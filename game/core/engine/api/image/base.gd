@@ -20,6 +20,7 @@ class ImageOutputModel:
 	var file_path: String
 	var error: Variant
 
+
 func generate_image(_input: ImageInputModel) -> ImageOutputModel:
 	assert(false, "Not implemented")
 	var response: ImageOutputModel = await SignalManager.processed
