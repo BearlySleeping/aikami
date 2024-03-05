@@ -1,0 +1,19 @@
+#
+#   Refer for explanation to following link:
+#   https://github.com/evilmartians/lefthook/blob/master/docs/configuration.md
+#
+
+pre-commit:
+    parallel: false # Run hooks in parallel if possible
+    commands:
+        gdscript-format:
+            root: game
+            tags: formatter gdscript
+            glob: '**/*.gd' # Adjust the glob pattern to match Lefthook's format
+            run: gdformat {staged_files} && git add {staged_files} # Format and stage the changes
+        gdscript-lint:
+            root: game
+            tags: linter gdscript
+            glob: '**/*.gd'
+            run: gdlint {staged_files} # Just run the linter on staged files
+

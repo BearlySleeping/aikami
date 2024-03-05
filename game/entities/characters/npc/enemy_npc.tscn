@@ -1,0 +1,16 @@
+[gd_scene load_steps=4 format=3 uid="uid://b2x8wr8c1h6ul"]
+
+[ext_resource type="Script" path="res://entities/characters/npc/base_npc.gd" id="1_j78dv"]
+[ext_resource type="Texture2D" uid="uid://dp6t2txysolu1" path="res://assets/npc/frodo/portraits/default.png" id="2_wuy1o"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_4ej6v"]
+radius = 21.0238
+
+[node name="BaseNPC" type="CharacterBody2D" groups=["NPC"]]
+script = ExtResource("1_j78dv")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_4ej6v")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_wuy1o")

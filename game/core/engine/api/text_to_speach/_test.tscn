@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://ctxu0tnnf5b81"]
+
+[ext_resource type="Script" path="res://core/engine/api/text_to_speach/_test.gd" id="1_qy3r2"]
+
+[node name="Test" type="Node2D"]
+script = ExtResource("1_qy3r2")
+
+[node name="Button" type="Button" parent="."]
+offset_left = 223.0
+offset_top = 191.0
+offset_right = 389.0
+offset_bottom = 295.0
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="."]

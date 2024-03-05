@@ -1,0 +1,10 @@
+{
+    "emeraldwalk.runonsave": {
+        "commands": [
+            {
+                "match": "\\.gd$",
+                "cmd": "gdformat ${file}"
+            }
+        ]
+    },
+}

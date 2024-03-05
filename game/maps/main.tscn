@@ -1,0 +1,16 @@
+[gd_scene load_steps=4 format=3 uid="uid://gkmudkj4w8ej"]
+
+[ext_resource type="PackedScene" uid="uid://cw8f7nsndgwau" path="res://maps/base_map.tscn" id="1_1bd6t"]
+[ext_resource type="PackedScene" uid="uid://cbmtekrofmb2q" path="res://environment/tilemaps/overworld.tscn" id="3_68k73"]
+[ext_resource type="PackedScene" uid="uid://kcpcg5onog5e" path="res://entities/characters/npc/base_npc.tscn" id="3_g4j8c"]
+
+[node name="BaseMap" node_paths=PackedStringArray("tilemap") instance=ExtResource("1_1bd6t")]
+tilemap = NodePath("TileMap")
+
+[node name="TileMap" parent="." index="0" instance=ExtResource("3_68k73")]
+
+[node name="Player" parent="." index="1"]
+position = Vector2(-121, 24)
+
+[node name="BaseNPC" parent="." index="2" instance=ExtResource("3_g4j8c")]
+position = Vector2(77, 18)

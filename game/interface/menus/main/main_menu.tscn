@@ -1,0 +1,109 @@
+[gd_scene load_steps=4 format=3 uid="uid://dc388hkklqvvc"]
+
+[ext_resource type="Theme" uid="uid://cb2tqos08yhkd" path="res://interface/theme/MinimalUI/MinimalUI.tres" id="1_0ajpt"]
+[ext_resource type="Script" path="res://interface/menus/main/main_menu.gd" id="1_tievw"]
+[ext_resource type="PackedScene" uid="uid://603k3vy4p3f1" path="res://interface/menus/main/settings/main_menu_settings.tscn" id="3_dt7l5"]
+
+[node name="MainMenu" type="Node2D"]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="MainMenu" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_tievw")
+
+[node name="ColorRect" type="ColorRect" parent="UI/MainMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/MainMenu"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -318.0
+offset_top = -104.0
+offset_right = 318.0
+offset_bottom = 104.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="UI/MainMenu/VBoxContainer"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 6
+theme = ExtResource("1_0ajpt")
+theme_override_font_sizes/font_size = 50
+text = "Aikami"
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="StartButton" type="Button" parent="UI/MainMenu/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+focus_neighbor_top = NodePath("../QuitButton")
+focus_neighbor_bottom = NodePath("../OptionButton")
+theme = ExtResource("1_0ajpt")
+theme_override_font_sizes/font_size = 24
+text = "Start"
+
+[node name="ResetButton" type="Button" parent="UI/MainMenu/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+focus_neighbor_top = NodePath("../QuitButton")
+focus_neighbor_bottom = NodePath("../OptionButton")
+theme = ExtResource("1_0ajpt")
+theme_override_font_sizes/font_size = 24
+text = "Reset"
+
+[node name="OptionButton" type="Button" parent="UI/MainMenu/VBoxContainer"]
+custom_minimum_size = Vector2(100, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+focus_neighbor_top = NodePath("../StartButton")
+focus_neighbor_bottom = NodePath("../QuitButton")
+theme = ExtResource("1_0ajpt")
+theme_override_font_sizes/font_size = 24
+text = "Option"
+
+[node name="QuitButton" type="Button" parent="UI/MainMenu/VBoxContainer"]
+custom_minimum_size = Vector2(100, 32)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+focus_neighbor_top = NodePath("../OptionButton")
+focus_neighbor_bottom = NodePath("../StartButton")
+theme = ExtResource("1_0ajpt")
+theme_override_font_sizes/font_size = 24
+text = "Quit
+"
+
+[node name="SettingsView" parent="UI" instance=ExtResource("3_dt7l5")]
+unique_name_in_owner = true
+visible = false
+
+[connection signal="pressed" from="UI/MainMenu/VBoxContainer/StartButton" to="UI/MainMenu" method="_on_start_button_pressed"]
+[connection signal="pressed" from="UI/MainMenu/VBoxContainer/ResetButton" to="UI/MainMenu" method="_on_reset_button_pressed"]
+[connection signal="pressed" from="UI/MainMenu/VBoxContainer/OptionButton" to="UI/MainMenu" method="_on_option_button_pressed"]
+[connection signal="pressed" from="UI/MainMenu/VBoxContainer/QuitButton" to="UI/MainMenu" method="_on_quit_button_pressed"]
+[connection signal="back_button_pressed" from="UI/SettingsView" to="UI/MainMenu" method="_on_settings_view_back_button_pressed"]
