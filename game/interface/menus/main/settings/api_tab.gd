@@ -45,5 +45,6 @@ func _on_check_button_toggled(toggled_on: bool) -> void:
 	else:
 		eleven_labs_field.hide()
 
+
 func _set_value(key: ConfigManager.ConfigKey, value: String) -> void:
 	ConfigManager.set_value(key, value.strip_edges())

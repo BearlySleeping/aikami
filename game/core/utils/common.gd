@@ -1,5 +1,6 @@
 class_name Utils
 
+
 static func get_random_int(max_value):
 	randomize()
 	return randi() % max_value
@@ -30,6 +31,7 @@ static func v4():
 	var node = "%02x%02x%02x%02x%02x%02x" % [b[10], b[11], b[12], b[13], b[14], b[15]]
 
 	return "%s-%s-%s-%s-%s" % [low, mid, hi, clock, node]
+
 
 ## Use this for dynamic generated images, for images in the project use load(...)
 static func get_image_texture_from_path(image_path: String) -> ImageTexture:
