@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemProtoset" load_steps=2 format=3 uid="uid://ddrmqwl3guset"]
+
+[ext_resource type="Script" path="res://interface/inventory/core/inventory_item_protoset.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+json_data = "[
+    {
+        \"height\": 1,
+        \"id\": \"item_1x1\",
+        \"image\": \"res://interface/inventory/item_book_blue.png\",
+        \"width\": 1
+    },
+    {
+        \"height\": 2,
+        \"id\": \"item_2x2\",
+        \"image\": \"res://interface/inventory/item_armour_silver.png\",
+        \"width\": 2
+    }
+]"
