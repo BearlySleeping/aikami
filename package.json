@@ -1,0 +1,36 @@
+{
+  "name": "aikami",
+  "version": "0.0.1",
+  "scripts": {
+    "generate:image": "bun run ai/image/generate.ts",
+    "lint:ai": "eslint . --ext .ts",
+    "format:ai": "prettier --write .",
+    "validate:ai": "tsc --noEmit",
+    "validate:godot": "cd game && gdlint .",
+    "format:godot": "cd game && gdformat .",
+    "validate": "bun validate:ai && bun validate:godot",
+    "format": "bun format:ai && bun format:godot",
+    "lint": "bun lint:ai",
+    "host": "bun run ai/host-locally.ts",
+    "build:web": "cd game && godot --headless --export-release webgl",
+    "build:linux": "cd game && godot --headless --export-release linux",
+    "build:windows": "cd game && godot --headless --export-release windows",
+    "build:macos": "cd game && godot --headless --export-release macos",
+    "serve:web": "python serve.py",
+    "serve:linux": "build/linux/aikami.x86_64",
+    "reset": "rm -rf build && bun postinstall",
+    "postinstall": "mkdir -v -p build/linux build/windows build/macos build/webgl"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.0.5",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "lefthook": "^1.6.1",
+    "prettier": "^3.2.5"
+  },
+  "dependencies": {
+    "@huggingface/inference": "^2.6.4",
+    "typescript": "^5.3.3"
+  }
+}
