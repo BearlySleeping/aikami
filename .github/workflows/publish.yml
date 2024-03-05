@@ -93,7 +93,7 @@ jobs:
               uses: softprops/action-gh-release@v1
               with:
                   files: build/**/*.zip
-                  token: ${{ secrets.GH_TOKEN }}
+                  token: ${{ secrets.RELEASE_TOKEN }}
             - name: Set Download URLs
               run: |
                   echo "Release output: ${{ toJson(steps.create-release.outputs) }}"
