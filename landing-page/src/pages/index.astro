@@ -1,82 +1,27 @@
 ---
-const RELEASE_TAG = import.meta.env.RELEASE_TAG;
-if (!RELEASE_TAG) {
-	throw new Error('RELEASE_TAG is required');
-}
-if (!RELEASE_TAG.startsWith('v')) {
-	throw new Error('RELEASE_TAG must be "v.X.X.X" format');
-}
-
-const baseURL = `https://github.com/BearlySleeping/aikami/releases/download/${RELEASE_TAG}`;
-const windowsDownloadLink = `${baseURL}/aikami-windows.zip`;
-const linuxDownloadLink = `${baseURL}/aikami-linux.zip`;
-const macosDownloadLink = `${baseURL}/aikami-macos.zip`;
-
-const githubURL = 'https://github.com/BearlySleeping/aikami';
-const featureOrBugsURL = 'https://github.com/BearlySleeping/aikami/issues';
-const roadmapURL = 'https://github.com/users/BearlySleeping/projects/1';
+import Header from '$components/Header.astro';
+import DemoSection from '$components/DemoSection.astro';
+import BacklogSection from '$components/BacklogSection.astro';
+import { Image } from 'astro:assets';
+import fantasyImage from '$assets/squad.webp';
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class="darkmode">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<link
-			href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.16/dist/tailwind.min.css"
-			rel="stylesheet"
-		/>
 		<title>AiKami Game</title>
 	</head>
-	<body class="bg-gray-100">
-		<header class="bg-blue-500 text-white text-center p-5">
-			<h1 class="text-4xl">Welcome to AiKami</h1>
-			<p class="text-xl">A topdown 2D RPG AI game</p>
-		</header>
-
+	<body
+		class="bg-background text-text dark:bg-background-dark dark:text-text-dark">
+		<Header />
 		<main class="p-10">
-			<section class="mb-10">
-				<h2 class="text-2xl mb-3">Download AiKami</h2>
-				<p>Choose your platform:</p>
-				<div class="flex space-x-5 mt-3">
-					<a
-						href={windowsDownloadLink}
-						class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-						>Windows</a
-					>
-					<a
-						href={linuxDownloadLink}
-						class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-						>Linux</a
-					>
-					<a
-						href={macosDownloadLink}
-						class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-						>macOS</a
-					>
-				</div>
-			</section>
-
-			<section class="mb-10">
-				<h2 class="text-2xl mb-3">GitHub Links</h2>
-				<div class="flex space-x-5">
-					<a
-						href={githubURL}
-						class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-						>GitHub Page</a
-					>
-					<a
-						href={featureOrBugsURL}
-						class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-						>Submit feature/bug</a
-					>
-					<a
-						href={roadmapURL}
-						class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-						>Roadmap</a
-					>
-				</div>
-			</section>
+			<DemoSection />
+			<div class="flex justify-center">
+				<Image src={fantasyImage} alt="Fantasy image" class="p-10" />
+			</div>
+			<BacklogSection />
 		</main>
 	</body>
 </html>
