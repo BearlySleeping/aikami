@@ -1,0 +1,29 @@
+---
+import Button from '$components/Button.astro';
+import { getReleaseTagVersion } from '$utils';
+const version = getReleaseTagVersion();
+
+const baseURL = `https://github.com/BearlySleeping/aikami/releases/download/${version}`;
+const windowsDownloadLink = `${baseURL}/aikami-windows.zip`;
+const linuxDownloadLink = `${baseURL}/aikami-linux.zip`;
+const macosDownloadLink = `${baseURL}/aikami-macos.zip`;
+const webLink = `https://aikami.bearlysleeping.com`;
+---
+
+<section class="mb-10">
+	<h2 class="mb-5 text-center text-3xl font-semibold">Try out AiKami</h2>
+	<p class="mb-5 text-center">Choose your platform:</p>
+	<div class="flex justify-center space-x-5">
+		<Button
+			href={windowsDownloadLink}
+			label="Windows"
+			icon="logos:microsoft-windows-icon"
+		/>
+
+		<Button href={linuxDownloadLink} label="Linux" icon="logos:linux-tux" />
+
+		<Button href={macosDownloadLink} label="macOS" icon="logos:apple" />
+
+		<Button href={webLink} label="Web" icon="logos:tor-browser" />
+	</div>
+</section>
