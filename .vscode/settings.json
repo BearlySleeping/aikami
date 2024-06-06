@@ -1,3 +1,29 @@
 {
-	"godot_tools.editor_path": "/usr/bin/godot"
+	"godot_tools.editor_path": "/usr/bin/godot",
+	"eslint.validate": [
+		"javascript",
+		"javascriptreact",
+		"astro",
+		"typescript",
+		"typescriptreact"
+	],
+	"editor.codeActionsOnSave": {
+		"source.fixAll": "explicit"
+	},
+	"editor.defaultFormatter": "esbenp.prettier-vscode",
+	"editor.formatOnSave": true,
+	"prettier.documentSelectors": ["**/*.astro"],
+	"[astro]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"stylelint.validate": [
+		// ↓ Add "html" language.
+		"html",
+		// ↓ Add "vue" language.
+		"vue",
+		// ↓ Add "svelte" language.
+		"svelte",
+		// ↓ Add "astro" language.
+		"astro"
+	]
 }

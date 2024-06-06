@@ -24,7 +24,7 @@ Overall what is next is:
 
 ## Play the Demo
 
-A demo version is available online [here](https://aikami-prod.web.app/).
+A demo version is available online [here](https://aikami.bearlysleeping.com).
 
 ## Contributing
 
