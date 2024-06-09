@@ -13,9 +13,9 @@ config_version=5
 config/name="AiKami"
 run/main_scene="res://interface/menus/main/main_menu.tscn"
 config/features=PackedStringArray("4.2", "GL Compatibility")
-boot_splash/image="res://assets/art/logo6.png"
-config/icon="res://assets/art/logo6.png"
-run/image="res://assets/art/logo6.png"
+boot_splash/image="res://assets/art/logo.png"
+config/icon="res://assets/art/logo.png"
+run/image="res://assets/art/logo.png"
 
 [audio]
 
