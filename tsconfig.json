@@ -59,6 +59,7 @@
 		"**/dist",
 		"tmp",
 		"build",
-		"game"
+		"game",
+		"landing-page"
 	]
 }
