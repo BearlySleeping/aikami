@@ -22,7 +22,7 @@ jobs:
             - name: 🤖 Setup Godot
               uses: chickensoft-games/setup-godot@v1
               with:
-                  version: 4.2.1
+                  version: 4.2.2
                   use-dotnet: false
             - name: Web Build
               run: |
@@ -59,7 +59,7 @@ jobs:
             - name: 🤖 Setup Godot
               uses: chickensoft-games/setup-godot@v1
               with:
-                  version: 4.2.1
+                  version: 4.2.2
                   use-dotnet: false
             - name: Setup Xcode
               if: matrix.config.platform == 'macos'
