@@ -2,6 +2,8 @@
 import Header from '$components/Header.astro';
 import DemoSection from '$components/DemoSection.astro';
 import BacklogSection from '$components/BacklogSection.astro';
+import IntroSection from '$components/IntroSection.astro';
+
 import { Image } from 'astro:assets';
 import fantasyImage from '$assets/squad.webp';
 ---
@@ -21,6 +23,7 @@ import fantasyImage from '$assets/squad.webp';
 			<div class="flex justify-center">
 				<Image src={fantasyImage} alt="Fantasy image" class="p-10" />
 			</div>
+			<IntroSection />
 			<BacklogSection />
 		</main>
 	</body>
