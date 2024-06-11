@@ -1,3 +1,5 @@
+# Common linting problems
+
 -   If gdlint/gdformat crashes
 
 `AttributeError: 'PatternStr' object has no attribute 'raw'`
