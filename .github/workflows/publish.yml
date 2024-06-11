@@ -24,6 +24,7 @@ jobs:
               with:
                   version: 4.2.2
                   use-dotnet: false
+                  include-templates: true
             - name: Web Build
               run: |
                   mkdir -v -p build/webgl
