@@ -61,6 +61,7 @@ jobs:
               with:
                   version: 4.2.2
                   use-dotnet: false
+                  include-templates: true
             - name: Setup Xcode
               if: matrix.config.platform == 'macos'
               uses: maxim-lobanov/setup-xcode@v1
