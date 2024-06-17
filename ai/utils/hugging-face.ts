@@ -1,9 +1,7 @@
-const huggingFaceAccessToken = process.env['HUGGING_FACE_ACCESS_TOKEN'];
+const huggingFaceAccessToken = process.env['API_HUGGING_FACE_KEY'];
 
 if (!huggingFaceAccessToken) {
-	throw new Error(
-		'HUGGING_FACE_ACCESS_TOKEN environment variable is not set',
-	);
+	throw new Error('API_HUGGING_FACE_KEY environment variable is not set');
 }
 
 export { huggingFaceAccessToken };

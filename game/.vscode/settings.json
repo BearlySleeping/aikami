@@ -3,7 +3,7 @@
         "commands": [
             {
                 "match": "\\.gd$",
-                "cmd": "gdformat ${file}"
+                "cmd": "poetry run gdformat ${file}"
             }
         ]
     },
