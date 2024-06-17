@@ -25,5 +25,14 @@
 		"svelte",
 		// ↓ Add "astro" language.
 		"astro"
-	]
+	],
+
+	"emeraldwalk.runonsave": {
+		"commands": [
+			{
+				"match": "\\.gd$",
+				"cmd": "poetry run gdformat ${file}"
+			}
+		]
+	}
 }

@@ -43,7 +43,7 @@ export const openFile = async (options: {
 	try {
 		const commandPrefix = getOpenFileCommandPrefix();
 
-		await $`${commandPrefix} ${filePath} &`;
+		await $`${commandPrefix} ${filePath}`;
 	} catch (error) {
 		console.error('Could not open the file', error);
 	}
