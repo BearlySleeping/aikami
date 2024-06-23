@@ -37,8 +37,10 @@ var item_protoset: InventoryItemProtoset:
 var _items: Array[InventoryItem] = []
 var _constraint_manager: ConstraintManager
 
+
 func enable_weight_constraint(capacity: float = 0.0) -> void:
 	_constraint_manager.enable_weight_constraint(capacity)
+
 
 func _get_configuration_warnings() -> PackedStringArray:
 	if item_protoset == null:
@@ -195,13 +197,11 @@ func can_hold_item(_item: InventoryItem) -> bool:
 
 ## Creates an InventoryItem based on the given prototype ID and adds it to the inventory.
 ## Returns null if the item cannot be added.
-func create_and_add_item(prototype_id: String, amount:=1) -> InventoryItem:
+func create_and_add_item(prototype_id: String, amount := 1) -> InventoryItem:
 	var item: InventoryItem = InventoryItem.new()
 	item.protoset = item_protoset
 	item.prototype_id = prototype_id
-	item.properties = {
-		"stack_size": amount
-	}
+	item.properties = {"stack_size": amount}
 	if add_item(item):
 		return item
 

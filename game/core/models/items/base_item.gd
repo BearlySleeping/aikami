@@ -41,6 +41,7 @@ func _init(p_id: String, data: Dictionary) -> void:
 	height = data.get("height", 1)
 	width = data.get("width", 1)
 
+
 func to_dict() -> Dictionary:
 	return {
 		"name": name,
@@ -53,6 +54,7 @@ func to_dict() -> Dictionary:
 		"image_path": image_path
 	}
 
+
 func to_item_prototype_dict() -> Dictionary:
 	return {
 		"name": name,
@@ -63,4 +65,3 @@ func to_item_prototype_dict() -> Dictionary:
 		"width": width,
 		"image_path": image_path
 	}
-

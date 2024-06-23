@@ -5,7 +5,8 @@ signal quest_completed(quest: QuestModel)  # Emitted when a quest gets moved to 
 signal new_available_quest(quest: QuestModel)  # Emitted when a quest gets added to the AvailablePool
 
 
-class BaseQuestPool extends Node:
+class BaseQuestPool:
+	extends Node
 	var quests: Array[QuestModel] = []
 
 	func _init(pool_name: String) -> void:

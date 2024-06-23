@@ -28,11 +28,13 @@ static func get_item(item_id: String) -> BaseItemModel:
 		items_cache = {item_id: item}
 	return item
 
+
 static func _get_provider(provider_type: String) -> BaseItemRepository:
 	if _providers.has(provider_type):
 		return _providers[provider_type]
 	_providers[provider_type] = _instantiate_provider(provider_type)
 	return _providers[provider_type]
+
 
 static func _instantiate_provider(provider_type: String) -> BaseItemRepository:
 	var provider_path: String = ITEM_PROVIDERS[provider_type]

@@ -33,6 +33,7 @@ func parse_prototypes(prototypes_array: Array[BaseItemModel]) -> void:
 		_prototypes[id] = prototype_data
 		_unstringify_prototype(_prototypes[id])
 
+
 func _to_json() -> String:
 	var result: Array[Dictionary] = []
 	for prototype_id: String in _prototypes.keys():

@@ -14,25 +14,13 @@ const INFO_OFFSET := Vector2(20, 0)
 @onready var lbl_info: Label = %LblInfo
 @onready var save_button: Button = %SaveButton
 
-var user_items: Array[Dictionary]= [
-	{
-		"id": "other_book_blue",
-		"amount": 2,
-		"position": Vector2i(3, 3)
-	},
- {
-		"id": "armor_chestplate_silver",
-		"amount": 1,
-		"position": Vector2i(4, 4)
-	},
+var user_items: Array[Dictionary] = [
+	{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)},
+	{"id": "armor_chestplate_silver", "amount": 1, "position": Vector2i(4, 4)},
 ]
 
-var npc_items: Array[Dictionary]= [
-	{
-		"id": "other_book_blue",
-		"amount": 2,
-		"position": Vector2i(3, 3)
-	}
+var npc_items: Array[Dictionary] = [
+	{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)}
 ]
 
 
@@ -40,18 +28,19 @@ func populate_inventory_grid(inventory: InventoryGrid, items: Array[Dictionary])
 	for item: Dictionary in items:
 		inventory.create_and_add_item_at(item["id"], item["position"], item["amount"])
 
+
 func add_item_definition_if_needed(id: String, array: Array[BaseItemModel]) -> void:
-	if array.any(func(item: BaseItemModel)-> bool: return item.id == id):
+	if array.any(func(item: BaseItemModel) -> bool: return item.id == id):
 		return
 	array.append(ItemManager.get_item(id))
+
 
 func _populate_inventory() -> void:
 	# First generate a protoset for inventory_player_grid and inventory_npc_grid that has only
 	# the item_definitions needed for the user and npc inventories
 	var item_definitions_needed: Array[BaseItemModel] = []
 
-
-	for item: Dictionary in (user_items + npc_items):
+	for item: Dictionary in user_items + npc_items:
 		add_item_definition_if_needed(item["id"], item_definitions_needed)
 
 	var item_protoset: InventoryItemProtoset = InventoryItemProtoset.new()
@@ -64,6 +53,7 @@ func _populate_inventory() -> void:
 
 	populate_inventory_grid(inventory_player_grid.inventory, user_items)
 	populate_inventory_grid(inventory_npc_grid.inventory, npc_items)
+
 
 func _ready() -> void:
 	inventory_player_grid.item_mouse_entered.connect(_on_item_mouse_entered)
@@ -78,9 +68,11 @@ func _ready() -> void:
 	save_button.pressed.connect(_on_save_button_pressed)
 	_populate_inventory()
 
+
 func _on_save_button_pressed() -> void:
 	print("Save button pressed")
 	print(inventory_player_grid.inventory.get_item_at(Vector2i(3, 3)))
+
 
 func _on_item_mouse_entered(item: InventoryItem) -> void:
 	lbl_info.show()
