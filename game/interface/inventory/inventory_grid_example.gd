@@ -14,19 +14,8 @@ const INFO_OFFSET := Vector2(20, 0)
 @onready var lbl_info: Label = %LblInfo
 @onready var save_button: Button = %SaveButton
 
-var user_items: Array[Dictionary] = [
-	{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)},
-	{"id": "armor_chestplate_silver", "amount": 1, "position": Vector2i(4, 4)},
-]
-
-var npc_items: Array[Dictionary] = [
-	{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)}
-]
-
-
-func populate_inventory_grid(inventory: InventoryGrid, items: Array[Dictionary]) -> void:
-	for item: Dictionary in items:
-		inventory.create_and_add_item_at(item["id"], item["position"], item["amount"])
+const USER_INVENTORY_SAVE_FILE: String = "test_user_inventory_state.save"
+const NPC_INVENTORY_SAVE_FILE: String = "test_npc_inventory_state.save"
 
 
 func add_item_definition_if_needed(id: String, array: Array[BaseItemModel]) -> void:
@@ -35,12 +24,44 @@ func add_item_definition_if_needed(id: String, array: Array[BaseItemModel]) -> v
 	array.append(ItemManager.get_item(id))
 
 
+func load_inventory_data(
+	save_path: String, default_items: Array[InventoryItemModel]
+) -> Array[InventoryItemModel]:
+	var response := SaveManager.load_file(save_path)
+	if response[0] == null:
+		return default_items
+	var data := response[0] as Array
+	var items: Array[InventoryItemModel] = []
+	for item: Dictionary in data:
+		items.append(InventoryItemModel.new(item))
+	return items
+
+
 func _populate_inventory() -> void:
+	var user_items := load_inventory_data(
+		USER_INVENTORY_SAVE_FILE,
+		[
+			InventoryItemModel.new(
+				{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)}
+			),
+			InventoryItemModel.new(
+				{"id": "armor_chestplate_silver", "amount": 1, "position": Vector2i(4, 4)}
+			),
+		]
+	)
+	var npc_items := load_inventory_data(
+		NPC_INVENTORY_SAVE_FILE,
+		[
+			InventoryItemModel.new(
+				{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)}
+			),
+		]
+	)
 	# First generate a protoset for inventory_player_grid and inventory_npc_grid that has only
 	# the item_definitions needed for the user and npc inventories
 	var item_definitions_needed: Array[BaseItemModel] = []
 
-	for item: Dictionary in user_items + npc_items:
+	for item: InventoryItemModel in user_items + npc_items:
 		add_item_definition_if_needed(item["id"], item_definitions_needed)
 
 	var item_protoset: InventoryItemProtoset = InventoryItemProtoset.new()
@@ -51,8 +72,8 @@ func _populate_inventory() -> void:
 	inventory_player_grid.inventory.enable_weight_constraint(5.0)
 	equipeped_item_slot.item_protoset = item_protoset
 
-	populate_inventory_grid(inventory_player_grid.inventory, user_items)
-	populate_inventory_grid(inventory_npc_grid.inventory, npc_items)
+	inventory_player_grid.populate_inventory(user_items)
+	inventory_npc_grid.populate_inventory(npc_items)
 
 
 func _ready() -> void:
@@ -70,8 +91,19 @@ func _ready() -> void:
 
 
 func _on_save_button_pressed() -> void:
-	print("Save button pressed")
-	print(inventory_player_grid.inventory.get_item_at(Vector2i(3, 3)))
+	var user_items := inventory_player_grid.get_inventory_items()
+	print("save user_items:", user_items)
+	SaveManager.save_file_raw(
+		USER_INVENTORY_SAVE_FILE,
+		user_items.map(func(item: InventoryItemModel) -> Dictionary: return item.to_dict())
+	)
+
+	var npc_items := inventory_npc_grid.get_inventory_items()
+	print("save npc_items:", npc_items)
+	SaveManager.save_file_raw(
+		NPC_INVENTORY_SAVE_FILE,
+		npc_items.map(func(item: InventoryItemModel) -> Dictionary: return item.to_dict())
+	)
 
 
 func _on_item_mouse_entered(item: InventoryItem) -> void:

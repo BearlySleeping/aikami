@@ -90,10 +90,8 @@ func add_item_at(item: InventoryItem, position: Vector2i) -> bool:
 
 ## Creates an InventoryItem based on the given prototype ID and adds it to the inventory
 ## at the given position. Returns null if the item cannot be added.
-func create_and_add_item_at(prototype_id: String, position: Vector2i, amount := 1) -> InventoryItem:
-	return _constraint_manager.get_grid_constraint().create_and_add_item_at(
-		prototype_id, position, amount
-	)
+func create_and_add_item_at(item: InventoryItemModel) -> InventoryItem:
+	return _constraint_manager.get_grid_constraint().create_and_add_item_at(item)
 
 
 ## Returns the item at the given position in the inventory. Returns null if the given field is empty.

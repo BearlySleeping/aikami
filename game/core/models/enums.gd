@@ -37,6 +37,15 @@ enum Class {
 	WIZARD,
 }
 
+enum EquippedSlot {
+	HEAD,
+	BODY,
+	LEGS,
+	FEET,
+	HANDS,
+	RING,
+}
+
 enum Mood {
 	DEFAULT,
 	SAD,

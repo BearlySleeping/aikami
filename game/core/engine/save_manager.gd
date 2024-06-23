@@ -19,6 +19,10 @@ static func reset() -> void:
 
 # Save the game data to a file
 static func save_file(path: String, data: BaseModel) -> bool:
+	return save_file_raw(path, data.to_dict())
+
+
+static func save_file_raw(path: String, data: Variant) -> bool:
 	var absolute_path := _get_path(path)
 	var dir_path := absolute_path.get_base_dir()
 
@@ -33,7 +37,7 @@ static func save_file(path: String, data: BaseModel) -> bool:
 	if not file:
 		push_error("Could not save to %s" % absolute_path)
 		return false
-	file.store_var(data.to_dict())
+	file.store_var(data)
 	file.close()
 	return true
 
@@ -43,7 +47,7 @@ static func load_file(path: String) -> Array:
 	var file := FileAccess.open(_get_path(path), FileAccess.READ)
 	if !file:
 		return [null, "Could not load file"]
-	var data := file.get_var() as Dictionary
+	var data: Variant = file.get_var()
 	file.close()
 	return [data, null]
 

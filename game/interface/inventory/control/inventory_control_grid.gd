@@ -202,6 +202,27 @@ func _draw() -> void:
 		_draw_grid(Vector2.ZERO, inventory.size.x, inventory.size.y, field_dimensions, item_spacing)
 
 
+func populate_inventory(items: Array[InventoryItemModel]) -> void:
+	for item in items:
+		inventory.create_and_add_item_at(item)
+
+
+func get_inventory_items() -> Array[InventoryItemModel]:
+	var current_items: Array[InventoryItemModel] = []
+	for item in inventory.get_items():
+		var item_properties := item.properties
+		current_items.append(
+			InventoryItemModel.new(
+				{
+					"id": item.prototype_id,
+					"amount": item_properties.get("stack_size", 1),
+					"position": item_properties.get("grid_position", Vector2i(0, 0))
+				}
+			)
+		)
+	return current_items
+
+
 ## Deselects the selected item.
 func deselect_inventory_item() -> void:
 	_select(null)
