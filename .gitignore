@@ -186,3 +186,5 @@ build
 output
 
 *.firebase
+
+godot-examples
