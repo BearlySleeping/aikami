@@ -1,0 +1,11 @@
+{
+    "emeraldwalk.runonsave": {
+        "commands": [
+            {
+                "match": "\\.gd$",
+                "cmd": "poetry run gdformat ${file}"
+            }
+        ]
+    },
+    "godotTools.editorPath.godot4": "c:\\Users\\snorr\\Development\\Godot_v4.2.2-stable_win64.exe",
+}

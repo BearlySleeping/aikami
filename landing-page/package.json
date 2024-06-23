@@ -1,0 +1,42 @@
+{
+  "name": "landing-page",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "lint": "eslint ./src",
+    "format": "prettier --write ./src",
+    "validate": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/check": "^0.5.5",
+    "@astrojs/mdx": "^2.1.1",
+    "@astrojs/tailwind": "^5.1.0",
+    "@astrojs/ts-plugin": "^1.8.0",
+    "@iconify-json/logos": "^1.1.43",
+    "@iconify-json/mdi": "^1.1.66",
+    "@types/canvas-confetti": "^1.6.3",
+    "astro": "^4.4.5",
+    "astro-icon": "^1.1.0",
+    "autoprefixer": "^10.4.15",
+    "canvas-confetti": "^1.9.1",
+    "postcss": "^8.4.28",
+    "tailwindcss": "^3.3.5",
+    "typescript": "^5.3.3"
+  },
+  "devDependencies": {
+    "@typescript-eslint/parser": "^7.12.0",
+    "eslint": "^9.4.0",
+    "eslint-plugin-astro": "^1.2.0",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-tailwindcss": "^3.17.3",
+    "postcss-html": "^1.7.0",
+    "prettier-plugin-astro": "^0.14.0",
+    "prettier-plugin-tailwindcss": "^0.6.1",
+    "typescript-eslint": "^7.12.0"
+  }
+}

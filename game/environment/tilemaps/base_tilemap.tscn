@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://dmpy63wowdb2b"]
+
+[ext_resource type="Script" path="res://environment/tilemaps/base_tilemap.gd" id="1_36oyn"]
+
+[node name="BaseTilemap" type="TileMap"]
+format = 2
+script = ExtResource("1_36oyn")

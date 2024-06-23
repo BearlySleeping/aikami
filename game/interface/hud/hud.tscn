@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3 uid="uid://bpq4l1m0phj8p"]
+
+[ext_resource type="Script" path="res://interface/hud/hud.gd" id="1_mr5e4"]
+[ext_resource type="PackedScene" uid="uid://ceolcwatpaicu" path="res://interface/hud/clock_hud.tscn" id="2_luqit"]
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1_mr5e4")
+
+[node name="DayNightCycleUI" parent="." instance=ExtResource("2_luqit")]
