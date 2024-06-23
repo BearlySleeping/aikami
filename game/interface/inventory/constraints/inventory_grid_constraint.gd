@@ -204,21 +204,21 @@ func add_item_at(item: InventoryItem, position: Vector2i) -> bool:
 	return false
 
 
-func create_and_add_item_at(prototype_id: String, position: Vector2i, amount := 1) -> InventoryItem:
+func create_and_add_item_at(item: InventoryItemModel) -> InventoryItem:
 	assert(inventory, "Inventory not set!")
-	var item_rect := Rect2i(position, _get_prototype_size(prototype_id))
+	var item_rect := Rect2i(item.position, _get_prototype_size(item.id))
 	if !rect_free(item_rect):
 		return null
 
-	var item := inventory.create_and_add_item(prototype_id, amount)
-	if item == null:
+	var inventory_item := inventory.create_and_add_item(item.id, item.amount)
+	if inventory_item == null:
 		return null
 
-	if not move_item_to(item, position):
-		inventory.remove_item(item)
+	if not move_item_to(inventory_item, item.position):
+		inventory.remove_item(inventory_item)
 		return null
 
-	return item
+	return inventory_item
 
 
 func get_item_at(position: Vector2i) -> InventoryItem:

@@ -1,16 +1,10 @@
 extends BaseItemRepository
 
 const ITEMS: Dictionary = {
-	"armor_helmet_iron":
-	{
-		"name": "Iron Helmet",
-		"description": "A small dagger made of iron",
-		"cost": 5,
-	},
 	"armor_chestplate_silver":
 	{
 		"name": "Silver Chestplate",
-		"description": "A small chestplate made of silver",
+		"description": "A chestplate made of silver",
 		"cost": 10,
 		"height": 2,
 		"image_path": "res://interface/inventory/item_armour_silver.png",

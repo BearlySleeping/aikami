@@ -1,0 +1,36 @@
+GDScript Coding Standards and Guidelines
+
+-   Always return early from functions to simplify logic and reduce nesting.
+-   Use guard clauses to handle edge cases and errors at the beginning of functions.
+-   Avoid using if-else statements where possible. Use guard clauses or ternary operators instead.
+-   Use tabs for indentation.
+-   Add comments with "##" before each public function and variable to ensure documentation is clear and accessible. Use one "#" For all other comments.
+-   All variables must be explicitly typed using the : syntax. Prefer inferred over explicit whenever possible.
+    Example:
+    var speed := 10.0 (inferred)
+    var speed: float = function_returning_dynamic_value() (explicit)
+-   All functions must have typed parameters and return types using the -> syntax.
+    Example:
+    func calculate_speed(distance: float, time: float) -> float:
+-   Keep functions small and focused. Ideally, a function should do one thing.
+-   Use local variables wherever possible. Avoid using global variables unless absolutely necessary.
+-   Prefer immutable data structures. Use const for variables that do not change.
+-   Avoid magic numbers. Use named constants instead.
+-   Handle errors gracefully using guard clauses and early returns.
+-   Use consistent and descriptive names for variables, functions, and classes.
+    Example: Use snake_case for variables and functions, and CamelCase for classes.
+-   Functions should avoid side effects. They should not change state or interact with the outside world unless absolutely necessary.
+-   Ensure all code goes through a review process where these guidelines are checked.
+-   All public functions and classes should have comprehensive documentation using the ## comments.
+
+Example Function with Guidelines Applied:
+
+```gd
+## Calculate the area of a rectangle
+func calculate_area(width: float, height: float) -> float:
+    # Return 0 if width or height is non-positive
+    if width <= 0 or height <= 0:
+        return 0.0
+    # Calculate and return the area
+    return width * height
+```
