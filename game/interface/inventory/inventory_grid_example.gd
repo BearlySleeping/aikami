@@ -1,6 +1,8 @@
 extends Control
 
 const INFO_OFFSET := Vector2(20, 0)
+const USER_INVENTORY_SAVE_FILE: String = "test_user_inventory_state.save"
+const NPC_INVENTORY_SAVE_FILE: String = "test_npc_inventory_state.save"
 
 @onready var inventory_player_grid: InventoryControlGrid = %CtrlInventoryGridLeft
 @onready var inventory_npc_grid: InventoryControlGrid = %CtrlInventoryGridRight
@@ -13,9 +15,6 @@ const INFO_OFFSET := Vector2(20, 0)
 @onready var btn_unequip: Button = %BtnUnequip
 @onready var lbl_info: Label = %LblInfo
 @onready var save_button: Button = %SaveButton
-
-const USER_INVENTORY_SAVE_FILE: String = "test_user_inventory_state.save"
-const NPC_INVENTORY_SAVE_FILE: String = "test_npc_inventory_state.save"
 
 
 func add_item_definition_if_needed(id: String, array: Array[BaseItemModel]) -> void:

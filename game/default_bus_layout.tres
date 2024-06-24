@@ -1,4 +1,7 @@
-[gd_resource type="AudioBusLayout" load_steps=2 format=3 uid="uid://cwu384cujang2"]
+[gd_resource type="AudioBusLayout" load_steps=3 format=3 uid="uid://cwu384cujang2"]
+
+[sub_resource type="AudioEffectCapture" id="AudioEffectCapture_ixel8"]
+resource_name = "Capture"
 
 [sub_resource type="AudioEffectRecord" id="AudioEffectRecord_fo272"]
 resource_name = "Record"
@@ -28,5 +31,7 @@ bus/4/mute = true
 bus/4/bypass_fx = false
 bus/4/volume_db = 0.0
 bus/4/send = &"Master"
-bus/4/effect/0/effect = SubResource("AudioEffectRecord_fo272")
+bus/4/effect/0/effect = SubResource("AudioEffectCapture_ixel8")
 bus/4/effect/0/enabled = true
+bus/4/effect/1/effect = SubResource("AudioEffectRecord_fo272")
+bus/4/effect/1/enabled = true

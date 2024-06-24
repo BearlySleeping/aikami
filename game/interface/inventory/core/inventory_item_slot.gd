@@ -10,6 +10,10 @@ signal protoset_changed
 const Verify := preload("../constraints/inventory_verify.gd")
 const KEY_ITEM := "item"
 
+## If set to true, the clear() method will try to return the item to its original inventory.
+## @default true
+@export var remember_source_inventory := true
+
 ##  An InventoryItemProtoset resource containing item prototypes that the slot can receive.
 ## @required
 var item_protoset: InventoryItemProtoset:
@@ -20,9 +24,6 @@ var item_protoset: InventoryItemProtoset:
 			_item = null
 		item_protoset = new_item_protoset
 		protoset_changed.emit()
-## If set to true, the clear() method will try to return the item to its original inventory.
-## @default true
-@export var remember_source_inventory := true
 
 var _wr_source_inventory: WeakRef = weakref(null)
 var _item: InventoryItem
