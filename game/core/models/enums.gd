@@ -37,7 +37,8 @@ enum Class {
 	WIZARD,
 }
 
-enum EquippedSlot {
+enum EquippedSlotType {
+	NONE,
 	HEAD,
 	BODY,
 	LEGS,

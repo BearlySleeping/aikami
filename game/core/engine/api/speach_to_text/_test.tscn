@@ -1,7 +1,6 @@
-[gd_scene load_steps=4 format=3 uid="uid://c6s8nhxgt74mc"]
+[gd_scene load_steps=3 format=3 uid="uid://c6s8nhxgt74mc"]
 
 [ext_resource type="Script" path="res://addons/godot_whisper/label_transcribe.gd" id="2_npoov"]
-[ext_resource type="WhisperResource" path="res://addons/godot_whisper/models/gglm-tiny.en.bin" id="3_pqv3q"]
 [ext_resource type="Script" path="res://addons/godot_whisper/capture_stream_to_text.gd" id="5_27hih"]
 
 [node name="Test" type="Node2D"]
@@ -40,7 +39,12 @@ offset_bottom = 301.0
 text = "Start"
 
 [node name="SpeechToText" type="SpeechToText" parent="."]
-language_model = ExtResource("3_pqv3q")
+_import_path = NodePath("")
+unique_name_in_owner = false
+process_mode = 0
+process_priority = 0
+process_physics_priority = 0
+process_thread_group = 0
+editor_description = ""
+language_model = null
 script = ExtResource("5_27hih")
-
-[connection signal="transcribed_msg" from="SpeechToText" to="RichTextLabel" method="_on_speech_to_text_transcribed_msg"]

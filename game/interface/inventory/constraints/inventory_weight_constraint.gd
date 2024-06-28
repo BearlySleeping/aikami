@@ -36,15 +36,15 @@ func _on_inventory_set() -> void:
 	_calculate_occupied_space()
 
 
-func on_item_added(_item: InventoryItem) -> void:
+func on_item_added(_item: InterfaceInventoryItem) -> void:
 	_calculate_occupied_space()
 
 
-func on_item_removed(_item: InventoryItem) -> void:
+func on_item_removed(_item: InterfaceInventoryItem) -> void:
 	_calculate_occupied_space()
 
 
-func on_item_modified(_item: InventoryItem) -> void:
+func on_item_modified(_item: InterfaceInventoryItem) -> void:
 	_calculate_occupied_space()
 
 
@@ -75,30 +75,30 @@ func _calculate_occupied_space() -> void:
 		assert(has_unlimited_capacity() || _occupied_space <= capacity, "Inventory overflow!")
 
 
-static func get_item_unit_weight(item: InventoryItem) -> float:
+static func get_item_unit_weight(item: InterfaceInventoryItem) -> float:
 	var weight: float = item.get_property(KEY_WEIGHT, 1.0)
 	return weight
 
 
-static func get_item_weight(item: InventoryItem) -> float:
+static func get_item_weight(item: InterfaceInventoryItem) -> float:
 	if item == null:
 		return -1.0
 	return StacksConstraint.get_item_stack_size(item) * get_item_unit_weight(item)
 
 
-static func set_item_weight(item: InventoryItem, weight: float) -> void:
+static func set_item_weight(item: InterfaceInventoryItem, weight: float) -> void:
 	assert(weight >= 0.0, "Item weight must be greater or equal to 0!")
 	item.set_property(KEY_WEIGHT, weight)
 
 
-func get_space_for(item: InventoryItem) -> InventoryItemCount:
+func get_space_for(item: InterfaceInventoryItem) -> InventoryItemCount:
 	if has_unlimited_capacity():
 		return InventoryItemCount.inf()
 	var unit_weight := WeightConstraint.get_item_unit_weight(item)
 	return InventoryItemCount.new(floor(get_free_space() / unit_weight))
 
 
-func has_space_for(item: InventoryItem) -> bool:
+func has_space_for(item: InterfaceInventoryItem) -> bool:
 	if has_unlimited_capacity():
 		return true
 	var item_weight := WeightConstraint.get_item_weight(item)

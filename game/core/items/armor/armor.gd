@@ -9,7 +9,8 @@ const ITEMS: Dictionary = {
 		"height": 2,
 		"image_path": "res://interface/inventory/item_armour_silver.png",
 		"width": 2,
-		"weight": 3
+		"weight": 3,
+		"slot_type": Enum.EquippedSlotType.BODY
 	},
 }
 

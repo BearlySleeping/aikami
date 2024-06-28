@@ -103,7 +103,7 @@ func _disconnect_inventory_signals() -> void:
 		_get_inventory().item_removed.disconnect(_on_item_removed)
 
 
-func _on_item_removed(_item: InventoryItem) -> void:
+func _on_item_removed(_item: InterfaceInventoryItem) -> void:
 	clear()
 
 
@@ -114,7 +114,7 @@ func _get_inventory() -> Inventory:
 ## Equips the given inventory item in the slot. If the slot already holds an item, clear() will be called first.
 ## Returns false if the clear call fails, the slot can't hold the given item, or already holds the given item.
 ## Returns true otherwise.
-func equip(item: InventoryItem) -> bool:
+func equip(item: InterfaceInventoryItem) -> bool:
 	if !can_hold_item(item):
 		return false
 
@@ -152,13 +152,13 @@ func clear() -> bool:
 
 
 ## Returns the equipped item.
-func get_item() -> InventoryItem:
+func get_item() -> InterfaceInventoryItem:
 	return _wr_item.get_ref()
 
 
 ## Checks if the slot can hold the given item, i.e. inventory contains the given item and the item is not null.
 ## This method can be overridden to implement item slots that can only hold specific items.
-func can_hold_item(item: InventoryItem) -> bool:
+func can_hold_item(item: InterfaceInventoryItem) -> bool:
 	if item == null:
 		return false
 
@@ -176,7 +176,7 @@ func reset() -> void:
 ## Serializes the item slot into a dictionary.
 func serialize() -> Dictionary:
 	var result: Dictionary = {}
-	var item: InventoryItem = _wr_item.get_ref()
+	var item: InterfaceInventoryItem = _wr_item.get_ref()
 
 	if item && item.get_inventory():
 		result[KEY_ITEM_INDEX] = item.get_inventory().get_item_index(item)

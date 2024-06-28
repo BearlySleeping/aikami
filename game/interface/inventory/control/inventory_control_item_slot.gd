@@ -9,25 +9,7 @@ extends Control
 const DropZone := preload("inventory_control_drop_zone.gd")
 const Draggable := preload("inventory_control_draggable.gd")
 
-## Path to an InventoryItemSlot node.
-## @required
-@export var item_slot_path: NodePath:
-	set(new_item_slot_path):
-		if item_slot_path == new_item_slot_path:
-			return
-		item_slot_path = new_item_slot_path
-		var node: Node = get_node_or_null(item_slot_path)
-
-		if node == null:
-			_clear()
-			return
-
-		if is_inside_tree():
-			assert(node is InventoryItemSlotBase)
-
-		item_slot = node
-		_refresh()
-		update_configuration_warnings()
+var slot_type: Enum.EquippedSlotType
 
 ## The default icon that will be used for items with no image property.
 ## @required
@@ -134,19 +116,6 @@ func _input(event: InputEvent) -> void:
 			_background_panel.hide()
 
 
-func _get_configuration_warnings() -> PackedStringArray:
-	if item_slot_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"This node is not linked to an item slot, so it can't display any content.\n"
-					+ "Set the item_slot_path property to point to an InventoryItemSlotBase node."
-				)
-			]
-		)
-	return PackedStringArray()
-
-
 func _connect_item_slot_signals() -> void:
 	if !is_instance_valid(item_slot):
 		return
@@ -172,11 +141,6 @@ func _ready() -> void:
 		# Clean up, in case it is duplicated in the editor
 		if is_instance_valid(_hbox_container):
 			_hbox_container.queue_free()
-
-	var node: Node = get_node_or_null(item_slot_path)
-	if is_inside_tree() && node:
-		assert(node is InventoryItemSlotBase)
-	item_slot = node
 
 	_hbox_container = HBoxContainer.new()
 	_hbox_container.size_flags_horizontal = SIZE_EXPAND_FILL

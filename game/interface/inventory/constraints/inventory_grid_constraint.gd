@@ -15,7 +15,6 @@ const KEY_HEIGHT := "height"
 const KEY_SIZE := "size"
 const KEY_ROTATED := "rotated"
 const KEY_POSITIVE_ROTATION := "positive_rotation"
-const KEY_GRID_POSITION := "grid_position"
 const DEFAULT_SIZE := Vector2i(10, 10)
 
 @export var size := DEFAULT_SIZE:
@@ -49,17 +48,17 @@ func _on_inventory_set() -> void:
 	_refresh_item_map()
 
 
-func on_item_added(item: InventoryItem) -> void:
+func on_item_added(item: InterfaceInventoryItem) -> void:
 	if item == null:
 		return
 	_item_map.fill_rect(get_item_rect(item), item)
 
 
-func on_item_removed(item: InventoryItem) -> void:
+func on_item_removed(item: InterfaceInventoryItem) -> void:
 	_item_map.clear_rect(get_item_rect(item))
 
 
-func on_item_modified(_item: InventoryItem) -> void:
+func on_item_modified(_item: InterfaceInventoryItem) -> void:
 	_refresh_item_map()
 
 
@@ -71,21 +70,21 @@ func _bounds_broken() -> bool:
 	return false
 
 
-func get_item_position(item: InventoryItem) -> Vector2i:
-	return item.get_property(KEY_GRID_POSITION, Vector2i.ZERO)
+func get_item_position(item: InterfaceInventoryItem) -> Vector2i:
+	return item.get_position()
 
 
 # TODO: Consider making a static "unsafe" version of this
-func set_item_position(item: InventoryItem, new_position: Vector2i) -> bool:
+func set_item_position(item: InterfaceInventoryItem, new_position: Vector2i) -> bool:
 	var new_rect := Rect2i(new_position, get_item_size(item))
 	if inventory.has_item(item) and !rect_free(new_rect, item):
 		return false
 
-	item.set_property(KEY_GRID_POSITION, new_position)
+	item.set_position(new_position)
 	return true
 
 
-func get_item_size(item: InventoryItem) -> Vector2i:
+func get_item_size(item: InterfaceInventoryItem) -> Vector2i:
 	var result := Vector2i.ZERO
 	if GridConstraint.is_item_rotated(item):
 		result.x = item.get_property(KEY_HEIGHT, 1)
@@ -96,16 +95,16 @@ func get_item_size(item: InventoryItem) -> Vector2i:
 	return result
 
 
-static func is_item_rotated(item: InventoryItem) -> bool:
+static func is_item_rotated(item: InterfaceInventoryItem) -> bool:
 	return item.get_property(KEY_ROTATED, false)
 
 
-static func is_item_rotation_positive(item: InventoryItem) -> bool:
+static func is_item_rotation_positive(item: InterfaceInventoryItem) -> bool:
 	return item.get_property(KEY_POSITIVE_ROTATION, false)
 
 
 # TODO: Consider making a static "unsafe" version of this
-func set_item_size(item: InventoryItem, new_size: Vector2i) -> bool:
+func set_item_size(item: InterfaceInventoryItem, new_size: Vector2i) -> bool:
 	if new_size.x < 1 || new_size.y < 1:
 		return false
 
@@ -118,7 +117,7 @@ func set_item_size(item: InventoryItem, new_size: Vector2i) -> bool:
 	return true
 
 
-func set_item_rotation(item: InventoryItem, rotated: bool) -> bool:
+func set_item_rotation(item: InterfaceInventoryItem, rotated: bool) -> bool:
 	if GridConstraint.is_item_rotated(item) == rotated:
 		return false
 	if !can_rotate_item(item):
@@ -132,18 +131,18 @@ func set_item_rotation(item: InventoryItem, rotated: bool) -> bool:
 	return true
 
 
-func rotate_item(item: InventoryItem) -> bool:
+func rotate_item(item: InterfaceInventoryItem) -> bool:
 	return set_item_rotation(item, !GridConstraint.is_item_rotated(item))
 
 
-static func set_item_rotation_direction(item: InventoryItem, positive: bool) -> void:
+static func set_item_rotation_direction(item: InterfaceInventoryItem, positive: bool) -> void:
 	if positive:
 		item.set_property(KEY_POSITIVE_ROTATION, true)
 	else:
 		item.clear_property(KEY_POSITIVE_ROTATION)
 
 
-func can_rotate_item(item: InventoryItem) -> bool:
+func can_rotate_item(item: InterfaceInventoryItem) -> bool:
 	var rotated_rect := get_item_rect(item)
 	var temp := rotated_rect.size.x
 	rotated_rect.size.x = rotated_rect.size.y
@@ -151,13 +150,13 @@ func can_rotate_item(item: InventoryItem) -> bool:
 	return rect_free(rotated_rect, item)
 
 
-func get_item_rect(item: InventoryItem) -> Rect2i:
+func get_item_rect(item: InterfaceInventoryItem) -> Rect2i:
 	var item_pos := get_item_position(item)
 	var item_size := get_item_size(item)
 	return Rect2i(item_pos, item_size)
 
 
-func set_item_rect(item: InventoryItem, new_rect: Rect2i) -> bool:
+func set_item_rect(item: InterfaceInventoryItem, new_rect: Rect2i) -> bool:
 	if !rect_free(new_rect, item):
 		return false
 	if !set_item_position(item, new_rect.position):
@@ -190,7 +189,7 @@ func _is_sorted() -> bool:
 	return true
 
 
-func add_item_at(item: InventoryItem, position: Vector2i) -> bool:
+func add_item_at(item: InterfaceInventoryItem, position: Vector2i) -> bool:
 	assert(inventory, "Inventory not set!")
 
 	var item_size := get_item_size(item)
@@ -204,13 +203,13 @@ func add_item_at(item: InventoryItem, position: Vector2i) -> bool:
 	return false
 
 
-func create_and_add_item_at(item: InventoryItemModel) -> InventoryItem:
+func create_and_add_item_at(item: InventoryItemModel) -> InterfaceInventoryItem:
 	assert(inventory, "Inventory not set!")
 	var item_rect := Rect2i(item.position, _get_prototype_size(item.id))
 	if !rect_free(item_rect):
 		return null
 
-	var inventory_item := inventory.create_and_add_item(item.id, item.amount)
+	var inventory_item := inventory.create_and_add_item(item)
 	if inventory_item == null:
 		return null
 
@@ -221,7 +220,7 @@ func create_and_add_item_at(item: InventoryItemModel) -> InventoryItem:
 	return inventory_item
 
 
-func get_item_at(position: Vector2i) -> InventoryItem:
+func get_item_at(position: Vector2i) -> InterfaceInventoryItem:
 	assert(inventory, "Inventory not set!")
 
 	if !_item_map.contains(position):
@@ -229,9 +228,9 @@ func get_item_at(position: Vector2i) -> InventoryItem:
 	return _item_map.get_field(position)
 
 
-func get_items_under(rect: Rect2i) -> Array[InventoryItem]:
+func get_items_under(rect: Rect2i) -> Array[InterfaceInventoryItem]:
 	assert(inventory, "Inventory not set!")
-	var result: Array[InventoryItem] = []
+	var result: Array[InterfaceInventoryItem] = []
 	for item in inventory.get_items():
 		var item_rect := get_item_rect(item)
 		if item_rect.intersects(rect):
@@ -239,7 +238,7 @@ func get_items_under(rect: Rect2i) -> Array[InventoryItem]:
 	return result
 
 
-func move_item_to(item: InventoryItem, position: Vector2i) -> bool:
+func move_item_to(item: InterfaceInventoryItem, position: Vector2i) -> bool:
 	assert(inventory, "Inventory not set!")
 	var item_size := get_item_size(item)
 	var rect := Rect2i(position, item_size)
@@ -251,7 +250,7 @@ func move_item_to(item: InventoryItem, position: Vector2i) -> bool:
 	return false
 
 
-func move_item_to_free_spot(item: InventoryItem) -> bool:
+func move_item_to_free_spot(item: InterfaceInventoryItem) -> bool:
 	if rect_free(get_item_rect(item), item):
 		return true
 
@@ -262,13 +261,13 @@ func move_item_to_free_spot(item: InventoryItem) -> bool:
 	return move_item_to(item, free_place.position)
 
 
-func _move_item_to_unsafe(item: InventoryItem, position: Vector2i) -> void:
-	item.set_property(KEY_GRID_POSITION, position)
-	if item.get_property(KEY_GRID_POSITION) == Vector2i.ZERO:
-		item.clear_property(KEY_GRID_POSITION)
+func _move_item_to_unsafe(item: InterfaceInventoryItem, position: Vector2i) -> void:
+	item.set_position(position)
 
 
-func transfer_to(item: InventoryItem, destination: GridConstraint, position: Vector2i) -> bool:
+func transfer_to(
+	item: InterfaceInventoryItem, destination: GridConstraint, position: Vector2i
+) -> bool:
 	assert(inventory, "Inventory not set!")
 	assert(destination.inventory, "Destination inventory not set!")
 	var item_size := get_item_size(item)
@@ -281,7 +280,9 @@ func transfer_to(item: InventoryItem, destination: GridConstraint, position: Vec
 	return _merge_to(item, destination, position)
 
 
-func _merge_to(item: InventoryItem, destination: GridConstraint, position: Vector2i) -> bool:
+func _merge_to(
+	item: InterfaceInventoryItem, destination: GridConstraint, position: Vector2i
+) -> bool:
 	var item_dst: Variant = destination.get_mergeable_item_at(item, position)
 	if item_dst == null:
 		return false
@@ -289,7 +290,9 @@ func _merge_to(item: InventoryItem, destination: GridConstraint, position: Vecto
 	return inventory._constraint_manager.get_stacks_constraint().join_stacks(item_dst, item)
 
 
-func get_mergeable_item_at(item: InventoryItem, position: Vector2i) -> InventoryItem:
+func get_mergeable_item_at(
+	item: InterfaceInventoryItem, position: Vector2i
+) -> InterfaceInventoryItem:
 	if inventory._constraint_manager.get_stacks_constraint() == null:
 		return null
 
@@ -303,8 +306,10 @@ func get_mergeable_item_at(item: InventoryItem, position: Vector2i) -> Inventory
 	return null
 
 
-func _get_mergeable_items_under(item: InventoryItem, rect: Rect2i) -> Array[InventoryItem]:
-	var result: Array[InventoryItem] = []
+func _get_mergeable_items_under(
+	item: InterfaceInventoryItem, rect: Rect2i
+) -> Array[InterfaceInventoryItem]:
+	var result: Array[InterfaceInventoryItem] = []
 
 	for item_dst in get_items_under(rect):
 		if item_dst == item:
@@ -315,7 +320,7 @@ func _get_mergeable_items_under(item: InventoryItem, rect: Rect2i) -> Array[Inve
 	return result
 
 
-func rect_free(rect: Rect2i, exception: InventoryItem = null) -> bool:
+func rect_free(rect: Rect2i, exception: InterfaceInventoryItem = null) -> bool:
 	assert(inventory, "Inventory not set!")
 
 	if rect.position.x < 0 || rect.position.y < 0 || rect.size.x < 1 || rect.size.y < 1:
@@ -334,7 +339,9 @@ func rect_free(rect: Rect2i, exception: InventoryItem = null) -> bool:
 
 
 # TODO: Check if this is needed after adding find_free_space
-func find_free_place(item: InventoryItem, exception: InventoryItem = null) -> Dictionary:
+func find_free_place(
+	item: InterfaceInventoryItem, exception: InterfaceInventoryItem = null
+) -> Dictionary:
 	var result := {success = false, position = Vector2i(-1, -1)}
 	var item_size := get_item_size(item)
 	for x in range(size.x - (item_size.x - 1)):
@@ -348,7 +355,7 @@ func find_free_place(item: InventoryItem, exception: InventoryItem = null) -> Di
 	return result
 
 
-func _compare_items(item1: InventoryItem, item2: InventoryItem) -> bool:
+func _compare_items(item1: InterfaceInventoryItem, item2: InterfaceInventoryItem) -> bool:
 	var rect1 := Rect2i(get_item_position(item1), get_item_size(item1))
 	var rect2 := Rect2i(get_item_position(item2), get_item_size(item2))
 	return rect1.get_area() > rect2.get_area()
@@ -357,7 +364,7 @@ func _compare_items(item1: InventoryItem, item2: InventoryItem) -> bool:
 func sort() -> bool:
 	assert(inventory, "Inventory not set!")
 
-	var item_array: Array[InventoryItem] = []
+	var item_array: Array[InterfaceInventoryItem] = []
 	for item in inventory.get_items():
 		item_array.append(item)
 	item_array.sort_custom(_compare_items)
@@ -379,7 +386,7 @@ func _sort_if_needed() -> void:
 		sort()
 
 
-func get_space_for(item: InventoryItem) -> InventoryItemCount:
+func get_space_for(item: InterfaceInventoryItem) -> InventoryItemCount:
 	var occupied_rects: Array[Rect2i] = []
 	var item_size := get_item_size(item)
 	if item_size == Vector2i.ONE:
@@ -392,7 +399,7 @@ func get_space_for(item: InventoryItem) -> InventoryItemCount:
 	return InventoryItemCount.new(occupied_rects.size())
 
 
-func has_space_for(item: InventoryItem) -> bool:
+func has_space_for(item: InterfaceInventoryItem) -> bool:
 	var item_size := get_item_size(item)
 	if item_size == Vector2i.ONE:
 		return _item_map.free_fields > 0

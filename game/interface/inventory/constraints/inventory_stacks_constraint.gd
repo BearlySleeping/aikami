@@ -16,7 +16,7 @@ const DEFAULT_MAX_STACK_SIZE := 1
 
 # TODO: Check which util functions can be made private
 # TODO: Consider making these util methods work with InventoryItemCount
-static func get_free_stack_space(item: InventoryItem) -> int:
+static func get_free_stack_space(item: InterfaceInventoryItem) -> int:
 	assert(item, "item is null!")
 	var max_stack_size := get_item_max_stack_size(item)
 	if max_stack_size == -1:
@@ -24,22 +24,24 @@ static func get_free_stack_space(item: InventoryItem) -> int:
 	return max_stack_size - get_item_stack_size(item)
 
 
-static func _has_custom_property(item: InventoryItem, property: String, value: Variant) -> bool:
+static func _has_custom_property(
+	item: InterfaceInventoryItem, property: String, value: Variant
+) -> bool:
 	assert(item, "item is null!")
 	return item.properties.has(property) && item.properties[property] == value
 
 
-static func get_item_stack_size(item: InventoryItem) -> int:
+static func get_item_stack_size(item: InterfaceInventoryItem) -> int:
 	assert(item, "item is null!")
 	return item.get_property(KEY_STACK_SIZE, DEFAULT_STACK_SIZE)
 
 
-static func get_item_max_stack_size(item: InventoryItem) -> int:
+static func get_item_max_stack_size(item: InterfaceInventoryItem) -> int:
 	assert(item, "item is null!")
 	return item.get_property(KEY_MAX_STACK_SIZE, DEFAULT_MAX_STACK_SIZE)
 
 
-static func set_item_stack_size(item: InventoryItem, stack_size: int) -> bool:
+static func set_item_stack_size(item: InterfaceInventoryItem, stack_size: int) -> bool:
 	assert(item, "item is null!")
 	assert(stack_size >= 0, "stack_size can't be negative!")
 	var max_stack_size := get_item_max_stack_size(item)
@@ -55,7 +57,7 @@ static func set_item_stack_size(item: InventoryItem, stack_size: int) -> bool:
 	return true
 
 
-static func set_item_max_stack_size(item: InventoryItem, max_stack_size: int) -> void:
+static func set_item_max_stack_size(item: InterfaceInventoryItem, max_stack_size: int) -> void:
 	assert(item, "item is null!")
 	# Check that max_stack_size is greater than 0, or -1 (infinite)
 	if max_stack_size != -1:
@@ -75,11 +77,11 @@ static func get_prototype_stack_size(protoset: InventoryItemProtoset, prototype_
 	return protoset.get_prototype_property(prototype_id, KEY_STACK_SIZE, 1.0)
 
 
-func get_mergeable_items(item: InventoryItem) -> Array[InventoryItem]:
+func get_mergeable_items(item: InterfaceInventoryItem) -> Array[InterfaceInventoryItem]:
 	assert(inventory, "Inventory not set!")
 	assert(item, "item is null!")
 
-	var result: Array[InventoryItem] = []
+	var result: Array[InterfaceInventoryItem] = []
 
 	for i in inventory.get_items():
 		if i == item:
@@ -92,7 +94,7 @@ func get_mergeable_items(item: InventoryItem) -> Array[InventoryItem]:
 	return result
 
 
-static func items_mergeable(item_1: InventoryItem, item_2: InventoryItem) -> bool:
+static func items_mergeable(item_1: InterfaceInventoryItem, item_2: InterfaceInventoryItem) -> bool:
 	# Two item stacks are mergeable if they have the same prototype ID and neither of the two contain
 	# custom properties that the other one doesn't have (except for "stack_size", "max_stack_size",
 	# "grid_position", or "weight").
@@ -100,10 +102,7 @@ static func items_mergeable(item_1: InventoryItem, item_2: InventoryItem) -> boo
 	assert(item_2, "item_2 is null!")
 
 	var ignore_properties: Array[String] = [
-		KEY_STACK_SIZE,
-		KEY_MAX_STACK_SIZE,
-		GridConstraint.KEY_GRID_POSITION,
-		WeightConstraint.KEY_WEIGHT
+		KEY_STACK_SIZE, KEY_MAX_STACK_SIZE, WeightConstraint.KEY_WEIGHT
 	]
 
 	if item_1.prototype_id != item_2.prototype_id:
@@ -124,7 +123,9 @@ static func items_mergeable(item_1: InventoryItem, item_2: InventoryItem) -> boo
 	return true
 
 
-func add_item_automerge(item: InventoryItem, _ignore_properties: Array[String] = []) -> bool:
+func add_item_automerge(
+	item: InterfaceInventoryItem, _ignore_properties: Array[String] = []
+) -> bool:
 	assert(item, "Item is null!")
 	assert(inventory, "Inventory not set!")
 	if !inventory._constraint_manager.has_space_for(item):
@@ -139,7 +140,9 @@ func add_item_automerge(item: InventoryItem, _ignore_properties: Array[String] =
 	return true
 
 
-static func merge_stacks(item_dst: InventoryItem, item_src: InventoryItem) -> MergeResult:
+static func merge_stacks(
+	item_dst: InterfaceInventoryItem, item_src: InterfaceInventoryItem
+) -> MergeResult:
 	assert(item_dst, "item_dst is null!")
 	assert(item_src, "item_src is null!")
 
@@ -168,7 +171,9 @@ static func merge_stacks(item_dst: InventoryItem, item_src: InventoryItem) -> Me
 	return MergeResult.PARTIAL
 
 
-static func split_stack(item: InventoryItem, new_stack_size: int) -> InventoryItem:
+static func split_stack(
+	item: InterfaceInventoryItem, new_stack_size: int
+) -> InterfaceInventoryItem:
 	assert(item, "item is null!")
 	assert(new_stack_size >= 1, "New stack size must be greater or equal to 1!")
 
@@ -188,7 +193,7 @@ static func split_stack(item: InventoryItem, new_stack_size: int) -> InventoryIt
 
 
 # TODO: Rename this
-func split_stack_safe(item: InventoryItem, new_stack_size: int) -> InventoryItem:
+func split_stack_safe(item: InterfaceInventoryItem, new_stack_size: int) -> InterfaceInventoryItem:
 	assert(inventory, "inventory is null!")
 	assert(inventory.has_item(item), "The inventory does not contain the given item!")
 
@@ -198,7 +203,7 @@ func split_stack_safe(item: InventoryItem, new_stack_size: int) -> InventoryItem
 	return new_item
 
 
-func join_stacks(item_dst: InventoryItem, item_src: InventoryItem) -> bool:
+func join_stacks(item_dst: InterfaceInventoryItem, item_src: InterfaceInventoryItem) -> bool:
 	if !stacks_joinable(item_dst, item_src):
 		return false
 
@@ -207,7 +212,7 @@ func join_stacks(item_dst: InventoryItem, item_src: InventoryItem) -> bool:
 	return true
 
 
-func stacks_joinable(item_dst: InventoryItem, item_src: InventoryItem) -> bool:
+func stacks_joinable(item_dst: InterfaceInventoryItem, item_src: InterfaceInventoryItem) -> bool:
 	assert(inventory, "inventory is null!")
 	assert(item_dst, "item_dst is null!")
 	assert(item_src, "item_src is null!")
@@ -225,15 +230,15 @@ func stacks_joinable(item_dst: InventoryItem, item_src: InventoryItem) -> bool:
 	return true
 
 
-func get_space_for(_item: InventoryItem) -> InventoryItemCount:
+func get_space_for(_item: InterfaceInventoryItem) -> InventoryItemCount:
 	return InventoryItemCount.inf()
 
 
-func has_space_for(_item: InventoryItem) -> bool:
+func has_space_for(_item: InterfaceInventoryItem) -> bool:
 	return true
 
 
-func get_free_stack_space_for(item: InventoryItem) -> InventoryItemCount:
+func get_free_stack_space_for(item: InterfaceInventoryItem) -> InventoryItemCount:
 	assert(inventory, "Inventory not set!")
 
 	var item_count := InventoryItemCount.zero()
@@ -246,7 +251,7 @@ func get_free_stack_space_for(item: InventoryItem) -> InventoryItemCount:
 	return item_count
 
 
-func pack_item(item: InventoryItem) -> void:
+func pack_item(item: InterfaceInventoryItem) -> void:
 	var free_stack_space := get_free_stack_space_for(item)
 	if free_stack_space.eq(InventoryItemCount.zero()):
 		return
@@ -261,7 +266,9 @@ func pack_item(item: InventoryItem) -> void:
 			return
 
 
-func transfer_autosplit(item: InventoryItem, destination: Inventory) -> InventoryItem:
+func transfer_autosplit(
+	item: InterfaceInventoryItem, destination: Inventory
+) -> InterfaceInventoryItem:
 	assert(
 		(
 			inventory._constraint_manager.get_configuration()
@@ -282,13 +289,15 @@ func transfer_autosplit(item: InventoryItem, destination: Inventory) -> Inventor
 	if count <= 0:
 		return null
 
-	var new_item: InventoryItem = StacksConstraint.split_stack(item, count)
+	var new_item: InterfaceInventoryItem = StacksConstraint.split_stack(item, count)
 	assert(new_item)
 	assert(destination.add_item(new_item))
 	return new_item
 
 
-func _get_space_for_single_item(p_inventory: Inventory, item: InventoryItem) -> InventoryItemCount:
+func _get_space_for_single_item(
+	p_inventory: Inventory, item: InterfaceInventoryItem
+) -> InventoryItemCount:
 	var single_item := item.duplicate()
 	assert(StacksConstraint.set_item_stack_size(single_item, 1))
 	var count := p_inventory._constraint_manager.get_space_for(single_item)
@@ -296,7 +305,7 @@ func _get_space_for_single_item(p_inventory: Inventory, item: InventoryItem) -> 
 	return count
 
 
-func transfer_autosplitmerge(item: InventoryItem, destination: Inventory) -> bool:
+func transfer_autosplitmerge(item: InterfaceInventoryItem, destination: Inventory) -> bool:
 	assert(
 		(
 			inventory._constraint_manager.get_configuration()
@@ -314,7 +323,7 @@ func transfer_autosplitmerge(item: InventoryItem, destination: Inventory) -> boo
 	return false
 
 
-func transfer_automerge(item: InventoryItem, destination: Inventory) -> bool:
+func transfer_automerge(item: InterfaceInventoryItem, destination: Inventory) -> bool:
 	assert(
 		(
 			inventory._constraint_manager.get_configuration()

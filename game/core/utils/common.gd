@@ -42,3 +42,13 @@ static func get_image_texture_from_path(image_path: String) -> ImageTexture:
 		printerr("get_image_texture_from_path:failed_to_load_image\n" + str(failed_to_load_image))
 		return
 	return ImageTexture.create_from_image(image)
+
+
+## Capitalize the first letter of a string and make the rest lowercase
+static func capitalize_first_letter(input: String) -> String:
+	# Return early if the input is empty
+	if input.length() == 0:
+		return input
+
+	# Capitalize the first letter and make the rest lowercase
+	return input.substr(0, 1).to_upper() + input.substr(1, input.length() - 1).to_lower()

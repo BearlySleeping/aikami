@@ -17,12 +17,12 @@ func _init(p_inventory: Inventory) -> void:
 
 
 # Override this
-func get_space_for(_item: InventoryItem) -> InventoryItemCount:
+func get_space_for(_item: InterfaceInventoryItem) -> InventoryItemCount:
 	return InventoryItemCount.zero()
 
 
 # Override this
-func has_space_for(_item: InventoryItem) -> bool:
+func has_space_for(_item: InterfaceInventoryItem) -> bool:
 	return false
 
 
@@ -47,15 +47,15 @@ func _on_inventory_set() -> void:
 
 
 # Override this
-func on_item_added(_item: InventoryItem) -> void:
+func on_item_added(_item: InterfaceInventoryItem) -> void:
 	pass
 
 
 # Override this
-func on_item_removed(_item: InventoryItem) -> void:
+func on_item_removed(_item: InterfaceInventoryItem) -> void:
 	pass
 
 
 # Override this
-func on_item_modified(_item: InventoryItem) -> void:
+func on_item_modified(_item: InterfaceInventoryItem) -> void:
 	pass

@@ -1,5 +1,5 @@
 @tool
-class_name InventoryItem
+class_name InterfaceInventoryItem
 extends Node
 
 ## Inventory item class. It is based on an item prototype from an InventoryItemProtoset resource.
@@ -28,6 +28,19 @@ const KEY_NAME := "name"
 
 const Verify := preload("../constraints/inventory_verify.gd")
 
+var item: InventoryItemModel
+
+
+func _init(
+	p_item: InventoryItemModel,
+	p_protoset: InventoryItemProtoset,
+	inventory: Inventory,
+) -> void:
+	item = p_item
+	protoset = p_protoset
+	_inventory = inventory
+
+
 ## An InventoryItemProtoset resource containing item prototypes.
 ## @required
 @export var protoset: InventoryItemProtoset:
@@ -42,28 +55,14 @@ const Verify := preload("../constraints/inventory_verify.gd")
 		protoset = new_protoset
 		_connect_protoset_signals()
 
-		# Reset the prototype ID (pick the first prototype from the protoset)
-		if protoset && protoset._prototypes && protoset._prototypes.keys().size() > 0:
-			prototype_id = protoset._prototypes.keys()[0]
-		else:
-			prototype_id = ""
-
 		protoset_changed.emit()
 		update_configuration_warnings()
+
 ## ID of the prototype from protoset this item is based on.
 ## @required
 @export var prototype_id: String:
-	set(new_prototype_id):
-		if new_prototype_id == prototype_id:
-			return
-		if protoset == null && !new_prototype_id.is_empty():
-			return
-		if (protoset) && (!protoset.has_prototype(new_prototype_id)):
-			return
-		prototype_id = new_prototype_id
-		_reset_properties()
-		update_configuration_warnings()
-		prototype_id_changed.emit()
+	get:
+		return item.id
 
 ## Additional item properties.
 ## @optional
@@ -72,6 +71,8 @@ const Verify := preload("../constraints/inventory_verify.gd")
 		properties = new_properties
 		properties_changed.emit()
 		update_configuration_warnings()
+	get:
+		return item.to_dict()
 
 var _inventory: Inventory
 var _item_slot: InventoryItemSlot
@@ -93,6 +94,15 @@ func _on_protoset_changed() -> void:
 	update_configuration_warnings()
 
 
+func set_position(position: Vector2i) -> void:
+	item.position = position
+	properties_changed.emit()
+
+
+func get_position() -> Vector2i:
+	return item.position
+
+
 func _get_configuration_warnings() -> PackedStringArray:
 	if !protoset:
 		return PackedStringArray()
@@ -111,7 +121,7 @@ func _reset_properties() -> void:
 		return
 
 	# Reset (erase) all properties from the current prototype but preserve the rest
-	var prototype: Dictionary = protoset.get_prototype(prototype_id)
+	var prototype: Dictionary = protoset.get_prototype_dict(prototype_id)
 	var keys: Array = properties.keys().duplicate()
 	for property: String in keys:
 		if prototype.has(property):

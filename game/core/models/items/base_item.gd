@@ -26,6 +26,9 @@ var width: float
 ## The path to the image of the item to display in the inventory
 ## @required
 var image_path: String
+## The position of the item to be used for the UI and the inventory grid system
+## @default Enum.EquippedSlotType.NONE
+var slot_type: Enum.EquippedSlotType
 
 
 func _init(p_id: String, data: Dictionary) -> void:
@@ -40,6 +43,7 @@ func _init(p_id: String, data: Dictionary) -> void:
 	max_stack_size = data.get("max_stack_size", 1)
 	height = data.get("height", 1)
 	width = data.get("width", 1)
+	slot_type = data.get("slot_type", Enum.EquippedSlotType.NONE)
 
 
 func to_dict() -> Dictionary:
@@ -51,7 +55,8 @@ func to_dict() -> Dictionary:
 		"max_stack_size": max_stack_size,
 		"height": height,
 		"width": width,
-		"image_path": image_path
+		"image_path": image_path,
+		"slot_type": slot_type
 	}
 
 
@@ -63,5 +68,6 @@ func to_item_prototype_dict() -> Dictionary:
 		"max_stack_size": max_stack_size,
 		"height": height,
 		"width": width,
-		"image_path": image_path
+		"image_path": image_path,
+		"slot_type": slot_type
 	}
