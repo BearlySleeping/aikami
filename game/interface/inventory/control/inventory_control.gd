@@ -10,20 +10,6 @@ signal inventory_item_context_activated(item: InterfaceInventoryItem)
 
 const KEY_NAME := "name"
 
-## Path to an Inventory node.
-@export var inventory_path: NodePath:
-	set(new_inv_path):
-		inventory_path = new_inv_path
-		var node: Node = get_node_or_null(inventory_path)
-
-		if node == null:
-			return
-
-		if is_inside_tree():
-			assert(node is Inventory)
-
-		inventory = node
-		update_configuration_warnings()
 ## The default icon that will be used for items with no image property.
 @export var default_item_icon: Texture2D
 
@@ -41,19 +27,6 @@ var inventory: Inventory = null:
 
 var _vbox_container: VBoxContainer
 var _item_list: ItemList
-
-
-func _get_configuration_warnings() -> PackedStringArray:
-	if inventory_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"This node is not linked to an inventory, so it can't display any content.\n"
-					+ "Set the inventory_path property to point to an Inventory node."
-				)
-			]
-		)
-	return PackedStringArray()
 
 
 func _ready() -> void:
@@ -75,9 +48,6 @@ func _ready() -> void:
 	_item_list.item_activated.connect(_on_list_item_activated)
 	_item_list.item_clicked.connect(_on_list_item_clicked)
 	_vbox_container.add_child(_item_list)
-
-	if has_node(inventory_path):
-		inventory = get_node(inventory_path)
 
 	_refresh()
 

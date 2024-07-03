@@ -60,22 +60,6 @@ const Verify := preload("../constraints/inventory_verify.gd")
 ## @default Color.GRAY
 @export var selection_color := Color.GRAY
 
-## Path to an Inventory node.
-## @required
-@export var inventory_path: NodePath:
-	set(new_inv_path):
-		inventory_path = new_inv_path
-		var node: Node = get_node_or_null(inventory_path)
-
-		if node == null:
-			return
-
-		if is_inside_tree():
-			assert(node is InventoryGrid)
-
-		inventory = node
-		update_configuration_warnings()
-
 ## The default texture that will be used for items with no image property.
 ## @required
 @export var default_item_texture: Texture2D:
@@ -137,19 +121,6 @@ var _selection_panel: Panel
 var _pending_highlights: Array[Dictionary] = []
 
 
-func _get_configuration_warnings() -> PackedStringArray:
-	if inventory_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"This node is not linked to an inventory, so it can't display any content.\n"
-					+ "Set the inventory_path property to point to an InventoryGrid node."
-				)
-			]
-		)
-	return PackedStringArray()
-
-
 func _ready() -> void:
 	if Engine.is_editor_hint():
 		# Clean up, in case it is duplicated in the editor
@@ -185,9 +156,6 @@ func _ready() -> void:
 	_inventory_control_item_container.resized.connect(
 		func() -> void: _inventory_control_drop_zone.size = _inventory_control_item_container.size
 	)
-
-	if has_node(inventory_path):
-		inventory = get_node_or_null(inventory_path)
 
 	_refresh()
 	_create_selection_panel()

@@ -1,10 +1,10 @@
-[gd_scene load_steps=3 format=3 uid="uid://d0lpj4dp3r4dd"]
+[gd_scene load_steps=3 format=3 uid="uid://daxygoynvdyya"]
 
-[ext_resource type="Script" path="res://interface/menus/game/game_menu.gd" id="1_gj21q"]
-[ext_resource type="Theme" uid="uid://65dakj0ukuj6" path="res://interface/theme/default_theme.tres" id="2_2s7jy"]
+[ext_resource type="Script" path="res://interface/menus/game/game_menu.gd" id="1_ohyo3"]
+[ext_resource type="Theme" uid="uid://65dakj0ukuj6" path="res://interface/theme/default_theme.tres" id="2_g2jg8"]
 
 [node name="GameMenu" type="CanvasLayer"]
-script = ExtResource("1_gj21q")
+script = ExtResource("1_ohyo3")
 
 [node name="Control" type="Control" parent="."]
 layout_mode = 3
@@ -13,7 +13,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme = ExtResource("2_2s7jy")
+theme = ExtResource("2_g2jg8")
 
 [node name="ColorRect" type="ColorRect" parent="Control"]
 layout_mode = 1

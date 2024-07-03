@@ -27,7 +27,7 @@ SceneManager="*res://core/engine/scene_manager.gd"
 AudioManager="*res://assets/audio/audio_manager.tscn"
 DialogueManager="*res://core/engine/dialogue_manager.gd"
 Hud="*res://interface/hud/hud.tscn"
-GameMenu="*res://interface/menus/pause/pause_menu.tscn"
+GameMenu="*res://interface/menus/game/game_menu.tscn"
 SignalManager="*res://core/engine/signal_manager.gd"
 TimeManager="*res://core/engine/time_manager.gd"
 

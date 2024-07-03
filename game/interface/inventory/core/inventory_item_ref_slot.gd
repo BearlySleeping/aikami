@@ -13,16 +13,6 @@ const EMPTY_SLOT := -1
 @export var _equipped_item := EMPTY_SLOT:
 	set = _set_equipped_item_index
 
-## Path to an Inventory node. Sets the inventory property.
-## @required
-@export var inventory_path: NodePath:
-	set(new_inv_path):
-		if inventory_path == new_inv_path:
-			return
-		inventory_path = new_inv_path
-		update_configuration_warnings()
-		_set_inventory_from_path(inventory_path)
-
 ## Reference to an Inventory node.
 var inventory: Inventory:
 	get = _get_inventory,
@@ -32,55 +22,24 @@ var _wr_item: WeakRef = weakref(null)
 var _wr_inventory: WeakRef = weakref(null)
 
 
-func _get_configuration_warnings() -> PackedStringArray:
-	if inventory_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"Inventory path not set! Inventory path needs to point to an inventory node, so "
-					+ "items from that inventory can be equipped in the slot."
-				)
-			]
-		)
-	return PackedStringArray()
-
-
 func _set_equipped_item_index(new_value: int) -> void:
 	_equipped_item = new_value
 	equip_by_index(new_value)
 
 
 func _ready() -> void:
-	_set_inventory_from_path(inventory_path)
 	equip_by_index(_equipped_item)
 
 
-func _set_inventory_from_path(path: NodePath) -> bool:
-	if path.is_empty():
-		return false
-
-	var node: Node = null
-
-	if is_inside_tree():
-		node = get_node_or_null(inventory_path)
-
-	if node == null || !(node is Inventory):
-		return false
-
-	clear()
-	_set_inventory(node)
-	return true
-
-
-func _set_inventory(inventory: Inventory) -> void:
-	if inventory == _wr_inventory.get_ref():
+func _set_inventory(p_inventory: Inventory) -> void:
+	if p_inventory == _wr_inventory.get_ref():
 		return
 
 	if _get_inventory():
 		_disconnect_inventory_signals()
 
 	clear()
-	_wr_inventory = weakref(inventory)
+	_wr_inventory = weakref(p_inventory)
 	inventory_changed.emit()
 
 	if _get_inventory():
