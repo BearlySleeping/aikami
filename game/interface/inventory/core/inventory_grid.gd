@@ -45,22 +45,6 @@ func get_item_rect(item: InterfaceInventoryItem) -> Rect2i:
 	return _constraint_manager.get_grid_constraint().get_item_rect(item)
 
 
-## Sets the item rotation (indicated by the rotation property).
-## Items can be rotated by positive or negative 90 degrees
-## (indicated by the positive_rotation property).
-## Returns false if the rotation can't be performed,
-## i.e. the item is already rotated or the rotation is obstructed
-## by other items/inventory boundaries.
-func set_item_rotation(item: InterfaceInventoryItem, rotated: bool) -> bool:
-	return _constraint_manager.get_grid_constraint().set_item_rotation(item, rotated)
-
-
-## Toggles item rotation. Returns false if the rotation can't be performed,
-## i.e. the item is already rotated or the rotation is obstructed by other items/inventory boundaries.
-func rotate_item(item: InterfaceInventoryItem) -> bool:
-	return _constraint_manager.get_grid_constraint().rotate_item(item)
-
-
 ## Checks if the item is rotated (indicated by the rotated property).
 func is_item_rotated(item: InterfaceInventoryItem) -> bool:
 	return ConstraintManager.GridConstraint.is_item_rotated(item)
@@ -69,13 +53,6 @@ func is_item_rotated(item: InterfaceInventoryItem) -> bool:
 ## Checks if there's place for the item to be rotated.
 func can_rotate_item(item: InterfaceInventoryItem) -> bool:
 	return _constraint_manager.get_grid_constraint().can_rotate_item(item)
-
-
-## Sets the item rotation to positive or negative (indicated by the positive_rotation property).
-## This does not affect the resulting size of the rotated item, only the way it is rendered in the UI.
-## If the item seems to be rendered upside-down after a rotation, set the rotation direction to negative.
-func set_item_rotation_direction(item: InterfaceInventoryItem, positive: bool) -> void:
-	_constraint_manager.set_item_rotation_direction(item, positive)
 
 
 ## Checks if the item rotation is positive (indicated by the positive_rotation property).

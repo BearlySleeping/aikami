@@ -71,7 +71,7 @@ func _bounds_broken() -> bool:
 
 
 func get_item_position(item: InterfaceInventoryItem) -> Vector2i:
-	return item.get_position()
+	return item.grid_position
 
 
 # TODO: Consider making a static "unsafe" version of this
@@ -80,66 +80,32 @@ func set_item_position(item: InterfaceInventoryItem, new_position: Vector2i) -> 
 	if inventory.has_item(item) and !rect_free(new_rect, item):
 		return false
 
-	item.set_position(new_position)
+	item.grid_position = new_position
 	return true
 
 
 func get_item_size(item: InterfaceInventoryItem) -> Vector2i:
 	var result := Vector2i.ZERO
+	var item_data := item.get_metadata()
 	if GridConstraint.is_item_rotated(item):
-		result.x = item.get_property(KEY_HEIGHT, 1)
-		result.y = item.get_property(KEY_WIDTH, 1)
+		result.x = item_data.height
+		result.y = item_data.width
 	else:
-		result.x = item.get_property(KEY_WIDTH, 1)
-		result.y = item.get_property(KEY_HEIGHT, 1)
+		result.x = item_data.width
+		result.y = item_data.height
 	return result
 
 
-static func is_item_rotated(item: InterfaceInventoryItem) -> bool:
-	return item.get_property(KEY_ROTATED, false)
+static func is_item_rotated(_item: InterfaceInventoryItem) -> bool:
+	# var item_data := item.get_metadata()
+	# return item_data.rotated
+	return false
 
 
-static func is_item_rotation_positive(item: InterfaceInventoryItem) -> bool:
-	return item.get_property(KEY_POSITIVE_ROTATION, false)
-
-
-# TODO: Consider making a static "unsafe" version of this
-func set_item_size(item: InterfaceInventoryItem, new_size: Vector2i) -> bool:
-	if new_size.x < 1 || new_size.y < 1:
-		return false
-
-	var new_rect := Rect2i(get_item_position(item), new_size)
-	if inventory.has_item(item) and !rect_free(new_rect, item):
-		return false
-
-	item.set_property(KEY_WIDTH, new_size.x)
-	item.set_property(KEY_HEIGHT, new_size.y)
-	return true
-
-
-func set_item_rotation(item: InterfaceInventoryItem, rotated: bool) -> bool:
-	if GridConstraint.is_item_rotated(item) == rotated:
-		return false
-	if !can_rotate_item(item):
-		return false
-
-	if rotated:
-		item.set_property(KEY_ROTATED, true)
-	else:
-		item.clear_property(KEY_ROTATED)
-
-	return true
-
-
-func rotate_item(item: InterfaceInventoryItem) -> bool:
-	return set_item_rotation(item, !GridConstraint.is_item_rotated(item))
-
-
-static func set_item_rotation_direction(item: InterfaceInventoryItem, positive: bool) -> void:
-	if positive:
-		item.set_property(KEY_POSITIVE_ROTATION, true)
-	else:
-		item.clear_property(KEY_POSITIVE_ROTATION)
+static func is_item_rotation_positive(_item: InterfaceInventoryItem) -> bool:
+	# var item_data := item.get_metadata()
+	# return item_data.positive_rotation
+	return false
 
 
 func can_rotate_item(item: InterfaceInventoryItem) -> bool:
@@ -156,21 +122,11 @@ func get_item_rect(item: InterfaceInventoryItem) -> Rect2i:
 	return Rect2i(item_pos, item_size)
 
 
-func set_item_rect(item: InterfaceInventoryItem, new_rect: Rect2i) -> bool:
-	if !rect_free(new_rect, item):
-		return false
-	if !set_item_position(item, new_rect.position):
-		return false
-	if !set_item_size(item, new_rect.size):
-		return false
-	return true
-
-
 func _get_prototype_size(prototype_id: String) -> Vector2i:
 	assert(inventory, "Inventory not set!")
-	assert(inventory.item_protoset, "Inventory protoset is null!")
-	var width: int = inventory.item_protoset.get_prototype_property(prototype_id, KEY_WIDTH, 1)
-	var height: int = inventory.item_protoset.get_prototype_property(prototype_id, KEY_HEIGHT, 1)
+	var item_data := ItemManager.get_item(prototype_id)
+	var width := item_data.width
+	var height := item_data.height
 	return Vector2i(width, height)
 
 
@@ -205,7 +161,7 @@ func add_item_at(item: InterfaceInventoryItem, position: Vector2i) -> bool:
 
 func create_and_add_item_at(item: InventoryItemModel) -> InterfaceInventoryItem:
 	assert(inventory, "Inventory not set!")
-	var item_rect := Rect2i(item.position, _get_prototype_size(item.id))
+	var item_rect := Rect2i(item.grid_position, _get_prototype_size(item.id))
 	if !rect_free(item_rect):
 		return null
 
@@ -213,7 +169,7 @@ func create_and_add_item_at(item: InventoryItemModel) -> InterfaceInventoryItem:
 	if inventory_item == null:
 		return null
 
-	if not move_item_to(inventory_item, item.position):
+	if not move_item_to(inventory_item, item.grid_position):
 		inventory.remove_item(inventory_item)
 		return null
 
@@ -262,7 +218,7 @@ func move_item_to_free_spot(item: InterfaceInventoryItem) -> bool:
 
 
 func _move_item_to_unsafe(item: InterfaceInventoryItem, position: Vector2i) -> void:
-	item.set_position(position)
+	item.grid_position = position
 
 
 func transfer_to(

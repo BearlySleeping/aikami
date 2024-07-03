@@ -7,7 +7,7 @@ static func get_random_int(max_value: int) -> int:
 
 
 static func random_bytes(n: int) -> Array[int]:
-	var r := []
+	var r: Array[int] = []
 	for index in range(0, n):
 		r.append(get_random_int(256))
 	return r

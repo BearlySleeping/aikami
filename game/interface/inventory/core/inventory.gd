@@ -13,26 +13,13 @@ signal item_removed(item: InterfaceInventoryItem)
 signal item_modified(item: InterfaceInventoryItem)
 ## Emitted when the contents of the inventory have changed.
 signal contents_changed
-## Emitted when the item_protoset property has been changed.
-signal protoset_changed
 
 const KEY_NODE_NAME := "node_name"
-const KEY_ITEM_PROTOSET := "item_protoset"
 const KEY_CONSTRAINTS := "constraints"
 const KEY_ITEMS := "items"
 
 const ConstraintManager := preload("../constraints/inventory_constraint_manager.gd")
 const Verify := preload("../constraints/inventory_verify.gd")
-
-var item_protoset: InventoryItemProtoset:
-	set(new_item_protoset):
-		if new_item_protoset == item_protoset:
-			return
-		# TODO: Maybe the inventory should be cleared here?
-		if not _items.is_empty():
-			return
-		item_protoset = new_item_protoset
-		protoset_changed.emit()
 
 var _items: Array[InterfaceInventoryItem] = []
 var _constraint_manager: ConstraintManager
@@ -40,19 +27,6 @@ var _constraint_manager: ConstraintManager
 
 func enable_weight_constraint(capacity: float = 0.0) -> void:
 	_constraint_manager.enable_weight_constraint(capacity)
-
-
-func _get_configuration_warnings() -> PackedStringArray:
-	if item_protoset == null:
-		return PackedStringArray(
-			[
-				(
-					"This inventory node has no protoset. Set the 'item_protoset' field to be able to "
-					+ "populate the inventory with items."
-				)
-			]
-		)
-	return PackedStringArray()
 
 
 static func get_item_script() -> Script:
@@ -132,8 +106,6 @@ func _connect_item_signals(item: InterfaceInventoryItem) -> void:
 
 
 func _disconnect_item_signals(item: InterfaceInventoryItem) -> void:
-	if item.protoset_changed.is_connected(_emit_item_modified):
-		item.protoset_changed.disconnect(_emit_item_modified)
 	if item.prototype_id_changed.is_connected(_emit_item_modified):
 		item.prototype_id_changed.disconnect(_emit_item_modified)
 	if item.properties_changed.is_connected(_emit_item_modified):
@@ -173,12 +145,15 @@ func add_item(item: InterfaceInventoryItem) -> bool:
 ## and the result of can_hold_item(item) into account.
 func can_add_item(item: InterfaceInventoryItem) -> bool:
 	if item == null || has_item(item):
+		Logger.warn("Item already in inventory")
 		return false
 
 	if !can_hold_item(item):
+		Logger.warn("Item cannot be added to inventory")
 		return false
 
 	if !_constraint_manager.has_space_for(item):
+		Logger.warn("Inventory is full")
 		return false
 
 	return true
@@ -194,9 +169,7 @@ func can_hold_item(_item: InterfaceInventoryItem) -> bool:
 ## Creates an InterfaceInventoryItem based on the given prototype ID and adds it to the inventory.
 ## Returns null if the item cannot be added.
 func create_and_add_item(item: InventoryItemModel) -> InterfaceInventoryItem:
-	var inventory_item: InterfaceInventoryItem = InterfaceInventoryItem.new(
-		item, item_protoset, self
-	)
+	var inventory_item: InterfaceInventoryItem = InterfaceInventoryItem.new(item, self)
 	if add_item(inventory_item):
 		return inventory_item
 
@@ -262,7 +235,6 @@ func transfer(item: InterfaceInventoryItem, destination: Inventory) -> bool:
 ## Resets the inventory to its default state. This includes clearing its contents and resetting all properties.
 func reset() -> void:
 	clear()
-	item_protoset = null
 	_constraint_manager.reset()
 
 
@@ -271,48 +243,3 @@ func clear() -> void:
 	for item in get_items():
 		item.queue_free()
 	remove_all_items()
-
-
-## Serializes the inventory into a dictionary.
-func serialize() -> Dictionary:
-	var result: Dictionary = {}
-
-	result[KEY_NODE_NAME] = name as String
-	result[KEY_ITEM_PROTOSET] = item_protoset.resource_path
-	result[KEY_CONSTRAINTS] = _constraint_manager.serialize()
-	if !get_items().is_empty():
-		result[KEY_ITEMS] = []
-		for item in get_items():
-			result[KEY_ITEMS].append(item.serialize())
-
-	return result
-
-
-## Loads the inventory data from the given dictionary.
-func deserialize(source: Dictionary) -> bool:
-	if (
-		!Verify.dict(source, true, KEY_NODE_NAME, TYPE_STRING)
-		|| !Verify.dict(source, true, KEY_ITEM_PROTOSET, TYPE_STRING)
-		|| !Verify.dict(source, false, KEY_ITEMS, TYPE_ARRAY, TYPE_DICTIONARY)
-		|| !Verify.dict(source, false, KEY_CONSTRAINTS, TYPE_DICTIONARY)
-	):
-		return false
-
-	clear()
-	item_protoset = null
-
-	if !source[KEY_NODE_NAME].is_empty() && source[KEY_NODE_NAME] != name:
-		name = source[KEY_NODE_NAME]
-	item_protoset = load(source[KEY_ITEM_PROTOSET])
-	# TODO: Check return value:
-	if source.has(KEY_CONSTRAINTS):
-		_constraint_manager.deserialize(source[KEY_CONSTRAINTS])
-	if source.has(KEY_ITEMS):
-		var items: Array = source[KEY_ITEMS]
-		for item_dict: Dictionary in items:
-			var item: InterfaceInventoryItem = Inventory.get_item_script().new()
-			# TODO: Check return value:
-			item.deserialize(item_dict)
-			assert(add_item(item), "Failed to add item '%s'. Inventory full?" % item.prototype_id)
-
-	return true

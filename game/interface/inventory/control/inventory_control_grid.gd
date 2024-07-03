@@ -210,7 +210,7 @@ func populate_inventory(items: Array[InventoryItemModel]) -> void:
 func get_inventory_items() -> Array[InventoryItemModel]:
 	var current_items: Array[InventoryItemModel] = []
 	for inventory_item in inventory.get_items():
-		current_items.append(inventory_item.item)
+		current_items.append(inventory_item.item_data)
 	return current_items
 
 
@@ -541,8 +541,6 @@ func _handle_item_transfer(item: InterfaceInventoryItem, drop_position: Vector2)
 
 	var field_coords := get_field_coords(drop_position + (field_dimensions / 2))
 	if source_inventory:
-		if source_inventory.item_protoset != inventory.item_protoset:
-			return
 		source_inventory.transfer_to(item, inventory, field_coords)
 	else:
 		inventory.add_item_at(item, field_coords)

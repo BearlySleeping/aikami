@@ -1,9 +1,11 @@
 extends Control
 
 const INFO_OFFSET := Vector2(20, 0)
-const USER_INVENTORY_SAVE_FILE: String = "test_user_inventory_state.save"
-const USER_EQUIPPED_SAVE_FILE: String = "test_user_equipped_state.save"
-const NPC_INVENTORY_SAVE_FILE: String = "test_npc_inventory_state.save"
+const USER_INVENTORY_SAVE_FILE := "test_user_inventory_state.save"
+const USER_EQUIPPED_SAVE_FILE := "test_user_equipped_state.save"
+const NPC_INVENTORY_SAVE_FILE := "test_npc_inventory_state.save"
+
+var equipped_slots: Array[InventoryItemSlot] = []
 
 @onready var inventory_player_grid: InventoryControlGrid = %InventoryGridPlayerControl
 @onready var inventory_npc_grid: InventoryControlGrid = %InventoryGridNpcControl
@@ -13,14 +15,6 @@ const NPC_INVENTORY_SAVE_FILE: String = "test_npc_inventory_state.save"
 @onready var split_npc_button: Button = %SplitNpcButton
 @onready var lbl_info: Label = %InfoLabel
 @onready var save_button: Button = %SaveButton
-
-var equipped_slots: Array[InventoryItemSlot] = []
-
-
-func add_item_definition_if_needed(id: String, array: Array[BaseItemModel]) -> void:
-	if array.any(func(item: BaseItemModel) -> bool: return item.id == id):
-		return
-	array.append(ItemManager.get_item(id))
 
 
 func load_inventory_data(
@@ -41,36 +35,27 @@ func _populate_inventory() -> void:
 		USER_INVENTORY_SAVE_FILE,
 		[
 			InventoryItemModel.new(
-				{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)}
+				{"id": "other_book_blue", "stack_size": 2, "grid_position": Vector2i(3, 3)}
 			),
 			InventoryItemModel.new(
-				{"id": "armor_chestplate_silver", "amount": 1, "position": Vector2i(4, 4)}
+				{"id": "armor_chestplate_silver", "stack_size": 1, "grid_position": Vector2i(4, 4)}
 			),
 		]
 	)
+
 	var npc_items := load_inventory_data(
 		NPC_INVENTORY_SAVE_FILE,
 		[
 			InventoryItemModel.new(
-				{"id": "other_book_blue", "amount": 2, "position": Vector2i(3, 3)}
+				{"id": "other_book_blue", "stack_size": 2, "grid_position": Vector2i(3, 3)}
 			),
 		]
 	)
 
 	var equipped_items := load_inventory_data(USER_EQUIPPED_SAVE_FILE, [])
 
-	# First generate a protoset for inventory_player_grid and inventory_npc_grid that has only
-	# the item_definitions needed for the user and npc inventories
-	var item_definitions_needed: Array[BaseItemModel] = []
-
-	for item: InventoryItemModel in user_items + npc_items + equipped_items:
-		add_item_definition_if_needed(item["id"], item_definitions_needed)
-
-	var item_protoset: InventoryItemProtoset = InventoryItemProtoset.new(item_definitions_needed)
 	inventory_player_grid.inventory = InventoryGridStacked.new()
 	inventory_npc_grid.inventory = InventoryGridStacked.new()
-	inventory_player_grid.inventory.item_protoset = item_protoset
-	inventory_npc_grid.inventory.item_protoset = item_protoset
 	inventory_player_grid.inventory.enable_weight_constraint(5.0)
 	inventory_player_grid.populate_inventory(user_items)
 	inventory_npc_grid.populate_inventory(npc_items)
@@ -85,12 +70,13 @@ func _populate_inventory() -> void:
 		var equipped_item_slot: InventoryControlItemSlot = InventoryControlItemSlot.new()
 		var item_slot: InventoryItemSlot = InventoryItemSlot.new()
 		item_slot.slot_type = slot_type
-		item_slot.item_protoset = item_protoset
 		equipped_item_slot.item_slot = item_slot
 		equipped_item_slot.slot_type = slot_type
 
 		_find_and_equip_item(
-			equipped_items, item_definitions_needed, slot_type, item_slot, item_protoset
+			equipped_items,
+			slot_type,
+			item_slot,
 		)
 
 		equipped_item_slot_container.add_child(equipped_item_slot)
@@ -100,27 +86,15 @@ func _populate_inventory() -> void:
 ## Finds and equips the item for the given slot type
 func _find_and_equip_item(
 	equipped_items: Array[InventoryItemModel],
-	item_definitions_needed: Array[BaseItemModel],
 	slot_type: Enum.EquippedSlotType,
 	item_slot: InventoryItemSlot,
-	item_protoset: InventoryItemProtoset
 ) -> bool:
 	for equipped_item in equipped_items:
-		var item_definition_index := -1
-		for i in range(item_definitions_needed.size()):
-			if item_definitions_needed[i].id == equipped_item.id:
-				item_definition_index = i
-				break
-		if item_definition_index == -1:
-			continue
-		if item_definitions_needed[item_definition_index].slot_type != slot_type:
+		var item_data := ItemManager.get_item(equipped_item.id)
+		if item_data.slot_type != slot_type:
 			continue
 
-		item_slot.equip(
-			InterfaceInventoryItem.new(
-				equipped_item, item_protoset, inventory_player_grid.inventory
-			)
-		)
+		item_slot.equip(InterfaceInventoryItem.new(equipped_item, inventory_player_grid.inventory))
 		return true
 	return false
 
@@ -158,7 +132,7 @@ func _on_save_button_pressed() -> void:
 	for slot: InventoryItemSlot in equipped_slots:
 		var item := slot.get_item()
 		if item != null:
-			equipped_items.append(item.item)
+			equipped_items.append(item.item_data)
 
 	print("equipped_items:", equipped_items)
 

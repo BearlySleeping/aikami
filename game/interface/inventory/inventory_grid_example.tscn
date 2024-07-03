@@ -48,11 +48,9 @@ grow_vertical = 2
 script = ExtResource("1_cwnpf")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
-layout_mode = 2
-offset_right = 562.0
+layout_mode = 1
+offset_right = 601.0
 offset_bottom = 345.0
-grow_horizontal = 2
-grow_vertical = 2
 alignment = 1
 
 [node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]

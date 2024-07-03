@@ -4,28 +4,13 @@ extends "inventory_item_slot_base.gd"
 
 ## Holds an inventory item.
 
-##
-signal protoset_changed
-
 const Verify := preload("../constraints/inventory_verify.gd")
-const KEY_ITEM := "item"
 
 var slot_type: Enum.EquippedSlotType
 
 ## If set to true, the clear() method will try to return the item to its original inventory.
 ## @default true
 @export var remember_source_inventory := true
-
-##  An InventoryItemProtoset resource containing item prototypes that the slot can receive.
-## @required
-var item_protoset: InventoryItemProtoset:
-	set(new_item_protoset):
-		if new_item_protoset == item_protoset:
-			return
-		if _item:
-			_item = null
-		item_protoset = new_item_protoset
-		protoset_changed.emit()
 
 var _wr_source_inventory: WeakRef = weakref(null)
 var _item: InterfaceInventoryItem
@@ -36,8 +21,9 @@ var _item: InterfaceInventoryItem
 ## Returns true otherwise.
 func equip(item: InterfaceInventoryItem) -> bool:
 	assert(slot_type != Enum.EquippedSlotType.NONE, "Slot type not set!")
+	var item_data := item.get_metadata()
 
-	if item.get_property("slot_type") != slot_type:
+	if item_data.slot_type != slot_type:
 		return false
 
 	if !can_hold_item(item):
@@ -107,12 +93,8 @@ func get_item() -> InterfaceInventoryItem:
 ## Checks if the slot can hold the given item, i.e. the item has the same protoset as the slot and is not null.
 ## This method can be overridden to implement item slots that can only hold specific items.
 func can_hold_item(item: InterfaceInventoryItem) -> bool:
-	assert(item_protoset, "Item protoset not set!")
 	if item == null:
 		return false
-	if item_protoset != item.protoset:
-		return false
-
 	return true
 
 

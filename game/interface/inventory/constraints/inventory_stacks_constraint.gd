@@ -33,12 +33,13 @@ static func _has_custom_property(
 
 static func get_item_stack_size(item: InterfaceInventoryItem) -> int:
 	assert(item, "item is null!")
-	return item.get_property(KEY_STACK_SIZE, DEFAULT_STACK_SIZE)
+	return item.stack_size
 
 
 static func get_item_max_stack_size(item: InterfaceInventoryItem) -> int:
 	assert(item, "item is null!")
-	return item.get_property(KEY_MAX_STACK_SIZE, DEFAULT_MAX_STACK_SIZE)
+	var item_data: BaseItemModel = item.get_metadata()
+	return item_data.max_stack_size
 
 
 static func set_item_stack_size(item: InterfaceInventoryItem, stack_size: int) -> bool:
@@ -53,28 +54,18 @@ static func set_item_stack_size(item: InterfaceInventoryItem, stack_size: int) -
 			item_inventory.remove_item(item)
 		item.queue_free()
 		return true
-	item.set_property(KEY_STACK_SIZE, stack_size)
+	item.stack_size = stack_size
 	return true
 
 
-static func set_item_max_stack_size(item: InterfaceInventoryItem, max_stack_size: int) -> void:
-	assert(item, "item is null!")
-	# Check that max_stack_size is greater than 0, or -1 (infinite)
-	if max_stack_size != -1:
-		assert(max_stack_size > 0, "max_stack_size can't be less than 1!")
-	item.set_property(KEY_MAX_STACK_SIZE, max_stack_size)
+static func get_prototype_max_stack_size(prototype_id: String) -> int:
+	var item_data := ItemManager.get_item(prototype_id)
+	return item_data.max_stack_size
 
 
-static func get_prototype_max_stack_size(
-	protoset: InventoryItemProtoset, prototype_id: String
-) -> int:
-	assert(protoset, "protoset is null!")
-	return protoset.get_prototype_property(prototype_id, KEY_MAX_STACK_SIZE, 1.0)
-
-
-static func get_prototype_stack_size(protoset: InventoryItemProtoset, prototype_id: String) -> int:
-	assert(protoset, "protoset is null!")
-	return protoset.get_prototype_property(prototype_id, KEY_STACK_SIZE, 1.0)
+static func get_prototype_stack_size(prototype_id: String) -> int:
+	var item_data := ItemManager.get_item(prototype_id)
+	return item_data.stack_size
 
 
 func get_mergeable_items(item: InterfaceInventoryItem) -> Array[InterfaceInventoryItem]:
@@ -101,24 +92,8 @@ static func items_mergeable(item_1: InterfaceInventoryItem, item_2: InterfaceInv
 	assert(item_1, "item_1 is null!")
 	assert(item_2, "item_2 is null!")
 
-	var ignore_properties: Array[String] = [
-		KEY_STACK_SIZE, KEY_MAX_STACK_SIZE, WeightConstraint.KEY_WEIGHT
-	]
-
 	if item_1.prototype_id != item_2.prototype_id:
 		return false
-
-	for property: String in item_1.properties.keys():
-		if property in ignore_properties:
-			continue
-		if !_has_custom_property(item_2, property, item_1.properties[property]):
-			return false
-
-	for property: String in item_2.properties.keys():
-		if property in ignore_properties:
-			continue
-		if !_has_custom_property(item_1, property, item_2.properties[property]):
-			return false
 
 	return true
 
@@ -136,7 +111,7 @@ func add_item_automerge(
 		if StacksConstraint.merge_stacks(target_item, item) == MergeResult.SUCCESS:
 			return true
 
-	assert(inventory.add_item(item))
+	assert(inventory.add_item(item), "Failed to add item to inventory")
 	return true
 
 
@@ -183,9 +158,10 @@ static func split_stack(
 		new_stack_size < stack_size, "New stack size must be smaller than the original stack size!"
 	)
 
-	var new_item := item.duplicate()
-	if new_item.get_parent():
-		new_item.get_parent().remove_child(new_item)
+	# We need to create new instance of InventoryItemModel
+	var new_item := InterfaceInventoryItem.new(
+		InventoryItemModel.new(item.item_data.to_dict()), item.get_inventory()
+	)
 
 	assert(set_item_stack_size(new_item, new_stack_size))
 	assert(set_item_stack_size(item, stack_size - new_stack_size))
@@ -199,7 +175,7 @@ func split_stack_safe(item: InterfaceInventoryItem, new_stack_size: int) -> Inte
 
 	var new_item := StacksConstraint.split_stack(item, new_stack_size)
 	if new_item:
-		assert(inventory.add_item(new_item))
+		assert(inventory.add_item(new_item), "Failed to add new item to inventory")
 	return new_item
 
 
@@ -298,7 +274,7 @@ func transfer_autosplit(
 func _get_space_for_single_item(
 	p_inventory: Inventory, item: InterfaceInventoryItem
 ) -> InventoryItemCount:
-	var single_item := item.duplicate()
+	var single_item := InterfaceInventoryItem.new(item.item_data, item.get_inventory())
 	assert(StacksConstraint.set_item_stack_size(single_item, 1))
 	var count := p_inventory._constraint_manager.get_space_for(single_item)
 	single_item.free()

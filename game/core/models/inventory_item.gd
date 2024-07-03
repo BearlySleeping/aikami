@@ -12,23 +12,23 @@ extends BaseModel
 var id: String
 ## The amount of the item, this is the same as the stack size
 ## @default 1
-var amount: int
+var stack_size: int
 ## The position of the item to be used for the UI and the inventory grid system
 ## @default Vector2i(0, 0)
-var position: Vector2i
+var grid_position: Vector2i
 
 
 func _init(data: Dictionary) -> void:
 	assert(data.has("id"), "id is required")
 	id = data.get("id")
-	amount = data.get("amount", 1)
-	position = data.get("position", Vector2i(0, 0))
+	stack_size = data.get("stack_size", 1)
+	grid_position = data.get("grid_position", Vector2i(0, 0))
 
 
 func to_dict() -> Dictionary:
 	var data: Dictionary = {
 		"id": id,
-		"amount": amount,
-		"position": position,
+		"stack_size": stack_size,
+		"grid_position": grid_position,
 	}
 	return data

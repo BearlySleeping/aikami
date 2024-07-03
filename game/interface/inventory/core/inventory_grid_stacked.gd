@@ -52,19 +52,14 @@ static func get_item_max_stack_size(item: InterfaceInventoryItem) -> int:
 	return StacksConstraint.get_item_max_stack_size(item)
 
 
-## Sets the maximum stack size for the given item.
-static func set_item_max_stack_size(item: InterfaceInventoryItem, new_stack_size: int) -> void:
-	StacksConstraint.set_item_max_stack_size(item, new_stack_size)
-
-
 ## Returns the stack size of the given item prototype.
 func get_prototype_stack_size(prototype_id: String) -> int:
-	return StacksConstraint.get_prototype_stack_size(item_protoset, prototype_id)
+	return StacksConstraint.get_prototype_stack_size(prototype_id)
 
 
 ##  Returns the maximum stack size of the given item prototype.
 func get_prototype_max_stack_size(prototype_id: String) -> int:
-	return StacksConstraint.get_prototype_max_stack_size(item_protoset, prototype_id)
+	return StacksConstraint.get_prototype_max_stack_size(prototype_id)
 
 
 ## ransfers the given item stack into the given inventory, joining it

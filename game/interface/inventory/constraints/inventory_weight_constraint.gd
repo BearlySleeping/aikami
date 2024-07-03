@@ -76,7 +76,8 @@ func _calculate_occupied_space() -> void:
 
 
 static func get_item_unit_weight(item: InterfaceInventoryItem) -> float:
-	var weight: float = item.get_property(KEY_WEIGHT, 1.0)
+	var item_data := item.get_metadata()
+	var weight := item_data.weight
 	return weight
 
 
@@ -84,11 +85,6 @@ static func get_item_weight(item: InterfaceInventoryItem) -> float:
 	if item == null:
 		return -1.0
 	return StacksConstraint.get_item_stack_size(item) * get_item_unit_weight(item)
-
-
-static func set_item_weight(item: InterfaceInventoryItem, weight: float) -> void:
-	assert(weight >= 0.0, "Item weight must be greater or equal to 0!")
-	item.set_property(KEY_WEIGHT, weight)
 
 
 func get_space_for(item: InterfaceInventoryItem) -> InventoryItemCount:

@@ -42,7 +42,7 @@ project/assembly_name="AiKami"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_whisper/plugin.cfg")
+enabled=PackedStringArray("res://addons/bottom_panel_shortcuts/plugin.cfg", "res://addons/godot_whisper/plugin.cfg", "res://addons/script-ide/plugin.cfg")
 
 [input]
 

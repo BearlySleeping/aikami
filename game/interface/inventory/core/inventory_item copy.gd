@@ -1,8 +1,8 @@
 @tool
-class_name InterfaceInventoryItem
+class_name InterBBBBBfaceInventoryItem
 extends Node
 
-## Inventory item class. It is based on an item prototype from an InventoryItemProtoset resource.
+## Inventory item class.
 ## Can hold additional properties.
 
 ## Emitted when the item prototype ID changes.
@@ -25,14 +25,14 @@ const KEY_NAME := "name"
 
 const Verify := preload("../constraints/inventory_verify.gd")
 
-var _item_item_data: InventoryItemModel
+var _item: InventoryItemModel
 
 
 func _init(
 	item: InventoryItemModel,
 	inventory: Inventory,
 ) -> void:
-	_item_item_data = item
+	_item = item
 	_inventory = inventory
 
 
@@ -40,35 +40,25 @@ func _init(
 ## @required
 var prototype_id: String:
 	get:
-		return _item_item_data.id
-
-## Additional item properties.
-## @optional
-var properties: Dictionary:
-	set(new_properties):
-		_item_item_data = InventoryItemModel.new(new_properties)
-		properties_changed.emit()
-		update_configuration_warnings()
-	get:
-		return _item_item_data.to_dict()
+		return _item.id
 
 var stack_size: int:
 	get:
-		return _item_item_data.stack_size
+		return _item.stack_size
 	set(new_stack_size):
-		_item_item_data.stack_size = new_stack_size
+		_item.stack_size = new_stack_size
 		properties_changed.emit()
 
 var grid_position: Vector2i:
 	get:
-		return _item_item_data.grid_position
+		return _item.grid_position
 	set(new_grid_position):
-		_item_item_data.grid_position = new_grid_position
+		_item.grid_position = new_grid_position
 		properties_changed.emit()
 
 var item_data: InventoryItemModel:
 	get:
-		return _item_item_data
+		return _item
 
 var _inventory: Inventory
 var _item_slot: InventoryItemSlot
@@ -76,17 +66,6 @@ var _item_slot: InventoryItemSlot
 
 func get_metadata() -> BaseItemModel:
 	return ItemManager.get_item(prototype_id)
-
-
-func _reset_properties() -> void:
-	_item_item_data = (
-		InventoryItemModel
-		. new(
-			{
-				"id": prototype_id,
-			}
-		)
-	)
 
 
 func _notification(what: int) -> void:
@@ -149,47 +128,28 @@ func get_inventory() -> Inventory:
 	return _inventory
 
 
-## Returns the value of the property with the given name.
-## In case the property can not be found, the default value is returned.
-func get_property(property_name: String, default_value: Variant = null) -> Variant:
-	# Note: The protoset editor still doesn't support arrays and dictionaries,
-	# but those can still be added via JSON definitions or via code.
-	if properties.has(property_name):
-		var value: Variant = properties[property_name]
-		if typeof(value) == TYPE_DICTIONARY || typeof(value) == TYPE_ARRAY:
-			return value.duplicate()
-		return value
-	var metadata: Dictionary = get_metadata().to_dict()
-	if metadata.has(property_name):
-		var value: Variant = metadata[property_name]
-		if typeof(value) == TYPE_DICTIONARY || typeof(value) == TYPE_ARRAY:
-			return value.duplicate()
-		return value
-
-	return default_value
-
-
-##  Sets the property with the given name for this item.
-func set_property(property_name: String, value: Variant) -> void:
-	var old_property: Variant = null
-	if properties.has(property_name):
-		old_property = properties[property_name]
-	properties[property_name] = value
-	if old_property != properties[property_name]:
-		properties_changed.emit()
-
-
-## Clears the property with the given name for this item.
-func clear_property(property_name: String) -> void:
-	if properties.has(property_name):
-		properties.erase(property_name)
-		properties_changed.emit()
-
-
 ## Resets all properties to default values.
 func reset() -> void:
 	prototype_id = ""
-	properties = {}
+
+
+## Helper function for retrieving the item texture.
+## It checks the image item property and loads it as a texture, if available.
+func get_texture() -> Texture2D:
+	var texture_path := get_metadata().image_path
+	if texture_path && texture_path != "" && ResourceLoader.exists(texture_path):
+		var texture := load(texture_path)
+		if texture is Texture2D:
+			return texture
+	return null
+
+
+## Helper function for retrieving the item title.
+## It checks the name item property and uses it as the title.
+func get_title() -> String:
+	var title: String = get_metadata().name
+
+	return title
 
 
 ##  Serializes the item into a dictionary.
@@ -198,6 +158,7 @@ func serialize() -> Dictionary:
 
 	result[KEY_NODE_NAME] = name as String
 	result[KEY_PROTOTYPE_ID] = prototype_id
+	var properties := item_data.to_dict()
 	if !properties.is_empty():
 		result[KEY_PROPERTIES] = {}
 		for property_name: String in properties.keys():
@@ -209,6 +170,7 @@ func serialize() -> Dictionary:
 func _serialize_property(property_name: String) -> Dictionary:
 	# Store all properties as strings for JSON support.
 	var result: Dictionary = {}
+	var properties := item_data.to_dict()
 	var property_value: Variant = properties[property_name]
 	var property_type := typeof(property_value)
 	result = {KEY_TYPE: property_type, KEY_VALUE: var_to_str(property_value)}
@@ -229,13 +191,14 @@ func deserialize(source: Dictionary) -> bool:
 	if !source[KEY_NODE_NAME].is_empty() && source[KEY_NODE_NAME] != name:
 		name = source[KEY_NODE_NAME]
 	prototype_id = source[KEY_PROTOTYPE_ID]
+	var properties := {}
 	if source.has(KEY_PROPERTIES):
 		for key: String in source[KEY_PROPERTIES].keys():
 			properties[key] = _deserialize_property(source[KEY_PROPERTIES][key])
 			if properties[key] == null:
 				properties = {}
 				return false
-
+	_item = InventoryItemModel.new(properties)
 	return true
 
 
@@ -253,22 +216,3 @@ func _deserialize_property(data: Dictionary) -> Variant:
 		)
 		return
 	return result
-
-
-## Helper function for retrieving the item texture.
-## It checks the image item property and loads it as a texture, if available.
-func get_texture() -> Texture2D:
-	var texture_path: Variant = get_property(KEY_IMAGE)
-	if texture_path && texture_path != "" && ResourceLoader.exists(texture_path):
-		var texture := load(texture_path)
-		if texture is Texture2D:
-			return texture
-	return null
-
-
-## Helper function for retrieving the item title.
-## It checks the name item property and uses it as the title.
-func get_title() -> String:
-	var title: String = get_property(KEY_NAME, prototype_id)
-
-	return title

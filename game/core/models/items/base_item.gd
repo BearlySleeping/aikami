@@ -19,10 +19,10 @@ var weight: float
 var max_stack_size: int
 ## The height of the item in the grid inventory
 ## @default 1
-var height: float
+var height: int
 ## The width of the item in the grid inventory
 ## @default 1
-var width: float
+var width: int
 ## The path to the image of the item to display in the inventory
 ## @required
 var image_path: String
