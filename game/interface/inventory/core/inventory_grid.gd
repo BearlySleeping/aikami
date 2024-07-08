@@ -31,99 +31,76 @@ func _init() -> void:
 
 
 ## Returns the position of the given item in the inventory.
-func get_item_position(item: InventoryItem) -> Vector2i:
+func get_item_position(item: InterfaceInventoryItem) -> Vector2i:
 	return _constraint_manager.get_grid_constraint().get_item_position(item)
 
 
 ## Returns the size of the given item.
-func get_item_size(item: InventoryItem) -> Vector2i:
+func get_item_size(item: InterfaceInventoryItem) -> Vector2i:
 	return _constraint_manager.get_grid_constraint().get_item_size(item)
 
 
 ## Returns the position and size of the given item in the inventory.
-func get_item_rect(item: InventoryItem) -> Rect2i:
+func get_item_rect(item: InterfaceInventoryItem) -> Rect2i:
 	return _constraint_manager.get_grid_constraint().get_item_rect(item)
 
 
-## Sets the item rotation (indicated by the rotation property).
-## Items can be rotated by positive or negative 90 degrees
-## (indicated by the positive_rotation property).
-## Returns false if the rotation can't be performed,
-## i.e. the item is already rotated or the rotation is obstructed
-## by other items/inventory boundaries.
-func set_item_rotation(item: InventoryItem, rotated: bool) -> bool:
-	return _constraint_manager.get_grid_constraint().set_item_rotation(item, rotated)
-
-
-## Toggles item rotation. Returns false if the rotation can't be performed,
-## i.e. the item is already rotated or the rotation is obstructed by other items/inventory boundaries.
-func rotate_item(item: InventoryItem) -> bool:
-	return _constraint_manager.get_grid_constraint().rotate_item(item)
-
-
 ## Checks if the item is rotated (indicated by the rotated property).
-func is_item_rotated(item: InventoryItem) -> bool:
+func is_item_rotated(item: InterfaceInventoryItem) -> bool:
 	return ConstraintManager.GridConstraint.is_item_rotated(item)
 
 
 ## Checks if there's place for the item to be rotated.
-func can_rotate_item(item: InventoryItem) -> bool:
+func can_rotate_item(item: InterfaceInventoryItem) -> bool:
 	return _constraint_manager.get_grid_constraint().can_rotate_item(item)
 
 
-## Sets the item rotation to positive or negative (indicated by the positive_rotation property).
-## This does not affect the resulting size of the rotated item, only the way it is rendered in the UI.
-## If the item seems to be rendered upside-down after a rotation, set the rotation direction to negative.
-func set_item_rotation_direction(item: InventoryItem, positive: bool) -> void:
-	_constraint_manager.set_item_rotation_direction(item, positive)
-
-
 ## Checks if the item rotation is positive (indicated by the positive_rotation property).
-func is_item_rotation_positive(item: InventoryItem) -> bool:
+func is_item_rotation_positive(item: InterfaceInventoryItem) -> bool:
 	return ConstraintManager.GridConstraint.is_item_rotation_positive(item)
 
 
 ## Adds the given to the inventory, at the given position.
-func add_item_at(item: InventoryItem, position: Vector2i) -> bool:
+func add_item_at(item: InterfaceInventoryItem, position: Vector2i) -> bool:
 	return _constraint_manager.get_grid_constraint().add_item_at(item, position)
 
 
-## Creates an InventoryItem based on the given prototype ID and adds it to the inventory
+## Creates an InterfaceInventoryItem based on the given prototype ID and adds it to the inventory
 ## at the given position. Returns null if the item cannot be added.
-func create_and_add_item_at(prototype_id: String, position: Vector2i) -> InventoryItem:
-	return _constraint_manager.get_grid_constraint().create_and_add_item_at(prototype_id, position)
+func create_and_add_item_at(item: InventoryItemModel) -> InterfaceInventoryItem:
+	return _constraint_manager.get_grid_constraint().create_and_add_item_at(item)
 
 
 ## Returns the item at the given position in the inventory. Returns null if the given field is empty.
-func get_item_at(position: Vector2i) -> InventoryItem:
+func get_item_at(position: Vector2i) -> InterfaceInventoryItem:
 	return _constraint_manager.get_grid_constraint().get_item_at(position)
 
 
-func get_items_under(rect: Rect2i) -> Array[InventoryItem]:
+func get_items_under(rect: Rect2i) -> Array[InterfaceInventoryItem]:
 	return _constraint_manager.get_grid_constraint().get_items_under(rect)
 
 
 ## Moves the given item in the inventory to the new given position.
-func move_item_to(item: InventoryItem, position: Vector2i) -> bool:
+func move_item_to(item: InterfaceInventoryItem, position: Vector2i) -> bool:
 	return _constraint_manager.get_grid_constraint().move_item_to(item, position)
 
 
 ## Transfers the given item to the given inventory to the given position.
-func transfer_to(item: InventoryItem, destination: Inventory, position: Vector2i) -> bool:
+func transfer_to(item: InterfaceInventoryItem, destination: Inventory, position: Vector2i) -> bool:
 	return _constraint_manager.get_grid_constraint().transfer_to(
 		item, destination._constraint_manager.get_grid_constraint(), position
 	)
 
 
 ## Checks if the given rectangle is not occupied by any items (with a given optional exception).
-func rect_free(rect: Rect2i, exception: InventoryItem = null) -> bool:
+func rect_free(rect: Rect2i, exception: InterfaceInventoryItem = null) -> bool:
 	return _constraint_manager.get_grid_constraint().rect_free(rect, exception)
 
 
 ## Finds a free place for the given item. Returns a dictionary with two fields:
 ## success and position. If success is true a free place has been found
 ## and is stored in the position field. Otherwise success is set to false.
-func find_free_place(item: InventoryItem) -> Dictionary:
+func find_free_place(item: InterfaceInventoryItem) -> Dictionary:
 	return _constraint_manager.get_grid_constraint().find_free_place(item)
 
 

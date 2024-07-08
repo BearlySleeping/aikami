@@ -45,6 +45,9 @@ var weaknesses: String
 ## @optional
 var relationships: String
 
+## Describes the NPC's voice type.
+var voice_type: Enum.VoiceType
+
 var current_mood := "default"
 
 var dynamic_data: NPCDynamicModel
@@ -64,3 +67,4 @@ func _init(npc_id: String, npc_data: Dictionary) -> void:
 	abilities = npc_data.abilities
 	weaknesses = npc_data.weaknesses
 	relationships = npc_data.relationships
+	voice_type = npc_data.voice_type

@@ -27,7 +27,8 @@ const PREDEFINED_NPCS: Dictionary = {
 		"dislikes": "Evil, the Ring's corruption",
 		"abilities": "Stealth, resilience",
 		"weaknesses": "The Ring's influence",
-		"relationships": "Friend of Sam, Merry, and Pippin"
+		"relationships": "Friend of Sam, Merry, and Pippin",
+		"voice_type": Enum.VoiceType.MALE_CHILD
 	},
 	PredefinedNPC.GANDALF:
 	{
@@ -48,7 +49,8 @@ const PREDEFINED_NPCS: Dictionary = {
 		"dislikes": "Evil, folly",
 		"abilities": "Magic, wisdom",
 		"weaknesses": "Physical form limitations",
-		"relationships": "Member of the Fellowship of the Ring"
+		"relationships": "Member of the Fellowship of the Ring",
+		"voice_type": Enum.VoiceType.MALE_OLD
 	},
 	PredefinedNPC.ARAGON:
 	{
@@ -69,7 +71,8 @@ const PREDEFINED_NPCS: Dictionary = {
 		"dislikes": "Tyranny, oppression",
 		"abilities": "Swordsmanship, leadership",
 		"weaknesses": "Heavy burden of destiny",
-		"relationships": "Loves Arwen, friend of the Fellowship"
+		"relationships": "Loves Arwen, friend of the Fellowship",
+		"voice_type": Enum.VoiceType.MALE_DEFAULT
 	},
 }
 

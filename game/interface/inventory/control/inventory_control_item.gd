@@ -7,7 +7,7 @@ signal context_activated
 const StacksConstraint := preload("../constraints/inventory_stacks_constraint.gd")
 const GridConstraint := preload("../constraints/inventory_grid_constraint.gd")
 
-var item: InventoryItem:
+var item: InterfaceInventoryItem:
 	set(new_item):
 		if item == new_item:
 			return
@@ -51,14 +51,10 @@ static var _stored_preview_size: Vector2
 static var _stored_preview_offset: Vector2
 
 
-func _connect_item_signals(new_item: InventoryItem) -> void:
+func _connect_item_signals(new_item: InterfaceInventoryItem) -> void:
 	if new_item == null:
 		return
 
-	if !new_item.protoset_changed.is_connected(_refresh):
-		new_item.protoset_changed.connect(_refresh)
-	if !new_item.prototype_id_changed.is_connected(_refresh):
-		new_item.prototype_id_changed.connect(_refresh)
 	if !new_item.properties_changed.is_connected(_refresh):
 		new_item.properties_changed.connect(_refresh)
 
@@ -67,10 +63,6 @@ func _disconnect_item_signals() -> void:
 	if !is_instance_valid(item):
 		return
 
-	if item.protoset_changed.is_connected(_refresh):
-		item.protoset_changed.disconnect(_refresh)
-	if item.prototype_id_changed.is_connected(_refresh):
-		item.prototype_id_changed.disconnect(_refresh)
 	if item.properties_changed.is_connected(_refresh):
 		item.properties_changed.disconnect(_refresh)
 

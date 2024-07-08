@@ -1,6 +1,6 @@
 class_name Global
 ## Global stats to use across the project
-enum ScreenType { MAIN_MENU, SETTINGS, GAME }
+enum ScreenType { MAIN_MENU, PAUSE_MENU, GAME_MENU, GAME }
 
 ## If true then the dialog box is active, used to disable processes like user input
 static var dialogue_active := false
