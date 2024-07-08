@@ -1,36 +1,153 @@
 extends Control
 
 const INFO_OFFSET := Vector2(20, 0)
+const USER_INVENTORY_SAVE_FILE := "test_user_inventory_state.save"
+const USER_EQUIPPED_SAVE_FILE := "test_user_equipped_state.save"
+const NPC_INVENTORY_SAVE_FILE := "test_npc_inventory_state.save"
 
-@onready var ctrl_inventory_left: InventoryControlGrid = %CtrlInventoryGridLeft
-@onready var ctrl_inventory_right: InventoryControlGrid = %CtrlInventoryGridRight
-@onready var btn_sort_left: Button = %BtnSortLeft
-@onready var btn_sort_right: Button = %BtnSortRight
-@onready var btn_split_left: Button = %BtnSplitLeft
-@onready var btn_split_right: Button = %BtnSplitRight
-@onready var ctrl_slot: InventoryControlItemSlot = %CtrlItemSlot
-@onready var btn_unequip: Button = %BtnUnequip
-@onready var lbl_info: Label = %LblInfo
+var equipped_slots: Array[InventoryItemSlot] = []
+
+@onready var inventory_player_grid: InventoryControlGrid = %InventoryGridPlayerControl
+@onready var inventory_npc_grid: InventoryControlGrid = %InventoryGridNpcControl
+@onready var sort_player_button: Button = %SortPlayerButton
+@onready var sort_npc_button: Button = %SortNpcButton
+@onready var split_player_button: Button = %SplitPlayerButton
+@onready var split_npc_button: Button = %SplitNpcButton
+@onready var lbl_info: Label = %InfoLabel
+@onready var save_button: Button = %SaveButton
+
+
+func load_inventory_data(
+	save_path: String, default_items: Array[InventoryItemModel]
+) -> Array[InventoryItemModel]:
+	var response := SaveManager.load_file(save_path)
+	if response[0] == null:
+		return default_items
+	var data := response[0] as Array
+	var items: Array[InventoryItemModel] = []
+	for item: Dictionary in data:
+		items.append(InventoryItemModel.new(item))
+	return items
+
+
+func _populate_inventory() -> void:
+	var user_items := load_inventory_data(
+		USER_INVENTORY_SAVE_FILE,
+		[
+			InventoryItemModel.new(
+				{"id": "other_book_blue", "stack_size": 2, "grid_position": Vector2i(3, 3)}
+			),
+			InventoryItemModel.new(
+				{"id": "armor_chestplate_silver", "stack_size": 1, "grid_position": Vector2i(4, 4)}
+			),
+		]
+	)
+
+	var npc_items := load_inventory_data(
+		NPC_INVENTORY_SAVE_FILE,
+		[
+			InventoryItemModel.new(
+				{"id": "other_book_blue", "stack_size": 2, "grid_position": Vector2i(3, 3)}
+			),
+		]
+	)
+
+	var equipped_items := load_inventory_data(USER_EQUIPPED_SAVE_FILE, [])
+
+	inventory_player_grid.inventory = InventoryGridStacked.new()
+	inventory_npc_grid.inventory = InventoryGridStacked.new()
+	inventory_player_grid.inventory.enable_weight_constraint(5.0)
+	inventory_player_grid.populate_inventory(user_items)
+	inventory_npc_grid.populate_inventory(npc_items)
+
+	var slot_types: Array = Enum.EquippedSlotType.values()
+	for slot_type: Enum.EquippedSlotType in slot_types:
+		if slot_type == Enum.EquippedSlotType.NONE:
+			continue
+		var slot_name: String = Enum.EquippedSlotType.keys()[slot_type]
+		var node_name: String = "%" + Utils.capitalize_first_letter(slot_name) + "SlotContainer"
+		var equipped_item_slot_container: PanelContainer = get_node(node_name)
+		var equipped_item_slot: InventoryControlItemSlot = InventoryControlItemSlot.new()
+		var item_slot: InventoryItemSlot = InventoryItemSlot.new()
+		item_slot.slot_type = slot_type
+		equipped_item_slot.item_slot = item_slot
+		equipped_item_slot.slot_type = slot_type
+
+		_find_and_equip_item(
+			equipped_items,
+			slot_type,
+			item_slot,
+		)
+
+		equipped_item_slot_container.add_child(equipped_item_slot)
+		equipped_slots.append(item_slot)
+
+
+## Finds and equips the item for the given slot type
+func _find_and_equip_item(
+	equipped_items: Array[InventoryItemModel],
+	slot_type: Enum.EquippedSlotType,
+	item_slot: InventoryItemSlot,
+) -> bool:
+	for equipped_item in equipped_items:
+		var item_data := ItemManager.get_item(equipped_item.id)
+		if item_data.slot_type != slot_type:
+			continue
+
+		item_slot.equip(InterfaceInventoryItem.new(equipped_item, inventory_player_grid.inventory))
+		return true
+	return false
 
 
 func _ready() -> void:
-	ctrl_inventory_left.item_mouse_entered.connect(_on_item_mouse_entered)
-	ctrl_inventory_left.item_mouse_exited.connect(_on_item_mouse_exited)
-	ctrl_inventory_right.item_mouse_entered.connect(_on_item_mouse_entered)
-	ctrl_inventory_right.item_mouse_exited.connect(_on_item_mouse_exited)
-	btn_sort_left.pressed.connect(_on_btn_sort.bind(ctrl_inventory_left))
-	btn_sort_right.pressed.connect(_on_btn_sort.bind(ctrl_inventory_right))
-	btn_split_left.pressed.connect(_on_btn_split.bind(ctrl_inventory_left))
-	btn_split_right.pressed.connect(_on_btn_split.bind(ctrl_inventory_right))
-	btn_unequip.pressed.connect(_on_btn_unequip)
+	inventory_player_grid.item_mouse_entered.connect(_on_item_mouse_entered)
+	inventory_player_grid.item_mouse_exited.connect(_on_item_mouse_exited)
+	inventory_npc_grid.item_mouse_entered.connect(_on_item_mouse_entered)
+	inventory_npc_grid.item_mouse_exited.connect(_on_item_mouse_exited)
+	sort_player_button.pressed.connect(_on_btn_sort.bind(inventory_player_grid))
+	sort_npc_button.pressed.connect(_on_btn_sort.bind(inventory_npc_grid))
+	split_player_button.pressed.connect(_on_btn_split.bind(inventory_player_grid))
+	split_npc_button.pressed.connect(_on_btn_split.bind(inventory_npc_grid))
+	save_button.pressed.connect(_on_save_button_pressed)
+	_populate_inventory()
 
 
-func _on_item_mouse_entered(item: InventoryItem) -> void:
+func _on_save_button_pressed() -> void:
+	var user_items := inventory_player_grid.get_inventory_items()
+	print("save user_items:", user_items)
+	SaveManager.save_file_raw(
+		USER_INVENTORY_SAVE_FILE,
+		user_items.map(func(item: InventoryItemModel) -> Dictionary: return item.to_dict())
+	)
+
+	var npc_items := inventory_npc_grid.get_inventory_items()
+	print("save npc_items:", npc_items)
+	SaveManager.save_file_raw(
+		NPC_INVENTORY_SAVE_FILE,
+		npc_items.map(func(item: InventoryItemModel) -> Dictionary: return item.to_dict())
+	)
+#
+	var equipped_items: Array[InventoryItemModel] = []
+
+	for slot: InventoryItemSlot in equipped_slots:
+		var item := slot.get_item()
+		if item != null:
+			equipped_items.append(item.item_data)
+
+	print("equipped_items:", equipped_items)
+
+	SaveManager.save_file_raw(
+		USER_EQUIPPED_SAVE_FILE,
+		equipped_items.map(func(item: InventoryItemModel) -> Dictionary: return item.to_dict())
+	)
+
+
+func _on_item_mouse_entered(item: InterfaceInventoryItem) -> void:
 	lbl_info.show()
-	lbl_info.text = item.prototype_id
+	lbl_info.text = item.get_title()
 
 
-func _on_item_mouse_exited(_item: InventoryItem) -> void:
+func _on_item_mouse_exited(_item: InterfaceInventoryItem) -> void:
 	lbl_info.hide()
 
 
@@ -63,7 +180,3 @@ func _on_btn_split(ctrl_inventory: InventoryControlGrid) -> void:
 	# All this floor/float jazz just to do integer division without warnings
 	var new_stack_size: int = floor(float(stack_size) / 2)
 	inventory_stacked.split(selected_item, new_stack_size)
-
-
-func _on_btn_unequip() -> void:
-	ctrl_slot.item_slot.clear()

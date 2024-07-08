@@ -23,7 +23,10 @@ duplicated-load: null
 enum-element-name: '[A-Z][A-Z0-9]*(_[A-Z0-9]+)*'
 enum-name: ([A-Z][a-z0-9]*)+
 excluded_directories: !!set
-    ../.git: null
+    .vscode: null
+    .godot: null
+    adddons: null
+    vfx: null
 expression-not-assigned: null
 function-argument-name: _?[a-z][a-z0-9]*(_[a-z0-9]+)*
 function-arguments-number: 10

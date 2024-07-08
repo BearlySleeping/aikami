@@ -3,6 +3,7 @@ extends EditorPlugin
 
 var dock
 
+
 func _enter_tree():
 	dock = preload("res://addons/godot_whisper/whisper_dock.tscn").instantiate()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, dock)

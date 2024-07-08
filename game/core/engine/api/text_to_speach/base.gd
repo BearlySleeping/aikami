@@ -5,8 +5,10 @@ extends BaseAPI
 # Custom model for a GPT function call
 class CallBasicRequestModel:
 	var text: String
+	var voice_type: Enum.VoiceType
 
-	func _init(p_text: String) -> void:
+	func _init(p_text: String, p_voice_type: Enum.VoiceType) -> void:
+		voice_type = p_voice_type
 		text = p_text
 
 

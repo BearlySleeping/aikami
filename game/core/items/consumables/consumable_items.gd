@@ -1,12 +1,16 @@
 extends BaseItemRepository
 
 const ITEMS: Dictionary = {
-	"consumable_potion_health_big":
+	"consumable_potion_health_small":
 	{
-		"name": "Big Health Potion",
-		"description": "A small dagger made of iron",
-		"cost": 5,
-	}
+		"name": "Small Health Potion",
+		"description": "A small health potion",
+		"cost": 10,
+		"height": 1,
+		"image_path": "res://interface/inventory/item_armour_silver.png",
+		"width": 1,
+		"weight": 1
+	},
 }
 
 

@@ -1,12 +1,10 @@
 @tool
-class_name InventoryItem
+class_name InterfaceInventoryItem
 extends Node
 
 ## Inventory item class. It is based on an item prototype from an InventoryItemProtoset resource.
 ## Can hold additional properties.
 
-## Emitted when the item protoset changes.
-signal protoset_changed
 ## Emitted when the item prototype ID changes.
 signal prototype_id_changed
 ## Emitted when the item properties change.
@@ -16,106 +14,77 @@ signal removed_from_inventory(inventory: Inventory)
 signal equipped_in_slot(item_slot: InventoryItemSlot)
 signal removed_from_slot(item_slot: InventoryItemSlot)
 
-const KEY_PROTOSET := "protoset"
 const KEY_PROTOTYPE_ID := "prototype_id"
 const KEY_PROPERTIES := "properties"
 const KEY_NODE_NAME := "node_name"
 const KEY_TYPE := "type"
 const KEY_VALUE := "value"
 
-const KEY_IMAGE := "image"
+const KEY_IMAGE := "image_path"
 const KEY_NAME := "name"
 
 const Verify := preload("../constraints/inventory_verify.gd")
 
-## An InventoryItemProtoset resource containing item prototypes.
-## @required
-@export var protoset: InventoryItemProtoset:
-	set(new_protoset):
-		if new_protoset == protoset:
-			return
-
-		if _inventory:
-			return
-
-		_disconnect_protoset_signals()
-		protoset = new_protoset
-		_connect_protoset_signals()
-
-		# Reset the prototype ID (pick the first prototype from the protoset)
-		if protoset && protoset._prototypes && protoset._prototypes.keys().size() > 0:
-			prototype_id = protoset._prototypes.keys()[0]
-		else:
-			prototype_id = ""
-
-		protoset_changed.emit()
-		update_configuration_warnings()
 ## ID of the prototype from protoset this item is based on.
 ## @required
-@export var prototype_id: String:
-	set(new_prototype_id):
-		if new_prototype_id == prototype_id:
-			return
-		if protoset == null && !new_prototype_id.is_empty():
-			return
-		if (protoset) && (!protoset.has_prototype(new_prototype_id)):
-			return
-		prototype_id = new_prototype_id
-		_reset_properties()
-		update_configuration_warnings()
-		prototype_id_changed.emit()
+var prototype_id: String:
+	get:
+		return _item_item_data.id
 
 ## Additional item properties.
 ## @optional
-@export var properties: Dictionary:
+var properties: Dictionary:
 	set(new_properties):
-		properties = new_properties
+		_item_item_data = InventoryItemModel.new(new_properties)
 		properties_changed.emit()
 		update_configuration_warnings()
+	get:
+		return _item_item_data.to_dict()
 
+var stack_size: int:
+	get:
+		return _item_item_data.stack_size
+	set(new_stack_size):
+		_item_item_data.stack_size = new_stack_size
+		properties_changed.emit()
+
+var grid_position: Vector2i:
+	get:
+		return _item_item_data.grid_position
+	set(new_grid_position):
+		_item_item_data.grid_position = new_grid_position
+		properties_changed.emit()
+
+var item_data: InventoryItemModel:
+	get:
+		return _item_item_data
+
+var _item_item_data: InventoryItemModel
 var _inventory: Inventory
 var _item_slot: InventoryItemSlot
 
 
-func _connect_protoset_signals() -> void:
-	if protoset == null:
-		return
-	protoset.changed.connect(_on_protoset_changed)
+func _init(
+	item: InventoryItemModel,
+	inventory: Inventory,
+) -> void:
+	_item_item_data = item
+	_inventory = inventory
 
 
-func _disconnect_protoset_signals() -> void:
-	if protoset == null:
-		return
-	protoset.changed.disconnect(_on_protoset_changed)
-
-
-func _on_protoset_changed() -> void:
-	update_configuration_warnings()
-
-
-func _get_configuration_warnings() -> PackedStringArray:
-	if !protoset:
-		return PackedStringArray()
-
-	if !protoset.has_prototype(prototype_id):
-		return PackedStringArray(
-			["Undefined prototype '%s'. Check the item protoset!" % prototype_id]
-		)
-
-	return PackedStringArray()
+func get_metadata() -> BaseItemModel:
+	return ItemManager.get_item(prototype_id)
 
 
 func _reset_properties() -> void:
-	if !protoset || prototype_id.is_empty():
-		properties = {}
-		return
-
-	# Reset (erase) all properties from the current prototype but preserve the rest
-	var prototype: Dictionary = protoset.get_prototype(prototype_id)
-	var keys: Array = properties.keys().duplicate()
-	for property: String in keys:
-		if prototype.has(property):
-			properties.erase(property)
+	_item_item_data = (
+		InventoryItemModel
+		. new(
+			{
+				"id": prototype_id,
+			}
+		)
+	)
 
 
 func _notification(what: int) -> void:
@@ -140,9 +109,6 @@ func _on_parented(parent: Node) -> void:
 func _on_added_to_inventory(inventory: Inventory) -> void:
 	assert(inventory)
 	_inventory = inventory
-	if _inventory.item_protoset:
-		protoset = _inventory.item_protoset
-
 	added_to_inventory.emit(_inventory)
 	_inventory.on_item_added(self)
 
@@ -191,11 +157,9 @@ func get_property(property_name: String, default_value: Variant = null) -> Varia
 		if typeof(value) == TYPE_DICTIONARY || typeof(value) == TYPE_ARRAY:
 			return value.duplicate()
 		return value
-
-	if protoset && protoset.prototype_has_property(prototype_id, property_name):
-		var value: Variant = protoset.get_prototype_property(
-			prototype_id, property_name, default_value
-		)
+	var metadata: Dictionary = get_metadata().to_dict()
+	if metadata.has(property_name):
+		var value: Variant = metadata[property_name]
 		if typeof(value) == TYPE_DICTIONARY || typeof(value) == TYPE_ARRAY:
 			return value.duplicate()
 		return value
@@ -222,7 +186,6 @@ func clear_property(property_name: String) -> void:
 
 ## Resets all properties to default values.
 func reset() -> void:
-	protoset = null
 	prototype_id = ""
 	properties = {}
 
@@ -232,7 +195,6 @@ func serialize() -> Dictionary:
 	var result: Dictionary = {}
 
 	result[KEY_NODE_NAME] = name as String
-	result[KEY_PROTOSET] = protoset.resource_path
 	result[KEY_PROTOTYPE_ID] = prototype_id
 	if !properties.is_empty():
 		result[KEY_PROPERTIES] = {}
@@ -255,7 +217,6 @@ func _serialize_property(property_name: String) -> Dictionary:
 func deserialize(source: Dictionary) -> bool:
 	if (
 		!Verify.dict(source, true, KEY_NODE_NAME, TYPE_STRING)
-		|| !Verify.dict(source, true, KEY_PROTOSET, TYPE_STRING)
 		|| !Verify.dict(source, true, KEY_PROTOTYPE_ID, TYPE_STRING)
 		|| !Verify.dict(source, false, KEY_PROPERTIES, TYPE_DICTIONARY)
 	):
@@ -265,7 +226,6 @@ func deserialize(source: Dictionary) -> bool:
 
 	if !source[KEY_NODE_NAME].is_empty() && source[KEY_NODE_NAME] != name:
 		name = source[KEY_NODE_NAME]
-	protoset = load(source[KEY_PROTOSET])
 	prototype_id = source[KEY_PROTOTYPE_ID]
 	if source.has(KEY_PROPERTIES):
 		for key: String in source[KEY_PROPERTIES].keys():
@@ -296,7 +256,7 @@ func _deserialize_property(data: Dictionary) -> Variant:
 ## Helper function for retrieving the item texture.
 ## It checks the image item property and loads it as a texture, if available.
 func get_texture() -> Texture2D:
-	var texture_path: String = get_property(KEY_IMAGE)
+	var texture_path: Variant = get_property(KEY_IMAGE)
 	if texture_path && texture_path != "" && ResourceLoader.exists(texture_path):
 		var texture := load(texture_path)
 		if texture is Texture2D:

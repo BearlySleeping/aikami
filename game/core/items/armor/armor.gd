@@ -1,12 +1,17 @@
 extends BaseItemRepository
 
 const ITEMS: Dictionary = {
-	"armor_helmet_iron":
+	"armor_chestplate_silver":
 	{
-		"name": "Iron Helmet",
-		"description": "A small dagger made of iron",
-		"cost": 5,
-	}
+		"name": "Silver Chestplate",
+		"description": "A chestplate made of silver",
+		"cost": 10,
+		"height": 2,
+		"image_path": "res://interface/inventory/item_armour_silver.png",
+		"width": 2,
+		"weight": 3,
+		"slot_type": Enum.EquippedSlotType.BODY
+	},
 }
 
 

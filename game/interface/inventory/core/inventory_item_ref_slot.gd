@@ -13,16 +13,6 @@ const EMPTY_SLOT := -1
 @export var _equipped_item := EMPTY_SLOT:
 	set = _set_equipped_item_index
 
-## Path to an Inventory node. Sets the inventory property.
-## @required
-@export var inventory_path: NodePath:
-	set(new_inv_path):
-		if inventory_path == new_inv_path:
-			return
-		inventory_path = new_inv_path
-		update_configuration_warnings()
-		_set_inventory_from_path(inventory_path)
-
 ## Reference to an Inventory node.
 var inventory: Inventory:
 	get = _get_inventory,
@@ -32,55 +22,24 @@ var _wr_item: WeakRef = weakref(null)
 var _wr_inventory: WeakRef = weakref(null)
 
 
-func _get_configuration_warnings() -> PackedStringArray:
-	if inventory_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"Inventory path not set! Inventory path needs to point to an inventory node, so "
-					+ "items from that inventory can be equipped in the slot."
-				)
-			]
-		)
-	return PackedStringArray()
-
-
 func _set_equipped_item_index(new_value: int) -> void:
 	_equipped_item = new_value
 	equip_by_index(new_value)
 
 
 func _ready() -> void:
-	_set_inventory_from_path(inventory_path)
 	equip_by_index(_equipped_item)
 
 
-func _set_inventory_from_path(path: NodePath) -> bool:
-	if path.is_empty():
-		return false
-
-	var node: Node = null
-
-	if is_inside_tree():
-		node = get_node_or_null(inventory_path)
-
-	if node == null || !(node is Inventory):
-		return false
-
-	clear()
-	_set_inventory(node)
-	return true
-
-
-func _set_inventory(inventory: Inventory) -> void:
-	if inventory == _wr_inventory.get_ref():
+func _set_inventory(p_inventory: Inventory) -> void:
+	if p_inventory == _wr_inventory.get_ref():
 		return
 
 	if _get_inventory():
 		_disconnect_inventory_signals()
 
 	clear()
-	_wr_inventory = weakref(inventory)
+	_wr_inventory = weakref(p_inventory)
 	inventory_changed.emit()
 
 	if _get_inventory():
@@ -103,7 +62,7 @@ func _disconnect_inventory_signals() -> void:
 		_get_inventory().item_removed.disconnect(_on_item_removed)
 
 
-func _on_item_removed(_item: InventoryItem) -> void:
+func _on_item_removed(_item: InterfaceInventoryItem) -> void:
 	clear()
 
 
@@ -114,7 +73,7 @@ func _get_inventory() -> Inventory:
 ## Equips the given inventory item in the slot. If the slot already holds an item, clear() will be called first.
 ## Returns false if the clear call fails, the slot can't hold the given item, or already holds the given item.
 ## Returns true otherwise.
-func equip(item: InventoryItem) -> bool:
+func equip(item: InterfaceInventoryItem) -> bool:
 	if !can_hold_item(item):
 		return false
 
@@ -152,13 +111,13 @@ func clear() -> bool:
 
 
 ## Returns the equipped item.
-func get_item() -> InventoryItem:
+func get_item() -> InterfaceInventoryItem:
 	return _wr_item.get_ref()
 
 
 ## Checks if the slot can hold the given item, i.e. inventory contains the given item and the item is not null.
 ## This method can be overridden to implement item slots that can only hold specific items.
-func can_hold_item(item: InventoryItem) -> bool:
+func can_hold_item(item: InterfaceInventoryItem) -> bool:
 	if item == null:
 		return false
 
@@ -176,7 +135,7 @@ func reset() -> void:
 ## Serializes the item slot into a dictionary.
 func serialize() -> Dictionary:
 	var result: Dictionary = {}
-	var item: InventoryItem = _wr_item.get_ref()
+	var item: InterfaceInventoryItem = _wr_item.get_ref()
 
 	if item && item.get_inventory():
 		result[KEY_ITEM_INDEX] = item.get_inventory().get_item_index(item)

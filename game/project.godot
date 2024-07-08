@@ -27,18 +27,23 @@ SceneManager="*res://core/engine/scene_manager.gd"
 AudioManager="*res://assets/audio/audio_manager.tscn"
 DialogueManager="*res://core/engine/dialogue_manager.gd"
 Hud="*res://interface/hud/hud.tscn"
-GameMenu="*res://interface/menus/pause/pause_menu.tscn"
+GameMenu="*res://interface/menus/game/game_menu.tscn"
 SignalManager="*res://core/engine/signal_manager.gd"
 TimeManager="*res://core/engine/time_manager.gd"
+PauseMenu="*res://interface/menus/pause/pause_menu.tscn"
 
 [debug]
 
 gdscript/warnings/untyped_declaration=1
 gdscript/warnings/integer_division=0
 
+[dotnet]
+
+project/assembly_name="AiKami"
+
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_whisper/plugin.cfg")
+enabled=PackedStringArray("res://addons/bottom_panel_shortcuts/plugin.cfg", "res://addons/script-ide/plugin.cfg")
 
 [input]
 
@@ -73,15 +78,21 @@ move_click={
 "events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":1,"position":Vector2(91, 16),"global_position":Vector2(95, 57),"factor":1.0,"button_index":1,"canceled":false,"pressed":true,"double_click":true,"script":null)
 ]
 }
-menu={
+game_menu_inventory={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":73,"key_label":0,"unicode":105,"echo":false,"script":null)
+]
+}
+game_menu={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194306,"key_label":0,"unicode":0,"echo":false,"script":null)
+]
+}
+pause_menu={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194305,"key_label":0,"unicode":0,"echo":false,"script":null)
 ]
 }
-
-[native_extensions]
-
-paths=PackedStringArray("res://addons/godot_whisper/godot_whisper.gdextension")
 
 [rendering]
 
