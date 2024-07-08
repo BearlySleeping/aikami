@@ -1,5 +1,4 @@
 {
-	"godot_tools.editor_path": "/usr/bin/godot",
 	"eslint.validate": [
 		"javascript",
 		"javascriptreact",
@@ -16,17 +15,6 @@
 	"[astro]": {
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	},
-	"stylelint.validate": [
-		// ↓ Add "html" language.
-		"html",
-		// ↓ Add "vue" language.
-		"vue",
-		// ↓ Add "svelte" language.
-		"svelte",
-		// ↓ Add "astro" language.
-		"astro"
-	],
-
 	"emeraldwalk.runonsave": {
 		"commands": [
 			{
