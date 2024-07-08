@@ -20,11 +20,14 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if Global.screen_type == Global.ScreenType.MAIN_MENU or not event.is_action_pressed("menu"):
+	if (
+		Global.screen_type == Global.ScreenType.MAIN_MENU
+		or not event.is_action_pressed("pause_menu")
+	):
 		return
 	visible = !visible
 	TimeManager.set_running(!visible)
-	Global.screen_type = Global.ScreenType.SETTINGS if visible else Global.ScreenType.GAME
+	Global.screen_type = Global.ScreenType.PAUSE_MENU if visible else Global.ScreenType.GAME
 
 
 func _on_music_slider_value_changed(value: float) -> void:

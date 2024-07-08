@@ -102,7 +102,7 @@ func _move_active_unit(new_cell: Vector2) -> void:
 
 
 ## Selects the unit in the `cell` if there's one there.
-## Sets it as the `_active_unit` and draws its walkable cells and interactive move path. 
+## Sets it as the `_active_unit` and draws its walkable cells and interactive move path.
 func _select_unit(cell: Vector2) -> void:
 	if not _units.has(cell):
 		return

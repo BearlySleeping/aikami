@@ -13,7 +13,7 @@ var slot_type: Enum.EquippedSlotType
 
 ## The default icon that will be used for items with no image property.
 ## @required
-@export var default_item_icon: Texture2D:
+var default_item_icon: Texture2D:
 	set(new_default_item_icon):
 		if default_item_icon == new_default_item_icon:
 			return
@@ -22,7 +22,7 @@ var slot_type: Enum.EquippedSlotType
 
 ## Item icon scaling.
 ## @default Vector2.ONE
-@export var icon_scaling := Vector2.ONE:
+var icon_scaling := Vector2.ONE:
 	set(new_icon_scaling):
 		if icon_scaling == new_icon_scaling:
 			return
@@ -34,7 +34,7 @@ var slot_type: Enum.EquippedSlotType
 
 ## The item texture is displayed if set to true.
 ## @default true
-@export var item_texture_visible := true:
+var item_texture_visible := true:
 	set(new_item_texture_visible):
 		if item_texture_visible == new_item_texture_visible:
 			return
@@ -44,7 +44,7 @@ var slot_type: Enum.EquippedSlotType
 
 ## The item name label is displayed if set to true.
 ## @default true
-@export var label_visible := true:
+var label_visible := true:
 	set(new_label_visible):
 		if label_visible == new_label_visible:
 			return
@@ -54,14 +54,14 @@ var slot_type: Enum.EquippedSlotType
 
 ## Style of the slot background.
 ## @optional
-@export var slot_style: StyleBox:
+var slot_style: StyleBox:
 	set(new_slot_style):
 		slot_style = new_slot_style
 		_refresh()
 
 ## Style of the slot background when the mouse hovers over it.
 ## @optional
-@export var slot_highlighted_style: StyleBox:
+var slot_highlighted_style: StyleBox:
 	set(new_slot_highlighted_style):
 		slot_highlighted_style = new_slot_highlighted_style
 		_refresh()

@@ -25,17 +25,6 @@ const KEY_NAME := "name"
 
 const Verify := preload("../constraints/inventory_verify.gd")
 
-var _item_item_data: InventoryItemModel
-
-
-func _init(
-	item: InventoryItemModel,
-	inventory: Inventory,
-) -> void:
-	_item_item_data = item
-	_inventory = inventory
-
-
 ## ID of the prototype from protoset this item is based on.
 ## @required
 var prototype_id: String:
@@ -70,8 +59,17 @@ var item_data: InventoryItemModel:
 	get:
 		return _item_item_data
 
+var _item_item_data: InventoryItemModel
 var _inventory: Inventory
 var _item_slot: InventoryItemSlot
+
+
+func _init(
+	item: InventoryItemModel,
+	inventory: Inventory,
+) -> void:
+	_item_item_data = item
+	_inventory = inventory
 
 
 func get_metadata() -> BaseItemModel:

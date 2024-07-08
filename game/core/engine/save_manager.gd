@@ -64,6 +64,19 @@ static func remove_file(path: String) -> void:
 		Logger.info("File does not exist.")
 
 
+static func load_items(
+	save_path: String, default_items: Array[InventoryItemModel] = []
+) -> Array[InventoryItemModel]:
+	var response := SaveManager.load_file(save_path)
+	if response[0] == null:
+		return default_items
+	var data := response[0] as Array
+	var items: Array[InventoryItemModel] = []
+	for item: Dictionary in data:
+		items.append(InventoryItemModel.new(item))
+	return items
+
+
 static func save_player_data(player: PlayerModel) -> bool:
 	current_player = player
 	return save_file(PLAYER_SAVE_PATH, player)

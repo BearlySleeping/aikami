@@ -1,10 +1,10 @@
 [gd_scene load_steps=3 format=3 uid="uid://d0lpj4dp3r4dd"]
 
-[ext_resource type="Script" path="res://interface/menus/game/game_menu.gd" id="1_gj21q"]
+[ext_resource type="Script" path="res://interface/menus/pause/pause_menu.gd" id="1_mpebn"]
 [ext_resource type="Theme" uid="uid://65dakj0ukuj6" path="res://interface/theme/default_theme.tres" id="2_2s7jy"]
 
-[node name="GameMenu" type="CanvasLayer"]
-script = ExtResource("1_gj21q")
+[node name="PauseMenu" type="CanvasLayer"]
+script = ExtResource("1_mpebn")
 
 [node name="Control" type="Control" parent="."]
 layout_mode = 3
@@ -103,7 +103,6 @@ focus_previous = NodePath("../MainMenuButton")
 text = "Quit Game"
 alignment = 0
 
-[connection signal="visibility_changed" from="." to="." method="_on_visibility_changed"]
 [connection signal="pressed" from="Control/MarginContainer/ButtonsVBox/ReturnToGameButton" to="." method="_on_return_to_game_button_pressed"]
 [connection signal="value_changed" from="Control/MarginContainer/ButtonsVBox/SettingsGridContainer/MusicSlider" to="." method="_on_music_slider_value_changed"]
 [connection signal="value_changed" from="Control/MarginContainer/ButtonsVBox/SettingsGridContainer/SFXSlider" to="." method="_on_sfx_slider_value_changed"]

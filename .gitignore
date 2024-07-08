@@ -187,4 +187,4 @@ output
 
 *.firebase
 
-game/godot-examples
+*godot-examples

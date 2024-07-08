@@ -38,19 +38,19 @@
 			"time_scale": 1.0,
 			"disable_vsync": false,
 			"fixed_fps": 60,
-            "scene": "${input:gdToTscn}",
+			"scene": "${input:gdToTscn}"
 		}
 	],
 	"inputs": [
-        {
-            "id": "gdToTscn",
-            "type": "command",
-            "command": "extension.commandvariable.transform",
-            "args": {
+		{
+			"id": "gdToTscn",
+			"type": "command",
+			"command": "extension.commandvariable.transform",
+			"args": {
 				"text": "${file}",
-                "find": "^(.*)(\\.[^\\.]+)$",
-                "replace": "$1.tscn"
-            }
-        }
-    ]
+				"find": "^(.*)(\\.[^\\.]+)$",
+				"replace": "$1.tscn"
+			}
+		}
+	]
 }

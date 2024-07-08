@@ -2,7 +2,7 @@ class_name AIManager
 
 enum ProviderType { IMAGE, TEXT, TEXT_TO_SPEACH, SPEACH_TO_TEXT }
 enum ImageProvider { DALLE, HUGGING_FACE }
-enum TextProvider { OPEN_AI }
+enum TextProvider { OPEN_AI, OLLAMA }
 enum TextToSpeachProvider { ELEVEN_LABS }
 enum SpeachToTextProvider { HUGGING_FACE }
 
@@ -18,6 +18,7 @@ const PROVIDERS_MAP := {
 	{
 		TextProvider.OPEN_AI:
 		["res://core/engine/api/text/open_ai.gd", ConfigManager.ConfigKey.API_OPEN_AI_KEY],
+		TextProvider.OLLAMA: ["res://core/engine/api/text/ollama.gd", "ollama"],
 	},
 	ProviderType.TEXT_TO_SPEACH:
 	{
@@ -64,8 +65,12 @@ static func _get_provider_config(provider_type: ProviderType) -> Array:
 
 static func _instantiate_provider(provider_config: Array) -> BaseAPI:
 	var provider_path: String = provider_config[0]
-	var provider_config_key: ConfigManager.ConfigKey = provider_config[1]
-	var provider_api_key: String = ConfigManager.get_value(provider_config_key)
+	var provider_api_key: String
+	if provider_config[1] is String:
+		provider_api_key = provider_config[1]
+	else:
+		var provider_config_key: ConfigManager.ConfigKey = provider_config[1]
+		provider_api_key = ConfigManager.get_value(provider_config_key)
 	var resource := load(provider_path)
 	return resource.new(provider_api_key)
 

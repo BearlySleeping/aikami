@@ -10,7 +10,7 @@ var slot_type: Enum.EquippedSlotType
 
 ## If set to true, the clear() method will try to return the item to its original inventory.
 ## @default true
-@export var remember_source_inventory := true
+var remember_source_inventory := true
 
 var _wr_source_inventory: WeakRef = weakref(null)
 var _item: InterfaceInventoryItem

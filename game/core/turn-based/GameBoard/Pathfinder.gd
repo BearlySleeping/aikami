@@ -21,8 +21,9 @@ func _init(grid: Grid, walkable_cells: Array) -> void:
 	#	not in the given array of walkable cells
 	for y in _grid.size.y:
 		for x in _grid.size.x:
-			if not walkable_cells.has(Vector2(x,y)):
-				_astar.set_point_solid(Vector2(x,y))
+			if not walkable_cells.has(Vector2(x, y)):
+				_astar.set_point_solid(Vector2(x, y))
+
 
 ## Returns the path found between `start` and `end` as an array of Vector2 coordinates.
 func calculate_point_path(start: Vector2, end: Vector2) -> PackedVector2Array:
