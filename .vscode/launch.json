@@ -19,6 +19,38 @@
 			"time_scale": 1.0,
 			"disable_vsync": false,
 			"fixed_fps": 60
+		},
+		{
+			"name": "Debug Active File",
+			"type": "godot",
+			"request": "launch",
+			"project": "${workspaceFolder}/game",
+			"address": "127.0.0.1",
+			"port": 6007,
+			"profiling": true,
+			"single_threaded_scene": false,
+			"debug_collisions": true,
+			"debug_paths": true,
+			"debug_navigation": true,
+			"debug_avoidance": true,
+			"debug_stringnames": true,
+			"frame_delay": 0,
+			"time_scale": 1.0,
+			"disable_vsync": false,
+			"fixed_fps": 60,
+			"scene": "${input:gdToTscn}"
+		}
+	],
+	"inputs": [
+		{
+			"id": "gdToTscn",
+			"type": "command",
+			"command": "extension.commandvariable.transform",
+			"args": {
+				"text": "${file}",
+				"find": "^(.*)(\\.[^\\.]+)$",
+				"replace": "$1.tscn"
+			}
 		}
 	]
 }

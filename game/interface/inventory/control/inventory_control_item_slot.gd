@@ -9,29 +9,11 @@ extends Control
 const DropZone := preload("inventory_control_drop_zone.gd")
 const Draggable := preload("inventory_control_draggable.gd")
 
-## Path to an InventoryItemSlot node.
-## @required
-@export var item_slot_path: NodePath:
-	set(new_item_slot_path):
-		if item_slot_path == new_item_slot_path:
-			return
-		item_slot_path = new_item_slot_path
-		var node: Node = get_node_or_null(item_slot_path)
-
-		if node == null:
-			_clear()
-			return
-
-		if is_inside_tree():
-			assert(node is InventoryItemSlotBase)
-
-		item_slot = node
-		_refresh()
-		update_configuration_warnings()
+var slot_type: Enum.EquippedSlotType
 
 ## The default icon that will be used for items with no image property.
 ## @required
-@export var default_item_icon: Texture2D:
+var default_item_icon: Texture2D:
 	set(new_default_item_icon):
 		if default_item_icon == new_default_item_icon:
 			return
@@ -40,7 +22,7 @@ const Draggable := preload("inventory_control_draggable.gd")
 
 ## Item icon scaling.
 ## @default Vector2.ONE
-@export var icon_scaling := Vector2.ONE:
+var icon_scaling := Vector2.ONE:
 	set(new_icon_scaling):
 		if icon_scaling == new_icon_scaling:
 			return
@@ -52,7 +34,7 @@ const Draggable := preload("inventory_control_draggable.gd")
 
 ## The item texture is displayed if set to true.
 ## @default true
-@export var item_texture_visible := true:
+var item_texture_visible := true:
 	set(new_item_texture_visible):
 		if item_texture_visible == new_item_texture_visible:
 			return
@@ -62,7 +44,7 @@ const Draggable := preload("inventory_control_draggable.gd")
 
 ## The item name label is displayed if set to true.
 ## @default true
-@export var label_visible := true:
+var label_visible := true:
 	set(new_label_visible):
 		if label_visible == new_label_visible:
 			return
@@ -72,14 +54,14 @@ const Draggable := preload("inventory_control_draggable.gd")
 
 ## Style of the slot background.
 ## @optional
-@export var slot_style: StyleBox:
+var slot_style: StyleBox:
 	set(new_slot_style):
 		slot_style = new_slot_style
 		_refresh()
 
 ## Style of the slot background when the mouse hovers over it.
 ## @optional
-@export var slot_highlighted_style: StyleBox:
+var slot_highlighted_style: StyleBox:
 	set(new_slot_highlighted_style):
 		slot_highlighted_style = new_slot_highlighted_style
 		_refresh()
@@ -134,19 +116,6 @@ func _input(event: InputEvent) -> void:
 			_background_panel.hide()
 
 
-func _get_configuration_warnings() -> PackedStringArray:
-	if item_slot_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"This node is not linked to an item slot, so it can't display any content.\n"
-					+ "Set the item_slot_path property to point to an InventoryItemSlotBase node."
-				)
-			]
-		)
-	return PackedStringArray()
-
-
 func _connect_item_slot_signals() -> void:
 	if !is_instance_valid(item_slot):
 		return
@@ -172,11 +141,6 @@ func _ready() -> void:
 		# Clean up, in case it is duplicated in the editor
 		if is_instance_valid(_hbox_container):
 			_hbox_container.queue_free()
-
-	var node: Node = get_node_or_null(item_slot_path)
-	if is_inside_tree() && node:
-		assert(node is InventoryItemSlotBase)
-	item_slot = node
 
 	_hbox_container = HBoxContainer.new()
 	_hbox_container.size_flags_horizontal = SIZE_EXPAND_FILL
@@ -280,8 +244,9 @@ func _refresh() -> void:
 		return
 
 	var item := item_slot.get_item()
+	var item_data := item.get_metadata()
 	if is_instance_valid(_label):
-		_label.text = item.get_property(InventoryControl.KEY_NAME, item.prototype_id)
+		_label.text = item_data.name
 	if is_instance_valid(_ctrl_inventory_item):
 		_ctrl_inventory_item.item = item
 		if item.get_texture():

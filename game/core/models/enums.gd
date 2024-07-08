@@ -22,6 +22,8 @@ enum Race {
 	TIEFLING,
 }
 
+enum VoiceType { MALE_OLD, MALE_DEFAULT, FEMALE_OLD, FEMALE_DEFAULT, MALE_CHILD, FEMALE_CHILD }
+
 enum Class {
 	BARBARIAN,
 	BARD,
@@ -35,6 +37,16 @@ enum Class {
 	SORCERER,
 	WARLOCK,
 	WIZARD,
+}
+
+enum EquippedSlotType {
+	NONE,
+	HEAD,
+	BODY,
+	LEGS,
+	FEET,
+	HANDS,
+	RING,
 }
 
 enum Mood {

@@ -1,0 +1,70 @@
+[gd_scene load_steps=2 format=3 uid="uid://1hh7cg8kpack"]
+
+[ext_resource type="Script" path="res://interface/menus/game/inventory/user_equipment_bar.gd" id="1_101sh"]
+
+[node name="UserEquipmentBar" type="VBoxContainer"]
+script = ExtResource("1_101sh")
+
+[node name="EquippedSlotsLabel" type="Label" parent="."]
+layout_mode = 2
+text = "Equipped slots"
+
+[node name="HeadSlotContainer" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="HeadSlotLabel" type="Label" parent="HeadSlotContainer"]
+layout_mode = 2
+text = "Head"
+horizontal_alignment = 1
+
+[node name="BodySlotContainer" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="BodySlotLabel" type="Label" parent="BodySlotContainer"]
+layout_mode = 2
+text = "Body"
+horizontal_alignment = 1
+
+[node name="LegsSlotContainer" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="LegsSlotLabel" type="Label" parent="LegsSlotContainer"]
+layout_mode = 2
+text = "Legs"
+horizontal_alignment = 1
+
+[node name="FeetSlotContainer" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="FeetSlotLabel" type="Label" parent="FeetSlotContainer"]
+layout_mode = 2
+text = "Feet"
+horizontal_alignment = 1
+
+[node name="HandsSlotContainer" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="HandsSlotLabel" type="Label" parent="HandsSlotContainer"]
+layout_mode = 2
+text = "Hands"
+horizontal_alignment = 1
+
+[node name="RingSlotContainer" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="RingSlotLabel" type="Label" parent="RingSlotContainer"]
+layout_mode = 2
+text = "Ring"
+horizontal_alignment = 1

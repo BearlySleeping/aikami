@@ -19,6 +19,10 @@ static func reset() -> void:
 
 # Save the game data to a file
 static func save_file(path: String, data: BaseModel) -> bool:
+	return save_file_raw(path, data.to_dict())
+
+
+static func save_file_raw(path: String, data: Variant) -> bool:
 	var absolute_path := _get_path(path)
 	var dir_path := absolute_path.get_base_dir()
 
@@ -33,7 +37,7 @@ static func save_file(path: String, data: BaseModel) -> bool:
 	if not file:
 		push_error("Could not save to %s" % absolute_path)
 		return false
-	file.store_var(data.to_dict())
+	file.store_var(data)
 	file.close()
 	return true
 
@@ -43,7 +47,7 @@ static func load_file(path: String) -> Array:
 	var file := FileAccess.open(_get_path(path), FileAccess.READ)
 	if !file:
 		return [null, "Could not load file"]
-	var data := file.get_var() as Dictionary
+	var data: Variant = file.get_var()
 	file.close()
 	return [data, null]
 
@@ -58,6 +62,19 @@ static func remove_file(path: String) -> void:
 			Logger.info("Failed to remove file.")
 	else:
 		Logger.info("File does not exist.")
+
+
+static func load_items(
+	save_path: String, default_items: Array[InventoryItemModel] = []
+) -> Array[InventoryItemModel]:
+	var response := SaveManager.load_file(save_path)
+	if response[0] == null:
+		return default_items
+	var data := response[0] as Array
+	var items: Array[InventoryItemModel] = []
+	for item: Dictionary in data:
+		items.append(InventoryItemModel.new(item))
+	return items
 
 
 static func save_player_data(player: PlayerModel) -> bool:

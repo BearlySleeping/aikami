@@ -6,18 +6,18 @@ extends Control
 ## and the contained items on the grid. The items can be moved around
 ## in the inventory by dragging.
 
-## Emitted when a grabbed InventoryItem is dropped.
-signal item_dropped(item: InventoryItem, offset: Vector2)
+## Emitted when a grabbed InterfaceInventoryItem is dropped.
+signal item_dropped(item: InterfaceInventoryItem, offset: Vector2)
 ## Emitted when the selection has changed. Use get_selected_inventory_item() to obtain the currently selected item.
 signal selection_changed
-## Emitted when an InventoryItem is activated (i.e. double clicked).
-signal inventory_item_activated(item: InventoryItem)
-## Emitted when the context menu of an InventoryItem is activated (i.e. right clicked).
-signal inventory_item_context_activated(item: InventoryItem)
-## Emitted when the mouse enters the Rect area of the control representing the given InventoryItem.
-signal item_mouse_entered(item: InventoryItem)
-## Emitted when the mouse leaves the Rect area of the control representing the given InventoryItem.
-signal item_mouse_exited(item: InventoryItem)
+## Emitted when an InterfaceInventoryItem is activated (i.e. double clicked).
+signal inventory_item_activated(item: InterfaceInventoryItem)
+## Emitted when the context menu of an InterfaceInventoryItem is activated (i.e. right clicked).
+signal inventory_item_context_activated(item: InterfaceInventoryItem)
+## Emitted when the mouse enters the Rect area of the control representing the given InterfaceInventoryItem.
+signal item_mouse_entered(item: InterfaceInventoryItem)
+## Emitted when the mouse leaves the Rect area of the control representing the given InterfaceInventoryItem.
+signal item_mouse_exited(item: InterfaceInventoryItem)
 
 const DropZone := preload("inventory_control_drop_zone.gd")
 const Draggable := preload("inventory_control_draggable.gd")
@@ -60,22 +60,6 @@ const Verify := preload("../constraints/inventory_verify.gd")
 ## @default Color.GRAY
 @export var selection_color := Color.GRAY
 
-## Path to an Inventory node.
-## @required
-@export var inventory_path: NodePath:
-	set(new_inv_path):
-		inventory_path = new_inv_path
-		var node: Node = get_node_or_null(inventory_path)
-
-		if node == null:
-			return
-
-		if is_inside_tree():
-			assert(node is InventoryGrid)
-
-		inventory = node
-		update_configuration_warnings()
-
 ## The default texture that will be used for items with no image property.
 ## @required
 @export var default_item_texture: Texture2D:
@@ -89,7 +73,7 @@ const Verify := preload("../constraints/inventory_verify.gd")
 	set(new_stretch_item_sprites):
 		stretch_item_sprites = new_stretch_item_sprites
 		_refresh()
-## The z-index used for the dragged InventoryItem in order to appear above other UI elements.
+## The z-index used for the dragged InterfaceInventoryItem in order to appear above other UI elements.
 ## @default 1
 @export var drag_sprite_z_index := 1
 
@@ -129,25 +113,12 @@ var inventory: InventoryGrid:
 
 var _inventory_control_item_container: Control
 var _inventory_control_drop_zone: DropZone
-var _selected_item: InventoryItem
+var _selected_item: InterfaceInventoryItem
 
 var _field_background_grid: Control
 var _field_backgrounds: Array
 var _selection_panel: Panel
 var _pending_highlights: Array[Dictionary] = []
-
-
-func _get_configuration_warnings() -> PackedStringArray:
-	if inventory_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"This node is not linked to an inventory, so it can't display any content.\n"
-					+ "Set the inventory_path property to point to an InventoryGrid node."
-				)
-			]
-		)
-	return PackedStringArray()
 
 
 func _ready() -> void:
@@ -186,9 +157,6 @@ func _ready() -> void:
 		func() -> void: _inventory_control_drop_zone.size = _inventory_control_item_container.size
 	)
 
-	if has_node(inventory_path):
-		inventory = get_node_or_null(inventory_path)
-
 	_refresh()
 	_create_selection_panel()
 	_create_field_background_grid()
@@ -202,13 +170,25 @@ func _draw() -> void:
 		_draw_grid(Vector2.ZERO, inventory.size.x, inventory.size.y, field_dimensions, item_spacing)
 
 
+func populate_inventory(items: Array[InventoryItemModel]) -> void:
+	for item in items:
+		inventory.create_and_add_item_at(item)
+
+
+func get_inventory_items() -> Array[InventoryItemModel]:
+	var current_items: Array[InventoryItemModel] = []
+	for inventory_item in inventory.get_items():
+		current_items.append(inventory_item.item_data)
+	return current_items
+
+
 ## Deselects the selected item.
 func deselect_inventory_item() -> void:
 	_select(null)
 
 
 ## Selects the given item.
-func select_inventory_item(item: InventoryItem) -> void:
+func select_inventory_item(item: InterfaceInventoryItem) -> void:
 	_select(item)
 
 
@@ -228,7 +208,7 @@ func get_field_coords(local_position: Vector2) -> Vector2i:
 
 
 ## Returns the currently selected item.
-func get_selected_inventory_item() -> InventoryItem:
+func get_selected_inventory_item() -> InterfaceInventoryItem:
 	return _selected_item
 
 
@@ -260,7 +240,7 @@ func _disconnect_inventory_signals() -> void:
 		inventory.item_removed.disconnect(_on_item_removed)
 
 
-func _on_item_modified(_item: InventoryItem) -> void:
+func _on_item_modified(_item: InterfaceInventoryItem) -> void:
 	_refresh()
 
 
@@ -269,7 +249,7 @@ func _on_inventory_resized() -> void:
 	_refresh_field_background_grid()
 
 
-func _on_item_removed(_item: InventoryItem) -> void:
+func _on_item_removed(_item: InterfaceInventoryItem) -> void:
 	if _item == _selected_item:
 		_select(null)
 
@@ -282,11 +262,11 @@ func _refresh() -> void:
 	_refresh_field_background_grid()
 
 
-func _move_item(item: InventoryItem, move_position: Vector2i) -> void:
+func _move_item(item: InterfaceInventoryItem, move_position: Vector2i) -> void:
 	inventory.move_item_to(item, move_position)
 
 
-func _merge_item(item_src: InventoryItem, item_position: Vector2i) -> void:
+func _merge_item(item_src: InterfaceInventoryItem, item_position: Vector2i) -> void:
 	var item_dst := (inventory as InventoryGridStacked).get_mergeable_item_at(
 		item_src, item_position
 	)
@@ -428,14 +408,14 @@ func _on_item_drop(
 		_select(item)
 
 
-func _get_item_sprite_size(item: InventoryItem) -> Vector2:
+func _get_item_sprite_size(item: InterfaceInventoryItem) -> Vector2:
 	if stretch_item_sprites:
 		return _get_stretched_item_sprite_size(item)
 
 	return item.get_texture().get_size()
 
 
-func _get_stretched_item_sprite_size(item: InventoryItem) -> Vector2:
+func _get_stretched_item_sprite_size(item: InterfaceInventoryItem) -> Vector2:
 	var item_size := inventory.get_item_size(item)
 	var sprite_size := Vector2(item_size) * field_dimensions
 
@@ -445,7 +425,7 @@ func _get_stretched_item_sprite_size(item: InventoryItem) -> Vector2:
 	return sprite_size
 
 
-func _get_unstreched_sprite_offset(item: InventoryItem) -> Vector2:
+func _get_unstreched_sprite_offset(item: InterfaceInventoryItem) -> Vector2:
 	var texture := item.get_texture()
 	if texture == null:
 		texture = default_item_texture
@@ -478,7 +458,7 @@ func _on_item_mouse_exited(ctrl_inventory_item: InventoryControlItem) -> void:
 	item_mouse_exited.emit(ctrl_inventory_item.item)
 
 
-func _select(item: InventoryItem) -> void:
+func _select(item: InterfaceInventoryItem) -> void:
 	if item == _selected_item:
 		return
 
@@ -503,7 +483,7 @@ func _on_drop_zone_mouse_exited() -> void:
 
 
 func _on_draggable_dropped(draggable: Draggable, drop_position: Vector2) -> void:
-	var item: InventoryItem = draggable.item
+	var item: InterfaceInventoryItem = draggable.item
 	if item == null:
 		return
 
@@ -516,7 +496,7 @@ func _on_draggable_dropped(draggable: Draggable, drop_position: Vector2) -> void
 		_handle_item_transfer(item, drop_position)
 
 
-func _handle_item_move(item: InventoryItem, drop_position: Vector2) -> void:
+func _handle_item_move(item: InterfaceInventoryItem, drop_position: Vector2) -> void:
 	var field_coords := get_field_coords(drop_position + (field_dimensions / 2))
 	if inventory.rect_free(Rect2i(field_coords, inventory.get_item_size(item)), item):
 		_move_item(item, field_coords)
@@ -524,13 +504,11 @@ func _handle_item_move(item: InventoryItem, drop_position: Vector2) -> void:
 		_merge_item(item, field_coords)
 
 
-func _handle_item_transfer(item: InventoryItem, drop_position: Vector2) -> void:
+func _handle_item_transfer(item: InterfaceInventoryItem, drop_position: Vector2) -> void:
 	var source_inventory: InventoryGrid = item.get_inventory()
 
 	var field_coords := get_field_coords(drop_position + (field_dimensions / 2))
 	if source_inventory:
-		if source_inventory.item_protoset != inventory.item_protoset:
-			return
 		source_inventory.transfer_to(item, inventory, field_coords)
 	else:
 		inventory.add_item_at(item, field_coords)
@@ -637,7 +615,7 @@ func _highlight_hovered_fields(field_coords: Vector2i, style: StyleBox) -> void:
 
 
 func _highlight_grabbed_item(style: StyleBox) -> bool:
-	var grabbed_item: InventoryItem = _get_global_grabbed_item()
+	var grabbed_item: InterfaceInventoryItem = _get_global_grabbed_item()
 	if !grabbed_item:
 		return false
 	var global_grabbed_item_pos: Vector2 = _get_global_grabbed_item_local_pos()
@@ -654,7 +632,7 @@ func _is_hovering(local_pos: Vector2) -> bool:
 	return get_rect().has_point(local_pos)
 
 
-func _highlight_item(item: InventoryItem, style: StyleBox) -> bool:
+func _highlight_item(item: InterfaceInventoryItem, style: StyleBox) -> bool:
 	if !item || !style:
 		return false
 
@@ -683,7 +661,7 @@ func _highlight_rect(rect: Rect2i, style: StyleBox, queue_for_reset: bool) -> vo
 		_queue_highlight(rect, field_style)
 
 
-func _get_global_grabbed_item() -> InventoryItem:
+func _get_global_grabbed_item() -> InterfaceInventoryItem:
 	if Draggable.grabbed_draggable == null:
 		return null
 	return (Draggable.grabbed_draggable as InventoryControlItem).item

@@ -3,28 +3,13 @@ class_name InventoryControl
 extends Control
 ## A UI control representing a basic Inventory. Displays a list of items in the inventory.
 
-## Emitted when an InventoryItem is activated (i.e. double clicked).
-signal inventory_item_activated(item: InventoryItem)
-## Emitted when the context menu of an InventoryItem is activated (i.e. right clicked).
-signal inventory_item_context_activated(item: InventoryItem)
+## Emitted when an InterfaceInventoryItem is activated (i.e. double clicked).
+signal inventory_item_activated(item: InterfaceInventoryItem)
+## Emitted when the context menu of an InterfaceInventoryItem is activated (i.e. right clicked).
+signal inventory_item_context_activated(item: InterfaceInventoryItem)
 
-const KEY_IMAGE := "image"
 const KEY_NAME := "name"
 
-## Path to an Inventory node.
-@export var inventory_path: NodePath:
-	set(new_inv_path):
-		inventory_path = new_inv_path
-		var node: Node = get_node_or_null(inventory_path)
-
-		if node == null:
-			return
-
-		if is_inside_tree():
-			assert(node is Inventory)
-
-		inventory = node
-		update_configuration_warnings()
 ## The default icon that will be used for items with no image property.
 @export var default_item_icon: Texture2D
 
@@ -42,19 +27,6 @@ var inventory: Inventory = null:
 
 var _vbox_container: VBoxContainer
 var _item_list: ItemList
-
-
-func _get_configuration_warnings() -> PackedStringArray:
-	if inventory_path.is_empty():
-		return PackedStringArray(
-			[
-				(
-					"This node is not linked to an inventory, so it can't display any content.\n"
-					+ "Set the inventory_path property to point to an Inventory node."
-				)
-			]
-		)
-	return PackedStringArray()
 
 
 func _ready() -> void:
@@ -76,9 +48,6 @@ func _ready() -> void:
 	_item_list.item_activated.connect(_on_list_item_activated)
 	_item_list.item_clicked.connect(_on_list_item_clicked)
 	_vbox_container.add_child(_item_list)
-
-	if has_node(inventory_path):
-		inventory = get_node(inventory_path)
 
 	_refresh()
 
@@ -116,7 +85,7 @@ func _on_list_item_clicked(
 		inventory_item_context_activated.emit(_get_inventory_item(index))
 
 
-func _on_item_modified(_item: InventoryItem) -> void:
+func _on_item_modified(_item: InterfaceInventoryItem) -> void:
 	_refresh()
 
 
@@ -143,7 +112,7 @@ func _populate_list() -> void:
 		_item_list.set_item_metadata(_item_list.get_item_count() - 1, item)
 
 
-func _get_item_title(item: InventoryItem) -> String:
+func _get_item_title(item: InterfaceInventoryItem) -> String:
 	if item == null:
 		return ""
 
@@ -156,14 +125,14 @@ func _get_item_title(item: InventoryItem) -> String:
 
 
 ## Returns the currently selected item.
-func get_selected_inventory_item() -> InventoryItem:
+func get_selected_inventory_item() -> InterfaceInventoryItem:
 	if _item_list.get_selected_items().is_empty():
 		return null
 
 	return _get_inventory_item(_item_list.get_selected_items()[0])
 
 
-func _get_inventory_item(index: int) -> InventoryItem:
+func _get_inventory_item(index: int) -> InterfaceInventoryItem:
 	assert(index >= 0)
 	assert(index < _item_list.get_item_count())
 
@@ -176,7 +145,7 @@ func deselect_inventory_item() -> void:
 
 
 ## Selects the given item.
-func select_inventory_item(item: InventoryItem) -> void:
+func select_inventory_item(item: InterfaceInventoryItem) -> void:
 	_item_list.deselect_all()
 	for index in _item_list.item_count:
 		if _item_list.get_item_metadata(index) != item:

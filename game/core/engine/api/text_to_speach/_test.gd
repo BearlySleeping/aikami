@@ -15,7 +15,9 @@ func _ready() -> void:
 
 
 func _on_pressed() -> void:
-	var input := BaseTextToSpeachAPI.CallBasicRequestModel.new("Hello!")
+	var input := BaseTextToSpeachAPI.CallBasicRequestModel.new(
+		"Hello!", Enum.VoiceType.MALE_DEFAULT
+	)
 	var response := await AIManager.text_to_speach(input)
 	if response.stream:
 		print("Error: ", response.error)

@@ -1,14 +1,17 @@
 extends BaseItemRepository
 
 const ITEMS: Dictionary = {
-	"consumable_potion_health_big":
+	"other_book_blue":
 	{
-		"name": "Big Health Potion",
-		"description": "A small dagger made of iron",
+		"name": "Blue Book",
+		"description": "A small book made of blue",
 		"cost": 5,
+		"image_path": "res://interface/inventory/item_book_blue.png",
+		"weight": 0,
+		"max_stack_size": 2
 	}
 }
 
 
-func get_item(item_id: String) -> ConsumableItemModel:
-	return ConsumableItemModel.new(item_id, _get_item_from_dict(item_id, ITEMS))
+func get_item(item_id: String) -> OtherItemModel:
+	return OtherItemModel.new(item_id, _get_item_from_dict(item_id, ITEMS))

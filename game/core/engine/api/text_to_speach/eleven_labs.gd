@@ -63,9 +63,6 @@ const VOICES := {
 	"Mimi": "zrHiDhphv9ZnVXBqCLjz"
 }
 
-## Character code used for voice to use
-var voice_id := "21m00Tcm4TlvDq8ikWAM"
-
 # Whether to use audio stream endpoint
 var use_stream_mode := true
 
@@ -75,11 +72,31 @@ var _web_socket_client := WebSocketClient.new()
 var _socket_is_connected := false
 var _text_buffer: PackedStringArray = []
 
+var _current_voice_type: Enum.VoiceType = Enum.VoiceType.MALE_DEFAULT
+
 
 func _init(p_api_key: String) -> void:
 	super(p_api_key)
 	_web_socket_client.socket_message_added.connect(_handle_socket_message)
 	_http_stream_client.stream_chunk_added.connect(_handle_stream_chunk)
+
+
+func _get_voice_id_from_type(voice_type: Enum.VoiceType) -> String:
+	match voice_type:
+		Enum.VoiceType.MALE_OLD:
+			return "29vD33N1CtxCmqQRPOHJ"
+		Enum.VoiceType.MALE_DEFAULT:
+			return "g5CIjZEefAph4nQFvHAz"
+		Enum.VoiceType.MALE_CHILD:
+			return "pNInz6obpgDQGcFmaJgB"
+		Enum.VoiceType.FEMALE_OLD:
+			return "z9fAnlkpzviPz146aGWa"
+		Enum.VoiceType.FEMALE_DEFAULT:
+			return "pFZP5JQG7iQjIQuC4Bku"
+		Enum.VoiceType.FEMALE_CHILD:
+			return "zrHiDhphv9ZnVXBqCLjz"
+		_:
+			return "Xb7hH8MSUJpSbSDYk0k2"
 
 
 func _setup_socket() -> void:
@@ -88,7 +105,7 @@ func _setup_socket() -> void:
 		. connect_to_socket_url(
 			(
 				"wss://api.elevenlabs.io/v1/text-to-speech/%s/stream-input?model_id=eleven_monolingual_v1"
-				% voice_id
+				% _get_voice_id_from_type(_current_voice_type)
 			)
 		)
 	)
@@ -163,7 +180,7 @@ func _get_headers() -> PackedStringArray:
 
 
 func _get_path(use_stream: bool) -> String:
-	var path := PATH + "/" + voice_id
+	var path := PATH + "/" + _get_voice_id_from_type(_current_voice_type)
 	if use_stream:
 		path += "/stream"
 	var optimize_streaming_latency := 0
@@ -228,6 +245,7 @@ func text_to_speach(request: CallBasicRequestModel) -> CallBasicResponseModel:
 	var headers := _get_headers()
 	var path := _get_path(use_stream_mode)
 	var response := CallBasicResponseModel.new()
+	_current_voice_type = request.voice_type
 
 	if use_stream_mode:
 		await _make_stream_request(path, headers, options)
@@ -259,7 +277,43 @@ func _handle_socket_message(chunk: Variant) -> void:
 
 	var parsed: Dictionary = JSON.parse_string(chunk)
 	if not "audio" in parsed or not parsed.audio:
-		return
+		return _handle_chunk_error(parsed)
 
 	var data := Marshalls.base64_to_raw(parsed["audio"])
 	SignalManager.voice_chunk_added.emit(data)
+
+
+## This function handles errors related to chunk loading.
+## It processes the error message and takes appropriate actions based on the error code.
+
+
+func _handle_chunk_error(chunk: Dictionary) -> void:
+	var error_code: int = chunk.get("code", -1)
+	var error_message: String = chunk.get("message", "Unknown error")
+
+	match error_code:
+		1008:
+			Logger.error("Unusual activity detected: %s" % error_message)
+			_handle_unusual_activity()
+		_:
+			Logger.error("Unhandled error (%d): %s" % [error_code, error_message])
+			_handle_generic_error()
+
+
+## Handle the specific case of unusual activity detected.
+## This can include notifying the user, logging the error, or taking other actions as needed.
+func _handle_unusual_activity() -> void:
+	# Notify the user, log the error, or take other actions as needed
+	show_error_message("Unusual activity detected. Please purchase a Paid Plan to continue.")
+
+
+## Handle generic errors that are not specifically accounted for.
+func _handle_generic_error() -> void:
+	# Log the error, notify the user, or take other actions as needed
+	show_error_message("An error occurred. Please try again later.")
+
+
+## Show an error message to the user.
+## This function displays an error message on the screen.
+func show_error_message(message: String) -> void:
+	print("show_error_message", message)
