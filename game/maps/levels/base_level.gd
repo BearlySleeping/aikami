@@ -1,11 +1,18 @@
-class_name Level extends Node2D
+  extends Node2D
 
 @export var player: Player
 @export var portals: Array[Portal]
 var data: LevelDataHandoff
 
+func _free_level() -> void:
+	PlayerManager.unparent_player( self )
+	queue_free()
 
 func _ready() -> void:
+	self.y_sort_enabled = true
+	PlayerManager.set_as_parent( self )
+	LevelManager.level_load_started.connect( _free_level )
+	
 	player.disable()
 	player.visible = false
 	# if we aren't transitioning between levels,

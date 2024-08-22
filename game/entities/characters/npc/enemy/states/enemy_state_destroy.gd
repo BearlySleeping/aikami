@@ -1,6 +1,6 @@
 class_name EnemyStateDestroy extends EnemyState
 
-const PICKUP = preload("res://Items/item_pickup/item_pickup.tscn")
+const PICKUP = preload("res://entities/items/item_pickup/item_pickup.tscn")
 
 @export var anim_name : String = "destroy"
 @export var knockback_speed : float = 200.0

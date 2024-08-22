@@ -1,9 +1,9 @@
 [gd_scene load_steps=10 format=3 uid="uid://cpohuml8sje4u"]
 
-[ext_resource type="Script" path="res://Items/item_pickup/item_pickup.gd" id="1_75i5r"]
-[ext_resource type="AudioStream" uid="uid://dqkscpjlwebc0" path="res://Items/item_pickup/item_pickup.wav" id="2_6t52m"]
-[ext_resource type="Texture2D" uid="uid://dxda6pdclrpa" path="res://Player/Sprites/Shadow.png" id="2_fgx2o"]
-[ext_resource type="Texture2D" uid="uid://bmjan6873e3h5" path="res://Items/sprites/items.png" id="3_ag87d"]
+[ext_resource type="Script" path="res://entities/items/item_pickup/item_pickup.gd" id="1_75i5r"]
+[ext_resource type="AudioStream" uid="uid://dqkscpjlwebc0" path="res://entities/items/item_pickup/item_pickup.wav" id="2_6t52m"]
+[ext_resource type="Texture2D" uid="uid://ci1yhe4yl1oaj" path="res://entities/characters/player/shadow.png" id="2_fgx2o"]
+[ext_resource type="Texture2D" uid="uid://bmjan6873e3h5" path="res://entities/items/sprites/items.png" id="3_ag87d"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_lir6u"]
 
