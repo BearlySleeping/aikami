@@ -12,12 +12,12 @@
 [ext_resource type="Script" path="res://entities/characters/npc/enemy/states/enemy_state_wander.gd" id="10_tqetg"]
 [ext_resource type="Script" path="res://entities/characters/npc/enemy/states/enemy_state_stun.gd" id="11_i8xm0"]
 [ext_resource type="Script" path="res://entities/characters/npc/enemy/states/enemy_state_destroy.gd" id="12_ke2eo"]
-[ext_resource type="Resource" uid="uid://cixpflhl0cjvo" path="res://core/nodes/items/gem.tres" id="13_gq3d7"]
+[ext_resource type="Resource" uid="uid://cixpflhl0cjvo" path="res://entities/items/gem.tres" id="13_gq3d7"]
 [ext_resource type="Script" path="res://entities/characters/npc/enemy/drop_data.gd" id="14_jdd1u"]
-[ext_resource type="Resource" uid="uid://prvahwyi1iha" path="res://core/nodes/items/apple.tres" id="15_bpneo"]
+[ext_resource type="Resource" uid="uid://prvahwyi1iha" path="res://entities/items/apple.tres" id="15_bpneo"]
 [ext_resource type="Texture2D" uid="uid://vs661oue3c1g" path="res://entities/characters/npc/enemy/slime/DestroySmoke.png" id="16_qmi8b"]
 [ext_resource type="Script" path="res://entities/characters/npc/enemy/states/enemy_state_chase.gd" id="16_v3mb8"]
-[ext_resource type="PackedScene" path="res://entities/characters/npc/enemy/vision_area.tscn" id="17_ti8pv"]
+[ext_resource type="PackedScene" uid="uid://bmxmydv0m20du" path="res://entities/characters/npc/enemy/vision_area.tscn" id="17_ti8pv"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_mc85u"]
 radius = 13.0

@@ -8,6 +8,7 @@ radius = 21.0238
 
 [node name="BaseNPC" type="CharacterBody2D" groups=["NPC"]]
 script = ExtResource("1_e2qh1")
+npc_id = 0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_4ej6v")

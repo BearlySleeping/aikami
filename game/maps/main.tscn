@@ -8,6 +8,7 @@
 tilemap = NodePath("TileMap")
 
 [node name="TileMap" parent="." index="0" instance=ExtResource("3_68k73")]
+layer_1/name = "Layer1"
 
 [node name="Player" parent="." index="1"]
 position = Vector2(-121, 24)

@@ -60,4 +60,3 @@ func _on_enemy_damaged( hurt_box : HurtBox ) -> void:
 
 func _on_animation_finished( _a : String ) -> void:
 	_animation_finished = true
-

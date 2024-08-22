@@ -1,7 +1,7 @@
 [gd_scene load_steps=38 format=3 uid="uid://b7x3cvq6i0qvf"]
 
 [ext_resource type="Script" path="res://entities/characters/npc/enemy/enemy.gd" id="1_daaqd"]
-[ext_resource type="Texture2D" path="res://Player/Sprites/Shadow.png" id="1_mx3qt"]
+[ext_resource type="Texture2D" uid="uid://ci1yhe4yl1oaj" path="res://entities/characters/player/shadow.png" id="1_mx3qt"]
 [ext_resource type="PackedScene" uid="uid://cpvl4rru3x52v" path="res://core/nodes/hurt_box/hurt_box.tscn" id="2_abt64"]
 [ext_resource type="Texture2D" uid="uid://dfb1ouyn4kesq" path="res://entities/characters/npc/enemy/slime/Slime.png" id="2_xu6l6"]
 [ext_resource type="PackedScene" uid="uid://c041sb462wu22" path="res://core/nodes/hit_box/hit_box.tscn" id="3_3b6qp"]

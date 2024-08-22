@@ -13,6 +13,7 @@ var target_color: Color
 func _ready() -> void:
 	assert(tilemap, "Tilemap is required")
 	player.request_path_to_target.connect(tilemap.get_path_to_point)
+	player.request_path_to_target.connect(tilemap.get_path_to_point)
 	Hud.show_hud()
 	TimeManager.set_running(true)
 	Global.screen_type = Global.ScreenType.GAME
