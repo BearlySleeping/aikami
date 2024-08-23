@@ -32,7 +32,6 @@ SignalManager="*res://core/engine/signal_manager.gd"
 TimeManager="*res://core/engine/time_manager.gd"
 PlayerManager="*res://core/engine/player_manager.gd"
 SceneTransition="*res://interface/scene_transition/scene_transition.tscn"
-LevelManager="*res://core/engine/level_manager.gd"
 
 [debug]
 
