@@ -10,5 +10,5 @@ script = ExtResource("1_3xp62")
 modulate = Color(0.298039, 1, 0.431373, 0.796078)
 position = Vector2(0, -20)
 texture = ExtResource("1_vqbiw")
-hframes = 16
-vframes = 3
+hframes = 6
+vframes = 8

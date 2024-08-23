@@ -36,7 +36,7 @@ func _ready() -> void:
 	monitoring = false
 	_place_player()
 	
-	await LevelManager.level_loaded
+	await SceneManager.level_loaded
 	
 	monitoring = true
 	body_entered.connect( _player_entered )
@@ -46,14 +46,14 @@ func _ready() -> void:
 
 
 func _player_entered( _p : Node2D ) -> void:
-	LevelManager.load_new_level( level, target_transition_area, get_offset() )
+	SceneManager.load_new_level( level, target_transition_area, get_offset() )
 	pass
 
 
 func _place_player() -> void:
-	if name != LevelManager.target_transition:
+	if name != SceneManager.target_transition:
 		return
-	PlayerManager.set_player_position( global_position + LevelManager.position_offset )
+	PlayerManager.set_player_position( global_position + SceneManager.position_offset )
 
 
 func get_offset() -> Vector2:
