@@ -55,7 +55,7 @@ func _on_load_pressed() -> void:
 	if is_paused == false:
 		return
 	SaveManager.load_game()
-	await LevelManager.level_load_started
+	await SceneManager.scene_load_started
 	hide_pause_menu()
 	pass
 

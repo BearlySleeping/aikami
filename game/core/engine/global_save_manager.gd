@@ -42,15 +42,15 @@ func load_game() -> void:
 	var save_dict : Dictionary = json.get_data() as Dictionary
 	current_save = save_dict
 	
-	LevelManager.load_new_level( current_save.scene_path, "", Vector2.ZERO )
+	SceneManager.load_new_level( current_save.scene_path, "", Vector2.ZERO )
 	
-	await LevelManager.level_load_started
+	await SceneManager.scene_load_started
 	
 	PlayerManager.set_player_position( Vector2( current_save.player.pos_x, current_save.player.pos_y ) )
 	PlayerManager.set_health( current_save.player.hp, current_save.player.max_hp )
 	PlayerManager.INVENTORY_DATA.parse_save_data( current_save.items )
 	
-	await LevelManager.level_loaded
+	await SceneManager.level_loaded
 	
 	game_loaded.emit()
 	

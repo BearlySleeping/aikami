@@ -3,7 +3,7 @@ class_name LevelTileMap extends TileMap
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	LevelManager.change_tilemap_bounds( _get_tilemap_bounds() )
+	SceneManager.change_tilemap_bounds( _get_tilemap_bounds() )
 	pass # Replace with function body.
 
 
