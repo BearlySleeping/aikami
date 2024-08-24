@@ -47,7 +47,7 @@ func _on_return_to_game_button_pressed() -> void:
 
 
 func _on_main_menu_button_pressed() -> void:
-	SceneManager.load_new_scene(SceneManager.SceneName.MAIN_MENU)
+	SceneManager.load_new_fixed_scene(SceneManager.SceneName.MAIN_MENU)
 	visible = false
 
 

@@ -77,4 +77,4 @@ func _on_save_button_pressed() -> void:
 	if !current_player:
 		return
 	SaveManager.save_player_data(current_player)
-	SceneManager.load_new_scene(SceneManager.SceneName.MAIN, "fade_to_black")
+	SceneManager.load_new_fixed_scene(SceneManager.SceneName.MAIN, "fade_to_black")

@@ -52,11 +52,11 @@ func get_total_game_time() -> TimeModel:
 ## Prepares the initial state of the modulator based on the initial hour.
 func _ready() -> void:
 	SaveManager.load_game_data()
-	if SaveManager.current_game_data:
+	if SaveManager.current_save_data:
 		total_delta_time = (
 			INGAME_TO_REAL_MINUTE_DURATION
 			* MINUTES_PER_HOUR
-			* SaveManager.current_game_data.total_in_game_hours
+			* SaveManager.current_save_data.total_in_game_hours
 		)
 
 
@@ -119,12 +119,12 @@ func to_calender(time: TimeModel) -> String:
 	# Format and return the calendar date
 	return (
 		"%s of %s %s, %s:%s"
-		% [current_day, _get_month_name(current_month), current_year, hour_str, minute_str]
+		% [current_day, _to_month_name(current_month), current_year, hour_str, minute_str]
 	)
 
 
 # Helper function to convert month number to month name
-func _get_month_name(month: int) -> String:
+func _to_month_name(month: int) -> String:
 	var months := [
 		"January",
 		"February",

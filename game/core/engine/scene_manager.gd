@@ -31,29 +31,37 @@ func change_tilemap_bounds( bounds : Array[ Vector2 ] ) -> void:
 	tilemap_bounds_changed.emit( bounds )
 
 func load_new_scene(
-		scene_name: SceneName,
+		scene_path: String,
 		_target_transition : String = "",
 		_position_offset : Vector2 = Vector2.ZERO
 ) -> void:
 	get_tree().paused = true
 	target_transition = _target_transition
 	position_offset = _position_offset
-	
+
 	await SceneTransition.fade_out()
-	
+
 	scene_load_started.emit()
-	
+
 	await get_tree().process_frame
-	var scene_path := _to_scene_path(scene_name)
+	# var scene_path := _to_scene_path(scene_name)
 	get_tree().change_scene_to_file( scene_path )
-	
+
 	await SceneTransition.fade_in()
-	
+
 	get_tree().paused = false
-	
+
 	await get_tree().process_frame
-	
+
 	scene_loaded.emit()
+
+func load_new_fixed_scene(
+		scene_name: SceneName,
+		_target_transition : String = "",
+		_position_offset : Vector2 = Vector2.ZERO
+) -> void:
+	var scene_path := _to_scene_path(scene_name)
+	load_new_scene(scene_path, _target_transition, _position_offset)
 
 
 

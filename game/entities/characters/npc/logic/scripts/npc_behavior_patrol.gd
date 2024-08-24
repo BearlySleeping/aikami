@@ -98,5 +98,3 @@ func _get_color_by_index( i : int ) -> Color:
 	while i > color_count - 1:
 		i -= color_count
 	return COLORS[ i ]
-
-

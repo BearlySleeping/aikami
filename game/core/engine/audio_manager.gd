@@ -21,18 +21,20 @@ func _ready() -> void:
 		player.volume_db = -40
 
 
+
+
 func play_music( _audio : AudioStream ) -> void:
 	if _audio == music_players[ current_music_player ].stream:
 		return
-	
+
 	current_music_player += 1
 	if current_music_player > 1:
 		current_music_player = 0
-	
+
 	var current_player : AudioStreamPlayer = music_players[ current_music_player ]
 	current_player.stream = _audio
 	play_and_fade_in( current_player )
-	
+
 	var old_player = music_players[ 1 ]
 	if current_music_player == 1:
 		old_player = music_players[ 0 ]
