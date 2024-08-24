@@ -43,4 +43,3 @@ func _on_area_enter( _a : Area2D ) -> void:
 			audio.play(0)
 		pass
 	pass
-

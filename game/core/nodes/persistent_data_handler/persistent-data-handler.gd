@@ -22,4 +22,3 @@ func get_value() -> void:
 
 func _get_name() -> String:
 	return get_tree().current_scene.scene_file_path + "/" + get_parent().name + "/" + name
-
