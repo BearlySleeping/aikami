@@ -25,9 +25,9 @@ func _on_start_button_pressed() -> void:
 		return
 	var has_created_player := SaveManager.initialize()
 	if has_created_player:
-		SceneManager.load_new_scene(SceneManager.SceneName.MAIN, "wipe_to_right")
+		SceneManager.load_new_fixed_scene(SceneManager.SceneName.MAIN)
 	else:
-		SceneManager.load_new_scene(SceneManager.SceneName.CHARACTER_CREATION, "wipe_to_right")
+		SceneManager.load_new_fixed_scene(SceneManager.SceneName.CHARACTER_CREATION)
 
 
 func reset_focus() -> void:

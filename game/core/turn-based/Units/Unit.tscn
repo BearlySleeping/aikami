@@ -45,6 +45,7 @@ script = ExtResource("1")
 grid = ExtResource("2")
 
 [node name="PathFollow2D" type="PathFollow2D" parent="."]
+rotates = false
 loop = false
 
 [node name="Shadow" type="Sprite2D" parent="PathFollow2D"]
@@ -58,7 +59,7 @@ scale = Vector2(0.24, 0.24)
 offset = Vector2(-3.8147e-06, -185)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-autoplay = "idle"
 libraries = {
 "": SubResource("AnimationLibrary_5dan3")
 }
+autoplay = "idle"

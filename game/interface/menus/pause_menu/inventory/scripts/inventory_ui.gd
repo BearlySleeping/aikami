@@ -44,4 +44,3 @@ func on_inventory_changed() -> void:
 	var i = focus_index
 	clear_inventory()
 	update_inventory( i )
-

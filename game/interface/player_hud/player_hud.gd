@@ -37,4 +37,3 @@ func update_max_hp( _max_hp : int ) -> void:
 		else:
 			hearts[i].visible = false
 	pass
-

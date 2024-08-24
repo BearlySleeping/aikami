@@ -42,8 +42,5 @@ func _on_body_entered(body: Node2D) -> void:
 	if not body is Player:
 		return
 	player_entered_portal.emit(self)
-	if transition_type == "zelda":
-		SceneManager.load_level_zelda(scene_name)
-	else:
-		SceneManager.load_new_scene(scene_name, transition_type)
+	SceneManager.load_new_fixed_scene(scene_name)
 	queue_free()

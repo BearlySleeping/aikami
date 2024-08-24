@@ -9,3 +9,7 @@ tile_set = ExtResource("2")
 format = 2
 script = ExtResource("1")
 grid = ExtResource("3")
+
+[node name="Layer0" type="TileMapLayer" parent="."]
+use_parent_material = true
+tile_set = ExtResource("2")
