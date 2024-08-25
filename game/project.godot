@@ -23,16 +23,16 @@ driver/enable_input=true
 
 [autoload]
 
-SceneManager="*res://core/engine/scene_manager.gd"
-AudioManager="*res://assets/audio/audio_manager.tscn"
-DialogueManager="*res://core/engine/dialogue_manager.gd"
+SceneManager="*res://core/managers/scene_manager.gd"
+AudioManager="*res://core/managers/audio_manager.gd"
+DialogueManager="*res://core/managers/dialogue_manager.gd"
 Hud="*res://interface/hud/hud.tscn"
 GameMenu="*res://interface/menus/pause/pause_menu.tscn"
-SignalManager="*res://core/engine/signal_manager.gd"
-TimeManager="*res://core/engine/time_manager.gd"
-PlayerManager="*res://core/engine/player_manager.gd"
+SignalManager="*res://core/managers/signal_manager.gd"
+TimeManager="*res://core/managers/time_manager.gd"
+PlayerManager="*res://core/managers/player_manager.gd"
 SceneTransition="*res://interface/scene_transition/scene_transition.tscn"
-SaveManager="*res://core/engine/save_manager.gd"
+SaveManager="*res://core/managers/save_manager.gd"
 
 [debug]
 
@@ -45,7 +45,7 @@ project/assembly_name="AiKami"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_whisper/plugin.cfg")
+enabled=PackedStringArray()
 
 [input]
 

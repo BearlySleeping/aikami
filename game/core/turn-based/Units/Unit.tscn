@@ -1,8 +1,8 @@
 [gd_scene load_steps=7 format=3 uid="uid://d4mhjq651egt"]
 
-[ext_resource type="Script" path="res://core/turn-based/Units/Unit.gd" id="1"]
-[ext_resource type="Resource" path="res://core/turn-based/GameBoard/Grid.tres" id="2"]
-[ext_resource type="Texture2D" uid="uid://b5ghlcxjxmmgw" path="res://core/turn-based/Units/unit_shadow.svg" id="3"]
+[ext_resource type="Script" path="res://core/turn-based/units/Unit.gd" id="1"]
+[ext_resource type="Resource" path="res://core/turn-based/board/Grid.tres" id="2"]
+[ext_resource type="Texture2D" uid="uid://b5ghlcxjxmmgw" path="res://core/turn-based/units/unit_shadow.svg" id="3"]
 
 [sub_resource type="Animation" id="1"]
 length = 0.001
