@@ -1,6 +1,6 @@
 [gd_scene load_steps=5 format=4 uid="uid://de53ukdqyusan"]
 
-[ext_resource type="Texture2D" uid="uid://cocms0prufyqi" path="res://core/turn-based/Background/grasslands.png" id="1"]
+[ext_resource type="Texture2D" uid="uid://cocms0prufyqi" path="res://core/turn-based/background/grasslands.png" id="1"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_5tkph"]
 texture = ExtResource("1")
