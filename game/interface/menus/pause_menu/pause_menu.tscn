@@ -1,7 +1,7 @@
 [gd_scene load_steps=8 format=3 uid="uid://bywqqrmmqtcpk"]
 
 [ext_resource type="Script" path="res://interface/menus/pause_menu/pause_menu.gd" id="1_uh5g0"]
-[ext_resource type="Texture2D" uid="uid://bmjan6873e3h5" path="res://entities/items/sprites/items.png" id="2_6f15s"]
+[ext_resource type="Texture2D" uid="uid://bmjan6873e3h5" path="res://world/entities/items/sprites/items.png" id="2_6f15s"]
 [ext_resource type="Script" path="res://interface/menus/pause_menu/inventory/scripts/inventory_data.gd" id="3_kwke8"]
 [ext_resource type="PackedScene" uid="uid://dndwapovgam4d" path="res://interface/menus/pause_menu/inventory/inventory_slot.tscn" id="3_x4v76"]
 [ext_resource type="Resource" uid="uid://djd6vwckdo4ya" path="res://interface/menus/pause_menu/inventory/player_inventory.tres" id="4_cwt50"]
