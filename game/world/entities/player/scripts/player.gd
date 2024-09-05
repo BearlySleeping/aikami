@@ -1,5 +1,8 @@
 class_name Player extends CharacterBody2D
 
+signal request_path_to_target(
+	current_position: Vector2i, target_position: Vector2i, path: PackedVector2Array
+)
 signal direction_changed(new_direction: Vector2)
 signal player_damaged(hurt_box: HurtBox)
 
@@ -20,21 +23,37 @@ var max_hp: int = 6
 @onready var state_machine: PlayerStateMachine = $StateMachine
 @onready var audio: AudioStreamPlayer2D = $Audio/AudioStreamPlayer2D
 
+## A path determined by mouse input for guiding the player's movement.
+var mouse_path: PackedVector2Array = []
+
 
 # Called when the node enters the scene tree for the first time.
-func _ready():
+func _ready() -> void:
 	PlayerManager.player = self
 	state_machine.initialize(self)
 	hit_box.damaged.connect(_take_damage)
 	update_hp(99)
 
 
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(_delta):
-	direction = Vector2(Input.get_axis("move_left", "move_right"), Input.get_axis("move_up", "move_down")).normalized()
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("move_click"):
+		return
+	Logger.debug("_unhandled_input:move_click", event)
+	var click_position := get_global_mouse_position()
+	request_path_to_target.emit(global_position, click_position, mouse_path)
 
-func _physics_process(_delta):
+
+# Called every frame. 'delta' is the elapsed time since the previous frame.
+func _process(_delta: float) -> void:
+	direction = (
+		Vector2(Input.get_axis("move_left", "move_right"), Input.get_axis("move_up", "move_down"))
+		. normalized()
+	)
+
+
+func _physics_process(_delta: float) -> void:
 	move_and_slide()
+
 
 func set_direction() -> bool:
 	if direction == Vector2.ZERO:
@@ -43,7 +62,7 @@ func set_direction() -> bool:
 	var direction_id: int = int(
 		round((direction + cardinal_direction * 0.1).angle() / TAU * DIR_4.size())
 	)
-	var new_dir = DIR_4[direction_id]
+	var new_dir: Vector2 = DIR_4[direction_id]
 
 	if new_dir == cardinal_direction:
 		return false
@@ -81,7 +100,7 @@ func _take_damage(hurt_box: HurtBox) -> void:
 
 func update_hp(delta: int) -> void:
 	hp = clampi(hp + delta, 0, max_hp)
-	Hud.update_hp(hp, max_hp)
+	#Hud.update_hp(hp, max_hp)
 
 
 func make_invulnerable(_duration: float = 1.0) -> void:

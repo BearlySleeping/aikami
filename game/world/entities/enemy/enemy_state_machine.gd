@@ -6,19 +6,19 @@ var prev_state : EnemyState
 var current_state : EnemyState
 
 
-func _ready():
+func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_DISABLED
 	pass
 
 
 
-func _process(delta):
+func _process(delta: float) -> void:
 	change_state( current_state.process( delta ) )
 	pass
 
 
 
-func _physics_process(delta):
+func _physics_process(delta: float) -> void:
 	change_state( current_state.physics( delta ) )
 	pass
 

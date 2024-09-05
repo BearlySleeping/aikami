@@ -45,14 +45,17 @@ var music_audio_player_count : int = 2
 var current_music_player_index : int = 0
 var music_players : Array[ AudioStreamPlayer ] = []
 var music_bus : String = "Music"
-
+var _sfx_stream_player: AudioStreamPlayer
 var music_fade_duration : float = 0.5
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_sfx_stream_player = AudioStreamPlayer.new()
+	add_child( _sfx_stream_player )
+
 	for i in music_audio_player_count:
-		var player = AudioStreamPlayer.new()
+		var player := AudioStreamPlayer.new()
 		add_child( player )
 		player.bus = music_bus
 		music_players.append( player )
@@ -60,7 +63,7 @@ func _ready() -> void:
 
 
 
-func play_sfx(sfx_stream_player: AudioStreamPlayer, sfx_name: SFXName) -> void:
+func play_sfx( sfx_name: SFXName, sfx_stream_player := _sfx_stream_player) -> void:
 	Logger.info("play_sfx", sfx_name)
 	var new_stream := _get_sfx_stream(sfx_name)
 	sfx_stream_player.stream = new_stream
@@ -87,7 +90,7 @@ func play_track(track_name: TrackName) -> void:
 	current_player.stream = new_stream
 	play_and_fade_in( current_player )
 
-	var old_player = music_players[ 1 ]
+	var old_player := music_players[ 1 ]
 	if current_music_player_index == 1:
 		old_player = music_players[ 0 ]
 	fade_out_and_stop( old_player )

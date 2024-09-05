@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ci8r8hr4esnlt"
-path="res://.godot/imported/picture_bubble.svg-0435bbd5906aafb1cecb99a8231c0763.ctex"
+uid="uid://csbbckyn3xnt"
+path="res://.godot/imported/text-bubble.png-0d38f748b672ae719b7bfffea37ee8b2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://interface/dialog_system/icons/picture_bubble.svg"
-dest_files=["res://.godot/imported/picture_bubble.svg-0435bbd5906aafb1cecb99a8231c0763.ctex"]
+source_file="res://assets/sprites/text-bubble.png"
+dest_files=["res://.godot/imported/text-bubble.png-0d38f748b672ae719b7bfffea37ee8b2.ctex"]
 
 [params]
 
@@ -32,6 +32,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

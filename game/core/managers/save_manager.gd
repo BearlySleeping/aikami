@@ -115,7 +115,9 @@ func load_game() -> void:
 
 	await SceneManager.scene_load_started
 
-	PlayerManager.set_player_position(Vector2(current_save_data.player.pos_x, current_save_data.player.pos_y))
+	PlayerManager.set_player_position(
+		Vector2(current_save_data.player.pos_x, current_save_data.player.pos_y)
+	)
 	PlayerManager.set_health(current_save_data.player.hp, current_save_data.player.max_hp)
 	PlayerManager.INVENTORY_DATA.parse_save_data(current_save_data.items)
 
@@ -146,12 +148,12 @@ func initialize() -> bool:
 
 
 func update_player_data() -> void:
-	var current_player := PlayerManager.player
+	var player := PlayerManager.player
 	var player_data := current_save_data.player
-	player_data.hp = current_player.hp
-	player_data.max_hp = current_player.max_hp
-	player_data.pos_x = current_player.global_position.x
-	player_data.pos_y = current_player.global_position.y
+	player_data.hp = player.hp
+	player_data.max_hp = player.max_hp
+	player_data.pos_x = player.global_position.x
+	player_data.pos_y = player.global_position.y
 	current_save_data.player = player_data
 
 

@@ -1,0 +1,35 @@
+[gd_scene load_steps=4 format=3 uid="uid://c585kt8004tyx"]
+
+[ext_resource type="Script" path="res://interface/dialogue/components/npc_container.gd" id="1_6jfos"]
+[ext_resource type="FontFile" uid="uid://cs3qtlo6j6oex" path="res://assets/fonts/pixelmix.ttf" id="1_23ifw"]
+[ext_resource type="PackedScene" uid="uid://c8sw0elfc2l24" path="res://interface/dialogue/components/button.tscn" id="2_tgd5n"]
+
+[node name="NPCTextContainer" type="HBoxContainer"]
+offset_left = 14.0
+offset_right = 450.0
+offset_bottom = 52.0
+alignment = 1
+script = ExtResource("1_6jfos")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/default_color = Color(0.439216, 0.396078, 0.321569, 1)
+theme_override_fonts/normal_font = ExtResource("1_23ifw")
+theme_override_fonts/bold_font = ExtResource("1_23ifw")
+bbcode_enabled = true
+text = "Example [b]Text[/b]!!!
+[wave]Wavy text[/wave]...
+[shake][color=orangered]Shaking text[/color][/shake]"
+scroll_active = false
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+alignment = 2
+
+[node name="NextButton" parent="VBoxContainer" instance=ExtResource("2_tgd5n")]
+layout_mode = 2
+text = "Next"
+
+[connection signal="pressed" from="VBoxContainer/NextButton" to="." method="_on_next_button_pressed"]

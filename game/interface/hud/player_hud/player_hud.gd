@@ -4,7 +4,7 @@ extends Control
 var hearts : Array[ HeartGUI ] = []
 
 
-func _ready():
+func _ready() -> void:
 	for child in $HFlowContainer.get_children():
 		if child is HeartGUI:
 			hearts.append( child )
