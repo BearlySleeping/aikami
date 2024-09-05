@@ -8,15 +8,13 @@ signal hidden
 @onready var button_load: Button = $Control/HBoxContainer/Button_Load
 @onready var item_description: Label = $Control/ItemDescription
 
-var is_paused : bool = false
-
+var is_paused: bool = false
 
 
 func _ready() -> void:
 	hide_pause_menu()
-	button_save.pressed.connect( _on_save_pressed )
-	button_load.pressed.connect( _on_load_pressed )
-
+	button_save.pressed.connect(_on_save_pressed)
+	button_load.pressed.connect(_on_load_pressed)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -33,7 +31,6 @@ func show_pause_menu() -> void:
 	visible = true
 	is_paused = true
 	shown.emit()
-
 
 
 func hide_pause_menu() -> void:
@@ -60,11 +57,10 @@ func _on_load_pressed() -> void:
 	pass
 
 
-
-func update_item_description( new_text : String ) -> void:
+func update_item_description(new_text: String) -> void:
 	item_description.text = new_text
 
 
-func play_audio( audio : AudioStream ) -> void:
+func play_audio(audio: AudioStream) -> void:
 	audio_stream_player.stream = audio
 	audio_stream_player.play()

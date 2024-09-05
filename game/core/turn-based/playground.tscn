@@ -1,23 +1,20 @@
-[gd_scene load_steps=14 format=3 uid="uid://30jb4kc5kf5p"]
+[gd_scene load_steps=11 format=3 uid="uid://30jb4kc5kf5p"]
 
-[ext_resource type="PackedScene" uid="uid://de53ukdqyusan" path="res://core/turn-based/background/Map.tscn" id="1_k0ccf"]
+[ext_resource type="PackedScene" uid="uid://de53ukdqyusan" path="res://core/turn-based/Background/Map.tscn" id="1_k0ccf"]
 [ext_resource type="Script" path="res://core/turn-based/board/GameBoard.gd" id="2_latoj"]
 [ext_resource type="Resource" path="res://core/turn-based/board/Grid.tres" id="3_biwpc"]
 [ext_resource type="PackedScene" uid="uid://n825j345khoi" path="res://core/turn-based/unit_overlay/UnitOverlay.tscn" id="4_2ty8c"]
 [ext_resource type="PackedScene" uid="uid://dxyfefsgkgc4l" path="res://core/turn-based/board/UnitPath.tscn" id="5_3q6qc"]
 [ext_resource type="PackedScene" uid="uid://bv1ul1qynrdwd" path="res://core/turn-based/board/Cursor/Cursor.tscn" id="6_tumom"]
-[ext_resource type="PackedScene" uid="uid://d4mhjq651egt" path="res://core/turn-based/units/Unit.tscn" id="7_rifqe"]
-[ext_resource type="Texture2D" uid="uid://don6rhlapjhye" path="res://core/turn-based/units/bear.png" id="8_e1eql"]
-[ext_resource type="Texture2D" uid="uid://x4kxxdinjx3r" path="res://core/turn-based/units/bugcat.png" id="9_abdyy"]
-[ext_resource type="Texture2D" uid="uid://ceanoo0yxcj8i" path="res://core/turn-based/units/squirrel.png" id="10_nxmg5"]
+[ext_resource type="PackedScene" uid="uid://d4mhjq651egt" path="res://core/turn-based/Units/Unit.tscn" id="7_rifqe"]
 
-[sub_resource type="Curve2D" id="Curve2D_p2fol"]
+[sub_resource type="Curve2D" id="Curve2D_awmfn"]
 resource_local_to_scene = true
 
-[sub_resource type="Curve2D" id="Curve2D_ifjvo"]
+[sub_resource type="Curve2D" id="Curve2D_1bmc7"]
 resource_local_to_scene = true
 
-[sub_resource type="Curve2D" id="Curve2D_mtquq"]
+[sub_resource type="Curve2D" id="Curve2D_hdmpw"]
 resource_local_to_scene = true
 
 [node name="Main" type="Node2D"]
@@ -37,24 +34,18 @@ position = Vector2(526, 363)
 
 [node name="Bear" parent="GameBoard" instance=ExtResource("7_rifqe")]
 position = Vector2(600, 480)
-curve = SubResource("Curve2D_p2fol")
-move_range = 3
-skin = ExtResource("8_e1eql")
-skin_offset = Vector2(2, 9)
+curve = SubResource("Curve2D_awmfn")
+script = null
 
 [node name="Cat" parent="GameBoard" instance=ExtResource("7_rifqe")]
 position = Vector2(850.293, 412.465)
-curve = SubResource("Curve2D_ifjvo")
-move_range = 8
-skin = ExtResource("9_abdyy")
-skin_offset = Vector2(5, 12)
+curve = SubResource("Curve2D_1bmc7")
+script = null
 
 [node name="Squirrel" parent="GameBoard" instance=ExtResource("7_rifqe")]
 position = Vector2(355.298, 298.556)
-curve = SubResource("Curve2D_mtquq")
-move_range = 5
-skin = ExtResource("10_nxmg5")
-skin_offset = Vector2(6, 17)
+curve = SubResource("Curve2D_hdmpw")
+script = null
 
 [connection signal="accept_pressed" from="GameBoard/Cursor" to="GameBoard" method="_on_Cursor_accept_pressed"]
 [connection signal="moved" from="GameBoard/Cursor" to="GameBoard" method="_on_Cursor_moved"]

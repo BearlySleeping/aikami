@@ -39,6 +39,14 @@ SaveManager="*res://core/managers/save_manager.gd"
 gdscript/warnings/untyped_declaration=1
 gdscript/warnings/integer_division=0
 
+[display]
+
+window/size/viewport_width=480
+window/size/viewport_height=270
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="viewport"
+
 [dotnet]
 
 project/assembly_name="AiKami"
@@ -46,6 +54,11 @@ project/assembly_name="AiKami"
 [editor_plugins]
 
 enabled=PackedStringArray()
+
+[gui]
+
+theme/custom="res://interface/theme/default_theme.tres"
+theme/custom_font="res://assets/fonts/pixelmix.ttf"
 
 [input]
 
@@ -85,6 +98,14 @@ menu={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194305,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
+
+[layer_names]
+
+2d_physics/layer_1="Player"
+2d_physics/layer_2="PlayerHurt"
+2d_physics/layer_3="PlayerInteract"
+2d_physics/layer_5="Walls"
+2d_physics/layer_9="Enemy"
 
 [rendering]
 

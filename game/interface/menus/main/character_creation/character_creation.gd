@@ -1,5 +1,5 @@
 @tool
-extends Control
+extends CanvasLayer
 
 const BACKGROUND_COLOR: int = 0xffffffff
 var current_player: PlayerModel
@@ -12,7 +12,6 @@ var current_player: PlayerModel
 @onready var generate_button: Button = %GenerateButton
 @onready var save_button: Button = %SaveButton
 @onready var avatar_frame: TextureRect = %AvatarFrame
-
 
 func _ready() -> void:
 	save_button.disabled = true

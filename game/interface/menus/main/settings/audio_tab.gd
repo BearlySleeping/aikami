@@ -30,9 +30,13 @@ func _ready() -> void:
 func set_volume(config_key: ConfigManager.ConfigKey, bus_id: int, value: float) -> void:
 	AudioServer.set_bus_volume_db(bus_id, linear_to_db(value))
 	ConfigManager.set_value(config_key, value)
-	AudioManager.play_button_sound()
+	_play_button_sound()
 
 
 func _to_bus_id(key: ConfigManager.ConfigKey) -> int:
 	var bus_name: String = BUS_MAP[key]
 	return AudioServer.get_bus_index(bus_name)
+
+
+func _play_button_sound() -> void:
+	AudioManager.play_sfx(AudioManager.SFXName.MENU)

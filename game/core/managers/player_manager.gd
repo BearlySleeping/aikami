@@ -4,49 +4,38 @@ const PLAYER = preload("res://world/entities/player/player.tscn")
 
 signal interact_pressed
 
-var player : Player
-var player_spawned : bool = false
-
-
-func _ready() -> void:
-	add_player_instance()
-	await get_tree().create_timer(0.2).timeout
-	player_spawned = true
-
+var player: Player
+var player_spawned: bool = false
 
 
 func add_player_instance() -> void:
+	if player:
+		return
 	player = PLAYER.instantiate()
-	add_child( player )
-	pass
+	add_child(player)
 
 
-
-func set_health( hp: int, max_hp: int ) -> void:
+func set_health(hp: int, max_hp: int) -> void:
 	player.max_hp = max_hp
 	player.hp = hp
-	player.update_hp( 0 )
+	player.update_hp(0)
 
 
-
-func set_player_position( _new_pos : Vector2 ) -> void:
+func set_player_position(_new_pos: Vector2) -> void:
+	add_player_instance()
 	player.global_position = _new_pos
-	pass
 
 
-
-func set_as_parent( _p : Node2D ) -> void:
+func set_as_parent(_p: Node2D) -> void:
 	if player.get_parent():
-		player.get_parent().remove_child( player )
-	_p.add_child( player )
+		player.get_parent().remove_child(player)
+	_p.add_child(player)
 
 
-
-func unparent_player( _p : Node2D ) -> void:
-	_p.remove_child( player )
-
+func unparent_player(_p: Node2D) -> void:
+	_p.remove_child(player)
 
 
-func play_audio( _audio : AudioStream ) -> void:
+func play_audio(_audio: AudioStream) -> void:
 	player.audio.stream = _audio
 	player.audio.play()
