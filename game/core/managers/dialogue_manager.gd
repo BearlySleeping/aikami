@@ -31,7 +31,7 @@ func _ready() -> void:
 
 func _on_text_chunk_added(text: String) -> void:
 	AIManager.generate_voice_with_text_chunk(text)
-	var exiting_text := dialogue_box.npc_text.text
+	var exiting_text := dialogue_box.npc_container.text
 	if exiting_text == "...":
 		dialogue_box.update_npc_text(text)
 	else:
@@ -97,7 +97,7 @@ func initialize_talk_with_npc(npc_id: NPCManager.PredefinedNPC) -> void:
 
 func clear() -> void:
 	Global.dialogue_active = false
-	dialogue_box.hide()
+	dialogue_box.clear()
 	var messages_amount := _messages.size()
 	# Only save if player has talked
 	if messages_amount > 2:

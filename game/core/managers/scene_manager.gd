@@ -69,7 +69,7 @@ func load_new_fixed_scene(
 func _to_scene_path(scene_name: SceneName) -> String:
 	match scene_name:
 		SceneName.MAIN:
-			return "res://maps/main.tscn"
+			return "res://world/maps/main.tscn"
 		SceneName.CHARACTER_CREATION:
 			return "res://interface/menus/main/character_creation/character_creation.tscn"
 		SceneName.MAIN_MENU:

@@ -1,22 +1,17 @@
 class_name DialogueBox
 extends CanvasLayer
 
-@onready var player_avatar: TextureRect = $PlayerAvatar
-@onready var npc_avatar: TextureRect = $NPCAvatar
-@onready var npc_text: RichTextLabel = $DialoguePanel/NPCText
-@onready var talk_input: TextEdit = $DialoguePanel/PlayerInput
-@onready var talk_button: Button = $DialoguePanel/TalkButton
-@onready var leave_button: Button = $DialoguePanel/LeaveButton
 
-
-func _ready() -> void:
-	visible = false
+@onready var player_avatar: AvatarBox = %PlayerAvatar
+@onready var npc_avatar: AvatarBox = %NPCAvatar
+@onready var npc_container: NPCContainer = %NPCContainer
+@onready var player_container: PlayerContainer = %PlayerContainer
 
 
 func clear() -> void:
 	visible = false
-	talk_input.text = ""
-	npc_text.text = ""
+	player_container.clear()
+	npc_container.clear()
 
 
 func update_npc_portrait(texture: CompressedTexture2D) -> void:
@@ -24,34 +19,32 @@ func update_npc_portrait(texture: CompressedTexture2D) -> void:
 
 
 func update_npc_text(text: String) -> void:
-	npc_text.text = text
-	talk_button.disabled = false
-
+	npc_container.text = text
 
 func initialize(player: PlayerModel) -> void:
 	if player.avatar_path:
-		player_avatar.texture = Utils.get_image_texture_from_path(player.avatar_path)
-	player_avatar.label_text = player.name
+		player_avatar.avatar_path = player.avatar_path
+	player_avatar.name_label = player.name
 
 
 func open(npc: NPCModel) -> void:
 	visible = true
-	npc_text.text = "..."
-	npc_avatar.texture = NPCManager.get_portrait_texture(npc)
-	npc_avatar.label_text = npc.name
-	talk_button.disabled = true
+	npc_container.text = "..."
+	npc_avatar.avatar_path = npc.portrait_path
+	npc_avatar.name_label = npc.name
 
 
-# called when the TalkButton is pressed
-func _on_talk_button_pressed() -> void:
-	talk_button.disabled = true
-	var text := talk_input.text
-	talk_input.text = ""
-	npc_text.text = "..."
-	talk_button.disabled = true
-	await DialogueManager.send_message(text)
+func _on_npc_text_container_done_button_pressed() -> void:
+	npc_container.hide()
+	player_container.show()
 
 
-# called when the LeaveButton is pressed
-func _on_leave_button_pressed() -> void:
+func _on_player_container_leave_button_pressed() -> void:
 	DialogueManager.clear()
+
+
+func _on_player_container_talk_button_pressed(text: String) -> void:
+	player_container.hide()
+	npc_container.show()
+	npc_container.text = "..."
+	await DialogueManager.send_message(text)

@@ -10,21 +10,21 @@ const PROVIDERS_MAP := {
 	ProviderType.IMAGE:
 	{
 		ImageProvider.DALLE:
-		["res://core/engine/api/image/dalle_image.gd", ConfigManager.ConfigKey.API_OPEN_AI_KEY],
+		["res://core/api/image/dalle_image.gd", ConfigManager.ConfigKey.API_OPEN_AI_KEY],
 		ImageProvider.HUGGING_FACE:
-		["res://core/engine/api/image/hf_image.gd", ConfigManager.ConfigKey.API_HUGGING_FACE_KEY]
+		["res://core/api/image/hf_image.gd", ConfigManager.ConfigKey.API_HUGGING_FACE_KEY]
 	},
 	ProviderType.TEXT:
 	{
 		TextProvider.OPEN_AI:
-		["res://core/engine/api/text/open_ai.gd", ConfigManager.ConfigKey.API_OPEN_AI_KEY],
-		TextProvider.OLLAMA: ["res://core/engine/api/text/ollama.gd", "ollama"],
+		["res://core/api/text/open_ai.gd", ConfigManager.ConfigKey.API_OPEN_AI_KEY],
+		TextProvider.OLLAMA: ["res://core/api/text/ollama.gd", "ollama"],
 	},
 	ProviderType.TEXT_TO_SPEACH:
 	{
 		TextToSpeachProvider.ELEVEN_LABS:
 		[
-			"res://core/engine/api/text_to_speach/eleven_labs.gd",
+			"res://core/api/text_to_speach/eleven_labs.gd",
 			ConfigManager.ConfigKey.API_ELEVEN_LABS_KEY
 		],
 	},
@@ -32,7 +32,7 @@ const PROVIDERS_MAP := {
 	{
 		SpeachToTextProvider.HUGGING_FACE:
 		[
-			"res://core/engine/api/speach_to_text/hf_stt.gd",
+			"res://core/api/speach_to_text/hf_stt.gd",
 			ConfigManager.ConfigKey.API_HUGGING_FACE_KEY
 		]
 	}

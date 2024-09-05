@@ -1,14 +1,14 @@
 class_name PlayerInteractionsHost extends Node2D
 
-@onready var player : Player = $".."
+@onready var player: Player = $".."
 
 
 # Called when the node enters the scene tree for the first time.
-func _ready():
-	player.direction_changed.connect( _update_direction )
+func _ready() -> void:
+	player.direction_changed.connect(_update_direction)
 
 
-func _update_direction( new_direction : Vector2 ) -> void:
+func _update_direction(new_direction: Vector2) -> void:
 	match new_direction:
 		Vector2.DOWN:
 			rotation_degrees = 0

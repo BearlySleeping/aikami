@@ -24,21 +24,26 @@ grow_horizontal = 2
 grow_vertical = 2
 theme = ExtResource("1_dstck")
 theme_override_font_sizes/font_size = 16
+current_tab = 0
 
 [node name="Video" parent="SettingsTabs" instance=ExtResource("3_2pbx7")]
 layout_mode = 2
+metadata/_tab_index = 0
 
 [node name="Audio" parent="SettingsTabs" instance=ExtResource("4_k6c5f")]
 visible = false
 layout_mode = 2
+metadata/_tab_index = 1
 
 [node name="API" parent="SettingsTabs" instance=ExtResource("5_x7ut5")]
 visible = false
 layout_mode = 2
+metadata/_tab_index = 2
 
 [node name="Control" parent="SettingsTabs" instance=ExtResource("6_wwq77")]
 visible = false
 layout_mode = 2
+metadata/_tab_index = 3
 
 [node name="BackButton" type="Button" parent="."]
 custom_minimum_size = Vector2(100, 0)
