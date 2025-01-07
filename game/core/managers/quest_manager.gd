@@ -1,280 +1,155 @@
+## QUEST MANAGER - GLOBAL SCRIPT
 extends Node
 
-signal quest_accepted(quest: QuestModel)  # Emitted when a quest gets moved to the ActivePool
-signal quest_completed(quest: QuestModel)  # Emitted when a quest gets moved to the CompletedPool
-signal new_available_quest(quest: QuestModel)  # Emitted when a quest gets added to the AvailablePool
+signal quest_updated( q: QuestModel )
+
+const QUEST_DATA_LOCATION : String = "res://quests/"
+
+var quests : Array[ QuestModel ]
+var current_quests : Array = []
 
 
-class BaseQuestPool:
-	extends Node
-	var quests: Array[QuestModel] = []
-
-	func _init(pool_name: String) -> void:
-		self.set_name(pool_name)
-
-	func add_quest(quest: QuestModel) -> QuestModel:
-		assert(quest != null)
-
-		quests.append(quest)
-
-		return quest
-
-	func remove_quest(quest: QuestModel) -> QuestModel:
-		assert(quest != null)
-		quests.erase(quest)
-
-		return quest
-
-	func get_quest_from_id(id: int) -> QuestModel:
-		for quest in quests:
-			if quest.id == id:
-				return quest
-		return null
-
-	func is_quest_inside(quest: QuestModel) -> bool:
-		return quest in quests
-
-	func get_ids_from_quests() -> Array[int]:
-		var ids: Array[int] = []
-		for quest in quests:
-			ids.append(quest.id)
-		return ids
-
-	func reset() -> void:
-		quests.clear()
+func _ready() -> void:
+	#gather all quests
+	gather_quest_data()
+	pass
 
 
-var available: BaseQuestPool = BaseQuestPool.new("Available")
-var active: BaseQuestPool = BaseQuestPool.new("Active")
-var completed: BaseQuestPool = BaseQuestPool.new("Completed")
+
+func _unhandled_input( event: InputEvent ) -> void:
+	if event.is_action_pressed("test"):
+		#print( find_quest( load("res://quests/recover_lost_flute.tres") as Quest ) )
+		#print( find_quest_by_title( "short quest" ) )
+		#print( "get_quest_index_by_title: ", get_quest_index_by_title("Recover Lost Magical Flute"))
+		#print( "get_quest_index_by_title: ", get_quest_index_by_title("short quest"))
+		
+		#print( "before: ", current_quests )
+		#update_quest( "Recover Lost Magical Flute" )
+		#update_quest( "Recover Lost Magical Flute", "", true )
+		#update_quest( "short quest", "", true )
+		#update_quest( "long quest", "step 1" )
+		#update_quest( "long quest", "step 2" )
+		
+		print( "quests: ", current_quests )
+		#print("============================================================")
+		pass
+	pass
 
 
-func _init() -> void:
-	add_child(available)
-	add_child(active)
-	add_child(completed)
+
+func gather_quest_data() -> void:
+	# Gather all quest resources and add to quests array
+	var quest_files : PackedStringArray = DirAccess.get_files_at( QUEST_DATA_LOCATION )
+	quests.clear()
+	for q in quest_files:
+		quests.append( load( QUEST_DATA_LOCATION + "/" + q ) as Quest )
+		pass
+	pass
 
 
-# QuestModel API
-func start_quest(quest: QuestModel) -> QuestModel:
-	assert(quest != null)
 
-	if active.is_quest_inside(quest):
-		return quest
-	if completed.is_quest_inside(quest):  #Throw an error?
-		return quest
-
-	#Add the quest to the actives quests
-	available.remove_quest(quest)
-	active.add_quest(quest)
-	quest_accepted.emit(quest)
-
-	quest.start()
-
-	return quest
-
-
-func complete_quest(quest: QuestModel) -> QuestModel:
-	if not active.is_quest_inside(quest):
-		return quest
-
-	if quest.objective_completed == false:
-		return quest
-
-	quest.complete()
-
-	active.remove_quest(quest)
-	completed.add_quest(quest)
-
-	quest_completed.emit(quest)
-
-	return quest
-
-
-func mark_quest_as_available(quest: QuestModel) -> void:
-	if (
-		available.is_quest_inside(quest)
-		or completed.is_quest_inside(quest)
-		or active.is_quest_inside(quest)
-	):
-		return
-
-	available.add_quest(quest)
-	new_available_quest.emit(quest)
+# Update the status of a quest
+func update_quest( _title : String, _completed_step : String = "", _is_complete : bool = false ) -> void:
+	var quest_index : int = get_quest_index_by_title( _title )
+	if quest_index == -1:
+		# Quest was not found - add it to the current quests array
+		var new_quest : Dictionary = {
+				title = _title,
+				is_complete = _is_complete,
+				completed_steps = []
+		}
+		
+		if _completed_step != "":
+			new_quest.completed_steps.append( _completed_step.to_lower() )
+		
+		current_quests.append( new_quest )
+		quest_updated.emit( new_quest )
+		
+		# Display a notification that quests was added
+		PlayerHud.queue_notification( "Quest Started", _title )
+		pass
+	else:
+		# Quest was found, update it
+		var q = current_quests[ quest_index ]
+		if _completed_step != "" and q.completed_steps.has( _completed_step ) == false:
+			q.completed_steps.append( _completed_step.to_lower() )
+			pass
+		
+		q.is_complete = _is_complete
+		
+		quest_updated.emit( q )
+		
+		# Display a notification that quests was updated OR completed
+		if q.is_complete == true:
+			PlayerHud.queue_notification( "Quest Complete!", _title )
+			disperse_quest_rewards( find_quest_by_title( _title ) )
+			
+		else:
+			PlayerHud.queue_notification( "Quest Updated", _title + ": " + _completed_step )
+	pass
 
 
-func get_available_quests() -> Array[QuestModel]:
-	return available.quests
+
+func disperse_quest_rewards( _q : Quest ) -> void:
+	# Give XP and item rewards to player
+	var _message : String = str( _q.reward_xp ) + "xp"
+	PlayerManager.reward_xp( _q.reward_xp )
+	for i in _q.reward_items:
+		PlayerManager.INVENTORY_DATA.add_item( i.item, i.quantity )
+		_message += ", " + i.item.name + " x" + str( i.quantity )
+	
+	PlayerHud.queue_notification( "Quest Rewards Received!", _message )
+	pass
 
 
-func get_active_quests() -> Array[QuestModel]:
-	return active.quests
+
+# Provide a quest and return the current quest associated with it
+func find_quest( _quest : QuestModel ) -> Dictionary:
+	for q in current_quests:
+		if q.title.to_lower() == _quest.title.to_lower():
+			return q
+	return { title = "not found", is_complete = false, completed_steps = [''] }
 
 
-func is_quest_available(quest: QuestModel) -> bool:
-	if not (active.is_quest_inside(quest) or completed.is_quest_inside(quest)):
+
+# Take title and find associated Quest resource
+func find_quest_by_title( _title : String ) -> Quest:
+	for q in quests:
+		if q.title.to_lower() == _title.to_lower():
+			return q
+	return null
+
+
+# Find quest by title name, and return index in Current Quests array
+func get_quest_index_by_title( _title : String ) -> int:
+	for i in current_quests.size():
+		if current_quests[ i ].title.to_lower() == _title.to_lower():
+			return i
+	# Return a -1 if we didn't find a quest with
+	# a matching title in our arry
+	return -1
+
+
+
+func sort_quests() -> void:
+	var active_quests : Array = []
+	var completed_quests : Array = []
+	for q in current_quests:
+		if q.is_complete:
+			completed_quests.append( q )
+		else:
+			active_quests.append( q )
+	
+	active_quests.sort_custom( sort_quests_ascending )
+	completed_quests.sort_custom( sort_quests_ascending )
+	
+	current_quests = active_quests
+	current_quests.append_array( completed_quests )
+	
+	pass
+
+
+func sort_quests_ascending( a, b ) -> bool:
+	if a.title < b.title:
 		return true
 	return false
-
-
-func is_quest_active(quest: QuestModel) -> bool:
-	if active.is_quest_inside(quest):
-		return true
-	return false
-
-
-func is_quest_completed(quest: QuestModel) -> bool:
-	if completed.is_quest_inside(quest):
-		return true
-	return false
-
-
-func is_quest_in_pool(quest: QuestModel, pool_name: String) -> bool:
-	if pool_name.is_empty():
-		for pool in get_children():
-			if pool.is_quest_inside(quest):
-				return true
-		return false
-
-	var pool := get_node(pool_name)
-	if pool.is_quest_inside(quest):
-		return true
-	return false
-
-
-func call_quest_method(quest_id: int, method: String, args: Array) -> void:
-	var quest: QuestModel = null
-
-	# Find the quest if present
-	for pools in get_children():
-		if pools.get_quest_from_id(quest_id) != null:
-			quest = pools.get_quest_from_id(quest_id)
-			break
-
-	# Make sure we've got the quest
-	if quest == null:
-		return
-
-	if quest.has_method(method):
-		quest.callv(method, args)
-
-
-func set_quest_property(quest_id: int, property: String, value: Variant) -> void:
-	var quest: QuestModel = null
-
-	# Find the quest
-	for pools in get_children():
-		if pools.get_quest_from_id(quest_id) != null:
-			quest = pools.get_quest_from_id(quest_id)
-
-	if quest == null:
-		return
-
-	# Now check if the quest has the property
-
-	# First if the property is null -> we return
-	if property == null:
-		return
-
-	var was_property_found: bool = false
-	# Then we check if the property is present
-	for p in quest.get_property_list():
-		if p.name == property:
-			was_property_found = true
-			break
-
-	# Return if the property was not found
-	if not was_property_found:
-		return
-
-	# Finally we set the value
-	quest.set(property, value)
-
-
-# Manager API
-
-
-func add_new_pool(pool_path: String, pool_name: String) -> void:
-	var pool = load(pool_path)
-	if pool == null:
-		return
-
-	var pool_instance = pool.new(pool_name)
-
-	# Make sure the pool does not exist yet
-	for pools in get_children():
-		if pool_instance.get_script() == pools.get_script():
-			return
-
-	add_child(pool_instance)
-
-
-func move_quest_to_pool(quest: QuestModel, old_pool: String, new_pool: String) -> QuestModel:
-	if old_pool == new_pool:
-		return
-
-	var old_pool_instance: BaseQuestPool = get_node_or_null(old_pool)
-	var new_pool_instance: BaseQuestPool = get_node_or_null(new_pool)
-
-	assert(old_pool_instance != null or new_pool_instance != null)
-
-	old_pool_instance.quests.erase(quest)
-	new_pool_instance.quests.append(quest)
-
-	return quest
-
-
-func reset_pool(pool_name: String) -> void:
-	if pool_name.is_empty():
-		for pool in get_children():
-			pool.reset()
-		return
-
-	var pool := get_node(pool_name)
-	pool.reset()
-	return
-
-
-func quests_as_dict() -> Dictionary:
-	var quest_dict: Dictionary = {}
-
-	for pool in get_children():
-		quest_dict[pool.name.to_lower()] = pool.get_ids_from_quests()
-
-	return quest_dict
-
-
-func dict_to_quests(dict: Dictionary, quests: Array[QuestModel]) -> void:
-	for pool in get_children():
-		# Make sure to iterate only for available pools
-		if !dict.has(pool.name.to_lower()):
-			continue
-
-		# Match quest with their ids and insert them into the quest pool
-		var quest_with_id: Dictionary = {}
-		var pool_ids: Array[int]
-		pool_ids.append_array(dict[pool.name.to_lower()])
-		for quest in quests:
-			if quest.id in pool_ids:
-				pool.add_quest(quest)
-				quests.erase(quest)
-
-
-func serialize_quests(pool: String) -> Dictionary:
-	var pool_node: BaseQuestPool = get_node_or_null(pool)
-
-	if pool_node == null:
-		return {}
-
-	var quest_dictionary: Dictionary = {}
-	for quests in pool_node.quests:
-		var quest_data: Dictionary
-		for name in quests.get_script().get_script_property_list():
-			# Filter only defined properties
-			if name.usage & PROPERTY_USAGE_STORAGE or name.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
-				quest_data[name["name"]] = quests.get(name["name"])
-
-		quest_data.erase("id")
-		quest_dictionary[quests.id] = quest_data
-
-	return quest_dictionary
