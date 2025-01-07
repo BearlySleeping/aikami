@@ -2,24 +2,22 @@ class_name QuestModel
 extends BaseModel
 
 var id: int
-var quest_name: String
-var quest_description: String
-var quest_objective: String
+var title: String
+var description: String
+var steps : Array[ String ]
 
-var objective_completed: bool = false:
-	set(value):
-		objective_completed = value
-	get:
-		return objective_completed
+var reward_xp : int
+var reward_items : Array[ BaseItemModel ] = []
 
 
-func update() -> void:
-	objective_completed = true
 
-
-func start() -> void:
-	pass
-
-
-func complete() -> void:
-	pass
+func to_dict() -> Dictionary:
+	var data: Dictionary = {
+		"id": id,
+		"title": title,
+		"description": description,
+		"steps": steps,
+		"reward_xp": reward_xp,
+		"reward_items": []
+	}
+	return data
