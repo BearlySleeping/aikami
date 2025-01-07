@@ -34,6 +34,7 @@ SceneTransition="*res://interface/scene_transition/scene_transition.tscn"
 SaveManager="*res://core/managers/save_manager.gd"
 InventoryManager="*res://core/managers/inventory_manager.gd"
 PauseMenu="*res://interface/menus/pause/pause_menu.tscn"
+QuestManager="*res://core/managers/quest_manager.gd"
 
 [debug]
 
