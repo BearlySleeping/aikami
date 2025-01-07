@@ -2,7 +2,7 @@
 
 [ext_resource type="Texture2D" uid="uid://cbiofx00i7x7s" path="res://world/entities/player/player_old/player_spritemap.png" id="1_d0yof"]
 [ext_resource type="Script" path="res://world/entities/player/player_old/player.gd" id="1_ywcny"]
-[ext_resource type="PackedScene" uid="uid://douqvbjjx8jy1" path="res://world/entities/player/player_old/talk_trigger.tscn" id="3_1c71l"]
+[ext_resource type="PackedScene" uid="uid://douqvbjjx8jy1" path="res://world/entities/player/talk_trigger.tscn" id="3_1c71l"]
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_2q8fv"]
 atlas = ExtResource("1_d0yof")

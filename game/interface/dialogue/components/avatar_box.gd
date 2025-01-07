@@ -1,6 +1,10 @@
 @tool
 class_name AvatarBox
-extends Sprite2D
+extends AspectRatioContainer
+
+@onready var sprite: Sprite2D = %AvatarSprite
+@onready var label: Label = %AvatarLabel
+
 
 @export var name_label := "":
 	set(value):
@@ -16,25 +20,28 @@ extends Sprite2D
 		avatar_path = value
 		_set_avatar()
 
-@onready var label: Label = $Label
 
 func _ready() -> void:
 	_set_label()
 
+
+func set_texture(texture: Texture2D) -> void:
+	sprite.texture = texture
 
 func _set_label() -> void:
 	if label != null:
 		label.text = name_label
 	update_configuration_warnings()
 
-
 func _set_avatar() -> void:
-	texture = null
-	texture = Utils.get_image_texture_from_path(avatar_path)
+	if sprite == null:
+		return
+	set_texture(null)
+	set_texture(Utils.get_image_texture_from_path(avatar_path, 100))
 	update_configuration_warnings()
 
 
-func _get_configuration_warnings():
+func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
 
 	if name_label == "":

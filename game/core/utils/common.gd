@@ -34,14 +34,40 @@ static func v4() -> String:
 
 
 ## Use this for dynamic generated images, for images in the project use load(...)
-static func get_image_texture_from_path(image_path: String) -> ImageTexture:
+static func get_image_texture_from_path(image_path: String, target_width: int = 0) -> ImageTexture:
 	var image := Image.new()
 	var failed_to_load_image := image.load(image_path)
 
 	if failed_to_load_image:
 		printerr("get_image_texture_from_path:failed_to_load_image\n" + str(failed_to_load_image))
-		return
+		return null
+
+	# Only resize if a valid target_width (> 0) is provided
+	if target_width > 0:
+		image = resize_image_keep_aspect(image, target_width, Image.INTERPOLATE_NEAREST)
+
 	return ImageTexture.create_from_image(image)
+
+
+static func resize_image_keep_aspect(
+	image: Image, target_width: int, interpolation: Image.Interpolation = Image.INTERPOLATE_NEAREST
+) -> Image:
+	# Get original dimensions
+	var original_width := image.get_width()
+	var original_height := image.get_height()
+
+	# Avoid division by zero
+	if original_width == 0 or original_height == 0:
+		return image
+
+	# Calculate the aspect ratio and find the new height based on the target width
+	var aspect_ratio := float(original_height) / float(original_width)
+	var new_height := int(round(target_width * aspect_ratio))
+
+	# Resize the image using the chosen interpolation method (default: linear)
+	image.resize(target_width, new_height, interpolation)
+
+	return image
 
 
 ## Capitalize the first letter of a string and make the rest lowercase

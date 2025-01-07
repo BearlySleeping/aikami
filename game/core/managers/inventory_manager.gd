@@ -1,9 +1,13 @@
 extends Node
 
 
-func add_item(item) -> bool:
+func open_inventory() -> void:
 	pass
+
+
+func add_item(item) -> bool:
+	return true
 
 
 func remove_item(item) -> bool:
-	pass
+	return false

@@ -12,6 +12,7 @@
 [ext_resource type="Script" path="res://world/entities/player/scripts/player_camera.gd" id="10_akbij"]
 [ext_resource type="PackedScene" uid="uid://cpvl4rru3x52v" path="res://core/nodes/hurt_box/hurt_box.tscn" id="11_7emok"]
 [ext_resource type="PackedScene" uid="uid://c041sb462wu22" path="res://core/nodes/hit_box/hit_box.tscn" id="11_cqpfr"]
+[ext_resource type="PackedScene" uid="uid://dpumqt2bp2i2c" path="res://world/entities/player/player_interact_area.tscn" id="12_c72d7"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_wqxdm"]
 
@@ -516,8 +517,6 @@ _data = {
 "walk_up": SubResource("Animation_hk6kp")
 }
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_vw4r4"]
-
 [sub_resource type="Animation" id="Animation_iahoe"]
 length = 0.001
 tracks/0/type = "value"
@@ -591,6 +590,8 @@ _data = {
 [sub_resource type="CircleShape2D" id="CircleShape2D_7gfkr"]
 
 [node name="Player" type="CharacterBody2D"]
+collision_layer = 0
+collision_mask = 0
 script = ExtResource("1_w3ehf")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
@@ -659,16 +660,6 @@ max_polyphony = 6
 
 [node name="Interactions" type="Node2D" parent="."]
 
-[node name="Area2D" type="Area2D" parent="Interactions"]
-position = Vector2(0, 6)
-collision_layer = 4
-collision_mask = 0
-monitoring = false
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Interactions/Area2D"]
-shape = SubResource("RectangleShape2D_vw4r4")
-debug_color = Color(0, 1, 0, 0.419608)
-
 [node name="EffectAnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
 "": SubResource("AnimationLibrary_tlu1d")
@@ -681,3 +672,5 @@ collision_layer = 2
 position = Vector2(0, -9)
 shape = SubResource("CircleShape2D_7gfkr")
 debug_color = Color(1, 0.831373, 0, 0.419608)
+
+[node name="PlayerInteractArea2D" parent="." instance=ExtResource("12_c72d7")]

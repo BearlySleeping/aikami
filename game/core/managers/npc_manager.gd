@@ -14,7 +14,7 @@ const PREDEFINED_NPCS: Dictionary = {
 		"name": "Gandalf the Grey",
 		"age": -1,
 		"gender": Enum.Gender.MALE,
-		"portrait_sprite_sheet_path": "res://assets/npc/gandalf/portrait_sprite_sheet.png",
+		"portrait_sprite_path": "res://assets/npc/gandalf/portrait.png",
 		"animation_sprite_sheet_path": "res://assets/npc/gandalf/animation_sprite_sheet.png",
 		"appearance": ["Tall", "Grey robe", "Long white beard"],
 		"location": "Middle-earth",
@@ -37,7 +37,7 @@ const PREDEFINED_NPCS: Dictionary = {
 		"name": "Aragorn",
 		"age": 87,
 		"gender": Enum.Gender.MALE,
-		"portrait_sprite_sheet_path": "res://assets/npc/aragon/portrait_sprite_sheet_path.png",
+		"portrait_sprite_path": "res://assets/npc/aragon/portrait.png",
 		"animation_sprite_sheet_path": "res://assets/npc/aragon/animation_sprite_sheet.png",
 		"appearance": ["Tall", "Rugged"],
 		"location": "Rohan, Gondor",
@@ -86,7 +86,7 @@ static func create_npc_model(npc_id: String, npc_data: Dictionary) -> NPCModel:
 
 ## TODO: add cache for the textures, add it in the npc_cache? or create a new cache variable?
 static func get_portrait_texture(npc: NPCModel, mood := "default") -> CompressedTexture2D:
-	return load(npc.portrait_path)
+	return load(npc.portrait_sprite_path)
 
 
 # Method to save an NPC's dynamic data

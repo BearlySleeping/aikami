@@ -1,11 +1,11 @@
-[gd_scene load_steps=7 format=3 uid="uid://dgdqc0v1oicd5"]
+[gd_scene load_steps=7 format=3 uid="uid://l225c1b5ntwe"]
 
-[ext_resource type="Texture2D" uid="uid://5f8gjlayjor3" path="res://world/environment/tilemaps/grass.png" id="1_ynj7p"]
-[ext_resource type="Texture2D" uid="uid://b03m7gkbdupc7" path="res://world/environment/tilemaps/dungeon_entrance.png" id="2_nlrgf"]
-[ext_resource type="Script" path="res://world/environment/tilemaps/level_tile_map.gd" id="3_ldij5"]
+[ext_resource type="Texture2D" uid="uid://5f8gjlayjor3" path="res://world/environment/tilemaps/assets/grass.png" id="1_jbm17"]
+[ext_resource type="Texture2D" uid="uid://b03m7gkbdupc7" path="res://world/environment/tilemaps/assets/dungeon_entrance.png" id="2_0rk45"]
+[ext_resource type="Script" path="res://world/environment/tilemaps/level_tile_map.gd" id="3_g7d4k"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_n2ps0"]
-texture = ExtResource("1_ynj7p")
+texture = ExtResource("1_jbm17")
 texture_region_size = Vector2i(32, 32)
 0:0/0 = 0
 1:0/0 = 0
@@ -466,7 +466,7 @@ texture_region_size = Vector2i(32, 32)
 15:7/0 = 0
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_52cmm"]
-texture = ExtResource("2_nlrgf")
+texture = ExtResource("2_0rk45")
 texture_region_size = Vector2i(32, 32)
 0:0/0 = 0
 0:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
@@ -500,4 +500,4 @@ sources/1 = SubResource("TileSetAtlasSource_52cmm")
 use_parent_material = true
 tile_set = SubResource("TileSet_8axs6")
 rendering_quadrant_size = 32
-script = ExtResource("3_ldij5")
+script = ExtResource("3_g7d4k")

@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://world/maps/levels/base_level.gd" id="1_b6g8j"]
 [ext_resource type="PackedScene" uid="uid://dr4blo7ya448q" path="res://world/maps/utils/player_spawn.tscn" id="3_03eop"]
-[ext_resource type="PackedScene" uid="uid://dgdqc0v1oicd5" path="res://world/environment/tilemaps/grass.tscn" id="5_d3lq2"]
+[ext_resource type="PackedScene" uid="uid://l225c1b5ntwe" path="res://world/environment/tilemaps/base_tile_map.tscn" id="5_d3lq2"]
 [ext_resource type="PackedScene" uid="uid://cpohuml8sje4u" path="res://world/entities/items/item_pickup/item_pickup.tscn" id="5_f5g0s"]
 [ext_resource type="PackedScene" uid="uid://bxnynmne8hsl2" path="res://world/entities/enemy/goblin/goblin.tscn" id="5_i7gnq"]
 [ext_resource type="PackedScene" uid="uid://bi8crg3nv50qw" path="res://world/entities/npc/npc.tscn" id="6_0b0ru"]

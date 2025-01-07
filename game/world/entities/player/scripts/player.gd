@@ -35,12 +35,22 @@ func _ready() -> void:
 	update_hp(99)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not event.is_action_pressed("move_click"):
-		return
-	Logger.debug("_unhandled_input:move_click", event)
+func _handle_move_click() -> void:
+	Logger.debug("_unhandled_input:move_click")
 	var click_position := get_global_mouse_position()
 	request_path_to_target.emit(global_position, click_position, mouse_path)
+
+
+func _handle_inventory() -> void:
+	Logger.debug("_unhandled_input:inventory")
+	InventoryManager.open_inventory()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("move_click"):
+		return _handle_move_click()
+	if event.is_action_pressed("inventory"):
+		return _handle_inventory()
 
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.

@@ -4,6 +4,7 @@
 [ext_resource type="Theme" uid="uid://65dakj0ukuj6" path="res://interface/theme/default_theme.tres" id="2_2s7jy"]
 
 [node name="PauseMenu" type="CanvasLayer"]
+process_mode = 3
 script = ExtResource("1_mpebn")
 
 [node name="Control" type="Control" parent="."]
