@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cbjnt02b5xojv"
-path="res://.godot/imported/portrait_sprite_sheet.png-33a93904ca6948751f0c21f39ca9414e.ctex"
+uid="uid://deg4ahcw003g8"
+path="res://.godot/imported/dungeon.png-a16c441316f1620bf2454dea6e2bf8a3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/aragon/portrait_sprite_sheet.png"
-dest_files=["res://.godot/imported/portrait_sprite_sheet.png-33a93904ca6948751f0c21f39ca9414e.ctex"]
+source_file="res://world/environment/tilemaps/assets/dungeon.png"
+dest_files=["res://.godot/imported/dungeon.png-a16c441316f1620bf2454dea6e2bf8a3.ctex"]
 
 [params]
 

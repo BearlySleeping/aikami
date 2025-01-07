@@ -8,7 +8,7 @@ var character_class: Enum.Class
 var name: String
 var age: int
 
-var portrait_sprite_sheet_path: String
+var portrait_sprite_path: String
 
 ## @optional
 var gender: Enum.Gender
@@ -33,5 +33,5 @@ func _init(character_id: String, data: Dictionary) -> void:
 	age = data.age
 	gender = data.gender
 	appearance = data.appearance
-	portrait_sprite_sheet_path = data.portrait_sprite_sheet_path
+	portrait_sprite_path = data.portrait_sprite_path
 	animation_sprite_sheet_path = data.animation_sprite_sheet_path

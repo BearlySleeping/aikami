@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://7ywh575y7xr0"
-path="res://.godot/imported/city-life.png-aaf3eb9569b2ad689001277e49e4cc54.ctex"
+uid="uid://d23qjwpxxl1pw"
+path="res://.godot/imported/portrait.png-c8a7da28972e15547c8c7493908a0070.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://world/environment/tilemaps/city-life.png"
-dest_files=["res://.godot/imported/city-life.png-aaf3eb9569b2ad689001277e49e4cc54.ctex"]
+source_file="res://assets/npc/aragon/portrait.png"
+dest_files=["res://.godot/imported/portrait.png-c8a7da28972e15547c8c7493908a0070.ctex"]
 
 [params]
 

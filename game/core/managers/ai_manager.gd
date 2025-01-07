@@ -31,10 +31,7 @@ const PROVIDERS_MAP := {
 	ProviderType.SPEACH_TO_TEXT:
 	{
 		SpeachToTextProvider.HUGGING_FACE:
-		[
-			"res://core/api/speach_to_text/hf_stt.gd",
-			ConfigManager.ConfigKey.API_HUGGING_FACE_KEY
-		]
+		["res://core/api/speach_to_text/hf_stt.gd", ConfigManager.ConfigKey.API_HUGGING_FACE_KEY]
 	}
 }
 
