@@ -7,6 +7,19 @@ extends CanvasLayer
 @onready var npc_container: NPCContainer = %NPCContainer
 @onready var player_container: PlayerContainer = %PlayerContainer
 
+const sample_text := "Example [b]Text[/b]!!!
+[wave]Wavy text[/wave]...
+[shake][color=orangered]Shaking text[/color][/shake]"
+
+func _ready() -> void:
+	#if Engine.is_editor_hint():
+	update_npc_text(sample_text)
+	var npc := NPCManager.get_npc(1)
+	open(npc)
+	SaveManager.initialize()
+	initialize(SaveManager.current_player)
+
+
 
 func clear() -> void:
 	visible = false
@@ -15,7 +28,7 @@ func clear() -> void:
 
 
 func update_npc_portrait(texture: CompressedTexture2D) -> void:
-	npc_avatar.texture = texture
+	npc_avatar.set_texture(texture)
 
 
 func update_npc_text(text: String) -> void:
@@ -30,8 +43,9 @@ func initialize(player: PlayerModel) -> void:
 func open(npc: NPCModel) -> void:
 	visible = true
 	npc_container.text = "..."
-	npc_avatar.avatar_path = npc.portrait_path
+	npc_avatar.avatar_path = npc.portrait_sprite_path
 	npc_avatar.name_label = npc.name
+	update_npc_portrait(NPCManager.get_portrait_texture(npc))
 
 
 func _on_npc_text_container_done_button_pressed() -> void:

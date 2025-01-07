@@ -2,10 +2,9 @@ extends Area2D
 
 var _current_npc: NPC
 
-
 # called when an input is detected
 func _input(event: InputEvent) -> void:
-	if event.is_action_pressed("talk") and _current_npc:
+	if event.is_action_pressed("interact") and _current_npc:
 		DialogueManager.initialize_talk_with_npc(_current_npc.npc_id)
 
 

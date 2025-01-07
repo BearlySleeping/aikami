@@ -16,7 +16,7 @@ var audio_stream_player: AudioStreamPlayer
 var _stored_streamed_audio: PackedByteArray
 var _stream := AudioStreamMP3.new()
 
-static var _current_npc_id: NPCManager.PredefinedNPC
+static var _current_npc_id: NPCManager.PredefinedNPC = -1
 static var _messages: PackedStringArray = []
 static var _current_mood := "default"
 

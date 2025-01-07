@@ -17,7 +17,6 @@ signal done_button_pressed()
 func _ready() -> void:
 	_set_text()
 
-
 func _set_text() -> void:
 	if npc_text_label != null:
 		npc_text_label.text = text

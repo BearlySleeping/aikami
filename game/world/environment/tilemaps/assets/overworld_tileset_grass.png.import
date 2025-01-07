@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dtoir2hf614xm"
-path="res://.godot/imported/portrait_sprite_sheet.png-fb71f8dd57a4b51cb9466782c98593ae.ctex"
+uid="uid://de7sk8el7b2vw"
+path="res://.godot/imported/overworld_tileset_grass.png-ef8e3cbc1f89a2f287e01366209c6a51.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/gandalf/portrait_sprite_sheet.png"
-dest_files=["res://.godot/imported/portrait_sprite_sheet.png-fb71f8dd57a4b51cb9466782c98593ae.ctex"]
+source_file="res://world/environment/tilemaps/assets/overworld_tileset_grass.png"
+dest_files=["res://.godot/imported/overworld_tileset_grass.png-ef8e3cbc1f89a2f287e01366209c6a51.ctex"]
 
 [params]
 
