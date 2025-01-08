@@ -26,7 +26,6 @@ func enter() -> void:
 	enemy.velocity = _direction * wander_speed
 	enemy.set_direction(_direction)
 	enemy.update_animation(anim_name)
-	pass
 
 
 ## What happens when the enemy exits this State?

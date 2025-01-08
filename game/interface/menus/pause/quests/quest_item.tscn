@@ -1,8 +1,7 @@
-[gd_scene load_steps=4 format=3 uid="uid://b76wnkiyk1lhy"]
+[gd_scene load_steps=3 format=3 uid="uid://b76wnkiyk1lhy"]
 
-[ext_resource type="Script" path="res://GUI/pause_menu/quests/quest_item.gd" id="1_lpnpi"]
-[ext_resource type="FontFile" uid="uid://o7gqnagfnby2" path="res://GUI/fonts/Abaddon Bold.ttf" id="1_pl7co"]
-[ext_resource type="FontFile" uid="uid://cnrqk38ddqqwy" path="res://GUI/fonts/m5x7.ttf" id="2_dmfjv"]
+[ext_resource type="Script" path="res://interface/menus/pause/quests/quest_item.gd" id="1_lpnpi"]
+[ext_resource type="FontFile" uid="uid://cs3qtlo6j6oex" path="res://assets/fonts/pixelmix.ttf" id="2_dmfjv"]
 
 [node name="QuestItem" type="Button"]
 custom_minimum_size = Vector2(200, 45)
@@ -14,7 +13,7 @@ offset_left = 8.0
 offset_top = 8.0
 offset_right = 193.0
 offset_bottom = 26.0
-theme_override_fonts/font = ExtResource("1_pl7co")
+theme_override_fonts/font = ExtResource("2_dmfjv")
 text = "Quest Title"
 clip_text = true
 text_overrun_behavior = 3

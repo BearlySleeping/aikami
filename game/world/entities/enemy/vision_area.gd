@@ -16,13 +16,11 @@ func _ready() -> void:
 func _on_body_enter(_b: Node2D) -> void:
 	if _b is Player:
 		player_entered.emit()
-	pass
 
 
 func _on_body_exit(_b: Node2D) -> void:
 	if _b is Player:
 		player_exited.emit()
-	pass
 
 
 func _on_direction_change(new_direction: Vector2) -> void:
@@ -37,4 +35,3 @@ func _on_direction_change(new_direction: Vector2) -> void:
 			rotation_degrees = -90
 		_:
 			rotation_degrees = 0
-	pass

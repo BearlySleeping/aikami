@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bl88i4tylbjqd"
-path="res://.godot/imported/checkbox.png-6f48b92b4d2df20891f6267b1e2b19ba.ctex"
+uid="uid://xuxkvcpmi5dj"
+path="res://.godot/imported/greaves.png-5b13fa22d767070d502b2cd267268271.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://interface/menus/pause2/quests/checkbox.png"
-dest_files=["res://.godot/imported/checkbox.png-6f48b92b4d2df20891f6267b1e2b19ba.ctex"]
+source_file="res://assets/sprites/armor/greaves.png"
+dest_files=["res://.godot/imported/greaves.png-5b13fa22d767070d502b2cd267268271.ctex"]
 
 [params]
 

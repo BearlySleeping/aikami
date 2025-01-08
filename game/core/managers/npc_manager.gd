@@ -1,6 +1,7 @@
 class_name NPCManager
 
 enum PredefinedNPC {
+	NONE,
 	ARAGON,
 	GANDALF,
 }
@@ -12,7 +13,7 @@ const PREDEFINED_NPCS: Dictionary = {
 		"race": Enum.Race.HUMAN,
 		"class": Enum.Class.WIZARD,
 		"name": "Gandalf the Grey",
-		"age": -1,
+		"age": 900,
 		"gender": Enum.Gender.MALE,
 		"portrait_sprite_path": "res://assets/npc/gandalf/portrait.png",
 		"animation_sprite_sheet_path": "res://assets/npc/gandalf/animation_sprite_sheet.png",
@@ -85,7 +86,7 @@ static func create_npc_model(npc_id: String, npc_data: Dictionary) -> NPCModel:
 
 
 ## TODO: add cache for the textures, add it in the npc_cache? or create a new cache variable?
-static func get_portrait_texture(npc: NPCModel, mood := "default") -> CompressedTexture2D:
+static func get_portrait_texture(npc: NPCModel, _mood := "default") -> CompressedTexture2D:
 	return load(npc.portrait_sprite_path)
 
 

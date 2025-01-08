@@ -30,7 +30,6 @@ func _on_body_entered(b) -> void:
 		if item_data:
 			if PlayerManager.INVENTORY_DATA.add_item(item_data) == true:
 				item_picked_up()
-	pass
 
 
 func item_picked_up() -> void:
@@ -40,16 +39,13 @@ func item_picked_up() -> void:
 	picked_up.emit()
 	await audio_stream_player_2d.finished
 	queue_free()
-	pass
 
 
 func _set_item_data(value: ItemData) -> void:
 	item_data = value
 	_update_texture()
-	pass
 
 
 func _update_texture() -> void:
 	if item_data and sprite_2d:
 		sprite_2d.texture = item_data.texture
-	pass

@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 @onready var player_hud: Control = %PlayerHUD
+@onready var notification_ui: NotificationUI = %NotificationHUD
 
 
 func _ready() -> void:
@@ -25,3 +26,7 @@ func update_heart(index: int, hp: int) -> void:
 
 func update_max_hp(max_hp: int) -> void:
 	player_hud.update_heart(max_hp)
+
+
+func queue_notification(title: String, message: String) -> void:
+	notification_ui.add_notification_to_queue(title, message)

@@ -15,7 +15,6 @@ var _animation_finished: bool = false
 ## What happens when we initialize this state?
 func init() -> void:
 	enemy.enemy_damaged.connect(_on_enemy_damaged)
-	pass
 
 
 ## What happens when the enemy enters this State?
@@ -30,14 +29,12 @@ func enter() -> void:
 
 	enemy.update_animation(anim_name)
 	enemy.animation_player.animation_finished.connect(_on_animation_finished)
-	pass
 
 
 ## What happens when the enemy exits this State?
 func exit() -> void:
 	enemy.invulnerable = false
 	enemy.animation_player.animation_finished.disconnect(_on_animation_finished)
-	pass
 
 
 ## What happens during the _process update in this State?

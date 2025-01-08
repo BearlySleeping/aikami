@@ -7,7 +7,6 @@ extends PlayerState
 ## What happens when the player enters this PlayerState?
 func enter() -> void:
 	player.update_animation("idle")
-	pass
 
 
 ## What happens when the player exits this PlayerState?

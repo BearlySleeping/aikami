@@ -1,9 +1,9 @@
 extends PlayerState
 
-var attacking: bool = false
-
-@export var attack_sound: AudioStream
 @export_range(1, 20, 0.5) var decelerate_speed: float = 5.0
+@export var attack_sound: AudioStream
+
+var attacking: bool = false
 
 @onready var animation_player: AnimationPlayer = $"../../AnimationPlayer"
 @onready var attack_anim: AnimationPlayer = $"../../Sprite2D/AttackEffectSprite/AnimationPlayer"
@@ -42,12 +42,12 @@ func exit() -> void:
 func process(_delta: float) -> PlayerState:
 	player.velocity -= player.velocity * decelerate_speed * _delta
 
-	if attacking == false:
-		if player.direction == Vector2.ZERO:
-			return idle
-		else:
-			return walk
-	return null
+	if attacking:
+		return null
+
+	if player.direction == Vector2.ZERO:
+		return idle
+	return walk
 
 
 ## What happens during the _physics_process update in this PlayerState?
@@ -60,5 +60,5 @@ func handle_input(_event: InputEvent) -> PlayerState:
 	return null
 
 
-func _end_attack(_newAnimName: String) -> void:
+func _end_attack(_new_anim_name: String) -> void:
 	attacking = false

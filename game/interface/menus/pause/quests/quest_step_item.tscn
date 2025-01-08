@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://dxfstusrlgtqu"]
 
-[ext_resource type="Script" path="res://interface/menus/pause2/quests/quest_step_item.gd" id="1_2ed12"]
-[ext_resource type="Texture2D" uid="uid://bl88i4tylbjqd" path="res://interface/menus/pause2/quests/checkbox.png" id="2_i03w0"]
+[ext_resource type="Script" path="res://interface/menus/pause/quests/quest_step_item.gd" id="1_2ed12"]
+[ext_resource type="Texture2D" uid="uid://bl88i4tylbjqd" path="res://interface/menus/pause/quests/checkbox.png" id="2_i03w0"]
 
 [node name="QuestStepItem" type="Control"]
 clip_contents = true

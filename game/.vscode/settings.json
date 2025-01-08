@@ -7,5 +7,15 @@
 			}
 		]
 	},
-	"cSpell.words": ["clampi", "elif", "wrapi"]
+	"cSpell.words": [
+		"chestplate",
+		"clampi",
+		"elif",
+		"onready",
+		"randf",
+		"roundi",
+		"tilemap",
+		"tscn",
+		"wrapi"
+	]
 }

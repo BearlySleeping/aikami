@@ -20,7 +20,7 @@ func _ready() -> void:
 	original_position = npc.global_position
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 	if abs(global_position.distance_to(original_position)) > wander_range * 32:
@@ -40,17 +40,16 @@ func start() -> void:
 	await get_tree().create_timer(randf() * idle_duration + idle_duration * 0.5).timeout
 	# WALK PHASE
 	npc.state = "walk"
-	var _dir: Vector2 = DIRECTIONS[randi_range(0, 3)]
-	npc.direction = _dir
-	npc.velocity = wander_speed * _dir
-	npc.update_direction(global_position + _dir)
+	var direction: Vector2 = DIRECTIONS[randi_range(0, 3)]
+	npc.direction = direction
+	npc.velocity = wander_speed * direction
+	npc.update_direction(global_position + direction)
 	npc.update_animation()
 	await get_tree().create_timer(randf() * wander_duration + wander_duration * 0.5).timeout
 	# REPEAT
 	if npc.do_behavior == false:
 		return
 	start()
-	pass
 
 
 func _set_wander_range(v: int) -> void:

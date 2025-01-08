@@ -1,6 +1,5 @@
 class_name LevelTileMap extends TileMapLayer
 
-
 ## Instance of AStarGrid2D for pathfinding within the tilemap.
 var _astar := AStarGrid2D.new()
 
@@ -10,7 +9,7 @@ var _tilemap_bounds: Rect2i
 
 # Initializes the AStarGrid2D with the tilemap's dimensions and configures pathfinding.
 func _ready() -> void:
-	SceneManager.change_tilemap_bounds( _get_tilemap_bounds() )
+	SceneManager.change_tilemap_bounds(_get_tilemap_bounds())
 	# Calculate the size of the tilemap based on used tiles.
 	var tile_size := tile_set.tile_size
 	var tilemap_size := get_used_rect().end - get_used_rect().position
@@ -57,12 +56,9 @@ func get_path_to_point(
 		)
 	)
 
-func _get_tilemap_bounds() -> Array[ Vector2 ]:
-	var bounds : Array[ Vector2 ] = []
-	bounds.append(
-		Vector2( get_used_rect().position * rendering_quadrant_size )
-	)
-	bounds.append(
-		Vector2( get_used_rect().end * rendering_quadrant_size )
-	)
+
+func _get_tilemap_bounds() -> Array[Vector2]:
+	var bounds: Array[Vector2] = []
+	bounds.append(Vector2(get_used_rect().position * rendering_quadrant_size))
+	bounds.append(Vector2(get_used_rect().end * rendering_quadrant_size))
 	return bounds

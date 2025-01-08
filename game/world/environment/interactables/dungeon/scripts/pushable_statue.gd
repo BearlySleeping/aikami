@@ -10,7 +10,6 @@ var push_direction: Vector2 = Vector2.ZERO:
 
 func _physics_process(_delta: float) -> void:
 	linear_velocity = push_direction * push_speed
-	pass
 
 
 func _set_push(value: Vector2) -> void:
@@ -19,4 +18,3 @@ func _set_push(value: Vector2) -> void:
 		audio.stop()
 	else:
 		audio.play()
-	pass

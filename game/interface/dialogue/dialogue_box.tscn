@@ -55,6 +55,8 @@ offset_left = 8.0
 offset_top = 35.0
 offset_right = 118.0
 offset_bottom = 186.0
+name_label = "Gandalf the Grey"
+avatar_path = "res://assets/npc/gandalf/portrait.png"
 
 [node name="PlayerAvatar" parent="DialogUI" instance=ExtResource("5_ana7k")]
 unique_name_in_owner = true
@@ -82,6 +84,7 @@ theme_override_styles/panel = SubResource("StyleBoxTexture_m6b2e")
 [node name="NPCContainer" parent="DialogUI/PanelContainer" instance=ExtResource("4_7l1nq")]
 unique_name_in_owner = true
 layout_mode = 2
+text = "..."
 
 [node name="PlayerContainer" parent="DialogUI/PanelContainer" instance=ExtResource("5_ebtfd")]
 unique_name_in_owner = true

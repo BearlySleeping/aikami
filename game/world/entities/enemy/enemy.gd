@@ -24,7 +24,6 @@ func _ready() -> void:
 	state_machine.initialize(self)
 	player = PlayerManager.player
 	hit_box.damaged.connect(_take_damage)
-	pass  # Replace with function body.
 
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -57,16 +56,14 @@ func set_direction(_new_direction: Vector2) -> bool:
 
 func update_animation(state: String) -> void:
 	animation_player.play(state + "_" + anim_direction())
-	pass
 
 
 func anim_direction() -> String:
 	if cardinal_direction == Vector2.DOWN:
 		return "down"
-	elif cardinal_direction == Vector2.UP:
+	if cardinal_direction == Vector2.UP:
 		return "up"
-	else:
-		return "side"
+	return "side"
 
 
 func _take_damage(hurt_box: HurtBox) -> void:

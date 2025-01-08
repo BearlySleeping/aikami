@@ -1,11 +1,25 @@
 extends Node
 
-const PLAYER = preload("res://world/entities/player/player.tscn")
-
 signal interact_pressed
+
+const PLAYER = preload("res://world/entities/player/player.tscn")
 
 var player: Player
 var player_spawned: bool = false
+
+# Key is Enum.EquippedSlotType and the value is item id
+# Example:
+# Enum.EquippedSlotType.HEAD: "armor_chestplate_silver"
+var player_equipment := {}
+
+
+func set_equipments(equipments: Dictionary) -> void:
+	# Clear the current equipment
+	player_equipment.clear()
+	for key: Enum.EquippedSlotType in equipments.keys():
+		player_equipment[key] = equipments[key]
+
+	Logger.debug("PlayerManager:set_equipments", player_equipment)
 
 
 func add_player_instance() -> void:

@@ -8,9 +8,11 @@ extends Node2D
 var canvas: CanvasModulate
 var target_color: Color
 
+
 func _free_level() -> void:
 	PlayerManager.unparent_player(self)
 	queue_free()
+
 
 func _ready() -> void:
 	self.y_sort_enabled = true
@@ -25,6 +27,7 @@ func _ready() -> void:
 		return
 	_init_canvas()
 
+
 func _init_canvas() -> void:
 	canvas = CanvasModulate.new()
 	_set_background_color()
@@ -34,10 +37,12 @@ func _init_canvas() -> void:
 		func(_time: TimeManager.TimeModel) -> void: _set_background_color()
 	)
 
+
 func _set_background_color() -> void:
 	# Calculate the color value from the gradient texture based on the current time
 	var value := (sin(TimeManager.total_delta_time - PI / 2.0) + 1.0) / 2.0
 	target_color = gradient_texture.gradient.sample(value)
+
 
 func _process(delta: float) -> void:
 	if target_color and canvas.color != target_color:

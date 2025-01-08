@@ -16,15 +16,15 @@ var hp: int = 6
 
 var max_hp: int = 6
 
+## A path determined by mouse input for guiding the player's movement.
+var mouse_path: PackedVector2Array = []
+
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var effect_animation_player: AnimationPlayer = $EffectAnimationPlayer
 @onready var hit_box: HitBox = $HitBox
 @onready var sprite: Sprite2D = $Sprite2D
 @onready var state_machine: PlayerStateMachine = $StateMachine
 @onready var audio: AudioStreamPlayer2D = $Audio/AudioStreamPlayer2D
-
-## A path determined by mouse input for guiding the player's movement.
-var mouse_path: PackedVector2Array = []
 
 
 # Called when the node enters the scene tree for the first time.
@@ -41,16 +41,9 @@ func _handle_move_click() -> void:
 	request_path_to_target.emit(global_position, click_position, mouse_path)
 
 
-func _handle_inventory() -> void:
-	Logger.debug("_unhandled_input:inventory")
-	InventoryManager.open_inventory()
-
-
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("move_click"):
 		return _handle_move_click()
-	if event.is_action_pressed("inventory"):
-		return _handle_inventory()
 
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -90,10 +83,9 @@ func update_animation(state: String) -> void:
 func anim_direction() -> String:
 	if cardinal_direction == Vector2.DOWN:
 		return "down"
-	elif cardinal_direction == Vector2.UP:
+	if cardinal_direction == Vector2.UP:
 		return "up"
-	else:
-		return "side"
+	return "side"
 
 
 func _take_damage(hurt_box: HurtBox) -> void:
@@ -105,7 +97,6 @@ func _take_damage(hurt_box: HurtBox) -> void:
 	else:
 		player_damaged.emit(hurt_box)
 		update_hp(99)
-	pass
 
 
 func update_hp(delta: int) -> void:
