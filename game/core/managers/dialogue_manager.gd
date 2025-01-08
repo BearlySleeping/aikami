@@ -16,7 +16,7 @@ var audio_stream_player: AudioStreamPlayer
 var _stored_streamed_audio: PackedByteArray
 var _stream := AudioStreamMP3.new()
 
-static var _current_npc_id: NPCManager.PredefinedNPC = -1
+static var _current_npc_id: NPCManager.PredefinedNPC = NPCManager.PredefinedNPC.NONE
 static var _messages: PackedStringArray = []
 static var _current_mood := "default"
 
@@ -105,11 +105,11 @@ func clear() -> void:
 	_messages = []
 	@warning_ignore("int_as_enum_without_cast")
 	@warning_ignore("int_as_enum_without_match")
-	_current_npc_id = -1
+	_current_npc_id = NPCManager.PredefinedNPC.NONE
 
 
 func get_first_message_prompt() -> String:
-	assert(_current_npc_id != -1, "_current_npc_id is not defined")
+	assert(_current_npc_id != NPCManager.PredefinedNPC.NONE, "_current_npc_id is not defined")
 	var npc := NPCManager.get_npc(_current_npc_id)
 	var player := SaveManager.current_player
 	var dynamic_npc_data := NPCManager.get_dynamic_data(_current_npc_id)
@@ -191,7 +191,7 @@ func to_dynamic_npc_info(dynamic_npc_data: NPCDynamicModel) -> PackedStringArray
 
 
 func send_message(prompt: String) -> void:
-	assert(_current_npc_id != -1, "_current_npc_id is not defined")
+	assert(_current_npc_id != NPCManager.PredefinedNPC.NONE, "_current_npc_id is not defined")
 	var npc := NPCManager.get_npc(_current_npc_id)
 	Logger.info("_send_message", prompt)
 	_messages.append(prompt)
@@ -243,7 +243,7 @@ func send_message(prompt: String) -> void:
 
 
 func save_dialogue() -> void:
-	assert(_current_npc_id != -1, "_current_npc_id is not defined")
+	assert(_current_npc_id != NPCManager.PredefinedNPC.NONE, "_current_npc_id is not defined")
 
 	var prompt := _to_generate_summary_prompt()
 	Logger.info("generate_summary:prompt", prompt)

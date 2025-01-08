@@ -13,6 +13,7 @@ var current_player: PlayerModel
 @onready var save_button: Button = %SaveButton
 @onready var avatar_frame: TextureRect = %AvatarFrame
 
+
 func _ready() -> void:
 	save_button.disabled = true
 	_populate_option_button(gender_option, Enum.Gender.keys())

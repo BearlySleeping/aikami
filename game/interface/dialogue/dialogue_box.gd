@@ -1,24 +1,23 @@
+@tool
 class_name DialogueBox
 extends CanvasLayer
 
+const sample_text := "Example [b]Text[/b]!!!\n[wave]Wavy text[/wave]...\n[shake][color=orangered]Shaking text[/color][/shake]"
 
 @onready var player_avatar: AvatarBox = %PlayerAvatar
 @onready var npc_avatar: AvatarBox = %NPCAvatar
 @onready var npc_container: NPCContainer = %NPCContainer
 @onready var player_container: PlayerContainer = %PlayerContainer
 
-const sample_text := "Example [b]Text[/b]!!!
-[wave]Wavy text[/wave]...
-[shake][color=orangered]Shaking text[/color][/shake]"
 
 func _ready() -> void:
-	#if Engine.is_editor_hint():
+	if not Engine.is_editor_hint():
+		return
 	update_npc_text(sample_text)
-	var npc := NPCManager.get_npc(1)
+	var npc := NPCManager.get_npc(NPCManager.PredefinedNPC.GANDALF)
 	open(npc)
 	SaveManager.initialize()
 	initialize(SaveManager.current_player)
-
 
 
 func clear() -> void:
@@ -33,6 +32,7 @@ func update_npc_portrait(texture: CompressedTexture2D) -> void:
 
 func update_npc_text(text: String) -> void:
 	npc_container.text = text
+
 
 func initialize(player: PlayerModel) -> void:
 	if player.avatar_path:

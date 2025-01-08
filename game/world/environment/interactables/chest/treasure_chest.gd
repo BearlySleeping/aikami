@@ -24,7 +24,6 @@ func _ready() -> void:
 	interact_area.area_exited.connect(_on_area_exit)
 	is_open_data.data_loaded.connect(set_chest_state)
 	set_chest_state()
-	pass
 
 
 func set_chest_state() -> void:
@@ -46,29 +45,24 @@ func player_interact() -> void:
 	else:
 		printerr("No Items in Chest!")
 		push_error("No Items in Chest! Chest Name: ", name)
-	pass
 
 
 func _on_area_enter(_a: Area2D) -> void:
 	PlayerManager.interact_pressed.connect(player_interact)
-	pass
 
 
 func _on_area_exit(_a: Area2D) -> void:
 	PlayerManager.interact_pressed.disconnect(player_interact)
-	pass
 
 
 func _set_item_data(value: ItemData) -> void:
 	item_data = value
 	_update_texture()
-	pass
 
 
 func _set_quantity(value: int) -> void:
 	quantity = value
 	_update_label()
-	pass
 
 
 func _update_texture() -> void:

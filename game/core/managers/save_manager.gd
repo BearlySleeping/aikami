@@ -1,16 +1,18 @@
 extends Node
-## Manager to save data, like player stats and avatar. For more simple config use ConfigManager
-const PLAYER_SAVE_PATH := "player/player.save"
-const GAME_SAVE_PATH := "game.save"
-var current_player: PlayerModel
-var current_save_data: GameSaveData
-static var save_base_path := Global.get_save_path("save")
 
 signal game_loaded
 signal game_saved
 
+## Manager to save data, like player stats and avatar. For more simple config use ConfigManager
+const PLAYER_SAVE_PATH := "player/player.save"
+const GAME_SAVE_PATH := "game.save"
 
-static func _get_path(path: String) -> String:
+var current_player: PlayerModel
+var current_save_data: GameSaveData
+var save_base_path := Global.get_save_path("save")
+
+
+func _get_path(path: String) -> String:
 	return save_base_path + "/" + path
 
 
@@ -21,11 +23,11 @@ func reset() -> void:
 
 
 # Save the game data to a file
-static func save_file(path: String, data: BaseModel) -> bool:
+func save_file(path: String, data: BaseModel) -> bool:
 	return save_file_raw(path, data.to_dict())
 
 
-static func save_file_raw(path: String, data: Variant) -> bool:
+func save_file_raw(path: String, data: Variant) -> bool:
 	var absolute_path := _get_path(path)
 	var dir_path := absolute_path.get_base_dir()
 
@@ -105,7 +107,6 @@ func save_game() -> void:
 	update_item_data()
 	save_game_data(current_save_data)
 	game_saved.emit()
-	pass
 
 
 func load_game() -> void:
@@ -174,7 +175,6 @@ func update_item_data() -> void:
 func add_persistent_value(value: String) -> void:
 	if check_persistent_value(value) == false:
 		current_save_data.persistence.append(value)
-	pass
 
 
 func check_persistent_value(value: String) -> bool:

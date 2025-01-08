@@ -6,14 +6,14 @@ var quest: QuestModel
 @onready var step_label: Label = $StepLabel
 
 
-func initialize(q_data: QuestModel, q_state: Dictionary) -> void:
-	quest = q_data
-	title_label.text = q_data.title
+func initialize(quest_data: QuestModel, quest_state: QuestModel) -> void:
+	quest = quest_data
+	title_label.text = quest_data.title
 
-	if q_state.is_complete:
+	if quest_state.is_complete:
 		step_label.text = "Completed"
 		step_label.modulate = Color.LIGHT_GREEN
 	else:
-		var step_count: int = q_data.steps.size()
-		var completed_count: int = q_state.completed_steps.size()
+		var step_count: int = quest_data.steps.size()
+		var completed_count: int = quest_state.completed_steps.size()
 		step_label.text = "quest step: " + str(completed_count) + "/" + str(step_count)

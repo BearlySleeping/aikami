@@ -1,6 +1,5 @@
 extends Node
 
-
 ## The names of the songs.
 ## Notes these are song from the album Dead but Dreaming by vivivivivi:
 ## https://tech-noir1.bandcamp.com/album/dead-but-dreaming
@@ -40,30 +39,28 @@ const TRACKS = {
 
 const SFXS = {SFXName.MENU: "res://assets/audio/sfx/menu.wav"}
 
-
-var music_audio_player_count : int = 2
-var current_music_player_index : int = 0
-var music_players : Array[ AudioStreamPlayer ] = []
-var music_bus : String = "Music"
+var music_audio_player_count: int = 2
+var current_music_player_index: int = 0
+var music_players: Array[AudioStreamPlayer] = []
+var music_bus: String = "Music"
+var music_fade_duration: float = 0.5
 var _sfx_stream_player: AudioStreamPlayer
-var music_fade_duration : float = 0.5
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_sfx_stream_player = AudioStreamPlayer.new()
-	add_child( _sfx_stream_player )
+	add_child(_sfx_stream_player)
 
 	for i in music_audio_player_count:
 		var player := AudioStreamPlayer.new()
-		add_child( player )
+		add_child(player)
 		player.bus = music_bus
-		music_players.append( player )
+		music_players.append(player)
 		player.volume_db = -40
 
 
-
-func play_sfx( sfx_name: SFXName, sfx_stream_player := _sfx_stream_player) -> void:
+func play_sfx(sfx_name: SFXName, sfx_stream_player := _sfx_stream_player) -> void:
 	Logger.info("play_sfx", sfx_name)
 	var new_stream := _get_sfx_stream(sfx_name)
 	sfx_stream_player.stream = new_stream
@@ -79,37 +76,34 @@ func play_track(track_name: TrackName) -> void:
 	Logger.info("play_track", track_name)
 	var new_stream := _get_track_stream(track_name)
 
-	if new_stream == music_players[ current_music_player_index ].stream:
+	if new_stream == music_players[current_music_player_index].stream:
 		return
 
 	current_music_player_index += 1
 	if current_music_player_index > 1:
 		current_music_player_index = 0
 
-	var current_player : AudioStreamPlayer = music_players[ current_music_player_index ]
+	var current_player: AudioStreamPlayer = music_players[current_music_player_index]
 	current_player.stream = new_stream
-	play_and_fade_in( current_player )
+	play_and_fade_in(current_player)
 
-	var old_player := music_players[ 1 ]
+	var old_player := music_players[1]
 	if current_music_player_index == 1:
-		old_player = music_players[ 0 ]
-	fade_out_and_stop( old_player )
+		old_player = music_players[0]
+	fade_out_and_stop(old_player)
 
 
-
-func play_and_fade_in( player : AudioStreamPlayer ) -> void:
-	player.play( 0 )
-	var tween : Tween = create_tween()
-	tween.tween_property( player, 'volume_db', 0, music_fade_duration )
-	pass
+func play_and_fade_in(player: AudioStreamPlayer) -> void:
+	player.play(0)
+	var tween: Tween = create_tween()
+	tween.tween_property(player, "volume_db", 0, music_fade_duration)
 
 
-func fade_out_and_stop( player : AudioStreamPlayer ) -> void:
-	var tween : Tween = create_tween()
-	tween.tween_property( player, 'volume_db', -40, music_fade_duration )
+func fade_out_and_stop(player: AudioStreamPlayer) -> void:
+	var tween: Tween = create_tween()
+	tween.tween_property(player, "volume_db", -40, music_fade_duration)
 	await tween.finished
 	player.stop()
-	pass
 
 
 func _get_track_stream(track_name: TrackName) -> AudioStream:

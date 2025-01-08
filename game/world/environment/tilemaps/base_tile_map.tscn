@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://l225c1b5ntwe"]
+[gd_scene load_steps=7 format=3 uid="uid://b2y2x5ktjbdhk"]
 
 [ext_resource type="Texture2D" uid="uid://5f8gjlayjor3" path="res://world/environment/tilemaps/assets/grass.png" id="1_jbm17"]
 [ext_resource type="Texture2D" uid="uid://b03m7gkbdupc7" path="res://world/environment/tilemaps/assets/dungeon_entrance.png" id="2_0rk45"]
@@ -491,8 +491,12 @@ tile_size = Vector2i(32, 32)
 physics_layer_0/collision_layer = 16
 physics_layer_0/collision_mask = 0
 terrain_set_0/mode = 0
-terrain_set_0/terrain_0/name = "Path"
+terrain_set_0/terrain_0/name = "path"
 terrain_set_0/terrain_0/color = Color(0.5, 0.34375, 0.25, 1)
+terrain_set_0/terrain_1/name = "solid"
+terrain_set_0/terrain_1/color = Color(0.5, 0.4375, 0.25, 1)
+custom_data_layer_0/name = "solid"
+custom_data_layer_0/type = 0
 sources/0 = SubResource("TileSetAtlasSource_n2ps0")
 sources/1 = SubResource("TileSetAtlasSource_52cmm")
 
