@@ -1,10 +1,12 @@
 class_name DialogueHistoryUI
 extends PanelContainer
 
+const DIALOGUE_HISTORY_ENTRY = preload(
+	"res://interface/dialogue/dialogue_history/dialogue_history_entry.tscn"
+)
+
 @onready var dialogue_container: VBoxContainer = %DialogueContainer
 @onready var scroll_container: ScrollContainer = $ScrollContainer
-
-const DIALOGUE_HISTORY_ENTRY = preload("res://interface/dialogue/dialogue_history/dialogue_history_entry.tscn")
 
 
 func _ready() -> void:
@@ -25,6 +27,7 @@ func update_scroll() -> void:
 	if scroll_container == null:
 		return
 	scroll_container.scroll_vertical = scroll_container.get_v_scroll_bar().max_value
+
 
 func clear() -> void:
 	dialogue_container.queue_free_children()

@@ -1,8 +1,126 @@
-[gd_scene load_steps=4 format=3 uid="uid://bpq4l1m0phj8p"]
+[gd_scene load_steps=12 format=3 uid="uid://bpq4l1m0phj8p"]
 
 [ext_resource type="Script" path="res://interface/hud/hud.gd" id="1_mr5e4"]
 [ext_resource type="PackedScene" uid="uid://ceolcwatpaicu" path="res://interface/hud/clock_hud.tscn" id="2_luqit"]
 [ext_resource type="PackedScene" uid="uid://bqtig7m22cmju" path="res://interface/hud/player_hud/player_hud.tscn" id="3_gbj8v"]
+[ext_resource type="Script" path="res://interface/hud/notifications.gd" id="4_h2cps"]
+[ext_resource type="Texture2D" uid="uid://c2ypl4hunb4hw" path="res://interface/hud/panel_notification.png" id="5_qea60"]
+[ext_resource type="FontFile" uid="uid://cs3qtlo6j6oex" path="res://assets/fonts/pixelmix.ttf" id="6_sqgqp"]
+[ext_resource type="AudioStream" uid="uid://dcekxlb1fqaqj" path="res://interface/hud/notification.wav" id="7_f01ht"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_sm42w"]
+content_margin_left = 12.0
+content_margin_top = 6.0
+content_margin_right = 12.0
+content_margin_bottom = 12.0
+texture = ExtResource("5_qea60")
+texture_margin_left = 18.0
+texture_margin_top = 18.0
+texture_margin_right = 10.0
+texture_margin_bottom = 10.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
+
+[sub_resource type="Animation" id="Animation_gopuo"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("PanelContainer:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(5, 5)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("PanelContainer:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Color(1, 1, 1, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("PanelContainer:visible")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [true]
+}
+
+[sub_resource type="Animation" id="Animation_7w5y7"]
+resource_name = "show_notification"
+length = 3.0
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("PanelContainer:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.3, 2.7, 3),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Vector2(5, 0), Vector2(5, 5), Vector2(5, 5), Vector2(5, 0)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("PanelContainer:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.3, 2.7, 3),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 0,
+"values": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("PanelContainer:visible")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 3),
+"transitions": PackedFloat32Array(1, 1),
+"update": 1,
+"values": [true, false]
+}
+tracks/3/type = "audio"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("../../AudioStreamPlayer")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"clips": [{
+"end_offset": 0.0,
+"start_offset": 0.0,
+"stream": ExtResource("7_f01ht")
+}],
+"times": PackedFloat32Array(0)
+}
+tracks/3/use_blend = true
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_m4ebj"]
+_data = {
+"RESET": SubResource("Animation_gopuo"),
+"show_notification": SubResource("Animation_7w5y7")
+}
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_mr5e4")
@@ -11,3 +129,46 @@ script = ExtResource("1_mr5e4")
 
 [node name="PlayerHUD" parent="." instance=ExtResource("3_gbj8v")]
 unique_name_in_owner = true
+
+[node name="NotificationHUD" type="Control" parent="."]
+unique_name_in_owner = true
+process_mode = 3
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+mouse_filter = 2
+script = ExtResource("4_h2cps")
+
+[node name="PanelContainer" type="PanelContainer" parent="NotificationHUD"]
+layout_mode = 0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = 249.0
+offset_bottom = 78.0
+theme_override_styles/panel = SubResource("StyleBoxTexture_sm42w")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="NotificationHUD/PanelContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="NotificationHUD/PanelContainer/VBoxContainer"]
+modulate = Color(1, 0.858824, 0.552941, 1)
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("6_sqgqp")
+text = "Notification Type"
+autowrap_mode = 2
+
+[node name="Label2" type="Label" parent="NotificationHUD/PanelContainer/VBoxContainer"]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = ExtResource("6_sqgqp")
+text = "Notification Message"
+autowrap_mode = 2
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="NotificationHUD"]
+libraries = {
+"": SubResource("AnimationLibrary_m4ebj")
+}

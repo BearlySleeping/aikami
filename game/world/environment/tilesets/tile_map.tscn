@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://bwsjohi850s5b"]
 
 [ext_resource type="TileSet" uid="uid://0c6kxpetkkr0" path="res://world/environment/tilesets/tileset.tres" id="1_i5rn4"]
-[ext_resource type="Script" path="res://world/environment/tilemaps/base_tilemap.gd" id="2_geu7i"]
+[ext_resource type="Script" path="res://world/environment/tilemaps/level_tile_map.gd" id="2_geu7i"]
 
 [node name="TileMap" type="TileMap"]
 tile_set = ExtResource("1_i5rn4")

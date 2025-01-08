@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cocms0prufyqi"
-path="res://.godot/imported/grasslands.png-6758bdbb3f0ade3996749ead99a3bc2f.ctex"
+path="res://.godot/imported/grasslands.png-4f2706e64b843d6bb1f13516bee0c2d8.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://core/turn-based/Background/grasslands.png"
-dest_files=["res://.godot/imported/grasslands.png-6758bdbb3f0ade3996749ead99a3bc2f.ctex"]
+source_file="res://core/turn-based/background/grasslands.png"
+dest_files=["res://.godot/imported/grasslands.png-4f2706e64b843d6bb1f13516bee0c2d8.ctex"]
 
 [params]
 

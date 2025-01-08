@@ -20,7 +20,6 @@ func init() -> void:
 	if vision_area:
 		vision_area.player_entered.connect(_on_player_enter)
 		vision_area.player_exited.connect(_on_player_exit)
-	pass
 
 
 ## What happens when the enemy enters this State?
@@ -30,7 +29,6 @@ func enter() -> void:
 	_can_see_player = true
 	if attack_area:
 		attack_area.monitoring = true
-	pass
 
 
 ## What happens when the enemy exits this State?
@@ -38,7 +36,6 @@ func exit() -> void:
 	if attack_area:
 		attack_area.monitoring = false
 	_can_see_player = false
-	pass
 
 
 ## What happens during the _process update in this State?
@@ -71,9 +68,7 @@ func _on_player_enter() -> void:
 	):
 		return
 	state_machine.change_state(self)
-	pass
 
 
 func _on_player_exit() -> void:
 	_can_see_player = false
-	pass

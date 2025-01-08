@@ -1,7 +1,7 @@
 [gd_scene load_steps=6 format=4 uid="uid://gkmudkj4w8ej"]
 
 [ext_resource type="PackedScene" uid="uid://cw8f7nsndgwau" path="res://world/maps/base_map.tscn" id="1_1bd6t"]
-[ext_resource type="PackedScene" uid="uid://l225c1b5ntwe" path="res://world/environment/tilemaps/base_tile_map.tscn" id="3_68k73"]
+[ext_resource type="PackedScene" uid="uid://b2y2x5ktjbdhk" path="res://world/environment/tilemaps/base_tile_map.tscn" id="3_68k73"]
 [ext_resource type="PackedScene" uid="uid://bi8crg3nv50qw" path="res://world/entities/npc/npc.tscn" id="3_td2eo"]
 [ext_resource type="PackedScene" uid="uid://dapdr3ojo2pha" path="res://world/entities/npc/npc_behavior_wander.tscn" id="4_t1vl3"]
 
@@ -16,6 +16,7 @@ tile_map_data = PackedByteArray("AAD+//7/AAAAAAAAAAD+////AAAAAAAAAAD+/wAAAAAAAAA
 
 [node name="NPC" parent="." index="2" instance=ExtResource("3_td2eo")]
 position = Vector2(25, 120)
+npc_id = 1
 
 [node name="NpcWanderBehavior" parent="NPC" index="3" instance=ExtResource("4_t1vl3")]
 position = Vector2(7, 2)

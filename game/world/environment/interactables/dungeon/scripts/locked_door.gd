@@ -1,11 +1,11 @@
 class_name LockedDoor extends Node2D
 
-var is_open: bool = false
-
 @export var key_item: ItemData  #What type of item can open me?
 
 @export var locked_audio: AudioStream
 @export var open_audio: AudioStream
+
+var is_open := false
 
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
 @onready var audio: AudioStreamPlayer2D = $AudioStreamPlayer2D
@@ -32,7 +32,6 @@ func open_door() -> void:
 	else:
 		audio.stream = locked_audio
 	audio.play()
-	pass
 
 
 func close_door() -> void:

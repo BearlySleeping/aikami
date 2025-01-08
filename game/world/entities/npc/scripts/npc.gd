@@ -11,6 +11,13 @@ signal do_behavior_enabled
 		npc_id = value
 		update_sprite(value)
 
+var state: String = "idle"
+var direction: Vector2 = Vector2.DOWN
+var direction_name: String = "down"
+var do_behavior: bool = true
+
+@onready var animation: AnimationPlayer = $AnimationPlayer
+
 @onready var sprite_2d: Sprite2D = $Sprite2D
 
 
@@ -23,23 +30,14 @@ func update_sprite(id: NPCManager.PredefinedNPC) -> void:
 	sprite_2d.texture = load(animation_sprite_sheet_path)
 
 
-var state: String = "idle"
-var direction: Vector2 = Vector2.DOWN
-var direction_name: String = "down"
-var do_behavior: bool = true
-
-@onready var animation: AnimationPlayer = $AnimationPlayer
-
-
 func _ready() -> void:
 	setup_npc()
 	if Engine.is_editor_hint():
 		return
 	do_behavior_enabled.emit()
-	pass
 
 
-func _physics_process(delta: float) -> void:
+func _physics_process(_delta: float) -> void:
 	move_and_slide()
 
 
@@ -67,6 +65,6 @@ func update_direction_name() -> void:
 
 
 func setup_npc() -> void:
-	if npc_id == null:
+	if npc_id == null or npc_id == NPCManager.PredefinedNPC.NONE:
 		return
 	update_sprite(npc_id)

@@ -39,12 +39,9 @@ func _ready() -> void:
 	monitoring = true
 	body_entered.connect(_player_entered)
 
-	pass
-
 
 func _player_entered(_p: Node2D) -> void:
 	SceneManager.load_new_level(level, target_transition_area, get_offset())
-	pass
 
 
 func _place_player() -> void:

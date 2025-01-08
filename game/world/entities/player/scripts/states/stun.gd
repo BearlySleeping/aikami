@@ -27,14 +27,12 @@ func enter() -> void:
 	player.update_animation("stun")
 	player.make_invulnerable(invulnerable_duration)
 	player.effect_animation_player.play("damaged")
-	pass
 
 
 ## What happens when the player exits this PlayerState?
 func exit() -> void:
 	next_state = null
 	player.animation_player.animation_finished.disconnect(_animation_finished)
-	pass
 
 
 ## What happens during the _process update in this PlayerState?
@@ -56,7 +54,6 @@ func handle_input(_event: InputEvent) -> PlayerState:
 func _player_damaged(_hurt_box: HurtBox) -> void:
 	hurt_box = _hurt_box
 	state_machine.change_state(self)
-	pass
 
 
 func _animation_finished(_a: String) -> void:

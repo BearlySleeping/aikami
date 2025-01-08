@@ -5,9 +5,9 @@ var npc: NPC
 
 
 func _ready() -> void:
-	var p = get_parent()
-	if p is NPC:
-		npc = p as NPC
+	var parent := get_parent()
+	if parent is NPC:
+		npc = parent as NPC
 		npc.do_behavior_enabled.connect(start)
 
 

@@ -32,12 +32,12 @@ TimeManager="*res://core/managers/time_manager.gd"
 PlayerManager="*res://core/managers/player_manager.gd"
 SceneTransition="*res://interface/scene_transition/scene_transition.tscn"
 SaveManager="*res://core/managers/save_manager.gd"
-InventoryManager="*res://core/managers/inventory_manager.gd"
-PauseMenu="*res://interface/menus/pause/pause_menu.tscn"
 QuestManager="*res://core/managers/quest_manager.gd"
+PauseMenu="*res://interface/menus/pause/pause_menu.tscn"
 
 [debug]
 
+gdscript/warnings/unused_signal=0
 gdscript/warnings/untyped_declaration=1
 gdscript/warnings/integer_division=0
 
@@ -109,6 +109,10 @@ trade={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":84,"key_label":0,"unicode":116,"location":0,"echo":false,"script":null)
 ]
+}
+attack={
+"deadzone": 0.5,
+"events": []
 }
 
 [layer_names]
