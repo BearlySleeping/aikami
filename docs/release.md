@@ -1,4 +1,4 @@
-# To create a new realse
+# To create a new release
 
 1. Create a new tag with comment:
 
