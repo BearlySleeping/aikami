@@ -239,6 +239,10 @@ func _get_options(text: String) -> Dictionary:
 	return options
 
 
+func set_current_voice_type(voice_type: Enum.VoiceType) -> void:
+	_current_voice_type = voice_type
+
+
 # Call Eleven labs API for text to speech
 func text_to_speach(request: CallBasicRequestModel) -> CallBasicResponseModel:
 	var options := _get_options(request.text)

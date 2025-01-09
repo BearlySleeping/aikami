@@ -33,11 +33,11 @@ func change_tilemap_bounds(bounds: Array[Vector2]) -> void:
 
 
 func load_new_scene(
-	scene_path: String, _target_transition: String = "", _position_offset: Vector2 = Vector2.ZERO
+	scene_path: String, p_target_transition: String = "", p_position_offset: Vector2 = Vector2.ZERO
 ) -> void:
 	get_tree().paused = true
-	target_transition = _target_transition
-	position_offset = _position_offset
+	target_transition = p_target_transition
+	position_offset = p_position_offset
 
 	await SceneTransition.fade_out()
 
@@ -57,16 +57,18 @@ func load_new_scene(
 
 
 func load_new_fixed_scene(
-	scene_name: SceneName, _target_transition: String = "", _position_offset: Vector2 = Vector2.ZERO
+	scene_name: SceneName,
+	p_target_transition: String = "",
+	p_position_offset: Vector2 = Vector2.ZERO
 ) -> void:
 	var scene_path := _to_scene_path(scene_name)
-	load_new_scene(scene_path, _target_transition, _position_offset)
+	load_new_scene(scene_path, p_target_transition, p_position_offset)
 
 
 func _to_scene_path(scene_name: SceneName) -> String:
 	match scene_name:
 		SceneName.MAIN:
-			return "res://world/maps/main.tscn"
+			return "res://world/maps/areas/forest/south.tscn"
 		SceneName.CHARACTER_CREATION:
 			return "res://interface/menus/main/character_creation/character_creation.tscn"
 		SceneName.MAIN_MENU:

@@ -43,7 +43,7 @@ func set_direction(_new_direction: Vector2) -> bool:
 	var direction_id: int = int(
 		round((direction + cardinal_direction * 0.1).angle() / TAU * DIR_4.size())
 	)
-	var new_dir = DIR_4[direction_id]
+	var new_dir: Vector2 = DIR_4[direction_id]
 
 	if new_dir == cardinal_direction:
 		return false

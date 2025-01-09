@@ -19,13 +19,13 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	var collision_info = move_and_collide(velocity * delta)
+	var collision_info := move_and_collide(velocity * delta)
 	if collision_info:
 		velocity = velocity.bounce(collision_info.get_normal())
 	velocity -= velocity * delta * 4
 
 
-func _on_body_entered(b) -> void:
+func _on_body_entered(b: Node2D) -> void:
 	if b is Player:
 		if item_data:
 			if PlayerManager.INVENTORY_DATA.add_item(item_data) == true:

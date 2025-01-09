@@ -16,7 +16,7 @@ extends AspectRatioContainer
 		avatar_path = value
 		_set_avatar()
 
-@onready var sprite: Sprite2D = %AvatarSprite
+@onready var texture_rect: TextureRect = %TextureRect
 @onready var label: Label = %AvatarLabel
 
 
@@ -25,7 +25,7 @@ func _ready() -> void:
 
 
 func set_texture(texture: Texture2D) -> void:
-	sprite.texture = texture
+	texture_rect.texture = texture
 
 
 func _set_label() -> void:
@@ -35,10 +35,10 @@ func _set_label() -> void:
 
 
 func _set_avatar() -> void:
-	if sprite == null:
+	if texture_rect == null:
 		return
 	set_texture(null)
-	set_texture(Utils.get_image_texture_from_path(avatar_path, 100))
+	set_texture(Utils.get_image_texture_from_path(avatar_path))
 	update_configuration_warnings()
 
 

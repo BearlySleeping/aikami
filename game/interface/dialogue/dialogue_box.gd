@@ -2,7 +2,9 @@
 class_name DialogueBox
 extends CanvasLayer
 
-const sample_text := "Example [b]Text[/b]!!!\n[wave]Wavy text[/wave]...\n[shake][color=orangered]Shaking text[/color][/shake]"
+const SAMPLE_TEXT := """Example [b]Text[/b]!!!
+[wave]Wavy text[/wave]...
+[shake][color=orangered]Shaking text[/color][/shake]"""
 
 @onready var player_avatar: AvatarBox = %PlayerAvatar
 @onready var npc_avatar: AvatarBox = %NPCAvatar
@@ -13,7 +15,7 @@ const sample_text := "Example [b]Text[/b]!!!\n[wave]Wavy text[/wave]...\n[shake]
 func _ready() -> void:
 	if not Engine.is_editor_hint():
 		return
-	update_npc_text(sample_text)
+	update_npc_text(SAMPLE_TEXT)
 	var npc := NPCManager.get_npc(NPCManager.PredefinedNPC.GANDALF)
 	open(npc)
 	SaveManager.initialize()
@@ -24,6 +26,9 @@ func clear() -> void:
 	visible = false
 	player_container.clear()
 	npc_container.clear()
+	npc_container.text = "..."
+	npc_container.show()
+	player_container.hide()
 
 
 func update_npc_portrait(texture: CompressedTexture2D) -> void:
@@ -43,7 +48,7 @@ func initialize(player: PlayerModel) -> void:
 func open(npc: NPCModel) -> void:
 	visible = true
 	npc_container.text = "..."
-	npc_avatar.avatar_path = npc.portrait_sprite_path
+	npc_avatar.avatar_path = NPCManager.get_portrait_path(npc)
 	npc_avatar.name_label = npc.name
 	update_npc_portrait(NPCManager.get_portrait_texture(npc))
 
@@ -55,6 +60,7 @@ func _on_npc_text_container_done_button_pressed() -> void:
 
 func _on_player_container_leave_button_pressed() -> void:
 	DialogueManager.clear()
+	clear()
 
 
 func _on_player_container_talk_button_pressed(text: String) -> void:

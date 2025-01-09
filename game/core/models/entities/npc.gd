@@ -9,14 +9,14 @@ var last_time_spoke_at: int
 ## Example ["Player's name is Sonny", "Player insulted me", "Player's favorite food is pie", "You revealed that you are a wizard"]
 var recollections: PackedStringArray
 
-var relentionship_level_with_player: int
+var relationship_level_with_player: int
 
 
 func _init(data: Dictionary) -> void:
 	super(data)
 	last_time_spoke_at = data.get("last_time_spoke_at", -1)
 	recollections = data.get("recollections", [])
-	relentionship_level_with_player = data.get("relentionship_level_with_player", 50)
+	relationship_level_with_player = data.get("relationship_level_with_player", 50)
 
 
 func to_dict() -> Dictionary:
@@ -25,6 +25,6 @@ func to_dict() -> Dictionary:
 		dict.last_time_spoke_at = last_time_spoke_at
 	if not recollections.is_empty():
 		dict.recollections = recollections
-	if relentionship_level_with_player != 50:
-		dict.relentionship_level_with_player = relentionship_level_with_player
+	if relationship_level_with_player != 50:
+		dict.relationship_level_with_player = relationship_level_with_player
 	return dict
