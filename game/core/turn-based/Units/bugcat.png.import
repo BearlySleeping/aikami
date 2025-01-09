@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://x4kxxdinjx3r"
-path="res://.godot/imported/bugcat.png-da19673cc3f8c9f5ca57e2ed1c4122d6.ctex"
+path="res://.godot/imported/bugcat.png-d02b16eb4e8a90f0ea07cf6929916cb3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://core/turn-based/units/bugcat.png"
-dest_files=["res://.godot/imported/bugcat.png-da19673cc3f8c9f5ca57e2ed1c4122d6.ctex"]
+source_file="res://core/turn-based/Units/bugcat.png"
+dest_files=["res://.godot/imported/bugcat.png-d02b16eb4e8a90f0ea07cf6929916cb3.ctex"]
 
 [params]
 
