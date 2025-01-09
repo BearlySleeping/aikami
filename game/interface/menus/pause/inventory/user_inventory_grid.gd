@@ -103,17 +103,16 @@ func _save() -> void:
 	)
 
 	var equipped_items: Array[InventoryItemModel] = []
+	var player_equipment: Dictionary = {}
 
 	for slot: InventoryItemSlot in equipped_slots:
 		var item := slot.get_item()
 		if item != null:
 			equipped_items.append(item.item_data)
+			player_equipment[slot.slot_type] = item.prototype_id
 
 	print("equipped_items:", equipped_items)
 
-	var player_equipment: Dictionary = {}
-	for item in equipped_items:
-		player_equipment[item.slot_type] = item.id
 	PlayerManager.set_equipments(player_equipment)
 
 	SaveManager.save_file_raw(

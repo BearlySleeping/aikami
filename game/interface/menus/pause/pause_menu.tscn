@@ -7,6 +7,7 @@
 
 [node name="PauseMenu" type="CanvasLayer"]
 process_mode = 3
+layer = 4
 script = ExtResource("1_ibakn")
 
 [node name="Control" type="Control" parent="."]
