@@ -26,6 +26,7 @@ func add_player_instance() -> void:
 	if player:
 		return
 	player = PLAYER.instantiate()
+	player_spawned = true
 	add_child(player)
 
 
@@ -35,9 +36,9 @@ func set_health(hp: int, max_hp: int) -> void:
 	player.update_hp(0)
 
 
-func set_player_position(_new_pos: Vector2) -> void:
+func set_player_position(new_pos: Vector2) -> void:
 	add_player_instance()
-	player.global_position = _new_pos
+	player.global_position = new_pos
 
 
 func set_as_parent(_p: Node2D) -> void:

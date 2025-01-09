@@ -25,3 +25,7 @@ func text_to_speach(_request: CallBasicRequestModel) -> CallBasicResponseModel:
 
 func handle_text_chunk_added(_text: String) -> void:
 	assert(false, "Not implemented")
+
+
+func set_current_voice_type(_voice_type: Enum.VoiceType) -> void:
+	assert(false, "Not implemented")

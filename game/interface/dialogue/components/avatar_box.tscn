@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://cq5icjhax5i8d"]
+[gd_scene load_steps=5 format=3 uid="uid://cq5icjhax5i8d"]
 
-[ext_resource type="Texture2D" uid="uid://d23qjwpxxl1pw" path="res://assets/npc/aragon/portrait.png" id="2_fr64v"]
+[ext_resource type="Texture2D" uid="uid://dpa4x4toykkel" path="res://assets/npc/aragon/neutral.webp" id="2_fr64v"]
 [ext_resource type="FontFile" uid="uid://cs3qtlo6j6oex" path="res://assets/fonts/pixelmix.ttf" id="2_hjgsw"]
 [ext_resource type="Script" path="res://interface/dialogue/components/avatar_box.gd" id="2_pax35"]
+[ext_resource type="Texture2D" uid="uid://3eapsarvwm6v" path="res://assets/npc/gandalf/angry.webp" id="3_vbdrr"]
 
 [node name="AvatarBox" type="AspectRatioContainer"]
 offset_right = 101.0
@@ -16,15 +17,23 @@ avatar_path = "res://assets/npc/gandalf/portrait_sprite_sheet.png"
 
 [node name="AvatarSprite" type="Sprite2D" parent="."]
 unique_name_in_owner = true
+visible = false
 position = Vector2(50, 73)
 texture = ExtResource("2_fr64v")
 
-[node name="AvatarLabel" type="Label" parent="AvatarSprite"]
+[node name="TextureRect" type="TextureRect" parent="."]
 unique_name_in_owner = true
-offset_left = -27.0
-offset_top = 46.0
-offset_right = 21.0
-offset_bottom = 69.0
+layout_mode = 2
+texture = ExtResource("3_vbdrr")
+expand_mode = 4
+
+[node name="AvatarLabel" type="Label" parent="TextureRect"]
+unique_name_in_owner = true
+layout_mode = 2
+offset_left = 2.0
+offset_top = 83.0
+offset_right = 103.0
+offset_bottom = 99.0
 theme_override_colors/font_color = Color(0.894118, 0.862745, 0.796078, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
 theme_override_constants/shadow_offset_x = 0

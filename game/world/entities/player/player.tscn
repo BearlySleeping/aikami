@@ -12,7 +12,7 @@
 [ext_resource type="Script" path="res://world/entities/player/scripts/player_camera.gd" id="10_akbij"]
 [ext_resource type="PackedScene" uid="uid://cpvl4rru3x52v" path="res://core/nodes/hurt_box/hurt_box.tscn" id="11_7emok"]
 [ext_resource type="PackedScene" uid="uid://c041sb462wu22" path="res://core/nodes/hit_box/hit_box.tscn" id="11_cqpfr"]
-[ext_resource type="PackedScene" uid="uid://dpumqt2bp2i2c" path="res://world/entities/player/player_interact_area.tscn" id="12_c72d7"]
+[ext_resource type="PackedScene" path="res://world/entities/player/player_interact_area.tscn" id="12_c72d7"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_wqxdm"]
 
@@ -590,8 +590,7 @@ _data = {
 [sub_resource type="CircleShape2D" id="CircleShape2D_7gfkr"]
 
 [node name="Player" type="CharacterBody2D"]
-collision_layer = 0
-collision_mask = 0
+collision_mask = 16
 script = ExtResource("1_w3ehf")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]

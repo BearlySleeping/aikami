@@ -90,7 +90,9 @@ func initialize_talk_with_npc(npc_id: NPCManager.PredefinedNPC) -> void:
 	_current_npc_id = npc_id
 	_messages = []
 	_current_mood = "default"
-	dialogue_box.open(NPCManager.get_npc(npc_id))
+	var npc := NPCManager.get_npc(npc_id)
+	dialogue_box.open(npc)
+	AIManager.set_current_npc(npc)
 	var first_prompt := get_first_message_prompt()
 	await send_message(first_prompt)
 
@@ -306,14 +308,18 @@ func _to_generate_summary_prompt() -> String:
 
 	if recollections.is_empty():
 		prompts.append("--- Guidance for Summary Generation (Do Not Repeat) ---")
-		prompts.append(
-			(
-				"Examples: 'Learned player is called Bob. "
-				+ "Encountered player at the crossroads, player expressed a desire to learn magic, "
-				+ "Discovered player's fear of dark forests, "
-				+ "I revealed the secret path to the enchanted grove, "
-				+ "We shared tales of ancient dragons.' "
-				+ "These are examples. Generate new points based on the actual conversation."
+		(
+			prompts
+			. append(
+				(
+					"Examples: 'Learned player is called Bob. "
+					+ "Encountered player at the crossroads, player expressed a desire to learn magic, "
+					+ "Discovered player's fear of dark forests, "
+					+ "I revealed the secret path to the enchanted grove, "
+					+ "We shared tales of ancient dragons.' "
+					+ "These are examples. Generate new points based on the actual conversation."
+					+ "Note, you are not the player you are the character the player is interacting with."
+				)
 			)
 		)
 
