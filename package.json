@@ -23,15 +23,15 @@
 		"postinstall": "bun setup-build-folders"
 	},
 	"devDependencies": {
-		"@types/bun": "^1.0.5",
+		"@types/bun": "^1.1.16",
 		"@typescript-eslint/eslint-plugin": "^6.21.0",
-		"eslint": "^8.56.0",
+		"eslint": "^8.57.1",
 		"eslint-config-prettier": "^9.1.0",
-		"firebase-tools": "^13.4.0",
-		"prettier": "^3.2.5"
+		"firebase-tools": "^13.29.1",
+		"prettier": "^3.4.2"
 	},
 	"dependencies": {
-		"@huggingface/inference": "^2.6.4",
-		"typescript": "^5.3.3"
+		"@huggingface/inference": "^2.8.1",
+		"typescript": "^5.7.3"
 	}
 }
