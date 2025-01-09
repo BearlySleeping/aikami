@@ -1,4 +1,4 @@
-class_name BaseTextToSpeachAPI
+class_name BaseTextToSpeechAPI
 extends BaseAPI
 
 
@@ -17,7 +17,7 @@ class CallBasicResponseModel:
 	var stream: AudioStream
 
 
-func text_to_speach(_request: CallBasicRequestModel) -> CallBasicResponseModel:
+func text_to_speech(_request: CallBasicRequestModel) -> CallBasicResponseModel:
 	assert(false, "Not implemented")
 	var response: CallBasicResponseModel = await SignalManager.processed
 	return response

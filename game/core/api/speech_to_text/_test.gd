@@ -48,6 +48,6 @@ func _preview() -> void:
 func _start() -> void:
 	var file := FileAccess.open("res://assets/voice-female.wav", FileAccess.READ)
 	_data = file.get_buffer(file.get_length())
-	var input := BaseSpeachToTextAPI.CallBasicRequestModel.new(_data, true)
+	var input := BaseSpeechToTextAPI.CallBasicRequestModel.new(_data, true)
 	rich_text_label.text = ""
-	AIManager.speach_to_text(input)
+	AIManager.speech_to_text(input)

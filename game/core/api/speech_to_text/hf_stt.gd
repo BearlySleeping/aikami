@@ -1,4 +1,4 @@
-extends BaseSpeachToTextAPI
+extends BaseSpeechToTextAPI
 
 const MODEL := "gpt-3.5-turbo"
 ## https://platform.openai.com/docs/api-reference/chat

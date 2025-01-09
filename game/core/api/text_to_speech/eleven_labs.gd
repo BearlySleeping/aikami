@@ -1,4 +1,4 @@
-extends BaseTextToSpeachAPI
+extends BaseTextToSpeechAPI
 
 # https://api.elevenlabs.io/v1/models
 const MODELS := [
