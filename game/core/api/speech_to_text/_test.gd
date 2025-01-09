@@ -19,7 +19,7 @@ func _ready() -> void:
 	button.pressed.connect(_toggle_recording)
 	button_2.pressed.connect(_preview)
 	button_3.pressed.connect(_start)
-	SignalManager.speach_to_text_chunk_added.connect(_on_text_chunk_added)
+	SignalManager.speech_to_text_chunk_added.connect(_on_text_chunk_added)
 
 
 func _toggle_recording() -> void:

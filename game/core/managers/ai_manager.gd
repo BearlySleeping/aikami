@@ -1,10 +1,10 @@
 class_name AIManager
 
-enum ProviderType { IMAGE, TEXT, TEXT_TO_SPEACH, SPEACH_TO_TEXT }
+enum ProviderType { IMAGE, TEXT, TEXT_TO_SPEECH, SPEECH_TO_TEXT }
 enum ImageProvider { DALLE, HUGGING_FACE }
 enum TextProvider { OPEN_AI, OLLAMA }
-enum TextToSpeachProvider { ELEVEN_LABS }
-enum SpeachToTextProvider { HUGGING_FACE }
+enum TextToSpeechProvider { ELEVEN_LABS }
+enum SpeechToTextProvider { HUGGING_FACE }
 
 const PROVIDERS_MAP := {
 	ProviderType.IMAGE:
@@ -20,18 +20,18 @@ const PROVIDERS_MAP := {
 		["res://core/api/text/open_ai.gd", ConfigManager.ConfigKey.API_OPEN_AI_KEY],
 		TextProvider.OLLAMA: ["res://core/api/text/ollama.gd", "ollama"],
 	},
-	ProviderType.TEXT_TO_SPEACH:
+	ProviderType.TEXT_TO_SPEECH:
 	{
-		TextToSpeachProvider.ELEVEN_LABS:
+		TextToSpeechProvider.ELEVEN_LABS:
 		[
-			"res://core/api/text_to_speach/eleven_labs.gd",
+			"res://core/api/text_to_speech/eleven_labs.gd",
 			ConfigManager.ConfigKey.API_ELEVEN_LABS_KEY
 		],
 	},
-	ProviderType.SPEACH_TO_TEXT:
+	ProviderType.SPEECH_TO_TEXT:
 	{
-		SpeachToTextProvider.HUGGING_FACE:
-		["res://core/api/speach_to_text/hf_stt.gd", ConfigManager.ConfigKey.API_HUGGING_FACE_KEY]
+		SpeechToTextProvider.HUGGING_FACE:
+		["res://core/api/speech_to_text/hf_stt.gd", ConfigManager.ConfigKey.API_HUGGING_FACE_KEY]
 	}
 }
 
@@ -50,8 +50,8 @@ static func _get_provider_config(provider_type: ProviderType) -> Array:
 	const CONFIG_MAP = {
 		ProviderType.IMAGE: ConfigManager.ConfigKey.API_IMAGE_PROVIDER,
 		ProviderType.TEXT: ConfigManager.ConfigKey.API_TEXT_PROVIDER,
-		ProviderType.TEXT_TO_SPEACH: ConfigManager.ConfigKey.API_TEXT_TO_SPEACH_PROVIDER,
-		ProviderType.SPEACH_TO_TEXT: ConfigManager.ConfigKey.API_SPEACH_TO_TEXT_PROVIDER,
+		ProviderType.TEXT_TO_SPEECH: ConfigManager.ConfigKey.API_TEXT_TO_SPEECH_PROVIDER,
+		ProviderType.SPEECH_TO_TEXT: ConfigManager.ConfigKey.API_SPEECH_TO_TEXT_PROVIDER,
 	}
 
 	var config_key: ConfigManager.ConfigKey = CONFIG_MAP[provider_type]
@@ -80,26 +80,26 @@ static func dispose_providers() -> void:
 
 static func set_current_npc(npc: NPCModel) -> void:
 	var voice_type := npc.voice_type
-	_get_provider(ProviderType.TEXT_TO_SPEACH).set_current_voice_type(voice_type)
+	_get_provider(ProviderType.TEXT_TO_SPEECH).set_current_voice_type(voice_type)
 
 
 ## Call this when you want voice to an incoming stream text
 ## have the chunk be empty to initialize the connection to the tts provider
 ## And have the chunk be empty text to close the connection
 static func generate_voice_with_text_chunk(chunk: String) -> void:
-	_get_provider(ProviderType.TEXT_TO_SPEACH).handle_text_chunk_added(chunk)
+	_get_provider(ProviderType.TEXT_TO_SPEECH).handle_text_chunk_added(chunk)
 
 
 static func speech_to_text(
 	input: BaseSpeechToTextAPI.CallBasicRequestModel
 ) -> BaseSpeechToTextAPI.CallBasicResponseModel:
-	return await _get_provider(ProviderType.SPEACH_TO_TEXT).speach_to_text(input)
+	return await _get_provider(ProviderType.SPEECH_TO_TEXT).speech_to_text(input)
 
 
 static func text_to_speech(
 	input: BaseTextToSpeechAPI.CallBasicRequestModel
 ) -> BaseTextToSpeechAPI.CallBasicResponseModel:
-	return await _get_provider(ProviderType.TEXT_TO_SPEACH).text_to_speach(input)
+	return await _get_provider(ProviderType.TEXT_TO_SPEECH).text_to_speech(input)
 
 
 ## Will generate an image and store it in a given path
