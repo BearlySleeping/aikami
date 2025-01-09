@@ -90,15 +90,15 @@ static func generate_voice_with_text_chunk(chunk: String) -> void:
 	_get_provider(ProviderType.TEXT_TO_SPEACH).handle_text_chunk_added(chunk)
 
 
-static func speach_to_text(
-	input: BaseSpeachToTextAPI.CallBasicRequestModel
-) -> BaseSpeachToTextAPI.CallBasicResponseModel:
+static func speech_to_text(
+	input: BaseSpeechToTextAPI.CallBasicRequestModel
+) -> BaseSpeechToTextAPI.CallBasicResponseModel:
 	return await _get_provider(ProviderType.SPEACH_TO_TEXT).speach_to_text(input)
 
 
-static func text_to_speach(
-	input: BaseTextToSpeachAPI.CallBasicRequestModel
-) -> BaseTextToSpeachAPI.CallBasicResponseModel:
+static func text_to_speech(
+	input: BaseTextToSpeechAPI.CallBasicRequestModel
+) -> BaseTextToSpeechAPI.CallBasicResponseModel:
 	return await _get_provider(ProviderType.TEXT_TO_SPEACH).text_to_speach(input)
 
 
