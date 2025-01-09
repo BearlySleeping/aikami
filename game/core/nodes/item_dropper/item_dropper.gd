@@ -1,7 +1,7 @@
 @tool
 class_name ItemDropper extends Node2D
 
-const PICKUP = preload("res://Items/item_pickup/item_pickup.tscn")
+const PICKUP = preload("res://world/entities/items/item_pickup/item_pickup.tscn")
 
 @export var item_data: ItemData:
 	set = _set_item_data

@@ -78,6 +78,11 @@ static func dispose_providers() -> void:
 	_providers.clear()
 
 
+static func set_current_npc(npc: NPCModel) -> void:
+	var voice_type := npc.voice_type
+	_get_provider(ProviderType.TEXT_TO_SPEACH).set_current_voice_type(voice_type)
+
+
 ## Call this when you want voice to an incoming stream text
 ## have the chunk be empty to initialize the connection to the tts provider
 ## And have the chunk be empty text to close the connection

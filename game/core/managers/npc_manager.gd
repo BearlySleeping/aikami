@@ -15,7 +15,13 @@ const PREDEFINED_NPCS: Dictionary = {
 		"name": "Gandalf the Grey",
 		"age": 900,
 		"gender": Enum.Gender.MALE,
-		"portrait_sprite_path": "res://assets/npc/gandalf/portrait.png",
+		"portraits":
+		{
+			"neutral": "res://assets/npc/gandalf/neutral.webp",
+			"happy": "res://assets/npc/gandalf/happy.webp",
+			"sad": "res://assets/npc/gandalf/sad.webp",
+			"angry": "res://assets/npc/gandalf/angry.webp",
+		},
 		"animation_sprite_sheet_path": "res://assets/npc/gandalf/animation_sprite_sheet.png",
 		"appearance": ["Tall", "Grey robe", "Long white beard"],
 		"location": "Middle-earth",
@@ -38,7 +44,13 @@ const PREDEFINED_NPCS: Dictionary = {
 		"name": "Aragorn",
 		"age": 87,
 		"gender": Enum.Gender.MALE,
-		"portrait_sprite_path": "res://assets/npc/aragon/portrait.png",
+		"portraits":
+		{
+			"neutral": "res://assets/npc/aragon/neutral.webp",
+			"happy": "res://assets/npc/aragon/happy.webp",
+			"sad": "res://assets/npc/aragon/sad.webp",
+			"angry": "res://assets/npc/aragon/angry.webp",
+		},
 		"animation_sprite_sheet_path": "res://assets/npc/aragon/animation_sprite_sheet.png",
 		"appearance": ["Tall", "Rugged"],
 		"location": "Rohan, Gondor",
@@ -85,9 +97,17 @@ static func create_npc_model(npc_id: String, npc_data: Dictionary) -> NPCModel:
 	return NPCModel.new(npc_id, full_npc_data)
 
 
+static func get_portrait_path(npc: NPCModel, mood := "neutral") -> String:
+	var portrait_path: String = npc.portraits[mood]
+	if not portrait_path:
+		portrait_path = npc.portraits["neutral"]
+		Logger.warn("Portrait path for mood %s not found, using neutral mood" % mood)
+	return portrait_path
+
+
 ## TODO: add cache for the textures, add it in the npc_cache? or create a new cache variable?
-static func get_portrait_texture(npc: NPCModel, _mood := "default") -> CompressedTexture2D:
-	return load(npc.portrait_sprite_path)
+static func get_portrait_texture(npc: NPCModel, mood := "neutral") -> CompressedTexture2D:
+	return load(get_portrait_path(npc, mood))
 
 
 # Method to save an NPC's dynamic data

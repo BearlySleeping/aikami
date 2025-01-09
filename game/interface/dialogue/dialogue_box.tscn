@@ -26,6 +26,7 @@ texture_margin_right = 16.0
 texture_margin_bottom = 16.0
 
 [node name="DialogueBox" type="CanvasLayer"]
+layer = 3
 script = ExtResource("1_is44f")
 
 [node name="DialogUI" type="Control" parent="."]
@@ -56,7 +57,7 @@ offset_top = 35.0
 offset_right = 118.0
 offset_bottom = 186.0
 name_label = "Gandalf the Grey"
-avatar_path = "res://assets/npc/gandalf/portrait.png"
+avatar_path = "res://assets/npc/gandalf/neutral.webp"
 
 [node name="PlayerAvatar" parent="DialogUI" instance=ExtResource("5_ana7k")]
 unique_name_in_owner = true

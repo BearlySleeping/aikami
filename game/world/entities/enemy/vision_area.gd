@@ -8,7 +8,7 @@ func _ready() -> void:
 	body_entered.connect(_on_body_enter)
 	body_exited.connect(_on_body_exit)
 
-	var p = get_parent()
+	var p := get_parent()
 	if p is Enemy:
 		p.direction_changed.connect(_on_direction_change)
 

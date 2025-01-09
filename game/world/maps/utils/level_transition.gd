@@ -1,9 +1,11 @@
 @tool
 class_name LevelTransition extends Area2D
 
+signal entered_from_here
+
 enum SIDE { LEFT, RIGHT, TOP, BOTTOM }
 
-@export_file("*.tscn") var level
+@export_file("*.tscn") var level: String = ""
 @export var target_transition_area: String = "LevelTransition"
 @export var center_player: bool = false
 
@@ -34,31 +36,32 @@ func _ready() -> void:
 	monitoring = false
 	_place_player()
 
-	await SceneManager.level_loaded
+	await SceneManager.scene_loaded
 
 	monitoring = true
 	body_entered.connect(_player_entered)
 
 
 func _player_entered(_p: Node2D) -> void:
-	SceneManager.load_new_level(level, target_transition_area, get_offset())
+	SceneManager.load_new_scene(level, target_transition_area, get_offset())
 
 
 func _place_player() -> void:
 	if name != SceneManager.target_transition:
 		return
 	PlayerManager.set_player_position(global_position + SceneManager.position_offset)
+	entered_from_here.emit()
 
 
 func get_offset() -> Vector2:
 	var offset: Vector2 = Vector2.ZERO
-	var player_pos = PlayerManager.player.global_position
+	var player_position := PlayerManager.player.global_position
 
 	if side == SIDE.LEFT or side == SIDE.RIGHT:
 		if center_player == true:
 			offset.y = 0
 		else:
-			offset.y = player_pos.y - global_position.y
+			offset.y = player_position.y - global_position.y
 		offset.x = 16
 		if side == SIDE.LEFT:
 			offset.x *= -1
@@ -66,7 +69,7 @@ func get_offset() -> Vector2:
 		if center_player == true:
 			offset.x = 0
 		else:
-			offset.x = player_pos.x - global_position.x
+			offset.x = player_position.x - global_position.x
 		offset.y = 16
 		if side == SIDE.TOP:
 			offset.y *= -1

@@ -132,7 +132,7 @@ height = 22.0
 
 [node name="NPC" type="CharacterBody2D"]
 collision_layer = 4
-collision_mask = 0
+collision_mask = 16
 script = ExtResource("1_u1o2w")
 
 [node name="Sprite2D" type="Sprite2D" parent="."]

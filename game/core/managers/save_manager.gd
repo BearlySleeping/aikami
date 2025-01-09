@@ -122,7 +122,7 @@ func load_game() -> void:
 	PlayerManager.set_health(current_save_data.player.hp, current_save_data.player.max_hp)
 	PlayerManager.INVENTORY_DATA.parse_save_data(current_save_data.items)
 
-	await SceneManager.level_loaded
+	await SceneManager.scene_loaded
 
 	game_loaded.emit()
 
@@ -161,7 +161,7 @@ func update_player_data() -> void:
 func update_scene_path() -> void:
 	var scene_path := ""
 	for c in get_tree().root.get_children():
-		if c is Level:
+		if c is BaseMap:
 			scene_path = c.scene_file_path
 	if scene_path == "":
 		return
