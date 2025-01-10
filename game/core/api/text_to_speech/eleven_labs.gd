@@ -1,4 +1,4 @@
-extends BaseTextToSpeachAPI
+extends BaseTextToSpeechAPI
 
 # https://api.elevenlabs.io/v1/models
 const MODELS := [
@@ -244,7 +244,7 @@ func set_current_voice_type(voice_type: Enum.VoiceType) -> void:
 
 
 # Call Eleven labs API for text to speech
-func text_to_speach(request: CallBasicRequestModel) -> CallBasicResponseModel:
+func text_to_speech(request: CallBasicRequestModel) -> CallBasicResponseModel:
 	var options := _get_options(request.text)
 	var headers := _get_headers()
 	var path := _get_path(use_stream_mode)

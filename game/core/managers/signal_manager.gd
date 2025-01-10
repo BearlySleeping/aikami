@@ -5,7 +5,7 @@ extends Node
 signal text_chunk_added(text: String)
 
 ## When a text stream chunk is updated with stt, it does not include the old chunks
-signal speach_to_text_chunk_added(text: String)
+signal speech_to_text_chunk_added(text: String)
 
 ## When a voice stream chunk is added, it does not include the old chunks
 signal voice_chunk_added(audio_bytes: PackedByteArray)
