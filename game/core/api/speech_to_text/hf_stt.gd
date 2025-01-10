@@ -1,4 +1,4 @@
-extends BaseSpeachToTextAPI
+extends BaseSpeechToTextAPI
 
 const MODEL := "gpt-3.5-turbo"
 ## https://platform.openai.com/docs/api-reference/chat
@@ -18,7 +18,7 @@ func _reset() -> void:
 	_stream_text = ""
 
 
-func speach_to_text(request: CallBasicRequestModel) -> CallBasicResponseModel:
+func speech_to_text(request: CallBasicRequestModel) -> CallBasicResponseModel:
 	_reset()
 	var use_stream := request.use_stream
 	var options := _get_options(request.data, use_stream)
@@ -56,7 +56,7 @@ func _make_stream_request(options: Dictionary) -> Array:
 			443,
 		)
 	)
-	SignalManager.speach_to_text_chunk_added.emit("")
+	SignalManager.speech_to_text_chunk_added.emit("")
 	await _http_stream_client.stream_request_completed
 	return [_stream_text, null]
 
@@ -81,7 +81,7 @@ func handle_chunk_entry(entry: String) -> bool:
 	if entry == "[DONE]":
 		Logger.debug("handle_chunk_entry:stream_result", _stream_text)
 		_http_stream_client.finish_request()
-		SignalManager.speach_to_text_chunk_added.emit("")
+		SignalManager.speech_to_text_chunk_added.emit("")
 		return false
 
 	var parsed_data: Variant = JSON.parse_string(entry)
@@ -108,7 +108,7 @@ func handle_chunk_entry(entry: String) -> bool:
 		if delta.content:
 			var chunk_text: String = delta["content"]
 			_stream_text += chunk_text
-			SignalManager.speach_to_text_chunk_added.emit(chunk_text)
+			SignalManager.speech_to_text_chunk_added.emit(chunk_text)
 	else:
 		_http_stream_client.handle_stream_error("Error: 'content' field not found in the 'delta'")
 		return false

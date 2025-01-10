@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://ctxu0tnnf5b81"]
 
-[ext_resource type="Script" path="res://core/api/text_to_speach/_test.gd" id="1_qy3r2"]
+[ext_resource type="Script" path="res://core/api/text_to_speech/_test.gd" id="1_qy3r2"]
 
 [node name="Test" type="Node2D"]
 script = ExtResource("1_qy3r2")
