@@ -1,6 +1,6 @@
 # Common linting problems
 
--   If gdlint/gdformat crashes
+- If gdlint/gdformat crashes
 
 `AttributeError: 'PatternStr' object has no attribute 'raw'`
 
@@ -11,7 +11,7 @@ It might be because you are using lambda function directly like this:
 ```python
 
 test.connect(func()->void:
-    if statment:
+    if statement:
         return x
 )
 
