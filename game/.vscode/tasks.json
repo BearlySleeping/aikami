@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Lint with gdlint",
+      "type": "shell",
+      "command": "poetry",
+      "args": [
+        "run",
+        "gdlint",
+        "${file}" // Runs gdlint on the currently active file
+      ],
+      "problemMatcher": {
+        "owner": "gdlint",
+        "fileLocation": ["absolute"],
+        "pattern": [
+          {
+            "regexp": "^(.*):(\\d+): Error: (.+) \\((.+)\\)$",
+            "file": 1,
+            "line": 2,
+            "message": 3,
+            "code": 4
+          }
+        ]
+      },
+      "presentation": {
+        "reveal": "never",
+        "panel": "shared",
+        "clear": true
+      }
+    }
+  ]
+}

@@ -4,35 +4,28 @@ extends "inventory_item_slot_base.gd"
 
 ## Holds an inventory item.
 
-##
-signal protoset_changed
-
 const Verify := preload("../constraints/inventory_verify.gd")
-const KEY_ITEM := "item"
 
-##  An InventoryItemProtoset resource containing item prototypes that the slot can receive.
-## @required
-@export var item_protoset: InventoryItemProtoset:
-	set(new_item_protoset):
-		if new_item_protoset == item_protoset:
-			return
-		if _item:
-			_item = null
-		item_protoset = new_item_protoset
-		protoset_changed.emit()
-		update_configuration_warnings()
+var slot_type: Enum.EquippedSlotType
+
 ## If set to true, the clear() method will try to return the item to its original inventory.
 ## @default true
-@export var remember_source_inventory := true
+var remember_source_inventory := true
 
 var _wr_source_inventory: WeakRef = weakref(null)
-var _item: InventoryItem
+var _item: InterfaceInventoryItem
 
 
 ## Equips the given inventory item in the slot. If the slot already contains an item, clear() will be called first.
 ## Returns false if the clear call fails, the slot can't hold the given item, or already holds the given item.
 ## Returns true otherwise.
-func equip(item: InventoryItem) -> bool:
+func equip(item: InterfaceInventoryItem) -> bool:
+	assert(slot_type != Enum.EquippedSlotType.NONE, "Slot type not set!")
+	var item_data := item.get_metadata()
+
+	if item_data.slot_type != slot_type:
+		return false
+
 	if !can_hold_item(item):
 		return false
 
@@ -53,7 +46,7 @@ func equip(item: InventoryItem) -> bool:
 	return true
 
 
-func on_item_added(item: InventoryItem) -> void:
+func on_item_added(item: InterfaceInventoryItem) -> void:
 	_item = item
 	item_equipped.emit()
 
@@ -91,21 +84,17 @@ func on_item_removed() -> void:
 	cleared.emit()
 
 
-## InventoryItem - Returns the equipped item.
+## InterfaceInventoryItem - Returns the equipped item.
 ## @note this method will not free the item if remember_source_inventory is false.
-func get_item() -> InventoryItem:
+func get_item() -> InterfaceInventoryItem:
 	return _item
 
 
 ## Checks if the slot can hold the given item, i.e. the item has the same protoset as the slot and is not null.
 ## This method can be overridden to implement item slots that can only hold specific items.
-func can_hold_item(item: InventoryItem) -> bool:
-	assert(item_protoset, "Item protoset not set!")
+func can_hold_item(item: InterfaceInventoryItem) -> bool:
 	if item == null:
 		return false
-	if item_protoset != item.protoset:
-		return false
-
 	return true
 
 
@@ -114,30 +103,3 @@ func reset() -> void:
 	if _item:
 		_item.queue_free()
 	_clear_impl(false)
-
-
-## Serializes the item slot into a dictionary.
-func serialize() -> Dictionary:
-	var result: Dictionary = {}
-
-	if _item:
-		result[KEY_ITEM] = _item.serialize()
-
-	return result
-
-
-## Loads the item slot data from the given dictionary.
-## @note: If the slot contains an item prior to deserialization, it will be queued for deletion.
-func deserialize(source: Dictionary) -> bool:
-	if !Verify.dict(source, false, KEY_ITEM, [TYPE_DICTIONARY]):
-		return false
-
-	reset()
-
-	if source.has(KEY_ITEM):
-		var item := InventoryItem.new()
-		if !item.deserialize(source[KEY_ITEM]):
-			return false
-		equip(item)
-
-	return true

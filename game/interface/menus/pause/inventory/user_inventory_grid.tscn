@@ -1,0 +1,136 @@
+[gd_scene load_steps=16 format=3 uid="uid://esjpvoxk18s8"]
+
+[ext_resource type="Script" path="res://interface/menus/pause/inventory/user_inventory_grid.gd" id="1_1nqc8"]
+[ext_resource type="Script" path="res://interface/inventory/control/inventory_control_grid.gd" id="2_u2gmc"]
+[ext_resource type="Texture2D" uid="uid://c5tps135rr4f1" path="res://icon.svg" id="3_0263n"]
+[ext_resource type="Texture2D" uid="uid://cygh8k6shbbdd" path="res://interface/inventory/field_background.png" id="4_q7xq1"]
+[ext_resource type="Texture2D" uid="uid://s2ydmhh3shft" path="res://interface/inventory/field_highlighted_background.png" id="5_nsont"]
+[ext_resource type="PackedScene" uid="uid://d3a36r2cmy5rn" path="res://interface/menus/pause/inventory/equipment_slot_container.tscn" id="6_ec3qp"]
+[ext_resource type="Texture2D" uid="uid://drn7l25whqf38" path="res://assets/sprites/armor/helmet.png" id="6_whlnm"]
+[ext_resource type="Texture2D" uid="uid://xuxkvcpmi5dj" path="res://assets/sprites/armor/greaves.png" id="7_w0bjr"]
+[ext_resource type="Texture2D" uid="uid://ctwipxsybchrn" path="res://assets/sprites/armor/platemail.png" id="8_r8j6v"]
+[ext_resource type="Texture2D" uid="uid://dq6hgh1psvwxv" path="res://assets/sprites/armor/bracers.png" id="9_1h1ys"]
+[ext_resource type="Texture2D" uid="uid://grab0b75dsyv" path="res://assets/sprites/armor/gauntlets.png" id="11_p7m4s"]
+[ext_resource type="Texture2D" uid="uid://c2higjo8upjmv" path="res://assets/sprites/armor/ring.png" id="12_ow8og"]
+
+[sub_resource type="StyleBoxTexture" id="1"]
+texture = ExtResource("4_q7xq1")
+region_rect = Rect2(0, 0, 32, 32)
+
+[sub_resource type="StyleBoxTexture" id="2"]
+texture = ExtResource("5_nsont")
+region_rect = Rect2(0, 0, 32, 32)
+
+[sub_resource type="StyleBoxFlat" id="5"]
+draw_center = false
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.92549, 0.152941, 1)
+
+[node name="UserInventoryGridStacked" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_1nqc8")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="InventoryVBoxContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PanelContainer" type="PanelContainer" parent="VBoxContainer/HBoxContainer/InventoryVBoxContainer"]
+layout_mode = 2
+
+[node name="InventoryGridPlayerControl" type="Control" parent="VBoxContainer/HBoxContainer/InventoryVBoxContainer/PanelContainer"]
+unique_name_in_owner = true
+texture_filter = 1
+custom_minimum_size = Vector2(200, 200)
+layout_mode = 2
+script = ExtResource("2_u2gmc")
+field_dimensions = Vector2(16, 16)
+draw_selections = true
+selection_color = Color(0.745098, 0.745098, 0.745098, 1)
+default_item_texture = ExtResource("3_0263n")
+field_style = SubResource("1")
+field_highlighted_style = SubResource("2")
+selection_style = SubResource("5")
+
+[node name="SortPlayerButton" type="Button" parent="VBoxContainer/HBoxContainer/InventoryVBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Sort"
+
+[node name="SplitPlayerButton" type="Button" parent="VBoxContainer/HBoxContainer/InventoryVBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Split"
+
+[node name="EquippedVBoxContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="EquippedSlotsLabel" type="Label" parent="VBoxContainer/HBoxContainer/EquippedVBoxContainer"]
+layout_mode = 2
+text = "Equipped slots"
+
+[node name="HeadSlotContainer" parent="VBoxContainer/HBoxContainer/EquippedVBoxContainer" instance=ExtResource("6_ec3qp")]
+unique_name_in_owner = true
+layout_mode = 2
+texture = ExtResource("6_whlnm")
+equipped_slot_type = 1
+
+[node name="BodySlotContainer" parent="VBoxContainer/HBoxContainer/EquippedVBoxContainer" instance=ExtResource("6_ec3qp")]
+unique_name_in_owner = true
+layout_mode = 2
+texture = ExtResource("8_r8j6v")
+equipped_slot_type = 2
+
+[node name="LegsSlotContainer" parent="VBoxContainer/HBoxContainer/EquippedVBoxContainer" instance=ExtResource("6_ec3qp")]
+unique_name_in_owner = true
+layout_mode = 2
+texture = ExtResource("9_1h1ys")
+equipped_slot_type = 3
+
+[node name="FeetSlotContainer" parent="VBoxContainer/HBoxContainer/EquippedVBoxContainer" instance=ExtResource("6_ec3qp")]
+unique_name_in_owner = true
+layout_mode = 2
+texture = ExtResource("7_w0bjr")
+equipped_slot_type = 4
+
+[node name="HandsSlotContainer" parent="VBoxContainer/HBoxContainer/EquippedVBoxContainer" instance=ExtResource("6_ec3qp")]
+unique_name_in_owner = true
+layout_mode = 2
+texture = ExtResource("11_p7m4s")
+equipped_slot_type = 5
+
+[node name="RingSlotContainer" parent="VBoxContainer/HBoxContainer/EquippedVBoxContainer" instance=ExtResource("6_ec3qp")]
+unique_name_in_owner = true
+layout_mode = 2
+texture = ExtResource("12_ow8og")
+equipped_slot_type = 6
+
+[node name="InfoLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 14.0

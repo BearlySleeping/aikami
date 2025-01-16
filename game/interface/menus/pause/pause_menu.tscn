@@ -1,10 +1,14 @@
-[gd_scene load_steps=3 format=3 uid="uid://daxygoynvdyya"]
+[gd_scene load_steps=5 format=3 uid="uid://6lls41v3mynk"]
 
-[ext_resource type="Script" path="res://interface/menus/pause/pause_menu.gd" id="1_g0lp4"]
-[ext_resource type="Theme" uid="uid://65dakj0ukuj6" path="res://interface/theme/default_theme.tres" id="2_w4yrw"]
+[ext_resource type="Script" path="res://interface/menus/pause/pause_menu.gd" id="1_ibakn"]
+[ext_resource type="PackedScene" uid="uid://esjpvoxk18s8" path="res://interface/menus/pause/inventory/user_inventory_grid.tscn" id="2_qe86p"]
+[ext_resource type="PackedScene" uid="uid://b7p4xoadi1v7v" path="res://interface/menus/pause/quests/quests.tscn" id="3_mtiyc"]
+[ext_resource type="PackedScene" uid="uid://bah3xdscalw7a" path="res://interface/menus/pause/system/system.tscn" id="4_g4qy7"]
 
-[node name="GameMenu" type="CanvasLayer"]
-script = ExtResource("1_g0lp4")
+[node name="PauseMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 4
+script = ExtResource("1_ibakn")
 
 [node name="Control" type="Control" parent="."]
 layout_mode = 3
@@ -13,7 +17,6 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme = ExtResource("2_w4yrw")
 
 [node name="ColorRect" type="ColorRect" parent="Control"]
 layout_mode = 1
@@ -22,90 +25,32 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.0705882, 0.0705882, 0.0705882, 0.780392)
+color = Color(0.141176, 0.141176, 0.141176, 0.831373)
 
-[node name="MarginContainer" type="MarginContainer" parent="Control"]
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="Control"]
+unique_name_in_owner = true
+
+[node name="TabContainer" type="TabContainer" parent="Control"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 256
-theme_override_constants/margin_right = 256
+tab_alignment = 1
+current_tab = 0
 
-[node name="ButtonsVBox" type="VBoxContainer" parent="Control/MarginContainer"]
-unique_name_in_owner = true
+[node name="Inventory" parent="Control/TabContainer" instance=ExtResource("2_qe86p")]
 layout_mode = 2
-alignment = 1
+metadata/_tab_index = 0
 
-[node name="ReturnToGameButton" type="Button" parent="Control/MarginContainer/ButtonsVBox"]
+[node name="Quests" parent="Control/TabContainer" instance=ExtResource("3_mtiyc")]
+visible = false
 layout_mode = 2
-focus_neighbor_top = NodePath("../QuitButton")
-focus_neighbor_bottom = NodePath("../SettingsGridContainer/MusicSlider")
-focus_next = NodePath("../SettingsGridContainer/MusicSlider")
-focus_previous = NodePath("../QuitButton")
-text = "Continue Game"
-alignment = 0
 
-[node name="SettingsGridContainer" type="GridContainer" parent="Control/MarginContainer/ButtonsVBox"]
-unique_name_in_owner = true
+[node name="System" parent="Control/TabContainer" instance=ExtResource("4_g4qy7")]
+visible = false
 layout_mode = 2
-size_flags_vertical = 4
-theme_override_constants/h_separation = 16
-columns = 2
 
-[node name="MusicLabel" type="Label" parent="Control/MarginContainer/ButtonsVBox/SettingsGridContainer"]
-layout_mode = 2
-text = "Music"
-
-[node name="MusicSlider" type="HSlider" parent="Control/MarginContainer/ButtonsVBox/SettingsGridContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 4
-focus_neighbor_top = NodePath("../../ReturnToGameButton")
-focus_neighbor_bottom = NodePath("../SFXSlider")
-focus_next = NodePath("../SFXSlider")
-focus_previous = NodePath("../../ReturnToGameButton")
-max_value = 1.0
-step = 0.05
-
-[node name="SFXLabel" type="Label" parent="Control/MarginContainer/ButtonsVBox/SettingsGridContainer"]
-layout_mode = 2
-text = "SFX"
-
-[node name="SFXSlider" type="HSlider" parent="Control/MarginContainer/ButtonsVBox/SettingsGridContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 4
-focus_neighbor_top = NodePath("../MusicSlider")
-focus_previous = NodePath("../MusicSlider")
-max_value = 1.0
-step = 0.05
-value = 1.0
-
-[node name="MainMenuButton" type="Button" parent="Control/MarginContainer/ButtonsVBox"]
-unique_name_in_owner = true
-layout_mode = 2
-focus_neighbor_bottom = NodePath("../QuitButton")
-focus_next = NodePath("../QuitButton")
-text = "Return to menu"
-alignment = 0
-
-[node name="QuitButton" type="Button" parent="Control/MarginContainer/ButtonsVBox"]
-layout_mode = 2
-focus_neighbor_top = NodePath("../MainMenuButton")
-focus_neighbor_bottom = NodePath("../ReturnToGameButton")
-focus_next = NodePath("../ReturnToGameButton")
-focus_previous = NodePath("../MainMenuButton")
-text = "Quit Game"
-alignment = 0
-
-[connection signal="visibility_changed" from="." to="." method="_on_visibility_changed"]
-[connection signal="pressed" from="Control/MarginContainer/ButtonsVBox/ReturnToGameButton" to="." method="_on_return_to_game_button_pressed"]
-[connection signal="value_changed" from="Control/MarginContainer/ButtonsVBox/SettingsGridContainer/MusicSlider" to="." method="_on_music_slider_value_changed"]
-[connection signal="value_changed" from="Control/MarginContainer/ButtonsVBox/SettingsGridContainer/SFXSlider" to="." method="_on_sfx_slider_value_changed"]
-[connection signal="pressed" from="Control/MarginContainer/ButtonsVBox/MainMenuButton" to="." method="_on_main_menu_button_pressed"]
-[connection signal="pressed" from="Control/MarginContainer/ButtonsVBox/QuitButton" to="." method="_on_quit_button_pressed"]
+[connection signal="hide_pause_menu" from="Control/TabContainer/System" to="." method="hide_pause_menu"]

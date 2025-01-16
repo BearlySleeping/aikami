@@ -20,19 +20,20 @@
     "serve:linux": "build/linux/aikami.x86_64",
     "reset": "rm -rf build && bun postinstall",
     "setup-build-folders": "mkdir -v -p build/linux build/windows build/macos build/webgl",
-    "postinstall": "bun setup-build-folders"
+    "postinstall": "bun setup-build-folders",
+    "check-spelling": "cspell --config .vscode/cspell.json \"**\""
   },
   "devDependencies": {
-    "@types/bun": "^1.0.5",
+    "@types/bun": "^1.1.16",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "eslint": "^8.56.0",
+    "cspell": "^8.17.2",
+    "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
-    "firebase-tools": "^13.4.0",
-    "lefthook": "^1.6.1",
-    "prettier": "^3.2.5"
+    "firebase-tools": "^13.29.1",
+    "prettier": "^3.4.2"
   },
   "dependencies": {
-    "@huggingface/inference": "^2.6.4",
-    "typescript": "^5.3.3"
+    "@huggingface/inference": "^2.8.1",
+    "typescript": "^5.7.3"
   }
 }

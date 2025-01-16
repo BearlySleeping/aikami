@@ -74,7 +74,7 @@ func contains(position: Vector2i) -> bool:
 	return (position.x >= 0) && (position.y >= 0) && (position.x < size.x) && (position.y < size.y)
 
 
-func get_field(position: Vector2i) -> InventoryItem:
+func get_field(position: Vector2i) -> InterfaceInventoryItem:
 	assert(contains(position), "%s out of bounds!" % position)
 	return map[position.x][position.y]
 

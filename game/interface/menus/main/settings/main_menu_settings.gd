@@ -16,4 +16,8 @@ func reset_focus() -> void:
 
 func _on_back_button_pressed() -> void:
 	back_button_pressed.emit()
-	AudioManager.play_button_sound()
+	_play_button_sound()
+
+
+func _play_button_sound() -> void:
+	AudioManager.play_sfx(AudioManager.SFXName.MENU)

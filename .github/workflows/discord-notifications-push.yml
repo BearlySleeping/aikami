@@ -1,0 +1,24 @@
+name: Discord Push Notifications
+
+on:
+    push:
+        branches: ['master', 'main', 'dev']
+        paths:
+            - '**' # Notify only when files are changed
+
+jobs:
+    notify-on-push:
+        name: Notify on Push
+        runs-on: ubuntu-latest
+        steps:
+            - name: Notify Discord about Push
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '🚀 New Commit Pushed!'
+                  embed-description: |
+                      **Commit Message:** ${{ github.event.head_commit.message }}
+                      **Branch:** ${{ github.ref_name }}
+                      **Author:** ${{ github.actor }}
+                      [View Commit](${{ github.event.head_commit.url }})
+                  embed-color: 3066993 # Blue

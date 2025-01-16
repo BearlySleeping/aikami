@@ -9,7 +9,7 @@ signal cleared
 
 
 # Override this
-func equip(_item: InventoryItem) -> bool:
+func equip(_item: InterfaceInventoryItem) -> bool:
 	return false
 
 
@@ -19,12 +19,12 @@ func clear() -> bool:
 
 
 # Override this
-func get_item() -> InventoryItem:
+func get_item() -> InterfaceInventoryItem:
 	return null
 
 
 # Override this
-func can_hold_item(_item: InventoryItem) -> bool:
+func can_hold_item(_item: InterfaceInventoryItem) -> bool:
 	return false
 
 

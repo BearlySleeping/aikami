@@ -42,7 +42,7 @@ func _init(p_inventory: Inventory) -> void:
 	inventory = p_inventory
 
 
-func on_item_added(item: InventoryItem) -> void:
+func on_item_added(item: InterfaceInventoryItem) -> void:
 	assert(_enforce_constraints(item), "Failed to enforce constraints!")
 
 	if _weight_constraint:
@@ -53,7 +53,7 @@ func on_item_added(item: InventoryItem) -> void:
 		_grid_constraint.on_item_added(item)
 
 
-func on_item_removed(item: InventoryItem) -> void:
+func on_item_removed(item: InterfaceInventoryItem) -> void:
 	if _weight_constraint:
 		_weight_constraint.on_item_removed(item)
 	if _stacks_constraint:
@@ -62,7 +62,7 @@ func on_item_removed(item: InventoryItem) -> void:
 		_grid_constraint.on_item_removed(item)
 
 
-func on_item_modified(item: InventoryItem) -> void:
+func on_item_modified(item: InterfaceInventoryItem) -> void:
 	if _weight_constraint:
 		_weight_constraint.on_item_modified(item)
 	if _stacks_constraint:
@@ -71,7 +71,7 @@ func on_item_modified(item: InventoryItem) -> void:
 		_grid_constraint.on_item_modified(item)
 
 
-func _enforce_constraints(item: InventoryItem) -> bool:
+func _enforce_constraints(item: InterfaceInventoryItem) -> bool:
 	match get_configuration():
 		Configuration.GRID:
 			return _grid_constraint.move_item_to_free_spot(item)
@@ -114,7 +114,7 @@ func get_configuration() -> int:
 	return Configuration.DEFAULT
 
 
-func get_space_for(item: InventoryItem) -> InventoryItemCount:
+func get_space_for(item: InterfaceInventoryItem) -> InventoryItemCount:
 	match get_configuration():
 		Configuration.WEIGHT:
 			return _weight_constraint.get_space_for(item)
@@ -136,13 +136,13 @@ func get_space_for(item: InventoryItem) -> InventoryItemCount:
 	return InventoryItemCount.inf()
 
 
-func _ws_get_space_for(item: InventoryItem) -> InventoryItemCount:
+func _ws_get_space_for(item: InterfaceInventoryItem) -> InventoryItemCount:
 	var stack_size := InventoryItemCount.new(StacksConstraint.get_item_stack_size(item))
 	var result := _weight_constraint.get_space_for(item).div(stack_size)
 	return result
 
 
-func _sg_get_space_for(item: InventoryItem) -> InventoryItemCount:
+func _sg_get_space_for(item: InterfaceInventoryItem) -> InventoryItemCount:
 	var grid_space := _grid_constraint.get_space_for(item)
 	var max_stack_size := InventoryItemCount.new(StacksConstraint.get_item_max_stack_size(item))
 	var stack_size := InventoryItemCount.new(StacksConstraint.get_item_stack_size(item))
@@ -150,7 +150,7 @@ func _sg_get_space_for(item: InventoryItem) -> InventoryItemCount:
 	return grid_space.mul(max_stack_size).add(free_stacks_space).div(stack_size)
 
 
-func has_space_for(item: InventoryItem) -> bool:
+func has_space_for(item: InterfaceInventoryItem) -> bool:
 	match get_configuration():
 		Configuration.WEIGHT:
 			return _weight_constraint.has_space_for(item)
@@ -170,7 +170,7 @@ func has_space_for(item: InventoryItem) -> bool:
 	return true
 
 
-func _sg_has_space_for(item: InventoryItem) -> bool:
+func _sg_has_space_for(item: InterfaceInventoryItem) -> bool:
 	if _grid_constraint.has_space_for(item):
 		return true
 	var stack_size := InventoryItemCount.new(StacksConstraint.get_item_stack_size(item))

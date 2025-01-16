@@ -1,0 +1,29 @@
+[gd_scene load_steps=2 format=3 uid="uid://enpoaq6waeal"]
+
+[ext_resource type="FontFile" uid="uid://cs3qtlo6j6oex" path="res://assets/fonts/pixelmix.ttf" id="1_glbax"]
+
+[node name="DialogueHistoryEntry" type="HBoxContainer"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 16.0
+grow_horizontal = 2
+size_flags_horizontal = 3
+
+[node name="NameLabel" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/default_color = Color(0, 0, 0, 1)
+theme_override_fonts/normal_font = ExtResource("1_glbax")
+theme_override_fonts/bold_font = ExtResource("1_glbax")
+bbcode_enabled = true
+text = "asdsadasd"
+scroll_active = false
+
+[node name="TextLabel" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_fonts/normal_font = ExtResource("1_glbax")
+theme_override_fonts/bold_font = ExtResource("1_glbax")
+bbcode_enabled = true
+text = "asdsdaasd"
+scroll_active = false

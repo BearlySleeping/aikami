@@ -56,7 +56,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme = ExtResource("1_d6fbj")
 theme_override_font_sizes/font_size = 22
-text = "Text To Speach"
+text = "Text To Speech"
 clip_text = true
 
 [node name="ElevenLabsField" type="HBoxContainer" parent="VBoxContainer"]

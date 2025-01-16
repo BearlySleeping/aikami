@@ -25,9 +25,9 @@ func _on_start_button_pressed() -> void:
 		return
 	var has_created_player := SaveManager.initialize()
 	if has_created_player:
-		SceneManager.load_new_scene(SceneManager.SceneName.MAIN, "wipe_to_right")
+		SceneManager.load_new_fixed_scene(SceneManager.SceneName.MAIN)
 	else:
-		SceneManager.load_new_scene(SceneManager.SceneName.CHARACTER_CREATION, "wipe_to_right")
+		SceneManager.load_new_fixed_scene(SceneManager.SceneName.CHARACTER_CREATION)
 
 
 func reset_focus() -> void:
@@ -41,7 +41,7 @@ func _on_quit_button_pressed() -> void:
 func _on_option_button_pressed() -> void:
 	settings_view.show()
 	settings_view.reset_focus()
-	AudioManager.play_button_sound()
+	_play_button_sound()
 
 
 func _on_settings_view_back_button_pressed() -> void:
@@ -52,3 +52,7 @@ func _on_settings_view_back_button_pressed() -> void:
 func _on_reset_button_pressed() -> void:
 	SaveManager.reset()
 	reset_button.hide()
+
+
+func _play_button_sound() -> void:
+	AudioManager.play_sfx(AudioManager.SFXName.MENU)

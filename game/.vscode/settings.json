@@ -1,10 +1,10 @@
 {
-    "emeraldwalk.runonsave": {
-        "commands": [
-            {
-                "match": "\\.gd$",
-                "cmd": "poetry run gdformat ${file}"
-            }
-        ]
-    },
+	"emeraldwalk.runonsave": {
+		"commands": [
+			{
+				"match": "\\.gd$",
+				"cmd": "poetry run gdformat ${file}"
+			}
+		]
+	},
 }

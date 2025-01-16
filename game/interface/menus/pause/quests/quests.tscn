@@ -1,0 +1,81 @@
+[gd_scene load_steps=5 format=3 uid="uid://b7p4xoadi1v7v"]
+
+[ext_resource type="Script" path="res://interface/menus/pause/quests/quests_ui.gd" id="1_b4hvh"]
+[ext_resource type="PackedScene" uid="uid://b76wnkiyk1lhy" path="res://interface/menus/pause/quests/quest_item.tscn" id="2_gtw03"]
+[ext_resource type="FontFile" uid="uid://cs3qtlo6j6oex" path="res://assets/fonts/pixelmix.ttf" id="3_fsivo"]
+[ext_resource type="PackedScene" uid="uid://dxfstusrlgtqu" path="res://interface/menus/pause/quests/quest_step_item.tscn" id="4_0o8cl"]
+
+[node name="Quests" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_b4hvh")
+metadata/_tab_index = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 14.0
+offset_right = 234.0
+offset_bottom = 214.0
+follow_focus = true
+scroll_vertical_custom_step = 100.0
+horizontal_scroll_mode = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="ScrollContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_bottom = 5
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ScrollContainer/MarginContainer"]
+layout_mode = 2
+
+[node name="QuestItem" parent="ScrollContainer/MarginContainer/VBoxContainer" instance=ExtResource("2_gtw03")]
+layout_mode = 2
+
+[node name="QuestItem2" parent="ScrollContainer/MarginContainer/VBoxContainer" instance=ExtResource("2_gtw03")]
+layout_mode = 2
+
+[node name="QuestItem3" parent="ScrollContainer/MarginContainer/VBoxContainer" instance=ExtResource("2_gtw03")]
+layout_mode = 2
+
+[node name="QuestItem4" parent="ScrollContainer/MarginContainer/VBoxContainer" instance=ExtResource("2_gtw03")]
+layout_mode = 2
+
+[node name="QuestItem5" parent="ScrollContainer/MarginContainer/VBoxContainer" instance=ExtResource("2_gtw03")]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 250.0
+offset_top = 17.0
+offset_right = 465.0
+offset_bottom = 61.0
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer"]
+custom_minimum_size = Vector2(215, 10)
+layout_mode = 2
+theme_override_fonts/font = ExtResource("3_fsivo")
+text = "Quest Title"
+autowrap_mode = 2
+
+[node name="DescriptionLabel" type="Label" parent="VBoxContainer"]
+modulate = Color(0.608618, 0.608618, 0.608618, 1)
+custom_minimum_size = Vector2(215, 10)
+layout_mode = 2
+theme_override_fonts/font = ExtResource("3_fsivo")
+text = "Quest description"
+autowrap_mode = 2
+
+[node name="SpacerControl" type="Control" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="QuestStepItem" parent="VBoxContainer" instance=ExtResource("4_0o8cl")]
+layout_mode = 2
+
+[node name="QuestStepItem2" parent="VBoxContainer" instance=ExtResource("4_0o8cl")]
+layout_mode = 2
+
+[node name="QuestStepItem3" parent="VBoxContainer" instance=ExtResource("4_0o8cl")]
+layout_mode = 2

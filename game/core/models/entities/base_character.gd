@@ -8,42 +8,23 @@ var character_class: Enum.Class
 var name: String
 var age: int
 
-## The absolute paths to the portraits of the character.[br]
-## The filename must be [enum Enum.Mood] + ".png/jpg"
-## And it has to include at least the default mood.[br]
-## @example
-## [codeblock]
-## avatar_paths = [
-##    "res://assets/avatars/elf/legolas/default.png",
-##    "res://assets/avatars/elf/legolas/angry.png",
-##    ]
-## [/codeblock][br]
-## @required
-var portrait_paths: PackedStringArray
-
 ## @optional
 var gender: Enum.Gender
 
 ## @optional
 var appearance: PackedStringArray
 
+var animation_sprite_sheet_path: String
+
+var unit_sprite_path: String
+
+# The key is the mood and the value is the path to the image
+# neutral mood is required
+var portraits: Dictionary
+
 
 func get_available_moods() -> PackedStringArray:
-	var moods: PackedStringArray = []
-
-	for portrait_path in portrait_paths:
-		var mood := portrait_path.get_file().split(".")[0]
-		moods.append(mood)
-	return moods
-
-
-func get_portrait_path(mood := "default") -> String:
-	for portrait_path in portrait_paths:
-		var portrait_mood := portrait_path.get_file().split(".")[0]
-		if portrait_mood == mood:
-			return portrait_path
-	assert(false, "portrait_paths does not have mood %s" % mood)
-	return ""
+	return portraits.keys()
 
 
 func _init(character_id: String, data: Dictionary) -> void:
@@ -54,4 +35,6 @@ func _init(character_id: String, data: Dictionary) -> void:
 	age = data.age
 	gender = data.gender
 	appearance = data.appearance
-	portrait_paths = data.portrait_paths
+	animation_sprite_sheet_path = data.animation_sprite_sheet_path
+	unit_sprite_path = data.unit_sprite_path
+	portraits = data.portraits

@@ -7,10 +7,10 @@ extends TabBar
 
 
 func _ready() -> void:
-	var text_to_speach_enabled: bool = ConfigManager.get_value(
-		ConfigManager.ConfigKey.API_TEXT_TO_SPEACH_ENABLED, true
+	var text_to_speech_enabled: bool = ConfigManager.get_value(
+		ConfigManager.ConfigKey.API_TEXT_TO_SPEECH_ENABLED, true
 	)
-	if text_to_speach_enabled:
+	if text_to_speech_enabled:
 		tts_enabled_button.button_pressed = true
 		eleven_labs_field.show()
 	else:
@@ -39,7 +39,7 @@ func _on_open_ai_key_input_text_changed(new_text: String) -> void:
 
 
 func _on_check_button_toggled(toggled_on: bool) -> void:
-	ConfigManager.set_value(ConfigManager.ConfigKey.API_TEXT_TO_SPEACH_ENABLED, toggled_on)
+	ConfigManager.set_value(ConfigManager.ConfigKey.API_TEXT_TO_SPEECH_ENABLED, toggled_on)
 	if toggled_on:
 		eleven_labs_field.show()
 	else:
