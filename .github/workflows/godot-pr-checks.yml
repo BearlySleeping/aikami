@@ -21,7 +21,7 @@ jobs:
             - uses: actions/checkout@v4
             - uses: streetsidesoftware/cspell-action@v6
               with:
-                  config: './vscode/cspell.json'
+                  config: '.vscode/cspell.json'
                   incremental_files_only: false
                   root: './game'
 
