@@ -14,6 +14,7 @@ const DOMAIN := "https://api.elevenlabs.io"
 const PATH := "/v1/text-to-speech"
 
 # https://api.elevenlabs.io/v1/voices
+# cSpell:disable
 const VOICES := {
 	"Rachel": "21m00Tcm4TlvDq8ikWAM",
 	"Drew": "29vD33N1CtxCmqQRPOHJ",
@@ -62,6 +63,7 @@ const VOICES := {
 	"Giovanni": "zcAOhNBS3c14rBihAFp1",
 	"Mimi": "zrHiDhphv9ZnVXBqCLjz"
 }
+# cSpell:enable
 
 # Whether to use audio stream endpoint
 var use_stream_mode := true
@@ -83,6 +85,7 @@ func _init(p_api_key: String) -> void:
 
 func _get_voice_id_from_type(voice_type: Enum.VoiceType) -> String:
 	match voice_type:
+		# cSpell:disable
 		Enum.VoiceType.MALE_OLD:
 			return "29vD33N1CtxCmqQRPOHJ"
 		Enum.VoiceType.MALE_DEFAULT:
@@ -97,6 +100,7 @@ func _get_voice_id_from_type(voice_type: Enum.VoiceType) -> String:
 			return "zrHiDhphv9ZnVXBqCLjz"
 		_:
 			return "Xb7hH8MSUJpSbSDYk0k2"
+		# cSpell:enable
 
 
 func _setup_socket() -> void:
@@ -233,7 +237,7 @@ func _get_options(text: String) -> Dictionary:
 		"model_id": "eleven_monolingual_v1",
 		# The text that will get converted into speech.
 		"text": text,
-		# Voice settings overriding stored setttings for the given voice. They are applied only on the given request.
+		# Voice settings overriding stored settings for the given voice. They are applied only on the given request.
 		"voice_settings": _get_voice_settings(),
 	}
 	return options

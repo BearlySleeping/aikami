@@ -6,7 +6,7 @@ extends BaseAPI
 class FieldModel:
 	## The key of the field, has to be unique of the fields provided
 	var name: String
-	## Description to help the AI know what the porpuse of the field is.
+	## Description to help the AI know what the purpose of the field is.
 	var description: String
 	## Valid options: string, number, array
 	var type: String

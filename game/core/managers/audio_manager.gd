@@ -1,7 +1,7 @@
 extends Node
 
 ## The names of the songs.
-## Notes these are song from the album Dead but Dreaming by vivivivivi:
+## Notes these are song from the album Dead but Dreaming:
 ## https://tech-noir1.bandcamp.com/album/dead-but-dreaming
 ## We don't have the rights it is just placeholder to vibe while debugging
 enum TrackName {

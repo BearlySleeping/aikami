@@ -13,7 +13,7 @@ static func random_bytes(n: int) -> Array[int]:
 	return r
 
 
-static func uuidbin() -> Array[int]:
+static func uuid_bin() -> Array[int]:
 	var b := random_bytes(16)
 
 	b[6] = (b[6] & 0x0f) | 0x40
@@ -22,7 +22,7 @@ static func uuidbin() -> Array[int]:
 
 
 static func v4() -> String:
-	var b := uuidbin()
+	var b := uuid_bin()
 
 	var low := "%02x%02x%02x%02x" % [b[0], b[1], b[2], b[3]]
 	var mid := "%02x%02x" % [b[4], b[5]]

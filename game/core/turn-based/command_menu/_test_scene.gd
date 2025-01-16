@@ -9,7 +9,7 @@ func _on_command_menu_command_selected(command: Resource) -> void:
 
 
 func _ready() -> void:
-	Global.__set_playground_mode()
+	Global.test_set_playground_mode()
 
 
 func _unhandled_input(event: InputEvent) -> void:

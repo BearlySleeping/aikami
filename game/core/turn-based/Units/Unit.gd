@@ -1,6 +1,6 @@
 @tool
-extends Node2D
 class_name Unit
+extends Node2D
 
 signal turn_started(unit: Unit)
 
@@ -19,16 +19,16 @@ var attack := 10
 var defense := 5
 var is_enemy: bool = false
 
-@onready var pointer_sprite: Sprite2D = $PointerSprite
-@onready var avatar_sprite: Sprite2D = $AvatarSprite
-@onready var health_progress_bar: ProgressBar = $HealthProgressBar
-@onready var animation_player: AnimationPlayer = $AnimationPlayer
-
 var health: float = 7:
 	set(value):
 		health = value
 		_update_health_progress_bar()
 		_play_animation()
+
+@onready var pointer_sprite: Sprite2D = $PointerSprite
+@onready var avatar_sprite: Sprite2D = $AvatarSprite
+@onready var health_progress_bar: ProgressBar = $HealthProgressBar
+@onready var animation_player: AnimationPlayer = $AnimationPlayer
 
 
 func update_data(p_unit_id: NPCManager.PredefinedNPC) -> void:
