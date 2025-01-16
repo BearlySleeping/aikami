@@ -138,14 +138,12 @@ func _ready() -> void:
 	_inventory_control_drop_zone.size = size
 	resized.connect(func() -> void: _inventory_control_drop_zone.size = size)
 	Draggable.draggable_grabbed.connect(
-		func(_draggable: Draggable, _grab_position: Vector2) -> void: (
+		func(_draggable: Draggable, _grab_position: Vector2) -> void:
 			_inventory_control_drop_zone.activate()
-		)
 	)
 	Draggable.draggable_dropped.connect(
-		func(_draggable: Draggable, _zone: DropZone, _drop_position: Vector2) -> void: (
+		func(_draggable: Draggable, _zone: DropZone, _drop_position: Vector2) -> void:
 			_inventory_control_drop_zone.deactivate()
-		)
 	)
 	_inventory_control_drop_zone.mouse_entered.connect(_on_drop_zone_mouse_entered)
 	_inventory_control_drop_zone.mouse_exited.connect(_on_drop_zone_mouse_exited)

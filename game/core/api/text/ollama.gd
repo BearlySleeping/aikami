@@ -148,8 +148,10 @@ func _to_gpt_function_request(function_call_model: CallFunctionRequestModel) -> 
 			field_properties["enum"] = field.enum_fields  # Add enum to properties if it's not null and not empty
 		properties[field.name] = field_properties
 
-	var required_fields: Array = fields.filter(func(x: FieldModel) -> bool: return x.required).map(
-		func(x: FieldModel) -> String: return x.name
+	var required_fields: Array = (
+		fields
+		. filter(func(x: FieldModel) -> bool: return x.required)
+		. map(func(x: FieldModel) -> String: return x.name)
 	)
 	return {
 		"type": "function",
