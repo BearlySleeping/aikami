@@ -1,0 +1,63 @@
+name: Discord Notifications
+
+on:
+    push:
+        branches:
+            - '**' # Notify for all branches
+    pull_request:
+        branches:
+            - '**' # Notify for all PRs
+    workflow_run:
+        workflows: ['Generic CI', 'Godot CI', 'Build, Release and Deploy']
+        types:
+            - completed
+
+jobs:
+    notify-on-push:
+        name: Notify on Push
+        runs-on: ubuntu-latest
+        steps:
+            - name: Notify Discord about Commit
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '🚀 New Commit Pushed!'
+                  embed-description: |
+                      **Commit Message:** ${{ github.event.head_commit.message }}
+                      **Branch:** ${{ github.ref_name }}
+                      **Author:** ${{ github.actor }}
+                      [View Commit](${{ github.event.head_commit.url }})
+                  embed-color: 3066993 # Blue
+
+    notify-on-completion:
+        name: Notify on Workflow Completion
+        runs-on: ubuntu-latest
+        if: ${{ always() }} # Runs whether the workflow succeeds or fails
+        steps:
+            - name: Notify Discord about Workflow Status
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: 'Status: ${{ job.status }} for ${{ github.workflow }}'
+                  embed-description: |
+                      **Repository:** ${{ github.repository }}
+                      **Branch:** ${{ github.ref_name }}
+                      **Triggered by:** ${{ github.actor }}
+                  embed-color: ${{ job.status == 'success' && 3066993 || 15158332 }} # Green for success, Red for failure
+
+    notify-on-failure:
+        name: Notify on Failure
+        runs-on: ubuntu-latest
+        if: ${{ failure() }}
+        steps:
+            - name: Notify Discord about Failure
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '🚨 Workflow Failed!'
+                  embed-description: |
+                      **Workflow:** ${{ github.workflow }}
+                      **Branch:** ${{ github.ref_name }}
+                      **Failed Job:** ${{ github.job }}
+                      **Triggered by:** ${{ github.actor }}
+                  embed-color: 15158332 # Red

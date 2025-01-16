@@ -114,7 +114,6 @@ var inventory: InventoryGrid:
 var _inventory_control_item_container: Control
 var _inventory_control_drop_zone: DropZone
 var _selected_item: InterfaceInventoryItem
-
 var _field_background_grid: Control
 var _field_backgrounds: Array
 var _selection_panel: Panel

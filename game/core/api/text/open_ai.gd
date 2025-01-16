@@ -203,14 +203,14 @@ func _handle_stream_chunk(chunk: PackedByteArray) -> void:
 	response = response.strip_edges()  # Remove leading and trailing whitespaces, including new lines
 	var data_entries := response.split("\n\n")  # Split the body into individual data entries
 	for entry in data_entries:
-		if !handle_chunk_entry(entry.replace("data: ", "")):
+		if !_handle_chunk_entry(entry.replace("data: ", "")):
 			return
 
 
-func handle_chunk_entry(entry: String) -> bool:
-	Logger.debug("handle_chunk_entry:entry", entry)
+func _handle_chunk_entry(entry: String) -> bool:
+	Logger.debug("_handle_chunk_entry:entry", entry)
 	if entry == "[DONE]":
-		Logger.debug("handle_chunk_entry:stream_result", _stream_text)
+		Logger.debug("_handle_chunk_entry:stream_result", _stream_text)
 		_http_stream_client.finish_request()
 		SignalManager.text_chunk_added.emit("")
 		return false
