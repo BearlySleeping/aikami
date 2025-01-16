@@ -1,7 +1,16 @@
-extends CanvasLayer
 class_name CommandMenu
+extends CanvasLayer
 
 signal command_selected(command: Resource)
+
+const COMMAND_BUTTON = preload("res://core/turn-based/command_menu/command_button.tscn")
+
+var attack := SkillResource.new("Attack", SkillResource.TargetType.ENEMIES)
+
+var skills: Array[SkillResource] = [
+	SkillResource.new("Heal", SkillResource.TargetType.PLAYERS),
+	SkillResource.new("Slash", SkillResource.TargetType.ENEMIES)
+]
 
 @onready var attack_button: Button = %AttackButton
 @onready var skills_button: Button = %SkillsButton
@@ -9,15 +18,6 @@ signal command_selected(command: Resource)
 
 @onready var main_commands: VBoxContainer = %MainCommands
 @onready var skill_container: VBoxContainer = %SkillCommands
-
-const COMMAND_BUTTON = preload("res://core/turn-based/command_menu/command_button.tscn")
-
-var attack := SkillResource.new("Attack", SkillResource.TARGET_TYPE.ENEMIES)
-
-var skills: Array[SkillResource] = [
-	SkillResource.new("Heal", SkillResource.TARGET_TYPE.PLAYERS),
-	SkillResource.new("Slash", SkillResource.TARGET_TYPE.ENEMIES)
-]
 
 
 func _ready() -> void:

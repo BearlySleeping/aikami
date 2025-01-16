@@ -1,13 +1,13 @@
-extends Node2D
 class_name UnitGroup
+extends Node2D
+
+const UNIT = preload("res://core/turn-based/units/unit.tscn")
 
 @export var unit_type := Enum.UnitType.PARTY
 @export var unit_ids: Array[NPCManager.PredefinedNPC] = []
 
 var units: Array[Unit] = []
 var current_index: int = 0
-
-const UNIT = preload("res://core/turn-based/units/unit.tscn")
 
 
 func initialize(p_unit_type: Enum.UnitType, p_unit_ids: Array[NPCManager.PredefinedNPC]) -> void:

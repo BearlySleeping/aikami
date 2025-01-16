@@ -379,3 +379,9 @@ $RECYCLE.BIN/
 *.msp
 *.lnk
 *.generated.props
+
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/cspell.json

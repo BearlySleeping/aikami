@@ -14,12 +14,11 @@ const BASE_RULES := [
 var dialogue_scene := preload("res://interface/dialogue/dialogue_ui.tscn")
 var dialogue_ui: DialogueUI
 var audio_stream_player: AudioStreamPlayer
+## If dialogue is active, aka dialogue ui is visible
+var is_active: bool = false
 
 var _stored_streamed_audio: PackedByteArray
 var _stream := AudioStreamMP3.new()
-
-## If dialogue is active, aka dialogue ui is visible
-var is_active: bool = false
 
 static var _current_npc_id: NPCManager.PredefinedNPC = NPCManager.PredefinedNPC.NONE
 static var _messages: PackedStringArray = []

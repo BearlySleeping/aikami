@@ -31,7 +31,7 @@ func _start_turn() -> void:
 
 	active_unit = units[current_unit_index]
 	if active_unit.health <= 0:
-		_end_turn()
+		end_turn()
 		return
 
 	turn_started.emit(active_unit)
@@ -48,7 +48,7 @@ func execute_command(command: SkillResource, target: Unit) -> void:
 	# Add other command types here
 
 	current_state = BattleState.IDLE
-	_end_turn()
+	end_turn()
 
 
 func _execute_ai_turn() -> void:
@@ -60,7 +60,7 @@ func _execute_ai_turn() -> void:
 	else:
 		target = _get_best_target_for_ally()
 
-	execute_command(SkillResource.new("Attack", SkillResource.TARGET_TYPE.ENEMIES), target)
+	execute_command(SkillResource.new("Attack", SkillResource.TargetType.ENEMIES), target)
 
 
 func start_targeting(command: SkillResource) -> void:
@@ -70,19 +70,19 @@ func start_targeting(command: SkillResource) -> void:
 	targeting_started.emit(valid_targets)
 
 
-func _get_valid_targets(target_type: SkillResource.TARGET_TYPE) -> Array[Unit]:
+func _get_valid_targets(target_type: SkillResource.TargetType) -> Array[Unit]:
 	var targets: Array[Unit] = []
 	for unit in units:
 		if unit.health <= 0:
 			continue
 
 		if (
-			target_type == SkillResource.TARGET_TYPE.ENEMIES
+			target_type == SkillResource.TargetType.ENEMIES
 			and unit.unit_type == Enum.UnitType.ENEMY
 		):
 			targets.append(unit)
 		elif (
-			target_type == SkillResource.TARGET_TYPE.PLAYERS
+			target_type == SkillResource.TargetType.PLAYERS
 			and unit.unit_type == Enum.UnitType.PARTY
 		):
 			targets.append(unit)
@@ -115,7 +115,7 @@ func _get_best_target_for_ally() -> Unit:
 	return target
 
 
-func _end_turn() -> void:
+func end_turn() -> void:
 	current_unit_index = (current_unit_index + 1) % units.size()
 	if _check_battle_end():
 		return
@@ -134,7 +134,7 @@ func _check_battle_end() -> bool:
 	if allies_alive == 0:
 		battle_ended.emit("enemies")
 		return true
-	elif enemies_alive == 0:
+	if enemies_alive == 0:
 		battle_ended.emit("party")
 		return true
 
@@ -152,7 +152,7 @@ func _is_enemy_unit_alive(unit: Unit) -> bool:
 func remove_unit(unit: Unit) -> void:
 	units.erase(unit)
 	if active_unit == unit:
-		_end_turn()
+		end_turn()
 
 
 # User tries to run from the battle
