@@ -16,6 +16,7 @@ signal add_child_to_scene(child: Node)
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child_to_scene.connect(add_child)
 
 

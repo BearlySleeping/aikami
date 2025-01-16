@@ -16,3 +16,7 @@ static var _base_save_path := "res://__debug/" if Global.is_development else "us
 
 static func get_save_path(path: String) -> String:
 	return _base_save_path + path
+
+## Only use this function when debugging
+static func __set_playground_mode():
+	Hud.visible = false

@@ -1,93 +1,87 @@
-## Represents a unit on the game board.
-## The board manages its position inside the game grid.
-## The unit itself holds stats and a visual representation that moves smoothly in the game world.
 @tool
+extends Node2D
 class_name Unit
-extends Path2D
 
-## Emitted when the unit reached the end of a path along which it was walking.
-signal walk_finished
+signal turn_started(unit: Unit)
 
-## Shared resource of type Grid, used to calculate map coordinates.
-@export var grid: Resource
-## Distance to which the unit can walk in cells.
-@export var move_range := 6
-## The unit's move speed when it's moving along a path.
-@export var move_speed := 600.0
-## Texture representing the unit.
-@export var skin: Texture:
+@export var unit_type := Enum.UnitType.PARTY
+@export var unit_id := NPCManager.PredefinedNPC.NONE:
 	set(value):
-		skin = value
-		if not _sprite:
-			# This will resume execution after this node's _ready()
-			await ready
-		_sprite.texture = value
-## Offset to apply to the `skin` sprite in pixels.
-@export var skin_offset := Vector2.ZERO:
+		if unit_id == value:
+			return
+		unit_id = value
+		update_data(value)
+
+var label := "Default Unit"
+var max_health := 100
+var mana := 50
+var attack := 10
+var defense := 5
+var is_enemy: bool = false
+
+@onready var pointer_sprite: Sprite2D = $PointerSprite
+@onready var avatar_sprite: Sprite2D = $AvatarSprite
+@onready var health_progress_bar: ProgressBar = $HealthProgressBar
+@onready var animation_player: AnimationPlayer = $AnimationPlayer
+
+var health: float = 7:
 	set(value):
-		skin_offset = value
-		if not _sprite:
-			await ready
-		_sprite.position = value
-
-## Coordinates of the current cell the cursor moved to.
-var cell := Vector2.ZERO:
-	set(value):
-		# When changing the cell's value, we don't want to allow coordinates outside
-		#	the grid, so we clamp them
-		cell = grid.grid_clamp(value)
-## Toggles the "selected" animation on the unit.
-var is_selected := false:
-	set(value):
-		is_selected = value
-		if is_selected:
-			_anim_player.play("selected")
-		else:
-			_anim_player.play("idle")
-
-var _is_walking := false:
-	set(value):
-		_is_walking = value
-		set_process(_is_walking)
-
-@onready var _sprite: Sprite2D = $PathFollow2D/Sprite
-@onready var _anim_player: AnimationPlayer = $AnimationPlayer
-@onready var _path_follow: PathFollow2D = $PathFollow2D
+		health = value
+		_update_health_progress_bar()
+		_play_animation()
 
 
-func _ready() -> void:
-	set_process(false)
-	_path_follow.rotates = false
-
-	cell = grid.calculate_grid_coordinates(position)
-	position = grid.calculate_map_position(cell)
-
-	# We create the curve resource here because creating it in the editor prevents us from
-	# moving the unit.
-	if not Engine.is_editor_hint():
-		curve = Curve2D.new()
-
-
-func _process(delta: float) -> void:
-	_path_follow.progress += move_speed * delta
-
-	if _path_follow.progress_ratio >= 1.0:
-		_is_walking = false
-		# Setting this value to 0.0 causes a Zero Length Interval error
-		_path_follow.progress = 0.00001
-		position = grid.calculate_map_position(cell)
-		curve.clear_points()
-		emit_signal("walk_finished")
+func update_data(p_unit_id: NPCManager.PredefinedNPC) -> void:
+	if p_unit_id == NPCManager.PredefinedNPC.NONE:
+		return set_player_data()
+	var npc_data := NPCManager.get_npc(p_unit_id)
+	if not npc_data:
+		return push_error("NPC data not found for npc_id: ", p_unit_id)
+	var npc_dynamic_data := NPCManager.get_dynamic_npc_data(p_unit_id)
+	label = npc_data.name
+	max_health = npc_dynamic_data.health
+	mana = npc_dynamic_data.mana
+	attack = npc_dynamic_data.attack
+	defense = npc_dynamic_data.defense
+	update_sprite(npc_data.unit_sprite_path)
 
 
-## Starts walking along the `path`.
-## `path` is an array of grid coordinates that the function converts to map coordinates.
-func walk_along(path: PackedVector2Array) -> void:
-	if path.is_empty():
-		return
+func set_player_data() -> void:
+	var player_data := PlayerManager.get_current_player()
+	var player_dynamic_data := PlayerManager.get_current_player_dynamic_data()
+	label = player_data.name
+	max_health = player_dynamic_data.health
+	mana = player_dynamic_data.mana
+	attack = player_dynamic_data.attack
+	defense = player_dynamic_data.defense
+	update_sprite(player_data.unit_sprite_path)
 
-	curve.add_point(Vector2.ZERO)
-	for point in path:
-		curve.add_point(grid.calculate_map_position(point) - position)
-	cell = path[-1]
-	_is_walking = true
+
+func update_sprite(sprite_path: String) -> void:
+	await ready
+	avatar_sprite.flip_h = unit_type == Enum.UnitType.ENEMY
+	avatar_sprite.texture = load(sprite_path)
+
+
+func _update_health_progress_bar() -> void:
+	health_progress_bar.value = (health / max_health) * 100
+
+
+func _play_animation() -> void:
+	animation_player.play("hurt")
+
+
+func focus() -> void:
+	pointer_sprite.show()
+
+
+func unfocus() -> void:
+	pointer_sprite.hide()
+
+
+func take_damage(value: int) -> void:
+	health -= value
+
+
+func start_turn() -> void:
+	turn_started.emit()

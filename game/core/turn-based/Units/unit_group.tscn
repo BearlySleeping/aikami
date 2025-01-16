@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://ltjwfvwdlhpp"]
+
+[ext_resource type="Script" path="res://core/turn-based/units/unit_group.gd" id="1_v2pgd"]
+
+[node name="UnitGroup" type="Node2D"]
+script = ExtResource("1_v2pgd")

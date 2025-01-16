@@ -78,3 +78,8 @@ static func capitalize_first_letter(input: String) -> String:
 
 	# Capitalize the first letter and make the rest lowercase
 	return input.substr(0, 1).to_upper() + input.substr(1, input.length() - 1).to_lower()
+
+
+## Convert a string to PascalCase
+static func to_enum_string(enum_fields: Dictionary, enum_value: int) -> String:
+	return enum_fields.keys()[enum_value].to_pascal_case()
