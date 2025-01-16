@@ -26,8 +26,9 @@ jobs:
             # Runs spellcheck using cspell
             # Requires cspell.json in root directory
             - name: Check spelling
-              uses: streetsidesoftware/cspell-action@v6.15.0
+              uses: streetsidesoftware/cspell-action@v6
               with:
+                  # See https://github.com/streetsidesoftware/cspell-action?tab=readme-ov-file#usage
                   config: './cspell.json'
                   incremental_files_only: false # Check all files, not just changed ones
                   root: '.'
