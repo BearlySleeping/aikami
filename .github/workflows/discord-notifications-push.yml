@@ -2,8 +2,7 @@ name: Discord Push Notifications
 
 on:
     push:
-        branches:
-            - '**' # Notify for all branches
+        branches: ['master', 'main', 'dev']
         paths:
             - '**' # Notify only when files are changed
 
