@@ -1,30 +1,70 @@
-class_name NPCDynamicModel
-extends BaseDynamicCharacter
+class_name NPCModel
+extends BaseCharacterModel
 
-## Timestamp in game minutes when the npc last spoke with the player
-## if -1, the npc has never spoke to the player before
-var last_time_spoke_at: int
+## Describes the NPC's usual location.
+## @optional
+var location: String
 
-## Things the npc remember, example player's name, any memorable things said in previous conversations.
-## Example ["Player's name is Sonny", "Player insulted me", "Player's favorite food is pie", "You revealed that you are a wizard"]
-var recollections: PackedStringArray
+## Describes the NPC's personality.
+## @optional
+var personality: String
 
-var relationship_level_with_player: int
+## Describes the NPC's demeanor and speech patterns.
+## @optional
+var demeanor_and_speech: String
+
+## Describes the NPC's backstory.
+## @optional
+var backstory: String
+
+## Describes the NPC's goals.
+## @optional
+var goals: String
+
+## Describes the NPC's fears.
+## @optional
+var fears: String
+
+## Describes what the NPC likes.
+## @optional
+var likes: String
+
+## Describes what the NPC dislikes.
+## @optional
+var dislikes: String
+
+## Describes the NPC's abilities.
+## @optional
+var abilities: String
+
+## Describes the NPC's weaknesses.
+## @optional
+var weaknesses: String
+
+## Describes the NPC's relationships with others.
+## @optional
+var relationships: String
+
+## Describes the NPC's voice type.
+var voice_type: Enum.VoiceType
+
+var current_mood := "default"
+
+var dynamic_data: NPCDynamicModel
 
 
-func _init(data: Dictionary) -> void:
-	super(data)
-	last_time_spoke_at = data.get("last_time_spoke_at", -1)
-	recollections = data.get("recollections", [])
-	relationship_level_with_player = data.get("relationship_level_with_player", 50)
+func _init(npc_id: String, npc_data: Dictionary) -> void:
+	super(npc_id, npc_data)
 
-
-func to_dict() -> Dictionary:
-	var dict := super()
-	if last_time_spoke_at != -1:
-		dict.last_time_spoke_at = last_time_spoke_at
-	if not recollections.is_empty():
-		dict.recollections = recollections
-	if relationship_level_with_player != 50:
-		dict.relationship_level_with_player = relationship_level_with_player
-	return dict
+	location = npc_data.location
+	personality = npc_data.personality
+	demeanor_and_speech = npc_data.demeanor_and_speech
+	backstory = npc_data.backstory
+	goals = npc_data.goals
+	fears = npc_data.fears
+	likes = npc_data.likes
+	dislikes = npc_data.dislikes
+	abilities = npc_data.abilities
+	weaknesses = npc_data.weaknesses
+	relationships = npc_data.relationships
+	voice_type = npc_data.voice_type

@@ -114,7 +114,6 @@ var inventory: InventoryGrid:
 var _inventory_control_item_container: Control
 var _inventory_control_drop_zone: DropZone
 var _selected_item: InterfaceInventoryItem
-
 var _field_background_grid: Control
 var _field_backgrounds: Array
 var _selection_panel: Panel
@@ -139,14 +138,12 @@ func _ready() -> void:
 	_inventory_control_drop_zone.size = size
 	resized.connect(func() -> void: _inventory_control_drop_zone.size = size)
 	Draggable.draggable_grabbed.connect(
-		func(_draggable: Draggable, _grab_position: Vector2) -> void: (
+		func(_draggable: Draggable, _grab_position: Vector2) -> void:
 			_inventory_control_drop_zone.activate()
-		)
 	)
 	Draggable.draggable_dropped.connect(
-		func(_draggable: Draggable, _zone: DropZone, _drop_position: Vector2) -> void: (
+		func(_draggable: Draggable, _zone: DropZone, _drop_position: Vector2) -> void:
 			_inventory_control_drop_zone.deactivate()
-		)
 	)
 	_inventory_control_drop_zone.mouse_entered.connect(_on_drop_zone_mouse_entered)
 	_inventory_control_drop_zone.mouse_exited.connect(_on_drop_zone_mouse_exited)
@@ -287,7 +284,7 @@ func _get_global_field_position(field_coords: Vector2i) -> Vector2:
 	return _get_field_position(field_coords) + global_position
 
 
-func _draw_grid(pos: Vector2, w: int, h: int, fsize: Vector2, spacing: int) -> void:
+func _draw_grid(pos: Vector2, w: int, h: int, f_size: Vector2, spacing: int) -> void:
 	if w <= 0 || h <= 0 || spacing < 0:
 		return
 
@@ -295,22 +292,22 @@ func _draw_grid(pos: Vector2, w: int, h: int, fsize: Vector2, spacing: int) -> v
 		var rect := Rect2(pos, _get_inventory_size_px())
 		draw_rect(rect, grid_color, false)
 		for i in range(w):
-			var from: Vector2 = Vector2(i * fsize.x, 0) + pos
-			var to: Vector2 = Vector2(i * fsize.x, rect.size.y) + pos
+			var from: Vector2 = Vector2(i * f_size.x, 0) + pos
+			var to: Vector2 = Vector2(i * f_size.x, rect.size.y) + pos
 			from += Vector2(spacing, 0)
 			to += Vector2(spacing, 0)
 			draw_line(from, to, grid_color)
 		for j in range(h):
-			var from: Vector2 = Vector2(0, j * fsize.y) + pos
-			var to: Vector2 = Vector2(rect.size.x, j * fsize.y) + pos
+			var from: Vector2 = Vector2(0, j * f_size.y) + pos
+			var to: Vector2 = Vector2(rect.size.x, j * f_size.y) + pos
 			from += Vector2(0, spacing)
 			to += Vector2(0, spacing)
 			draw_line(from, to, grid_color)
 	else:
 		for i in range(w):
 			for j in range(h):
-				var field_pos := pos + Vector2(i * fsize.x, j * fsize.y) + Vector2(i, j) * spacing
-				var field_rect := Rect2(field_pos, fsize)
+				var field_pos := pos + Vector2(i * f_size.x, j * f_size.y) + Vector2(i, j) * spacing
+				var field_rect := Rect2(field_pos, f_size)
 				draw_rect(field_rect, grid_color, false)
 
 

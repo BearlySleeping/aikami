@@ -2,9 +2,12 @@ class_name BaseDynamicCharacter
 extends BaseModel
 
 # Dynamic properties
-var level: int = 1
-var health: int = 100
-var experience: int = 0
+var level := 1
+var attack := 5
+var defense := 5
+var health := 100
+var mana := 100
+var experience := 0
 var inventory: Array = []
 var equipment: Array = []
 
@@ -33,14 +36,17 @@ func add_experience(p_experience: int) -> void:
 
 func _init(data: Dictionary) -> void:
 	level = data.get("level", 1)
+	attack = data.get("attack", 5)
+	defense = data.get("defense", 5)
 	health = data.get("health", 100)
+	mana = data.get("mana", 100)
 	experience = data.get("experience", 0)
 	inventory = data.get("inventory", [])
 	equipment = data.get("equipment", [])
 
 
 func to_dict() -> Dictionary:
-	var dict := {"level": level, "health": health, "experience": experience}
+	var dict := {"level": level, "health": health, "experience": experience, "attack": attack}
 	if inventory and not inventory.is_empty():
 		dict.inventory = inventory
 	if equipment and not equipment.is_empty():

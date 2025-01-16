@@ -1,15 +1,15 @@
-[gd_scene load_steps=7 format=3 uid="uid://d4mhjq651egt"]
+[gd_scene load_steps=7 format=3 uid="uid://dqukt8cwhn0p"]
 
-[ext_resource type="Script" path="res://core/turn-based/units/Unit.gd" id="1"]
-[ext_resource type="Resource" path="res://core/turn-based/board/Grid.tres" id="2"]
-[ext_resource type="Texture2D" uid="uid://b5ghlcxjxmmgw" path="res://core/turn-based/units/unit_shadow.svg" id="3"]
+[ext_resource type="Script" path="res://core/turn-based/units/unit.gd" id="1_16gvw"]
+[ext_resource type="Texture2D" uid="uid://c8vamggynbxpa" path="res://assets/npc/aragon/unit.png" id="1_ox5oi"]
+[ext_resource type="Texture2D" uid="uid://dcq7dp1h0chdm" path="res://core/turn-based/assets/cursor_finger.png" id="3_nybw8"]
 
-[sub_resource type="Animation" id="1"]
+[sub_resource type="Animation" id="Animation_77rr1"]
 length = 0.001
 tracks/0/type = "value"
 tracks/0/imported = false
 tracks/0/enabled = true
-tracks/0/path = NodePath("PathFollow2D/Sprite:modulate")
+tracks/0/path = NodePath("AvatarSprite:self_modulate")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = {
@@ -19,47 +19,50 @@ tracks/0/keys = {
 "values": [Color(1, 1, 1, 1)]
 }
 
-[sub_resource type="Animation" id="2"]
-length = 1.4
+[sub_resource type="Animation" id="Animation_rnu4q"]
+resource_name = "hurt"
 tracks/0/type = "value"
 tracks/0/imported = false
 tracks/0/enabled = true
-tracks/0/path = NodePath("PathFollow2D/Sprite:modulate")
+tracks/0/path = NodePath("AvatarSprite:self_modulate")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = {
-"times": PackedFloat32Array(0, 0.7),
-"transitions": PackedFloat32Array(1, 1),
+"times": PackedFloat32Array(0, 0.2, 0.4, 0.6),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
 "update": 0,
-"values": [Color(1.5, 1.5, 1.5, 1), Color(1, 1, 1, 1)]
+"values": [Color(30, 30, 30, 1), Color(1, 1, 1, 1), Color(30, 30, 30, 1), Color(1, 1, 1, 1)]
 }
 
-[sub_resource type="AnimationLibrary" id="AnimationLibrary_5dan3"]
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_8rxi3"]
 _data = {
-"idle": SubResource("1"),
-"selected": SubResource("2")
+"RESET": SubResource("Animation_77rr1"),
+"hurt": SubResource("Animation_rnu4q")
 }
 
-[node name="Unit" type="Path2D"]
-script = ExtResource("1")
-grid = ExtResource("2")
+[node name="Unit" type="Node2D"]
+script = ExtResource("1_16gvw")
+unit_id = null
 
-[node name="PathFollow2D" type="PathFollow2D" parent="."]
-rotates = false
-loop = false
+[node name="AvatarSprite" type="Sprite2D" parent="."]
+texture = ExtResource("1_ox5oi")
 
-[node name="Shadow" type="Sprite2D" parent="PathFollow2D"]
-modulate = Color(0.101961, 0.109804, 0.0901961, 0.329412)
-position = Vector2(0, 5.43238)
-texture = ExtResource("3")
+[node name="PointerSprite" type="Sprite2D" parent="."]
+visible = false
+position = Vector2(-16, 0)
+scale = Vector2(0.15, 0.15)
+texture = ExtResource("3_nybw8")
 
-[node name="Sprite" type="Sprite2D" parent="PathFollow2D"]
-position = Vector2(2, 0)
-scale = Vector2(0.24, 0.24)
-offset = Vector2(-3.8147e-06, -185)
+[node name="HealthProgressBar" type="ProgressBar" parent="."]
+offset_left = -8.0
+offset_top = -18.0
+offset_right = 92.0
+offset_bottom = 9.0
+scale = Vector2(0.15, 0.15)
+value = 100.0
+metadata/_edit_use_anchors_ = true
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
-"": SubResource("AnimationLibrary_5dan3")
+"": SubResource("AnimationLibrary_8rxi3")
 }
-autoplay = "idle"

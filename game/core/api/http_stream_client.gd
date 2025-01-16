@@ -125,8 +125,8 @@ func _attempt_to_connect() -> bool:
 	return true
 
 
-func _attempt_to_request(httpclient_status: int) -> void:
-	if httpclient_status != HTTPClient.STATUS_CONNECTED:
+func _attempt_to_request(http_client_status: int) -> void:
+	if http_client_status != HTTPClient.STATUS_CONNECTED:
 		return
 	_is_requested = true
 	var request_error := _http_client.request(HTTPClient.METHOD_POST, _path, _headers, _body)

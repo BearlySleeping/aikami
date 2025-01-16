@@ -7,10 +7,22 @@ const PLAYER = preload("res://world/entities/player/player.tscn")
 var player: Player
 var player_spawned: bool = false
 
+var player_data: PlayerDynamicModel
+
 # Key is Enum.EquippedSlotType and the value is item id
 # Example:
 # Enum.EquippedSlotType.HEAD: "armor_chestplate_silver"
 var player_equipment := {}
+
+
+func get_current_player() -> PlayerModel:
+	return SaveManager.current_player
+
+
+func get_current_player_dynamic_data() -> PlayerDynamicModel:
+	if not player_data:
+		player_data = PlayerDynamicModel.new({})
+	return player_data
 
 
 func set_equipments(equipments: Dictionary) -> void:

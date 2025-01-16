@@ -62,7 +62,7 @@ func get_prototype_max_stack_size(prototype_id: String) -> int:
 	return StacksConstraint.get_prototype_max_stack_size(prototype_id)
 
 
-## ransfers the given item stack into the given inventory, joining it
+## Transfers the given item stack into the given inventory, joining it
 ## with any available item stacks with the same prototype ID.
 func transfer_automerge(item: InterfaceInventoryItem, destination: Inventory) -> bool:
 	return _constraint_manager.get_stacks_constraint().transfer_automerge(item, destination)
