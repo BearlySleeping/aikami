@@ -14,6 +14,7 @@ on:
             - 'game/**' # Only runs when game files change
 
 jobs:
+    # Spellcheck checks
     spell-check:
         name: 'Spellcheck'
         runs-on: ubuntu-latest
@@ -25,8 +26,8 @@ jobs:
                   incremental_files_only: false
                   root: './game'
 
-    # Formatting check
-    format-check:
+    # Formatting and linting checks
+    format-and-lint-check:
         name: 'GDScript Formatting Check'
         runs-on: ubuntu-latest
         steps:
@@ -42,18 +43,6 @@ jobs:
               run: |
                   cd game
                   gdformat --check ./
-
-    # Linting check
-    lint-check:
-        name: 'GDScript Linting Check'
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-
-            # Install GDScript toolkit for linting
-            - name: Setup GDScript toolkit
-              uses: Scony/godot-gdscript-toolkit@4.2.0
 
             # Run linting check
             - name: Run linting
