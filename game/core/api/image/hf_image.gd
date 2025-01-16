@@ -13,8 +13,8 @@ class Parameters:
 	## The width in pixels of the generated image
 	var width := 256
 
-	## The number of denoising steps.
-	## More denoising steps usually lead to a higher quality image at the expense of slower inference.
+	## The number of demising steps.
+	## More demising steps usually lead to a higher quality image at the expense of slower inference.
 	var num_inference_steps: int
 
 	## Guidance scale: Higher guidance scale encourages to generate images that are closely linked

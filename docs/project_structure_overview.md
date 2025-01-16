@@ -36,9 +36,9 @@ This document outlines the structure of our project, detailing the purpose of ea
 
 The `ai` directory contains all artificial intelligence-related scripts and models. It is organized into subcategories for different AI functionalities:
 
--   **Image**: For AI that deals with image processing and generation.
--   **Text**: Contains models and scripts for text analysis, generation, and understanding.
--   **Voice**: For voice recognition and generation AI components.
+- **Image**: For AI that deals with image processing and generation.
+- **Text**: Contains models and scripts for text analysis, generation, and understanding.
+- **Voice**: For voice recognition and generation AI components.
 
 These components utilize various technologies, including Hugging Face's transformers, custom Python scripts, and other machine learning tools. Right now this is only used to create static assets for the game folder, but this might also be expanded to create custom models that will be used in the game.
 
@@ -46,16 +46,16 @@ These components utilize various technologies, including Hugging Face's transfor
 
 The `game` directory houses all the Godot project files, scripts (GDScript), and assets. It is structured as follows to organize different types of game content:
 
--   **Audio**: Contains all audio files, including music and sound effects (SFX), organized further into `music` and `sfx`.
--   **Engine**: Scripts that form the game's engine, including APIs, managers (for dialogues, scenes, etc.), and utilities.
--   **Entities**: Game entities like NPCs and the player character, including their scripts, scenes, and assets.
--   **Maps**: Game levels and maps, including base maps and specific scenes.
--   **Models**: Data models used within the game, such as character models, item definitions, and other game logic-related structures.
--   **UI**: User interface components, including dialogue boxes, menus, and theming resources.
+- **Audio**: Contains all audio files, including music and sound effects (SFX), organized further into `music` and `sfx`.
+- **Engine**: Scripts that form the game's engine, including APIs, managers (for dialogues, scenes, etc.), and utilities.
+- **Entities**: Game entities like NPCs and the player character, including their scripts, scenes, and assets.
+- **Maps**: Game levels and maps, including base maps and specific scenes.
+- **Models**: Data models used within the game, such as character models, item definitions, and other game logic-related structures.
+- **UI**: User interface components, including dialogue boxes, menus, and theming resources.
 
 ### Landing-page (`/landing-page`)
 
-The `landing-page` is the ladning page for the game on `https://bearlysleeping.com`. It uses Astro and tailwind. The landing page get's auto updated every time a new release is pushed with github workflow actions.
+The `landing-page` is the landing page for the game on `https://bearlysleeping.com`. It uses Astro and tailwind. The landing page get's auto updated every time a new release is pushed with github workflow actions.
 
 ### Docs (`/docs`)
 
@@ -63,9 +63,9 @@ The `docs` directory contains all project documentation. This includes developer
 
 ### Additional Directories
 
--   **`.github`**: Contains GitHub-specific configurations, including workflows for CI (Continuous Integration).
--   **`lefthook.yml`**: Configuration file for Lefthook, used to manage Git hooks for actions like pre-commit checks.
--   **`LICENSE`**: The project's license file.
+- **`.github`**: Contains GitHub-specific configurations, including workflows for CI (Continuous Integration).
+- **`lefthook.yml`**: Configuration file for Lefthook, used to manage Git hooks for actions like pre-commit checks.
+- **`LICENSE`**: The project's license file.
 
 ## Summary
 

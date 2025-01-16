@@ -23,4 +23,6 @@ func _init(data: Dictionary) -> void:
 	character_class = data.character_class
 	gender = data.gender
 	appearance = data.appearance
-	avatar_path = data.get("avatar_path", "")
+	# TODO Implement based on your game's design
+	avatar_path = data.get("avatar_path", "res://assets/npc/generic/player_4.png")
+	unit_sprite_path = data.get("unit_sprite_path", "res://assets/npc/generic/player_4.png")
