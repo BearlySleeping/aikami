@@ -2,8 +2,12 @@ class_name NPCManager
 
 enum PredefinedNPC {
 	NONE,
+	# Allies:
 	ARAGON,
 	GANDALF,
+	# Enemies:
+	ORC,
+	TROLL,
 }
 
 # Constant dictionary for NPC templates
@@ -22,6 +26,7 @@ const PREDEFINED_NPCS: Dictionary = {
 			"sad": "res://assets/npc/gandalf/sad.webp",
 			"angry": "res://assets/npc/gandalf/angry.webp",
 		},
+		"unit_sprite_path": "res://assets/npc/gandalf/unit.png",
 		"animation_sprite_sheet_path": "res://assets/npc/gandalf/animation_sprite_sheet.png",
 		"appearance": ["Tall", "Grey robe", "Long white beard"],
 		"location": "Middle-earth",
@@ -51,6 +56,7 @@ const PREDEFINED_NPCS: Dictionary = {
 			"sad": "res://assets/npc/aragon/sad.webp",
 			"angry": "res://assets/npc/aragon/angry.webp",
 		},
+		"unit_sprite_path": "res://assets/npc/aragon/unit.png",
 		"animation_sprite_sheet_path": "res://assets/npc/aragon/animation_sprite_sheet.png",
 		"appearance": ["Tall", "Rugged"],
 		"location": "Rohan, Gondor",
@@ -65,6 +71,61 @@ const PREDEFINED_NPCS: Dictionary = {
 		"weaknesses": "Heavy burden of destiny",
 		"relationships": "Loves Arwen, friend of the Fellowship",
 		"voice_type": Enum.VoiceType.MALE_DEFAULT
+	},
+	# Enemies:
+	PredefinedNPC.ORC:
+	{
+		"race": Enum.Race.HALF_ORC,
+		"class": Enum.Class.BARBARIAN,
+		"name": "Orc Grunt",
+		"age": 25,
+		"gender": Enum.Gender.MALE,
+		"portraits":
+		{
+			"neutral": "res://assets/npc/orc/neutral.webp",
+		},
+		"unit_sprite_path": "res://assets/npc/orc/unit.png",
+		"animation_sprite_sheet_path": "res://assets/npc/orc/animation_sprite_sheet.png",
+		"appearance": ["Muscular", "Green skin", "Crude armor"],
+		"location": "Dark caverns, wastelands",
+		"personality": "Savage and aggressive",
+		"demeanor_and_speech": "Rough and gruff",
+		"backstory": "A common soldier in the service of dark forces.",
+		"goals": "Serve the dark lord, crush enemies",
+		"fears": "Bright light, powerful magic",
+		"likes": "Violence, spoils of war",
+		"dislikes": "Elves, weakness",
+		"abilities": "Brute strength, intimidation",
+		"weaknesses": "Low intelligence, disorganized",
+		"relationships": "Part of the Orc Horde",
+		"voice_type": Enum.VoiceType.MALE_OLD
+	},
+	PredefinedNPC.TROLL:
+	{
+		"race": Enum.Race.HALF_ORC,
+		"class": Enum.Class.BARBARIAN,
+		"name": "Mountain Troll",
+		"age": 50,
+		"gender": Enum.Gender.MALE,
+		"portraits":
+		{
+			"neutral": "res://assets/npc/troll/neutral.webp",
+		},
+		"unit_sprite_path": "res://assets/npc/troll/unit.png",
+		"animation_sprite_sheet_path": "res://assets/npc/troll/animation_sprite_sheet.png",
+		"appearance": ["Massive size", "Rocky skin", "Primitive weapons"],
+		"location": "Mountain caves",
+		"personality": "Dim-witted but dangerous",
+		"demeanor_and_speech": "Slow and brutish",
+		"backstory": "Guardians of the dark lord’s strongholds, feared for their immense power.",
+		"goals": "Protect the stronghold, destroy intruders",
+		"fears": "Fire, sunlight",
+		"likes": "Crushing things, eating",
+		"dislikes": "Small and fast enemies",
+		"abilities": "Overwhelming strength, durability",
+		"weaknesses": "Slow movement, low intelligence",
+		"relationships": "Servants of dark forces",
+		"voice_type": Enum.VoiceType.MALE_OLD
 	},
 }
 
@@ -112,12 +173,12 @@ static func get_portrait_texture(npc: NPCModel, mood := "neutral") -> Compressed
 
 # Method to save an NPC's dynamic data
 static func save_npc_dynamic_data(npc_id: PredefinedNPC) -> void:
-	var npc_dynamic_data := get_dynamic_data(npc_id)
+	var npc_dynamic_data := get_dynamic_npc_data(npc_id)
 	var path := _to_npc_save_path(npc_id)
 	SaveManager.save_file(path, npc_dynamic_data)
 
 
-static func get_dynamic_data(npc_id: PredefinedNPC) -> NPCDynamicModel:
+static func get_dynamic_npc_data(npc_id: PredefinedNPC) -> NPCDynamicModel:
 	var npc := get_npc(npc_id)  # This ensures the NPC model exists
 	if npc.dynamic_data:
 		return npc.dynamic_data

@@ -18,7 +18,7 @@ class_name SpriteSheetUpdater
 ##}
 ##var playerAnimationModel = AnimationModel.new(animation_positions, 6, 10)
 ##SpriteSheetUpdater.update_sprite_frames_with_new_sheet(animated_sprite_2d,
-##   "new_spirte.png", playerAnimationModel)
+##   "new_sprite.png", playerAnimationModel)
 ## [/codeblock]
 static func update_sprite_frames_with_new_sheet(
 	animated_sprite_2d: AnimatedSprite2D, new_sheet_path: String, animation_model: AnimationModel

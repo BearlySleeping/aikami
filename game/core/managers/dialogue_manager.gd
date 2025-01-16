@@ -1,5 +1,7 @@
 extends Node
 
+const NPC_TEXT_PLACEHOLDER = "[wave]...[/wave]"
+
 const BASE_RULES := [
 	"You are a NPC in a fantasy RPG engaging me in conversation.",
 	"You should initiate the conversation with the player.",
@@ -9,9 +11,11 @@ const BASE_RULES := [
 	"Avoid breaking character or mentioning modern or out-of-context elements."
 ]
 
-var dialogue_scene := preload("res://interface/dialogue/dialogue_box.tscn")
-var dialogue_box: DialogueBox
+var dialogue_scene := preload("res://interface/dialogue/dialogue_ui.tscn")
+var dialogue_ui: DialogueUI
 var audio_stream_player: AudioStreamPlayer
+## If dialogue is active, aka dialogue ui is visible
+var is_active: bool = false
 
 var _stored_streamed_audio: PackedByteArray
 var _stream := AudioStreamMP3.new()
@@ -30,15 +34,22 @@ func _ready() -> void:
 
 
 func _on_text_chunk_added(text: String) -> void:
+	if not is_active:
+		return
 	AIManager.generate_voice_with_text_chunk(text)
-	var exiting_text := dialogue_box.npc_container.text
-	if exiting_text == "...":
-		dialogue_box.update_npc_text(text)
+
+	if not text:
+		return
+	var exiting_text := dialogue_ui.npc_container.text
+	if exiting_text == NPC_TEXT_PLACEHOLDER:
+		dialogue_ui.update_npc_text(text)
 	else:
-		dialogue_box.update_npc_text(exiting_text + text)
+		dialogue_ui.update_npc_text(exiting_text + text)
 
 
 func _on_voice_chunk_added(chunk: PackedByteArray) -> void:
+	if not is_active:
+		return
 	Logger.debug("_on_voice_chunk_added:chunk size", chunk.size())
 	_stored_streamed_audio.append_array(chunk)
 	if audio_stream_player.playing:
@@ -83,23 +94,41 @@ func initialize_talk_with_npc(npc_id: NPCManager.PredefinedNPC) -> void:
 	if Global.dialogue_active or npc_id == _current_npc_id:
 		return
 	Global.dialogue_active = true
-	if !dialogue_box:
-		dialogue_box = dialogue_scene.instantiate()
-		get_tree().root.add_child(dialogue_box)
-		dialogue_box.initialize(SaveManager.current_player)
 	_current_npc_id = npc_id
 	_messages = []
 	_current_mood = "default"
 	var npc := NPCManager.get_npc(npc_id)
-	dialogue_box.open(npc)
+	show_dialogue(npc)
 	AIManager.set_current_npc(npc)
 	var first_prompt := get_first_message_prompt()
 	await send_message(first_prompt)
 
 
+## Hide Dialog System UI
+func hide_dialogue() -> void:
+	is_active = false
+	clear()
+	dialogue_ui.hide_dialogue()
+	process_mode = Node.PROCESS_MODE_DISABLED
+	get_tree().paused = false
+
+
+## Show the dialog UI
+func show_dialogue(npc: NPCModel) -> void:
+	if !dialogue_ui:
+		dialogue_ui = dialogue_scene.instantiate()
+		get_tree().root.add_child(dialogue_ui)
+		dialogue_ui.initialize(SaveManager.current_player)
+	dialogue_ui.show_dialogue(npc)
+	is_active = true
+	dialogue_ui.visible = true
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().paused = true
+
+
 func clear() -> void:
 	Global.dialogue_active = false
-	dialogue_box.clear()
+	dialogue_ui.clear()
 	var messages_amount := _messages.size()
 	# Only save if player has talked
 	if messages_amount > 2:
@@ -112,27 +141,13 @@ func clear() -> void:
 
 func get_first_message_prompt() -> String:
 	assert(_current_npc_id != NPCManager.PredefinedNPC.NONE, "_current_npc_id is not defined")
-	var npc := NPCManager.get_npc(_current_npc_id)
-	var player := SaveManager.current_player
-	var dynamic_npc_data := NPCManager.get_dynamic_data(_current_npc_id)
-
 	var prompts := PackedStringArray()
 
 	# Context Section
 	prompts.append("--- Context ---")
 	prompts.append_array(BASE_RULES)
 
-	# NPC Info Section
-	prompts.append("--- Info about you, the NPC ---")
-	prompts.append_array(_to_static_npc_info(npc))
-
-	# Player Info Section
-	prompts.append("--- Info about the Player ---")
-	prompts.append_array(to_player_info(player))
-
-	# Dynamic NPC Info / Memory Section
-	prompts.append("--- Memory / Extra Info ---")
-	prompts.append_array(to_dynamic_npc_info(dynamic_npc_data))
+	inject_metadata(prompts)
 
 	return "\n".join(prompts)
 
@@ -163,12 +178,30 @@ func _to_static_npc_info(npc: NPCModel) -> PackedStringArray:
 	return info
 
 
+func inject_metadata(prompts: PackedStringArray) -> void:
+	var npc := NPCManager.get_npc(_current_npc_id)
+	var player := SaveManager.current_player
+	var dynamic_npc_data := NPCManager.get_dynamic_npc_data(_current_npc_id)
+
+	# NPC Info Section
+	prompts.append("--- Info about you, the NPC ---")
+	prompts.append_array(_to_static_npc_info(npc))
+
+	# Player Info Section
+	prompts.append("--- Info about the Player ---")
+	prompts.append_array(to_player_info(player))
+
+	# Dynamic NPC Info / Memory Section
+	prompts.append("--- Memory / Extra Info ---")
+	prompts.append_array(to_dynamic_npc_info(dynamic_npc_data))
+
+
 func to_player_info(player: PlayerModel) -> PackedStringArray:
 	var info := PackedStringArray()
 	# Player attributes
-	info.append("gender: %s" % player.gender)
-	info.append("race: %s" % player.race)
-	info.append("class: %s" % player.character_class)
+	info.append("gender: %s" % Utils.to_enum_string(Enum.Gender, player.gender))
+	info.append("race: %s" % Utils.to_enum_string(Enum.Race, player.race))
+	info.append("class: %s" % Utils.to_enum_string(Enum.Class, player.character_class))
 	info.append("age: %s" % player.age)
 	if player.appearance:
 		info.append("appearance: %s" % ", ".join(player.appearance))
@@ -238,10 +271,10 @@ func send_message(prompt: String) -> void:
 
 	if mood and mood != _current_mood:
 		_current_mood = mood
-		dialogue_box.update_npc_portrait(NPCManager.get_portrait_texture(npc, mood))
+		dialogue_ui.update_npc_portrait_path(NPCManager.get_portrait_path(npc, mood))
 
 	_messages.append(text)
-	#dialogue_box.update_npc_text(text)
+	#dialogue_ui.update_npc_text(text)
 
 
 func save_dialogue() -> void:
@@ -257,7 +290,7 @@ func save_dialogue() -> void:
 	var text := response.text
 	Logger.info("generate_summary:response", text)
 	var new_recollections: Array = text.split(",", false)
-	var dynamic_npc_data := NPCManager.get_dynamic_data(_current_npc_id)
+	var dynamic_npc_data := NPCManager.get_dynamic_npc_data(_current_npc_id)
 	dynamic_npc_data.recollections = new_recollections.map(
 		func(recollection: String) -> String: return recollection.strip_edges()
 	)
@@ -275,9 +308,7 @@ func _to_generate_summary_prompt() -> String:
 
 	var current_conversation_str := "\n".join(message_list)
 	var prompts := PackedStringArray()
-	var npc := NPCManager.get_npc(_current_npc_id)
-	var player := SaveManager.current_player
-	var dynamic_npc_data := NPCManager.get_dynamic_data(_current_npc_id)
+	var dynamic_npc_data := NPCManager.get_dynamic_npc_data(_current_npc_id)
 	var recollections := dynamic_npc_data.recollections
 
 	var task_intro := (
@@ -290,17 +321,7 @@ func _to_generate_summary_prompt() -> String:
 	prompts.append("--- Task ---")
 	prompts.append(task_intro)
 
-	# NPC Info Section
-	prompts.append("--- Info about you, the NPC ---")
-	prompts.append_array(_to_static_npc_info(npc))
-
-	# Player Info Section
-	prompts.append("--- Info about the Player ---")
-	prompts.append_array(to_player_info(player))
-
-	# Dynamic NPC Info / Memory Section
-	prompts.append("--- Memory / Extra Info ---")
-	prompts.append_array(to_dynamic_npc_info(dynamic_npc_data))
+	inject_metadata(prompts)
 
 	# Providing clarity that the conversation is the focus for summary generation
 	prompts.append("--- Actual Conversation ---")

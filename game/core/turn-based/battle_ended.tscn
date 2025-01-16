@@ -1,0 +1,26 @@
+[gd_scene load_steps=2 format=3 uid="uid://clsif1l65qsmr"]
+
+[ext_resource type="Script" path="res://core/turn-based/battle_ended.gd" id="1_x5826"]
+
+[node name="BattleEnded" type="Node2D"]
+script = ExtResource("1_x5826")
+
+[node name="Title" type="RichTextLabel" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 153.0
+offset_top = 49.0
+offset_right = 309.0
+offset_bottom = 83.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 6
+text = "Battle Ended"
+fit_content = true
+
+[node name="Subtile" type="RichTextLabel" parent="."]
+offset_left = 140.0
+offset_top = 106.0
+offset_right = 307.0
+offset_bottom = 146.0

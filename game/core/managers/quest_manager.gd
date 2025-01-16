@@ -102,7 +102,7 @@ func get_quest_index_by_title(title: String) -> int:
 		if current_quests[i].title.to_lower() == title.to_lower():
 			return i
 	# Return a -1 if we didn't find a quest with
-	# a matching title in our arry
+	# a matching title in our array
 	return -1
 
 

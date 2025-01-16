@@ -1,0 +1,37 @@
+[gd_scene load_steps=6 format=3 uid="uid://bh10w4aa6fdhv"]
+
+[ext_resource type="Script" path="res://core/turn-based/battle_scene.gd" id="1_b0spm"]
+[ext_resource type="Texture2D" uid="uid://bevvl5ybiyaku" path="res://core/turn-based/assets/battleground.png" id="1_hou5s"]
+[ext_resource type="PackedScene" uid="uid://ltjwfvwdlhpp" path="res://core/turn-based/units/unit_group.tscn" id="3_tg2aq"]
+[ext_resource type="PackedScene" uid="uid://dd7ey27i52xjy" path="res://core/turn-based/command_menu/command_menu.tscn" id="4_dtv44"]
+[ext_resource type="PackedScene" uid="uid://clsif1l65qsmr" path="res://core/turn-based/battle_ended.tscn" id="5_uyuqe"]
+
+[node name="BattleScene" type="Node2D"]
+texture_filter = 1
+script = ExtResource("1_b0spm")
+
+[node name="TextureRect" type="TextureRect" parent="."]
+self_modulate = Color(0.505882, 0.505882, 0.505882, 1)
+offset_left = -61.0
+offset_top = -20.0
+offset_right = 583.0
+offset_bottom = 278.0
+scale = Vector2(1.1, 1.1)
+size_flags_horizontal = 3
+size_flags_vertical = 3
+texture = ExtResource("1_hou5s")
+stretch_mode = 4
+
+[node name="EnemyGroup" parent="." instance=ExtResource("3_tg2aq")]
+unique_name_in_owner = true
+position = Vector2(45, 35)
+
+[node name="PartyGroup" parent="." instance=ExtResource("3_tg2aq")]
+unique_name_in_owner = true
+position = Vector2(422, 33)
+
+[node name="CommandMenu" parent="." instance=ExtResource("4_dtv44")]
+unique_name_in_owner = true
+
+[node name="BattleEnded" parent="." instance=ExtResource("5_uyuqe")]
+visible = false

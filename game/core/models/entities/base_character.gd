@@ -16,6 +16,8 @@ var appearance: PackedStringArray
 
 var animation_sprite_sheet_path: String
 
+var unit_sprite_path: String
+
 # The key is the mood and the value is the path to the image
 # neutral mood is required
 var portraits: Dictionary
@@ -34,4 +36,5 @@ func _init(character_id: String, data: Dictionary) -> void:
 	gender = data.gender
 	appearance = data.appearance
 	animation_sprite_sheet_path = data.animation_sprite_sheet_path
+	unit_sprite_path = data.unit_sprite_path
 	portraits = data.portraits
