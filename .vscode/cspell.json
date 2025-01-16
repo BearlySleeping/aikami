@@ -1,0 +1,28 @@
+{
+	"$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+	"version": "0.2",
+	"dictionaries": ["softwareTerms"],
+	"ignorePaths": [
+		"**/*.tscn",
+		"**/*.import",
+		"**/*.godot/**/*.*",
+		"**/*.tres",
+		"../game/badges/**/*.*",
+		"../game/coverage/**/*.*",
+		"../game/addons/**/*.*"
+	],
+	"words": [
+		"chestplate",
+		"clampi",
+		"elif",
+		"NPCS",
+		"onready",
+		"randf",
+		"roundi",
+		"tilemap",
+		"tscn",
+		"unfocus",
+		"webp",
+		"wrapi"
+	]
+}
