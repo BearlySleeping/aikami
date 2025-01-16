@@ -1,0 +1,42 @@
+name: Check Build, Release and Deploy Status
+
+on:
+    workflow_run:
+        workflows: ['Build, Release and Deploy'] # Triggered by this workflow
+        types:
+            - completed # Trigger when the workflow completes
+
+jobs:
+    notify-status:
+        name: Notify Discord on Workflow Status
+        runs-on: ubuntu-latest
+
+        steps:
+            # Notify on Success
+            - name: Notify Discord on Success
+              if: ${{ github.event.workflow_run.conclusion == 'success' }} # Runs only on success
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '🎉 Build, Release, and Deploy Succeeded!'
+                  embed-description: |
+                      **Version:** ${{ github.event.workflow_run.head_branch }}
+                      **Repository:** ${{ github.repository }}
+                      **Triggered by:** ${{ github.event.workflow_run.actor }}
+                  embed-color: 65280 # Green
+                  embed-footer-text: 'The pipeline completed successfully!'
+
+            # Notify on Failure
+            - name: Notify Discord on Failure
+              if: ${{ github.event.workflow_run.conclusion == 'failure' }} # Runs only on failure
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '🚨 Build, Release, and Deploy Failed!'
+                  embed-description: |
+                      **Workflow:** Build, Release, and Deploy
+                      **Repository:** ${{ github.repository }}
+                      **Branch:** ${{ github.event.workflow_run.head_branch }}
+                      **Triggered by:** ${{ github.event.workflow_run.actor }}
+                  embed-color: 15158332 # Red
+                  embed-footer-text: 'The pipeline encountered errors.'
