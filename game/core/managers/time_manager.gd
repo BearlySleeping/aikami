@@ -11,7 +11,7 @@ const MINUTES_PER_DAY := 1440
 const MINUTES_PER_HOUR := 60
 const DAYS_IN_MONTH := 30
 ## Calculates the duration of an in-game minute in real-time seconds.
-const INGAME_TO_REAL_MINUTE_DURATION := (2 * PI) / MINUTES_PER_DAY
+const IN_GAME_TO_REAL_MINUTE_DURATION := (2 * PI) / MINUTES_PER_DAY
 
 
 class TimeModel:
@@ -31,7 +31,7 @@ const TIME_SPEED = 0.25
 
 const SAVE_FREQUENCY_IN_GAME_MINUTES := 10
 
-var total_delta_time := INGAME_TO_REAL_MINUTE_DURATION * MINUTES_PER_HOUR
+var total_delta_time := IN_GAME_TO_REAL_MINUTE_DURATION * MINUTES_PER_HOUR
 var running := false
 
 var _total_in_game_minutes := 0
@@ -42,7 +42,7 @@ func set_running(value: bool) -> void:
 
 
 func get_total_in_game_minutes() -> int:
-	return int(total_delta_time / INGAME_TO_REAL_MINUTE_DURATION)
+	return int(total_delta_time / IN_GAME_TO_REAL_MINUTE_DURATION)
 
 
 func get_total_game_time() -> TimeModel:
@@ -54,7 +54,7 @@ func _ready() -> void:
 	SaveManager.load_game_data()
 	if SaveManager.current_save_data:
 		total_delta_time = (
-			INGAME_TO_REAL_MINUTE_DURATION
+			IN_GAME_TO_REAL_MINUTE_DURATION
 			* MINUTES_PER_HOUR
 			* SaveManager.current_save_data.total_in_game_hours
 		)
@@ -64,7 +64,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not running:
 		return
-	total_delta_time += delta * INGAME_TO_REAL_MINUTE_DURATION * TIME_SPEED
+	total_delta_time += delta * IN_GAME_TO_REAL_MINUTE_DURATION * TIME_SPEED
 	var new_time := get_total_game_time()
 
 	if _total_in_game_minutes == new_time.total_in_game_minutes:

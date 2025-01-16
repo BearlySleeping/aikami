@@ -28,7 +28,7 @@ func start_transition(animation_name: String) -> void:
 func finish_transition() -> void:
 	if timer:
 		timer.stop()
-	# construct second half of the transitation's animation name
+	# construct second half of the transition's animation name
 	var ending_animation_name: String = starting_animation_name.replace("to", "from")
 
 	if !anim_player.has_animation(ending_animation_name):

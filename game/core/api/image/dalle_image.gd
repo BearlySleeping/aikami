@@ -4,6 +4,7 @@ signal download_completed(success: bool, path: String)
 
 const URL: String = "https://api.openai.com/v1/images/generations"
 const TEMPERATURE: float = 0.5
+# cspell:ignore dall
 const MODEL: String = "dall-e-3"
 
 var _client := HTTPRequestClient.new()
