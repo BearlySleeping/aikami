@@ -7,7 +7,6 @@ const IMAGE_TYPE_MAP := {
 	ImageType.JPG: "jpg",
 }
 
-
 class ImageInputModel:
 	var prompt: String
 	var directory: String
