@@ -1,0 +1,71 @@
+# apps/frontend/pwa/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+stack: 'frontend'
+tags:
+  - 'pwa'
+  - 'svelte'
+
+project:
+  name: 'PWA'
+  description: 'Progressive Web App for the main application.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'frontend-utils'
+  - 'frontend-services'
+  - 'schemas'
+  - 'types'
+  - 'constants'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'static/**/*'
+    - 'messages/**/*'
+  configs:
+    - 'deno.json'
+    - 'tsconfig.json'
+    - 'tailwind.config.mjs'
+    - 'svelte.config.js'
+    - 'vite.config.ts'
+
+tasks:
+  dev:
+    command: 'deno task dev'
+    local: true
+  build:
+    command: 'deno task build'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+    outputs:
+      - '.svelte-kit'
+      - 'build'
+  check:
+    command: 'deno task check'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'deno task lint'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'deno task format'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'

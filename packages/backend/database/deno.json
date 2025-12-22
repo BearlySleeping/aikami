@@ -1,0 +1,7 @@
+{
+  "tasks": {
+    "lint": "deno lint",
+    "format": "deno fmt",
+    "check": "deno check"
+  }
+}

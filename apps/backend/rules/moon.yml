@@ -1,0 +1,48 @@
+# apps/backend/rules/moon.yml
+$schema: "https://moonrepo.dev/schemas/project.json"
+
+language: "typescript"
+layer: "configuration"
+stack: "backend"
+tags:
+  - "firebase"
+  - "security"
+
+project:
+  name: "Firebase Rules"
+  description: "Security rules for Firestore and Storage."
+  channel: "#backend"
+  owner: "Backend Team"
+
+dependsOn:
+  - "backend-configs"
+  - "backend-utils"
+  - "schemas"
+  - "types"
+  - "constants"
+  - "logger"
+
+fileGroups:
+  sources:
+    - "src/**/*"
+    - "*.rules"
+  configs:
+    - "deno.json"
+    - "firebase.json"
+    - "firestore.indexes.json"
+
+tasks:
+  format:
+    command: "deno task format"
+    inputs:
+      - "/deno.json"
+      - "/deno.lock"
+      - "@group(sources)"
+      - "@group(configs)"
+  lint:
+    command: "deno task lint"
+    inputs:
+      - "/deno.json"
+      - "/deno.lock"
+      - "@group(sources)"
+      - "@group(configs)"

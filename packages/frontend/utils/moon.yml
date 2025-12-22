@@ -1,0 +1,57 @@
+# packages/frontend/utils/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+stack: 'frontend'
+tags:
+  - 'utils'
+  - 'frontend'
+
+project:
+  name: 'Frontend Utilities'
+  description: 'Shared frontend utilities.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'deno.json'
+
+tasks:
+  check:
+    command: 'deno task check'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'deno task format'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'deno task lint'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  test:
+    command: 'deno task test'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'

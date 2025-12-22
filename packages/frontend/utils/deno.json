@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window", "esnext", "dom"]
+  },
+  "tasks": {
+    "lint": "deno lint",
+    "format": "deno fmt",
+    "check": "deno check",
+    "test": "deno test --doc"
+  }
+}

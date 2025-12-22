@@ -1,0 +1,43 @@
+# packages/constants/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+stack: 'systems'
+tags:
+  - 'constants'
+
+project:
+  name: 'Constants'
+  description: 'Shared constants for the application.'
+  channel: '#general'
+  owner: 'Core Team'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'deno.json'
+
+tasks:
+  check:
+    command: 'deno task check'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'deno task format'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'deno task lint'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
