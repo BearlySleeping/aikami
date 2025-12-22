@@ -1,63 +1,71 @@
-# AiKami - A Pixel 2D Top-Down RPG
+# AiKami: The AI-Powered 2D RPG
 
-## Introduction
+**AiKami** is a modern, AI-powered technology stack for creating immersive, top-down 2D RPGs in the spirit of classic Dungeons & Dragons adventures. Developed by **BearlySleeping**, this project aims to redefine the genre by integrating cutting-edge AI to drive dynamic storytelling, character interactions, and world events.
 
-AiKami aims to create a pixel 2D top-down RPG game where all NPCs and sprites are generated using AI. Inspired by D&D games like the Baldur's Gate series, AiKami seeks to create a rich and immersive world where players can explore, battle, and interact with AI-driven characters. The unique aspect of AiKami is that NPCs have their own beliefs, personalities, and strategies, and they interact with the player and the world based on these attributes.
+This repository contains the complete monorepo for the AiKami stack, including the web-based Progressive Web App (PWA), the Godot game client, backend services, and all the shared libraries that power the ecosystem.
 
-## Project Stack
+## Project Overview
 
--   **[Godot Engine](https://godotengine.org/)**: The core game is developed in Godot with GDScript.
--   **[Hugging Face](https://huggingface.co/)**: For AI functionalities, including NPC and sprite generation, we leverage Hugging Face transformers library.
--   **[Bun](https://bun.sh)**: We use Bun and TypeScript to run commands to generate images outside Godot for internal use, found in the AI folder.
+AiKami is an ambitious project that combines the creative possibilities of AI with the classic gameplay of 2D RPGs. The project is built on a modern, scalable, and maintainable technology stack, with a clear separation of concerns between the different components.
 
-## Development Roadmap
+The project is structured as a monorepo, managed by **Moon** and **Deno**, which allows for a streamlined development workflow and easy code sharing between the different applications and packages.
 
-See the roadmap [here](https://github.com/users/BearlySleeping/projects/1).
+### Key Features
 
-Overall, what's next includes:
+- **AI-Driven World:** NPCs and in-game events are powered by modern AI, creating a living world that reacts to your choices. The AI is powered by **Google's Genkit**, a robust and extensible AI framework.
+- **Cross-Platform PWA:** A **SvelteKit**-based PWA serves as the main hub for players to manage their accounts, characters, and interact with the game world outside of the main game client. The PWA is inspired by [RisuAI](https://github.com/kwaroran/RisuAI).
+- **High-Performance Game Client:** The game itself is built with the powerful and open-source **Godot Engine**.
+- **Scalable Backend:** Built on **Deno** and a serverless architecture using **Firebase** (Functions, Authentication, Firestore, and Storage), the backend is designed to be scalable, secure, and efficient.
+- **Monorepo Structure:** The entire codebase is managed in a single monorepo using **Moon**, making it easy to share code and manage dependencies.
+- **CI/CD:** The project has a CI/CD pipeline set up with **GitHub Actions** that only deploys the components that have been changed.
 
--   **Voice Generation**: Bringing unique voices to our AI-generated NPCs.
--   **Combat System**: Refining the AI-driven combat to be dynamic and engaging.
--   **Inventory Management**: Creating an intuitive and expansive inventory system.
--   **Level System**: Developing a comprehensive level-up system that rewards player progression.
--   **Races & Classes**: Incorporating a variety of races and classes for players to choose from, each with unique abilities and lore.
+## Architecture
 
-## Game Concept
+The AiKami ecosystem is composed of several key components that work together to deliver the full experience.
 
-Imagine a D&D RPG game like Baldur's Gate or Divinity, except you cannot control any NPCs, allies, or enemies, nor can you force trades, battles, etc. NPCs must want to help you, and they will follow their own strategies that align with their beliefs, trust in you, etc. All actions are driven by AI. There will be no prewritten dialogs; all interactions will be dynamically generated with AI. However, there will still be a story and a plot since NPCs will have agendas, backgrounds, lore, goals, etc. There will be quests for players to embark on, creating a rich and evolving narrative experience.
+- **Frontend Applications:**
+  - **PWA (SvelteKit):** The main user-facing application for account and character management.
+  - **Static Sites (Astro):** The landing page and documentation sites.
+  - **Game Client (Godot):** The 2D top-down RPG.
+- **Backend Services:**
+  - **Firebase:** The backend is built on a serverless architecture using Firebase.
+- **AI Integration:**
+  - **Genkit:** Google's Genkit is used as the AI framework.
 
-### Examples of Gameplay Dynamics
+For a more detailed explanation of the architecture, please refer to the [**Architecture Overview**](./docs/ARCHITECTURE.md).
 
--   **Relationship-Driven Actions**: You are in a battle with your squad. The night before, you stole from your healer. They found out and now dislike you, resulting in them being less inclined to heal you.
--   **Contextual Decision Making**: You insult a trader, and he will charge you more. Smooth talk him, and he might give you a discount.
--   **Ally Dynamics**: Any NPC can become your ally and may leave you if they no longer like you. If an NPC idolizes you, they might sacrifice themselves for your safety.
+## Getting Started
 
--   **Fear and Bravery**: If a person is very scared, they will stay at the back during fights. You can train them to become braver over time.
+Ready to contribute? We'd love to have you! Please check out our [**Contributing Guide**](./CONTRIBUTING.md) for instructions on how to set up your development environment and make your first contribution.
 
-### AI-Driven Interactions
+For a deeper dive into the project's architecture, stack, and coding standards, please explore our [**documentation**](./docs).
 
-The AI makes decisions based on a list of possible actions and the context it knows. This leads to a dynamic and realistic interaction system where NPCs' behaviors are influenced by their relationships, experiences, and personal traits.
+## TODO
 
-### Additional Features and Creative Examples
+The project is still under development, and there are many things to do. Here is a high-level overview of the tasks that need to be done:
 
--   **Dynamic Quests**: Quests in AiKami are not static. An NPC might give you a quest based on their current needs or fears. For instance, a blacksmith might ask for rare materials only if his current stock is low, or a farmer might seek help with a pest problem that arises randomly.
+- **Documentation:**
+  - Create a new `CODING_STANDARDS.md` file in the `docs` directory.
+  - Write detailed documentation for each package and app.
+  - Document the CI/CD pipeline.
+  - Document the Godot client's interaction with the Firebase backend.
+- **Testing:**
+  - Define a unit testing strategy.
+  - Plan for Playwright tests for the PWA.
+- **Development:**
+  - **Landing Page:**
+    - ...
+  - **Backend:**
+    - ...
+  - **Docs Page:**
+    - ...
+  - **PWA:**
+    - ...
+  - **Godot:**
+    - ...
 
--   **Evolving World**: The game world evolves with or without the player's direct interaction. Towns can grow or shrink based on economic conditions driven by NPCs. Natural disasters or bandit raids might change the landscape and NPC settlements.
+For a more detailed list of tasks, please refer to the [**TODO.md**](./TODO.md) file.
 
--   **Emotional Depth**: NPCs have emotional states that influence their interactions. An NPC who has just lost a loved one might refuse to speak to you or might be driven to seek revenge, influencing the storyline dynamically.
+---
 
--   **Reputation System**: Your actions influence your reputation across different regions. Save a village from a dragon, and you might be celebrated as a hero, gaining discounts and allies. Betray a trust, and you might find doors closed and prices higher in certain towns.
-
-## Play the Demo
-
-A demo version is available online [here](https://aikami.bearlysleeping.com).
-
-## Contributing
-
-Contributions are warmly welcomed! Whether you're interested in game development, AI features, or documentation, your input can help shape AiKami.
-
-Check out our [contribution guidelines](CONTRIBUTING.md) for more information on how you can get involved.
-
-## Feedback and Support
-
-Your feedback is invaluable to us. For feature requests, bug reports, or support, please file an issue on our [GitHub project page](https://github.com/your-github-repo/issues).
+**BearlySleeping** - _Dreaming big, one line of code at a time._

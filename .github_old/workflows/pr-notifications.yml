@@ -1,0 +1,66 @@
+name: Pull Request Notifications
+
+on:
+    pull_request:
+        types:
+            - opened # Triggered when a PR is created
+            - reopened # Triggered when a closed PR is reopened
+            - synchronize # Triggered when new commits are added to the PR
+            - closed # Triggered when a PR is merged or closed
+
+jobs:
+    notify-on-pr-events:
+        name: Notify on Pull Request Events
+        runs-on: ubuntu-latest
+        steps:
+            - name: Notify on PR Opened or Reopened
+              if: ${{ github.event.action == 'opened' || github.event.action == 'reopened' }}
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '📂 New PR Opened!' # Applies for both opened and reopened
+                  embed-description: |
+                      **Title:** ${{ github.event.pull_request.title }}
+                      **Branch:** ${{ github.event.pull_request.head.ref }}
+                      **Author:** ${{ github.event.pull_request.user.login }}
+                      [View Pull Request](${{ github.event.pull_request.html_url }})
+                  embed-color: 3447003 # Blue
+
+            - name: Notify on PR Updated
+              if: ${{ github.event.action == 'synchronize' }}
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '📝 PR Updated with New Commits'
+                  embed-description: |
+                      **Title:** ${{ github.event.pull_request.title }}
+                      **Branch:** ${{ github.event.pull_request.head.ref }}
+                      **Author:** ${{ github.event.pull_request.user.login }}
+                      [View Pull Request](${{ github.event.pull_request.html_url }})
+                  embed-color: 16753920 # Orange
+
+            - name: Notify on PR Merged
+              if: ${{ github.event.action == 'closed' && github.event.pull_request.merged == true }}
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '🎉 PR Merged!'
+                  embed-description: |
+                      **Title:** ${{ github.event.pull_request.title }}
+                      **Branch:** ${{ github.event.pull_request.head.ref }}
+                      **Author:** ${{ github.event.pull_request.user.login }}
+                      [View Pull Request](${{ github.event.pull_request.html_url }})
+                  embed-color: 65280 # Green
+
+            - name: Notify on PR Closed
+              if: ${{ github.event.action == 'closed' && github.event.pull_request.merged != true }}
+              uses: tsickert/discord-webhook@v6.0.0
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  embed-title: '🔔 PR Closed'
+                  embed-description: |
+                      **Title:** ${{ github.event.pull_request.title }}
+                      **Branch:** ${{ github.event.pull_request.head.ref }}
+                      **Author:** ${{ github.event.pull_request.user.login }}
+                      [View Pull Request](${{ github.event.pull_request.html_url }})
+                  embed-color: 15158332 # Red

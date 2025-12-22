@@ -1,0 +1,55 @@
+# packages/utils/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+stack: 'systems'
+tags:
+  - 'utils'
+
+project:
+  name: 'Utilities'
+  description: 'Shared utilities for the application.'
+  channel: '#general'
+  owner: 'Core Team'
+
+dependsOn:
+  - 'constants'
+  - 'types'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'deno.json'
+
+tasks:
+  check:
+    command: 'deno task check'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'deno task format'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'deno task lint'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  test:
+    command: 'deno task test'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'

@@ -1,0 +1,111 @@
+# Runs on game directory files for:
+# - Push to master/main
+# - Pull requests to master/main/dev
+name: Godot CI
+
+on:
+    push:
+        branches: ['master', 'main']
+        paths:
+            - 'game/**' # Only runs when game files change
+    pull_request:
+        branches: ['master', 'main', 'dev']
+        paths:
+            - 'game/**' # Only runs when game files change
+
+jobs:
+    # Spellcheck checks
+    spell-check:
+        name: 'Spellcheck'
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: streetsidesoftware/cspell-action@v6
+              with:
+                  config: '.vscode/cspell.json'
+                  incremental_files_only: false
+                  root: './game'
+
+    # Formatting and linting checks
+    format-and-lint-check:
+        name: 'GDScript Formatting Check'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            # Install GDScript toolkit for formatting
+            - name: Setup GDScript toolkit
+              uses: Scony/godot-gdscript-toolkit@4.2.0
+
+            # Run formatting check
+            - name: Check formatting
+              run: |
+                  cd game
+                  gdformat --check ./
+
+            # Run linting check
+            - name: Run linting
+              run: |
+                  cd game
+                  gdlint ./
+
+    # Runs visual tests with specific graphics drivers
+    visual-tests:
+        name: 'Visual Tests (${{ matrix.render-driver }})'
+        runs-on: ubuntu-latest
+        # Prevents duplicate workflows on PRs from same repository
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+        env:
+            DOTNET_CLI_TELEMETRY_OPTOUT: true
+            DOTNET_NOLOGO: true
+        strategy:
+            fail-fast: false
+            matrix:
+                render-driver: [vulkan] # Can add opengl3 if needed
+        steps:
+            # Checkout with LFS and submodules
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  lfs: true
+                  submodules: 'recursive'
+
+            # Setup .NET environment
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4.0.0
+              with:
+                  global-json-file: global.json
+
+            - name: Restore dependencies
+              run: dotnet restore
+
+            # Setup graphics drivers
+            - name: Add graphics repositories
+              run: |
+                  sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+                  sudo add-apt-repository -n ppa:kisak/kisak-mesa
+
+            # Install and cache graphics packages
+            - name: Install graphics drivers
+              uses: awalsh128/cache-apt-pkgs-action@v1.4.1
+              with:
+                  packages: mesa-vulkan-drivers binutils
+                  version: 1.0
+
+            # Setup Godot environment
+            - name: Setup Godot
+              uses: chickensoft-games/setup-godot@v2.0.0
+              with:
+                  version: global.json
+
+            # Generate C# bindings
+            - name: Generate .NET Bindings
+              working-directory: ./game
+              run: godot --headless --build-solutions --quit || exit 0
+
+            # Run the actual tests
+            - name: Run Tests
+              working-directory: ./game
+              run: |
+                  xvfb-run godot --audio-driver Dummy --rendering-driver ${{ matrix.render-driver }} --run-tests --quit-on-finish --coverage
