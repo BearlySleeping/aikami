@@ -1,0 +1,93 @@
+import '../script-config.development.ts'
+import { npcRepository } from '@aikami/backend/database/npc.ts'
+import type { NpcCreateData } from '@aikami/types'
+
+const npcs: NpcCreateData[] = [
+  {
+    name: 'Aragorn',
+    race: 'Human',
+    class: 'Ranger',
+    level: 15,
+    experiencePoints: 100000,
+    abilityScores: {
+      strength: 18,
+      dexterity: 16,
+      constitution: 16,
+      intelligence: 14,
+      wisdom: 15,
+      charisma: 16,
+    },
+    hitPoints: 150,
+    armorClass: 18,
+    speed: 30,
+    alignment: 'Lawful Good',
+    background: 'Noble',
+    proficiencies: ['Longsword', 'Bow', 'Survival', 'Athletics'],
+    languages: ['Common', 'Elvish', 'Sindarin'],
+    equipment: ['Andúril', 'Bow', 'Elven Cloak'],
+    inventory: ['Andúril', 'Bow', 'Elven Cloak'],
+    isFriendly: true,
+  },
+  {
+    name: 'Gandalf',
+    race: 'Maiar',
+    class: 'Wizard',
+    level: 20,
+    experiencePoints: 355000,
+    abilityScores: {
+      strength: 14,
+      dexterity: 14,
+      constitution: 16,
+      intelligence: 20,
+      wisdom: 20,
+      charisma: 18,
+    },
+    hitPoints: 120,
+    armorClass: 12,
+    speed: 30,
+    alignment: 'Lawful Good',
+    background: 'Sage',
+    proficiencies: ['Staff', 'Arcana', 'History', 'Insight'],
+    languages: ['Common', 'Elvish', 'Valarin'],
+    equipment: ["Wizard's Staff", 'Glamdring', 'Narya'],
+    inventory: ["Wizard's Staff", 'Glamdring', 'Narya'],
+    isFriendly: true,
+  },
+  {
+    name: 'Legolas',
+    race: 'Elf',
+    class: 'Fighter',
+    level: 15,
+    experiencePoints: 100000,
+    abilityScores: {
+      strength: 14,
+      dexterity: 20,
+      constitution: 14,
+      intelligence: 14,
+      wisdom: 16,
+      charisma: 16,
+    },
+    hitPoints: 130,
+    armorClass: 17,
+    speed: 35,
+    alignment: 'Chaotic Good',
+    background: 'Outlander',
+    proficiencies: ['Longbow', 'Shortsword', 'Acrobatics', 'Perception'],
+    languages: ['Common', 'Elvish'],
+    equipment: ['Bow of the Galadhrim', 'White Knives'],
+    inventory: ['Bow of the Galadhrim', 'White Knives'],
+    isFriendly: true,
+  },
+]
+
+const populateNpcs = async () => {
+  for (const npc of npcs) {
+    const id = await npcRepository.addDocument({
+      createData: npc,
+      getCollectionPathArgument: {},
+    })
+    console.log(`Created NPC ${npc.name} with id: ${id}`)
+  }
+}
+
+populateNpcs().catch(console.error)

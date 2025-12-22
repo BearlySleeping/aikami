@@ -1,0 +1,33 @@
+---
+import Header from "$components/Header.astro";
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title } = Astro.props;
+
+const displayTitle = title ?? 'AiKami Game'
+---
+
+
+<!doctype html>
+<html lang="en" class="dark"  data-theme="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{displayTitle}</title>
+	</head>
+	<body
+		class="bg-background text-text dark:bg-background-dark dark:text-text-dark">
+		<Header />
+		<main class="p-10">
+			<slot />
+
+		</main>
+	</body>
+</html>

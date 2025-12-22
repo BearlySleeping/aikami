@@ -1,69 +1,70 @@
-# Contributing to AiKami
+# Contributing to Aikami
 
-Thank you for your interest in contributing to AiKami! We're excited to have you join our community and help improve the game. This document will guide you through the contribution process and outline the steps you need to follow to contribute to the project.
+First off, thank you for considering contributing to Aikami! It's people like you that make open source projects such a great experience. We welcome contributions of all kinds, from bug fixes to new features.
+
+This document provides a high-level overview of how to get started. For more detailed information, please refer to our full documentation:
+
+- [**Project Structure**](./docs/STRUCTURE.md)
+- [**Technology Stack**](./docs/STACK.md)
+- [**Architecture**](./docs/ARCHITECTURE.md)
+- [**Coding Standards**](./docs/CODING_STANDARDS.md)
 
 ## Getting Started
 
-Before you can start contributing, there are a few tools and standards you need to be familiar with. This will help ensure that your contributions are consistent with the rest of the project and can be integrated smoothly.
-
 ### Prerequisites
 
-1. **GDScript**: All game logic is written in GDScript, so familiarity with it is essential.
-2. **Godot Engine**: You should have the latest stable version of the Godot Engine installed to test your changes locally.
+- **Deno:** The project uses Deno as the primary JavaScript/TypeScript runtime. You can find installation instructions at [deno.land](https://deno.land/).
+- **Moon:** Our monorepo is managed with Moon. While not strictly required for all tasks, it's recommended for a seamless experience. Installation instructions are at [moonrepo.dev](https://moonrepo.dev/).
+- **Godot Engine:** To work on the game client, you'll need the latest stable version of the Godot Engine. You can download it from [godotengine.org](https://godotengine.org/).
 
-### Required Tools
+### Setup
 
-To contribute to this project, you need to have the following tools installed:
+1.  **Fork & Clone:** Fork the repository to your own GitHub account and then clone it to your local machine.
+2.  **Install Dependencies:** This project uses `deno` and does not rely on a `node_modules` folder in the same way a traditional Node.js project does. Dependencies are managed in the root `deno.json` file and are cached by Deno on first use.
 
--   **GDScript Toolkit**: This is used for linting GDScript code to ensure it meets our coding standards.
--   **Lefthook**: We use Lefthook to set up git hooks that automate certain checks and tasks.
+### Running the Project
 
-#### Installing GDScript Toolkit
+You can run the various applications in the monorepo using Deno tasks defined in the root `deno.json`.
 
-You can install the GDScript Toolkit by running:
+-   **Run the PWA:**
+    ```bash
+    deno task dev:pwa
+    ```
+-   **Run the Docs Site:**
+    ```bash
+    deno task dev:docs
+    ```
+-   **Run the Landing Page:**
+    ```bash
+    deno task dev:landing
+    ```
 
-```sh
-pip3 install "gdtoolkit==4.*"
-```
+### Development Workflow
 
-#### Installing Lefthook
+1.  **Create a Branch:** Create a new branch for your feature or bug fix.
+    ```bash
+    git checkout -b my-new-feature
+    ```
+2.  **Make Changes:** Make your changes to the codebase.
+3.  **Check Your Work:** Before committing, be sure to run the linter and formatter.
+    ```bash
+    # Format all files
+    deno task format
 
-To setup lefthook you can install [bun](https://bun.sh/docs/installation)
-and run
+    # Lint all files
+    deno task lint
 
-```sh
-bun install
-```
+    # Run type checks
+    deno task check
+    ```
+4.  **Commit:** Commit your changes with a descriptive commit message.
+    ```bash
+    git commit -m "feat: add my new feature"
+    ```
+5.  **Push:** Push your changes to your fork.
+    ```bash
+    git push origin my-new-feature
+    ```
+6.  **Create a Pull Request:** Open a pull request from your fork to the main Aikami repository.
 
-Or if you only want to work with godot you can install lefthook [here](https://github.com/evilmartians/lefthook/blob/master/docs/install.md)
-
-## Making Contributions
-
-### Fork and Clone the Repository
-
-To start contributing, fork the repository on GitHub, then clone your fork locally.
-
-```sh
-git clone https://github.com/BearlySleeping/aikami.git
-```
-
-### Following the Coding Standards
-
-Our project adheres to coding standards defined in the `game/.gdlintrc` file. Please ensure your contributions follow these guidelines. You can check your code with the GDScript Toolkit.
-
-### Submitting Changes
-
-1. Create a new branch for your changes.
-2. Make your changes and commit them with clear, concise commit messages.
-3. Push your branch to your fork on GitHub.
-4. Open a pull request against the main repository with a description of your changes.
-
-## Code Review Process
-
-Once you've submitted a pull request, the project maintainers will review your changes. We might suggest some changes or improvements. This is a normal part of the contribution process, so please don't be discouraged!
-
-## Questions?
-
-If you have any questions or need further assistance, feel free to open an issue in the repository or ask in our community chat (if available).
-
-Thank you for contributing to AiKami! Your efforts help make the game better for everyone.
+Thank you for your contribution!

@@ -1,0 +1,22 @@
+---
+description: GDScript (Godot) coding standards.
+globs: **/*.gd
+---
+
+# GDScript Best Practices
+
+## 1. Naming Conventions
+- **Files/Classes:** `PascalCase` (e.g., `PlayerController.gd`).
+- **Functions/Variables:** `snake_case` (e.g., `move_speed`, `_process_input()`).
+- **Nodes:** `PascalCase` in the scene tree (e.g., `Player`, `MainCamera`).
+- **Private:** Prefix "private" functions and variables with an underscore (`_my_private_var`).
+
+## 2. Static Typing
+- **Use Static Types:** Use static typing for all variables, function arguments, and return values.
+  - **Correct:** `var health: int = 100`
+  - **Correct:** `func _on_hit(damage: float) -> void:`
+  - **Incorrect:** `var health = 100`
+
+## 3. Signals
+- **Prefer Signals:** Use signals for communication between nodes instead of direct function calls (e.g., `get_node("...").function()`). This decouples your scenes.
+- **Define Custom Signals:** Define custom signals at the top of your script.

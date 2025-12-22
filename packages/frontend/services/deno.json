@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["src/env.d.ts", "src/app.global.d.ts"]
+  },
+  "tasks": {
+    "lint": "deno lint",
+    "format": "deno fmt",
+    "check": "deno check",
+    "test": "deno test --doc"
+  }
+}

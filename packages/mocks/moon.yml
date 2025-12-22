@@ -1,0 +1,49 @@
+# packages/mocks/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+stack: 'systems'
+tags:
+  - 'mocks'
+  - 'testing'
+
+project:
+  name: 'Mocks'
+  description: 'Shared mocks for testing.'
+  channel: '#general'
+  owner: 'Core Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'deno.json'
+
+tasks:
+  check:
+    command: 'deno task check'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'deno task format'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'deno task lint'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'

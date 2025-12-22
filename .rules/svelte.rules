@@ -1,0 +1,44 @@
+---
+description: Strict rules for modern Svelte 5. Enforces Runes and new event/markup patterns.
+globs: **/*.svelte
+---
+
+# Svelte 5 Core Principles
+
+## 1. Reactivity is Runes
+- **CRITICAL: Use Runes for all reactivity.** The `$`-family of runes are the *only* way to manage state.
+- **State:** Use `$state` for all reactive local state.
+  - **Correct:** `let count = $state(0);`
+  - **Incorrect:** `let count = 0;`
+- **Derived State:** Use `$derived` for all computed values.
+  - **Correct:** `let doubled = $derived(count * 2);`
+  - **Incorrect:** `$: doubled = count * 2;` (The `$: ` syntax is legacy).
+- **Side Effects:** Use `$effect` for side effects. This replaces `onMount`, `afterUpdate`, and `$: ` for running code.
+  - **Correct:** `$effect(() => { console.log('Count is', count); });`
+
+## 2. Component Props & Events
+- **Props:** Use `$props` to define component properties.
+  - **Correct:** `let { user, theme = 'dark' } = $props();`
+  - **Incorrect:** `export let user;`
+- **Bindings:** Use `$bindable` to make a prop two-way bindable from a parent.
+  - **Correct:** `let { value = $bindable() } = $props();`
+- **Event Handlers:** Use plain HTML `onclick` (and similar) attributes.
+  - **Correct:** `<button onclick={handleClick}>Click Me</button>`
+  - **Incorrect:** `<button on:click={handleClick}>Click Me</button>`
+
+## 3. Markup & Reusability
+- **Use Snippets:** Use `{#snippet ...}` and `{@render ...}` for all reusable markup. This is the Svelte 5 replacement for slots.
+  - **Correct:**
+    ```svelte
+    {#snippet icon(name)}
+      <i class="icon-{name}"></i>
+    {/snippet}
+
+    {@render icon('user')}
+    ```
+
+## 4. Internationalization (i18n)
+- **Use Paraglide:** All user-facing text MUST be internationalized.
+- **Import:** `import t from "$locale";`
+- **Usage:** `<h1>{t.page_title()}</h1>` or `<p>{t.greeting({ name: userName })}</p>`
+- **INCORRECT:** `<h1>My Page Title</h1>`

@@ -1,0 +1,43 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Default deny-all rule.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Allow users to write to their own video folders.
+    match /videos/{videoId}/{allImages=**} {
+      allow write: if true;
+    }
+
+    // Allow public read for team assets, but restrict writes.
+    match /teams/{teamId}/{allImages=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && ( (isInTeam(teamId) && canUploadFilesToTeam()) || isSuperAdmin());
+    }
+
+    // -- Helper functions --
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return request.auth.token.userRole == 'superAdmin';
+    }
+
+    function isInTeam(teamId) {
+      return "currentTeam" in request.auth.token && teamId == request.auth.token.currentTeam.id;
+    }
+
+    function currentTeamRole() {
+      // Corrected function using the ternary operator
+      return "currentTeam" in request.auth.token ? request.auth.token.currentTeam.role : null;
+    }
+
+    function canUploadFilesToTeam() {
+        return currentTeamRole() == 'teamOwner' || currentTeamRole() == 'teamAdmin';
+    }
+  }
+}

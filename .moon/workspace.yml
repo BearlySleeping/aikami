@@ -1,0 +1,26 @@
+# .moon/workspace.yml
+
+projects:
+  # App IDs
+  pwa: "apps/frontend/pwa"
+  landing-page: "apps/frontend/landing_page"
+  docs: "apps/frontend/docs"
+  functions: "apps/backend/functions"
+  # rules: "apps/backend/rules"
+
+  constants: "packages/constants"
+  schemas: "packages/schemas"
+  types: "packages/types"
+  logger: "packages/logger"
+  utils: "packages/utils"
+  mocks: "packages/mocks"
+
+  backend-configs: "packages/backend/configs"
+  backend-utils: "packages/backend/utils"
+  backend-database: "packages/backend/database"
+  backend-auth: "packages/backend/auth"
+  backend-ai: "packages/backend/ai"
+  backend-svelte-kit: "packages/backend/svelte-kit"
+
+  frontend-services: "packages/frontend/services"
+  frontend-utils: "packages/frontend/utils"
