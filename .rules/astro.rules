@@ -1,0 +1,15 @@
+---
+description: Best practices for Astro projects, focusing on islands and content.
+globs: **/*.astro, src/content/config.ts
+---
+
+# Astro Best Practices
+
+## 1. Islands Architecture
+- **Zero-JS by Default:** Write components as static Astro components first.
+- **Client Directives:** Only use client directives (e.g., `client:load`, `client:idle`) when client-side interactivity is **required**.
+- **Pass Props:** Pass data as props from your server-side Astro component to your client-side Svelte/React/etc. island. Avoid data fetching inside a client island.
+
+## 2. Content Collections
+- **Use Collections:** All Markdown/MDX content must live in `src/content/`.
+- **Define Schemas:** All collections MUST have a strict schema defined in `src/content/config.ts` using Zod.

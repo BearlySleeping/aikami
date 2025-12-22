@@ -1,0 +1,59 @@
+---
+description: Core coding standards for all TypeScript/JavaScript files. Enforces arrow functions, early returns, and specific JSDoc style.
+globs: **/*.ts, **/*.js, **/*.svelte, **/*.astro
+---
+
+# Core Coding Standards
+
+## 1. Function Style
+- **Use `const` Arrow Functions:** Always prefer `const` arrow functions for all functions, including event handlers and utility functions.
+  - **Correct:** `export const myFunction = (arg: string): string => { ... };`
+  - **Incorrect:** `export function myFunction(arg) { ... }`
+- **Class Methods:** Standard class methods are an exception.
+
+## 2. Control Flow
+- **Use Early Returns (Guard Clauses):** Always use early returns to reduce nesting and improve readability.
+  - **Correct:**
+    ```typescript
+    const doSomething = (user: User | null) => {
+      if (!user) {
+        return;
+      }
+      // ... logic for user
+    };
+    ```
+  - **Incorrect:**
+    ```typescript
+    const doSomething = (user: User | null) => {
+      if (user) {
+        // ... nested logic
+      }
+    };
+    ```
+
+## 3. JSDoc Comments
+- **JSDoc on All Functions:** All exported functions, methods, and complex non-exported functions MUST have a JSDoc comment.
+- **CRITICAL: No Types in JSDoc:** Your most important rule. TypeScript handles typing. JSDoc is for **descriptions only**.
+  - **Correct:**
+    ```typescript
+    /**
+     * Fetches a user from the database.
+     * @param userId The unique identifier for the user.
+     * @returns The user object or null if not found.
+     */
+    export const fetchUser = async (userId: string): Promise<User | null> => {
+      // ...
+    };
+    ```
+  - **INCORRECT (Do NOT do this):**
+    ```typescript
+    /**
+     * @param {string} userId
+     * @returns {Promise<User | null>}
+     */
+    ```
+
+## 4. General Clean Code
+- **Single Responsibility Principle (SRP):** Functions must do one thing well. If a function gets too complex, refactor it into smaller, well-named helper functions.
+- **DRY (Don't Repeat Yourself):** Abstract repeated logic into reusable utility functions.
+- **Naming:** Use clear, descriptive, and searchable names for all variables, functions, and files.

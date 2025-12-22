@@ -1,0 +1,20 @@
+---
+description: Strict, utility-first Tailwind CSS best practices.
+globs: **/*.svelte, **/*.astro, **/*.tsx, **/*.jsx
+---
+
+# Tailwind CSS Best Practices
+
+## 1. Utility-First Always
+- **Use Utility Classes:** Apply utilities directly in the `class` attribute. This should be your default for all styling (layout, color, typography, etc.).
+- **Avoid `@apply`:** Do not use `@apply` in component `<style>` blocks. This breaks the utility-first workflow. If classes get too long, extract a new component.
+- **Scoped Styles are for Exceptions:** Only use a `<style>` block for things Tailwind *cannot* do, like complex, one-off keyframe animations or custom CSS property overrides.
+
+## 2. Dynamic Classes
+- **Use Ternaries:** For simple conditional classes, use a ternary operator in the `class` attribute.
+  - `class="p-4 {isActive ? 'bg-blue-500' : 'bg-gray-200'}"`
+- **Use `clsx` (or similar):** For complex logic, import a utility like `clsx` to build the class string cleanly.
+
+## 3. Configuration
+- **Theme:** All colors, fonts, and spacing should be defined in `tailwind.config.js`. Do not use arbitrary values (e.g., `[#123456]`, `[13px]`) in your markup.
+- **Content:** Ensure the `content` array in `tailwind.config.js` is correctly configured to scan all `.svelte`, `.astro`, `.ts`, etc. files for classes.

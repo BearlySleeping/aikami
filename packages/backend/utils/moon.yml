@@ -1,0 +1,57 @@
+# packages/backend/utils/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+stack: 'backend'
+tags:
+  - 'utils'
+  - 'backend'
+
+project:
+  name: 'Backend Utilities'
+  description: 'Shared backend utilities.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'deno.json'
+
+tasks:
+  check:
+    command: 'deno task check'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'deno task format'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'deno task lint'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  test:
+    command: 'deno task test'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'

@@ -1,0 +1,166 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{allDocs=**} {
+      allow read, write: if false;
+    }
+    match /emails/{emailId} {      
+      allow read: if isSignedIn() && isSuperAdmin()
+    }
+    match /invoices/{invoiceId} {      
+      allow create: if false;
+      allow read, write: if isSignedIn() && isSuperAdmin()
+    }
+    match /teams/{teamId} {      
+      allow create, delete: if isSuperAdmin();
+      allow read: if isSignedIn() && (isInTeam(teamId) || isSuperAdmin());
+      allow update: if isSignedIn() && (isInTeam(teamId) || isSuperAdmin());
+    }
+    match /providers/{providerId} {      
+      allow read, write: if isSignedIn() && isSuperAdmin();
+      
+      match /tenants/{tenantId} {      
+        allow read, write: if isSignedIn() && isSuperAdmin();
+        
+        match /accounts/{accountId} {      
+          allow read, write: if isSignedIn() && isSuperAdmin();
+        }
+      }
+    }
+    match /videoScripts/{videoScriptId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isSignedIn() && ( canManageVideoScript() || isSuperAdmin() );
+    }
+    match /videoScriptFolders/{videoScriptFolderId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isSignedIn(); // && ( canManageVideoScript() || isSuperAdmin() );
+    }
+    match /folders/{folderId} {      
+      allow read: if canManageFolder();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && ( canManageFolder() || isSuperAdmin() );
+    }
+    match /gifs/{gifId} {      
+      allow read: if canManageGif();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && ( canManageGif() || isSuperAdmin() );
+    }
+    match /videoLinks/{videoLinkId} {      
+      allow read, create: if true;
+      allow update, delete: if isSignedIn() && ( canManageVideo() || isSuperAdmin() );
+    }
+    // -- Videos
+    match /videos/{videoId} {      
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && ( canManageVideo() || isSuperAdmin() );
+    }
+    // -- Video segments
+    match /videoSegments/{videoSegmentId} {  
+      allow read: if true; //should be is signed in, but for trumpet admin page we have it true isSignedIn();
+      allow delete: if isSignedIn() && ( canManageVideo() || isSuperAdmin() );
+    }
+    match /favorites/{uid} {
+      allow read, update: if ( isSignedIn() && hasSameUID(uid) ) || (isSignedIn() && isInCurrentTeam()) || ( isSignedIn() && isSuperAdmin() );
+      allow write: if isSignedIn() && hasSameUID(uid);
+    }
+    // -- Users
+    match /users/{uid} {
+      allow read: if ( isSignedIn() && hasSameUID(uid) ) || (isSignedIn() && isInCurrentTeam()) || ( isSignedIn() && isSuperAdmin() );
+      allow update: if ( isSignedIn() && hasSameUID(uid) ) || (isSignedIn() && isInCurrentTeam()) || ( isSignedIn() && isSuperAdmin() );
+      allow write: if isSignedIn() && isSuperAdmin();
+      
+      match /notifications/{notificationId} {
+        allow write, read: if isSignedIn() && ( hasSameUID(uid) || isSuperAdmin() );
+      }
+      match /tokens/{tokenId} {
+        allow write: if isSignedIn() && ( hasSameUID(uid) || isSuperAdmin() );
+      }
+      match /ctaShortcuts/{ctaShortcutId} {
+        allow write, read: if isSignedIn() && ( hasSameUID(uid) || isSuperAdmin() );
+      }
+    }
+    match /stats/{allDocs=**} {
+      allow read, write: if isSuperAdmin();
+    }
+    match /stats/total {
+      match /users/{uid} {      
+        allow read: if ( isSignedIn() && hasSameUID(uid) ) || (isSignedIn() && isInCurrentTeam()) || ( isSignedIn() && isSuperAdmin() );
+        allow update: if ( isSignedIn() && hasSameUID(uid) ) || (isSignedIn() && isInCurrentTeam()) || ( isSignedIn() && isSuperAdmin() );
+      }
+      match /videos/{videoId} {      
+        allow read: if isSignedIn() && ( canViewVideoStats() || isSuperAdmin() );      
+        
+        match /videoHistories/{videoHistoryId} {
+          allow read: if isSignedIn() && ( canViewVideoHistory() || isSuperAdmin() );      
+    	    allow create, update: if true;
+        }
+      }
+      match /lambdaLogs/{lambdaLogId}{
+        allow read: if true;
+      }
+    }
+
+    // -- Helper functions
+    function existingData() {
+      return resource.data;
+    }
+    function currentUser() {
+      return request.auth;
+    }
+    function currentUserToken() {
+      return currentUser().token;
+    }
+    function isSignedIn() {
+      return currentUser() != null;
+    }
+    function canManageFolder() {
+      return isInTeam(existingData().teamId) || hasSameUID(existingData().creatorUID);
+    }
+    function canManageGif() {
+      return isInTeam(existingData().teamId) || hasSameUID(existingData().creatorUID);
+    }
+    function canViewVideoHistory() {
+      return true;
+    }
+    function canManageVideoScript() {
+      return isInTeam(existingData().creatorTeamId) || isInTeam(existingData().personalizedTeamId) || isInTeam(existingData().teamId) || hasSameUID(existingData().creatorUID);
+    }
+    function canManageVideo() {
+      return isInTeam(existingData().creatorTeamId) || isInTeam(existingData().personalizedTeamId) || isInTeam(existingData().teamId) || hasSameUID(existingData().creatorUID);
+    }
+    function canViewVideoStats() {
+      return true;
+    }
+    function hasSameUID(uid) {
+      return currentUser().uid == uid;
+    }
+    function currentTeam() {
+      return "currentTeam" in currentUserToken() ? currentUserToken().currentTeam : null;
+    }
+    function currentTeamId() {
+      return currentTeam() != null ? currentTeam().id : null;
+    }
+    function isInTeam(teamId) {
+      return "currentTeam" in currentUserToken().keys() && teamId == currentUserToken().currentTeam.id;
+    }
+    function isInCurrentTeam() {
+      return 'teamIds' in existingData() && currentTeamId() in existingData().teamIds;
+    }
+    function isSuperAdmin() {
+      return currentUserToken().userRole == 'superAdmin';
+    }
+    /*
+    function isPremium() {
+      return isSignedIn() && (currentUserToken().userStatus == 'active' || currentUserToken().userStatus == 'trialing') && currentUserToken().plan == 'premium';
+    }
+    function currentTeamRole() {
+      return currentTeam() != null ? currentTeam().role : null;
+    }
+    // [WRITE] Data that is sent to a Firestore document
+    function incomingData() {
+      return request.resource.data;
+    }
+    */
+  }
+}

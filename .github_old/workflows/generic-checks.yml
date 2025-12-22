@@ -1,0 +1,34 @@
+# Runs on non-game files for:
+# - Push to master/main
+# - Pull requests to master/main/dev
+name: Generic CI
+
+on:
+    push:
+        branches: ['master', 'main']
+        paths:
+            - '**'
+            - '!game/**' # Excludes game directory
+    pull_request:
+        branches: ['master', 'main', 'dev']
+        paths:
+            - '**'
+            - '!game/**' # Excludes game directory
+
+jobs:
+    spellcheck:
+        name: 'Spellcheck'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            # Runs spellcheck using cspell
+            # Requires cspell.json in root directory
+            - name: Check spelling
+              uses: streetsidesoftware/cspell-action@v6
+              with:
+                  # See https://github.com/streetsidesoftware/cspell-action?tab=readme-ov-file#usage
+                  config: '.vscode/cspell.json'
+                  incremental_files_only: false # Check all files, not just changed ones
+                  root: '.'

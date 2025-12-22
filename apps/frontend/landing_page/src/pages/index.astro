@@ -1,0 +1,21 @@
+---
+import MainLayout from '$layouts/main.astro';
+
+import DemoSection from '$components/DemoSection.astro';
+import BacklogSection from '$components/BacklogSection.astro';
+import IntroSection from '$components/IntroSection.astro';
+import Picture from '$components/Picture.astro';
+
+import fantasyImage from 'assets/squad.avif';
+
+
+---
+<MainLayout>
+		<DemoSection />
+			<div class="flex justify-center">
+				<Picture src={fantasyImage} alt="Fantasy image" class="p-10" height={500} />
+			</div>
+			<IntroSection />
+			<BacklogSection />
+</MainLayout>
+

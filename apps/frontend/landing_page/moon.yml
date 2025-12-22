@@ -1,0 +1,73 @@
+# apps/frontend/landing_page/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+stack: 'frontend'
+tags:
+  - 'website'
+  - 'astro'
+
+project:
+  name: 'Landing Page'
+  description: 'Public landing page for the project.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'public/**/*'
+  configs:
+    - 'deno.json'
+    - 'tsconfig.json'
+    - 'tailwind.config.mjs'
+    - 'astro.config.ts'
+
+tasks:
+  dev:
+    command: 'deno task dev'
+    local: true
+  start:
+    command: 'deno task start'
+    local: true
+  build:
+    command: 'deno task build'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+    outputs:
+      - 'dist'
+  preview:
+    command: 'deno task preview'
+    local: true
+  astro:
+    command: 'deno task astro'
+  check:
+    command: 'deno task check'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'deno task format'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'deno task lint'
+    inputs:
+      - '/deno.json'
+      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
