@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "lib": ["esnext", "dom"],
+    "lib": ["esnext", "dom", "deno.ns"],
     "types": ["./src/vite-env.d.ts"]
   },
   "tasks": {
