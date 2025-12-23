@@ -1,51 +1,79 @@
-# Testing
+# Testing Strategy
 
-This document provides an overview of the testing strategy for the Aikami project.
+This document outlines the comprehensive testing strategy for the AiKami project, ensuring code quality, reliability, and maintainability.
 
 ## Guiding Principles
 
--   **Test everything that can break:** We should write tests for all our code, including the frontend, backend, and shared packages.
--   **Write tests that are easy to read and maintain:** Tests should be easy to read and understand. They should also be easy to maintain as the codebase changes.
--   **Write tests that are fast and reliable:** Tests should be fast to run and should not be flaky.
+-   **Test-Driven Development (TDD):** We embrace TDD, writing failing tests before implementing functionality to guide our development process.
+-   **Comprehensive Coverage:** We aim for high code coverage, targeting **>80%** for all new and modified modules to minimize defects.
+-   **Readability & Maintainability:** Tests are written to be clear, concise, and easy to understand, facilitating future maintenance and refactoring.
+-   **Fast & Reliable:** Tests are designed to execute quickly and consistently, avoiding flakiness to ensure immediate feedback.
+-   **Test Everything that Can Break:** We write tests for all critical components across the frontend, backend, and shared packages.
 
-## Unit Testing
+## Testing Methodologies
 
-Unit tests are used to test individual units of code, such as functions, classes, and components. We use the built-in Deno testing framework to write our unit tests.
+### Unit Testing
 
-### Backend
+Unit tests focus on isolated units of code (e.g., functions, classes, components) to verify their correctness independently.
 
-For the backend, we write unit tests for all our Firebase Functions. We use the `@firebase/testing` library to test our functions in a local emulator. This allows us to test our functions without having to deploy them to Firebase.
+-   **Scope:** Individual functions, classes, methods, or components.
+-   **Tools:**
+    -   **Backend & Shared Packages:** Deno's built-in testing framework.
+    -   **Frontend (Svelte Components):** `@testing-library/svelte` for testing components in a simulated browser environment.
+    -   **Firebase Functions:** `@firebase/testing` for testing functions against a local Firebase emulator.
+-   **Practices:**
+    -   Every module must have corresponding tests.
+    -   Use appropriate test setup/teardown mechanisms (e.g., fixtures, `beforeEach`/`afterEach`).
+    -   Mock external dependencies to ensure isolation.
+    -   Test both success and failure cases, including edge conditions.
 
-### Frontend
+### Integration Testing
 
-For the frontend, we write unit tests for all our Svelte components. We use the `@testing-library/svelte` library to test our components in a simulated browser environment. This allows us to test our components without having to run them in a real browser.
+Integration tests verify the interactions and data flow between different modules or services within the system.
 
-### Shared Packages
+-   **Scope:** Interaction between frontend and backend, database transactions, API endpoints.
+-   **Tools:**
+    -   **Backend:** Deno's built-in testing framework.
+    -   **Firebase Backend:** `@firebase/testing` for integration tests within a local emulator.
+-   **Practices:**
+    -   Test complete user flows involving multiple components.
+    -   Verify data integrity across system boundaries.
+    -   Ensure proper authentication and authorization mechanisms are working.
+    -   Validate form submissions and data processing pipelines.
 
-For the shared packages, we write unit tests for all our utility functions and classes. We use the built-in Deno testing framework to write our unit tests.
+### End-to-End (E2E) Testing
 
-## Integration Testing
+End-to-End tests simulate real user scenarios to validate the entire application's functionality from start to finish.
 
-Integration tests are used to test the interaction between different parts of the system. For example, we write integration tests to test the interaction between the frontend and the backend.
+-   **Scope:** Full application workflows from the user's perspective.
+-   **Tool:** Playwright (Node.js library) for browser automation.
+-   **Practices:**
+    -   Simulate user interactions (clicks, input, navigation).
+    -   Verify critical business processes and user journeys.
+    -   Ensure the application behaves correctly across different browsers and devices (if configured).
 
-We use the built-in Deno testing framework to write our integration tests. We also use the `@firebase/testing` library to test our backend in a local emulator.
+## Code Coverage
 
-## End-to-End Testing
-
-End-to-end (E2E) tests are used to test the entire application from the user's perspective. We use Playwright to write our E2E tests.
-
-Playwright is a Node.js library that provides a high-level API for controlling a browser. We use Playwright to simulate user interactions and to verify that the application is working correctly.
+-   **Target:** All new and modified code should aim for **>80%** code coverage.
+-   **Measurement:** Specific tools for coverage reporting will be configured per project (e.g., `deno coverage` for Deno projects).
 
 ## Running the Tests
 
-To run the tests, use the following command:
+To execute the entire test suite (unit, integration, and E2E tests) for the project, use the following command:
 
 ```bash
 deno task test
 ```
 
-This command will run all the unit tests, integration tests, and E2E tests in the project.
+## Quality Gates
+
+Before any code is considered complete and ready for review or deployment, it must pass the following quality gates:
+
+-   All tests (unit, integration, E2E) must pass successfully.
+-   Code coverage must meet the >80% target.
+-   No linting or static analysis errors.
+-   Type safety must be enforced (e.g., TypeScript checks).
 
 ## Conclusion
 
-By following this testing strategy, we can ensure that the Aikami project is a success. If you have any questions or suggestions, please feel free to open an issue or a pull request.
+By adhering to this comprehensive testing strategy, we ensure the delivery of high-quality, robust, and reliable software for the AiKami project.
