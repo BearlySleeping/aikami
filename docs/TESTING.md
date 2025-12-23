@@ -14,13 +14,13 @@ This document outlines the comprehensive testing strategy for the AiKami project
 
 ### Unit Testing
 
-Unit tests focus on isolated units of code (e.g., functions, classes, components) to verify their correctness independently.
+Unit tests focus on isolated units of code (e.g., functions, classes) to verify their correctness independently.
 
--   **Scope:** Individual functions, classes, methods, or components.
+-   **Scope:** Individual functions, classes, and methods.
 -   **Tools:**
-    -   **Backend & Shared Packages:** Deno's built-in testing framework.
-    -   **Frontend (Svelte Components):** `@testing-library/svelte` for testing components in a simulated browser environment.
-    -   **Firebase Functions:** `@firebase/testing` for testing functions against a local Firebase emulator.
+    -   **Backend & Shared Packages:** Deno's built-in testing framework is the standard for all backend and shared library code.
+    -   **Frontend (Svelte Components):** Unit testing for Svelte components is currently deferred. In the future, if a dedicated internal component library is developed, we will look into implementing Storybook for component testing and visualization.
+    -   **Firebase Functions:** `@firebase/testing` is used for testing functions against a local Firebase emulator.
 -   **Practices:**
     -   Every module must have corresponding tests.
     -   Use appropriate test setup/teardown mechanisms (e.g., fixtures, `beforeEach`/`afterEach`).
@@ -45,8 +45,8 @@ Integration tests verify the interactions and data flow between different module
 
 End-to-End tests simulate real user scenarios to validate the entire application's functionality from start to finish.
 
--   **Scope:** Full application workflows from the user's perspective.
--   **Tool:** Playwright (Node.js library) for browser automation.
+-   **Scope:** Full application workflows for our frontend applications from the user's perspective.
+-   **Tool:** Playwright (Node.js library) is the designated tool for all E2E testing of our SvelteKit and Astro applications.
 -   **Practices:**
     -   Simulate user interactions (clicks, input, navigation).
     -   Verify critical business processes and user journeys.
