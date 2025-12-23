@@ -1,103 +1,58 @@
 # Coding Standards
 
-This document outlines the coding standards for the Aikami project. By following these standards, we can ensure that the codebase is clean, consistent, and easy to maintain.
+This document outlines the coding standards for the AiKami project. Adhering to these standards ensures code consistency, readability, and maintainability across the codebase.
 
-## Guiding Principles
+## General Guidelines
 
--   **Consistency:** Code should be consistent in style and structure across the entire project.
 -   **Readability:** Code should be easy to read and understand.
--   **Simplicity:** Code should be as simple as possible, without sacrificing functionality or performance.
+-   **Maintainability:** Code should be easy to modify and extend.
+-   **Consistency:** Follow existing patterns and styles within the project.
+-   **Clarity:** Avoid clever or overly complex solutions when a simpler alternative exists.
+-   **DRY (Don't Repeat Yourself):** Avoid duplicating code.
 
-## Linting
+## TypeScript Specific Guidelines
 
-We use [**XO**](https://github.com/xojs/xo) as our primary linter. XO is a highly opinionated linter that enforces a strict set of rules, which helps to ensure consistency and readability.
+These guidelines are primarily based on the Google TypeScript Style Guide.
 
-We also use the [**unicorn**](https://github.com/sindresorhus/eslint-plugin-unicorn) ESLint plugin, which provides a set of additional rules for writing better code.
+### Language Features
 
-### Configuration
+-   **Variable Declarations:** Always use `const` or `let`. `var` is forbidden. Prefer `const` by default.
+-   **Modules:** Use ES6 modules (`import`/`export`). Do not use `namespace`.
+-   **Exports:** Use named exports (`export {MyClass};`). Avoid default exports.
+-   **Classes:**
+    -   Do not use `#private` fields. Use TypeScript's `private` visibility modifier.
+    -   Mark properties never reassigned outside the constructor with `readonly`.
+    -   Never use the `public` modifier (it's the default). Restrict visibility with `private` or `protected` where possible.
+-   **Functions:** Prefer function declarations for named functions. Use arrow functions for anonymous functions/callbacks.
+-   **String Literals:** Use single quotes (`'`). Use template literals (`` ` ``) for interpolation and multi-line strings.
+-   **Equality Checks:** Always use triple equals (`===`) and not equals (`!==`).
+-   **Type Assertions:** Avoid type assertions (`x as SomeType`) and non-nullability assertions (`y!`). If necessary, provide clear justification.
 
-The linting configuration is defined in the `deno.json` file. To run the linter, use the following command:
+### Disallowed Features
 
-```bash
-deno lint
-```
+-   **`any` Type:** Avoid `any`. Prefer `unknown` or a more specific type.
+-   **Wrapper Objects:** Do not instantiate `String`, `Boolean`, or `Number` wrapper classes.
+-   **Automatic Semicolon Insertion (ASI):** Do not rely on it. Explicitly end all statements with a semicolon.
+-   **`const enum`:** Do not use `const enum`. Use plain `enum` instead.
+-   **`eval()` and `Function(...string)`:** Forbidden.
 
-### Rules
+### Naming
 
-We use the default XO rules, with a few minor modifications. The full set of rules can be found in the `deno.json` file.
+-   **`UpperCamelCase`:** For classes, interfaces, types, enums, and decorators.
+-   **`lowerCamelCase`:** For variables, parameters, functions, methods, and properties.
+-   **`CONSTANT_CASE`:** For global constant values, including enum values.
+-   **`_` Prefix/Suffix:** Do not use `_` as a prefix or suffix for identifiers, including for private properties.
 
-Here are some of the key rules that we follow:
+### Type System
 
--   **Semicolons:** We do not use semicolons.
--   **Indentation:** We use 2 spaces for indentation.
--   **Quotes:** We use single quotes for strings.
--   **Trailing commas:** We use trailing commas for multiline arrays and objects.
--   **Naming conventions:** We use camelCase for variables and functions, and PascalCase for classes and types.
+-   **Type Inference:** Rely on type inference for simple, obvious types. Be explicit for complex types.
+-   **`undefined` and `null`:** Both are supported. Be consistent within your project.
+-   **Optional vs. `|undefined`:** Prefer optional parameters and fields (`?`) over adding `|undefined` to the type.
+-   **`Array<T>` Type:** Use `T[]` for simple types. Use `Array<T>` for more complex union types (e.g., `Array<string | number>`).
+-   **`{}` Type:** Do not use `{}`. Prefer `unknown`, `Record<string, unknown>`, or `object`.
 
-For a complete list of rules, please refer to the [XO documentation](https://github.com/xojs/xo#rules) and the [unicorn documentation](https://github.com/sindresorhus/eslint-plugin-unicorn#rules).
+### Comments and Documentation
 
-## Formatting
-
-We use the `deno fmt` command to format our code. This ensures that the code is always formatted consistently.
-
-To format the code, use the following command:
-
-```bash
-deno fmt
-```
-
-## Type Checking
-
-We use TypeScript for all our code. This helps to ensure that the code is type-safe and free of errors.
-
-To run the type checker, use the following command:
-
-```bash
-deno check
-```
-
-## Git
-
-### Commits
-
-We follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification for our commit messages. This helps to ensure that our commit history is clean, consistent, and easy to read.
-
-A commit message consists of a **header**, a **body**, and a **footer**.
-
-The header has a special format that includes a **type**, a **scope**, and a **subject**:
-
-```
-<type>(<scope>): <subject>
-```
-
-The **type** must be one of the following:
-
--   `feat`: A new feature
--   `fix`: A bug fix
--   `docs`: Documentation only changes
--   `style`: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
--   `refactor`: A code change that neither fixes a bug nor adds a feature
--   `perf`: A code change that improves performance
--   `test`: Adding missing tests or correcting existing tests
--   `build`: Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)
--   `ci`: Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs)
--   `chore`: Other changes that don't modify `src` or `test` files
--   `revert`: Reverts a previous commit
-
-The **scope** is optional and can be used to specify the part of the codebase that is affected by the change.
-
-The **subject** contains a succinct description of the change.
-
-### Branches
-
-We use the following branching strategy:
-
--   `main`: The main branch. This branch should always be stable and deployable.
--   `develop`: The development branch. This branch is where we merge our feature branches.
--   `feat/...`: Feature branches. These branches are used to develop new features.
--   `fix/...`: Bug fix branches. These branches are used to fix bugs.
--   `docs/...`: Documentation branches. These branches are used to write documentation.
-
-## Conclusion
-
-By following these coding standards, we can ensure that the Aikami project is a success. If you have any questions or suggestions, please feel free to open an issue or a pull request.
+-   **JSDoc:** Use `/** JSDoc */` for documentation, `//` for implementation comments.
+-   **Redundancy:** Do not declare types in `@param` or `@return` blocks (e.g., `/** @param {string} user */`).
+-   **Add Information:** Comments must add information, not just restate the code.
