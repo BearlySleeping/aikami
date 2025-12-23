@@ -8,13 +8,13 @@ This package is a dependency of other packages in the monorepo and is not meant 
 
 ## Usage
 
-To use the logger from this package, import it from `@aikami/logger`:
+To use the logger from this package, import it from `$logger`:
 
 ```typescript
-import logger from '@aikami/logger'
+import logger from "$logger";
 
-logger.info('This is an info message')
-logger.error('This is an error message')
+logger.info("This is an info message");
+logger.error("This is an error message");
 ```
 
 ## API
@@ -52,8 +52,6 @@ The logger has the following log levels:
 The default log level is `info`. You can set the log level using the `setLogLevel` method.
 
 ```typescript
-import logger from '@aikami/logger'
-import { logLevels } from '@aikami/constants'
-
-logger.setLogLevel(logLevels.DEBUG)
+import logger from "$logger";
+logger.setLogLevel("DEBUG");
 ```
