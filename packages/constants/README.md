@@ -11,7 +11,7 @@ This package is a dependency of other packages in the monorepo and is not meant 
 To use the constants from this package, import them from `@aikami/constants`:
 
 ```typescript
-import { userRoles } from '@aikami/constants'
+import { userRoles } from "@aikami/constants";
 ```
 
 ## Constants
@@ -48,14 +48,6 @@ import { userRoles } from '@aikami/constants'
 
 - `commonLocations`: An array of common locations.
 - `commonLocationObjects`: An array of common location objects.
-
-### `logger.ts`
-
-- `logLevels`: An array of log levels.
-  - `debug`
-  - `info`
-  - `warn`
-  - `error`
 
 ### `regex.ts`
 
