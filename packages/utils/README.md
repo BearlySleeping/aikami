@@ -11,7 +11,7 @@ This package is a dependency of other packages in the monorepo and is not meant 
 To use the utils from this package, import them from `@aikami/utils`:
 
 ```typescript
-import { getErrorMessage } from '@aikami/utils'
+import { isEqualArray } from "@aikami/utils";
 ```
 
 ## Utils

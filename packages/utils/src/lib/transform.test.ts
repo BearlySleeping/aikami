@@ -1,4 +1,5 @@
-import { assertEquals } from 'https://deno.land/std@0.208.0/assert/mod.ts'
+// packages/utils/src/lib/transform.test.ts
+import { assertEquals } from '@std/assert'
 import { Timestamp } from 'firebase/firestore'
 import { fromJsonData } from './transform.ts'
 import { unixLabel } from '@aikami/constants'
