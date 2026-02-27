@@ -1,14 +1,11 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 export const BaseCharacterSheetSchema = z
   .object({
     name: z.string().describe('Character Name (Required, max 100 characters)'),
     race: z.string().describe('Character Race (Required, max 50 characters)'),
     class: z.string().describe('Character Class (Required, max 50 characters)'),
-    level: z
-      .number()
-      .int()
-      .describe('Character Level (Required, integer between 1 and 20)'),
+    level: z.number().int().describe('Character Level (Required, integer between 1 and 20)'),
     experiencePoints: z
       .number()
       .int()
@@ -16,10 +13,7 @@ export const BaseCharacterSheetSchema = z
 
     abilityScores: z
       .object({
-        strength: z
-          .number()
-          .int()
-          .describe('Strength Score (Required, integer between 1 and 30)'),
+        strength: z.number().int().describe('Strength Score (Required, integer between 1 and 30)'),
         dexterity: z
           .number()
           .int()
@@ -32,25 +26,13 @@ export const BaseCharacterSheetSchema = z
           .number()
           .int()
           .describe('Intelligence Score (Required, integer between 1 and 30)'),
-        wisdom: z
-          .number()
-          .int()
-          .describe('Wisdom Score (Required, integer between 1 and 30)'),
-        charisma: z
-          .number()
-          .int()
-          .describe('Charisma Score (Required, integer between 1 and 30)'),
+        wisdom: z.number().int().describe('Wisdom Score (Required, integer between 1 and 30)'),
+        charisma: z.number().int().describe('Charisma Score (Required, integer between 1 and 30)'),
       })
       .describe('Ability Scores'),
 
-    hitPoints: z
-      .number()
-      .int()
-      .describe('Hit Points (Required, non-negative integer)'),
-    armorClass: z
-      .number()
-      .int()
-      .describe('Armor Class (Required, non-negative integer)'),
+    hitPoints: z.number().int().describe('Hit Points (Required, non-negative integer)'),
+    armorClass: z.number().int().describe('Armor Class (Required, non-negative integer)'),
     speed: z.number().int().describe('Speed (Required, non-negative integer)'),
 
     alignment: z
@@ -60,10 +42,7 @@ export const BaseCharacterSheetSchema = z
       ), // Example enum
     background: z.string().describe('Background (Required, max 50 characters)'), // Could also be an enum
 
-    proficiencies: z
-      .string()
-      .array()
-      .describe('Proficiencies (Array of strings)'),
+    proficiencies: z.string().array().describe('Proficiencies (Array of strings)'),
     languages: z.string().array().describe('Languages (Array of strings)'),
 
     equipment: z.string().array().describe('Equipment (Array of strings)'),
@@ -77,9 +56,6 @@ export const BaseCharacterSheetSchema = z
     bonds: z.string().describe('Bonds (Optional, max 500 characters)').optional(),
     flaws: z.string().describe('Flaws (Optional, max 500 characters)').optional(),
 
-    notes: z
-      .string()
-      .describe('Additional Notes (Optional, max 1000 characters)')
-      .optional(),
+    notes: z.string().describe('Additional Notes (Optional, max 1000 characters)').optional(),
   })
-  .describe('D&D Character Sheet')
+  .describe('D&D Character Sheet');

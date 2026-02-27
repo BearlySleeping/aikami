@@ -1,5 +1,5 @@
 export type HttpsCallable = (
-  // deno-lint-ignore ban-types
+  // biome-disable-next-line ban-types
   data?: {} | null,
-  // deno-lint-ignore no-explicit-any
-) => Promise<{ readonly data: any }>
+  // biome-disable-next-line no-explicit-any
+) => Promise<{ readonly data: any }>;

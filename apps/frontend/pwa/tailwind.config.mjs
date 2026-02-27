@@ -30,4 +30,4 @@ export default {
   // Updated to the modern object syntax for clarity
   darkMode: ['selector', '.darkmode'],
   plugins: [],
-}
+};

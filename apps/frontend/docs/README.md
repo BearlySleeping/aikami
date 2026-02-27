@@ -1,49 +1,58 @@
-# Starlight Starter Kit: Basics
+# @app/docs
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+Project documentation website built with Astro Starlight.
 
-```
-deno create astro@latest -- --template starlight
-```
+## Overview
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+This is the documentation site for the Aikami project, built with Astro and Starlight. It provides:
+- User guides and tutorials
+- API reference documentation
+- Development documentation
 
-## 🚀 Project Structure
+## Tech Stack
 
-Inside of your Astro + Starlight project, you'll see the following folders and files:
+- **Framework**: Astro + Starlight
+- **Styling**: Tailwind CSS
+- **Content**: MDX
 
-```
-.
-├── public/
-├── src/
-│   ├── assets/
-│   ├── content/
-│   │   └── docs/
-│   └── content.config.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+## Installation
+
+This is a workspace app managed by moon. Install dependencies:
+
+```bash
+bun install
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+## Tasks
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
+| Task | Command | Description |
+|------|---------|-------------|
+| `dev` | `bun run dev` | Start development server |
+| `build` | `bun run build` | Build for production |
+| `preview` | `bun run preview` | Preview production build |
+| `check` | `bun run check` | Run TypeScript checks |
+| `lint` | `bun run lint` | Lint code with Biome |
+| `format` | `bun run format` | Format code with Biome |
 
-Static assets, like favicons, can be placed in the `public/` directory.
+## Project Structure
 
-## 🧞 Commands
+```
+src/
+├── assets/          # Static assets
+├── content/
+│   └── docs/        # Documentation pages
+│       ├── guides/  # User guides
+│       └── reference/  # API reference
+└── content.config.ts  # Content configuration
+```
 
-All commands are run from the root of the project, from a terminal:
+## Dependencies
 
-| Command                | Action                                           |
-| :--------------------- | :----------------------------------------------- |
-| `deno install`         | Installs dependencies                            |
-| `deno dev`             | Starts local dev server at `localhost:4321`      |
-| `deno build`           | Build your production site to `./dist/`          |
-| `deno preview`         | Preview your build locally, before deploying     |
-| `deno astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `deno astro -- --help` | Get help using the Astro CLI                     |
+This app depends on the following packages:
+- `@aikami/constants`
+- `@aikami/schemas`
+- `@aikami/types`
 
-## 👀 Want to learn more?
+## Adding Documentation
 
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+Add new documentation pages in `src/content/docs/`. Use MDX format for rich content.

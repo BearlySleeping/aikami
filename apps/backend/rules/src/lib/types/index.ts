@@ -1,2 +1,2 @@
-export * from "./auth.ts";
-export * from "./firestore.ts";
+export * from './auth.ts';
+export * from './firestore.ts';

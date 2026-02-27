@@ -1,7 +1,6 @@
-import type { UserClaims } from '@aikami/types'
-import type { CallableContext, CommonError, Response } from '@aikami/types'
-import { toUserClaims } from '@aikami/utils'
-import { https } from 'firebase-functions'
+import type { CallableContext, CommonError, Response, UserClaims } from '@aikami/types';
+import { toUserClaims } from '@aikami/utils';
+import { https } from 'firebase-functions';
 
 /** @see https://firebase.google.com/docs/reference/functions/providers_https_#functionserrorcode */
 type HttpsErrorType =
@@ -21,7 +20,7 @@ type HttpsErrorType =
   | 'unauthenticated'
   | 'unavailable'
   | 'unimplemented'
-  | 'unknown'
+  | 'unknown';
 
 /**
  * Get a Error object that the frontend can easily read and understand from when
@@ -36,7 +35,7 @@ export const toHttpsError = (
   errorCode: HttpsErrorType,
   errorMessage: string,
   details?: unknown,
-): https.HttpsError => new https.HttpsError(errorCode, errorMessage, details)
+): https.HttpsError => new https.HttpsError(errorCode, errorMessage, details);
 
 /**
  * Validates auth context for callable function for an active user. Throws
@@ -47,14 +46,11 @@ export const toHttpsError = (
  */
 export const assertUser = (context: CallableContext): UserClaims => {
   if (!context.auth) {
-    throw toHttpsError(
-      'permission-denied',
-      'function called without context.auth',
-    )
+    throw toHttpsError('permission-denied', 'function called without context.auth');
   } else {
-    return toUserClaims(context.auth)
+    return toUserClaims(context.auth);
   }
-}
+};
 
 /**
  * Validates auth context for callable function for an active user. Throws
@@ -65,22 +61,16 @@ export const assertUser = (context: CallableContext): UserClaims => {
  */
 export const assertSuperAdmin = (context: CallableContext): UserClaims => {
   if (!context.auth) {
-    throw toHttpsError(
-      'permission-denied',
-      'function called without context.auth',
-    )
+    throw toHttpsError('permission-denied', 'function called without context.auth');
   }
-  const userClaims = toUserClaims(context.auth)
+  const userClaims = toUserClaims(context.auth);
 
   if (userClaims.userRole !== 'superAdmin') {
-    throw toHttpsError(
-      'permission-denied',
-      'function called without context.auth',
-    )
+    throw toHttpsError('permission-denied', 'function called without context.auth');
   } else {
-    return userClaims
+    return userClaims;
   }
-}
+};
 
 /**
  * Sends a descriptive error response when running a callable function
@@ -89,17 +79,16 @@ export const assertSuperAdmin = (context: CallableContext): UserClaims => {
  */
 export const catchErrors = async <T>(promise: Promise<T> | T): Promise<T> => {
   try {
-    const response = await promise
-    return response
+    const response = await promise;
+    return response;
   } catch (error_) {
-    const error = error_ instanceof https.HttpsError ? error_ : toHttpsError(
-      'unknown',
-      (error_ as CommonError).message ?? '',
-      error_,
-    )
-    throw error
+    const error =
+      error_ instanceof https.HttpsError
+        ? error_
+        : toHttpsError('unknown', (error_ as CommonError).message ?? '', error_);
+    throw error;
   }
-}
+};
 
 /**
  * Sends a descriptive error response when running a callable function
@@ -112,8 +101,8 @@ export const catchAPIErrors = async (
   promise: () => Promise<void>,
 ): Promise<void> => {
   try {
-    await promise()
+    await promise();
   } catch (error) {
-    response.status(500).send(error)
+    response.status(500).send(error);
   }
-}
+};

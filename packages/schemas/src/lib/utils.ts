@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
-import type { ZodObject, ZodOptional, ZodUnion } from 'zod'
-import { FieldValueSchema } from './fields.ts'
+import type { ZodObject, ZodOptional, ZodUnion } from 'zod';
+import { FieldValueSchema } from './fields.ts';
 
 /**
  * Creates a shape object from a Zod schema where optional fields are made "deletable"
@@ -14,21 +14,20 @@ import { FieldValueSchema } from './fields.ts'
 export function getDeletableFields<T extends ZodObject<any>>(
   schema: T,
 ): {
-  [
-    K in keyof T['shape'] as T['shape'][K] extends ZodOptional<any> ? K
-      : never
-  ]: ZodUnion<[T['shape'][K], typeof FieldValueSchema]>
+  [K in keyof T['shape'] as T['shape'][K] extends ZodOptional<any> ? K : never]: ZodUnion<
+    [T['shape'][K], typeof FieldValueSchema]
+  >;
 } {
-  const shape = schema.shape
-  const deletableShape: any = {}
+  const shape = schema.shape;
+  const deletableShape: any = {};
 
   for (const key in shape) {
-    const field = shape[key]
+    const field = shape[key];
 
     if (field.isOptional()) {
-      deletableShape[key] = field.or(FieldValueSchema)
+      deletableShape[key] = field.or(FieldValueSchema);
     }
   }
 
-  return deletableShape as any
+  return deletableShape as any;
 }

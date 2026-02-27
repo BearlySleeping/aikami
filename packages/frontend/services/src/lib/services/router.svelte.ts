@@ -1,7 +1,7 @@
-import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants'
-import type { Listener } from '@aikami/types'
-import { BaseClass, toAppError } from '@aikami/utils'
-import type { Navigation as SvelteKitNavigation, Page } from '@sveltejs/kit'
+import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
+import type { Listener } from '@aikami/types';
+import { BaseClass, toAppError } from '@aikami/utils';
+import type { Page, Navigation as SvelteKitNavigation } from '@sveltejs/kit';
 import {
   type AllRoutes,
   type PathParameters,
@@ -10,20 +10,19 @@ import {
   toRouteHref,
   toRoutePathFromRouteId,
   toRoutePathFromURL,
-} from '$router'
-import type {
-  BaseFrontendClassInterface,
-  BaseFrontendClassOptions,
-} from '../base/base-frontend-class.ts'
+} from '$router';
+import type { BaseFrontendClassInterface } from '../base/base-frontend-class.ts';
 
-type Navigation = SvelteKitNavigation | {
-  from: null
-  to: null
-  type: null
-  willUnload: null
-  delta: null
-  complete: null
-}
+type Navigation =
+  | SvelteKitNavigation
+  | {
+      from: null;
+      to: null;
+      type: null;
+      willUnload: null;
+      delta: null;
+      complete: null;
+    };
 
 /**
  * Returns a Promise that resolves when SvelteKit navigates (or fails to
@@ -50,52 +49,52 @@ type Navigation = SvelteKitNavigation | {
 type GoTo = (
   url: string | URL,
   opts?: {
-    replaceState?: boolean
-    noscroll?: boolean
-    keepfocus?: boolean
-    state?: App.PageState | undefined
+    replaceState?: boolean;
+    noscroll?: boolean;
+    keepfocus?: boolean;
+    state?: App.PageState | undefined;
   },
-) => Promise<void>
+) => Promise<void>;
 
 export type RouterServiceInterface = BaseFrontendClassInterface & {
-  readonly url: URL
-  readonly searchParams: URLSearchParams
-  readonly currentRoute: RouteName | undefined
-  readonly initialized: boolean
-  readonly navigatingToRoute: RouteName | undefined
-  readonly isNavigating: boolean
-  readonly currentPathName: string | undefined
-  readonly previousPage: Page | undefined
+  readonly url: URL;
+  readonly searchParams: URLSearchParams;
+  readonly currentRoute: RouteName | undefined;
+  readonly initialized: boolean;
+  readonly navigatingToRoute: RouteName | undefined;
+  readonly isNavigating: boolean;
+  readonly currentPathName: string | undefined;
+  readonly previousPage: Page | undefined;
 
   toRouteHref<T extends RouteName>(
     route: T,
     options: RouteOptions & {
-      queryParameters: AllRoutes[T]['queryParameters']
-      pathParameters: PathParameters<T>
-      url: URL | undefined
+      queryParameters: AllRoutes[T]['queryParameters'];
+      pathParameters: PathParameters<T>;
+      url: URL | undefined;
     },
-  ): string
+  ): string;
   /**
    * Navigate to the specified href.
    *
    * Only use this when it is not possible to use {@link goToRoute},
    * currently this use case is only for embed package.
    */
-  goToHref(href: string): Promise<void>
+  goToHref(href: string): Promise<void>;
   goToRoute<T extends RouteName>(
     route: T,
     options: RouteOptions & {
-      queryParameters: AllRoutes[T]['queryParameters']
-      pathParameters: PathParameters<T>
+      queryParameters: AllRoutes[T]['queryParameters'];
+      pathParameters: PathParameters<T>;
     },
-  ): Promise<void>
+  ): Promise<void>;
 
   initialize(options: {
-    goto: GoTo
-    page: Page
-    navigating: Navigation | null
-    initialRoute?: RouteName
-  }): void
+    goto: GoTo;
+    page: Page;
+    navigating: Navigation | null;
+    initialRoute?: RouteName;
+  }): void;
 
   /**
    * Navigate to the app. This is used when the user comes from
@@ -104,152 +103,140 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
    *      if {@link goto} is defined then navigate to that page.
    *      else use defaultHref, that is personal page/
    */
-  navigateToApp(options?: {
-    defaultHref?: string
-    forceRefresh?: boolean
-  }): Promise<void>
+  navigateToApp(options?: { defaultHref?: string; forceRefresh?: boolean }): Promise<void>;
 
-  setCurrentPage(route?: RouteName): void
+  setCurrentPage(route?: RouteName): void;
 
-  onPageChanged(listener: Listener<Page | undefined>): void
-}
+  onPageChanged(listener: Listener<Page | undefined>): void;
+};
 
 export class RouterService extends BaseClass implements RouterServiceInterface {
-  history = $state<Page[]>([])
-  initialized = $state(false)
-  currentPathName = $state<string | undefined>()
+  history = $state<Page[]>([]);
+  initialized = $state(false);
+  currentPathName = $state<string | undefined>();
 
-  private readonly _pageChangedListener = this.createLiteObserver<
-    Page | undefined
-  >()
+  private readonly _pageChangedListener = this.createLiteObserver<Page | undefined>();
 
-  private _goto: GoTo | undefined
-  private _pageValue = $state<Page | undefined>()
-  private _navigating = $state<Navigation | undefined>()
-  private _currentRoute = $state<RouteName | undefined>()
+  private _goto: GoTo | undefined;
+  private _pageValue = $state<Page | undefined>();
+  private _navigating = $state<Navigation | undefined>();
+  private _currentRoute = $state<RouteName | undefined>();
 
-  private readonly _redirectToKey = REDIRECT_TO_URL_SEARCH_PARAM_KEY
-
-  constructor(options: BaseFrontendClassOptions) {
-    super(options)
-  }
+  private readonly _redirectToKey = REDIRECT_TO_URL_SEARCH_PARAM_KEY;
 
   protected get redirectToHref(): string | undefined {
-    const { searchParams } = this.url
-    const redirectToHref = searchParams.get(this._redirectToKey)
+    const { searchParams } = this.url;
+    const redirectToHref = searchParams.get(this._redirectToKey);
     if (!redirectToHref) {
-      return undefined
+      return undefined;
     }
-    return redirectToHref
+    return redirectToHref;
   }
 
   async goToHref(goto: string): Promise<void> {
-    this.log('goToHref', { goto })
+    this.log('goToHref', { goto });
     if (!this._goto) {
-      throw toAppError('internal', 'RouterService is not initialized')
+      throw toAppError('internal', 'RouterService is not initialized');
     }
 
-    return await this._goto(goto)
+    return await this._goto(goto);
   }
   async goToRoute<T extends RouteName>(
     route: T,
     options: RouteOptions & {
-      queryParameters: AllRoutes[T]['queryParameters']
-      pathParameters: PathParameters<T>
+      queryParameters: AllRoutes[T]['queryParameters'];
+      pathParameters: PathParameters<T>;
     },
   ): Promise<void> {
-    this.log('goToRoute', options)
+    this.log('goToRoute', options);
 
     const href = this.toRouteHref(route, {
       ...options,
       url: this.url,
-    })
+    });
 
-    this.log('goToRoute:href', href)
-    return await this.goToHref(href)
+    this.log('goToRoute:href', href);
+    return await this.goToHref(href);
   }
 
   onPageChanged(listener: Listener<Page | undefined>): void {
-    return this._pageChangedListener.subscribe(listener)
+    return this._pageChangedListener.subscribe(listener);
   }
 
   get previousPage(): Page | undefined {
-    return this.history[this.history.length - 2]
+    return this.history[this.history.length - 2];
   }
 
   setCurrentPage(route?: RouteName): void {
-    this._currentRoute = route
+    this._currentRoute = route;
   }
 
   get url(): URL {
     if (!this._pageValue) {
-      throw toAppError('internal', 'RouterService not initialized or page not set')
+      throw toAppError('internal', 'RouterService not initialized or page not set');
     }
-    return this._pageValue.url
+    return this._pageValue.url;
   }
   get searchParams(): URLSearchParams {
-    return this.url.searchParams
+    return this.url.searchParams;
   }
 
   get isNavigating(): boolean {
-    return !!this._navigating
+    return !!this._navigating;
   }
 
   get navigatingToRoute(): RouteName | undefined {
     if (!this._navigating?.to) {
-      return undefined
+      return undefined;
     }
 
-    const { to } = this._navigating
+    const { to } = this._navigating;
     const route = to.route.id
       ? this.toRoutePathFromRouteId(to.route.id)
-      : toRoutePathFromURL(to.url)
-    return route as RouteName
+      : toRoutePathFromURL(to.url);
+    return route as RouteName;
   }
 
   get currentRoute(): RouteName | undefined {
-    return this.navigatingToRoute ?? this._currentRoute
+    return this.navigatingToRoute ?? this._currentRoute;
   }
   get $currentRoute(): RouteName | undefined {
-    return this.currentRoute
+    return this.currentRoute;
   }
 
   toRouteHref<T extends RouteName>(
     route: T,
     options: RouteOptions & {
-      queryParameters: AllRoutes[T]['queryParameters']
-      pathParameters: PathParameters<T>
-      url: URL | undefined
+      queryParameters: AllRoutes[T]['queryParameters'];
+      pathParameters: PathParameters<T>;
+      url: URL | undefined;
     },
   ): string {
     return toRouteHref(route, {
       ...options,
       redirectToKey: this._redirectToKey,
       url: options.url ?? this.url,
-    })
+    });
   }
 
   toRoutePathFromRouteId(routeId: string): RouteName | undefined {
-    this.debug('toRoutePathFromRouteId', { routeId })
-    return toRoutePathFromRouteId(routeId)
+    this.debug('toRoutePathFromRouteId', { routeId });
+    return toRoutePathFromRouteId(routeId);
   }
-  private _isNavigatingToApp = false
+  private _isNavigatingToApp = false;
 
-  async navigateToApp(options?: {
-    defaultHref?: string
-    forceRefresh?: boolean
-  }): Promise<void> {
+  async navigateToApp(options?: { defaultHref?: string; forceRefresh?: boolean }): Promise<void> {
     if (this._isNavigatingToApp) {
-      return
+      return;
     }
-    const { defaultHref, forceRefresh } = options ?? {}
-    this._isNavigatingToApp = true
+    const { defaultHref, forceRefresh } = options ?? {};
+    this._isNavigatingToApp = true;
 
-    const redirectToHref = this.redirectToHref
+    const redirectToHref = this.redirectToHref;
     this.log('navigateToApp', {
       defaultHref,
       redirectToHref,
-    })
+    });
     if (
       redirectToHref &&
       redirectToHref !== '/' &&
@@ -258,9 +245,9 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
       !redirectToHref.startsWith('/register')
     ) {
       if (forceRefresh) {
-        globalThis.window.open(redirectToHref, '_self')
+        globalThis.window.open(redirectToHref, '_self');
       } else {
-        await this.goToHref(redirectToHref)
+        await this.goToHref(redirectToHref);
       }
     } else {
       if (forceRefresh) {
@@ -271,65 +258,67 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
               queryParameters: undefined,
               url: this.url,
             }),
-        )
+        );
       } else {
-        await (defaultHref ? this.goToHref(defaultHref) : this.goToRoute('dashboard', {
-          pathParameters: undefined,
-          queryParameters: undefined,
-        }))
+        await (defaultHref
+          ? this.goToHref(defaultHref)
+          : this.goToRoute('dashboard', {
+              pathParameters: undefined,
+              queryParameters: undefined,
+            }));
       }
     }
 
-    this._isNavigatingToApp = false
+    this._isNavigatingToApp = false;
   }
 
   initialize(options: {
-    goto: GoTo
-    page: Page
-    navigating: Navigation | null
-    initialRoute?: RouteName
+    goto: GoTo;
+    page: Page;
+    navigating: Navigation | null;
+    initialRoute?: RouteName;
   }): void {
-    this.debug('initialize', options)
-    const { goto, page, navigating } = options
-    this._goto = goto
+    this.debug('initialize', options);
+    const { goto, page, navigating } = options;
+    this._goto = goto;
 
     $effect.root(() => {
-      this._navigating = navigating ?? undefined
+      this._navigating = navigating ?? undefined;
 
-      this._pageValue = page
+      this._pageValue = page;
 
-      const routeId = page.route.id
-      this.log('page changed:routeId', routeId)
+      const routeId = page.route.id;
+      this.log('page changed:routeId', routeId);
 
       const currentRoute = routeId
         ? this.toRoutePathFromRouteId(routeId)
-        : toRoutePathFromURL(page.url)
+        : toRoutePathFromURL(page.url);
 
-      this.log('page changed:route', currentRoute)
+      this.log('page changed:route', currentRoute);
       if (!currentRoute) {
-        return this.warn('Page has no route')
+        return this.warn('Page has no route');
       }
 
-      this._currentRoute = currentRoute
-      this.currentPathName = page.url.pathname
-      this._pushPageToHistory(page)
-    })
+      this._currentRoute = currentRoute;
+      this.currentPathName = page.url.pathname;
+      this._pushPageToHistory(page);
+    });
 
     $effect.root(() => {
-      this._pageChangedListener.publish(this.previousPage)
-    })
+      this._pageChangedListener.publish(this.previousPage);
+    });
 
-    this.initialized = true
+    this.initialized = true;
   }
 
   private _pushPageToHistory(route: Page): void {
-    this.history.push(route)
+    this.history.push(route);
     if (this.history.length > 50) {
-      this.history.shift()
+      this.history.shift();
     }
   }
 }
 
 export const routerService: RouterServiceInterface = new RouterService({
   className: 'RouterService',
-})
+});

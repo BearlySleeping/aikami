@@ -1,0 +1,22 @@
+{
+  "name": "@app/docs",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro start",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "astro": "5.18.0"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*"
+  }
+}

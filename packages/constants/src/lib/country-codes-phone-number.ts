@@ -111,13 +111,7 @@ const allCountries = [
   ['Denmark (Danmark)', 'dk', '45'],
   ['Djibouti', 'dj', '253'],
   ['Dominica', 'dm', '1', 13, ['767']],
-  [
-    'Dominican Republic (República Dominicana)',
-    'do',
-    '1',
-    2,
-    ['809', '829', '849'],
-  ],
+  ['Dominican Republic (República Dominicana)', 'do', '1', 2, ['809', '829', '849']],
   ['Ecuador', 'ec', '593'],
   ['Egypt (‫مصر‬‎)', 'eg', '20'],
   ['El Salvador', 'sv', '503'],
@@ -300,7 +294,7 @@ const allCountries = [
   ['Zambia', 'zm', '260'],
   ['Zimbabwe', 'zw', '263'],
   ['Åland Islands', 'ax', '358', 1, ['18']],
-] as const
+] as const;
 
 export const normalizedCountries = allCountries.map((country) => {
   return {
@@ -311,5 +305,5 @@ export const normalizedCountries = allCountries.map((country) => {
     label: `${country[0]} +${country[2]}`,
     name: country[0],
     priority: country[3] || 0,
-  }
-})
+  };
+});

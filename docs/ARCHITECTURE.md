@@ -34,5 +34,5 @@ The Aikami ecosystem is composed of several key components that work together to
 
 ## Monorepo & Tooling
 
--   **Deno:** We use Deno as our primary runtime for TypeScript/JavaScript, providing a secure and modern development environment.
+-   **Bun:** We use Bun as our primary runtime for TypeScript/JavaScript, providing a fast and modern development environment with built-in package management, testing, and bundling.
 -   **Moon:** The entire project is managed as a monorepo using Moon, which helps us manage dependencies, run tasks, and maintain a consistent development experience across all our applications and packages.

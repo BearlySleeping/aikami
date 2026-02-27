@@ -1,6 +1,6 @@
-import '../script-config.development.ts'
-import { npcRepository } from '@aikami/backend/database/npc.ts'
-import type { NpcCreateData } from '@aikami/types'
+import '../script-config.development.ts';
+import { npcRepository } from '@aikami/backend/database/npc';
+import type { NpcCreateData } from '@aikami/types';
 
 const npcs: NpcCreateData[] = [
   {
@@ -78,16 +78,16 @@ const npcs: NpcCreateData[] = [
     inventory: ['Bow of the Galadhrim', 'White Knives'],
     isFriendly: true,
   },
-]
+];
 
 const populateNpcs = async () => {
   for (const npc of npcs) {
     const id = await npcRepository.addDocument({
       createData: npc,
       getCollectionPathArgument: {},
-    })
-    console.log(`Created NPC ${npc.name} with id: ${id}`)
+    });
+    console.log(`Created NPC ${npc.name} with id: ${id}`);
   }
-}
+};
 
-populateNpcs().catch(console.error)
+populateNpcs().catch(console.error);

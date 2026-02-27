@@ -1,17 +1,16 @@
 // api/route.ts
 
-import { z } from 'genkit'
+import { googleAI } from '@genkit-ai/googleai';
+import { z } from 'genkit';
 // this example requires beta features
-import { genkit } from 'genkit/beta'
-
-import { googleAI } from '@genkit-ai/googleai'
+import { genkit } from 'genkit/beta';
 
 const ai = genkit({
   plugins: [googleAI()], // set the GOOGLE_API_KEY env variable
   model: googleAI.model('gemini-2.0-flash'),
-})
+});
 
-import genkitEndpoint from './endpoint.ts'
+import genkitEndpoint from './endpoint.ts';
 
 // data.ts
 
@@ -35,18 +34,18 @@ export const ANIMAL_USERS = [
     favoriteFoods: ['Strawberries', 'Crickets'],
   },
   { uid: 'panda', emoji: '🐼', name: 'Panda', favoriteFoods: ['Bamboo'] },
-]
+];
 
 export const GROUPS = {
   mammals: ['sloth', 'koala', 'panda'],
   slowpokes: ['sloth', 'turtle'],
   bearish: ['koala', 'panda'],
-} as Record<string, string[]>
+} as Record<string, string[]>;
 
-const TODAY = Date.now()
-const DAYS = 60000 * 60 * 24
+const TODAY = Date.now();
+const DAYS = 60000 * 60 * 24;
 function futureDate(n: number) {
-  return new Date(TODAY + n * DAYS).toISOString().substring(0, 10)
+  return new Date(TODAY + n * DAYS).toISOString().substring(0, 10);
 }
 
 export const UPCOMING_EVENTS = [
@@ -116,7 +115,7 @@ export const UPCOMING_EVENTS = [
     name: 'The Great Mammal Migration Simulation',
     date: futureDate(25),
   },
-]
+];
 
 const upcomingEvents = ai.defineTool(
   {
@@ -133,30 +132,27 @@ const upcomingEvents = ai.defineTool(
     }),
   },
   async (params, options) => {
-    const { groupId } = params
-    const { context } = options
+    const { groupId } = params;
+    const { context } = options;
 
-    const contacts = context.contacts.filter((c: { group: string }) => c.group === groupId)
-    await Promise.resolve()
-    return { contacts }
+    const contacts = context.contacts.filter((c: { group: string }) => c.group === groupId);
+    await Promise.resolve();
+    return { contacts };
   },
-)
+);
 
-const SYSTEM_PROMPT =
-  `You are a helpful assistant and animal nutrition expert. Use Markdown formatting when replying. When using tools, assume the user wants to look in all groups unless they specifically mention one.
+const SYSTEM_PROMPT = `You are a helpful assistant and animal nutrition expert. Use Markdown formatting when replying. When using tools, assume the user wants to look in all groups unless they specifically mention one.
 
-Available Groups: ${Object.keys(GROUPS).join(', ')}`
+Available Groups: ${Object.keys(GROUPS).join(', ')}`;
 
 export const POST = genkitEndpoint(({ messages, prompt, context }) => {
   const chat = ai.chat({
-    system: `${SYSTEM_PROMPT}\n\nUser Info: ${
-      JSON.stringify(
-        context?.auth || 'Current user is unauthenticated.',
-      )
-    }`,
+    system: `${SYSTEM_PROMPT}\n\nUser Info: ${JSON.stringify(
+      context?.auth || 'Current user is unauthenticated.',
+    )}`,
     messages,
     tools: [upcomingEvents],
     context,
-  })
-  return chat.sendStream({ prompt })
-})
+  });
+  return chat.sendStream({ prompt });
+});

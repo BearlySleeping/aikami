@@ -1,33 +1,33 @@
-import { Timer, type TimerInterface } from './timer.ts'
-import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts'
+import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts';
+import { Timer, type TimerInterface } from './timer.ts';
 
-export type BasicLoggerInterface = BaseLoggerInterface
+export type BasicLoggerInterface = BaseLoggerInterface;
 
 class BasicTimer extends Timer implements TimerInterface {}
 class BasicLoggerService extends BaseLoggerService implements BasicLoggerInterface {
   write(entry: LogEntry, ...data: unknown[]): void {
     try {
       if (this.shouldSkipLog(entry)) {
-        return
+        return;
       }
 
-      const { logType, message } = entry
+      const { logType, message } = entry;
 
-      const log = console[logType ?? 'log']
+      const log = console[logType ?? 'log'];
 
-      log(logType, message)
+      log(logType, message);
       for (const element of data) {
-        log(this.getMessage(element))
+        log(this.getMessage(element));
       }
-      log('\n')
+      log('\n');
     } catch (_error) {
       // console.log(e);
     }
   }
 
   override createTimer(): TimerInterface {
-    return new BasicTimer()
+    return new BasicTimer();
   }
 }
 
-export default new BasicLoggerService()
+export default new BasicLoggerService();

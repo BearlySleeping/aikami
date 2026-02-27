@@ -1,5 +1,6 @@
-import { type Firestore, initializeFirestore, Timestamp } from 'firebase/firestore'
-import app from './app.ts'
+import { type Firestore, initializeFirestore, Timestamp } from 'firebase/firestore';
+import app from './app.ts';
+
 export {
   addDoc,
   arrayRemove,
@@ -24,27 +25,27 @@ export {
   updateDoc,
   where,
   writeBatch,
-} from 'firebase/firestore'
+} from 'firebase/firestore';
 
-let _firestore: Firestore | undefined
+let _firestore: Firestore | undefined;
 
 const getFirestore = () => {
   if (_firestore) {
-    return _firestore
+    return _firestore;
   }
   _firestore = initializeFirestore(app, {
-    ignoreUndefinedProperties: import.meta.env['PUBLIC_FLAVOR'] === 'production',
-    localCache: import.meta.env['PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE'] ===
-        '1'
-      ? {
-        kind: 'persistent',
-      }
-      : undefined,
-  })
+    ignoreUndefinedProperties: import.meta.env.PUBLIC_FLAVOR === 'production',
+    localCache:
+      import.meta.env.PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE === '1'
+        ? {
+            kind: 'persistent',
+          }
+        : undefined,
+  });
 
-  return _firestore
-}
+  return _firestore;
+};
 
-const firestore = getFirestore()
+const firestore = getFirestore();
 
-export { firestore, Timestamp }
+export { firestore, Timestamp };

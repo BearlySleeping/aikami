@@ -7,10 +7,11 @@ stack: 'backend'
 tags:
   - 'firebase'
   - 'functions'
+  - 'application'
 
 project:
-  name: 'Firebase Functions'
-  description: 'Backend cloud functions for the application.'
+  title: 'Firebase Functions'
+  description: 'Backend cloud functions deployed to Firebase Cloud Functions.'
   channel: '#backend'
   owner: 'Backend Team'
 
@@ -27,46 +28,53 @@ fileGroups:
     - 'src/**/*'
     - 'scripts/**/*'
   configs:
-    - 'deno.json'
+    - 'package.json'
     - 'tsconfig.json'
-    - 'compile.ts'
-    - 'deploy.ts'
+    - '*.ts'
+  tests:
+    - 'tests/**/*'
 
 tasks:
   build:
-    command: 'deno task build'
+    command: 'bun run build'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
     outputs:
       - 'build'
-  check:
-    command: 'deno task check'
+  deploy:
+    command: 'bun run deploy'
+    deps:
+      - 'build'
+  typecheck:
+    command: 'bun run typecheck'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   format:
-    command: 'deno task format'
+    command: 'bun run format'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   lint:
-    command: 'deno task lint'
+    command: 'bun run lint'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   test:
-    command: 'deno task test'
+    command: 'bun run test'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  validate:
+    command: 'bun run validate'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
       - '@group(configs)'

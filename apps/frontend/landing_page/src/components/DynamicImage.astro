@@ -1,31 +1,21 @@
 ---
 import type { ImageMetadata, ImageQuality } from 'astro';
 
-import Picture from '$components/Picture.astro';
-
 interface Props {
-	altText: string;
-	class?: string;
-	eager?: boolean;
-	height?: number;
-	imagePath: string;
-	width?: number;
-	quality?: ImageQuality;
+  altText: string;
+  class?: string;
+  eager?: boolean;
+  height?: number;
+  imagePath: string;
+  width?: number;
+  quality?: ImageQuality;
 }
 
-const {
-	altText,
-	class: className,
-	eager,
-	height,
-	imagePath,
-	width,
-	quality,
-} = Astro.props;
+const { altText, class: className, eager, height, imagePath, width, quality } = Astro.props;
 
 // Import all blog and certificate images dynamically
 const images = import.meta.glob<{ default: ImageMetadata }>(
-	'/src/assets/**/*.{jpeg,jpg,png,gif,webp,avif}',
+  '/src/assets/**/*.{jpeg,jpg,png,gif,webp,avif}',
 );
 
 // Construct the full path from the imagePath
@@ -34,14 +24,14 @@ const fullPath = `/src/assets/${imagePath}`;
 // Check if the image exists in our glob
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
 if (!images[fullPath]) {
-	throw new Error(
-		`"${fullPath}" does not exist in glob: "/src/assets/**/*.{jpeg,jpg,png,gif,webp}"`,
-	);
+  throw new Error(
+    `"${fullPath}" does not exist in glob: "/src/assets/**/*.{jpeg,jpg,png,gif,webp}"`,
+  );
 }
 
 // Get the image
 const imageModule = await images[fullPath]();
-const image = imageModule.default;
+const _image = imageModule.default;
 ---
 
 <Picture

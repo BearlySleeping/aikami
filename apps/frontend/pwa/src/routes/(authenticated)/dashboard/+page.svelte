@@ -1,10 +1,9 @@
 <script lang="ts">
-    import DashboardView from "$lib/views/dashboard/DashboardView.svelte";
-    import { getDashboardViewModel } from "$lib/views/dashboard/dashboard-view-model.svelte";
+import { getDashboardViewModel } from '$lib/views/dashboard/dashboard-view-model.svelte.ts';
 
-    const viewModel = getDashboardViewModel({
-        className: "DashboardViewModel",
-    });
+const _viewModel = getDashboardViewModel({
+  className: 'DashboardViewModel',
+});
 </script>
 
 <DashboardView {viewModel} />

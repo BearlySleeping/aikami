@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "moon": {
+      "command": "moon",
+      "args": ["mcp"],
+      "env": {
+        "MOON_WORKSPACE_ROOT": "/home/sonny/Development/Projects/passion/aikami"
+      }
+    }
+  }
+}

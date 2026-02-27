@@ -2,23 +2,8 @@
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
     "strictNullChecks": true,
-    "baseUrl": "src",
-    "paths": {
-      "$lib/*": ["lib/*"],
-      "$utils": ["utils"],
-      "$utils/*": ["utils/*"],
-      "$components/*": ["components/*"],
-      "$layouts/*": ["layouts/*"],
-      "$assets/*": ["assets/*"],
-      "$pages/*": ["pages/*"]
-    }
+    "baseUrl": "."
   },
-  "include": [
-    ".astro/types.d.ts",
-    "src",
-    "windi.config.ts",
-    "astro.config.ts",
-    "eslint.config.ts"
-  ],
+  "include": [".astro/types.d.ts", "src/**/*", "astro.config.ts"],
   "exclude": ["dist"]
 }

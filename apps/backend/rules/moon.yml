@@ -1,48 +1,57 @@
 # apps/backend/rules/moon.yml
-$schema: "https://moonrepo.dev/schemas/project.json"
+$schema: 'https://moonrepo.dev/schemas/project.json'
 
-language: "typescript"
-layer: "configuration"
-stack: "backend"
+language: 'typescript'
+layer: 'application'
+stack: 'backend'
 tags:
-  - "firebase"
-  - "security"
+  - 'firebase'
+  - 'security'
+  - 'application'
 
 project:
-  name: "Firebase Rules"
-  description: "Security rules for Firestore and Storage."
-  channel: "#backend"
-  owner: "Backend Team"
+  title: 'Firebase Rules'
+  description: 'Security rules for Firebase Firestore and Cloud Storage.'
+  channel: '#backend'
+  owner: 'Backend Team'
 
 dependsOn:
-  - "backend-configs"
-  - "backend-utils"
-  - "schemas"
-  - "types"
-  - "constants"
-  - "logger"
+  - 'backend-configs'
+  - 'backend-utils'
+  - 'schemas'
+  - 'types'
+  - 'constants'
+  - 'logger'
 
 fileGroups:
   sources:
-    - "src/**/*"
-    - "*.rules"
+    - 'src/**/*'
+    - '*.rules'
   configs:
-    - "deno.json"
-    - "firebase.json"
-    - "firestore.indexes.json"
+    - 'package.json'
+    - 'firebase.json'
+    - 'firestore.*.json'
+  tests:
+    - 'tests/**/*'
 
 tasks:
   format:
-    command: "deno task format"
+    command: 'bun run format'
     inputs:
-      - "/deno.json"
-      - "/deno.lock"
-      - "@group(sources)"
-      - "@group(configs)"
+      - '@group(sources)'
+      - '@group(configs)'
   lint:
-    command: "deno task lint"
+    command: 'bun run lint'
     inputs:
-      - "/deno.json"
-      - "/deno.lock"
-      - "@group(sources)"
-      - "@group(configs)"
+      - '@group(sources)'
+      - '@group(configs)'
+  typecheck:
+    command: 'bun run typecheck'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'

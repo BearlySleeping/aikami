@@ -6,6 +6,6 @@ declare namespace App {
   // interface Error {}
   // interface Locals {}
   // interface PageData {}
-  interface PageState {}
+  type PageState = {};
   // interface Platform {}
 }

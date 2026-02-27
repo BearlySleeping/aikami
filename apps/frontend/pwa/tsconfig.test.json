@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "$services": ["./src/lib/client/services-mock"],
+      "$services/*": ["./src/lib/client/services-mock/*"],
+      "@aikami/frontend/services": ["../../packages/frontend/services/src"],
+      "@aikami/frontend/services/*": ["../../packages/frontend/services/src/*"],
+      "@aikami/types": ["../../packages/types/src"],
+      "@aikami/types/*": ["../../packages/types/src/*"],
+      "@aikami/utils": ["../../packages/utils/src"],
+      "@aikami/utils/*": ["../../packages/utils/src/*"],
+      "@aikami/logger": ["../../packages/logger/src"],
+      "@aikami/logger/*": ["../../packages/logger/src/*"],
+      "@aikami/constants": ["../../packages/constants/src"],
+      "@aikami/constants/*": ["../../packages/constants/src/*"],
+      "@aikami/schemas": ["../../packages/schemas/src"],
+      "@aikami/schemas/*": ["../../packages/schemas/src/*"]
+    }
+  }
+}

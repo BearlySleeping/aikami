@@ -4,7 +4,7 @@ This document details the primary technologies, frameworks, and services used in
 
 ## Core Technologies
 
--   **Runtime:** [Deno](https://deno.land/)
+-   **Runtime:** [Bun](https://bun.sh/)
 -   **Language:** [TypeScript](https://www.typescriptlang.org/)
 -   **Monorepo Manager:** [Moon](https://moonrepo.dev/)
 
@@ -29,5 +29,5 @@ This document details the primary technologies, frameworks, and services used in
 ## Tooling & Libraries
 
 -   **Data Validation:** [Zod](https://zod.dev/)
--   **Linting & Formatting:** Deno's built-in `deno lint` and `deno fmt`
--   **Type Checking:** Deno's built-in `deno check` and `svelte-check`
+-   **Linting & Formatting:** [Biome](https://biomejs.dev/)
+-   **Type Checking:** [TypeScript](https://www.typescriptlang.org/) (`tsc --noEmit`) and `svelte-check`

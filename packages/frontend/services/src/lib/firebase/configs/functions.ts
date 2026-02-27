@@ -1,9 +1,9 @@
-import { getFunctions } from 'firebase/functions'
-import app from './app.ts'
+import { getFunctions } from 'firebase/functions';
+import app from './app.ts';
 
-export { httpsCallable } from 'firebase/functions'
+export { httpsCallable } from 'firebase/functions';
 
 // TODO add region to env
-const region: string = import.meta.env['PUBLIC_CLOUD_FUNCTIONS_REGION'] || 'europe-west1'
+const region: string = import.meta.env.PUBLIC_CLOUD_FUNCTIONS_REGION || 'europe-west1';
 
-export const functions = getFunctions(app, region)
+export const functions = getFunctions(app, region);

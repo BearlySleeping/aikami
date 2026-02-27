@@ -1,0 +1,19 @@
+{
+  "name": "@aikami/utils",
+  "scripts": {
+    "test": "bun test",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write .",
+    "validate": "bun run typecheck && bun test"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/types": "workspace:*"
+  },
+  "devDependencies": {
+    "firebase": "12.10.0"
+  }
+}

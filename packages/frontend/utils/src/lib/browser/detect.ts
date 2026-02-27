@@ -1,9 +1,9 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck: Legacy browser detection logic with various global checks.
-import { type Browser as DetectBrowser, detect, type OperatingSystem } from 'detect-browser'
-import { isbot } from 'isbot'
+import { type Browser as DetectBrowser, detect, type OperatingSystem } from 'detect-browser';
+import { isbot } from 'isbot';
 
-export type Browser = DetectBrowser | 'bot' | 'react-native' | 'node' | 'brave'
+export type Browser = DetectBrowser | 'bot' | 'react-native' | 'node' | 'brave';
 
 /**
  * Detect if a user agent is a bot, crawler or spider
@@ -13,8 +13,8 @@ export type Browser = DetectBrowser | 'bot' | 'react-native' | 'node' | 'brave'
  * @returns true if the user agent is a bot, crawler or spider
  */
 export const isBot = (userAgent: string): boolean => {
-  return isbot(userAgent)
-}
+  return isbot(userAgent);
+};
 
 /**
  * Browsers that can install the extension.
@@ -22,15 +22,15 @@ export const isBot = (userAgent: string): boolean => {
  * Note that browsers like brave and other chromium browsers that can use chrome
  * store will return chrome.
  */
-type ExtensionStore = 'chrome-web-store' | 'edge-add-ons' | 'firefox-add-ons'
+type ExtensionStore = 'chrome-web-store' | 'edge-add-ons' | 'firefox-add-ons';
 
 export const getBrowser = (): Browser | undefined => {
   if (isBrave()) {
-    return 'brave'
+    return 'brave';
   }
-  const browser = detect()
-  return browser?.name
-}
+  const browser = detect();
+  return browser?.name;
+};
 /**
  * Gets the extension store, returns undefined if the browser does not have a
  * supported extension support.
@@ -38,78 +38,70 @@ export const getBrowser = (): Browser | undefined => {
  * @param browser The current browser, will be [getBrowser()] if undefined.
  * @returns The browser's extension store to install the extension or undefined.
  */
-export const getExtensionStore = (
-  browser = getBrowser(),
-): ExtensionStore | undefined => {
+export const getExtensionStore = (browser = getBrowser()): ExtensionStore | undefined => {
   switch (browser) {
     case 'chrome':
     case 'brave':
-      return 'chrome-web-store'
+      return 'chrome-web-store';
     case 'firefox':
-      return 'firefox-add-ons'
+      return 'firefox-add-ons';
     case 'edge':
-      return 'edge-add-ons'
+      return 'edge-add-ons';
     default:
-      return undefined
+      return undefined;
   }
-}
+};
 
 const isBrave = (): boolean => {
   if (typeof window === 'undefined') {
-    return false
+    return false;
   }
 
-  return !!(navigator as Navigator & { brave: unknown }).brave
-}
+  return !!(navigator as Navigator & { brave: unknown }).brave;
+};
 
 export const getOS = (): OperatingSystem | NodeJS.Platform | undefined => {
-  const browser = detect()
-  return browser?.os ?? undefined
-}
+  const browser = detect();
+  return browser?.os ?? undefined;
+};
 
 export const isIOS = (): boolean => {
-  return getOS() === 'iOS'
-}
+  return getOS() === 'iOS';
+};
 
 export const isMobileDevice = (): boolean => {
   if (typeof window === 'undefined') {
-    return false
+    return false;
   }
 
-  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
-    navigator.userAgent,
-  )
-}
+  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent);
+};
 
 export const isTabletDevice = (): boolean => {
   if (typeof window === 'undefined') {
-    return false
+    return false;
   }
 
-  const ua = navigator.userAgent.toLowerCase()
+  const ua = navigator.userAgent.toLowerCase();
   return (
     isIPad() ||
-    /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/
-      .test(
-        ua,
-      )
-  )
-}
+    /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk|(puffin(?!.*(IP|AP|WP))))/.test(
+      ua,
+    )
+  );
+};
 
 export const isMobileOrTablet = (): boolean => {
-  return isMobileDevice() || isTabletDevice()
-}
+  return isMobileDevice() || isTabletDevice();
+};
 
 export const isIPad = (): boolean => {
   if (typeof window === 'undefined') {
-    return false
+    return false;
   }
-  const ua = navigator.userAgent.toLowerCase()
-  return (
-    ua.includes('ipad') ||
-    (ua.includes('macintosh') && 'ontouchend' in document)
-  )
-}
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes('ipad') || (ua.includes('macintosh') && 'ontouchend' in document);
+};
 
 /*
  * Gets browser information based on native javascript built in functionality
@@ -122,38 +114,38 @@ export function browserDetector(
   window: Window & { opera?: unknown },
 ): {
   dataBrowser: {
-    name: string
-    value: string
-    version: string
-  }[]
+    name: string;
+    value: string;
+    version: string;
+  }[];
   dataOS: {
-    name: string
-    value: string
-    version: string
-  }[]
-  header: unknown[]
+    name: string;
+    value: string;
+    version: string;
+  }[];
+  header: unknown[];
   init: () => {
     browser: {
-      name: string
-      version: number
-    }
+      name: string;
+      version: number;
+    };
     os: {
-      name: string
-      version: number
-    }
-  }
+      name: string;
+      version: number;
+    };
+  };
   matchItem: (
     string: string,
     data: {
-      name: string
-      value: string
-      version: string
+      name: string;
+      value: string;
+      version: string;
     }[],
   ) => {
-    name: string
-    version: number
-  }
-  options: never[]
+    name: string;
+    version: number;
+  };
+  options: never[];
 } {
   const module = {
     dataBrowser: [
@@ -186,56 +178,51 @@ export function browserDetector(
       window.opera,
     ],
     init() {
-      const agent = this.header.join(' ')
-      const os = this.matchItem(agent, this.dataOS)
-      const browser = this.matchItem(agent, this.dataBrowser)
-      return { browser, os }
+      const agent = this.header.join(' ');
+      const os = this.matchItem(agent, this.dataOS);
+      const browser = this.matchItem(agent, this.dataBrowser);
+      return { browser, os };
     },
-    matchItem(
-      string: string,
-      data: { name: string; value: string; version: string }[],
-    ) {
-      let index = 0
-      let index_ = 0
-      let regex
-      let regexV
-      let match
-      let matches
-      let version
+    matchItem(string: string, data: { name: string; value: string; version: string }[]) {
+      let index = 0;
+      let index_ = 0;
+      let regex;
+      let regexV;
+      let match;
+      let matches;
+      let version;
 
       for (index = 0; index < data.length; index += 1) {
-        regex = new RegExp(data[index].value, 'i')
-        match = regex.test(string)
+        regex = new RegExp(data[index].value, 'i');
+        match = regex.test(string);
         if (match) {
-          regexV = new RegExp(
-            data[index].version + '[- /:;]([\\d._]+)',
-            'i',
-          )
-          matches = string.match(regexV)
-          version = ''
+          regexV = new RegExp(`${data[index].version}[- /:;]([\\d._]+)`, 'i');
+          matches = string.match(regexV);
+          version = '';
           if (matches?.[1]) {
-            matches = matches[1]
+            matches = matches[1];
           }
           if (typeof matches === 'string') {
-            matches = matches.split(/[._]+/)
+            matches = matches.split(/[._]+/);
             for (index_ = 0; index_ < matches.length; index_ += 1) {
-              version += index_ === 0
-                // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
-                ? matches[index_] + '.'
-                : matches[index_]
+              version +=
+                index_ === 0
+                  ? // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
+                    `${matches[index_]}.`
+                  : matches[index_];
             }
           } else {
-            version = '0'
+            version = '0';
           }
           return {
             name: data[index].name,
             version: Number.parseFloat(version),
-          }
+          };
         }
       }
-      return { name: 'unknown', version: 0 }
+      return { name: 'unknown', version: 0 };
     },
     options: [],
-  }
-  return module
+  };
+  return module;
 }

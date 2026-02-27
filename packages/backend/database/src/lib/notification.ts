@@ -1,8 +1,7 @@
-import type { RepositoryType } from '@aikami/types'
-
-import { NotificationCreateSchema, NotificationSchema } from '@aikami/schemas'
-import { getNotificationDocumentPath, getNotificationsCollectionPath } from '@aikami/utils'
-import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts'
+import { NotificationCreateSchema, NotificationSchema } from '@aikami/schemas';
+import type { RepositoryType } from '@aikami/types';
+import { getNotificationDocumentPath, getNotificationsCollectionPath } from '@aikami/utils';
+import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts';
 
 export type NotificationRepositoryType = RepositoryType<
   typeof NotificationSchema,
@@ -10,22 +9,20 @@ export type NotificationRepositoryType = RepositoryType<
   never,
   { uid: string },
   {
-    notificationId: string
-    uid: string
+    notificationId: string;
+    uid: string;
   }
->
+>;
 
-export type NotificationRepositoryInterface = BackendRepositoryInterface<
-  NotificationRepositoryType
->
+export type NotificationRepositoryInterface =
+  BackendRepositoryInterface<NotificationRepositoryType>;
 
-export const notificationRepository: NotificationRepositoryInterface = new BackendRepository<
-  NotificationRepositoryType
->({
-  className: 'NotificationRepository',
-  createSchema: NotificationCreateSchema,
-  getCollectionPath: getNotificationsCollectionPath,
-  getDocumentPath: getNotificationDocumentPath,
-  schema: NotificationSchema,
-  updateSchema: undefined,
-})
+export const notificationRepository: NotificationRepositoryInterface =
+  new BackendRepository<NotificationRepositoryType>({
+    className: 'NotificationRepository',
+    createSchema: NotificationCreateSchema,
+    getCollectionPath: getNotificationsCollectionPath,
+    getDocumentPath: getNotificationDocumentPath,
+    schema: NotificationSchema,
+    updateSchema: undefined,
+  });

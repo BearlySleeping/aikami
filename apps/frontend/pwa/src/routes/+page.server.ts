@@ -1,6 +1,6 @@
-import { toRouteHref } from '$router'
-import { redirect } from '@sveltejs/kit'
-import type { PageServerLoad } from './$types'
+import { redirect } from '@sveltejs/kit';
+import { toRouteHref } from '$router';
+import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url }) => {
   if (locals.userSession) {
@@ -11,7 +11,7 @@ export const load: PageServerLoad = ({ locals, url }) => {
         queryParameters: undefined,
         url,
       }),
-    )
+    );
   } else {
     throw redirect(
       302,
@@ -20,6 +20,6 @@ export const load: PageServerLoad = ({ locals, url }) => {
         queryParameters: undefined,
         url,
       }),
-    )
+    );
   }
-}
+};

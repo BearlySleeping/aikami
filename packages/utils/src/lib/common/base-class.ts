@@ -1,35 +1,35 @@
-import logger, { type LogEntry } from '$logger'
+import logger, { type LogEntry } from '$logger';
 import {
   createLiteObserver,
   createObserver,
   type Listener,
   type UnsubscribeFunction,
-} from './listener.ts'
+} from './listener.ts';
 
 export type BaseClassOptions = {
-  className: string
-}
+  className: string;
+};
 
 export type BaseClassInterface = {
-  readonly _className: string
+  readonly _className: string;
   // initialize(): Promise<void>;
-  dispose(): Promise<void>
-}
+  dispose(): Promise<void>;
+};
 
 export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOptions>
-  implements BaseClassInterface {
-  private static readonly _logger = logger
+  implements BaseClassInterface
+{
+  private static readonly _logger = logger;
 
   get _className(): string {
-    return this._options.className
+    return this._options.className;
   }
 
-  constructor(protected readonly _options: Options) {
-  }
+  constructor(protected readonly _options: Options) {}
 
   async dispose(): Promise<void> {
-    this.debug('dispose')
-    return await Promise.resolve()
+    this.debug('dispose');
+    return await Promise.resolve();
   }
 
   protected debug(...args: unknown[]): void {
@@ -39,7 +39,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
         logType: 'debug',
       },
       ...args,
-    )
+    );
   }
   protected info(...args: unknown[]): void {
     this._write(
@@ -48,7 +48,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
         logType: 'info',
       },
       ...args,
-    )
+    );
   }
   protected warn(...args: unknown[]): void {
     this._write(
@@ -57,7 +57,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
         logType: 'warn',
       },
       ...args,
-    )
+    );
   }
   protected error(...args: unknown[]): void {
     this._write(
@@ -66,7 +66,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
         logType: 'error',
       },
       ...args,
-    )
+    );
   }
   protected log(...args: unknown[]): void {
     this._write(
@@ -75,7 +75,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
         logType: 'log',
       },
       ...args,
-    )
+    );
   }
   /**
    * createObserver
@@ -83,10 +83,10 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
    * @returns observer
    */
   protected createObserver<EventType = void>(): {
-    subscribe: (listener: Listener<EventType>) => UnsubscribeFunction
-    publish: (event: EventType) => void
+    subscribe: (listener: Listener<EventType>) => UnsubscribeFunction;
+    publish: (event: EventType) => void;
   } {
-    return createObserver<EventType>()
+    return createObserver<EventType>();
   }
   /**
    * createLiteObserver is a helper function that creates a listener that can
@@ -95,10 +95,10 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
    * @returns observer
    */
   protected createLiteObserver<EventType = void>(): {
-    subscribe: (listener: Listener<EventType>) => void
-    publish: (event: EventType) => void
+    subscribe: (listener: Listener<EventType>) => void;
+    publish: (event: EventType) => void;
   } {
-    return createLiteObserver<EventType>()
+    return createLiteObserver<EventType>();
   }
   private _write(entry: LogEntry, ...data: unknown[]): void {
     // only show the hour and minutes now, without AM/PM
@@ -106,9 +106,9 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
       hour: 'numeric',
       hour12: false,
       minute: 'numeric',
-    })
+    });
 
-    let message = `${liteTimestamp} [${this._className}] `
+    let message = `${liteTimestamp} [${this._className}] `;
     // if (entry.logLevel) {
     // 	message += ` ${entry.logLevel.toLocaleLowerCase()}: `;
     // } else {
@@ -116,9 +116,9 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
     // }
 
     if (entry.message) {
-      message += entry.message
+      message += entry.message;
     } else if (typeof data[0] === 'string') {
-      message += data.shift() as string
+      message += data.shift() as string;
     }
 
     BaseClass._logger.write(
@@ -127,6 +127,6 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
         message,
       },
       ...data,
-    )
+    );
   }
 }

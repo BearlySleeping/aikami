@@ -1,4 +1,4 @@
-import type { Routes } from '@aikami/frontend/services'
+import type { Routes } from '@aikami/frontend/services';
 
 export const routes = {
   login: {
@@ -25,6 +25,6 @@ export const routes = {
     routeId: 'settings',
     type: 'authenticated',
   },
-} as const satisfies Routes
+} as const satisfies Routes;
 
-export const searchParametersToKeep: Readonly<string[]> = [] as const
+export const searchParametersToKeep: Readonly<string[]> = [] as const;

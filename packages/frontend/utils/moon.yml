@@ -7,10 +7,11 @@ stack: 'frontend'
 tags:
   - 'utils'
   - 'frontend'
+  - 'library'
 
 project:
-  name: 'Frontend Utilities'
-  description: 'Shared frontend utilities.'
+  title: 'Frontend Utilities'
+  description: 'Shared frontend utility functions and browser helpers.'
   channel: '#frontend'
   owner: 'Frontend Team'
 
@@ -24,34 +25,29 @@ fileGroups:
   sources:
     - 'src/**/*'
   configs:
-    - 'deno.json'
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'tests/**/*'
 
 tasks:
-  check:
-    command: 'deno task check'
+  typecheck:
+    command: 'bun run typecheck'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   format:
-    command: 'deno task format'
+    command: 'bun run format'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   lint:
-    command: 'deno task lint'
+    command: 'bun run lint'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
-  test:
-    command: 'deno task test'
+  fix:
+    command: 'bun run fix'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'

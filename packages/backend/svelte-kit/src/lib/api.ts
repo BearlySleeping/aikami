@@ -1,9 +1,9 @@
-import { toAppErrorFromUnknownError } from '@aikami/utils'
-import { error, json, type RequestEvent } from '@sveltejs/kit'
-import logger from '$logger'
+import { toAppErrorFromUnknownError } from '@aikami/utils';
+import { error, json, type RequestEvent } from '@sveltejs/kit';
+import logger from '$logger';
 
 // This type definition remains the same
-export type APICalls = Record<string, [unknown, unknown]>
+export type APICalls = Record<string, [unknown, unknown]>;
 
 /**
  * Enhanced SvelteKit API call handler.
@@ -30,34 +30,34 @@ export const onSvelteKitAPICall = async <
     payload: AllFunctions[Endpoint][0],
   ) => AllFunctions[Endpoint][1] | Promise<AllFunctions[Endpoint][1]>,
 ): Promise<Response> => {
-  const callEndpoint = endpoint as string
-  const apiName = `api/${callEndpoint}`
-  logger.log('onSvelteKitAPICall', apiName)
+  const callEndpoint = endpoint as string;
+  const apiName = `api/${callEndpoint}`;
+  logger.log('onSvelteKitAPICall', apiName);
 
   try {
-    const { request } = event
+    const { request } = event;
 
-    const payload = (await request.json()) as AllFunctions[Endpoint][0]
+    const payload = (await request.json()) as AllFunctions[Endpoint][0];
     // --- End of Conditional Logic ---
 
-    logger.log(apiName, payload)
+    logger.log(apiName, payload);
 
-    const response = await promise(payload)
+    const response = await promise(payload);
 
     // Return a successful response, ensuring `undefined` becomes `null` for valid JSON.
-    return json({ response: response ?? null })
+    return json({ response: response ?? null });
   } catch (err) {
     // Your original, correct error handling logic.
-    const appError = toAppErrorFromUnknownError(err)
-    logger.error(apiName, appError)
+    const appError = toAppErrorFromUnknownError(err);
+    logger.error(apiName, appError);
 
     // Throw the final, formatted error for SvelteKit to handle.
     throw error(appError.cause.statusCode, {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore We don't declare app.d.ts in the lib project, but do it in the apps
+      // @ts-expect-error We don't declare app.d.ts in the lib project, but do it in the apps
       details: appError.cause.details,
       message: appError.message,
       type: appError.cause.errorType,
-    })
+    });
   }
-}
+};

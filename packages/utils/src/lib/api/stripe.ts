@@ -1,4 +1,4 @@
-import type { CountryCode } from '@aikami/types'
+import type { CountryCode } from '@aikami/types';
 
 const COUNTRY_CODE_TAX_ID_TYPE_MAP = {
   AE: 'ae_trn',
@@ -37,7 +37,7 @@ const COUNTRY_CODE_TAX_ID_TYPE_MAP = {
   UA: 'ua_vat',
   US: 'us_ein',
   ZA: 'za_vat',
-} as const satisfies Partial<Record<CountryCode, TaxIdType | undefined>>
+} as const satisfies Partial<Record<CountryCode, TaxIdType | undefined>>;
 
 type TaxIdType =
   | 'ae_trn'
@@ -90,7 +90,7 @@ type TaxIdType =
   | 'tw_vat'
   | 'ua_vat'
   | 'us_ein'
-  | 'za_vat'
+  | 'za_vat';
 
 const TAX_ID_TYPE_REGEX_MAP = {
   ae_trn: /^[1-9]{1}[0-9]{14}$/,
@@ -144,44 +144,40 @@ const TAX_ID_TYPE_REGEX_MAP = {
   ua_vat: /^(\d{10}|\d{12})$/,
   us_ein: /^(\d{2}-?\d{7})$/,
   za_vat: /^(\d{10})$/,
-} as const satisfies Record<TaxIdType, RegExp>
+} as const satisfies Record<TaxIdType, RegExp>;
 
 export const getTaxIdType = (
   countryCode: CountryCode,
   taxIdValue: string,
 ): TaxIdType | undefined => {
-  const taxIdType = COUNTRY_CODE_TAX_ID_TYPE_MAP[
-    countryCode as keyof typeof COUNTRY_CODE_TAX_ID_TYPE_MAP
-  ]
+  const taxIdType =
+    COUNTRY_CODE_TAX_ID_TYPE_MAP[countryCode as keyof typeof COUNTRY_CODE_TAX_ID_TYPE_MAP];
   if (taxIdType) {
-    return taxIdType
+    return taxIdType;
   }
 
   // if the taxIdType is not found, try to find the correct taxId based on the value
   for (const [taxIdType, regex] of Object.entries(TAX_ID_TYPE_REGEX_MAP)) {
     if (regex.test(taxIdValue)) {
-      return taxIdType as TaxIdType
+      return taxIdType as TaxIdType;
     }
   }
 
-  return undefined
-}
+  return undefined;
+};
 
-export const isValidTaxId = (
-  countryCode: CountryCode,
-  taxIdValue: string,
-): boolean => {
-  const taxIdType = getTaxIdType(countryCode, taxIdValue)
+export const isValidTaxId = (countryCode: CountryCode, taxIdValue: string): boolean => {
+  const taxIdType = getTaxIdType(countryCode, taxIdValue);
   if (!taxIdType) {
-    return false
+    return false;
   }
-  return true
-}
+  return true;
+};
 
 const COUNTRY_CODE_TAX_ID_REGEX_MAP = {
   DK: /^DK[0-9]{8}$/,
   NO: /^[0-9]{9}MVA$/,
-} as const satisfies Partial<Record<CountryCode, RegExp>>
+} as const satisfies Partial<Record<CountryCode, RegExp>>;
 
 /**
  * If the country code is not in the map, it will return true. This is because
@@ -192,19 +188,16 @@ const COUNTRY_CODE_TAX_ID_REGEX_MAP = {
  * @param countryCode country code
  * @returns true if the tax id is valid, false otherwise
  */
-export const frontendValidateTaxId = (
-  taxIdValue: string,
-  countryCode: CountryCode,
-): boolean => {
+export const frontendValidateTaxId = (taxIdValue: string, countryCode: CountryCode): boolean => {
   const isInCountryCodeMap = (
     countryCode: CountryCode,
   ): countryCode is keyof typeof COUNTRY_CODE_TAX_ID_REGEX_MAP =>
-    countryCode in COUNTRY_CODE_TAX_ID_REGEX_MAP
+    countryCode in COUNTRY_CODE_TAX_ID_REGEX_MAP;
 
   if (!isInCountryCodeMap(countryCode)) {
-    return taxIdValue.length > 8
+    return taxIdValue.length > 8;
   }
 
-  const regex = COUNTRY_CODE_TAX_ID_REGEX_MAP[countryCode]
-  return regex.test(taxIdValue)
-}
+  const regex = COUNTRY_CODE_TAX_ID_REGEX_MAP[countryCode];
+  return regex.test(taxIdValue);
+};

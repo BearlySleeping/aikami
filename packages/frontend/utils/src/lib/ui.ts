@@ -13,7 +13,7 @@ export const buttonColors = [
   'tertiary',
   'ghost',
   'danger',
-] as const
+] as const;
 
 /**
  * The names of the button size.
@@ -23,13 +23,7 @@ export const buttonColors = [
  * @see libs/shared/frontend/svelte/src/lib/components/base/button/base/BaseButton.svelte
  */
 
-export const buttonSizes = [
-  'x-small',
-  'small',
-  'medium',
-  'large',
-  'x-large',
-] as const
+export const buttonSizes = ['x-small', 'small', 'medium', 'large', 'x-large'] as const;
 
 /**
  * The names of the icons used in svelte icons.
@@ -128,13 +122,13 @@ export const iconNames = [
   'volume',
   'volume-low',
   'warning',
-] as const satisfies Readonly<string[]>
+] as const satisfies Readonly<string[]>;
 
 /** The color classes available for components. */
-export type Color = (typeof buttonColors)[number]
+export type Color = (typeof buttonColors)[number];
 
 /** The sizes available for components. */
-export type Size = (typeof buttonSizes)[number]
+export type Size = (typeof buttonSizes)[number];
 
 /**
  * The names of the icons used in svelte icons.
@@ -143,4 +137,4 @@ export type Size = (typeof buttonSizes)[number]
  *
  * @see libs\shared\svelte\src\lib\components\base\icon\BaseIcon.svelte
  */
-export type IconName = (typeof iconNames)[number]
+export type IconName = (typeof iconNames)[number];

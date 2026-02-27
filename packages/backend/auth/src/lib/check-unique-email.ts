@@ -1,6 +1,5 @@
-import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types'
-
-import { getUserByEmail } from '@aikami/backend/database/user.ts'
+import { getUserByEmail } from '@aikami/backend/database/user.ts';
+import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 
 /**
  * Check if email exists
@@ -10,7 +9,7 @@ import { getUserByEmail } from '@aikami/backend/database/user.ts'
 export const checkUniqueEmail = async (
   options: AuthMessagePayload<'checkUniqueEmail'>,
 ): Promise<AuthMessageResponse<'checkUniqueEmail'>> => {
-  const { email } = options
-  const user = await getUserByEmail(email)
-  return !user
-}
+  const { email } = options;
+  const user = await getUserByEmail(email);
+  return !user;
+};

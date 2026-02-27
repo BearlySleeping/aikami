@@ -1,3 +1,3 @@
-import type { messaging } from 'firebase-admin'
+import type { messaging } from 'firebase-admin';
 
-export type FCMNotification = messaging.Notification
+export type FCMNotification = messaging.Notification;

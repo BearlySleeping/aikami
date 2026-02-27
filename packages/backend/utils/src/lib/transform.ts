@@ -1,6 +1,6 @@
-import type { CoreData } from '@aikami/types'
-import { Timestamp } from '@google-cloud/firestore'
-import { unixLabel } from '@aikami/constants'
+import { unixLabel } from '@aikami/constants';
+import type { CoreData } from '@aikami/types';
+import { Timestamp } from '@google-cloud/firestore';
 
 /**
  * Converts all `Timestamp` instances to `number` instances.
@@ -8,24 +8,22 @@ import { unixLabel } from '@aikami/constants'
  * @param data The data to convert.
  * @returns The converted data.
  */
-export const toJsonData = (
-  data: Omit<CoreData, 'createdAt'>,
-): Record<string, unknown> => {
-  const transformedData: Record<string, unknown> = {}
+export const toJsonData = (data: Omit<CoreData, 'createdAt'>): Record<string, unknown> => {
+  const transformedData: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (Array.isArray(value)) {
-      transformedData[key] = value.map(getValue)
-      continue
+      transformedData[key] = value.map(getValue);
+      continue;
     }
 
     if (value instanceof Timestamp) {
-      transformedData[key + unixLabel] = value.toMillis()
-      continue
+      transformedData[key + unixLabel] = value.toMillis();
+      continue;
     }
 
     if (typeof value === 'object' && value !== null) {
-      transformedData[key] = toJsonData(value as unknown as CoreData)
-      continue
+      transformedData[key] = toJsonData(value as unknown as CoreData);
+      continue;
     }
 
     if (
@@ -34,24 +32,24 @@ export const toJsonData = (
       value === null ||
       typeof value === 'function'
     ) {
-      continue
+      continue;
     }
 
-    transformedData[key] = value
+    transformedData[key] = value;
   }
-  return transformedData
-}
+  return transformedData;
+};
 
 export const getValue = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map((value) => {
-      return getValue(value)
-    })
+      return getValue(value);
+    });
   }
 
   if (typeof value === 'object' && value !== null) {
-    return toJsonData(value as CoreData)
+    return toJsonData(value as CoreData);
   }
 
-  return value
-}
+  return value;
+};

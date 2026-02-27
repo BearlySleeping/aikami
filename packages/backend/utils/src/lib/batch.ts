@@ -1,20 +1,20 @@
-import { runFunctions } from '@aikami/utils'
+import { runFunctions } from '@aikami/utils';
 
 export type BatchInterface = {
-  push(...promise: AsyncFunction<unknown>[]): void
-  commit(): Promise<void>
-}
-type AsyncFunction<T> = () => Promise<T>
+  push(...promise: AsyncFunction<unknown>[]): void;
+  commit(): Promise<void>;
+};
+type AsyncFunction<T> = () => Promise<T>;
 
 class Batch implements BatchInterface {
-  private _promises: AsyncFunction<unknown>[] = []
-  private _concurrency = 5
+  private _promises: AsyncFunction<unknown>[] = [];
+  private _concurrency = 5;
   async commit(): Promise<void> {
-    await runFunctions(this._promises, this._concurrency)
-    this._promises = []
+    await runFunctions(this._promises, this._concurrency);
+    this._promises = [];
   }
   push(...promise: AsyncFunction<unknown>[]): void {
-    this._promises.push(...promise)
+    this._promises.push(...promise);
   }
 }
 /**
@@ -22,4 +22,4 @@ class Batch implements BatchInterface {
  *
  * @returns A function that accepts a function to limit.
  */
-export const getBatch = (): BatchInterface => new Batch()
+export const getBatch = (): BatchInterface => new Batch();

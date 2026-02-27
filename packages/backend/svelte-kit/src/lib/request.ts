@@ -1,6 +1,5 @@
-import type { CountryCode } from '@aikami/types'
-
-import { countryCodes } from '@aikami/constants'
+import { countryCodes } from '@aikami/constants';
+import type { CountryCode } from '@aikami/types';
 /**
  * ;^)
  *
@@ -9,19 +8,17 @@ import { countryCodes } from '@aikami/constants'
  * @returns the value of the key or undefined
  */
 export const getHead = (headers: Headers, key: string): string | undefined => {
-  const head = headers.get(key)
-  return head ?? undefined
-}
+  const head = headers.get(key);
+  return head ?? undefined;
+};
 
-export const getCountryCodeFromRequest = (
-  request: Request,
-): CountryCode | undefined => {
-  const headers = request.headers
+export const getCountryCodeFromRequest = (request: Request): CountryCode | undefined => {
+  const headers = request.headers;
 
-  const countryCode = getHead(headers, 'x-vercel-ip-country')
+  const countryCode = getHead(headers, 'x-vercel-ip-country');
 
   if (countryCode && countryCodes.includes(countryCode)) {
-    return countryCode as CountryCode
+    return countryCode as CountryCode;
   }
-  return
-}
+  return;
+};

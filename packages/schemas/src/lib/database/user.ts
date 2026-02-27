@@ -1,25 +1,25 @@
-import { z } from 'zod'
+import { z } from 'zod';
 import {
   FirebaseAuthMetadataSchema,
   SignInProviderSchema,
   UserClaimsSchema,
   UserRoleSchema,
-} from '../auth.ts'
-import { FieldValueSchema, TimestampSchema } from '../fields.ts'
-import { CoreCreateSchema, CoreOmitSchema, CoreSchema, CoreUpdateSchema } from '../core.ts'
-import { CountryCodeSchema } from '../common/position.ts'
-import { getDeletableFields } from '../utils.ts'
+} from '../auth.ts';
+import { CountryCodeSchema } from '../common/position.ts';
+import { CoreCreateSchema, CoreOmitSchema, CoreSchema, CoreUpdateSchema } from '../core.ts';
+import { FieldValueSchema, TimestampSchema } from '../fields.ts';
+import { getDeletableFields } from '../utils.ts';
 
 /** The user data in firebase auth */
 export const UserSessionSchema = UserClaimsSchema.extend(FirebaseAuthMetadataSchema.shape).extend({
   currentSignInProvider: SignInProviderSchema,
-})
+});
 
 /** The user data in firebase auth */
 export const UserLiteSchema = UserSessionSchema.extend({
   createdAt: TimestampSchema.or(z.date()),
   signInProviders: z.array(SignInProviderSchema).optional(),
-})
+});
 
 export const UserSchema = UserLiteSchema.omit({
   createdAt: true,
@@ -51,21 +51,21 @@ export const UserSchema = UserLiteSchema.omit({
      * month
      */
     monthlyUploadedDuration: z.number().optional(),
-  })
+  });
 
 export const UserCreateSchema = UserSchema.omit(CoreOmitSchema)
   .extend(CoreCreateSchema.shape)
   .extend({
     agreedAt: UserSchema.shape.agreedAt.or(FieldValueSchema),
-  })
+  });
 
-export const UserUpdateSchema = UserSchema
-  .extend(getDeletableFields(UserSchema)).omit(CoreOmitSchema)
-  .extend(CoreUpdateSchema.shape)
+export const UserUpdateSchema = UserSchema.extend(getDeletableFields(UserSchema))
+  .omit(CoreOmitSchema)
+  .extend(CoreUpdateSchema.shape);
 
 export const UserLiteCreateSchema = z.object({
   displayName: z.string().optional(),
-  email: z.email(),
+  email: z.string().email(),
   errorMessage: z.string().optional(),
   userRole: UserRoleSchema,
-})
+});

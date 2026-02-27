@@ -1,29 +1,53 @@
-# Mocks
+# @aikami/mocks
 
-This package provides a set of mock data that can be used in tests and for development.
+Shared mocks and test fixtures for unit and integration tests.
+
+## Use Case
+
+This package provides mock data and fixtures used across the monorepo for:
+- Unit testing
+- Integration testing
+- Development and debugging
+- Storybook/SvelteKit component development
 
 ## Installation
 
-This package is a dependency of other packages in the monorepo and is not meant to be used as a standalone package.
+This is a workspace package managed by moon. Install via:
+
+```bash
+bun install
+```
+
+## Dependencies
+
+- `@aikami/constants` - Constant values
+- `@aikami/schemas` - Zod schemas for mock generation
+- `@aikami/types` - Type definitions
+- `zocker` - Mock data generation library
+
+## Tasks
+
+| Task | Command | Description |
+|------|---------|-------------|
+| `check` | `bun run check` | Run TypeScript type checking |
+| `format` | `bun run format` | Format code with Biome |
+| `lint` | `bun run lint` | Lint code with Biome |
+| `test` | `bun test` | Run tests |
 
 ## Usage
 
-To use the mocks from this package, import them from `@aikami/mocks`:
-
 ```typescript
-import { mockDate } from '@aikami/mocks'
+import { mockUser, mockCharacter, getRandomId } from '@aikami/mocks';
+
+// Use predefined mocks
+const user = mockUser();
+
+// Generate random mocks
+const randomUser = zocker(UserSchema).generate();
 ```
 
-## Mocks
+## Available Mocks
 
-- `mockDate`: A mock date.
-- `mockUID`: A mock user ID.
-- `mockTeamId`: A mock team ID.
-- `mockThumbnailURL`: A mock thumbnail URL.
-- `mockGifURL`: A mock GIF URL.
-- `mockWebmURL`: A mock WebM URL.
-- `mockDescription`: A mock description.
-- `mockDescriptionLite`: A mock lite description.
-- `mockFirstName`: A mock first name.
-- `mockLastName`: A mock last name.
-- `getRandomId`: A function that returns a random ID.
+- **Data mocks** - User, Character, Message, NPC data
+- **Utility mocks** - Random IDs, dates, URLs
+- **Schema-based mocks** - Generated via Zod schemas

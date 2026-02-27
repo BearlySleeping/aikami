@@ -1,0 +1,12 @@
+{
+  "sortPackages": true,
+  "semverGroups": [
+    {
+      "label": "enforce versions to match",
+      "range": "",
+      "dependencyTypes": ["prod", "dev"],
+      "dependencies": ["**"],
+      "packages": ["**"]
+    }
+  ]
+}

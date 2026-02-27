@@ -1,5 +1,11 @@
-import { dialogService } from '../services/dialog.svelte.ts'
-import { firebaseAnalyticService } from '../firebase/firebase-analytics-service.ts'
+import {
+  BaseClass,
+  type BaseClassInterface,
+  type BaseClassOptions,
+  toAppErrorFromUnknownError,
+} from '@aikami/utils';
+import { firebaseAnalyticService } from '../firebase/firebase-analytics-service.ts';
+import { dialogService } from '../services/dialog.svelte.ts';
 import type {
   AnalyticsEvent,
   AnalyticsEventName,
@@ -7,53 +13,39 @@ import type {
   ConditionalSnackbarData,
   ConfirmDialogData,
   SnackbarData,
-} from '../types/index.ts'
-import {
-  BaseClass,
-  type BaseClassInterface,
-  type BaseClassOptions,
-  toAppErrorFromUnknownError,
-} from '@aikami/utils'
+} from '../types/index.ts';
 
-export type BaseFrontendClassOptions = BaseClassOptions
+export type BaseFrontendClassOptions = BaseClassOptions;
 
-export type BaseFrontendClassInterface = BaseClassInterface
+export type BaseFrontendClassInterface = BaseClassInterface;
 
 export abstract class BaseFrontendClass<
-  Options extends BaseFrontendClassOptions = BaseFrontendClassOptions,
-> extends BaseClass<Options> implements BaseFrontendClassInterface {
+    Options extends BaseFrontendClassOptions = BaseFrontendClassOptions,
+  >
+  extends BaseClass<Options>
+  implements BaseFrontendClassInterface
+{
   protected async logEvent<T extends AnalyticsEventName>(
     eventName: T,
     eventParameters: AnalyticsEventParameters<T>,
   ): Promise<void> {
-    return await firebaseAnalyticService
-      .logEvent(
-        eventName,
-        eventParameters,
-      )
+    return await firebaseAnalyticService.logEvent(eventName, eventParameters);
   }
 
   protected showSnackbar(action: SnackbarData): void {
-    return dialogService.showSnackbar(action)
+    return dialogService.showSnackbar(action);
   }
-  protected showConditionalSnackbar(
-    options: ConditionalSnackbarData,
-  ): void {
-    return dialogService.showConditionalSnackbar(options)
+  protected showConditionalSnackbar(options: ConditionalSnackbarData): void {
+    return dialogService.showConditionalSnackbar(options);
   }
   protected async openConfirmDialog(
     confirmDialog: Omit<ConfirmDialogData, 'resolve'>,
   ): Promise<boolean> {
-    return await dialogService.openConfirmDialog(
-      confirmDialog,
-    )
+    return await dialogService.openConfirmDialog(confirmDialog);
   }
 
-  protected setAppLoading(
-    loading: boolean,
-    label?: string,
-  ): void {
-    return dialogService.setAppLoading(loading, label)
+  protected setAppLoading(loading: boolean, label?: string): void {
+    return dialogService.setAppLoading(loading, label);
   }
   /**
    * A helper wrapper to handle service methods. It will show success/error
@@ -76,48 +68,48 @@ export abstract class BaseFrontendClass<
        * This text will be shown as a success notification snackbar if the
        * method succeeds
        */
-      successText?: string
+      successText?: string;
       /**
        * This text will be shown as a error notification snackbar if the
        * method fails
        */
-      errorText?: string
+      errorText?: string;
       /** The analytics event to send if the method succeeds */
-      successAnalyticsEvent: AnalyticsEvent[]
+      successAnalyticsEvent: AnalyticsEvent[];
       /**
        * The arguments to show a confirmation dialog, before executing the
        * {@link method}
        */
-      confirmArguments?: Omit<ConfirmDialogData, 'resolve'>
+      confirmArguments?: Omit<ConfirmDialogData, 'resolve'>;
     },
   ): Promise<void> {
-    const { confirmArguments, errorText, successText } = options
-    let { successAnalyticsEvent } = options
+    const { confirmArguments, errorText, successText } = options;
+    let { successAnalyticsEvent } = options;
 
     if (confirmArguments) {
-      const confirmed = await this.openConfirmDialog(confirmArguments)
+      const confirmed = await this.openConfirmDialog(confirmArguments);
       if (!confirmed) {
-        return
+        return;
       }
     }
 
-    const responseOk = typeof method === 'function' ? await method() : await method
+    const responseOk = typeof method === 'function' ? await method() : await method;
 
     if (responseOk) {
       if (successText) {
         this.showSnackbar({
           text: successText,
           type: 'success',
-        })
+        });
       }
 
       successAnalyticsEvent = Array.isArray(successAnalyticsEvent)
         ? successAnalyticsEvent
-        : [successAnalyticsEvent]
+        : [successAnalyticsEvent];
 
       await Promise.all(
         successAnalyticsEvent.map((event) => this.logEvent(event.name, event.parameters)),
-      )
+      );
     } else {
       // TODO: add analytic events for errors?
       // or use sentry?
@@ -126,27 +118,23 @@ export abstract class BaseFrontendClass<
         this.showSnackbar({
           text: errorText,
           type: 'error',
-        })
+        });
       }
     }
   }
-  protected showErrorNotification(
-    error: unknown,
-    fallbackMessage?: string,
-  ): void {
-    const appError = toAppErrorFromUnknownError(error)
+  protected showErrorNotification(error: unknown, fallbackMessage?: string): void {
+    const appError = toAppErrorFromUnknownError(error);
 
     const getText = (): string => {
       switch (appError.cause.errorType) {
-        case 'unknown':
         default:
-          return fallbackMessage ?? 'unknown_error_occurred'
+          return fallbackMessage ?? 'unknown_error_occurred';
       }
-    }
+    };
 
     this.showSnackbar({
       text: getText(),
       type: 'error',
-    })
+    });
   }
 }

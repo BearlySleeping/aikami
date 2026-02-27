@@ -1,12 +1,10 @@
 <script lang="ts">
-    import t from "$i18n";
-    import type { PersonaCreationViewModelInterface } from "./persona-creation-view-model.svelte";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import type { PersonaCreationViewModelInterface } from './persona-creation-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: PersonaCreationViewModelInterface;
-    };
-    const { viewModel }: Props = $props();
+type Props = {
+  viewModel: PersonaCreationViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

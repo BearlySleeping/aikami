@@ -1,30 +1,30 @@
-import type { RegisterForm } from '../form/auth.ts'
+import type { RegisterForm } from '../form/auth.ts';
 
 export type AuthApiEvents = {
   checkUniqueEmail: [
     {
-      email: string
+      email: string;
     },
     boolean,
-  ]
+  ];
   confirmTermsAndService: [
     {
-      uid: string
+      uid: string;
     },
-    string | void,
-  ]
+    string | undefined,
+  ];
   createCustomFirebaseSignInToken: [
     undefined,
     {
-      customFirebaseSignInToken: string
+      customFirebaseSignInToken: string;
     },
-  ]
-  deleteAccount: [undefined, undefined]
+  ];
+  deleteAccount: [undefined, undefined];
   register: [
     {
-      registerForm: RegisterForm
-      shouldSendEmail?: boolean
-      uid?: string
+      registerForm: RegisterForm;
+      shouldSendEmail?: boolean;
+      uid?: string;
     },
     {
       /**
@@ -32,32 +32,32 @@ export type AuthApiEvents = {
        * to a client device to use to sign in with the client SDKs'
        * signInWithCustomToken()
        */
-      customFirebaseSignInToken: string
-      uid: string
+      customFirebaseSignInToken: string;
+      uid: string;
     },
-  ]
+  ];
   sendResetPassword: [
     {
-      email: string
+      email: string;
     },
-    void,
-  ]
+    undefined,
+  ];
   updateEmail: [
     {
-      email: string
-      uid: string
+      email: string;
+      uid: string;
     },
-    void,
-  ]
-}
+    undefined,
+  ];
+};
 
 export type AuthMessageData<T extends AuthMessageType = AuthMessageType> = {
-  payload: AuthMessagePayload<T>
-  type: T
-}
+  payload: AuthMessagePayload<T>;
+  type: T;
+};
 
-export type AuthMessagePayload<T extends AuthMessageType = AuthMessageType> = AuthApiEvents[T][0]
+export type AuthMessagePayload<T extends AuthMessageType = AuthMessageType> = AuthApiEvents[T][0];
 
-export type AuthMessageResponse<T extends AuthMessageType = AuthMessageType> = AuthApiEvents[T][1]
+export type AuthMessageResponse<T extends AuthMessageType = AuthMessageType> = AuthApiEvents[T][1];
 
-export type AuthMessageType = keyof AuthApiEvents
+export type AuthMessageType = keyof AuthApiEvents;

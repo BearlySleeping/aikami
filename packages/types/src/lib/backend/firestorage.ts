@@ -1,8 +1,8 @@
 export type FirestorageImageMetadata = {
-  contentType: string
-  metadata: { firebaseStorageDownloadTokens: string }
+  contentType: string;
+  metadata: { firebaseStorageDownloadTokens: string };
   customMetadata?: {
-    creatorUID?: string
-    teamId?: string
-  }
-}
+    creatorUID?: string;
+    teamId?: string;
+  };
+};

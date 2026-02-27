@@ -15,7 +15,7 @@ import type {
   UpdateData as BackendUpdateData,
   WhereFilterOp as BackendWhereFilterOp,
   WriteBatch as BackendWriteBatch,
-} from '@google-cloud/firestore'
+} from '@google-cloud/firestore';
 import type {
   DocumentData as FrontendDocumentData,
   DocumentReference as FrontendDocumentReference,
@@ -30,7 +30,7 @@ import type {
   UpdateData as FrontendUpdateData,
   WhereFilterOp as FrontendWhereFilterOp,
   WriteBatch as FrontendWriteBatch,
-} from 'firebase/firestore'
+} from 'firebase/firestore';
 
 export type {
   BackendCollectionReference,
@@ -45,54 +45,52 @@ export type {
   BackendQuerySnapshot,
   BackendTimestamp,
   BackendWhereFilterOp,
-}
+};
 
-export type WriteBatch = FrontendWriteBatch | BackendWriteBatch
+export type WriteBatch = FrontendWriteBatch | BackendWriteBatch;
 
 export type UpdateData<T extends DocumentData = DocumentData> =
   | BackendUpdateData<T>
-  | FrontendUpdateData<T>
+  | FrontendUpdateData<T>;
 
-export type Firestore = FrontendFirestore | BackendFirestore
+export type Firestore = FrontendFirestore | BackendFirestore;
 
-export type DocumentData = FrontendDocumentData | BackendDocumentData
-export type WhereFilterOp = FrontendWhereFilterOp | BackendWhereFilterOp
+export type DocumentData = FrontendDocumentData | BackendDocumentData;
+export type WhereFilterOp = FrontendWhereFilterOp | BackendWhereFilterOp;
 
-export type FieldPath = FrontendFieldPath | BackendFieldPath
+export type FieldPath = FrontendFieldPath | BackendFieldPath;
 // Query
-export type Query<T extends DocumentData = DocumentData> =
-  | FrontendQuery<T>
-  | BackendQuery<T>
+export type Query<T extends DocumentData = DocumentData> = FrontendQuery<T> | BackendQuery<T>;
 
 export type QuerySnapshot<T extends DocumentData = DocumentData> =
   | FrontendQuerySnapshot<T>
-  | BackendQuerySnapshot<T>
+  | BackendQuerySnapshot<T>;
 
 export type CollectionReference<T extends DocumentData = DocumentData> =
   | FrontendQuery<T>
-  | BackendCollectionReference<T>
+  | BackendCollectionReference<T>;
 
 export type DocumentReference<T extends DocumentData = DocumentData> =
   | FrontendDocumentReference<T>
-  | BackendDocumentReference<T>
+  | BackendDocumentReference<T>;
 
 export type DocumentSnapshot<T extends DocumentData = DocumentData> =
   | FrontendDocumentSnapshot<T>
-  | BackendDocumentSnapshot<T>
+  | BackendDocumentSnapshot<T>;
 
 // Fields
-export type Timestamp = FrontendTimestamp | BackendTimestamp
-export type FieldValue = FrontendFieldValue | BackendFieldValue
-export type GeoPoint = FrontendGeoPoint | BackendGeoPoint
+export type Timestamp = FrontendTimestamp | BackendTimestamp;
+export type FieldValue = FrontendFieldValue | BackendFieldValue;
+export type GeoPoint = FrontendGeoPoint | BackendGeoPoint;
 
-export type ServerTimestamp = () => FieldValue
-export type ServerIncrement = (amount: number) => FieldValue
-export type ServerArrayUnion = (...elements: unknown[]) => FieldValue
-export type ServerArrayRemove = (...elements: unknown[]) => FieldValue
+export type ServerTimestamp = () => FieldValue;
+export type ServerIncrement = (amount: number) => FieldValue;
+export type ServerArrayUnion = (...elements: unknown[]) => FieldValue;
+export type ServerArrayRemove = (...elements: unknown[]) => FieldValue;
 
-export type ServerDelete = () => FieldValue
+export type ServerDelete = () => FieldValue;
 
-export type ToGeoPoint = (lat: number, lng: number) => GeoPoint
-export type ToTimestamp = (date: Date) => Timestamp
+export type ToGeoPoint = (lat: number, lng: number) => GeoPoint;
+export type ToTimestamp = (date: Date) => Timestamp;
 
-export type ToTimestampNow = () => Timestamp
+export type ToTimestampNow = () => Timestamp;

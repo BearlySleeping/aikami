@@ -1,12 +1,10 @@
 <script lang="ts">
-    import type { ProfileViewModelInterface } from "./profile-view-model.svelte";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
-    import t from "$i18n";
+import type { ProfileViewModelInterface } from './profile-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: ProfileViewModelInterface;
-    };
-    const { viewModel }: Props = $props();
+type Props = {
+  viewModel: ProfileViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

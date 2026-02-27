@@ -1,0 +1,16 @@
+{
+  "name": "@aikami/backend-svelte-kit",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@aikami/backend-utils": "workspace:*"
+  }
+}

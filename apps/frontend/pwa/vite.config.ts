@@ -1,18 +1,18 @@
-import { paraglideVitePlugin } from '@inlang/paraglide-js'
-import tailwindcss from '@tailwindcss/vite'
-import { sveltekit } from '@sveltejs/kit/vite'
-import { defineConfig, type PluginOption } from 'vite'
-import devtoolsJson from 'vite-plugin-devtools-json'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { isoImport } from 'vite-plugin-iso-import'
-import { visualizer } from 'rollup-plugin-visualizer'
-import process from 'node:process'
+import { dirname, resolve } from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import { sveltekit } from '@sveltejs/kit/vite';
+import tailwindcss from '@tailwindcss/vite';
+import { visualizer } from 'rollup-plugin-visualizer';
+import { defineConfig, type PluginOption } from 'vite';
+import devtoolsJson from 'vite-plugin-devtools-json';
+import { isoImport } from 'vite-plugin-iso-import';
 
-const projectDirectory = dirname(fileURLToPath(import.meta.url))
-const rootDirectory = resolve(projectDirectory, '../../..')
+const projectDirectory = dirname(fileURLToPath(import.meta.url));
+const rootDirectory = resolve(projectDirectory, '../../..');
 
-const port = Number(process.env.PORT || 5173)
+const port = Number(process.env.PORT || 5173);
 
 export default defineConfig(({ mode }) => {
   const plugins: PluginOption[] = [
@@ -23,10 +23,10 @@ export default defineConfig(({ mode }) => {
       project: './project.inlang',
       outdir: './src/lib/paraglide',
     }) as PluginOption,
-  ]
+  ];
 
-  if (mode === 'development' && process.env['DEBUG'] === '1') {
-    plugins.unshift(devtoolsJson())
+  if (mode === 'development' && process.env.DEBUG === '1') {
+    plugins.unshift(devtoolsJson());
   }
 
   if (mode === 'analyze') {
@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
         gzipSize: true,
         open: true,
       }) as unknown as PluginOption,
-    )
+    );
   }
 
   return {
@@ -50,5 +50,5 @@ export default defineConfig(({ mode }) => {
       },
       port,
     },
-  }
-})
+  };
+});

@@ -1,4 +1,4 @@
-import crypto from 'node:crypto'
+import crypto from 'node:crypto';
 
 /**
  * Get the prefix for a given environment flavor.
@@ -10,15 +10,15 @@ import crypto from 'node:crypto'
 const getPrefix = (flavor: string): string => {
   switch (flavor) {
     case 'development':
-      return 'sk_dev'
+      return 'sk_dev';
     case 'staging':
-      return 'sk_stage'
+      return 'sk_stage';
     case 'production':
-      return 'sk_prod'
+      return 'sk_prod';
     default:
-      return `sk_${flavor}`
+      return `sk_${flavor}`;
   }
-}
+};
 
 /**
  * Generate a secure secret string for SDK access.
@@ -28,11 +28,11 @@ const getPrefix = (flavor: string): string => {
  * @returns A secure secret string prefixed based on the environment flavor.
  */
 export const generateSecret = (flavor: string): string => {
-  const prefix = getPrefix(flavor)
+  const prefix = getPrefix(flavor);
 
   // Generate a secure random string
-  const randomBytes = crypto.randomBytes(32)
-  const secret = randomBytes.toString('hex')
+  const randomBytes = crypto.randomBytes(32);
+  const secret = randomBytes.toString('hex');
 
-  return `${prefix}_${secret}`
-}
+  return `${prefix}_${secret}`;
+};

@@ -1,13 +1,13 @@
-import { getAuth } from 'firebase/auth'
-import app from './app.ts'
+import { getAuth } from 'firebase/auth';
+import app from './app.ts';
 
 export {
   confirmPasswordReset as firebaseConfirmPasswordReset,
   createUserWithEmailAndPassword,
-  getAdditionalUserInfo,
-  getIdToken,
   GithubAuthProvider,
   GoogleAuthProvider,
+  getAdditionalUserInfo,
+  getIdToken,
   OAuthProvider,
   onIdTokenChanged,
   sendPasswordResetEmail,
@@ -19,6 +19,6 @@ export {
   updatePassword as firebaseUpdatePassword,
   updateProfile,
   verifyPasswordResetCode as firebaseVerifyPasswordResetCode,
-} from 'firebase/auth'
+} from 'firebase/auth';
 
-export const auth = getAuth(app)
+export const auth = getAuth(app);

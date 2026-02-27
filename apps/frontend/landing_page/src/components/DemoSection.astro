@@ -1,13 +1,13 @@
 ---
-import Button from '$components/Button.astro';
 import { getReleaseTagVersion } from '$utils/index';
+
 const version = getReleaseTagVersion();
 
 const baseURL = `https://github.com/BearlySleeping/aikami/releases/download/${version}`;
-const windowsDownloadLink = `${baseURL}/aikami-windows.zip`;
-const linuxDownloadLink = `${baseURL}/aikami-linux.zip`;
-const macosDownloadLink = `${baseURL}/aikami-macos.zip`;
-const webLink = `https://aikami.bearlysleeping.com`;
+const _windowsDownloadLink = `${baseURL}/aikami-windows.zip`;
+const _linuxDownloadLink = `${baseURL}/aikami-linux.zip`;
+const _macosDownloadLink = `${baseURL}/aikami-macos.zip`;
+const _webLink = `https://aikami.bearlysleeping.com`;
 ---
 
 <section class="mb-10">

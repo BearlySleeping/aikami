@@ -1,16 +1,18 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Docs",
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
     "strictNullChecks": true,
-    "baseUrl": "src",
+    "baseUrl": ".",
     "paths": {
-      "$lib/*": ["lib/*"],
-      "$utils": ["utils"],
-      "$utils/*": ["utils/*"],
-      "$components/*": ["components/*"],
-      "$layouts/*": ["layouts/*"],
-      "$assets/*": ["assets/*"],
-      "$pages/*": ["pages/*"]
+      "$lib/*": ["src/lib/*"],
+      "$utils": ["src/utils"],
+      "$utils/*": ["src/utils/*"],
+      "$components/*": ["src/components/*"],
+      "$layouts/*": ["src/layouts/*"],
+      "$assets/*": ["src/assets/*"],
+      "$pages/*": ["src/pages/*"]
     }
   },
   "include": [".astro/types.d.ts", "src", "astro.config.ts"],

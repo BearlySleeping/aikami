@@ -4,13 +4,13 @@ import type {
   OAuthProviderCreateData,
   OAuthProviderUpdateData,
   ServerTimestamp,
-} from '@aikami/types'
+} from '@aikami/types';
+import logger from '$logger';
 import {
   getDateFromUnixTime,
   getDaysFromNowInUnix,
   getMonthsFromNowInUnix,
-} from '../common/utils.ts'
-import logger from '$logger'
+} from '../common/utils.ts';
 
 /**
  * Converts the current oauth data to the oauthProvider create data
@@ -19,16 +19,16 @@ import logger from '$logger'
  * @returns The oauthProvider create data
  */
 export const toOAuthProviderCreateData = (options: {
-  refreshToken: string
-  accessToken: string
-  oauthProvider: string
-  profileData: OAuthProfileData
-  redirectURI: string
-  expiresAt?: number
-  serverTimestamp: ServerTimestamp
-  timestampFromDate: (date: Date) => FieldValue
+  refreshToken: string;
+  accessToken: string;
+  oauthProvider: string;
+  profileData: OAuthProfileData;
+  redirectURI: string;
+  expiresAt?: number;
+  serverTimestamp: ServerTimestamp;
+  timestampFromDate: (date: Date) => FieldValue;
 }): OAuthProviderCreateData => {
-  logger.debug('toOAuthProviderCreateData', options)
+  logger.debug('toOAuthProviderCreateData', options);
   const {
     accessToken,
     expiresAt,
@@ -38,8 +38,8 @@ export const toOAuthProviderCreateData = (options: {
     refreshToken,
     serverTimestamp,
     timestampFromDate,
-  } = options
-  const { accountId, email, metadata, name, phoneNumber, photoURL, tenantId } = profileData
+  } = options;
+  const { accountId, email, metadata, name, phoneNumber, photoURL, tenantId } = profileData;
 
   const oauthProviderCreateData: OAuthProviderCreateData = {
     accessToken,
@@ -54,31 +54,31 @@ export const toOAuthProviderCreateData = (options: {
     ),
     redirectURI,
     refreshToken,
-  }
+  };
   if (email) {
-    oauthProviderCreateData.email = email
+    oauthProviderCreateData.email = email;
   }
   if (tenantId) {
-    oauthProviderCreateData.tenantId = tenantId
+    oauthProviderCreateData.tenantId = tenantId;
   }
   if (name) {
-    oauthProviderCreateData.name = name
+    oauthProviderCreateData.name = name;
   }
   if (photoURL) {
-    oauthProviderCreateData.photoURL = photoURL
+    oauthProviderCreateData.photoURL = photoURL;
   }
   if (redirectURI) {
-    oauthProviderCreateData.redirectURI = redirectURI
+    oauthProviderCreateData.redirectURI = redirectURI;
   }
   if (metadata) {
-    oauthProviderCreateData.metadata = metadata
+    oauthProviderCreateData.metadata = metadata;
   }
   if (phoneNumber) {
-    oauthProviderCreateData.phoneNumber = phoneNumber
+    oauthProviderCreateData.phoneNumber = phoneNumber;
   }
 
-  return oauthProviderCreateData
-}
+  return oauthProviderCreateData;
+};
 
 /**
  * Converts the current oauth data to the oauthProvider update data
@@ -87,23 +87,17 @@ export const toOAuthProviderCreateData = (options: {
  * @returns The oauthProvider update data
  */
 export const toOAuthProviderUpdateData = (options: {
-  refreshToken?: string
-  accessToken: string
-  oauthProvider: string
-  profileData?: OAuthProfileData
-  expiresAt?: number
-  timestampFromDate: (date: Date) => FieldValue
+  refreshToken?: string;
+  accessToken: string;
+  oauthProvider: string;
+  profileData?: OAuthProfileData;
+  expiresAt?: number;
+  timestampFromDate: (date: Date) => FieldValue;
 }): OAuthProviderUpdateData => {
-  logger.debug('toOAuthProviderUpdateData', options)
+  logger.debug('toOAuthProviderUpdateData', options);
 
-  const {
-    accessToken,
-    expiresAt,
-    oauthProvider,
-    profileData,
-    refreshToken,
-    timestampFromDate,
-  } = options
+  const { accessToken, expiresAt, oauthProvider, profileData, refreshToken, timestampFromDate } =
+    options;
 
   const oauthProviderUpdateData: OAuthProviderUpdateData = {
     accessToken,
@@ -114,38 +108,38 @@ export const toOAuthProviderUpdateData = (options: {
           : getDaysFromNowInUnix(60),
       ),
     ),
-  }
+  };
   if (refreshToken) {
-    oauthProviderUpdateData.refreshToken = refreshToken
+    oauthProviderUpdateData.refreshToken = refreshToken;
   }
 
   if (!profileData) {
-    return oauthProviderUpdateData
+    return oauthProviderUpdateData;
   }
 
-  const { email, metadata, name, phoneNumber, photoURL, tenantId } = profileData
+  const { email, metadata, name, phoneNumber, photoURL, tenantId } = profileData;
 
   if (tenantId) {
-    oauthProviderUpdateData.tenantId = tenantId
+    oauthProviderUpdateData.tenantId = tenantId;
   }
   if (email) {
-    oauthProviderUpdateData.email = email
+    oauthProviderUpdateData.email = email;
   }
   if (name) {
-    oauthProviderUpdateData.name = name
+    oauthProviderUpdateData.name = name;
   }
   if (photoURL) {
-    oauthProviderUpdateData.photoURL = photoURL
+    oauthProviderUpdateData.photoURL = photoURL;
   }
   if (metadata) {
-    oauthProviderUpdateData.metadata = metadata
+    oauthProviderUpdateData.metadata = metadata;
   }
   if (phoneNumber) {
-    oauthProviderUpdateData.phoneNumber = phoneNumber
+    oauthProviderUpdateData.phoneNumber = phoneNumber;
   }
 
-  return oauthProviderUpdateData
-}
+  return oauthProviderUpdateData;
+};
 
 /**
  * Converts the current oauth data to the oauthProvider update data
@@ -153,42 +147,32 @@ export const toOAuthProviderUpdateData = (options: {
  * @param options The options
  * @returns The oauthProvider update data
  */
-export const toOAuthProfileData = (
-  options: OAuthProfileData,
-): OAuthProfileData => {
-  logger.debug('toOAuthProfileData', options)
+export const toOAuthProfileData = (options: OAuthProfileData): OAuthProfileData => {
+  logger.debug('toOAuthProfileData', options);
 
-  const {
-    accountId,
-    email,
-    metadata,
-    name,
-    phoneNumber,
-    photoURL,
-    tenantId,
-  } = options
+  const { accountId, email, metadata, name, phoneNumber, photoURL, tenantId } = options;
 
   const oAuthProfileData: OAuthProfileData = {
     accountId,
-  }
+  };
   if (tenantId) {
-    oAuthProfileData.tenantId = tenantId
+    oAuthProfileData.tenantId = tenantId;
   }
   if (email) {
-    oAuthProfileData.email = email
+    oAuthProfileData.email = email;
   }
   if (name) {
-    oAuthProfileData.name = name
+    oAuthProfileData.name = name;
   }
   if (photoURL) {
-    oAuthProfileData.photoURL = photoURL
+    oAuthProfileData.photoURL = photoURL;
   }
   if (metadata) {
-    oAuthProfileData.metadata = metadata
+    oAuthProfileData.metadata = metadata;
   }
   if (phoneNumber) {
-    oAuthProfileData.phoneNumber = phoneNumber
+    oAuthProfileData.phoneNumber = phoneNumber;
   }
 
-  return oAuthProfileData
-}
+  return oAuthProfileData;
+};

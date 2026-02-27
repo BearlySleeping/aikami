@@ -1,33 +1,33 @@
 <script lang="ts">
-    import {
-        getHeadTagsViewModel,
-        type HeadTagsViewModelInterface,
-        type BaseMetaTags,
-    } from "./head-tags-view-model.svelte";
+import {
+  type BaseMetaTags,
+  getHeadTagsViewModel,
+  type HeadTagsViewModelInterface,
+} from './head-tags-view-model.svelte.ts';
 
-    interface Props {
-        data: BaseMetaTags;
-        baseURL: string;
-        path: string;
-        viewModel?: HeadTagsViewModelInterface;
-    }
+interface Props {
+  data: BaseMetaTags;
+  baseURL: string;
+  path: string;
+  viewModel?: HeadTagsViewModelInterface;
+}
 
-    let {
-        data,
-        baseURL,
-        path,
-        viewModel = getHeadTagsViewModel({ className: "HeadTagsView" }),
-    }: Props = $props();
+let {
+  data,
+  baseURL,
+  path,
+  viewModel = getHeadTagsViewModel({ className: 'HeadTagsView' }),
+}: Props = $props();
 
-    $effect(() => {
-        viewModel.setData(data);
-        viewModel.setBaseURL(baseURL);
-        viewModel.setPath(path);
-    });
+$effect(() => {
+  viewModel.setData(data);
+  viewModel.setBaseURL(baseURL);
+  viewModel.setPath(path);
+});
 
-    const metadata = $derived(viewModel.fullMetadata());
-    const organizationJsonLd = $derived(viewModel.organizationJsonLd());
-    const searchActionJsonLd = $derived(viewModel.searchActionJsonLd());
+const _metadata = $derived(viewModel.fullMetadata());
+const _organizationJsonLd = $derived(viewModel.organizationJsonLd());
+const _searchActionJsonLd = $derived(viewModel.searchActionJsonLd());
 </script>
 
 <svelte:head>

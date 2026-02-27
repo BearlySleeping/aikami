@@ -1,10 +1,9 @@
 <script lang="ts">
-    import SettingsView from "$lib/views/settings/SettingsView.svelte";
-    import { getSettingsViewModel } from "$lib/views/settings/settings-view-model.svelte";
+import { getSettingsViewModel } from '$lib/views/settings/settings-view-model.svelte.ts';
 
-    const viewModel = getSettingsViewModel({
-        className: "SettingsViewModel",
-    });
+const _viewModel = getSettingsViewModel({
+  className: 'SettingsViewModel',
+});
 </script>
 
 <SettingsView {viewModel} />

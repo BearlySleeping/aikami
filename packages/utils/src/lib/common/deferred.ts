@@ -1,12 +1,12 @@
 class Deferred<T, E> {
-  readonly promise: Promise<T>
-  resolve: (value: T | PromiseLike<T>) => void = () => undefined
-  reject: (reason?: E) => void = () => undefined
+  readonly promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void = () => undefined;
+  reject: (reason?: E) => void = () => undefined;
   constructor() {
     this.promise = new Promise<T>((resolve, reject) => {
-      this.resolve = resolve
-      this.reject = reject
-    })
+      this.resolve = resolve;
+      this.reject = reject;
+    });
   }
 }
 /**
@@ -36,4 +36,4 @@ class Deferred<T, E> {
  *
  * @returns a new deferred class instance.
  */
-export const createDeferred = <T, E>(): Deferred<T, E> => new Deferred<T, E>()
+export const createDeferred = <T, E>(): Deferred<T, E> => new Deferred<T, E>();

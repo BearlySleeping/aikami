@@ -7,10 +7,11 @@ stack: 'backend'
 tags:
   - 'utils'
   - 'backend'
+  - 'library'
 
 project:
-  name: 'Backend Utilities'
-  description: 'Shared backend utilities.'
+  title: 'Backend Utilities'
+  description: 'Shared backend utility functions and helpers.'
   channel: '#backend'
   owner: 'Backend Team'
 
@@ -24,34 +25,41 @@ fileGroups:
   sources:
     - 'src/**/*'
   configs:
-    - 'deno.json'
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'tests/**/*'
 
 tasks:
-  check:
-    command: 'deno task check'
+  typecheck:
+    command: 'bun run typecheck'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   format:
-    command: 'deno task format'
+    command: 'bun run format'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   lint:
-    command: 'deno task lint'
+    command: 'bun run lint'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   test:
-    command: 'deno task test'
+    command: 'bun test'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  validate:
+    command: 'bun run validate'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
       - '@group(configs)'

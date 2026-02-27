@@ -1,4 +1,4 @@
-import type { Routes } from '@aikami/frontend/services'
+import type { Routes } from '@aikami/frontend/services';
 
 export const routes = {
   login: {
@@ -6,8 +6,8 @@ export const routes = {
     queryParameters: undefined as
       | undefined
       | {
-        returnUrl?: boolean
-      },
+          returnUrl?: boolean;
+        },
     routeId: 'login',
     type: 'unauthenticated',
   },
@@ -16,12 +16,6 @@ export const routes = {
     queryParameters: undefined,
     routeId: 'register',
     type: 'unauthenticated',
-  },
-  characters: {
-    getPath: () => '/characters',
-    queryParameters: undefined,
-    routeId: '/(authenticated)/characters',
-    type: 'authenticated',
   },
   dashboard: {
     getPath: () => '/dashboard',
@@ -53,7 +47,7 @@ export const routes = {
     routeId: 'character/[id]',
     type: 'authenticated',
   },
-  'characters': {
+  characters: {
     getPath: () => '/characters',
     queryParameters: undefined,
     routeId: 'characters',
@@ -89,6 +83,6 @@ export const routes = {
     routeId: 'npcs',
     type: 'authenticated',
   },
-} as const satisfies Routes
+} as const satisfies Routes;
 
-export const searchParametersToKeep: Readonly<string[]> = [] as const
+export const searchParametersToKeep: Readonly<string[]> = [] as const;

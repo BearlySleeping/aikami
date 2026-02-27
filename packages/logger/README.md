@@ -1,57 +1,66 @@
-# Logger
+# @aikami/logger
 
-This package provides a basic logger that writes to the console.
+Shared logging utility for structured logging across the Aikami monorepo.
+
+## Use Case
+
+This package provides a consistent logging interface used across the entire monorepo. It offers:
+- Structured logging with different log levels
+- Timer functionality for performance tracking
+- Consistent log format across frontend and backend
 
 ## Installation
 
-This package is a dependency of other packages in the monorepo and is not meant to be used as a standalone package.
+This is a workspace package managed by moon. Install via:
+
+```bash
+bun install
+```
+
+## Dependencies
+
+- `@aikami/constants` - Environment detection utilities
+- `@aikami/types` - Type definitions
+- `firebase-functions` - Firebase Functions logger types
+
+## Tasks
+
+| Task | Command | Description |
+|------|---------|-------------|
+| `check` | `bun run check` | Run TypeScript type checking |
+| `format` | `bun run format` | Format code with Biome |
+| `lint` | `bun run lint` | Lint code with Biome |
 
 ## Usage
 
-To use the logger from this package, import it from `$logger`:
-
 ```typescript
-import logger from "$logger";
+import logger from '@aikami/logger';
 
-logger.info("This is an info message");
-logger.error("This is an error message");
+logger.info('User logged in', { userId: '123' });
+logger.error('Failed to fetch', { error: err.message });
+logger.warn('Rate limit approaching', { remaining: 5 });
+
+// Timer for performance tracking
+const timer = logger.createTimer();
+await heavyOperation();
+const duration = timer.stop();
+logger.debug(`Operation took ${duration}ms`);
 ```
 
 ## API
 
-### `logger`
+### Log Levels
 
-The default export is a `BasicLoggerService` instance.
+- `debug` - Detailed diagnostic information
+- `info` - General informational messages
+- `warn` - Warning messages for potential issues
+- `error` - Error messages for failures
 
-#### Methods
+### Methods
 
 - `debug(message: string, ...data: unknown[]): void`
 - `info(message: string, ...data: unknown[]): void`
 - `warn(message: string, ...data: unknown[]): void`
 - `error(message: string, ...data: unknown[]): void`
 - `createTimer(): TimerInterface`
-
-### `TimerInterface`
-
-An interface for a timer.
-
-#### Methods
-
-- `start(): void`
-- `stop(): number`
-
-## Log Levels
-
-The logger has the following log levels:
-
-- `debug`
-- `info`
-- `warn`
-- `error`
-
-The default log level is `info`. You can set the log level using the `setLogLevel` method.
-
-```typescript
-import logger from "$logger";
-logger.setLogLevel("DEBUG");
-```
+- `setLogLevel(level: string): void`

@@ -1,12 +1,12 @@
-import type { FirebaseError } from 'firebase-admin'
-import { toRouteHref } from '$router'
-import { deleteCookie, getCookie } from '@aikami/backend/svelte-kit/cookies.ts'
-import { toUserSessionDataFromToken } from '@aikami/backend/utils/auth.ts'
-import type { UserSessionData } from '@aikami/types'
-import { getAuth } from '@aikami/backend/configs/auth.ts'
-import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants'
-import { type Cookies, redirect } from '@sveltejs/kit'
-import logger from '$logger'
+import { getAuth } from '@aikami/backend/configs/auth.ts';
+import { deleteCookie, getCookie } from '@aikami/backend/svelte-kit/cookies.ts';
+import { toUserSessionDataFromToken } from '@aikami/backend/utils/auth.ts';
+import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
+import type { UserSessionData } from '@aikami/types';
+import { type Cookies, redirect } from '@sveltejs/kit';
+import type { FirebaseError } from 'firebase-admin';
+import logger from '$logger';
+import { toRouteHref } from '$router';
 
 /**
  * Same as {@link getUserSession} but redirects to login page if user is not
@@ -16,18 +16,18 @@ import logger from '$logger'
  * @returns User session data
  */
 export const validateUserSession = (options: {
-  url: URL
-  locals: { userSession?: UserSessionData }
+  url: URL;
+  locals: { userSession?: UserSessionData };
 }): UserSessionData => {
-  const { url } = options
-  const userSession = getUserSessionFromLocales(options)
-  logger.log('validateUserSession', { userSession })
+  const { url } = options;
+  const userSession = getUserSessionFromLocales(options);
+  logger.log('validateUserSession', { userSession });
 
   if (!userSession) {
     logger.log('validateUserSession: no userSession', {
       path: url.pathname,
       userSession,
-    })
+    });
     redirect(
       307,
       toRouteHref('login', {
@@ -36,10 +36,10 @@ export const validateUserSession = (options: {
         setRedirectTo: true,
         url,
       }),
-    )
+    );
   }
   if (!userSession.userRole) {
-    logger.log('validateUserSession: no userRole')
+    logger.log('validateUserSession: no userRole');
     redirect(
       307,
       toRouteHref('register', {
@@ -48,7 +48,7 @@ export const validateUserSession = (options: {
         setRedirectTo: true,
         url,
       }),
-    )
+    );
   }
 
   // if (userSession.status === 'unconfirmed-terms') {
@@ -69,206 +69,196 @@ export const validateUserSession = (options: {
   // 	);
   // }
 
-  return userSession
-}
+  return userSession;
+};
 
 export const getUserSessionFromLocales = (options: {
-  locals: { userSession?: UserSessionData }
+  locals: { userSession?: UserSessionData };
 }): UserSessionData | undefined => {
-  const { locals } = options
+  const { locals } = options;
   if (locals.userSession?.userRole) {
-    return locals.userSession
+    return locals.userSession;
   }
-  return
-}
+  return;
+};
 
 export const getUserSessionFromLocalesOrURL = async (options: {
-  locals: { userSession?: UserSessionData }
-  cookies: Cookies
-  url: URL
-  request: Request
+  locals: { userSession?: UserSessionData };
+  cookies: Cookies;
+  url: URL;
+  request: Request;
 }): Promise<UserSessionData | undefined> => {
-  logger.log('getUserSessionFromLocalesOrURL', options)
-  const { locals } = options
-  let userSession = locals.userSession
+  logger.log('getUserSessionFromLocalesOrURL', options);
+  const { locals } = options;
+  let userSession = locals.userSession;
   if (!userSession) {
-    const { userSession: userSessionFromCookies } = await getUserSession(options)
+    const { userSession: userSessionFromCookies } = await getUserSession(options);
     logger.log('getUserSessionFromLocalesOrURL:userSessionFromCookies', {
       userSessionFromCookies,
-    })
-    userSession = userSessionFromCookies
+    });
+    userSession = userSessionFromCookies;
     if (userSession) {
-      locals.userSession = userSession
+      locals.userSession = userSession;
     }
   }
 
   if (userSession?.userRole) {
-    return locals.userSession
+    return locals.userSession;
   }
 
-  const idToken = options.request.headers.get('firebase-auth-id-token')
+  const idToken = options.request.headers.get('firebase-auth-id-token');
   if (idToken) {
-    const [userSessionFromIdToken] = await getUserSessionFromIdToken(idToken)
+    const [userSessionFromIdToken] = await getUserSessionFromIdToken(idToken);
 
     if (userSessionFromIdToken) {
-      locals.userSession = userSessionFromIdToken
-      return locals.userSession
+      locals.userSession = userSessionFromIdToken;
+      return locals.userSession;
     }
   }
 
   if (userSession?.userRole) {
-    return locals.userSession
+    return locals.userSession;
   }
 
-  return
-}
+  return;
+};
 
 export const getSearchParamValue = (options: {
-  searchParams: URLSearchParams
-  key: string
+  searchParams: URLSearchParams;
+  key: string;
 }): string | undefined => {
-  const { key, searchParams } = options
-  let value = searchParams.get(key)
+  const { key, searchParams } = options;
+  let value = searchParams.get(key);
   if (value) {
-    return value
+    return value;
   }
 
-  const goToPath = searchParams.get(REDIRECT_TO_URL_SEARCH_PARAM_KEY)
+  const goToPath = searchParams.get(REDIRECT_TO_URL_SEARCH_PARAM_KEY);
   if (!goToPath) {
-    return
+    return;
   }
   // make goToPath a valid URLSearchParams, it will be
   // be like this goto=%2Fcrm%2Fadd...
-  const goToSearchParams = new URLSearchParams(goToPath)
-  value = goToSearchParams.get(key)
-  return value ?? undefined
-}
+  const goToSearchParams = new URLSearchParams(goToPath);
+  value = goToSearchParams.get(key);
+  return value ?? undefined;
+};
 
 export const getUserSession = async (options: {
-  cookies: Cookies
-  url: URL
-  request: Request
-  domain?: string
+  cookies: Cookies;
+  url: URL;
+  request: Request;
+  domain?: string;
 }): Promise<{
-  userSession: UserSessionData | undefined
-  shouldReAuthenticate?: boolean | undefined
+  userSession: UserSessionData | undefined;
+  shouldReAuthenticate?: boolean | undefined;
 }> => {
   try {
-    const { url } = options
+    const { url } = options;
 
-    const [userSession, shouldReAuthenticate] = await getUserSessionFromCookies(options)
+    const [userSession, shouldReAuthenticate] = await getUserSessionFromCookies(options);
     logger.log('getUserSession', {
       href: url.href,
       searchParams: url.searchParams,
       shouldReAuthenticate,
       userSession,
-    })
+    });
 
     return {
       shouldReAuthenticate,
       userSession,
-    }
+    };
   } catch (error) {
-    logger.error('hooks.server:getUserSession', error)
+    logger.error('hooks.server:getUserSession', error);
     return {
       shouldReAuthenticate: false,
       userSession: undefined,
-    }
+    };
   }
-}
+};
 
 export const getUserSessionFromIdToken = async (
   token: string,
 ): Promise<[UserSessionData] | [undefined, boolean]> => {
   try {
-    logger.debug('getUserSessionFromIdToken', { token })
+    logger.debug('getUserSessionFromIdToken', { token });
 
-    const decodedIdToken = await getAuth().verifyIdToken(
-      token,
-      true, /** checkRevoked */
-    )
-    return [toUserSessionDataFromToken(decodedIdToken)]
+    const decodedIdToken = await getAuth().verifyIdToken(token, true /** checkRevoked */);
+    return [toUserSessionDataFromToken(decodedIdToken)];
   } catch (e) {
-    const error = e as FirebaseError
-    const code = error.code
+    const error = e as FirebaseError;
+    const code = error.code;
 
     const refreshTokenErrorCodes = [
       'auth/id-token-revoked',
       'auth/id-token-expired',
       'auth/argument-error',
-    ]
-    const shouldTryToRefreshToken = refreshTokenErrorCodes.includes(code)
+    ];
+    const shouldTryToRefreshToken = refreshTokenErrorCodes.includes(code);
 
-    logger.error('getUserSessionFromIdToken', error)
-    return [undefined, shouldTryToRefreshToken]
+    logger.error('getUserSessionFromIdToken', error);
+    return [undefined, shouldTryToRefreshToken];
   }
-}
+};
 
 export const getUserSessionFromCookies = async (options: {
-  cookies: Cookies
-  url: URL
-  request: Request
-  domain?: string
+  cookies: Cookies;
+  url: URL;
+  request: Request;
+  domain?: string;
 }): Promise<[UserSessionData] | [undefined, boolean]> => {
   try {
-    const sessionCookie = getCookie('__session', options)
-    logger.debug('getUserSessionFromCookies', { sessionCookie })
+    const sessionCookie = getCookie('__session', options);
+    logger.debug('getUserSessionFromCookies', { sessionCookie });
 
-    if (
-      !sessionCookie ||
-      sessionCookie === 'null' ||
-      sessionCookie === 'undefined'
-    ) {
-      return [undefined, false]
+    if (!sessionCookie || sessionCookie === 'null' || sessionCookie === 'undefined') {
+      return [undefined, false];
     }
 
     const decodedIdToken = await getAuth().verifySessionCookie(
       sessionCookie,
-      true, /** checkRevoked */
-    )
-    return [toUserSessionDataFromToken(decodedIdToken)]
+      true /** checkRevoked */,
+    );
+    return [toUserSessionDataFromToken(decodedIdToken)];
   } catch (e) {
-    const error = e as FirebaseError
-    const code = error.code
+    const error = e as FirebaseError;
+    const code = error.code;
 
     const refreshTokenErrorCodes = [
       'auth/id-token-revoked',
       'auth/id-token-expired',
       'auth/argument-error',
-    ]
-    const shouldTryToRefreshToken = refreshTokenErrorCodes.includes(code)
+    ];
+    const shouldTryToRefreshToken = refreshTokenErrorCodes.includes(code);
 
-    deleteCookie('__session', options)
+    deleteCookie('__session', options);
 
-    logger.error('getUserSessionFromCookies', error)
-    return [undefined, shouldTryToRefreshToken]
+    logger.error('getUserSessionFromCookies', error);
+    return [undefined, shouldTryToRefreshToken];
   }
-}
+};
 
 export const getUserFromTokenHeader = async (options: {
-  headers: Headers
+  headers: Headers;
 }): Promise<UserSessionData | undefined> => {
   try {
-    const { headers } = options
-    const authorizationHeader = headers.get('Authorization')
+    const { headers } = options;
+    const authorizationHeader = headers.get('Authorization');
     if (!authorizationHeader) {
-      return undefined
+      return undefined;
     }
-    const [type, token] = authorizationHeader.split(' ')
+    const [type, token] = authorizationHeader.split(' ');
     if (type !== 'Bearer') {
-      return undefined
+      return undefined;
     }
     if (!token) {
-      return undefined
+      return undefined;
     }
 
-    const decodedIdToken = await getAuth().verifyIdToken(
-      token,
-      true, /** checkRevoked */
-    )
-    return toUserSessionDataFromToken(decodedIdToken)
+    const decodedIdToken = await getAuth().verifyIdToken(token, true /** checkRevoked */);
+    return toUserSessionDataFromToken(decodedIdToken);
   } catch (error) {
-    logger.error('getUserFromTokenHeader', error)
-    return
+    logger.error('getUserFromTokenHeader', error);
+    return;
   }
-}
+};

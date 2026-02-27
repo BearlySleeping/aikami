@@ -1,26 +1,26 @@
-import axios from 'axios'
-import type { CommonError } from '@aikami/types'
-import logger from '$logger'
+import type { CommonError } from '@aikami/types';
+import axios from 'axios';
+import logger from '$logger';
 
 export const downloadVideoFile = ({
   fileName,
   onDownloadProgress,
   url,
 }: {
-  fileName: string
-  url: string
+  fileName: string;
+  url: string;
   onDownloadProgress?: (progress: {
     /** The amount of byte transferred. */
-    bytesTransferred: number
+    bytesTransferred: number;
     /** The total amount of bytes to be transferred. */
-    totalBytes: number
-  }) => void
+    totalBytes: number;
+  }) => void;
 }): {
-  future: () => Promise<void>
-  cancel: () => Promise<boolean> | boolean
+  future: () => Promise<void>;
+  cancel: () => Promise<boolean> | boolean;
 } => {
   // eslint-disable-next-line import/no-named-as-default-member
-  const cancelSource = axios.CancelToken.source()
+  const cancelSource = axios.CancelToken.source();
   const future = async () => {
     try {
       const response = await axios.get<BlobPart>(url, {
@@ -30,38 +30,36 @@ export const downloadVideoFile = ({
             onDownloadProgress({
               bytesTransferred: event.loaded,
               totalBytes: event.total ?? -1,
-            })
+            });
           }
         },
         responseType: 'blob',
-      })
+      });
 
-      const fileURL = URL.createObjectURL(
-        new Blob([response.data]),
-      )
-      await downloadFile(fileURL, fileName)
+      const fileURL = URL.createObjectURL(new Blob([response.data]));
+      await downloadFile(fileURL, fileName);
     } catch (error_) {
-      const error = error_ as CommonError
-      logger.error('downloadVideoFile', error)
+      const error = error_ as CommonError;
+      logger.error('downloadVideoFile', error);
       if (error.code === 'canceled') {
-        return
+        return;
         // something else we
       }
     }
-  }
+  };
   return {
     cancel: () => {
       try {
-        cancelSource.cancel('canceled')
-        return true
+        cancelSource.cancel('canceled');
+        return true;
       } catch (error) {
-        logger.error('downloadVideoFile', error)
-        return false
+        logger.error('downloadVideoFile', error);
+        return false;
       }
     },
     future,
-  }
-}
+  };
+};
 
 /**
  * Downloads a file from the specified URL with the specified filename.
@@ -71,14 +69,11 @@ export const downloadVideoFile = ({
  * @returns A promise that resolves when the download completes successfully, or
  *   rejects with an error if the download fails.
  */
-export const downloadFile = async (
-  downloadURL: string,
-  fileName: string,
-): Promise<void> => {
-  const fileLink = document.createElement('a')
-  fileLink.href = downloadURL
-  fileLink.setAttribute('download', fileName)
-  document.body.append(fileLink)
+export const downloadFile = async (downloadURL: string, fileName: string): Promise<void> => {
+  const fileLink = document.createElement('a');
+  fileLink.href = downloadURL;
+  fileLink.setAttribute('download', fileName);
+  document.body.append(fileLink);
   try {
     await new Promise<void>((resolve) => {
       // fileLink.addEventListener('readystatechange', () => {
@@ -90,10 +85,10 @@ export const downloadFile = async (
       // 		}
       // 	}
       // });
-      fileLink.click()
-      resolve()
-    })
+      fileLink.click();
+      resolve();
+    });
   } finally {
-    fileLink.remove()
+    fileLink.remove();
   }
-}
+};

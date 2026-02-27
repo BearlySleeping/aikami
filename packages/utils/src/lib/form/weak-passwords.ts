@@ -3342,6 +3342,6 @@ const weakPasswords = [
   'cardinals',
   'captain1',
   'bubbles1',
-] as const
+] as const;
 
-export default weakPasswords
+export default weakPasswords;

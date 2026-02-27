@@ -1,10 +1,7 @@
 <script lang="ts">
-    import { getLoginViewModel } from "./login-view-model.svelte";
-    import t from "$i18n";
-    import ForgotPasswordDialog from "./forgot-password/ForgotPasswordDialog.svelte";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import { getLoginViewModel } from './login-view-model.svelte.ts';
 
-    const viewModel = getLoginViewModel({ className: "LoginView" });
+const _viewModel = getLoginViewModel({ className: 'LoginView' });
 </script>
 
 <BaseViewModelContainer

@@ -1,11 +1,11 @@
-import { toRouteHref } from '$router'
-import { redirect } from '@sveltejs/kit'
-import type { PageLoad } from './$types'
+import { redirect } from '@sveltejs/kit';
+import { toRouteHref } from '$router';
+import type { PageLoad } from './$types';
 
 export const load: PageLoad = (event) => {
-  const { params } = event
+  const { params } = event;
 
-  const { id } = params
+  const { id } = params;
   if (!id) {
     return redirect(
       307,
@@ -14,10 +14,10 @@ export const load: PageLoad = (event) => {
         queryParameters: undefined,
         url: event.url,
       }),
-    )
+    );
   }
 
   return {
     id,
-  }
-}
+  };
+};

@@ -1,10 +1,10 @@
-import mdx from '@astrojs/mdx'
-import sitemap from '@astrojs/sitemap'
-import icon from 'astro-icon'
-import { defineConfig, passthroughImageService } from 'astro/config'
+import mdx from '@astrojs/mdx';
+import sitemap from '@astrojs/sitemap';
+import tailwindcss from '@tailwindcss/vite';
+import { defineConfig, passthroughImageService } from 'astro/config';
+import icon from 'astro-icon';
 
-import tailwindcss from '@tailwindcss/vite'
-const monorepoRoot = new URL('../../..', import.meta.url).pathname
+const monorepoRoot = new URL('../../..', import.meta.url).pathname;
 
 // https://astro.build/config
 export default defineConfig({
@@ -30,4 +30,4 @@ export default defineConfig({
       },
     },
   },
-})
+});

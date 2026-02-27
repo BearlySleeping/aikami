@@ -1,27 +1,66 @@
-# Functions
+# @app/backend-functions
 
-This app contains the backend functions for the Aikami project. The functions are written in TypeScript and run on Firebase Functions.
+Backend cloud functions deployed to Firebase Cloud Functions.
+
+## Overview
+
+This app contains the Firebase Cloud Functions for the Aikami project:
+- HTTP-triggered API endpoints
+- Scheduled jobs
+- Event-triggered functions
+- AI-powered features with Genkit
+
+## Tech Stack
+
+- **Runtime**: Node.js / Bun
+- **Platform**: Firebase Cloud Functions
+- **AI**: Google Genkit
 
 ## Installation
 
-This app is a dependency of other packages in the monorepo and is not meant to be used as a standalone app.
+This is a workspace app managed by moon. Install dependencies:
 
-## Usage
-
-The functions are deployed to Firebase and are triggered by HTTP requests or other Firebase events.
-
-## Functions
-
-### `test`
-
-This is a test function that uses Genkit to chat with the Google AI. It also retrieves user data from the database.
-
-To use this function, send a POST request to the `/test` endpoint with a JSON body like this:
-
-```json
-{
-  "prompt": "Hello there!"
-}
+```bash
+bun install
 ```
 
-The function will respond with a JSON object containing the chat response and the user data.
+## Tasks
+
+| Task | Command | Description |
+|------|---------|-------------|
+| `build` | `bun run build` | Compile TypeScript for deployment |
+| `deploy` | `bun run deploy` | Deploy functions to Firebase |
+| `check` | `bun run check` | Run TypeScript checks |
+| `lint` | `bun run lint` | Lint code with Biome |
+| `format` | `bun run format` | Format code with Biome |
+| `test` | `bun run test` | Run function tests |
+
+## Dependencies
+
+This app depends on the following packages:
+- `@aikami/constants`
+- `@aikami/schemas`
+- `@aikami/types`
+- `@aikami/logger`
+- `@aikami/backend-configs`
+- `@aikami/backend-utils`
+- `@aikami/backend-database`
+
+## Deployment
+
+```bash
+# Build and deploy
+moon run functions:deploy
+
+# Or manually
+bun run build && firebase deploy --only functions
+```
+
+## Function Structure
+
+```
+src/
+└── controllers/
+    └── api/       # HTTP-triggered functions
+scripts/           # Utility scripts for data management
+```

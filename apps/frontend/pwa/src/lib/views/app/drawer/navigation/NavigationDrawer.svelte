@@ -1,10 +1,9 @@
 <script lang="ts">
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
-    import { getNavigationDrawerViewModel } from "./navigation-drawer-view-model.svelte";
+import { getNavigationDrawerViewModel } from './navigation-drawer-view-model.svelte.ts';
 
-    const viewModel = getNavigationDrawerViewModel({
-        className: "NavigationDrawerViewModel",
-    });
+const _viewModel = getNavigationDrawerViewModel({
+  className: 'NavigationDrawerViewModel',
+});
 </script>
 
 <BaseViewModelContainer {viewModel} class="drawer-side">

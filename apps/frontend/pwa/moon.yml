@@ -7,10 +7,12 @@ stack: 'frontend'
 tags:
   - 'pwa'
   - 'svelte'
+  - 'playwright'
+  - 'application'
 
 project:
-  name: 'PWA'
-  description: 'Progressive Web App for the main application.'
+  title: 'PWA'
+  description: 'Main Progressive Web Application built with SvelteKit.'
   channel: '#frontend'
   owner: 'Frontend Team'
 
@@ -28,44 +30,84 @@ fileGroups:
     - 'static/**/*'
     - 'messages/**/*'
   configs:
-    - 'deno.json'
+    - 'package.json'
     - 'tsconfig.json'
-    - 'tailwind.config.mjs'
-    - 'svelte.config.js'
-    - 'vite.config.ts'
+    - 'tailwind.config.*'
+    - 'svelte.config.*'
+    - 'vite.config.*'
+  tests:
+    - 'tests/**/*'
+    - 'playwright.config.*'
+  unitTests:
+    - 'src/**/*.test.ts'
 
 tasks:
   dev:
-    command: 'deno task dev'
-    local: true
+    command: 'bunx vite dev'
+    preset: 'server'
   build:
-    command: 'deno task build'
+    command: 'bunx vite build'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
     outputs:
       - '.svelte-kit'
       - 'build'
-  check:
-    command: 'deno task check'
+  preview:
+    command: 'bunx vite preview'
+    preset: 'server'
+  test:
+    script: |
+      bun run test:unit
+      bun run build && bunx vite preview & PID=$!; sleep 5; bunx playwright test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
+    deps:
+      - 'build'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
+      - '@group(tests)'
+      - '@group(unitTests)'
+      - '@group(sources)'
+  test-unit:
+    command: 'bun run test:unit'
+    inputs:
+      - '@group(unitTests)'
+      - '@group(sources)'
+  test-e2e:
+    script: 'bun run build && bunx vite preview & PID=$!; sleep 5; bunx playwright test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
+    deps:
+      - 'build'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  test-ci:
+    script: 'bun run build && bunx vite preview --host & PID=$!; sleep 8; bunx playwright test --reporter=github; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
+    deps:
+      - 'build'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  typecheck:
+    command: 'bun run typecheck'
+    inputs:
       - '@group(sources)'
       - '@group(configs)'
   lint:
-    command: 'deno task lint'
+    command: 'bun run lint'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   format:
-    command: 'deno task format'
+    command: 'bun run format'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
+      - '@group(configs)'
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  validate:
+    command: 'bun run validate'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
       - '@group(configs)'

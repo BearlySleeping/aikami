@@ -1,24 +1,25 @@
-import { z } from 'zod'
-import { CountryToCode } from '@aikami/constants'
-import { GeoPointSchema } from '../fields.ts'
+import { CountryToCode } from '@aikami/constants';
+import { z } from 'zod';
+import { GeoPointSchema } from '../fields.ts';
 
-type CountryCode = keyof typeof CountryToCode
+type CountryCode = keyof typeof CountryToCode;
 // z.enum expects a non-empty array so to work around that
 // we pull the first value out explicitly
-const CountryCodes: [CountryCode, ...CountryCode[]] = Object.keys(
-  CountryToCode,
-) as [CountryCode, ...CountryCode[]]
+const CountryCodes: [CountryCode, ...CountryCode[]] = Object.keys(CountryToCode) as [
+  CountryCode,
+  ...CountryCode[],
+];
 
 /**
  * Example: DK, (Denmark) Two-letter country code ([ISO 3166-1
  * alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
  */
-export const CountryCodeSchema = z.enum(CountryCodes)
+export const CountryCodeSchema = z.enum(CountryCodes);
 
 export const PositionFieldSchema = z.object({
   geohash: z.string(),
   geopoint: GeoPointSchema,
-})
+});
 
 export const AddressFieldSchema = z.object({
   /**
@@ -48,4 +49,4 @@ export const AddressFieldSchema = z.object({
    * country like "England", not a county like "Devon".
    */
   regionCode: z.string().optional(),
-})
+});

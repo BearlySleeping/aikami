@@ -37,7 +37,7 @@ const AF = [
     ['Urozgan', 'ORU'],
     ['Zabul', 'ZAB'],
   ],
-] as const
+] as const;
 const AX = [
   'Åland Islands',
   'AX',
@@ -59,7 +59,7 @@ const AX = [
     ['Sund', 'SD'],
     ['Vårdö', 'VR'],
   ],
-] as const
+] as const;
 const AL = [
   'Albania',
   'AL',
@@ -77,7 +77,7 @@ const AL = [
     ['Tirana', '11'],
     ['Vlorë', '12'],
   ],
-] as const
+] as const;
 const DZ = [
   'Algeria',
   'DZ',
@@ -131,7 +131,7 @@ const DZ = [
     ['Tizi Ouzou', '15'],
     ['Tlemcen', '13'],
   ],
-] as const
+] as const;
 const AS = [
   'American Samoa',
   'AS',
@@ -143,7 +143,7 @@ const AS = [
     ['Rose Atoll', '21'],
     ['Swains Island', '22'],
   ],
-] as const
+] as const;
 const AD = [
   'Andorra',
   'AD',
@@ -156,7 +156,7 @@ const AD = [
     ['Ordino', '05'],
     ['Sant Julià de Lòria', '06'],
   ],
-] as const
+] as const;
 const AO = [
   'Angola',
   'AO',
@@ -180,7 +180,7 @@ const AO = [
     ['Uíge', 'UIG'],
     ['Zaire', 'ZAI'],
   ],
-] as const
+] as const;
 const AI = [
   'Anguilla',
   'AI',
@@ -208,8 +208,8 @@ const AI = [
     ['South Wager Island', '21'],
     ['West Cay', '22'],
   ],
-] as const
-const AQ = ['Antarctica', 'AQ', [['Antarctica', 'AQ']]] as const
+] as const;
+const AQ = ['Antarctica', 'AQ', [['Antarctica', 'AQ']]] as const;
 const AG = [
   'Antigua and Barbuda',
   'AG',
@@ -247,7 +247,7 @@ const AG = [
     ['Wicked Will Island', '36'],
     ['York Island', '37'],
   ],
-] as const
+] as const;
 const AR = [
   'Argentina',
   'AR',
@@ -277,7 +277,7 @@ const AR = [
     ['Tierra del Fuego', 'V'],
     ['Tucumán', 'T'],
   ],
-] as const
+] as const;
 const AM = [
   'Armenia',
   'AM',
@@ -294,8 +294,8 @@ const AM = [
     ['Vayots Dzor', 'VD'],
     ['Yerevan', 'ER'],
   ],
-] as const
-const AW = ['Aruba', 'AW', [['Aruba', 'AW']]] as const
+] as const;
+const AW = ['Aruba', 'AW', [['Aruba', 'AW']]] as const;
 const AU = [
   'Australia',
   'AU',
@@ -309,7 +309,7 @@ const AU = [
     ['Victoria', 'VIC'],
     ['Western Australia', 'WA'],
   ],
-] as const
+] as const;
 const AT = [
   'Austria',
   'AT',
@@ -324,7 +324,7 @@ const AT = [
     ['Vorarlberg', '8'],
     ['Wien', '9'],
   ],
-] as const
+] as const;
 const AZ = [
   'Azerbaijan',
   'AZ',
@@ -397,7 +397,7 @@ const AZ = [
     ['Zaqatala', 'ZAQ'],
     ['Zərdab', 'ZAR'],
   ],
-] as const
+] as const;
 const BS = [
   'Bahamas',
   'BS',
@@ -437,7 +437,7 @@ const BS = [
     ['South Eleuthera', '37'],
     ['West Grand Bahama', '39'],
   ],
-] as const
+] as const;
 const BH = [
   'Bahrain',
   'BH',
@@ -448,7 +448,7 @@ const BH = [
     ['Al Wusţá', '16'],
     ['Ash Shamālīyah', '17'],
   ],
-] as const
+] as const;
 const BD = [
   'Bangladesh',
   'BD',
@@ -462,7 +462,7 @@ const BD = [
     ['Rangpur', 'F'],
     ['Sylhet', 'G'],
   ],
-] as const
+] as const;
 const BB = [
   'Barbados',
   'BB',
@@ -479,7 +479,7 @@ const BB = [
     ['Saint Philip', '10'],
     ['Saint Thomas', '11'],
   ],
-] as const
+] as const;
 const BY = [
   'Belarus',
   'BY',
@@ -492,7 +492,7 @@ const BY = [
     ['Minsk voblast', 'MI'],
     ['Vitsebsk voblast', 'VI'],
   ],
-] as const
+] as const;
 const BE = [
   'Belgium',
   'BE',
@@ -501,7 +501,7 @@ const BE = [
     ['Flanders', 'VLG'],
     ['Wallonia', 'WAL'],
   ],
-] as const
+] as const;
 const BZ = [
   'Belize',
   'BZ',
@@ -513,7 +513,7 @@ const BZ = [
     ['Stann Creek District', 'SC'],
     ['Toledo District', 'TOL'],
   ],
-] as const
+] as const;
 const BJ = [
   'Benin',
   'BJ',
@@ -531,7 +531,7 @@ const BJ = [
     ['Plateau', 'PL'],
     ['Zou', 'ZO'],
   ],
-] as const
+] as const;
 const BM = [
   'Bermuda',
   'BM',
@@ -548,7 +548,7 @@ const BM = [
     ['Town of St. George', '06'],
     ['Warwick Parish', '11'],
   ],
-] as const
+] as const;
 const BT = [
   'Bhutan',
   'BT',
@@ -574,7 +574,7 @@ const BT = [
     ['Wangdue Phodrang', '24'],
     ['Zhemgang', '34'],
   ],
-] as const
+] as const;
 const BO = [
   'Bolivia',
   'BO',
@@ -589,7 +589,7 @@ const BO = [
     ['Santa Cruz', 'SC'],
     ['Tarija', 'TJ'],
   ],
-] as const
+] as const;
 const BQ = [
   'Bonaire, Sint Eustatius and Saba',
   'BQ',
@@ -598,7 +598,7 @@ const BQ = [
     ['Saba Isand', 'SA'],
     ['Sint Eustatius', 'SE'],
   ],
-] as const
+] as const;
 const BA = [
   'Bosnia and Herzegovina',
   'BA',
@@ -607,7 +607,7 @@ const BA = [
     ['Federacija Bosne i Hercegovine', 'BIH'],
     ['Republika Srpska', 'SRP'],
   ],
-] as const
+] as const;
 const BW = [
   'Botswana',
   'BW',
@@ -622,8 +622,8 @@ const BW = [
     ['South East', 'SE'],
     ['Southern', 'SO'],
   ],
-] as const
-const BV = ['Bouvet Island', 'BV', [['Bouvet Island', 'BV']]] as const
+] as const;
+const BV = ['Bouvet Island', 'BV', [['Bouvet Island', 'BV']]] as const;
 const BR = [
   'Brazil',
   'BR',
@@ -656,12 +656,12 @@ const BR = [
     ['Sergipe', 'SE'],
     ['Tocantins', 'TO'],
   ],
-] as const
+] as const;
 const IO = [
   'British Indian Ocean Territory',
   'IO',
   [['British Indian Ocean Territory', 'IO']],
-] as const
+] as const;
 const BN = [
   'Brunei Darussalam',
   'BN',
@@ -671,7 +671,7 @@ const BN = [
     ['Temburong', 'TE'],
     ['Tutong', 'TU'],
   ],
-] as const
+] as const;
 const BG = [
   'Bulgaria',
   'BG',
@@ -705,7 +705,7 @@ const BG = [
     ['Vidin', '05'],
     ['Vraca', '06'],
   ],
-] as const
+] as const;
 const BF = [
   'Burkina Faso',
   'BF',
@@ -756,7 +756,7 @@ const BF = [
     ['Zondoma', 'ZON'],
     ['Zoundwéogo', 'ZOU'],
   ],
-] as const
+] as const;
 const BI = [
   'Burundi',
   'BI',
@@ -779,7 +779,7 @@ const BI = [
     ['Rutana', 'RT'],
     ['Ruyigi', 'RY'],
   ],
-] as const
+] as const;
 const KH = [
   'Cambodia',
   'KH',
@@ -810,7 +810,7 @@ const KH = [
     ['Taakaev', '21'],
     ['Tbong Khmum', '25'],
   ],
-] as const
+] as const;
 const CM = [
   'Cameroon',
   'CM',
@@ -826,7 +826,7 @@ const CM = [
     ['Sud', 'SU'],
     ['Sud-Ouest', 'SW'],
   ],
-] as const
+] as const;
 const CA = [
   'Canada',
   'CA',
@@ -845,7 +845,7 @@ const CA = [
     ['Saskatchewan', 'SK'],
     ['Yukon', 'YT'],
   ],
-] as const
+] as const;
 const CV = [
   'Cape Verde',
   'CV',
@@ -870,7 +870,7 @@ const CV = [
     ['Tarrafal', 'TA'],
     ['Tarrafal de São Nicolau', 'TS'],
   ],
-] as const
+] as const;
 const KY = [
   'Cayman Islands',
   'KY',
@@ -884,7 +884,7 @@ const KY = [
     ['West End', 'undefined'],
     ['Western', 'undefined'],
   ],
-] as const
+] as const;
 const CF = [
   'Central African Republic',
   'CF',
@@ -907,7 +907,7 @@ const CF = [
     ['Sangha-Mbaéré', 'SE'],
     ['Vakaga', 'VK'],
   ],
-] as const
+] as const;
 const TD = [
   'Chad',
   'TD',
@@ -935,7 +935,7 @@ const TD = [
     ['Ville de Ndjamena', 'ND'],
     ['Wadi Fira', 'WF'],
   ],
-] as const
+] as const;
 const CL = [
   'Chile',
   'CL',
@@ -958,7 +958,7 @@ const CL = [
     ['Tarapacá', 'TA'],
     ['Valparaíso', 'VS'],
   ],
-] as const
+] as const;
 const CN = [
   'China',
   'CN',
@@ -997,8 +997,8 @@ const CN = [
     ['Yunnan', 'YN'],
     ['Zhejiang', 'ZJ'],
   ],
-] as const
-const CX = ['Christmas Island', 'CX', [['Christmas Island', 'CX']]] as const
+] as const;
+const CX = ['Christmas Island', 'CX', [['Christmas Island', 'CX']]] as const;
 const CC = [
   'Cocos (Keeling) Islands',
   'CC',
@@ -1010,7 +1010,7 @@ const CC = [
     ['South Island', 'SI'],
     ['West Island', 'WI'],
   ],
-] as const
+] as const;
 const CO = [
   'Colombia',
   'CO',
@@ -1049,7 +1049,7 @@ const CO = [
     ['Vaupés', 'VAU'],
     ['Vichada', 'VID'],
   ],
-] as const
+] as const;
 const KM = [
   'Comoros',
   'KM',
@@ -1058,7 +1058,7 @@ const KM = [
     ['Andjouân', 'A'],
     ['Moûhîlî', 'M'],
   ],
-] as const
+] as const;
 const CG = [
   'Congo, Republic of the (Brazzaville)',
   'CG',
@@ -1076,7 +1076,7 @@ const CG = [
     ['Pool', '12'],
     ['Sangha', '13'],
   ],
-] as const
+] as const;
 const CD = [
   'Congo, the Democratic Republic of the (Kinshasa)',
   'CD',
@@ -1093,7 +1093,7 @@ const CD = [
     ['Orientale', 'OR'],
     ['Sud-Kivu', 'SK'],
   ],
-] as const
+] as const;
 const CK = [
   'Cook Islands',
   'CK',
@@ -1111,7 +1111,7 @@ const CK = [
     ['Pukapuka', 'undefined'],
     ['Rakahanga', 'undefined'],
   ],
-] as const
+] as const;
 const CR = [
   'Costa Rica',
   'CR',
@@ -1124,7 +1124,7 @@ const CR = [
     ['Puntarenas', '6'],
     ['San José', '1'],
   ],
-] as const
+] as const;
 const CI = [
   "Côte d'Ivoire, Republic of",
   'CI',
@@ -1149,7 +1149,7 @@ const CI = [
     ['Worodougou', '14'],
     ['Zanzan', '08'],
   ],
-] as const
+] as const;
 const HR = [
   'Croatia',
   'HR',
@@ -1176,7 +1176,7 @@ const HR = [
     ['Zadarska županija', '13'],
     ['Zagrebačka županija', '01'],
   ],
-] as const
+] as const;
 const CU = [
   'Cuba',
   'CU',
@@ -1198,8 +1198,8 @@ const CU = [
     ['Santiago de Cuba', '13'],
     ['Villa Clara', '05'],
   ],
-] as const
-const CW = ['Curaçao', 'CW', [['Curaçao', 'CW']]] as const
+] as const;
+const CW = ['Curaçao', 'CW', [['Curaçao', 'CW']]] as const;
 const CY = [
   'Cyprus',
   'CY',
@@ -1211,7 +1211,7 @@ const CY = [
     ['Lemesos', '02'],
     ['Pafos', '05'],
   ],
-] as const
+] as const;
 const CZ = [
   'Czech Republic',
   'CZ',
@@ -1231,7 +1231,7 @@ const CZ = [
     ['Vysočina', '63'],
     ['Zlínský kraj', '72'],
   ],
-] as const
+] as const;
 const DK = [
   'Denmark',
   'DK',
@@ -1242,7 +1242,7 @@ const DK = [
     ['Sjælland', 'DK-85'],
     ['Syddanmark', 'DK-83'],
   ],
-] as const
+] as const;
 const DJ = [
   'Djibouti',
   'DJ',
@@ -1253,7 +1253,7 @@ const DJ = [
     ['Obock', 'OB'],
     ['Tadjourah', 'TA'],
   ],
-] as const
+] as const;
 const DM = [
   'Dominica',
   'DM',
@@ -1269,7 +1269,7 @@ const DM = [
     ['Saint Paul Parish', '10'],
     ['Saint Peter Parish', '11'],
   ],
-] as const
+] as const;
 const DO = [
   'Dominican Republic',
   'DO',
@@ -1284,7 +1284,7 @@ const DO = [
     ['Norte', '35'],
     ['Valdesia', '42'],
   ],
-] as const
+] as const;
 const EC = [
   'Ecuador',
   'EC',
@@ -1314,7 +1314,7 @@ const EC = [
     ['Tungurahua', 'T'],
     ['Zamora-Chinchipe', 'Z'],
   ],
-] as const
+] as const;
 const EG = [
   'Egypt',
   'EG',
@@ -1349,7 +1349,7 @@ const EG = [
     ['Sohag', 'SHG'],
     ['South Sinai', 'JS'],
   ],
-] as const
+] as const;
 const SV = [
   'El Salvador',
   'SV',
@@ -1369,7 +1369,7 @@ const SV = [
     ['Sonsonate', 'SO'],
     ['Usulután', 'US'],
   ],
-] as const
+] as const;
 const GQ = [
   'Equatorial Guinea',
   'GQ',
@@ -1382,7 +1382,7 @@ const GQ = [
     ['Litoral', 'LI'],
     ['Wele-Nzas', 'WN'],
   ],
-] as const
+] as const;
 const ER = [
   'Eritrea',
   'ER',
@@ -1394,7 +1394,7 @@ const ER = [
     ['Maekel', 'MA'],
     ['Semien-Keih-Bahri', 'SK'],
   ],
-] as const
+] as const;
 const EE = [
   'Estonia',
   'EE',
@@ -1415,7 +1415,7 @@ const EE = [
     ['Viljandimaa (Viljandi)', '84'],
     ['Võrumaa (Voru)', '86'],
   ],
-] as const
+] as const;
 const ET = [
   'Ethiopia',
   'ET',
@@ -1432,12 +1432,12 @@ const ET = [
     ["Southern Nations Nationalities and People's Region", 'SN'],
     ['Tigray', 'TI'],
   ],
-] as const
+] as const;
 const FK = [
   'Falkland Islands (Islas Malvinas)',
   'FK',
   [['Falkland Islands (Islas Malvinas)', 'undefined']],
-] as const
+] as const;
 const FO = [
   'Faroe Islands',
   'FO',
@@ -1452,7 +1452,7 @@ const FO = [
     ['Tvoroyri', 'undefined'],
     ['Vagar', 'undefined'],
   ],
-] as const
+] as const;
 const FJ = [
   'Fiji',
   'FJ',
@@ -1473,7 +1473,7 @@ const FJ = [
     ['Serua', '13'],
     ['Tailevu', '14'],
   ],
-] as const
+] as const;
 const FI = [
   'Finland',
   'FI',
@@ -1498,7 +1498,7 @@ const FI = [
     ['Uusimaa', 'FI-18'],
     ['Varsinais-Suomi', 'FI-19'],
   ],
-] as const
+] as const;
 const FR = [
   'France',
   'FR',
@@ -1530,8 +1530,8 @@ const FR = [
     ['Terres Australes Françaises', 'TF'],
     ['Wallis-et-Futuna', 'WF'],
   ],
-] as const
-const GF = ['French Guiana', 'GF', [['French Guiana', 'undefined']]] as const
+] as const;
+const GF = ['French Guiana', 'GF', [['French Guiana', 'undefined']]] as const;
 const PF = [
   'French Polynesia',
   'PF',
@@ -1542,7 +1542,7 @@ const PF = [
     ['Iles du Vent', 'undefined'],
     ['Iles Sous-le-Vent', 'undefined'],
   ],
-] as const
+] as const;
 const TF = [
   'French Southern and Antarctic Lands',
   'TF',
@@ -1552,7 +1552,7 @@ const TF = [
     ['Iles Kerguelen', 'undefined'],
     ['Iles Saint-Paul et Amsterdam', 'undefined'],
   ],
-] as const
+] as const;
 const GA = [
   'Gabon',
   'GA',
@@ -1567,7 +1567,7 @@ const GA = [
     ['Ogooué-Maritime', '8'],
     ['Woleu-Ntem', '9'],
   ],
-] as const
+] as const;
 const GM = [
   'Gambia, The',
   'GM',
@@ -1579,7 +1579,7 @@ const GM = [
     ['Upper River', 'U'],
     ['Western', 'W'],
   ],
-] as const
+] as const;
 const GE = [
   'Georgia',
   'GE',
@@ -1597,7 +1597,7 @@ const GE = [
     ['Shida Kartli', 'SK'],
     ['Tbilisi', 'TB'],
   ],
-] as const
+] as const;
 const DE = [
   'Germany',
   'DE',
@@ -1619,7 +1619,7 @@ const DE = [
     ['Schleswig-Holstein', 'SH'],
     ['Thüringen', 'TH'],
   ],
-] as const
+] as const;
 const GH = [
   'Ghana',
   'GH',
@@ -1641,8 +1641,8 @@ const GH = [
     ['Western', 'WP'],
     ['Western North', 'undefined'],
   ],
-] as const
-const GI = ['Gibraltar', 'GI', [['Gibraltar', 'undefined']]] as const
+] as const;
+const GI = ['Gibraltar', 'GI', [['Gibraltar', 'undefined']]] as const;
 const GR = [
   'Greece',
   'GR',
@@ -1662,7 +1662,7 @@ const GR = [
     ['Ípeiros', 'D'],
     ['Ágion Óros', '69'],
   ],
-] as const
+] as const;
 const GL = [
   'Greenland',
   'GL',
@@ -1672,7 +1672,7 @@ const GL = [
     ['Qaasuitsup Kommunia', 'QA'],
     ['Qeqqata Kommunia', 'QE'],
   ],
-] as const
+] as const;
 const GD = [
   'Grenada',
   'GD',
@@ -1685,9 +1685,9 @@ const GD = [
     ['Saint Patrick', '06'],
     ['Southern Grenadine Islands', '10'],
   ],
-] as const
-const GP = ['Guadeloupe', 'GP', [['Guadeloupe', 'undefined']]] as const
-const GU = ['Guam', 'GU', [['Guam', 'undefined']]] as const
+] as const;
+const GP = ['Guadeloupe', 'GP', [['Guadeloupe', 'undefined']]] as const;
+const GU = ['Guam', 'GU', [['Guam', 'undefined']]] as const;
 const GT = [
   'Guatemala',
   'GT',
@@ -1715,7 +1715,7 @@ const GT = [
     ['Totonicapán', 'TO'],
     ['Zacapa', 'ZA'],
   ],
-] as const
+] as const;
 const GG = [
   'Guernsey',
   'GG',
@@ -1731,7 +1731,7 @@ const GG = [
     ['Torteval', 'undefined'],
     ['Vale', 'undefined'],
   ],
-] as const
+] as const;
 const GN = [
   'Guinea',
   'GN',
@@ -1745,7 +1745,7 @@ const GN = [
     ['Mamou', 'M'],
     ['Nzérékoré', 'N'],
   ],
-] as const
+] as const;
 const GW = [
   'Guinea-Bissau',
   'GW',
@@ -1760,7 +1760,7 @@ const GW = [
     ['Quinara', 'QU'],
     ['Tombali', 'TO'],
   ],
-] as const
+] as const;
 const GY = [
   'Guyana',
   'GY',
@@ -1776,7 +1776,7 @@ const GY = [
     ['Upper Demerara-Berbice', 'UD'],
     ['Upper Takutu-Upper Essequibo', 'UT'],
   ],
-] as const
+] as const;
 const HT = [
   'Haiti',
   'HT',
@@ -1792,17 +1792,13 @@ const HT = [
     ['Sud', 'SD'],
     ['Sud-Est', 'SE'],
   ],
-] as const
+] as const;
 const HM = [
   'Heard Island and McDonald Islands',
   'HM',
   [['Heard Island and McDonald Islands', 'undefined']],
-] as const
-const VA = [
-  'Holy See (Vatican City)',
-  'VA',
-  [['Holy See (Vatican City)', '01']],
-] as const
+] as const;
+const VA = ['Holy See (Vatican City)', 'VA', [['Holy See (Vatican City)', '01']]] as const;
 const HN = [
   'Honduras',
   'HN',
@@ -1826,8 +1822,8 @@ const HN = [
     ['Valle', 'VA'],
     ['Yoro', 'YO'],
   ],
-] as const
-const HK = ['Hong Kong', 'HK', [['Hong Kong', 'HK']]] as const
+] as const;
+const HK = ['Hong Kong', 'HK', [['Hong Kong', 'HK']]] as const;
 const HU = [
   'Hungary',
   'HU',
@@ -1876,7 +1872,7 @@ const HU = [
     ['Zala', 'ZA'],
     ['Zalaegerszeg', 'ZE'],
   ],
-] as const
+] as const;
 const IS = [
   'Iceland',
   'IS',
@@ -1890,7 +1886,7 @@ const IS = [
     ['Vestfirðir', '4'],
     ['Vesturland', '3'],
   ],
-] as const
+] as const;
 const IN = [
   'India',
   'IN',
@@ -1932,7 +1928,7 @@ const IN = [
     ['Uttar Pradesh', 'UP'],
     ['West Bengal', 'WB'],
   ],
-] as const
+] as const;
 const ID = [
   'Indonesia',
   'ID',
@@ -1971,7 +1967,7 @@ const ID = [
     ['Sumatera Utara', 'SU'],
     ['Yogyakarta', 'YO'],
   ],
-] as const
+] as const;
 const IR = [
   'Iran, Islamic Republic of',
   'IR',
@@ -2008,7 +2004,7 @@ const IR = [
     ['Yazd', '25'],
     ['Zanjān', '11'],
   ],
-] as const
+] as const;
 const IQ = [
   'Iraq',
   'IQ',
@@ -2032,7 +2028,7 @@ const IQ = [
     ['Şalāḩ ad Dīn', 'SD'],
     ['Wāsiţ', 'WA'],
   ],
-] as const
+] as const;
 const IE = [
   'Ireland',
   'IE',
@@ -2064,8 +2060,8 @@ const IE = [
     ['Wexford', 'WX'],
     ['Wicklow', 'WW'],
   ],
-] as const
-const IM = ['Isle of Man', 'IM', [['Isle of Man', 'undefined']]] as const
+] as const;
+const IM = ['Isle of Man', 'IM', [['Isle of Man', 'undefined']]] as const;
 const IL = [
   'Israel',
   'IL',
@@ -2077,7 +2073,7 @@ const IL = [
     ['Tel-Aviv', 'TA'],
     ['Yerushalayim', 'JM'],
   ],
-] as const
+] as const;
 const IT = [
   'Italy',
   'IT',
@@ -2103,7 +2099,7 @@ const IT = [
     ["Valle d'Aosta", '23'],
     ['Veneto', '34'],
   ],
-] as const
+] as const;
 const JM = [
   'Jamaica',
   'JM',
@@ -2123,7 +2119,7 @@ const JM = [
     ['Trelawny', '07'],
     ['Westmoreland', '10'],
   ],
-] as const
+] as const;
 const JP = [
   'Japan',
   'JP',
@@ -2176,8 +2172,8 @@ const JP = [
     ['Yamaguchi', '35'],
     ['Yamanashi', '19'],
   ],
-] as const
-const JE = ['Jersey', 'JE', [['Jersey', 'undefined']]] as const
+] as const;
+const JE = ['Jersey', 'JE', [['Jersey', 'undefined']]] as const;
 const JO = [
   'Jordan',
   'JO',
@@ -2195,7 +2191,7 @@ const JO = [
     ['Ma‘ān', 'MN'],
     ['Mādabā', 'MD'],
   ],
-] as const
+] as const;
 const KZ = [
   'Kazakhstan',
   'KZ',
@@ -2217,7 +2213,7 @@ const KZ = [
     ['Soltustik Qazaqstan', 'SEV'],
     ['Zhambyl', 'ZHA'],
   ],
-] as const
+] as const;
 const KE = [
   'Kenya',
   'KE',
@@ -2270,7 +2266,7 @@ const KE = [
     ['Wajir', '46'],
     ['West Pokot', '47'],
   ],
-] as const
+] as const;
 const KI = [
   'Kiribati',
   'KI',
@@ -2303,7 +2299,7 @@ const KI = [
     ['Tarawa', 'undefined'],
     ['Teraina', 'undefined'],
   ],
-] as const
+] as const;
 const KP = [
   "Korea, Democratic People's Republic of",
   'KP',
@@ -2320,7 +2316,7 @@ const KP = [
     ["P'yongyang-si (P'yongyang City)", '01'],
     ['Yanggang-do (Yanggang Province)', '10'],
   ],
-] as const
+] as const;
 const KR = [
   'Korea, Republic of',
   'KR',
@@ -2343,7 +2339,7 @@ const KR = [
     ['Daejeon-gwangyeoksi', '30'],
     ['Ulsan-gwangyeoksi', '31'],
   ],
-] as const
+] as const;
 const XK = [
   'Kosovo',
   'XK',
@@ -2356,7 +2352,7 @@ const XK = [
     ['Pristina', 'PR'],
     ['Prizren', 'PZ'],
   ],
-] as const
+] as const;
 const KW = [
   'Kuwait',
   'KW',
@@ -2368,7 +2364,7 @@ const KW = [
     ['Ḩawallī', 'HA'],
     ['Mubārak al Kabir', 'MU'],
   ],
-] as const
+] as const;
 const KG = [
   'Kyrgyzstan',
   'KG',
@@ -2382,7 +2378,7 @@ const KG = [
     ['Talas Oblasty', 'T'],
     ['Ysyk-Kol Oblasty (Karakol)', 'Y'],
   ],
-] as const
+] as const;
 const LA = [
   'Laos',
   'LA',
@@ -2405,7 +2401,7 @@ const LA = [
     ['Xaisomboun', 'XS'],
     ['Xiangkhouang', 'XI'],
   ],
-] as const
+] as const;
 const LV = [
   'Latvia',
   'LV',
@@ -2530,7 +2526,7 @@ const LV = [
     ['Viļāni', '109'],
     ['Zilupe', '110'],
   ],
-] as const
+] as const;
 const LB = [
   'Lebanon',
   'LB',
@@ -2544,7 +2540,7 @@ const LB = [
     ['Mont-Liban', 'JL'],
     ['Nabatîyé', 'NA'],
   ],
-] as const
+] as const;
 const LS = [
   'Lesotho',
   'LS',
@@ -2560,7 +2556,7 @@ const LS = [
     ['Quthing', 'G'],
     ['Thaba-Tseka', 'K'],
   ],
-] as const
+] as const;
 const LR = [
   'Liberia',
   'LR',
@@ -2581,7 +2577,7 @@ const LR = [
     ['River Geee', 'RG'],
     ['Sinoe', 'SI'],
   ],
-] as const
+] as const;
 const LY = [
   'Libya',
   'LY',
@@ -2609,7 +2605,7 @@ const LY = [
     ['Yafran', 'WD'],
     ['Wādī ash Shāţiʾ', 'WS'],
   ],
-] as const
+] as const;
 const LI = [
   'Liechtenstein',
   'LI',
@@ -2626,7 +2622,7 @@ const LI = [
     ['Triesenberg', '10'],
     ['Vaduz', '11'],
   ],
-] as const
+] as const;
 const LT = [
   'Lithuania',
   'LT',
@@ -2642,7 +2638,7 @@ const LT = [
     ['Utenos', 'UT'],
     ['Vilniaus', 'VL'],
   ],
-] as const
+] as const;
 const LU = [
   'Luxembourg',
   'LU',
@@ -2660,8 +2656,8 @@ const LU = [
     ['Vianden', 'VD'],
     ['Wiltz', 'WI'],
   ],
-] as const
-const MO = ['Macao', 'MO', [['Macao', 'undefined']]] as const
+] as const;
+const MO = ['Macao', 'MO', [['Macao', 'undefined']]] as const;
 const MK = [
   'Macedonia, Republic of',
   'MK',
@@ -2738,7 +2734,7 @@ const MK = [
     ['Zrnovci', '33'],
     ['Želino', '30'],
   ],
-] as const
+] as const;
 const MG = [
   'Madagascar',
   'MG',
@@ -2750,7 +2746,7 @@ const MG = [
     ['Toamasina', 'A'],
     ['Toliara', 'U'],
   ],
-] as const
+] as const;
 const MW = [
   'Malawi',
   'MW',
@@ -2783,7 +2779,7 @@ const MW = [
     ['Thyolo', 'TH'],
     ['Zomba', 'ZO'],
   ],
-] as const
+] as const;
 const MY = [
   'Malaysia',
   'MY',
@@ -2805,7 +2801,7 @@ const MY = [
     ['Wilayah Persekutuan (Labuan)', '15'],
     ['Wilayah Persekutuan (Putrajaya)', '16'],
   ],
-] as const
+] as const;
 const MV = [
   'Maldives',
   'MV',
@@ -2832,7 +2828,7 @@ const MV = [
     ['Thaa', '08'],
     ['Vaavu', '04'],
   ],
-] as const
+] as const;
 const ML = [
   'Mali',
   'ML',
@@ -2849,7 +2845,7 @@ const ML = [
     ['Taoudénit', '9'],
     ['Ménaka', '10'],
   ],
-] as const
+] as const;
 const MT = [
   'Malta',
   'MT',
@@ -2923,7 +2919,7 @@ const MT = [
     ['Żejtun', '67'],
     ['Żurrieq', '68'],
   ],
-] as const
+] as const;
 const MH = [
   'Marshall Islands',
   'MH',
@@ -2951,8 +2947,8 @@ const MH = [
     ['Wotho', 'WTH'],
     ['Wotje', 'WTJ'],
   ],
-] as const
-const MQ = ['Martinique', 'MQ', [['Martinique', 'undefined']]] as const
+] as const;
+const MQ = ['Martinique', 'MQ', [['Martinique', 'undefined']]] as const;
 const MR = [
   'Mauritania',
   'MR',
@@ -2973,7 +2969,7 @@ const MR = [
     ['Tiris Zemmour', '11'],
     ['Trarza', '06'],
   ],
-] as const
+] as const;
 const MU = [
   'Mauritius',
   'MU',
@@ -2995,7 +2991,7 @@ const MU = [
     ['Savanne', 'SA'],
     ['Vacoas-Phoenix', 'CP'],
   ],
-] as const
+] as const;
 const YT = [
   'Mayotte',
   'YT',
@@ -3018,7 +3014,7 @@ const YT = [
     ['Bandraboua', '16'],
     ['Koungou', '17'],
   ],
-] as const
+] as const;
 const MX = [
   'Mexico',
   'MX',
@@ -3056,7 +3052,7 @@ const MX = [
     ['Yucatán', 'YUC'],
     ['Zacatecas', 'ZAC'],
   ],
-] as const
+] as const;
 const FM = [
   'Micronesia, Federated States of',
   'FM',
@@ -3066,7 +3062,7 @@ const FM = [
     ['Pohnpei', 'PNI'],
     ['Yap', 'YAP'],
   ],
-] as const
+] as const;
 const MD = [
   'Moldova',
   'MD',
@@ -3109,7 +3105,7 @@ const MD = [
     ['Telenești', 'TE'],
     ['Ungheni', 'UN'],
   ],
-] as const
+] as const;
 const MC = [
   'Monaco',
   'MC',
@@ -3132,7 +3128,7 @@ const MC = [
     ['Spélugues', 'SP'],
     ['Vallon de la Rousse', 'VR'],
   ],
-] as const
+] as const;
 const MN = [
   'Mongolia',
   'MN',
@@ -3159,7 +3155,7 @@ const MN = [
     ['Uvs', '046'],
     ['Erdenet', '074'],
   ],
-] as const
+] as const;
 const ME = [
   'Montenegro',
   'ME',
@@ -3188,7 +3184,7 @@ const ME = [
     ['Ulcinj', '20'],
     ['Žabljak', '21'],
   ],
-] as const
+] as const;
 const MS = [
   'Montserrat',
   'MS',
@@ -3197,7 +3193,7 @@ const MS = [
     ['Saint Georges', 'undefined'],
     ["Saint Peter's", 'undefined'],
   ],
-] as const
+] as const;
 const MA = [
   'Morocco',
   'MA',
@@ -3215,7 +3211,7 @@ const MA = [
     ['Laâyoune-Sakia El Hamra', 'MA-11'],
     ['Dakhla-Oued Ed-Dahab', 'MA-12'],
   ],
-] as const
+] as const;
 const MZ = [
   'Mozambique',
   'MZ',
@@ -3232,7 +3228,7 @@ const MZ = [
     ['Tete', 'T'],
     ['Zambezia', 'Q'],
   ],
-] as const
+] as const;
 const MM = [
   'Myanmar',
   'MM',
@@ -3253,7 +3249,7 @@ const MM = [
     ['Tanintharyi', '05'],
     ['Yangon', '06'],
   ],
-] as const
+] as const;
 const NA = [
   'Namibia',
   'NA',
@@ -3273,7 +3269,7 @@ const NA = [
     ['Otjozondjupa', 'OD'],
     ['Zambezi', 'CA'],
   ],
-] as const
+] as const;
 const NR = [
   'Nauru',
   'NR',
@@ -3293,7 +3289,7 @@ const NR = [
     ['Uaboe', '13'],
     ['Yaren', '14'],
   ],
-] as const
+] as const;
 const NP = [
   'Nepal',
   'NP',
@@ -3306,7 +3302,7 @@ const NP = [
     ['Karnali Province', '6'],
     ['Sudurpashchim Province', '7'],
   ],
-] as const
+] as const;
 const NL = [
   'Netherlands',
   'NL',
@@ -3324,7 +3320,7 @@ const NL = [
     ['Zeeland', 'ZE'],
     ['Zuid-Holland', 'ZH'],
   ],
-] as const
+] as const;
 const NC = [
   'New Caledonia',
   'NC',
@@ -3333,7 +3329,7 @@ const NC = [
     ['Nord', 'undefined'],
     ['Sud', 'undefined'],
   ],
-] as const
+] as const;
 const NZ = [
   'New Zealand',
   'NZ',
@@ -3356,7 +3352,7 @@ const NZ = [
     ['West Coast', 'WTC'],
     ['Chatham Islands Territory', 'CIT'],
   ],
-] as const
+] as const;
 const NI = [
   'Nicaragua',
   'NI',
@@ -3379,7 +3375,7 @@ const NI = [
     ['Atlántico Norte', 'AN'],
     ['Atlántico Sur', 'AS'],
   ],
-] as const
+] as const;
 const NE = [
   'Niger',
   'NE',
@@ -3393,7 +3389,7 @@ const NE = [
     ['Tillabéri', '6'],
     ['Zinder', '7'],
   ],
-] as const
+] as const;
 const NG = [
   'Nigeria',
   'NG',
@@ -3436,9 +3432,9 @@ const NG = [
     ['Yobe', 'YO'],
     ['Zamfara', 'ZA'],
   ],
-] as const
-const NU = ['Niue', 'NU', [['Niue', 'undefined']]] as const
-const NF = ['Norfolk Island', 'NF', [['Norfolk Island', 'undefined']]] as const
+] as const;
+const NU = ['Niue', 'NU', [['Niue', 'undefined']]] as const;
+const NF = ['Norfolk Island', 'NF', [['Norfolk Island', 'undefined']]] as const;
 const MP = [
   'Northern Mariana Islands',
   'MP',
@@ -3448,7 +3444,7 @@ const MP = [
     ['Saipan', 'undefined'],
     ['Tinian', 'undefined'],
   ],
-] as const
+] as const;
 const NO = [
   'Norway',
   'NO',
@@ -3475,7 +3471,7 @@ const NO = [
     ['Jan Mayen', '22'],
     ['Svalbard', '21'],
   ],
-] as const
+] as const;
 const OM = [
   'Oman',
   'OM',
@@ -3492,7 +3488,7 @@ const OM = [
     ['Shamal ash Sharqiyah', 'SJ'],
     ['Zufar', 'ZU'],
   ],
-] as const
+] as const;
 const PK = [
   'Pakistan',
   'PK',
@@ -3506,7 +3502,7 @@ const PK = [
     ['Sindh', 'SD'],
     ['Federally Administered Tribal Areas', 'TA'],
   ],
-] as const
+] as const;
 const PW = [
   'Palau',
   'PW',
@@ -3528,7 +3524,7 @@ const PW = [
     ['Peleliu', '350'],
     ['Sonsoral', '370'],
   ],
-] as const
+] as const;
 const PS = [
   'Palestine, State of',
   'PS',
@@ -3550,7 +3546,7 @@ const PS = [
     ['Ţūbās', 'TBS'],
     ['Ţūlkarm', 'TKM'],
   ],
-] as const
+] as const;
 const PA = [
   'Panama',
   'PA',
@@ -3569,7 +3565,7 @@ const PA = [
     ['Panamá Oeste', '10'],
     ['Veraguas', '9'],
   ],
-] as const
+] as const;
 const PG = [
   'Papua New Guinea',
   'PG',
@@ -3597,7 +3593,7 @@ const PG = [
     ['Western', 'WPD'],
     ['Western Highlands', 'WHM'],
   ],
-] as const
+] as const;
 const PY = [
   'Paraguay',
   'PY',
@@ -3621,7 +3617,7 @@ const PY = [
     ['Presidente Hayes', '15'],
     ['San Pedro', '2'],
   ],
-] as const
+] as const;
 const PE = [
   'Peru',
   'PE',
@@ -3653,7 +3649,7 @@ const PE = [
     ['Tumbes', 'TUM'],
     ['Ucayali', 'UCA'],
   ],
-] as const
+] as const;
 const PH = [
   'Philippines',
   'PH',
@@ -3741,8 +3737,8 @@ const PH = [
     ['Zamboanga del Sur', 'ZAS'],
     ['Zamboanga Sibugay', 'ZSI'],
   ],
-] as const
-const PN = ['Pitcairn', 'PN', [['Pitcairn Islands', 'undefined']]] as const
+] as const;
+const PN = ['Pitcairn', 'PN', [['Pitcairn Islands', 'undefined']]] as const;
 const PL = [
   'Poland',
   'PL',
@@ -3764,7 +3760,7 @@ const PL = [
     ['Wielkopolskie', '30'],
     ['Zachodniopomorskie', '32'],
   ],
-] as const
+] as const;
 const PT = [
   'Portugal',
   'PT',
@@ -3790,7 +3786,7 @@ const PT = [
     ['Vila Real', '17'],
     ['Viseu', '18'],
   ],
-] as const
+] as const;
 const PR = [
   'Puerto Rico',
   'PR',
@@ -3869,7 +3865,7 @@ const PR = [
     ['Yabucoa', 'undefined'],
     ['Yauco', 'undefined'],
   ],
-] as const
+] as const;
 const QA = [
   'Qatar',
   'QA',
@@ -3882,8 +3878,8 @@ const QA = [
     ['Az̧ Za̧`āyin', 'ZA'],
     ['Umm Şalāl', 'US'],
   ],
-] as const
-const RE = ['Réunion', 'RE', [['Réunion', 'undefined']]] as const
+] as const;
+const RE = ['Réunion', 'RE', [['Réunion', 'undefined']]] as const;
 const RO = [
   'Romania',
   'RO',
@@ -3930,7 +3926,7 @@ const RO = [
     ['Vaslui', 'VS'],
     ['Vrancea', 'VN'],
   ],
-] as const
+] as const;
 const RU = [
   'Russian Federation',
   'RU',
@@ -4019,7 +4015,7 @@ const RU = [
     ['Yaroslavl Oblast', 'YAR'],
     ['Zabaykalsky Krai', 'ZAB'],
   ],
-] as const
+] as const;
 const RW = [
   'Rwanda',
   'RW',
@@ -4030,7 +4026,7 @@ const RW = [
     ['Western', '04'],
     ['Southern', '05'],
   ],
-] as const
+] as const;
 const BL = [
   'Saint Barthélemy',
   'BL',
@@ -4038,7 +4034,7 @@ const BL = [
     ['Au Vent', '02'],
     ['Sous le Vent', '01'],
   ],
-] as const
+] as const;
 const SH = [
   'Saint Helena, Ascension and Tristan da Cunha',
   'SH',
@@ -4047,7 +4043,7 @@ const SH = [
     ['Saint Helena', 'HL'],
     ['Tristan da Cunha', 'TA'],
   ],
-] as const
+] as const;
 const KN = [
   'Saint Kitts and Nevis',
   'KN',
@@ -4055,7 +4051,7 @@ const KN = [
     ['Saint Kitts', 'K'],
     ['Nevis', 'N'],
   ],
-] as const
+] as const;
 const LC = [
   'Saint Lucia',
   'LC',
@@ -4071,8 +4067,8 @@ const LC = [
     ['Soufriere', '10'],
     ['Vieux Fort', '11'],
   ],
-] as const
-const MF = ['Saint Martin', 'MF', [['Saint Martin', 'undefined']]] as const
+] as const;
+const MF = ['Saint Martin', 'MF', [['Saint Martin', 'undefined']]] as const;
 const PM = [
   'Saint Pierre and Miquelon',
   'PM',
@@ -4080,7 +4076,7 @@ const PM = [
     ['Miquelon', 'undefined'],
     ['Saint Pierre', 'undefined'],
   ],
-] as const
+] as const;
 const VC = [
   'Saint Vincent and the Grenadines',
   'VC',
@@ -4092,7 +4088,7 @@ const VC = [
     ['Saint George', '04'],
     ['Saint Patrick', '05'],
   ],
-] as const
+] as const;
 const WS = [
   'Samoa',
   'WS',
@@ -4109,7 +4105,7 @@ const WS = [
     ["Va'a-o-Fonoti", 'VF'],
     ['Vaisigano', 'VS'],
   ],
-] as const
+] as const;
 const SM = [
   'San Marino',
   'SM',
@@ -4124,7 +4120,7 @@ const SM = [
     ['San Marino', '07'],
     ['Serravalle', '09'],
   ],
-] as const
+] as const;
 const ST = [
   'Sao Tome and Principe',
   'ST',
@@ -4132,7 +4128,7 @@ const ST = [
     ['Principe', 'P'],
     ['Sao Tome', 'S'],
   ],
-] as const
+] as const;
 const SA = [
   'Saudi Arabia',
   'SA',
@@ -4151,7 +4147,7 @@ const SA = [
     ['Najran', '10'],
     ['Tabuk', '07'],
   ],
-] as const
+] as const;
 const SN = [
   'Senegal',
   'SN',
@@ -4171,7 +4167,7 @@ const SN = [
     ['Thies', 'TH'],
     ['Ziguinchor', 'ZG'],
   ],
-] as const
+] as const;
 const RS = [
   'Serbia',
   'RS',
@@ -4207,7 +4203,7 @@ const RS = [
     ['Zapadnobački', '05'],
     ['Zlatiborski', '16'],
   ],
-] as const
+] as const;
 const SC = [
   'Seychelles',
   'SC',
@@ -4238,7 +4234,7 @@ const SC = [
     ['Saint Louis', '22'],
     ['Takamaka', '23'],
   ],
-] as const
+] as const;
 const SL = [
   'Sierra Leone',
   'SL',
@@ -4248,7 +4244,7 @@ const SL = [
     ['Southern', 'S'],
     ['Western', 'W'],
   ],
-] as const
+] as const;
 const SG = [
   'Singapore',
   'SG',
@@ -4259,12 +4255,8 @@ const SG = [
     ['South East', '04'],
     ['South West', '05'],
   ],
-] as const
-const SX = [
-  'Sint Maarten (Dutch part)',
-  'SX',
-  [['Sint Maarten', 'undefined']],
-] as const
+] as const;
+const SX = ['Sint Maarten (Dutch part)', 'SX', [['Sint Maarten', 'undefined']]] as const;
 const SK = [
   'Slovakia',
   'SK',
@@ -4278,7 +4270,7 @@ const SK = [
     ['Trnavsky', 'TA'],
     ['Zilinsky', 'ZI'],
   ],
-] as const
+] as const;
 const SI = [
   'Slovenia',
   'SI',
@@ -4490,7 +4482,7 @@ const SI = [
     ['Zirovnica', '192'],
     ['Zuzemberk', '193'],
   ],
-] as const
+] as const;
 const SB = [
   'Solomon Islands',
   'SB',
@@ -4506,7 +4498,7 @@ const SB = [
     ['Temotu', 'TE'],
     ['Western', 'WE'],
   ],
-] as const
+] as const;
 const SO = [
   'Somalia',
   'SO',
@@ -4530,7 +4522,7 @@ const SO = [
     ['Togdheer', 'TO'],
     ['Woqooyi Galbeed', 'WO'],
   ],
-] as const
+] as const;
 const ZA = [
   'South Africa',
   'ZA',
@@ -4545,7 +4537,7 @@ const ZA = [
     ['North West', 'NW'],
     ['Western Cape', 'WC'],
   ],
-] as const
+] as const;
 const GS = [
   'South Georgia and South Sandwich Islands',
   'GS',
@@ -4559,7 +4551,7 @@ const GS = [
     ['Southern Thule', 'undefined'],
     ['Traversay Islands', 'undefined'],
   ],
-] as const
+] as const;
 const SS = [
   'South Sudan',
   'SS',
@@ -4575,7 +4567,7 @@ const SS = [
     ['Western Bahr el Ghazal', 'BW'],
     ['Western Equatoria', 'EW'],
   ],
-] as const
+] as const;
 const ES = [
   'Spain',
   'ES',
@@ -4633,7 +4625,7 @@ const ES = [
     ['Zamora', 'ZA'],
     ['Zaragoza', 'Z'],
   ],
-] as const
+] as const;
 const LK = [
   'Sri Lanka',
   'LK',
@@ -4648,7 +4640,7 @@ const LK = [
     ['Vayamba', '6'],
     ['Uva', '8'],
   ],
-] as const
+] as const;
 const SD = [
   'Sudan',
   'SD',
@@ -4672,7 +4664,7 @@ const SD = [
     ['Sinnar', 'SI'],
     ['Wasat Darfur Zalinjay', 'DC'],
   ],
-] as const
+] as const;
 const SR = [
   'Suriname',
   'SR',
@@ -4688,7 +4680,7 @@ const SR = [
     ['Sipaliwini', 'SI'],
     ['Wanica', 'WA'],
   ],
-] as const
+] as const;
 const SZ = [
   'Eswatini',
   'SZ',
@@ -4698,7 +4690,7 @@ const SZ = [
     ['Manzini', 'MA'],
     ['Shiselweni', 'SH'],
   ],
-] as const
+] as const;
 const SE = [
   'Sweden',
   'SE',
@@ -4725,7 +4717,7 @@ const SE = [
     ['Västmanland', 'U'],
     ['Västra Götaland', 'O'],
   ],
-] as const
+] as const;
 const CH = [
   'Switzerland',
   'CH',
@@ -4757,7 +4749,7 @@ const CH = [
     ['Zug', 'ZG'],
     ['Zürich', 'ZH'],
   ],
-] as const
+] as const;
 const SY = [
   'Syrian Arab Republic',
   'SY',
@@ -4777,7 +4769,7 @@ const SY = [
     ['Rif Dimashq', 'RD'],
     ['Tartus', 'TA'],
   ],
-] as const
+] as const;
 const TW = [
   'Taiwan',
   'TW',
@@ -4803,7 +4795,7 @@ const TW = [
     ['Yilan', 'ILA'],
     ['Yunlin', 'YUN'],
   ],
-] as const
+] as const;
 const TJ = [
   'Tajikistan',
   'TJ',
@@ -4813,7 +4805,7 @@ const TJ = [
     ['Khatlon', 'KT'],
     ['Sughd', 'SU'],
   ],
-] as const
+] as const;
 const TZ = [
   'Tanzania, United Republic of',
   'TZ',
@@ -4845,7 +4837,7 @@ const TZ = [
     ['Zanzibar Central/South', '11'],
     ['Zanzibar Urban/West', '15'],
   ],
-] as const
+] as const;
 const TH = [
   'Thailand',
   'TH',
@@ -4928,7 +4920,7 @@ const TH = [
     ['Yala', '95'],
     ['Yasothon', '35'],
   ],
-] as const
+] as const;
 const TL = [
   'Timor-Leste',
   'TL',
@@ -4947,7 +4939,7 @@ const TL = [
     ['Oecussi', 'OE'],
     ['Viqueque', 'VI'],
   ],
-] as const
+] as const;
 const TG = [
   'Togo',
   'TG',
@@ -4958,7 +4950,7 @@ const TG = [
     ['Plateaux', 'P'],
     ['Savannes', 'S'],
   ],
-] as const
+] as const;
 const TK = [
   'Tokelau',
   'TK',
@@ -4967,7 +4959,7 @@ const TK = [
     ['Fakaofo', 'undefined'],
     ['Nukunonu', 'undefined'],
   ],
-] as const
+] as const;
 const TO = [
   'Tonga',
   'TO',
@@ -4978,7 +4970,7 @@ const TO = [
     ['Tongatapu', '04'],
     ["Vava'u", '05'],
   ],
-] as const
+] as const;
 const TT = [
   'Trinidad and Tobago',
   'TT',
@@ -4999,7 +4991,7 @@ const TT = [
     ['Tobago', 'TOB'],
     ['Tunapuna-Piarco', 'TUP'],
   ],
-] as const
+] as const;
 const TN = [
   'Tunisia',
   'TN',
@@ -5028,7 +5020,7 @@ const TN = [
     ['Tunis', '11'],
     ['Zaghouan', '22'],
   ],
-] as const
+] as const;
 const TR = [
   'Turkey',
   'TR',
@@ -5115,7 +5107,7 @@ const TR = [
     ['Yozgat', '66'],
     ['Zonguldak', '67'],
   ],
-] as const
+] as const;
 const TM = [
   'Turkmenistan',
   'TM',
@@ -5127,12 +5119,8 @@ const TM = [
     ['Lebap', 'L'],
     ['Mary', 'M'],
   ],
-] as const
-const TC = [
-  'Turks and Caicos Islands',
-  'TC',
-  [['Turks and Caicos Islands', 'undefined']],
-] as const
+] as const;
+const TC = ['Turks and Caicos Islands', 'TC', [['Turks and Caicos Islands', 'undefined']]] as const;
 const TV = [
   'Tuvalu',
   'TV',
@@ -5146,7 +5134,7 @@ const TV = [
     ['Nukulaelae', 'NKL'],
     ['Vaitupu', 'VAU'],
   ],
-] as const
+] as const;
 const UG = [
   'Uganda',
   'UG',
@@ -5232,7 +5220,7 @@ const UG = [
     ['Wakiso', '113'],
     ['Yumbe', '313'],
   ],
-] as const
+] as const;
 const UA = [
   'Ukraine',
   'UA',
@@ -5265,7 +5253,7 @@ const UA = [
     ['Kyiv', '30'],
     ['Sevastopol', '40'],
   ],
-] as const
+] as const;
 const AE = [
   'United Arab Emirates',
   'AE',
@@ -5278,7 +5266,7 @@ const AE = [
     ['Sharjah', 'SH'],
     ['Umm Al Quwain', 'UQ'],
   ],
-] as const
+] as const;
 const GB = [
   'United Kingdom',
   'GB',
@@ -5501,7 +5489,7 @@ const GB = [
     ['Wrexham', 'WRX'],
     ['York', 'YOR'],
   ],
-] as const
+] as const;
 const US = [
   'United States',
   'US',
@@ -5569,7 +5557,7 @@ const US = [
     ['Armed Forces Europe, Canada, Africa and Middle East', 'AE'],
     ['Armed Forces Pacific', 'AP'],
   ],
-] as const
+] as const;
 const UM = [
   'United States Minor Outlying Islands',
   'UM',
@@ -5586,7 +5574,7 @@ const UM = [
     ['Bajo Nuevo Bank', 'BN'],
     ['Serranilla Bank', 'SB'],
   ],
-] as const
+] as const;
 const UY = [
   'Uruguay',
   'UY',
@@ -5611,7 +5599,7 @@ const UY = [
     ['Tacuarembó', 'TA'],
     ['Treinta y Tres', 'TT'],
   ],
-] as const
+] as const;
 const UZ = [
   'Uzbekistan',
   'UZ',
@@ -5631,7 +5619,7 @@ const UZ = [
     ['Xorazm (Urganch)', 'XO'],
     ['Qoraqalpog‘iston Respublikasi (Nukus)', 'QR'],
   ],
-] as const
+] as const;
 const VU = [
   'Vanuatu',
   'VU',
@@ -5643,7 +5631,7 @@ const VU = [
     ['Taféa', 'TAE'],
     ['Torba', 'TOB'],
   ],
-] as const
+] as const;
 const VE = [
   'Venezuela, Bolivarian Republic of',
   'VE',
@@ -5674,7 +5662,7 @@ const VE = [
     ['Yaracuy', 'U'],
     ['Zulia', 'V'],
   ],
-] as const
+] as const;
 const VN = [
   'Vietnam',
   'VN',
@@ -5744,7 +5732,7 @@ const VN = [
     ['Hải Phòng', 'HP'],
     ['Hồ Chí Minh (Sài Gòn)', 'SG'],
   ],
-] as const
+] as const;
 const VG = [
   'Virgin Islands, British',
   'VG',
@@ -5754,7 +5742,7 @@ const VG = [
     ['Tortola', 'TTA'],
     ['Virgin Gorda', 'VGD'],
   ],
-] as const
+] as const;
 const VI = [
   'Virgin Islands, U.S.',
   'VI',
@@ -5763,7 +5751,7 @@ const VI = [
     ['St. John', 'SJO'],
     ['St. Croix', 'SCR'],
   ],
-] as const
+] as const;
 const WF = [
   'Wallis and Futuna',
   'WF',
@@ -5772,7 +5760,7 @@ const WF = [
     ['Sigave', 'SIG'],
     ['Wallis', 'WAL'],
   ],
-] as const
+] as const;
 const EH = [
   'Western Sahara',
   'EH',
@@ -5783,7 +5771,7 @@ const EH = [
     ['Aousserd', 'AOU'],
     ['Oued ed Dahab', 'OUD'],
   ],
-] as const
+] as const;
 const YE = [
   'Yemen',
   'YE',
@@ -5809,7 +5797,7 @@ const YE = [
     ['Shabwah', 'SH'],
     ['Tā‘izz', 'TA'],
   ],
-] as const
+] as const;
 const ZM = [
   'Zambia',
   'ZM',
@@ -5824,7 +5812,7 @@ const ZM = [
     ['Southern', '07'],
     ['Western', '01'],
   ],
-] as const
+] as const;
 const ZW = [
   'Zimbabwe',
   'ZW',
@@ -5840,7 +5828,7 @@ const ZW = [
     ['Matabeleland South', 'MS'],
     ['Midlands', 'MI'],
   ],
-] as const
+] as const;
 export const allCountries = [
   AF,
   AX,
@@ -6091,7 +6079,7 @@ export const allCountries = [
   YE,
   ZM,
   ZW,
-] as const
+] as const;
 
 /*
 
