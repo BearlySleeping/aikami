@@ -1,10 +1,9 @@
 <script lang="ts">
-    import ProfileView from "$lib/views/profile/ProfileView.svelte";
-    import { getProfileViewModel } from "$lib/views/profile/profile-view-model.svelte";
+import { getProfileViewModel } from '$lib/views/profile/profile-view-model.svelte.ts';
 
-    const viewModel = getProfileViewModel({
-        className: "ProfileViewModel",
-    });
+const _viewModel = getProfileViewModel({
+  className: 'ProfileViewModel',
+});
 </script>
 
 <ProfileView {viewModel} />

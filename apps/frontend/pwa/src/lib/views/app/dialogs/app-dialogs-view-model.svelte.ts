@@ -1,84 +1,85 @@
-import { dialogService } from '$services'
+import type { AppLoadingData, ConfirmDialogData, SnackbarData } from '@aikami/frontend/services';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services'
+} from '@aikami/frontend/services';
+import { dialogService } from '$services/index.ts';
 
-import type { AppLoadingData, ConfirmDialogData, SnackbarData } from '@aikami/frontend/services'
-
-export type AppDialogsViewModelOptions = BaseViewModelOptions
+export type AppDialogsViewModelOptions = BaseViewModelOptions;
 
 export type AppDialogsViewModelInterface = BaseViewModelInterface & {
   /**
    * The data for the confirm dialog.
    */
-  readonly confirmDialog: ConfirmDialogData | undefined
+  readonly confirmDialog: ConfirmDialogData | undefined;
 
   /**
    * The data for the snackbar.
    */
-  readonly snackbar: SnackbarData | undefined
+  readonly snackbar: SnackbarData | undefined;
 
   /**
    * The data for the app loading indicator.
    */
-  readonly appLoading: AppLoadingData | undefined
+  readonly appLoading: AppLoadingData | undefined;
 
   /**
    * Hides the snackbar.
    */
-  hideSnackbar(): void
+  hideSnackbar(): void;
 
   /**
    * Agrees to the confirm dialog.
    */
-  confirmDialogAgree(): void
+  confirmDialogAgree(): void;
 
   /**
    * Cancels the confirm dialog.
    */
-  confirmDialogCancel(): void
-}
+  confirmDialogCancel(): void;
+};
 
-class AppDialogsViewModel extends BaseViewModel<AppDialogsViewModelOptions>
-  implements AppDialogsViewModelInterface {
-  confirmDialog = $derived(dialogService.confirmDialog)
+class AppDialogsViewModel
+  extends BaseViewModel<AppDialogsViewModelOptions>
+  implements AppDialogsViewModelInterface
+{
+  confirmDialog = $derived(dialogService.confirmDialog);
 
-  snackbar = $derived(dialogService.snackbar)
+  snackbar = $derived(dialogService.snackbar);
 
-  appLoading = $derived(dialogService.appLoading)
+  appLoading = $derived(dialogService.appLoading);
 
   hideSnackbar(): void {
-    this.debug('Hiding snackbar')
-    dialogService.hideSnackbar()
+    this.debug('Hiding snackbar');
+    dialogService.hideSnackbar();
   }
 
   confirmDialogAgree(): void {
-    const dialog = dialogService.confirmDialog
+    const dialog = dialogService.confirmDialog;
     if (!dialog?.resolve) {
-      this.warn('No confirm dialog to agree to')
-      return
+      this.warn('No confirm dialog to agree to');
+      return;
     }
 
-    this.debug('Confirm dialog agreed')
-    dialog.resolve(true)
-    dialogService.confirmDialog = undefined
+    this.debug('Confirm dialog agreed');
+    dialog.resolve(true);
+    dialogService.confirmDialog = undefined;
   }
 
   confirmDialogCancel(): void {
-    const dialog = dialogService.confirmDialog
+    const dialog = dialogService.confirmDialog;
     if (!dialog?.resolve) {
-      this.warn('No confirm dialog to cancel')
-      return
+      this.warn('No confirm dialog to cancel');
+      return;
     }
 
-    this.debug('Confirm dialog cancelled')
-    dialog.resolve(false)
-    dialogService.confirmDialog = undefined
+    this.debug('Confirm dialog cancelled');
+    dialog.resolve(false);
+    dialogService.confirmDialog = undefined;
   }
 }
 
 export const getAppDialogsViewModel = (
   options: AppDialogsViewModelOptions,
-): AppDialogsViewModelInterface => new AppDialogsViewModel(options)
+): AppDialogsViewModelInterface => new AppDialogsViewModel(options);

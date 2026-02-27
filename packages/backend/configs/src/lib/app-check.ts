@@ -1,12 +1,12 @@
-import { type AppCheck, getAppCheck as fbGetAppCheck } from 'firebase-admin/app-check'
+import { type AppCheck, getAppCheck as fbGetAppCheck } from 'firebase-admin/app-check';
 
-import { getApp } from './app.ts'
+import { getApp } from './app.ts';
 
-let _appCheck: AppCheck | undefined
+let _appCheck: AppCheck | undefined;
 
 export const getAppCheck = () => {
   if (!_appCheck) {
-    _appCheck = fbGetAppCheck(getApp())
+    _appCheck = fbGetAppCheck(getApp());
   }
-  return _appCheck
-}
+  return _appCheck;
+};

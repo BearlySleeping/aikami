@@ -1,11 +1,11 @@
-import { type FirebaseOptions, getApps, initializeApp } from 'firebase/app'
 // import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
-import { toAppError } from '@aikami/utils'
+import { toAppError } from '@aikami/utils';
+import { type FirebaseOptions, getApps, initializeApp } from 'firebase/app';
 
 const getApp = () => {
-  const app = getApps()[0]
+  const app = getApps()[0];
   if (app) {
-    return app
+    return app;
   }
 
   const serviceAccount: FirebaseOptions = {
@@ -15,20 +15,20 @@ const getApp = () => {
     storageBucket: import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET,
     messagingSenderId: import.meta.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     appId: import.meta.env.PUBLIC_FIREBASE_APP_ID,
-  }
+  };
 
   if (!serviceAccount.apiKey) {
     throw toAppError(
       'internal',
       'Firebase configuration is missing. Please set the required environment variables like `PUBLIC_FIREBASE_API_KEY`.',
-    )
+    );
   }
 
-  return initializeApp(serviceAccount)
-}
+  return initializeApp(serviceAccount);
+};
 
 // https://gist.github.com/dyaa/8f8d1f8964160630f2475fe26a2e6150
-const app = getApp()
+const app = getApp();
 
 // const getAppCheck = () => {
 // 	try {
@@ -71,4 +71,4 @@ const app = getApp()
 
 // export const appCheck = getAppCheck();
 
-export default app
+export default app;

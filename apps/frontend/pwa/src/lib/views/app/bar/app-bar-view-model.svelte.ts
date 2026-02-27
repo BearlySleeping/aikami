@@ -1,129 +1,130 @@
-import { appService, authService, routerService } from '$services'
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services'
-import type { RouteName } from '$router'
-
-import type { CurrentUser } from '@aikami/types'
-import t from '$i18n'
+} from '@aikami/frontend/services';
+import type { CurrentUser } from '@aikami/types';
+import t from '$i18n.ts';
+import type { RouteName } from '$router';
+import { appService, authService, routerService } from '$services/index.ts';
 
 export type ProfileMenuOption = {
-  icon: string
-  text: string
-  click: () => void
-}
+  icon: string;
+  text: string;
+  click: () => void;
+};
 
-export type AppBarViewModelOptions = BaseViewModelOptions
+export type AppBarViewModelOptions = BaseViewModelOptions;
 
 export type AppBarViewModelInterface = BaseViewModelInterface & {
   /**
    * Whether the user is logged in.
    */
-  readonly isLoggedIn: boolean
+  readonly isLoggedIn: boolean;
 
   /**
    * The current user.
    */
-  readonly currentUser: CurrentUser | undefined
+  readonly currentUser: CurrentUser | undefined;
 
   /**
    * The current route.
    */
-  readonly currentRoute: string | undefined
+  readonly currentRoute: string | undefined;
 
   /**
    * The options for the profile menu.
    */
-  readonly profileMenuOptions: ProfileMenuOption[]
+  readonly profileMenuOptions: ProfileMenuOption[];
 
   /**
    * The title of the app bar.
    */
-  readonly appBarTitle: string | undefined
+  readonly appBarTitle: string | undefined;
 
   /**
    * Whether to show the drawer button.
    */
-  readonly showDrawerButton: boolean
+  readonly showDrawerButton: boolean;
 
   /**
    * Navigates to the home page.
    */
-  goToHome(): Promise<void>
+  goToHome(): Promise<void>;
 
   /**
    * Navigates to the login page.
    */
-  goToLogin(): Promise<void>
+  goToLogin(): Promise<void>;
 
   /**
    * Navigates to the register page.
    */
-  goToRegister(): Promise<void>
+  goToRegister(): Promise<void>;
 
   /**
    * Navigates to the dashboard page.
    */
-  goToDashboard(): Promise<void>
+  goToDashboard(): Promise<void>;
 
   /**
    * Navigates to the profile page.
    */
-  goToProfile(): Promise<void>
+  goToProfile(): Promise<void>;
 
   /**
    * Navigates to the settings page.
    */
-  goToSettings(): Promise<void>
+  goToSettings(): Promise<void>;
 
   /**
    * Logs out the current user.
    */
-  logout(): Promise<void>
+  logout(): Promise<void>;
 
-  toggleNavigationDrawer(): void
-}
+  toggleNavigationDrawer(): void;
+};
 
-class AppBarViewModel extends BaseViewModel<AppBarViewModelOptions>
-  implements AppBarViewModelInterface {
-  isLoggedIn = $derived(authService.isLoggedIn)
+class AppBarViewModel
+  extends BaseViewModel<AppBarViewModelOptions>
+  implements AppBarViewModelInterface
+{
+  isLoggedIn = $derived(authService.isLoggedIn);
 
-  currentUser = $derived(authService.currentUser)
+  currentUser = $derived(authService.currentUser);
 
-  currentRoute = $derived(routerService.currentRoute)
+  currentRoute = $derived(routerService.currentRoute);
 
   showDrawerButton = $derived.by(() => {
     if (!this.currentUser) {
-      return false
+      return false;
     }
 
     if (!this.currentRoute) {
-      return true
+      return true;
     }
 
-    const publicRoutes: RouteName[] = ['login', 'register']
+    const publicRoutes: RouteName[] = ['login', 'register'];
 
-    const isPublicRoute = publicRoutes.includes(this.currentRoute)
+    const isPublicRoute = publicRoutes.includes(this.currentRoute);
 
-    return !isPublicRoute
-  })
+    return !isPublicRoute;
+  });
 
   appBarTitle = $derived.by(() => {
     switch (this.currentRoute) {
       case 'dashboard':
-        return 'Dashboard'
+        return 'Dashboard';
       case 'settings':
-        return t.settings()
+        return t.settings();
       case 'login':
-        return t.login()
+        return t.login();
       case 'register':
-        return t.register()
+        return t.register();
       default:
-        return undefined
+        return undefined;
     }
-  })
+  });
 
   profileMenuOptions = $derived<ProfileMenuOption[]>([
     {
@@ -137,21 +138,19 @@ class AppBarViewModel extends BaseViewModel<AppBarViewModelOptions>
       click: () => this.goToDashboard(),
     },
     {
-      icon:
-        'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+      icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
       text: t.settings() || 'Settings',
       click: () => this.goToSettings(),
     },
     {
-      icon:
-        'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
+      icon: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
       text: t.logout() || 'Logout',
       click: () => this.logout(),
     },
-  ])
+  ]);
 
   toggleNavigationDrawer(): void {
-    appService.toggleNavigationDrawer()
+    appService.toggleNavigationDrawer();
   }
 
   async goToHome(): Promise<void> {
@@ -159,12 +158,12 @@ class AppBarViewModel extends BaseViewModel<AppBarViewModelOptions>
       await routerService.goToRoute('dashboard', {
         pathParameters: undefined,
         queryParameters: undefined,
-      })
+      });
     } else {
       await routerService.goToRoute('dashboard', {
         pathParameters: undefined,
         queryParameters: undefined,
-      })
+      });
     }
   }
 
@@ -172,47 +171,46 @@ class AppBarViewModel extends BaseViewModel<AppBarViewModelOptions>
     await routerService.goToRoute('login', {
       pathParameters: undefined,
       queryParameters: undefined,
-    })
+    });
   }
 
   async goToRegister(): Promise<void> {
     await routerService.goToRoute('register', {
       pathParameters: undefined,
       queryParameters: undefined,
-    })
+    });
   }
 
   async goToDashboard(): Promise<void> {
     await routerService.goToRoute('dashboard', {
       pathParameters: undefined,
       queryParameters: undefined,
-    })
+    });
   }
 
   async goToProfile(): Promise<void> {
     await routerService.goToRoute('settings', {
       pathParameters: undefined,
       queryParameters: undefined,
-    })
+    });
   }
 
   async goToSettings(): Promise<void> {
     await routerService.goToRoute('settings', {
       pathParameters: undefined,
       queryParameters: undefined,
-    })
+    });
   }
 
   async logout(): Promise<void> {
     try {
-      await authService.signOut()
-      await this.goToLogin()
+      await authService.signOut();
+      await this.goToLogin();
     } catch (err) {
-      this.error('Failed to logout', err)
+      this.error('Failed to logout', err);
     }
   }
 }
 
-export const getAppBarViewModel = (
-  options: AppBarViewModelOptions,
-): AppBarViewModelInterface => new AppBarViewModel(options)
+export const getAppBarViewModel = (options: AppBarViewModelOptions): AppBarViewModelInterface =>
+  new AppBarViewModel(options);

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Backend Rules",
+  "extends": "../../../config/tsconfig/tsconfig.backend.json",
+  "compilerOptions": {
+    "baseUrl": "../../../",
+    "noEmit": true
+  },
+  "include": ["src/**/*", "*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

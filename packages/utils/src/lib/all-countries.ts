@@ -1,1 +1,1 @@
-export { allCountries } from '@aikami/constants'
+export { allCountries } from '@aikami/constants';

@@ -1,12 +1,10 @@
 <script lang="ts">
-    import t from "$i18n";
-    import type { NpcListViewModelInterface } from "./npc-list-view-model.svelte";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import type { NpcListViewModelInterface } from './npc-list-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: NpcListViewModelInterface;
-    };
-    const { viewModel }: Props = $props();
+type Props = {
+  viewModel: NpcListViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

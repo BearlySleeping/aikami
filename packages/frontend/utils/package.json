@@ -1,0 +1,18 @@
+{
+  "name": "@aikami/frontend-utils",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "dayjs": "1.11.19",
+    "detect-browser": "5.3.0",
+    "isbot": "5.1.35"
+  }
+}

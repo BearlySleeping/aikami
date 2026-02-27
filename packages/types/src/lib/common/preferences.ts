@@ -1,8 +1,8 @@
-import type { SupportedLocaleSchema } from '@aikami/schemas'
-import type { z } from 'zod'
+import type { SupportedLocaleSchema } from '@aikami/schemas';
+import type { z } from 'zod';
 
-export type SupportedLocale = z.infer<typeof SupportedLocaleSchema>
+export type SupportedLocale = z.infer<typeof SupportedLocaleSchema>;
 
 export type LangData = {
-  [key in SupportedLocale]?: string
-}
+  [key in SupportedLocale]?: string;
+};

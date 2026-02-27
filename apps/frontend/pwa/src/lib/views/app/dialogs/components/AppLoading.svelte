@@ -1,13 +1,11 @@
 <script lang="ts">
-    import type { AppDialogsViewModelInterface } from "../app-dialogs-view-model.svelte";
-    import t from "$i18n";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import type { AppDialogsViewModelInterface } from '../app-dialogs-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: AppDialogsViewModelInterface;
-    };
+type Props = {
+  viewModel: AppDialogsViewModelInterface;
+};
 
-    let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 </script>
 
 {#if viewModel.appLoading}

@@ -1,12 +1,12 @@
-import { type Auth, getAuth as fbGetAuth } from 'firebase-admin/auth'
+import { type Auth, getAuth as fbGetAuth } from 'firebase-admin/auth';
 
-import { getApp } from './app.ts'
+import { getApp } from './app.ts';
 
-let _auth: Auth | undefined
+let _auth: Auth | undefined;
 
 export const getAuth = () => {
   if (!_auth) {
-    _auth = fbGetAuth(getApp())
+    _auth = fbGetAuth(getApp());
   }
-  return _auth
-}
+  return _auth;
+};

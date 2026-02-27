@@ -18,9 +18,9 @@ Unit tests focus on isolated units of code (e.g., functions, classes) to verify 
 
 -   **Scope:** Individual functions, classes, and methods.
 -   **Tools:**
-    -   **Backend & Shared Packages:** Deno's built-in testing framework is the standard for all backend and shared library code.
+    -   **Backend & Shared Packages:** Bun's built-in test runner is the standard for all backend and shared library code.
     -   **Frontend (Svelte Components):** Unit testing for Svelte components is currently deferred. In the future, if a dedicated internal component library is developed, we will look into implementing Storybook for component testing and visualization.
-    -   **Firebase Functions:** `@firebase/testing` is used for testing functions against a local Firebase emulator.
+    -   **Firebase Functions:** `firebase-functions-test` is used for testing functions against a local Firebase emulator.
 -   **Practices:**
     -   Every module must have corresponding tests.
     -   Use appropriate test setup/teardown mechanisms (e.g., fixtures, `beforeEach`/`afterEach`).
@@ -33,8 +33,8 @@ Integration tests verify the interactions and data flow between different module
 
 -   **Scope:** Interaction between frontend and backend, database transactions, API endpoints.
 -   **Tools:**
-    -   **Backend:** Deno's built-in testing framework.
-    -   **Firebase Backend:** `@firebase/testing` for integration tests within a local emulator.
+    -   **Backend:** Bun's built-in test runner.
+    -   **Firebase Backend:** `firebase-functions-test` for integration tests within a local emulator.
 -   **Practices:**
     -   Test complete user flows involving multiple components.
     -   Verify data integrity across system boundaries.
@@ -55,14 +55,16 @@ End-to-End tests simulate real user scenarios to validate the entire application
 ## Code Coverage
 
 -   **Target:** All new and modified code should aim for **>80%** code coverage.
--   **Measurement:** Specific tools for coverage reporting will be configured per project (e.g., `deno coverage` for Deno projects).
+-   **Measurement:** Coverage reporting using Bun's built-in test runner or project-specific tools.
 
 ## Running the Tests
 
 To execute the entire test suite (unit, integration, and E2E tests) for the project, use the following command:
 
 ```bash
-deno task test
+moon run :test
+# Or for specific projects
+bun test
 ```
 
 ## Quality Gates

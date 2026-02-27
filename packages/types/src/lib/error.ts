@@ -1,4 +1,4 @@
-import type { NumericRange } from './common.ts'
+import type { NumericRange } from './common.ts';
 
 export type ErrorType =
   | 'cancelled'
@@ -41,14 +41,14 @@ export type ErrorType =
   | 'captcha-required'
   | 'captcha-invalid'
   | 'chrome-extension-not-signed-in'
-  | 'project-not-found'
+  | 'project-not-found';
 
 export type SvelteKitError = {
-  type: ErrorType
-  message?: string
-  errorId?: string
-  details?: unknown
-}
+  type: ErrorType;
+  message?: string;
+  errorId?: string;
+  details?: unknown;
+};
 
 /** Error that has been thrown by the {@link toAppError} function. */
 export type AppError = {
@@ -61,7 +61,7 @@ export type AppError = {
    *
    * @example 'An internal error has occurred.'
    */
-  message: string
+  message: string;
 
   cause: {
     /**
@@ -72,14 +72,14 @@ export type AppError = {
      *
      * @see {@link ErrorType}
      */
-    errorType: ErrorType
+    errorType: ErrorType;
 
     /**
      * Additional error details.
      *
      * @example {"projectId": "my-project"}
      */
-    details?: unknown
+    details?: unknown;
 
     /**
      * The [HTTP status
@@ -89,6 +89,6 @@ export type AppError = {
      *
      * @default 500
      */
-    statusCode: NumericRange<400, 599>
-  }
-}
+    statusCode: NumericRange<400, 599>;
+  };
+};

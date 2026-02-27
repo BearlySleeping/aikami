@@ -1,5 +1,13 @@
 {
   "mcpServers": {
+    "moon": {
+      "command": "moon",
+      "args": ["mcp"],
+      "env": {
+        "MOON_WORKSPACE_ROOT": "/home/sonny/Development/Projects/passion/aikami"
+      },
+      "disabled": false
+    },
     "svelte": {
       "url": "https://mcp.svelte.dev/mcp"
     },
@@ -12,9 +20,7 @@
     },
     "godot": {
       "command": "node",
-      "args": [
-        "/home/sonny/Development/Projects/Tools/godot-mcp/build/index.js"
-      ],
+      "args": ["/home/sonny/Development/Projects/Tools/godot-mcp/build/index.js"],
       "env": {
         "DEBUG": "true"
       },

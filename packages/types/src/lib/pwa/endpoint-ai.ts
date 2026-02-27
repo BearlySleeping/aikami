@@ -1,31 +1,66 @@
-import type { PersonaData } from '../database/persona.ts'
+import type { PersonaData } from '../database/persona.ts';
+
+export type AIProviderType = 'openai' | 'anthropic' | 'openrouter' | 'gemini';
+
+export interface AIChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface AIProviderConfig {
+  type: AIProviderType;
+  apiKey: string;
+  model?: string;
+}
+
+export interface ChatContext {
+  npcId?: string;
+  characterId?: string;
+  messages: AIChatMessage[];
+  systemPrompt?: string;
+}
 
 export type AIApiEvents = {
   createPersona: [
     {
-      prompt: string
+      prompt: string;
     },
     {
-      persona: PersonaData
+      persona: PersonaData;
     },
-  ]
+  ];
   sendMessage: [
     {
-      text: string
+      text: string;
+      provider?: AIProviderType;
+      apiKey?: string;
+      model?: string;
+      context: ChatContext;
     },
     {
-      text: string
+      text: string;
+      usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      };
     },
-  ]
-}
+  ];
+  getProviders: [
+    {},
+    {
+      providers: { type: AIProviderType; name: string; defaultModel: string }[];
+    },
+  ];
+};
 
 export type AIMessageData<T extends AIMessageType = AIMessageType> = {
-  payload: AIMessagePayload<T>
-  type: T
-}
+  payload: AIMessagePayload<T>;
+  type: T;
+};
 
-export type AIMessagePayload<T extends AIMessageType = AIMessageType> = AIApiEvents[T][0]
+export type AIMessagePayload<T extends AIMessageType = AIMessageType> = AIApiEvents[T][0];
 
-export type AIMessageResponse<T extends AIMessageType = AIMessageType> = AIApiEvents[T][1]
+export type AIMessageResponse<T extends AIMessageType = AIMessageType> = AIApiEvents[T][1];
 
-export type AIMessageType = keyof AIApiEvents
+export type AIMessageType = keyof AIApiEvents;

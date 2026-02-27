@@ -1,9 +1,9 @@
-import type { FieldValue } from './api/firestore.ts'
+import type { FieldValue } from './api/firestore.ts';
 
 export type Nullable<T> = {
-  [P in keyof T]?: T[P] | null
-}
+  [P in keyof T]?: T[P] | null;
+};
 
 export type Removable<T> = {
-  [P in keyof T]?: T[P] | FieldValue
-}
+  [P in keyof T]?: T[P] | FieldValue;
+};

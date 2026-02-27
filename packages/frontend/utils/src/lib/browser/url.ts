@@ -9,6 +9,6 @@
  * @returns the new path
  */
 export const replaceLocaleInURL = (path: string, locale: string): string => {
-  const rest = path.split('/').slice(2)
-  return `/${[locale, ...rest].join('/')}`
-}
+  const rest = path.split('/').slice(2);
+  return `/${[locale, ...rest].join('/')}`;
+};

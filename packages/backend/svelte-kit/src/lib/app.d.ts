@@ -7,12 +7,12 @@
 // See https://kit.svelte.dev/docs/types#app
 // for information about these interfaces
 declare namespace App {
-  type ErrorType = import('@shared/types').ErrorType
+  type ErrorType = import('@shared/types').ErrorType;
 
   interface Error {
-    details?: unknown
-    errorId?: string
-    message?: string
-    type: ErrorType
+    details?: unknown;
+    errorId?: string;
+    message?: string;
+    type: ErrorType;
   }
 }

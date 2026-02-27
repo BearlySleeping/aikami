@@ -1,6 +1,5 @@
-import type { StorageReference, UploadMetadata, UploadResult } from 'firebase/storage'
-
-import { BaseClass, type BaseClassInterface } from '@aikami/utils' // Using your BaseClass
+import { BaseClass, type BaseClassInterface } from '@aikami/utils'; // Using your BaseClass
+import type { StorageReference, UploadMetadata, UploadResult } from 'firebase/storage';
 
 export type FirebaseStorageServiceInterface = BaseClassInterface & {
   /**
@@ -9,7 +8,7 @@ export type FirebaseStorageServiceInterface = BaseClassInterface & {
    * @param path The full path to the file in your bucket.
    * @returns A promise that resolves with the StorageReference.
    */
-  getRef(path: string): Promise<StorageReference>
+  getRef(path: string): Promise<StorageReference>;
 
   /**
    * Uploads a file, Blob, or byte array to a specified path in Firebase
@@ -25,25 +24,25 @@ export type FirebaseStorageServiceInterface = BaseClassInterface & {
     path: string,
     data: ArrayBuffer | Blob | File | Uint8Array,
     metadata?: UploadMetadata,
-  ): Promise<UploadResult>
-}
+  ): Promise<UploadResult>;
+};
 
 // This type represents the module we are dynamically importing ('./storage')
-type StorageModule = typeof import('./configs/storage.ts')
+type StorageModule = typeof import('./configs/storage.ts');
 
 class FirebaseStorageService extends BaseClass implements FirebaseStorageServiceInterface {
   // Private static property to cache the dynamically imported module
-  private static _storageModule?: StorageModule
+  private static _storageModule?: StorageModule;
 
   constructor() {
     super({
       className: 'FirebaseStorageService',
-    })
+    });
   }
 
   public async getRef(path: string): Promise<StorageReference> {
-    const { ref, storage } = await this._getStorageModule()
-    return ref(storage, path)
+    const { ref, storage } = await this._getStorageModule();
+    return ref(storage, path);
   }
 
   public async upload(
@@ -52,11 +51,11 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
     metadata?: UploadMetadata,
   ): Promise<UploadResult> {
     // Dynamically get the uploadBytes function and a storage reference
-    const { uploadBytes } = await this._getStorageModule()
-    const storageRef = await this.getRef(path)
+    const { uploadBytes } = await this._getStorageModule();
+    const storageRef = await this.getRef(path);
 
-    this.log(`Uploading to: ${storageRef.fullPath}`)
-    return uploadBytes(storageRef, data, metadata)
+    this.log(`Uploading to: ${storageRef.fullPath}`);
+    return uploadBytes(storageRef, data, metadata);
   }
 
   /**
@@ -65,24 +64,18 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
    */
   private async _getStorageModule(): Promise<StorageModule> {
     if (FirebaseStorageService._storageModule) {
-      return FirebaseStorageService._storageModule
+      return FirebaseStorageService._storageModule;
     }
 
-    if (
-      import.meta.env.SSR ||
-      typeof window === 'undefined' ||
-      import.meta.env['STORYBOOK']
-    ) {
-      throw new Error(
-        `${this._className} is not available on the server.`,
-      )
+    if (import.meta.env.SSR || typeof window === 'undefined' || import.meta.env.STORYBOOK) {
+      throw new Error(`${this._className} is not available on the server.`);
     }
 
     // Dynamically import and cache the module
-    FirebaseStorageService._storageModule = await import('./configs/storage.ts')
-    return FirebaseStorageService._storageModule
+    FirebaseStorageService._storageModule = await import('./configs/storage.ts');
+    return FirebaseStorageService._storageModule;
   }
 }
 
 // Export a singleton instance of the service
-export const firebaseStorageService = new FirebaseStorageService()
+export const firebaseStorageService = new FirebaseStorageService();

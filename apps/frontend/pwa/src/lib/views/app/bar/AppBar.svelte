@@ -1,9 +1,7 @@
 <script lang="ts">
-    import { getAppBarViewModel } from "./app-bar-view-model.svelte";
-    import t from "$i18n";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import { getAppBarViewModel } from './app-bar-view-model.svelte.ts';
 
-    const viewModel = getAppBarViewModel({ className: "AppBarViewModel" });
+const _viewModel = getAppBarViewModel({ className: 'AppBarViewModel' });
 </script>
 
 <BaseViewModelContainer {viewModel} class="navbar bg-base-100 shadow-sm">

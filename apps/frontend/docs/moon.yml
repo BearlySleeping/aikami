@@ -7,10 +7,11 @@ stack: 'frontend'
 tags:
   - 'documentation'
   - 'astro'
+  - 'application'
 
 project:
-  name: 'Documentation'
-  description: 'Project documentation website.'
+  title: 'Documentation'
+  description: 'Project documentation website built with Astro.'
   channel: '#frontend'
   owner: 'Frontend Team'
 
@@ -24,50 +25,49 @@ fileGroups:
     - 'src/**/*'
     - 'public/**/*'
   configs:
-    - 'deno.json'
+    - 'package.json'
     - 'tsconfig.json'
-    - 'tailwind.config.mjs'
-    - 'astro.config.ts'
+    - 'tailwind.config.*'
+    - 'astro.config.*'
+  tests:
+    - 'tests/**/*'
 
 tasks:
   dev:
-    command: 'deno task dev'
-    local: true
+    command: 'bun run dev'
+    preset: 'server'
   start:
-    command: 'deno task start'
-    local: true
+    command: 'bun run start'
+    preset: 'server'
   build:
-    command: 'deno task build'
+    command: 'bun run build'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
     outputs:
       - 'dist'
   preview:
-    command: 'deno task preview'
-    local: true
+    command: 'bun run preview'
+    preset: 'server'
   astro:
-    command: 'deno task astro'
-  check:
-    command: 'deno task check'
+    command: 'bun run astro'
+  typecheck:
+    command: 'bun run typecheck'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   format:
-    command: 'deno task format'
+    command: 'bun run format'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
       - '@group(sources)'
       - '@group(configs)'
   lint:
-    command: 'deno task lint'
+    command: 'bun run lint'
     inputs:
-      - '/deno.json'
-      - '/deno.lock'
+      - '@group(sources)'
+      - '@group(configs)'
+  fix:
+    command: 'bun run fix'
+    inputs:
       - '@group(sources)'
       - '@group(configs)'

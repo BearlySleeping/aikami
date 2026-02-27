@@ -1,5 +1,5 @@
-import { z } from 'zod'
-import { FieldValueSchema, TimestampSchema } from './fields.ts'
+import { z } from 'zod';
+import { FieldValueSchema, TimestampSchema } from './fields.ts';
 
 // Code to transform error message to localized key for parameters
 // const customErrorMap: z.ZodErrorMap = (issue, ctx) => {
@@ -29,7 +29,7 @@ import { FieldValueSchema, TimestampSchema } from './fields.ts'
 
 export const CoreFormSchema = z.object({
   id: z.string().optional(),
-})
+});
 
 export const CoreSchema = z.object({
   /**
@@ -40,7 +40,7 @@ export const CoreSchema = z.object({
   id: z.string(),
   priority: z.number().optional(),
   updatedAt: TimestampSchema.optional().or(z.null()),
-})
+});
 
 /**
  * The keys to omit when creating a new record.
@@ -49,44 +49,36 @@ export const CoreOmitSchema = {
   id: true,
   createdAt: true,
   updatedAt: true,
-} as const
+} as const;
 
 export const CoreCreateSchema = CoreSchema.omit(CoreOmitSchema).extend({
   createdAt: FieldValueSchema.optional(),
-})
+});
 
 export const CoreUpdateSchema = CoreSchema.omit(CoreOmitSchema).extend({
   updatedAt: FieldValueSchema,
-})
+});
 
 // TODO implement this
 // https://github.com/colinhacks/zod/discussions/2050
-export const makeOptionalFieldsToServerDelete = <
-  Schema extends z.ZodObject<z.ZodRawShape>,
->(
+export const makeOptionalFieldsToServerDelete = <Schema extends z.ZodObject<z.ZodRawShape>>(
   schema: Schema,
 ) => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-  const entries = Object.entries(schema.shape) as [
-    keyof Schema['shape'],
-    z.ZodTypeAny,
-  ][]
-  const newProps = entries.reduce<
-    {
-      [key in keyof Schema['shape']]: Schema['shape'][key] extends z.ZodOptional<
-        infer T
-      > ? z.ZodNullable<T>
-        : Schema['shape'][key]
-    }
-  >((acc, [key, value]) => {
+  const entries = Object.entries(schema.shape) as [keyof Schema['shape'], z.ZodTypeAny][];
+  const newProps = entries.reduce<{
+    [key in keyof Schema['shape']]: Schema['shape'][key] extends z.ZodOptional<infer T>
+      ? z.ZodNullable<T>
+      : Schema['shape'][key];
+  }>((acc, [key, value]) => {
     // eslint-disable-next-line
-    // @ts-ignore ignore
-    acc[key] = value instanceof z.ZodOptional ? FieldValueSchema : value
-    return acc
+    // @ts-expect-error ignore
+    acc[key] = value instanceof z.ZodOptional ? FieldValueSchema : value;
+    return acc;
     // eslint-disable-next-line
-    // @ts-ignore ignore
-  }, {})
+    // @ts-expect-error ignore
+  }, {});
   // eslint-disable-next-line
-  // @ts-ignore ignore
-  return z.object(newProps)
-}
+  // @ts-expect-error ignore
+  return z.object(newProps);
+};

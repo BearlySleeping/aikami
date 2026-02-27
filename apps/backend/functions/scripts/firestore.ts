@@ -1,12 +1,12 @@
-import '../script-config.development.ts'
+import '../script-config.development.ts';
 
-import type { CharacterData } from '@aikami/types'
-import { characterRepository } from '@aikami/backend/database/character.ts'
+import { characterRepository } from '@aikami/backend/database/character.ts';
+import type { CharacterData } from '@aikami/types';
 
-const uid = 'O0O4WsmWLcaGkXBhNWpEu6O4ruz2'
+const uid = 'O0O4WsmWLcaGkXBhNWpEu6O4ruz2';
 
 const avatarUrl =
-  'https://yt3.ggpht.com/C7WeyJiFARnR1Di_45SEsSQcgq1A6atU9q6XtaPP53HYYdVQ08dRvwXNciXAL2Ww2JfEOXuYNTD1Kw=s640-rw-nd-v1'
+  'https://yt3.ggpht.com/C7WeyJiFARnR1Di_45SEsSQcgq1A6atU9q6XtaPP53HYYdVQ08dRvwXNciXAL2Ww2JfEOXuYNTD1Kw=s640-rw-nd-v1';
 
 const characterCreateData: Omit<CharacterData, 'id' | 'createdAt'> = {
   name: 'Elora Swiftstrike',
@@ -73,11 +73,11 @@ const characterCreateData: Omit<CharacterData, 'id' | 'createdAt'> = {
     'Quiet and observant, Elora speaks only when necessary, often conveying more with a knowing glance than with words. She moves with an effortless grace, even in everyday tasks.',
   avatarUrl,
   uid,
-}
+};
 
 const characterId = await characterRepository.addDocument({
   createData: characterCreateData,
   getCollectionPathArgument: { uid },
-})
+});
 
-console.log('Character document created with id:', characterId)
+console.log('Character document created with id:', characterId);

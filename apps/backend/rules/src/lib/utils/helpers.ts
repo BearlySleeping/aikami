@@ -1,17 +1,16 @@
-import type { CoreData } from "@aikami/types";
-
-import { mockData } from "$mocks";
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { CoreData } from '@aikami/types';
 import {
   assertFails,
   assertSucceeds,
   initializeTestEnvironment,
   type RulesTestEnvironment,
-} from "@firebase/rules-unit-testing";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { expect } from "vitest";
+} from '@firebase/rules-unit-testing';
+import { expect } from 'vitest';
+import { mockData } from '$mocks';
 
-import type { MockAuth } from "../types/index.ts";
+import type { MockAuth } from '../types/index.ts';
 
 let testEnvironment: RulesTestEnvironment | undefined;
 
@@ -20,7 +19,7 @@ export const setup = async ({
   data = mockData,
 }: {
   auth?: MockAuth;
-  data?: Record<string, Omit<CoreData, "createdAt">>;
+  data?: Record<string, Omit<CoreData, 'createdAt'>>;
 } = {}) => {
   const projectId = `rules-spec-${Date.now()}`;
 
@@ -29,12 +28,9 @@ export const setup = async ({
   } else {
     testEnvironment = await initializeTestEnvironment({
       firestore: {
-        host: "127.0.0.1",
+        host: '127.0.0.1',
         port: 8080,
-        rules: readFileSync(
-          resolve(__dirname, "../../../firestore.rules"),
-          "utf8",
-        ),
+        rules: readFileSync(resolve(__dirname, '../../../firestore.rules'), 'utf8'),
       },
 
       projectId,
@@ -73,8 +69,7 @@ expect.extend({
     }
 
     return {
-      message: () =>
-        "Expected Firebase operation to be allowed, but it was denied",
+      message: () => 'Expected Firebase operation to be allowed, but it was denied',
       pass,
     };
   },
@@ -90,8 +85,7 @@ expect.extend({
       // ignore
     }
     return {
-      message: () =>
-        "Expected Firebase operation to be denied, but it was allowed",
+      message: () => 'Expected Firebase operation to be denied, but it was allowed',
       pass,
     };
   },

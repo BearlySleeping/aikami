@@ -1,10 +1,9 @@
 <script lang="ts">
-    import { getAppErrorViewModel } from "./app-error-view-model.svelte";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import { getAppErrorViewModel } from './app-error-view-model.svelte.ts';
 
-    const viewModel = getAppErrorViewModel({
-        className: "AppErrorViewModel",
-    });
+const _viewModel = getAppErrorViewModel({
+  className: 'AppErrorViewModel',
+});
 </script>
 
 <BaseViewModelContainer {viewModel} class="hero min-h-screen bg-base-200">

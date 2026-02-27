@@ -1655,4 +1655,4 @@ export const allLocales = [
     local: 'isiZulu',
     name: 'Zulu',
   },
-] as const
+] as const;

@@ -1,7 +1,7 @@
-import type { RepositoryType } from '@aikami/types'
-import { NpcCreateSchema, NpcSchema, NpcUpdateSchema } from '@aikami/schemas'
-import { getNpcDocumentPath, getNpcsCollectionPath } from '@aikami/utils'
-import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts'
+import { NpcCreateSchema, NpcSchema, NpcUpdateSchema } from '@aikami/schemas';
+import type { RepositoryType } from '@aikami/types';
+import { getNpcDocumentPath, getNpcsCollectionPath } from '@aikami/utils';
+import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts';
 
 export type NpcRepositoryType = RepositoryType<
   typeof NpcSchema,
@@ -9,19 +9,15 @@ export type NpcRepositoryType = RepositoryType<
   typeof NpcUpdateSchema,
   Record<string, never>,
   { npcId: string }
->
+>;
 
-export type NpcRepositoryInterface = BackendRepositoryInterface<
-  NpcRepositoryType
->
+export type NpcRepositoryInterface = BackendRepositoryInterface<NpcRepositoryType>;
 
-export const npcRepository: NpcRepositoryInterface = new BackendRepository<
-  NpcRepositoryType
->({
+export const npcRepository: NpcRepositoryInterface = new BackendRepository<NpcRepositoryType>({
   className: 'NpcRepository',
   createSchema: NpcCreateSchema,
   updateSchema: NpcUpdateSchema,
   getCollectionPath: getNpcsCollectionPath,
   getDocumentPath: getNpcDocumentPath,
   schema: NpcSchema,
-})
+});

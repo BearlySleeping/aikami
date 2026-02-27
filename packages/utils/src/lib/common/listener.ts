@@ -1,6 +1,6 @@
-export type Listener<EventType> = (event_: EventType) => void
+export type Listener<EventType> = (event_: EventType) => void;
 
-export type UnsubscribeFunction = () => void
+export type UnsubscribeFunction = () => void;
 
 /**
  * createObserver
@@ -8,22 +8,22 @@ export type UnsubscribeFunction = () => void
  * @returns observer
  */
 export const createObserver = <EventType = void>(): {
-  subscribe: (listener: Listener<EventType>) => UnsubscribeFunction
-  publish: (event: EventType) => void
+  subscribe: (listener: Listener<EventType>) => UnsubscribeFunction;
+  publish: (event: EventType) => void;
 } => {
-  let listeners: Listener<EventType>[] = []
+  let listeners: Listener<EventType>[] = [];
   return {
     publish: (event: EventType) => {
-      for (const l of listeners) l(event)
+      for (const l of listeners) l(event);
     },
     subscribe: (listener: Listener<EventType>): UnsubscribeFunction => {
-      listeners.push(listener)
+      listeners.push(listener);
       return () => {
-        listeners = listeners.filter((l) => l !== listener)
-      }
+        listeners = listeners.filter((l) => l !== listener);
+      };
     },
-  }
-}
+  };
+};
 /**
  * createLiteObserver is a helper function that creates a listener that can be
  * only listens'ed to once at a time and you cannot unsubscribe.
@@ -31,18 +31,18 @@ export const createObserver = <EventType = void>(): {
  * @returns observer
  */
 export const createLiteObserver = <EventType = void>(): {
-  subscribe: (listener: Listener<EventType>) => void
-  publish: (event: EventType) => void
+  subscribe: (listener: Listener<EventType>) => void;
+  publish: (event: EventType) => void;
 } => {
-  let currentListener: Listener<EventType> | undefined
+  let currentListener: Listener<EventType> | undefined;
   return {
     publish: (event: EventType) => {
       if (currentListener) {
-        currentListener(event)
+        currentListener(event);
       }
     },
     subscribe: (listener: Listener<EventType>): void => {
-      currentListener = listener
+      currentListener = listener;
     },
-  }
-}
+  };
+};

@@ -1,4 +1,3 @@
-import type { z } from 'zod'
 import type {
   FirebaseSignInProviderNameSchema,
   SignInProviderSchema,
@@ -7,54 +6,53 @@ import type {
   UserRoleSchema,
   UserStatusSchema,
   UserTokenSchema,
-} from '@aikami/schemas'
+} from '@aikami/schemas';
+import type { z } from 'zod';
 
-export type SignInSocialProvider = z.infer<typeof SignInSocialProviderSchema>
+export type SignInSocialProvider = z.infer<typeof SignInSocialProviderSchema>;
 
-export type SignInProvider = z.infer<typeof SignInProviderSchema>
+export type SignInProvider = z.infer<typeof SignInProviderSchema>;
 
 export type UserMetadata = {
-  firstName?: string
-  lastName?: string
-  localeCode?: string
-  photoURL?: string
-  phoneNumber?: string
-}
+  firstName?: string;
+  lastName?: string;
+  localeCode?: string;
+  photoURL?: string;
+  phoneNumber?: string;
+};
 
 export type RegisterData = {
-  email: string
-  signInProvider: SignInProvider
-  userMetadata?: UserMetadata
-  uid?: string
-}
+  email: string;
+  signInProvider: SignInProvider;
+  userMetadata?: UserMetadata;
+  uid?: string;
+};
 
 export type GoogleMetadata = {
-  given_name?: string
-  family_name?: string
-  locale?: string
-  email?: string
-  picture?: string
-  name?: string
-  verified_email?: boolean
-}
+  given_name?: string;
+  family_name?: string;
+  locale?: string;
+  email?: string;
+  picture?: string;
+  name?: string;
+  verified_email?: boolean;
+};
 
 export type MicrosoftMetadata = {
-  given_name?: string
-  family_name?: string
-  locale?: string
-  email?: string
-  picture?: string
-  name?: string
-  verified_email?: boolean
-}
+  given_name?: string;
+  family_name?: string;
+  locale?: string;
+  email?: string;
+  picture?: string;
+  name?: string;
+  verified_email?: boolean;
+};
 
-export type FirebaseSignInProviderName = z.infer<
-  typeof FirebaseSignInProviderNameSchema
->
+export type FirebaseSignInProviderName = z.infer<typeof FirebaseSignInProviderNameSchema>;
 
-export type UserClaims = z.infer<typeof UserClaimsSchema>
+export type UserClaims = z.infer<typeof UserClaimsSchema>;
 
-export type UserRole = z.infer<typeof UserRoleSchema>
+export type UserRole = z.infer<typeof UserRoleSchema>;
 /**
  * The status of the user.
  *
@@ -62,6 +60,6 @@ export type UserRole = z.infer<typeof UserRoleSchema>
  *
  * TODO: add more statuses
  */
-export type UserStatus = z.infer<typeof UserStatusSchema>
+export type UserStatus = z.infer<typeof UserStatusSchema>;
 
-export type UserTokenData = z.infer<typeof UserTokenSchema>
+export type UserTokenData = z.infer<typeof UserTokenSchema>;

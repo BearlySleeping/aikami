@@ -1,3 +1,3 @@
-import { m } from '$lib/paraglide/messages.js'
+import { m } from '$lib/paraglide/messages.js';
 
-export default m
+export default m;
