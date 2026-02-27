@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "lib": ["ES2022"],
+    "moduleResolution": "Bundler",
+    "typeRoots": ["./node_modules/@types"],
+    "types": ["node", "bun"],
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noImplicitThis": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@aikami/*": ["./packages/*/src/index.ts"],
+      "$lib/*": ["./src/lib/*"],
+      "$routes": ["./src/routes.ts"],
+      "$env/static/private": ["./src/env.d.ts"],
+      "$env/static/public": ["./src/env.d.ts"],
+      "$logger": ["./src/lib/logger.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "build", ".svelte-kit"]
+}

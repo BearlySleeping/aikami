@@ -8,21 +8,21 @@
 // See https://kit.svelte.dev/docs/types#app
 // for information about these interfaces
 declare namespace App {
-  type Locales = import('@aikami/types').SupportedLocale
-  type UserSessionData = import('@aikami/types').UserSessionData
-  type DeviceData = import('@aikami/types').DeviceData
-  type ErrorType = import('@aikami/types').ErrorType
+  type Locales = import('@aikami/types').SupportedLocale;
+  type UserSessionData = import('@aikami/types').UserSessionData;
+  type DeviceData = import('@aikami/types').DeviceData;
+  type ErrorType = import('@aikami/types').ErrorType;
 
   interface Locals {
-    locale: Locales
-    device?: DeviceData
-    userSession?: UserSessionData
-    currentRoutePath?: string
+    locale: Locales;
+    device?: DeviceData;
+    userSession?: UserSessionData;
+    currentRoutePath?: string;
   }
 
   interface Error {
-    type: ErrorType
-    errorId?: string
-    details?: unknown
+    type: ErrorType;
+    errorId?: string;
+    details?: unknown;
   }
 }

@@ -1,7 +1,7 @@
-import { Timer, type TimerInterface } from './timer.ts'
+import process from 'node:process';
 // import Sentry from 'winston-sentry-log';
-import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts'
-import process from 'node:process'
+import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts';
+import { Timer, type TimerInterface } from './timer.ts';
 
 // import { createLogger, format, transports } from 'winston';
 // type TransformableInfo = {
@@ -46,33 +46,35 @@ import process from 'node:process'
 // 	],
 // });
 
-export type SvelteKitBackendLoggerInterface = BaseLoggerInterface
+export type SvelteKitBackendLoggerInterface = BaseLoggerInterface;
 
 class SvelteKitTimer extends Timer implements TimerInterface {}
 
-class SvelteKitBackendLoggerService extends BaseLoggerService
-  implements SvelteKitBackendLoggerInterface {
+class SvelteKitBackendLoggerService
+  extends BaseLoggerService
+  implements SvelteKitBackendLoggerInterface
+{
   override write(entry: LogEntry, ...data: unknown[]): void {
     try {
       if (this.shouldSkipLog(entry)) {
-        return
+        return;
       }
 
-      let { logType, message } = entry
+      let { logType, message } = entry;
 
       if (!logType || logType === 'log') {
-        logType = 'info'
+        logType = 'info';
       }
 
       if (!message) {
-        const element = data.shift()
-        message = this.getMessage(element)
+        const element = data.shift();
+        message = this.getMessage(element);
       }
 
-      console[logType](this.getMessage(message))
-      console.log('\n')
+      console[logType](this.getMessage(message));
+      console.log('\n');
       for (const element of data) {
-        console.log(this.getMessage(element))
+        console.log(this.getMessage(element));
       }
     } catch (_error) {
       // console.log(_error);
@@ -80,10 +82,10 @@ class SvelteKitBackendLoggerService extends BaseLoggerService
   }
 
   override createTimer(): TimerInterface {
-    return new SvelteKitTimer()
+    return new SvelteKitTimer();
   }
 }
 
 export default new SvelteKitBackendLoggerService({
-  logLevel: process.env['LOG_LEVEL'],
-})
+  logLevel: process.env.LOG_LEVEL,
+});

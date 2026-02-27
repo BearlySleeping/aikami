@@ -1,4 +1,4 @@
-export const userRoles = ['member', 'superAdmin'] as const
+export const userRoles = ['member', 'superAdmin'] as const;
 
 export const userStatuses = [
   'active',
@@ -7,6 +7,6 @@ export const userStatuses = [
   'canceled',
   'inactive',
   'unconfirmed',
-] as const
+] as const;
 
-export const firebaseSignInProviderNames = ['google', 'github'] as const
+export const firebaseSignInProviderNames = ['google', 'github'] as const;

@@ -1,20 +1,56 @@
 {
-  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
     "esModuleInterop": true,
+    "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "sourceMap": true,
-    "strict": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true
-  }
-  // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-  // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
-  //
-  // If you want to overwrite includes/excludes, make sure to copy over the relevant includes/excludes
-  // from the referenced tsconfig.json - TypeScript does not merge them in
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "$components/*": ["./src/lib/components/*"],
+      "$i18n": ["./src/lib/client/utils/i18n"],
+      "$i18n/*": ["./src/lib/client/utils/i18n/*"],
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"],
+      "$router": ["./src/lib/server/router.ts"],
+      "$routes": ["./src/lib/constants/routes"],
+      "$routes/*": ["./src/lib/constants/routes/*"],
+      "$logger": ["./src/lib/logger"],
+      "$services": ["./src/lib/client/services"],
+      "$services/*": ["./src/lib/client/services/*"],
+      "$types": ["./src/lib/types"],
+      "$types/*": ["./src/lib/types/*"],
+      "$utils": ["./src/lib/utils"],
+      "$utils/*": ["./src/lib/utils/*"],
+      "$views/*": ["./src/lib/views/*"],
+      "$mock-services": ["./src/lib/client/services-mock"],
+      "$mock-services/*": ["./src/lib/client/services-mock/*"],
+      "@aikami/backend/svelte-kit/*": ["./src/lib/backend/*"],
+      "@aikami/backend/database/*": ["./src/lib/backend/database/*"],
+      "@aikami/backend/auth/*": ["./src/lib/backend/auth/*"],
+      "@aikami/backend/ai/*": ["./src/lib/backend/ai/*"],
+      "@aikami/backend/utils/*": ["./src/lib/backend/utils/*"],
+      "@aikami/backend/configs/*": ["./src/lib/backend/configs/*"],
+      "@aikami/constants": ["../../packages/constants/src"],
+      "@aikami/schemas": ["../../packages/schemas/src"],
+      "@aikami/types": ["../../packages/types/src"],
+      "@aikami/utils": ["../../packages/utils/src"],
+      "@aikami/logger": ["../../packages/logger/src"],
+      "@aikami/frontend/services": ["../../packages/frontend/services/src"],
+      "@aikami/frontend/utils": ["../../packages/frontend/utils/src"],
+      "@aikami/frontend/repositories": ["../../packages/frontend/repositories/src"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "*.ts"],
+  "exclude": ["node_modules", ".svelte-kit", "build", "src/lib/paraglide/messages"]
 }

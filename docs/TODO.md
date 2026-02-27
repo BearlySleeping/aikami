@@ -5,7 +5,7 @@ This document outlines some of the planned features and improvements for the Aik
 ## Short-Term Goals
 
 - [ ] **Character Creation Flow:** Implement the full character creation and customization flow in the PWA.
-- [ ] **AI Dialogue System v1:** Integrate the first version of the AI-powered dialogue system with a few key NPCs.
+- [x] **AI Dialogue System v1:** Integrate the first version of the AI-powered dialogue system with a few key NPCs. (In Progress)
 - [ ] **Real-time Chat:** Add a real-time chat feature to the PWA for players to communicate.
 
 ## Medium-Term Goals

@@ -1,0 +1,17 @@
+{
+  "name": "@aikami/frontend-services",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/frontend-utils": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "idb-keyval": "6.2.2"
+  }
+}

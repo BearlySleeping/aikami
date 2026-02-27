@@ -1,24 +1,24 @@
-import adapter from '@sveltejs/adapter-auto'
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import adapter from '@sveltejs/adapter-auto';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
-const projectDirectory = dirname(fileURLToPath(import.meta.url))
-const packagesDirectory = resolve(projectDirectory, '../../../packages')
+const projectDirectory = dirname(fileURLToPath(import.meta.url));
+const packagesDirectory = resolve(projectDirectory, '../../../packages');
 /**
  * Get the absolute path from the root directory
  *
  * @param {string} path Relative path
  * @returns {string} Absolute path
  */
-const toPackagesPath = (path) => join(packagesDirectory, path)
+const toPackagesPath = (path) => join(packagesDirectory, path);
 /**
  * Get the absolute path from the src folder in the project directory
  *
  * @param {string} path Relative path
  * @returns {string} Absolute path
  */
-const toSrcPath = (path) => join(projectDirectory, 'src', path)
+const toSrcPath = (path) => join(projectDirectory, 'src', path);
 
 const config = {
   preprocess: [vitePreprocess()],
@@ -30,13 +30,9 @@ const config = {
       $i18n: toSrcPath('lib/client/utils/i18n'),
       $lib: toPackagesPath('lib'),
       '$lib/*': toSrcPath('lib/*'),
-      $router: toPackagesPath(
-        'frontend/services/src/lib/router/router-utils',
-      ),
+      $router: toPackagesPath('frontend/services/src/lib/router/router-utils'),
       $routes: toSrcPath('lib/constants/routes'),
-      '$logger': toPackagesPath(
-        'logger/src/lib/svelte-kit.ts',
-      ),
+      $logger: toPackagesPath('logger/src/lib/svelte-kit.ts'),
       $services: toSrcPath('lib/client/services'),
       '$services/*': toSrcPath('lib/services/*'),
 
@@ -60,21 +56,13 @@ const config = {
       '@aikami/backend/configs': toPackagesPath('backend/configs/src'),
 
       '@aikami/constants': toPackagesPath('constants/src'),
-      '@aikami/frontend/services': toPackagesPath(
-        'frontend/services/src',
-      ),
-      '@aikami/frontend/services/*': toPackagesPath(
-        'frontend/services/src/lib',
-      ),
+      '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
+      '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib'),
       '@aikami/frontend/test': toPackagesPath('frontend/test/src'),
       '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
-      '@aikami/frontend/utils/*': toPackagesPath(
-        'frontend/utils/src/lib',
-      ),
+      '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
       '@aikami/frontend/repositories': toPackagesPath('frontend/repositories/src'),
-      '@aikami/frontend/repositories/*': toPackagesPath(
-        'frontend/repositories/src/lib',
-      ),
+      '@aikami/frontend/repositories/*': toPackagesPath('frontend/repositories/src/lib'),
 
       '@aikami/mocks': toPackagesPath('mocks/src'),
       '@aikami/schemas': toPackagesPath('schemas/src'),
@@ -83,6 +71,6 @@ const config = {
       '@aikami/utils': toPackagesPath('utils/src'),
     },
   },
-}
+};
 
-export default config
+export default config;

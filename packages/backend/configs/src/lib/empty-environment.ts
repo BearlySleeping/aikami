@@ -16,6 +16,6 @@
  * > In `prod`, this behavior will depend on your adapter.
  * ```
  */
-export const env: Record<string, string | undefined> | undefined = undefined
+export const env: Record<string, string | undefined> | undefined = undefined;
 
-export default env
+export default env;

@@ -1,0 +1,16 @@
+{
+  "name": "@aikami/types",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "firebase": "12.10.0",
+    "firebase-functions": "7.0.6",
+    "zod": "4.3.6"
+  }
+}

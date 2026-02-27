@@ -1,1 +1,1 @@
-export const unixLabel = 'Unix'
+export const unixLabel = 'Unix';

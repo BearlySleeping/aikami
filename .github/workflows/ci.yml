@@ -7,8 +7,8 @@ on:
     branches: [main, develop]
 
 env:
-  DENO_VERSION: "1.45.0"
   NODE_VERSION: "20"
+  BUN_VERSION: "1.1.18"
 
 jobs:
   lint-and-format:
@@ -18,26 +18,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          deno-version: ${{ env.DENO_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Cache Deno dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/deno
-          key: deno-${{ hashFiles('**/deno.json', '**/deno.lock') }}
-          restore-keys: deno-
+      - name: Install dependencies
+        run: bun install
 
       - name: Check formatting
-        run: deno fmt --check
+        run: bun run format
 
       - name: Run linter
-        run: deno lint
+        run: bun run lint
 
       - name: Type check
-        run: deno check **/*.ts
+        run: bun run check
 
   test-backend:
     name: Test Backend
@@ -46,23 +42,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          deno-version: ${{ env.DENO_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Cache Deno dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/deno
-          key: deno-${{ hashFiles('**/deno.json', '**/deno.lock') }}
-          restore-keys: deno-
+      - name: Install dependencies
+        run: bun install
 
       - name: Run backend tests
-        run: deno task --cwd apps/backend test
+        run: cd apps/backend && bun test
 
       - name: Test backend build
-        run: deno task --cwd apps/backend build
+        run: cd apps/backend && bun run build
 
   test-packages:
     name: Test Packages
@@ -71,29 +63,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          deno-version: ${{ env.DENO_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Cache Deno dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/deno
-          key: deno-${{ hashFiles('**/deno.json', '**/deno.lock') }}
-          restore-keys: deno-
+      - name: Install dependencies
+        run: bun install
 
       - name: Test common-types package
-        run: deno task --cwd packages/common-types test
+        run: cd packages/common-types && bun test
 
       - name: Test ai-logic package
-        run: deno task --cwd packages/ai-logic test
+        run: cd packages/ai-logic && bun test
 
       - name: Check common-types package
-        run: deno task --cwd packages/common-types check
+        run: cd packages/common-types && bun run check
 
       - name: Check ai-logic package
-        run: deno task --cwd packages/ai-logic check
+        run: cd packages/ai-logic && bun run check
 
   test-frontend:
     name: Test Frontend
@@ -109,11 +97,6 @@ jobs:
           cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: ${{ env.DENO_VERSION }}
-
       - name: Install frontend dependencies
         working-directory: apps/frontend
         run: npm ci
@@ -126,8 +109,8 @@ jobs:
         working-directory: apps/frontend
         run: npm run build
 
-      - name: Run frontend tests (Deno)
-        run: deno task --cwd apps/frontend test
+      - name: Run frontend tests
+        run: cd apps/frontend && bun test
 
   integration-test:
     name: Integration Tests
@@ -137,10 +120,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          deno-version: ${{ env.DENO_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -149,19 +132,11 @@ jobs:
           cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
 
-      - name: Cache Deno dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/deno
-          key: deno-${{ hashFiles('**/deno.json', '**/deno.lock') }}
-          restore-keys: deno-
-
-      - name: Install frontend dependencies
-        working-directory: apps/frontend
-        run: npm ci
+      - name: Install dependencies
+        run: bun install
 
       - name: Build backend
-        run: deno task --cwd apps/backend build
+        run: cd apps/backend && bun run build
 
       - name: Build frontend
         working-directory: apps/frontend
@@ -169,7 +144,7 @@ jobs:
 
       - name: Start backend for integration tests
         run: |
-          deno task --cwd apps/backend start &
+          cd apps/backend && bun start &
           echo $! > backend.pid
         env:
           PORT: 8000
@@ -179,7 +154,7 @@ jobs:
           timeout 30 bash -c 'until curl -f http://localhost:8000/health; do sleep 1; done'
 
       - name: Run integration tests
-        run: deno test --allow-all tests/integration/
+        run: bun test tests/integration/
 
       - name: Stop backend
         run: |
@@ -194,10 +169,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: ${{ env.DENO_VERSION }}
+
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -213,7 +185,7 @@ jobs:
         run: npm audit --audit-level=moderate
 
       - name: Run Deno security scan
-        run: deno check --unstable **/*.ts
+        run: bun run check
 
   build-matrix:
     name: Build Matrix
@@ -221,28 +193,21 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        deno-version: ["1.45.0", "1.44.0"]
       fail-fast: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          deno-version: ${{ matrix.deno-version }}
+          bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Cache Deno dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/deno
-          key: ${{ matrix.os }}-deno-${{ matrix.deno-version }}-${{ hashFiles('**/deno.json', '**/deno.lock') }}
-          restore-keys: |
-            ${{ matrix.os }}-deno-${{ matrix.deno-version }}-
-            ${{ matrix.os }}-deno-
+      - name: Install dependencies
+        run: bun install
 
       - name: Check workspace
-        run: deno task check
+        run: bun run check
 
       - name: Build backend
-        run: deno task --cwd apps/backend build
+        run: cd apps/backend && bun run build

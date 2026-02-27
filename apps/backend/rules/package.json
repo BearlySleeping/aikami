@@ -1,0 +1,9 @@
+{
+  "name": "@app/backend-rules",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write ."
+  }
+}

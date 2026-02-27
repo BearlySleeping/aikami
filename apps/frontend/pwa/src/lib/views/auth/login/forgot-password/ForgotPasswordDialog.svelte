@@ -1,20 +1,18 @@
 <script lang="ts">
-    import type { LoginViewModelInterface } from "../login-view-model.svelte";
-    import { getForgotPasswordViewModel } from "./forgot-password-view-model.svelte";
-    import t from "$i18n";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import type { LoginViewModelInterface } from '../login-view-model.svelte.ts';
+import { getForgotPasswordViewModel } from './forgot-password-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: LoginViewModelInterface;
-    };
+type Props = {
+  viewModel: LoginViewModelInterface;
+};
 
-    let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-    const forgotPasswordViewModel = getForgotPasswordViewModel({
-        // svelte-ignore state_referenced_locally
-        loginViewModel: viewModel,
-        className: "ForgotPasswordViewModel",
-    });
+const _forgotPasswordViewModel = getForgotPasswordViewModel({
+  // svelte-ignore state_referenced_locally
+  loginViewModel: viewModel,
+  className: 'ForgotPasswordViewModel',
+});
 </script>
 
 {#if forgotPasswordViewModel.isOpen}

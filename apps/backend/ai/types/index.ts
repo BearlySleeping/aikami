@@ -1,3 +1,3 @@
 export type CLIOptions = {
-	model?: string;
+  model?: string;
 };

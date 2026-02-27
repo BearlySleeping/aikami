@@ -254,6 +254,6 @@ export const CountryToCode = {
   ZM: 'Zambia',
   ZW: 'Zimbabwe',
   // cSpell:enable
-} as const
+} as const;
 
-export const countryCodes = Object.keys(CountryToCode)
+export const countryCodes = Object.keys(CountryToCode);

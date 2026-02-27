@@ -1,4 +1,4 @@
-import logger from '$logger'
+import logger from '$logger';
 
 /**
  * Checks if the browser/device supports Progressive Web Apps (PWA).
@@ -10,11 +10,11 @@ export const isPWASupported = (): boolean => {
   if ('serviceWorker' in navigator) {
     // Check if manifest is supported
     if ('Manifest' in globalThis) {
-      return true
+      return true;
     }
   }
-  return false
-}
+  return false;
+};
 
 /**
  * Checks if the PWA is already installed on the user's device.
@@ -25,19 +25,19 @@ export const isPWAInstalled = (): boolean => {
   // Check if beforeinstallprompt event is supported
   if ('BeforeInstallPromptEvent' in globalThis) {
     // Check if the PWA is installed
-    return globalThis.matchMedia('(display-mode: standalone)').matches
+    return globalThis.matchMedia('(display-mode: standalone)').matches;
   }
-  return false
-}
+  return false;
+};
 
 type BeforeInstallPromptEvent = {
-  readonly platforms: string[]
+  readonly platforms: string[];
   readonly userChoice: Promise<{
-    outcome: 'accepted' | 'dismissed'
-    platform: string
-  }>
-  prompt(): Promise<void>
-} & Event
+    outcome: 'accepted' | 'dismissed';
+    platform: string;
+  }>;
+  prompt(): Promise<void>;
+} & Event;
 
 /**
  * Installs the PWA on the user's device.
@@ -50,12 +50,12 @@ export const installPWA = (): Promise<boolean> => {
     // Check if beforeinstallprompt event is supported
     if ('BeforeInstallPromptEvent' in globalThis) {
       globalThis.addEventListener('beforeinstallprompt', async (e) => {
-        const event = e as BeforeInstallPromptEvent
+        const event = e as BeforeInstallPromptEvent;
         // Prevent the default behavior, so the browser doesn't automatically prompt the user
-        event.preventDefault()
+        event.preventDefault();
 
         // Store the event for later use
-        const deferredPrompt = event
+        const deferredPrompt = event;
 
         // You can show your custom install prompt here if you want
         // For example, display a button on the page and handle the click event
@@ -63,24 +63,24 @@ export const installPWA = (): Promise<boolean> => {
 
         // Example: Show a button with id="installBtn" to prompt the user for installation
 
-        await deferredPrompt.prompt()
-        const choiceResult = await deferredPrompt.userChoice
+        await deferredPrompt.prompt();
+        const choiceResult = await deferredPrompt.userChoice;
         // ChoiceResult.outcome will be either 'accepted' or 'dismissed'
         if (choiceResult.outcome === 'accepted') {
-          logger.log('PWA installation accepted by the user.')
-          resolve(true)
+          logger.log('PWA installation accepted by the user.');
+          resolve(true);
         } else {
-          logger.log('PWA installation dismissed by the user.')
-          resolve(false)
+          logger.log('PWA installation dismissed by the user.');
+          resolve(false);
         }
         // Cleanup the event listener
         globalThis.removeEventListener('beforeinstallprompt', () => {
           // noop
-        })
-      })
+        });
+      });
     } else {
       // If the beforeinstallprompt event is not supported, PWA installation is not possible
-      resolve(false)
+      resolve(false);
     }
-  })
-}
+  });
+};

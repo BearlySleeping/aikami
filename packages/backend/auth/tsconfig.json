@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Backend Auth",
+  "extends": "../../../config/tsconfig/tsconfig.backend.json",
+  "compilerOptions": {
+    "baseUrl": "../../../",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

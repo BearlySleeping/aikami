@@ -1,15 +1,15 @@
 <script lang="ts">
-    import { CharacterLibraryViewModel } from "./character-library-view-model.svelte";
+import { CharacterLibraryViewModel } from './character-library-view-model.svelte.ts';
 
-    const vm = new CharacterLibraryViewModel();
-    let fileInput: HTMLInputElement;
+const vm = new CharacterLibraryViewModel();
+let _fileInput: HTMLInputElement;
 
-    function onFileChange(e: Event) {
-        const target = e.target as HTMLInputElement;
-        if (target.files) {
-            vm.handleFileUpload(target.files);
-        }
-    }
+function _onFileChange(e: Event) {
+  const target = e.target as HTMLInputElement;
+  if (target.files) {
+    vm.handleFileUpload(target.files);
+  }
+}
 </script>
 
 <div class="p-4">

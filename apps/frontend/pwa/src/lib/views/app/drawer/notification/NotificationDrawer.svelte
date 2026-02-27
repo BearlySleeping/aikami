@@ -1,11 +1,9 @@
 <script lang="ts">
-    import { getNotificationDrawerViewModel } from "./notification-drawer-view-model.svelte";
-    import t from "$i18n";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import { getNotificationDrawerViewModel } from './notification-drawer-view-model.svelte.ts';
 
-    const viewModel = getNotificationDrawerViewModel({
-        className: "NotificationDrawer",
-    });
+const _viewModel = getNotificationDrawerViewModel({
+  className: 'NotificationDrawer',
+});
 </script>
 
 <BaseViewModelContainer {viewModel} class="drawer drawer-end">

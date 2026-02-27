@@ -1,12 +1,10 @@
 <script lang="ts">
-    import type { SettingsViewModelInterface } from "./settings-view-model.svelte";
-    import t from "$i18n";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import type { SettingsViewModelInterface } from './settings-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: SettingsViewModelInterface;
-    };
-    const { viewModel }: Props = $props();
+type Props = {
+  viewModel: SettingsViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="container mx-auto p-6 max-w-4xl">

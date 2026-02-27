@@ -1,54 +1,54 @@
-import { authService, personaService, routerService } from '$services'
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services'
-import type { CurrentUser, PersonaData } from '@aikami/types'
-import t from '$i18n'
+} from '@aikami/frontend/services';
+import type { CurrentUser, PersonaData } from '@aikami/types';
+import t from '$i18n.ts';
+import { authService, personaService, routerService } from '$services/index.ts';
 
-export type ProfileViewModelOptions = BaseViewModelOptions
+export type ProfileViewModelOptions = BaseViewModelOptions;
 
 export type ProfileViewModelInterface = BaseViewModelInterface & {
   /**
    * The current user.
    */
-  readonly user: CurrentUser | null
+  readonly user: CurrentUser | null;
   /**
    * A readonly array of characters.
    */
-  readonly characters: readonly PersonaData[]
+  readonly characters: readonly PersonaData[];
 
   /**
    * Navigates to the character page.
    * @param characterId The ID of the character to navigate to.
    */
-  goToCharacter(characterId: string): Promise<void>
+  goToCharacter(characterId: string): Promise<void>;
 
   /**
    * Signs the user out.
-   */ signOut(): Promise<void>
-}
+   */ signOut(): Promise<void>;
+};
 
 class ProfileViewModel extends BaseViewModel implements ProfileViewModelInterface {
-  user = $state<CurrentUser | null>(null)
-  characters = $state<PersonaData[]>([])
+  user = $state<CurrentUser | null>(null);
+  characters = $state<PersonaData[]>([]);
 
   override async initialize(): Promise<void> {
-    this.setAppLoading(true)
-    this.user = authService.currentUser ?? null
+    this.setAppLoading(true);
+    this.user = authService.currentUser ?? null;
     if (!this.user) {
-      this.showErrorNotification(new Error(t.error_user_not_found()))
-      this.setAppLoading(false)
-      return
+      this.showErrorNotification(new Error(t.error_user_not_found()));
+      this.setAppLoading(false);
+      return;
     }
 
     try {
-      this.characters = await personaService.getPersonas(this.user.id)
+      this.characters = await personaService.getPersonas(this.user.id);
     } catch (error) {
-      this.showErrorNotification(error)
+      this.showErrorNotification(error);
     } finally {
-      this.setAppLoading(false)
+      this.setAppLoading(false);
     }
   }
 
@@ -56,18 +56,17 @@ class ProfileViewModel extends BaseViewModel implements ProfileViewModelInterfac
     await routerService.goToRoute('character/[id]', {
       pathParameters: { id: characterId },
       queryParameters: undefined,
-    })
+    });
   }
 
   async signOut(): Promise<void> {
-    await authService.signOut()
+    await authService.signOut();
     await routerService.goToRoute('login', {
       pathParameters: undefined,
       queryParameters: undefined,
-    })
+    });
   }
 }
 
-export const getProfileViewModel = (
-  options: ProfileViewModelOptions,
-): ProfileViewModelInterface => new ProfileViewModel(options)
+export const getProfileViewModel = (options: ProfileViewModelOptions): ProfileViewModelInterface =>
+  new ProfileViewModel(options);

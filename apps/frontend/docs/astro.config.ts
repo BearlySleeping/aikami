@@ -1,8 +1,9 @@
 // @ts-check
-import { defineConfig, passthroughImageService } from 'astro/config'
-import starlight from '@astrojs/starlight'
 
-const monorepoRoot = new URL('../../..', import.meta.url).pathname
+import starlight from '@astrojs/starlight';
+import { defineConfig, passthroughImageService } from 'astro/config';
+
+const monorepoRoot = new URL('../../..', import.meta.url).pathname;
 
 // https://astro.build/config
 export default defineConfig({
@@ -13,7 +14,13 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'My Docs',
-      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
+      social: [
+        {
+          icon: 'github',
+          label: 'GitHub',
+          href: 'https://github.com/withastro/starlight',
+        },
+      ],
       sidebar: [
         {
           label: 'Guides',
@@ -39,4 +46,4 @@ export default defineConfig({
       },
     },
   },
-})
+});

@@ -1,12 +1,10 @@
 <script lang="ts">
-    import type { DashboardViewModelInterface } from "./dashboard-view-model.svelte";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
-    import t from "$i18n";
+import type { DashboardViewModelInterface } from './dashboard-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: DashboardViewModelInterface;
-    };
-    const { viewModel }: Props = $props();
+type Props = {
+  viewModel: DashboardViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

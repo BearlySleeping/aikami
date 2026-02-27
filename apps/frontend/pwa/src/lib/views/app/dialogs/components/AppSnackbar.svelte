@@ -1,27 +1,26 @@
 <script lang="ts">
-    import type { AppDialogsViewModelInterface } from "../app-dialogs-view-model.svelte";
-    import BaseViewModelContainer from "$components/BaseViewModelContainer.svelte";
+import type { AppDialogsViewModelInterface } from '../app-dialogs-view-model.svelte.ts';
 
-    type Props = {
-        viewModel: AppDialogsViewModelInterface;
-    };
+type Props = {
+  viewModel: AppDialogsViewModelInterface;
+};
 
-    let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-    const getAlertClass = (type?: string): string => {
-        switch (type) {
-            case "success":
-                return "alert-success";
-            case "error":
-                return "alert-error";
-            case "warning":
-                return "alert-warning";
-            case "info":
-                return "alert-info";
-            default:
-                return "alert-info";
-        }
-    };
+const _getAlertClass = (type?: string): string => {
+  switch (type) {
+    case 'success':
+      return 'alert-success';
+    case 'error':
+      return 'alert-error';
+    case 'warning':
+      return 'alert-warning';
+    case 'info':
+      return 'alert-info';
+    default:
+      return 'alert-info';
+  }
+};
 </script>
 
 {#if viewModel.snackbar}

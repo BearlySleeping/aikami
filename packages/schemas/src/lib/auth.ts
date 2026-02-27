@@ -1,22 +1,17 @@
-import { z } from 'zod'
-import { firebaseSignInProviderNames, userRoles } from '@aikami/constants'
-import { SupportedLocaleSchema } from './common/preference.ts'
+import { firebaseSignInProviderNames, userRoles } from '@aikami/constants';
+import { z } from 'zod';
+import { SupportedLocaleSchema } from './common/preference.ts';
 
 export const FirebaseAuthMetadataSchema = z.object({
   displayName: z.string().optional(),
-  email: z.email().optional(),
+  email: z.string().email().optional(),
   phoneNumber: z.string().optional(),
   photoURL: z.string().optional(),
-})
+});
 
-export const SignInSocialProviderSchema = z.enum([
-  'google',
-  'github',
-])
+export const SignInSocialProviderSchema = z.enum(['google', 'github']);
 
-export const SignInProviderSchema = z
-  .enum(['email'])
-  .or(SignInSocialProviderSchema)
+export const SignInProviderSchema = z.enum(['email']).or(SignInSocialProviderSchema);
 
 export const UserMetadataSchema = z.object({
   firstName: z.string().optional(),
@@ -24,14 +19,14 @@ export const UserMetadataSchema = z.object({
   localeCode: z.string().optional(),
   phoneNumber: z.string().optional(),
   photoURL: z.string().optional(),
-})
+});
 
 export const RegisterDataSchema = z.object({
   email: z.string(),
   signInProvider: SignInProviderSchema,
   uid: z.string().optional(),
   userMetadata: UserMetadataSchema.optional(),
-})
+});
 
 export const GoogleMetadataSchema = z.object({
   email: z.string().optional(),
@@ -41,7 +36,7 @@ export const GoogleMetadataSchema = z.object({
   name: z.string().optional(),
   picture: z.string().optional(),
   verified_email: z.boolean().optional(),
-})
+});
 
 export const MicrosoftMetadataSchema = z.object({
   email: z.string().optional(),
@@ -51,13 +46,11 @@ export const MicrosoftMetadataSchema = z.object({
   name: z.string().optional(),
   picture: z.string().optional(),
   verified_email: z.boolean().optional(),
-})
+});
 
-export const UserRoleSchema = z.enum(userRoles)
+export const UserRoleSchema = z.enum(userRoles);
 
-export const FirebaseSignInProviderNameSchema = z.enum(
-  firebaseSignInProviderNames,
-)
+export const FirebaseSignInProviderNameSchema = z.enum(firebaseSignInProviderNames);
 
 /**
  * The status of the user.
@@ -66,7 +59,7 @@ export const FirebaseSignInProviderNameSchema = z.enum(
  *
  * TODO: add more statuses
  */
-export const UserStatusSchema = z.enum(['unconfirmed-terms', 'active'])
+export const UserStatusSchema = z.enum(['unconfirmed-terms', 'active']);
 
 /**
  * Fields in the user token data only created by createCustomToken. These fields
@@ -99,8 +92,8 @@ export const UserTokenSchema = z.object({
 
   /** If this is undefined, then the user has not finished the registration. */
   userRole: UserRoleSchema.optional(),
-})
+});
 
 export const UserClaimsSchema = UserTokenSchema.extend({
   id: z.string(),
-})
+});

@@ -1,50 +1,46 @@
-import { z } from 'zod'
 import {
   BaseFormViewModel,
   type BaseFormViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services'
-
-import { authService } from '$services'
-import { CoreFormSchema } from '@aikami/schemas'
-import type { LoginViewModelInterface } from '../login-view-model.svelte'
+} from '@aikami/frontend/services';
+import { CoreFormSchema } from '@aikami/schemas';
+import { z } from 'zod';
+import { authService } from '$services/index.ts';
+import type { LoginViewModelInterface } from '../login-view-model.svelte.ts';
 
 const ForgotPasswordFormSchema = CoreFormSchema.extend({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
-})
+});
 
-export type ForgotPasswordViewModelOptions =
-  & BaseViewModelOptions
-  & {
-    loginViewModel: LoginViewModelInterface
-  }
+export type ForgotPasswordViewModelOptions = BaseViewModelOptions & {
+  loginViewModel: LoginViewModelInterface;
+};
 
-export type ForgotPasswordViewModelInterface =
-  & BaseFormViewModelInterface<
-    typeof ForgotPasswordFormSchema
-  >
-  & {
-    /**
-     * Whether the dialog is open.
-     */
-    readonly isOpen: boolean
+export type ForgotPasswordViewModelInterface = BaseFormViewModelInterface<
+  typeof ForgotPasswordFormSchema
+> & {
+  /**
+   * Whether the dialog is open.
+   */
+  readonly isOpen: boolean;
 
-    /**
-     * Closes the dialog.
-     */
-    close(): void
-  }
+  /**
+   * Closes the dialog.
+   */
+  close(): void;
+};
 
 class ForgotPasswordViewModel
   extends BaseFormViewModel<typeof ForgotPasswordFormSchema, ForgotPasswordViewModelOptions>
-  implements ForgotPasswordViewModelInterface {
+  implements ForgotPasswordViewModelInterface
+{
   /**
    * The login view model.
    */
-  private _loginViewModel: LoginViewModelInterface
+  private _loginViewModel: LoginViewModelInterface;
 
   get isOpen(): boolean {
-    return this._loginViewModel.showForgotPasswordDialog
+    return this._loginViewModel.showForgotPasswordDialog;
   }
 
   constructor(options: ForgotPasswordViewModelOptions) {
@@ -55,10 +51,10 @@ class ForgotPasswordViewModel
       },
       schema: ForgotPasswordFormSchema,
       onSubmit: async (values) => {
-        await this._sendResetEmail(values.email)
+        await this._sendResetEmail(values.email);
       },
-    })
-    this._loginViewModel = options.loginViewModel
+    });
+    this._loginViewModel = options.loginViewModel;
   }
 
   /**
@@ -67,27 +63,27 @@ class ForgotPasswordViewModel
    */
   private async _sendResetEmail(email: string): Promise<void> {
     try {
-      await authService.sendPasswordResetEmail(email)
+      await authService.sendPasswordResetEmail(email);
 
       this.showSnackbar({
         text: 'Password reset email sent. Please check your inbox.',
         type: 'success',
-      })
+      });
 
-      this.close()
+      this.close();
     } catch (err) {
-      this.error('Failed to send reset email', err)
-      this._errors.email = 'Failed to send reset email. Please try again.'
-      throw err
+      this.error('Failed to send reset email', err);
+      this._errors.email = 'Failed to send reset email. Please try again.';
+      throw err;
     }
   }
 
   close(): void {
-    this._loginViewModel.closeForgotPasswordDialog()
-    this.reset()
+    this._loginViewModel.closeForgotPasswordDialog();
+    this.reset();
   }
 }
 
 export const getForgotPasswordViewModel = (
   options: ForgotPasswordViewModelOptions,
-): ForgotPasswordViewModelInterface => new ForgotPasswordViewModel(options)
+): ForgotPasswordViewModelInterface => new ForgotPasswordViewModel(options);

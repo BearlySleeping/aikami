@@ -1,5 +1,5 @@
-import { z } from 'zod'
-import { FieldValueSchema, TimestampSchema, UniversalValueSchema } from '../fields.ts'
+import { z } from 'zod';
+import { FieldValueSchema, TimestampSchema, UniversalValueSchema } from '../fields.ts';
 
 /**
  * The user role in the CRM.
@@ -8,7 +8,7 @@ import { FieldValueSchema, TimestampSchema, UniversalValueSchema } from '../fiel
  * - member: The user is a member of the CRM.
  * - creator: The user is the creator of the CRM. In superoffice this means the
  */
-export const OAuthRoleSchema = z.enum(['admin', 'member', 'creator'])
+export const OAuthRoleSchema = z.enum(['admin', 'member', 'creator']);
 
 /** Represents OAuth profile data. */
 export const OAuthProfileDataSchema = z.object({
@@ -41,7 +41,7 @@ export const OAuthProfileDataSchema = z.object({
 
   /** The role of the user in CRM. */
   userRole: OAuthRoleSchema,
-})
+});
 
 export const OAuthValidationSchema = z.object({
   /** The o auth2 refresh token. */
@@ -73,20 +73,18 @@ export const OAuthValidationSchema = z.object({
   redirectURI: z.string(),
   /** The o auth2 refresh token. */
   refreshToken: z.string(),
-})
+});
 
 export const OAuthExecuteSchema = OAuthValidationSchema.omit({
   createdAt: true,
   // expiresAt: true,
-}).extend(OAuthProfileDataSchema.shape)
+}).extend(OAuthProfileDataSchema.shape);
 
 export const OAuthProviderLiteSchema = OAuthProfileDataSchema.extend(
   OAuthValidationSchema.omit({ createdAt: true, expiresAt: true }).shape,
-)
+);
 
-export const OAuthProviderSchema = OAuthProfileDataSchema.extend(
-  OAuthValidationSchema.shape,
-)
+export const OAuthProviderSchema = OAuthProfileDataSchema.extend(OAuthValidationSchema.shape);
 
 export const OAuthProviderCreateSchema = OAuthProviderSchema.omit({
   createdAt: true,
@@ -96,7 +94,7 @@ export const OAuthProviderCreateSchema = OAuthProviderSchema.omit({
     createdAt: FieldValueSchema,
     expiresAt: FieldValueSchema,
   }).shape,
-)
+);
 
 export const OAuthProviderUpdateSchema = OAuthProviderSchema.omit({
   accountId: true,
@@ -107,16 +105,12 @@ export const OAuthProviderUpdateSchema = OAuthProviderSchema.omit({
 }).extend({
   expiresAt: TimestampSchema,
   refreshToken: z.string().optional(),
-})
+});
 
-export const OAuthProvidersSchema = z
-  .record(z.string(), OAuthProviderSchema)
-  .optional()
+export const OAuthProvidersSchema = z.record(z.string(), OAuthProviderSchema).optional();
 
-export const OAuthProvidersLiteSchema = z
-  .record(z.string(), OAuthProfileDataSchema)
-  .optional()
+export const OAuthProvidersLiteSchema = z.record(z.string(), OAuthProfileDataSchema).optional();
 
-export const OAuthProvidersCreateSchema = OAuthProviderCreateSchema.optional()
+export const OAuthProvidersCreateSchema = OAuthProviderCreateSchema.optional();
 
-export const OAuthProvidersUpdateSchema = OAuthProviderUpdateSchema.optional()
+export const OAuthProvidersUpdateSchema = OAuthProviderUpdateSchema.optional();

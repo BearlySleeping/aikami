@@ -24,3 +24,4 @@ projects:
 
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"
+  frontend-repositories: "packages/frontend/repositories"

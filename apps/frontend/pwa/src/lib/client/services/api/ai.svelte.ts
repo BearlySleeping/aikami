@@ -2,12 +2,11 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services'
-import type { PersonaData } from '@aikami/types'
-import type { AIMessageData, AIMessageResponse, AIMessageType } from '@aikami/types'
-import { internalAPIService } from './internal.svelte.ts'
+} from '@aikami/frontend/services';
+import type { AIMessageData, AIMessageResponse, AIMessageType, PersonaData } from '@aikami/types';
+import { internalAPIService } from './internal.svelte.ts';
 
-export type AIServiceOptions = BaseFrontendClassOptions
+export type AIServiceOptions = BaseFrontendClassOptions;
 
 export type AIServiceInterface = BaseFrontendClassInterface & {
   /**
@@ -16,56 +15,56 @@ export type AIServiceInterface = BaseFrontendClassInterface & {
    * @param character The character data.
    * @returns The AI response.
    */
-  sendMessageToAI(text: string, character?: PersonaData): Promise<string | undefined>
+  sendMessageToAI(text: string, character?: PersonaData): Promise<string | undefined>;
 
   /**
    * Creates a character using AI.
    * @param prompt The prompt to use for character creation.
    * @returns The created character data.
    */
-  createPersona(prompt: string): Promise<PersonaData | undefined>
-}
+  createPersona(prompt: string): Promise<PersonaData | undefined>;
+};
 
 export class AIService extends BaseFrontendClass<AIServiceOptions> implements AIServiceInterface {
   async createPersona(prompt: string): Promise<PersonaData | undefined> {
-    this.log('createPersona', { prompt })
+    this.log('createPersona', { prompt });
     try {
       const response = await this._callAIEndpoint({
         type: 'createPersona',
         payload: {
           prompt,
         },
-      })
+      });
 
-      return response.persona
+      return response.persona;
     } catch (error) {
-      this.error('createPersona', error)
+      this.error('createPersona', error);
     }
   }
 
   async sendMessageToAI(text: string, character?: PersonaData): Promise<string | undefined> {
-    this.log('sendMessage', { text, character })
+    this.log('sendMessage', { text, character });
     try {
       const response = await this._callAIEndpoint({
         type: 'sendMessage',
         payload: {
           text,
         },
-      })
+      });
 
-      return response.text
+      return response.text;
     } catch (error) {
-      this.error('sendMessage', error)
+      this.error('sendMessage', error);
     }
   }
 
   private async _callAIEndpoint<T extends AIMessageType>(
     data: AIMessageData<T>,
   ): Promise<AIMessageResponse<T>> {
-    return await internalAPIService.callAIEndpoint(data)
+    return await internalAPIService.callAIEndpoint(data);
   }
 }
 
 export const aiService: AIServiceInterface = new AIService({
   className: 'AIService',
-})
+});

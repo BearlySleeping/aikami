@@ -1,4 +1,4 @@
-type EventTargetType = Window | Document | HTMLElement
+type EventTargetType = Window | Document | HTMLElement;
 
 /**
  * Creates an event listener for a specified event on a target object. Returns a
@@ -14,10 +14,10 @@ export const createEventListener = (
   target: EventTargetType,
   event: string,
   handler: (event: Event) => void,
-): () => void => {
+): (() => void) => {
   // Add the event listener
-  target.addEventListener(event, handler)
+  target.addEventListener(event, handler);
 
   // Return a function that can be called to remove the listener
-  return () => target.removeEventListener(event, handler)
-}
+  return () => target.removeEventListener(event, handler);
+};

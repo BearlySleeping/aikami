@@ -1,0 +1,17 @@
+{
+  "name": "@aikami/logger",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@types/node": "25.3.2"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "firebase-functions": "7.0.6"
+  }
+}

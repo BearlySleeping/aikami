@@ -1,81 +1,70 @@
-# SvelteKit PWA
+# @app/pwa
 
-This is a SvelteKit Progressive Web App (PWA) that serves as the front-end for the AI RPG. The PWA is used to role-play with AI characters, and it is synced with your Firebase account so that when you play on Godot, it should work together.
+Main Progressive Web Application built with SvelteKit.
 
-## Internationalization (i18n)
+## Overview
 
-This project uses Paraglide for internationalization. All user-facing text must be internationalized.
+This is the primary PWA application for Aikami - an AI-powered RPG experience. The PWA provides:
+- Character selection and chat interface
+- User authentication via Firebase
+- Real-time sync with Godot game
+- Image generation for AI characters
 
-### Adding New Translations
+## Tech Stack
 
-1. Add translation keys to the message files in `messages/`:
-   - `messages/en.json` - English translations
-   - Add other language files as needed
+- **Framework**: SvelteKit
+- **Styling**: Tailwind CSS + DaisyUI
+- **i18n**: Paraglide (inlang)
+- **Testing**: Playwright
+- **Deployment**: Firebase Hosting
 
-2. Import and use in components:
+## Installation
 
-   ```typescript
-   import t from "$i18n";
+This is a workspace app managed by moon. Install dependencies:
 
-   // In Svelte components
-   <h1>{t.page_title()}</h1>
-   <p>{t.greeting({ name: userName })}</p>
-   ```
-
-3. **NEVER** hardcode user-facing strings directly in components:
-   - ❌ `<h1>My Page Title</h1>`
-   - ✅ `<h1>{t.page_title()}</h1>`
-
-4. **NEVER** use fallbacks for translations. All text must be defined in the message files.
-   - ❌ `<h1>{t.page_title?.() || 'My Page Title'}</h1>`
-   - ✅ `<h1>{t.page_title()}</h1>`
-
-### Message File Format
-
-```json
-{
-  "$schema": "https://inlang.com/schema/inlang-message-format",
-  "key_name": "Translation text",
-  "key_with_params": "Hello, {name}!"
-}
+```bash
+bun install
 ```
 
-## Roadmap
+## Tasks
 
-- **Character Selection:** Users will be able to select a character to chat with.
-- **Chat History:** The chat history will be saved to Firestore and will be synced between the PWA and the Godot game.
-- **Image Generation:** Users will be able to generate images of the AI characters.
-- **User Profiles:** Users will have profiles where they can see their chat history and generated images.
+| Task | Command | Description |
+|------|---------|-------------|
+| `dev` | `bunx vite dev` | Start development server |
+| `build` | `bunx vite build` | Build for production |
+| `preview` | `bunx vite preview` | Preview production build |
+| `check` | `bun run check` | Run TypeScript checks |
+| `lint` | `bun run lint` | Lint code with Biome |
+| `format` | `bun run format` | Format code with Biome |
+| `test` | `bun run test` | Run Playwright tests |
+| `test:ci` | `bun run test-ci` | Run tests for CI |
 
 ## Project Structure
 
-- **`src/`**: This directory contains the source code for the PWA.
-  - **`app.d.ts`**: This file contains the type definitions for the `App` namespace.
-  - **`lib/`**: This directory contains the core application logic, components, and utilities.
-    - **`client/`**: This directory contains client-side services and repositories.
-    - **`components/`**: This directory contains reusable Svelte components.
-    - **`constants/`**: This directory contains application-wide constants.
-    - **`paraglide/`**: This directory contains the internationalization configuration and generated files.
-    - **`server/`**: This directory contains server-side utilities.
-    - **`types/`**: This directory contains application-wide types.
-    - **`views/`**: This directory contains the application's views and corresponding view models.
-  - **`routes/`**: This directory contains the routes for the PWA.
-  - **`static/`**: This directory contains static assets that are served by the PWA.
-- **`static/`**: This directory contains static assets that are served by the PWA.
-- **`tsconfig.json`**: This file contains the TypeScript configuration for the PWA.
-- **`vite.config.ts`**: This file contains the Vite configuration for the PWA.
+```
+src/
+├── lib/
+│   ├── client/      # Client-side services
+│   ├── components/  # Reusable Svelte components
+│   ├── constants/   # App-specific constants
+│   ├── paraglide/  # i18n generated files
+│   ├── server/      # Server-side utilities
+│   ├── types/       # App-specific types
+│   └── views/       # Page views and view models
+├── routes/          # SvelteKit routes
+└── static/          # Static assets
+```
 
-## Commands
+## Dependencies
 
-To run the commands, `cd` into the `apps/frontend/pwa` directory and then run the command with `deno task <command>`.
+This app depends on the following packages:
+- `@aikami/constants`
+- `@aikami/schemas`
+- `@aikami/types`
+- `@aikami/logger`
+- `@aikami/frontend-utils`
+- `@aikami/frontend-services`
 
-- **`dev`**: Starts the development server.
-- **`build`**: Builds the PWA for production.
-- **`preview`**: Previews the production build of the PWA.
-- **`prepare`**: Synchronizes the SvelteKit project.
-- **`check:svelte`**: Type-checks the Svelte components.
-- **`check:watch`**: Type-checks the Svelte components in watch mode.
-- **`check:deno`**: Type-checks the Deno code.
-- **`lint`**: Lints the Deno code.
-- **`format`**: Formats the Deno code.
-- **`check`**: Runs both `check:svelte` and `check:deno`.
+## Internationalization
+
+All user-facing text must be internationalized using Paraglide. See the [i18n guide](https://inlang.com/) for details.
