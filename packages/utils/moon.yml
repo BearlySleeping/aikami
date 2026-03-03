@@ -8,6 +8,9 @@ tags:
   - 'shared'
   - 'library'
 
+toolchains:
+  javascript: false
+
 project:
   title: 'Utilities'
   description: 'Shared utility functions and helpers for the monorepo.'
@@ -45,10 +48,15 @@ tasks:
       - '@group(sources)'
       - '@group(configs)'
   test:
-    command: 'bun test'
+    command: 'bun run test'
     inputs:
       - '@group(sources)'
       - '@group(tests)'
+      - '@group(configs)'
+  check:
+    command: 'bun run check'
+    inputs:
+      - '@group(sources)'
       - '@group(configs)'
   fix:
     command: 'bun run fix'

@@ -1,11 +1,12 @@
 <script lang="ts">
+import type { Snippet } from 'svelte';
 import type { PWAHookData } from '$lib/types/index.ts';
 import type { BaseMetaTags } from '$views/app/metadata/head-tags-view-model.svelte.ts';
 import { getAppViewModel } from './app-view-model.svelte.ts';
 
 interface Props {
   data: PWAHookData;
-  children: any;
+  children: Snippet;
 }
 
 let { data, children }: Props = $props();
@@ -15,7 +16,7 @@ const viewModel = getAppViewModel({ data, className: 'AppViewModel' });
 
 const { isLoggedIn, navigationDrawerEnabled, showAppBar, showFooter } = viewModel;
 
-const _defaultMetaTags: BaseMetaTags = {
+const defaultMetaTags: BaseMetaTags = {
   title: 'AiKami',
   description: 'AiKami',
   keywords: ['ai', 'game'],

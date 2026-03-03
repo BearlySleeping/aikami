@@ -8,8 +8,10 @@
     "astro": "astro",
     "lint": "biome lint .",
     "format": "biome format .",
+    "check": "biome check .",
     "typecheck": "tsc --noEmit",
-    "fix": "biome check --write ."
+    "fix": "biome check --write .",
+    "validate": "bun run check && bun run typecheck"
   },
   "devDependencies": {
     "astro": "5.18.0"

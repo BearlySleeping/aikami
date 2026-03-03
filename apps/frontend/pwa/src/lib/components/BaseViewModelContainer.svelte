@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { BaseViewModelInterface } from '@aikami/frontend/services';
+import type { BaseViewModelInterface } from '@aikami/frontend/services/index.ts';
 import { onMount } from 'svelte';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
    */
   id?: string;
   fillHeight?: boolean;
+  // biome-ignore lint/suspicious/noExplicitAny: Svelte slots can accept any content
   children: any;
   class?: string;
   /**

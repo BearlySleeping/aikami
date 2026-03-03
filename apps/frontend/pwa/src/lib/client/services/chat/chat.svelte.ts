@@ -2,8 +2,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { MessageData } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { MessageData } from '@aikami/types/index.ts';
 
 export type ChatServiceOptions = BaseFrontendClassOptions;
 
@@ -47,7 +47,7 @@ export type ChatServiceInterface = BaseFrontendClassInterface & {
    * Current error message, if any.
    * @readonly - Use setError() to modify
    */
-  readonly error: string | null;
+  readonly errorMessage: string | null;
 
   /**
    * Sets the loading state.
@@ -108,7 +108,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   isLoading = $state(false);
   isSending = $state(false);
   isTyping = $state(false);
-  error: string | null = $state(null);
+  errorMessage: string | null = $state(null);
 
   setLoading(loading: boolean): void {
     this.isLoading = loading;
@@ -123,7 +123,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   }
 
   setError(error: string | null): void {
-    this.error = error;
+    this.errorMessage = error;
   }
 
   addMessage(message: ChatMessage): void {
@@ -135,7 +135,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
       id: msg.id || crypto.randomUUID(),
       text: msg.text,
       sender: msg.sender,
-      timestamp: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+      timestamp: msg.createdAt ? msg.createdAt.toDate() : new Date(),
     }));
   }
 
@@ -164,7 +164,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
     this.isLoading = false;
     this.isSending = false;
     this.isTyping = false;
-    this.error = null;
+    this.errorMessage = null;
   }
 }
 

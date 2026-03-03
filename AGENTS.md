@@ -19,7 +19,13 @@ Aikami is a monorepo using **moon** for task orchestration, **Bun** as the runti
 
 ## Build, Lint, and Test Commands
 
-**Always use moon** from the root directory to leverage caching. Never `cd` into project directories.
+### Architecture: Moon as Orchestrator
+
+Moon must **NEVER** call binary tools directly (e.g., `bunx vite`, `bunx biome`). It acts strictly as an **orchestrator** that delegates to local `package.json` scripts. Every moon task must use `command: 'bun run <script>'` so that:
+
+1. Developers can bypass Moon and run tasks directly via `cd apps/frontend/pwa && bun run dev`.
+2. Tool versions and flags are managed in one place (`package.json`), not scattered across `moon.yml` files.
+3. Moon handles dependency ordering, caching, and parallel execution - nothing else.
 
 ```bash
 bun moon run {project}:{task} -- --{options}
@@ -28,14 +34,17 @@ bun moon run {project}:{task} -- --{options}
 ### Root Commands (monorepo-wide)
 
 ```bash
-# Development (local)
-bun moon run :fix              # Auto-fix all (format + lint + imports) - run before committing
-bun moon run :validate         # Typecheck + test - CI pipeline
+# Fix (auto-fix format + lint + imports) - run before committing
+bun moon run :fix
 
-# Granular commands
-bun moon run :format           # Format code
-bun moon run :lint             # Lint only (no auto-fix)
-bun moon run :typecheck        # TypeScript type checking
+# Check (lint + format via biome check) - for CI
+bun moon run :check
+
+# TypeScript type checking
+bun moon run :typecheck
+
+# Full validation (check + typecheck + test)
+bun moon run :validate
 
 # Building
 bun moon run :build            # Build all projects
@@ -43,7 +52,7 @@ bun moon run :build --affected # Build affected projects only
 
 # Testing
 bun moon run :test             # Run all tests
-bun moon run :test --watch    # Run tests in watch mode
+bun moon run :test --watch     # Run tests in watch mode
 ```
 
 ### Dependency Management
@@ -65,7 +74,8 @@ bun run deps:check
 bun run deps:list
 ```
 
-**Important**: 
+**Important**:
+
 - Run `bun run deps:sync` after adding new dependencies to ensure consistency
 - Run `bun run deps:update` periodically to get latest versions
 
@@ -83,6 +93,7 @@ bun moon run pwa:validate  # typecheck + test
 ```
 
 Or manually:
+
 ```bash
 # In project directory
 bun biome check --write src/   # Fix lint/format issues
@@ -131,6 +142,7 @@ bun moon run auth:build
 ### Project Names
 
 Common project names (use in `bun moon run {name}:{task}`):
+
 - `pwa` - Frontend PWA
 - `docs` - Documentation
 - `landing-page` - Landing page
@@ -163,7 +175,7 @@ The project uses **Biome** with these settings (from `biome.json`):
 Run formatting before committing:
 
 ```bash
-bun run format:write
+bun moon run :fix
 ```
 
 ### Naming Conventions
@@ -178,21 +190,24 @@ bun run format:write
 
 - Use **explicit type imports** when importing types: `import type { Character } from '$types'`
 - Use **path aliases** defined in `tsconfig.json`:
-  - `$lib` - lib folder
-  - `$types` - @aikami/types
-  - `$services` - frontend services
-  - `$logger` - @aikami/logger
+    - `$lib` - lib folder
+    - `$types` - @aikami/types
+    - `$services` - frontend services
+    - `$logger` - @aikami/logger
 - Group imports: external → internal → relative
 - Use **named exports** over default exports
 - **Always include file extensions** in relative imports:
-  - `import { something } from './foo.ts';`
-  - `import { something } from './bar.svelte.ts';`
-  - Never: `import { something } from './foo';`
+    - `import { something } from './foo.ts';`
+    - `import { something } from './bar.svelte.ts';`
+    - Never: `import { something } from './foo';`
 
 ### TypeScript
 
 - **Always** use explicit return types for exported functions
 - Use `unknown` over `any`; if `any` is needed, add a comment explaining why
+- **NEVER** use `as unknown as SomeType` - this is a code smell that hides root cause issues
+    - If types don't match, fix the root cause or create a proper transformation function
+    - Example: Instead of `user as unknown as AdminUser`, create `toAdminUser(user): AdminUser` function
 - Prefer **Zod** for runtime validation (use schemas from `@aikami/schemas`)
 - Use **interface** for object shapes that may be extended, **type** for unions/intersections
 
@@ -203,8 +218,8 @@ import type { Character } from "$types";
 import { z } from "zod";
 
 export const CharacterSchema = z.object({
-  id: z.string(),
-  name: z.string(),
+	id: z.string(),
+	name: z.string(),
 });
 
 export type Character = z.infer<typeof CharacterSchema>;
@@ -221,10 +236,10 @@ This project uses Svelte 5 with runes:
 
 ```typescript
 class CharacterService {
-  characters = $state<Character[]>([]);
-  selectedCharacter = $state<Character | null>(null);
+	characters = $state<Character[]>([]);
+	selectedCharacter = $state<Character | null>(null);
 
-  selectedCount = $derived(this.characters.length);
+	selectedCount = $derived(this.characters.length);
 }
 ```
 
@@ -238,34 +253,35 @@ All interfaces for services, view models, and component props **must** have JSDo
  * Provides methods for importing, adding, and selecting character data.
  */
 export type CharacterServiceInterface = BaseFrontendClassInterface & {
-  /**
-   * List of all imported characters.
-   * @readonly - Use addCharacter() to modify
-   */
-  readonly characters: Character[];
+	/**
+	 * List of all imported characters.
+	 * @readonly - Use addCharacter() to modify
+	 */
+	readonly characters: Character[];
 
-  /**
-   * Currently selected character for chat or editing.
-   * @readonly - Use selectCharacter() to modify
-   */
-  readonly selectedCharacter: Character | null;
+	/**
+	 * Currently selected character for chat or editing.
+	 * @readonly - Use selectCharacter() to modify
+	 */
+	readonly selectedCharacter: Character | null;
 
-  /**
-   * Imports a character from a file (PNG or JSON).
-   * @param file - The file to import
-   * @returns The imported Character or null if import failed
-   */
-  importFile(file: File): Promise<Character | null>;
+	/**
+	 * Imports a character from a file (PNG or JSON).
+	 * @param file - The file to import
+	 * @returns The imported Character or null if import failed
+	 */
+	importFile(file: File): Promise<Character | null>;
 
-  /**
-   * Adds a character to the characters list.
-   * @param char - The character to add
-   */
-  addCharacter(char: Character): void;
+	/**
+	 * Adds a character to the characters list.
+	 * @param char - The character to add
+	 */
+	addCharacter(char: Character): void;
 };
 ```
 
 **Rules:**
+
 1. **Always use `readonly`** for state properties in interfaces - enforce mutation through methods
 2. **Use `@readonly`** annotation to document that direct assignment is prohibited
 3. **All fields must have JSDoc comments** describing their purpose
@@ -340,16 +356,59 @@ const { viewModel }: Props = $props();
   {#if viewModel.showGreeting}
     <CharacterCard ... />
   {/if}
-  
+
   <!-- Delegate to viewModel methods -->
   <ChatContainer onSend={(text) => viewModel.sendMessage(text)} />
 </BaseViewModelContainer>
 ```
 
 The view model should:
+
 - Handle initialization in `initialize()` method (called by BaseViewModelContainer)
 - Expose all UI state as properties
 - Expose all UI actions as methods
+
+### Route Standard
+
+All page routes must follow this pattern:
+
+```typescript
+<script lang="ts">
+import { getChatViewModel } from '$views/chat/chat-view-model.svelte.ts';
+import ChatView from '$views/chat/ChatView.svelte';
+
+import type { PageProps } from './$types';
+
+let { data }: PageProps = $props();
+
+const viewModel = getChatViewModel({
+  className: 'ChatViewModel',
+  // svelte-ignore state_referenced_locally
+  npcId: data.id,
+});
+</script>
+
+<ChatView {viewModel} />
+```
+
+**Rules:**
+
+1. **Always use `$views/` path alias** for importing view models and views
+2. **Always use `getXxxViewModel` factory function** to create the view model
+3. **Always pass `className`** as the first option
+4. **Use `// svelte-ignore state_referenced_locally`** for props that are used in the viewModel options (to avoid Svelte 5 warnings)
+5. **Use `$props()` to get route data** from `data` prop
+6. **Views should accept `viewModel` as a prop** and use `BaseViewModelContainer`
+
+If a view creates its own view model internally (like login/register forms), the route can be simpler:
+
+```typescript
+<script lang="ts">
+import LoginView from '$views/auth/login/LoginView.svelte';
+</script>
+
+<LoginView />
+```
 
 The frontend uses a **BaseFormViewModel** pattern for form handling:
 
@@ -360,22 +419,22 @@ The frontend uses a **BaseFormViewModel** pattern for form handling:
 
 ```typescript
 export type LoginViewModelInterface = BaseFormViewModelInterface<
-  typeof LoginFormSchema
+	typeof LoginFormSchema
 > & {
-  readonly isSocialSigningIn: boolean;
-  socialLogin(provider: string): Promise<void>;
+	readonly isSocialSigningIn: boolean;
+	socialLogin(provider: string): Promise<void>;
 };
 
 class LoginViewModel extends BaseFormViewModel<
-  typeof LoginFormSchema,
-  LoginViewModelOptions
+	typeof LoginFormSchema,
+	LoginViewModelOptions
 > {
-  private _isSocialSigningIn = $state<boolean>(false);
-  isSocialSigningIn = $derived(this._isSocialSigningIn);
+	private _isSocialSigningIn = $state<boolean>(false);
+	isSocialSigningIn = $derived(this._isSocialSigningIn);
 }
 
 export const getLoginViewModel = (
-  options: LoginViewModelOptions
+	options: LoginViewModelOptions,
 ): LoginViewModelInterface => new LoginViewModel(options);
 ```
 
@@ -396,10 +455,10 @@ throw toAppError("internal", "Something went wrong", { extra: "data" });
 
 // Handling unknown errors
 try {
-  await doSomething();
+	await doSomething();
 } catch (err) {
-  const appError = toAppErrorFromUnknownError(err);
-  // Handle the standardized error
+	const appError = toAppErrorFromUnknownError(err);
+	// Handle the standardized error
 }
 ```
 
@@ -459,33 +518,35 @@ All services must follow this exact pattern:
 
 ```typescript
 import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
+	BaseFrontendClass,
+	type BaseFrontendClassInterface,
+	type BaseFrontendClassOptions,
 } from "@aikami/frontend/services";
 import type { Character } from "$types";
 
 export type CharacterServiceOptions = BaseFrontendClassOptions;
 
 export type CharacterServiceInterface = BaseFrontendClassInterface & {
-  readonly characters: Character[];
-  getCharacter(id: string): Promise<Character | null>;
+	readonly characters: Character[];
+	getCharacter(id: string): Promise<Character | null>;
 };
 
 class CharacterService
-  extends BaseFrontendClass<CharacterServiceOptions>
-  implements CharacterServiceInterface
+	extends BaseFrontendClass<CharacterServiceOptions>
+	implements CharacterServiceInterface
 {
-  characters: Character[] = $state([]);
+	characters: Character[] = $state([]);
 
-  async getCharacter(id: string): Promise<Character | null> {
-    return await characterRepository.getDocument({ id });
-  }
+	async getCharacter(id: string): Promise<Character | null> {
+		return await characterRepository.getDocument({ id });
+	}
 }
 
-export const characterService: CharacterServiceInterface = new CharacterService({
-  className: 'CharacterService',
-});
+export const characterService: CharacterServiceInterface = new CharacterService(
+	{
+		className: "CharacterService",
+	},
+);
 ```
 
 **Important**: Do NOT pass options in the constructor. Pass them when creating the singleton:
@@ -493,15 +554,15 @@ export const characterService: CharacterServiceInterface = new CharacterService(
 ```typescript
 // ❌ WRONG
 class CharacterService extends BaseFrontendClass {
-  constructor() {
-    super({ className: 'CharacterService' }); // Don't do this
-  }
+	constructor() {
+		super({ className: "CharacterService" }); // Don't do this
+	}
 }
 export const characterService = new CharacterService();
 
 // ✅ CORRECT
 export const characterService = new CharacterService({
-  className: 'CharacterService',
+	className: "CharacterService",
 });
 ```
 
@@ -529,9 +590,9 @@ If you need a class that doesn't require the base class (like a pure utility), i
 ```typescript
 // Valid: Utility class with .svelte.ts suffix
 export class CharacterImporter {
-  static importFromPng(file: File): Promise<Character | null> {
-    // ...
-  }
+	static importFromPng(file: File): Promise<Character | null> {
+		// ...
+	}
 }
 ```
 
@@ -545,10 +606,10 @@ Tests use **Playwright** with the following patterns:
 import { expect, test } from "@playwright/test";
 
 test.describe("Feature Name", () => {
-  test("should do something", async ({ page }) => {
-    await page.goto("/route");
-    await expect(page.getByRole("heading")).toBeVisible();
-  });
+	test("should do something", async ({ page }) => {
+		await page.goto("/route");
+		await expect(page.getByRole("heading")).toBeVisible();
+	});
 });
 ```
 
@@ -573,3 +634,153 @@ test.describe("Feature Name", () => {
 - **Zod**: All form validation should use Zod schemas
 - **Firebase**: Auth operations go through services in `@aikami/frontend/services`
 - **API**: All API endpoints use the `handleXxxEndpoint` pattern with `createApiHandler`
+
+<!-- rtk-instructions v2 -->
+
+# RTK (Rust Token Killer) - Token-Optimized Commands
+
+## Golden Rule
+
+**Always prefix commands with `rtk`**. If RTK has a dedicated filter, it uses it. If not, it passes through unchanged. This means RTK is always safe to use.
+
+**Important**: Even in command chains with `&&`, use `rtk`:
+
+```bash
+# ❌ Wrong
+git add . && git commit -m "msg" && git push
+
+# ✅ Correct
+rtk git add . && rtk git commit -m "msg" && rtk git push
+```
+
+## RTK Commands by Workflow
+
+### Build & Compile (80-90% savings)
+
+```bash
+rtk cargo build         # Cargo build output
+rtk cargo check         # Cargo check output
+rtk cargo clippy        # Clippy warnings grouped by file (80%)
+rtk tsc                 # TypeScript errors grouped by file/code (83%)
+rtk lint                # ESLint/Biome violations grouped (84%)
+rtk prettier --check    # Files needing format only (70%)
+rtk next build          # Next.js build with route metrics (87%)
+```
+
+### Test (90-99% savings)
+
+```bash
+rtk cargo test          # Cargo test failures only (90%)
+rtk vitest run          # Vitest failures only (99.5%)
+rtk playwright test     # Playwright failures only (94%)
+rtk test <cmd>          # Generic test wrapper - failures only
+```
+
+### Git (59-80% savings)
+
+```bash
+rtk git status          # Compact status
+rtk git log             # Compact log (works with all git flags)
+rtk git diff            # Compact diff (80%)
+rtk git show            # Compact show (80%)
+rtk git add             # Ultra-compact confirmations (59%)
+rtk git commit          # Ultra-compact confirmations (59%)
+rtk git push            # Ultra-compact confirmations
+rtk git pull            # Ultra-compact confirmations
+rtk git branch          # Compact branch list
+rtk git fetch           # Compact fetch
+rtk git stash           # Compact stash
+rtk git worktree        # Compact worktree
+```
+
+Note: Git passthrough works for ALL subcommands, even those not explicitly listed.
+
+### GitHub (26-87% savings)
+
+```bash
+rtk gh pr view <num>    # Compact PR view (87%)
+rtk gh pr checks        # Compact PR checks (79%)
+rtk gh run list         # Compact workflow runs (82%)
+rtk gh issue list       # Compact issue list (80%)
+rtk gh api              # Compact API responses (26%)
+```
+
+### Bun & Project Tooling (Token-Optimized Wrappers)
+
+Since RTK does not have a native `bun` subcommand, you MUST use the universal wrappers (`err`, `summary`, `test`) to filter Bun commands:
+
+```bash
+rtk summary bun install         # Heuristic summary of install output
+rtk err bun run <script>        # Show only errors/warnings (e.g., rtk err bun run typecheck)
+rtk err bunx <cmd>              # Show only errors for CLI commands
+rtk err bun moon <args>         # Filter Moon task runner output to errors only
+rtk test bun moon run pwa:test  # Generic test wrapper - failures only
+rtk summary bun run deps:check  # Summary of Syncpack dependency check
+rtk prisma                      # Prisma natively supported (no wrapper needed)
+```
+
+### Files & Search (60-75% savings)
+
+```bash
+rtk ls <path>           # Tree format, compact (65%)
+rtk read <file>         # Code reading with filtering (60%)
+rtk grep <pattern>      # Search grouped by file (75%)
+rtk find <pattern>      # Find grouped by directory (70%)
+```
+
+### Analysis & Debug (70-90% savings)
+
+```bash
+rtk err <cmd>           # Filter errors only from any command
+rtk log <file>          # Deduplicated logs with counts
+rtk json <file>         # JSON structure without values
+rtk deps                # Dependency overview
+rtk env                 # Environment variables compact
+rtk summary <cmd>       # Smart summary of command output
+rtk diff                # Ultra-compact diffs
+```
+
+### Infrastructure (85% savings)
+
+```bash
+rtk docker ps           # Compact container list
+rtk docker images       # Compact image list
+rtk docker logs <c>     # Deduplicated logs
+rtk kubectl get         # Compact resource list
+rtk kubectl logs        # Deduplicated pod logs
+```
+
+### Network (65-70% savings)
+
+```bash
+rtk curl <url>          # Compact HTTP responses (70%)
+rtk wget <url>          # Compact download output (65%)
+```
+
+### Meta Commands
+
+```bash
+rtk gain                # View token savings statistics
+rtk gain --history      # View command history with savings
+rtk discover            # Analyze Claude Code sessions for missed RTK usage
+rtk proxy <cmd>         # Run command without filtering (for debugging)
+rtk init                # Add RTK instructions to CLAUDE.md
+rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
+```
+
+## Token Savings Overview
+
+| Category         | Commands                       | Typical Savings |
+| ---------------- | ------------------------------ | --------------- |
+| Tests            | vitest, playwright, cargo test | 90-99%          |
+| Build            | next, tsc, lint, prettier      | 70-87%          |
+| Git              | status, log, diff, add, commit | 59-80%          |
+| GitHub           | gh pr, gh run, gh issue        | 26-87%          |
+| Package Managers | rtk summary bun, rtk err bun   | 70-90%          |
+| Files            | ls, read, grep, find           | 60-75%          |
+| Infrastructure   | docker, kubectl                | 85%             |
+| Network          | curl, wget                     | 65-70%          |
+
+Overall average: **60-90% token reduction** on common development operations.
+
+<!-- /rtk-instructions -->

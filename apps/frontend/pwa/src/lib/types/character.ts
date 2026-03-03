@@ -12,7 +12,9 @@ export interface Character {
   tags: string[];
   creator: string;
   character_version: string;
-  extensions: Record<string, any>;
+  extensions: Record<string, unknown>;
+  avatarUrl?: string;
+  voiceConfigId?: string;
 }
 
 export interface CharacterCardV2 {

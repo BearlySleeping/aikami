@@ -2,11 +2,11 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { DeviceData, DeviceType, LogLevel } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { DeviceData, DeviceType, LogLevel } from '@aikami/types/index.ts';
 
-import { isMobileDevice } from '@aikami/utils';
-import logger from '$logger';
+import { isMobileDevice } from '@aikami/utils/index.ts';
+import logger from '$logger/index.ts';
 
 export type AppServiceOptions = BaseFrontendClassOptions;
 

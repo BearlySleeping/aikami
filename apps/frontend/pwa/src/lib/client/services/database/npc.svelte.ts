@@ -3,8 +3,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { NpcData } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { NpcData } from '@aikami/types/index.ts';
 
 export type NpcServiceOptions = BaseFrontendClassOptions;
 

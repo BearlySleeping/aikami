@@ -1,0 +1,74 @@
+# apps/frontend/game2/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+stack: 'frontend'
+tags:
+  - 'game2'
+  - 'godotjs'
+  - 'game'
+
+toolchains:
+  javascript: false
+
+project:
+  title: 'Game2'
+  description: 'GodotJS game project using TypeScript.'
+  channel: '#game-dev'
+  owner: 'Game Team'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'tests/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'project.godot'
+    - 'biome.json'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  dev:
+    command: 'npm run dev'
+    preset: 'server'
+  build:
+    command: 'npm run build'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  generate:
+    command: 'npm run generate'
+    inputs:
+      - '@group(sources)'
+  lintWrite:
+    command: 'npm run lint:write'
+    inputs:
+      - '@group(sources)'
+  formatWrite:
+    command: 'npm run format:write'
+    inputs:
+      - '@group(sources)'
+  typecheck:
+    command: 'npm run typecheck'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  validate:
+    command: 'npm run validate'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+  test:
+    command: 'npm run test'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  open-editor:
+    command: 'npm run open-editor'
+  watch:
+    command: 'npm run watch'
+    preset: 'utility'

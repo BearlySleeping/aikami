@@ -1,7 +1,8 @@
 <script lang="ts">
+import t from '$i18n.ts';
 import { getNavigationDrawerViewModel } from './navigation-drawer-view-model.svelte.ts';
 
-const _viewModel = getNavigationDrawerViewModel({
+const viewModel = getNavigationDrawerViewModel({
   className: 'NavigationDrawerViewModel',
 });
 </script>
@@ -72,7 +73,7 @@ const _viewModel = getNavigationDrawerViewModel({
                         d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                     />
                 </svg>
-                Logout
+                {t.logout()}
             </button>
         </li>
     </ul>

@@ -16,6 +16,7 @@ export const confirmTermsAndService = async (
       updateUserClaimsOptional(uid, userUpdateData),
       updateUserData(uid, userUpdateData),
     ]);
+    return undefined;
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   } catch (error) {
     logger.error('confirmTermsAndService', error);

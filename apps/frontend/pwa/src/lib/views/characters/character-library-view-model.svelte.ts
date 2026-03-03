@@ -1,3 +1,4 @@
+import type { Character } from '$lib/types/character.ts';
 import { characterService } from '$services/index.ts';
 
 export class CharacterLibraryViewModel {
@@ -11,7 +12,7 @@ export class CharacterLibraryViewModel {
     }
   }
 
-  selectCharacter(char: any) {
+  selectCharacter(char: Character) {
     characterService.selectCharacter(char);
   }
 }

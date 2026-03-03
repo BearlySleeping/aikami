@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { CurrentUser } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { CurrentUser } from '@aikami/types/index.ts';
 import t from '$i18n.ts';
-import type { RouteName } from '$router';
+import type { RouteName } from '$router.ts';
 import { appService, authService, routerService } from '$services/index.ts';
 
 export type ProfileMenuOption = {
@@ -114,7 +114,7 @@ class AppBarViewModel
   appBarTitle = $derived.by(() => {
     switch (this.currentRoute) {
       case 'dashboard':
-        return 'Dashboard';
+        return t.dashboard();
       case 'settings':
         return t.settings();
       case 'login':
@@ -129,12 +129,12 @@ class AppBarViewModel
   profileMenuOptions = $derived<ProfileMenuOption[]>([
     {
       icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-      text: 'Profile',
+      text: t.profile(),
       click: () => this.goToProfile(),
     },
     {
       icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2V7zm16 4l-4-4h8l-4 4z',
-      text: 'Dashboard',
+      text: t.dashboard(),
       click: () => this.goToDashboard(),
     },
     {

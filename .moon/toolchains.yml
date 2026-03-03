@@ -1,9 +1,8 @@
 # .moon/toolchains.yml
 
 bun:
-  version: "1.1.31"
+  version: "latest"
 
 javascript:
   packageManager: "bun"
   syncProjectWorkspaceDependencies: true
-  rootPackageDependenciesOnly: true

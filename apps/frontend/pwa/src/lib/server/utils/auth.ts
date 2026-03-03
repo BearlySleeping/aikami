@@ -1,12 +1,12 @@
 import { getAuth } from '@aikami/backend/configs/auth.ts';
 import { deleteCookie, getCookie } from '@aikami/backend/svelte-kit/cookies.ts';
 import { toUserSessionDataFromToken } from '@aikami/backend/utils/auth.ts';
-import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
-import type { UserSessionData } from '@aikami/types';
+import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants/index.ts';
+import type { UserSessionData } from '@aikami/types/index.ts';
 import { type Cookies, redirect } from '@sveltejs/kit';
 import type { FirebaseError } from 'firebase-admin';
-import logger from '$logger';
-import { toRouteHref } from '$router';
+import logger from '$logger/index.ts';
+import { toRouteHref } from '$router.ts';
 
 /**
  * Same as {@link getUserSession} but redirects to login page if user is not

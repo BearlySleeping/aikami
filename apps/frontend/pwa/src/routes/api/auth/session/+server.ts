@@ -1,8 +1,8 @@
 import { getAuth } from '@aikami/backend/configs/auth.ts';
 import { onSvelteKitAPICall } from '@aikami/backend/svelte-kit/api.ts';
 import { deleteCookie, sessionAge, setCookie } from '@aikami/backend/svelte-kit/cookies.ts';
-import type { PWACalls } from '@aikami/types';
-import logger from '$logger';
+import type { PWACalls } from '@aikami/types/index.ts';
+import logger from '$logger/index.ts';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = (event) =>

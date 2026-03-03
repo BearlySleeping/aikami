@@ -1,9 +1,13 @@
-import type { AppLoadingData, ConfirmDialogData, SnackbarData } from '@aikami/frontend/services';
+import type {
+  AppLoadingData,
+  ConfirmDialogData,
+  SnackbarData,
+} from '@aikami/frontend/services/index.ts';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/index.ts';
 import { dialogService } from '$services/index.ts';
 
 export type AppDialogsViewModelOptions = BaseViewModelOptions;

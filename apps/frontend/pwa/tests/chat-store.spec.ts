@@ -1,22 +1,49 @@
 import { expect, test } from '@playwright/test';
 
+type MockChatMessage = {
+  id: string;
+  text: string;
+  sender: 'user' | 'ai';
+  timestamp: Date;
+};
+
 test('basic test', () => {
   expect(1 + 1).toBe(2);
 });
 
 test('store interface test', () => {
-  const mockStore = {
-    messages: [] as any[],
+  const mockStore: {
+    messages: MockChatMessage[];
+    isLoading: boolean;
+    isSending: boolean;
+    isTyping: boolean;
+    error: string | null;
+    setLoading: (loading: boolean) => void;
+    setSending: (sending: boolean) => void;
+    setTyping: (typing: boolean) => void;
+    setError: (error: string | null) => void;
+    addMessage: (message: MockChatMessage) => void;
+    setMessages: (messages: MockChatMessage[]) => void;
+    appendAIMessage: (text: string) => void;
+    updateLastAIMessage: (text: string) => void;
+    clear: () => void;
+  } = {
+    messages: [],
     isLoading: false,
     isSending: false,
     isTyping: false,
-    error: null as string | null,
+    error: null,
     setLoading: (_loading: boolean) => {},
     setSending: (_sending: boolean) => {},
     setTyping: (_typing: boolean) => {},
     setError: (_error: string | null) => {},
-    addMessage: (_message: any) => {},
-    setMessages: (_messages: any[]) => {},
+    addMessage: (_message: {
+      id: string;
+      text: string;
+      sender: 'user' | 'ai';
+      timestamp: Date;
+    }) => {},
+    setMessages: (_messages: MockChatMessage[]) => {},
     appendAIMessage: (_text: string) => {},
     updateLastAIMessage: (_text: string) => {},
     clear: () => {},

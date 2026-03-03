@@ -187,6 +187,10 @@ export const createPersona = async (
     ...personaSheet,
     avatarUrl: imageUrl,
     uid: user.id,
+    isActive: false,
+    temporaryHitPoints: 0,
+    savingThrows: [],
+    skills: [],
   });
 
   logger.log(`Successfully created character ${persona.id} for user ${user.id}`);

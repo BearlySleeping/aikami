@@ -1,0 +1,37 @@
+{
+  "name": "@aikami/game2",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "godot-ts build",
+    "dev": "npm-run-all build generate -p watch watch-generate open-editor",
+    "generate": "godot-ts generate",
+    "open-editor": "godot -e --path .",
+    "start": "npm run build && godot",
+    "watch": "godot-ts watch",
+    "watch-generate": "nodemon --exec \"godot-ts generate\" -e gd",
+    "lint": "biome lint .",
+    "lint:write": "biome lint --write .",
+    "lint:ci": "biome ci src/",
+    "format": "biome format .",
+    "format:write": "biome format --write .",
+    "format:ci": "biome ci src/",
+    "check": "biome check src/",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run check && npm run typecheck",
+    "test": "godot --test --test-case=\"[jsb]*\""
+  },
+  "devDependencies": {
+    "@godot-js/godot-ts": "0.0.8",
+    "@types/node": "25.3.2",
+    "@biomejs/biome": "2.4.0",
+    "nodemon": "3.1.14",
+    "npm-run-all2": "8.0.4",
+    "typescript": "5.9.3"
+  },
+  "godot-ts": {
+    "src": ".",
+    "out": "./.godot/GodotJS",
+    "minifyClasses": false
+  }
+}

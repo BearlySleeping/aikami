@@ -44,3 +44,22 @@ export const getNpcsCollectionPath = (): string => 'npcs';
 
 export const getNpcDocumentPath = (options: { npcId: string }): string =>
   `${getNpcsCollectionPath()}/${options.npcId}`;
+
+// Group Chats
+export const getGroupChatsCollectionPath = (options: { uid: string }): string =>
+  `${getUserDocumentPath(options)}/groupChats`;
+
+export const getGroupChatDocumentPath = (options: { uid: string; groupChatId: string }): string =>
+  `${getGroupChatsCollectionPath(options)}/${options.groupChatId}`;
+
+// Group Messages
+export const getGroupMessagesCollectionPath = (options: {
+  uid: string;
+  groupChatId: string;
+}): string => `${getGroupChatDocumentPath(options)}/messages`;
+
+export const getGroupMessageDocumentPath = (options: {
+  uid: string;
+  groupChatId: string;
+  messageId: string;
+}): string => `${getGroupMessagesCollectionPath(options)}/${options.messageId}`;
