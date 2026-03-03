@@ -5,8 +5,8 @@ projects:
   pwa: "apps/frontend/pwa"
   landing-page: "apps/frontend/landing_page"
   docs: "apps/frontend/docs"
+  game2: "apps/frontend/game2"
   functions: "apps/backend/functions"
-  # rules: "apps/backend/rules"
 
   constants: "packages/constants"
   schemas: "packages/schemas"

@@ -2,12 +2,12 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { CurrentUser } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { CurrentUser } from '@aikami/types/index.ts';
 import { goto } from '$app/navigation';
 import { navigating, page } from '$app/state';
-import type { RouteName } from '$router';
-import { appService, authService, routerService } from '$services/index.ts';
+import type { RouteName } from '$router.ts';
+import { appService, authService, onboardingService, routerService } from '$services/index.ts';
 import type { PWAHookData } from '$types/index.ts';
 
 export type AppViewModelOptions = BaseViewModelOptions & {
@@ -101,6 +101,9 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
       page,
       navigating,
     });
+
+    // Check if user needs onboarding
+    await onboardingService.redirectIfNeeded();
   }
 
   handleAppClose(_event: BeforeUnloadEvent): void {}

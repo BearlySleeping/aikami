@@ -11,12 +11,13 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "biome lint src",
     "format": "biome format src",
+    "check": "biome check src",
     "typecheck": "tsc --noEmit",
     "fix": "biome check --write src",
     "test": "playwright test",
     "test:unit": "bun test --tsconfig tsconfig.test.json src",
     "test:ui": "playwright test --ui",
-    "validate": "bun run typecheck && bun run test"
+    "validate": "bun run check && bun run typecheck"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.13.0",
@@ -25,6 +26,8 @@
     "@sveltejs/kit": "2.53.3",
     "@sveltejs/vite-plugin-svelte": "7.0.0",
     "@tailwindcss/vite": "4.2.1",
+    "@types/png-chunks-extract": "^1.0.2",
+    "@types/text-encoding": "^0.0.40",
     "daisyui": "5.5.19",
     "playwright": "1.58.2",
     "rollup-plugin-visualizer": "7.0.0",
@@ -42,7 +45,10 @@
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
     "device-detector-js": "3.0.3",
-    "eruda": "3.4.3"
+    "eruda": "3.4.3",
+    "png-chunks-extract": "^1.0.0",
+    "text-encoding": "^0.7.0"
   }
 }

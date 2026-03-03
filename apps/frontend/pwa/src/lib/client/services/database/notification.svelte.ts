@@ -1,14 +1,14 @@
 import {
   type NotificationRepositoryInterface,
   notificationRepository,
-} from '@aikami/frontend/repositories/notification';
+} from '@aikami/frontend/repositories/notification.ts';
 
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { NotificationData, Subscription } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { NotificationData, Subscription } from '@aikami/types/index.ts';
 
 export type NotificationServiceOptions = BaseFrontendClassOptions & {
   database: NotificationRepositoryInterface;

@@ -1,11 +1,11 @@
-import type { SocialSignInResponse } from '@aikami/frontend/services';
+import type { SocialSignInResponse } from '@aikami/frontend/services/index.ts';
 import {
   BaseFormViewModel,
   type BaseFormViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { CoreFormSchema } from '@aikami/schemas';
-import type { FirebaseSignInProviderName } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import { CoreFormSchema } from '@aikami/schemas/index.ts';
+import type { FirebaseSignInProviderName } from '@aikami/types/index.ts';
 import { z } from 'zod';
 import { authService, routerService } from '$services/index.ts';
 

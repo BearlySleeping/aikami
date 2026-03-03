@@ -1,4 +1,5 @@
 <script lang="ts">
+import t from '$i18n.ts';
 import type { PersonaListViewModelInterface } from './persona-list-view-model.svelte.ts';
 
 type Props = {
@@ -26,15 +27,37 @@ const { viewModel }: Props = $props();
                         class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
                     >
                         {#each viewModel.personas as persona (persona.id)}
-                            <a
-                                href={`/personas/${persona.id}`}
-                                class="card bg-base-200 hover:bg-base-300 transition-colors"
+                            <div
+                                class="card bg-base-200 hover:bg-base-300 transition-colors relative"
+                                class:ring-2={persona.isActive}
+                                class:ring-primary={persona.isActive}
                             >
+                                {#if persona.isActive}
+                                    <div class="absolute top-2 right-2 badge badge-primary">
+                                        Active
+                                    </div>
+                                {/if}
                                 <div class="card-body">
                                     <h3 class="card-title">{persona.name}</h3>
                                     <p>{persona.alignment}</p>
+                                    <div class="card-actions justify-end mt-2">
+                                        {#if !persona.isActive}
+                                            <button
+                                                class="btn btn-sm btn-primary"
+                                                onclick={() => viewModel.setActivePersona(persona.id)}
+                                            >
+                                                Set Active
+                                            </button>
+                                        {/if}
+                                        <a
+                                            href={`/personas/${persona.id}`}
+                                            class="btn btn-sm btn-ghost"
+                                        >
+                                            Edit
+                                        </a>
+                                    </div>
                                 </div>
-                            </a>
+                            </div>
                         {/each}
                     </div>
                 {/if}

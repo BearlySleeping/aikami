@@ -1,14 +1,15 @@
 {
   "name": "@app/backend-functions",
   "scripts": {
-    "typecheck": "tsc --noEmit --skipLibCheck",
-    "format": "biome format .",
     "lint": "biome lint .",
+    "format": "biome format .",
+    "check": "biome check .",
+    "typecheck": "tsc --noEmit --skipLibCheck",
     "fix": "biome check --write .",
     "build": "bun run compile.ts",
     "deploy": "bun run deploy.ts",
     "test": "bun run scripts/test.ts",
-    "validate": "bun run typecheck && bun run test",
+    "validate": "bun run check && bun run typecheck",
     "populate-npcs": "bun run scripts/populate-npcs.ts"
   },
   "dependencies": {

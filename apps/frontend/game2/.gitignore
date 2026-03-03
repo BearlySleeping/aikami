@@ -1,0 +1,15 @@
+.godot/
+node_modules/
+dist/
+builds/
+*.import
+*.o
+*.os
+*.pyc
+*.so
+*.dylib
+.DS_Store
+*.local
+.env
+.env.*
+!.env.example

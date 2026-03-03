@@ -1,10 +1,13 @@
-import { type UserRepositoryInterface, userRepository } from '@aikami/frontend/repositories/user';
+import {
+  type UserRepositoryInterface,
+  userRepository,
+} from '@aikami/frontend/repositories/user.ts';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { DocumentObservable, UserData, UserUpdateData } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { DocumentObservable, UserData, UserUpdateData } from '@aikami/types/index.ts';
 
 export type UserServiceOptions = BaseFrontendClassOptions & {
   database: UserRepositoryInterface;

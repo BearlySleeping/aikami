@@ -2,7 +2,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/index.ts';
 import { routerService } from '$services/index.ts';
 
 export type DashboardViewModelOptions = BaseViewModelOptions;

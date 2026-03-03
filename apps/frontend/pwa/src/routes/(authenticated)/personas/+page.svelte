@@ -1,7 +1,8 @@
 <script lang="ts">
-import { getPersonaListViewModel } from '$lib/views/persona/list/persona-list-view-model.svelte.ts';
+import PersonaListView from '$views/persona/list/PersonaListView.svelte';
+import { getPersonaListViewModel } from '$views/persona/list/persona-list-view-model.svelte.ts';
 
-const _viewModel = getPersonaListViewModel({
+const viewModel = getPersonaListViewModel({
   className: 'PersonaListViewModel',
 });
 </script>

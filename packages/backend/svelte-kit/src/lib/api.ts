@@ -53,8 +53,6 @@ export const onSvelteKitAPICall = async <
 
     // Throw the final, formatted error for SvelteKit to handle.
     throw error(appError.cause.statusCode, {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error We don't declare app.d.ts in the lib project, but do it in the apps
       details: appError.cause.details,
       message: appError.message,
       type: appError.cause.errorType,
