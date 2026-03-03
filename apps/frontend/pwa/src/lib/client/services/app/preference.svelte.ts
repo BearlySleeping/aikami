@@ -2,8 +2,8 @@ import {
   type BaseFrontendClassOptions,
   type CorePreferenceProviderInterface,
   CorePreferenceProviderService,
-} from '@aikami/frontend/services';
-import type { SupportedLocale } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { SupportedLocale } from '@aikami/types/index.ts';
 
 export type FCMCachedData = {
   disabled?: boolean;

@@ -2,8 +2,8 @@ import {
   BaseFormViewModel,
   type BaseFormViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { CoreFormSchema } from '@aikami/schemas';
+} from '@aikami/frontend/services/index.ts';
+import { CoreFormSchema } from '@aikami/schemas/index.ts';
 import { z } from 'zod';
 import { authService } from '$services/index.ts';
 import type { LoginViewModelInterface } from '../login-view-model.svelte.ts';

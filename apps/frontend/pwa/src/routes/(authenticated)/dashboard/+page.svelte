@@ -1,7 +1,8 @@
 <script lang="ts">
-import { getDashboardViewModel } from '$lib/views/dashboard/dashboard-view-model.svelte.ts';
+import DashboardView from '$views/dashboard/DashboardView.svelte';
+import { getDashboardViewModel } from '$views/dashboard/dashboard-view-model.svelte.ts';
 
-const _viewModel = getDashboardViewModel({
+const viewModel = getDashboardViewModel({
   className: 'DashboardViewModel',
 });
 </script>

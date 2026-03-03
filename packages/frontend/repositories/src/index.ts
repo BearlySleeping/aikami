@@ -1,3 +1,4 @@
+export * from './lib/group-chat.ts';
 export * from './lib/message.ts';
 export * from './lib/notification.ts';
 export * from './lib/npc.ts';

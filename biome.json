@@ -1,12 +1,20 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": true
+    "ignoreUnknown": true,
+    "includes": [
+      "apps/frontend/pwa/**",
+      "apps/frontend/docs/**",
+      "apps/frontend/landing_page/**",
+      "apps/backend/functions/**",
+      "apps/backend/rules/**",
+      "packages/**"
+    ]
   },
   "formatter": {
     "enabled": true,

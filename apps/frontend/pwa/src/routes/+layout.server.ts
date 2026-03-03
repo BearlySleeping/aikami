@@ -1,5 +1,5 @@
-import type { LogLevel } from '@aikami/types';
-import type { RouteName } from '$router';
+import type { LogLevel } from '@aikami/types/index.ts';
+import type { RouteName } from '$router.ts';
 import type { PWAHookData } from '$types/index.ts';
 import type { LayoutServerLoad } from './$types';
 

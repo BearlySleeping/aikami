@@ -78,7 +78,5 @@ export const makeOptionalFieldsToServerDelete = <Schema extends z.ZodObject<z.Zo
     // eslint-disable-next-line
     // @ts-expect-error ignore
   }, {});
-  // eslint-disable-next-line
-  // @ts-expect-error ignore
   return z.object(newProps);
 };

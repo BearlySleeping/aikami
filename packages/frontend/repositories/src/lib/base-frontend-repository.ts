@@ -481,7 +481,7 @@ export class FrontendRepository<T extends RepositoryType>
     this.debug('getQuery', constraints);
 
     return query<z.infer<T['data']>, z.infer<T['data']>>(
-      // @ts-expect-error Firebase don't require index signature
+      // @ts-expect-error Firebase CollectionReference is not assignable to Query generic
       collection(firestore, collectionPath),
       ...constraints,
     );
@@ -688,7 +688,7 @@ export class FrontendRepository<T extends RepositoryType>
     }
 
     return query<z.infer<T['data']>, z.infer<T['data']>>(
-      // @ts-expect-error Firebase require index signature
+      // @ts-expect-error Firebase Query generic type incompatibility with CollectionReference
       options.collectionGroupName
         ? await this.getCollectionGroupReference(options.collectionGroupName)
         : await this.getCollectionReference(options.getCollectionPathArgument),

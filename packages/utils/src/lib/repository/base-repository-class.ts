@@ -194,7 +194,7 @@ export abstract class BaseRepository<T extends RepositoryType> extends BaseClass
   protected async parse(
     type: 'data' | 'createData' | 'updateData',
     dataToParse: unknown,
-    // deno-lint-ignore no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: Generic parse method returns inferred type
   ): Promise<any> {
     // Implementation's async nature wraps the returned value in Promise<any>
     // Inner helper function (remains the same)

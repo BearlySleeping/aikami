@@ -10,6 +10,9 @@ tags:
   - 'playwright'
   - 'application'
 
+toolchains:
+  javascript: false
+
 project:
   title: 'PWA'
   description: 'Main Progressive Web Application built with SvelteKit.'
@@ -43,10 +46,10 @@ fileGroups:
 
 tasks:
   dev:
-    command: 'bunx vite dev'
+    command: 'bun run dev'
     preset: 'server'
   build:
-    command: 'bunx vite build'
+    command: 'bun run build'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
@@ -54,12 +57,12 @@ tasks:
       - '.svelte-kit'
       - 'build'
   preview:
-    command: 'bunx vite preview'
+    command: 'bun run preview'
     preset: 'server'
   test:
     script: |
       bun run test:unit
-      bun run build && bunx vite preview & PID=$!; sleep 5; bunx playwright test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
+      bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
     deps:
       - 'build'
     inputs:
@@ -72,14 +75,14 @@ tasks:
       - '@group(unitTests)'
       - '@group(sources)'
   test-e2e:
-    script: 'bun run build && bunx vite preview & PID=$!; sleep 5; bunx playwright test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
+    script: 'bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
     deps:
       - 'build'
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-ci:
-    script: 'bun run build && bunx vite preview --host & PID=$!; sleep 8; bunx playwright test --reporter=github; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
+    script: 'bun run build && bun run preview -- --host & PID=$!; sleep 8; bun run test -- --reporter=github; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
     deps:
       - 'build'
     inputs:
@@ -97,6 +100,11 @@ tasks:
       - '@group(configs)'
   format:
     command: 'bun run format'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  check:
+    command: 'bun run check'
     inputs:
       - '@group(sources)'
       - '@group(configs)'

@@ -170,10 +170,8 @@ export const getRoutePath = <T extends RouteName>(options: {
 
   const route = getRoute(routeName);
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment, @typescript-eslint/prefer-ts-expect-error
-  // @ts-expect-error pathParameters can be undefined for the entire router, or be defined for some on another router, in order to
-  // support all possible combinations in different apps, we need to ignore possible ts errors
-  const path = route.getPath(pathParameters);
+  // pathParameters can be undefined for the entire router, or be defined for some on another router
+  const path = (route.getPath as (params: unknown) => string)(pathParameters);
 
   return baseHref + path;
 };

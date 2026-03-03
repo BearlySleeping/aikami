@@ -1,14 +1,18 @@
 {
   "name": "@aikami/backend-configs",
+  "main": "src/index.ts",
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
+    "check": "biome check .",
     "typecheck": "tsc --noEmit",
-    "fix": "biome check --write ."
+    "fix": "biome check --write .",
+    "validate": "bun run check && bun run typecheck"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "dotenv": "^16.4.7"
   }
 }

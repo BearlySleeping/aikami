@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 
 describe('ChatService Mock', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: Test mock service
   let mockChatService: any;
 
   beforeEach(() => {
@@ -25,11 +26,14 @@ describe('ChatService Mock', () => {
         this.error = v;
       },
 
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       addMessage(m: any) {
         this.messages.push(m);
       },
 
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       setMessages(msgs: any[]) {
+        // biome-ignore lint/suspicious/noExplicitAny: Test mock service
         this.messages = msgs.map((msg: any) => ({
           id: msg.id || crypto.randomUUID(),
           text: msg.text,
@@ -168,9 +172,11 @@ describe('ChatService Mock', () => {
 describe('AIService Mock', () => {
   test('should return mock AI response', async () => {
     const mockAIService = {
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       async sendMessageToAI(text: string, _character?: any): Promise<string> {
         return `Mock response to: ${text}`;
       },
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       async createPersona(prompt: string): Promise<any> {
         return {
           id: 'mock-persona-id',
@@ -189,6 +195,7 @@ describe('AIService Mock', () => {
       async sendMessageToAI(text: string): Promise<string> {
         return `Mock: ${text}`;
       },
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       async createPersona(prompt: string): Promise<any> {
         return {
           id: 'mock-persona-id',
@@ -207,6 +214,7 @@ describe('AIService Mock', () => {
 describe('NPC Service Mock', () => {
   test('should return mock NPC', async () => {
     const mockNpcService = {
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       async get(id: string): Promise<any> {
         return {
           id,
@@ -221,6 +229,7 @@ describe('NPC Service Mock', () => {
           notes: 'Test notes',
         };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       async getAll(): Promise<any[]> {
         return [];
       },
@@ -235,9 +244,11 @@ describe('NPC Service Mock', () => {
 
   test('should return empty array for getAll', async () => {
     const mockNpcService = {
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       async get(id: string): Promise<any> {
         return { id, name: 'Test' };
       },
+      // biome-ignore lint/suspicious/noExplicitAny: Test mock service
       async getAll(): Promise<any[]> {
         return [];
       },

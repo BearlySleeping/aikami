@@ -1,10 +1,17 @@
 {
   "name": "@aikami/frontend-services",
+  "main": "src/index.ts",
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
+    "check": "biome check .",
     "typecheck": "tsc --noEmit",
-    "fix": "biome check --write ."
+    "fix": "biome check --write .",
+    "validate": "bun run check && bun run typecheck"
+  },
+  "imports": {
+    "$router": "./src/lib/router/router-utils.ts",
+    "$routes": "../../apps/frontend/pwa/src/lib/constants/routes.ts"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
@@ -12,6 +19,7 @@
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
     "idb-keyval": "6.2.2"
   }
 }

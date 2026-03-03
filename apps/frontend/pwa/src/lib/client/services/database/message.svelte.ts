@@ -6,8 +6,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { DocumentsObservable, MessageCreateData, MessageData } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { DocumentsObservable, MessageCreateData, MessageData } from '@aikami/types/index.ts';
 
 export type MessageServiceOptions = BaseFrontendClassOptions & {
   database: MessageRepositoryInterface;

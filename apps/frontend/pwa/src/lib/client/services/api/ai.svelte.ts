@@ -2,8 +2,14 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { AIMessageData, AIMessageResponse, AIMessageType, PersonaData } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type {
+  AIMessageData,
+  AIMessageResponse,
+  AIMessageType,
+  NpcData,
+  PersonaData,
+} from '@aikami/types/index.ts';
 import { internalAPIService } from './internal.svelte.ts';
 
 export type AIServiceOptions = BaseFrontendClassOptions;
@@ -15,7 +21,7 @@ export type AIServiceInterface = BaseFrontendClassInterface & {
    * @param character The character data.
    * @returns The AI response.
    */
-  sendMessageToAI(text: string, character?: PersonaData): Promise<string | undefined>;
+  sendMessageToAI(text: string, character?: PersonaData | NpcData): Promise<string | undefined>;
 
   /**
    * Creates a character using AI.
@@ -42,13 +48,19 @@ export class AIService extends BaseFrontendClass<AIServiceOptions> implements AI
     }
   }
 
-  async sendMessageToAI(text: string, character?: PersonaData): Promise<string | undefined> {
+  async sendMessageToAI(
+    text: string,
+    character?: PersonaData | NpcData,
+  ): Promise<string | undefined> {
     this.log('sendMessage', { text, character });
     try {
       const response = await this._callAIEndpoint({
         type: 'sendMessage',
         payload: {
           text,
+          context: {
+            messages: [],
+          },
         },
       });
 

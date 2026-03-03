@@ -1,4 +1,4 @@
-import { PersonaSchema } from '@aikami/schemas';
+import { PersonaCreateSchema, PersonaSchema, PersonaUpdateSchema } from '@aikami/schemas';
 import type { RepositoryType } from '@aikami/types';
 import { getPersonaDocumentPath, getPersonasCollectionPath } from '@aikami/utils';
 import {
@@ -8,8 +8,8 @@ import {
 
 export type PersonaRepositoryType = RepositoryType<
   typeof PersonaSchema,
-  never,
-  never,
+  typeof PersonaCreateSchema,
+  typeof PersonaUpdateSchema,
   { uid: string },
   { uid: string; personaId: string }
 >;
@@ -19,9 +19,9 @@ export type PersonaRepositoryInterface = FrontendRepositoryInterface<PersonaRepo
 export const personaRepository: PersonaRepositoryInterface =
   new FrontendRepository<PersonaRepositoryType>({
     className: 'PersonaRepository',
-    createSchema: undefined,
+    createSchema: PersonaCreateSchema,
     getCollectionPath: getPersonasCollectionPath,
     getDocumentPath: getPersonaDocumentPath,
     schema: PersonaSchema,
-    updateSchema: undefined,
+    updateSchema: PersonaUpdateSchema,
   });

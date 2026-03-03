@@ -1,12 +1,14 @@
 {
   "name": "@aikami/backend-utils",
+  "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
     "lint": "biome lint .",
     "format": "biome format .",
+    "check": "biome check .",
     "typecheck": "tsc --noEmit",
     "fix": "biome check --write .",
-    "validate": "bun run typecheck && bun test"
+    "validate": "bun run check && bun run typecheck"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

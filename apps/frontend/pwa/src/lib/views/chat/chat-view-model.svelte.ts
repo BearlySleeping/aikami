@@ -2,8 +2,8 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { MessageCreateData, NpcData } from '@aikami/types';
+} from '@aikami/frontend/services/index.ts';
+import type { MessageCreateData, NpcData } from '@aikami/types/index.ts';
 import {
   aiService,
   authService,
@@ -38,7 +38,7 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   readonly isTyping: boolean;
 
   /** Current error message, if any */
-  readonly error: string | null;
+  readonly chatError: string | null;
 
   /** Array of chat messages */
   readonly messages: typeof chatService.messages;
@@ -85,8 +85,8 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     return chatService.isTyping;
   }
 
-  get error() {
-    return chatService.error;
+  get chatError() {
+    return chatService.errorMessage;
   }
 
   get messages() {
@@ -101,8 +101,8 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
       if (this.npc) {
         await this.loadChatHistory();
       }
-    } catch (error) {
-      this.error('initialize', error);
+    } catch (err) {
+      this.error('initialize', err);
     } finally {
       chatService.setLoading(false);
     }
@@ -143,7 +143,7 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     await this.saveMessage(text, 'user');
 
     try {
-      const response = await aiService.sendMessageToAI(text, this.npc as any);
+      const response = await aiService.sendMessageToAI(text, this.npc ?? undefined);
       if (response) {
         chatService.appendAIMessage(response);
         await this.saveMessage(response, 'ai');

@@ -13,3 +13,4 @@ export * from './database/notification.svelte.ts';
 export * from './database/npc.svelte.ts';
 export * from './database/persona.svelte.ts';
 export * from './database/user.svelte.ts';
+export * from './dice-service.svelte.ts';
