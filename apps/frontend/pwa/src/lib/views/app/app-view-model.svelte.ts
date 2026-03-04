@@ -91,19 +91,19 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   showFooter = false;
 
   override async initialize(): Promise<void> {
-    await super.initialize();
-
-    // Initialize services
-    await authService.initialize();
-
     routerService.initialize({
       goto,
       page,
       navigating,
     });
 
+    // Initialize services
+    await authService.initialize();
+
     // Check if user needs onboarding
     await onboardingService.redirectIfNeeded();
+
+    await super.initialize();
   }
 
   handleAppClose(_event: BeforeUnloadEvent): void {}

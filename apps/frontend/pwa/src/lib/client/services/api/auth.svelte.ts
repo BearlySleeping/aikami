@@ -108,34 +108,44 @@ export class AuthService
   isLoggedIn = $derived(!!this.currentUser);
   uid = $derived(this.currentUser?.id);
 
+  /**
+   * Whether the auth state is currently changing.
+   * This is used to prevent multiple auth state changes from happening at the same time.
+   */
+  private _isChangingAuthState = false;
+
+  private _initialized = false;
+
   private get _auth(): FirebaseAuthServiceInterface {
     return this._options.auth;
   }
-
-  private _initialized = false;
 
   private _currentToken: string | undefined;
 
   async initialize(): Promise<void> {
     this.log('initialize');
-    if (this._initialized) {
-      return;
+    try {
+      if (this._initialized) {
+        return;
+      }
+      this._initialized = true;
+
+      await this._auth.onIdTokenChanged(
+        async (user) => {
+          if (this._isChangingAuthState) {
+            return;
+          }
+
+          await this.setAuthUser(user, true);
+        },
+        (error) => {
+          this.error(error.message);
+          this.currentUser = undefined;
+        },
+      );
+    } catch (error) {
+      this.error('initialize', error);
     }
-    this._initialized = true;
-
-    await this._auth.onIdTokenChanged(
-      async (user) => {
-        if (this._isChangingAuthState) {
-          return;
-        }
-
-        await this.setAuthUser(user, true);
-      },
-      (error) => {
-        this.error(error.message);
-        this.currentUser = undefined;
-      },
-    );
   }
 
   async signInWithEmailAndPassword(options: { email: string; password: string }): Promise<boolean> {
@@ -202,11 +212,7 @@ export class AuthService
       };
     }
   }
-  /**
-   * Whether the auth state is currently changing.
-   * This is used to prevent multiple auth state changes from happening at the same time.
-   */
-  private _isChangingAuthState = false;
+
   setIsChangingAuthState(value: boolean): void {
     this.log('setIsChangingAuthState', value);
     this._isChangingAuthState = value;
