@@ -30,7 +30,6 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
 
-    "noEmit": false
   },
   "exclude": ["node_modules", "dist", "build", ".svelte-kit", "tmp"]
 }
