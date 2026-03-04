@@ -2,7 +2,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 
 export type DiceServiceOptions = BaseFrontendClassOptions;
 

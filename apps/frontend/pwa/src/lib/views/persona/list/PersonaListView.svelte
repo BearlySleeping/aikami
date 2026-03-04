@@ -1,5 +1,6 @@
 <script lang="ts">
-import t from '$i18n.ts';
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import type { PersonaListViewModelInterface } from './persona-list-view-model.svelte.ts';
 
 type Props = {

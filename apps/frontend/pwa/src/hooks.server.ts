@@ -1,8 +1,8 @@
-import { toDeviceData } from '@aikami/utils/index.ts';
+import { toDeviceData } from '@aikami/utils';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { getUserSession } from '$lib/server/utils/auth.ts';
-import logger from '$logger/index.ts';
-import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router.ts';
+import logger from '$logger';
+import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
 
 const TEST_MODE_HEADER = 'x-test-mode';
 const TEST_USER_ID_HEADER = 'x-test-user-id';

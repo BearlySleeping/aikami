@@ -7,7 +7,7 @@ import {
   firebaseAuthService,
   type SocialSignInError,
   type SocialSignInResponse,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 import type {
   AuthMessageData,
   AuthMessageResponse,
@@ -16,8 +16,8 @@ import type {
   FirebaseSignInProviderName,
   FirebaseUser,
   RegisterForm,
-} from '@aikami/types/index.ts';
-import { getUserLiteData } from '@aikami/utils/index.ts';
+} from '@aikami/types';
+import { getUserLiteData } from '@aikami/utils';
 import { analyticService } from './analytic.svelte.ts';
 import { internalAPIService } from './internal.svelte.ts';
 

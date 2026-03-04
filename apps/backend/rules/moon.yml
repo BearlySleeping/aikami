@@ -50,11 +50,6 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
-  check:
-    command: 'bun run check'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
   fix:
     command: 'bun run fix'
     inputs:

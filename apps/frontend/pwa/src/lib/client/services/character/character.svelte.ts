@@ -2,9 +2,9 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/index.ts';
-import { authService, storageService } from '$services/index.ts';
-import type { Character } from '$types/index.ts';
+} from '@aikami/frontend/services';
+import { authService, storageService } from '$services';
+import type { Character } from '$types';
 import { CharacterImporter, type CharacterImportResult } from './character-importer.ts';
 
 export type CharacterServiceOptions = BaseFrontendClassOptions;

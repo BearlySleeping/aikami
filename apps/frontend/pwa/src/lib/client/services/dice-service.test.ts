@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 (globalThis as any).$state = (val: any) => val;
 (globalThis as any).$derived = (val: any) => val;
 
-mock.module('@aikami/frontend/services/index.ts', () => {
+mock.module('@aikami/frontend/services', () => {
   return {
     BaseFrontendClass: class BaseFrontendClass {
       constructor(options: any) {}
-    }
+    },
   };
 });
 

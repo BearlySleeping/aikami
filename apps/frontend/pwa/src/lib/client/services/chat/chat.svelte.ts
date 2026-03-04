@@ -2,8 +2,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { MessageData } from '@aikami/types/index.ts';
+} from '@aikami/frontend/services';
+import type { MessageData } from '@aikami/types';
 
 export type ChatServiceOptions = BaseFrontendClassOptions;
 

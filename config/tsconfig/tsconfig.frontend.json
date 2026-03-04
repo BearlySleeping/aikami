@@ -1,7 +1,18 @@
 {
   "extends": ["./tsconfig.base.json", "./tsconfig.paths.shared.json"],
   "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "paths": {
+      "@aikami/constants": ["packages/constants/src/index.ts"],
+      "@aikami/constants/*": ["packages/constants/src/*"],
+      "@aikami/types": ["packages/types/src/index.ts"],
+      "@aikami/types/*": ["packages/types/src/*"],
+      "@aikami/schemas": ["packages/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["packages/schemas/src/*"],
+      "@aikami/logger": ["packages/logger/src/index.ts"],
+      "@aikami/logger/*": ["packages/logger/src/*"],
+      "@aikami/utils": ["packages/utils/src/index.ts"],
+      "@aikami/utils/*": ["packages/utils/src/*"],
       "$logger": ["packages/logger/src/index.ts"],
       "$logger/*": ["packages/logger/src/*"],
       "$router": ["packages/frontend/services/src/lib/router/router-utils.ts"],

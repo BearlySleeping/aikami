@@ -2,9 +2,9 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { PersonaData } from '@aikami/types/index.ts';
-import { authService, personaService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { PersonaData } from '@aikami/types';
+import { authService, personaService } from '$services';
 
 export type PersonaListViewModelOptions = BaseViewModelOptions;
 

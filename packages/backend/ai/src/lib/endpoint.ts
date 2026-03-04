@@ -1,4 +1,4 @@
-// deno-lint-ignore-file no-explicit-any
+// biome-disable-file noExplicitAny
 
 import { getRealTimeDatabase } from '@aikami/backend/configs/realtime-database.ts';
 import { verifyIdToken } from '@aikami/backend/utils/auth.ts';

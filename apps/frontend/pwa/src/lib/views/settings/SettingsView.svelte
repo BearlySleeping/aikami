@@ -1,4 +1,6 @@
 <script lang="ts">
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import type { SettingsViewModelInterface } from './settings-view-model.svelte.ts';
 
 type Props = {

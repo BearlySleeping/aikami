@@ -47,7 +47,7 @@ export type AIApiEvents = {
     },
   ];
   getProviders: [
-    {},
+    { providers: [] },
     {
       providers: { type: AIProviderType; name: string; defaultModel: string }[];
     },

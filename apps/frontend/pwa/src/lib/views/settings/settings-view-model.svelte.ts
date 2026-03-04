@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import { CoreFormSchema } from '@aikami/schemas/index.ts';
+} from '@aikami/frontend/services';
+import { CoreFormSchema } from '@aikami/schemas';
 import { z } from 'zod';
-import { authService, dialogService, routerService } from '$services/index.ts';
+import { authService, dialogService, routerService } from '$services';
 
 const ProfileFormSchema = CoreFormSchema.extend({
   displayName: z.string().min(1, 'Name is required'),

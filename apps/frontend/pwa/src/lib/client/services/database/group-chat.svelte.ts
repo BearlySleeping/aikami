@@ -3,9 +3,9 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { GroupChatData } from '@aikami/schemas/index.ts';
-import { authService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { GroupChatData } from '@aikami/schemas';
+import { authService } from '$services';
 import { npcService } from './npc.svelte.ts';
 
 export type GroupChatServiceOptions = BaseFrontendClassOptions;
