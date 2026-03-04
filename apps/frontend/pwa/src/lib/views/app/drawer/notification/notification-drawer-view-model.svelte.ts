@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { NotificationData } from '@aikami/types/index.ts';
-import { getDate } from '@aikami/utils/index.ts';
-import { appService, authService, notificationService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { NotificationData } from '@aikami/types';
+import { getDate } from '@aikami/utils';
+import { appService, authService, notificationService } from '$services';
 
 export type NotificationDrawerItem = {
   createdAt: Date;

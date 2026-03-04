@@ -8,6 +8,16 @@ This document outlines some of the planned features and improvements for the Aik
 - [x] **AI Dialogue System v1:** Integrate the first version of the AI-powered dialogue system with a few key NPCs. (In Progress)
 - [ ] **Real-time Chat:** Add a real-time chat feature to the PWA for players to communicate.
 
+## PWA Next Phase Tasks
+
+- [ ] **Advanced Context Management:** Implement a LorebookService to inject relevant world data into the AI's context based on activation keywords.
+- [ ] **Chat Interaction Overhaul:** Add Regenerate/Swipe options, Message Editing, and Branching capabilities.
+- [ ] **Character Expressions & Visuals:** Enhance CharacterImporter for multiple expressions and update ChatView to dynamically switch avatars.
+- [ ] **Author's Notes & Prompt Orchestration:** Create a template system for formatting character data and injecting high-priority behavioral instructions.
+- [ ] **RPG Mechanics Integration:** Implement Stat Sheets, chat commands (e.g., /roll d20 + 3), and NPC skill check challenges.
+- [ ] **UI/UX Polishing & PWA Features:** Add Svelte transitions, Dark/Light modes, custom color themes, and improve offline capabilities.
+- [ ] **Enhanced Onboarding:** Create a guided walkthrough for first-time users and a library of Starter Characters.
+
 ## Medium-Term Goals
 
 - [ ] **Basic Inventory System:** Design and implement a basic inventory system for the Godot client and backend.

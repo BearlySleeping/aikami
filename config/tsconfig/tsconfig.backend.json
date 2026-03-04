@@ -1,14 +1,42 @@
 {
   "extends": ["./tsconfig.base.json", "./tsconfig.paths.shared.json"],
   "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "paths": {
+      "@aikami/constants": ["packages/constants/src/index.ts"],
+      "@aikami/constants/*": ["packages/constants/src/*"],
+      "@aikami/types": ["packages/types/src/index.ts"],
+      "@aikami/types/*": ["packages/types/src/*"],
+      "@aikami/schemas": ["packages/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["packages/schemas/src/*"],
+      "@aikami/logger": ["packages/logger/src/index.ts"],
+      "@aikami/logger/*": ["packages/logger/src/*"],
+      "@aikami/utils": ["packages/utils/src/index.ts"],
+      "@aikami/utils/*": ["packages/utils/src/*"],
+      "$logger": ["packages/logger/src/index.ts"],
+      "$logger/*": ["packages/logger/src/*"],
+      "$env/*": ["config/tsconfig/stubs/env/*"],
       "@aikami/backend-configs": ["packages/backend/configs/src/index.ts"],
       "@aikami/backend-configs/*": ["packages/backend/configs/src/*"],
+      "@aikami/backend/configs/app-check.ts": ["packages/backend/configs/src/lib/app-check.ts"],
+      "@aikami/backend/configs/*.ts": ["packages/backend/configs/src/lib/*.ts", "packages/backend/configs/src/*.ts"],
+      "@aikami/backend/configs/*": ["packages/backend/configs/src/lib/*", "packages/backend/configs/src/*"],
       "@aikami/backend-utils": ["packages/backend/utils/src/index.ts"],
       "@aikami/backend-utils/*": ["packages/backend/utils/src/*"],
+      "@aikami/backend/utils/*.ts": ["packages/backend/utils/src/lib/*.ts", "packages/backend/utils/src/*.ts"],
+      "@aikami/backend/utils/*": ["packages/backend/utils/src/lib/*", "packages/backend/utils/src/*"],
       "@aikami/backend-database": ["packages/backend/database/src/index.ts"],
+      "@aikami/backend-database/*": ["packages/backend/database/src/*"],
+      "@aikami/backend/database/*.ts": ["packages/backend/database/src/lib/*.ts", "packages/backend/database/src/*"],
+      "@aikami/backend/database/*": ["packages/backend/database/src/lib/*", "packages/backend/database/src/*"],
       "@aikami/backend-auth": ["packages/backend/auth/src/index.ts"],
-      "@aikami/backend-ai": ["packages/backend/ai/src/index.ts"]
+      "@aikami/backend-auth/*": ["packages/backend/auth/src/*"],
+      "@aikami/backend/auth/*.ts": ["packages/backend/auth/src/lib/*.ts", "packages/backend/auth/src/*.ts"],
+      "@aikami/backend/auth/*": ["packages/backend/auth/src/lib/*", "packages/backend/auth/src/*"],
+      "@aikami/backend-ai": ["packages/backend/ai/src/index.ts"],
+      "@aikami/backend-ai/*": ["packages/backend/ai/src/*"],
+      "@aikami/backend/ai/*.ts": ["packages/backend/ai/src/lib/*.ts", "packages/backend/ai/src/*.ts"],
+      "@aikami/backend/ai/*": ["packages/backend/ai/src/lib/*", "packages/backend/ai/src/*"]
     }
   }
 }

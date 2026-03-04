@@ -56,9 +56,9 @@ export const addMobileLoggerUI = (): void => {
     };
     // (console as any).warn = log;
     const oldLog = console.log; // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    // deno-lint-ignore no-explicit-any
+    // biome-disable-next-line noExplicitAny
     (console as any).mobileLog = log; // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    // deno-lint-ignore no-explicit-any
+    // biome-disable-next-line noExplicitAny
     (console as any).error = function (...items: unknown[]) {
       log(items);
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument

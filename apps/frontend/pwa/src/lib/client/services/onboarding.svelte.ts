@@ -2,9 +2,9 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 import { goto } from '$app/navigation';
-import { authService, personaService } from '$services/index.ts';
+import { authService, personaService } from '$services';
 
 export type OnboardingServiceOptions = BaseFrontendClassOptions;
 

@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
-import logger from '$logger/index.ts';
-import { toRouteHref } from '$router.ts';
+import logger from '$logger';
+import { toRouteHref } from '$router';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = ({ cookies, url }) => {

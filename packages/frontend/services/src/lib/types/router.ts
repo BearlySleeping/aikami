@@ -2,7 +2,7 @@ export type RouteType = 'public' | 'authenticated' | 'unauthenticated';
 
 export type Route = {
   queryParameters: Record<string, string | number | boolean | undefined> | undefined;
-  // deno-lint-ignore no-explicit-any
+  // biome-disable-next-line noExplicitAny
   getPath: (parameters: any) => string;
   routeId: string;
   type: RouteType;

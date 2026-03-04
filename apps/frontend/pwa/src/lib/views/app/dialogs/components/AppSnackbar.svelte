@@ -1,4 +1,5 @@
 <script lang="ts">
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import type { AppDialogsViewModelInterface } from '../app-dialogs-view-model.svelte.ts';
 
 type Props = {
@@ -7,7 +8,7 @@ type Props = {
 
 let { viewModel }: Props = $props();
 
-const _getAlertClass = (type?: string): string => {
+const getAlertClass = (type?: string): string => {
   switch (type) {
     case 'success':
       return 'alert-success';

@@ -4,8 +4,7 @@
   "extends": "../../../config/tsconfig/tsconfig.svelte-kit.json",
   "compilerOptions": {
     "baseUrl": "../../../",
-    "outDir": "dist",
-    "rootDir": "src"
+    "outDir": "dist"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", ".svelte-kit"]

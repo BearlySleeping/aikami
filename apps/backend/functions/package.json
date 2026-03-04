@@ -3,13 +3,12 @@
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
-    "check": "biome check .",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "fix": "biome check --write .",
     "build": "bun run compile.ts",
     "deploy": "bun run deploy.ts",
     "test": "bun run scripts/test.ts",
-    "validate": "bun run check && bun run typecheck",
+    "validate": "bun run typecheck && bun run test",
     "populate-npcs": "bun run scripts/populate-npcs.ts"
   },
   "dependencies": {

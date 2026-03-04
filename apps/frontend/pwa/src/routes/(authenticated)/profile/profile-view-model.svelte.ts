@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { CurrentUser, PersonaData } from '@aikami/types/index.ts';
-import t from '$i18n.ts';
-import { authService, personaService, routerService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { CurrentUser, PersonaData } from '@aikami/types';
+import t from '$i18n';
+import { authService, personaService, routerService } from '$services';
 
 export type ProfileViewModelOptions = BaseViewModelOptions;
 

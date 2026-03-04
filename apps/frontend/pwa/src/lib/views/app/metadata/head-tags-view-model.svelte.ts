@@ -3,8 +3,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
   type RouteName,
-} from '@aikami/frontend/services/index.ts';
-import { routerService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import { routerService } from '$services';
 
 const jsonLd = (data: Record<string, unknown>): string => {
   return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;

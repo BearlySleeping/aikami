@@ -1,13 +1,13 @@
-import type { SocialSignInResponse } from '@aikami/frontend/services/index.ts';
+import type { SocialSignInResponse } from '@aikami/frontend/services';
 import {
   BaseFormViewModel,
   type BaseFormViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import { CoreFormSchema } from '@aikami/schemas/index.ts';
-import type { FirebaseSignInProviderName } from '@aikami/types/index.ts';
+} from '@aikami/frontend/services';
+import { CoreFormSchema } from '@aikami/schemas';
+import type { FirebaseSignInProviderName } from '@aikami/types';
 import { z } from 'zod';
-import { authService, routerService } from '$services/index.ts';
+import { authService, routerService } from '$services';
 
 const LoginFormSchema = CoreFormSchema.extend({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),

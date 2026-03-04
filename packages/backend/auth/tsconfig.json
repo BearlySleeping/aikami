@@ -3,8 +3,7 @@
   "display": "Backend Auth",
   "extends": "../../../config/tsconfig/tsconfig.backend.json",
   "compilerOptions": {
-    "baseUrl": "../../../",
-    "outDir": "dist"
+    "baseUrl": "../../.."
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

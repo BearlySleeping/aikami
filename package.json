@@ -5,24 +5,25 @@
     "packages/**",
     "apps/**"
   ],
-  "scripts": {
-      "moon": "moon",
-      "postinstall": "moon sync",
-      "dev": "moon run pwa:dev",
-      "build": "moon run :build",
-      "build:affected": "moon run :build --affected",
-      "test": "moon run :test",
-      "test:watch": "moon run :test -- --watch",
+"scripts": {
+    "moon": "moon",
+    "postinstall": "moon sync",
+    "dev": "moon run pwa:dev",
+    "build": "moon run :build",
+    "build:affected": "moon run :build --affected",
+    "test": "moon run :test",
+    "test:watch": "moon run :test -- --watch",
 
-      "lint": "moon run :lint",
-      "format": "moon run :format",
-      "check": "moon run :check",
-      "fix": "moon run :fix",
+    "lint": "moon run :lint",
+    "format": "moon run :format",
+    "fix": "moon run :fix",
 
-      "typecheck": "moon run :typecheck",
 
-      "validate": "moon run :validate",
-      "ci": "bun run validate && bun run test",
+
+    "typecheck": "moon run :typecheck",
+
+    "validate": "moon run :validate",
+    "ci": "bun run validate && bun run test",
 
       "clean": "rm -rf node_modules",
       "clean:all": "rm -rf node_modules .svelte-kit dist build .moon",

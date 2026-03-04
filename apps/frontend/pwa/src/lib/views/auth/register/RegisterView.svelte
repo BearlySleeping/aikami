@@ -1,7 +1,9 @@
 <script lang="ts">
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import { getRegisterViewModel } from './register-view-model.svelte.ts';
 
-const _viewModel = getRegisterViewModel({ className: 'RegisterView' });
+const viewModel = getRegisterViewModel({ className: 'RegisterView' });
 </script>
 
 <BaseViewModelContainer

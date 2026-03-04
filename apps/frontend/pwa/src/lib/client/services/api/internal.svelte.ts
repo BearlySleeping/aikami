@@ -2,8 +2,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/index.ts';
-import { callSvelteKitAPI } from '@aikami/frontend/utils/index.ts';
+} from '@aikami/frontend/services';
+import { callSvelteKitAPI } from '@aikami/frontend/utils';
 import type {
   AIMessageData,
   AIMessageResponse,
@@ -15,8 +15,8 @@ import type {
   PWACallRequest,
   PWACallResponse,
   PWACalls,
-} from '@aikami/types/index.ts';
-import { toAppErrorFromUnknownError } from '@aikami/utils/index.ts';
+} from '@aikami/types';
+import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { authService } from './auth.svelte.ts';
 
 export type InternalAPIServiceOptions = BaseFrontendClassOptions;

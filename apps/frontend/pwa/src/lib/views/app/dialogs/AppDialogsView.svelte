@@ -1,7 +1,11 @@
 <script lang="ts">
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import { getAppDialogsViewModel } from './app-dialogs-view-model.svelte.ts';
+import AppLoading from './components/AppLoading.svelte';
+import AppSnackbar from './components/AppSnackbar.svelte';
+import ConfirmDialog from './components/ConfirmDialog.svelte';
 
-const _viewModel = getAppDialogsViewModel({ className: 'AppDialogsView' });
+const viewModel = getAppDialogsViewModel({ className: 'AppDialogsView' });
 </script>
 
 <BaseViewModelContainer {viewModel}>

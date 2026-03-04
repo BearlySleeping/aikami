@@ -2,15 +2,15 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { MessageCreateData, NpcData } from '@aikami/types/index.ts';
+} from '@aikami/frontend/services';
+import type { MessageCreateData, NpcData } from '@aikami/types';
 import {
   aiService,
   authService,
   chatService,
   messageService,
   npcService,
-} from '$services/index.ts';
+} from '$services';
 
 /**
  * Options for creating a ChatViewModel instance.

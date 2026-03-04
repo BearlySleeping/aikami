@@ -11,18 +11,18 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "biome lint src",
     "format": "biome format src",
-    "check": "biome check src",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "fix": "biome check --write src",
     "test": "playwright test",
     "test:unit": "bun test --tsconfig tsconfig.test.json src",
     "test:ui": "playwright test --ui",
-    "validate": "bun run check && bun run typecheck"
+    "validate": "bun run typecheck && bun run test"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.13.0",
     "@playwright/test": "1.58.2",
     "@sveltejs/adapter-auto": "7.0.1",
+    "@sveltejs/adapter-node": "^5.5.4",
     "@sveltejs/kit": "2.53.3",
     "@sveltejs/vite-plugin-svelte": "7.0.0",
     "@tailwindcss/vite": "4.2.1",

@@ -1,5 +1,5 @@
-import { supportedLocales } from '@aikami/constants';
-import { z } from 'zod';
+import { supportedLocales } from "@aikami/constants";
+import { z } from "zod";
 
 /**
  * The supported language codes on the public pwa and flutter app.
@@ -7,4 +7,7 @@ import { z } from 'zod';
  */
 export const SupportedLocaleSchema = z.enum(supportedLocales);
 
-export const LocaleDataSchema = z.record(SupportedLocaleSchema, z.string().optional());
+export const LocaleDataSchema = z.record(
+	SupportedLocaleSchema,
+	z.string().optional(),
+);

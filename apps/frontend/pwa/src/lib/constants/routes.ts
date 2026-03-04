@@ -1,4 +1,4 @@
-import type { Routes } from '@aikami/frontend/services/index.ts';
+import type { Routes } from '@aikami/frontend/services';
 
 export {
   type AllRoutes,
@@ -9,7 +9,7 @@ export {
   toRouteHref,
   toRoutePathFromRouteId,
   toRoutePathFromURL,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 
 export const routes = {
   login: {

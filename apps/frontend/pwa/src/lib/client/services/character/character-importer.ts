@@ -1,5 +1,13 @@
-import { Buffer } from 'node:buffer';
 import type { Character, CharacterCardV2 } from '$lib/types/character.ts';
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
 
 export type CharacterImportResult = {
   character: Character;
@@ -16,7 +24,7 @@ export class CharacterImporter {
     }
 
     if (textChunks.chara) {
-      const decoded = new TextDecoder().decode(Buffer.from(textChunks.chara, 'base64'));
+      const decoded = new TextDecoder().decode(base64ToUint8Array(textChunks.chara));
       try {
         const json = JSON.parse(decoded);
         if (json.spec === 'chara_card_v2') {
@@ -31,7 +39,7 @@ export class CharacterImporter {
     }
 
     if (textChunks.cbar) {
-      const decoded = new TextDecoder().decode(Buffer.from(textChunks.cbar, 'base64'));
+      const decoded = new TextDecoder().decode(base64ToUint8Array(textChunks.cbar));
       try {
         const json = JSON.parse(decoded);
         if (json.name && json.description) {

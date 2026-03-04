@@ -1,4 +1,4 @@
-import { toAppError } from '@aikami/utils/index.ts';
+import { toAppError } from '@aikami/utils';
 import extractChunks from 'png-chunks-extract';
 
 /**

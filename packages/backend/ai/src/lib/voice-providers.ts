@@ -7,7 +7,7 @@ import {
   VoiceProviderCapabilities,
   VoiceProviderInterface,
   VoiceSettings,
-} from '$types/index.ts';
+} from '@aikami/schemas';
 
 export class ElevenLabsProvider implements VoiceProviderInterface {
   readonly name = 'ElevenLabs';
@@ -26,7 +26,7 @@ export class ElevenLabsProvider implements VoiceProviderInterface {
   }
 
   async generate(request: VoiceGenerationRequest): Promise<VoiceGenerationResult> {
-    const startTime = Date.now();
+    const _startTime = Date.now();
 
     const voiceId = request.voiceId || 'rachel';
     const settings = request.settings || DEFAULT_VOICE_SETTINGS;
@@ -139,7 +139,7 @@ export class SileroProvider implements VoiceProviderInterface {
   private baseUrl = 'https://api.silero.ai';
 
   async generate(request: VoiceGenerationRequest): Promise<VoiceGenerationResult> {
-    const startTime = Date.now();
+    const _startTime = Date.now();
 
     const voiceId = request.voiceId || 'aidar_48khz';
     const settings = request.settings || DEFAULT_VOICE_SETTINGS;
@@ -256,7 +256,7 @@ export class CoquiProvider implements VoiceProviderInterface {
   }
 
   async generate(request: VoiceGenerationRequest): Promise<VoiceGenerationResult> {
-    const startTime = Date.now();
+    const _startTime = Date.now();
 
     const voiceId = request.voiceId || 'female-voice-1';
     const settings = request.settings || DEFAULT_VOICE_SETTINGS;

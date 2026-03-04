@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import adapter from '@sveltejs/adapter-auto';
+import adapter from '@sveltejs/adapter-node';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +24,9 @@ const config = {
   preprocess: [vitePreprocess()],
   extensions: ['.svelte', '.svx'],
   kit: {
-    adapter: adapter(),
+    adapter: adapter({
+      out: 'build',
+    }),
     alias: {
       '$components/*': toSrcPath('lib/components/*'),
       $i18n: toSrcPath('lib/client/utils/i18n'),

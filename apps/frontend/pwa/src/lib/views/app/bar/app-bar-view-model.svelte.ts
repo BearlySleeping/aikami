@@ -2,11 +2,11 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { CurrentUser } from '@aikami/types/index.ts';
-import t from '$i18n.ts';
-import type { RouteName } from '$router.ts';
-import { appService, authService, routerService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { CurrentUser } from '@aikami/types';
+import t from '$i18n';
+import type { RouteName } from '$router';
+import { appService, authService, routerService } from '$services';
 
 export type ProfileMenuOption = {
   icon: string;

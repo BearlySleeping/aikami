@@ -1,4 +1,5 @@
 {
+  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -14,56 +15,15 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
-    "paths": {
-      "$components/*": ["./src/lib/components/*"],
-      "$i18n": ["./src/lib/client/utils/i18n"],
-      "$i18n/*": ["./src/lib/client/utils/i18n/*"],
-      "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"],
-      "$router": ["./src/lib/server/router.ts"],
-      "$routes": ["./src/lib/constants/routes"],
-      "$routes/*": ["./src/lib/constants/routes/*"],
-      "$logger": ["./src/lib/logger"],
-      "$services": ["./src/lib/client/services"],
-      "$services/*": ["./src/lib/client/services/*"],
-      "$types": ["./src/lib/types"],
-      "$types/*": ["./src/lib/types/*"],
-      "$utils": ["./src/lib/utils"],
-      "$utils/*": ["./src/lib/utils/*"],
-      "$views/*": ["./src/lib/views/*"],
-      "$mock-services": ["./src/lib/client/services-mock"],
-      "$mock-services/*": ["./src/lib/client/services-mock/*"],
-      "@aikami/backend/svelte-kit/*": ["./src/lib/backend/*"],
-      "@aikami/backend/database/*": ["./src/lib/backend/database/*"],
-      "@aikami/backend/auth/*": ["./src/lib/backend/auth/*"],
-      "@aikami/backend/ai/*": ["./src/lib/backend/ai/*"],
-      "@aikami/backend/utils/*": ["./src/lib/backend/utils/*"],
-      "@aikami/backend/configs/*": ["./src/lib/backend/configs/*"],
-      "@aikami/constants/index.ts": ["../../../packages/constants/src/index.ts"],
-      "@aikami/constants": ["../../../packages/constants/src/index.ts"],
-      "@aikami/schemas/index.ts": ["../../../packages/schemas/src/index.ts"],
-      "@aikami/schemas": ["../../../packages/schemas/src/index.ts"],
-      "@aikami/types/index.ts": ["../../../packages/types/src/index.ts"],
-      "@aikami/types": ["../../../packages/types/src/index.ts"],
-      "@aikami/utils/index.ts": ["../../../packages/utils/src/index.ts"],
-      "@aikami/utils": ["../../../packages/utils/src/index.ts"],
-      "@aikami/logger/index.ts": ["../../../packages/logger/src/index.ts"],
-      "@aikami/logger": ["../../../packages/logger/src/index.ts"],
-      "@aikami/frontend/services/index.ts": ["../../../packages/frontend/services/src/index.ts"],
-      "@aikami/frontend/services": ["../../../packages/frontend/services/src/index.ts"],
-      "@aikami/frontend/services/*": ["../../../packages/frontend/services/src/*"],
-      "@aikami/frontend/utils/index.ts": ["../../../packages/frontend/utils/src/index.ts"],
-      "@aikami/frontend/utils": ["../../../packages/frontend/utils/src/index.ts"],
-      "@aikami/frontend/utils/*": ["../../../packages/frontend/utils/src/*"],
-      "@aikami/frontend/repositories/index.ts": [
-        "../../../packages/frontend/repositories/src/index.ts"
-      ],
-      "@aikami/frontend/repositories": ["../../../packages/frontend/repositories/src/index.ts"],
-      "@aikami/frontend/repositories/*": ["../../../packages/frontend/repositories/src/*"]
-    }
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "*.ts",
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts"
+  ],
   "exclude": ["node_modules", ".svelte-kit", "build", "src/lib/paraglide/messages"]
 }

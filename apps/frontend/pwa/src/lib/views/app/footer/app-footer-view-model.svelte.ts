@@ -2,7 +2,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 
 export type AppFooterViewModelOptions = BaseViewModelOptions;
 

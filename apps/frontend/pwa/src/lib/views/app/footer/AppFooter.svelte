@@ -1,7 +1,9 @@
 <script lang="ts">
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import { getAppFooterViewModel } from './app-footer-view-model.svelte.ts';
 
-const _viewModel = getAppFooterViewModel({
+const viewModel = getAppFooterViewModel({
   className: 'AppFooter',
 });
 </script>

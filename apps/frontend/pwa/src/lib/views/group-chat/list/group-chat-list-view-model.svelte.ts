@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { GroupChatData } from '@aikami/schemas/index.ts';
-import type { NpcData } from '@aikami/types/index.ts';
-import { authService, groupChatService, npcService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { GroupChatData } from '@aikami/schemas';
+import type { NpcData } from '@aikami/types';
+import { authService, groupChatService, npcService } from '$services';
 
 export type GroupChatListViewModelOptions = BaseViewModelOptions;
 

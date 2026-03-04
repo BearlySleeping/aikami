@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { PersonaData } from '@aikami/types/index.ts';
-import { toAppErrorFromUnknownError } from '@aikami/utils/index.ts';
-import { aiService, authService, personaService, storageService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { PersonaData } from '@aikami/types';
+import { toAppErrorFromUnknownError } from '@aikami/utils';
+import { aiService, authService, personaService, storageService } from '$services';
 
 export type PersonaCreationViewModelOptions = BaseViewModelOptions & {
   isOnboarding?: boolean;

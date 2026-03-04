@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://c1example00"]
 
-[ext_resource type="Script" path="res://src/scenes/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://.godot/GodotJS/src/scenes/main.js" id="1_main"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")

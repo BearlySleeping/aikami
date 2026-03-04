@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import type { NpcData } from '@aikami/types/index.ts';
-import { toAppErrorFromUnknownError } from '@aikami/utils/index.ts';
-import { npcService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import type { NpcData } from '@aikami/types';
+import { toAppErrorFromUnknownError } from '@aikami/utils';
+import { npcService } from '$services';
 
 export type NpcListViewModelOptions = BaseViewModelOptions;
 

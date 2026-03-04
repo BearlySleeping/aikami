@@ -2,10 +2,10 @@ import {
   BaseFormViewModel,
   type BaseFormViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import { CoreFormSchema } from '@aikami/schemas/index.ts';
+} from '@aikami/frontend/services';
+import { CoreFormSchema } from '@aikami/schemas';
 import { z } from 'zod';
-import { authService } from '$services/index.ts';
+import { authService } from '$services';
 import type { LoginViewModelInterface } from '../login-view-model.svelte.ts';
 
 const ForgotPasswordFormSchema = CoreFormSchema.extend({

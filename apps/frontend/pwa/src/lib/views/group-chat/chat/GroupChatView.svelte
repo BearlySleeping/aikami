@@ -1,5 +1,6 @@
 <script lang="ts">
-import t from '$i18n.ts';
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import type { GroupChatViewModelInterface } from './group-chat-view-model.svelte.ts';
 
 type Props = {

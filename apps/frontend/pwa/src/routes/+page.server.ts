@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { toRouteHref } from '$router.ts';
+import { toRouteHref } from '$router';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals, url }) => {
