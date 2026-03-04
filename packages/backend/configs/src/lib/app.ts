@@ -30,7 +30,6 @@ const getApp = () => {
   }
 
   const serviceAccountString = getEnvironmentValue('FIREBASE_SERVICE_ACCOUNT', true);
-
   const isCloudRun = !!getEnvironmentValue('K_SERVICE', true);
 
   const options: AppOptions = {};
