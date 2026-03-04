@@ -2,9 +2,9 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 import { page } from '$app/state';
-import { routerService } from '$services/index.ts';
+import { routerService } from '$services';
 
 import type { BaseMetaTags } from '../metadata/head-tags-view-model.svelte.ts';
 

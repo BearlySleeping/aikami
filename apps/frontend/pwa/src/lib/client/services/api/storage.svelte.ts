@@ -4,7 +4,7 @@ import {
   type BaseFrontendClassOptions,
   type FirebaseStorageServiceInterface,
   firebaseStorageService,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 
 export type StorageServiceOptions = BaseFrontendClassOptions & {
   storage: FirebaseStorageServiceInterface;

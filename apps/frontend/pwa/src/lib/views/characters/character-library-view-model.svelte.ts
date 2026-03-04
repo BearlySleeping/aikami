@@ -1,5 +1,5 @@
 import type { Character } from '$lib/types/character.ts';
-import { characterService } from '$services/index.ts';
+import { characterService } from '$services';
 
 export class CharacterLibraryViewModel {
   get characters() {

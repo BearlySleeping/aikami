@@ -2,7 +2,7 @@
 import '../app.css';
 import { onMount } from 'svelte';
 import AppView from '$lib/views/app/AppView.svelte';
-import logger from '$logger/index.ts';
+import logger from '$logger';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();

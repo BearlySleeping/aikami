@@ -9,7 +9,6 @@
     "ignoreUnknown": true,
     "includes": [
       "apps/frontend/pwa/**",
-      "apps/frontend/docs/**",
       "apps/frontend/landing_page/**",
       "apps/backend/functions/**",
       "apps/backend/rules/**",
@@ -82,11 +81,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "apps/frontend/pwa/**",
-        "apps/frontend/docs/**",
-        "apps/frontend/landing_page/**"
-      ],
+      "includes": ["apps/frontend/pwa/**", "apps/frontend/landing_page/**"],
       "linter": {
         "rules": {
           "suspicious": {
@@ -101,6 +96,28 @@
         "rules": {
           "correctness": {
             "noUnusedVariables": "warn"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/frontend/landing_page/astro.config.ts",
+        "apps/frontend/docs/astro.config.js",
+        "apps/frontend/docs/src/content.config.js",
+        "packages/frontend/utils/**",
+        "packages/frontend/services/**",
+        "packages/backend/ai/**",
+        "packages/types/**",
+        "packages/schemas/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          },
+          "complexity": {
+            "noBannedTypes": "off"
           }
         }
       }

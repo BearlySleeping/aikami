@@ -2,10 +2,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services/index.ts';
-import t from '$i18n.ts';
-import type { RouteName } from '$router.ts';
-import { authService, routerService } from '$services/index.ts';
+} from '@aikami/frontend/services';
+import t from '$i18n';
+import type { RouteName } from '$router';
+import { authService, routerService } from '$services';
 
 export type NavigationItem = {
   label: string;

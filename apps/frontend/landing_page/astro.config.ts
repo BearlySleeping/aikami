@@ -20,7 +20,7 @@ export default defineConfig({
   },
   vite: {
     // see https://github.com/tailwindlabs/tailwindcss/issues/18802
-    // deno-lint-ignore no-explicit-any
+    // biome-disable-next-line noExplicitAny
     plugins: [tailwindcss() as any],
     server: {
       fs: {

@@ -2,14 +2,14 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services/index.ts';
+} from '@aikami/frontend/services';
 import type {
   AIMessageData,
   AIMessageResponse,
   AIMessageType,
   NpcData,
   PersonaData,
-} from '@aikami/types/index.ts';
+} from '@aikami/types';
 import { internalAPIService } from './internal.svelte.ts';
 
 export type AIServiceOptions = BaseFrontendClassOptions;

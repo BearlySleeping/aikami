@@ -2,9 +2,9 @@
 import { CharacterLibraryViewModel } from './character-library-view-model.svelte.ts';
 
 const vm = new CharacterLibraryViewModel();
-let _fileInput: HTMLInputElement;
+let fileInput: HTMLInputElement;
 
-function _onFileChange(e: Event) {
+function onFileChange(e: Event) {
   const target = e.target as HTMLInputElement;
   if (target.files) {
     vm.handleFileUpload(target.files);

@@ -1,7 +1,34 @@
 import type { AIMessagePayload, AIMessageResponse, UserSessionData } from '@aikami/types';
 
 import logger from '$logger';
+import { LorebookService } from './lorebook.ts';
 import { type AIChatMessage, createAIProvider } from './providers/index.ts';
+
+/**
+ * Helper to inject lorebook context into the message list.
+ */
+const injectLoreContext = (
+  messages: AIChatMessage[],
+  text: string,
+  history: AIChatMessage[],
+): void => {
+  const lorebook = new LorebookService(LorebookService.getMockEntries());
+  // Combine current text and recent history for scanning
+  const scanText = history.map((m) => m.content).join('\n') + '\n' + text;
+  const activatedEntries = lorebook.scan(scanText);
+
+  if (activatedEntries.length > 0) {
+    const lorePrompt = lorebook.formatForPrompt(activatedEntries);
+    // Find system prompt index or insert at beginning
+    const systemIndex = messages.findIndex((m) => m.role === 'system');
+    if (systemIndex !== -1) {
+      messages.splice(systemIndex + 1, 0, { role: 'system', content: lorePrompt });
+    } else {
+      messages.unshift({ role: 'system', content: lorePrompt });
+    }
+    logger.debug('Injected lorebook context', { entryCount: activatedEntries.length });
+  }
+};
 
 export const sendMessage = async (
   options: AIMessagePayload<'sendMessage'>,
@@ -21,6 +48,9 @@ export const sendMessage = async (
     if (context.systemPrompt) {
       messages.push({ role: 'system', content: context.systemPrompt });
     }
+
+    // Inject Lorebook context here
+    injectLoreContext(messages, text, context.messages);
 
     for (const msg of context.messages) {
       messages.push(msg);
@@ -77,6 +107,9 @@ export async function* sendMessageStream(
     if (context.systemPrompt) {
       messages.push({ role: 'system', content: context.systemPrompt });
     }
+
+    // Inject Lorebook context here
+    injectLoreContext(messages, text, context.messages);
 
     for (const msg of context.messages) {
       messages.push(msg);

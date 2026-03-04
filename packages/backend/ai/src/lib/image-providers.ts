@@ -4,7 +4,7 @@ import type {
   ImageGenerationRequest,
   ImageGenerationResult,
   ProviderCapabilities,
-} from '$types/index.ts';
+} from '@aikami/schemas';
 
 export class DallEProvider implements ImageGenerationProviderInterface {
   readonly name = 'DALL-E (via Google AI)';

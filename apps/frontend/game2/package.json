@@ -9,17 +9,17 @@
     "open-editor": "godot -e --path .",
     "start": "npm run build && godot",
     "watch": "godot-ts watch",
-    "watch-generate": "nodemon --exec \"godot-ts generate\" -e gd",
-    "lint": "biome lint .",
+    "watch-generate": "nodemon --exec \"godot-ts generate\" -e ts",
     "lint:write": "biome lint --write .",
     "lint:ci": "biome ci src/",
     "format": "biome format .",
     "format:write": "biome format --write .",
     "format:ci": "biome ci src/",
-    "check": "biome check src/",
+    "check": "biome check .",
+    "fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
     "validate": "npm run check && npm run typecheck",
-    "test": "godot --test --test-case=\"[jsb]*\""
+    "test": "bun test"
   },
   "devDependencies": {
     "@godot-js/godot-ts": "0.0.8",

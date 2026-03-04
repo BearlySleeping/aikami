@@ -1,5 +1,6 @@
 <script lang="ts">
-import t from '$i18n.ts';
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import { getNavigationDrawerViewModel } from './navigation-drawer-view-model.svelte.ts';
 
 const viewModel = getNavigationDrawerViewModel({

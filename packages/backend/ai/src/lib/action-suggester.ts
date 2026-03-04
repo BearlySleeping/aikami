@@ -61,7 +61,7 @@ Each suggestion should be 1-2 sentences and fit the D&D setting.`;
 
 export const getActionSuggestionsSimple = (
   lastMessages: string[],
-  currentSituation: string,
+  _currentSituation: string,
   _characterInfo: string,
 ): ActionSuggestion => {
   const hasCombat = lastMessages.some(

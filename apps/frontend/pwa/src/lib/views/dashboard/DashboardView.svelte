@@ -1,4 +1,6 @@
 <script lang="ts">
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import type { DashboardViewModelInterface } from './dashboard-view-model.svelte.ts';
 
 type Props = {

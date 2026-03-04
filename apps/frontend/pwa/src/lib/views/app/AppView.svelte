@@ -1,8 +1,14 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
+import { page } from '$app/state';
+import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 import type { PWAHookData } from '$lib/types/index.ts';
 import type { BaseMetaTags } from '$views/app/metadata/head-tags-view-model.svelte.ts';
 import { getAppViewModel } from './app-view-model.svelte.ts';
+import AppBar from './bar/AppBar.svelte';
+import NavigationDrawer from './drawer/navigation/NavigationDrawer.svelte';
+import AppFooter from './footer/AppFooter.svelte';
+import HeadTagsView from './metadata/HeadTagsView.svelte';
 
 interface Props {
   data: PWAHookData;

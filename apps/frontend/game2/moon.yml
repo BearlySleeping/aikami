@@ -32,43 +32,59 @@ fileGroups:
 
 tasks:
   dev:
-    command: 'npm run dev'
+    command: 'bun run dev'
     preset: 'server'
   build:
-    command: 'npm run build'
+    command: 'bun run build'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
   generate:
-    command: 'npm run generate'
+    command: 'bun run generate'
+    inputs:
+      - '@group(sources)'
+  lint:
+    command: 'bun run lint'
     inputs:
       - '@group(sources)'
   lintWrite:
-    command: 'npm run lint:write'
+    command: 'bun run lint:write'
+    inputs:
+      - '@group(sources)'
+  format:
+    command: 'bun run format'
     inputs:
       - '@group(sources)'
   formatWrite:
-    command: 'npm run format:write'
+    command: 'bun run format:write'
+    inputs:
+      - '@group(sources)'
+  check:
+    command: 'bun run check'
+    inputs:
+      - '@group(sources)'
+  fix:
+    command: 'bun run fix'
     inputs:
       - '@group(sources)'
   typecheck:
-    command: 'npm run typecheck'
+    command: 'bun run typecheck'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
   validate:
-    command: 'npm run validate'
+    command: 'bun run validate'
     inputs:
       - '@group(sources)'
       - '@group(tests)'
       - '@group(configs)'
   test:
-    command: 'npm run test'
+    command: 'bun run test'
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   open-editor:
-    command: 'npm run open-editor'
+    command: 'bun run open-editor'
   watch:
-    command: 'npm run watch'
+    command: 'bun run watch'
     preset: 'utility'

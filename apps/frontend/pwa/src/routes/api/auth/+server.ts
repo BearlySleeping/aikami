@@ -1,8 +1,8 @@
-import { handleAuthEndpoint } from '@aikami/backend/auth/index.ts';
+import { handleAuthEndpoint } from '@aikami/backend/auth';
 import { onSvelteKitAPICall } from '@aikami/backend/svelte-kit/api.ts';
-import type { PWACalls } from '@aikami/types/index.ts';
+import type { PWACalls } from '@aikami/types';
 import { getUserSessionFromLocalesOrURL } from '$lib/server/utils/auth.ts';
-import logger from '$logger/index.ts';
+import logger from '$logger';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = (event) =>

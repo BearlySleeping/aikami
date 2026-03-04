@@ -21,9 +21,9 @@ const { viewModel }: Props = $props();
           </div>
         {/if}
 
-        {#if viewModel.error}
+        {#if viewModel.chatError}
           <div class="alert alert-error">
-            <span>{viewModel.error}</span>
+            <span>{viewModel.chatError}</span>
           </div>
         {/if}
 

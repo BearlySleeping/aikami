@@ -25,9 +25,9 @@ $effect(() => {
   viewModel.setPath(path);
 });
 
-const _metadata = $derived(viewModel.fullMetadata());
-const _organizationJsonLd = $derived(viewModel.organizationJsonLd());
-const _searchActionJsonLd = $derived(viewModel.searchActionJsonLd());
+const metadata = $derived(viewModel.fullMetadata());
+const organizationJsonLd = $derived(viewModel.organizationJsonLd());
+const searchActionJsonLd = $derived(viewModel.searchActionJsonLd());
 </script>
 
 <svelte:head>
