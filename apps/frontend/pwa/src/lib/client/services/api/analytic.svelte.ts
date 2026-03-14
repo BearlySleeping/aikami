@@ -7,13 +7,7 @@ import {
   firebaseAnalyticService,
   type LogAction,
 } from '@aikami/frontend/services';
-import type {
-  SignInProvider,
-  UserData,
-  UserLiteData,
-  UserRole,
-  UserStatus,
-} from '@aikami/types';
+import type { SignInProvider, UserData, UserLiteData, UserRole, UserStatus } from '@aikami/types';
 import { BaseClass } from '@aikami/utils';
 
 export type AnalyticsAuthData = {

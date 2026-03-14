@@ -5,9 +5,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 mock.module('@aikami/frontend/services', () => {
   return {
-    BaseFrontendClass: class BaseFrontendClass {
-      constructor(options: any) {}
-    },
+    BaseFrontendClass: class BaseFrontendClass {},
   };
 });
 

@@ -28,7 +28,8 @@
 
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
 
   },
   "exclude": ["node_modules", "dist", "build", ".svelte-kit", "tmp"]

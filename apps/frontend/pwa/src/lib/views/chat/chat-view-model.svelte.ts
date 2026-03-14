@@ -4,13 +4,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { MessageCreateData, NpcData } from '@aikami/types';
-import {
-  aiService,
-  authService,
-  chatService,
-  messageService,
-  npcService,
-} from '$services';
+import { aiService, authService, chatService, messageService, npcService } from '$services';
 
 /**
  * Options for creating a ChatViewModel instance.
@@ -117,8 +111,7 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
       const messages = await messageService.getMessages(uid, this.npc.id);
       chatService.setMessages(messages);
       this.showGreeting = messages.length === 0;
-    } catch (error) {
-      console.error('Failed to load chat history:', error);
+    } catch (_error) {
     } finally {
       chatService.setLoading(false);
     }
@@ -148,9 +141,8 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
         chatService.appendAIMessage(response);
         await this.saveMessage(response, 'ai');
       }
-    } catch (error) {
+    } catch (_error) {
       chatService.setError('Failed to get response from AI');
-      console.error('AI error:', error);
     } finally {
       chatService.setSending(false);
       chatService.setTyping(false);
@@ -172,9 +164,7 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
 
     try {
       await messageService.createMessage(uid, this.npc.id, messageData);
-    } catch (error) {
-      console.error('Failed to save message:', error);
-    }
+    } catch (_error) {}
   }
 
   clearChat(): void {

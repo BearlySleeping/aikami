@@ -1,12 +1,21 @@
 {
   "name": "@app/backend-functions",
+  "type": "module",
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "fix": "biome check --write .",
     "build": "bun run compile.ts",
-    "deploy": "bun run deploy.ts",
+    "deploy": "firestack deploy",
+    "deploy:local": "node ../../../../firestack/dist/main.js deploy",
+    "emulate": "firestack emulate",
+    "emulate:local": "node ../../../../firestack/dist/main.js emulate",
+    "rules": "firestack rules",
+    "delete": "firestack delete",
+    "logs": "firestack logs",
+    "scripts": "firestack scripts",
+    "scripts:local": "node ../../../../firestack/dist/main.js scripts",
     "test": "bun run scripts/test.ts",
     "validate": "bun run typecheck && bun run test",
     "populate-npcs": "bun run scripts/populate-npcs.ts"
@@ -22,10 +31,8 @@
     "@genkit-ai/googleai": "1.28.0",
     "axios": "1.13.6",
     "firebase-admin": "13.7.0",
-    "firebase-functions": "7.0.6",
-    "genkit": "1.29.0"
-  },
-  "devDependencies": {
-    "@types/bun": "1.3.9"
+    "firebase-functions": "7.1.1",
+    "genkit": "1.30.1",
+    "@snorreks/firestack": "0.0.30"
   }
 }

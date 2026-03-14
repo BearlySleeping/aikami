@@ -1,4 +1,4 @@
-import { getAuth } from 'firebase/auth';
+import { connectAuthEmulator, getAuth } from 'firebase/auth';
 import app from './app.ts';
 
 export {
@@ -22,3 +22,7 @@ export {
 } from 'firebase/auth';
 
 export const auth = getAuth(app);
+
+if (import.meta.env.PUBLIC_FLAVOR === 'EMULATOR') {
+  connectAuthEmulator(auth, 'http://localhost:9099');
+}

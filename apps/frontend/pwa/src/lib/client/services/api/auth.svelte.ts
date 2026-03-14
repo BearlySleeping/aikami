@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/client/services/api/auth.svelte.ts
 import {
   type AuthProviderId,
   BaseFrontendClass,
@@ -9,6 +10,7 @@ import {
   type SocialSignInResponse,
 } from '@aikami/frontend/services';
 import type {
+  AppResult,
   AuthMessageData,
   AuthMessageResponse,
   AuthMessageType,
@@ -17,7 +19,7 @@ import type {
   FirebaseUser,
   RegisterForm,
 } from '@aikami/types';
-import { getUserLiteData } from '@aikami/utils';
+import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
 import { analyticService } from './analytic.svelte.ts';
 import { internalAPIService } from './internal.svelte.ts';
 
@@ -58,7 +60,7 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    * @param options The sign-in options.
    * @returns A promise that resolves with true if the sign-in was successful, false otherwise.
    */
-  signInWithEmailAndPassword(options: { email: string; password: string }): Promise<boolean>;
+  signInWithEmailAndPassword(options: { email: string; password: string }): Promise<AppResult>;
 
   /**
    * Signs out the current user.
@@ -148,16 +150,25 @@ export class AuthService
     }
   }
 
-  async signInWithEmailAndPassword(options: { email: string; password: string }): Promise<boolean> {
+  async signInWithEmailAndPassword(options: {
+    email: string;
+    password: string;
+  }): Promise<AppResult> {
     this.log('signInWithEmailAndPassword', options);
     try {
       const user = await this._auth.signInWithEmailAndPassword(options);
       await this.setAuthUser(user, true);
 
-      return true;
-    } catch (error) {
+      await this.setAuthUser(user, true);
+      return { success: true, data: undefined };
+    } catch (error: unknown) {
+      // TypeScript defaults to unknown in strict mode
       this.error('signInWithEmailAndPassword', error);
-      return false;
+
+      return {
+        success: false,
+        error: toAppErrorFromUnknownError(error),
+      };
     }
   }
 

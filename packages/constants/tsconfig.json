@@ -6,7 +6,6 @@
       "@aikami/constants": ["packages/constants/src/index.ts"],
       "@aikami/types": ["packages/types/src/index.ts"],
       "@aikami/schemas": ["packages/schemas/src/index.ts"],
-      "@aikami/logger": ["packages/logger/src/index.ts"],
       "@aikami/utils": ["packages/utils/src/index.ts"],
       "@aikami/mocks": ["packages/mocks/src/index.ts"],
       "@aikami/backend/configs": ["packages/backend/configs/src/index.ts"],

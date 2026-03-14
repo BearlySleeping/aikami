@@ -6,7 +6,6 @@ import {
 } from '@aikami/frontend/services';
 import type { GroupChatData } from '@aikami/schemas';
 import { authService } from '$services';
-import { npcService } from './npc.svelte.ts';
 
 export type GroupChatServiceOptions = BaseFrontendClassOptions;
 

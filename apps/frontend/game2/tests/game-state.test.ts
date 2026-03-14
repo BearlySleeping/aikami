@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 describe('GameState', () => {
-    let gameState: any;
+    let gameState: unknown;
 
     beforeEach(() => {
         // Setup test environment

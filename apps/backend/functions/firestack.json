@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/@snorreks/firestack/firestack.schema.json",
+  "flavors": {
+    "development": "aikami-dev",
+    "production": "aikami-prod"
+  },
+  "region": "europe-west3",
+  "nodeVersion": "24",
+  "engine": "bun",
+  "minify": true,
+  "sourcemap": true
+}

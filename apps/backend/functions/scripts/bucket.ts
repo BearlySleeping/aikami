@@ -1,6 +1,3 @@
-// testPost.ts
-import '../script-config.development.ts';
-
 import { getBucket } from '@aikami/backend/configs/bucket.ts';
 
 const bucket = getBucket();

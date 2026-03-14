@@ -125,12 +125,7 @@ class AppErrorViewModel
     const { error, status, url } = this._pageStore;
 
     if (status === 404) {
-      console.warn('Page not found:', url.href);
     } else {
-      console.error('Error occurred:', {
-        code: status,
-        message: error?.message,
-      });
     }
     return await super.initialize();
   }

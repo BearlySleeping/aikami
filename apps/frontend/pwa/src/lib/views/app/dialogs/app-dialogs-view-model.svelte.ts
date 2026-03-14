@@ -1,8 +1,4 @@
-import type {
-  AppLoadingData,
-  ConfirmDialogData,
-  SnackbarData,
-} from '@aikami/frontend/services';
+import type { AppLoadingData, ConfirmDialogData, SnackbarData } from '@aikami/frontend/services';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

@@ -1,5 +1,5 @@
 import process from 'node:process';
-import logger from 'firebase-functions/logger';
+import { logger } from 'firebase-functions/logger';
 import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts';
 import { Timer, type TimerInterface } from './timer.ts';
 

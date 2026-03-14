@@ -8,6 +8,24 @@ This package provides a consistent logging interface used across the entire mono
 - Structured logging with different log levels
 - Timer functionality for performance tracking
 - Consistent log format across frontend and backend
+- Environment-specific implementations (browser, server, Firebase Functions)
+
+## Important: Use `$logger` Path Alias
+
+**Never import from `@aikami/logger` directly.** Instead, always use the `$logger` path alias:
+
+```typescript
+import logger from '$logger';
+```
+
+The `$logger` alias is configured in each project's `tsconfig.json` to point to the appropriate implementation:
+
+| Project Type | Implementation |
+|--------------|----------------|
+| Firebase Functions | `logger-functions.ts` |
+| SvelteKit (SSR) | `svelte-kit.ts` |
+| Browser/Frontend | `logger-browser.ts` |
+| Shared packages | `index.ts` (logger-basic.ts) |
 
 ## Installation
 
@@ -34,7 +52,7 @@ bun install
 ## Usage
 
 ```typescript
-import logger from '@aikami/logger';
+import logger from '$logger';
 
 logger.info('User logged in', { userId: '123' });
 logger.error('Failed to fetch', { error: err.message });
@@ -46,6 +64,20 @@ await heavyOperation();
 const duration = timer.stop();
 logger.debug(`Operation took ${duration}ms`);
 ```
+
+## Implementations
+
+### logger-basic.ts
+Basic console logger - used as fallback for standalone scripts or when no environment-specific logger is needed.
+
+### logger-functions.ts
+Firebase Cloud Functions logger - uses `firebase-functions/logger` in production, falls back to console in emulator.
+
+### logger-browser.ts
+Browser console logger with enhanced formatting for client-side logging.
+
+### svelte-kit.ts
+SvelteKit server-side logger - integrates with SvelteKit's SSR environment.
 
 ## API
 

@@ -186,11 +186,11 @@ describe('DiceService', () => {
     });
 
     test('should double damage on critical hit', () => {
-      let hasCritical = false;
+      let _hasCritical = false;
       for (let i = 0; i < 1000; i++) {
         const result = DiceService.rollAttack(10, 0, false, '1d8', 'slashing');
         if (result.isCritical) {
-          hasCritical = true;
+          _hasCritical = true;
           expect(result.damage).toBeGreaterThanOrEqual(2);
           break;
         }

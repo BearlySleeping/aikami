@@ -1,8 +1,5 @@
 import { personaRepository } from '@aikami/frontend/repositories/persona.ts';
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
 import { authService } from '$services';
 

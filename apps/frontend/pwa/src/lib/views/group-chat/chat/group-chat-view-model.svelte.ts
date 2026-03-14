@@ -50,7 +50,7 @@ class GroupChatViewModel
 
       if (this.groupChat) {
         const allNpcs = await npcService.getAll();
-        this.characters = allNpcs.filter((npc) => this.groupChat!.characterIds.includes(npc.id));
+        this.characters = allNpcs.filter((npc) => this.groupChat?.characterIds.includes(npc.id));
       }
     } catch (err) {
       this.error('initialize', err);
@@ -116,8 +116,8 @@ class GroupChatViewModel
   }
 
   private async getAIResponse(userText: string, character: NpcData): Promise<string> {
-    const systemPrompt = character.notes || '';
-    const context = `You are ${character.name}. ${character.occupation || ''}`;
+    const _systemPrompt = character.notes || '';
+    const _context = `You are ${character.name}. ${character.occupation || ''}`;
 
     // TODO: Integrate with AI service
     return `[${character.name} responds to: "${userText}"]`;

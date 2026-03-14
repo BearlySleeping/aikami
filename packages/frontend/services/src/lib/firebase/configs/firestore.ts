@@ -1,4 +1,9 @@
-import { type Firestore, initializeFirestore, Timestamp } from 'firebase/firestore';
+import {
+  connectFirestoreEmulator,
+  type Firestore,
+  initializeFirestore,
+  Timestamp,
+} from 'firebase/firestore';
 import app from './app.ts';
 
 export {
@@ -42,6 +47,10 @@ const getFirestore = () => {
           }
         : undefined,
   });
+
+  if (import.meta.env.PUBLIC_FLAVOR === 'EMULATOR') {
+    connectFirestoreEmulator(_firestore, 'localhost', 8080);
+  }
 
   return _firestore;
 };

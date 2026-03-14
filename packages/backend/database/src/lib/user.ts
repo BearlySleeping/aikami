@@ -1,7 +1,7 @@
-import { getFirestore } from '@aikami/backend/configs/database.ts';
-import { serverTimestamp } from '@aikami/backend/configs/firestore.ts';
+import { getFirestore } from '@aikami/backend/configs/database';
+import { serverTimestamp } from '@aikami/backend/configs/firestore';
 
-import { updateUserClaims } from '@aikami/backend/utils/auth.ts';
+import { updateUserClaims } from '@aikami/backend/utils/auth';
 import { UserCreateSchema, UserSchema, UserUpdateSchema } from '@aikami/schemas';
 import type {
   RegisterForm,

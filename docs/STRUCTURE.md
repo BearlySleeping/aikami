@@ -44,7 +44,14 @@ The `packages` directory contains the following shared packages:
     -   `repositories`: This directory contains the repository package that is used by the frontend applications.
     -   `services`: This directory contains the service package that is used by the frontend applications.
     -   `utils`: This directory contains the utility package that is used by the frontend applications.
--   `logger`: This directory contains the logger that is used by the applications.
+-   `logger`: This directory contains the logger that is used by the applications. The logger has environment-specific implementations:
+
+    -   `logger-functions.ts`: For Firebase Cloud Functions (uses `firebase-functions/logger`)
+    -   `logger-browser.ts`: For browser-based frontend applications
+    -   `svelte-kit.ts`: For SvelteKit server-side rendering
+    -   `svelte-kit-ssr.ts`: For SvelteKit SSR (legacy compatibility)
+
+    Use the `$logger` path alias to import the appropriate logger for your environment. Never import from `@aikami/logger` directly.
 -   `mocks`: This directory contains the mocks that are used by the applications.
 -   `schemas`: This directory contains the Zod schemas that are used by the applications.
 -   `types`: This directory contains the TypeScript types that are used by the applications.

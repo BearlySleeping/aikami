@@ -12,8 +12,6 @@
       "@aikami/types/*": ["packages/types/src/*"],
       "@aikami/schemas": ["packages/schemas/src/index.ts"],
       "@aikami/schemas/*": ["packages/schemas/src/*"],
-      "@aikami/logger": ["packages/logger/src/index.ts"],
-      "@aikami/logger/*": ["packages/logger/src/*"],
       "$logger": ["packages/logger/src/index.ts"]
     }
   },

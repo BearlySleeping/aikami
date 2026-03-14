@@ -466,6 +466,49 @@ try {
 
 ---
 
+## Logging
+
+Always use the `$logger` path alias for logging. **Never use `@aikami/logger`.**
+
+### Environment-Specific Loggers
+
+The `$logger` alias points to different implementations based on the project:
+
+| Project Type | Path Alias Target |
+|--------------|-------------------|
+| Firebase Functions | `packages/logger/src/lib/logger-functions.ts` |
+| SvelteKit (SSR) | `packages/logger/src/lib/svelte-kit.ts` |
+| Frontend (Browser) | `packages/logger/src/lib/logger-browser.ts` |
+| Backend (Node.js) | `packages/logger/src/lib/logger-functions.ts` |
+
+### Configuration
+
+Path aliases are configured in:
+
+- **Backend functions**: `config/tsconfig/tsconfig.backend.json` and `apps/backend/functions/tsconfig.json`
+- **SvelteKit**: `config/tsconfig/tsconfig.svelte-kit.json`
+- **Frontend (non-SvelteKit)**: `config/tsconfig/tsconfig.frontend.json`
+
+### Usage
+
+```typescript
+import logger from '$logger';
+
+logger.log('info message');
+logger.debug('debug message');
+logger.warn('warning message');
+logger.error('error message', { extra: 'data' });
+```
+
+### Important Build Notes
+
+The build tools (esbuild via firestack) do **not** automatically resolve tsconfig path aliases. You must configure aliases explicitly in the build configuration:
+
+- **Firebase Functions**: The firestack build passes `tsconfig` to esbuild, but you may need to add `alias` option to esbuild config for proper resolution
+- **Scripts**: When running scripts (like `on_emulate.ts`) with `bun`, pass aliases via command line: `bun --alias '$logger=packages/logger/src/lib/logger-functions.ts' run script.ts`
+
+---
+
 ## Component Structure
 
 ### File Organization
