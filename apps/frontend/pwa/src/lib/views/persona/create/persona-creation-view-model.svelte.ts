@@ -5,7 +5,7 @@ import {
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
-import { aiService, authService, personaService, storageService } from '$services';
+import { aiService, authService, storageService } from '$services';
 
 export type PersonaCreationViewModelOptions = BaseViewModelOptions & {
   isOnboarding?: boolean;

@@ -9,6 +9,7 @@
     "validate": "bun run typecheck"
   },
   "dependencies": {
+    "@aikami/backend-configs": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",

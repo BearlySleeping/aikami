@@ -1,14 +1,14 @@
 <script lang="ts">
-import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
-import CharacterCard from '$lib/components/chat/CharacterCard.svelte';
-import ChatContainer from '$lib/components/chat/ChatContainer.svelte';
-import type { ChatViewModelInterface } from './chat-view-model.svelte.ts';
+  import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
+  import CharacterCard from '$lib/components/chat/CharacterCard.svelte';
+  import ChatContainer from '$lib/components/chat/ChatContainer.svelte';
+  import type { ChatViewModelInterface } from './chat-view-model.svelte.ts';
 
-type Props = {
-  viewModel: ChatViewModelInterface;
-};
+  type Props = {
+    viewModel: ChatViewModelInterface;
+  };
 
-const { viewModel }: Props = $props();
+  const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -16,21 +16,15 @@ const { viewModel }: Props = $props();
     <div class="card bg-base-100 shadow-xl h-full">
       <div class="card-body p-4">
         {#if viewModel.errorMessage}
-          <div class="alert alert-error">
-            <span>{viewModel.errorMessage}</span>
-          </div>
+          <div class="alert alert-error"><span>{viewModel.errorMessage}</span></div>
         {/if}
 
         {#if viewModel.chatError}
-          <div class="alert alert-error">
-            <span>{viewModel.chatError}</span>
-          </div>
+          <div class="alert alert-error"><span>{viewModel.chatError}</span></div>
         {/if}
 
         {#if viewModel.isLoading}
-          <div class="flex justify-center">
-            <span class="loading loading-spinner"></span>
-          </div>
+          <div class="flex justify-center"><span class="loading loading-spinner"></span></div>
         {:else if viewModel.npc}
           {#if viewModel.showGreeting}
             <div class="mb-4">

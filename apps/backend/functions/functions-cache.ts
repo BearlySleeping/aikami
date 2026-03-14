@@ -1,51 +1,49 @@
-import axios from 'axios';
-import type {
-  FunctionsCache,
-  FunctionsCacheFetch,
-  FunctionsCacheUpdate,
-} from 'nx-cloud-functions-deployer';
+import type { FunctionsCacheGet, FunctionsCacheUpdate } from '@snorreks/firestack';
 
-const baseURL = 'https://api.jsonbin.io/v3/b';
+// Use the endpoint from your screenshot (don't forget the https://)
+const baseURL = 'https://picked-hog-64217.upstash.io';
+// Paste your unhidden token here (ideally move this to an environment variable later!)
+const token =	"AfrZAAIncDJkMWJhNGQ0NzI5YTI0YzI1OGE1YWYxMzM1MWZkZDVmNXAyNjQyMTc"
 
-const getBinId = (flavor: string): string => {
-  switch (flavor) {
-    case 'development':
-      return '6331878ea1610e63863950af';
-    case 'production':
-      return '635841e60e6a79321e345e8c';
-    case 'staging':
-      return '64312542ebd26539d0a6c9ee';
-    default:
-      throw new Error(`Unknown flavor: ${flavor}`);
-  }
-};
 
-const masterKey = '$2b$10$aKk5wBPTio4d6rkJ9g397OBD3DYZRTTzh/MyQ5f8JTDeGuiCR6MyO';
-
-export const fetch: FunctionsCacheFetch = async ({ flavor }) => {
-  const binId = getBinId(flavor);
-  const response = await axios.get<FunctionsCache>(`${baseURL}/${binId}/latest`, {
+export const get: FunctionsCacheGet = async ({ flavor }) => {
+  // We use the flavor directly in the URL to dynamically create the key
+  const response = await fetch(`${baseURL}/get/cache:${flavor}`, {
+    method: 'GET',
     headers: {
-      'X-Bin-Meta': 'false',
-      'X-Master-Key': masterKey,
+      Authorization: `Bearer ${token}`,
     },
   });
-  return response.data;
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch cache: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  // Upstash returns the data inside a 'result' property.
+  // If the key doesn't exist yet, it returns null, so we fallback to an empty object.
+  return data.result ? JSON.parse(data.result) : {};
 };
 
 export const update: FunctionsCacheUpdate = async ({ flavor, newFunctionsCache }) => {
-  const binId = getBinId(flavor);
-
-  const oldFunctionsCache = await fetch({ flavor });
+  const oldFunctionsCache = await get({ flavor });
 
   const mergedFunctionsCache = {
     ...oldFunctionsCache,
     ...newFunctionsCache,
   };
 
-  await axios.put(`${baseURL}/${binId}`, mergedFunctionsCache, {
+  const response = await fetch(`${baseURL}/set/cache:${flavor}`, {
+    method: 'POST', // Upstash REST uses POST for setting data
     headers: {
-      'X-Master-Key': masterKey,
+      Authorization: `Bearer ${token}`,
     },
+    // We stringify the merged cache so it saves as a JSON string in Redis
+    body: JSON.stringify(mergedFunctionsCache),
   });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update cache: ${response.statusText}`);
+  }
 };

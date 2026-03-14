@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { unixLabel } from '@aikami/constants';
 import type { CoreData } from '@aikami/types';
-import { Timestamp } from 'firebase/firestore';
+import type { Timestamp } from 'firebase/firestore';
 import { fromJsonData } from './transform.ts';
 
 interface TestData extends Omit<CoreData, 'createdAt'> {

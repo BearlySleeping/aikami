@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { getAuth } from '@aikami/backend/configs/auth.ts';
-import { getEnvironmentValue } from '@aikami/backend/configs/environment.ts';
-import { timestampFromDate } from '@aikami/backend/configs/firestore.ts';
+import { getAuth } from '@aikami/backend/configs/auth';
+import { getEnvironmentValue } from '@aikami/backend/configs/environment';
+import { timestampFromDate } from '@aikami/backend/configs/firestore';
 import type {
   AuthCreateRequest,
   AuthUpdateRequest,

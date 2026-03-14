@@ -8,11 +8,8 @@
       "@aikami/types/*": ["packages/types/src/*"],
       "@aikami/schemas": ["packages/schemas/src/index.ts"],
       "@aikami/schemas/*": ["packages/schemas/src/*"],
-      "@aikami/logger": ["packages/logger/src/index.ts"],
-      "@aikami/logger/*": ["packages/logger/src/*"],
       "@aikami/utils": ["packages/utils/src/index.ts"],
-      "@aikami/utils/*": ["packages/utils/src/*"],
-      "$logger": ["packages/logger/src/index.ts"]
+      "@aikami/utils/*": ["packages/utils/src/*"]
     }
   }
 }

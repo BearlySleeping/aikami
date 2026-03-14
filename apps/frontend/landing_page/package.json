@@ -12,7 +12,7 @@
     "validate": "bun run typecheck"
   },
   "devDependencies": {
-    "astro": "5.18.0"
+    "astro": "6.0.2"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

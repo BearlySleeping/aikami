@@ -8,11 +8,11 @@
     "validate": "bun run typecheck"
   },
   "devDependencies": {
-    "@types/node": "25.3.2"
+    "@types/node": "25.4.0"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/types": "workspace:*",
-    "firebase-functions": "7.0.6"
+    "firebase-functions": "7.1.1"
   }
 }

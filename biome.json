@@ -1,15 +1,17 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
-    "useIgnoreFile": true
+    "useIgnoreFile": true,
+    "defaultBranch": "main"
   },
   "files": {
     "ignoreUnknown": true,
     "includes": [
       "apps/frontend/pwa/**",
       "apps/frontend/landing_page/**",
+      "apps/frontend/game2/**",
       "apps/backend/functions/**",
       "apps/backend/rules/**",
       "packages/**"
@@ -31,32 +33,28 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noExplicitAny": "warn",
-        "noImplicitAnyLet": "off",
-        "noNonNullAssertedOptionalChain": "off",
-        "useIterableCallbackReturn": "off"
+        "noThenProperty": "error",
+        "noExplicitAny": "error",
+        "noConsole": "warn"
       },
       "style": {
-        "useImportType": "off",
-        "noNonNullAssertion": "off"
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error",
+        "useFilenamingConvention": "error",
+        "useNumberNamespace": "error",
+        "noSubstr": "error"
       },
       "complexity": {
-        "noForEach": "off",
-        "noUselessSwitchCase": "off",
-        "noStaticOnlyClass": "off",
-        "useArrowFunction": "error"
+        "useArrowFunction": "error",
+        "noUselessSwitchCase": "error",
+        "useFlatMap": "error",
+        "useDateNow": "error",
+        "noForEach": "error"
       },
       "correctness": {
-        "noUnusedVariables": "off",
-        "noVoidTypeReturn": "off",
-        "noUnusedImports": "off",
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
         "useImportExtensions": "error"
-      },
-      "a11y": {
-        "useValidLang": "off"
-      },
-      "performance": {
-        "noAccumulatingSpread": "off"
       }
     }
   },
@@ -74,6 +72,13 @@
       "operatorLinebreak": "after"
     }
   },
+  "html": {
+    "experimentalFullSupportEnabled": true,
+    "formatter": {
+      "enabled": true,
+      "indentScriptAndStyle": true
+    }
+  },
   "css": {
     "parser": {
       "tailwindDirectives": true
@@ -81,43 +86,65 @@
   },
   "overrides": [
     {
-      "includes": ["apps/frontend/pwa/**", "apps/frontend/landing_page/**"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "warn"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["packages/**"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "noUnusedVariables": "warn"
-          }
-        }
-      }
-    },
-    {
       "includes": [
         "apps/frontend/landing_page/astro.config.ts",
         "apps/frontend/docs/astro.config.js",
-        "apps/frontend/docs/src/content.config.js",
-        "packages/frontend/utils/**",
-        "packages/frontend/services/**",
-        "packages/backend/ai/**",
-        "packages/types/**",
-        "packages/schemas/**"
+        "apps/frontend/docs/src/content.config.js"
       ],
       "linter": {
         "rules": {
           "suspicious": {
-            "noExplicitAny": "off"
-          },
+            "noExplicitAny": "off",
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/frontend/game2/**"],
+      "formatter": {
+        "indentWidth": 4,
+        "lineWidth": 120
+      },
+      "linter": {
+        "rules": {
           "complexity": {
-            "noBannedTypes": "off"
+            "noForEach": "off",
+            "noStaticOnlyClass": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "warn"
+          },
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedImports": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/frontend/pwa/**", "packages/utils/**", "packages/constants/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noForEach": "off",
+            "noStaticOnlyClass": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off",
+            "noImplicitAnyLet": "off",
+            "useIterableCallbackReturn": "off"
+          },
+          "correctness": {
+            "noUnusedVariables": "off"
+          },
+          "a11y": {
+            "useValidLang": "off",
+            "noSvgWithoutTitle": "off",
+            "useButtonType": "off"
+          },
+          "style": {
+            "useFilenamingConvention": "off"
           }
         }
       }

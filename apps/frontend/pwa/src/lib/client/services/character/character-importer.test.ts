@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { CharacterImporter } from './character-importer.ts';
 
 describe('CharacterImporter', () => {

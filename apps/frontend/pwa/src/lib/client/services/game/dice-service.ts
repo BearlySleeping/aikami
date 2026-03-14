@@ -120,9 +120,9 @@ export class DiceService {
       throw new Error(`Invalid dice notation: ${dice}`);
     }
 
-    const numDice = parseInt(match[1], 10);
-    const numSides = parseInt(match[2], 10);
-    const flatModifier = match[3] ? parseInt(match[3], 10) : 0;
+    const numDice = Number.parseInt(match[1], 10);
+    const numSides = Number.parseInt(match[2], 10);
+    const flatModifier = match[3] ? Number.parseInt(match[3], 10) : 0;
 
     if (numDice < 1 || numDice > 100) {
       throw new Error('Number of dice must be between 1 and 100');
@@ -198,7 +198,7 @@ export class DiceService {
 
     const totalModifier = abilityModifier + proficiency;
     const dice = '1d20';
-    const baseRoll = DiceService.roll(dice);
+    const _baseRoll = DiceService.roll(dice);
 
     let finalRoll: RollResult;
     if (advantage && !disadvantage) {

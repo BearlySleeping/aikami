@@ -5,12 +5,15 @@ export * from './lib/api/firestore.ts';
 export * from './lib/api/hubspot.ts';
 export * from './lib/api/microsoft.ts';
 export * from './lib/api/oauth2.ts';
+
 export * from './lib/auth.ts';
 export * from './lib/backend/auth.ts';
 export * from './lib/backend/fcm.ts';
 export * from './lib/backend/firebase.ts';
 export * from './lib/backend/firestorage.ts';
+export * from './lib/backend/functions.ts';
 export * from './lib/backend/http.ts';
+
 export * from './lib/class.ts';
 export * from './lib/common/preferences.ts';
 export * from './lib/common.ts';

@@ -1,3 +1,4 @@
+// packages/types/src/lib/error.ts
 import type { NumericRange } from './common.ts';
 
 export type ErrorType =
@@ -18,6 +19,7 @@ export type ErrorType =
   | 'unavailable'
   | 'ai_tokens_exceeded'
   | 'ai_no_text_response'
+  | 'invalid-credentials'
   | 'data-loss'
   | 'unauthenticated'
   | 'activity-not-found'
@@ -30,18 +32,7 @@ export type ErrorType =
   | 'access-denied'
   | 'unauthorized'
   | 'server-error'
-  | 'unknown-error'
-  // CRM
-  | 'user-not-created'
-  | 'no-crm-team-created'
-  | 'no-crm-team-created-contact-admin'
-  | 'crm-member-not-in-team'
-  | 'unknown-crm-provider'
-  | 'reconnect-with-crm'
-  | 'captcha-required'
-  | 'captcha-invalid'
-  | 'chrome-extension-not-signed-in'
-  | 'project-not-found';
+  | 'unknown-error';
 
 export type SvelteKitError = {
   type: ErrorType;

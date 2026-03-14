@@ -3,6 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "dev:emulator": "FLAVOR=EMULATOR FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 GCP_PROJECT=aikami-dev GCLOUD_PROJECT=aikami-dev FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 vite dev --mode emulator",
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
@@ -19,20 +20,20 @@
     "validate": "bun run typecheck && bun run test"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "2.13.0",
+    "@inlang/paraglide-js": "2.14.0",
     "@playwright/test": "1.58.2",
     "@sveltejs/adapter-auto": "7.0.1",
-    "@sveltejs/adapter-node": "^5.5.4",
-    "@sveltejs/kit": "2.53.3",
+    "@sveltejs/adapter-node": "5.5.4",
+    "@sveltejs/kit": "2.53.4",
     "@sveltejs/vite-plugin-svelte": "7.0.0",
     "@tailwindcss/vite": "4.2.1",
-    "@types/png-chunks-extract": "^1.0.2",
-    "@types/text-encoding": "^0.0.40",
+    "@types/png-chunks-extract": "1.0.2",
+    "@types/text-encoding": "0.0.40",
     "daisyui": "5.5.19",
     "playwright": "1.58.2",
-    "rollup-plugin-visualizer": "7.0.0",
-    "svelte": "5.53.5",
-    "svelte-check": "4.4.4",
+    "rollup-plugin-visualizer": "7.0.1",
+    "svelte": "5.53.10",
+    "svelte-check": "4.4.5",
     "tailwindcss": "4.2.1",
     "vite": "7.3.1",
     "vite-plugin-devtools-json": "1.0.0",
@@ -48,7 +49,7 @@
     "@aikami/utils": "workspace:*",
     "device-detector-js": "3.0.3",
     "eruda": "3.4.3",
-    "png-chunks-extract": "^1.0.0",
-    "text-encoding": "^0.7.0"
+    "png-chunks-extract": "1.0.0",
+    "text-encoding": "0.7.0"
   }
 }

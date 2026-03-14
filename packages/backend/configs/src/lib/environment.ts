@@ -3,7 +3,10 @@ import { isEmptyObject, toAppError } from '@aikami/utils';
 import { config } from 'dotenv';
 import * as env from '$env/static/private';
 
-type OptionalEnvironmentKeys = 'FIREBASE_SERVICE_ACCOUNT' | 'DENO_VERSION';
+type OptionalEnvironmentKeys =
+  | 'FIREBASE_SERVICE_ACCOUNT'
+  | 'DENO_VERSION'
+  | 'FIRESTORE_EMULATOR_HOST';
 
 type RequiredEnvironmentKeys =
   //

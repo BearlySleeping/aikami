@@ -12,6 +12,6 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "dotenv": "^16.4.7"
+    "dotenv": "17.3.1"
   }
 }

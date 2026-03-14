@@ -1,4 +1,4 @@
-import { getStorage } from 'firebase/storage';
+import { connectStorageEmulator, getStorage } from 'firebase/storage';
 
 import app from './app.ts'; // Assuming this path exports your initialized Firebase app
 
@@ -15,3 +15,7 @@ export {
 // Initialize Firebase Storage.
 // You can optionally pass a default bucket URL, e.g., getStorage(app, 'gs://my-bucket.appspot.com');
 export const storage = getStorage(app);
+
+if (import.meta.env.PUBLIC_FLAVOR === 'EMULATOR') {
+  connectStorageEmulator(storage, 'localhost', 9199);
+}

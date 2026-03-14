@@ -1,5 +1,5 @@
-import '../script-config.development.ts';
-import { npcRepository } from '@aikami/backend/database/npc';
+import { npcRepository } from '@aikami/backend-database';
+import { DEFAULT_SAVING_THROWS, DEFAULT_SKILLS } from '@aikami/schemas';
 import type { NpcCreateData } from '@aikami/types';
 
 const npcs: NpcCreateData[] = [
@@ -18,6 +18,9 @@ const npcs: NpcCreateData[] = [
       charisma: 16,
     },
     hitPoints: 150,
+    temporaryHitPoints: 0,
+    savingThrows: DEFAULT_SAVING_THROWS,
+    skills: DEFAULT_SKILLS,
     armorClass: 18,
     speed: 30,
     alignment: 'Lawful Good',
@@ -43,6 +46,9 @@ const npcs: NpcCreateData[] = [
       charisma: 18,
     },
     hitPoints: 120,
+    temporaryHitPoints: 0,
+    savingThrows: DEFAULT_SAVING_THROWS,
+    skills: DEFAULT_SKILLS,
     armorClass: 12,
     speed: 30,
     alignment: 'Lawful Good',
@@ -68,6 +74,9 @@ const npcs: NpcCreateData[] = [
       charisma: 16,
     },
     hitPoints: 130,
+    temporaryHitPoints: 0,
+    savingThrows: DEFAULT_SAVING_THROWS,
+    skills: DEFAULT_SKILLS,
     armorClass: 17,
     speed: 35,
     alignment: 'Chaotic Good',
@@ -80,14 +89,10 @@ const npcs: NpcCreateData[] = [
   },
 ];
 
-const populateNpcs = async () => {
-  for (const npc of npcs) {
-    const id = await npcRepository.addDocument({
-      createData: npc,
-      getCollectionPathArgument: {},
-    });
-    console.log(`Created NPC ${npc.name} with id: ${id}`);
-  }
-};
-
-populateNpcs().catch(console.error);
+for (const npc of npcs) {
+  const id = await npcRepository.addDocument({
+    createData: npc,
+    getCollectionPathArgument: {},
+  });
+  console.log(`Created NPC ${npc.name} with id: ${id}`);
+}

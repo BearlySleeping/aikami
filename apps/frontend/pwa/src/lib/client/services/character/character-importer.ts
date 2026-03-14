@@ -33,9 +33,7 @@ export class CharacterImporter {
         if (json.data) {
           return json.data as Character;
         }
-      } catch (e) {
-        console.error('Failed to parse V2 character card', e);
-      }
+      } catch (_e) {}
     }
 
     if (textChunks.cbar) {
@@ -45,9 +43,7 @@ export class CharacterImporter {
         if (json.name && json.description) {
           return CharacterImporter.convertRisuAiToCharacter(json);
         }
-      } catch (e) {
-        console.error('Failed to parse cbar (RisuAI) character card', e);
-      }
+      } catch (_e) {}
     }
 
     return null;
@@ -80,8 +76,7 @@ export class CharacterImporter {
       });
 
       return avatarFile;
-    } catch (e) {
-      console.error('Failed to extract avatar from PNG', e);
+    } catch (_e) {
       return undefined;
     }
   }
@@ -102,9 +97,7 @@ export class CharacterImporter {
       if (json.name && json.description) {
         return CharacterImporter.convertV1ToV2(json);
       }
-    } catch (e) {
-      console.error('Failed to parse JSON character', e);
-    }
+    } catch (_e) {}
     return null;
   }
 

@@ -5,7 +5,7 @@ import {
 } from '@aikami/frontend/services';
 import type { GroupChatData } from '@aikami/schemas';
 import type { NpcData } from '@aikami/types';
-import { authService, groupChatService, npcService } from '$services';
+import { groupChatService, npcService } from '$services';
 
 export type GroupChatListViewModelOptions = BaseViewModelOptions;
 

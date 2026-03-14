@@ -1,5 +1,3 @@
-import type { Character } from '../../types/character.ts';
-
 type Message = {
   id: string;
   text: string;

@@ -1,7 +1,7 @@
 import process from 'node:process';
-import { getFirestore } from '@aikami/backend/configs/database.ts';
-import { documentId } from '@aikami/backend/configs/firestore.ts';
-import { getBatch } from '@aikami/backend/utils/batch.ts';
+import { getFirestore } from '@aikami/backend/configs/database';
+import { documentId } from '@aikami/backend/configs/firestore';
+import { getBatch } from '@aikami/backend/utils/batch';
 import type {
   BackendQuery,
   CoreData,

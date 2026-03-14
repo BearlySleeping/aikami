@@ -1,7 +1,12 @@
 import type { CountryToCode } from '@aikami/constants';
 import type { GeoPoint } from './api/firestore.ts';
+import type { AppError } from './error.ts'; // Adjust import based on your structure
 
 export type BaseForm = Record<string, unknown>;
+
+export type AppResult<T = void, E = AppError> =
+  | { success: true; data: T }
+  | { success: false; error: E };
 
 /**
  * Example: DK, (Denmark) Two-letter country code ([ISO 3166-1

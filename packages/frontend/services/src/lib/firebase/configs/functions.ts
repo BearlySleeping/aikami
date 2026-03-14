@@ -1,4 +1,4 @@
-import { getFunctions } from 'firebase/functions';
+import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 import app from './app.ts';
 
 export { httpsCallable } from 'firebase/functions';
@@ -7,3 +7,7 @@ export { httpsCallable } from 'firebase/functions';
 const region: string = import.meta.env.PUBLIC_CLOUD_FUNCTIONS_REGION || 'europe-west1';
 
 export const functions = getFunctions(app, region);
+
+if (import.meta.env.PUBLIC_FLAVOR === 'EMULATOR') {
+  connectFunctionsEmulator(functions, 'localhost', 5001);
+}

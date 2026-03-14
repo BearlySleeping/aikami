@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/auth/login/login-view-model.svelte.ts
 import type { SocialSignInResponse } from '@aikami/frontend/services';
 import {
   BaseFormViewModel,
@@ -88,7 +89,10 @@ class LoginViewModel
    */
   private async _loginWithEmail(email: string, password: string): Promise<void> {
     try {
-      await authService.signInWithEmailAndPassword({ email, password });
+      const result = await authService.signInWithEmailAndPassword({ email, password });
+      if (!result.success) {
+        throw result.error;
+      }
       await routerService.goToRoute('dashboard', {
         pathParameters: undefined,
         queryParameters: undefined,
@@ -96,7 +100,6 @@ class LoginViewModel
     } catch (err) {
       this.error('Login failed', err);
       this._errors.password = 'Invalid email or password';
-      throw err;
     }
   }
 
