@@ -1,6 +1,6 @@
 import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { error, json, type RequestEvent } from '@sveltejs/kit';
-import logger from '$logger';
+import { logger } from '$logger';
 
 // This type definition remains the same
 export type APICalls = Record<string, [unknown, unknown]>;

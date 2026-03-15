@@ -1,10 +1,15 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/auth/login/LoginView.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import ForgotPasswordDialog from './forgot-password/ForgotPasswordDialog.svelte';
-  import { getLoginViewModel } from './login-view-model.svelte.ts';
+  import type { LoginViewModelInterface } from './login-view-model.svelte.ts';
 
-  const viewModel = getLoginViewModel({ className: 'LoginView' });
+  type Props = {
+    viewModel: LoginViewModelInterface;
+  };
+
+  let { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer
@@ -174,4 +179,4 @@
   </div>
 </BaseViewModelContainer>
 
-<ForgotPasswordDialog {viewModel} />
+<ForgotPasswordDialog loginViewModel={viewModel} />

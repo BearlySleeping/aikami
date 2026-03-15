@@ -31,6 +31,6 @@ class AWSLoggerService extends BaseLoggerService implements AWSLoggerInterface {
   }
 }
 
-export default new AWSLoggerService({
+export const logger = new AWSLoggerService({
   logLevel: process.env.LOG_LEVEL,
 });

@@ -35,6 +35,7 @@ class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerI
   }
 }
 
-export default new FrontendLoggerService({
-  logLevel: import.meta.env.PUBLIC_LOG_LEVEL,
+
+export const logger = new FrontendLoggerService({
+	logLevel: import.meta.env.PUBLIC_LOG_LEVEL,
 });

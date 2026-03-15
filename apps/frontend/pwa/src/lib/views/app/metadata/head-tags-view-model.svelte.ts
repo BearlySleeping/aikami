@@ -1,9 +1,11 @@
+// apps/frontend/pwa/src/lib/views/app/metadata/head-tags-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
   type RouteName,
 } from '@aikami/frontend/services';
+import { page } from '$app/state';
 import { routerService } from '$services';
 
 const jsonLd = (data: Record<string, unknown>): string => {
@@ -114,46 +116,35 @@ export type MetaTagProperties = {
 
 export type MetaTags = Partial<MetaTagProperties>;
 
-export type HeadTagsViewModelOptions = BaseViewModelOptions;
+export type HeadTagsViewModelOptions = BaseViewModelOptions & {
+  data?: BaseMetaTags;
+};
 
 export type HeadTagsViewModelInterface = BaseViewModelInterface & {
   /**
    * The base metadata for the page.
    */
-  readonly baseMetadata: () => BaseMetaTags;
+  readonly baseMetadata: BaseMetaTags;
 
   /**
    * The full metadata for the page.
    */
-  readonly fullMetadata: () => MetaTags;
+  readonly fullMetadata: MetaTags;
 
   /**
    * The JSON-LD for the organization.
    */
-  readonly organizationJsonLd: () => string | null;
+  readonly organizationJsonLd: string | null;
 
   /**
    * The JSON-LD for the search action.
    */
-  readonly searchActionJsonLd: () => string | null;
+  readonly searchActionJsonLd: string | null;
 
   /**
-   * Sets the metadata for the page.
-   * @param data The metadata to set.
+   * Updates the base metadata for the page.
    */
   setData(data: BaseMetaTags): void;
-
-  /**
-   * Sets the base URL for the page.
-   * @param baseURL The base URL to set.
-   */
-  setBaseURL(baseURL: string): void;
-
-  /**
-   * Sets the path for the page.
-   * @param path The path to set.
-   */
-  setPath(path: string): void;
 };
 
 class HeadTagsViewModel
@@ -163,19 +154,14 @@ class HeadTagsViewModel
   /**
    * The metadata for the page.
    */
-  private _data = $state<BaseMetaTags | null>(null);
+  private _data = $state<BaseMetaTags | undefined>();
 
-  /**
-   * The base URL for the page.
-   */
-  private _baseURL = $state<string>('');
+  constructor(options: HeadTagsViewModelOptions) {
+    super(options);
+    this._data = options.data;
+  }
 
-  /**
-   * The path for the page.
-   */
-  private _path = $state<string>('');
-
-  baseMetadata = $derived((): BaseMetaTags => {
+  get baseMetadata(): BaseMetaTags {
     const currentRoute = routerService.currentRoute;
 
     const defaultMetadata: BaseMetaTags = {
@@ -185,11 +171,11 @@ class HeadTagsViewModel
     };
 
     return this._data ? { ...defaultMetadata, ...this._data } : defaultMetadata;
-  });
+  }
 
-  fullMetadata = $derived((): MetaTags => {
-    const data = this.baseMetadata();
-    const url = this._baseURL && this._path ? `${this._baseURL}${this._path}` : undefined;
+  get fullMetadata(): MetaTags {
+    const data = this.baseMetadata;
+    const url = `${page.url.origin}${page.url.pathname}`;
 
     if (!data) {
       return {};
@@ -237,22 +223,27 @@ class HeadTagsViewModel
       twitter,
       url,
     };
-  });
+  }
 
-  organizationJsonLd = $derived((): string | null => {
-    if (!this._baseURL) return null;
+  get organizationJsonLd(): string | null {
+    if (!page.url.origin) {
+      return null;
+    }
 
     return jsonLd({
       '@context': 'https://schema.org',
       '@type': 'Organization',
-      logo: `${this._baseURL}/favicon.ico`,
-      url: this.fullMetadata().url,
+      logo: `${page.url.origin}/favicon.ico`,
+      url: this.fullMetadata.url,
     });
-  });
+  }
 
-  searchActionJsonLd = $derived((): string | null => {
-    const metadata = this.fullMetadata();
-    if (!metadata.url || !metadata.searchURL) return null;
+  get searchActionJsonLd(): string | null {
+    const metadata = this.fullMetadata;
+
+    if (!metadata.url || !metadata.searchURL) {
+      return null;
+    }
 
     return jsonLd({
       '@context': 'https://schema.org',
@@ -264,25 +255,12 @@ class HeadTagsViewModel
       },
       url: metadata.url,
     });
-  });
+  }
 
   setData(data: BaseMetaTags): void {
     this._data = data;
   }
 
-  setBaseURL(baseURL: string): void {
-    this._baseURL = baseURL;
-  }
-
-  setPath(path: string): void {
-    this._path = path;
-  }
-
-  /**
-   * Gets the title for the page.
-   * @param _options The options.
-   * @returns The title for the page.
-   */
   private _getTitle(_options: { currentRoute?: RouteName }): string {
     // TODO use currentRoute to set the title
     return 'AiKami';

@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/auth/register/register-view-model.svelte.ts
 import type { SocialSignInResponse } from '@aikami/frontend/services';
 import {
   BaseFormViewModel,

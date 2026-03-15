@@ -1,5 +1,5 @@
 import process from 'node:process';
-import { logger } from 'firebase-functions/logger';
+import { logger as firebaseFunctionsLogger } from 'firebase-functions/logger';
 import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts';
 import { Timer, type TimerInterface } from './timer.ts';
 
@@ -22,7 +22,7 @@ class FunctionsLoggerService extends BaseLoggerService implements FunctionsLogge
       }
 
       const baseLog =
-        process.env.FIREBASE_CONFIG && !process.env.FUNCTIONS_EMULATOR ? logger : console;
+        process.env.FIREBASE_CONFIG && !process.env.FUNCTIONS_EMULATOR ? firebaseFunctionsLogger : console;
 
       const log = baseLog[logType ?? 'log'];
 
@@ -40,6 +40,7 @@ class FunctionsLoggerService extends BaseLoggerService implements FunctionsLogge
   }
 }
 
-export default new FunctionsLoggerService({
-  logLevel: process.env.LOG_LEVEL,
+
+export const logger = new FunctionsLoggerService({
+	logLevel: process.env.LOG_LEVEL,
 });

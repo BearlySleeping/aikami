@@ -1,6 +1,6 @@
 import { updateUserClaimsOptional, updateUserData } from '@aikami/backend/database/user.ts';
 import type { AuthMessagePayload, AuthMessageResponse, UserClaims } from '@aikami/types';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export const confirmTermsAndService = async (
   options: AuthMessagePayload<'confirmTermsAndService'>,

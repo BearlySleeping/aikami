@@ -1,7 +1,7 @@
-// import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+// packages/frontend/services/src/lib/firebase/configs/app.ts
 import { toAppError } from '@aikami/utils';
 import { type FirebaseOptions, getApps, initializeApp } from 'firebase/app';
-import logger from '$logger';
+import { logger } from '$logger';
 
 const getApp = () => {
   const app = getApps()[0];
@@ -10,20 +10,22 @@ const getApp = () => {
   }
 
   const isEmulator = import.meta.env.PUBLIC_FLAVOR === 'EMULATOR';
+  const projectId = import.meta.env.PUBLIC_FIREBASE_PROJECT_ID;
 
   const serviceAccount: FirebaseOptions = isEmulator
     ? {
         apiKey: 'demo-key',
         authDomain: 'localhost',
-        projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID || 'aikami-dev',
-        storageBucket: 'localhost',
+        projectId,
+        storageBucket: `${projectId}.firebasestorage.app`,
         messagingSenderId: '000000000000',
         appId: 'demo-app-id',
+        measurementId: 'test-measurement-id',
       }
     : {
         apiKey: import.meta.env.PUBLIC_FIREBASE_API_KEY,
         authDomain: import.meta.env.PUBLIC_FIREBASE_AUTH_DOMAIN,
-        projectId: import.meta.env.PUBLIC_FIREBASE_PROJECT_ID,
+        projectId,
         storageBucket: import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET,
         messagingSenderId: import.meta.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
         appId: import.meta.env.PUBLIC_FIREBASE_APP_ID,

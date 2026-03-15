@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/dashboard/dashboard-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,

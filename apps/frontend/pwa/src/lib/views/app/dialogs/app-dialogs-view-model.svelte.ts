@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/app/dialogs/app-dialogs-view-model.svelte.ts
 import type { AppLoadingData, ConfirmDialogData, SnackbarData } from '@aikami/frontend/services';
 import {
   BaseViewModel,
@@ -44,11 +45,17 @@ class AppDialogsViewModel
   extends BaseViewModel<AppDialogsViewModelOptions>
   implements AppDialogsViewModelInterface
 {
-  confirmDialog = $derived(dialogService.confirmDialog);
+  get confirmDialog() {
+    return dialogService.confirmDialog;
+  }
 
-  snackbar = $derived(dialogService.snackbar);
+  get snackbar() {
+    return dialogService.snackbar;
+  }
 
-  appLoading = $derived(dialogService.appLoading);
+  get appLoading() {
+    return dialogService.appLoading;
+  }
 
   hideSnackbar(): void {
     this.debug('Hiding snackbar');

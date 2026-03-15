@@ -86,6 +86,6 @@ class SvelteKitBackendLoggerService
   }
 }
 
-export default new SvelteKitBackendLoggerService({
+export const logger = new SvelteKitBackendLoggerService({
   logLevel: process.env.LOG_LEVEL,
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/chat/ChatView.svelte
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import CharacterCard from '$lib/components/chat/CharacterCard.svelte';
   import ChatContainer from '$lib/components/chat/ChatContainer.svelte';

@@ -138,7 +138,6 @@ export class CharacterImporter {
     );
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: External data from character files has unknown structure
   private static convertRisuAiToCharacter(risuData: any): Character {
     return {
       name: risuData.name || '',
@@ -158,7 +157,6 @@ export class CharacterImporter {
     };
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: External data from character files has unknown structure
   private static convertV1ToV2(v1: any): Character {
     return {
       name: v1.name || '',

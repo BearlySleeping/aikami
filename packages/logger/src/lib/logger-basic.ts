@@ -30,4 +30,6 @@ class BasicLoggerService extends BaseLoggerService implements BasicLoggerInterfa
   }
 }
 
-export default new BasicLoggerService();
+export const logger = new BasicLoggerService({
+  logLevel: process.env.LOG_LEVEL,
+});

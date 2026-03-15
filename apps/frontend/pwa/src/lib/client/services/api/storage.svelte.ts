@@ -36,8 +36,16 @@ class StorageService
 
       this.log('uploadAvatar', { path });
 
+      // 1. Upload the file
       const result = await this._storage.upload(path, file);
-      return result.ref.fullPath;
+
+      // 2. Fetch the download URL
+      // Note: Adjust 'getDownloadURL' if your custom interface uses a different method name
+      // and check if it expects 'result.ref' or 'result.ref.fullPath' as the argument.
+      const downloadUrl = await this._storage.getDownloadURL(result.ref);
+
+      this.log('uploadAvatar uploaded', { downloadUrl });
+      return downloadUrl;
     } catch (error) {
       this.error(error);
       return;

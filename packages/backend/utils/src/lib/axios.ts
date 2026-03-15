@@ -4,7 +4,7 @@ import axios, {
   type AxiosResponse,
   type RawAxiosRequestHeaders,
 } from 'axios';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export type QueryParameters = Record<string, boolean | number | string | undefined>;
 

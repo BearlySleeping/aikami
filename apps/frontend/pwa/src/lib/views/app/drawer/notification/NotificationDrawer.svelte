@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/drawer/notification/NotificationDrawer.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import { getNotificationDrawerViewModel } from './notification-drawer-view-model.svelte.ts';

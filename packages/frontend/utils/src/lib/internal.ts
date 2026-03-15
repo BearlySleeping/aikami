@@ -1,6 +1,6 @@
 import type { SvelteKitError } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export type APICalls = Record<string, [unknown, unknown]>;
 

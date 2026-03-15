@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/persona/create/PersonaCreationView.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import type { PersonaCreationViewModelInterface } from './persona-creation-view-model.svelte.ts';

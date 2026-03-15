@@ -1,9 +1,14 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/auth/register/RegisterView.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
-  import { getRegisterViewModel } from './register-view-model.svelte.ts';
+  import type { RegisterViewModelInterface } from './register-view-model.svelte.ts';
 
-  const viewModel = getRegisterViewModel({ className: 'RegisterView' });
+  type Props = {
+    viewModel: RegisterViewModelInterface;
+  };
+
+  let { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer

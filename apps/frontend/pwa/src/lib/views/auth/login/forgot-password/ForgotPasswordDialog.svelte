@@ -1,24 +1,25 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/auth/login/forgot-password/ForgotPasswordDialog.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import type { LoginViewModelInterface } from '../login-view-model.svelte.ts';
   import { getForgotPasswordViewModel } from './forgot-password-view-model.svelte.ts';
 
   type Props = {
-    viewModel: LoginViewModelInterface;
+    loginViewModel: LoginViewModelInterface;
   };
 
-  let { viewModel }: Props = $props();
+  let { loginViewModel }: Props = $props();
 
-  const forgotPasswordViewModel = getForgotPasswordViewModel({
+  const viewModel = getForgotPasswordViewModel({
     // svelte-ignore state_referenced_locally
-    loginViewModel: viewModel,
+    loginViewModel,
     className: 'ForgotPasswordViewModel',
   });
 </script>
 
-{#if forgotPasswordViewModel.isOpen}
-  <BaseViewModelContainer viewModel={forgotPasswordViewModel} class="modal modal-open">
+{#if viewModel.isOpen}
+  <BaseViewModelContainer {viewModel} class="modal modal-open">
     <div class="modal-box">
       <h3 class="font-bold text-lg mb-4">{t.forgot_password()}</h3>
 
@@ -28,7 +29,7 @@
         class="flex flex-col gap-4"
         onsubmit={(e) => {
                     e.preventDefault();
-                    forgotPasswordViewModel.handleSubmit();
+                    viewModel.handleSubmit();
                 }}
       >
         <div class="form-control">
@@ -39,22 +40,20 @@
             id="forgot-email"
             type="email"
             class="input input-bordered"
-            class:input-error={forgotPasswordViewModel.errors.email}
+            class:input-error={viewModel.errors.email}
             placeholder={t.email_placeholder()}
-            value={forgotPasswordViewModel.form.email}
+            value={viewModel.form.email}
             oninput={(e) => {
-                            forgotPasswordViewModel.form.email =
+                            viewModel.form.email =
                                 e.currentTarget.value;
-                            forgotPasswordViewModel.handleChange("email");
+                            viewModel.handleChange("email");
                         }}
-            disabled={forgotPasswordViewModel.isSubmitting}
+            disabled={viewModel.isSubmitting}
             autocomplete="email"
           >
-          {#if forgotPasswordViewModel.errors.email}
+          {#if viewModel.errors.email}
             <div class="label">
-              <span class="label-text-alt text-error">
-                {forgotPasswordViewModel.errors.email}
-              </span>
+              <span class="label-text-alt text-error"> {viewModel.errors.email} </span>
             </div>
           {/if}
         </div>
@@ -63,17 +62,13 @@
           <button
             type="button"
             class="btn btn-ghost"
-            onclick={() => forgotPasswordViewModel.close()}
-            disabled={forgotPasswordViewModel.isSubmitting}
+            onclick={() => viewModel.close()}
+            disabled={viewModel.isSubmitting}
           >
             {t.cancel()}
           </button>
-          <button
-            type="submit"
-            class="btn btn-primary"
-            disabled={forgotPasswordViewModel.isSubmitting}
-          >
-            {#if forgotPasswordViewModel.isSubmitting}
+          <button type="submit" class="btn btn-primary" disabled={viewModel.isSubmitting}>
+            {#if viewModel.isSubmitting}
               <span class="loading loading-spinner"></span>
             {/if}
             {t.send_reset_email()}
@@ -83,10 +78,10 @@
     </div>
     <div
       class="modal-backdrop"
-      onclick={() => forgotPasswordViewModel.close()}
+      onclick={() => viewModel.close()}
       onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
-                    forgotPasswordViewModel.close();
+                    viewModel.close();
                 }
             }}
       role="button"

@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/persona/create/persona-creation-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,

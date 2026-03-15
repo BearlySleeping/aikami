@@ -1,6 +1,6 @@
 import type { AIMessagePayload, AIMessageResponse, UserSessionData } from '@aikami/types';
 
-import logger from '$logger';
+import { logger } from '$logger';
 import { LorebookService } from './lorebook.ts';
 import { type AIChatMessage, createAIProvider } from './providers/index.ts';
 

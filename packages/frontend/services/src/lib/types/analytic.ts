@@ -4,6 +4,14 @@ export type AllAnalyticsEvents = {
   login: { method: string };
   logout: undefined;
   pwa_action: { action: string };
+
+  invalid_url: {
+    url: string;
+  };
+  unknown_error: {
+    code: number;
+    message?: string;
+  };
 };
 
 export type AnalyticsEventName = keyof AllAnalyticsEvents;

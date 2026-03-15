@@ -18,7 +18,7 @@ import type {
   DocumentSnapshot,
   Query,
 } from '@google-cloud/firestore';
-import logger from '$logger';
+import { logger } from '$logger';
 
 /**
  * Updates an array of documents

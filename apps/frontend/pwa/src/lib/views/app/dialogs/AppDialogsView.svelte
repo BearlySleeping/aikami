@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/dialogs/AppDialogsView.svelte
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import { getAppDialogsViewModel } from './app-dialogs-view-model.svelte.ts';
   import AppLoading from './components/AppLoading.svelte';

@@ -58,6 +58,7 @@ const viewModel = getChatViewModel({
 ```
 
 **Rules:**
+
 1. Always use `$views/` path alias for importing view models and views
 2. Always use `getXxxViewModel` factory function to create the view model
 3. Always pass `className` as the first option
@@ -77,10 +78,10 @@ This project uses Svelte 5 with runes:
 class CharacterService {
   characters = $state<Character[]>([]);
   selectedCharacter = $state<Character | null>(null);
-  
+
   // Computed value
   selectedCount = $derived(this.characters.length);
-  
+
   // Effect
   $effect(() => {
     console.log('Selected character changed:', this.selectedCharacter);
@@ -127,33 +128,35 @@ All services must follow this exact pattern:
 
 ```typescript
 import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
+	BaseFrontendClass,
+	type BaseFrontendClassInterface,
+	type BaseFrontendClassOptions,
 } from "@aikami/frontend/services";
 import type { Character } from "$types";
 
 export type CharacterServiceOptions = BaseFrontendClassOptions;
 
 export type CharacterServiceInterface = BaseFrontendClassInterface & {
-  readonly characters: Character[];
-  getCharacter(id: string): Promise<Character | null>;
+	readonly characters: Character[];
+	getCharacter(id: string): Promise<Character | null>;
 };
 
 class CharacterService
-  extends BaseFrontendClass<CharacterServiceOptions>
-  implements CharacterServiceInterface
+	extends BaseFrontendClass<CharacterServiceOptions>
+	implements CharacterServiceInterface
 {
-  characters: Character[] = $state([]);
+	characters: Character[] = $state([]);
 
-  async getCharacter(id: string): Promise<Character | null> {
-    return await characterRepository.getDocument({ id });
-  }
+	async getCharacter(id: string): Promise<Character | null> {
+		return await characterRepository.getDocument({ id });
+	}
 }
 
-export const characterService: CharacterServiceInterface = new CharacterService({
-  className: "CharacterService",
-});
+export const characterService: CharacterServiceInterface = new CharacterService(
+	{
+		className: "CharacterService",
+	},
+);
 ```
 
 **Important**: Pass options when creating the singleton, not in the constructor.
@@ -200,7 +203,41 @@ const { viewModel }: Props = $props();
 </BaseViewModelContainer>
 ```
 
+### Destructuring Reactive Properties
+
+**NEVER** destructure properties from a ViewModel or Service. Destructuring evaluates getters and `$state` immediately, copying the static value and completely breaking Svelte 5's reactivity tracking.
+
+### ❌ WRONG: Destructuring (Breaks Reactivity)
+
+```typescript
+<script lang="ts">
+  const viewModel = getAppViewModel({ data, className: 'AppViewModel' });
+
+  // BAD! This copies the values once and breaks Svelte's signal tracking
+  const { showAppBar, isLoggedIn } = viewModel;
+</script>
+
+{#if showAppBar}
+  <AppBar />
+{/if}
+```
+
+### ✅ CORRECT: Direct Instance Access
+
+Always access properties directly through the viewModel instance in your template. This ensures Svelte's compiler registers the property read and successfully tracks the signal.
+
+```typescript
+<script lang="ts">
+  const viewModel = getAppViewModel({ data, className: 'AppViewModel' });
+</script>
+
+{#if viewModel.showAppBar}
+  <AppBar />
+{/if}
+```
+
 The view model should:
+
 - Handle initialization in `initialize()` method (called by BaseViewModelContainer)
 - Expose all UI state as properties
 - Expose all UI actions as methods
@@ -217,28 +254,29 @@ All interfaces must have JSDoc comments:
  * Provides methods for importing, adding, and selecting character data.
  */
 export type CharacterServiceInterface = BaseFrontendClassInterface & {
-  /**
-   * List of all imported characters.
-   * @readonly - Use addCharacter() to modify
-   */
-  readonly characters: Character[];
+	/**
+	 * List of all imported characters.
+	 * @readonly - Use addCharacter() to modify
+	 */
+	readonly characters: Character[];
 
-  /**
-   * Currently selected character.
-   * @readonly - Use selectCharacter() to modify
-   */
-  readonly selectedCharacter: Character | null;
+	/**
+	 * Currently selected character.
+	 * @readonly - Use selectCharacter() to modify
+	 */
+	readonly selectedCharacter: Character | null;
 
-  /**
-   * Imports a character from a file.
-   * @param file - The file to import
-   * @returns The imported Character or null if import failed
-   */
-  importFile(file: File): Promise<Character | null>;
+	/**
+	 * Imports a character from a file.
+	 * @param file - The file to import
+	 * @returns The imported Character or null if import failed
+	 */
+	importFile(file: File): Promise<Character | null>;
 };
 ```
 
 **Rules:**
+
 1. Always use `readonly` for state properties
 2. Use `@readonly` annotation
 3. All fields must have JSDoc comments
@@ -250,24 +288,24 @@ export type CharacterServiceInterface = BaseFrontendClassInterface & {
 
 Use path aliases defined in `svelte.config.js`:
 
-| Alias | Purpose |
-|-------|---------|
-| `$lib` | lib folder |
-| `$types` | @aikami/types |
-| `$services` | frontend services |
-| `$logger` | @aikami/logger |
-| `$views` | view models and views |
-| `$i18n` | i18n utilities |
+| Alias       | Purpose               |
+| ----------- | --------------------- |
+| `$lib`      | lib folder            |
+| `$types`    | @aikami/types         |
+| `$services` | frontend services     |
+| `$logger`   | @aikami/logger        |
+| `$views`    | view models and views |
+| `$i18n`     | i18n utilities        |
 
 ### Import Rules
 
 - Use **explicit type imports**: `import type { Character } from '$types'`
 - Use **named exports** over default exports
 - **Always include file extensions** in relative imports:
-  ```typescript
-  import { something } from './foo.ts';
-  import { something } from './bar.svelte.ts';
-  ```
+    ```typescript
+    import { something } from "./foo.ts";
+    import { something } from "./bar.svelte.ts";
+    ```
 
 ---
 
@@ -280,11 +318,11 @@ import { createApiHandler } from "@aikami/utils";
 import type { PWACalls } from "@aikami/types";
 
 export const POST: RequestHandler = (event) =>
-  createApiHandler<PWACalls, 'feature'>('feature', event, async (data) => {
-    const { payload, type } = data;
-    // Handle the request
-    return { success: true };
-  });
+	createApiHandler<PWACalls, "feature">("feature", event, async (data) => {
+		const { payload, type } = data;
+		// Handle the request
+		return { success: true };
+	});
 ```
 
 ---
@@ -304,9 +342,9 @@ throw toAppError("internal", "Something went wrong", { extra: "data" });
 
 // Handling unknown errors
 try {
-  await doSomething();
+	await doSomething();
 } catch (err) {
-  const appError = toAppErrorFromUnknownError(err);
+	const appError = toAppErrorFromUnknownError(err);
 }
 ```
 
@@ -324,10 +362,10 @@ Use Bun's built-in test runner:
 import { describe, expect, test } from "bun:test";
 
 describe("CharacterService", () => {
-  test("should import character from file", async () => {
-    const character = await characterService.importFile(mockFile);
-    expect(character).not.toBeNull();
-  });
+	test("should import character from file", async () => {
+		const character = await characterService.importFile(mockFile);
+		expect(character).not.toBeNull();
+	});
 });
 ```
 
@@ -339,13 +377,13 @@ Use Playwright:
 import { expect, test } from "@playwright/test";
 
 test.describe("Authentication", () => {
-  test("should login successfully", async ({ page }) => {
-    await page.goto("/login");
-    await page.fill('[name="email"]', "test@example.com");
-    await page.fill('[name="password"]', "password");
-    await page.click('[type="submit"]');
-    await expect(page).toHaveURL("/dashboard");
-  });
+	test("should login successfully", async ({ page }) => {
+		await page.goto("/login");
+		await page.fill('[name="email"]', "test@example.com");
+		await page.fill('[name="password"]', "password");
+		await page.click('[type="submit"]');
+		await expect(page).toHaveURL("/dashboard");
+	});
 });
 ```
 
@@ -404,3 +442,4 @@ bun run typecheck
 6. ❌ Using `as unknown as SomeType` - Create transformation functions instead
 7. ❌ Omitting file extensions in imports
 8. ❌ Using default exports - Use named exports
+9. ❌ Destructuring reactive properties from ViewModels or Services - Always access them directly via the instance (`viewModel.property`) so Svelte tracks the read.

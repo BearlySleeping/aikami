@@ -5,7 +5,7 @@ import type {
   OAuthProviderUpdateData,
   ServerTimestamp,
 } from '@aikami/types';
-import logger from '$logger';
+import { logger } from '$logger';
 import {
   getDateFromUnixTime,
   getDaysFromNowInUnix,

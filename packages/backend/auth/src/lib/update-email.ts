@@ -2,7 +2,7 @@ import { updateUserData } from '@aikami/backend/database/user.ts';
 import { updateFirebaseAuthUser } from '@aikami/backend/utils/auth.ts';
 import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
-import logger from '$logger';
+import { logger } from '$logger';
 import { checkUniqueEmail } from './check-unique-email.ts';
 
 export const updateEmail = async (

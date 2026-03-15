@@ -12,12 +12,13 @@ declare namespace App {
   type UserSessionData = import('@aikami/types').UserSessionData;
   type DeviceData = import('@aikami/types').DeviceData;
   type ErrorType = import('@aikami/types').ErrorType;
+  type RouteName = import('$router').RouteName;
 
   interface Locals {
     locale: Locales;
     device?: DeviceData;
     userSession?: UserSessionData;
-    currentRoutePath?: string;
+    currentRoute?: RouteName;
   }
 
   interface Error {

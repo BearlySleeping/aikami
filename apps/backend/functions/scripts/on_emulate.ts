@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+// apps/backend/functions/scripts/on_emulate.ts
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getAuth } from '@aikami/backend/configs/auth';
 import { getBucket } from '@aikami/backend/configs/bucket';
@@ -15,12 +16,11 @@ import type {
   PersonaCreateData,
   UserCreateData,
 } from '@aikami/types';
-import type { ScriptContext } from '@snorreks/firestack';
-import logger from '$logger';
+import { logger } from '$logger';
 
 const EMULATOR_PASSWORD = 'asdasd';
 
-const ASSETS_DIR = join(__dirname, '../../assets');
+const ASSETS_DIR = join(__dirname, '../assets');
 
 const storageAssets = [
   {
@@ -222,7 +222,7 @@ const uploadAssetToStorage = async (asset: StorageAsset): Promise<string> => {
   const filePath = join(ASSETS_DIR, asset.fileName);
 
   try {
-    const fileContent = readFileSync(filePath);
+    const fileContent = await readFile(filePath);
     const file = bucket.file(asset.destinationPath);
 
     await file.save(fileContent, {
@@ -252,66 +252,39 @@ const seedStorage = async (assets: StorageAsset[]) => {
   return uploadedPaths;
 };
 
-export async function run(context: ScriptContext) {
-  logger.log('running on emulate script', context);
-  logger.log('FLAVOR', process.env.FLAVOR);
-  logger.log('LOG_LEVEL', process.env.LOG_LEVEL);
-  logger.log('context.projectId', context.projectId);
-
-  logger.log('Creating NPCs...');
-  for (const npc of npcs) {
-    const id = await npcRepository.addDocument({
-      createData: npc,
-      getCollectionPathArgument: {},
-    });
-    logger.log(`Created NPC ${npc.name} with id: ${id}`);
-  }
-
-  logger.log('Clearing existing emulator users...');
-  await deleteAllEmulatorUsers();
-
-  logger.log('Creating email/password users...');
-
-  const authorizedUid = await createFirebaseAuthUser({
-    uid: 'authorized_user',
-    displayName: 'Authorized User',
-    email: 'authorized@bearlysleeping.com',
-    password: EMULATOR_PASSWORD,
+logger.log('Creating NPCs...');
+for (const npc of npcs) {
+  const id = await npcRepository.addDocument({
+    createData: npc,
+    getCollectionPathArgument: {},
   });
-  await createUserDocument(authorizedUid, 'authorized@bearlysleeping.com', 'Authorized User');
-  logger.log('Created authorized user (registered)');
-
-  await createFirebaseAuthUser({
-    uid: 'unauthorized_user',
-    displayName: 'Unauthorized User',
-    email: 'unauthorized@bearlysleeping.com',
-    password: EMULATOR_PASSWORD,
-  });
-  logger.log('Created unauthorized user (no user document)');
-
-  logger.log('Creating persona and chat for authorized user...');
-  const personaId = await createPersona(authorizedUid);
-  logger.log(`Created persona: ${personaId}`);
-
-  const chatId = await createChat(authorizedUid, personaId);
-  logger.log(`Created chat: ${chatId}`);
-
-  await seedStorage(storageAssets);
-
-  logger.log('✅ Emulator seeded!');
-  logger.log('');
-  logger.log('Auth Users:');
-  logger.log('  Authorized: authorized@bearlysleeping.com / asdasd');
-  logger.log('  Unauthorized: unauthorized@bearlysleeping.com / asdasd');
+  logger.log(`Created NPC ${npc.name} with id: ${id}`);
 }
 
-if (import.meta.main || process.mainModule === module) {
-  const flavor = process.env.FLAVOR || 'development';
-  const projectId = process.env.FIREBASE_PROJECT_ID || 'aikami-dev';
-  run({ projectId, flavor }).catch((error) => {
-    logger.error('❌ Seeding failed:', error);
-    process.exit(1);
-  });
-}
+logger.log('Clearing existing emulator users...');
+await deleteAllEmulatorUsers();
 
-export default run;
+logger.log('Creating email/password users...');
+
+const authorizedUid = await createFirebaseAuthUser({
+  uid: 'authorized_user',
+  displayName: 'Authorized User',
+  email: 'authorized@bearlysleeping.com',
+  password: EMULATOR_PASSWORD,
+});
+await createUserDocument(authorizedUid, 'authorized@bearlysleeping.com', 'Authorized User');
+logger.log('Created authorized user (registered)');
+
+logger.log('Creating persona and chat for authorized user...');
+const personaId = await createPersona(authorizedUid);
+logger.log(`Created persona: ${personaId}`);
+
+const chatId = await createChat(authorizedUid, personaId);
+logger.log(`Created chat: ${chatId}`);
+
+await seedStorage(storageAssets);
+
+logger.log('✅ Emulator seeded!');
+logger.log('');
+logger.log('Auth Users:');
+logger.log('  Authorized: authorized@bearlysleeping.com / asdasd');

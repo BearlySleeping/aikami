@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/error/AppErrorView.svelte
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import { getAppErrorViewModel } from './app-error-view-model.svelte.ts';
 

@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/app/drawer/notification/notification-drawer-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -53,10 +54,13 @@ class NotificationDrawerViewModel
   extends BaseViewModel<NotificationDrawerViewModelOptions>
   implements NotificationDrawerViewModelInterface
 {
-  readonly showNotificationDrawer = $derived(appService.showNotificationDrawer);
+  get showNotificationDrawer() {
+    return appService.showNotificationDrawer;
+  }
 
-  readonly notificationDrawerItems = $derived.by(() => {
+  get notificationDrawerItems() {
     const notifications = notificationService.notifications;
+
     return notifications.map((notification) => ({
       ...notification,
       click: () =>
@@ -69,9 +73,11 @@ class NotificationDrawerViewModel
       createdAt: getDate(notification.createdAt),
       imageURL: '',
     }));
-  });
+  }
 
-  readonly notificationCount = $derived(notificationService.notificationsAmount);
+  get notificationCount() {
+    return notificationService.notificationsAmount;
+  }
 
   async clearNotifications(): Promise<void> {
     const uid = authService.uid;

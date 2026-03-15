@@ -1,4 +1,4 @@
-import logger from '$logger';
+import { logger } from '$logger';
 
 class Node<ValueType extends () => unknown = () => unknown> {
   value: ValueType;

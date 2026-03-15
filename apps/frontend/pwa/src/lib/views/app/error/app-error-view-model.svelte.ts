@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/app/error/app-error-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -63,16 +64,27 @@ class AppErrorViewModel
   extends BaseViewModel<AppErrorViewModelOptions>
   implements AppErrorViewModelInterface
 {
-  /**
-   * The SvelteKit page store.
-   */
-  private _pageStore = $derived(page);
+  // Note: Ensure you have `import { page } from '$app/state';` at the top of your file.
 
-  readonly errorType = $derived(this._getErrorType());
-  readonly host = $derived(this._pageStore.url.origin);
-  readonly pathname = $derived(this._pageStore.url.pathname);
-  readonly errorId = $derived((this._pageStore.error as CustomError)?.errorId);
-  readonly metadata = $derived(this._getMetadata());
+  get errorType() {
+    return this._getErrorType();
+  }
+
+  get host() {
+    return page.url.origin;
+  }
+
+  get pathname() {
+    return page.url.pathname;
+  }
+
+  get errorId() {
+    return (page.error as CustomError | null)?.errorId;
+  }
+
+  get metadata() {
+    return this._getMetadata();
+  }
 
   /**
    * A map of error types to their corresponding messages, descriptions, and icons.
@@ -103,9 +115,9 @@ class AppErrorViewModel
     },
   };
 
-  readonly currentError = $derived(
-    this._errorMessages[this.errorType] || this._errorMessages['unknown-error'],
-  );
+  get currentError() {
+    return this._errorMessages[this.errorType] || this._errorMessages['unknown-error'];
+  }
 
   /**
    * Gets the metadata for the page.
@@ -122,12 +134,18 @@ class AppErrorViewModel
   }
 
   override async initialize(): Promise<void> {
-    const { error, status, url } = this._pageStore;
+    const { error, status, url } = page;
 
     if (status === 404) {
+      void this.logEvent('invalid_url', {
+        url: url.href,
+      });
     } else {
+      void this.logEvent('unknown_error', {
+        code: status,
+        message: error?.message,
+      });
     }
-    return await super.initialize();
   }
 
   async handleRetry(): Promise<void> {
@@ -148,7 +166,7 @@ class AppErrorViewModel
   }
 
   goTo(): void {
-    const { status } = this._pageStore;
+    const { status } = page;
 
     // Simple navigation fallback
     if (status === 403) {
@@ -165,8 +183,8 @@ class AppErrorViewModel
    * @returns The error type.
    */
   private _getErrorType(): ErrorType {
-    const status = this._pageStore.status;
-    const error = this._pageStore.error as CustomError;
+    const status = page.status;
+    const error = page.error as CustomError;
     const type = error?.type;
     const pathname = this.pathname;
 
