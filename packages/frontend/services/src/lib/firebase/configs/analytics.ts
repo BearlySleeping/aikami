@@ -1,3 +1,4 @@
+// packages/frontend/services/src/lib/firebase/configs/analytics.ts
 import { getAnalytics } from 'firebase/analytics';
 import app from './app.ts';
 

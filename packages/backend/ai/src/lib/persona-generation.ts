@@ -10,7 +10,7 @@ import type {
 import { toAppError } from '@aikami/utils';
 import { googleAI } from '@genkit-ai/googleai';
 import { genkit, z } from 'genkit';
-import logger from '$logger';
+import { logger } from '$logger';
 
 const ai = genkit({
   plugins: [googleAI()], // set the GOOGLE_API_KEY env variable

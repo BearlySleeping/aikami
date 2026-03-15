@@ -1,4 +1,4 @@
-import logger from '$logger';
+import { logger } from '$logger';
 
 /**
  * Checks if the browser/device supports Progressive Web Apps (PWA).

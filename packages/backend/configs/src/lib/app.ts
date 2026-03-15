@@ -1,23 +1,20 @@
 import {
   type AppOptions,
   cert,
-  deleteApp,
   getApps,
   initializeApp,
   type ServiceAccount,
 } from 'firebase-admin/app';
-import logger from '$logger';
+import { logger } from '$logger';
 import { getEnvironmentValue } from './environment.ts';
-
-const AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 
 /**
  * Determines if the application is currently running in emulator mode.
  * Checks multiple sources: process.env, and vite mode.
  */
-const isEmulatorMode = (): boolean => {
+export const isEmulatorMode = (): boolean => {
   // Check vite mode (set via --mode flag or vite.config.ts)
-  const viteMode = process.env.VITE_MODE || process.env.NODE_ENV;
+  const viteMode = getEnvironmentValue('VITE_MODE', true) || getEnvironmentValue('NODE_ENV', true);
   if (viteMode === 'emulator') {
     return true;
   }
@@ -42,32 +39,6 @@ const parseServiceAccount = (serviceAccountString: string): ServiceAccount => {
     logger.error('Invalid FIREBASE_SERVICE_ACCOUNT env:', serviceAccountString);
     throw error;
   }
-};
-
-/**
- * Manages the existing Firebase App instance lifecycle.
- * Handles safe re-initialization during HMR (Hot Module Replacement)
- * or when toggling between live and emulator modes.
- */
-const getExistingAppSafely = (isEmulator: boolean) => {
-  const existingApp = getApps()[0];
-  if (!existingApp) {
-    return undefined;
-  }
-  // If we are in emulator mode, but the existing app was initialized with live credentials,
-  // we need to tear it down so we can reinitialize it purely for the emulator.
-  if (isEmulator && existingApp.options?.credential) {
-    logger.debug('- Existing app has live credentials. Deleting for emulator reinit.');
-    try {
-      deleteApp(existingApp);
-      return undefined;
-    } catch {
-      // App might already be deleted or inaccessible
-      return undefined;
-    }
-  }
-
-  return existingApp;
 };
 
 /**
@@ -110,15 +81,14 @@ const buildAppOptions = (isEmulator: boolean): AppOptions => {
  * Retrieves an existing Firebase Admin app or initializes a new one.
  */
 export const getApp = () => {
-  const isEmulator = isEmulatorMode();
-  logger.log('isEmulator', isEmulator);
-
-  const existingApp = getExistingAppSafely(isEmulator);
-
+  const existingApp = getApps()[0];
   // Early return if we already have a valid app instance
   if (existingApp) {
     return existingApp;
   }
+
+  const isEmulator = isEmulatorMode();
+  logger.log('isEmulator', isEmulator);
 
   const options = buildAppOptions(isEmulator);
 

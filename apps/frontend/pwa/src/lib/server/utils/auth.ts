@@ -5,7 +5,7 @@ import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
 import type { UserSessionData } from '@aikami/types';
 import { type Cookies, redirect } from '@sveltejs/kit';
 import type { FirebaseError } from 'firebase-admin';
-import logger from '$logger';
+import { logger } from '$logger';
 import { toRouteHref } from '$router';
 
 /**

@@ -1,3 +1,4 @@
+// packages/frontend/services/src/lib/firebase/firebase-analytics-service.ts
 import { BaseClass, type BaseClassInterface } from '@aikami/utils';
 
 type Analytics = typeof import('./configs/analytics.ts');
@@ -11,14 +12,21 @@ export type FirebaseAnalyticServiceInterface = {
 class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServiceInterface {
   private static _analytic?: Analytics;
 
-  constructor() {
-    super({
-      className: 'AnalyticService',
-    });
-  }
 
-  async setUserId(uid: string): Promise<void> {
-    const response = await this._getAnalytics();
+  /**
+     * Helper to check if we are currently running in the emulator.
+     */
+    private get _isEmulator(): boolean {
+      return import.meta.env.PUBLIC_FLAVOR === 'EMULATOR';
+    }
+
+	async setUserId(uid: string): Promise<void> {
+    if (this._isEmulator) {
+      this.debug('[Mock Analytics] setUserId:', { uid });
+      return;
+    }
+
+		const response = await this._getAnalytics();
     if (!response) {
       return;
     }
@@ -26,8 +34,13 @@ class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServi
     setUserId(analytics, uid);
   }
 
-  async setUserProperties(userProperties: Record<string, unknown>): Promise<void> {
-    const response = await this._getAnalytics();
+	async setUserProperties(userProperties: Record<string, unknown>): Promise<void> {
+  if (this._isEmulator) {
+      this.debug('[Mock Analytics] setUserProperties:', userProperties);
+      return;
+    }
+
+		const response = await this._getAnalytics();
     if (!response) {
       return;
     }
@@ -35,8 +48,13 @@ class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServi
 
     setUserProperties(analytics, userProperties);
   }
-  async logEvent(eventName: string, eventParameters?: Record<string, unknown>): Promise<void> {
-    const response = await this._getAnalytics();
+	async logEvent(eventName: string, eventParameters?: Record<string, unknown>): Promise<void> {
+  if (this._isEmulator) {
+      this.debug(`[Mock Analytics] logEvent: ${eventName}`, eventParameters);
+      return;
+    }
+
+		const response = await this._getAnalytics();
     if (!response) {
       return;
     }
@@ -63,4 +81,6 @@ class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServi
   }
 }
 
-export const firebaseAnalyticService = new FirebaseAnalyticService();
+export const firebaseAnalyticService = new FirebaseAnalyticService({
+	className: 'FirebaseAnalyticService',
+});

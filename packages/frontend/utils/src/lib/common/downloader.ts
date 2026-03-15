@@ -1,6 +1,6 @@
 import type { CommonError } from '@aikami/types';
 import axios from 'axios';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export const downloadVideoFile = ({
   fileName,

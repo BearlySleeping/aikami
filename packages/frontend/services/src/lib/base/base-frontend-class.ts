@@ -1,3 +1,4 @@
+// packages/frontend/services/src/lib/base/base-frontend-class.ts
 import {
   BaseClass,
   type BaseClassInterface,

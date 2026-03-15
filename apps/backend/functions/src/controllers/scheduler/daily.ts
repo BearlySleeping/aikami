@@ -1,5 +1,5 @@
 import { onSchedule } from '@snorreks/firestack';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export default onSchedule(
   async (context) => {

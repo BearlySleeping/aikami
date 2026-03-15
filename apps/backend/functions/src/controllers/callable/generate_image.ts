@@ -1,6 +1,6 @@
 import type { CallableFunctions } from '@aikami/types';
 import { onCall } from '@snorreks/firestack';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export default onCall<CallableFunctions, 'generateImage'>(
   async (request) => {

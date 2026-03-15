@@ -1,24 +1,13 @@
 <script lang="ts">
   import '../app.css';
-  import { onMount } from 'svelte';
   import AppView from '$lib/views/app/AppView.svelte';
-  import logger from '$logger';
+  import { getAppViewModel } from '$lib/views/app/app-view-model.svelte';
   import type { LayoutProps } from './$types';
 
   let { data, children }: LayoutProps = $props();
 
   // svelte-ignore state_referenced_locally
-  const { logLevel } = data;
-  if (logLevel) {
-    logger.setLogLevel(logLevel);
-  }
-
-  onMount(async () => {
-    if (import.meta.env.PUBLIC_FLAVOR === 'development') {
-      const eruda = (await import('eruda')).default;
-      eruda.init();
-    }
-  });
+  const viewModel = getAppViewModel({ data, className: 'AppViewModel' });
 </script>
 
-<AppView {data}> {@render children()} </AppView>
+<AppView {viewModel}> {@render children()} </AppView>

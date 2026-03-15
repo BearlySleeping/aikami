@@ -25,6 +25,14 @@ export type FirebaseStorageServiceInterface = BaseClassInterface & {
     data: ArrayBuffer | Blob | File | Uint8Array,
     metadata?: UploadMetadata,
   ): Promise<UploadResult>;
+
+  /**
+   * Gets the download URL for a file in Firebase Storage.
+   *
+   * @param path The full path to the file in your bucket.
+   * @returns A promise that resolves with the download URL string.
+   */
+  getDownloadURL(ref: string | StorageReference): Promise<string>;
 };
 
 // This type represents the module we are dynamically importing ('./storage')
@@ -43,6 +51,16 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
   public async getRef(path: string): Promise<StorageReference> {
     const { ref, storage } = await this._getStorageModule();
     return ref(storage, path);
+  }
+
+  public async getDownloadURL(ref: string | StorageReference): Promise<string> {
+    // Dynamically get the getDownloadURL function
+    const { getDownloadURL } = await this._getStorageModule();
+    if (typeof ref === 'string') {
+      const storageRef = await this.getRef(ref);
+      return getDownloadURL(storageRef);
+    }
+    return getDownloadURL(ref);
   }
 
   public async upload(

@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/client/services/index.ts
 export { dialogService, routerService } from '@aikami/frontend/services';
 export * from './api/ai.svelte.ts';
 export * from './api/analytic.svelte.ts';

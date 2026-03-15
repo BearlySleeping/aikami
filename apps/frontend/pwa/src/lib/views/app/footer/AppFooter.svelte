@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/footer/AppFooter.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import { getAppFooterViewModel } from './app-footer-view-model.svelte.ts';

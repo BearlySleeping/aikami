@@ -1,37 +1,8 @@
 import { toDeviceData } from '@aikami/utils';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { getUserSession } from '$lib/server/utils/auth.ts';
-import logger from '$logger';
+import { logger } from '$logger';
 import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
-
-const TEST_MODE_HEADER = 'x-test-mode';
-const TEST_USER_ID_HEADER = 'x-test-user-id';
-const TEST_USER_EMAIL_HEADER = 'x-test-user-email';
-const TEST_USER_NAME_HEADER = 'x-test-user-name';
-
-const isTestMode = (request: Request): boolean => {
-  return request.headers.get(TEST_MODE_HEADER) === 'true' || process.env.NODE_ENV === 'test';
-};
-
-const createTestUserSession = (request: Request) => {
-  const userId = request.headers.get(TEST_USER_ID_HEADER) || 'test-user-123';
-  const email = request.headers.get(TEST_USER_EMAIL_HEADER) || 'test@example.com';
-  const name = request.headers.get(TEST_USER_NAME_HEADER) || 'Test User';
-
-  return {
-    id: userId,
-    displayName: name,
-    email: email,
-    emailVerified: true,
-    photoURL: undefined,
-    disabled: false,
-    customClaims: {},
-    userRole: 'member' as const,
-    status: 'active' as const,
-    preferredLocale: 'en' as const,
-    currentSignInProvider: 'email' as const,
-  };
-};
 
 export const handleError = (({ error }) => {
   const pwaError = error as App.Error | undefined;
@@ -50,14 +21,11 @@ export const handle = (async ({ event, resolve }) => {
   const { pathname } = url;
   const routeId = route.id;
 
-  let userSession;
+  const { shouldReAuthenticate, userSession } = await getUserSession(event);
 
-  if (isTestMode(request)) {
-    logger.log('hooks:testMode', { pathname });
-    userSession = createTestUserSession(request);
-  } else {
-    const { shouldReAuthenticate, userSession: sessionFromAuth } = await getUserSession(event);
-    userSession = sessionFromAuth;
+  if (shouldReAuthenticate) {
+    // TODO: navigate the user to a loading page, where we fetch a new token from the firebase frontend sdk and update the backend JWT
+    // If it fails, log the user off and go to /login page again.
   }
 
   logger.log('hooks:handle:getUserSession_result', {
@@ -85,9 +53,9 @@ export const handle = (async ({ event, resolve }) => {
     return response;
   }
 
-  const currentRoutePath = routeId ? toRoutePathFromRouteId(routeId) : toRoutePathFromURL(url);
+  const currentRoute = routeId ? toRoutePathFromRouteId(routeId) : toRoutePathFromURL(url);
 
-  locals.currentRoutePath = currentRoutePath;
+  locals.currentRoute = currentRoute;
 
   const userAgent = request.headers.get('user-agent');
   if (!locals.device && userAgent) {
@@ -107,7 +75,7 @@ export const handle = (async ({ event, resolve }) => {
     routeId,
   });
 
-  logger.log('hooks:currentRoutePath', currentRoutePath);
+  logger.log('hooks:currentRoute', currentRoute);
   // Route groups now handle authentication logic
   // No need to manually check auth status here
 

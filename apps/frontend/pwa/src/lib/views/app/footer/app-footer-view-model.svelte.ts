@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/app/footer/app-footer-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,

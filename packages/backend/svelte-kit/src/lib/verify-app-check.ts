@@ -1,6 +1,6 @@
 import { getAppCheck } from '@aikami/backend-configs';
 import { toAppError } from '@aikami/utils';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export const verifyAppCheck = async (request: { headers: Headers }) => {
   try {

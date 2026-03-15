@@ -23,8 +23,8 @@
     },
     "devDependencies": {
         "@godot-js/godot-ts": "0.0.8",
-        "@types/node": "25.4.0",
-        "@biomejs/biome": "2.4.6",
+        "@types/node": "25.5.0",
+        "@biomejs/biome": "2.4.7",
         "nodemon": "3.1.14",
         "npm-run-all2": "8.0.4",
         "typescript": "5.9.3"

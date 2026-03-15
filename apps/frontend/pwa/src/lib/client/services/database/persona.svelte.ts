@@ -45,10 +45,6 @@ export type PersonaServiceInterface = BaseFrontendClassInterface & {
 };
 
 class PersonaService extends BaseFrontendClass implements PersonaServiceInterface {
-  constructor() {
-    super({ className: 'PersonaService' });
-  }
-
   async hasPersona(): Promise<boolean> {
     const user = authService.currentUser;
     if (!user) return false;
@@ -111,4 +107,6 @@ class PersonaService extends BaseFrontendClass implements PersonaServiceInterfac
   }
 }
 
-export const personaService: PersonaServiceInterface = new PersonaService();
+export const personaService: PersonaServiceInterface = new PersonaService({
+  className: 'PersonaService',
+});

@@ -1,3 +1,4 @@
+// packages/frontend/services/src/lib/router/router-utils.ts
 import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
 import { setSearchParameters, toAppError } from '@aikami/utils';
 import { routes, searchParametersToKeep } from '$routes';
@@ -116,45 +117,53 @@ export const toRouteHref = <T extends RouteName>(
   // return href;
 };
 
-export const toRoutePathFromURL = (url: URL): RouteName | undefined => {
-  // https://github.com/sveltejs/kit/issues/6126
-  // this.log('toRoutePathFromURL', { url });
-  let pathname = url.pathname;
-  pathname = pathname.replace('/', '');
-
-  pathname = pathname.replace('/', '');
+export const toRoutePathFromRouteId = (routeId: string): RouteName | undefined => {
+  // 1. Clean the incoming SvelteKit routeId
+  // Removes leading slashes AND any layout groups like "(authenticated)/"
+  const cleanInput = routeId
+    .replace(/^\/+/, '')
+    .replace(/\(.*?\)\//g, '');
 
   for (const [routeName, routeOptions] of Object.entries(routes) as [
     string,
     AllRoutes[RouteName],
   ][]) {
-    let routeId: string = routeOptions.routeId;
-    if (routeId.includes('(')) {
-      // remove all the optional parameters
-      // example (settings)/settings/account => settings/account
-      // nb remember to remove / after the } in the routeId
-      // find (...)/ and replace it with ''
-      routeId = routeId.replace(/\(.*?\)\//g, '');
-    }
-    if (routeId === routeName) {
+    // 2. Clean the config routeId exactly the same way
+    // This makes it safe even if your routes.ts has inconsistent routeIds
+    const cleanConfigRouteId = routeOptions.routeId
+      .replace(/^\/+/, '')
+      .replace(/\(.*?\)\//g, '');
+
+    // 3. Compare the cleaned strings (e.g., 'characters' === 'characters')
+    if (cleanConfigRouteId === cleanInput) {
       return routeName as RouteName;
     }
   }
+
   return undefined;
 };
 
-export const toRoutePathFromRouteId = (routeId: string): RouteName | undefined => {
-  if (routeId.startsWith('/')) {
-    routeId = routeId.replace('/', '');
-  }
-  routeId = routeId.replace('[[locale]]/', '');
-  routeId = routeId.replace(/\(.*?\)\//g, '');
+export const toRoutePathFromURL = (url: URL): RouteName | undefined => {
+  // https://github.com/sveltejs/kit/issues/6126
+  // this.log('toRoutePathFromURL', { url });
+
+  // Normalize the URL pathname (e.g., "/dashboard" -> "dashboard")
+  const pathname = url.pathname === '/' ? '/' : url.pathname.replace(/^\/+/, '');
 
   for (const [routeName, routeOptions] of Object.entries(routes) as [
     string,
     AllRoutes[RouteName],
   ][]) {
-    if (routeOptions.routeId === routeId) {
+    // Clean route groups like (authenticated)/ from the config routeId
+    const cleanRouteId = routeOptions.routeId.replace(/^\/+/, '').replace(/\(.*?\)\//g, '');
+    // remove all the optional parameters
+    // example (settings)/settings/account => settings/account
+    // nb remember to remove / after the } in the routeId
+    // find (...)/ and replace it with ''
+    // Convert dynamic segments like [id] to regex wildcards so /chat/123 matches chat/[id]
+    const routeRegex = new RegExp('^' + cleanRouteId.replace(/\[.*?\]/g, '[^/]+') + '$');
+
+    if (routeRegex.test(pathname)) {
       return routeName as RouteName;
     }
   }

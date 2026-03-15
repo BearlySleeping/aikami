@@ -1,5 +1,5 @@
 import type { UniversalValue } from '@aikami/types';
-import logger from '$logger';
+import { logger } from '$logger';
 import { toAppError } from './error.ts';
 
 /**

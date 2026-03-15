@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/drawer/navigation/NavigationDrawer.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import { getNavigationDrawerViewModel } from './navigation-drawer-view-model.svelte.ts';

@@ -1,5 +1,5 @@
 import type { LangData, SupportedLocale, Timestamp } from '@aikami/types';
-import logger from '$logger';
+import { logger } from '$logger';
 import { toAppError } from './error.ts';
 import { toFixedNumber } from './utils.ts';
 

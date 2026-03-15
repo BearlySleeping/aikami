@@ -3,7 +3,7 @@ import type { RequestFunctions } from '@aikami/types';
 import { googleAI } from '@genkit-ai/googleai';
 import { onRequest } from '@snorreks/firestack';
 import { genkit } from 'genkit/beta';
-import logger from '$logger';
+import { logger } from '$logger';
 
 const ai = genkit({
   plugins: [googleAI()], // set the GOOGLE_API_KEY env variable

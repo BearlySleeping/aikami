@@ -1,6 +1,6 @@
 import type { Cookies } from '@sveltejs/kit';
 import type { SerializeOptions } from 'cookie';
-import logger from '$logger';
+import { logger } from '$logger';
 
 // The original, public-facing CookieKey type.
 export type CookieKey = '__session' | 'locale';

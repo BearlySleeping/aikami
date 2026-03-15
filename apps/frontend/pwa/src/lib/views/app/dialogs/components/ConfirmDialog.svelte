@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/dialogs/components/ConfirmDialog.svelte
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import type { AppDialogsViewModelInterface } from '../app-dialogs-view-model.svelte.ts';
 

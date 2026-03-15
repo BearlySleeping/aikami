@@ -1,4 +1,4 @@
-import logger from '$logger';
+import { logger } from '$logger';
 import type { CorePreferenceProviderInterface } from './index.ts';
 
 export class PreferenceService<PreferenceRecords extends Record<string, unknown>>

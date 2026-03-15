@@ -1,6 +1,6 @@
 import type { DeviceData } from '@aikami/types';
 import type { DeviceDetectorResult } from 'device-detector-js';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export const toDeviceData = (result: DeviceDetectorResult): DeviceData => {
   logger.debug('toDeviceData', result);

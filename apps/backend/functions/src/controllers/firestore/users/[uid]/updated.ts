@@ -1,6 +1,6 @@
 import type { UserData } from '@aikami/types';
 import { onUpdated } from '@snorreks/firestack';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export default onUpdated<UserData>(({ data }) => {
   const beforeUser = data.before;

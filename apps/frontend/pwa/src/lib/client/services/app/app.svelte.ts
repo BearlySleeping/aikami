@@ -6,7 +6,7 @@ import {
 import type { DeviceData, DeviceType, LogLevel } from '@aikami/types';
 
 import { isMobileDevice } from '@aikami/utils';
-import logger from '$logger';
+import { logger } from '$logger';
 
 export type AppServiceOptions = BaseFrontendClassOptions;
 

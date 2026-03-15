@@ -6,6 +6,6 @@ export type { Character, CharacterCardV1, CharacterCardV2 } from './character.ts
 export type PWAHookData = {
   device?: DeviceData;
   userSession?: UserSessionData;
-  currentRoutePath?: RouteName;
+  currentRoute?: RouteName;
   logLevel?: LogLevel;
 };

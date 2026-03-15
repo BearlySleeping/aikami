@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/bar/AppBar.svelte
   import t from '$i18n';
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import { getAppBarViewModel } from './app-bar-view-model.svelte.ts';

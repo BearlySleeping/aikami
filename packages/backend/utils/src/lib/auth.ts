@@ -21,7 +21,7 @@ import {
   toUserTokenData,
 } from '@aikami/utils';
 import type { CreateRequest, DecodedIdToken, UpdateRequest, UserRecord } from 'firebase-admin/auth';
-import logger from '$logger';
+import { logger } from '$logger';
 
 /**
  * Must be a valid E.164 spec compliant phone number.

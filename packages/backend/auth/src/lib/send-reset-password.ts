@@ -2,7 +2,7 @@ import { getUserByEmail } from '@aikami/backend/database/user.ts';
 import { getPasswordResetLink } from '@aikami/backend/utils/auth.ts';
 import type { AuthMessagePayload, AuthMessageResponse } from '@aikami/types';
 import { toAppError, toSupportedLocale } from '@aikami/utils';
-import logger from '$logger';
+import { logger } from '$logger';
 
 /**
  * Send reset password if email exists

@@ -2,8 +2,9 @@
   import type { BaseViewModelInterface } from '@aikami/frontend/services';
   import { onMount } from 'svelte';
   import AppLoading from './AppLoading.svelte';
+  import type { Snippet } from 'svelte';
 
-  interface Props {
+  type Props = {
     viewModel: BaseViewModelInterface;
     /**
      * Element id for testing
@@ -12,15 +13,14 @@
      */
     id?: string;
     fillHeight?: boolean;
-    // biome-ignore lint/suspicious/noExplicitAny: Svelte slots can accept any content
-    children: any;
+    children: Snippet;
     class?: string;
     /**
      * The HTML element to render.
      * @default 'div'
      */
     element?: 'div' | 'footer' | 'header' | 'main' | 'section' | 'article' | 'aside' | 'nav';
-  }
+  };
 
   let {
     viewModel,

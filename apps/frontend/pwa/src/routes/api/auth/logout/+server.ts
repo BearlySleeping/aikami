@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import logger from '$logger';
+import { logger } from '$logger';
 import { toRouteHref } from '$router';
 import type { RequestHandler } from './$types';
 

@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/npc/list/npc-list-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,

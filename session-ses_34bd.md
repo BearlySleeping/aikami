@@ -148,7 +148,7 @@ The error at line 186 is that `personaSheet` + `avatarUrl` + `uid` is missing `i
 10: import { toAppError } from '@aikami/utils';
 11: import { googleAI } from '@genkit-ai/googleai';
 12: import { genkit, z } from 'genkit';
-13: import logger from '$logger';
+13: import { logger } from '$logger';
 14: 
 15: const ai = genkit({
 16:   plugins: [googleAI()], // set the GOOGLE_API_KEY env variable
@@ -468,7 +468,7 @@ Good, only package resolution LSP errors. Now let me fix the remaining backend f
 <type>file</type>
 <content>1: import { updateUserClaimsOptional, updateUserData } from '@aikami/backend/database/user.ts';
 2: import type { AuthMessagePayload, AuthMessageResponse, UserClaims } from '@aikami/types';
-3: import logger from '$logger';
+3: import { logger } from '$logger';
 4: 
 5: export const confirmTermsAndService = async (
 6:   options: AuthMessagePayload<'confirmTermsAndService'>,

@@ -1,7 +1,9 @@
+// packages/frontend/services/src/lib/services/router.svelte.ts
 import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
 import type { Listener } from '@aikami/types';
 import { BaseClass, toAppError } from '@aikami/utils';
 import type { Page, Navigation as SvelteKitNavigation } from '@sveltejs/kit';
+import { untrack } from 'svelte';
 import {
   type AllRoutes,
   type PathParameters,
@@ -105,7 +107,7 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
    */
   navigateToApp(options?: { defaultHref?: string; forceRefresh?: boolean }): Promise<void>;
 
-  setCurrentPage(route?: RouteName): void;
+  setCurrentRoute(route?: RouteName): void;
 
   onPageChanged(listener: Listener<Page | undefined>): void;
 };
@@ -167,7 +169,8 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     return this.history[this.history.length - 2];
   }
 
-  setCurrentPage(route?: RouteName): void {
+  setCurrentRoute(route?: RouteName): void {
+    this.log('setCurrentRoute', { route });
     this._currentRoute = route;
   }
 
@@ -278,34 +281,57 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     navigating: Navigation | null;
     initialRoute?: RouteName;
   }): void {
-    this.debug('initialize', options);
-    const { goto, page, navigating } = options;
-    this._goto = goto;
+    this.log('initialize', options);
+    this._goto = options.goto;
 
     $effect.root(() => {
-      this._navigating = navigating ?? undefined;
+      $effect(() => {
+        // 1. TRACKED PHASE: Read the SvelteKit properties we want to react to.
+        // Svelte will re-run this effect ONLY when these specific values change.
+        const currentNavigating = options.navigating;
+        const currentPage = options.page;
+        const routeId = currentPage.route.id;
+        const urlPathname = currentPage.url.pathname;
+        const urlObj = currentPage.url;
 
-      this._pageValue = page;
+        // 2. UNTRACKED PHASE: Do all our internal state mutations safely.
+        // This guarantees we never trigger our own effect.
+        untrack(() => {
+          this._navigating = currentNavigating ?? undefined;
+          this._pageValue = currentPage;
 
-      const routeId = page.route.id;
-      this.log('page changed:routeId', routeId);
+          this.log('page changed:routeId', routeId);
 
-      const currentRoute = routeId
-        ? this.toRoutePathFromRouteId(routeId)
-        : toRoutePathFromURL(page.url);
+          const currentRoute = routeId
+            ? this.toRoutePathFromRouteId(routeId)
+            : toRoutePathFromURL(urlObj);
 
-      this.log('page changed:route', currentRoute);
-      if (!currentRoute) {
-        return this.warn('Page has no route');
-      }
+          this.log('page changed:route', currentRoute);
 
-      this._currentRoute = currentRoute;
-      this.currentPathName = page.url.pathname;
-      this._pushPageToHistory(page);
+          if (!currentRoute) {
+            return this.warn('Page has no route');
+          }
+
+          this.setCurrentRoute(currentRoute);
+          this.currentPathName = urlPathname;
+
+          // No more infinite loops from mutating the $state array!
+          this._pushPageToHistory(currentPage);
+        });
+      });
     });
 
+    // Fix the second effect as well, using the same pattern!
     $effect.root(() => {
-      this._pageChangedListener.publish(this.previousPage);
+      $effect(() => {
+        // Track the previous page...
+        const prev = this.previousPage;
+
+        // ...but untrack the listener emission so it doesn't cause cascades
+        untrack(() => {
+          this._pageChangedListener.publish(prev);
+        });
+      });
     });
 
     this.initialized = true;

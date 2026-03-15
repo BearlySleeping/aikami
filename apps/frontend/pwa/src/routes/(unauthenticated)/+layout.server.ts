@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import logger from '$logger';
+import { logger } from '$logger';
 import { toRouteHref } from '$router';
 import type { LayoutServerLoad } from './$types';
 
@@ -23,7 +23,4 @@ export const load: LayoutServerLoad = ({ locals, url }) => {
       }),
     );
   }
-
-  // User is not authenticated, allow access to unauthenticated pages
-  return {};
 };

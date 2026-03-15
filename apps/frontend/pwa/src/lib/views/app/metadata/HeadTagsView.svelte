@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/views/app/metadata/HeadTagsView.svelte
   import {
     type BaseMetaTags,
     getHeadTagsViewModel,
@@ -6,80 +7,67 @@
   } from './head-tags-view-model.svelte.ts';
 
   interface Props {
-    data: BaseMetaTags;
-    baseURL: string;
-    path: string;
+    data?: BaseMetaTags;
     viewModel?: HeadTagsViewModelInterface;
   }
 
   let {
     data,
-    baseURL,
-    path,
-    viewModel = getHeadTagsViewModel({ className: 'HeadTagsView' }),
+    // svelte-ignore state_referenced_locally
+    viewModel = getHeadTagsViewModel({ data, className: 'HeadTagsView' }),
   }: Props = $props();
-
-  $effect(() => {
-    viewModel.setData(data);
-    viewModel.setBaseURL(baseURL);
-    viewModel.setPath(path);
-  });
-
-  const metadata = $derived(viewModel.fullMetadata());
-  const organizationJsonLd = $derived(viewModel.organizationJsonLd());
-  const searchActionJsonLd = $derived(viewModel.searchActionJsonLd());
 </script>
 
 <svelte:head>
-  <meta name="robots" content={metadata.robots}>
-  <meta name="googlebot" content={metadata.robots}>
+  <meta name="robots" content={viewModel.fullMetadata.robots}>
+  <meta name="googlebot" content={viewModel.fullMetadata.robots}>
 
-  {#if metadata.title}
-    <title>{metadata.title}</title>
-    <meta name="title" content={metadata.title}>
+  {#if viewModel.fullMetadata.title}
+    <title>{viewModel.fullMetadata.title}</title>
+    <meta name="title" content={viewModel.fullMetadata.title}>
   {/if}
 
-  {#if metadata.description}
-    <meta name="description" content={metadata.description}>
+  {#if viewModel.fullMetadata.description}
+    <meta name="description" content={viewModel.fullMetadata.description}>
   {/if}
 
-  {#if metadata.author}
-    <meta name="author" content={metadata.author}>
+  {#if viewModel.fullMetadata.author}
+    <meta name="author" content={viewModel.fullMetadata.author}>
   {/if}
 
-  {#if metadata.keywords}
-    <meta name="keywords" content={metadata.keywords.join(", ")}>
+  {#if viewModel.fullMetadata.keywords}
+    <meta name="keywords" content={viewModel.fullMetadata.keywords.join(", ")}>
   {/if}
 
-  {#if metadata.url}
-    <link rel="canonical" href={metadata.url}>
+  {#if viewModel.fullMetadata.url}
+    <link rel="canonical" href={viewModel.fullMetadata.url}>
   {/if}
 
-  {#if metadata.twitter}
+  {#if viewModel.fullMetadata.twitter}
     <meta name="twitter:card" content="summary_large_image">
 
-    {#each Object.entries(metadata.twitter) as [ tag, content ] (tag)}
+    {#each Object.entries(viewModel.fullMetadata.twitter) as [ tag, content ] (tag)}
       <meta name={tag} property="twitter:{tag}" content={String(content)}>
     {/each}
   {/if}
 
-  {#if metadata.openGraph}
-    {#each Object.entries(metadata.openGraph) as [ tag, content ] (tag)}
+  {#if viewModel.fullMetadata.openGraph}
+    {#each Object.entries(viewModel.fullMetadata.openGraph) as [ tag, content ] (tag)}
       <meta name={tag} property="og:{tag}" content={String(content)}>
     {/each}
   {/if}
 
-  {#if metadata.article}
-    {#each Object.entries(metadata.article) as [ tag, content ] (tag)}
+  {#if viewModel.fullMetadata.article}
+    {#each Object.entries(viewModel.fullMetadata.article) as [ tag, content ] (tag)}
       <meta name={tag} property="article:{tag}" content={String(content)}>
     {/each}
   {/if}
 
-  {#if organizationJsonLd}
-    {@html organizationJsonLd}
+  {#if viewModel.organizationJsonLd}
+    {@html viewModel.organizationJsonLd}
   {/if}
 
-  {#if searchActionJsonLd}
-    {@html searchActionJsonLd}
+  {#if viewModel.searchActionJsonLd}
+    {@html viewModel.searchActionJsonLd}
   {/if}
 </svelte:head>

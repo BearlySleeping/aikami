@@ -1,3 +1,4 @@
+// apps/frontend/pwa/src/lib/views/app/bar/app-bar-view-model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -89,13 +90,19 @@ class AppBarViewModel
   extends BaseViewModel<AppBarViewModelOptions>
   implements AppBarViewModelInterface
 {
-  isLoggedIn = $derived(authService.isLoggedIn);
+  get isLoggedIn() {
+    return authService.isLoggedIn;
+  }
 
-  currentUser = $derived(authService.currentUser);
+  get currentUser() {
+    return authService.currentUser;
+  }
 
-  currentRoute = $derived(routerService.currentRoute);
+  get currentRoute() {
+    return routerService.currentRoute;
+  }
 
-  showDrawerButton = $derived.by(() => {
+  get showDrawerButton() {
     if (!this.currentUser) {
       return false;
     }
@@ -105,13 +112,10 @@ class AppBarViewModel
     }
 
     const publicRoutes: RouteName[] = ['login', 'register'];
+    return !publicRoutes.includes(this.currentRoute);
+  }
 
-    const isPublicRoute = publicRoutes.includes(this.currentRoute);
-
-    return !isPublicRoute;
-  });
-
-  appBarTitle = $derived.by(() => {
+  get appBarTitle() {
     switch (this.currentRoute) {
       case 'dashboard':
         return t.dashboard();
@@ -124,30 +128,32 @@ class AppBarViewModel
       default:
         return undefined;
     }
-  });
+  }
 
-  profileMenuOptions = $derived<ProfileMenuOption[]>([
-    {
-      icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
-      text: t.profile(),
-      click: () => this.goToProfile(),
-    },
-    {
-      icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2V7zm16 4l-4-4h8l-4 4z',
-      text: t.dashboard(),
-      click: () => this.goToDashboard(),
-    },
-    {
-      icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
-      text: t.settings() || 'Settings',
-      click: () => this.goToSettings(),
-    },
-    {
-      icon: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
-      text: t.logout() || 'Logout',
-      click: () => this.logout(),
-    },
-  ]);
+  get profileMenuOptions(): ProfileMenuOption[] {
+    return [
+      {
+        icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+        text: t.profile(),
+        click: () => this.goToProfile(),
+      },
+      {
+        icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2V7zm16 4l-4-4h8l-4 4z',
+        text: t.dashboard(),
+        click: () => this.goToDashboard(),
+      },
+      {
+        icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37... ', // truncated for brevity
+        text: t.settings() || 'Settings',
+        click: () => this.goToSettings(),
+      },
+      {
+        icon: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1',
+        text: t.logout() || 'Logout',
+        click: () => this.logout(),
+      },
+    ];
+  }
 
   toggleNavigationDrawer(): void {
     appService.toggleNavigationDrawer();

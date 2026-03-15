@@ -7,6 +7,9 @@ This document outlines some of the planned features and improvements for the Aik
 - [ ] **Character Creation Flow:** Implement the full character creation and customization flow in the PWA.
 - [x] **AI Dialogue System v1:** Integrate the first version of the AI-powered dialogue system with a few key NPCs. (In Progress)
 - [ ] **Real-time Chat:** Add a real-time chat feature to the PWA for players to communicate.
+- [ ] Architecture: Integrate OpenViking for hierarchical lore retrieval.
+- [ ] DevOps: Add `rtk bun moon run services:viking` to the dev workflow.
+- [ ] Testing: Setup PromptFoo for NPC personality regression testing.
 
 ## PWA Next Phase Tasks
 

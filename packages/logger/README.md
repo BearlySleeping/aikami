@@ -15,7 +15,7 @@ This package provides a consistent logging interface used across the entire mono
 **Never import from `@aikami/logger` directly.** Instead, always use the `$logger` path alias:
 
 ```typescript
-import logger from '$logger';
+import { logger } from '$logger';
 ```
 
 The `$logger` alias is configured in each project's `tsconfig.json` to point to the appropriate implementation:
@@ -52,7 +52,7 @@ bun install
 ## Usage
 
 ```typescript
-import logger from '$logger';
+import { logger } from '$logger';
 
 logger.info('User logged in', { userId: '123' });
 logger.error('Failed to fetch', { error: err.message });

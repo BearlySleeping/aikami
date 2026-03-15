@@ -3,4 +3,4 @@ import logger from './lib/logger-basic.ts';
 
 export { isValidLogLevel, type LogEntry };
 
-export default logger;
+export {logger}
