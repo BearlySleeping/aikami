@@ -47,7 +47,7 @@ export type ChatServiceInterface = BaseFrontendClassInterface & {
    * Current error message, if any.
    * @readonly - Use setError() to modify
    */
-  readonly errorMessage: string | null;
+  readonly errorMessage: string | undefined;
 
   /**
    * Sets the loading state.
@@ -71,7 +71,7 @@ export type ChatServiceInterface = BaseFrontendClassInterface & {
    * Sets the error message.
    * @param error - The error message or null
    */
-  setError(error: string | null): void;
+  setError(error: string | undefined): void;
 
   /**
    * Adds a message to the chat.
@@ -108,7 +108,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   isLoading = $state(false);
   isSending = $state(false);
   isTyping = $state(false);
-  errorMessage: string | null = $state(null);
+  errorMessage: string | undefined = $state(undefined);
 
   setLoading(loading: boolean): void {
     this.isLoading = loading;
@@ -122,7 +122,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
     this.isTyping = typing;
   }
 
-  setError(error: string | null): void {
+  setError(error: string | undefined): void {
     this.errorMessage = error;
   }
 
@@ -131,12 +131,34 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   }
 
   setMessages(messages: MessageData[]): void {
-    this.messages = messages.map((msg) => ({
-      id: msg.id || crypto.randomUUID(),
-      text: msg.text,
-      sender: msg.sender,
-      timestamp: msg.createdAt ? msg.createdAt.toDate() : new Date(),
-    }));
+    this.debug('setMessages: raw messages', messages);
+    this.messages = messages.map((msg) => {
+      let timestamp: Date;
+      const createdAt = msg.createdAt as unknown;
+      if (createdAt) {
+        // Handle Firestore Timestamp (has toDate method) or plain Date
+        if (
+          typeof createdAt === 'object' &&
+          'toDate' in createdAt &&
+          typeof createdAt.toDate === 'function'
+        ) {
+          timestamp = (createdAt as { toDate: () => Date }).toDate();
+        } else if (createdAt instanceof Date) {
+          timestamp = createdAt;
+        } else {
+          timestamp = new Date();
+        }
+      } else {
+        timestamp = new Date();
+      }
+      return {
+        id: msg.id || crypto.randomUUID(),
+        text: msg.text,
+        sender: msg.sender,
+        timestamp,
+      };
+    });
+    this.debug('setMessages: mapped messages', this.messages);
   }
 
   appendAIMessage(text: string): void {
@@ -164,7 +186,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
     this.isLoading = false;
     this.isSending = false;
     this.isTyping = false;
-    this.errorMessage = null;
+    this.errorMessage = undefined;
   }
 }
 

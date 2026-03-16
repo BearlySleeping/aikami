@@ -126,9 +126,10 @@ const _generateAndStoreImage = async (
  * @returns The generated character sheet.
  */
 const _generatePersona = async (prompt: string) => {
+  const randomSeed = Math.random().toString(36).substring(7);
   const result = await ai.generate({
     model: googleAI.model('gemini-2.5-flash'),
-    prompt: `Generate an interesting Dungeons & Dragons character based on the following prompt: ${prompt}`,
+    prompt: `Generate a unique and interesting Dungeons & Dragons character based on the following prompt. Use the seed "${randomSeed}" to ensure variety. The character's name should be completely different from any common fantasy names: ${prompt}`,
     output: {
       schema: PersonaSheetSchema,
     },

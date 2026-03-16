@@ -26,13 +26,14 @@
     "clean:all": "rm -rf node_modules .svelte-kit dist build .moon",
     "deps:update": "syncpack update --dependency-types prod,dev --target latest",
     "deps:sync": "syncpack fix --dependency-types prod,dev",
-    "deps:check": "syncpack lint --dependency-types prod,dev"
+    "deps:check": "syncpack lint --dependency-types prod,dev",
+    "update:llm": "bunx @fission-ai/openspec update && bunx skills add pbakaus/impeccable"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.7",
     "@moonrepo/cli": "2.0.4",
     "@types/bun": "1.3.10",
-    "bun-automock": "0.2.5",
+    "bun-automock": "0.2.7",
     "syncpack": "14.2.0",
     "tsconfig-moon": "1.4.2",
     "typescript": "5.9.3"

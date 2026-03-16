@@ -18,7 +18,7 @@
       "@aikami/utils/*": ["packages/utils/src/*"],
       "$logger": ["packages/logger/src/lib/logger-functions.ts"],
       "$logger/*": ["packages/logger/src/*"],
-      "$env/*": ["config/tsconfig/stubs/env/*"],
+      "$env/static/private": ["packages/backend/configs/lib/empty-environment.ts"],
       "@aikami/backend-configs": ["packages/backend/configs/src/index.ts"],
       "@aikami/backend-configs/*": ["packages/backend/configs/src/*"],
       "@aikami/backend/configs/*": ["packages/backend/configs/src/lib/*"],

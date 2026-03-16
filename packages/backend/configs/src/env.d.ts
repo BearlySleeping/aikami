@@ -1,3 +1,4 @@
+// packages/backend/configs/src/env.d.ts
 // Stub for SvelteKit's $env/static/private module.
 // This module is provided by SvelteKit at build time in the PWA context.
 // In non-SvelteKit contexts (e.g., Cloud Functions), the environment.ts

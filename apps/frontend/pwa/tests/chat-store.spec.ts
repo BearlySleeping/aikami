@@ -17,11 +17,11 @@ test('store interface test', () => {
     isLoading: boolean;
     isSending: boolean;
     isTyping: boolean;
-    error: string | null;
+    error: string | undefined;
     setLoading: (loading: boolean) => void;
     setSending: (sending: boolean) => void;
     setTyping: (typing: boolean) => void;
-    setError: (error: string | null) => void;
+    setError: (error: string | undefined) => void;
     addMessage: (message: MockChatMessage) => void;
     setMessages: (messages: MockChatMessage[]) => void;
     appendAIMessage: (text: string) => void;
@@ -32,11 +32,11 @@ test('store interface test', () => {
     isLoading: false,
     isSending: false,
     isTyping: false,
-    error: null,
+    error: undefined,
     setLoading: (_loading: boolean) => {},
     setSending: (_sending: boolean) => {},
     setTyping: (_typing: boolean) => {},
-    setError: (_error: string | null) => {},
+    setError: (_error: string | undefined) => {},
     addMessage: (_message: {
       id: string;
       text: string;

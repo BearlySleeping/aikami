@@ -1,4 +1,4 @@
-import logger, { type LogEntry } from '$logger';
+import { type LogEntry, logger } from '$logger';
 import {
   createLiteObserver,
   createObserver,

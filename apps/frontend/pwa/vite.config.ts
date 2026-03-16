@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
   const plugins: PluginOption[] = [
     isoImport(),
     tailwindcss(),
-    sveltekit(),
+    sveltekit() as PluginOption,
     paraglideVitePlugin({
       project: './project.inlang',
       outdir: './src/lib/paraglide',

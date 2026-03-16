@@ -1,3 +1,4 @@
+// packages/backend/configs/src/lib/fcm.ts
 import { getMessaging as fbGetMessaging } from 'firebase-admin/messaging';
 import { getApp } from './app.ts';
 

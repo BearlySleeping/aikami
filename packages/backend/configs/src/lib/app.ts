@@ -1,3 +1,4 @@
+// packages/backend/configs/src/lib/app.ts
 import {
   type AppOptions,
   cert,
@@ -6,24 +7,7 @@ import {
   type ServiceAccount,
 } from 'firebase-admin/app';
 import { logger } from '$logger';
-import { getEnvironmentValue } from './environment.ts';
-
-/**
- * Determines if the application is currently running in emulator mode.
- * Checks multiple sources: process.env, and vite mode.
- */
-export const isEmulatorMode = (): boolean => {
-  // Check vite mode (set via --mode flag or vite.config.ts)
-  const viteMode = getEnvironmentValue('VITE_MODE', true) || getEnvironmentValue('NODE_ENV', true);
-  if (viteMode === 'emulator') {
-    return true;
-  }
-
-  return (
-    !!getEnvironmentValue('FIRESTORE_EMULATOR_HOST', true) ||
-    getEnvironmentValue('FLAVOR') === 'EMULATOR'
-  );
-};
+import { getEnvironmentValue, isEmulatorMode } from './environment.ts';
 
 /**
  * Parses the Firebase service account JSON string and fixes private key newlines.
@@ -41,21 +25,37 @@ const parseServiceAccount = (serviceAccountString: string): ServiceAccount => {
   }
 };
 
+const getEmulatorOptions = (projectId: string): AppOptions => {
+  logger.debug('- Running in emulator mode. Setting projectId to satisfy Admin SDK requirements.');
+
+  // Set emulator hosts for Firebase Admin SDK
+  process.env.FIREBASE_AUTH_EMULATOR_HOST =
+    process.env.FIREBASE_AUTH_EMULATOR_HOST || 'localhost:9099';
+  process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || 'localhost:8080';
+  process.env.GCLOUD_PROJECT = projectId;
+
+  return { projectId, storageBucket: `${projectId}.firebasestorage.app` };
+};
+
 /**
  * Builds the configuration options for the Firebase Admin SDK based on the environment.
  */
-const buildAppOptions = (isEmulator: boolean): AppOptions => {
+const buildAppOptions = (): AppOptions => {
+  const isEmulator = isEmulatorMode();
+  logger.log('isEmulator', isEmulator);
+
   const options: AppOptions = {};
 
   // The Firebase Auth emulator requires a projectId to validate tokens.
-  const projectId = getEnvironmentValue('GCP_PROJECT_ID', true);
+  // In emulator mode, this is optional and will default to 'aikami-dev'
+  const projectId = getEnvironmentValue('GCLOUD_PROJECT', isEmulator);
 
-  if (isEmulator) {
-    logger.debug(
-      '- Running in emulator mode. Setting projectId to satisfy Admin SDK requirements.',
-    );
-    options.projectId = projectId;
-    return options;
+  if (isEmulator && !projectId) {
+    return getEmulatorOptions('aikami-dev');
+  }
+
+  if (isEmulator && projectId) {
+    return getEmulatorOptions(projectId);
   }
 
   // --- Production / Live Environment Setup ---
@@ -87,13 +87,15 @@ export const getApp = () => {
     return existingApp;
   }
 
-  const isEmulator = isEmulatorMode();
-  logger.log('isEmulator', isEmulator);
+  const options = buildAppOptions();
 
-  const options = buildAppOptions(isEmulator);
+  logger.debug(`- Initializing Firebase Admin SDK with options`, {
+    credentials: !!options.credential,
+    ...options,
+  });
 
-  logger.debug(`- Initializing Firebase Admin SDK with options`, options);
   const initializedApp = initializeApp(options);
+
   logger.debug('- Firebase Admin SDK initialized!');
 
   return initializedApp;

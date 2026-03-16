@@ -26,40 +26,26 @@ export const getUserStatsDocumentPath = (options: { uid: string }): string =>
   `${getTotalStatsDocumentPath()}/${getUserDocumentPath(options)}`;
 
 // Personas
-export const getPersonasCollectionPath = (options: { uid: string }): string =>
-  `${getUserDocumentPath(options)}/personas`;
+export const getPersonasCollectionPath = (): string => `personas`;
 
 export const getPersonaDocumentPath = (options: { uid: string; personaId: string }): string =>
-  `${getPersonasCollectionPath(options)}/${options.personaId}`;
+  `${getPersonasCollectionPath()}/${options.personaId}`;
 
 // Chat
-export const getMessagesCollectionPath = (options: { uid: string }): string =>
-  `${getUserDocumentPath(options)}/chats`;
+export const getChatsCollectionPath = (): string => 'chats';
 
-export const getMessageDocumentPath = (options: { uid: string; chatId: string }): string =>
-  `${getMessagesCollectionPath(options)}/${options.chatId}`;
+export const getChatDocumentPath = (options: { chatId: string }): string =>
+  `${getChatsCollectionPath()}/${options.chatId}`;
+
+// Messages (subcollection of chat)
+export const getMessagesCollectionPath = (options: { chatId: string }): string =>
+  `${getChatDocumentPath(options)}/messages`;
+
+export const getMessageDocumentPath = (options: { chatId: string; messageId: string }): string =>
+  `${getMessagesCollectionPath(options)}/${options.messageId}`;
 
 // Npcs
 export const getNpcsCollectionPath = (): string => 'npcs';
 
 export const getNpcDocumentPath = (options: { npcId: string }): string =>
   `${getNpcsCollectionPath()}/${options.npcId}`;
-
-// Group Chats
-export const getGroupChatsCollectionPath = (options: { uid: string }): string =>
-  `${getUserDocumentPath(options)}/groupChats`;
-
-export const getGroupChatDocumentPath = (options: { uid: string; groupChatId: string }): string =>
-  `${getGroupChatsCollectionPath(options)}/${options.groupChatId}`;
-
-// Group Messages
-export const getGroupMessagesCollectionPath = (options: {
-  uid: string;
-  groupChatId: string;
-}): string => `${getGroupChatDocumentPath(options)}/messages`;
-
-export const getGroupMessageDocumentPath = (options: {
-  uid: string;
-  groupChatId: string;
-  messageId: string;
-}): string => `${getGroupMessagesCollectionPath(options)}/${options.messageId}`;

@@ -19,6 +19,7 @@ class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerI
         return;
       }
 
+      // biome-ignore lint/suspicious/noConsole: this is the logger package
       const log = console[logType ?? 'log'];
       if (typeof message !== 'undefined') {
         log(message, ...data);
@@ -35,7 +36,6 @@ class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerI
   }
 }
 
-
 export const logger = new FrontendLoggerService({
-	logLevel: import.meta.env.PUBLIC_LOG_LEVEL,
+  logLevel: import.meta.env.PUBLIC_LOG_LEVEL,
 });

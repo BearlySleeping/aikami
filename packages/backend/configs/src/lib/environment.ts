@@ -1,15 +1,21 @@
+// packages/backend/configs/src/lib/environment.ts
 import process from 'node:process';
 import { isEmptyObject, toAppError } from '@aikami/utils';
 import { config } from 'dotenv';
 import * as env from '$env/static/private';
 
-type OptionalEnvironmentKeys = 'FIREBASE_SERVICE_ACCOUNT' | 'FIRESTORE_EMULATOR_HOST' | 'VITE_MODE';
+type OptionalEnvironmentKeys =
+  | 'FIREBASE_SERVICE_ACCOUNT'
+  | 'FIRESTORE_EMULATOR_HOST'
+  | 'VITE_MODE'
+  | 'FIREBASE_AUTH_EMULATOR_HOST'
+  | 'GCP_PROJECT_ID'
+  | 'PUBLIC_FLAVOR';
 
 type RequiredEnvironmentKeys =
   //
   | 'GCP_CLIENT_ID'
   | 'GCP_CLIENT_SECRET'
-  | 'GCP_PROJECT_ID'
   | 'FLAVOR'
   | 'PARSE_LEVEL'
   | 'NODE_ENV'
@@ -17,8 +23,13 @@ type RequiredEnvironmentKeys =
   // Extra url
   | 'PWA_URL';
 
-// add all keys in ./env.dev to this type
-type EnvironmentKey = RequiredEnvironmentKeys | OptionalEnvironmentKeys;
+// GCLOUD_PROJECT is conditionally required - needed in production but has default for emulator
+type ConditionalEnvironmentKeys = 'GCLOUD_PROJECT';
+
+type EnvironmentKey =
+  | RequiredEnvironmentKeys
+  | OptionalEnvironmentKeys
+  | ConditionalEnvironmentKeys;
 
 type EnvironmentData = {
   [key in EnvironmentKey]?: string;
@@ -38,25 +49,55 @@ export const getEnvironmentValue = <T extends boolean = false>(
   environmentKey: EnvironmentKey,
   optional: T = false as T,
 ): T extends true ? string | undefined : string => {
-  if (!environment) {
-    // If env is only { default: [Getter], env: [Getter] } then it means this is not running in sveltekit SSR
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (env && !isEmptyObject(env) && 'FLAVOR' in env) {
-      environment = env as EnvironmentData;
-    } else if (process.env.FLAVOR) {
-      environment = process.env as EnvironmentData;
-    } else {
-      environment = config().parsed as EnvironmentData;
+  // 1. Always check process.env first! This catches emulator variables.
+  let value = process.env[environmentKey];
+
+  if (!value) {
+    if (!environment) {
+      const parsedDotEnv = config().parsed || {};
+      const svelteEnv = env && !isEmptyObject(env) && 'FLAVOR' in env ? env : {};
+
+      environment = {
+        ...parsedDotEnv,
+        ...svelteEnv,
+      } as EnvironmentData;
+    }
+    value = environment[environmentKey];
+  }
+
+  // For GCLOUD_PROJECT, provide default in emulator mode
+  if (!value && environmentKey === 'GCLOUD_PROJECT') {
+    const mode = getEnvironmentValue('VITE_MODE', true) || getEnvironmentValue('NODE_ENV', true);
+    const flavor = environment?.FLAVOR || process.env.FLAVOR;
+    if (mode === 'emulator' || flavor === 'EMULATOR') {
+      value = 'aikami-dev';
     }
   }
-  environment ??= {};
-  const value = environment[environmentKey];
+
   if (optional) {
     return value as T extends true ? string | undefined : string;
   }
 
   if (!value) {
-    throw toAppError('internal', `process.env.${environmentKey} is missing`);
+    throw toAppError('internal', `Environment variable ${environmentKey} is missing.`);
   }
+
   return value;
+};
+
+/**
+ * Determines if the application is currently running in emulator mode.
+ * Checks multiple sources: process.env, and vite mode.
+ */
+export const isEmulatorMode = (): boolean => {
+  // Check vite mode (set via --mode flag or vite.config.ts)
+  const mode = getEnvironmentValue('VITE_MODE', true) || getEnvironmentValue('NODE_ENV', true);
+  if (mode === 'emulator') {
+    return true;
+  }
+
+  // Check FLAVOR (private) or PUBLIC_FLAVOR (public)
+  const flavor = getEnvironmentValue('FLAVOR', true) || getEnvironmentValue('PUBLIC_FLAVOR', true);
+
+  return !!getEnvironmentValue('FIRESTORE_EMULATOR_HOST', true) || flavor === 'EMULATOR';
 };

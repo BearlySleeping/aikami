@@ -13,7 +13,10 @@
   <div class="p-4">
     <div class="card bg-base-100 shadow-xl">
       <div class="card-body">
-        <h2 class="card-title">{t.personas()}</h2>
+        <div class="flex justify-between items-center">
+          <h2 class="card-title">{t.personas()}</h2>
+          <a href="/personas/create" class="btn btn-primary"> {t.createYourPersona()} </a>
+        </div>
 
         {#if viewModel.isLoading}
           <div class="flex justify-center"><span class="loading loading-spinner"></span></div>
@@ -42,7 +45,6 @@
                         Set Active
                       </button>
                     {/if}
-                    <a href={`/personas/${persona.id}`} class="btn btn-sm btn-ghost"> Edit </a>
                   </div>
                 </div>
               </div>

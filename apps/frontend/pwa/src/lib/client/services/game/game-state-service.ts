@@ -92,8 +92,8 @@ export interface WorldState {
 }
 
 export interface GameStateServiceInterface {
-  readonly currentWorld: WorldState | null;
-  readonly currentLocation: WorldLocation | null;
+  readonly currentWorld: WorldState | undefined;
+  readonly currentLocation: WorldLocation | undefined;
   readonly worldVariables: Record<string, unknown>;
   readonly isConnected: boolean;
 
@@ -107,7 +107,7 @@ export interface GameStateServiceInterface {
   addEventListener(listener: GameStateListener): () => void;
   createSession(characterIds: string[]): Promise<ActiveSessionData>;
   endSession(): Promise<void>;
-  getActiveSession(): ActiveSessionData | null;
+  getActiveSession(): ActiveSessionData | undefined;
 }
 
 export type GameStateOptions = {
@@ -115,11 +115,11 @@ export type GameStateOptions = {
 };
 
 export const createGameStateService = (options: GameStateOptions): GameStateServiceInterface => {
-  let currentWorld: WorldState | null = null;
-  let currentLocation: WorldLocation | null = null;
+  let currentWorld: WorldState | undefined;
+  let currentLocation: WorldLocation | undefined;
   const listeners: Set<GameStateListener> = new Set();
-  let unsubscribeWorld: (() => void) | null = null;
-  let activeSession: ActiveSessionData | null = null;
+  let unsubscribeWorld: (() => void) | undefined;
+  let activeSession: ActiveSessionData | undefined;
 
   const emitEvent = (event: GameStateEvent) => {
     listeners.forEach((listener) => listener(event));
@@ -139,7 +139,7 @@ export const createGameStateService = (options: GameStateOptions): GameStateServ
     },
 
     get isConnected() {
-      return unsubscribeWorld !== null;
+      return unsubscribeWorld !== undefined;
     },
 
     subscribeToWorld: async (worldId: string) => {
@@ -156,8 +156,8 @@ export const createGameStateService = (options: GameStateOptions): GameStateServ
       };
 
       unsubscribeWorld = () => {
-        currentWorld = null;
-        currentLocation = null;
+        currentWorld = undefined;
+        currentLocation = undefined;
       };
 
       emitEvent({
@@ -170,10 +170,10 @@ export const createGameStateService = (options: GameStateOptions): GameStateServ
     unsubscribeFromWorld: () => {
       if (unsubscribeWorld) {
         unsubscribeWorld();
-        unsubscribeWorld = null;
+        unsubscribeWorld = undefined;
       }
-      currentWorld = null;
-      currentLocation = null;
+      currentWorld = undefined;
+      currentLocation = undefined;
     },
 
     updateLocation: async (locationId: string) => {
@@ -328,10 +328,10 @@ export const createGameStateService = (options: GameStateOptions): GameStateServ
       const unsubscribe = () => {
         if (unsubscribeWorld) {
           unsubscribeWorld();
-          unsubscribeWorld = null;
+          unsubscribeWorld = undefined;
         }
-        currentWorld = null;
-        currentLocation = null;
+        currentWorld = undefined;
+        currentLocation = undefined;
       };
       unsubscribe();
     },

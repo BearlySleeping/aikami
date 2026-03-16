@@ -79,7 +79,7 @@ class AppErrorViewModel
   }
 
   get errorId() {
-    return (page.error as CustomError | null)?.errorId;
+    return (page.error as CustomError | undefined)?.errorId;
   }
 
   get metadata() {

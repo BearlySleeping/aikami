@@ -47,40 +47,24 @@ export const routes = {
     routeId: '/(public)/about',
     type: 'public',
   },
-  'character/create': {
-    getPath: () => '/character/create',
-    queryParameters: undefined,
-    routeId: '/(authenticated)/character/create',
-    type: 'authenticated',
-  },
-  'character/[id]': {
-    getPath: (params: { id: string }) => `/character/${params.id}`,
-    queryParameters: undefined,
-    routeId: '/(authenticated)/character/[id]',
-    type: 'authenticated',
-  },
-  characters: {
-    getPath: () => '/characters',
-    queryParameters: undefined,
-    routeId: '/(authenticated)/characters',
-    type: 'authenticated',
-  },
-  'chat/[id]': {
-    getPath: (params: { id: string }) => `/chat/${params.id}`,
-    queryParameters: undefined,
+  chat: {
+    getPath: (params: { chatId: string }) => `/chat/${params.chatId}`,
+    queryParameters: {} as {
+      npcId: string;
+    },
     routeId: '/(authenticated)/chat/[id]',
-    type: 'authenticated',
-  },
-  'character/[id]/image': {
-    getPath: (params: { id: string }) => `/character/${params.id}/image`,
-    queryParameters: undefined,
-    routeId: '/(authenticated)/character/[id]/image',
     type: 'authenticated',
   },
   'personas/create': {
     getPath: () => '/personas/create',
     queryParameters: undefined,
     routeId: '/(authenticated)/personas/create',
+    type: 'authenticated',
+  },
+  personas: {
+    getPath: () => '/personas',
+    queryParameters: undefined,
+    routeId: '/(authenticated)/personas',
     type: 'authenticated',
   },
   npcs: {

@@ -1,3 +1,4 @@
+// config/storybook/preview.ts
 import 'virtual:windi.css';
 import { loadAndSetLocale } from '@shared/frontend/test';
 import type { Preview } from '@storybook/svelte';

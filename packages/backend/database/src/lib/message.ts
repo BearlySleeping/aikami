@@ -1,3 +1,4 @@
+// packages/backend/database/src/lib/message.ts
 import { MessageCreateSchema, MessageSchema, MessageUpdateSchema } from '@aikami/schemas';
 import type { RepositoryType } from '@aikami/types';
 import { getMessageDocumentPath, getMessagesCollectionPath } from '@aikami/utils';
@@ -7,8 +8,8 @@ export type MessageRepositoryType = RepositoryType<
   typeof MessageSchema,
   typeof MessageCreateSchema,
   typeof MessageUpdateSchema,
-  { uid: string },
-  { uid: string; chatId: string }
+  { chatId: string },
+  { chatId: string; messageId: string }
 >;
 
 export type MessageRepositoryInterface = BackendRepositoryInterface<MessageRepositoryType>;

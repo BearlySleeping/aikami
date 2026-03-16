@@ -1,3 +1,6 @@
+// packages/backend/configs/src/index.ts
+
+export * from './lib/app.ts';
 export * from './lib/app-check.ts';
 export * from './lib/auth.ts';
 export * from './lib/bucket.ts';

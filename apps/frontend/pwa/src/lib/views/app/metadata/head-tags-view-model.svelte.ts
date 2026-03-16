@@ -134,12 +134,12 @@ export type HeadTagsViewModelInterface = BaseViewModelInterface & {
   /**
    * The JSON-LD for the organization.
    */
-  readonly organizationJsonLd: string | null;
+  readonly organizationJsonLd: string | undefined;
 
   /**
    * The JSON-LD for the search action.
    */
-  readonly searchActionJsonLd: string | null;
+  readonly searchActionJsonLd: string | undefined;
 
   /**
    * Updates the base metadata for the page.
@@ -225,9 +225,9 @@ class HeadTagsViewModel
     };
   }
 
-  get organizationJsonLd(): string | null {
+  get organizationJsonLd(): string | undefined {
     if (!page.url.origin) {
-      return null;
+      return undefined;
     }
 
     return jsonLd({
@@ -238,11 +238,11 @@ class HeadTagsViewModel
     });
   }
 
-  get searchActionJsonLd(): string | null {
+  get searchActionJsonLd(): string | undefined {
     const metadata = this.fullMetadata;
 
     if (!metadata.url || !metadata.searchURL) {
-      return null;
+      return undefined;
     }
 
     return jsonLd({

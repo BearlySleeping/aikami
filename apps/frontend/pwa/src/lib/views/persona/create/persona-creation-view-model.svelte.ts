@@ -22,14 +22,15 @@ export type PersonaCreationViewModelInterface = BaseViewModelInterface & {
   };
   avatarUrl: string;
   prompt: string;
-  generatedPersona: PersonaData | null;
+  generatedPersona: PersonaData | undefined;
   readonly isLoading: boolean;
   readonly isUploading: boolean;
   readonly isOnboarding: boolean;
 
   createPersonaFromAI(): Promise<void>;
   uploadAvatar(file: File): Promise<void>;
-  savePersona(): Promise<PersonaData | null>;
+  savePersona(): Promise<PersonaData | undefined>;
+  regenerate(): Promise<void>;
   skipOnboarding(): Promise<void>;
 };
 
@@ -48,7 +49,7 @@ class PersonaCreationViewModel
   isLoading = $state(false);
   isUploading = $state(false);
   prompt = $state('');
-  generatedPersona = $state<PersonaData | null>(null);
+  generatedPersona = $state<PersonaData | undefined>(undefined);
   isOnboarding = $derived(this._options.isOnboarding ?? false);
 
   async skipOnboarding(): Promise<void> {
@@ -99,48 +100,31 @@ class PersonaCreationViewModel
     }
   }
 
-  async savePersona(): Promise<PersonaData | null> {
-    const user = authService.currentUser;
-    if (!user || !this.name) {
-      return null;
+  async savePersona(): Promise<PersonaData | undefined> {
+    const { goto } = await import('$app/navigation');
+    if (!this.generatedPersona?.id) {
+      return undefined;
     }
 
     this.isLoading = true;
 
     try {
-      const { personaRepository } = await import('@aikami/frontend/repositories/persona.ts');
-      // Use generated persona data as base, override with user edits
-      const {
-        id: _id,
-        createdAt: _c,
-        updatedAt: _u,
-        priority: _p,
-        ...baseData
-      } = this.generatedPersona ?? ({} as PersonaData);
-      const newPersonaId = await personaRepository.addDocument({
-        getCollectionPathArgument: { uid: user.id },
-        createData: {
-          ...baseData,
-          name: this.name,
-          notes: this.backstory,
-          avatarUrl: this.avatarUrl || undefined,
-          uid: user.id,
-          isActive: false,
-        },
-      });
-      const newPersona = await personaRepository.getDocument({
-        uid: user.id,
-        personaId: newPersonaId,
-      });
-      return newPersona ?? null;
+      await goto('/personas');
+      return this.generatedPersona;
     } catch (error) {
       this.error('savePersona', error);
       const appError = toAppErrorFromUnknownError(error);
       this.errorMessage = appError.message;
-      return null;
+      return undefined;
     } finally {
       this.isLoading = false;
     }
+  }
+
+  async regenerate(): Promise<void> {
+    this.generatedPersona = undefined;
+    this.name = '';
+    this.backstory = '';
   }
 }
 

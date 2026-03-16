@@ -15,7 +15,7 @@ General coding standards and conventions for the Aikami project.
 ## General Rules
 
 - All methods must be JSDoc commented
-- All methods with multiple arguments should use an options object: `{...}` instead of chained arguments
+- All methods must use an options object: `{...}` even for single arguments
 - Use `options` instead of `opts`
 - Escape early (return early pattern)
 - If a section can be a separate method, make it a separate method
@@ -25,6 +25,44 @@ General coding standards and conventions for the Aikami project.
 - Use arrow functions
 - Use `type` over `interface` unless extending
 - Options types only used in a single method should be defined inside that method, not exported
+
+---
+
+## Method Options Pattern
+
+All methods must use an options object, even for single arguments:
+
+```typescript
+/**
+ * Parses a character from a local file (PNG or JSON) without uploading assets.
+ * @param options - Configuration object.
+ * @param options.file - The local file to parse.
+ * @returns A promise that resolves to the parsed Character object.
+ */
+importFile(options: { file: File }): Promise<Character>;
+```
+
+---
+
+## Debug Logging
+
+All service and view model methods must include debug logging:
+
+```typescript
+// In services/viewmodels (they extend BaseFrontendClass)
+async importFile(options: { file: File }): Promise<Character> {
+  this.debug('importFile', options);
+  // ... method implementation
+}
+
+// For standalone functions
+import { logger } from '$logger';
+
+async function parseCharacter(options: { file: File }) {
+  logger.debug('parseCharacter', options);
+  // ... function implementation
+}
+```
 
 ---
 
@@ -224,10 +262,11 @@ export type CharacterServiceInterface = BaseFrontendClassInterface & {
 
   /**
    * Imports a character from a file (PNG or JSON).
-   * @param file - The file to import
-   * @returns The imported Character or null if import failed
+   * @param options - Configuration object.
+   * @param options.file - The file to import.
+   * @returns The imported Character or null if import failed.
    */
-  importFile(file: File): Promise<Character | null>;
+  importFile(options: { file: File }): Promise<Character | null>;
 };
 ```
 
@@ -236,6 +275,7 @@ export type CharacterServiceInterface = BaseFrontendClassInterface & {
 2. Use `@readonly` annotation to document direct assignment is prohibited
 3. All fields must have JSDoc comments describing purpose
 4. All methods must have JSDoc comments with @param descriptions
+5. All methods use options object even for single arguments
 
 ---
 
@@ -248,4 +288,4 @@ export type CharacterServiceInterface = BaseFrontendClassInterface & {
 5. ❌ Abbreviating variable names - Use descriptive names
 6. ❌ Omitting braces in if/else - Always use braces
 7. ❌ Missing JSDoc on public methods
-8. ❌ Using positional arguments for multi-parameter methods - Use options objects
+8. ❌ Using positional arguments for methods - Always use options objects

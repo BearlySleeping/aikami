@@ -1,67 +1,77 @@
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+// apps/frontend/pwa/src/lib/client/services/character/character.svelte.ts
+import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
+import { toAppError } from '@aikami/utils';
 import { authService, storageService } from '$services';
 import type { Character } from '$types';
-import { CharacterImporter, type CharacterImportResult } from './character-importer.ts';
+import { downloadFromUrl } from './character-downloader.ts';
+import { importFromJson, importFromPng } from './character-importer.ts';
 
 export type CharacterServiceOptions = BaseFrontendClassOptions;
 
 /**
  * Service interface for managing characters in the application.
- * Provides methods for importing, adding, and selecting character data.
  */
-export type CharacterServiceInterface = BaseFrontendClassInterface & {
+export type CharacterServiceInterface = {
   /**
-   * List of all imported characters.
-   * @readonly - Use addCharacter() to modify
+   * List of all imported characters currently in state.
+   * @readonly Modify this list using the `addCharacter` method.
    */
   readonly characters: Character[];
 
   /**
-   * Currently selected character for chat or editing.
-   * @readonly - Use selectCharacter() to modify
+   * The currently selected character for chat or editing.
+   * @readonly Modify this state using the `selectCharacter` method.
    */
-  readonly selectedCharacter: Character | null;
+  readonly selectedCharacter: Character | undefined;
 
   /**
-   * Imports a character from a file (PNG or JSON).
-   * Automatically detects format and parses character data.
-   * @param file - The file to import (PNG image or JSON file)
-   * @returns The imported Character or null if import failed
+   * Parses a character from a local file (PNG or JSON) without uploading assets.
+   * * @param options - Configuration object.
+   * @param options.file - The local file to parse.
+   * @returns A promise that resolves to the parsed Character object.
    */
-  importFile(file: File): Promise<Character | null>;
+  importFile(options: { file: File }): Promise<Character>;
 
   /**
-   * Imports a character from a file (PNG or JSON) with avatar upload.
-   * Automatically detects format, parses character data, and uploads avatar to Firebase.
-   * @param file - The file to import (PNG image or JSON file)
-   * @param characterId - The character document ID for storing avatar
-   * @returns The imported Character with avatarUrl, or null if import failed
+   * Parses a character from a local file and simultaneously uploads its avatar to storage.
+   * * @param options - Configuration object.
+   * @param options.file - The local file to parse and extract the avatar from.
+   * @param options.characterId - The database ID to associate with the uploaded avatar.
+   * @returns A promise that resolves to the parsed Character object, updated with the remote avatar URL.
    */
-  importFileWithAvatar(file: File, characterId: string): Promise<Character | null>;
+  importFileWithAvatar(options: { file: File; characterId: string }): Promise<Character>;
 
   /**
-   * Adds a character to the characters list.
-   * @param char - The character to add
+   * Downloads a character card from a remote URL, parses it, and uploads the avatar to storage.
+   * * @param options - Configuration object.
+   * @param options.url - The external URL to download the character from (e.g., Chub, Risu).
+   * @param options.characterId - The database ID to associate with the uploaded avatar.
+   * @returns A promise that resolves to the parsed Character object, updated with the remote avatar URL.
    */
-  addCharacter(char: Character): void;
+  importFromUrl(options: { url: string; characterId: string }): Promise<Character>;
 
   /**
-   * Sets the selected character.
-   * @param char - The character to select
+   * Appends a newly parsed or fetched character to the active state list.
+   * * @param options - Configuration object.
+   * @param options.character - The character object to add.
    */
-  selectCharacter(char: Character): void;
+  addCharacter(options: { character: Character }): void;
 
   /**
-   * Uploads an avatar image for a character.
-   * @param file - The avatar image file
-   * @param characterId - The character document ID
-   * @returns The uploaded avatar URL or undefined if failed
+   * Sets the active character in the application state.
+   * * @param options - Configuration object.
+   * @param options.character - The character object to set as active.
    */
-  uploadAvatar(file: File, characterId: string): Promise<string | undefined>;
+  selectCharacter(options: { character: Character }): void;
+
+  /**
+   * Uploads an avatar image file to Firebase storage.
+   * * @param options - Configuration object.
+   * @param options.file - The image file to upload.
+   * @param options.characterId - The character document ID used to build the storage path.
+   * @returns A promise that resolves to the uploaded avatar's download URL, or undefined if it fails.
+   */
+  uploadAvatar(options: { file: File; characterId: string }): Promise<string | undefined>;
 };
 
 class CharacterService
@@ -69,75 +79,86 @@ class CharacterService
   implements CharacterServiceInterface
 {
   characters: Character[] = $state([]);
-  selectedCharacter: Character | null = $state(null);
+  selectedCharacter: Character | undefined = $state(undefined);
 
-  async importFile(file: File): Promise<Character | null> {
-    let char: Character | null = null;
-    if (file.type === 'image/png') {
-      char = await CharacterImporter.importFromPng(file);
-    } else if (file.type === 'application/json' || file.name.endsWith('.json')) {
-      char = await CharacterImporter.importFromJson(file);
-    }
+  async importFile(options: { file: File }): Promise<Character> {
+    this.debug('handleFileUpload', options);
 
-    if (char) {
-      this.addCharacter(char);
-    }
-    return char;
+    const { file } = options;
+    const { character } = await this._extractCharacter({ file });
+    this.addCharacter({ character });
+    return character;
   }
 
-  async importFileWithAvatar(file: File, characterId: string): Promise<Character | null> {
-    let importResult: CharacterImportResult | null = null;
+  async importFileWithAvatar(options: { file: File; characterId: string }): Promise<Character> {
+    this.debug('importFileWithAvatar', options);
+    const { file, characterId } = options;
+    const { character, avatarFile } = await this._extractCharacter({ file });
 
-    if (file.type === 'image/png') {
-      importResult = await CharacterImporter.importFromPngWithAvatar(file);
-    } else if (file.type === 'application/json' || file.name.endsWith('.json')) {
-      importResult = await CharacterImporter.importFromJsonWithAvatar(file);
-    }
-
-    if (!importResult) return null;
-
-    const { character } = importResult;
-
-    if (importResult.avatarFile) {
-      const avatarUrl = await this.uploadAvatar(importResult.avatarFile, characterId);
+    if (avatarFile) {
+      const avatarUrl = await this.uploadAvatar({ file: avatarFile, characterId });
       if (avatarUrl) {
         character.avatarUrl = avatarUrl;
       }
     }
 
-    this.addCharacter(character);
+    this.addCharacter({ character });
     return character;
   }
 
-  async uploadAvatar(file: File, characterId: string): Promise<string | undefined> {
-    const uid = this._getCurrentUserId();
+  async importFromUrl(options: { url: string; characterId: string }): Promise<Character> {
+    this.debug('importFromUrl', options);
+    const { url, characterId } = options;
+
+    const file = await downloadFromUrl({ url });
+    return this.importFileWithAvatar({ file, characterId });
+  }
+  async _extractCharacter(options: { file: File }) {
+    this.debug('_extractCharacter', options);
+    const { file } = options;
+
+    if (file.type === 'image/png') {
+      return await importFromPng({ file });
+    }
+
+    if (file.type === 'application/json' || file.name.endsWith('.json')) {
+      return await importFromJson({ file });
+    }
+
+    throw toAppError(
+      'invalid-argument',
+      'Unsupported file type. Please upload a PNG or JSON file.',
+    );
+  }
+
+  async uploadAvatar(options: { file: File; characterId: string }): Promise<string | undefined> {
+    this.debug('uploadAvatar', options);
+    const { file, characterId } = options;
+    const uid = authService.uid;
+
     if (!uid) {
-      this.log('uploadAvatar', { message: 'No user logged in' });
-      return undefined;
+      throw toAppError('unauthorized', 'Cannot upload avatar: User is not logged in.');
     }
 
     try {
-      const result = await storageService.uploadAvatar({
+      return await storageService.uploadAvatar({
         file,
         uid: `${uid}/characters/${characterId}`,
       });
-      return result;
     } catch (error) {
-      this.error(error);
+      this.error('uploadAvatar failed', error);
       return undefined;
     }
   }
 
-  private _getCurrentUserId(): string | undefined {
-    return authService.uid;
+  addCharacter(options: { character: Character }): void {
+    this.debug('addCharacter', options);
+    this.characters.push(options.character);
   }
 
-  addCharacter(char: Character): void {
-    this.characters.push(char);
-  }
-
-  selectCharacter(char: Character): void {
-    this.selectedCharacter = char;
+  selectCharacter(options: { character: Character }): void {
+    this.debug('selectCharacter', options);
+    this.selectedCharacter = options.character;
   }
 }
 

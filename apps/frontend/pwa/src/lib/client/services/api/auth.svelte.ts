@@ -322,7 +322,7 @@ export class AuthService
   }
 
   protected async setAuthUser(
-    user: FirebaseUser | null | undefined,
+    user: FirebaseUser | undefined,
     forceRefresh?: boolean,
   ): Promise<void> {
     this.debug('setAuthUser', { forceRefresh, user });
@@ -374,7 +374,7 @@ export class AuthService
    * @param forceRefresh - Force refresh regardless of token expiration.
    * @public
    */
-  private async _setToken(user?: FirebaseUser | null, forceRefresh?: boolean) {
+  private async _setToken(user?: FirebaseUser, forceRefresh?: boolean) {
     const token = user ? await this._auth.getIdToken(user, forceRefresh) : undefined;
     if (!forceRefresh && token === this._currentToken) {
       return;
