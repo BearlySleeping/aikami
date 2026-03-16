@@ -1,5 +1,5 @@
+import { isEmulatorMode } from '@aikami/backend-configs';
 import type { AIMessagePayload, AIMessageResponse, UserSessionData } from '@aikami/types';
-
 import { logger } from '$logger';
 import { LorebookService } from './lorebook.ts';
 import { type AIChatMessage, createAIProvider } from './providers/index.ts';
@@ -38,6 +38,19 @@ export const sendMessage = async (
     logger.log('sendMessage', options, user);
 
     const { text, provider = 'openai', apiKey, model, context } = options;
+
+    // Return mock response in emulator mode
+    if (isEmulatorMode()) {
+      logger.log('Emulator mode: returning mock AI response');
+      return {
+        text: `[Mock AI Response] You said: "${text}". This is a mock response from the AI since we're running in emulator mode. In production, this would call the actual ${provider} API.`,
+        usage: {
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+        },
+      };
+    }
 
     if (!apiKey) {
       throw new Error('API key is required');
@@ -97,6 +110,13 @@ export async function* sendMessageStream(
     logger.log('sendMessageStream', options, user);
 
     const { text, provider = 'openai', apiKey, model, context } = options;
+
+    // Return mock response in emulator mode
+    if (isEmulatorMode()) {
+      logger.log('Emulator mode: returning mock AI response');
+      yield `[Mock AI Response] You said: "${text}". This is a mock response from the AI since we're running in emulator mode. In production, this would call the actual ${provider} API.`;
+      return;
+    }
 
     if (!apiKey) {
       throw new Error('API key is required');

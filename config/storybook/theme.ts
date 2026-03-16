@@ -1,3 +1,4 @@
+// config/storybook/theme.ts
 import { create } from '@storybook/theming';
 import logo from './logo-text.svg';
 

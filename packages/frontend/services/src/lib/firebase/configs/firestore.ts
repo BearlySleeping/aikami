@@ -1,10 +1,34 @@
+// packages/frontend/services/src/lib/firebase/configs/firestore.ts
+import './app.ts'; // Ensure app is initialized first
 import {
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  collection,
+  collectionGroup,
   connectFirestoreEmulator,
+  deleteDoc,
+  deleteField,
+  doc,
+  documentId,
   type Firestore,
-  initializeFirestore,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+  getFirestore,
+  increment,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  startAfter,
   Timestamp,
+  updateDoc,
+  where,
+  writeBatch,
 } from 'firebase/firestore';
-import app from './app.ts';
 
 export {
   addDoc,
@@ -30,31 +54,28 @@ export {
   updateDoc,
   where,
   writeBatch,
-} from 'firebase/firestore';
+};
 
 let _firestore: Firestore | undefined;
+let _emulatorConnected = false;
 
-const getFirestore = () => {
+const getFirestoreInstance = (): Firestore => {
   if (_firestore) {
     return _firestore;
   }
-  _firestore = initializeFirestore(app, {
-    ignoreUndefinedProperties: import.meta.env.PUBLIC_FLAVOR === 'production',
-    localCache:
-      import.meta.env.PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE === '1'
-        ? {
-            kind: 'persistent',
-          }
-        : undefined,
-  });
 
-  if (import.meta.env.PUBLIC_FLAVOR === 'EMULATOR') {
+  // Use getFirestore() without arguments - it auto-uses the default app
+  // This works because app.ts is imported above which initializes the app
+  _firestore = getFirestore();
+
+  // Connect to emulator - only do this once
+  if (import.meta.env.PUBLIC_FLAVOR === 'EMULATOR' && !_emulatorConnected) {
     connectFirestoreEmulator(_firestore, 'localhost', 8080);
+    _emulatorConnected = true;
   }
 
   return _firestore;
 };
 
-const firestore = getFirestore();
-
-export { firestore, Timestamp };
+export type { Firestore };
+export { getFirestoreInstance, Timestamp };

@@ -1,0 +1,85 @@
+# packages/frontend/components/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'components'
+  - 'shared'
+  - 'library'
+  - 'storybook'
+
+project:
+  title: 'Frontend Components'
+  description: 'Shared UI components library for Aikami.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'svelte.config.js'
+    - 'vite.config.ts'
+    - '.storybook/**/*'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  dev:
+    command: 'bun run dev'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      runInWorkspace: false
+
+  build:
+    command: 'bun run build'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    outputs:
+      - 'storybook-static'
+    options:
+      runInWorkspace: false
+
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      runInWorkspace: false
+
+  typecheck:
+    command: 'bun run typecheck'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  format:
+    command: 'bun run format'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  lint:
+    command: 'bun run lint'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  validate:
+    command: 'bun run validate'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'

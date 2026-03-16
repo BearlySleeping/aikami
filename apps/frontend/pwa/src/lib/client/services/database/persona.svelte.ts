@@ -21,7 +21,7 @@ export type PersonaServiceInterface = BaseFrontendClassInterface & {
    * Gets the currently active persona for the user.
    * @returns The active persona or null if none is active.
    */
-  getActivePersona(): Promise<PersonaData | null>;
+  getActivePersona(): Promise<PersonaData | undefined>;
 
   /**
    * Sets a persona as the active one (game-style - one character for entire run).
@@ -58,12 +58,12 @@ class PersonaService extends BaseFrontendClass implements PersonaServiceInterfac
     return await personaRepository.getDocumentsByCollection({ uid });
   }
 
-  async getActivePersona(): Promise<PersonaData | null> {
+  async getActivePersona(): Promise<PersonaData | undefined> {
     const user = authService.currentUser;
-    if (!user) return null;
+    if (!user) return undefined;
 
     const personas = await personaRepository.getDocumentsByCollection({ uid: user.id });
-    return personas.find((p: PersonaData) => p.isActive) ?? null;
+    return personas.find((p: PersonaData) => p.isActive) ?? undefined;
   }
 
   async setActivePersona(personaId: string): Promise<void> {

@@ -17,6 +17,102 @@ Aikami is a monorepo using **moon** for task orchestration, **Bun** as the runti
 
 ---
 
+## Moon Project Configuration
+
+Every project in the monorepo **must** have a `moon.yml` that follows this standard:
+
+```yaml
+# packages/{project}/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'  # or 'application', 'tool'
+tags:
+  - '{project}'
+  - 'shared'
+  - 'library'
+
+project:
+  title: '{Title}'
+  description: '{Description}.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  typecheck:
+    command: 'bun run typecheck'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  format:
+    command: 'bun run format'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  lint:
+    command: 'bun run lint'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  validate:
+    command: 'bun run validate'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+
+  dev:
+    command: 'bun run dev'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      runInWorkspace: false
+
+  build:
+    command: 'bun run build'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      runInWorkspace: false
+```
+
+### Key Rules
+
+1. **All tasks use `bun run <script>`** - Never call binaries directly
+2. **All scripts must be in `package.json`** - Moon delegates to package.json scripts
+3. **Use `@group()` references** - Reference fileGroups for inputs
+4. **`runInWorkspace: false`** for dev/build - Run in project dir, not workspace root
+5. **Include all 7 standard tasks**: `typecheck`, `format`, `lint`, `test`, `fix`, `validate`, `dev`, `build`
+
+---
+
 ## Quick Reference
 
 ```bash
@@ -98,11 +194,12 @@ To maintain a clean, predictable, and heavily standardized codebase, adhere to t
 
 ### Functions & Control Flow
 
-- ❌ **Chained arguments** → All methods with multiple arguments must use an options object (`{...}`).
+- ❌ **Chained arguments** → All methods must use an options object (`{...}`), even for single arguments.
 - ❌ **Single-line `if` statements** → Always use curly braces `{}` even for a single statement.
 - ✅ **Escape Early** → Always use the return-early pattern to avoid deep nesting.
 - ✅ **Arrow Functions** → Default to arrow functions for standard methods and callbacks.
 - ✅ **Extract Logic** → If a section within a method can stand alone, extract it into a separate private method.
+- ✅ **Debug Logging** → All service and view model methods must call `this.debug()` at the start. For standalone functions, import logger from `$logger` and call `logger.debug()`.
 
 ### Naming, Documentation & Logging
 

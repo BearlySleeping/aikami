@@ -1,3 +1,4 @@
+// packages/backend/configs/src/lib/bucket.ts
 import { getStorage, type Storage } from 'firebase-admin/storage';
 
 import { getApp } from './app.ts';

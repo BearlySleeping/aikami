@@ -1,0 +1,41 @@
+{
+  "name": "@aikami/frontend-components",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ai-button": "./src/ai-button.svelte"
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "scripts": {
+    "dev": "storybook dev --port 6006",
+    "build": "storybook build",
+    "test": "test-storybook",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write .",
+    "validate": "bun run typecheck && bun test"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "10.2.19",
+    "@storybook/addon-essentials": "^8.6.18",
+    "@storybook/addon-interactions": "^8.6.18",
+    "@storybook/addon-svelte-csf": "5.0.11",
+    "@storybook/svelte": "10.2.19",
+    "@storybook/svelte-vite": "10.2.19",
+    "@storybook/test-runner": "0.24.2",
+    "@sveltejs/vite-plugin-svelte": "7.0.0",
+    "autoprefixer": "10.4.27",
+    "postcss": "8.5.8",
+    "storybook": "10.2.19",
+    "svelte": "5.53.12",
+    "tailwindcss": "4.2.1",
+    "vite": "^5.4.0"
+  }
+}

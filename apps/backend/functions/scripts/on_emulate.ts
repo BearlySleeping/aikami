@@ -1,38 +1,60 @@
 // apps/backend/functions/scripts/on_emulate.ts
-import { readFile } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getAuth } from '@aikami/backend/configs/auth';
-import { getBucket } from '@aikami/backend/configs/bucket';
 import { serverTimestamp } from '@aikami/backend/configs/firestore';
-import { messageRepository } from '@aikami/backend/database/message';
 import { personaRepository } from '@aikami/backend/database/persona';
 import { setUserData } from '@aikami/backend/database/user';
-import { createFirebaseAuthUser } from '@aikami/backend/utils/auth';
+import { uploadToFirebase } from '@aikami/backend/utils/storage';
+
 import { npcRepository } from '@aikami/backend-database';
 import { DEFAULT_SAVING_THROWS, DEFAULT_SKILLS } from '@aikami/schemas';
-import type {
-  MessageCreateData,
-  NpcCreateData,
-  PersonaCreateData,
-  UserCreateData,
-} from '@aikami/types';
+import type { NpcCreateData, PersonaCreateData, UserCreateData } from '@aikami/types';
 import { logger } from '$logger';
 
 const EMULATOR_PASSWORD = 'asdasd';
 
 const ASSETS_DIR = join(__dirname, '../assets');
 
-const storageAssets = [
-  {
-    fileName: 'image.avif',
-    destinationPath: 'images/avatar-default.avif',
-    contentType: 'image/avif',
-  },
-];
+type NpcWithExpressions = NpcCreateData & {
+  expressions?: Record<string, string>;
+};
 
-const npcs: NpcCreateData[] = [
+async function uploadNpcImages(npcDir: string): Promise<Record<string, string>> {
+  const expressions: Record<string, string> = {};
+
+  try {
+    const files = await readdir(npcDir);
+    for (const file of files) {
+      if (file.endsWith('.webp') || file.endsWith('.png') || file.endsWith('.jpg')) {
+        const expression = file.replace('.webp', '').replace('.png', '').replace('.jpg', '');
+        const filePath = join(npcDir, file);
+        const destination = `npc/${npcDir.split('/').pop()}/${file}`;
+        const contentType = file.endsWith('.png') ? 'image/png' : 'image/webp';
+
+        try {
+          const url = await uploadToFirebase({
+            filePath,
+            destination,
+            contentType,
+          });
+          expressions[expression] = url;
+          logger.log(`Uploaded ${expression}: ${url}`);
+        } catch (e) {
+          logger.error(`Failed to upload ${file}:`, e);
+        }
+      }
+    }
+  } catch {
+    logger.warn(`No images found for NPC: ${npcDir}`);
+  }
+
+  return expressions;
+}
+
+const npcs: NpcWithExpressions[] = [
   {
-    name: 'Aragorn',
+    name: 'aragon',
     race: 'Human',
     class: 'Ranger',
     level: 15,
@@ -58,6 +80,7 @@ const npcs: NpcCreateData[] = [
     equipment: ['Andúril', 'Bow', 'Elven Cloak'],
     inventory: ['Andúril', 'Bow', 'Elven Cloak'],
     isFriendly: true,
+    visibility: 'public',
   },
   {
     name: 'Gandalf',
@@ -86,34 +109,65 @@ const npcs: NpcCreateData[] = [
     equipment: ["Wizard's Staff", 'Glamdring', 'Narya'],
     inventory: ["Wizard's Staff", 'Glamdring', 'Narya'],
     isFriendly: true,
+    visibility: 'public',
   },
   {
-    name: 'Legolas',
-    race: 'Elf',
-    class: 'Fighter',
-    level: 15,
-    experiencePoints: 100000,
+    name: 'Orc',
+    race: 'Orc',
+    class: 'Barbarian',
+    level: 5,
+    experiencePoints: 6500,
     abilityScores: {
-      strength: 14,
-      dexterity: 20,
-      constitution: 14,
-      intelligence: 14,
-      wisdom: 16,
-      charisma: 16,
+      strength: 18,
+      dexterity: 12,
+      constitution: 16,
+      intelligence: 8,
+      wisdom: 10,
+      charisma: 8,
     },
-    hitPoints: 130,
+    hitPoints: 60,
     temporaryHitPoints: 0,
     savingThrows: DEFAULT_SAVING_THROWS,
     skills: DEFAULT_SKILLS,
-    armorClass: 17,
-    speed: 35,
-    alignment: 'Chaotic Good',
+    armorClass: 13,
+    speed: 30,
+    alignment: 'Chaotic Evil',
+    background: 'Soldier',
+    proficiencies: ['Greataxe', 'Intimidation', 'Athletics'],
+    languages: ['Common', 'Orc'],
+    equipment: ['Greataxe', 'Javelins', 'Leather Armor'],
+    inventory: ['Greataxe', 'Javelins', 'Leather Armor', 'Trophy Teeth'],
+    isFriendly: false,
+    visibility: 'public',
+  },
+  {
+    name: 'Troll',
+    race: 'Troll',
+    class: 'Monk',
+    level: 8,
+    experiencePoints: 24000,
+    abilityScores: {
+      strength: 20,
+      dexterity: 14,
+      constitution: 18,
+      intelligence: 6,
+      wisdom: 12,
+      charisma: 6,
+    },
+    hitPoints: 95,
+    temporaryHitPoints: 0,
+    savingThrows: DEFAULT_SAVING_THROWS,
+    skills: DEFAULT_SKILLS,
+    armorClass: 14,
+    speed: 40,
+    alignment: 'Chaotic Evil',
     background: 'Outlander',
-    proficiencies: ['Longbow', 'Shortsword', 'Acrobatics', 'Perception'],
-    languages: ['Common', 'Elvish'],
-    equipment: ['Bow of the Galadhrim', 'White Knives'],
-    inventory: ['Bow of the Galadhrim', 'White Knives'],
-    isFriendly: true,
+    proficiencies: ['Unarmed Strike', 'Intimidation', 'Survival'],
+    languages: ['Common', 'Orc'],
+    equipment: ['Claws (natural)', 'Greatclub'],
+    inventory: ['Claws (natural)', 'Greatclub', 'Goblin Ears'],
+    isFriendly: false,
+    visibility: 'public',
   },
 ];
 
@@ -143,148 +197,107 @@ const createUserDocument = async (uid: string, email: string, displayName: strin
 };
 
 const createPersona = async (uid: string): Promise<string> => {
-  const persona: PersonaCreateData = {
-    name: 'Aria the Bard',
-    race: 'Half-Elf',
-    class: 'Bard',
-    level: 10,
-    experiencePoints: 64000,
+  const personaData: PersonaCreateData = {
+    uid,
+    name: 'Test User',
+    race: 'Human',
+    class: 'Wizard',
+    level: 1,
+    experiencePoints: 0,
     abilityScores: {
       strength: 10,
-      dexterity: 14,
-      constitution: 12,
-      intelligence: 13,
+      dexterity: 10,
+      constitution: 10,
+      intelligence: 10,
       wisdom: 10,
-      charisma: 18,
+      charisma: 10,
     },
-    hitPoints: 80,
+    hitPoints: 10,
     temporaryHitPoints: 0,
     savingThrows: DEFAULT_SAVING_THROWS,
     skills: DEFAULT_SKILLS,
-    armorClass: 14,
+    armorClass: 10,
     speed: 30,
-    alignment: 'Chaotic Good',
-    background: 'Entertainer',
-    proficiencies: ['Viol', 'Dagger', 'Performance', 'Persuasion'],
-    languages: ['Common', 'Elvish', 'Draconic'],
-    equipment: ['Viol', 'Costume', "Traveler's Clothes"],
-    inventory: ['Viol', 'Costume', "Traveler's Clothes", '10 GP'],
-    personalityTraits: 'Always humming a tune, speaks in poetic verses',
-    ideals: 'Beauty and art are worth protecting',
-    bonds: 'Owes a debt to a mysterious patron',
-    flaws: 'Cannot resist a gamble',
-    uid,
+    alignment: 'Neutral',
+    background: 'Sage',
+    proficiencies: [],
+    languages: ['Common'],
+    equipment: [],
+    inventory: [],
     isActive: true,
-    createdAt: serverTimestamp(),
   };
 
-  const personaId = await personaRepository.addDocument({
-    createData: persona,
+  const id = await personaRepository.addDocument({
     getCollectionPathArgument: { uid },
+    createData: personaData,
   });
-  return personaId;
+  return id;
 };
 
-const createChat = async (uid: string, personaId: string) => {
-  const persona = await personaRepository.getDocument({
-    uid,
-    personaId,
-  });
-
-  if (!persona) {
-    throw new Error(`Persona ${personaId} not found`);
-  }
-
-  const chatId = `chat_${Date.now()}`;
-
-  const initialMessage: MessageCreateData = {
-    text: 'Hello! I am Aria, a traveling bard. Would you like to hear a tale?',
-    sender: 'ai',
-    createdAt: serverTimestamp(),
-  };
-
-  await messageRepository.addDocument({
-    createData: initialMessage,
-    getCollectionPathArgument: { uid },
-  });
-
-  return chatId;
-};
-
-type StorageAsset = {
-  fileName: string;
-  destinationPath: string;
-  contentType: string;
-};
-
-const uploadAssetToStorage = async (asset: StorageAsset): Promise<string> => {
-  const bucket = getBucket();
-  const filePath = join(ASSETS_DIR, asset.fileName);
+const createNpcs = async () => {
+  const npcImagesDir = join(ASSETS_DIR, 'images/npc');
+  logger.log('Creating NPCs with images...');
 
   try {
-    const fileContent = await readFile(filePath);
-    const file = bucket.file(asset.destinationPath);
+    const npcDirs = await readdir(npcImagesDir);
+    logger.log(`Found NPC directories: ${npcDirs.join(', ')}`);
 
-    await file.save(fileContent, {
-      metadata: {
-        contentType: asset.contentType,
-      },
+    for (const npcDir of npcDirs) {
+      const npcData = npcs.find(
+        (n) => n.name.toLowerCase().replace(' ', '-') === npcDir.toLowerCase(),
+      );
+
+      if (!npcData) {
+        logger.warn(`No NPC data found for directory: ${npcDir}`);
+        continue;
+      }
+
+      const expressions = await uploadNpcImages(join(npcImagesDir, npcDir));
+
+      const npcWithExpressions: NpcCreateData = {
+        ...npcData,
+        expressions,
+        avatarUrl: expressions.neutral || expressions.happy || Object.values(expressions)[0],
+      };
+
+      const id = await npcRepository.addDocument({
+        getCollectionPathArgument: {} as Record<string, never>,
+        createData: npcWithExpressions,
+      });
+      logger.log(`Created NPC: ${npcData.name} (${id})`);
+    }
+  } catch (error) {
+    logger.error('Error creating NPCs:', error);
+  }
+};
+
+const createEmulatorUser = async (email: string, displayName: string) => {
+  const auth = getAuth();
+  try {
+    const userRecord = await auth.createUser({
+      email,
+      password: EMULATOR_PASSWORD,
+      displayName,
     });
 
-    logger.log(`Uploaded ${asset.fileName} to ${asset.destinationPath}`);
-    return asset.destinationPath;
+    const uid = userRecord.uid;
+    await createUserDocument(uid, email, displayName);
+    await createPersona(uid);
+    logger.log(`Created user: ${email} (${uid})`);
+    return uid;
   } catch (error) {
-    logger.error(`Failed to upload ${asset.fileName}:`, error);
-    throw error;
+    logger.error(`Error creating user ${email}:`, error);
+    return undefined;
   }
 };
 
-const seedStorage = async (assets: StorageAsset[]) => {
-  logger.log('Seeding storage with images...');
-  const uploadedPaths: string[] = [];
+logger.log('Starting emulation...');
 
-  for (const asset of assets) {
-    const path = await uploadAssetToStorage(asset);
-    uploadedPaths.push(path);
-  }
-
-  logger.log(`✅ Seeded ${uploadedPaths.length} storage assets`);
-  return uploadedPaths;
-};
-
-logger.log('Creating NPCs...');
-for (const npc of npcs) {
-  const id = await npcRepository.addDocument({
-    createData: npc,
-    getCollectionPathArgument: {},
-  });
-  logger.log(`Created NPC ${npc.name} with id: ${id}`);
-}
-
-logger.log('Clearing existing emulator users...');
 await deleteAllEmulatorUsers();
 
-logger.log('Creating email/password users...');
+await createNpcs();
 
-const authorizedUid = await createFirebaseAuthUser({
-  uid: 'authorized_user',
-  displayName: 'Authorized User',
-  email: 'authorized@bearlysleeping.com',
-  password: EMULATOR_PASSWORD,
-});
-await createUserDocument(authorizedUid, 'authorized@bearlysleeping.com', 'Authorized User');
-logger.log('Created authorized user (registered)');
+await createEmulatorUser('admin@example.com', 'Admin User');
+await createEmulatorUser('user@example.com', 'Regular User');
 
-logger.log('Creating persona and chat for authorized user...');
-const personaId = await createPersona(authorizedUid);
-logger.log(`Created persona: ${personaId}`);
-
-const chatId = await createChat(authorizedUid, personaId);
-logger.log(`Created chat: ${chatId}`);
-
-await seedStorage(storageAssets);
-
-logger.log('✅ Emulator seeded!');
-logger.log('');
-logger.log('Auth Users:');
-logger.log('  Authorized: authorized@bearlysleeping.com / asdasd');
+logger.log('Emulation complete!');

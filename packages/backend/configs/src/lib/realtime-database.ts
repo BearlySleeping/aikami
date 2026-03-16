@@ -1,3 +1,4 @@
+// packages/backend/configs/src/lib/realtime-database.ts
 import { type Database, getDatabase } from 'firebase-admin/database';
 import { getApp } from './app.ts';
 

@@ -3,7 +3,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "dev:emulator": "FLAVOR=EMULATOR FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 GCP_PROJECT=aikami-dev GCLOUD_PROJECT=aikami-dev FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 vite dev --mode emulator",
+    "dev:emulator": "vite dev --mode emulator",
+    "dev:production": "vite dev --mode production",
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",

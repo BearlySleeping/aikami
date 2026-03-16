@@ -1,3 +1,4 @@
+// config/storybook/main.ts
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { StorybookConfig } from '@storybook/svelte-vite';

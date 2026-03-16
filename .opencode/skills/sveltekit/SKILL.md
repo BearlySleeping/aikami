@@ -138,7 +138,7 @@ export type CharacterServiceOptions = BaseFrontendClassOptions;
 
 export type CharacterServiceInterface = BaseFrontendClassInterface & {
 	readonly characters: Character[];
-	getCharacter(id: string): Promise<Character | null>;
+	getCharacter(options: { id: string }): Promise<Character | null>;
 };
 
 class CharacterService
@@ -147,8 +147,9 @@ class CharacterService
 {
 	characters: Character[] = $state([]);
 
-	async getCharacter(id: string): Promise<Character | null> {
-		return await characterRepository.getDocument({ id });
+	async getCharacter(options: { id: string }): Promise<Character | null> {
+		this.debug('getCharacter', options);
+		return await characterRepository.getDocument(options);
 	}
 }
 
@@ -160,6 +161,10 @@ export const characterService: CharacterServiceInterface = new CharacterService(
 ```
 
 **Important**: Pass options when creating the singleton, not in the constructor.
+
+**Rules**:
+1. All methods use options object even for single arguments
+2. All methods include `this.debug()` call at the start
 
 ---
 
@@ -268,10 +273,11 @@ export type CharacterServiceInterface = BaseFrontendClassInterface & {
 
 	/**
 	 * Imports a character from a file.
-	 * @param file - The file to import
-	 * @returns The imported Character or null if import failed
+	 * @param options - Configuration object.
+	 * @param options.file - The file to import.
+	 * @returns The imported Character or null if import failed.
 	 */
-	importFile(file: File): Promise<Character | null>;
+	importFile(options: { file: File }): Promise<Character | null>;
 };
 ```
 
@@ -281,6 +287,7 @@ export type CharacterServiceInterface = BaseFrontendClassInterface & {
 2. Use `@readonly` annotation
 3. All fields must have JSDoc comments
 4. All methods must have JSDoc with @param descriptions
+5. All methods use options object even for single arguments
 
 ---
 
@@ -443,3 +450,4 @@ bun run typecheck
 7. ❌ Omitting file extensions in imports
 8. ❌ Using default exports - Use named exports
 9. ❌ Destructuring reactive properties from ViewModels or Services - Always access them directly via the instance (`viewModel.property`) so Svelte tracks the read.
+10. ❌ Using positional arguments - Always use options object, even for single arguments

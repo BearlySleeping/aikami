@@ -1,3 +1,4 @@
+// packages/backend/configs/src/lib/auth.ts
 import { type Auth, getAuth as fbGetAuth } from 'firebase-admin/auth';
 
 import { getApp } from './app.ts';

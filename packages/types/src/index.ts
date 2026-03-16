@@ -17,6 +17,7 @@ export * from './lib/backend/http.ts';
 export * from './lib/class.ts';
 export * from './lib/common/preferences.ts';
 export * from './lib/common.ts';
+export * from './lib/database/chat.ts';
 export * from './lib/database/core.ts';
 export * from './lib/database/message.ts';
 export * from './lib/database/notification.ts';

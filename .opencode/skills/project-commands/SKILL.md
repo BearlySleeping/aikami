@@ -54,6 +54,7 @@ Replace `pwa` with any project name (see Project Names below).
 | `bun moon run pwa:typecheck` | Run type checking |
 | `bun moon run pwa:test` | Run tests |
 | `bun moon run pwa:dev` | Start dev server |
+| `bun moon run pwa:build` | Build project (for Storybook/frontend projects) |
 
 ---
 
@@ -92,6 +93,7 @@ Use these names in `bun moon run {name}:{task}`:
 | `schemas` | Zod schemas |
 | `types` | TypeScript types |
 | `constants` | Shared constants |
+| `components` | Frontend UI components library (Storybook) |
 | `frontend-services` | Frontend services package |
 | `frontend-utils` | Frontend utilities package |
 | `backend-auth` | Auth backend |

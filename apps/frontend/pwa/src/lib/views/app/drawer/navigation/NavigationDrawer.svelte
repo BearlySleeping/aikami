@@ -25,7 +25,8 @@
       {#each section.items as item}
         <li>
           <button
-            class="flex items-center gap-2"
+            class="flex items-center gap-2 active:bg-primary
+            {item.active ? 'bg-primary' : ''}"
             class:active={item.active}
             onclick={() => viewModel.goToRoute(item.route)}
           >

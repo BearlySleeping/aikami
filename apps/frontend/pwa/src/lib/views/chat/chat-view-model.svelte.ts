@@ -4,145 +4,127 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { MessageCreateData, NpcData } from '@aikami/types';
-import { aiService, authService, chatService, messageService, npcService } from '$services';
+import type { ChatData, MessageData, NpcData } from '@aikami/types';
+import {
+  aiService,
+  authService,
+  type ChatMessage,
+  chatService,
+  diceService,
+  imageGenerationService,
+  npcChatService,
+  ttsService,
+} from '$services';
 
-/**
- * Options for creating a ChatViewModel instance.
- */
 export type ChatViewModelOptions = BaseViewModelOptions & {
-  /** The ID of the NPC to chat with */
-  npcId: string;
+  chat: ChatData;
+  npc: NpcData;
 };
 
-/**
- * View model interface for the chat functionality.
- * Manages chat state, message sending, and NPC interactions.
- */
 export type ChatViewModelInterface = BaseViewModelInterface & {
-  /** The NPC being chatted with, or null if not loaded */
-  readonly npc: NpcData | null;
-
-  /** Whether chat data is currently loading */
+  readonly npc?: NpcData;
+  readonly chatData?: {
+    affection: number;
+    stats: Record<string, unknown>;
+    backgroundImageUrl?: string;
+  };
   readonly isLoading: boolean;
-
-  /** Whether a message is currently being sent */
   readonly isSending: boolean;
-
-  /** Whether the AI is typing a response */
   readonly isTyping: boolean;
-
-  /** Current error message, if any */
-  readonly chatError: string | null;
-
-  /** Array of chat messages */
-  readonly messages: typeof chatService.messages;
-
-  /** Whether to show the greeting card (before first message) */
+  readonly chatError: string | undefined;
+  readonly messages: ChatMessage[];
   readonly showGreeting: boolean;
-
-  /**
-   * Loads the chat history for the current NPC.
-   * Should be called after initialize() when NPC data is available.
-   */
-  loadChatHistory(): Promise<void>;
-
-  /**
-   * Sends a message to the AI and handles the response.
-   * @param text - The message text to send
-   */
+  readonly isGeneratingImage: boolean;
+  readonly isPlayingTts: boolean;
+  readonly backgroundImageUrl: string | undefined;
+  loadChatHistory(chat: ChatData): Promise<void>;
   sendMessage(text: string): Promise<void>;
-
-  /**
-   * Dismisses the greeting card and shows the chat.
-   */
+  editMessage(messageId: string, newText: string): Promise<void>;
+  deleteMessage(messageId: string): Promise<void>;
+  regenerateMessage(messageId: string): Promise<void>;
+  generateImage(prompt: string): Promise<string>;
+  playTts(messageId: string): Promise<void>;
+  stopTts(): void;
+  attachFile(messageId: string, file: File): Promise<void>;
+  updateAffection(change: number): Promise<void>;
+  rollPerception(): Promise<{ roll: number; total: number }>;
+  rollPersuasion(context?: string): Promise<{ roll: number; total: number }>;
+  generateBackground(prompt?: string): Promise<void>;
   dismissGreeting(): void;
-
-  /**
-   * Clears all chat messages and resets state.
-   */
   clearChat(): void;
 };
 
 class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatViewModelInterface {
-  npc = $state<NpcData | null>(null);
+  npc = $state<NpcData | undefined>();
+  chat = $state<ChatData | undefined>();
+
   showGreeting = $state(true);
+  chatData = $state<
+    { affection: number; stats: Record<string, unknown>; backgroundImageUrl?: string } | undefined
+  >();
+  isGeneratingImage = $state(false);
+  isPlayingTts = $state(false);
+  backgroundImageUrl = $state<string | undefined>();
+
+  constructor(options: ChatViewModelOptions) {
+    super(options);
+    this.npc = options.npc;
+    this.chat = options.chat;
+  }
 
   get isLoading() {
     return chatService.isLoading;
   }
-
   get isSending() {
     return chatService.isSending;
   }
-
   get isTyping() {
     return chatService.isTyping;
   }
-
   get chatError() {
     return chatService.errorMessage;
   }
-
   get messages() {
-    return chatService.messages;
+    return this.chat?.messages ?? [];
   }
 
-  async initialize(): Promise<void> {
-    chatService.setLoading(true);
-    try {
-      const npcData = await npcService.get(this._options.npcId);
-      this.npc = npcData ?? null;
-      if (this.npc) {
-        await this.loadChatHistory();
-      }
-    } catch (err) {
-      this.error('initialize', err);
-    } finally {
-      chatService.setLoading(false);
-    }
-  }
+  async loadChatHistory(chat: ChatData): Promise<void> {
+    this.debug('loadChatHistory', chat);
 
-  async loadChatHistory(): Promise<void> {
-    const uid = authService.uid;
-    if (!uid || !this.npc) return;
-
-    chatService.setLoading(true);
-    try {
-      const messages = await messageService.getMessages(uid, this.npc.id);
-      chatService.setMessages(messages);
-      this.showGreeting = messages.length === 0;
-    } catch (_error) {
-    } finally {
-      chatService.setLoading(false);
-    }
+    this.chatData = {
+      affection: chat.affection ?? 0,
+      stats: chat.stats ?? {},
+      backgroundImageUrl: chat.backgroundImageUrl,
+    };
+    this.backgroundImageUrl = chat.backgroundImageUrl;
+    chatService.setMessages(chat.messages as unknown as MessageData[]);
+    this.showGreeting = (chat.messages?.length ?? 0) === 0;
   }
 
   async sendMessage(text: string): Promise<void> {
-    if (!this.npc) return;
-
+    this.debug('sendMessage', text);
+    if (!this.npc) {
+      return;
+    }
     this.showGreeting = false;
     chatService.setSending(true);
     chatService.setTyping(true);
-    chatService.setError(null);
-
+    chatService.setError(undefined);
     const userMessage = {
       id: crypto.randomUUID(),
       text,
       sender: 'user' as const,
       timestamp: new Date(),
     };
-
     chatService.addMessage(userMessage);
     await this.saveMessage(text, 'user');
-
     try {
       const response = await aiService.sendMessageToAI(text, this.npc ?? undefined);
       if (response) {
         chatService.appendAIMessage(response);
         await this.saveMessage(response, 'ai');
       }
-    } catch (_error) {
+    } catch {
       chatService.setError('Failed to get response from AI');
     } finally {
       chatService.setSending(false);
@@ -150,27 +132,177 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     }
   }
 
-  dismissGreeting(): void {
-    this.showGreeting = false;
+  async editMessage(messageId: string, newText: string): Promise<void> {
+    this.debug('editMessage', messageId, newText);
+    const msgs = [...chatService.messages] as unknown as MessageData[];
+    const idx = msgs.findIndex((m) => m.id === messageId);
+    if (idx === -1) return;
+    msgs[idx] = { ...msgs[idx], text: newText };
+    chatService.setMessages(msgs);
+    await this.persistMessages(msgs);
   }
 
-  private async saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
-    const uid = authService.uid;
-    if (!uid || !this.npc) return;
+  async deleteMessage(messageId: string): Promise<void> {
+    this.debug('deleteMessage', messageId);
+    const msgs = (chatService.messages as unknown as MessageData[]).filter(
+      (m) => m.id !== messageId,
+    );
+    chatService.setMessages(msgs);
+    await this.persistMessages(msgs);
+  }
 
-    const messageData: MessageCreateData = {
-      text,
-      sender,
-    };
-
+  async regenerateMessage(messageId: string): Promise<void> {
+    this.debug('regenerateMessage', messageId);
+    const msgs = [...chatService.messages] as unknown as MessageData[];
+    const idx = msgs.findIndex((m) => m.id === messageId);
+    if (idx === -1 || msgs[idx].sender !== 'ai') return;
+    chatService.setTyping(true);
     try {
-      await messageService.createMessage(uid, this.npc.id, messageData);
-    } catch (_error) {}
+      const context = msgs
+        .slice(0, idx)
+        .map((m) => m.text)
+        .join('\n');
+      const response = await aiService.sendMessageToAI(
+        `Regenerate your response. Context: ${context}`,
+        this.npc,
+      );
+      if (response) {
+        msgs[idx] = { ...msgs[idx], text: response };
+        chatService.setMessages(msgs);
+        await this.persistMessages(msgs);
+      }
+    } catch {
+      chatService.setError('Failed to regenerate message');
+    } finally {
+      chatService.setTyping(false);
+    }
+  }
+
+  async generateImage(prompt: string): Promise<string> {
+    this.debug('generateImage', prompt);
+    this.isGeneratingImage = true;
+    try {
+      return (await imageGenerationService.generateImage({ prompt })).url;
+    } finally {
+      this.isGeneratingImage = false;
+    }
+  }
+
+  async playTts(messageId: string): Promise<void> {
+    this.debug('playTts', messageId);
+    const msg = (chatService.messages as unknown as MessageData[]).find((m) => m.id === messageId);
+    if (!msg) return;
+    this.isPlayingTts = true;
+    try {
+      await ttsService.speak({ text: msg.text });
+    } finally {
+      this.isPlayingTts = false;
+    }
+  }
+
+  stopTts(): void {
+    ttsService.stop();
+    this.isPlayingTts = false;
+  }
+
+  async attachFile(messageId: string, file: File): Promise<void> {
+    this.debug('attachFile', messageId, file.name);
+    const msgs = [...chatService.messages] as unknown as MessageData[];
+    const idx = msgs.findIndex((m) => m.id === messageId);
+    if (idx === -1) return;
+    const url = URL.createObjectURL(file);
+    msgs[idx] = {
+      ...msgs[idx],
+      attachments: [...(msgs[idx].attachments ?? []), { type: 'file', url, name: file.name }],
+    };
+    chatService.setMessages(msgs);
+    await this.persistMessages(msgs);
+  }
+
+  async updateAffection(change: number): Promise<void> {
+    this.debug('updateAffection', change);
+    if (!this.chatData) return;
+    this.chatData = { ...this.chatData, affection: (this.chatData.affection ?? 0) + change };
+  }
+
+  async rollPerception(): Promise<{ roll: number; total: number }> {
+    this.debug('rollPerception');
+    const wisdom = 3;
+    const result = diceService.rollD20(wisdom);
+    chatService.addMessage({
+      id: crypto.randomUUID(),
+      text: `Perception check: rolled ${result.natural} + ${wisdom} = ${result.total}`,
+      sender: 'ai',
+      timestamp: new Date(),
+    });
+    return { roll: result.natural, total: result.total };
+  }
+
+  async rollPersuasion(context?: string): Promise<{ roll: number; total: number }> {
+    this.debug('rollPersuasion', context);
+    const charisma = 3;
+    const result = diceService.rollD20(charisma);
+    const ctx = context ? ` Attempting to persuade: ${context}` : '';
+    chatService.addMessage({
+      id: crypto.randomUUID(),
+      text: `Persuasion check: rolled ${result.natural} + ${charisma} = ${result.total}${ctx}`,
+      sender: 'ai',
+      timestamp: new Date(),
+    });
+    return { roll: result.natural, total: result.total };
+  }
+
+  async generateBackground(prompt?: string): Promise<void> {
+    this.debug('generateBackground', prompt);
+    this.isGeneratingImage = true;
+    try {
+      const bg = prompt ?? `Fantasy chat background, ${this.npc?.name ?? 'mysterious'} atmosphere`;
+      const result = await imageGenerationService.generateImage({ prompt: bg });
+      this.backgroundImageUrl = result.url;
+      if (this.chatData) this.chatData.backgroundImageUrl = result.url;
+    } finally {
+      this.isGeneratingImage = false;
+    }
+  }
+
+  dismissGreeting(): void {
+    this.debug('dismissGreeting');
+    this.showGreeting = false;
   }
 
   clearChat(): void {
     chatService.clear();
     this.showGreeting = true;
+  }
+
+  private async saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
+    this.debug('saveMessage', text, sender);
+    const uid = authService.uid;
+    if (!uid || !this.npc) return;
+    try {
+      const chat = await npcChatService.getOrCreateChat({
+        uid,
+        npcId: this.npc.id,
+        npcName: this.npc.name,
+        npcAvatarUrl: this.npc.avatarUrl,
+      });
+      await npcChatService.addMessage({
+        chatId: chat.id,
+        uid,
+        npcId: this.npc.id,
+        message: text,
+        sender,
+      });
+    } catch {}
+  }
+
+  private async persistMessages(msgs: MessageData[]): Promise<void> {
+    const uid = authService.uid;
+    if (!uid || !this.npc) return;
+    try {
+      const chat = await npcChatService.getChat({ uid, npcId: this.npc.id });
+      if (chat?.id) await npcChatService.updateChat({ chatId: chat.id, messages: msgs });
+    } catch {}
   }
 }
 

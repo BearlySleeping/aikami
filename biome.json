@@ -148,6 +148,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/frontend/components/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": "off"
+          }
+        }
+      }
     }
   ]
 }

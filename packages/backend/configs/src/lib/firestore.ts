@@ -1,3 +1,4 @@
+// packages/backend/configs/src/lib/firestore.ts
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 export const serverTimestamp = () => FieldValue.serverTimestamp();

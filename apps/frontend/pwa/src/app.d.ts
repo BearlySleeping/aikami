@@ -19,10 +19,12 @@ declare namespace App {
     device?: DeviceData;
     userSession?: UserSessionData;
     currentRoute?: RouteName;
+    customFirebaseSignInToken?: string;
   }
 
   interface Error {
     type: ErrorType;
+    message?: string;
     errorId?: string;
     details?: unknown;
   }

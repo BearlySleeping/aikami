@@ -1,3 +1,4 @@
+// packages/backend/configs/src/lib/app-check.ts
 import { type AppCheck, getAppCheck as fbGetAppCheck } from 'firebase-admin/app-check';
 
 import { getApp } from './app.ts';
