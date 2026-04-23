@@ -72,6 +72,14 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     this.chat = options.chat;
   }
 
+  override async initialize(): Promise<void> {
+    this.debug('initialize');
+    if (this.chat) {
+      await this.loadChatHistory(this.chat);
+    }
+    return super.initialize();
+  }
+
   get isLoading() {
     return chatService.isLoading;
   }
@@ -84,8 +92,30 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   get chatError() {
     return chatService.errorMessage;
   }
-  get messages() {
-    return this.chat?.messages ?? [];
+  get messages(): ChatMessage[] {
+    const msgs = this.chat?.messages ?? [];
+    return msgs.map((msg) => {
+      const createdAt = msg.createdAt as unknown;
+      let timestamp: Date;
+      if (
+        typeof createdAt === 'object' &&
+        createdAt !== null &&
+        'toDate' in createdAt &&
+        typeof (createdAt as { toDate: () => Date }).toDate === 'function'
+      ) {
+        timestamp = (createdAt as { toDate: () => Date }).toDate();
+      } else if (createdAt instanceof Date) {
+        timestamp = createdAt;
+      } else {
+        timestamp = new Date();
+      }
+      return {
+        id: msg.id || crypto.randomUUID(),
+        text: msg.text,
+        sender: msg.sender,
+        timestamp,
+      };
+    });
   }
 
   async loadChatHistory(chat: ChatData): Promise<void> {
@@ -278,22 +308,23 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   private async saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
     this.debug('saveMessage', text, sender);
     const uid = authService.uid;
-    if (!uid || !this.npc) return;
+    const chatId = this.chat?.id;
+    if (!uid || !this.npc || !chatId) {
+      this.debug('saveMessage: missing uid, npc, or chatId');
+      return;
+    }
     try {
-      const chat = await npcChatService.getOrCreateChat({
-        uid,
-        npcId: this.npc.id,
-        npcName: this.npc.name,
-        npcAvatarUrl: this.npc.avatarUrl,
-      });
       await npcChatService.addMessage({
-        chatId: chat.id,
+        chatId,
         uid,
         npcId: this.npc.id,
         message: text,
         sender,
       });
-    } catch {}
+      this.debug('saveMessage: success');
+    } catch (error) {
+      this.error('saveMessage failed', error);
+    }
   }
 
   private async persistMessages(msgs: MessageData[]): Promise<void> {

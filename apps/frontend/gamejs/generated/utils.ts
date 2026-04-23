@@ -1,4 +1,4 @@
-import { GArray, GDictionary } from "godot";
+import { GArray, GDictionary } from 'godot';
 
 /**
  * Recursively converts JavaScript objects and arrays to Godot-compatible GDictionary and GArray types
@@ -18,7 +18,7 @@ export function toGD(data: any): any {
     return data;
   }
 
-  if (typeof data === "object") {
+  if (typeof data === 'object') {
     const gDict = new GDictionary();
     for (const [key, value] of Object.entries(data as Object)) {
       gDict.set(key, toGD(value));

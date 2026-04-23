@@ -8,16 +8,29 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="GameJS"
-run/main_scene="res://src/scenes/main.tscn"
-config/features=PackedStringArray("4.5", "GL Compatibility")
-config/icon="res://icon.svg"
+run/main_scene="res://src/interface/auth/login_view.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
 
 [autoload]
 
-GameState="*res://src/core/game_state.gd"
+Env="*res://.godot/GodotJS/src/core/env.js"
+GameState="*res://.godot/GodotJS/src/core/game_state.js"
+ConfigManager="*res://.godot/GodotJS/src/core/managers/config_manager.js"
+AudioManager="*res://.godot/GodotJS/src/core/managers/audio_manager.js"
+Firebase="*res://.godot/GodotJS/src/core/firebase.js"
+FirebaseHttpClient="*res://.godot/GodotJS/src/core/firebase_http_client.js"
+FirebaseAuth="*res://.godot/GodotJS/src/core/firebase_auth.js"
+FirebaseCloudSave="*res://.godot/GodotJS/src/core/firebase_cloud_save.js"
+FirebaseLeaderboard="*res://.godot/GodotJS/src/core/firebase_leaderboard.js"
+FirebaseStorage="*res://.godot/GodotJS/src/core/firebase_storage.js"
+FirebaseFunctions="*res://.godot/GodotJS/src/core/firebase_functions.js"
 
 [display]
 
@@ -27,7 +40,15 @@ window/stretch/mode="canvas_items"
 
 [editor]
 
-run/main_scene="res://src/scenes/main.tscn"
+run/main_scene="res://src/interface/auth/login_view.tscn"
+
+[input]
+
+pause={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":0,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":4194305,"physical_keycode":0,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
 
 [rendering]
 

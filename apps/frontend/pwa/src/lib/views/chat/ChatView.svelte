@@ -55,7 +55,7 @@
             isSending={viewModel.isSending}
             isTyping={viewModel.isTyping}
             onSend={(text) => viewModel.sendMessage(text)}
-            title={viewModel.showGreeting ? undefined : "Chat with " + viewModel.npc.name}
+            title={viewModel.showGreeting ? undefined : `Chat with ${viewModel.npc.name}`}
             characterName={viewModel.npc.name}
             characterAvatarUrl={viewModel.npc.avatarUrl}
           />

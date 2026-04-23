@@ -8,6 +8,7 @@ export * from './lib/database/appearance.ts';
 export * from './lib/database/branch.ts';
 export * from './lib/database/character.ts';
 export * from './lib/database/chat.ts';
+export * from './lib/database/config.ts';
 export * from './lib/database/knowledge-graph.ts';
 export * from './lib/database/lorebook.ts';
 export * from './lib/database/memory.ts';

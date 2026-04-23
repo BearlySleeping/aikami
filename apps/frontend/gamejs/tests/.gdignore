@@ -1,0 +1,4 @@
+# Ignore this entire folder from Godot
+e2e/
+screenshots/
+*.png

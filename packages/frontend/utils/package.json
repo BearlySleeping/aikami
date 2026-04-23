@@ -15,6 +15,6 @@
     "@aikami/types": "workspace:*",
     "dayjs": "1.11.20",
     "detect-browser": "5.3.0",
-    "isbot": "5.1.36"
+    "isbot": "5.1.39"
   }
 }

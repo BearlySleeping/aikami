@@ -1,23 +1,13 @@
 {
-  "lsp": {
-    "bun": {
-      "settings": {
-        "bun": {
-          "enable": true
-        }
-      }
-    }
-  },
   "context_servers": {
-    "moon": {
-      "command": {
-        "path": "moon",
-        "args": ["mcp"],
-        "env": {
-          "MOON_WORKSPACE_ROOT": "/home/sonny/Development/Projects/passion/aikami"
-        }
+    "godot": {
+      "source": "custom",
+      "command": "npx",
+      "args": ["@coding-solo/godot-mcp"],
+      "env": {
+        "GODOT_PATH": "/etc/profiles/per-user/sonny/bin/godot",
+        "DEBUG": "true"
       }
     }
-  },
-
+  }
 }

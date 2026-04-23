@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "godot": {
+      "command": "npx",
+      "args": ["@coding-solo/godot-mcp"],
+      "env": {
+        "GODOT_PATH": "/etc/profiles/per-user/sonny/bin/godot",
+        "DEBUG": "true"
+      }
+    }
+  }
+}

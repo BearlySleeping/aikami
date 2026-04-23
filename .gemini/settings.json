@@ -20,8 +20,9 @@
     },
     "godot": {
       "command": "node",
-      "args": ["/home/sonny/Development/Projects/Tools/godot-mcp/build/index.js"],
+      "args": ["/home/sonny/Development/Projects/passion/aikami/godot-mcp/build/index.js"],
       "env": {
+        "GODOT_PATH": "/etc/profiles/per-user/sonny/bin/godot",
         "DEBUG": "true"
       },
       "disabled": false,

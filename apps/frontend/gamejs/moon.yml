@@ -1,90 +1,79 @@
-# apps/frontend/gamejs/moon.yml
 $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'application'
-stack: 'frontend'
 tags:
   - 'gamejs'
-  - 'godotjs'
-  - 'game'
-
-toolchains:
-  javascript: false
+  - 'frontend'
+  - 'application'
 
 project:
   title: 'GameJS'
-  description: 'GodotJS game project using TypeScript.'
-  channel: '#game-dev'
-  owner: 'Game Team'
+  description: 'GodotJS game using TypeScript for game logic.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
 
 fileGroups:
   sources:
     - 'src/**/*'
-    - 'tests/**/*'
   configs:
     - 'package.json'
     - 'tsconfig.json'
     - 'project.godot'
-    - 'biome.json'
   tests:
     - 'tests/**/*'
 
 tasks:
-  dev:
-    command: 'bun run dev'
-    preset: 'server'
-  build:
-    command: 'bun run build'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  generate:
-    command: 'bun run generate'
-    inputs:
-      - '@group(sources)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-  lintWrite:
-    command: 'bun run lint:write'
-    inputs:
-      - '@group(sources)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-  formatWrite:
-    command: 'bun run format:write'
-    inputs:
-      - '@group(sources)'
-  check:
-    command: 'bun run check'
-    inputs:
-      - '@group(sources)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
   typecheck:
     command: 'bun run typecheck'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+
+  format:
+    command: 'bun run format'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  lint:
+    command: 'bun run lint'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+
   validate:
     command: 'bun run validate'
     inputs:
       - '@group(sources)'
       - '@group(tests)'
       - '@group(configs)'
-  test:
-    command: 'bun run test'
+
+  dev:
+    command: 'bun run dev'
     inputs:
-      - '@group(tests)'
       - '@group(sources)'
-  open-editor:
-    command: 'bun run open-editor'
-  watch:
-    command: 'bun run watch'
-    preset: 'utility'
+      - '@group(configs)'
+    options:
+      runFromWorkspaceRoot: false
+
+  build:
+    command: 'bun run build'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      runFromWorkspaceRoot: false

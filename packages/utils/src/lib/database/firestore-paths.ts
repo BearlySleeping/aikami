@@ -49,3 +49,9 @@ export const getNpcsCollectionPath = (): string => 'npcs';
 
 export const getNpcDocumentPath = (options: { npcId: string }): string =>
   `${getNpcsCollectionPath()}/${options.npcId}`;
+
+// Configs
+export const getConfigsCollectionPath = (): string => 'configs';
+
+export const getConfigDocumentPath = (options: { uid: string }): string =>
+  `${getConfigsCollectionPath()}/${options.uid}`;
