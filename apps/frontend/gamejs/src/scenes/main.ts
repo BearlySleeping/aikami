@@ -1,7 +1,7 @@
-import { _, Node } from 'godot';
+import { Node } from 'godot';
 
-export class Main extends Node {
-    _ready(): void {
-        _.print('Game2 Main Scene loaded');
-    }
+export default class Main extends Node {
+    _ready(): void {}
+
+    on_click_me(): void {}
 }

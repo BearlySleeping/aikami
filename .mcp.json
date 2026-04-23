@@ -6,6 +6,14 @@
       "env": {
         "MOON_WORKSPACE_ROOT": "/home/sonny/Development/Projects/passion/aikami"
       }
+    },
+    "godot": {
+      "command": "node",
+      "args": ["/home/sonny/Development/Projects/passion/aikami/godot-mcp/build/index.js"],
+      "env": {
+        "GODOT_PATH": "/etc/profiles/per-user/sonny/bin/godot",
+        "DEBUG": "true"
+      }
     }
   }
 }

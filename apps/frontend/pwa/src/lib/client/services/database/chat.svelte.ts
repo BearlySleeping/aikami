@@ -201,8 +201,6 @@ class NpcChatService
     this.debug('addMessage', options);
     const { chatId, uid, npcId, message, sender } = options;
 
-    const existingChat = await this.getChat({ uid, npcId });
-    this.debug('addMessage: existingChat', existingChat);
     const now = new Date();
 
     const newMessage: MessageData = {
@@ -215,11 +213,14 @@ class NpcChatService
     };
     this.debug('addMessage: newMessage', newMessage);
 
-    if (existingChat) {
-      this.debug('addMessage: updating existing chat with new message');
-      const updatedMessages = [...(existingChat.messages || []), newMessage];
-      this.debug('addMessage: updatedMessages', updatedMessages);
-      try {
+    try {
+      const existingChat = await chatRepository.getDocument({ chatId });
+      this.debug('addMessage: existingChat', existingChat);
+
+      if (existingChat) {
+        this.debug('addMessage: updating existing chat with new message');
+        const updatedMessages = [...(existingChat.messages || []), newMessage];
+        this.debug('addMessage: updatedMessages', updatedMessages);
         await chatRepository.updateDocument({
           getDocumentPathArgument: { chatId: existingChat.id },
           updateData: {
@@ -229,13 +230,8 @@ class NpcChatService
           },
         });
         this.debug('addMessage: update successful');
-      } catch (error) {
-        this.error('addMessage: update failed', error);
-        throw error;
-      }
-    } else {
-      this.debug('addMessage: creating new chat');
-      try {
+      } else {
+        this.debug('addMessage: creating new chat');
         await chatRepository.addDocument({
           getCollectionPathArgument: undefined,
           createData: {
@@ -251,10 +247,10 @@ class NpcChatService
           },
         });
         this.debug('addMessage: create successful');
-      } catch (error) {
-        this.error('addMessage: create failed', error);
-        throw error;
       }
+    } catch (error) {
+      this.error('addMessage failed', error);
+      throw error;
     }
   }
 

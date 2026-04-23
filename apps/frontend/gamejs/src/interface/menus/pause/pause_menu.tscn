@@ -1,0 +1,56 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://.godot/GodotJS/src/interface/menus/pause/pause_menu.js" id="1_pause_menu"]
+
+[node name="PauseMenu" type="CanvasLayer"]
+script = ExtResource("1_pause_menu")
+
+[node name="MenuControl" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="MenuControl"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.5)
+
+[node name="TabContainer" type="TabContainer" parent="MenuControl"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -80.0
+offset_right = 100.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Resume" type="TabBar" parent="MenuControl/TabContainer"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MenuControl/TabContainer/Resume"]
+layout_mode = 2
+
+[node name="ResumeButton" type="Button" parent="MenuControl/TabContainer/Resume/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Resume"
+
+[node name="OptionsButton" type="Button" parent="MenuControl/TabContainer/Resume/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Options"
+
+[node name="QuitButton" type="Button" parent="MenuControl/TabContainer/Resume/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Quit"

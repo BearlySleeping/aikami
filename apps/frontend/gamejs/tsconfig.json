@@ -1,25 +1,27 @@
 {
-    "compilerOptions": {
-        "target": "ES2022",
-        "module": "ESNext",
-        "moduleResolution": "bundler",
-        "lib": ["ES2022", "DOM", "DOM.Iterable"],
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "resolveJsonModule": true,
-        "declaration": true,
-        "declarationMap": true,
-        "sourceMap": true,
-        "outDir": "./dist",
-        "rootDir": ".",
-        "baseUrl": ".",
-        "paths": {
-            "$game/*": ["src/*"]
-        },
-        "types": ["node", "bun-types"]
-    },
-    "include": ["src/**/*", "tests/**/*"],
-    "exclude": ["node_modules", "dist", ".godot"]
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "GodotJS Game",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+
+    "typeRoots": ["./typings", "./node_modules/@types"],
+
+    "paths": {
+      "@aikami/constants": ["../../../packages/constants/src/index.ts"],
+      "@aikami/types": ["../../../packages/types/src/index.ts"],
+      "@aikami/schemas": ["../../../packages/schemas/src/index.ts"],
+      "$logger": ["../../../packages/logger/src/lib/godot.ts"]
+    }
+  },
+  "include": ["src/**/*", "typings/**/*"],
+  "exclude": [
+    "tests/**/*",
+    "scripts/**/*",
+    "generated/**/*",
+    "node_modules/**/*",
+    "dist/**/*",
+    ".godot/**/*"
+  ]
 }

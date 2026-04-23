@@ -8,9 +8,9 @@ describe('GameStateService', () => {
     service = createGameStateService({ uid: 'test-user-123' });
   });
 
-  test('should initialize with null world', () => {
-    expect(service.currentWorld).toBeNull();
-    expect(service.currentLocation).toBeNull();
+  test('should initialize with undefined world', () => {
+    expect(service.currentWorld).toBeUndefined();
+    expect(service.currentLocation).toBeUndefined();
     expect(service.isConnected).toBe(false);
   });
 

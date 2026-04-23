@@ -1,37 +1,52 @@
 {
-    "name": "@aikami/gamejs",
-    "version": "0.0.0",
-    "type": "module",
-    "scripts": {
-        "build": "godot-ts build",
-        "dev": "npm-run-all build generate -p watch watch-generate open-editor",
-        "generate": "godot-ts generate",
-        "open-editor": "godot -e --path .",
-        "start": "npm run build && godot",
-        "watch": "godot-ts watch",
-        "watch-generate": "nodemon --exec \"godot-ts generate\" -e ts",
-        "lint:write": "biome lint --write .",
-        "lint:ci": "biome ci src/",
-        "format": "biome format .",
-        "format:write": "biome format --write .",
-        "format:ci": "biome ci src/",
-        "check": "biome check .",
-        "fix": "biome check --write .",
-        "typecheck": "tsc --noEmit",
-        "validate": "npm run check && npm run typecheck",
-        "test": "bun test"
-    },
-    "devDependencies": {
-        "@godot-js/godot-ts": "0.0.8",
-        "@types/node": "25.5.0",
-        "@biomejs/biome": "2.4.7",
-        "nodemon": "3.1.14",
-        "npm-run-all2": "8.0.4",
-        "typescript": "5.9.3"
-    },
-    "godot-ts": {
-        "src": ".",
-        "out": "./.godot/GodotJS",
-        "minifyClasses": false
-    }
+  "name": "@aikami/gamejs",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "godot-ts build",
+    "watch": "godot-ts watch",
+    "editor": "godot -e --path .",
+    "dev": "bun run scripts/debug.js",
+    "dev:emulator": "bun run scripts/debug.js --mode=emulator",
+    "dev:production": "bun run scripts/debug.js --mode=production",
+    "template:download": "bun run scripts/download-template.ts",
+    "template:download:linux": "bun run scripts/download-template.ts --linux",
+    "template:download:web": "bun run scripts/download-template.ts --web",
+    "template:download:all": "bun run scripts/download-template.ts --all",
+    "template:download:force": "bun run scripts/download-template.ts --force",
+    "template:list": "bun run scripts/download-template.ts --list",
+    "export": "bun run scripts/export.ts",
+    "export:linux": "bun run scripts/export.ts --linux",
+    "export:web": "bun run scripts/export.ts --web",
+    "export:all": "bun run scripts/export.ts --all",
+    "export:list": "bun run scripts/export.ts --list",
+    "export:clean": "bun run scripts/export.ts --clean",
+    "export:serve": "bun run scripts/serve.ts",
+    "test": "bun test",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:godot": "godot --headless --test --test-case=\"[jsb]*\"",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format .",
+    "format:fix": "biome format --write .",
+    "fix": "biome check --write . && biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "validate": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.12",
+    "@godot-js/godot-ts": "0.0.8",
+    "@playwright/test": "^1.59.1",
+    "@types/node": "25.6.0",
+    "nodemon": "3.1.14",
+    "npm-run-all2": "8.0.4",
+    "tsc-alias": "1.8.16",
+    "typescript": "6.0.3"
+  },
+  "godot-ts": {
+    "src": "src",
+    "out": "./.godot/GodotJS/src",
+    "minifyClasses": false
+  }
 }

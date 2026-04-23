@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "godot": {
+      "type": "local",
+      "command": ["node", "/home/sonny/Development/Projects/passion/aikami/godot-mcp/build/index.js"],
+      "environment": {
+        "GODOT_PATH": "/etc/profiles/per-user/sonny/bin/godot",
+        "DEBUG": "true"
+      },
+      "enabled": true
+    }
+  }
+}

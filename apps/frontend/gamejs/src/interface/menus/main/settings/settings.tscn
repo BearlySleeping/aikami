@@ -1,0 +1,171 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://.godot/GodotJS/src/interface/menus/main/settings/settings.js" id="1_settings"]
+[ext_resource type="Script" path="res://.godot/GodotJS/src/interface/menus/main/settings/video_tab.js" id="2_video_tab"]
+[ext_resource type="Script" path="res://.godot/GodotJS/src/interface/menus/main/settings/audio_tab.js" id="3_audio_tab"]
+[ext_resource type="Script" path="res://.godot/GodotJS/src/interface/menus/main/settings/input_tab.js" id="4_input_tab"]
+[ext_resource type="Script" path="res://.godot/GodotJS/src/interface/menus/main/settings/api_tab.js" id="5_api_tab"]
+
+[node name="Settings" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_settings")
+
+[node name="SettingsTabs" type="TabContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Video" type="TabBar" parent="SettingsTabs"]
+layout_mode = 2
+script = ExtResource("2_video_tab")
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="SettingsTabs/Video"]
+layout_mode = 2
+
+[node name="Fullscreen" type="CheckBox" parent="SettingsTabs/Video/VBoxContainer2"]
+layout_mode = 2
+text = "Fullscreen"
+
+[node name="Borderless" type="CheckBox" parent="SettingsTabs/Video/VBoxContainer2"]
+layout_mode = 2
+text = "Borderless"
+
+[node name="Vsync" type="OptionButton" parent="SettingsTabs/Video/VBoxContainer2"]
+layout_mode = 2
+
+[node name="Audio" type="TabBar" parent="SettingsTabs"]
+layout_mode = 2
+script = ExtResource("3_audio_tab")
+
+[node name="VolumeContainer" type="VBoxContainer" parent="SettingsTabs/Audio"]
+layout_mode = 2
+
+[node name="audiomastervolumeSlider" type="HSlider" parent="SettingsTabs/Audio/VolumeContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 1.0
+
+[node name="LabelMaster" type="Label" parent="SettingsTabs/Audio/VolumeContainer"]
+layout_mode = 2
+text = "Master"
+
+[node name="audiomusicvolumeSlider" type="HSlider" parent="SettingsTabs/Audio/VolumeContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 1.0
+
+[node name="LabelMusic" type="Label" parent="SettingsTabs/Audio/VolumeContainer"]
+layout_mode = 2
+text = "Music"
+
+[node name="audiosfxvolumeSlider" type="HSlider" parent="SettingsTabs/Audio/VolumeContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 1.0
+
+[node name="LabelSFX" type="Label" parent="SettingsTabs/Audio/VolumeContainer"]
+layout_mode = 2
+text = "SFX"
+
+[node name="audiovoicevolumeSlider" type="HSlider" parent="SettingsTabs/Audio/VolumeContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 1.0
+
+[node name="LabelVoice" type="Label" parent="SettingsTabs/Audio/VolumeContainer"]
+layout_mode = 2
+text = "Voice"
+
+[node name="Input" type="TabBar" parent="SettingsTabs"]
+layout_mode = 2
+script = ExtResource("4_input_tab")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SettingsTabs/Input"]
+layout_mode = 2
+
+[node name="moveupKey" type="Button" parent="SettingsTabs/Input/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Move Up"
+
+[node name="movedownKey" type="Button" parent="SettingsTabs/Input/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Move Down"
+
+[node name="moveleftKey" type="Button" parent="SettingsTabs/Input/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Move Left"
+
+[node name="moverightKey" type="Button" parent="SettingsTabs/Input/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Move Right"
+
+[node name="interactKey" type="Button" parent="SettingsTabs/Input/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Interact"
+
+[node name="pauseKey" type="Button" parent="SettingsTabs/Input/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Pause"
+
+[node name="API" type="TabBar" parent="SettingsTabs"]
+layout_mode = 2
+script = ExtResource("5_api_tab")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SettingsTabs/API"]
+layout_mode = 2
+
+[node name="OpenAIKey" type="LineEdit" parent="SettingsTabs/API/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "sk-..."
+
+[node name="SaveButton" type="Button" parent="SettingsTabs/API/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save"
+
+[node name="BackButton" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -60.0
+offset_right = -20.0
+offset_bottom = -20.0
+text = "Back"

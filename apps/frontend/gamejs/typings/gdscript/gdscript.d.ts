@@ -1,3 +1,1 @@
-declare module 'gdscript' {
-
-}
+declare module 'gdscript' {}

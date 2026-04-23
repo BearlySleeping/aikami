@@ -1,0 +1,76 @@
+[gd_scene format=3 uid="uid://briw82gjbqd2a"]
+
+[ext_resource type="Script" uid="uid://dcr7crp6a2hsl" path="res://.godot/GodotJS/src/interface/menus/main/main_menu.js" id="1_main_menu"]
+
+[node name="MainMenu" type="Control" unique_id=2027864977]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main_menu")
+
+[node name="Background" type="ColorRect" parent="." unique_id=1876415255]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0980392, 0.0980392, 0.0980392, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=323975543]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -80.0
+offset_right = 100.0
+offset_bottom = 80.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer" unique_id=2049336292]
+layout_mode = 2
+text = "AIKAMI"
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="VBoxContainer" unique_id=317874852]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 1
+text = "Start"
+
+[node name="OptionsButton" type="Button" parent="VBoxContainer" unique_id=1282736026]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 1
+text = "Options"
+
+[node name="AuthTestButton" type="Button" parent="VBoxContainer" unique_id=1737364487]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 1
+text = "Test Auth"
+
+[node name="FirebaseTestButton" type="Button" parent="VBoxContainer" unique_id=1737364489]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 1
+text = "Firebase Test (F5)"
+
+[node name="LogoutButton" type="Button" parent="VBoxContainer" unique_id=1737364490]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 1
+text = "Logout"
+
+[node name="QuitButton" type="Button" parent="VBoxContainer" unique_id=1737364488]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 1
+text = "Quit"

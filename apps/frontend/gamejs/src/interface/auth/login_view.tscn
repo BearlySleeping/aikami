@@ -1,0 +1,108 @@
+[gd_scene format=3 uid="uid://cjv3jxq8t3w7y"]
+
+[ext_resource type="Script" path="res://src/interface/auth/login_view.ts" id="1_login_view"]
+
+[node name="LoginView" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_login_view")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0980392, 0.0980392, 0.0980392, 1)
+
+[node name="CenterContainer" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Sign In"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="EmailInput" type="LineEdit" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+placeholder_text = "Email"
+
+[node name="PasswordInput" type="LineEdit" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+placeholder_text = "Password"
+secret = true
+
+[node name="SignInButton" type="Button" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 44)
+layout_mode = 2
+focus_mode = 1
+text = "Sign In"
+
+[node name="GoogleSignInButton" type="Button" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 44)
+layout_mode = 2
+focus_mode = 1
+text = "Sign in with Google"
+
+[node name="TokenInput" type="LineEdit" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+placeholder_text = "Paste token from browser..."
+
+[node name="TokenSignInButton" type="Button" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 40)
+layout_mode = 2
+focus_mode = 1
+text = "Sign in with Token"
+
+[node name="CreateAccountButton" type="Button" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 36)
+layout_mode = 2
+focus_mode = 1
+text = "Create Account"
+flat = true
+
+[node name="GuestButton" type="Button" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 36)
+layout_mode = 2
+focus_mode = 1
+text = "Play as Guest"
+flat = true
+
+[node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 3
