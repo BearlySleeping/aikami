@@ -1,0 +1,49 @@
+---
+description: Implement a contract from contracts/ — read spec → build → validate → commit
+argument-hint: "[contract name or leave empty to pick next pending]"
+---
+
+# Contract Implementation Workflow
+
+User input: $ARGUMENTS
+
+## Phase 1: Load Contract
+
+1. Read `contracts/INDEX.md` — get current priority ranking
+2. Read `contracts/PROGRESS.md` — check in-progress/completed
+3. If $ARGUMENTS specified, load that contract. Otherwise, pick next `not_started`.
+4. Read the contract fully. Understand: data model, acceptance criteria, test hooks, implementation notes.
+5. Run `moon_detect_affected` to see current project state.
+
+## Phase 2: Implement
+
+For each acceptance criterion:
+1. Create/modify files per the Implementation Notes
+2. Follow `aikami-conventions` (snake_case, ViewModel pattern, Svelte 5 runes)
+3. Follow `coding-standards` (arrow functions, early returns, options objects)
+4. Use `moon_run_task` for per-project fix/typecheck — NOT raw bun commands
+5. Commit in logical groups (one per AC or file group)
+
+## Phase 3: Verify
+
+1. Run `validate({ test: true })` — fix+typecheck+build+test on all affected
+2. If errors: fix and re-run until clean
+3. Manually verify each AC
+
+## Phase 4: Log & Archive
+
+1. Update `contracts/PROGRESS.md`:
+   - Mark as `completed`
+   - Log findings, files created/modified, deviations, limitations
+2. Update `contracts/INDEX.md` status: `not_started` → `completed`
+3. Present diff summary + suggested commit message
+4. Ask: "Commit? Commit+push? Continue to next contract?"
+
+## Hard Rules
+
+- Never push without explicit instruction
+- Never run two contracts simultaneously
+- Always use `validate()` not raw fix/typecheck/test commands
+- Always use `moon_run_task` for project-specific operations
+- Reference `aikami-conventions` + `coding-standards` skills for patterns
+- Keep PROGRESS.md updated after each phase

@@ -1,0 +1,81 @@
+# =============================================================================
+# Task Template: TypeScript Library
+# =============================================================================
+# For all library projects: packages/shared/*, packages/backend/*, packages/frontend/*
+# Uses "bun run <name>" to delegate to package.json scripts.
+# =============================================================================
+
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'tsconfig*.json'
+    - 'package.json'
+    - 'moon.yml'
+  tests:
+    - 'src/**/*.test.ts'
+    - 'src/**/*.spec.ts'
+    - 'tests/**/*'
+
+tasks:
+  typecheck:
+    command: 'bun'
+    args: ['run', 'typecheck']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  lint:
+    command: 'bun'
+    args: ['run', 'lint']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  fix:
+    command: 'bun'
+    args: ['run', 'fix']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: false
+      runInCI: false
+
+  test:
+    command: 'bun'
+    args: ['run', 'test']
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  validate:
+    deps:
+      - '~:lint'
+      - '~:format'
+      - '~:typecheck'
+    options:
+      cache: false
+      runInCI: true
+
+  format:
+    command: 'bun'
+    args: ['run', 'format']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true

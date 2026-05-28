@@ -1,0 +1,97 @@
+# =============================================================================
+# Global Inherited Tasks (All Projects)
+# =============================================================================
+# Tasks defined here are inherited by EVERY project in the workspace.
+# Projects can override, extend, or exclude them.
+# All tasks use "bun run <name>" to delegate to each project's package.json.
+# =============================================================================
+
+$schema: "https://moonrepo.dev/schemas/tasks.json"
+
+fileGroups:
+  sources:
+    - "src/**/*"
+  configs:
+    - "package.json"
+    - "tsconfig.json"
+    - "moon.yml"
+  root-configs:
+    - "/package.json"
+    - "/bun.lock"
+    - "/biome.json"
+    - "/tsconfig.json"
+  tests:
+    - "tests/**/*"
+    - "**/*.test.{ts,js}"
+    - "**/*.spec.{ts,js}"
+  assets:
+    - "static/**/*"
+    - "public/**/*"
+    - "**/*.css"
+
+tasks:
+  lint:
+    command: "bun"
+    args: ["run", "lint"]
+    inputs:
+      - "@group(sources)"
+      - "@group(configs)"
+      - "@group(root-configs)"
+    options:
+      cache: true
+      runInCI: true
+
+  format:
+    command: "bun"
+    args: ["run", "format"]
+    inputs:
+      - "@group(sources)"
+      - "@group(configs)"
+      - "@group(root-configs)"
+    options:
+      cache: true
+      runInCI: true
+
+  typecheck:
+    command: "bun"
+    args: ["run", "typecheck"]
+    inputs:
+      - "@group(sources)"
+      - "@group(configs)"
+      - "@group(root-configs)"
+    options:
+      cache: true
+      runInCI: true
+
+  fix:
+    command: "bun"
+    args: ["run", "fix"]
+    inputs:
+      - "@group(sources)"
+      - "@group(configs)"
+      - "@group(root-configs)"
+    options:
+      cache: false
+      runInCI: false
+      affectedFiles: true
+
+  test:
+    command: "bun"
+    args: ["run", "test"]
+    inputs:
+      - "@group(sources)"
+      - "@group(tests)"
+      - "@group(configs)"
+    options:
+      cache: true
+      runInCI: true
+
+  validate:
+    deps:
+      - "~:lint"
+      - "~:format"
+      - "~:typecheck"
+    options:
+      cache: false
+      runInCI: true
+      internal: true

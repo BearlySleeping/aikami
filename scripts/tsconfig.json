@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Scripts",
+  "extends": "../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "outDir": "dist",
+    "types": ["bun"],
+    "paths": {
+      "@aikami/constants": ["../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../packages/shared/constants/src/*"],
+      "@aikami/mocks": ["../packages/shared/mocks/src/index.ts"],
+      "@aikami/mocks/*": ["../packages/shared/mocks/src/*"],
+      "@aikami/types": ["../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../packages/shared/types/src/*"],
+      "@aikami/schemas": ["../packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../packages/shared/schemas/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "temp"]
+}

@@ -2,7 +2,7 @@
   "name": "@aikami/monorepo",
   "private": true,
   "workspaces": [
-    "packages/*",
+    "packages/shared/*",
     "packages/backend/*",
     "packages/frontend/*",
     "apps/frontend/*",
@@ -22,6 +22,11 @@
     "typecheck": "moon run :typecheck",
     "validate": "moon run :validate",
     "ci": "bun run validate && bun run test",
+    "scripts": "bun run scripts/src/index.ts",
+    "setup": "bun run scripts/src/lib/setup.ts",
+    "dev:all": "bun run scripts/src/lib/dev_all.ts",
+    "knowledge:generate": "bun run scripts/src/lib/generate_llms_txt.ts",
+    "test:blackbox": "bun run scripts/src/test_blackbox/run.ts",
     "clean": "rm -rf node_modules",
     "clean:all": "rm -rf node_modules .svelte-kit dist build .moon",
     "deps:update": "syncpack update --dependency-types prod,dev --target latest",
@@ -30,16 +35,16 @@
     "update:llm": "bunx @fission-ai/openspec update && bunx skills add pbakaus/impeccable"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
-    "@moonrepo/cli": "2.2.2",
-    "@types/bun": "1.3.12",
+    "@biomejs/biome": "2.4.13",
+    "@moonrepo/cli": "2.2.3",
+    "@types/bun": "1.3.13",
     "bun-automock": "0.2.7",
     "syncpack": "14.3.0",
     "tsconfig-moon": "1.4.2",
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "onetime": "^5.1.2",
+    "onetime": "5.1.2",
     "zod": "4.3.6"
   },
   "overrides": {

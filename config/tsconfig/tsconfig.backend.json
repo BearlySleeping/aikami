@@ -5,16 +5,16 @@
 		"lib": ["ES2023"],
 		"target": "ES2023",
 		"paths": {
-			"@aikami/constants": ["packages/constants/src/index.ts"],
-			"@aikami/constants/*": ["packages/constants/src/*"],
-			"@aikami/types": ["packages/types/src/index.ts"],
-			"@aikami/types/*": ["packages/types/src/*"],
-			"@aikami/schemas": ["packages/schemas/src/index.ts"],
-			"@aikami/schemas/*": ["packages/schemas/src/*"],
-			"@aikami/utils": ["packages/utils/src/index.ts"],
-			"@aikami/utils/*": ["packages/utils/src/*"],
-			"$logger": ["packages/logger/src/lib/logger-functions.ts"],
-			"$logger/*": ["packages/logger/src/*"],
+			"@aikami/constants": ["packages/shared/constants/src/index.ts"],
+			"@aikami/constants/*": ["packages/shared/constants/src/*"],
+			"@aikami/types": ["packages/shared/types/src/index.ts"],
+			"@aikami/types/*": ["packages/shared/types/src/*"],
+			"@aikami/schemas": ["packages/shared/schemas/src/index.ts"],
+			"@aikami/schemas/*": ["packages/shared/schemas/src/*"],
+			"@aikami/utils": ["packages/shared/utils/src/index.ts"],
+			"@aikami/utils/*": ["packages/shared/utils/src/*"],
+			"$logger": ["packages/shared/logger/src/lib/logger-functions.ts"],
+			"$logger/*": ["packages/shared/logger/src/*"],
 			"$env/*": ["config/tsconfig/stubs/env/*"],
 			"@aikami/backend-configs": ["packages/backend/configs/src/index.ts"],
 			"@aikami/backend-configs/*": ["packages/backend/configs/src/*"],
@@ -27,10 +27,7 @@
 			"@aikami/backend/database/*": ["packages/backend/database/src/lib/*"],
 			"@aikami/backend-auth": ["packages/backend/auth/src/index.ts"],
 			"@aikami/backend-auth/*": ["packages/backend/auth/src/*"],
-			"@aikami/backend/auth/*": ["packages/backend/auth/src/lib/*"],
-			"@aikami/backend-ai": ["packages/backend/ai/src/index.ts"],
-			"@aikami/backend-ai/*": ["packages/backend/ai/src/*"],
-			"@aikami/backend/ai/*": ["packages/backend/ai/src/lib/*"]
+			"@aikami/backend/auth/*": ["packages/backend/auth/src/lib/*"]
 		}
 	}
 }

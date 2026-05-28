@@ -7,6 +7,7 @@ import {
 } from '@aikami/frontend/services';
 import { CoreFormSchema } from '@aikami/schemas';
 import type { FirebaseSignInProviderName } from '@aikami/types';
+import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { z } from 'zod';
 import { authService, routerService } from '$services';
 
@@ -78,9 +79,13 @@ class LoginViewModel
     });
   }
 
-  isSocialSigningIn = $derived(this._isSocialSigningIn);
+  get isSocialSigningIn(): FirebaseSignInProviderName | undefined {
+    return this._isSocialSigningIn;
+  }
 
-  showForgotPasswordDialog = $derived(this._showForgotPasswordDialog);
+  get showForgotPasswordDialog(): boolean {
+    return this._showForgotPasswordDialog;
+  }
 
   /**
    * Performs email/password login.
@@ -99,7 +104,13 @@ class LoginViewModel
       });
     } catch (err) {
       this.error('Login failed', err);
-      this._errors.password = 'Invalid email or password';
+      const appError = toAppErrorFromUnknownError(err);
+      if (appError.cause.errorType === 'unauthenticated' || appError.cause.errorType === 'invalid-credentials') {
+        this._errors.password = 'Invalid email or password';
+      } else {
+        this.errorMessage = appError.message;
+        this._errors.password = 'Invalid email or password';
+      }
     }
   }
 

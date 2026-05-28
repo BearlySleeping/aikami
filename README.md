@@ -1,71 +1,81 @@
-# AiKami: The AI-Powered 2D RPG
+# Aikami — AI-Powered RPG Platform
 
-**AiKami** is a modern, AI-powered technology stack for creating immersive, top-down 2D RPGs in the spirit of classic Dungeons & Dragons adventures. Developed by **BearlySleeping**, this project aims to redefine the genre by integrating cutting-edge AI to drive dynamic storytelling, character interactions, and world events.
+An AI-driven platform for creating and experiencing immersive 2D RPG adventures. Built with SvelteKit, Firebase, Godot, and Bun.
 
-This repository contains the complete monorepo for the AiKami stack, including the web-based Progressive Web App (PWA), the Godot game client, backend services, and all the shared libraries that power the ecosystem.
+## What Is This?
 
-## Project Overview
-
-AiKami is an ambitious project that combines the creative possibilities of AI with the classic gameplay of 2D RPGs. The project is built on a modern, scalable, and maintainable technology stack, with a clear separation of concerns between the different components.
-
-The project is structured as a monorepo, managed by **Moon** and **Deno**, which allows for a streamlined development workflow and easy code sharing between the different applications and packages.
-
-### Key Features
-
-- **AI-Driven World:** NPCs and in-game events are powered by modern AI, creating a living world that reacts to your choices. The AI is powered by **Google's Genkit**, a robust and extensible AI framework.
-- **Cross-Platform PWA:** A **SvelteKit**-based PWA serves as the main hub for players to manage their accounts, characters, and interact with the game world outside of the main game client. The PWA is inspired by [RisuAI](https://github.com/kwaroran/RisuAI).
-- **High-Performance Game Client:** The game itself is built with the powerful and open-source **Godot Engine**.
-- **Scalable Backend:** Built on **Deno** and a serverless architecture using **Firebase** (Functions, Authentication, Firestore, and Storage), the backend is designed to be scalable, secure, and efficient.
-- **Monorepo Structure:** The entire codebase is managed in a single monorepo using **Moon**, making it easy to share code and manage dependencies.
-- **CI/CD:** The project has a CI/CD pipeline set up with **GitHub Actions** that only deploys the components that have been changed.
+Aikami combines AI-powered NPCs with D&D-style character sheets in a chat-based RPG experience. Users create Personas, interact with AI-driven NPCs, build relationships, and explore dynamic worlds.
 
 ## Architecture
 
-The AiKami ecosystem is composed of several key components that work together to deliver the full experience.
+```
+PWA (SvelteKit)  │  Game Client (Godot)  │  Landing/Docs (Astro)
+─────────────────┼───────────────────────┼─────────────────────
+        Firebase Backend (Functions, Auth, Firestore, Storage)
+─────────────────────────────────────────────────────────────
+    Shared Packages (constants, types, schemas, logger, utils)
+```
 
-- **Frontend Applications:**
-  - **PWA (SvelteKit):** The main user-facing application for account and character management.
-  - **Static Sites (Astro):** The landing page and documentation sites.
-  - **Game Client (Godot):** The 2D top-down RPG.
-- **Backend Services:**
-  - **Firebase:** The backend is built on a serverless architecture using Firebase.
-- **AI Integration:**
-  - **Genkit:** Google's Genkit is used as the AI framework.
+## Quick Start
 
-For a more detailed explanation of the architecture, please refer to the [**Architecture Overview**](./docs/ARCHITECTURE.md).
+```bash
+bun run setup         # First-time onboarding
+bun run dev           # Start PWA (http://localhost:5173)
+bun run dev:all       # Emulators + PWA (tmux session)
+bun run test:blackbox # Full test suite
+```
 
-## Getting Started
+## Project Structure
 
-Ready to contribute? We'd love to have you! Please check out our [**Contributing Guide**](./CONTRIBUTING.md) for instructions on how to set up your development environment and make your first contribution.
+| Directory | Purpose |
+|-----------|---------|
+| `apps/frontend/pwa` | Main PWA (SvelteKit 2, Svelte 5 runes) |
+| `apps/frontend/gamejs` | GodotJS game client (TypeScript) |
+| `apps/frontend/landing_page` | Landing page (Astro) |
+| `apps/frontend/docs` | Documentation site (Astro) |
+| `apps/backend/functions` | Firebase Cloud Functions |
+| `packages/shared/` | Shared libraries (6 packages) |
+| `packages/backend/` | Backend-specific packages (5) |
+| `packages/frontend/` | Frontend-specific packages (5) |
+| `scripts/` | CI, setup, blackbox test runner |
+| `knowledge/` | AI-readable project documentation |
+| `.pi/` | Pi AI agent extensions and skills |
+| `.moon/` | Moon task orchestration |
 
-For a deeper dive into the project's architecture, stack, and coding standards, please explore our [**documentation**](./docs).
+## Key Commands
 
-## TODO
+```bash
+bun run typecheck     # Typecheck all projects
+bun run test          # Run all tests
+bun run fix           # Auto-fix lint/format
+bun run validate      # lint + format + typecheck
+bun run scripts       # Interactive script runner
+```
 
-The project is still under development, and there are many things to do. Here is a high-level overview of the tasks that need to be done:
+## Documentation
 
-- **Documentation:**
-  - Create a new `CODING_STANDARDS.md` file in the `docs` directory.
-  - Write detailed documentation for each package and app.
-  - Document the CI/CD pipeline.
-  - Document the Godot client's interaction with the Firebase backend.
-- **Testing:**
-  - Define a unit testing strategy.
-  - Plan for Playwright tests for the PWA.
-- **Development:**
-  - **Landing Page:**
-    - ...
-  - **Backend:**
-    - ...
-  - **Docs Page:**
-    - ...
-  - **PWA:**
-    - ...
-  - **Godot:**
-    - ...
+- `knowledge/CONTEXT.md` — AI briefing (read this first)
+- `knowledge/llms.txt` — Full knowledge index
+- `knowledge/architecture/architecture.md` — System design
+- `knowledge/guides/dev-workflow.md` — Developer guide
+- `knowledge/contracts/INDEX.md` — Feature contracts
 
-For a more detailed list of tasks, please refer to the [**TODO.md**](./TODO.md) file.
+## Tech Stack
+
+**Bun × SvelteKit 2 × Firebase × Godot × Moon × Biome**
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Bun |
+| PWA | SvelteKit 2, Svelte 5 Runes |
+| Landing/Docs | Astro |
+| Game | Godot + GodotJS (TypeScript) |
+| Backend | Firebase Functions, Firestore, Auth |
+| Monorepo | Moon 2.2 |
+| Linting | Biome |
+| Testing | Playwright, Vitest, Blackbox runner |
+| AI Agent | Pi |
 
 ---
 
-**BearlySleeping** - _Dreaming big, one line of code at a time._
+**BearlySleeping** — *Dreaming big, one line of code at a time.*

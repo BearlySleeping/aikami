@@ -2,8 +2,8 @@
 // Simple logger for game - no external dependencies
 
 import type { LogLevel } from '@aikami/types';
-import type { BaseLoggerInterface, LogEntry } from '../../../../../packages/logger/src/lib/base';
-import type { TimerInterface } from '../../../../../packages/logger/src/lib/timer';
+import type { BaseLoggerInterface, LogEntry } from '../../../../../../packages/shared/logger/src/lib/base';
+import type { TimerInterface } from '../../../../../../packages/shared/logger/src/lib/timer';
 
 class SimpleTimer implements TimerInterface {
     private readonly _start: number = Date.now();

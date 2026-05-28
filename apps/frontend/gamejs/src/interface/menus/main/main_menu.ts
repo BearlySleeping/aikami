@@ -1,6 +1,6 @@
 // apps/frontend/gamejs/src/interface/menus/main/main_menu.ts
 import { type Button, Callable, Control, type InputEventKey, type PackedScene, ResourceLoader } from 'godot';
-import FirebaseAuth from '../../../core/firebase_auth';
+import FirebaseAuth from '../../../core/firebase/auth';
 import AudioManager from '../../../core/managers/audio_manager';
 import { logger } from '../../../utils/logger';
 

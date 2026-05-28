@@ -9,10 +9,10 @@
     "typeRoots": ["./typings", "./node_modules/@types"],
 
     "paths": {
-      "@aikami/constants": ["../../../packages/constants/src/index.ts"],
-      "@aikami/types": ["../../../packages/types/src/index.ts"],
-      "@aikami/schemas": ["../../../packages/schemas/src/index.ts"],
-      "$logger": ["../../../packages/logger/src/lib/godot.ts"]
+      "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
+      "@aikami/types": ["../../../packages/shared/types/src/index.ts"],
+      "@aikami/schemas": ["../../../packages/shared/schemas/src/index.ts"],
+      "$logger": ["../../../packages/shared/logger/src/lib/godot.ts"]
     }
   },
   "include": ["src/**/*", "typings/**/*"],

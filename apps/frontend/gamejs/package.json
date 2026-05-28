@@ -25,6 +25,13 @@
     "test": "bun test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:scenes": "bun run scripts/test.ts",
+    "test:scenes:emulator": "bun run scripts/test.ts --mode=emulator",
+    "test:scenes:list": "bun run scripts/test.ts --list",
+    "test:ai": "bun run scripts/test.ts --mode=emulator ai",
+    "test:managers": "bun run scripts/test.ts --mode=emulator managers",
+    "test:quest-npc": "bun run scripts/test.ts --mode=emulator quest_npc",
+    "test:game-systems": "bun run scripts/test.ts --mode=emulator game_systems",
     "test:godot": "godot --headless --test --test-case=\"[jsb]*\"",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -35,7 +42,7 @@
     "validate": "biome check ."
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
+    "@biomejs/biome": "2.4.13",
     "@godot-js/godot-ts": "0.0.8",
     "@playwright/test": "^1.59.1",
     "@types/node": "25.6.0",

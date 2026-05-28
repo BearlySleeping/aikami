@@ -15,7 +15,7 @@ declare module 'godot' {
     set_process_input(enabled: boolean): void;
     get_tree(): {
       change_scene_to_file(path: string): void;
-      quit(): void;
+      quit(exit_code?: number): void;
       paused: boolean;
     };
     get_viewport(): {
@@ -125,4 +125,9 @@ declare module 'godot' {
   }
 
   export type InputEvent = unknown;
+
+  export class OS {
+    static delay_msec(msec: number): void;
+    static shell_open(url: string): void;
+  }
 }

@@ -1,0 +1,14 @@
+{
+  "steeringMode": "all",
+  "followUpMode": "all",
+  "enableSkillCommands": true,
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
+  "extensions": ["./.pi/extensions"],
+  "skills": ["./.pi/skills"],
+  "prompts": ["./.pi/prompts"],
+  "themes": ["./.pi/themes"]
+}

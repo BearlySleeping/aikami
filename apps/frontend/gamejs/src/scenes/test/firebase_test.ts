@@ -5,11 +5,11 @@
  * @test Coverage Auth (signIn, signUp, logout, anonymous), Firestore (create, read, update, delete), Storage (upload, download, delete), Functions (call, prompt_ai)
  */
 import { Node } from 'godot';
-import FirebaseAuth from '../../core/firebase_auth';
-import FirebaseCloudSave from '../../core/firebase_cloud_save';
-import FirebaseFunctions from '../../core/firebase_functions';
-import FirebaseLeaderboard from '../../core/firebase_leaderboard';
-import FirebaseStorage from '../../core/firebase_storage';
+import FirebaseAuth from '../../core/firebase/auth';
+import FirebaseCloudSave from '../../core/firebase/cloud_save';
+import FirebaseFunctions from '../../core/firebase/functions';
+import FirebaseLeaderboard from '../../core/firebase/leaderboard';
+import FirebaseStorage from '../../core/firebase/storage';
 import { logger } from '../../utils/logger';
 
 const TEST_EMAIL = 'user@example.com';

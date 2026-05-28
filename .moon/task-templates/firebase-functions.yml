@@ -1,0 +1,103 @@
+# =============================================================================
+# Task Template: Firebase Cloud Functions
+# =============================================================================
+# For apps/backend/functions
+# =============================================================================
+
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'scripts/**/*'
+  configs:
+    - 'tsconfig*.json'
+    - 'package.json'
+    - 'moon.yml'
+  tests:
+    - 'tests/**/*'
+    - 'src/**/*.test.ts'
+    - 'src/**/*.spec.ts'
+
+tasks:
+  build:
+    command: 'bun'
+    args: ['run', 'build']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    outputs:
+      - 'build'
+      - 'dist'
+    options:
+      cache: true
+      runInCI: true
+
+  deploy:
+    command: 'bun'
+    args: ['run', 'deploy']
+    deps:
+      - '~:build'
+    options:
+      cache: false
+      runInCI: true
+
+  typecheck:
+    command: 'bun'
+    args: ['run', 'typecheck']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  lint:
+    command: 'bun'
+    args: ['run', 'lint']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  fix:
+    command: 'bun'
+    args: ['run', 'fix']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: false
+      runInCI: false
+
+  test:
+    command: 'bun'
+    args: ['run', 'test']
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  validate:
+    deps:
+      - '~:lint'
+      - '~:format'
+      - '~:typecheck'
+    options:
+      cache: false
+      runInCI: true
+
+  format:
+    command: 'bun'
+    args: ['run', 'format']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true

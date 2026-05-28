@@ -1,6 +1,10 @@
 # .moon/workspace.yml
+$schema: "https://moonrepo.dev/schemas/workspace.json"
 
 projects:
+  # Scripts
+  scripts: "scripts"
+
   # App IDs
   pwa: "apps/frontend/pwa"
   landing-page: "apps/frontend/landing_page"
@@ -8,20 +12,69 @@ projects:
   gamejs: "apps/frontend/gamejs"
   functions: "apps/backend/functions"
 
-  constants: "packages/constants"
-  schemas: "packages/schemas"
-  types: "packages/types"
-  logger: "packages/logger"
-  utils: "packages/utils"
-  mocks: "packages/mocks"
+  # Shared Packages
+  constants: "packages/shared/constants"
+  schemas: "packages/shared/schemas"
+  types: "packages/shared/types"
+  logger: "packages/shared/logger"
+  utils: "packages/shared/utils"
+  mocks: "packages/shared/mocks"
 
+  # Backend Packages
   backend-configs: "packages/backend/configs"
   backend-utils: "packages/backend/utils"
   backend-database: "packages/backend/database"
   backend-auth: "packages/backend/auth"
-  backend-ai: "packages/backend/ai"
   backend-svelte-kit: "packages/backend/svelte-kit"
 
+  # Frontend Packages
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"
   frontend-repositories: "packages/frontend/repositories"
+  frontend-configs: "packages/frontend/configs"
+
+defaultProject: "pwa"
+
+vcs:
+  client: "git"
+  provider: "github"
+  defaultBranch: "master"
+  remoteCandidates: ["origin"]
+  sync: true
+  hooks:
+    pre-commit:
+      - "bunx moon run :fix --affected --status=staged"
+      - "bunx moon run :typecheck --affected --status=staged"
+      - "git diff -z --name-only --cached | xargs -0 git add || true"
+    post-merge:
+      - "bunx moon sync"
+      - "bun run knowledge:generate"
+    post-checkout:
+      - "bunx moon sync"
+      - "bun run knowledge:generate"
+
+constraints:
+  enforceLayerRelationships: false
+
+pipeline:
+  cacheLifetime: "7 days"
+  autoCleanCache: true
+  inheritColorsForPipedTasks: true
+  installDependencies: ["bun"]
+  syncProjects: true
+  syncWorkspace: true
+
+hasher:
+  walkStrategy: "vcs"
+  optimization: "accuracy"
+  warnOnMissingInputs: true
+  ignoreMissingPatterns:
+    - "**/.env"
+    - "**/vite.config.ts"
+    - "**/tsconfig*.json"
+
+telemetry: false
+
+experiments:
+  asyncAffectedTracking: true
+  asyncGraphBuilding: true

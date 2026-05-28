@@ -6,7 +6,7 @@
  */
 import { type Button, Callable, Color, Control, type Label, type LineEdit, OS } from 'godot';
 import Env from '../../core/env';
-import FirebaseAuth from '../../core/firebase_auth';
+import FirebaseAuth from '../../core/firebase/auth';
 import { logger } from '../../utils/logger';
 
 const MAIN_MENU_SCENE = 'res://src/interface/menus/main/main_menu.tscn';

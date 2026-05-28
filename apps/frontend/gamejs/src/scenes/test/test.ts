@@ -1,6 +1,6 @@
 // apps/frontend/gamejs/src/scenes/test/test.ts
 import { Node } from 'godot';
-import FirebaseAuth from '../../core/firebase_auth';
+import FirebaseAuth from '../../core/firebase/auth';
 import { logger } from '../../utils/logger';
 
 const TEST_EMAIL = 'user@example.com';

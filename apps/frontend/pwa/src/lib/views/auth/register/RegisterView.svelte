@@ -168,6 +168,12 @@
           {/if}
         </div>
 
+        {#if viewModel.errorMessage}
+          <div class="alert alert-error">
+            <span>{viewModel.errorMessage}</span>
+          </div>
+        {/if}
+
         <button
           type="submit"
           class="btn btn-primary mt-2"

@@ -1,0 +1,97 @@
+# Aikami Knowledge Index
+
+> **AI-first entry point.** Read this file first.
+> Generated: 2026-05-28
+> Files: 43 across 11 categories
+
+## Quick Start (Read These First)
+
+1. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts
+2. [Contracts Index](contracts/INDEX.md) — active feature contracts
+3. [Architecture](guides/ARCHITECTURE.md) — system design
+4. [Tech Stack](guides/STACK.md) — technology stack
+5. [Coding Standards](guides/CODING_STANDARDS.md) — project conventions
+
+## Main Repo
+
+Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
+
+## architecture/
+
+- [Architecture Overview](architecture/architecture.md)
+- [Known Limitations & TODOs](architecture/limitations.md)
+- [Architecture](architecture/README.md)
+## CONTEXT.md/
+
+- [Aikami — AI Briefing](CONTEXT.md)
+## contracts/
+
+- [AI vendor directories](contracts/C-001-remove-ai-vendor-dirs.md)
+- [C 002 establish knowledge dir](contracts/C-002-establish-knowledge-dir.md)
+- [C 003 establish pi setup](contracts/C-003-establish-pi-setup.md)
+- [C 004 migrate skills](contracts/C-004-migrate-skills.md)
+- [C 005 restructure packages shared](contracts/C-005-restructure-packages-shared.md)
+- [C 006 add frontend configs package](contracts/C-006-add-frontend-configs-package.md)
+- [C 007 establish scripts project](contracts/C-007-establish-scripts-project.md)
+- [C 008 copy moon setup](contracts/C-008-copy-moon-setup.md)
+- [No explicit tasks — inherits from task templates](contracts/C-009-standardize-moon-tsconfig.md)
+- [C 010 setup script](contracts/C-010-setup-script.md)
+- [C 011 blackbox testing](contracts/C-011-blackbox-testing.md)
+- [C 012 generate llms and context](contracts/C-012-generate-llms-and-context.md)
+- [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
+- [Contract Implementation Progress](contracts/PROGRESS.md)
+- [Contracts](contracts/README.md)
+- [TEMPLATE](contracts/TEMPLATE.md)
+## decisions/
+
+- [Decisions](decisions/README.md)
+## design/
+
+- [Design](design/README.md)
+## guides/
+
+- [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
+- [Architecture Overview](guides/ARCHITECTURE.md)
+- [CI/CD Pipeline](guides/CI_CD.md)
+- [Coding Standards](guides/CODING_STANDARDS.md)
+- [Developer Workflow](guides/dev-workflow.md)
+- [Aikami Feature Specification](guides/FEATURES.md)
+- [Godot Client](guides/GODOT.md)
+- [Playwright Tests](guides/PLAYWRIGHT.md)
+- [PWA Feature Roadmap](guides/PWA_FEATURES.md)
+- [Guides](guides/README.md)
+- [Technology Stack](guides/STACK.md)
+- [Structure](guides/STRUCTURE.md)
+- [Testing Strategy](guides/TESTING.md)
+- [Todo & Future Features](guides/TODO.md)
+## index.md/
+
+- [Welcome to Aikami Docs](index.md)
+## intro/
+
+- [Intro](intro/README.md)
+- [Setup Guide](intro/setup.md)
+- [Product Vision](intro/vision.md)
+## README.md/
+
+- [Aikami Knowledge](README.md)
+## scripts/
+
+- [Scripts](scripts/README.md)
+## tickets/
+
+- [Tickets](tickets/README.md)
+
+---
+
+## How to Use
+
+**For AI tools:**
+1. Read this entire file first — it's the map
+2. Identify 2-5 files relevant to your task
+3. Read those files before writing anything
+
+**For humans:** Browse on GitHub — all markdown renders natively.
+
+**Adding files:** Create markdown in the right category folder.
+Run `bun run scripts -- generate_llms` to update this index.

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8q1x7y3z4w5w"]
+
+[ext_resource type="Script" path="res://src/scenes/test/piper_tts_test.ts" id="1_piper1"]
+
+[node name="PiperTtsTest" type="Node"]
+script = ExtResource("1_piper1")

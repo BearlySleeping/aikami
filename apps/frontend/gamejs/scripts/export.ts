@@ -1,5 +1,6 @@
 import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface } from 'node:readline';
 
@@ -11,6 +12,11 @@ const EXPORTS: Record<string, { name: string; platform: string }> = {
   windows: { name: 'Windows', platform: 'Windows' },
   macos: { name: 'macOS', platform: 'macOS' },
 };
+
+const EXCLUDED_EXPORT_PATHS = [
+  'src/scenes/test',
+  'tests',
+];
 
 const args = process.argv.slice(2);
 const isAll = args.includes('--all');
@@ -49,6 +55,36 @@ function getGodotBinary(): string {
   return trySystemGodot() || 'godot';
 }
 
+function shouldExclude(srcPath: string): boolean {
+  const normalized = srcPath.replace(/\\/g, '/');
+  for (const excluded of EXCLUDED_EXPORT_PATHS) {
+    if (normalized.includes(excluded)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function copyDirFiltered(src: string, dest: string): void {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+
+    if (shouldExclude(srcPath)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      copyDirFiltered(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 function exportPlatform(key: string): boolean {
   const exp = EXPORTS[key];
   const outDir = `dist/${key}`;
@@ -73,7 +109,7 @@ function exportPlatform(key: string): boolean {
 
     fs.copyFileSync('project.godot', `${outDir}/project.godot`);
     fs.cpSync('.godot', `${outDir}/.godot`, { recursive: true });
-    fs.cpSync('src', `${outDir}/src`, { recursive: true });
+    copyDirFiltered('src', `${outDir}/src`);
     fs.copyFileSync(bin, `${outDir}/game`);
     fs.chmodSync(`${outDir}/game`, 0o755);
   }

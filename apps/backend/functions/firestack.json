@@ -8,5 +8,17 @@
   "nodeVersion": "24",
   "engine": "bun",
   "minify": true,
-  "sourcemap": true
+  "sourcemap": true,
+  "rulesTests": {
+    "firestore": {
+      "rulesFile": "src/rules/firestore.rules",
+      "testPattern": "tests/rules/**/*.rules.test.ts",
+      "projectId": "aikami-rules-test"
+    },
+    "storage": {
+      "rulesFile": "src/rules/storage.rules",
+      "testPattern": "tests/storage-rules/**/*.rules.test.ts",
+      "projectId": "aikami-rules-test"
+    }
+  }
 }

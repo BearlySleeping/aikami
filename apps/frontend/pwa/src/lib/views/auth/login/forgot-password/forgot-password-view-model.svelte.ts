@@ -5,6 +5,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { CoreFormSchema } from '@aikami/schemas';
+import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { z } from 'zod';
 import { authService } from '$services';
 import type { LoginViewModelInterface } from '../login-view-model.svelte.ts';
@@ -75,7 +76,7 @@ class ForgotPasswordViewModel
     } catch (err) {
       this.error('Failed to send reset email', err);
       this._errors.email = 'Failed to send reset email. Please try again.';
-      throw err;
+      this.errorMessage = toAppErrorFromUnknownError(err).message;
     }
   }
 

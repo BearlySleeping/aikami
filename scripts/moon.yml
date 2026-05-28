@@ -1,0 +1,58 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'scripts'
+  - 'ci'
+  - 'ops'
+
+project:
+  name: 'scripts'
+  description: 'Monorepo scripts for CI, setup, developer onboarding, and operations.'
+  channel: '#general'
+  owner: 'Core Team'
+
+fileGroups:
+  sources:
+    - 'src/lib/**/*.ts'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'moon.yml'
+  entry:
+    - 'src/index.ts'
+
+tasks:
+  typecheck:
+    command: 'bun run typecheck'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(entry)'
+    options:
+      mergeArgs: 'replace'
+
+  lint:
+    command: 'bun run lint'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(entry)'
+    options:
+      mergeArgs: 'replace'
+
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(entry)'
+    options:
+      mergeArgs: 'replace'
+
+  run:
+    command: 'bun run start'
+    options:
+      cache: false
+      runInCI: false
