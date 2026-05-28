@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8x7k3j9m2p1t"]
+
+[ext_resource type="Script" path="res://src/scenes/test/game_systems_test.ts" id="1_jkl012"]
+
+[node name="GameSystemsTest" type="Node"]
+script = ExtResource("1_jkl012")

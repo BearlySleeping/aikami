@@ -1,0 +1,123 @@
+# =============================================================================
+# Task Template: Vite/SvelteKit Application
+# =============================================================================
+# For SvelteKit frontend apps: pwa, landing-page, docs
+# All apps use "bun run <name>" to delegate to package.json scripts.
+# =============================================================================
+
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'static/**/*'
+  configs:
+    - 'vite.config.*'
+    - 'svelte.config.*'
+    - 'tsconfig*.json'
+    - 'package.json'
+    - 'tailwind.config.*'
+    - 'moon.yml'
+  tests:
+    - 'tests/**/*'
+    - 'src/**/*.test.ts'
+    - 'src/**/*.spec.ts'
+  assets:
+    - 'static/**/*'
+    - 'src/**/*.css'
+
+tasks:
+  dev:
+    command: 'bun'
+    args: ['run', 'dev']
+    preset: 'server'
+    options:
+      cache: false
+      runInCI: false
+      persistent: true
+
+  build:
+    command: 'bun'
+    args: ['run', 'build']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(assets)'
+    outputs:
+      - 'build'
+      - 'dist'
+      - '.svelte-kit'
+    options:
+      cache: true
+      runInCI: true
+
+  preview:
+    command: 'bun'
+    args: ['run', 'preview']
+    deps:
+      - '~:build'
+    preset: 'server'
+    options:
+      cache: false
+      runInCI: false
+      persistent: true
+
+  typecheck:
+    command: 'bun'
+    args: ['run', 'typecheck']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  lint:
+    command: 'bun'
+    args: ['run', 'lint']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  fix:
+    command: 'bun'
+    args: ['run', 'fix']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: false
+      runInCI: false
+
+  test:
+    command: 'bun'
+    args: ['run', 'test']
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true
+
+  validate:
+    deps:
+      - '~:lint'
+      - '~:format'
+      - '~:typecheck'
+    options:
+      cache: false
+      runInCI: true
+
+  format:
+    command: 'bun'
+    args: ['run', 'format']
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
+      runInCI: true

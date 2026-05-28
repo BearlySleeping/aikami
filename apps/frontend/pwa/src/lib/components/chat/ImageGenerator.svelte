@@ -33,7 +33,9 @@
         class="btn btn-sm btn-primary"
         disabled={isGenerating || !prompt.trim()}
         onclick={() => {
-          onGenerate?.(prompt);
+          const currentPrompt = prompt;
+          onGenerate?.(currentPrompt);
+          // biome-ignore lint/suspicious/noGlobalAssign: Svelte 5 $state() rune, not a global
           prompt = '';
         }}
       >

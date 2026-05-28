@@ -3,8 +3,7 @@ import type { FunctionsCacheGet, FunctionsCacheUpdate } from '@snorreks/firestac
 // Use the endpoint from your screenshot (don't forget the https://)
 const baseURL = 'https://picked-hog-64217.upstash.io';
 // Paste your unhidden token here (ideally move this to an environment variable later!)
-const token =	"AfrZAAIncDJkMWJhNGQ0NzI5YTI0YzI1OGE1YWYxMzM1MWZkZDVmNXAyNjQyMTc"
-
+const token = 'AfrZAAIncDJkMWJhNGQ0NzI5YTI0YzI1OGE1YWYxMzM1MWZkZDVmNXAyNjQyMTc';
 
 export const get: FunctionsCacheGet = async ({ flavor }) => {
   // We use the flavor directly in the URL to dynamically create the key

@@ -11,6 +11,8 @@ interface EnvVars {
     PUBLIC_FIREBASE_APP_ID: string;
     PUBLIC_LOG_LEVEL: string;
     PUBLIC_FLAVOR: string;
+    OPENROUTER_API_KEY: string;
+    PIPER_BASE_URL: string;
     [key: string]: string;
 }
 
@@ -23,6 +25,8 @@ const DEFAULT_VARS: EnvVars = {
     PUBLIC_FIREBASE_APP_ID: '',
     PUBLIC_LOG_LEVEL: 'INFO',
     PUBLIC_FLAVOR: 'DEVELOPMENT',
+    OPENROUTER_API_KEY: '',
+    PIPER_BASE_URL: 'http://localhost:5002',
 };
 
 export default class Env extends Node {
@@ -79,6 +83,14 @@ export default class Env extends Node {
 
     get auth_domain(): string {
         return this._vars.PUBLIC_FIREBASE_AUTH_DOMAIN;
+    }
+
+    get openrouter_api_key(): string {
+        return this._vars.OPENROUTER_API_KEY;
+    }
+
+    get piper_base_url(): string {
+        return this._vars.PIPER_BASE_URL;
     }
 
     get flavor(): string {

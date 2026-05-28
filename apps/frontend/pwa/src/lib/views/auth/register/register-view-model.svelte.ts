@@ -7,6 +7,7 @@ import {
 } from '@aikami/frontend/services';
 import { CoreFormSchema } from '@aikami/schemas';
 import type { FirebaseSignInProviderName } from '@aikami/types';
+import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { z } from 'zod';
 import { authService, routerService } from '$services';
 
@@ -65,7 +66,9 @@ class RegisterViewModel
     });
   }
 
-  isSocialSigningIn = $derived(this._isSocialSigningIn);
+  get isSocialSigningIn(): FirebaseSignInProviderName | undefined {
+    return this._isSocialSigningIn;
+  }
 
   /**
    * Registers a new user with email and password.
@@ -98,7 +101,8 @@ class RegisterViewModel
       });
     } catch (err) {
       this.error('Registration failed', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create account';
+      const appError = toAppErrorFromUnknownError(err);
+      const errorMessage = appError.message;
 
       if (errorMessage.includes('email-already-in-use')) {
         this._errors.email = 'This email is already registered';
@@ -106,8 +110,8 @@ class RegisterViewModel
         this._errors.password = 'Password is too weak';
       } else {
         this._errors.email = 'Failed to create account. Please try again.';
+        this.errorMessage = appError.message;
       }
-      throw err;
     }
   }
 
@@ -138,6 +142,7 @@ class RegisterViewModel
         });
       } else {
         this.error('Social registration failed', response);
+        this.errorMessage = 'Failed to sign up. Please try again.';
         this.showSnackbar({
           text: 'Failed to sign up. Please try again.',
           type: 'error',
@@ -145,6 +150,7 @@ class RegisterViewModel
       }
     } catch (err) {
       this.error('Social registration error', err);
+      this.errorMessage = toAppErrorFromUnknownError(err).message;
       this.showSnackbar({
         text: 'An error occurred during sign up',
         type: 'error',

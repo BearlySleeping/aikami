@@ -1,8 +1,60 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // ═══════════════════════════════════════════════════════════════
+    // Helper Functions
+    // ═══════════════════════════════════════════════════════════════
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.get('userRole', '') == 'superAdmin';
+    }
+
+    function isValidImageType() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isValidFileSize() {
+      return request.resource.size <= 5 * 1024 * 1024; // 5MB
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // User avatars and uploads — owner only
+    // ═══════════════════════════════════════════════════════════════
+    match /users/{uid}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(uid) && isValidImageType() && isValidFileSize();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // NPC avatars — public read, creator write
+    // ═══════════════════════════════════════════════════════════════
+    match /npcs/{npcId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isValidImageType() && isValidFileSize();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Public assets — public read, authenticated write
+    // ═══════════════════════════════════════════════════════════════
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() && isValidImageType() && isValidFileSize();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Default deny — explicit catch-all at the end
+    // ═══════════════════════════════════════════════════════════════
     match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

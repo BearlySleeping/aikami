@@ -256,3 +256,4 @@ $RECYCLE.BIN/
 
 **/examples/**
 script-config.*.ts
+test-results/

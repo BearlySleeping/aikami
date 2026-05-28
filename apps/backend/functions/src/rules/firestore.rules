@@ -1,12 +1,152 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // ═══════════════════════════════════════════════════════════════
+    // Helper Functions
+    // ═══════════════════════════════════════════════════════════════
+
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.get('userRole', '') == 'superAdmin';
+    }
+
+    function isDocumentOwner(field) {
+      return isAuthenticated() && resource.data[field] == request.auth.uid;
+    }
+
+    function isRequestOwner(field) {
+      return isAuthenticated() && request.resource.data[field] == request.auth.uid;
+    }
+
+    function isPublicDocument(visibilityField) {
+      return resource.data[visibilityField] == 'public';
+    }
+
+    function canReadMessage(chatId) {
+      // Prefer denormalized fields (fast, no get() limit)
+      return resource.data.chatVisibility == 'public'
+        || (isAuthenticated() && (
+          resource.data.chatOwnerUid == request.auth.uid
+          // Fallback to parent chat get() for legacy messages without denormalized fields
+          || get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid
+          || isAdmin()
+        ));
+    }
+
+    function canWriteMessage(chatId) {
+      // Prefer denormalized field (fast, no get() limit)
+      return isAuthenticated() && (
+        resource.data.chatOwnerUid == request.auth.uid
+        // Fallback to parent chat get() for legacy messages without denormalized fields
+        || get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid
+        || isAdmin()
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Configs — owner only
+    // ═══════════════════════════════════════════════════════════════
     match /configs/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isOwner(uid);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Users — public read (authenticated), owner write, admin full access
+    // ═══════════════════════════════════════════════════════════════
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(uid) || isAdmin();
+      allow update, delete: if isOwner(uid) || isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Personas — public read, creator write
+    // ═══════════════════════════════════════════════════════════════
+    match /personas/{personaId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isRequestOwner('uid');
+      allow update, delete: if isDocumentOwner('uid') || isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // NPCs — public read for public NPCs, creator full access
+    // ═══════════════════════════════════════════════════════════════
+    match /npcs/{npcId} {
+      allow read: if isPublicDocument('visibility')
+                    || isDocumentOwner('creatorUid')
+                    || isAdmin();
+      allow create: if isAuthenticated() && isRequestOwner('creatorUid');
+      allow update, delete: if isDocumentOwner('creatorUid') || isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Chats — owner + public visibility
+    // ═══════════════════════════════════════════════════════════════
+    match /chats/{chatId} {
+      allow read: if isDocumentOwner('uid')
+                    || isPublicDocument('visibility')
+                    || isAdmin();
+      allow create: if isAuthenticated() && isRequestOwner('uid');
+      allow update, delete: if isDocumentOwner('uid') || isAdmin();
+
+      // Messages — access follows parent chat
+      // Uses denormalized chatOwnerUid and chatVisibility fields for O(1)
+      // rule evaluation. Falls back to get() on parent chat for legacy
+      // messages that don't have these fields yet.
+      match /messages/{messageId} {
+        allow read: if canReadMessage(chatId);
+        allow create: if isAuthenticated() && (
+          request.resource.data.chatOwnerUid == request.auth.uid
+          || get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid
+          || isAdmin()
+        );
+        allow update, delete: if canWriteMessage(chatId);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Notifications — owner only
+    // ═══════════════════════════════════════════════════════════════
+    match /users/{uid}/notifications/{notificationId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // FCM Tokens — owner only
+    // ═══════════════════════════════════════════════════════════════
+    match /users/{uid}/tokens/{tokenId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Stats — admin read only, no write
+    // ═══════════════════════════════════════════════════════════════
+    match /stats/total {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Stats user subdocs — admin read only
+    // ═══════════════════════════════════════════════════════════════
+    match /stats/total/users/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Default deny — explicit catch-all at the end
+    // ═══════════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

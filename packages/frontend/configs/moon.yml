@@ -1,0 +1,20 @@
+$schema: "https://moonrepo.dev/schemas/project.json"
+
+language: "typescript"
+layer: "library"
+stack: frontend
+tags:
+  - "config"
+  - "frontend"
+  - "library"
+
+project:
+  name: 'frontend-configs'
+  description: "Shared frontend configuration files and environment schemas."
+  channel: "#frontend"
+  owner: "Frontend Team"
+
+dependsOn:
+  - "constants"
+  - "schemas"
+  - "types"

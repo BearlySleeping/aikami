@@ -30,7 +30,7 @@ const downloadRisu = async (options: { url: string }): Promise<File> => {
 
 const downloadChub = async (options: { url: string }): Promise<File> => {
   const urlParts = options.url.split('/');
-  const idIndex = urlParts.findIndex((p) => p === 'characters');
+  const idIndex = urlParts.indexOf('characters');
 
   if (idIndex === -1 || !urlParts[idIndex + 1] || !urlParts[idIndex + 2]) {
     throw toAppError('invalid-argument', 'Invalid Chub URL format.');

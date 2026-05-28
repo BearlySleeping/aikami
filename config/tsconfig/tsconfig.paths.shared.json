@@ -2,14 +2,14 @@
   "compilerOptions": {
     "baseUrl": "../../",
     "paths": {
-      "@aikami/constants": ["packages/constants/src/index.ts"],
-      "@aikami/constants/*": ["packages/constants/src/*"],
-      "@aikami/types": ["packages/types/src/index.ts"],
-      "@aikami/types/*": ["packages/types/src/*"],
-      "@aikami/schemas": ["packages/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["packages/schemas/src/*"],
-      "@aikami/utils": ["packages/utils/src/index.ts"],
-      "@aikami/utils/*": ["packages/utils/src/*"]
+      "@aikami/constants": ["packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["packages/shared/constants/src/*"],
+      "@aikami/types": ["packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["packages/shared/types/src/*"],
+      "@aikami/schemas": ["packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["packages/shared/schemas/src/*"],
+      "@aikami/utils": ["packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["packages/shared/utils/src/*"]
     }
   }
 }

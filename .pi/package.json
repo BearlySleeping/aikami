@@ -1,0 +1,12 @@
+{
+  "name": "pi",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@mariozechner/pi-coding-agent": "^0.76.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

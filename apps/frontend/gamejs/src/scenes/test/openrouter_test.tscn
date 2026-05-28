@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c8q1x7y3z4w5v"]
+
+[ext_resource type="Script" path="res://src/scenes/test/openrouter_test.ts" id="1_abc123"]
+
+[node name="OpenRouterTest" type="Node"]
+script = ExtResource("1_abc123")

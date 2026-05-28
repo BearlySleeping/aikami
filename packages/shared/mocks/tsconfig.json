@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Mocks",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../../../",
+    "outDir": "dist",
+    "paths": {
+      "@aikami/constants": ["packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["packages/shared/constants/src/*"],
+      "@aikami/types": ["packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["packages/shared/types/src/*"],
+      "@aikami/schemas": ["packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["packages/shared/schemas/src/*"],
+      "@aikami/utils": ["packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["packages/shared/utils/src/*"],
+      "$logger": ["packages/shared/logger/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
