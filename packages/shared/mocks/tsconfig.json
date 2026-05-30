@@ -6,6 +6,7 @@
     "baseUrl": "../../../",
     "outDir": "dist",
     "paths": {
+      "@aikami/backend-database": ["packages/backend/database/src/index.ts"],
       "@aikami/constants": ["packages/shared/constants/src/index.ts"],
       "@aikami/constants/*": ["packages/shared/constants/src/*"],
       "@aikami/types": ["packages/shared/types/src/index.ts"],

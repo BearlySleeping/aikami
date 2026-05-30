@@ -1,0 +1,29 @@
+# apps/backend/dataconnect/connector/connector.yaml
+# Firebase Data Connect connector configuration.
+#
+# A connector exposes the GraphQL schema as a callable API.  The generated
+# SDK (@firebase/data-connect) uses this connector id to produce typed
+# query/mutation functions.
+#
+# Regenerate SDK after schema changes:
+#   firebase dataconnect:generate
+
+connectorId: aikami-connector
+
+# Which schema sources this connector exposes.
+# Paths are relative to the connector.yaml file.
+schema:
+  - ../schema/schema.gql
+
+# Authentication mode for API calls.
+# "PUBLIC" means unauthenticated clients can query (matching Firestore
+# security rules enforced at the application layer).  Switch to "AUTHENTICATED"
+# when the Firebase Auth integration is wired up.
+authMode: PUBLIC
+
+# Generated SDK output paths (used by `firebase dataconnect:generate`).
+# The generated code will land in apps/backend/dataconnect/generated/.
+generate:
+  javascriptSdk:
+    outputDir: ../generated
+    packageName: "@aikami/dataconnect-generated"

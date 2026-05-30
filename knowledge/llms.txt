@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-05-28
-> Files: 43 across 11 categories
+> Generated: 2026-05-29
+> Files: 48 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -38,6 +38,11 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [C 010 setup script](contracts/C-010-setup-script.md)
 - [C 011 blackbox testing](contracts/C-011-blackbox-testing.md)
 - [C 012 generate llms and context](contracts/C-012-generate-llms-and-context.md)
+- [C 013 setup tooling and mcp](contracts/C-013-setup-tooling-and-mcp.md)
+- [C 014 database abstraction and dataconnect](contracts/C-014-database-abstraction-and-dataconnect.md)
+- [C 015 ai service abstraction](contracts/C-015-ai-service-abstraction.md)
+- [C 016 game engine boundary](contracts/C-016-game-engine-boundary.md)
+- [C 017 update knowledge base](contracts/C-017-update-knowledge-base.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
 - [Contracts](contracts/README.md)

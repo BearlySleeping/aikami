@@ -141,10 +141,7 @@ class AuthGameViewModel
 
       if (response.status === 'failed') {
         const payload = response.payload as SocialSignInError;
-        throw toAppError(
-          'unauthorized',
-          payload.message || 'Google sign-in failed',
-        );
+        throw toAppError('unauthorized', payload.message || 'Google sign-in failed');
       }
 
       if (response.status !== 'exitingUser') {
@@ -229,10 +226,7 @@ class AuthGameViewModel
 
       if (window.opener) {
         const origin = new URLSearchParams(window.location.search).get('origin') || '*';
-        window.opener.postMessage(
-          { type: 'GAME_AUTH_SUCCESS', token },
-          origin,
-        );
+        window.opener.postMessage({ type: 'GAME_AUTH_SUCCESS', token }, origin);
       }
     } catch (err) {
       this.error('Failed to complete authentication', err);

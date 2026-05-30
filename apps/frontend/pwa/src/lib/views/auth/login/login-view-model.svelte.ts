@@ -105,7 +105,10 @@ class LoginViewModel
     } catch (err) {
       this.error('Login failed', err);
       const appError = toAppErrorFromUnknownError(err);
-      if (appError.cause.errorType === 'unauthenticated' || appError.cause.errorType === 'invalid-credentials') {
+      if (
+        appError.cause.errorType === 'unauthenticated' ||
+        appError.cause.errorType === 'invalid-credentials'
+      ) {
         this._errors.password = 'Invalid email or password';
       } else {
         this.errorMessage = appError.message;

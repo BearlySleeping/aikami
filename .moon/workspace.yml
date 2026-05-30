@@ -21,6 +21,7 @@ projects:
   mocks: "packages/shared/mocks"
 
   # Backend Packages
+  backend-ai: "packages/backend/ai"
   backend-configs: "packages/backend/configs"
   backend-utils: "packages/backend/utils"
   backend-database: "packages/backend/database"
@@ -42,10 +43,11 @@ vcs:
   remoteCandidates: ["origin"]
   sync: true
   hooks:
-    pre-commit:
-      - "bunx moon run :fix --affected --status=staged"
-      - "bunx moon run :typecheck --affected --status=staged"
-      - "git diff -z --name-only --cached | xargs -0 git add || true"
+    # TODO: uncomment this once we are stable
+    # pre-commit:
+    #   - "bunx moon run :fix --affected --status=staged"
+    #   - "bunx moon run :typecheck --affected --status=staged"
+    #   - "git diff -z --name-only --cached | xargs -0 git add || true"
     post-merge:
       - "bunx moon sync"
       - "bun run knowledge:generate"

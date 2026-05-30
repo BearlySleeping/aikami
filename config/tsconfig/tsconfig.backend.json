@@ -27,7 +27,11 @@
 			"@aikami/backend/database/*": ["packages/backend/database/src/lib/*"],
 			"@aikami/backend-auth": ["packages/backend/auth/src/index.ts"],
 			"@aikami/backend-auth/*": ["packages/backend/auth/src/*"],
-			"@aikami/backend/auth/*": ["packages/backend/auth/src/lib/*"]
+			"@aikami/backend/auth/*": ["packages/backend/auth/src/lib/*"],
+		"@aikami/backend-ai": ["packages/backend/ai/src/index.ts"],
+		"@aikami/backend-ai/*": ["packages/backend/ai/src/*"],
+		"@aikami/mocks": ["packages/shared/mocks/src/index.ts"],
+		"@aikami/mocks/*": ["packages/shared/mocks/src/*"]
 		}
 	}
 }

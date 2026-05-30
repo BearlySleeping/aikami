@@ -169,9 +169,7 @@
         </div>
 
         {#if viewModel.errorMessage}
-          <div class="alert alert-error">
-            <span>{viewModel.errorMessage}</span>
-          </div>
+          <div class="alert alert-error"><span>{viewModel.errorMessage}</span></div>
         {/if}
 
         <button

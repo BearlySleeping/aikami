@@ -52,6 +52,12 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
   validate:
     command: 'bun run validate'
     inputs:

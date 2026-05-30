@@ -1,0 +1,23 @@
+{
+  "name": "@aikami/backend-ai",
+  "main": "src/index.ts",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit",
+    "fix": "biome check --write .",
+    "test": "bun test",
+    "validate": "bun run typecheck && bun run test"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@aikami/mocks": "workspace:*"
+  }
+}

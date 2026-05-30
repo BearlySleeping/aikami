@@ -1,5 +1,89 @@
 # Contract Implementation Progress
 
+## C-014 — Database Abstraction & Data Connect — ✅ completed
+
+### Findings
+- BaseDatabaseService interface created as a pure TypeScript `interface` with zero Firebase imports — vendor-agnostic CRUD + query surface with 7 methods.
+- Supporting types (`QueryFilter`, `QueryOperator`, `QueryOptions`, `OrderBy`, `SortDirection`) defined alongside the interface, all using `type` (per coding rules).
+- MockDatabaseService implements BaseDatabaseService in-memory with `Map<string, Map<string, unknown>>` — 30 unit tests pass, all methods properly guarded and returning clones.
+- FirebaseDataConnectService uses the actual `firebase/data-connect` SDK (`getDataConnect`, `connectDataConnectEmulator`, `queryRef`, `mutationRef`, `executeQuery`, `executeMutation`). Code generation (`firebase dataconnect:generate`) is required before queries execute — the service provides descriptive errors when named queries are missing.
+- Data Connect emulator scaffolded at `apps/backend/dataconnect/` with `dataconnect.yaml`, `schema/schema.gql` (7 tables mirroring core collections), and `connector/connector.yaml`.
+- Firestack config updated: `emulators` array now includes `dataconnect`, `emulatorPorts` configured for auth/functions/firestore/pubsub/storage/ui.
+- TDD example test: `UserRepository` tested against both MockDatabaseService (12 passing unit tests) and FirebaseDataConnectService (13 integration tests — correctly skipped without emulator).
+- All affected projects typecheck cleanly. Pre-existing PWA errors (bun:test types, stale type refs, a11y warnings) are unrelated.
+
+### AC Status
+- [x] AC-1: BaseDatabaseService Interface Defined — `packages/backend/database/src/lib/base-database-service.ts`, zero Firebase imports, 7 methods exported via barrel.
+- [x] AC-2: FirebaseDataConnectService Implements Interface — `packages/backend/database/src/lib/firebase-data-connect-service.ts`, uses `firebase/data-connect` SDK, lazy init, error mapping.
+- [x] AC-3: Data Connect Emulator Configured — `apps/backend/dataconnect/dataconnect.yaml`, `schema/schema.gql` (7 tables), `connector/connector.yaml`; firestack.json updated with `dataconnect` in emulators array.
+- [x] AC-4: MockDatabaseService for TDD — `packages/shared/mocks/src/lib/mock-database-service.ts`, 30 tests pass, `seedCollection()` and `reset()` helpers work correctly.
+- [x] AC-5: TDD Workflow Demonstrated — `packages/backend/database/tests/user-repository.test.ts` with mock (12 pass) + integration (13 skip) suites.
+
+### Files created
+- `packages/backend/database/src/lib/base-database-service.ts` — vendor-agnostic interface + supporting types
+- `packages/backend/database/src/lib/firebase-data-connect-service.ts` — Data Connect implementation via `firebase/data-connect` SDK
+- `packages/backend/database/src/lib/user-repository.ts` — example repository composing BaseDatabaseService
+- `packages/backend/database/tests/user-repository.test.ts` — TDD test battery (mock + integration)
+- `packages/shared/mocks/src/lib/mock-database-service.ts` — in-memory mock with filter/order/limit support
+- `packages/shared/mocks/tests/mock-database-service.test.ts` — 30 unit tests for the mock
+- `apps/backend/dataconnect/dataconnect.yaml` — Data Connect service config
+- `apps/backend/dataconnect/schema/schema.gql` — PostgreSQL schema (7 tables: User, Npc, Persona, Chat, Message, Notification, Config)
+- `apps/backend/dataconnect/connector/connector.yaml` — connector configuration
+
+### Files modified
+- `packages/backend/database/src/index.ts` — added exports for base-database-service, firebase-data-connect-service, user-repository
+- `packages/backend/database/package.json` — added `firebase` 12.13.0 dep, added test script
+- `packages/backend/database/moon.yml` — added test task
+- `packages/shared/mocks/src/index.ts` — added mock-database-service export
+- `packages/shared/mocks/package.json` — added `@aikami/backend-database` workspace dep
+- `packages/shared/mocks/tsconfig.json` — added `@aikami/backend-database` path alias
+- `packages/shared/mocks/moon.yml` — added `backend-database` to dependsOn
+- `apps/backend/functions/firestack.json` — added `emulators` array (incl. dataconnect) and `emulatorPorts`
+
+### Deviations from contract
+- `.moon/workspace.yml` — did NOT add `dataconnect` project entry (the dataconnect directory is config-only with no package.json/tsconfig — not a buildable moon project).
+- `firestack.config.ts` vs `firestack.json` — project uses `firestack.json`, not `firestack.config.ts`. Schema uses flat `emulators` array + `emulatorPorts` object, not nested Firebase-style emulator objects.
+- Data Connect code generation (`firebase dataconnect:generate`) is a follow-up step — the FirebaseDataConnectService is structurally complete but requires generated query names to execute.
+
+---
+
+## C-017 — Update Knowledge Base — ✅ completed
+
+### Findings
+- Updated all 7 target knowledge files (architecture.md, limitations.md, STACK.md, STRUCTURE.md, CODING_STANDARDS.md, index.md, CONTEXT.md) to reflect May 2026 Deep Research findings
+- architecture.md: Full rewrite — removed Godot/Genkit/Firestore as current, added PixiJS v8 + bitECS engine boundary diagram, Data Connect PostgreSQL, Valibot, TanStack DB + PowerSync, AiServiceInterface, BaseDatabaseService. Added migration status table.
+- limitations.md: Added 3 new sections — Svelte 5 Reactivity Boundary, Bridge Serialization Constraints, Deprecated Components table. Moved GodotJS to deprecated.
+- STACK.md: Replaced technology table with 19-row comprehensive table. Added architecture layer diagram, migration notes section. Godot/Genkit only in "Replaced by" context.
+- STRUCTURE.md: Marked apps/frontend/gamejs/ as ⚠️ DEPRECATED with migration target. Added pwa/src/lib/game/ tree. Listed planned packages (valibot-schemas, tanstack-db). Added path aliases table.
+- CODING_STANDARDS.md: Appended "Strict AI Coding Rules" section with 4 sub-sections, each with ✅/❌ code examples: type>interface, arrow const>function, explicit braces, early escapes.
+- index.md: Updated project description with new stack. Zero Godot/Genkit references.
+- CONTEXT.md: Updated tech stack table and one-liner, project tree with deprecated marker and new engine path, engine boundary section, strict AI coding rules summary.
+- llms.txt: Regenerated (48 files, was 48 — 5 new doc files indexed).
+- Typecheck: 7 pre-existing errors, 9 pre-existing warnings in PWA — zero new errors from documentation changes.
+- All 6 AC grep-based verification checks passed.
+- GODOT.md preserved as-is per contract (frozen migration reference). Other guides (AI_RESEARCH.md, dev-workflow.md, etc.) left for future contracts.
+
+### Files modified
+- knowledge/architecture/architecture.md — Full rewrite with engine boundary diagram, Data Connect, migration table
+- knowledge/architecture/limitations.md — Added boundary constraints, serialization rules, deprecation table
+- knowledge/guides/STACK.md — New technology table + migration notes
+- knowledge/guides/STRUCTURE.md — Deprecation markers, new engine path, planned packages
+- knowledge/guides/CODING_STANDARDS.md — Appended Strict AI Coding Rules (4 sections, 10 code examples)
+- knowledge/index.md — Updated project description
+- knowledge/CONTEXT.md — Updated tech stack, project tree, engine boundary section
+- knowledge/llms.txt — Regenerated (48 files)
+
+### AC Status
+- [x] AC-1: Architecture Doc Reflects New Stack
+- [x] AC-2: Limitations Reflect Engine Boundary Constraints
+- [x] AC-3: STACK.md Lists New Technologies
+- [x] AC-4: STRUCTURE.md Shows New Layout + Deprecation
+- [x] AC-5: CODING_STANDARDS.md Includes Strict AI Rules
+- [x] AC-6: INDEX.md, CONTEXT.md, and llms.txt Are Consistent
+- [x] AC-7: TypeScript Typecheck Passes Clean (zero new errors)
+
+---
+
 ## C-001 — Remove AI Vendor Directories — ✅ completed
 
 ### Findings

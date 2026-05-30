@@ -81,6 +81,14 @@ Use HTML `onclick`, not Svelte 4 `on:click`:
 <button onclick={handleClick}>Click</button>
 ```
 
+### Engine Boundary Constraint
+
+**`$state` runes are banned in game code.** The PixiJS v8 + bitECS game engine runs at 60fps via `requestAnimationFrame` and lives in `apps/frontend/pwa/src/lib/game/`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame, crashing the microtask queue (`ERR_SVELTE_TOO_MANY_UPDATES`).
+
+- **Svelte UI**: Handles low-frequency state — menus, chat wrappers, stats blocks, inventory. Uses `$state` runes.
+- **Game Engine**: Handles high-frequency tick data — movement, rendering, physics. Pure imperative TypeScript. No Svelte imports.
+- **Bridge**: All UI↔Game communication goes through the typed `EngineBridge` (`GameCommand` →, `GameEvent` ←). See Section 11.
+
 ## 4. ViewModel Pattern
 
 **Views are thin wrappers. ViewModels own all logic.** No local `$state` in views. No `onMount`.
@@ -190,14 +198,27 @@ throw toAppError("unauthorized", "User not logged in");
 
 Valid types: `not-found`, `invalid-argument`, `unauthorized`, `unauthenticated`, `internal`, `captcha-required`.
 
-## 8. Zod Validation
+## 8. Validation
 
-All runtime validation uses Zod from `@aikami/schemas`:
+### Server-Side (Zod)
+
+All server-side runtime validation (Firebase Functions, API boundaries) uses Zod from `@aikami/schemas`:
 
 ```typescript
 import { z } from "zod";
 import { userSchema } from "@aikami/schemas";
 ```
+
+### Client-Side (Valibot)
+
+Client-side perimeter validation uses Valibot for lightweight, tree-shakeable validation (~1.5KB vs Zod's ~12KB):
+
+```typescript
+import * as v from 'valibot';
+import { userSchema } from '@aikami/valibot-schemas';
+```
+
+**Rule**: Zod stays on the server; Valibot is preferred on the client (PWA).
 
 ## 9. Project Structure
 
@@ -205,14 +226,16 @@ import { userSchema } from "@aikami/schemas";
 aikami/
   apps/
     frontend/pwa/         — SvelteKit PWA
-    frontend/landing_page/ — Landing page
-    frontend/docs/         — Documentation site
-    frontend/gamejs/       — Game app
-    backend/functions/     — Firebase Cloud Functions
+    │   └── src/lib/game/  — 🎮 PixiJS v8 + bitECS engine (C-016)
+    frontend/landing_page/ — Landing page (Astro)
+    frontend/docs/         — Documentation site (Astro)
+    frontend/gamejs/       — ⚠️ DEPRECATED — Legacy GodotJS client
+    │                        Migration target: pwa/src/lib/game/
+    backend/functions/     — Firebase Cloud Functions v2
   packages/
-    shared/                — constants, logger, mocks, schemas, types, utils
-    backend/               — auth, configs, database, svelte-kit, utils
-    frontend/              — components, configs, repositories, services, utils
+    shared/                — constants, logger, mocks, schemas, types, utils, valibot-schemas
+    backend/               — ai, auth, configs, database, svelte-kit, utils
+    frontend/              — components, configs, repositories, services, utils, tanstack-db
     scripts/               — CI, setup, ops scripts
 ```
 
@@ -221,10 +244,118 @@ aikami/
 Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected()` before running tests.
 
 ```bash
-bun moon run pwa:dev              # Start PWA dev server
+bun moon run pwa:dev              # Start PWA dev server (includes game engine)
 bun moon run :typecheck            # Type-check all projects
 bun moon run :lint                 # Lint all projects
 bun moon run :fix                  # Auto-fix lint issues
 bun moon run :test                 # Run all tests
 bun moon run :validate             # Full CI validation
+```
+
+## 11. Architectural Boundary Pattern
+
+The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit PWA through a strict architectural boundary. This decoupling prevents the 60fps game loop from triggering Svelte 5 reactivity and crashing the browser microtask queue.
+
+### Boundary Diagram
+
+```
+┌──────────────────────────────────────────────────────┐
+│  SVELTEKIT UI LAYER  ($state runes)                   │
+│  ┌───────────┐  ┌──────────┐  ┌───────────────────┐ │
+│  │ ChatView   │  │ HUDView  │  │ GameViewModel     │ │
+│  │ $state()   │  │ $state() │  │ $state(): messages│ │
+│  └─────┬──────┘  └────┬─────┘  └────────┬──────────┘ │
+│        │              │                  │            │
+│        └──────────────┼──────────────────┘            │
+│                       │ EngineBridge.send()            │
+│           EngineBridge.on() listen for events          │
+├───────────────────────┼───────────────────────────────┤
+│  ENGINE BRIDGE        │  (typed message channel)       │
+│                       │  GameCommand →                 │
+│                       │  GameEvent ←                   │
+├───────────────────────┼───────────────────────────────┤
+│  PIXIJS + bitECS RUNTIME (imperative, no $state)      │
+│  ┌────────────────────┴──────────────────────────────┐│
+│  │  GameWorld (bitECS world)                          ││
+│  │  ┌─────────┐  ┌─────────┐  ┌───────────────────┐ ││
+│  │  │ Systems │  │Entities │  │ PixiJS Application │ ││
+│  │  │ movement│  │  NPCs   │  │  <canvas> 60fps    │ ││
+│  │  │ render  │  │  player │  │  requestAnimation  │ ││
+│  │  │ physics │  │  items  │  │  Frame loop        │ ││
+│  │  └─────────┘  └─────────┘  └───────────────────┘ ││
+│  └───────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────┘
+```
+
+### Critical Rules
+
+#### 1. No `$state` in Game Code
+
+Game code in `apps/frontend/pwa/src/lib/game/` runs at 60fps via `requestAnimationFrame`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame — catastrophic performance impact. The game directory is a **pure imperative TypeScript zone** with zero Svelte imports.
+
+```typescript
+// ❌ Forbidden — $state in game code
+// apps/frontend/pwa/src/lib/game/systems/movement.ts
+let playerX = $state(0);  // Crashes Svelte microtask queue!
+
+// ✅ Correct — plain variable updated by the ticker
+// apps/frontend/pwa/src/lib/game/systems/movement.ts
+let playerX = 0;
+```
+
+#### 2. Svelte UI Handles Low-Frequency State
+
+ViewModels in `apps/frontend/pwa/src/lib/views/` handle UI-relevant state only:
+
+- **Menus** — open/closed, selected item
+- **Chat wrappers** — message lists, input text, loading flags
+- **Stats blocks** — health bars, inventory counts, character sheets
+- **HUD** — minimap toggle, skill cooldowns, quest trackers
+
+These update at human-perceptible rates (seconds, not milliseconds). The bitECS engine ticker handles per-frame tick metrics (position deltas, collision results, animation frames) natively via structural array (SoA) configurations — never through Svelte runes.
+
+#### 3. Bridge Serialization
+
+All payloads crossing the `EngineBridge` must be **plain serializable objects** only:
+
+- ✅ `string`, `number`, `boolean`, arrays of primitives
+- ❌ Class instances, functions, PixiJS objects (`Sprite`, `Container`), bitECS handles (`World`, entity references)
+
+```typescript
+// ✅ Correct — plain serializable command
+type MoveCommand = { type: 'MOVE_PLAYER'; direction: 'up' | 'down' | 'left' | 'right' };
+
+// ✅ Correct — plain serializable event
+type DialogEvent = { type: 'DIALOG_TRIGGER'; npcId: string; message: string };
+
+// ❌ Forbidden — PixiJS object crossing the bridge
+type BadEvent = { type: 'RENDER'; sprite: Sprite };
+```
+
+#### 4. Event Emission at UI-Relevant Intervals
+
+Bridge events must be emitted at UI-relevant intervals — not per-frame:
+
+- ✅ **Dialog triggers** — when player interacts with NPC
+- ✅ **Health changes** — when damage taken (not every frame of an animation)
+- ✅ **Scene transitions** — when entering/exiting a location
+- ❌ **Position updates** — every frame (handle in-game only, smooth via PixiJS tweening)
+- ❌ **Animation frames** — every frame (handled by PixiJS `AnimatedSprite`)
+
+#### 5. No Blocking the Game Loop
+
+Bridge message handlers on the Svelte side must not perform synchronous heavy work:
+
+```typescript
+// ✅ Correct — offload heavy work
+bridge.on('EVENT', (event) => {
+  requestIdleCallback(() => {
+    processEvent(event);
+  });
+});
+
+// ❌ Forbidden — synchronous heavy work blocks the game loop
+bridge.on('EVENT', (event) => {
+  heavySynchronousWork(event);
+});
 ```

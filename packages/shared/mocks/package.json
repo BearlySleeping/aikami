@@ -1,5 +1,6 @@
 {
   "name": "@aikami/mocks",
+  "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
     "lint": "biome lint .",
@@ -9,6 +10,7 @@
     "validate": "bun run typecheck && bun test"
   },
   "dependencies": {
+    "@aikami/backend-database": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
