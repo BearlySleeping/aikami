@@ -23,6 +23,7 @@
     "vite": "8.0.14"
   },
   "dependencies": {
+    "@aikami/frontend-api-core": "workspace:*",
     "bitecs": "^0.4.0",
     "pixi.js": "^8.18.1"
   }

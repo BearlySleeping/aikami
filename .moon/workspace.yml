@@ -9,7 +9,6 @@ projects:
   pwa: "apps/frontend/pwa"
   landing-page: "apps/frontend/landing_page"
   docs: "apps/frontend/docs"
-  gamejs: "apps/frontend/gamejs"
   game: "apps/frontend/game"
   firebase: "apps/backend/firebase"
 
@@ -30,6 +29,7 @@ projects:
   backend-svelte-kit: "packages/backend/svelte-kit"
 
   # Frontend Packages
+  frontend-api-core: "packages/frontend/api-core"
   frontend-dataconnect: "packages/frontend/dataconnect"
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"

@@ -4,7 +4,7 @@ import { Type } from "typebox"
 
 /** Fallback workspace summary — used if moon query fails. Update when projects change. */
 const FALLBACK_SUMMARY = `Workspace: aikami projects (moon)
-Apps:  pwa, landing-page, docs, gamejs, functions
+Apps:  pwa, landing-page, docs, game, firebase
 Libs:  constants, schemas, types, logger, utils, mocks, backend-*, frontend-*`
 
 export default function (pi: ExtensionAPI) {
