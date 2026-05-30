@@ -19,6 +19,6 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "idb-keyval": "6.2.2"
+    "idb-keyval": "6.2.4"
   }
 }
