@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3 uid="uid://v37pld2ul4n6"]
+
+[ext_resource type="Theme" uid="uid://cb2tqos08yhkd" path="res://interface/theme/MinimalUI/MinimalUI.tres" id="1_76rhg"]
+[ext_resource type="Script" path="res://interface/menus/main/settings/action_button.gd" id="1_kwngg"]
+
+[node name="ActionButton" type="Button"]
+custom_minimum_size = Vector2(100, 0)
+offset_right = 8.0
+offset_bottom = 8.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme = ExtResource("1_76rhg")
+theme_override_font_sizes/font_size = 24
+toggle_mode = true
+script = ExtResource("1_kwngg")

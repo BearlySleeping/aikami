@@ -1,0 +1,35 @@
+[gd_scene load_steps=3 format=3 uid="uid://blmopi0p8v0uy"]
+
+[ext_resource type="PackedScene" uid="uid://c8sw0elfc2l24" path="res://interface/dialogue/components/button.tscn" id="1_hmmsq"]
+[ext_resource type="Script" path="res://interface/dialogue/components/player_container.gd" id="1_su5cy"]
+
+[node name="InputContainer" type="HBoxContainer"]
+offset_left = 14.0
+offset_top = 10.0
+offset_right = 450.0
+offset_bottom = 62.0
+alignment = 1
+script = ExtResource("1_su5cy")
+
+[node name="PlayerInput" type="TextEdit" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="TalkButton" parent="VBoxContainer" instance=ExtResource("1_hmmsq")]
+unique_name_in_owner = true
+layout_mode = 2
+disabled = true
+text = "Talk"
+
+[node name="LeaveButton" parent="VBoxContainer" instance=ExtResource("1_hmmsq")]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Leave"
+
+[connection signal="text_changed" from="PlayerInput" to="." method="_on_player_input_text_changed"]
+[connection signal="pressed" from="VBoxContainer/TalkButton" to="." method="_on_talk_button_pressed"]
+[connection signal="pressed" from="VBoxContainer/LeaveButton" to="." method="_on_leave_button_pressed"]

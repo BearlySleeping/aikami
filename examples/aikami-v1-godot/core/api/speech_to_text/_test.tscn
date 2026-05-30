@@ -1,0 +1,50 @@
+[gd_scene load_steps=3 format=3 uid="uid://c6s8nhxgt74mc"]
+
+[ext_resource type="Script" path="res://addons/godot_whisper/label_transcribe.gd" id="2_npoov"]
+[ext_resource type="Script" path="res://addons/godot_whisper/capture_stream_to_text.gd" id="5_27hih"]
+
+[node name="Test" type="Node2D"]
+
+[node name="Button" type="Button" parent="."]
+offset_left = 223.0
+offset_top = 191.0
+offset_right = 389.0
+offset_bottom = 295.0
+text = "Press to record"
+
+[node name="RichTextLabel" type="RichTextLabel" parent="."]
+offset_left = 103.0
+offset_top = 21.0
+offset_right = 486.0
+offset_bottom = 164.0
+script = ExtResource("2_npoov")
+
+[node name="Button2" type="Button" parent="."]
+offset_left = 39.0
+offset_top = 201.0
+offset_right = 204.0
+offset_bottom = 290.0
+text = "Preview"
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="."]
+volume_db = 1.0
+autoplay = true
+bus = &"Record"
+
+[node name="Button3" type="Button" parent="."]
+offset_left = 419.0
+offset_top = 223.0
+offset_right = 523.0
+offset_bottom = 301.0
+text = "Start"
+
+[node name="SpeechToText" type="SpeechToText" parent="."]
+_import_path = NodePath("")
+unique_name_in_owner = false
+process_mode = 0
+process_priority = 0
+process_physics_priority = 0
+process_thread_group = 0
+editor_description = ""
+language_model = null
+script = ExtResource("5_27hih")

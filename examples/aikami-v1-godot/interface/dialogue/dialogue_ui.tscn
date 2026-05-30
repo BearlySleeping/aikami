@@ -1,0 +1,101 @@
+[gd_scene load_steps=9 format=3 uid="uid://b1o372l2424b8"]
+
+[ext_resource type="Script" path="res://interface/dialogue/dialogue_ui.gd" id="1_is44f"]
+[ext_resource type="Texture2D" uid="uid://csbbckyn3xnt" path="res://assets/sprites/text-bubble.png" id="3_jiamh"]
+[ext_resource type="PackedScene" uid="uid://c585kt8004tyx" path="res://interface/dialogue/components/npc_container.tscn" id="4_7l1nq"]
+[ext_resource type="PackedScene" uid="uid://cq5icjhax5i8d" path="res://interface/dialogue/components/avatar_box.tscn" id="5_ana7k"]
+[ext_resource type="PackedScene" uid="uid://blmopi0p8v0uy" path="res://interface/dialogue/components/player_container.tscn" id="5_ebtfd"]
+
+[sub_resource type="Gradient" id="Gradient_tdesi"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_msg20"]
+gradient = SubResource("Gradient_tdesi")
+fill_from = Vector2(0, 1)
+fill_to = Vector2(0, 0)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_m6b2e"]
+content_margin_left = 14.0
+content_margin_top = 10.0
+content_margin_right = 14.0
+content_margin_bottom = 10.0
+texture = ExtResource("3_jiamh")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+
+[node name="DialogueUI" type="CanvasLayer"]
+layer = 3
+script = ExtResource("1_is44f")
+
+[node name="DialogUI" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TextureRect" type="TextureRect" parent="DialogUI"]
+modulate = Color(0, 0, 0, 0.639216)
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -153.0
+grow_horizontal = 2
+grow_vertical = 0
+texture = SubResource("GradientTexture2D_msg20")
+
+[node name="NPCAvatar" parent="DialogUI" instance=ExtResource("5_ana7k")]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 8.0
+offset_top = 35.0
+offset_right = 118.0
+offset_bottom = 186.0
+name_label = "Gandalf the Grey"
+avatar_path = "res://assets/npc/gandalf/neutral.webp"
+
+[node name="PlayerAvatar" parent="DialogUI" instance=ExtResource("5_ana7k")]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 359.0
+offset_top = 37.0
+offset_right = 469.0
+offset_bottom = 188.0
+
+[node name="PanelContainer" type="PanelContainer" parent="DialogUI"]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -473.0
+offset_top = -82.0
+offset_right = -9.0
+offset_bottom = -10.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxTexture_m6b2e")
+
+[node name="NPCContainer" parent="DialogUI/PanelContainer" instance=ExtResource("4_7l1nq")]
+unique_name_in_owner = true
+layout_mode = 2
+text = "..."
+
+[node name="PlayerContainer" parent="DialogUI/PanelContainer" instance=ExtResource("5_ebtfd")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="Timer" type="Timer" parent="DialogUI"]
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="DialogUI"]
+
+[connection signal="done_button_pressed" from="DialogUI/PanelContainer/NPCContainer" to="." method="_on_npc_text_container_done_button_pressed"]
+[connection signal="leave_button_pressed" from="DialogUI/PanelContainer/PlayerContainer" to="." method="_on_player_container_leave_button_pressed"]
+[connection signal="talk_button_pressed" from="DialogUI/PanelContainer/PlayerContainer" to="." method="_on_player_container_talk_button_pressed"]
