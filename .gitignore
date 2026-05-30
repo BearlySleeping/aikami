@@ -263,3 +263,4 @@ examples/web/
 game/addons/godot_whisper/bin/
 game/addons/godot_whisper/models/
 game/assets/audio/
+.direnv/
