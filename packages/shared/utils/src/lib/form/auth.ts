@@ -127,7 +127,10 @@ export const getUserLiteData = async ({
 }): Promise<UserLiteData> => {
   const creationTime = user.metadata.creationTime;
   if (!creationTime) {
-    throw toAppError('invalid-argument', 'getUserLiteData: Creation time is required');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'getUserLiteData: Creation time is required'
+});
   }
   const email = user.email;
 
@@ -135,7 +138,10 @@ export const getUserLiteData = async ({
   claims = claims ?? (await user.getIdTokenResult()).claims;
 
   if (!claims) {
-    throw toAppError('invalid-argument', 'getUserLiteData: Claims are required');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'getUserLiteData: Claims are required'
+});
   }
 
   return toUserLiteData({

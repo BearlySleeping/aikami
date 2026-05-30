@@ -21,7 +21,10 @@ export const getTranslatedText = (text: LangData, locale: string | SupportedLoca
     text[locale as SupportedLocale] ?? text.en ?? text[Object.keys(text)[0] as SupportedLocale];
 
   if (!translatedText) {
-    throw toAppError('invalid-argument', 'No text found');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'No text found'
+});
   }
   return translatedText;
 };

@@ -457,10 +457,10 @@ export const getSearchParams = <T extends Record<string, string>>(
   if (requiredParams) {
     for (const requiredParam of requiredParams) {
       if (!params[requiredParam]) {
-        throw toAppError(
-          'invalid-argument',
-          `Missing required param ${requiredParam.toString()} in url ${url}`,
-        );
+        throw toAppError({
+          errorType: 'invalid-argument',
+          errorMessage: `Missing required param ${requiredParam.toString()} in url ${url}`,
+        });
       }
     }
   }

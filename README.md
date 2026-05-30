@@ -33,12 +33,13 @@ bun run test:blackbox # Full test suite
 | `apps/frontend/gamejs` | GodotJS game client (TypeScript) |
 | `apps/frontend/landing_page` | Landing page (Astro) |
 | `apps/frontend/docs` | Documentation site (Astro) |
-| `apps/backend/functions` | Firebase Cloud Functions |
+| `apps/backend/firebase` | Firebase Cloud Functions + Data Connect |
 | `packages/shared/` | Shared libraries (6 packages) |
 | `packages/backend/` | Backend-specific packages (5) |
 | `packages/frontend/` | Frontend-specific packages (5) |
 | `scripts/` | CI, setup, blackbox test runner |
-| `knowledge/` | AI-readable project documentation |
+| `docs/` | Human-readable project documentation |
+| `.context/` | AI agent instructions and file index |
 | `.pi/` | Pi AI agent extensions and skills |
 | `.moon/` | Moon task orchestration |
 
@@ -54,11 +55,12 @@ bun run scripts       # Interactive script runner
 
 ## Documentation
 
-- `knowledge/CONTEXT.md` — AI briefing (read this first)
-- `knowledge/llms.txt` — Full knowledge index
-- `knowledge/architecture/architecture.md` — System design
-- `knowledge/guides/dev-workflow.md` — Developer guide
-- `knowledge/contracts/INDEX.md` — Feature contracts
+- `.context/CONTEXT.md` — AI briefing (read this first)
+- `.context/llms.txt` — Full AI-first file index
+- `docs/README.md` — Human-facing docs hub
+- `docs/architecture/architecture.md` — System design
+- `docs/guides/dev-workflow.md` — Developer guide
+- `docs/contracts/INDEX.md` — Feature contracts
 
 ## Tech Stack
 

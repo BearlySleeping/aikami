@@ -216,7 +216,10 @@ export const canManageUser = ({ currentUserClaims }: { currentUserClaims: UserCl
   const currentUserRole = currentUserClaims.userRole;
 
   if (currentUserRole !== 'superAdmin') {
-    throw toAppError('permission-denied', 'unauthorized_user_role');
+    throw toAppError({
+  errorType: 'permission-denied',
+  errorMessage: 'unauthorized_user_role'
+});
   }
 };
 

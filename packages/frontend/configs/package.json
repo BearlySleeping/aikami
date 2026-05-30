@@ -11,6 +11,8 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "firebase": "12.13.0"
+    "@aikami/utils": "workspace:*",
+    "firebase": "12.13.0",
+    "zod": "4.3.6"
   }
 }

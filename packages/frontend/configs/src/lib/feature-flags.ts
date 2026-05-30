@@ -7,7 +7,7 @@ import { publicEnv } from './environment';
  */
 export const featureFlags = {
   /** Enable Firestore offline persistence */
-  offlinePersistence: (publicEnv as Record<string, string>).PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE === '1',
+  offlinePersistence: publicEnv.PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE === '1',
 
   /** Enable Gmail integration */
   gmailIntegration: Boolean(publicEnv.PUBLIC_GMAIL_CLIENT_ID),
@@ -16,7 +16,7 @@ export const featureFlags = {
   pushNotifications: Boolean(publicEnv.PUBLIC_VAPID_KEY),
 
   /** Enable app check */
-  appCheck: (publicEnv as Record<string, string>).PUBLIC_DISABLE_APP_CHECK !== '1',
+  appCheck: publicEnv.PUBLIC_DISABLE_APP_CHECK !== '1',
 } as const;
 
 export type FeatureFlags = typeof featureFlags;

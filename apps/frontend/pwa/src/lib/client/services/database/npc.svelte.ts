@@ -184,7 +184,7 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
 
     const systemNpc = await npcRepository.getDocument({ npcId: systemNpcId });
     if (!systemNpc) {
-      throw toAppError('not-found', 'System NPC not found');
+      throw toAppError({ errorType: 'not-found', errorMessage: 'System NPC not found' });
     }
 
     const {
@@ -243,7 +243,7 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
     const uid = authService.uid;
 
     if (!uid) {
-      throw toAppError('unauthorized', 'Cannot upload avatar: User is not logged in.');
+      throw toAppError({ errorType: 'unauthorized', errorMessage: 'Cannot upload avatar: User is not logged in.' });
     }
 
     try {
@@ -268,10 +268,10 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
       return await importFromJson({ file });
     }
 
-    throw toAppError(
-      'invalid-argument',
-      'Unsupported file type. Please upload a PNG or JSON file.',
-    );
+    throw toAppError({
+      errorType: 'invalid-argument',
+      errorMessage: 'Unsupported file type. Please upload a PNG or JSON file.',
+    });
   }
 }
 

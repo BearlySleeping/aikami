@@ -32,10 +32,10 @@ const getApp = () => {
       };
 
   if (!serviceAccount.apiKey) {
-    throw toAppError(
-      'internal',
-      'Firebase configuration is missing. Please set the required environment variables like `PUBLIC_FIREBASE_API_KEY`.',
-    );
+    throw toAppError({
+      errorType: 'internal',
+      errorMessage: 'Firebase configuration is missing. Please set the required environment variables like `PUBLIC_FIREBASE_API_KEY`.',
+    });
   }
   // TODO: change to debug
   logger.info('serviceAccount', serviceAccount);

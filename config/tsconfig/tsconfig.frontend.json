@@ -17,6 +17,8 @@
       "$router/*": ["packages/frontend/services/src/lib/router/router-utils/*"],
       "$routes": ["apps/frontend/pwa/src/lib/constants/routes.ts"],
       "$routes/*": ["apps/frontend/pwa/src/lib/constants/routes/*"],
+      "@aikami/frontend/configs": ["packages/frontend/configs/src/index.ts"],
+      "@aikami/frontend/configs/*": ["packages/frontend/configs/src/lib/*"],
       "@aikami/frontend/services": ["packages/frontend/services/src/index.ts"],
       "@aikami/frontend/services/*": ["packages/frontend/services/src/lib/*"],
       "@aikami/frontend/utils": ["packages/frontend/utils/src/index.ts"],

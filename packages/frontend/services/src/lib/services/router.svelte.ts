@@ -138,7 +138,10 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   async goToHref(goto: string): Promise<void> {
     this.log('goToHref', { goto });
     if (!this._goto) {
-      throw toAppError('internal', 'RouterService is not initialized');
+      throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'RouterService is not initialized'
+});
     }
 
     return await this._goto(goto);
@@ -176,7 +179,10 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
 
   get url(): URL {
     if (!this._pageValue) {
-      throw toAppError('internal', 'RouterService not initialized or page not set');
+      throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'RouterService not initialized or page not set'
+});
     }
     return this._pageValue.url;
   }

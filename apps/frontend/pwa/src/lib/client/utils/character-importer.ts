@@ -25,7 +25,7 @@ export class CharacterImporter {
       chunks = extractChunks(uint8Array);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw toAppError('invalid-argument', `Invalid PNG file: ${message}`);
+      throw toAppError({ errorType: 'invalid-argument', errorMessage: `Invalid PNG file: ${message}` });
     }
 
     for (const chunk of chunks) {
@@ -51,22 +51,22 @@ export class CharacterImporter {
       try {
         decoded = atob(text);
       } catch {
-        throw toAppError(
-          'invalid-argument',
-          'Character card contains invalid base64 data in chara chunk',
-        );
+        throw toAppError({
+          errorType: 'invalid-argument',
+          errorMessage: 'Character card contains invalid base64 data in chara chunk',
+        });
       }
 
       try {
         return JSON.parse(decoded);
       } catch {
-        throw toAppError(
-          'invalid-argument',
-          'Character card contains invalid JSON after base64 decoding',
-        );
+        throw toAppError({
+          errorType: 'invalid-argument',
+          errorMessage: 'Character card contains invalid JSON after base64 decoding',
+        });
       }
     }
 
-    throw toAppError('not-found', 'No character data found in PNG file (missing chara tEXt chunk)');
+    throw toAppError({ errorType: 'not-found', errorMessage: 'No character data found in PNG file (missing chara tEXt chunk)' });
   }
 }

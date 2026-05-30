@@ -1,0 +1,72 @@
+# apps/backend/firebase/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+stack: 'backend'
+tags:
+  - 'firebase'
+  - 'application'
+
+project:
+  name: 'firebase'
+  description: 'Backend Firebase project: Cloud Functions, Firestore Rules, and Data Connect.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'backend-configs'
+  - 'backend-utils'
+  - 'backend-database'
+  - 'schemas'
+  - 'types'
+  - 'constants'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'scripts/**/*'
+  configs:
+    - 'firestack.json'
+    - '*.ts'
+  tests:
+    - 'tests/**/*'
+  deployment:
+    - 'functions_cache.ts'
+
+tasks:
+  deploy:
+    command: 'bun run deploy'
+    inputs:
+      - '@group(deployment)'
+    options:
+      cache: false
+      runInCI: true
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+  test-rules:
+    command: 'bun run test:rules'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+  emulate:
+    command: 'bun run emulate'
+    options:
+      cache: false
+      runInCI: false
+  scripts:
+    command: 'bun run scripts'
+    options:
+      cache: false
+      runInCI: false
+  logs:
+    command: 'bun run logs'
+    options:
+      cache: false
+      runInCI: false

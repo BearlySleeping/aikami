@@ -1,0 +1,46 @@
+{
+  "name": "@aikami/firebase",
+  "type": "module",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsc --noEmit --skipLibCheck",
+    "fix": "biome check --write .",
+    "build": "firestack deploy --dry-run",
+    "deploy": "firestack deploy",
+    "deploy:local": "node ../../../../firestack/dist/main.js deploy",
+    "emulate": "firestack emulate --mode emulator --force",
+    "emulate:local": "node ../../../../firestack/dist/main.js emulate",
+    "sync": "firestack sync",
+    "rules": "firestack rules",
+    "delete": "firestack delete",
+    "delete:local": "node ../../../../firestack/dist/main.js delete",
+    "logs": "firestack logs",
+    "scripts": "firestack scripts",
+    "scripts:local": "node ../../../../firestack/dist/main.js scripts",
+    "test": "bun test tests/controllers.test.ts",
+    "test:rules": "firestack test:rules --flavor development",
+    "populate-npcs": "bun run scripts/populate-npcs.ts"
+  },
+  "dependencies": {
+    "@aikami/backend-ai": "workspace:*",
+    "@aikami/backend-configs": "workspace:*",
+    "@aikami/backend-database": "workspace:*",
+    "@aikami/backend-utils": "workspace:*",
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/mocks": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@genkit-ai/googleai": "1.28.0",
+    "@snorreks/firestack": "^0.0.38",
+    "axios": "1.15.2",
+    "firebase-admin": "13.8.0",
+    "firebase-functions": "7.2.5",
+    "genkit": "1.33.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase-tools": "^15.15.0"
+  }
+}

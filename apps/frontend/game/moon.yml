@@ -1,0 +1,95 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+stack: 'frontend'
+tags:
+  - 'game'
+  - 'frontend'
+  - 'application'
+  - 'playwright'
+
+toolchains:
+  javascript: false
+
+project:
+  title: 'Game'
+  description: 'Standalone PixiJS + bitECS game with vanilla TypeScript frontend.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'index.html'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'tsconfig.test.json'
+    - 'vite.config.*'
+  tests:
+    - 'tests/**/*'
+    - 'playwright.config.*'
+  unitTests:
+    - 'src/**/*.test.ts'
+
+tasks:
+  dev:
+    command: 'bun run dev'
+    preset: 'server'
+  build:
+    command: 'bun run build'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    outputs:
+      - 'dist'
+  preview:
+    command: 'bun run preview'
+    preset: 'server'
+  test:
+    script: |
+      bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
+    deps:
+      - 'build'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  test-unit:
+    command: 'bun run test:unit'
+    inputs:
+      - '@group(unitTests)'
+      - '@group(sources)'
+  test-e2e:
+    script: 'bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
+    deps:
+      - 'build'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  typecheck:
+    command: 'bun run typecheck'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  lint:
+    command: 'bun run lint'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  format:
+    command: 'bun run format'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+  validate:
+    command: 'bun run validate'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'

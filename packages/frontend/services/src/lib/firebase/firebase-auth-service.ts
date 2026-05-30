@@ -99,7 +99,10 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     await signInWithEmailAndPassword(auth, email, password);
     const user = auth.currentUser;
     if (!user) {
-      throw toAppError('invalid-argument', 'auth.currentUser is undefined');
+      throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'auth.currentUser is undefined'
+});
     }
 
     return user;
@@ -123,7 +126,10 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     const { auth, firebaseUpdatePassword, signInWithEmailAndPassword } = await this._getAuth();
     const user = auth.currentUser;
     if (!user?.email) {
-      throw toAppError('unauthorized', 'User is not logged in');
+      throw toAppError({
+  errorType: 'unauthorized',
+  errorMessage: 'User is not logged in'
+});
     }
     const response = await signInWithEmailAndPassword(auth, user.email, oldPassword);
     this.debug('updatePassword:signInWithEmailAndPassword', { response });
@@ -139,7 +145,10 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     const { auth, updateEmail } = await this._getAuth();
     const currentUser = auth.currentUser;
     if (!currentUser) {
-      throw toAppError('unauthorized', 'auth.currentUser is undefined');
+      throw toAppError({
+  errorType: 'unauthorized',
+  errorMessage: 'auth.currentUser is undefined'
+});
     }
 
     await updateEmail(currentUser, newEmail);
@@ -162,7 +171,10 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     await signInWithEmailAndPassword(auth, email, password);
     const user = auth.currentUser;
     if (!user) {
-      throw toAppError('unauthorized', 'auth.currentUser is undefined');
+      throw toAppError({
+  errorType: 'unauthorized',
+  errorMessage: 'auth.currentUser is undefined'
+});
     }
 
     return user;

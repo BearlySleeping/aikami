@@ -1,36 +1,14 @@
 // packages/frontend/configs/src/lib/firestore.ts
-import './app.ts'; // Ensure app is initialized first
+import { connectFirestoreEmulator, type Firestore, initializeFirestore } from 'firebase/firestore';
+import app from './app';
 import {
-  addDoc,
-  arrayRemove,
-  arrayUnion,
-  collection,
-  collectionGroup,
-  connectFirestoreEmulator,
-  deleteDoc,
-  deleteField,
-  doc,
-  documentId,
-  type Firestore,
-  getCountFromServer,
-  getDoc,
-  getDocs,
-  getFirestore,
-  increment,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  startAfter,
-  Timestamp,
-  updateDoc,
-  where,
-  writeBatch,
-} from 'firebase/firestore';
-import { isEmulatorMode } from './environment';
+  EMULATOR_PORTS,
+  isDevelopmentModePublic,
+  isEmulatorModePublic,
+  publicEnv,
+} from './environment';
 
+export type { Firestore } from 'firebase/firestore';
 export {
   addDoc,
   arrayRemove,
@@ -52,28 +30,31 @@ export {
   serverTimestamp,
   setDoc,
   startAfter,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
-};
+} from 'firebase/firestore';
 
-let _firestore: Firestore | undefined;
-let _emulatorConnected = false;
+const initializeFirestoreInstance = (): Firestore => {
+  const instance = initializeFirestore(app, {
+    ignoreUndefinedProperties: !isDevelopmentModePublic(),
+    localCache:
+      publicEnv.PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE === '1'
+        ? { kind: 'persistent' }
+        : undefined,
+  });
 
-export const getFirestoreInstance = (): Firestore => {
-  if (_firestore) {
-    return _firestore;
+  // Connect to emulator — only do this once
+  if (isEmulatorModePublic()) {
+    connectFirestoreEmulator(instance, 'localhost', EMULATOR_PORTS.firestore);
   }
 
-  _firestore = getFirestore();
-
-  if (isEmulatorMode() && !_emulatorConnected) {
-    connectFirestoreEmulator(_firestore, 'localhost', 8080);
-    _emulatorConnected = true;
-  }
-
-  return _firestore;
+  return instance;
 };
 
-export type { Firestore };
-export { Timestamp };
+// Eagerly initialize — the single DOMException: AbortError that fires on SSR
+// is a harmless Firestore SDK internal WebChannel abort (auth token resolves
+// moments after the initial WebChannel starts). This is a known Firebase SDK
+// behavior and does not affect functionality.
+export const firestore = initializeFirestoreInstance();

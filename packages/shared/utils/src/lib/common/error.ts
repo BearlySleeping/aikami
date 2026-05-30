@@ -48,17 +48,22 @@ export const toHttpErrorStatusCode = (errorType: ErrorType): AppError['cause']['
  * Get a Error object that the frontend can easily read and understand from when
  * thrown.
  *
- * @param errorType The error type.
- * @param errorMessage The error message.
- * @param details The error details.
+ * @param options The options for creating the error.
+ * @param options.errorType The error type.
+ * @param options.errorMessage The error message.
+ * @param options.details Optional error details.
  * @returns A HttpsError.
  */
-export const toAppError = (errorType: ErrorType, errorMessage: string, details?: unknown): Error =>
-  new Error(errorMessage, {
+export const toAppError = (options: {
+  details?: unknown;
+  errorMessage: string;
+  errorType: ErrorType;
+}): Error =>
+  new Error(options.errorMessage, {
     cause: {
-      details,
-      errorType,
-      statusCode: toHttpErrorStatusCode(errorType),
+      details: options.details,
+      errorType: options.errorType,
+      statusCode: toHttpErrorStatusCode(options.errorType),
     } satisfies AppError['cause'],
   });
 

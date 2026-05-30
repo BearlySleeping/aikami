@@ -1,53 +1,49 @@
-// scripts/src/index.ts
+#!/usr/bin/env bun
 /**
  * Script runner for the Aikami monorepo.
  *
- * Usage:
- *   bun run scripts                     # Interactive mode — lists all scripts
- *   bun run scripts -- setup            # Run setup.ts directly
- *   bun run scripts -- dev_all          # Run dev_all.ts directly
- *   bun run scripts -- generate_llms    # Run generate_llms_txt.ts
+ * Two modes:
+ * 1. DIRECT:  bun run scripts -- <name> [args...]
+ *    Resolves <name> via SCRIPT_MAP short names or as a path relative to src/lib/.
+ *    Example: bun run scripts -- setup
+ *
+ * 2. INTERACTIVE:  bun run scripts
+ *    Lists all available scripts and lets you pick one to run.
  */
 
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
+import { c, error, log, ok } from './lib/cli_utils';
 
+// ---------------------------------------------------------------------------
 // Short name → relative path from src/lib/
+// ---------------------------------------------------------------------------
 const SCRIPT_MAP: Record<string, string> = {
-  setup: 'setup.ts',
-  dev_all: 'dev_all.ts',
-  dev: 'dev_all.ts',
-  generate_llms: 'generate_llms_txt.ts',
-  generate_context: 'generate_context.ts',
-  cleanup_vendor_dirs: 'cleanup_vendor_dirs.ts',
-  cleanup: 'cleanup_vendor_dirs.ts',
-  validate_all: 'validate_all.ts',
-  validate: 'validate_all.ts',
-  test_blackbox: '../test_blackbox/run.ts',
-  test_bb: '../test_blackbox/run.ts',
-  bb: '../test_blackbox/run.ts',
+  // Ops scripts
+  dev_all: 'ops/dev_all.ts',
+  dev: 'ops/dev_all.ts',
+  generate_llms: 'ops/generate_llms_txt.ts',
+  generate_context: 'ops/generate_context.ts',
+  cleanup_vendor_dirs: 'ops/cleanup_vendor_dirs.ts',
+  cleanup: 'ops/cleanup_vendor_dirs.ts',
+  validate_all: 'ops/validate_all.ts',
+  validate: 'ops/validate_all.ts',
+
+  // Setup scripts
+  setup: 'setup/setup.ts',
+
+  // Test scripts
+  test_blackbox: 'test_blackbox/run.ts',
+  test_bb: 'test_blackbox/run.ts',
+  bb: 'test_blackbox/run.ts',
 };
 
 const SCRIPT_DIR = join(import.meta.dir, 'lib');
+const EXCLUDED_FILES = new Set(['cli_utils.ts']);
 
-const RED = '\x1b[31m';
-const GREEN = '\x1b[32m';
-const CYAN = '\x1b[36m';
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
-
-function log(msg: string) {
-  console.log(msg);
-}
-
-function ok(msg: string) {
-  console.log(`${GREEN}✓${RESET} ${msg}`);
-}
-
-function error(msg: string) {
-  console.error(`${RED}✗${RESET} ${msg}`);
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 async function findScripts(dir: string, base: string): Promise<string[]> {
   const scripts: string[] = [];
@@ -56,7 +52,7 @@ async function findScripts(dir: string, base: string): Promise<string[]> {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       scripts.push(...(await findScripts(fullPath, base)));
-    } else if (entry.name.endsWith('.ts')) {
+    } else if (entry.name.endsWith('.ts') && !EXCLUDED_FILES.has(entry.name)) {
       scripts.push(relative(base, fullPath));
     }
   }
@@ -65,47 +61,53 @@ async function findScripts(dir: string, base: string): Promise<string[]> {
 
 async function runScript(scriptRelPath: string, scriptArgs: string[]): Promise<void> {
   const absPath = join(SCRIPT_DIR, scriptRelPath);
+  const file = Bun.file(absPath);
 
-  try {
-    // Dynamic import to run the script
-    log(`\n${BOLD}Running: ${CYAN}${scriptRelPath}${RESET}`);
-    if (scriptArgs.length > 0) {
-      log(`Args: ${scriptArgs.join(' ')}`);
-    }
-    log('');
-
-    const proc = Bun.spawn({
-      cmd: ['bun', 'run', absPath, ...scriptArgs],
-      stdout: 'inherit',
-      stderr: 'inherit',
-      stdin: 'inherit',
-    });
-
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      error(`Script exited with code ${exitCode}`);
-      process.exit(exitCode);
-    }
-
-    ok(`Done — ${scriptRelPath}`);
-  } catch (err) {
-    error(`Failed to run: ${scriptRelPath}`);
-    if (err instanceof Error) error(err.message);
+  if (!(await file.exists())) {
+    error(`Script not found: ${scriptRelPath}`);
+    error(`  Looked at: ${absPath}`);
     process.exit(1);
   }
+
+  log(`Running ${c.bold}${scriptRelPath}${c.reset}...`);
+  if (scriptArgs.length > 0) {
+    console.log(`Args: ${scriptArgs.join(' ')}`);
+  }
+
+  const proc = Bun.spawn({
+    cmd: ['bun', 'run', absPath, ...scriptArgs],
+    stdout: 'inherit',
+    stderr: 'inherit',
+    stdin: 'inherit',
+  });
+
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    error(`Script exited with code ${exitCode}`);
+    process.exit(exitCode);
+  }
+
+  ok('Done');
 }
 
 function resolveScriptPath(nameOrPath: string): string {
+  // Check short name map first
   if (SCRIPT_MAP[nameOrPath]) {
     return SCRIPT_MAP[nameOrPath];
   }
+
+  // Try as relative path from src/lib/
   if (nameOrPath.endsWith('.ts')) {
     return nameOrPath;
   }
+
   return `${nameOrPath}.ts`;
 }
 
+// ---------------------------------------------------------------------------
 // Interactive mode
+// ---------------------------------------------------------------------------
+
 async function interactiveMode(): Promise<void> {
   const scripts = await findScripts(SCRIPT_DIR, SCRIPT_DIR);
 
@@ -115,26 +117,37 @@ async function interactiveMode(): Promise<void> {
   }
 
   console.log(`
-${BOLD}╔════════════════════════════════════════════╗${RESET}
-${BOLD}║        Aikami Script Runner                ║${RESET}
-${BOLD}╚════════════════════════════════════════════╝${RESET}
+${c.bold}╔═══════════════════════════════════════════════════╗${c.reset}
+${c.bold}║         Aikami Script Runner                      ║${c.reset}
+${c.bold}╚═══════════════════════════════════════════════════╝${c.reset}
 `);
-  console.log(`${BOLD}Available scripts:${RESET}\n`);
+
+  console.log(`${c.bold}Available scripts:${c.reset}\n`);
   scripts.forEach((s, i) => {
     const num = String(i + 1).padStart(2, ' ');
-    console.log(`  ${DIM}${num}.${RESET} ${s}`);
+    console.log(`  ${c.dim}${num}.${c.reset} ${s}`);
   });
   console.log();
 
-  process.stdout.write(`${BOLD}Select a script (1-${scripts.length}):${RESET} `);
+  const promptText = `${c.bold}Select a script to run (1-${scripts.length}):${c.reset} `;
+  process.stdout.write(promptText);
 
+  const reader = Bun.stdin.stream().getReader();
   const decoder = new TextDecoder();
   let input = '';
 
-  for await (const chunk of Bun.stdin.stream()) {
-    input += decoder.decode(chunk);
-    if (input.includes('\n')) break;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    input += decoder.decode(value, { stream: true });
+    if (input.includes('\n')) {
+      break;
+    }
   }
+
+  await reader.releaseLock();
 
   const choice = input.trim();
   const index = Number.parseInt(choice, 10) - 1;
@@ -144,17 +157,25 @@ ${BOLD}╚═══════════════════════�
     process.exit(1);
   }
 
-  await runScript(scripts[index], Bun.argv.slice(2));
+  const scriptPath = scripts[index];
+  const extraArgs = Bun.argv.slice(2);
+
+  await runScript(scriptPath, extraArgs);
 }
 
+// ---------------------------------------------------------------------------
 // Entry
-const args = Bun.argv.slice(2);
+// ---------------------------------------------------------------------------
+
+const args = Bun.argv.slice(2); // ['bun', 'index.ts', ...]
 
 if (args.length === 0) {
   await interactiveMode();
 } else {
+  // Direct mode: first arg is script name/path, rest are script args
   const scriptName = args[0];
   const scriptArgs = args.slice(1);
   const scriptPath = resolveScriptPath(scriptName);
+
   await runScript(scriptPath, scriptArgs);
 }

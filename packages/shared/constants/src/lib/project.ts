@@ -1,0 +1,50 @@
+// packages/shared/constants/src/lib/project.ts
+
+export const modes = ['development', 'staging', 'production', 'emulator'] as const;
+
+export const defaultMode = 'development' as const satisfies (typeof modes)[number];
+
+/**
+ * Aikami backend application identifiers.
+ *
+ * | App       | Location                        | Use Case                        |
+ * |-----------|---------------------------------|---------------------------------|
+ * | `firebase`| `apps/backend/firebase`         | Cloud Functions + Firestore     |
+ */
+export const backendAppIds = ['firebase'] as const;
+
+/**
+ * Aikami frontend application identifiers.
+ *
+ * | App            | Location                      | Use Case                              |
+ * |----------------|-------------------------------|---------------------------------------|
+ * | `docs`         | `apps/frontend/docs`          | Documentation site                    |
+ * | `gamejs`       | `apps/frontend/gamejs`        | GameJS rendering engine               |
+ * | `landing_page` | `apps/frontend/landing_page`  | Marketing landing page                |
+ * | `pwa`          | `apps/frontend/pwa`           | Main PWA (characters, chat, settings) |
+ */
+export const frontendAppIds = ['docs', 'gamejs', 'landing_page', 'pwa'] as const;
+
+/**
+ * All Aikami application identifiers (backend + frontend).
+ */
+export const appIds = [...backendAppIds, ...frontendAppIds] as const;
+
+/**
+ * Maps each Aikami deployment mode to its Firebase/GCP project ID.
+ * Used by both frontend and backend apps.
+ *
+ * Emulator mode uses the `demo-` prefix so Firebase doesn't attempt production project lookups.
+ */
+export const MODE_PROJECT_MAP = {
+  development: 'aikami-dev',
+  staging: 'aikami-dev',
+  production: 'aikami-prod',
+  emulator: 'demo-aikami-emulator',
+} as const satisfies Record<(typeof modes)[number], string>;
+
+/**
+ * GCP region where Cloud Functions and Cloud Run services are deployed.
+ * Must match the `region` field in `apps/backend/firebase/firestack.config.ts`.
+ */
+export const CLOUD_FUNCTIONS_REGION = 'europe-west1' as const;
