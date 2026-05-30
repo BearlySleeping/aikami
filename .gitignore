@@ -258,3 +258,4 @@ script-config.*.ts
 test-results/
 
 examples/godot/
+examples/web/
