@@ -16,11 +16,11 @@
     "validate": "bun run typecheck && bun run test:unit"
   },
   "devDependencies": {
-    "@playwright/test": "1.59.1",
-    "@types/bun": "1.3.13",
-    "playwright": "1.59.1",
+    "@playwright/test": "1.60.0",
+    "@types/bun": "1.3.14",
+    "playwright": "1.60.0",
     "typescript": "6.0.3",
-    "vite": "8.0.9"
+    "vite": "8.0.14"
   },
   "dependencies": {
     "bitecs": "^0.4.0",
