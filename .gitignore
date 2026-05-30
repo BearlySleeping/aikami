@@ -257,5 +257,9 @@ $RECYCLE.BIN/
 script-config.*.ts
 test-results/
 
+examples/aikami-old/
 examples/godot/
 examples/web/
+game/addons/godot_whisper/bin/
+game/addons/godot_whisper/models/
+game/assets/audio/
