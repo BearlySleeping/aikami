@@ -37,7 +37,9 @@
           # Developer Experience
           direnv
           nix-direnv
-        ];
+                  python3
+          git-filter-repo
+];
 
         # nix-direnv location — used by .envrc on subsequent loads to
         # source direnvrc without re-evaluating nixpkgs
