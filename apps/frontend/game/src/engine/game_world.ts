@@ -10,6 +10,8 @@ import { createPlayer } from './entities/create_player.ts';
 import { createTestSprite } from './entities/create_test_sprite.ts';
 import type { PixiAppOptions } from './pixi_app.ts';
 import { createPixiApp } from './pixi_app.ts';
+import type { GameAiService } from './services/ai_service.ts';
+import type { GameApiService } from './services/api_service.ts';
 import { updateDialogTriggers } from './systems/dialog_trigger_system.ts';
 import { setupInput } from './systems/input_system.ts';
 import { updateMovement } from './systems/movement_system.ts';
@@ -40,6 +42,12 @@ class GameWorld {
   /** The engine bridge for UI↔Game communication. */
   private bridge: EngineBridge;
 
+  /** Optional game API service for backend communication. */
+  private apiService: GameApiService | undefined;
+
+  /** Optional game AI service for AI-powered features. */
+  private aiService: GameAiService | undefined;
+
   /** The entity ID of the player entity. */
   private playerEntityId = 0;
 
@@ -59,9 +67,13 @@ class GameWorld {
    * tear it down and release all resources.
    *
    * @param bridge - The engine bridge to use for UI↔Game communication.
+   * @param apiService - Optional API service for backend communication.
+   * @param aiService - Optional AI service for AI-powered features.
    */
-  constructor(bridge: EngineBridge) {
+  constructor(bridge: EngineBridge, apiService?: GameApiService, aiService?: GameAiService) {
     this.bridge = bridge;
+    this.apiService = apiService;
+    this.aiService = aiService;
   }
 
   /**
@@ -157,6 +169,12 @@ class GameWorld {
       this.inputTeardown();
       this.inputTeardown = undefined;
     }
+
+    // Destroy services (abort pending requests)
+    this.apiService?.destroy();
+    this.aiService?.destroy();
+    this.apiService = undefined;
+    this.aiService = undefined;
 
     // Destroy PixiJS (releases WebGL context, removes canvas listeners)
     if (this.app) {

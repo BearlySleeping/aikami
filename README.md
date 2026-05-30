@@ -27,21 +27,21 @@ bun run test:blackbox # Full test suite
 
 ## Project Structure
 
-| Directory | Purpose |
-|-----------|---------|
-| `apps/frontend/pwa` | Main PWA (SvelteKit 2, Svelte 5 runes) |
-| `apps/frontend/gamejs` | GodotJS game client (TypeScript) |
-| `apps/frontend/landing_page` | Landing page (Astro) |
-| `apps/frontend/docs` | Documentation site (Astro) |
-| `apps/backend/firebase` | Firebase Cloud Functions + Data Connect |
-| `packages/shared/` | Shared libraries (6 packages) |
-| `packages/backend/` | Backend-specific packages (5) |
-| `packages/frontend/` | Frontend-specific packages (5) |
-| `scripts/` | CI, setup, blackbox test runner |
-| `docs/` | Human-readable project documentation |
-| `.context/` | AI agent instructions and file index |
-| `.pi/` | Pi AI agent extensions and skills |
-| `.moon/` | Moon task orchestration |
+| Directory                    | Purpose                                 |
+| ---------------------------- | --------------------------------------- |
+| `apps/frontend/pwa`          | Main PWA (SvelteKit 2, Svelte 5 runes)  |
+| `apps/frontend/game`         | PixiJS v8 + bitECS engine               |
+| `apps/frontend/landing_page` | Landing page (Astro)                    |
+| `apps/frontend/docs`         | Documentation site (Astro)              |
+| `apps/backend/firebase`      | Firebase Cloud Functions + Data Connect |
+| `packages/shared/`           | Shared libraries (6 packages)           |
+| `packages/backend/`          | Backend-specific packages (5)           |
+| `packages/frontend/`         | Frontend-specific packages (5)          |
+| `scripts/`                   | CI, setup, blackbox test runner         |
+| `docs/`                      | Human-readable project documentation    |
+| `.context/`                  | AI agent instructions and file index    |
+| `.pi/`                       | Pi AI agent extensions and skills       |
+| `.moon/`                     | Moon task orchestration                 |
 
 ## Key Commands
 
@@ -66,18 +66,18 @@ bun run scripts       # Interactive script runner
 
 **Bun × SvelteKit 2 × Firebase × Godot × Moon × Biome**
 
-| Layer | Technology |
-|-------|-----------|
-| Runtime | Bun |
-| PWA | SvelteKit 2, Svelte 5 Runes |
-| Landing/Docs | Astro |
-| Game | Godot + GodotJS (TypeScript) |
-| Backend | Firebase Functions, Firestore, Auth |
-| Monorepo | Moon 2.2 |
-| Linting | Biome |
-| Testing | Playwright, Vitest, Blackbox runner |
-| AI Agent | Pi |
+| Layer        | Technology                          |
+| ------------ | ----------------------------------- |
+| Runtime      | Bun                                 |
+| PWA          | SvelteKit 2, Svelte 5 Runes         |
+| Landing/Docs | Astro                               |
+| Game         | Godot + GodotJS (TypeScript)        |
+| Backend      | Firebase Functions, Firestore, Auth |
+| Monorepo     | Moon 2.2                            |
+| Linting      | Biome                               |
+| Testing      | Playwright, Vitest, Blackbox runner |
+| AI Agent     | Pi                                  |
 
 ---
 
-**BearlySleeping** — *Dreaming big, one line of code at a time.*
+**BearlySleeping** — _Dreaming big, one line of code at a time._
