@@ -7,13 +7,20 @@ export const verifyAppCheck = async (request: { headers: Headers }) => {
     const appCheckToken = request.headers.get('X-Firebase-AppCheck');
     // logger.log('verifyAppCheck:appCheckToken', appCheckToken);
     if (!appCheckToken) {
-      throw toAppError('captcha-required', 'Missing app check token');
+      throw toAppError({
+  errorType: 'captcha-required',
+  errorMessage: 'Missing app check token'
+});
     }
 
     await getAppCheck().verifyToken(appCheckToken);
     logger.log('verifyAppCheck:valid');
   } catch (error) {
     logger.error('verifyAppCheck:error', error);
-    throw toAppError('internal', 'Failed to verify app check token', error);
+    throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'Failed to verify app check token',
+  details: error
+});
   }
 };

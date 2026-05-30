@@ -1,5 +1,5 @@
 {
-  description = "Aikami PWA - SvelteKit frontend with Playwright testing";
+  description = "Aikami Setup";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -30,12 +30,26 @@
 
           # Playwright with Nix-fixed browsers
           playwright-test
+
+          # Hybrid Cloud Emulation
+          google-cloud-sql-proxy
+
+          # Developer Experience
+          direnv
+          nix-direnv
         ];
+
+        # nix-direnv location — used by .envrc on subsequent loads to
+        # source direnvrc without re-evaluating nixpkgs
+        NIX_DIRENV = "${pkgs.nix-direnv}";
 
         shellHook = ''
           export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
           export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
-          echo "Playwright browsers from Nix: $PLAYWRIGHT_BROWSERS_PATH"
+          echo "🎭 Playwright browsers from Nix: $PLAYWRIGHT_BROWSERS_PATH"
+
+          # The marker file signals to .envrc that the Nix shell is ready
+          export AIKAMI_NIX_READY=1
         '';
       };
 

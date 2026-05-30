@@ -79,7 +79,10 @@ export const getEnvironmentValue = <T extends boolean = false>(
   }
 
   if (!value) {
-    throw toAppError('internal', `Environment variable ${environmentKey} is missing.`);
+    throw toAppError({
+  errorType: 'internal',
+  errorMessage: `Environment variable ${environmentKey} is missing.`
+});
   }
 
   return value;

@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aikami Game</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0a1a;
+        color: #e0e0e0;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+
+      #app {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ---- Menu ---- */
+      #menu-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        animation: fadeIn 0.5s ease-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      #menu-screen h1 {
+        font-size: 48px;
+        font-weight: 700;
+        color: #7ec8e3;
+        text-shadow: 0 0 20px rgba(126, 200, 227, 0.4);
+        margin-bottom: 24px;
+        letter-spacing: 2px;
+      }
+
+      #menu-screen h2 {
+        font-size: 18px;
+        font-weight: 400;
+        color: #8899aa;
+        margin-bottom: 32px;
+        margin-top: -12px;
+        letter-spacing: 1px;
+      }
+
+      .menu-btn {
+        width: 240px;
+        padding: 14px 0;
+        font-size: 18px;
+        font-weight: 600;
+        border: 2px solid #334155;
+        border-radius: 8px;
+        background: #1a1a2e;
+        color: #c0c8d0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        letter-spacing: 1px;
+      }
+
+      .menu-btn:hover {
+        background: #252545;
+        border-color: #7ec8e3;
+        color: #e0e8f0;
+        transform: scale(1.03);
+        box-shadow: 0 0 16px rgba(126, 200, 227, 0.15);
+      }
+
+      .menu-btn:active {
+        transform: scale(0.98);
+      }
+
+      /* ---- Options panel ---- */
+      #options-panel {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      #options-panel label {
+        font-size: 14px;
+        color: #8899aa;
+        margin-top: 8px;
+      }
+
+      #options-panel select {
+        width: 240px;
+        padding: 8px 12px;
+        font-size: 15px;
+        border: 2px solid #334155;
+        border-radius: 8px;
+        background: #1a1a2e;
+        color: #c0c8d0;
+        cursor: pointer;
+      }
+
+      #options-panel select:hover {
+        border-color: #7ec8e3;
+      }
+
+      .options-back-btn {
+        width: 240px;
+        padding: 10px 0;
+        font-size: 14px;
+        font-weight: 500;
+        border: 2px solid #334155;
+        border-radius: 8px;
+        background: #1a1a2e;
+        color: #8899aa;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-top: 8px;
+      }
+
+      .options-back-btn:hover {
+        border-color: #7ec8e3;
+        color: #c0c8d0;
+      }
+
+      /* ---- Game canvas ---- */
+      #game-screen {
+        display: none;
+        position: relative;
+      }
+
+      #game-canvas {
+        display: block;
+        border: 2px solid #334155;
+        border-radius: 4px;
+      }
+
+      /* ---- Quit overlay ---- */
+      #quit-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 100;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #quit-overlay .quit-box {
+        background: #1a1a2e;
+        border: 2px solid #334155;
+        border-radius: 12px;
+        padding: 32px 48px;
+        text-align: center;
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      #quit-overlay .quit-box p {
+        font-size: 18px;
+        color: #c0c8d0;
+        margin-bottom: 20px;
+      }
+
+      .quit-btn-row {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+      }
+
+      .quit-btn-row button {
+        padding: 10px 32px;
+        font-size: 15px;
+        font-weight: 600;
+        border: 2px solid #334155;
+        border-radius: 8px;
+        background: #1a1a2e;
+        color: #c0c8d0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .quit-btn-row button:hover {
+        border-color: #7ec8e3;
+      }
+
+      .quit-btn-row button.danger {
+        border-color: #885555;
+        color: #e88888;
+      }
+
+      .quit-btn-row button.danger:hover {
+        background: #332222;
+        border-color: #cc6666;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Menu screen -->
+      <div id="menu-screen">
+        <h1>AIKAMI</h1>
+        <h2>Chronicles of the Lost Realm</h2>
+        <button id="btn-start" class="menu-btn">Start Game</button>
+        <button id="btn-options" class="menu-btn">Options</button>
+        <button id="btn-quit" class="menu-btn">Quit</button>
+      </div>
+
+      <!-- Options panel (shown/hidden by JS) -->
+      <div id="options-panel">
+        <label for="select-resolution">Resolution</label>
+        <select id="select-resolution">
+          <option value="800x600" selected>800 × 600</option>
+          <option value="1024x768">1024 × 768</option>
+          <option value="1280x720">1280 × 720</option>
+        </select>
+        <button id="btn-options-back" class="options-back-btn">← Back</button>
+      </div>
+
+      <!-- Game screen -->
+      <div id="game-screen">
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+      </div>
+
+      <!-- Quit confirmation overlay -->
+      <div id="quit-overlay">
+        <div class="quit-box">
+          <p>Quit to menu?</p>
+          <div class="quit-btn-row">
+            <button id="btn-quit-confirm" class="danger">Quit</button>
+            <button id="btn-quit-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

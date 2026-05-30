@@ -1,0 +1,19 @@
+# packages/frontend/dataconnect/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+stack: 'frontend'
+tags:
+  - 'sdk'
+  - 'frontend'
+  - 'library'
+
+project:
+  name: 'frontend-dataconnect'
+  description: 'Generated Firebase Data Connect SDK wrappers for Aikami.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'frontend-configs'

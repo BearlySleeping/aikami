@@ -1,0 +1,5 @@
+{
+  "dataconnect": {
+    "source": "apps/backend/firebase/dataconnect"
+  }
+}

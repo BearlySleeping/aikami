@@ -125,10 +125,10 @@ class CharacterService
       return await importFromJson({ file });
     }
 
-    throw toAppError(
-      'invalid-argument',
-      'Unsupported file type. Please upload a PNG or JSON file.',
-    );
+    throw toAppError({
+      errorType: 'invalid-argument',
+      errorMessage: 'Unsupported file type. Please upload a PNG or JSON file.',
+    });
   }
 
   async uploadAvatar(options: { file: File; characterId: string }): Promise<string | undefined> {
@@ -137,7 +137,7 @@ class CharacterService
     const uid = authService.uid;
 
     if (!uid) {
-      throw toAppError('unauthorized', 'Cannot upload avatar: User is not logged in.');
+      throw toAppError({ errorType: 'unauthorized', errorMessage: 'Cannot upload avatar: User is not logged in.' });
     }
 
     try {

@@ -5,19 +5,20 @@
   "compilerOptions": {
     "rootDir": "../..",
     "outDir": "dist",
+    "baseUrl": "../..",
     "paths": {
-      "@aikami/constants": ["../../shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["../../shared/constants/src/*"],
-      "@aikami/mocks": ["../../shared/mocks/src/index.ts"],
-      "@aikami/mocks/*": ["../../shared/mocks/src/*"],
-      "@aikami/schemas": ["../../shared/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["../../shared/schemas/src/*"],
-      "@aikami/types": ["../../shared/types/src/index.ts"],
-      "@aikami/types/*": ["../../shared/types/src/*"],
-      "@aikami/utils": ["../../shared/utils/src/index.ts"],
-      "@aikami/utils/*": ["../../shared/utils/src/*"],
-      "$logger": ["../../shared/logger/src/index.ts"],
-      "$logger/*": ["../../shared/logger/src/*"]
+      "@aikami/constants": ["shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["shared/constants/src/*"],
+      "@aikami/mocks": ["shared/mocks/src/index.ts"],
+      "@aikami/mocks/*": ["shared/mocks/src/*"],
+      "@aikami/schemas": ["shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["shared/schemas/src/*"],
+      "@aikami/types": ["shared/types/src/index.ts"],
+      "@aikami/types/*": ["shared/types/src/*"],
+      "@aikami/utils": ["shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["shared/utils/src/*"],
+      "$logger": ["shared/logger/src/index.ts"],
+      "$logger/*": ["shared/logger/src/*"]
     }
   },
   "include": ["src/**/*"],

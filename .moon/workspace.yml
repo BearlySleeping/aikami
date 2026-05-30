@@ -10,7 +10,8 @@ projects:
   landing-page: "apps/frontend/landing_page"
   docs: "apps/frontend/docs"
   gamejs: "apps/frontend/gamejs"
-  functions: "apps/backend/functions"
+  game: "apps/frontend/game"
+  firebase: "apps/backend/firebase"
 
   # Shared Packages
   constants: "packages/shared/constants"
@@ -29,6 +30,7 @@ projects:
   backend-svelte-kit: "packages/backend/svelte-kit"
 
   # Frontend Packages
+  frontend-dataconnect: "packages/frontend/dataconnect"
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"
   frontend-repositories: "packages/frontend/repositories"

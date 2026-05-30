@@ -141,11 +141,17 @@ class AuthGameViewModel
 
       if (response.status === 'failed') {
         const payload = response.payload as SocialSignInError;
-        throw toAppError('unauthorized', payload.message || 'Google sign-in failed');
+        throw toAppError({
+  errorType: 'unauthorized',
+  errorMessage: payload.message || 'Google sign-in failed'
+});
       }
 
       if (response.status !== 'exitingUser') {
-        throw toAppError('not-found', 'No user returned from Google sign-in');
+        throw toAppError({
+  errorType: 'not-found',
+  errorMessage: 'No user returned from Google sign-in'
+});
       }
 
       await this._completeAuth();
@@ -174,7 +180,10 @@ class AuthGameViewModel
       });
 
       if (!result.success) {
-        throw result.error ?? toAppError('unauthorized', 'Invalid email or password');
+        throw result.error ?? toAppError({
+  errorType: 'unauthorized',
+  errorMessage: 'Invalid email or password'
+});
       }
 
       await this._completeAuth();
@@ -218,7 +227,10 @@ class AuthGameViewModel
       const token = await authService.getIdToken();
 
       if (!token) {
-        throw toAppError('internal', 'Failed to retrieve authentication token');
+        throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'Failed to retrieve authentication token'
+});
       }
 
       this._idToken = token;

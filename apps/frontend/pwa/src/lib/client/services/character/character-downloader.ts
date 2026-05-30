@@ -16,13 +16,19 @@ const downloadRisu = async (options: { url: string }): Promise<File> => {
   const match = options.url.match(/\/character\/([a-f0-9-]+)\/?$/i);
   const uuid = match ? match[1] : undefined;
 
-  if (!uuid) throw toAppError('invalid-argument', 'Invalid Risu URL format.');
+  if (!uuid) throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'Invalid Risu URL format.'
+});
 
   const response = await fetch(
     `https://realm.risuai.net/api/v1/download/png-v3/${uuid}?non_commercial=true`,
   );
 
-  if (!response.ok) throw toAppError('internal', 'Risu API returned an error.');
+  if (!response.ok) throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'Risu API returned an error.'
+});
 
   const blob = await response.blob();
   return new File([blob], `${uuid}.png`, { type: 'image/png' });
@@ -33,7 +39,10 @@ const downloadChub = async (options: { url: string }): Promise<File> => {
   const idIndex = urlParts.indexOf('characters');
 
   if (idIndex === -1 || !urlParts[idIndex + 1] || !urlParts[idIndex + 2]) {
-    throw toAppError('invalid-argument', 'Invalid Chub URL format.');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'Invalid Chub URL format.'
+});
   }
 
   const creatorName = urlParts[idIndex + 1];
@@ -44,7 +53,10 @@ const downloadChub = async (options: { url: string }): Promise<File> => {
     { headers: { Accept: 'application/json' } },
   );
 
-  if (!response.ok) throw toAppError('internal', 'Chub API returned an error.');
+  if (!response.ok) throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'Chub API returned an error.'
+});
 
   const metadata = await response.json();
   const imageUrl = metadata.node?.max_res_url;
@@ -55,7 +67,10 @@ const downloadChub = async (options: { url: string }): Promise<File> => {
   }
 
   const imageResponse = await fetch(imageUrl);
-  if (!imageResponse.ok) throw toAppError('internal', 'Failed to fetch Chub avatar image.');
+  if (!imageResponse.ok) throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'Failed to fetch Chub avatar image.'
+});
 
   const blob = await imageResponse.blob();
   return new File([blob], `${projectName}.png`, { type: 'image/png' });
@@ -63,7 +78,10 @@ const downloadChub = async (options: { url: string }): Promise<File> => {
 
 const downloadGeneric = async (options: { url: string }): Promise<File> => {
   const response = await fetch(options.url);
-  if (!response.ok) throw toAppError('internal', 'Failed to fetch generic URL.');
+  if (!response.ok) throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'Failed to fetch generic URL.'
+});
 
   const blob = await response.blob();
   let fileName = options.url.split('?')[0].split('/').pop() || 'downloaded_character';
@@ -85,7 +103,10 @@ export const downloadFromUrl = async (options: { url: string }): Promise<File> =
   const host = getHostFromUrl({ url });
 
   if (!host) {
-    throw toAppError('invalid-argument', 'Invalid URL provided.');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'Invalid URL provided.'
+});
   }
 
   try {
@@ -100,6 +121,9 @@ export const downloadFromUrl = async (options: { url: string }): Promise<File> =
     return await downloadGeneric({ url });
   } catch (error) {
     logger.error('character-downloader', { url, error });
-    throw toAppError('internal', 'Failed to download character card from the provided URL.');
+    throw toAppError({
+  errorType: 'internal',
+  errorMessage: 'Failed to download character card from the provided URL.'
+});
   }
 };

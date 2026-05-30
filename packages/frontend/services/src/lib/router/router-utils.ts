@@ -52,7 +52,10 @@ const getRoute = (routeName: RouteName): AllRoutes[RouteName] => {
     return route;
   }
 
-  throw toAppError('not-found', `Route ${routeName} not found`);
+  throw toAppError({
+  errorType: 'not-found',
+  errorMessage: `Route ${routeName} not found`
+});
 };
 
 export const toRouteHref = <T extends RouteName>(

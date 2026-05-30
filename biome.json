@@ -12,7 +12,8 @@
       "apps/frontend/pwa/**",
       "apps/frontend/landing_page/**",
       "apps/frontend/gamejs/src/**",
-      "apps/backend/functions/**",
+      "apps/backend/firebase/**",
+      "packages/frontend/dataconnect/**",
       "apps/backend/rules/**",
       "packages/**"
     ]

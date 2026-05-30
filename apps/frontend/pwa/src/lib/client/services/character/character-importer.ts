@@ -82,7 +82,10 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
   const arrayBuffer = await file.arrayBuffer();
 
   if (!isPng({ buffer: arrayBuffer })) {
-    throw toAppError('invalid-argument', 'File is not a valid PNG.');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'File is not a valid PNG.'
+});
   }
 
   const uint8Array = new Uint8Array(arrayBuffer);
@@ -104,7 +107,10 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
   }
 
   if (!character) {
-    throw toAppError('invalid-argument', 'No valid character data found in PNG.');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'No valid character data found in PNG.'
+});
   }
 
   const avatarFile = new File([file], `${file.name.replace('.png', '')}_avatar.png`, {
@@ -127,7 +133,10 @@ export const importFromJson = async (options: { file: File }): Promise<Character
   try {
     json = JSON.parse(text);
   } catch {
-    throw toAppError('invalid-argument', 'Invalid JSON format.');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'Invalid JSON format.'
+});
   }
 
   let character: Character | undefined;
@@ -141,7 +150,10 @@ export const importFromJson = async (options: { file: File }): Promise<Character
   }
 
   if (!character) {
-    throw toAppError('invalid-argument', 'JSON does not match known character specifications.');
+    throw toAppError({
+  errorType: 'invalid-argument',
+  errorMessage: 'JSON does not match known character specifications.'
+});
   }
 
   let avatarFile: File | undefined;

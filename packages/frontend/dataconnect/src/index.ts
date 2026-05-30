@@ -1,0 +1,20 @@
+// packages/frontend/dataconnect/src/index.ts
+//
+// Wrapper around generated Firebase Data Connect SDK queries.
+// Automatically injects the shared Data Connect singleton so consumers
+// (SvelteKit ViewModels) don't need to manage connection state.
+//
+// Generated SDK path: src/lib/generated/
+// Regenerate with: firebase dataconnect:sdk:generate
+
+import { getDataConnect } from '@aikami/frontend/configs/data_connect';
+import { connectorConfig } from './lib/generated';
+
+const dataConnect = getDataConnect(connectorConfig);
+
+// Re-export the connector config for consumers that need it.
+export { connectorConfig };
+export { dataConnect };
+
+// Re-export generated types so consumers can use typed variables.
+export type * from './lib/generated';

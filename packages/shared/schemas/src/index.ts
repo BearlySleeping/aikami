@@ -24,6 +24,8 @@ export * from './lib/database/world.ts';
 export * from './lib/fields.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/image-generation.ts';
+export * from './lib/logging/index.ts';
+export * from './lib/project.ts';
 export type { Persona } from './persona.schema.ts';
 // Note: PersonaSchema from persona.schema.ts is not re-exported here to avoid
 // collision with the existing PersonaSchema from ./lib/database/persona.ts.
