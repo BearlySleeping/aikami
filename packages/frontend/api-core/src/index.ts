@@ -1,0 +1,26 @@
+// packages/frontend/api-core/src/index.ts
+
+// API Client
+export * from './api/game_api_client_interface.ts';
+export * from './api/game_api_client.ts';
+export * from './api/errors.ts';
+export * from './api/types.ts';
+
+// AI Interface
+export * from './ai/frontend_ai_interface.ts';
+export * from './ai/types.ts';
+
+// AI Implementations — Cloud
+export { OpenAiClient } from './ai/clients/openai_client.ts';
+export { GeminiClient } from './ai/clients/gemini_client.ts';
+
+// AI Implementations — Local
+export { OllamaClient } from './ai/clients/ollama_client.ts';
+export { ComfyUiClient } from './ai/clients/comfyui_client.ts';
+export { LocalTtsClient } from './ai/clients/local_tts_client.ts';
+
+// Mock
+export { MockAiClient } from './ai/mock/mock_ai_client.ts';
+
+// Factory
+export { createAiClient } from './ai/factory.ts';

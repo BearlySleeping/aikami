@@ -9,6 +9,9 @@ tags:
   - 'application'
   - 'playwright'
 
+dependsOn:
+  - 'frontend-api-core'
+
 toolchains:
   javascript: false
 
