@@ -257,8 +257,13 @@ $RECYCLE.BIN/
 script-config.*.ts
 test-results/
 
-examples/aikami-old/
-examples/godot/
+*.gd.uid
+examples/**/*.import
+examples/**/*.png
+examples/**/*.wav
+examples/**/*.ttf
+examples/**/*.svg
+examples/godot-examples/
 examples/web/
 game/addons/godot_whisper/bin/
 game/addons/godot_whisper/models/
