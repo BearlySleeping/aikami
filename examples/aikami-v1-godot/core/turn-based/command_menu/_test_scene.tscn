@@ -1,0 +1,30 @@
+[gd_scene load_steps=3 format=3 uid="uid://dd0y6vr04ui3t"]
+
+[ext_resource type="Script" path="res://core/turn-based/command_menu/_test_scene.gd" id="1_2rvad"]
+[ext_resource type="PackedScene" uid="uid://dd7ey27i52xjy" path="res://core/turn-based/command_menu/command_menu.tscn" id="3_2pk7d"]
+
+[node name="TestScene" type="Node2D"]
+script = ExtResource("1_2rvad")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="CommandMenu" parent="CanvasLayer" instance=ExtResource("3_2pk7d")]
+unique_name_in_owner = true
+
+[node name="CommandLabel" type="Label" parent="CanvasLayer"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -30.0
+offset_right = 20.0
+offset_bottom = 30.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 1
+theme_override_font_sizes/font_size = 60
+
+[connection signal="command_selected" from="CanvasLayer/CommandMenu" to="." method="_on_command_menu_command_selected"]

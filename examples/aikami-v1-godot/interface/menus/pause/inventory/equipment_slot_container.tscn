@@ -1,0 +1,26 @@
+[gd_scene load_steps=4 format=3 uid="uid://d3a36r2cmy5rn"]
+
+[ext_resource type="Script" path="res://interface/menus/pause/inventory/equipment_slot_container.gd" id="1_p0esy"]
+[ext_resource type="Shader" path="res://interface/menus/pause/inventory/equipment_slot_container.gdshader" id="3_q8jp0"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_hubjh"]
+shader = ExtResource("3_q8jp0")
+
+[node name="SlotContainer" type="PanelContainer"]
+clip_contents = true
+custom_minimum_size = Vector2(32, 32)
+offset_right = 40.0
+offset_bottom = 40.0
+size_flags_horizontal = 4
+size_flags_vertical = 4
+script = ExtResource("1_p0esy")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+color = Color(0.0885599, 0.0885599, 0.0885599, 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+unique_name_in_owner = true
+material = SubResource("ShaderMaterial_hubjh")
+position = Vector2(16, 16)
