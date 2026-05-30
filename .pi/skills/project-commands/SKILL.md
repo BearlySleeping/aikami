@@ -5,6 +5,47 @@ description: Aikami monorepo commands reference — moon tasks, validation, depl
 
 # Project Commands
 
+## Direnv Environment (Always Loaded)
+
+The project uses direnv (`.envrc` + `scripts/direnv/`) to provision the entire development environment. These env vars are **always available** when pi runs in this project:
+
+| Env Var | Description |
+|---------|-------------|
+| `AIKAMI_ROOT` | Project root directory |
+| `AIKAMI_MODE` | emulator, development, or production |
+| `AIKAMI_PROJECT_ID` | GCP project id (resolved from mode) |
+| `AIKAMI_IS_EMULATOR` | "1" if emulator, "0" otherwise |
+| `AIKAMI_NIX_READY` | "1" if Nix devShell is loaded |
+| `GEMINI_API_KEY` | Loaded from GSM (mock in emulator) |
+
+### Shell Shortcuts (bash/zsh)
+
+When working in a terminal, these aliases are available:
+
+```bash
+# Moon task aliases
+m <target>         # bunx moon run <target>       (e.g., m pwa:dev)
+md <project>       # Start dev server              (e.g., md pwa)
+mt <project>       # Run tests                     (e.g., mt schemas)
+mb <project>       # Build                         (e.g., mb pwa)
+mf                 # Fix affected projects
+mc                 # Typecheck affected projects
+ms                 # Moon sync
+ma [task]          # Run affected tasks
+
+# Aikami workflows
+aikami_dev         # Full local dev (emulators)
+aikami_emulate     # Backend emulators only
+aikami_validate    # Fix → typecheck → build → test
+aikami_affected    # Show changed projects
+aikami_switch      # Switch mode (emulator/dev/prod)
+aikami_help        # Full shortcut list
+```
+
+**AI agents**: Use the pi extension tools (moon_run_task, validate, firestore_query, etc.) instead of these shell aliases. The tools route through `bun moon run` and respect the direnv environment automatically.
+
+---
+
 ## Moon Project Configuration
 
 Every project in the monorepo **must** have a `moon.yml` that follows this standard:

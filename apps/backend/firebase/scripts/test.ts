@@ -1,5 +1,5 @@
 // testPost.ts
-import '../script-config.development.ts';
+import '../script_config.development.ts';
 
 const url = 'https://us-central1-agmcs2025.cloudfunctions.net/test';
 

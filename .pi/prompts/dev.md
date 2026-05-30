@@ -1,5 +1,17 @@
 # Development Protocol
 
+## Environment (Always Loaded via Direnv)
+
+The project uses direnv to provision the entire development environment. These env vars are always available:
+
+- `AIKAMI_MODE` — emulator (local), development (staging), or production (live)
+- `AIKAMI_PROJECT_ID` — resolved GCP project id
+- `AIKAMI_IS_EMULATOR` — "1" when running locally
+
+Use `direnv_status` to check the current environment. Use `direnv_switch_mode emulator` to switch to local development.
+
+---
+
 ## Service Management (tmux)
 
 Start services BEFORE coding. They survive pi restarts and run in a dedicated tmux session.

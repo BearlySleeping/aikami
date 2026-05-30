@@ -159,7 +159,7 @@ Updated all knowledge files with current project state after full audit:
 ## C-011 — Blackbox Testing Infrastructure — ✅ completed
 
 ### Findings
-- Built complete blackbox test framework following nordclaw's architecture
+- Built complete blackbox test framework following aikami's architecture
 - Test runner: starts emulators → starts dev servers → runs suites → reports → cleanup
 - Emulator manager: auto-starts firestack emulate, kills stale processes, port probes
 - Dev server manager: starts PWA dev server, port polling, graceful shutdown
@@ -241,7 +241,7 @@ Updated all knowledge files with current project state after full audit:
 - .moon/hooks/pre-commit
 
 ### Files modified
-- .moon/workspace.yml — full nordclaw-style enhancement
+- .moon/workspace.yml — full aikami-style enhancement
 - 22 moon.yml files — added stack, removed validate, cleaned up
 
 ---
@@ -281,7 +281,7 @@ Updated all knowledge files with current project state after full audit:
 ## C-006 — Add packages/frontend/configs — ✅ completed
 
 ### Findings
-- Created new package from scratch following nordclaw pattern
+- Created new package from scratch following aikami pattern
 - moon.yml: dependsOn [constants, schemas, types], layer:library, stack:frontend
 - tsconfig.json: extends config/tsconfig/tsconfig.frontend.json with correct @aikami/* paths
 - package.json: @aikami/frontend-configs with workspace deps
@@ -342,13 +342,13 @@ Updated all knowledge files with current project state after full audit:
 ### Findings
 - .agents/ directory already removed — all skills already migrated to .pi/skills/
 - 26 SKILL.md files present (18 impeccable + teach-impeccable + 8 engineering)
-- All engineering skills from nordclaw present and adapted
-- firestore-collection SKILL.md had 6 @nordclaw/ references — fixed to @aikami/
-- No remaining nordclaw references in any skill file
+- All engineering skills from aikami present and adapted
+- firestore-collection SKILL.md had 6 @aikami/ references — fixed to @aikami/
+- No remaining aikami references in any skill file
 - aikami-conventions skill references SvelteKit 2, Svelte 5 runes, ViewModel, Zod, Firebase, file path comments (28 matches)
 
 ### Files modified
-- .pi/skills/firestore-collection/SKILL.md — replaced @nordclaw/ → @aikami/ (6 occurrences)
+- .pi/skills/firestore-collection/SKILL.md — replaced @aikami/ → @aikami/ (6 occurrences)
 
 ---
 
@@ -359,7 +359,7 @@ Updated all knowledge files with current project state after full audit:
 - settings.json: steeringMode/followUpMode set to "all", extensions/skills/prompts paths correct
 - mcp.json: context-mode MCP server configured
 - Extensions: moon-integration.ts, firebase-tools.ts, log-viewer.ts present
-- No nordclaw-specific extensions (deployment-orchestrator, genkit-manager, etc.) — correct
+- No aikami-specific extensions (deployment-orchestrator, genkit-manager, etc.) — correct
 - Prompts: contract.md, dev.md, pre-commit.md, handoff.md, anti-loop.md, pi-test.md present
 - Skills: present (handled by C-004)
 - .gitignore ignores node_modules, caches, logs. No bun.lock or node_modules present.

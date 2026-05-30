@@ -4,7 +4,7 @@ import { getNotificationDocumentPath, getNotificationsCollectionPath } from '@ai
 import {
   FrontendRepository,
   type FrontendRepositoryInterface,
-} from './base-frontend-repository.ts';
+} from './base_frontend_repository.ts';
 
 type NotificationRepositoryType = RepositoryType<
   typeof NotificationSchema,

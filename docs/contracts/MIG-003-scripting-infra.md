@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw reference: `scripts/src/lib/` — deploy/, ops/, setup/, test_blackbox/ subdirectories |
-| **Target** | `scripts/src/lib/` — reorganize into domain folders matching Nordclaw hierarchy |
+| **Source** | Aikami reference: `scripts/src/lib/` — deploy/, ops/, setup/, test_blackbox/ subdirectories |
+| **Target** | `scripts/src/lib/` — reorganize into domain folders matching Aikami hierarchy |
 | **Priority** | P0 — structural prerequisite for future deploy/setup scripts |
 | **Dependencies** | None |
 | **Status** | completed |
@@ -11,11 +11,11 @@
 
 ## Overview
 
-Restructure Aikami's `scripts/` package from a flat `src/lib/` directory (with `test_blackbox/` at `src/` level) to the Nordclaw hierarchy where `deploy/`, `ops/`, `setup/`, and `test_blackbox/` all live under `scripts/src/lib/`. Extract inline CLI utilities from `index.ts` into a shared `cli_utils.ts` file. This aligns the scripting infrastructure architecture between the two codebases, enabling consistent module resolution and making it straightforward to port scripts between repos.
+Restructure Aikami's `scripts/` package from a flat `src/lib/` directory (with `test_blackbox/` at `src/` level) to the Aikami hierarchy where `deploy/`, `ops/`, `setup/`, and `test_blackbox/` all live under `scripts/src/lib/`. Extract inline CLI utilities from `index.ts` into a shared `cli_utils.ts` file. This aligns the scripting infrastructure architecture between the two codebases, enabling consistent module resolution and making it straightforward to port scripts between repos.
 
 ## Design Reference
 
-**Nordclaw pattern**: `scripts/src/lib/{deploy,ops,setup,test_blackbox}/`
+**Aikami pattern**: `scripts/src/lib/{deploy,ops,setup,test_blackbox}/`
 
 Key structural elements:
 - `scripts/src/lib/deploy/` — deployment scripts (index, plan, secrets, notification, prepare_package)
@@ -44,7 +44,7 @@ scripts/src/
     ...
 ```
 
-New Nordclaw-aligned layout:
+New Aikami-aligned layout:
 ```
 scripts/src/
   index.ts
@@ -74,14 +74,14 @@ scripts/src/
 
 ### File changes
 
-1. **New file**: `scripts/src/lib/cli_utils.ts` — extract color constants, log, ok, error, warn helpers from index.ts (mirroring Nordclaw's cli_utils.ts)
+1. **New file**: `scripts/src/lib/cli_utils.ts` — extract color constants, log, ok, error, warn helpers from index.ts (mirroring Aikami's cli_utils.ts)
 2. **Modified**: `scripts/src/index.ts` — update SCRIPT_MAP entries, import from cli_utils, add EXCLUDED_FILES
 3. **Modified (5 moved scripts)**: Fix `PROJECT_ROOT`/`ROOT` from `../../..` → `../../../..` in dev_all.ts, generate_context.ts, generate_llms_txt.ts, cleanup_vendor_dirs.ts, setup.ts
 4. **Modified**: `package.json` (root) — update 4 script paths
 
 ## Acceptance Criteria
 
-### AC-1: Directory structure matches Nordclaw
+### AC-1: Directory structure matches Aikami
 **Given** the monorepo is checked out
 **When** listing `scripts/src/lib/`
 **Then** the directories `deploy/`, `ops/`, `setup/`, and `test_blackbox/` exist, and the file `cli_utils.ts` exists
@@ -92,7 +92,7 @@ scripts/src/
 - CI: `moon run scripts:typecheck` passes
 
 **Watch Points**:
-- Empty `deploy/` directory must still exist to mirror Nordclaw
+- Empty `deploy/` directory must still exist to mirror Aikami
 
 ### AC-2: Script runner resolves all scripts correctly
 **Given** the monorepo is set up with `bun install`
@@ -143,6 +143,6 @@ scripts/src/
 
 ## Edge Cases & Gotchas
 
-- **Empty deploy/ directory**: Git does not track empty directories. Create a `.gitkeep` or mention in CONTEXT.md that the directory exists. Nordclaw does NOT have a .gitkeep — check if deploy/ is empty there. If so, copy the approach.
+- **Empty deploy/ directory**: Git does not track empty directories. Create a `.gitkeep` or mention in CONTEXT.md that the directory exists. Aikami does NOT have a .gitkeep — check if deploy/ is empty there. If so, copy the approach.
 - **test_blackbox relative imports**: All test_blackbox files use same-dir (`./`) or parent (`../`) imports relative to each other. Since they all move as a unit into `lib/test_blackbox/`, no changes needed.
 - **moon.yml sources glob**: Currently `src/lib/**/*.ts` — test_blackbox files moving INTO `src/lib/` are now covered by this glob (previously they were at `src/test_blackbox/`). Add explicit test_blackbox fileGroup if needed. Verify moon's glob resolution.

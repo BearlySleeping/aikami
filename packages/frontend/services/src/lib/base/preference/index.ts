@@ -69,10 +69,10 @@ export abstract class CorePreferenceProviderService<
       'indexedDB' in window &&
       globalThis.self === globalThis.top
     ) {
-      CorePreferenceProviderService._preferenceProvider = (await import('./indexed-db.ts')).default;
+      CorePreferenceProviderService._preferenceProvider = (await import('./indexed_db.ts')).default;
     } else {
       CorePreferenceProviderService._preferenceProvider = (
-        await import('./local-storage.ts')
+        await import('./local_storage.ts')
       ).default;
     }
 

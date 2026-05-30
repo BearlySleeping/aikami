@@ -58,6 +58,7 @@ When executing any Firestack command, the agent should:
 4. Use the `scriptsDirectory` (default: `scripts`) for custom scripts and `on_emulate.ts`.
 5. Use the `rulesDirectory` (default: `src/rules`) for rules and indexes.
 6. Assume the package manager is `bun` unless `engine` or `packageManager` says otherwise.
+7. **Respect the direnv environment**: `AIKAMI_MODE` (emulator/development/production) determines the deployment target. Use `direnv_status` to check the current mode before deploying or emulating. The `firebase_deploy_functions` and `firebase_emulator` pi tools already handle mode resolution automatically.
 
 ## References
 

@@ -3,8 +3,8 @@ import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/fronte
 import { toAppError } from '@aikami/utils';
 import { authService, storageService } from '$services';
 import type { Character } from '$types';
-import { downloadFromUrl } from './character-downloader.ts';
-import { importFromJson, importFromPng } from './character-importer.ts';
+import { downloadFromUrl } from './character_downloader.ts';
+import { importFromJson, importFromPng } from './character_importer.ts';
 
 export type CharacterServiceOptions = BaseFrontendClassOptions;
 

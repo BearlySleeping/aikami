@@ -1,7 +1,7 @@
 import { NotificationCreateSchema, NotificationSchema } from '@aikami/schemas';
 import type { RepositoryType } from '@aikami/types';
 import { getNotificationDocumentPath, getNotificationsCollectionPath } from '@aikami/utils';
-import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts';
+import { BackendRepository, type BackendRepositoryInterface } from './base_backend_repository.ts';
 
 export type NotificationRepositoryType = RepositoryType<
   typeof NotificationSchema,

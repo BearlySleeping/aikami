@@ -2,7 +2,7 @@
 
 Monorepo restructuring contracts for aikami. Each contract defines a complete refactoring task with:
 - Metadata (source, target, priority, dependencies)
-- Design reference (nordclaw pattern)
+- Design reference (aikami pattern)
 - Acceptance criteria with Given/When/Then + test hooks
 - Implementation notes
 - Edge cases & gotchas
@@ -32,17 +32,17 @@ P2 (Polish — after P1):
 | C-001 | [Remove AI Vendor Directories](C-001-remove-ai-vendor-dirs.md) | Remove .ai, .claude, .cursor, .gemini, .qwen, .zed, .opencode, .agent, .agents, openspec, .github, .github_old, and stale root files | — |
 | C-002 | [Establish Knowledge Directory](C-002-establish-knowledge-dir.md) | Create knowledge/ with architecture, contracts, decisions, guides, intro subdirectories | C-001 |
 | C-003 | [Establish .pi Setup](C-003-establish-pi-setup.md) | Create .pi/ with extensions, skills, agents, prompts, settings.json, mcp.json | C-001, C-002 |
-| C-004 | [Migrate Skills to .pi/skills](C-004-migrate-skills.md) | Move .agents/skills → .pi/skills, copy engineering skills from nordclaw | C-001, C-003 |
+| C-004 | [Migrate Skills to .pi/skills](C-004-migrate-skills.md) | Move .agents/skills → .pi/skills, copy engineering skills from aikami | C-001, C-003 |
 
 ### 🟡 P1 — Structure & Configuration (Foundation)
 
 | # | Contract | Description | Depends On |
 |---|----------|-------------|------------|
 | C-005 | [Restructure Packages Under packages/shared](C-005-restructure-packages-shared.md) | Move constants, logger, mocks, schemas, types, utils to packages/shared/; remove packages/backend/ai | C-001 |
-| C-006 | [Add packages/frontend/configs](C-006-add-frontend-configs-package.md) | Create frontend configs package following nordclaw pattern | C-005 |
+| C-006 | [Add packages/frontend/configs](C-006-add-frontend-configs-package.md) | Create frontend configs package following aikami pattern | C-005 |
 | C-007 | [Establish Scripts Project](C-007-establish-scripts-project.md) | Create scripts/ with moon.yml, setup script, dev script, generate_llms_txt | C-001, C-005 |
-| C-008 | [Copy .moon Setup from Nordclaw](C-008-copy-moon-setup.md) | Add task templates, git hooks, inherited tasks, enhance workspace.yml | C-005, C-006, C-007 |
-| C-009 | [Standardize moon.yml and tsconfig.json](C-009-standardize-moon-tsconfig.md) | Standardize all project configs to nordclaw pattern | C-005, C-006, C-007, C-008 |
+| C-008 | [Copy .moon Setup from Aikami](C-008-copy-moon-setup.md) | Add task templates, git hooks, inherited tasks, enhance workspace.yml | C-005, C-006, C-007 |
+| C-009 | [Standardize moon.yml and tsconfig.json](C-009-standardize-moon-tsconfig.md) | Standardize all project configs to aikami pattern | C-005, C-006, C-007, C-008 |
 | C-013 | [Setup Tooling and MCP](C-013-setup-tooling-and-mcp.md) | Tauri v2, PixiJS v8 + bitECS, AI skills, moon tasks | C-012 |
 | C-014 | [Database Abstraction & Data Connect](C-014-database-abstraction-and-dataconnect.md) | BaseDatabaseService interface, FirebaseDataConnectService, Data Connect emulator, MockDatabaseService | C-005, C-009 |
 | C-015 | [AI Service Abstraction](C-015-ai-service-abstraction.md) | AiServiceInterface, BaseAiService (rate-limit/circuit-breaker/Zod), OpenAiService + GeminiService, MockAiService, refactor prompt_ai | C-005 |

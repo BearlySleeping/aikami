@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -9,13 +9,13 @@
   "files": {
     "ignoreUnknown": true,
     "includes": [
-      "apps/frontend/pwa/**",
-      "apps/frontend/landing_page/**",
-      "apps/frontend/gamejs/src/**",
-      "apps/backend/firebase/**",
-      "packages/frontend/dataconnect/**",
-      "apps/backend/rules/**",
-      "packages/**"
+      "apps/**",
+      "packages/**",
+      "scripts/**",
+      "!**/temp/*",
+      "!**/tmp/*",
+      "!**/dist/*",
+      "!**/build/*"
     ]
   },
   "formatter": {
@@ -36,26 +36,45 @@
       "suspicious": {
         "noThenProperty": "error",
         "noExplicitAny": "error",
-        "noConsole": "warn"
+        "noConsole": "error"
       },
       "style": {
         "useImportType": "error",
         "useNodejsImportProtocol": "error",
-        "useFilenamingConvention": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "filenameCases": ["snake_case"]
+          }
+        },
         "useNumberNamespace": "error",
-        "noSubstr": "error"
+        "noSubstr": "error",
+        "useBlockStatements": "error",
+        "useNamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false
+          }
+        },
+        "useConsistentTypeDefinitions": {
+          "level": "error",
+          "options": {
+            "style": "type"
+          }
+        }
       },
       "complexity": {
         "useArrowFunction": "error",
         "noUselessSwitchCase": "error",
         "useFlatMap": "error",
         "useDateNow": "error",
-        "noForEach": "error"
+        "noForEach": "error",
+        "noStaticOnlyClass": "error"
       },
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
-        "useImportExtensions": "error"
+        "useImportExtensions": "off"
       }
     }
   },
@@ -71,7 +90,8 @@
       "bracketSameLine": false,
       "attributePosition": "auto",
       "operatorLinebreak": "after"
-    }
+    },
+    "globals": ["Bun", "process", "fetch", "prompt"]
   },
   "html": {
     "experimentalFullSupportEnabled": true,
@@ -86,6 +106,64 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.spec.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          },
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.svelte", "**/*.astro"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useButtonType": "off",
+            "noSvgWithoutTitle": "off",
+            "useAnchorContent": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.css"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUnknownAtRules": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.d.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useConsistentTypeDefinitions": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/scripts/**/*.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          },
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
     {
       "includes": [
         "apps/frontend/landing_page/astro.config.ts",
@@ -130,7 +208,12 @@
       }
     },
     {
-      "includes": ["apps/frontend/pwa/**", "packages/utils/**", "packages/constants/**"],
+      "includes": [
+        "apps/frontend/pwa/**",
+        "packages/shared/utils/**",
+        "packages/shared/constants/**",
+        "packages/frontend/utils/**"
+      ],
       "linter": {
         "rules": {
           "complexity": {
@@ -157,7 +240,9 @@
       }
     },
     {
-      "includes": ["packages/frontend/components/**"],
+      "includes": [
+        "packages/frontend/components/**"
+      ],
       "linter": {
         "rules": {
           "suspicious": {

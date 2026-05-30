@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw blackbox test runner — `architecture/blackbox-test-runner.md`, `contracts/pwa-admin-ai--llm-provider-management.md` |
+| **Source** | Aikami blackbox test runner — `architecture/blackbox-test-runner.md`, `contracts/pwa-admin-ai--llm-provider-management.md` |
 | **Target** | `/aikami/tests/blackbox/` + test infrastructure |
 | **Priority** | P2 — Important for regression safety but not blocking initial refactor |
 | **Dependencies** | C-007 (scripts project), C-009 (standardized configs) |
@@ -11,11 +11,11 @@
 
 ## Overview
 
-Establish a blackbox (end-to-end) testing infrastructure for aikami. Currently aikami uses Playwright for the PWA, but there's no structured blackbox test runner with fixtures, reporting, and CI integration. Follow the nordclaw pattern of a universal blackbox test runner that can test the full stack (Firebase emulators + PWA + API routes).
+Establish a blackbox (end-to-end) testing infrastructure for aikami. Currently aikami uses Playwright for the PWA, but there's no structured blackbox test runner with fixtures, reporting, and CI integration. Follow the aikami pattern of a universal blackbox test runner that can test the full stack (Firebase emulators + PWA + API routes).
 
 ## Design Reference
 
-**Nordclaw blackbox test architecture**:
+**Aikami blackbox test architecture**:
 - Tests live alongside code or in a dedicated `tests/` directory
 - Playwright for browser-based tests
 - Firebase emulators for backend integration tests

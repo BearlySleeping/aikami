@@ -1,7 +1,7 @@
 // apps/frontend/game/src/main.ts
 
 import { createEngineBridge, GameWorld } from './engine/index.ts';
-import { MenuController } from './menu/menu-controller.ts';
+import { MenuController } from './menu/menu_controller.ts';
 
 // ---------------------------------------------------------------------------
 // Application entry point — boots menu first, game on demand

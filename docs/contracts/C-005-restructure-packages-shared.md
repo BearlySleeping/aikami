@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw `packages/shared/` structure |
+| **Source** | Aikami `packages/shared/` structure |
 | **Target** | `/aikami/packages/shared/` |
 | **Priority** | P1 — Foundation change required before adding new packages |
 | **Dependencies** | C-001 (clean root) |
@@ -11,7 +11,7 @@
 
 ## Overview
 
-Restructure the monorepo so that shared packages live under `packages/shared/` instead of `packages/` directly. This follows the nordclaw convention and separates shared utilities from domain-specific backend/frontend packages.
+Restructure the monorepo so that shared packages live under `packages/shared/` instead of `packages/` directly. This follows the aikami convention and separates shared utilities from domain-specific backend/frontend packages.
 
 ## Design Reference
 
@@ -38,7 +38,7 @@ packages/
     └── utils/
 ```
 
-**Target structure** (nordclaw-style):
+**Target structure** (aikami-style):
 ```
 packages/
 ├── shared/

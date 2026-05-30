@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw `scripts/src/lib/setup.ts` pattern + intro/setup.md |
+| **Source** | Aikami `scripts/src/lib/setup.ts` pattern + intro/setup.md |
 | **Target** | `/aikami/scripts/src/lib/setup.ts` |
 | **Priority** | P2 — Quality of life for developers; not blocking |
 | **Dependencies** | C-007 (scripts project), C-008 (.moon setup) |
@@ -15,7 +15,7 @@ Create an interactive setup script that onboards new developers to the aikami mo
 
 ## Design Reference
 
-**Nordclaw setup** (`knowledge/intro/setup.md` and `scripts/src/lib/setup.ts`):
+**Aikami setup** (`knowledge/intro/setup.md` and `scripts/src/lib/setup.ts`):
 - Prerequisite checks (Bun, Node, Firebase CLI, git)
 - Dependency installation (`bun install`)
 - Moon synchronization (`bunx moon sync`)

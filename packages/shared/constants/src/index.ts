@@ -1,9 +1,9 @@
 export * from './lib/auth.ts';
 export * from './lib/common.ts';
-export { allCountries } from './lib/country-codes.ts';
-export * from './lib/country-codes-phone-number.ts';
+export { allCountries } from './lib/country_codes.ts';
+export * from './lib/country_codes_phone_number.ts';
 export * from './lib/emulator.ts';
-export * from './lib/locale-codes.ts';
+export * from './lib/locale_codes.ts';
 export * from './lib/location.ts';
 export * from './lib/logger.ts';
 export * from './lib/project.ts';

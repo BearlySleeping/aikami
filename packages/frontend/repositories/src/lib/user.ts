@@ -4,7 +4,7 @@ import { getUserDocumentPath, getUsersCollectionPath } from '@aikami/utils';
 import {
   FrontendRepository,
   type FrontendRepositoryInterface,
-} from './base-frontend-repository.ts';
+} from './base_frontend_repository.ts';
 
 export type UserRepositoryType = RepositoryType<
   typeof UserSchema,

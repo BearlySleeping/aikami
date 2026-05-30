@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw per-project `moon.yml` and `tsconfig.json` patterns |
+| **Source** | Aikami per-project `moon.yml` and `tsconfig.json` patterns |
 | **Target** | All packages and apps in aikami |
 | **Priority** | P1 — Standardization pass after all structural changes |
 | **Dependencies** | C-005 (packages/shared), C-006 (frontend configs), C-007 (scripts), C-008 (.moon setup) |
@@ -11,11 +11,11 @@
 
 ## Overview
 
-Standardize every project's `moon.yml` and `tsconfig.json` to follow the nordclaw pattern. After restructuring packages (C-005) and adding the .moon templates (C-008), each project needs updated configs that reference the correct inherited tasks and package paths.
+Standardize every project's `moon.yml` and `tsconfig.json` to follow the aikami pattern. After restructuring packages (C-005) and adding the .moon templates (C-008), each project needs updated configs that reference the correct inherited tasks and package paths.
 
 ## Design Reference
 
-**Nordclaw `moon.yml` pattern** (library):
+**Aikami `moon.yml` pattern** (library):
 ```yaml
 $schema: 'https://moonrepo.dev/schemas/project.json'
 
@@ -37,7 +37,7 @@ dependsOn:
 # No explicit tasks — inherits from task templates
 ```
 
-**Nordclaw `tsconfig.json` pattern** (shared library):
+**Aikami `tsconfig.json` pattern** (shared library):
 ```json
 {
   "$schema": "https://json.schemastore.org/tsconfig",
@@ -57,7 +57,7 @@ dependsOn:
 }
 ```
 
-**Nordclaw `moon.yml` pattern** (application):
+**Aikami `moon.yml` pattern** (application):
 ```yaml
 $schema: 'https://moonrepo.dev/schemas/project.json'
 

@@ -4,7 +4,7 @@ import { getConfigDocumentPath, getConfigsCollectionPath } from '@aikami/utils';
 import {
   FrontendRepository,
   type FrontendRepositoryInterface,
-} from './base-frontend-repository.ts';
+} from './base_frontend_repository.ts';
 
 export type ConfigRepositoryType = RepositoryType<
   typeof ConfigSchema,

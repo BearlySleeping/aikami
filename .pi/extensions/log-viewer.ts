@@ -3,21 +3,18 @@
 //
 // Routes by action:
 //   action=logs (default):
-//     cloud-run (pwa, admin)  → scripts/ops/logs.ts → gcloud logging
-//     firebase-hosting         → scripts/ops/logs.ts → gcloud logging
-//     firebase-functions       → bun moon run functions:logs → firestack → gcloud
-//     browser-extension        → unsupported (tell user to check browser DevTools)
+//     cloud-run (pwa)       → scripts/ops/logs.ts → gcloud logging
+//     firebase-hosting       → scripts/ops/logs.ts → gcloud logging
+//     firebase-functions     → bun moon run functions:logs → firestack → gcloud
 //
 // Also delegates Firestore log_entries queries to firestore_query tool.
+//
+// Direnv env vars (set by .envrc) — always available:
+//   AIKAMI_MODE          — emulator | development | production
+//   AIKAMI_PROJECT_ID    — GCP project id
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Type } from "typebox"
-
-// Stubs: Replace with @aikami/constants + scripts after C-005/C-007 refactor
-const MODE_PROJECT_MAP: Record<string, string> = {
-  development: process.env.FIREBASE_PROJECT_ID ?? "aikami-dev",
-  production: process.env.FIREBASE_PROJECT_ID ?? "aikami-prod",
-}
 
 const APP_CONFIG: Record<string, { serviceType: string }> = {
   pwa: { serviceType: "cloud-run" },
@@ -36,7 +33,7 @@ export default function (pi: ExtensionAPI) {
     name: "service_logs",
     label: "Logs: View Service Logs",
     description:
-      "View logs for Nordclaw services. "
+      "View logs for Aikami services. "
       + "Apps: pwa, admin, landing, functions. "
       + "Log actions: tail, line limits, time filters, function name filters. "
       + "For Firestore log_entries (client-side structured logs), use firestore_query instead.",
@@ -93,7 +90,8 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const app = params.app ?? "functions"
-      const mode = params.mode ?? "development"
+      // Resolve mode: explicit param > direnv env > "development" default
+      const mode = params.mode ?? (process.env.AIKAMI_MODE as string | undefined) ?? "development"
       const lines = params.lines ?? 50
       const serviceType = APP_SERVICE_TYPES[app]
 
@@ -117,9 +115,9 @@ export default function (pi: ExtensionAPI) {
         }
       }
 
-      if (!MODE_PROJECT_MAP[mode]) {
+      if (!process.env.AIKAMI_PROJECT_ID && mode !== "emulator") {
         return {
-          content: [{ type: "text", text: `Unknown mode: ${mode}` }],
+          content: [{ type: "text", text: `Unknown mode: ${mode} (AIKAMI_PROJECT_ID not set by direnv)` }],
           details: { code: 1, source: "unknown_mode" },
         }
       }

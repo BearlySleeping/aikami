@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw `scripts/` project |
+| **Source** | Aikami `scripts/` project |
 | **Target** | `/aikami/scripts/` |
 | **Priority** | P1 — Required for developer onboarding, CI, and operational scripts |
 | **Dependencies** | C-001 (clean root), C-005 (packages/shared/) |
@@ -11,11 +11,11 @@
 
 ## Overview
 
-Create a `scripts/` project at the monorepo root for CI scripts, developer setup, monorepo maintenance, and operational tasks. Follow the nordclaw scripts pattern: a standalone moon project with its own package.json, tsconfig.json, and src/ directory. This replaces any ad-hoc scripts currently at the root level.
+Create a `scripts/` project at the monorepo root for CI scripts, developer setup, monorepo maintenance, and operational tasks. Follow the aikami scripts pattern: a standalone moon project with its own package.json, tsconfig.json, and src/ directory. This replaces any ad-hoc scripts currently at the root level.
 
 ## Design Reference
 
-**Nordclaw scripts/** structure:
+**Aikami scripts/** structure:
 ```
 scripts/
 ├── moon.yml
@@ -97,12 +97,12 @@ scripts/
 
 ## Implementation Notes
 
-1. **Copy moon.yml**: Copy structure from nordclaw `scripts/moon.yml`, adapt tags and description
-2. **Copy tsconfig.json**: Copy from nordclaw, add `@aikami/` paths
+1. **Copy moon.yml**: Copy structure from aikami `scripts/moon.yml`, adapt tags and description
+2. **Copy tsconfig.json**: Copy from aikami, add `@aikami/` paths
 3. **package.json**: `"name": "@aikami/scripts"`, dependencies on `@aikami/constants`, `@aikami/schemas`, `firebase-admin`
 4. **Root package.json scripts**: Add `"setup": "bun run scripts/src/lib/setup.ts"`, `"dev:all": "bun run scripts/src/lib/dev_all.ts"`, `"knowledge:generate": "bun run scripts/src/lib/generate_llms_txt.ts"`
-5. **Root moon.yml tasks**: Add `emulate-all` task (like nordclaw) that calls `dev_all.ts`
-6. **Skip nordclaw-specific scripts**: Don't copy `lovable_setup.ts`, `lovable_sync.ts`, `generate_migration_manifest.ts` — aikami doesn't use Lovable
+5. **Root moon.yml tasks**: Add `emulate-all` task (like aikami) that calls `dev_all.ts`
+6. **Skip aikami-specific scripts**: Don't copy `lovable_setup.ts`, `lovable_sync.ts`, `generate_migration_manifest.ts` — aikami doesn't use Lovable
 
 ## Edge Cases & Gotchas
 

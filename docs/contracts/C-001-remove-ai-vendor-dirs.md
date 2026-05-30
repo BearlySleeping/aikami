@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw knowledge setup — `knowledge/contracts/TEMPLATE.md` |
+| **Source** | Aikami knowledge setup — `knowledge/contracts/TEMPLATE.md` |
 | **Target** | `/` — aikami monorepo root |
 | **Priority** | P0 — Blocks all other refactoring; must clean stale configs first |
 | **Dependencies** | None |
@@ -15,7 +15,7 @@ Remove all stale AI-tool vendor directories and configs from the aikami monorepo
 
 ## Design Reference
 
-**Nordclaw reference**: Clean root — only `.pi/` for AI agent config, `.moon/` for task orchestration, no vendor-specific AI dirs.
+**Aikami reference**: Clean root — only `.pi/` for AI agent config, `.moon/` for task orchestration, no vendor-specific AI dirs.
 
 ## Directories and Files to Remove
 

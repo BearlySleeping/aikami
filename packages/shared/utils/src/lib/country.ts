@@ -1,4 +1,4 @@
-type AllCountries = typeof import('./all-countries.ts').allCountries;
+type AllCountries = typeof import('./all_countries.ts').allCountries;
 
 let _allCountries: AllCountries | undefined;
 
@@ -7,7 +7,7 @@ const getAllCountries = async (): Promise<AllCountries> => {
     return _allCountries;
   }
 
-  _allCountries = await import('./all-countries.ts').then((module) => module.allCountries);
+  _allCountries = await import('./all_countries.ts').then((module) => module.allCountries);
 
   return _allCountries as AllCountries;
 };

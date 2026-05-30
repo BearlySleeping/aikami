@@ -13,7 +13,7 @@ import {
   toRoutePathFromRouteId,
   toRoutePathFromURL,
 } from '$router';
-import type { BaseFrontendClassInterface } from '../base/base-frontend-class.ts';
+import type { BaseFrontendClassInterface } from '../base/base_frontend_class.ts';
 
 type Navigation =
   | SvelteKitNavigation

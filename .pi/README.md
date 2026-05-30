@@ -22,22 +22,31 @@ Models, observational memory, context-mode, theme, and Telegram bridge are globa
 
 ## Project Extensions (`.pi/extensions/`)
 
-### 1. `moon-integration.ts` — Monorepo Orchestration
+### 1. `direnv.ts` — Environment Awareness
+| Tool | Purpose |
+|------|--------|
+| `direnv_status` | Show current environment: mode, project, Nix shell, secrets |
+| `direnv_switch_mode` | Switch between emulator, development, production |
+| `direnv_add_package` | Add a Nix package to flake.nix and reload direnv |
+| `direnv_add_secret` | Register a new secret key in secrets.sh |
+
+### 2. `moon-integration.ts` — Monorepo Orchestration
 | Tool | Purpose |
 |------|---------|
 | `moon_detect_affected` | Query moon for changed projects |
 | `moon_run_task` | Run any moon task |
 | `moon_list_projects` | List all monorepo projects |
 | `validate` | Fix+typecheck → optionally build+test on affected projects |
+| `blackbox_test` | Run full-stack blackbox integration tests |
 
-### 2. `firebase-tools.ts` — Firebase Operations
+### 3. `firebase-tools.ts` — Firebase Operations
 | Tool | Purpose |
 |------|---------|
 | `firestore_query` | Query Firestore collections |
 | `firebase_deploy_functions` | Deploy functions via firestack |
 | `firebase_emulator` | Start/stop/status of Firebase emulators |
 
-### 3. `log-viewer.ts` — Unified Logs
+### 4. `log-viewer.ts` — Unified Logs
 | Tool | Purpose |
 |------|---------|
 | `service_logs` | View logs for Aikami services |
@@ -80,3 +89,4 @@ See individual skill files for details. Key skills:
 | Use `ctx_execute` for analysis, not raw file reads | context-mode |
 | Use `ctx_fetch_and_index` for web docs, not inline paste | context-mode |
 | Svelte 5 ViewModel pattern, runes, Zod schemas | aikami-conventions skill |
+| Direnv environment is always loaded — extensions read `AIKAMI_MODE`, `AIKAMI_PROJECT_ID` directly | direnv.ts |
