@@ -22,6 +22,7 @@
     "populate-npcs": "bun run scripts/populate-npcs.ts"
   },
   "dependencies": {
+    "@aikami/backend-ai": "workspace:*",
     "@aikami/backend-configs": "workspace:*",
     "@aikami/backend-database": "workspace:*",
     "@aikami/backend-utils": "workspace:*",

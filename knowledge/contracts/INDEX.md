@@ -17,6 +17,7 @@ P0 (Blocking — must do first):
 
 P1 (Foundation — after P0):
   C-005 → C-006 → C-007 → C-008 → C-009
+  C-013 → C-014 → C-015 → C-016 → C-017 (tooling + database + AI + game engine + docs, parallel to C-005…C-009)
 
 P2 (Polish — after P1):
   C-010 → C-011 → C-012
@@ -42,6 +43,11 @@ P2 (Polish — after P1):
 | C-007 | [Establish Scripts Project](C-007-establish-scripts-project.md) | Create scripts/ with moon.yml, setup script, dev script, generate_llms_txt | C-001, C-005 |
 | C-008 | [Copy .moon Setup from Nordclaw](C-008-copy-moon-setup.md) | Add task templates, git hooks, inherited tasks, enhance workspace.yml | C-005, C-006, C-007 |
 | C-009 | [Standardize moon.yml and tsconfig.json](C-009-standardize-moon-tsconfig.md) | Standardize all project configs to nordclaw pattern | C-005, C-006, C-007, C-008 |
+| C-013 | [Setup Tooling and MCP](C-013-setup-tooling-and-mcp.md) | Tauri v2, PixiJS v8 + bitECS, AI skills, moon tasks | C-012 |
+| C-014 | [Database Abstraction & Data Connect](C-014-database-abstraction-and-dataconnect.md) | BaseDatabaseService interface, FirebaseDataConnectService, Data Connect emulator, MockDatabaseService | C-005, C-009 |
+| C-015 | [AI Service Abstraction](C-015-ai-service-abstraction.md) | AiServiceInterface, BaseAiService (rate-limit/circuit-breaker/Zod), OpenAiService + GeminiService, MockAiService, refactor prompt_ai | C-005 |
+| C-016 | [Game Engine Boundary](C-016-game-engine-boundary.md) | PixiJS v8 + bitECS in SvelteKit without reactivity loops, EngineBridge interface, TDD entity↔UI events, MVP sprite on Tauri load | C-013 |
+| C-017 | [Update Knowledge Base](C-017-update-knowledge-base.md) ✅ | Refactor knowledge/ docs: remove Godot, add PixiJS/bitECS/Tauri/Data Connect/Valibot/PowerSync, add strict AI coding rules | C-013, C-014, C-015, C-016 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 

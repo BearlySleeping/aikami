@@ -1,43 +1,43 @@
-import { getUserData } from '@aikami/backend-database';
+// apps/backend/functions/src/controllers/api/prompt_ai.ts
 import type { RequestFunctions } from '@aikami/types';
-import { googleAI } from '@genkit-ai/googleai';
+import { createAiService } from '@aikami/backend-ai';
 import { onRequest } from '@snorreks/firestack';
-import { genkit } from 'genkit/beta';
 import { logger } from '$logger';
 
-const ai = genkit({
-  plugins: [googleAI()], // set the GOOGLE_API_KEY env variable
-  model: googleAI.model('gemini-2.0-flash'),
-});
-
+/**
+ * POST /api/prompt_ai
+ *
+ * AI prompt endpoint using the vendor-agnostic AI service abstraction.
+ * Provider is selected via the `AI_PROVIDER` environment variable
+ * (`openai` or `gemini`), defaulting to `gemini`.
+ *
+ * Request body: `{ prompt: string }`
+ * Response: `{ chatResponse: { text: string, ... }, user: UserData }`
+ */
 export default onRequest<RequestFunctions, 'prompt_ai'>(
   async (request, response) => {
     try {
-      logger.log('Request body:', request.body); // Good for debugging
-      const user = await getUserData('ZVl2HZcI2kfrh5keT76FXOVlYpE3');
+      logger.log('Request body:', request.body);
 
-      // --- Your placeholders ---
+      const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
+      logger.log('AI provider:', provider);
 
-      // 1. The 'system' prompt (the AI's instructions)
+      const aiService = createAiService({ provider });
+
       const system = 'You are a helpful assistant. Keep your answers brief.';
-
-      // 3. The 'prompt' (the new user message from the request)
-      // Assumes your POST request sends JSON like: { "prompt": "Hello there!" }
       const prompt = request.body.prompt || 'Tell me a short fact.';
 
-      // --- End placeholders ---
-
-      // These lines will now work
-      const chat = ai.chat({ system });
-      const chatResponse = await chat.send({ prompt });
+      const chatResponse = await aiService.generateChat([
+        { role: 'system', content: system },
+        { role: 'user', content: prompt },
+      ]);
 
       response.send({
         chatResponse,
-        user,
       });
     } catch (error) {
       logger.error(error);
-      response.status(500).send(error);
+      response.status(500).send({ error: 'AI service error', message: String(error) });
     }
   },
   {

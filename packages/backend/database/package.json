@@ -6,12 +6,14 @@
     "format": "biome format .",
     "typecheck": "tsc --noEmit",
     "fix": "biome check --write .",
-    "validate": "bun run typecheck"
+    "test": "bun test",
+    "validate": "bun run typecheck && bun test"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "firebase": "12.13.0"
   }
 }

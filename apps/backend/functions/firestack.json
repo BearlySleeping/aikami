@@ -9,6 +9,23 @@
   "engine": "bun",
   "minify": true,
   "sourcemap": true,
+  "emulators": [
+    "auth",
+    "functions",
+    "firestore",
+    "pubsub",
+    "storage",
+    "ui",
+    "dataconnect"
+  ],
+  "emulatorPorts": {
+    "auth": 9099,
+    "functions": 5001,
+    "firestore": 8080,
+    "pubsub": 8085,
+    "storage": 9199,
+    "ui": 4000
+  },
   "rulesTests": {
     "firestore": {
       "rulesFile": "src/rules/firestore.rules",

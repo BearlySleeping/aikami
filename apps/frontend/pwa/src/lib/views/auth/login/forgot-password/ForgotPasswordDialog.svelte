@@ -59,9 +59,7 @@
         </div>
 
         {#if viewModel.errorMessage}
-          <div class="alert alert-error mt-4">
-            <span>{viewModel.errorMessage}</span>
-          </div>
+          <div class="alert alert-error mt-4"><span>{viewModel.errorMessage}</span></div>
         {/if}
 
         <div class="modal-action">

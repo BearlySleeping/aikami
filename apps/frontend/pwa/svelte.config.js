@@ -38,6 +38,9 @@ const config = {
       $services: toSrcPath('lib/client/services'),
       '$services/*': toSrcPath('lib/services/*'),
 
+      $game: toSrcPath('lib/game'),
+      '$game/*': toSrcPath('lib/game/*'),
+
       $types: toSrcPath('lib/types'),
       $utils: toSrcPath('lib/utils'),
       '$utils/*': toSrcPath('lib/utils/*'),

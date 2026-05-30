@@ -38,6 +38,8 @@ fileGroups:
     - 'tailwind.config.*'
     - 'svelte.config.*'
     - 'vite.config.*'
+  srcTauri:
+    - 'src-tauri/**/*'
   tests:
     - 'tests/**/*'
     - 'playwright.config.*'
@@ -107,6 +109,17 @@ tasks:
     command: 'bun run fix'
     inputs:
       - '@group(sources)'
+      - '@group(configs)'
+  tauri-dev:
+    command: 'bun run tauri:dev'
+    preset: 'server'
+  tauri-build:
+    command: 'bun run tauri:build'
+    options:
+      cache: false
+    inputs:
+      - '@group(sources)'
+      - '@group(srcTauri)'
       - '@group(configs)'
   validate:
     command: 'bun run validate'

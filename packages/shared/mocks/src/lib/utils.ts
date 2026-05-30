@@ -22,5 +22,3 @@ export const mockDescriptionLite = 'Lorem ipsum dolor sit amet, consectetur adip
 
 export const mockFirstName = 'Per';
 export const mockLastName = 'Bob';
-
-export { getRandomId };

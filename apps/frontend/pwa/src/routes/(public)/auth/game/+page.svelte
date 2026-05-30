@@ -2,8 +2,8 @@
   // apps/frontend/pwa/src/routes/(public)/auth/game/+page.svelte
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
   import {
-    getAuthGameViewModel,
     type AuthGameViewModelInterface,
+    getAuthGameViewModel,
   } from '$lib/views/auth/game/auth-game-view-model.svelte.ts';
 
   const viewModel: AuthGameViewModelInterface = getAuthGameViewModel({
@@ -75,7 +75,7 @@
             }}
             disabled={viewModel.authState === 'signing_in'}
             autocomplete="email"
-          />
+          >
           <input
             type="password"
             class="input input-bordered"
@@ -86,7 +86,7 @@
             }}
             disabled={viewModel.authState === 'signing_in'}
             autocomplete="current-password"
-          />
+          >
           <button
             type="submit"
             class="btn btn-primary"
@@ -100,14 +100,10 @@
         </form>
 
         {#if viewModel.errorMessage}
-          <div class="alert alert-error mt-4">
-            <span>{viewModel.errorMessage}</span>
-          </div>
+          <div class="alert alert-error mt-4"><span>{viewModel.errorMessage}</span></div>
         {/if}
       {:else if viewModel.authState === 'success'}
-        <div class="alert alert-success mb-4">
-          <span>Sign-in successful!</span>
-        </div>
+        <div class="alert alert-success mb-4"><span>Sign-in successful!</span></div>
 
         <p class="text-sm mb-2">Copy this token and paste it into the game:</p>
 
@@ -117,11 +113,8 @@
             class="input input-bordered join-item flex-1 text-xs font-mono"
             value={viewModel.idToken}
             readonly
-          />
-          <button
-            class="btn join-item btn-primary"
-            onclick={() => viewModel.copyToken()}
           >
+          <button class="btn join-item btn-primary" onclick={() => viewModel.copyToken()}>
             {viewModel.copied ? 'Copied!' : 'Copy'}
           </button>
         </div>
@@ -132,22 +125,12 @@
           </p>
         {/if}
 
-        <button
-          class="btn btn-ghost btn-sm mt-4"
-          onclick={() => viewModel.closeWindow()}
-        >
+        <button class="btn btn-ghost btn-sm mt-4" onclick={() => viewModel.closeWindow()}>
           Close Window
         </button>
       {:else if viewModel.authState === 'error'}
-        <div class="alert alert-error mb-4">
-          <span>{viewModel.errorMessage}</span>
-        </div>
-        <button
-          class="btn btn-primary"
-          onclick={() => viewModel.resetToIdle()}
-        >
-          Try Again
-        </button>
+        <div class="alert alert-error mb-4"><span>{viewModel.errorMessage}</span></div>
+        <button class="btn btn-primary" onclick={() => viewModel.resetToIdle()}>Try Again</button>
       {/if}
     </div>
   </div>

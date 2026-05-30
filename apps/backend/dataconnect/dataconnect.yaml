@@ -1,0 +1,38 @@
+# apps/backend/dataconnect/dataconnect.yaml
+# Firebase Data Connect service configuration for the Aikami backend.
+#
+# This file registers a Data Connect service that maps GraphQL types
+# (defined in schema/schema.gql) to Cloud SQL for PostgreSQL tables.
+# The local emulator uses this config to spin up a throwaway PostgreSQL
+# instance on port 5432 and expose the Data Connect API on port 9399.
+#
+# Prerequisites:
+#   - Java 11+  (same as other Firebase emulators)
+#   - Port 5432 must be free (Data Connect emulator runs its own PostgreSQL)
+#   - Port 9399 must be free (Data Connect emulator API)
+#
+# Cold-start warning: the first `emulators:start` may take 30-60 seconds
+# while PostgreSQL initialises.
+
+specVersion: v1alpha
+
+# Unique service id within the Firebase project.
+serviceId: aikami-db
+
+# Path to the directory containing the source schema (GraphQL SDL).
+location: .
+
+schema:
+  # Relative path to the GraphQL schema file(s).
+  source: ./schema
+
+connector:
+  # Path to the connector configuration.
+  source: ./connector
+
+# Data Connect emulator port overrides (used by firestack.json).
+# Defaults shown below — only uncomment to change.
+# emulators:
+#   dataconnect:
+#     port: 9399
+#     postgresPort: 5432

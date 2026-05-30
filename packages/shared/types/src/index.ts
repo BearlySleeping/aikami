@@ -31,6 +31,7 @@ export * from './lib/error.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/helpers.ts';
 export * from './lib/logger.ts';
+export * from './lib/pwa/ai-service-interface.ts';
 export * from './lib/pwa/endpoint-ai.ts';
 export * from './lib/pwa/endpoint-auth.ts';
 export * from './lib/pwa/endpoints.ts';

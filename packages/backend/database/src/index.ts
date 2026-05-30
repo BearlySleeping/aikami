@@ -1,4 +1,7 @@
+export * from './lib/base-database-service.ts';
 export * from './lib/config.ts';
+export * from './lib/firebase-data-connect-service.ts';
+export * from './lib/user-repository.ts';
 export * from './lib/notification.ts';
 export * from './lib/npc.ts';
 export * from './lib/user.ts';
