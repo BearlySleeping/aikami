@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Frontend API Core",
+  "extends": "../../../config/tsconfig/tsconfig.frontend.json",
+  "compilerOptions": {
+    "baseUrl": "../../../",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

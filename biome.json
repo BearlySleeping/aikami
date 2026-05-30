@@ -181,34 +181,6 @@
     },
     {
       "includes": [
-        "apps/frontend/gamejs/src/**"
-      ],
-      "formatter": {
-        "enabled": true,
-        "indentWidth": 4,
-        "lineWidth": 120
-      },
-      "linter": {
-        "enabled": true,
-        "rules": {
-          "complexity": {
-            "noForEach": "off",
-            "noStaticOnlyClass": "off"
-          },
-          "suspicious": {
-            "noExplicitAny": "warn",
-            "noConsole": "off"
-          },
-          "correctness": {
-            "noUnusedVariables": "off",
-            "noUnusedImports": "off",
-            "useImportExtensions": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
         "apps/frontend/pwa/**",
         "packages/shared/utils/**",
         "packages/shared/constants/**",
@@ -240,9 +212,7 @@
       }
     },
     {
-      "includes": [
-        "packages/frontend/components/**"
-      ],
+      "includes": ["packages/frontend/components/**"],
       "linter": {
         "rules": {
           "suspicious": {

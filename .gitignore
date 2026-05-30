@@ -254,6 +254,7 @@ $RECYCLE.BIN/
 **/script-config.staging.ts
 
 
-**/examples/**
 script-config.*.ts
 test-results/
+
+examples/godot/
