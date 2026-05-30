@@ -1,7 +1,7 @@
 import { ConfigCreateSchema, ConfigSchema, ConfigUpdateSchema } from '@aikami/schemas';
 import type { RepositoryType } from '@aikami/types';
 import { getConfigDocumentPath, getConfigsCollectionPath } from '@aikami/utils';
-import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts';
+import { BackendRepository, type BackendRepositoryInterface } from './base_backend_repository.ts';
 
 export type ConfigRepositoryType = RepositoryType<
   typeof ConfigSchema,

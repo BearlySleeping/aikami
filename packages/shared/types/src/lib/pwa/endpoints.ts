@@ -1,5 +1,5 @@
-import type { AIMessageData, AIMessageResponse } from './endpoint-ai.ts';
-import type { AuthMessageData, AuthMessageResponse } from './endpoint-auth.ts';
+import type { AIMessageData, AIMessageResponse } from './endpoint_ai.ts';
+import type { AuthMessageData, AuthMessageResponse } from './endpoint_auth.ts';
 
 export type PWACallEndpoint = keyof PWACalls;
 

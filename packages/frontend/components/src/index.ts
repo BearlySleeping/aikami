@@ -1,1 +1,1 @@
-export { default as AiButton } from './ai-button.svelte';
+export { default as AiButton } from './ai_button.svelte';

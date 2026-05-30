@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw reference: `knowledge/contracts/TEMPLATE.md` |
+| **Source** | Aikami reference: `knowledge/contracts/TEMPLATE.md` |
 | **Target** | `{path}` — {brief description} |
 | **Priority** | P{0|1|2} — {one-line justification} |
 | **Dependencies** | {list of contracts or packages this depends on} |
@@ -15,7 +15,7 @@
 
 ## Design Reference
 
-**Nordclaw pattern**: `{relevant nordclaw path or doc}`
+**Aikami pattern**: `{relevant aikami path or doc}`
 
 Key structural elements:
 - {bullet list of key patterns, files, or configs to replicate}

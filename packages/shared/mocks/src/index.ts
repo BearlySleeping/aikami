@@ -1,4 +1,4 @@
-export * from './lib/mock-ai-service.ts';
-export * from './lib/mock-database-service.ts';
-export * from './lib/mock-generators.ts';
+export * from './lib/mock_ai_service.ts';
+export * from './lib/mock_database_service.ts';
+export * from './lib/mock_generators.ts';
 export * from './lib/utils.ts';

@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw `.moon/` setup |
+| **Source** | Aikami `.moon/` setup |
 | **Target** | `/aikami/.moon/` |
 | **Priority** | P1 — Required for consistent task orchestration across all projects |
 | **Dependencies** | C-005 (packages/shared/ restructured), C-006 (frontend configs), C-007 (scripts) |
@@ -11,11 +11,11 @@
 
 ## Overview
 
-Enhance the `.moon/` setup by copying task templates, git hooks, and inherited tasks from nordclaw. Currently aikami has only `workspace.yml` and `toolchains.yml` — missing task templates and hooks. This contract adds the full nordclaw moon orchestration layer.
+Enhance the `.moon/` setup by copying task templates, git hooks, and inherited tasks from aikami. Currently aikami has only `workspace.yml` and `toolchains.yml` — missing task templates and hooks. This contract adds the full aikami moon orchestration layer.
 
 ## Design Reference
 
-**Nordclaw `.moon/`** full structure:
+**Aikami `.moon/`** full structure:
 ```
 .moon/
 ├── workspace.yml               # Project registry, VCS config, pipeline
@@ -37,25 +37,25 @@ Enhance the `.moon/` setup by copying task templates, git hooks, and inherited t
 ## Changes Detail
 
 ### 1. `.moon/tasks/all.yml` — Global Inherited Tasks
-Copy from nordclaw. Defines file groups and tasks inherited by ALL projects:
+Copy from aikami. Defines file groups and tasks inherited by ALL projects:
 - `sources`, `configs`, `root-configs`, `deployment`, `tests`, `assets` file groups
 - `typecheck`, `format`, `lint`, `test`, `fix`, `validate` tasks
 - All tasks use `bun run <name>` — delegates to each project's package.json scripts
 
 ### 2. `.moon/task-templates/` — Task Templates
-Copy all three templates from nordclaw:
+Copy all three templates from aikami:
 - **typescript-library.yml**: For packages/shared/*, packages/backend/*, packages/frontend/* — vitest, biome, tsc
 - **vite-application.yml**: For apps/frontend/pwa, apps/frontend/docs, apps/frontend/landing_page — vite build, preview, dev
 - **firebase-functions.yml**: For apps/backend/functions — firebase deploy, emulator
 
 ### 3. `.moon/hooks/` — Git Hooks
-Copy from nordclaw, adapt for aikami:
-- **pre-commit**: Currently disabled in nordclaw (commented out). For aikami, enable a lightweight check
+Copy from aikami, adapt for aikami:
+- **pre-commit**: Currently disabled in aikami (commented out). For aikami, enable a lightweight check
 - **post-merge**: `bunx moon sync` (no knowledge:pull or lovable:sync for aikami)
 - **post-checkout**: `bunx moon sync`
 
 ### 4. `.moon/workspace.yml` — Enhance
-Add nordclaw features currently missing:
+Add aikami features currently missing:
 - `vcs.hooks` configuration
 - `pipeline` configuration (cacheLifetime, syncProjects, etc.)
 - `hasher` configuration
@@ -123,16 +123,16 @@ Add nordclaw features currently missing:
 
 ## Implementation Notes
 
-1. **Copy tasks/all.yml**: Nearly identical to nordclaw — copy, then update any aikami-specific file paths
-2. **Copy task templates**: Copy all three, adjust comments (remove nordclaw-specific project references)
-3. **Hooks**: Copy post-merge and post-checkout. For pre-commit, start with just `git diff` passthrough (like nordclaw's current state), leave a comment about enabling `:fix --affected` later
-4. **workspace.yml merge**: Start with aikami's current workspace.yml, ADD the nordclaw features (vcs, pipeline, hasher, experiments), don't overwrite the project list
+1. **Copy tasks/all.yml**: Nearly identical to aikami — copy, then update any aikami-specific file paths
+2. **Copy task templates**: Copy all three, adjust comments (remove aikami-specific project references)
+3. **Hooks**: Copy post-merge and post-checkout. For pre-commit, start with just `git diff` passthrough (like aikami's current state), leave a comment about enabling `:fix --affected` later
+4. **workspace.yml merge**: Start with aikami's current workspace.yml, ADD the aikami features (vcs, pipeline, hasher, experiments), don't overwrite the project list
 5. **defaultProject**: Set to `pwa` (matches aikami's `"dev": "moon run pwa:dev"`)
 6. **vcs.defaultBranch**: Set to `master` (matches aikami's current branch)
 
 ## Edge Cases & Gotchas
 
-- **enforceLayerRelationships**: Keep `false` like nordclaw — layers are advisory
+- **enforceLayerRelationships**: Keep `false` like aikami — layers are advisory
 - **Pre-commit hook**: Don't enable `:fix --affected` in pre-commit yet — it can be slow. Add as commented-out example
 - **firebase-functions template**: Verify it works with aikami's functions structure
-- **toolchains.yml**: Aikami already has this — no change needed unless nordclaw has different toolchain versions
+- **toolchains.yml**: Aikami already has this — no change needed unless aikami has different toolchain versions

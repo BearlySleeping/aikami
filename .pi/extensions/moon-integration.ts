@@ -120,6 +120,7 @@ export default function (pi: ExtensionAPI) {
       "validate runs fix+typecheck on all affected projects (moon caches unchanged projects).",
       "If fix+typecheck pass, optionally run build then test.",
       "Pass test=true to also run unit/E2E tests after build passes.",
+      "The direnv environment (AIKAMI_MODE) is already loaded — no need to check mode.",
     ],
     parameters: Type.Object({
       test: Type.Optional(Type.Boolean({
@@ -216,6 +217,7 @@ export default function (pi: ExtensionAPI) {
       "Ensure emulator is running first: firebase_emulator start (or tmux_session start emulator).",
       "Blackbox tests start/stop their own dev servers — no need to pre-start.",
       "Use noCrossService=true to skip multi-service flow tests during rapid iteration.",
+      "Current mode from direnv: emulator=local, development/production=live GCP. Blackbox tests require emulator mode.",
     ],
     parameters: Type.Object({
       suites: Type.Optional(
@@ -274,8 +276,11 @@ export default function (pi: ExtensionAPI) {
 
   // ── Lightweight workspace context (dynamically fetched) ────────────
   pi.on("before_agent_start", async (event, _ctx) => {
+    const modeInfo = process.env.AIKAMI_MODE
+      ? `\nDirenv: AIKAMI_MODE=${process.env.AIKAMI_MODE}  project=${process.env.AIKAMI_PROJECT_ID || "?"}`
+      : ""
     return {
-      systemPrompt: `${event.systemPrompt}\n\n${workspaceSummary}`,
+      systemPrompt: `${event.systemPrompt}\n\n${workspaceSummary}${modeInfo}`,
     }
   })
 }

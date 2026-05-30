@@ -2,12 +2,16 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Type } from "typebox"
 
-// Stub: Replace with @aikami/constants after C-005 packages/shared refactor
+// Direnv env vars (set by .envrc / scripts/direnv/) — always available:
+//   AIKAMI_MODE          — emulator | development | production
+//   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
 const MODES = ["development", "production"] as const
 type Mode = (typeof MODES)[number]
-const MODE_PROJECT_MAP: Record<Mode, string> = {
-  development: process.env.FIREBASE_PROJECT_ID ?? "aikami-dev",
-  production: process.env.FIREBASE_PROJECT_ID ?? "aikami-prod",
+
+/** Resolve GCP project id from direnv env; fall back to known defaults */
+function getProjectId(mode: Mode): string {
+  return process.env.AIKAMI_PROJECT_ID
+    ?? (mode === "development" ? "aikami-dev" : "aikami-prod")
 }
 
 export default function (pi: ExtensionAPI) {
@@ -39,7 +43,8 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
-      const mode = (params.env) ?? "emulator"
+      // Resolve mode: explicit param > direnv env > "emulator" default
+      const mode = params.env ?? (process.env.AIKAMI_MODE as Mode | undefined) ?? "emulator"
       if (mode === "emulator") {
         const result = await pi.exec("bun", [
           "run",
@@ -55,7 +60,7 @@ export default function (pi: ExtensionAPI) {
           details: { code: result.code },
         }
       }
-      const projectId = MODE_PROJECT_MAP[mode]
+      const projectId = getProjectId(mode as Mode)
       const result = await pi.exec("bun", [
         "run",
         "scripts/temp/firestore_query.ts",
@@ -68,7 +73,7 @@ export default function (pi: ExtensionAPI) {
       ], { signal })
       return {
         content: [{ type: "text", text: result.stdout || result.stderr }],
-        details: { code: result.code, projectId },
+        details: { code: result.code, projectId, mode },
       }
     },
   })
@@ -100,7 +105,8 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
-      const mode = params.mode ?? "development"
+      // Resolve mode: explicit param > direnv env > "development" default
+      const mode = params.mode ?? (process.env.AIKAMI_MODE as string | undefined) ?? "development"
       const args = ["bun", "moon", "run", "functions:deploy", "--", mode]
       if (params.only) args.push("--only", params.only)
       const result = await pi.exec("env", args, { signal })
@@ -134,18 +140,18 @@ export default function (pi: ExtensionAPI) {
         const checkResult = await pi.exec("bash", ["-c", "curl -s -o /dev/null -w '%{http_code}' http://localhost:4400 2>/dev/null || echo '000'"], { signal })
         if (checkResult.stdout?.trim() === "200") {
           return {
-            content: [{ type: "text", text: "✅ Emulator already running (port 4400 responding).\n\nRead logs: tmux_session read emulator\nAttach: tmux select-window -t nordclaw-dev:1" }],
+            content: [{ type: "text", text: "✅ Emulator already running (port 4400 responding).\n\nRead logs: tmux_session read emulator\nAttach: tmux select-window -t aikami-dev:1" }],
             details: { code: 0, alreadyRunning: true },
           }
         }
 
-        // Delegate to tmux (same session as tmux-orchestrator.ts — nordclaw-dev:1).
+        // Delegate to tmux (same session as tmux-orchestrator.ts — aikami-dev:1).
         // Uses identical commands to avoid session/window conflicts.
-        _onUpdate?.({ content: [{ type: "text", text: "Starting emulator in tmux session nordclaw-dev:1..." }] })
+        _onUpdate?.({ content: [{ type: "text", text: "Starting emulator in tmux session aikami-dev:1..." }] })
         await pi.exec("bash", ["-c", [
-          'tmux has-session -t nordclaw-dev 2>/dev/null || tmux new-session -d -s nordclaw-dev -c "$(pwd)" -n main',
-          'W=$(tmux list-windows -t nordclaw-dev -F "#{window_index}" 2>/dev/null)',
-          'echo "$W" | grep -qx "1" || tmux new-window -d -t nordclaw-dev -n emulator -c "$(pwd)" "bun emulate:backend"',
+          'tmux has-session -t aikami-dev 2>/dev/null || tmux new-session -d -s aikami-dev -c "$(pwd)" -n main',
+          'W=$(tmux list-windows -t aikami-dev -F "#{window_index}" 2>/dev/null)',
+          'echo "$W" | grep -qx "1" || tmux new-window -d -t aikami-dev -n emulator -c "$(pwd)" "bun emulate:backend"',
         ].join(" && ")], { signal })
 
         // Poll for readiness (up to 60s)
@@ -159,28 +165,28 @@ export default function (pi: ExtensionAPI) {
 
         if (!ready) {
           return {
-            content: [{ type: "text", text: "⚠️  Emulator start timed out after 60s.\nCheck: tmux select-window -t nordclaw-dev:1\nOr: tmux_session read emulator" }],
+            content: [{ type: "text", text: "⚠️  Emulator start timed out after 60s.\nCheck: tmux select-window -t aikami-dev:1\nOr: tmux_session read emulator" }],
             isError: true,
             details: { code: 1 },
           }
         }
 
         return {
-          content: [{ type: "text", text: "✅ Emulator started in tmux (nordclaw-dev:1).\nRead logs: tmux_session read emulator\nAttach: tmux select-window -t nordclaw-dev:1" }],
+          content: [{ type: "text", text: "✅ Emulator started in tmux (aikami-dev:1).\nRead logs: tmux_session read emulator\nAttach: tmux select-window -t aikami-dev:1" }],
           details: { code: 0 },
         }
       }
       if (params.action === "stop") {
         // Only kill the emulator window, not the entire session.
         // Checking if window 1 is the ONLY window — if so, kill session.
-        const check = await pi.exec("bash", ["-c", "tmux list-windows -t nordclaw-dev -F '#{window_index}' 2>/dev/null"], { signal })
+        const check = await pi.exec("bash", ["-c", "tmux list-windows -t aikami-dev -F '#{window_index}' 2>/dev/null"], { signal })
         const windows = (check.stdout || "").split("\n").filter(Boolean)
         if (windows.length <= 1) {
           // Only emulator window (or none) — safe to kill session
-          await pi.exec("bash", ["-c", "tmux kill-session -t nordclaw-dev 2>/dev/null; true"], { signal })
+          await pi.exec("bash", ["-c", "tmux kill-session -t aikami-dev 2>/dev/null; true"], { signal })
         } else {
           // Other services running (pwa, vm-controller) — only kill window 1
-          await pi.exec("bash", ["-c", "tmux kill-window -t nordclaw-dev:1 2>/dev/null; true"], { signal })
+          await pi.exec("bash", ["-c", "tmux kill-window -t aikami-dev:1 2>/dev/null; true"], { signal })
         }
         // Also stop any orphaned emulator processes
         await pi.exec("bun", ["firebase", "emulators:stop"], { signal }).catch(() => {})

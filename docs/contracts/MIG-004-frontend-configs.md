@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw reference: `packages/frontend/configs/src/lib/` |
+| **Source** | Aikami reference: `packages/frontend/configs/src/lib/` |
 | **Target** | `packages/frontend/configs/src/lib/` — Align singleton pattern, environment schema, and barrel exports |
 | **Priority** | P0 — Architectural boundary; all frontend apps depend on this module for Firebase initialization |
 | **Dependencies** | MIG-003 (Scripting), `@aikami/constants`, `@aikami/schemas`, `@aikami/utils`, `@aikami/types` |
@@ -11,13 +11,13 @@
 
 ## Overview
 
-Align the `packages/frontend/configs` module with the Nordclaw standard. This module serves as the strict configuration boundary for all Aikami frontend applications, exporting Firebase service singletons (app, auth, firestore, storage, functions, etc.) and a validated environment singleton. The alignment replaces Aikami's current ad-hoc patterns (`PUBLIC_FLAVOR`, positional `toAppError`, `getFirestore()`-based firestore initializer) with Nordclaw's proven abstract-singleton pattern (`PUBLIC_MODE`, object-style `toAppError`, `initializeFirestore()` with options).
+Align the `packages/frontend/configs` module with the Aikami standard. This module serves as the strict configuration boundary for all Aikami frontend applications, exporting Firebase service singletons (app, auth, firestore, storage, functions, etc.) and a validated environment singleton. The alignment replaces Aikami's current ad-hoc patterns (`PUBLIC_FLAVOR`, positional `toAppError`, `getFirestore()`-based firestore initializer) with Aikami's proven abstract-singleton pattern (`PUBLIC_MODE`, object-style `toAppError`, `initializeFirestore()` with options).
 
 This also introduces shared constants (`modes`, `frontendAppIds`, `MODE_PROJECT_MAP`, `EMULATOR_PORTS`, `CLOUD_FUNCTIONS_REGION`) and shared schemas (`ModeSchema`, `FrontendAppIdSchema`, `LogLevelSchema`) that were missing in Aikami but required by the configs module.
 
 ## Design Reference
 
-**Nordclaw pattern**: `packages/frontend/configs/src/lib/`
+**Aikami pattern**: `packages/frontend/configs/src/lib/`
 
 Key structural elements:
 - `environment.ts` — Validates `import.meta.env` against a Zod master schema; exports a frozen `publicEnv` singleton plus helper functions (`getProjectId`, `isEmulatorModePublic`, etc.)
@@ -33,7 +33,7 @@ Key structural elements:
 
 **`packages/shared/utils`** — Update `toAppError` signature
 - Current: `toAppError(errorType, errorMessage, details?)` (positional)
-- Target: `toAppError({ errorType, errorMessage, details? })` (object, matching Nordclaw)
+- Target: `toAppError({ errorType, errorMessage, details? })` (object, matching Aikami)
 - Update all callers in Aikami codebase
 
 **`packages/shared/constants`** — Add project & emulator constants
@@ -64,7 +64,7 @@ Key structural elements:
 - Remove hardcoded emulator config (now comes from validated env)
 - Use `getProjectId()` from environment instead of `PUBLIC_FIREBASE_PROJECT_ID` directly
 - Eagerly kick off App Check via `void import('./app_check.ts')`
-- Match Nordclaw singleton pattern exactly
+- Match Aikami singleton pattern exactly
 
 **Rewrite** `packages/frontend/configs/src/lib/firestore.ts`
 - Replace `getFirestore()` → `initializeFirestore(app, options)`
@@ -87,7 +87,7 @@ Key structural elements:
 - `storage.ts` — `getStorage(app)`, connect emulator, export `storage`
 
 **Update** `packages/frontend/configs/src/index.ts`
-- Only re-export `environment.ts` (matching Nordclaw)
+- Only re-export `environment.ts` (matching Aikami)
 - Services are imported directly by consuming code
 
 **Update** `packages/frontend/configs/package.json`
@@ -152,7 +152,7 @@ Key structural elements:
 **And** Firebase service singletons must be imported from their specific paths (e.g., `@aikami/frontend-configs/auth`)
 
 **Test Hooks**:
-- Unit: Verify barrel export list matches Nordclaw
+- Unit: Verify barrel export list matches Aikami
 - CI: `moon run frontend-configs:typecheck` passes
 
 **Watch Points**:
@@ -201,13 +201,13 @@ Key structural elements:
 
 5. **Verification**:
    - `moon run frontend-configs:typecheck` passes
-   - Visual diff confirmation that each file matches Nordclaw pattern
+   - Visual diff confirmation that each file matches Aikami pattern
 
 ## Edge Cases & Gotchas
 
 - **`toAppError` signature change**: Existing callers in Aikami that use positional args must be updated. The `environment.ts` already uses the object form; `app.ts` uses positional and must be updated as part of the rewrite.
 - **Circular dependency on `app_check.ts`**: The App Check module imports `app` from `app.ts`, and `app.ts` dynamically imports `app_check.ts`. This must use `void import('./app_check.ts')` (not a synchronous `import`) to avoid the cycle.
 - **`PUBLIC_MODE` vs `PUBLIC_FLAVOR`**: All references to `PUBLIC_FLAVOR` in env files and consuming code must be migrated to `PUBLIC_MODE`. This contract covers the configs module; downstream migration is tracked separately.
-- **`MODE_PROJECT_MAP` for Aikami**: Uses `aikami-dev`, `aikami-prod`, `demo-aikami-emulator` — project-specific, not copied verbatim from Nordclaw.
-- **`frontendAppIds` for Aikami**: `['docs', 'gamejs', 'landing_page', 'pwa']` — matches actual Aikami apps, not Nordclaw's app list.
-- **Emulator port consistency**: All ports must match what the Firebase emulator suite actually uses (defined in `firebase.json`). These are standardized and identical to Nordclaw.
+- **`MODE_PROJECT_MAP` for Aikami**: Uses `aikami-dev`, `aikami-prod`, `demo-aikami-emulator` — project-specific, not copied verbatim from Aikami.
+- **`frontendAppIds` for Aikami**: `['docs', 'gamejs', 'landing_page', 'pwa']` — matches actual Aikami apps, not Aikami's app list.
+- **Emulator port consistency**: All ports must match what the Firebase emulator suite actually uses (defined in `firebase.json`). These are standardized and identical to Aikami.

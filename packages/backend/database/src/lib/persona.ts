@@ -1,7 +1,7 @@
 import { PersonaCreateSchema, PersonaSchema, PersonaUpdateSchema } from '@aikami/schemas';
 import type { RepositoryType } from '@aikami/types';
 import { getPersonaDocumentPath, getPersonasCollectionPath } from '@aikami/utils';
-import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts';
+import { BackendRepository, type BackendRepositoryInterface } from './base_backend_repository.ts';
 
 export type PersonaRepositoryType = RepositoryType<
   typeof PersonaSchema,

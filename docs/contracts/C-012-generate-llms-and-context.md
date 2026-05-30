@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw `llms.txt` + `CONTEXT.md` generation pattern |
+| **Source** | Aikami `llms.txt` + `CONTEXT.md` generation pattern |
 | **Target** | `/aikami/knowledge/llms.txt` + `knowledge/CONTEXT.md` |
 | **Priority** | P2 — AI tooling QoL; not blocking development |
 | **Dependencies** | C-002 (knowledge dir), C-007 (scripts project) |
@@ -15,14 +15,14 @@ Generate `knowledge/llms.txt` (AI-first file index) and `knowledge/CONTEXT.md` (
 
 ## Design Reference
 
-**Nordclaw `llms.txt`** structure:
+**Aikami `llms.txt`** structure:
 - Generated file (run `bun run scripts/src/lib/generate_llms_txt.ts`)
 - Lists every file in `knowledge/` grouped by category
 - Quick Start section (top 5 files to read first)
 - "How to Use" section for AI tools
 - "Adding files" instructions for humans
 
-**Nordclaw `CONTEXT.md`** structure:
+**Aikami `CONTEXT.md`** structure:
 - What We're Building (1 paragraph)
 - Tech Stack (one-line)
 - Current Phase
@@ -85,10 +85,10 @@ Generate `knowledge/llms.txt` (AI-first file index) and `knowledge/CONTEXT.md` (
 
 ## Implementation Notes
 
-1. **generate_llms_txt.ts**: Copy from nordclaw `scripts/src/lib/generate_llms_txt.ts`, adapt paths
+1. **generate_llms_txt.ts**: Copy from aikami `scripts/src/lib/generate_llms_txt.ts`, adapt paths
 2. **Run on post-merge hook**: Add `bun run knowledge:generate` to `.moon/hooks/post-merge` so llms.txt is always current
 3. **CONTEXT.md is hand-written**: Unlike llms.txt which is auto-generated, CONTEXT.md is manually maintained (update when project scope, phase, or conventions change)
-4. **Template for CONTEXT.md**: Use nordclaw's `CONTEXT.md` as a structural template, fill with aikami-specific content
+4. **Template for CONTEXT.md**: Use aikami's `CONTEXT.md` as a structural template, fill with aikami-specific content
 5. **Active Contracts section**: List all C-0XX contracts with their current status — update as contracts are completed
 6. **Known Limitations**: Document current aikami limitations (auth setup, Firebase config, test coverage gaps)
 

@@ -21,7 +21,7 @@ import {
   toUserRole,
 } from '@aikami/utils';
 import { logger } from '$logger';
-import { BackendRepository, type BackendRepositoryInterface } from './base-backend-repository.ts';
+import { BackendRepository, type BackendRepositoryInterface } from './base_backend_repository.ts';
 import { deleteQuery } from './utils.ts';
 
 export type UserRepositoryType = RepositoryType<

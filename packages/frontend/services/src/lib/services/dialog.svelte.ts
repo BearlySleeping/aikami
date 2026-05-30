@@ -2,7 +2,7 @@ import { BaseClass } from '@aikami/utils';
 import type {
   BaseFrontendClassInterface,
   BaseFrontendClassOptions,
-} from '../base/base-frontend-class.ts';
+} from '../base/base_frontend_class.ts';
 import type {
   AppLoadingData,
   ConditionalSnackbarData,

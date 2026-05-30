@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw knowledge setup — `knowledge/` |
+| **Source** | Aikami knowledge setup — `knowledge/` |
 | **Target** | `/knowledge/` — aikami monorepo root |
 | **Priority** | P0 — Required before any other contract can reference knowledge docs |
 | **Dependencies** | C-001 (clean root first) |
@@ -11,11 +11,11 @@
 
 ## Overview
 
-Establish a `knowledge/` directory at the monorepo root, following the nordclaw knowledge structure. This becomes the single source of truth for architecture docs, feature contracts, decision records, guides, and intro docs. All AI tools (pi, and any future tools) read from this directory.
+Establish a `knowledge/` directory at the monorepo root, following the aikami knowledge structure. This becomes the single source of truth for architecture docs, feature contracts, decision records, guides, and intro docs. All AI tools (pi, and any future tools) read from this directory.
 
 ## Design Reference
 
-**Nordclaw knowledge structure** (`/home/sonny/Development/Projects/passion/nordclaw/knowledge/`):
+**Aikami knowledge structure** (`/home/sonny/Development/Projects/passion/aikami/knowledge/`):
 
 ```
 knowledge/
@@ -46,7 +46,7 @@ knowledge/
 - Unit: `test -d knowledge/architecture && test -d knowledge/contracts && test -d knowledge/decisions && test -d knowledge/guides && test -d knowledge/intro`
 
 ### AC-2: TEMPLATE.md Copied
-**Given** nordclaw has `knowledge/contracts/TEMPLATE.md`
+**Given** aikami has `knowledge/contracts/TEMPLATE.md`
 **When** this contract is implemented
 **Then** aikami has `knowledge/contracts/TEMPLATE.md` with the same structure (adapted for aikami naming)
 
@@ -81,11 +81,11 @@ knowledge/
 
 ## Implementation Notes
 
-1. **Copy from nordclaw**: Copy `knowledge/contracts/TEMPLATE.md`, `knowledge/.gitignore` directly from nordclaw
+1. **Copy from aikami**: Copy `knowledge/contracts/TEMPLATE.md`, `knowledge/.gitignore` directly from aikami
 2. **Adapt CONTEXT.md**: Write fresh for aikami — reference apps/frontend/pwa, packages/shared/*, Firebase, SvelteKit 2
 3. **Skip lovable/**: Aikami doesn't use Lovable — skip this subdirectory unless needed later
-4. **scripts/ subdir**: Copy `generate_llms_txt.ts` from nordclaw knowledge/scripts, adapt for aikami paths
-5. **Do NOT copy nordclaw-specific docs**: Only copy structural templates and meta-docs, not feature-specific content
+4. **scripts/ subdir**: Copy `generate_llms_txt.ts` from aikami knowledge/scripts, adapt for aikami paths
+5. **Do NOT copy aikami-specific docs**: Only copy structural templates and meta-docs, not feature-specific content
 
 ## Edge Cases & Gotchas
 

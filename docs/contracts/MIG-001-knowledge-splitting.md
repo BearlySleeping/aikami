@@ -2,20 +2,20 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw reference: `.context/` + `docs/` split pattern |
+| **Source** | Aikami reference: `.context/` + `docs/` split pattern |
 | **Target** | Migrate `knowledge/` to `.context/` (AI instructions) + `docs/` (human-readable) |
-| **Priority** | P1 — structural refactoring, unblocks nordclaw alignment |
+| **Priority** | P1 — structural refactoring, unblocks aikami alignment |
 | **Dependencies** | None (standalone migration) |
 | **Status** | in_progress |
 | **Contract version** | 1.0.0 |
 
 ## Overview
 
-The current `knowledge/` directory mixes AI agent instructions with human-readable documentation. The Nordclaw pattern splits these into `.context/` (AI-only) and `docs/` (human-readable). This contract defines the exact file relocation mapping, updates all code references, and deletes the legacy `knowledge/` directory.
+The current `knowledge/` directory mixes AI agent instructions with human-readable documentation. The Aikami pattern splits these into `.context/` (AI-only) and `docs/` (human-readable). This contract defines the exact file relocation mapping, updates all code references, and deletes the legacy `knowledge/` directory.
 
 ## Design Reference
 
-**Nordclaw pattern**: `.context/` holds AI briefing files (`CONTEXT.md`, `llms.txt`, `index.md`). `docs/` holds all human-readable documentation (architecture, contracts, decisions, design, guides, intro, scripts, tickets).
+**Aikami pattern**: `.context/` holds AI briefing files (`CONTEXT.md`, `llms.txt`, `index.md`). `docs/` holds all human-readable documentation (architecture, contracts, decisions, design, guides, intro, scripts, tickets).
 
 Key structural elements:
 - `.context/CONTEXT.md` — 2-page AI briefing (read first by any AI tool)

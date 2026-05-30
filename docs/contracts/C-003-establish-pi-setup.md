@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw `.pi/` setup |
+| **Source** | Aikami `.pi/` setup |
 | **Target** | `/aikami/.pi/` |
 | **Priority** | P0 — Required for pi agent to work with project-specific tools and skills |
 | **Dependencies** | C-001 (clean root), C-002 (knowledge dir for contract-implementer skill) |
@@ -11,11 +11,11 @@
 
 ## Overview
 
-Establish the `.pi/` directory at the monorepo root with project-specific extensions, skills, agents, and prompts. Copy the foundational setup from nordclaw and adapt for aikami's stack (SvelteKit PWA, Firebase, Bun, moon). The `.pi/` directory extends the global `~/.pi/` setup with project-specific tooling.
+Establish the `.pi/` directory at the monorepo root with project-specific extensions, skills, agents, and prompts. Copy the foundational setup from aikami and adapt for aikami's stack (SvelteKit PWA, Firebase, Bun, moon). The `.pi/` directory extends the global `~/.pi/` setup with project-specific tooling.
 
 ## Design Reference
 
-**Nordclaw `.pi/` structure**:
+**Aikami `.pi/` structure**:
 
 ```
 .pi/
@@ -86,7 +86,7 @@ Establish the `.pi/` directory at the monorepo root with project-specific extens
 - Unit: `test -f .pi/extensions/log-viewer.ts`
 
 **Watch Points**:
-- Skip nordclaw-specific extensions: `zeroclaw-orchestrator.ts`, `deployment-orchestrator.ts`, `genkit-manager.ts`, `tmux-orchestrator.ts`, `image-guard.ts` (aikami doesn't use Genkit, Zeroclaw, or tmux orchestration)
+- Skip aikami-specific extensions: `zeroclaw-orchestrator.ts`, `deployment-orchestrator.ts`, `genkit-manager.ts`, `tmux-orchestrator.ts`, `image-guard.ts` (aikami doesn't use Genkit, Zeroclaw, or tmux orchestration)
 - Add only extensions that aikami actually needs
 
 ### AC-5: .pi .gitignore
@@ -96,13 +96,13 @@ Establish the `.pi/` directory at the monorepo root with project-specific extens
 
 ## Implementation Notes
 
-1. **Copy from nordclaw**: `settings.json`, `mcp.json`, `.gitignore`, `README.md`, `tsconfig.json` can be copied directly
+1. **Copy from aikami**: `settings.json`, `mcp.json`, `.gitignore`, `README.md`, `tsconfig.json` can be copied directly
 2. **Adapt extensions path**: settings.json paths should reference `./.pi/extensions`, `./.pi/skills`, `./.pi/prompts`
-3. **package.json**: Copy from nordclaw, keep only the dependencies needed by the extensions we're keeping
+3. **package.json**: Copy from aikami, keep only the dependencies needed by the extensions we're keeping
 4. **Extensions to keep**: `moon-integration.ts`, `firebase-tools.ts`, `log-viewer.ts`
 5. **Extensions to skip**: `deployment-orchestrator.ts`, `genkit-manager.ts`, `image-guard.ts`, `tmux-orchestrator.ts`, `zeroclaw-orchestrator.ts`
 6. **Skills**: Handled by contract C-004
-7. **Prompts**: Copy `contract.md`, `dev.md`, `pre-commit.md`, `handoff.md` — adapt for aikami naming conventions (e.g., `@aikami/` package scope vs `@nordclaw/`)
+7. **Prompts**: Copy `contract.md`, `dev.md`, `pre-commit.md`, `handoff.md` — adapt for aikami naming conventions (e.g., `@aikami/` package scope vs `@aikami/`)
 
 ## Edge Cases & Gotchas
 

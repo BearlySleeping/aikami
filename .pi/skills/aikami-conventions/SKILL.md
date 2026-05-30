@@ -239,7 +239,57 @@ aikami/
     scripts/               — CI, setup, ops scripts
 ```
 
-## 10. Moon Commands
+## 10. Direnv Development Environment
+
+The project uses direnv for deterministic, zero-setup development. `.envrc` sources Nix flakes, resolves environment mode, loads secrets from GCP Secret Manager, and provides shell aliases. All pi extensions inherit this environment.
+
+### Environment Variables (Always Available)
+
+| Variable | Source | Purpose |
+|----------|--------|---------|
+| `AIKAMI_MODE` | `.env.local` or default | emulator / development / production |
+| `AIKAMI_PROJECT_ID` | Resolved from mode | GCP project id for current mode |
+| `AIKAMI_IS_EMULATOR` | Resolved from mode | "1" = local emulators, "0" = live GCP |
+| `AIKAMI_NIX_READY` | flake.nix shellHook | "1" when Nix devShell loaded |
+| `GEMINI_API_KEY` | GSM or mock | Gemini API key for AI features |
+| `PLAYWRIGHT_BROWSERS_PATH` | Nix flake | Playwright browsers from Nix |
+
+### Mode Switching
+
+```bash
+# Switch mode (creates/updates .env.local)
+aikami_switch emulator     # Local development (Firebase emulators)
+aikami_switch development  # Staging (live GCP aikami-dev)
+aikami_switch production   # Production (live GCP aikami-prod)
+
+# Or use the pi extension tool
+direnv_switch_mode emulator
+```
+
+### Adding Tools to the Environment
+
+When the LLM needs a CLI tool not in the Nix devShell:
+
+```bash
+# Via pi extension (preferred)
+direnv_add_package python3   # Adds to flake.nix, triggers direnv reload
+direnv_add_package ffmpeg    # Same for any nixpkgs package
+
+# After reload, the package is available in the shell and pi.exec()
+```
+
+### Secrets Management
+
+```bash
+# Add a new secret key to the managed list
+direnv_add_secret OPENAI_API_KEY
+
+# Then create it in GCP Secret Manager and refresh
+# (Only for development/production modes)
+aikami_secrets_refresh
+```
+
+## 11. Moon Commands
 
 Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected()` before running tests.
 
@@ -252,7 +302,7 @@ bun moon run :test                 # Run all tests
 bun moon run :validate             # Full CI validation
 ```
 
-## 11. Architectural Boundary Pattern
+## 12. Architectural Boundary Pattern
 
 The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit PWA through a strict architectural boundary. This decoupling prevents the 60fps game loop from triggering Svelte 5 reactivity and crashing the browser microtask queue.
 

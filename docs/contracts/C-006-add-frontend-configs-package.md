@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw `packages/frontend/configs/` |
+| **Source** | Aikami `packages/frontend/configs/` |
 | **Target** | `/aikami/packages/frontend/configs/` |
 | **Priority** | P1 — Needed for frontend config management pattern |
 | **Dependencies** | C-005 (packages/shared/ restructured) |
@@ -11,14 +11,14 @@
 
 ## Overview
 
-Create a `packages/frontend/configs/` package for shared frontend configuration — environment schemas, Firebase config, app constants, and feature flags. This follows the nordclaw pattern where frontend configs are separated from backend configs. Currently aikami has `packages/backend/configs/` but no dedicated frontend configs package.
+Create a `packages/frontend/configs/` package for shared frontend configuration — environment schemas, Firebase config, app constants, and feature flags. This follows the aikami pattern where frontend configs are separated from backend configs. Currently aikami has `packages/backend/configs/` but no dedicated frontend configs package.
 
 ## Design Reference
 
-**Nordclaw `packages/frontend/configs/`** structure:
+**Aikami `packages/frontend/configs/`** structure:
 - `moon.yml` — project config with dependsOn: constants, schemas, types
 - `tsconfig.json` — extends frontend tsconfig, paths to shared packages
-- `package.json` — `@nordclaw/frontend-configs`
+- `package.json` — `@aikami/frontend-configs`
 - `src/` — config source files
 - Extends `config/tsconfig/tsconfig.frontend.json`
 
@@ -49,7 +49,7 @@ packages/frontend/configs/
 - Unit: `test -f packages/frontend/configs/tsconfig.json`
 - Unit: `test -f packages/frontend/configs/package.json`
 
-### AC-2: moon.yml Follows Nordclaw Pattern
+### AC-2: moon.yml Follows Aikami Pattern
 **Given** the moon.yml file
 **When** moon syncs the project
 **Then** the project is registered with correct dependsOn, layer, tags
@@ -86,15 +86,15 @@ packages/frontend/configs/
 
 ## Implementation Notes
 
-1. **Copy moon.yml structure** from nordclaw's `packages/frontend/configs/moon.yml`
-2. **Copy tsconfig.json structure** from nordclaw, adapting paths for aikami (`@aikami/` instead of `@nordclaw/`)
+1. **Copy moon.yml structure** from aikami's `packages/frontend/configs/moon.yml`
+2. **Copy tsconfig.json structure** from aikami, adapting paths for aikami (`@aikami/` instead of `@aikami/`)
 3. **package.json**: Use `"name": "@aikami/frontend-configs"`, standard scripts (typecheck, lint, format, fix, test)
 4. **src/ contents**: Create initial files — env.schema.ts (Zod), app.config.ts, firebase.config.ts, feature-flags.ts
-5. **config/tsconfig/tsconfig.frontend.json**: May need to create this base config if aikami doesn't have one. Copy from nordclaw's `config/tsconfig/tsconfig.frontend.json`
+5. **config/tsconfig/tsconfig.frontend.json**: May need to create this base config if aikami doesn't have one. Copy from aikami's `config/tsconfig/tsconfig.frontend.json`
 6. **Root package.json workspaces**: Already covers `"packages/frontend/*"` — no change needed
 
 ## Edge Cases & Gotchas
 
 - **Existing backend/configs**: Do NOT modify `packages/backend/configs/` — frontend configs is a separate concern
 - **Firebase config**: If aikami currently has Firebase config scattered across the PWA, consolidate into this package
-- **config/tsconfig/ directory**: Verify `tsconfig.frontend.json` and `tsconfig.base.json` exist in `config/tsconfig/` — create if missing (copy from nordclaw)
+- **config/tsconfig/ directory**: Verify `tsconfig.frontend.json` and `tsconfig.base.json` exist in `config/tsconfig/` — create if missing (copy from aikami)

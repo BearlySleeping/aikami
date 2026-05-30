@@ -8,13 +8,13 @@ import type {
 
 import { createApiHandler, toAppError } from '@aikami/utils';
 
-import { checkUniqueEmail } from './lib/check-unique-email.ts';
-import { confirmTermsAndService } from './lib/confirm-terms-and-service.ts';
-import { createCustomFirebaseSignInToken } from './lib/create-custom-firebase-token.ts';
-import { deleteAccount } from './lib/delete-account.ts';
+import { checkUniqueEmail } from './lib/check_unique_email.ts';
+import { confirmTermsAndService } from './lib/confirm_terms_and_service.ts';
+import { createCustomFirebaseSignInToken } from './lib/create_custom_firebase_token.ts';
+import { deleteAccount } from './lib/delete_account.ts';
 import { register } from './lib/register.ts';
-import { sendResetPassword } from './lib/send-reset-password.ts';
-import { updateEmail } from './lib/update-email.ts';
+import { sendResetPassword } from './lib/send_reset_password.ts';
+import { updateEmail } from './lib/update_email.ts';
 
 const apiHandler = createApiHandler<AuthApiEvents, UserClaims | undefined>({
   checkUniqueEmail,

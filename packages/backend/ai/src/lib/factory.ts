@@ -1,7 +1,7 @@
 // packages/backend/ai/src/lib/factory.ts
-import type { AiServiceInterface } from './ai-service-interface.ts';
-import { GeminiService } from './gemini-service.ts';
-import { OpenAiService } from './openai-service.ts';
+import type { AiServiceInterface } from './ai_service_interface.ts';
+import { GeminiService } from './gemini_service.ts';
+import { OpenAiService } from './openai_service.ts';
 import type { CreateAiServiceOptions } from './types.ts';
 
 /**

@@ -2,20 +2,20 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Nordclaw reference: `apps/backend/firebase/`, `packages/frontend/dataconnect/` |
+| **Source** | Aikami reference: `apps/backend/firebase/`, `packages/frontend/dataconnect/` |
 | **Target** | `apps/backend/firebase/`, `packages/frontend/dataconnect/` — restructure backend + scaffold frontend DataConnect package |
-| **Priority** | P0 — structural alignment with Nordclaw; unblocks future DataConnect SDK work |
+| **Priority** | P0 — structural alignment with Aikami; unblocks future DataConnect SDK work |
 | **Dependencies** | MIG-001 (Knowledge Splitting) |
 | **Status** | not_started |
 | **Contract version** | 1.0.0 |
 
 ## Overview
 
-Restructure the Aikami backend so its directory layout and workspace naming identically match the Nordclaw standard. The `apps/backend/functions/` workspace is renamed to `apps/backend/firebase/` and Data Connect is nested inside it (`apps/backend/firebase/dataconnect/`). A new frontend DataConnect SDK package (`packages/frontend/dataconnect/`) wraps the generated Firebase Data Connect queries so SvelteKit ViewModels don't manage connection state.
+Restructure the Aikami backend so its directory layout and workspace naming identically match the Aikami standard. The `apps/backend/functions/` workspace is renamed to `apps/backend/firebase/` and Data Connect is nested inside it (`apps/backend/firebase/dataconnect/`). A new frontend DataConnect SDK package (`packages/frontend/dataconnect/`) wraps the generated Firebase Data Connect queries so SvelteKit ViewModels don't manage connection state.
 
 ## Design Reference
 
-**Nordclaw pattern**: `apps/backend/firebase/` (Cloud Functions + DataConnect) and `packages/frontend/dataconnect/` (generated SDK wrappers)
+**Aikami pattern**: `apps/backend/firebase/` (Cloud Functions + DataConnect) and `packages/frontend/dataconnect/` (generated SDK wrappers)
 
 Key structural elements:
 - `apps/backend/firebase/` — the sole Firebase workspace; replaces `apps/backend/functions/`
@@ -29,7 +29,7 @@ Key structural elements:
 
 ### Directory Mapping
 
-| Old (Aikami) | New (Aikami, matching Nordclaw) |
+| Old (Aikami) | New (Aikami, matching Aikami) |
 |---|---|
 | `apps/backend/functions/` | `apps/backend/firebase/` |
 | `apps/backend/dataconnect/` | `apps/backend/firebase/dataconnect/` |
@@ -47,7 +47,7 @@ Key structural elements:
 |---|---|
 | `.moon/workspace.yml` | `functions: "apps/backend/functions"` → `firebase: "apps/backend/firebase"`; add `frontend-dataconnect: "packages/frontend/dataconnect"` |
 | `biome.json` | `apps/backend/functions/**` → `apps/backend/firebase/**`; add `packages/frontend/dataconnect/**` |
-| `apps/backend/firebase/package.json` | Rename package; update to Nordclaw-style scripts and dependencies |
+| `apps/backend/firebase/package.json` | Rename package; update to Aikami-style scripts and dependencies |
 | `apps/backend/firebase/moon.yml` | Rename project, update tags, add tasks |
 | `apps/backend/firebase/tsconfig.json` | Update path aliases for new workspace name |
 | `firebase.json` (root, new) | `dataconnect.source: "apps/backend/firebase/dataconnect"` |
@@ -57,7 +57,7 @@ Key structural elements:
 
 ## Acceptance Criteria
 
-### AC-1: Backend Directory Matches Nordclaw Structure
+### AC-1: Backend Directory Matches Aikami Structure
 **Given** the repo is checked out at HEAD
 **When** I inspect `apps/backend/`
 **Then** `apps/backend/functions/` does NOT exist; `apps/backend/firebase/` DOES exist with all original functions source files plus `dataconnect/` subdirectory containing schema, connector, and dataconnect.yaml
@@ -69,7 +69,7 @@ Key structural elements:
 
 **Watch Points**:
 - The `dist/` directory inside the old `functions/` contains cached emulator state; exclude from move or clean first
-- The `dataconnect/` subdirectory keeps its existing content (Aikami schema, not Nordclaw's)
+- The `dataconnect/` subdirectory keeps its existing content (Aikami schema, not Aikami's)
 
 ### AC-2: Root firebase.json Points to New DataConnect Path
 **Given** the repo root
@@ -94,7 +94,7 @@ Key structural elements:
 - CI: `moon run frontend-dataconnect:typecheck` passes
 
 **Watch Points**:
-- The generated SDK must use Aikami's connector id (`aikami-connector`) and service id (`aikami-db`), not Nordclaw's
+- The generated SDK must use Aikami's connector id (`aikami-connector`) and service id (`aikami-db`), not Aikami's
 - The `@aikami/frontend/configs` path alias must exist in tsconfig for the `getDataConnect` import
 
 ### AC-4: All Import Paths and Config References Are Updated
@@ -175,5 +175,5 @@ Key structural elements:
 - **dist/ directory in old functions**: The `dist/` dir contains large emulator state files. Use `mv` (which is fast and atomic) rather than copy.
 - **node_modules**: The `functions` directory has its own `node_modules`. After `bun install` at root, the lockfile needs updating.
 - **moon cache**: After renaming a project, moon's cache may be invalid. Run `bunx moon clean` or delete `.moon/cache` if typecheck fails with stale errors.
-- **Generated SDK connector config**: Must use `connector: 'aikami-connector'` and `service: 'aikami-db'` to match Aikami's dataconnect.yaml, not Nordclaw's `audit-logs`.
+- **Generated SDK connector config**: Must use `connector: 'aikami-connector'` and `service: 'aikami-db'` to match Aikami's dataconnect.yaml, not Aikami's `audit-logs`.
 - **frontend-configs path alias**: The new `tsconfig.frontend.json` must include `@aikami/frontend/configs` for the dataconnect package to resolve the `getDataConnect` import.

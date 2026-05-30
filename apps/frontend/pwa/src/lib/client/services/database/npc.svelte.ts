@@ -8,8 +8,8 @@ import {
 import type { NpcCreateData, NpcData } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { authService, storageService } from '$services';
-import { downloadFromUrl } from '../character/character-downloader.ts';
-import { importFromJson, importFromPng } from '../character/character-importer.ts';
+import { downloadFromUrl } from '../character/character_downloader.ts';
+import { importFromJson, importFromPng } from '../character/character_importer.ts';
 
 export type NpcServiceOptions = BaseFrontendClassOptions;
 
