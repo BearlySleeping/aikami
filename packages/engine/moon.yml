@@ -17,5 +17,16 @@ project:
 dependsOn:
   - 'frontend-api-core'
 
-toolchains:
-  javascript: false
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+
+tasks:
+  test:
+    command: 'bun test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'

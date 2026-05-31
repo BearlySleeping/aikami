@@ -70,7 +70,13 @@ const updateContextSystem = (options: {
   // with an amortized O(1) lookup bounded by the constant cell count.
   const candidateEids = spatialGrid.queryNeighborhood(playerPos.x, playerPos.y);
 
+  // Track which candidates we actually saw — used for the far-entity
+  // cleanup pass below.
+  const seenCandidates = new Set<number>();
+
   for (const eid of candidateEids) {
+    seenCandidates.add(eid);
+
     const npcDialog = getComponent(world, eid, NPCDialog) as NPCDialogData | undefined;
     if (!npcDialog) {
       continue;
@@ -102,12 +108,30 @@ const updateContextSystem = (options: {
         },
       });
     } else if (!isInContext && entitiesInContext.has(eid)) {
-      // Player just left context range
+      // Player just left context range (entity is in 3×3 neighborhood
+      // but outside the distance threshold).
       entitiesInContext.delete(eid);
       bridge.emit({
         type: 'CONTEXT_EXITED',
         entityId: npcDialog.npcId,
       });
+    }
+  }
+
+  // Cleanup pass: entities that were previously in-context but are now
+  // outside the 3×3 cell neighborhood. Since contextRadius ≤ cellSize,
+  // any entity outside the 9-cell window is guaranteed to be beyond the
+  // context radius and should be treated as having exited.
+  for (const eid of entitiesInContext) {
+    if (!seenCandidates.has(eid)) {
+      const npcDialog = getComponent(world, eid, NPCDialog) as NPCDialogData | undefined;
+      if (npcDialog) {
+        bridge.emit({
+          type: 'CONTEXT_EXITED',
+          entityId: npcDialog.npcId,
+        });
+      }
+      entitiesInContext.delete(eid);
     }
   }
 };

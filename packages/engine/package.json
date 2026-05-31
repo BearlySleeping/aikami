@@ -5,6 +5,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "fix": "biome check --write ."
   },
   "dependencies": {

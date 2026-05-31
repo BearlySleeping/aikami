@@ -10,6 +10,7 @@ import {
 import type { EngineBridge } from './engine_bridge.ts';
 import type { PixiAppOptions } from './pixi_app.ts';
 import { createPixiApp } from './pixi_app.ts';
+import { dirtyCheckAppearance } from './systems/render_system.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { Direction, GameEvent } from './types.ts';
@@ -350,6 +351,10 @@ class GameWorld {
     const events = message.events as GameEvent[] | undefined;
     if (events) {
       for (const gameEvent of events) {
+        // Intercept APPEARANCE_CHANGED for composited sprite invalidation
+        if (gameEvent.type === 'APPEARANCE_CHANGED') {
+          dirtyCheckAppearance(gameEvent.eid, gameEvent.layerIds);
+        }
         this.bridge.emit(gameEvent);
       }
     }
@@ -426,6 +431,20 @@ class GameWorld {
         command: {
           type: 'SPAWN_NPC',
           npcData: (cmd as { npcData: unknown }).npcData,
+        },
+      });
+    });
+
+    // Forward TRIGGER_MACRO commands
+    bridgeWithCommands.onCommand('TRIGGER_MACRO', (cmd: unknown) => {
+      const macroCmd = cmd as { macro: string; args: string[]; entityId?: number };
+      this.postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'TRIGGER_MACRO',
+          macro: macroCmd.macro,
+          args: macroCmd.args,
+          entityId: macroCmd.entityId,
         },
       });
     });
