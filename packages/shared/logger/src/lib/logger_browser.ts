@@ -1,5 +1,5 @@
 import { LogLevelPriority } from '@aikami/constants';
-import type { LogEntry, LoggerInterface, TimerInterface, LogContext } from '@aikami/types';
+import type { LogContext, LogEntry, LoggerInterface, TimerInterface } from '@aikami/types';
 import { BaseLoggerService } from './base.ts';
 import { Timer } from './timer.ts';
 
@@ -94,23 +94,23 @@ class FrontendLoggerService extends BaseLoggerService implements FrontendLoggerI
 
     const payload = { logs: this._batch, context: this._context };
     this._batch = [];
-
-    fetch('/api/logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    })
-      .then(() => {
-        // success
-      })
-      .catch(() => {
-        // On failure, restore the batch (capped to max size).
-        this._batch = payload.logs.concat(this._batch).slice(-BATCH_MAX_SIZE);
-      })
-      .finally(() => {
-        this._isFlushing = false;
-      });
+    // TODO implment logging
+    // fetch('/api/logs', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify(payload),
+    //   keepalive: true,
+    // })
+    //   .then(() => {
+    //     // success
+    //   })
+    //   .catch(() => {
+    //     // On failure, restore the batch (capped to max size).
+    //     this._batch = payload.logs.concat(this._batch).slice(-BATCH_MAX_SIZE);
+    //   })
+    //   .finally(() => {
+    //     this._isFlushing = false;
+    //   });
   }
 }
 
