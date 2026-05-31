@@ -1,8 +1,8 @@
 import { getFirestore } from '@aikami/backend/configs/database';
-import { getEnvironmentValue } from '@aikami/backend/configs/environment';
+import { backendEnv } from '@aikami/backend/configs/environment';
 import { documentId, serverTimestamp } from '@aikami/backend/configs/firestore';
 import { getBatch } from '@aikami/backend/utils/batch';
-import type { GetQueryOptions, ParseLevel, QueryFilter, RepositoryType } from '@aikami/types';
+import type { GetQueryOptions, QueryFilter, RepositoryType } from '@aikami/types';
 import {
   BaseRepository,
   type BaseRepositoryInterface,
@@ -91,8 +91,7 @@ export class BackendRepository<T extends RepositoryType>
   constructor(options: BaseRepositoryOptions<T>) {
     super({
       ...options,
-      parseLevel:
-        options.parseLevel ?? (getEnvironmentValue('PARSE_LEVEL', true) as ParseLevel | undefined),
+      parseLevel: options.parseLevel ?? backendEnv.PARSE_LEVEL,
     });
   }
 
@@ -149,12 +148,11 @@ export class BackendRepository<T extends RepositoryType>
   }: {
     getCollectionPathArgument: T['getCollectionPathArgument'];
     createData: Omit<z.infer<T['createData']>, 'createdAt'>;
-	  }): Promise<string> {
+  }): Promise<string> {
     this.debug('addDocument', createData);
-    
+
     const collectionReference =
       await this.getCollectionReference<z.infer<T['createData']>>(getCollectionPathArgument);
-
 
     const data = await this.parse('createData', {
       createdAt: serverTimestamp(),

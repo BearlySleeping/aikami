@@ -2,8 +2,8 @@
 /// <reference lib="webworker" />
 import type { World } from 'bitecs';
 import { addComponent, createWorld, getComponent, query, set } from 'bitecs';
-import { registerNPCDialogObservers } from '../components/npc_dialog.ts';
-import { NPCDialog } from '../components/npc_dialog.ts';
+import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
+import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerSpriteObservers } from '../components/sprite.ts';
 import type { VelocityData } from '../components/velocity.ts';
@@ -13,14 +13,12 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer } from '../entities/create_player.ts';
 import { createTestSprite } from '../entities/create_test_sprite.ts';
+import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
+import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
 import type { Direction, GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
-import type { NPCDialogData } from '../components/npc_dialog.ts';
-import type { PositionData } from '../components/position.ts';
-import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
-import { MAX_ENTITIES } from '../config/memory_config.ts';
 
 // ---------------------------------------------------------------------------
 // Worker: owns the full bitECS world and system ticking
@@ -110,7 +108,7 @@ const workerBridge: EngineBridge = {
   executeCommand(_cmd: string, _args: string[]): void {
     // No-op: commands are handled by the main thread
   },
-  triggerMacro(_macro: string, _args: string[]): void {
+  triggerMacro(_macro: string, _args: string[], _entityId?: number): void {
     // No-op: macros are handled by the main thread
   },
 };
@@ -185,9 +183,16 @@ const handleBridgeCommand = (command: GameCommand): void => {
     case 'LOAD_SCENE':
     case 'PAUSE_GAME':
     case 'RESUME_GAME':
-    case 'EXECUTE_COMMAND':
-    case 'TRIGGER_MACRO': {
+    case 'EXECUTE_COMMAND': {
       // These commands are not processed by the worker in the current MVP.
+      break;
+    }
+    case 'TRIGGER_MACRO': {
+      enqueueMacro({
+        name: command.macro,
+        args: command.args,
+        entityId: command.entityId ?? 0,
+      });
       break;
     }
     default: {
@@ -273,6 +278,7 @@ const tickLoop = (): void => {
   }
 
   // Run game systems
+  updateExpressions(world, workerBridge);
   updateMovement(world, deltaMs);
   updateDialogTriggers(world, playerEntityId, workerBridge);
 
@@ -333,11 +339,7 @@ const tickLoop = (): void => {
  * @param grid - The spatial hash grid to populate.
  * @param buffer - Pre-allocated Float32Array for interleaved x/y positions.
  */
-const populateSpatialGrid = (
-  w: World,
-  grid: SpatialHashGrid,
-  buffer: Float32Array,
-): void => {
+const populateSpatialGrid = (w: World, grid: SpatialHashGrid, buffer: Float32Array): void => {
   const entityIds: number[] = [];
 
   for (const eid of query(w, CONTEXT_QUERY_TERMS)) {
