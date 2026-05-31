@@ -1,16 +1,23 @@
 // scripts/src/lib/test_blackbox/dev_server_manager.ts
 // Start dev servers for browser-based test suites.
 
-import { type ChildProcess, spawn } from 'node:child_process';
 import { resolve } from 'node:path';
+import { PWA_EMULATOR_PORT } from '@aikami/constants';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../..');
+const GAME_PORT = 5174;
 
-const PWA_PORT = 5173;
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
-const running = new Map<string, ChildProcess>();
+const DEV_SERVER_CONFIG = {
+  pwa: { cwd: 'apps/frontend/pwa', port: PWA_EMULATOR_PORT },
+  game: { cwd: 'apps/frontend/game', port: GAME_PORT },
+} as const;
 
-export async function startDevServer(app: 'pwa', timeoutMs = 30_000): Promise<void> {
+type AppName = keyof typeof DEV_SERVER_CONFIG;
+
+const running = new Map<string, ReturnType<typeof Bun.spawn>>();
+
+export async function startDevServer(app: AppName, timeoutMs = 30_000): Promise<void> {
   if (running.has(app)) {
     const existing = running.get(app);
     if (existing?.exitCode === null) {
@@ -20,30 +27,33 @@ export async function startDevServer(app: 'pwa', timeoutMs = 30_000): Promise<vo
     running.delete(app);
   }
 
-  const cwd = resolve(PROJECT_ROOT, 'apps/frontend/pwa');
+  const config = DEV_SERVER_CONFIG[app];
+  const cwd = resolve(PROJECT_ROOT, config.cwd);
+  const port = config.port;
 
   console.log(`  Starting ${app} dev server...`);
 
-  const proc = spawn('bun', ['run', 'dev'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
+  const proc = Bun.spawn({
+    cmd: ['bun', 'run', 'dev'],
     cwd,
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
 
-  proc.stdout?.on('data', () => {});
-  proc.stderr?.on('data', () => {});
-
-  proc.on('error', (err) => {
-    console.error(`  ✗ ${app} dev server error: ${err.message}`);
-  });
+  // Drain stdout/stderr to prevent backpressure
+  (async () => { for await (const _chunk of proc.stdout) {} })().catch(() => {});
+  (async () => { for await (const _chunk of proc.stderr) {} })().catch(() => {});
 
   running.set(app, proc);
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://localhost:${PWA_PORT}/`, { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(`http://localhost:${port}/`, {
+        signal: AbortSignal.timeout(2000),
+      });
       if (res.ok || res.status < 500) {
-        console.log(`  ✓ ${app} dev server ready on :${PWA_PORT}`);
+        console.log(`  ✓ ${app} dev server ready on :${port}`);
         return;
       }
     } catch {
@@ -52,12 +62,12 @@ export async function startDevServer(app: 'pwa', timeoutMs = 30_000): Promise<vo
     await new Promise((r) => setTimeout(r, 1000));
   }
 
-  throw new Error(`Timeout starting ${app} dev server on :${PWA_PORT}`);
+  throw new Error(`Timeout starting ${app} dev server on :${port}`);
 }
 
 export async function stopAllDevServers(): Promise<void> {
   for (const [app, proc] of running) {
-    proc.kill('SIGTERM');
+    proc.kill();
     running.delete(app);
   }
   console.log('✓ Dev servers stopped');

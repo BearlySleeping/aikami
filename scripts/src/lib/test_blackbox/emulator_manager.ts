@@ -1,17 +1,18 @@
 // scripts/src/lib/test_blackbox/emulator_manager.ts
 // Spawn and manage Firebase emulators from within the test process.
 
-import { type ChildProcess, execSync, spawn } from 'node:child_process';
+import { execSync as nodeExecSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { EMULATOR_PORTS } from '@aikami/constants';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 const FIREBASE_DIR = resolve(PROJECT_ROOT, 'apps/backend/firebase');
 
 // Standard Firebase emulator ports
-const AUTH_PORT = 9099;
-const FIRESTORE_PORT = 8080;
+const AUTH_PORT = EMULATOR_PORTS.auth;
+const FIRESTORE_PORT = EMULATOR_PORTS.firestore;
 
-let firebaseProcess: ChildProcess | null = null;
+let firebaseProcess: ReturnType<typeof Bun.spawn> | null = null;
 
 export async function startEmulators(timeoutMs = 90_000): Promise<void> {
   const skip = process.argv.includes('--no-emulator');
@@ -32,33 +33,38 @@ export async function startEmulators(timeoutMs = 90_000): Promise<void> {
 
   console.log('🚀 Starting Firebase emulators...');
 
-  firebaseProcess = spawn('bun', ['run', 'emulate'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
+  firebaseProcess = Bun.spawn({
+    cmd: ['bun', 'run', 'emulate'],
     cwd: FIREBASE_DIR,
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
 
   let lastStderr = '';
 
-  firebaseProcess.stdout?.on('data', (data: Buffer) => {
-    const text = data.toString();
-    if (text.includes('All emulators ready') || text.includes('Emulator')) {
-      console.log(`  ${text.trim().slice(0, 120)}`);
+  // Read stdout/stderr from Bun.spawn
+  (async () => {
+    const reader = firebaseProcess!.stdout.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value);
+      if (text.includes('All emulators ready') || text.includes('Emulator')) {
+        console.log(`  ${text.trim().slice(0, 120)}`);
+      }
     }
-  });
+  })().catch(() => {});
 
-  firebaseProcess.stderr?.on('data', (data: Buffer) => {
-    lastStderr = data.toString();
-  });
-
-  firebaseProcess.on('error', (err) => {
-    console.error(`  ✗ Emulator process error: ${err.message}`);
-  });
-
-  firebaseProcess.on('exit', (code) => {
-    if (code !== null && code !== 0) {
-      console.log(`  ⚠ Emulator exited with code ${code}`);
+  (async () => {
+    const reader = firebaseProcess!.stderr.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      lastStderr = decoder.decode(value);
     }
-  });
+  })().catch(() => {});
 
   try {
     await waitForPort(AUTH_PORT, timeoutMs);
@@ -76,7 +82,7 @@ function killStaleEmulators(): void {
   const ports = [AUTH_PORT, FIRESTORE_PORT, 5001, 9199, 4400];
   for (const port of ports) {
     try {
-      execSync(`fuser -k ${port}/tcp 2>/dev/null`, { stdio: 'ignore', timeout: 2000 });
+      nodeExecSync(`fuser -k ${port}/tcp 2>/dev/null`, { stdio: 'ignore', timeout: 2000 });
     } catch {
       // No process on this port
     }
@@ -85,15 +91,8 @@ function killStaleEmulators(): void {
 
 export async function stopEmulators(): Promise<void> {
   if (firebaseProcess) {
-    const pid = firebaseProcess.pid;
-    firebaseProcess.kill('SIGTERM');
+    firebaseProcess.kill();
     await new Promise((r) => setTimeout(r, 2000));
-    try {
-      if (pid) process.kill(pid, 0);
-      firebaseProcess.kill('SIGKILL');
-    } catch {
-      // Already dead
-    }
     firebaseProcess = null;
   }
   killStaleEmulators();

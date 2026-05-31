@@ -1,5 +1,6 @@
 {
   "name": "@aikami/schemas",
+  "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
     "lint": "biome lint .",

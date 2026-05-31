@@ -17,6 +17,9 @@ export const EMULATOR_PORTS = {
   dataconnect: 9399,
 } as const;
 
+export const PWA_PORT = 5173;
+export const PWA_EMULATOR_PORT = 5174;
+
 export const EMULATOR_HOSTS = {
   auth: `localhost:${EMULATOR_PORTS.auth}`,
   firestore: `localhost:${EMULATOR_PORTS.firestore}`,

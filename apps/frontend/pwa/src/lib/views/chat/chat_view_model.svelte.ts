@@ -194,7 +194,11 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
         // Dispatch any macros to the engine bridge
         const bridge = createEngineBridge();
         for (const macro of chunkResult.macros) {
-          this.debug('macro in response', { name: macro.name, args: macro.args, entityId: this.gameEntityId });
+          this.debug('macro in response', {
+            name: macro.name,
+            args: macro.args,
+            entityId: this.gameEntityId,
+          });
           bridge.triggerMacro(macro.name, macro.args, this.gameEntityId);
         }
 

@@ -3,7 +3,7 @@
 
 import type { SuiteResult, TestSuites } from './types.ts';
 
-const SUITE_TIMEOUT_MS = 60_000;
+const SUITE_TIMEOUT_MS = 300_000;
 
 export async function runSuites(
   suites: TestSuites,

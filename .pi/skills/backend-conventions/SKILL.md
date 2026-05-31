@@ -60,10 +60,10 @@ export type UserDocument = {
 export type CreateUserInput = Omit<UserDocument, "id" | "createdAt" | "updatedAt">;
 
 export class UserRepository {
-  private readonly collection = "users";
+  private readonly _collection = "users";
 
-  constructor(private readonly db: BaseDatabaseService) {
-    if (!db) {
+  constructor(private readonly _db: BaseDatabaseService) {
+    if (!_db) {
       throw new Error("UserRepository requires a BaseDatabaseService instance.");
     }
   }
@@ -72,11 +72,11 @@ export class UserRepository {
     if (!id) {
       throw new Error("id is required.");
     }
-    return this.db.getDocument<UserDocument>(this.collection, id);
+    return this._db.getDocument<UserDocument>(this._collection, id);
   }
 
   async findAll(options?: QueryOptions): Promise<UserDocument[]> {
-    return this.db.getDocuments<UserDocument>(this.collection, options);
+    return this._db.getDocuments<UserDocument>(this._collection, options);
   }
 
   async create(input: CreateUserInput): Promise<string> {
@@ -84,7 +84,7 @@ export class UserRepository {
       throw new Error("email is required.");
     }
     const now = new Date().toISOString();
-    return this.db.addDocument<UserDocument>(this.collection, {
+    return this._db.addDocument<UserDocument>(this._collection, {
       ...input,
       createdAt: now,
       updatedAt: now,
@@ -95,7 +95,7 @@ export class UserRepository {
     if (!id) {
       throw new Error("id is required.");
     }
-    await this.db.updateDocument<UserDocument>(this.collection, id, {
+    await this._db.updateDocument<UserDocument>(this._collection, id, {
       ...input,
       updatedAt: new Date().toISOString(),
     });
@@ -105,14 +105,14 @@ export class UserRepository {
     if (!id) {
       throw new Error("id is required.");
     }
-    await this.db.deleteDocument(this.collection, id);
+    await this._db.deleteDocument(this._collection, id);
   }
 
   async findByRole(role: string): Promise<UserDocument[]> {
     if (!role) {
       throw new Error("role is required.");
     }
-    return this.db.getDocuments<UserDocument>(this.collection, {
+    return this._db.getDocuments<UserDocument>(this._collection, {
       filters: [{ field: "role", operator: "==", value: role }],
     });
   }
@@ -121,11 +121,12 @@ export class UserRepository {
 
 ### Rules
 
-- **Constructor injection** — `constructor(private readonly db: BaseDatabaseService)`
+- **Constructor injection** — `constructor(private readonly _db: BaseDatabaseService)`
 - **Regular methods** — `async findById(id) { ... }` (not arrow class fields)
 - **Guard clauses first** — validate inputs before any work
 - **Never import Firestore/Firebase SDK directly** — go through `BaseDatabaseService`
-- **Collection name as private field** — `private readonly collection = "users"`
+- **Collection name as private field** — `private readonly _collection = "users"`
+- **Private members prefixed with `_`** — `_db`, `_collection`, `_normalizeEmail()` (see `aikami-conventions`)
 
 ## 3. Database Abstraction
 
@@ -163,22 +164,22 @@ export type UserServiceOptions = {
 };
 
 export class UserService {
-  private readonly userRepository: UserRepository;
+  private readonly _userRepository: UserRepository;
 
   constructor(options: UserServiceOptions) {
-    this.userRepository = options.userRepository;
+    this._userRepository = options.userRepository;
   }
 
   async getOrCreateUser(email: string, displayName: string) {
     logger.debug("getOrCreateUser", { email });
 
-    const existing = await this.userRepository.findByEmail(email);
+    const existing = await this._userRepository.findByEmail(email);
     if (existing) {
       return existing;
     }
 
-    const id = await this.userRepository.create({ email, displayName, role: "user" });
-    const created = await this.userRepository.findById(id);
+    const id = await this._userRepository.create({ email, displayName, role: "user" });
+    const created = await this._userRepository.findById(id);
     if (!created) {
       throw toAppError("internal", "Failed to create user");
     }
@@ -193,6 +194,7 @@ export class UserService {
 - **Options object for constructor** — `{ userRepository: UserRepository }`
 - **Depend on repositories, not on database** — services never import `BaseDatabaseService`
 - **Business logic only** — no HTTP concerns, no Firestore SDK calls
+- **Private members prefixed with `_`** — `_userRepository`, `_cache`, `_normalizeEmail()`
 
 ## 5. Controller Structure
 

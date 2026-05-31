@@ -1,0 +1,8 @@
+# Minimal stub — required by Data Connect emulator.
+# Replace with actual queries when Data Connect is wired up.
+query ListUsers @auth(level: PUBLIC) {
+  users {
+    id
+    email
+  }
+}

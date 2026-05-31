@@ -1,5 +1,68 @@
 # Development Protocol
 
+## 🔴 SESSION START — ALWAYS DO THIS FIRST
+
+Before writing ANY code, load the `aikami-conventions` skill. This is
+non-negotiable. The skill contains critical violations that break builds
+if ignored (logger alias, import paths, type locations, file naming,
+private member prefix).
+
+**If you get an esbuild/module resolution error:** The fix is never to
+bypass a convention. Re-read the 🔴 CRITICAL VIOLATIONS section in
+`aikami-conventions` before changing any import.
+
+### Skill Loading Order
+
+1. Load `aikami-conventions` (always first)
+2. If frontend code: also load `svelte-conventions`
+3. If backend code: also load `backend-conventions`
+4. If Cloud Functions: also load `firebase-functions`
+5. If game code: also load `pixijs-v8`
+
+---
+
+## Output Style
+
+**Terse. Technical substance only. Drop articles, filler, pleasantries.**
+Fragments OK. Every word must earn its place.
+
+- **Artifacts to files** — Never inline large generated content. Return file
+  path + 1-line description.
+- **Auto-expand only for**: security warnings, irreversible actions, user
+  confusion.
+- **After `validate()`**: 3-4 line summary — what changed, results, suggested
+  commit message.
+
+---
+
+## Context-Mode Routing (Mandatory)
+
+We use the Context Mode MCP to protect the context window. One unrouted command
+dumps 56 KB into context.
+
+### Think in Code
+Analyze/count/filter/compare/search/parse/transform: **write code** via
+`ctx_execute(language, code)`, `console.log()` only the answer. No raw data
+in context.
+
+### BLOCKED & REDIRECTED
+- **Shell (>20 lines output)**: Only for `git`, `mkdir`, `rm`, `mv`, `cd`,
+  `ls`, `bun install`. Use `ctx_batch_execute()` or `ctx_execute()`.
+- **File reading (for analysis)**: Reading to **edit** = fine. Reading to
+  **analyze/explore** = use `ctx_execute_file()`.
+- **grep / search**: Use `ctx_execute(language: "shell", code: "grep ...")`.
+
+### Parallel I/O
+Multi-command research: `ctx_batch_execute()` with `concurrency`. Network/API
+bounds: concurrency `4-8`. CPU bounds (build, test): concurrency `1`.
+
+### Session Continuity
+Session history is persistent. On resume, **search BEFORE asking user:**
+- What did we decide? → `ctx_search(queries: ["decision"], source: "decision", sort: "timeline")`
+- What constraints exist? → `ctx_search(queries: ["constraint"], source: "constraint")`
+
+---
+
 ## Environment (Always Loaded via Direnv)
 
 The project uses direnv to provision the entire development environment. These env vars are always available:
@@ -27,6 +90,13 @@ Start the Firebase emulator before coding for local backend support.
 3. Call `validate()` — fix+typecheck on affected projects
 4. If fails → fix, re-run
 5. If passes → present summary, ask user: commit, commit+push, or change
+
+## Commit & Push Policy
+
+**Never commit or push without explicit user instruction.** Default: keep all
+changes in the working tree. After `validate()` passes: present diff summary +
+suggested commit message. Ask: "Commit? Commit+push? Change?" Do not push
+automatically at end of a task.
 
 ## Model Modes
 

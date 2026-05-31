@@ -128,6 +128,27 @@
         <button class="btn btn-ghost btn-sm mt-4" onclick={() => viewModel.closeWindow()}>
           Close Window
         </button>
+      {:else if viewModel.authState === 'handoff_complete'}
+        <div class="alert alert-success mb-4">
+          <svg
+            class="w-5 h-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          <span>You're all set!</span>
+        </div>
+
+        <p class="text-sm text-center text-base-content/70 mb-4">
+          Your authentication has been sent to the game. You may close this window.
+        </p>
+
+        <button class="btn btn-primary" onclick={() => viewModel.closeWindow()}>
+          Close Window
+        </button>
       {:else if viewModel.authState === 'error'}
         <div class="alert alert-error mb-4"><span>{viewModel.errorMessage}</span></div>
         <button class="btn btn-primary" onclick={() => viewModel.resetToIdle()}>Try Again</button>

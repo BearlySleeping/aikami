@@ -1,5 +1,6 @@
 {
   "name": "@aikami/logger",
+  "main": "src/index.ts",
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
