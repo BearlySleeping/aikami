@@ -243,7 +243,10 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
     const uid = authService.uid;
 
     if (!uid) {
-      throw toAppError({ errorType: 'unauthorized', errorMessage: 'Cannot upload avatar: User is not logged in.' });
+      throw toAppError({
+        errorType: 'unauthorized',
+        errorMessage: 'Cannot upload avatar: User is not logged in.',
+      });
     }
 
     try {

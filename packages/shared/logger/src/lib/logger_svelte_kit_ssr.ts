@@ -1,52 +1,9 @@
 import process from 'node:process';
-// import Sentry from 'winston-sentry-log';
-import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts';
-import { Timer, type TimerInterface } from './timer.ts';
+import type { LogEntry, LoggerInterface, TimerInterface } from '@aikami/types';
+import { BaseLoggerService } from './base.ts';
+import { Timer } from './timer.ts';
 
-// import { createLogger, format, transports } from 'winston';
-// type TransformableInfo = {
-// 	level: string;
-// 	message: string;
-// 	timestamp: string;
-// };
-
-// const logFormat = format.printf((info) => {
-// 	const { level, message, timestamp } = info as TransformableInfo;
-// 	return `${timestamp} ${level}: ${message}`;
-// });
-// const logger = createLogger({
-// 	format: format.combine(
-// 		format.timestamp({ format: 'HH:mm:ss' }),
-// 		// format.timestamp({ format: 'YY-MM-DD HH:mm:ss' }),
-
-// 		// Format the metadata object
-// 		format.metadata({
-// 			fillExcept: ['message', 'level', 'timestamp'],
-// 		}),
-// 		// format.errors({ stack: true }),
-// 		// format.splat(),
-// 		// format.json(),
-// 	),
-// 	level: 'debug',
-// 	// level: import.meta.env.PUBLIC_FLAVOR === 'prod' ? 'info' : 'debug',
-// 	transports: [
-// 		new transports.Console({
-// 			format: format.combine(format.colorize(), logFormat),
-// 		}),
-// 		// new Sentry({
-// 		// 	config: {
-// 		// 		dsn: import.meta.env.PUBLIC_SENTRY_DSN,
-// 		// 		environment:
-// 		// 			import.meta.env.PUBLIC_FLAVOR === 'prod'
-// 		// 				? 'production'
-// 		// 				: 'development',
-// 		// 	},
-// 		// 	level: 'info',
-// 		// }),
-// 	],
-// });
-
-export type SvelteKitBackendLoggerInterface = BaseLoggerInterface;
+export type SvelteKitBackendLoggerInterface = LoggerInterface;
 
 class SvelteKitTimer extends Timer implements TimerInterface {}
 
@@ -69,13 +26,22 @@ class SvelteKitBackendLoggerService
       if (!message) {
         const element = data.shift();
         message = this.getMessage(element);
+        // Put the extracted message back on entry so sinks see it.
+        (entry as Record<string, unknown>).message = message;
       }
 
+      // Write to console
+      // biome-ignore lint/suspicious/noConsole: logger implementation
       console[logType](this.getMessage(message));
+      // biome-ignore lint/suspicious/noConsole: logger implementation
       console.log('\n');
       for (const element of data) {
+        // biome-ignore lint/suspicious/noConsole: logger implementation
         console.log(this.getMessage(element));
       }
+
+      // Flush to registered sinks (SSRLogSink for Firestore persistence)
+      this._flushSinks(entry, ...data);
     } catch (_error) {
       // console.log(_error);
     }
@@ -86,6 +52,8 @@ class SvelteKitBackendLoggerService
   }
 }
 
-export const logger = new SvelteKitBackendLoggerService({
-  logLevel: process.env.LOG_LEVEL,
-});
+export function createLogger(): LoggerInterface {
+  return new SvelteKitBackendLoggerService({
+    logLevel: process.env.LOG_LEVEL,
+  });
+}

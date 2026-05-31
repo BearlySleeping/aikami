@@ -15,6 +15,7 @@ projects:
   # Shared Packages
   constants: "packages/shared/constants"
   schemas: "packages/shared/schemas"
+  parser: "packages/shared/parser"
   types: "packages/shared/types"
   logger: "packages/shared/logger"
   utils: "packages/shared/utils"
@@ -29,6 +30,7 @@ projects:
   backend-svelte-kit: "packages/backend/svelte-kit"
 
   # Frontend Packages
+  engine: "packages/engine"
   frontend-api-core: "packages/frontend/api-core"
   frontend-dataconnect: "packages/frontend/dataconnect"
   frontend-services: "packages/frontend/services"

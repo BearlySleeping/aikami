@@ -12,22 +12,17 @@ Use `direnv_status` to check the current environment. Use `direnv_switch_mode em
 
 ---
 
-## Service Management (tmux)
+## Service Management
 
-Start services BEFORE coding. They survive pi restarts and run in a dedicated tmux session.
+Start the Firebase emulator before coding for local backend support.
 
-- `/dev start` — start all services (emulator + pwa + ) in tmux session `aikami-dev`
-- `/dev stop` — stop all services
-- `/dev` — show status of all services
-- `tmux_session start emulator` — start just the Firebase emulator in tmux
-- `tmux_session read emulator` — capture last 100 lines of emulator output
-- `tmux_session list` — list all services and their status
-
-**Attach to view:** `tmux attach -t aikami-dev`
+- `firebase_emulator start` — start the local Firebase emulator suite
+- `firebase_emulator stop` — stop the emulator
+- `firebase_emulator status` — check if emulator is running
 
 ## Flow
 
-1. Start services: `/dev start`
+1. Start emulator if needed: `firebase_emulator start`
 2. Write code — no lint/typecheck during dev
 3. Call `validate()` — fix+typecheck on affected projects
 4. If fails → fix, re-run
@@ -77,15 +72,13 @@ When the same thing is attempted twice and fails, STOP trying.
 |-----------|--------------|---------|
 | "I sent /start, is it working?" ×2 | "Try sending /start again" | Create a test script that hits the webhook directly |
 | Deploy fails twice | "Try deploying again" | Read deploy logs, check moon affected, check service status |
-| "Is the VM up?" ×2 | "Try checking" | `service_logs` + `vm_controller_request` + write a health check script |
+| Service unreachable ×2 | "Try checking" | `service_logs` + write a health check script |
 | Any error ×2 | "Try again" | Write a minimal reproduction script, run it locally, capture output |
 
 ### Always prefer local testing over production
 
 - Cloud Functions webhook not working? → Test with emulator + curl first
-- VM Controller unresponsive? → `tmux_session start ` + `vm_controller_request path=/health`
 - Telegram not receiving? → Send test webhook payload directly with bun, verify flow end-to-end locally
-- Zeroclaw not responding? → `_manage action=logs` BEFORE asking user to try again
 
 ### Create diagnostic scripts — DON'T ask the user to run commands
 
@@ -114,12 +107,10 @@ Run with: `bun /tmp/debug_webhook.ts`
 
 Before concluding what's wrong, exhaust these in order:
 1. `service_logs` — View logs for the relevant service
-2. `tmux_session read <service>` — Check dev service output
-3. `firestore_query` — Check if data was written
-4. `vm_controller_request` — Check VM health / events
-5. `_manage action=logs` — Container logs
-6. Write a custom diagnostic script — Gather structured evidence
-7. **LAST RESORT** — Ask user to try something manually
+2. `firestore_query` — Check if data was written
+3. `firebase_emulator status` — Verify emulator is running
+4. Write a custom diagnostic script — Gather structured evidence
+5. **LAST RESORT** — Ask user to try something manually
 
 ### Never hallucinate errors
 

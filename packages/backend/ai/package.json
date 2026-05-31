@@ -6,8 +6,7 @@
     "format": "biome format .",
     "typecheck": "tsc --noEmit",
     "fix": "biome check --write .",
-    "test": "bun test",
-    "validate": "bun run typecheck && bun run test"
+    "test": "bun test"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

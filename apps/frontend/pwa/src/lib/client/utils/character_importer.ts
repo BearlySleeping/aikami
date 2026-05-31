@@ -25,7 +25,10 @@ export class CharacterImporter {
       chunks = extractChunks(uint8Array);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw toAppError({ errorType: 'invalid-argument', errorMessage: `Invalid PNG file: ${message}` });
+      throw toAppError({
+        errorType: 'invalid-argument',
+        errorMessage: `Invalid PNG file: ${message}`,
+      });
     }
 
     for (const chunk of chunks) {
@@ -67,6 +70,9 @@ export class CharacterImporter {
       }
     }
 
-    throw toAppError({ errorType: 'not-found', errorMessage: 'No character data found in PNG file (missing chara tEXt chunk)' });
+    throw toAppError({
+      errorType: 'not-found',
+      errorMessage: 'No character data found in PNG file (missing chara tEXt chunk)',
+    });
   }
 }

@@ -56,13 +56,8 @@ test.describe('Chat Message Sending', () => {
       // Check for mock AI response in emulator mode
       const mockResponse = page.getByText(/Mock AI Response/);
       if (await mockResponse.isVisible({ timeout: 5000 }).catch(() => false)) {
-        console.log('✓ Mock AI response received in emulator mode');
       }
-
-      console.log('✓ Chat message sent successfully');
     } else {
-      // Skip test if chat page is not accessible
-      console.log('⚠ Chat page not accessible, skipping test');
     }
   });
 
@@ -77,7 +72,6 @@ test.describe('Chat Message Sending', () => {
     // Check if chat container is visible
     const chatContainer = page.locator('[data-testid="chat-container"]');
     if (await chatContainer.isVisible().catch(() => false)) {
-      console.log('✓ Chat container is visible');
     }
   });
 });

@@ -3,8 +3,18 @@
   "display": "Frontend Repositories",
   "extends": "../../../config/tsconfig/tsconfig.frontend.json",
   "compilerOptions": {
-    "baseUrl": "../../../",
-    "outDir": "dist"
+    "rootDir": "../..",
+    "outDir": "dist",
+    "paths": {
+      "@aikami/constants": ["../../shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
+      "@aikami/schemas": ["../../shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../shared/schemas/src/lib/*"],
+      "@aikami/types": ["../../shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../shared/types/src/lib/*"],
+      "@aikami/utils": ["../../shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../shared/utils/src/lib/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

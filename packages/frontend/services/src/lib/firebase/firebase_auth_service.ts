@@ -32,14 +32,16 @@ export type SocialSignInResponse<T extends SocialSignInStatus = SocialSignInStat
   status: T;
   payload: SocialSignInResponses[T];
 };
-type Auth = typeof import('./configs/auth.ts');
+type Auth = typeof import('@aikami/frontend/configs/auth.ts');
 
-export type AuthProviderId = 'google.com' | 'github.com';
+export type AuthProviderId = 'google.com' | 'github.com' | 'microsoft.com';
 
 export type FirebaseAuthServiceInterface = BaseClassInterface & {
   getAuthUser(): Promise<FirebaseUser | undefined>;
 
   signInWithPopup(providerId: AuthProviderId): Promise<SocialSignInResponse>;
+
+  signInWithRedirect(providerId: AuthProviderId): Promise<void>;
 
   signInWithEmailAndPassword(options: { email: string; password: string }): Promise<User>;
 
@@ -100,9 +102,9 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     const user = auth.currentUser;
     if (!user) {
       throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'auth.currentUser is undefined'
-});
+        errorType: 'invalid-argument',
+        errorMessage: 'auth.currentUser is undefined',
+      });
     }
 
     return user;
@@ -126,10 +128,7 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     const { auth, firebaseUpdatePassword, signInWithEmailAndPassword } = await this._getAuth();
     const user = auth.currentUser;
     if (!user?.email) {
-      throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'User is not logged in'
-});
+      throw toAppError({ errorType: 'unauthorized', errorMessage: 'User is not logged in' });
     }
     const response = await signInWithEmailAndPassword(auth, user.email, oldPassword);
     this.debug('updatePassword:signInWithEmailAndPassword', { response });
@@ -146,9 +145,9 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     const currentUser = auth.currentUser;
     if (!currentUser) {
       throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'auth.currentUser is undefined'
-});
+        errorType: 'unauthorized',
+        errorMessage: 'auth.currentUser is undefined',
+      });
     }
 
     await updateEmail(currentUser, newEmail);
@@ -166,15 +165,13 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     const { email, password } = options;
     const { auth, signInWithEmailAndPassword } = await this._getAuth();
 
-    await signInWithEmailAndPassword(auth, email, password);
-
-    await signInWithEmailAndPassword(auth, email, password);
-    const user = auth.currentUser;
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user ?? auth.currentUser;
     if (!user) {
       throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'auth.currentUser is undefined'
-});
+        errorType: 'unauthorized',
+        errorMessage: 'auth.currentUser is undefined',
+      });
     }
 
     return user;
@@ -203,6 +200,31 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     await updateProfile(user, profile);
   }
 
+  async signInWithRedirect(providerId: AuthProviderId): Promise<void> {
+    const { auth, GithubAuthProvider, GoogleAuthProvider, OAuthProvider, signInWithRedirect } =
+      await this._getAuth();
+
+    const getProvider = () => {
+      switch (providerId) {
+        case 'google.com':
+          return new GoogleAuthProvider();
+        case 'github.com':
+          return new GithubAuthProvider();
+        case 'microsoft.com': {
+          const provider = new OAuthProvider('microsoft.com');
+          provider.setCustomParameters({ tenant: 'common' });
+          provider.addScope('email');
+          provider.addScope('profile');
+          return provider;
+        }
+        default:
+          return new OAuthProvider(providerId);
+      }
+    };
+
+    await signInWithRedirect(auth, getProvider());
+  }
+
   async signInWithPopup(providerId: AuthProviderId): Promise<SocialSignInResponse> {
     try {
       const {
@@ -219,6 +241,15 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
             return new GoogleAuthProvider();
           case 'github.com':
             return new GithubAuthProvider();
+          case 'microsoft.com': {
+            const provider = new OAuthProvider('microsoft.com');
+            // 'common' allows both personal Microsoft accounts and work/school accounts.
+            // Set to a tenant ID to restrict to a specific Azure AD tenant.
+            provider.setCustomParameters({ tenant: 'common' });
+            provider.addScope('email');
+            provider.addScope('profile');
+            return provider;
+          }
           default:
             return new OAuthProvider(providerId);
         }
@@ -233,7 +264,7 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
               status: 'exitingUser',
             }
           : {
-              payload: getRegisterDataFromCredential(userCredential),
+              payload: getRegisterDataFromCredential({ userCredential, getAdditionalUserInfo }),
               status: 'newUser',
             };
 
@@ -285,7 +316,7 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
       throw new Error(`${this._className} is not available on SSR`);
     }
 
-    FirebaseAuthService._auth = await import('./configs/auth.ts');
+    FirebaseAuthService._auth = await import('@aikami/frontend/configs/auth.ts');
     return FirebaseAuthService._auth;
   }
 }

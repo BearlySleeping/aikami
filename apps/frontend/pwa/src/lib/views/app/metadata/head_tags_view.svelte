@@ -6,10 +6,10 @@
     type HeadTagsViewModelInterface,
   } from './head_tags_view_model.svelte.ts';
 
-  interface Props {
+  type Props = {
     data?: BaseMetaTags;
     viewModel?: HeadTagsViewModelInterface;
-  }
+  };
 
   let {
     data,

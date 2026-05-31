@@ -1,5 +1,10 @@
 // apps/frontend/pwa/src/lib/client/services/index.ts
-export { dialogService, routerService } from '@aikami/frontend/services';
+export {
+  type DialogServiceInterface,
+  dialogService,
+  type RouterServiceInterface,
+  routerService,
+} from '@aikami/frontend/services';
 export * from './api/ai.svelte.ts';
 export * from './api/analytic.svelte.ts';
 export * from './api/auth.svelte.ts';
@@ -14,7 +19,8 @@ export * from './database/notification.svelte.ts';
 export * from './database/npc.svelte.ts';
 export * from './database/persona.svelte.ts';
 export * from './database/user.svelte.ts';
-export * from './dice_service.svelte.ts';
+export * from './dice/dice_service.svelte.ts';
+export * from './game/game_state_service.svelte.ts';
 export * from './media/image_generation.svelte.ts';
 export * from './media/tts.svelte.ts';
-export * from './onboarding.svelte.ts';
+export * from './onboarding/onboarding.svelte.ts';

@@ -29,9 +29,10 @@ bun install
 | `dev` | `bun run dev` | Start development server |
 | `build` | `bun run build` | Build for production |
 | `preview` | `bun run preview` | Preview production build |
-| `check` | `bun run check` | Run TypeScript checks |
-| `lint` | `bun run lint` | Lint code with Biome |
-| `format` | `bun run format` | Format code with Biome |
+| `typecheck` | `tsc --noEmit` | Run TypeScript type checking |
+| `lint` | `biome lint .` | Lint code with Biome |
+| `format` | `biome format .` | Format code with Biome |
+| `fix` | `biome check --write .` | Auto-fix lint & format issues |
 
 ## Dependencies
 

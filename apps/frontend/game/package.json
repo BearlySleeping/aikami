@@ -12,8 +12,7 @@
     "lint": "biome lint src tests",
     "format": "biome format src tests",
     "fix": "biome check --write src tests && biome format --write src tests",
-    "typecheck": "tsc --noEmit",
-    "validate": "bun run typecheck && bun run test:unit"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "1.60.0",
@@ -23,6 +22,7 @@
     "vite": "8.0.14"
   },
   "dependencies": {
+    "@aikami/engine": "workspace:*",
     "@aikami/frontend-api-core": "workspace:*",
     "bitecs": "^0.4.0",
     "pixi.js": "^8.18.1"

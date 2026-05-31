@@ -1,10 +1,9 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/routes/+layout.svelte
   import '../app.css';
-  import AppView from '$lib/views/app/AppView.svelte';
-  import { getAppViewModel } from '$lib/views/app/app-view-model.svelte';
+  import AppView from '$lib/views/app/app_view.svelte';
+  import { getAppViewModel } from '$lib/views/app/app_view_model.svelte';
   import type { LayoutProps } from './$types';
-  // Force Firebase to load early to ensure single instance
-  import '@aikami/frontend/services/firebase/configs/firestore';
 
   let { data, children }: LayoutProps = $props();
 

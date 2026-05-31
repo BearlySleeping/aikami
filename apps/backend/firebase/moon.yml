@@ -3,7 +3,6 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'application'
-stack: 'backend'
 tags:
   - 'firebase'
   - 'application'

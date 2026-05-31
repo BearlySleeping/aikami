@@ -32,9 +32,10 @@ bun install
 
 | Task | Command | Description |
 |------|---------|-------------|
-| `check` | `bun run check` | Run TypeScript type checking |
-| `format` | `bun run format` | Format code with Biome |
-| `lint` | `bun run lint` | Lint code with Biome |
+| `typecheck` | `tsc --noEmit` | Run TypeScript type checking |
+| `format` | `biome format .` | Format code with Biome |
+| `lint` | `biome lint .` | Lint code with Biome |
+| `fix` | `biome check --write .` | Auto-fix lint & format issues |
 
 ## Usage
 

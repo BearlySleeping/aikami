@@ -1,7 +1,9 @@
 // packages/frontend/services/src/lib/firebase/firebase-analytics-service.ts
+
+import { isEmulatorModePublic } from '@aikami/frontend/configs/environment.ts';
 import { BaseClass, type BaseClassInterface } from '@aikami/utils';
 
-type Analytics = typeof import('./configs/analytics.ts');
+type Analytics = typeof import('@aikami/frontend/configs/analytics.ts');
 
 export type FirebaseAnalyticServiceInterface = {
   setUserId(uid: string): Promise<void>;
@@ -12,21 +14,13 @@ export type FirebaseAnalyticServiceInterface = {
 class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServiceInterface {
   private static _analytic?: Analytics;
 
-
-  /**
-     * Helper to check if we are currently running in the emulator.
-     */
-    private get _isEmulator(): boolean {
-      return import.meta.env.PUBLIC_FLAVOR === 'EMULATOR';
-    }
-
-	async setUserId(uid: string): Promise<void> {
-    if (this._isEmulator) {
+  async setUserId(uid: string): Promise<void> {
+    if (isEmulatorModePublic()) {
       this.debug('[Mock Analytics] setUserId:', { uid });
       return;
     }
 
-		const response = await this._getAnalytics();
+    const response = await this._getAnalytics();
     if (!response) {
       return;
     }
@@ -34,13 +28,13 @@ class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServi
     setUserId(analytics, uid);
   }
 
-	async setUserProperties(userProperties: Record<string, unknown>): Promise<void> {
-  if (this._isEmulator) {
+  async setUserProperties(userProperties: Record<string, unknown>): Promise<void> {
+    if (isEmulatorModePublic()) {
       this.debug('[Mock Analytics] setUserProperties:', userProperties);
       return;
     }
 
-		const response = await this._getAnalytics();
+    const response = await this._getAnalytics();
     if (!response) {
       return;
     }
@@ -48,13 +42,13 @@ class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServi
 
     setUserProperties(analytics, userProperties);
   }
-	async logEvent(eventName: string, eventParameters?: Record<string, unknown>): Promise<void> {
-  if (this._isEmulator) {
+  async logEvent(eventName: string, eventParameters?: Record<string, unknown>): Promise<void> {
+    if (isEmulatorModePublic()) {
       this.debug(`[Mock Analytics] logEvent: ${eventName}`, eventParameters);
       return;
     }
 
-		const response = await this._getAnalytics();
+    const response = await this._getAnalytics();
     if (!response) {
       return;
     }
@@ -72,7 +66,7 @@ class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServi
       throw new Error(`${this._className} is not available on SSR`);
     }
     try {
-      FirebaseAnalyticService._analytic = await import('./configs/analytics.ts');
+      FirebaseAnalyticService._analytic = await import('@aikami/frontend/configs/analytics.ts');
       return FirebaseAnalyticService._analytic;
     } catch (error) {
       this.error('_analytics', error);
@@ -81,6 +75,7 @@ class FirebaseAnalyticService extends BaseClass implements FirebaseAnalyticServi
   }
 }
 
-export const firebaseAnalyticService = new FirebaseAnalyticService({
-	className: 'FirebaseAnalyticService',
-});
+export const firebaseAnalyticService: FirebaseAnalyticServiceInterface =
+  new FirebaseAnalyticService({
+    className: 'FirebaseAnalyticService',
+  });

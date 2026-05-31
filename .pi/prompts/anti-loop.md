@@ -28,7 +28,7 @@ Do this:
 
 | Attempt | Action |
 |---------|--------|
-| 1st failure | Check `service_logs`, `tmux_session read`, `firestore_query` |
+| 1st failure | Check `service_logs`, `firestore_query`, `firebase_emulator status` |
 | 2nd failure | Write diagnostic script, test locally, capture structured output |
 | 3rd+ | NEVER happens — the 2-strikes rule already kicked in |
 

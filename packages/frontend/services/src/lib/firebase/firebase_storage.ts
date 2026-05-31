@@ -36,7 +36,7 @@ export type FirebaseStorageServiceInterface = BaseClassInterface & {
 };
 
 // This type represents the module we are dynamically importing ('./storage')
-type StorageModule = typeof import('./configs/storage.ts');
+type StorageModule = typeof import('@aikami/frontend/configs/storage.ts');
 
 class FirebaseStorageService extends BaseClass implements FirebaseStorageServiceInterface {
   // Private static property to cache the dynamically imported module
@@ -90,10 +90,10 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
     }
 
     // Dynamically import and cache the module
-    FirebaseStorageService._storageModule = await import('./configs/storage.ts');
+    FirebaseStorageService._storageModule = await import('@aikami/frontend/configs/storage.ts');
     return FirebaseStorageService._storageModule;
   }
 }
 
 // Export a singleton instance of the service
-export const firebaseStorageService = new FirebaseStorageService();
+export const firebaseStorageService: FirebaseStorageServiceInterface = new FirebaseStorageService();

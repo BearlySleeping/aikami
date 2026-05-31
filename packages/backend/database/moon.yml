@@ -3,7 +3,6 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'library'
-stack: 'backend'
 tags:
   - 'database'
   - 'firebase'
@@ -11,7 +10,7 @@ tags:
   - 'library'
 
 project:
-  title: 'Database'
+  name: 'backend-database'
   description: 'Database services and utilities for Firestore operations.'
   channel: '#backend'
   owner: 'Backend Team'
@@ -32,34 +31,9 @@ fileGroups:
     - 'tests/**/*'
 
 tasks:
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
   test:
     command: 'bun run test'
     inputs:
       - '@group(sources)'
       - '@group(tests)'
-      - '@group(configs)'
-  validate:
-    command: 'bun run validate'
-    inputs:
-      - '@group(sources)'
       - '@group(configs)'

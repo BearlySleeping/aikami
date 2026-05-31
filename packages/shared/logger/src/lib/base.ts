@@ -1,108 +1,15 @@
 import { LogLevelPriority } from '@aikami/constants';
-import type { LogLevel } from '@aikami/types';
-import type { TimerInterface } from './timer.ts';
-/** `LogType` indicates the type of console log. See {@link Console} */
-export type LogType = 'debug' | 'info' | 'warn' | 'error' | 'log';
+import type { LogEntry, LoggerInterface, LogLevel, LogSink, TimerInterface } from '@aikami/types';
 
-/**
- * `LogEntry` represents a structured entry. All keys aside from `level`,
- * `logType` and `message` are included in the log.
- */
-export type LogEntry = {
-  logLevel?: LogLevel;
-  logType?: LogType;
-  message?: string;
-};
-
-/**
- * `Logger` is a wrapper around the console object. It provides a structured
- * logging interface and a way to dynamically set the {@link LogLevel} (log
- * level).
- *
- * In production, the log level is set to `CRITICAL` by default.
- *
- * In development, the log level is set to `INFO` by default.
- */
-export type BaseLoggerInterface = {
-  logLevel: LogLevel;
-
-  createTimer(): TimerInterface;
-
-  /**
-   * Sets the current log level. If the level is not set, it will never log
-   * anything.
-   *
-   * In production, the default level is undefined.
-   *
-   * @param logLevel The logLevel to set.
-   */
-  setLogLevel(logLevel: LogLevel): void;
-
-  /**
-   * Writes a `LogEntry` to the console.
-   *
-   * If the level is not set, it will never log anything. If the level is set,
-   * it will only log if the level is greater than or equal to the current
-   * level. See {@link LogLevelPriority} for the priority order.
-   *
-   * The default {@link LogLevel} is `INFO`.
-   *
-   * The default {@link LogType} is `log`.
-   *
-   * @param entry - The `LogEntry` including level, message, and any
-   *   additional structured metadata.
-   */
-  write(entry: LogEntry, ...data: unknown[]): void;
-  /**
-   * Writes a `debug` {@link LogType}.
-   *
-   * The default {@link LogLevel} is `INFO`.
-   *
-   * @param args - Arguments, concatenated into the log message.
-   */
-  debug(...args: unknown[]): void;
-  /**
-   * Writes a `log` {@link LogType}.
-   *
-   * The default {@link LogLevel} is `INFO`.
-   *
-   * @param args - Arguments, concatenated into the log message.
-   */
-  log(...args: unknown[]): void;
-  /**
-   * Writes a `info` {@link LogType}.
-   *
-   * The default {@link LogLevel} is `INFO`.
-   *
-   * @param args - Arguments, concatenated into the log message.
-   */
-  info(...args: unknown[]): void;
-  /**
-   * Writes a `warn` {@link LogType}.
-   *
-   * The default {@link LogLevel} is `WARNING`.
-   *
-   * @param args - Arguments, concatenated into the log message.
-   */
-  warn(...args: unknown[]): void;
-  /**
-   * Writes a `error` {@link LogType}.
-   *
-   * The default {@link LogLevel} is `ERROR`.
-   *
-   * @param args - Arguments, concatenated into the log message.
-   * @public
-   */
-  error(...args: unknown[]): void;
-};
 export const isValidLogLevel = (logLevel?: string): logLevel is LogLevel =>
   !!logLevel && logLevel in LogLevelPriority;
 
-export abstract class BaseLoggerService implements BaseLoggerInterface {
+export abstract class BaseLoggerService implements LoggerInterface {
   logLevel: LogLevel;
+  protected _sinks: LogSink[] = [];
 
   constructor(options?: { logLevel?: LogLevel | string }) {
-    const logLevel = options?.logLevel;
+    const logLevel = options?.logLevel?.toUpperCase();
     this.logLevel = isValidLogLevel(logLevel) ? logLevel : 'INFO';
   }
 
@@ -117,6 +24,20 @@ export abstract class BaseLoggerService implements BaseLoggerInterface {
     }
 
     this.logLevel = logLevel;
+  }
+
+  addSink(sink: LogSink): void {
+    this._sinks.push(sink);
+  }
+
+  protected _flushSinks(entry: LogEntry, ...data: unknown[]): void {
+    for (const sink of this._sinks) {
+      try {
+        void sink.write(entry, ...data);
+      } catch {
+        // Sinks must never throw; swallow silently.
+      }
+    }
   }
 
   protected shouldSkipLog(options: { logLevel?: LogLevel }): boolean {
@@ -139,7 +60,7 @@ export abstract class BaseLoggerService implements BaseLoggerInterface {
   abstract write(entry: LogEntry, ...data: unknown[]): void;
 
   error(...args: unknown[]): void {
-    return this.write(
+    this.write(
       {
         logLevel: 'ERROR',
         logType: 'error',
@@ -148,7 +69,7 @@ export abstract class BaseLoggerService implements BaseLoggerInterface {
     );
   }
   log(...args: unknown[]): void {
-    return this.write(
+    this.write(
       {
         logLevel: 'INFO',
         logType: 'log',
@@ -157,7 +78,7 @@ export abstract class BaseLoggerService implements BaseLoggerInterface {
     );
   }
   info(...args: unknown[]): void {
-    return this.write(
+    this.write(
       {
         logLevel: 'INFO',
         logType: 'info',
@@ -166,7 +87,7 @@ export abstract class BaseLoggerService implements BaseLoggerInterface {
     );
   }
   warn(...args: unknown[]): void {
-    return this.write(
+    this.write(
       {
         logLevel: 'WARNING',
         logType: 'warn',
@@ -176,7 +97,7 @@ export abstract class BaseLoggerService implements BaseLoggerInterface {
   }
 
   debug(...args: unknown[]): void {
-    return this.write(
+    this.write(
       {
         logLevel: 'DEBUG',
         logType: 'debug',

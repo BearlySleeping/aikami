@@ -3,14 +3,13 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'library'
-stack: 'unknown'
 tags:
   - 'logger'
   - 'shared'
   - 'library'
 
 project:
-  title: 'Logger'
+  name: 'logger'
   description: 'Shared logging utility for structured logging across the monorepo.'
   channel: '#general'
   owner: 'Core Team'
@@ -19,33 +18,3 @@ dependsOn:
   - 'constants'
   - 'types'
 
-fileGroups:
-  sources:
-    - 'src/**/*'
-  configs:
-    - 'package.json'
-    - 'tsconfig.json'
-  tests:
-    - 'tests/**/*'
-
-tasks:
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
