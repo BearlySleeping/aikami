@@ -14,18 +14,9 @@
 # Core types — shared across all tables
 # ---------------------------------------------------------------------------
 
-"""
-ISO-8601 timestamp stored as a PostgreSQL timestamptz column.
-Maps to Firestore's Timestamp type.
-"""
-scalar Date
-
-"""
-Arbitrary JSON payload stored as a PostgreSQL JSONB column.
-Used for nested objects (stats, metadata, abilities) and arrays
-that don't warrant separate join tables.
-"""
-scalar JSON
+# Scalar aliases:
+#   Date — built-in scalar (ISO-8601 date, provided by prelude)
+#   Any — built-in scalar for arbitrary JSON/JSONB (provided by prelude)
 
 # ---------------------------------------------------------------------------
 # Users
@@ -54,10 +45,10 @@ type User @table {
   localeCode:   String @col(name: "locale_code")
 
   # Connected Google accounts (stored as JSONB array of email strings).
-  connectedEmails: JSON @col(name: "connected_emails")
+  connectedEmails: Any @col(name: "connected_emails")
 
   # Sign-in providers (JSONB array of provider strings).
-  signInProviders: JSON @col(name: "sign_in_providers")
+  signInProviders: Any @col(name: "sign_in_providers")
 
   # Terms acceptance timestamp.
   agreedAt: Date @col(name: "agreed_at")
@@ -88,10 +79,10 @@ type Npc @table {
   visibility: String @col(name: "visibility")
 
   # Character sheet (D&D stats, abilities, etc.) — JSONB.
-  stats: JSON @col(name: "stats")
+  stats: Any @col(name: "stats")
 
   # Tags (JSONB array).
-  tags: JSON @col(name: "tags")
+  tags: Any @col(name: "tags")
 }
 
 # ---------------------------------------------------------------------------
@@ -111,7 +102,7 @@ type Persona @table {
   uid: String @col(name: "uid")
 
   # Persona-specific traits (JSONB).
-  traits: JSON @col(name: "traits")
+  traits: Any @col(name: "traits")
 }
 
 # ---------------------------------------------------------------------------
@@ -145,7 +136,7 @@ type Chat @table {
   backgroundImageUrl: String @col(name: "background_image_url")
 
   # Character sheet stats (D&D) — JSONB.
-  stats: JSON @col(name: "stats")
+  stats: Any @col(name: "stats")
 
   # Messages are a separate table (see below) linked via chatId.
 }
@@ -178,10 +169,10 @@ type Message @table {
   chatVisibility:  String @col(name: "chat_visibility")
 
   # Attachments (JSONB array of { type, url, name, mimeType, size }).
-  attachments: JSON @col(name: "attachments")
+  attachments: Any @col(name: "attachments")
 
   # Arbitrary metadata (JSONB).
-  metadata: JSON @col(name: "metadata")
+  metadata: Any @col(name: "metadata")
 }
 
 # ---------------------------------------------------------------------------
@@ -209,7 +200,7 @@ type Notification @table {
   link: String @col(name: "link")
 
   # Arbitrary payload (JSONB).
-  data: JSON @col(name: "data")
+  data: Any @col(name: "data")
 }
 
 # ---------------------------------------------------------------------------
@@ -225,5 +216,5 @@ type Config @table {
   key: String @col(name: "key")
 
   # Configuration value (JSONB — can hold strings, numbers, objects, arrays).
-  value: JSON @col(name: "value")
+  value: Any @col(name: "value")
 }

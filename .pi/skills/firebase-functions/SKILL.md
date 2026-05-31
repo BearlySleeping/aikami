@@ -296,12 +296,54 @@ firebase_deploy_functions mode=development only=pollGmail,sendNotification
 
 ## 7. Callable Function Pattern
 
-Follow the 4-layer callable pattern:
+All Firebase callable functions follow a strict 4-layer typed pattern with explicit
+"never" rules at each layer:
 
-1. **Types** — `packages/shared/types/src/lib/api/{name}.ts` (input/output Zod schemas + TS types)
-2. **Registry** — `callable_functions.ts` (type-safe function name registry)
-3. **Controller** — `apps/backend/functions/src/controllers/callable/{name}.ts` (uses `onCallZod`)
-4. **Frontend** — `firebaseFunctionsService.getTypedCallable('name')`
+### 1. Types — `packages/shared/types/src/lib/api/<function_name>.ts`
+
+```typescript
+export type MyFunctionRequest = { field: string };
+export type MyFunctionResponse = { result: string };
+```
+
+### 2. Registry — `packages/shared/types/src/lib/api/callable_functions.ts`
+
+```typescript
+export type CallableFunctions = {
+  my_function: [MyFunctionRequest, MyFunctionResponse];
+  // ... existing entries
+  [key: string]: [unknown, unknown]; // index signature for extensibility
+};
+```
+
+- **Never** remove the index signature — it's required for extensibility.
+
+### 3. Controller — `apps/backend/functions/src/controllers/callable/<function_name>.ts`
+
+```typescript
+import type { CallableFunctions } from '@aikami/types';
+
+export default onCall<CallableFunctions, 'my_function'>(async (request) => {
+  // request.data is typed as MyFunctionRequest
+  // return type is MyFunctionResponse
+});
+```
+
+- **Never** use `onCall<Record<string, [Req, Res]>, 'name'>` — deprecated pattern.
+- **Never** define local `type MyFunctionRequest = {...}` — import from `@aikami/types`.
+
+### 4. Frontend — `firebaseFunctionsService.getTypedCallable('name')`
+
+```typescript
+import { firebaseFunctionsService } from '@aikami/frontend/services';
+
+const callable = await firebaseFunctionsService.getTypedCallable('my_function');
+const { data } = await callable({ field: 'value' });
+// data is typed as MyFunctionResponse
+```
+
+- **Never** raw import `httpsCallable` from `@aikami/frontend/configs/functions`.
+- Always re-export from `apps/frontend/<app>/src/lib/firebase/<name>.ts` for app-local convenience.
 
 ---
 
@@ -349,6 +391,8 @@ bun moon run functions:test-rules
 6. **Early returns** — validate → early return → business logic
 7. **Cold start** — init heavy deps outside handler
 8. **Snake_case files** — enforced by Biome
+9. **Private members `_` prefixed** — `_cache`, `_normalizeInput()` (see `aikami-conventions`)
+10. **Always `$logger`, never `@aikami/logger`** — environment-specific alias breaks otherwise
 
 ---
 

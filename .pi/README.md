@@ -59,7 +59,7 @@ See individual skill files for details.
 
 | Skill | When Used |
 |-------|-----------|
-| `aikami-conventions` | **All** code — TS strictness, imports, arrow functions, errors |
+| `aikami-conventions` | **🔴 LOAD FIRST** before ANY code — critical violations, TS strictness, imports, arrow functions, errors, private member `_` prefix, snake_case files, output style |
 | `svelte-conventions` | Svelte 5 runes, ViewModel, services, aliases |
 | `backend-conventions` | Backend patterns — repository, database abstraction, services |
 | `firebase-functions` | Cloud Functions — firestack v2, Zod wrappers, deployment |
@@ -95,8 +95,10 @@ See individual skill files for details.
 | Always use `validate()` instead of raw moon commands | moon-integration.ts |
 | Use `ctx_execute` for analysis, not raw file reads | context-mode |
 | Use `ctx_fetch_and_index` for web docs, not inline paste | context-mode |
-| General TS rules, imports, arrow functions | `aikami-conventions` skill |
+| Load `aikami-conventions` first before any code | dev.md prompt 🔴 |
+| General TS rules, imports, arrow functions, private `_` prefix, snake_case files, output style | `aikami-conventions` skill 🔴 |
 | Svelte 5 ViewModel, services, runes | `svelte-conventions` skill |
 | Backend repository pattern, database abstraction | `backend-conventions` skill |
 | Game engine boundary, PixiJS patterns | `pixijs-v8` skill |
+| Private class members use `_` prefix | `aikami-conventions` skill |
 | Direnv environment is always loaded — extensions read `AIKAMI_MODE`, `AIKAMI_PROJECT_ID` directly | direnv.ts |

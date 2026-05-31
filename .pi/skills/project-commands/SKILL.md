@@ -309,6 +309,19 @@ The root `package.json` provides shortcuts for common operations:
 
 ---
 
+## Commit Message Directives
+
+Pushing commits with these directives in the commit message controls what gets deployed:
+
+| Directive | Effect |
+| :--- | :--- |
+| `[only <app>]` | Deploy only specified app(s), ignoring affected detection |
+| `[skip <app>]` | Skip specified app(s) even if affected |
+| `[skip all]` | Skip all deployments |
+| `[deploy all]` | Deploy all apps regardless of changes (Alias: `[force]`) |
+
+---
+
 ## Pre-Commit Workflow
 
 Lefthook runs the following on staged files:

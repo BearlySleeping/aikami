@@ -68,6 +68,7 @@ No local `$state` in views. No `onMount`.
 - ❌ **`$derived` to proxy service state** → Use native getters
 - ❌ **Business logic in ViewModels** → Delegate to services, never import repositories or call APIs
 - ❌ **Conditionals / data transforms in views** → Compute in the ViewModel, expose ready-to-render data
+- ✅ **Private members prefixed with `_`** — `_cache`, `_pendingRequests`, `_normalizeInput()`
 
 ### ViewModel Interface — All Properties `readonly`
 
@@ -82,6 +83,10 @@ export type FeatureViewModelInterface = BaseViewModelInterface & {
 
 TypeScript enforces this at compile time — the view can only read, never write.
 The ViewModel class still owns mutable `$state` internally.
+
+**Exception**: ViewModel `$state` fields listed in the interface are **public** —
+do NOT prefix them with `_`. Private helper methods/fields not in the
+interface MUST use `_` prefix (see `aikami-conventions`).
 
 ### ViewModel Template
 
@@ -147,6 +152,127 @@ export const getFeatureViewModel = (
 - Always extend `BaseViewModel` and `implements *Interface`
 - ViewModel files: `{name}_view_model.svelte.ts` (NOT `vm` shorthand)
 - ViewModel imports services, **never** repositories or Firebase SDK directly
+
+### ViewModel — `super.initialize()` Placement
+
+Always call `super.initialize()` **at the end** of `initialize()`. This keeps
+the loading overlay visible until data is loaded:
+
+```typescript
+// ✅ Correct — loading screen stays until data is ready
+override async initialize(): Promise<void> {
+  await automationService.load();  // data first
+  return await super.initialize(); // then clear loading screen
+}
+
+// ❌ Wrong — loading screen disappears before data arrives
+override async initialize(): Promise<void> {
+  await super.initialize();        // too early
+  await automationService.load();
+}
+```
+
+### ViewModel — Navigation Methods
+
+Navigation methods must be `async` and use `await`:
+
+```typescript
+// ✅ Correct
+async cancel(): Promise<void> {
+  await routerService.goToRoute('agents', { pathParameters: undefined, queryParameters: undefined });
+}
+
+// ❌ Wrong — void hides errors
+cancel(): void {
+  void routerService.goToRoute('agents', ...);
+}
+```
+
+### ViewModel — Link Click Handlers with `preventDefault`
+
+When using `<a href="...">` for navigation (SEO/accessibility), the ViewModel
+provides a `handle*Link(event)` method that calls `event.preventDefault()` before
+navigating. This keeps DOM concerns **out of the view template**:
+
+```typescript
+// ViewModel
+handleBackLink(event: MouseEvent): void {
+  event.preventDefault();
+  void this.navigateBack();
+}
+```
+
+```svelte
+<!-- View — clean, no inline DOM logic -->
+<a href="/agents" onclick={(e) => viewModel.handleBackLink(e)}>
+  ← All agents
+</a>
+
+<!-- ❌ Wrong — DOM logic in view template -->
+<a href="/agents" onclick={(e) => { e.preventDefault(); viewModel.cancel(); }}>
+```
+
+### ViewModel — Never Abbreviate `viewModel`
+
+Never abbreviate `viewModel` as `vm`, `const`, `val`, or any other shorthand.
+Use `viewModel` everywhere in the template:
+
+```svelte
+<!-- ✅ Correct -->
+{viewModel.items}
+<button onclick={() => viewModel.handleClick()}>
+
+<!-- ❌ Wrong -->
+{vm.items}
+<button onclick={() => vm.handleClick()}>
+```
+
+### ViewModel — Never Import Data Directly in a View
+
+Views access data only through the ViewModel. Add a getter on the ViewModel
+instead of importing constants/data directly:
+
+```typescript
+// ✅ Correct — getter on ViewModel
+get departmentTemplates(): DepartmentTemplate[] {
+  return DEPARTMENT_TEMPLATES;
+}
+```
+
+```svelte
+<!-- View accesses via viewModel -->
+{#each viewModel.departmentTemplates as template}
+```
+
+```svelte
+<!-- ❌ Wrong — view imports data directly -->
+<script>
+  import { DEPARTMENT_TEMPLATES } from '$lib/data/departments';
+</script>
+{#each DEPARTMENT_TEMPLATES as template}
+```
+
+### View File Location
+
+Views belong at `$views/<route-path>/` — matching the route structure:
+
+- Multi-page features use subfolders: `$views/agents/library/`, `$views/agents/new/`, `$views/agents/detail/`
+- Layout components go in `$views/app/<category>/`
+- Single-page features go directly under `$views/<name>/`
+
+### ViewModel — Block Statements
+
+Always use block statements for `if`/`else`/`return`:
+
+```typescript
+// ✅ Correct
+if (!this.canCreate) { return; }
+
+// ❌ Wrong — Biome rejects this
+if (!this.canCreate) return;
+```
+
+---
 
 ## 3. Services Architecture
 
@@ -238,7 +364,8 @@ export type MyServiceInterface = BaseFrontendClassInterface & { ... };
 #### 4. Export Singleton Instance at Bottom
 
 Every service exports a singleton instance at the end of the file with the
-interface type annotation and `className`:
+interface type annotation and `className`. Private internal members (caches,
+maps, counters) use `_` prefix.
 
 ```typescript
 export const myService: MyServiceInterface = new MyService({

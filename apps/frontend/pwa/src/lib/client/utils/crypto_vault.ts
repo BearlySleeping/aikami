@@ -54,21 +54,14 @@ const getMachineFingerprint = (): string => {
  */
 const deriveKey = async (pin: string, salt: BufferSource): Promise<CryptoKey> => {
   const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(pin),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  );
+  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(pin), 'PBKDF2', false, [
+    'deriveKey',
+  ]);
 
-  return crypto.subtle.deriveKey(
-    { ...PBKDF2_PARAMS, salt },
-    keyMaterial,
-    ALGORITHM,
-    false,
-    ['encrypt', 'decrypt'],
-  );
+  return crypto.subtle.deriveKey({ ...PBKDF2_PARAMS, salt }, keyMaterial, ALGORITHM, false, [
+    'encrypt',
+    'decrypt',
+  ]);
 };
 
 /**
@@ -79,10 +72,7 @@ const deriveKey = async (pin: string, salt: BufferSource): Promise<CryptoKey> =>
  * @param options.text - The plaintext to encrypt.
  * @param options.pin - Optional custom PIN. Defaults to the machine fingerprint.
  */
-export const encrypt = async (options: {
-  text: string;
-  pin?: string;
-}): Promise<void> => {
+export const encrypt = async (options: { text: string; pin?: string }): Promise<void> => {
   logger.debug('encrypt', { textLength: options.text.length });
 
   const pin = options.pin || getMachineFingerprint();
@@ -106,9 +96,7 @@ export const encrypt = async (options: {
   );
 
   // Pack salt + IV + ciphertext into a single base64 string.
-  const packed = new Uint8Array(
-    salt.byteLength + iv.byteLength + ciphertext.byteLength,
-  );
+  const packed = new Uint8Array(salt.byteLength + iv.byteLength + ciphertext.byteLength);
   packed.set(salt, 0);
   packed.set(iv, salt.byteLength);
   packed.set(new Uint8Array(ciphertext), salt.byteLength + iv.byteLength);
@@ -123,9 +111,7 @@ export const encrypt = async (options: {
  * @returns The decrypted plaintext, or `undefined` if no vault exists or
  *          decryption fails (wrong PIN, tampered data).
  */
-export const decrypt = async (options: {
-  pin?: string;
-}): Promise<string | undefined> => {
+export const decrypt = async (options: { pin?: string }): Promise<string | undefined> => {
   logger.debug('decrypt');
 
   const raw = localStorage.getItem(VAULT_KEY);
@@ -143,11 +129,7 @@ export const decrypt = async (options: {
 
     const key = await deriveKey(pin, salt);
     const decoder = new TextDecoder();
-    const plaintext = await crypto.subtle.decrypt(
-      { ...ALGORITHM, iv },
-      key,
-      ciphertext,
-    );
+    const plaintext = await crypto.subtle.decrypt({ ...ALGORITHM, iv }, key, ciphertext);
 
     return decoder.decode(plaintext);
   } catch {
