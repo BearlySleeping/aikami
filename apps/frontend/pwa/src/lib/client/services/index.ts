@@ -24,3 +24,4 @@ export * from './game/game_state_service.svelte.ts';
 export * from './media/image_generation.svelte.ts';
 export * from './media/tts.svelte.ts';
 export * from './onboarding/onboarding.svelte.ts';
+export * from './settings/ai_settings.svelte.ts';
