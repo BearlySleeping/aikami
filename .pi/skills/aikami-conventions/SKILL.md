@@ -1,18 +1,22 @@
 ---
 name: aikami-conventions
 description: >-
-  General TypeScript and monorepo conventions for Aikami — strict TS rules,
-  import path discipline, arrow functions, `as const` / `satisfies`, error
-  handling, validation boundaries, project structure, and direnv environment.
-  Use when writing or refactoring ANY Aikami code.
-version: 2.0.0
-tags: ["aikami", "conventions", "typescript", "monorepo"]
+  🔴 LOAD BEFORE writing ANY Aikami code — TypeScript and monorepo conventions
+  including critical violations (logger, imports, types), strict TS rules, import
+  path discipline, arrow functions, `as const` / `satisfies`, error handling,
+  validation boundaries, project structure, private member naming, file naming,
+  output style, and direnv environment.
+version: 3.0.0
+tags: ["aikami", "conventions", "typescript", "monorepo", "critical"]
 ---
 
 # Aikami Conventions
 
-General TypeScript and monorepo conventions that apply across the entire Aikami
-codebase. For framework-specific patterns, also load the relevant skill:
+**🔴 READ BEFORE WRITING ANY CODE.** These rules are non-negotiable. Violations
+break the build, cause esbuild/aliasing errors, or produce code that won't
+compile. Load this skill first, before touching any file.
+
+For framework-specific patterns, also load:
 
 | Skill | Covers |
 |-------|--------|
@@ -22,28 +26,141 @@ codebase. For framework-specific patterns, also load the relevant skill:
 | `firebase-functions` | Firebase Cloud Functions v2 best practices |
 | `firestore-collection` | Scaffolding Firestore collections |
 
-## 1. File Path Comments
+---
 
-Every source file must include its relative path from the monorepo root as a
-comment at the very top of the file.
+## 🔴 CRITICAL VIOLATIONS — DO NOT BREAK THESE
 
-**TypeScript / Svelte `.ts` files** — line 1, before any imports:
+These are the most common mistakes. Check this list before every import or type
+definition. If you get an esbuild error about a missing module, **the fix is
+never to bypass the convention.** The convention is the fix.
+
+### 1. Logger: Always `$logger`, Never `@aikami/logger`
 
 ```typescript
-// apps/frontend/pwa/src/lib/views/feature/view_model.svelte.ts
-import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
+// ✅ CORRECT — $logger resolves to the right impl for this environment
+import { logger } from "$logger";
+
+// ❌ WRONG — bypasses environment-specific resolution, breaks builds
+import { logger } from "@aikami/logger";
 ```
 
-**Svelte `.svelte` files** — first line inside `<script>`:
+| Environment | `$logger` resolves to |
+|---|---|
+| SvelteKit (PWA) | `shared/logger/src/lib/svelte_kit.ts` |
+| Firebase Functions | `shared/logger/src/lib/logger_functions.ts` |
+| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts` |
+| AWS / Node.js | `shared/logger/src/lib/logger_aws.ts` |
 
-```svelte
-<script lang="ts">
-  // apps/frontend/pwa/src/lib/views/feature/view.svelte
-  import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
-</script>
+**Why**: Each environment configures `$logger` in its own `tsconfig.json` `paths`
+(or `svelte.config.js`). `@aikami/logger` is a NPM package alias — it doesn't
+know which environment you're in and will resolve to the wrong implementation.
+
+### 2. Import from Package ROOT, Never `lib/` Sub-Paths
+
+```typescript
+// ✅ CORRECT — import from package root (maps to src/index.ts)
+import type { User, Session } from "@aikami/types";
+import { toAppError } from "@aikami/utils";
+import { userSchema } from "@aikami/schemas";
+
+// ✅ CORRECT — local alias also maps to package root
+import type { User } from "$types";
+
+// ❌ WRONG — never import from lib/ sub-paths
+import type { User } from "@aikami/types/lib/user";
+import type { CommandNode } from "@aikami/schemas/lib/parser";
 ```
 
-## 2. TypeScript Strictness
+**Why**: `src/index.ts` is the public API surface. `lib/` is an implementation
+detail. Tree-shaking removes unused exports. Importing from `lib/` bypasses
+barrel exports and can miss re-exports or renamed symbols.
+
+### 3. Never Export Types or Schemas from Service Files
+
+Types and schemas are data shapes, not business logic:
+
+```typescript
+// ❌ WRONG — type/schema defined in a service file
+// apps/frontend/pwa/src/lib/client/services/game/game_state_service.ts
+export type ActiveContextEntry = { entityId: string; ... };
+export const ActiveSessionSchema = z.object({ ... });
+
+// ✅ CORRECT — import from the schema/type layer
+// apps/frontend/pwa/src/lib/client/services/game/game_state_service.ts
+import type { ActiveContextEntry } from "$types/game.ts";
+import { ActiveSessionSchema } from "@aikami/schemas";
+```
+
+The ONLY exception: the service's own **interface and options type**:
+
+```typescript
+export type MyServiceInterface = BaseClassInterface & { ... };
+export type MyServiceOptions = { ... };
+```
+
+### 4. File Naming: snake_case ONLY
+
+All source files use `snake_case`. Enforced by Biome `useFilenamingConvention`.
+
+```
+✅ auth_service.ts      ✅ poll_gmail.ts        ✅ user_repository.ts
+✅ view_model.svelte.ts  ✅ base_view.svelte
+
+❌ authService.ts       ❌ pollGmail.ts          ❌ UserRepository.ts
+❌ ViewModel.svelte.ts   ❌ BaseView.svelte
+```
+
+### 5. Private Members: Underscore `_` Prefix
+
+All `private` class members (fields, methods, getters, setters) must use an
+underscore `_` prefix. This visually distinguishes them from public members
+and prevents accidental access from outside the class.
+
+```typescript
+// ✅ CORRECT — private members prefixed with _
+class UserService {
+  private readonly _userRepository: UserRepository;
+  private _cache = new Map<string, User>();
+  private readonly _collection = "users";
+
+  async findById(id: string): Promise<User | undefined> {
+    return this._userRepository.findById(id);
+  }
+
+  private _normalizeEmail(email: string): string {
+    return email.toLowerCase().trim();
+  }
+}
+
+// ❌ WRONG — private members without underscore prefix
+class UserService {
+  private readonly userRepository: UserRepository;
+  private cache = new Map<string, User>();
+
+  private normalizeEmail(email: string): string { ... }
+}
+```
+
+**Exception**: ViewModel `$state` fields are public by design (see
+`svelte-conventions`). Do NOT prefix public `$state` fields with `_`.
+
+---
+
+## Output Style
+
+**Terse. Technical substance only. No fluff.** Drop articles, filler,
+pleasantries, hedging. Fragments are OK. Every word must earn its place.
+
+- **Artifacts to files** — Never inline large generated content. Return: file
+  path + 1-line description.
+- **Auto-expand only for**: security warnings, irreversible actions, user
+  confusion.
+- **After validate**: 3-4 line summary — what changed, results, suggested
+  commit message. Nothing more.
+
+---
+
+## TypeScript Strictness
 
 ### ❌ Forbidden — Use the Alternative
 
@@ -68,7 +185,7 @@ import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
 
 - **Arrow Functions** — Use arrow functions everywhere. The sole exception is class methods: use regular method syntax (`methodName() {}` instead of `methodName = () => {}`) so that `this` and `super` work correctly.
 - **Escape Early** — Return-early pattern to avoid deep nesting
-- **Extract Logic** — If a section within a function can stand alone, extract it into a separate private function
+- **Extract Logic** — If a section within a function can stand alone, extract it into a separate private function (with `_` prefix: `_extractedHelper()`)
 - **JSDoc Everything** — All exported functions, types, and complex internals must have JSDoc comments
 - **Debug Logging** — Every function must call `logger.debug('{methodName}', options)` at the start, passing the function name as a string. Skip for trivial one-liners (simple getters, passthroughs, pure computed values).
 
@@ -139,7 +256,9 @@ const CONFIG = {
 } as const satisfies Record<string, string | number>;
 ```
 
-## 3. Import Path Rules
+---
+
+## Import Path Rules
 
 ### Always Import from Package Root
 
@@ -159,12 +278,7 @@ import type { CommandNode } from "@aikami/schemas/lib/parser";
 import { toAppError } from "@aikami/utils/lib/errors";
 ```
 
-**Rationale**: Tree-shaking removes unused exports. The `src/index.ts` file is
-the public API surface; `lib/` is an implementation detail.
-
 ### Same Rule for Local Aliases
-
-This applies to path aliases too:
 
 ```typescript
 // ✅ CORRECT
@@ -176,25 +290,29 @@ import type { User } from "$types/lib/user";
 import { userSchema } from "@aikami/schemas/lib/user";
 ```
 
-### Logger: Always `$logger`, Never `@aikami/logger`
+### Backend Package Aliases: Forward Slash, Never Hyphen
 
-The logger has an environment-specific alias `$logger`. Never import from
-`@aikami/logger` directly.
+Backend package imports use forward slash (`/`) between `backend` and the
+sub-package name — never hyphens:
 
 ```typescript
-// ✅ CORRECT — $logger resolves to the right impl for this environment
-import { logger } from "$logger";
+// ✅ CORRECT
+import { AgentService } from "@aikami/backend/agent";
+import { ChatService } from "@aikami/backend/chat";
+import { onboardingFlow } from "@aikami/backend/onboarding";
 
-// ❌ WRONG — bypasses environment-specific resolution
-import { logger } from "@aikami/logger";
+// ❌ WRONG
+import { AgentService } from "@aikami/backend-agent";
+import { ChatService } from "@aikami/backend-chat";
 ```
 
-| Environment | `$logger` resolves to |
-|---|---|
-| SvelteKit (PWA) | `shared/logger/src/lib/svelte_kit.ts` |
-| Firebase Functions | `shared/logger/src/lib/logger_functions.ts` |
-| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts` |
-| AWS / Node.js | `shared/logger/src/lib/logger_aws.ts` |
+This applies to:
+- `apps/frontend/pwa/svelte.config.js` — Vite/SvelteKit aliases
+- `apps/backend/firebase/tsconfig.json` — Functions tsconfig paths
+- All `import` statements referencing these packages
+
+The pattern `@aikami/backend/<name>` keeps sub-package imports consistent
+with `@aikami/backend/auth/*`, `@aikami/backend/configs/*`, etc.
 
 ### Wildcard Imports (Only When Needed)
 
@@ -204,12 +322,11 @@ import * as v from "valibot";
 import * as z from "zod";
 ```
 
-## 4. Type Definitions — Where Types and Schemas Live
+---
 
-### Never Export Types or Schemas from Services
+## Type Definitions — Where Types and Schemas Live
 
-Types and schemas are **not** business logic. A service file should export
-functions and classes, not data shape definitions.
+See CRITICAL VIOLATION #3 above. Additional details:
 
 | Location | What goes there |
 |---|---|
@@ -217,36 +334,6 @@ functions and classes, not data shape definitions.
 | `packages/shared/types/` | Cross-project types (used by 2+ apps/packages) |
 | `apps/<app>/src/lib/types/` | Single-app types (100% specific to one app) |
 | Inline / top of file | Single-method type used in exactly one function |
-
-```typescript
-// ❌ WRONG — type and schema exported from a service
-// apps/frontend/pwa/src/lib/client/services/game/game_state_service.ts
-export type ActiveContextEntry = { entityId: string; ... };
-export const ActiveSessionSchema = z.object({ ... });
-
-// ✅ CORRECT — schema in @aikami/schemas
-// packages/shared/schemas/src/lib/api/game.ts
-export const ActiveSessionSchema = z.object({ ... });
-
-// ✅ CORRECT — type in @aikami/types, derived from schema
-// packages/shared/types/src/lib/api/game.ts
-import type { z } from "zod";
-import type { ActiveSessionSchema } from "@aikami/schemas";
-export type ActiveSessionData = z.infer<typeof ActiveSessionSchema>;
-
-// ✅ CORRECT — shared type in @aikami/types
-// packages/shared/types/src/lib/api/chat.ts
-import type { z } from "zod";
-import type { ChatMessageSchema } from "@aikami/schemas";
-export type ChatMessage = z.infer<typeof ChatMessageSchema>;
-
-// ✅ CORRECT — app-local type when 100% pwa-only
-// apps/frontend/pwa/src/lib/types/index.ts
-export type ChatMessage = {
-  id: string;
-  text: string;
-};
-```
 
 ### Schema-First: Derive Types from Zod Schemas
 
@@ -279,7 +366,9 @@ the inferred type.
 exist as a Zod schema in `@aikami/schemas` and be re-exported as a type from
 `@aikami/types`.
 
-## 5. Error Handling
+---
+
+## Error Handling
 
 Use `AppError` from `@aikami/utils`:
 
@@ -293,7 +382,9 @@ throw toAppError("unauthorized", "User not logged in");
 
 Valid types: `not-found`, `invalid-argument`, `unauthorized`, `unauthenticated`, `internal`, `captcha-required`.
 
-## 6. Validation
+---
+
+## Validation
 
 ### Server-Side (Zod)
 
@@ -315,7 +406,9 @@ import { userSchema } from "@aikami/valibot-schemas";
 
 **Rule**: Zod stays on the server; Valibot is preferred on the client (PWA).
 
-## 7. Project Structure
+---
+
+## Project Structure
 
 ```
 aikami/
@@ -332,7 +425,9 @@ aikami/
     scripts/               — CI, setup, ops scripts
 ```
 
-## 8. Moon Commands
+---
+
+## Moon Commands
 
 Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected` before tests.
 
@@ -345,7 +440,9 @@ bun moon run :test                 # Run all tests
 bun moon run :validate             # Full CI validation
 ```
 
-## 9. Direnv Development Environment
+---
+
+## Direnv Development Environment
 
 The project uses direnv for deterministic, zero-setup development. Environment
 variables are always available via the loaded `.envrc`. All pi extensions
@@ -375,4 +472,35 @@ When the LLM needs a CLI tool not in the Nix devShell:
 ```bash
 direnv_add_package python3   # Adds to flake.nix, triggers direnv reload
 direnv_add_package ffmpeg
+```
+
+---
+
+## Commit & Push Policy
+
+**Never commit or push without explicit user instruction.** Default: keep all
+changes in the working tree. Present a summary after `validate()` and offer:
+"Commit? Commit+push? Continue?" Let the user decide.
+
+---
+
+## File Path Comments
+
+Every source file must include its relative path from the monorepo root as a
+comment at the very top of the file.
+
+**TypeScript / Svelte `.ts` files** — line 1, before any imports:
+
+```typescript
+// apps/frontend/pwa/src/lib/views/feature/view_model.svelte.ts
+import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
+```
+
+**Svelte `.svelte` files** — first line inside `<script>`:
+
+```svelte
+<script lang="ts">
+  // apps/frontend/pwa/src/lib/views/feature/view.svelte
+  import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
+</script>
 ```

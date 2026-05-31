@@ -1,16 +1,20 @@
 #!/usr/bin/env bun
 // scripts/src/lib/test_blackbox/run.ts
 // Entry point for blackbox tests. Starts emulators + dev servers, runs suites, reports.
+// Primary service lifecycle: tmux (bypasses Nix posix_spawn PATH loss).
+// Fallback: process spawn (when tmux unavailable).
 
 import { startDevServer, stopAllDevServers } from './dev_server_manager.ts';
 import { startEmulators, stopEmulators } from './emulator_manager.ts';
 import { printTerminalReport, writeJsonReport } from './reporter.ts';
 import { runSuites } from './test_runner.ts';
+import { startServices, stopServices } from './tmux_manager.ts';
 import type { SuiteResult, TestSuites } from './types.ts';
 
 const args = process.argv.slice(2);
 const suiteFilterSet = new Set(args.filter((a) => !a.startsWith('--')));
 const noCrossService = args.includes('--no-cross-service');
+const noEmulator = args.includes('--no-emulator');
 const help = args.includes('--help') || args.includes('-h');
 
 if (help) {
@@ -24,17 +28,19 @@ Arguments:
 
 Options:
   --no-cross-service  Skip cross-service tests
-  --no-emulator       Skip emulator startup (if already running)
+  --no-emulator       Skip service startup (if already running)
   --help, -h          Show help
 
 Suites:
   schema-check      Validate Zod schemas + TypeScript types
   functions         Firebase Functions tests (requires emulators)
   pwa               PWA browser tests (requires PWA dev server)
+  game-e2e          Game Firebase REST integration (requires emulators + game dev server)
   cross-service     Multi-service flow tests
 
 Examples:
   bun run test:blackbox                         # All suites
+  bun run test:blackbox game-e2e                # Game only
   bun run test:blackbox schema-check            # Schema only
   bun run test:blackbox pwa functions           # PWA + Functions
   bun run test:blackbox --no-cross-service      # Skip cross-service
@@ -51,6 +57,7 @@ async function main() {
     { name: 'schema-check', path: './suites/schema_check.ts', key: 'schemaCheckSuite' },
     { name: 'functions', path: './suites/functions.api.ts', key: 'functionsSuite' },
     { name: 'pwa', path: './suites/pwa.e2e.ts', key: 'pwaSuite' },
+    { name: 'game-e2e', path: './suites/game_e2e.ts', key: 'gameE2eSuite' },
   ];
   if (!noCrossService) {
     // cross-service suite can be added later
@@ -74,41 +81,74 @@ async function main() {
     process.exit(0);
   }
 
-  // ── 2. Start services in parallel ────────────────────────
+  // ── 2. Start services ─────────────────────────────────────
   const needsEmulator = suites.some((s) => s.category === 'service' || s.category === 'cross-service');
   const needsPwa = suites.some((s) => s.name === 'pwa');
+  const needsGame = suites.some((s) => s.name === 'game-e2e');
 
-  const services: Promise<void>[] = [];
+  if (!noEmulator) {
+    const tmuxAvailable = await checkTmuxAvailable();
 
-  if (needsEmulator) {
-    services.push(
-      startEmulators().catch((e) => {
-        console.error('❌ Failed to start emulators:', e instanceof Error ? e.message : e);
-      }),
-    );
+    if (tmuxAvailable) {
+      const only: string[] = [];
+      if (needsEmulator) only.push('emulators');
+      if (needsGame) only.push('game');
+      if (needsPwa) only.push('pwa');
+
+      if (only.length > 0) {
+        console.log(`🚀 Starting services via tmux (${only.join(', ')})...`);
+        try {
+          await startServices({ only });
+        } catch (e) {
+          console.error('  ⚠ Tmux startup failed:', e instanceof Error ? e.message : e);
+        }
+      }
+    } else {
+      // Fallback: process spawn (may fail in Nix env)
+      const services: Promise<void>[] = [];
+
+      if (needsEmulator) {
+        services.push(
+          startEmulators().catch((e) => {
+            console.error('❌ Failed to start emulators:', e instanceof Error ? e.message : e);
+          }),
+        );
+      }
+
+      if (needsPwa) {
+        services.push(
+          startDevServer('pwa').catch((e) => {
+            console.error('  ⚠ PWA dev server failed:', e instanceof Error ? e.message : e);
+          }),
+        );
+      }
+
+      if (needsGame) {
+        services.push(
+          startDevServer('game').catch((e) => {
+            console.error('  ⚠ Game dev server failed:', e instanceof Error ? e.message : e);
+          }),
+        );
+      }
+
+      if (services.length > 0) {
+        console.log(`🚀 Starting ${services.length} service(s)...`);
+        await Promise.all(services);
+      }
+    }
+  } else {
+    console.log('⏭  Skipping service startup (--no-emulator)');
   }
 
-  if (needsPwa) {
-    services.push(
-      startDevServer('pwa').catch((e) => {
-        console.error('  ⚠ PWA dev server failed:', e instanceof Error ? e.message : e);
-      }),
-    );
-  }
-
-  if (services.length > 0) {
-    console.log(`🚀 Starting ${services.length} service(s)...`);
-    await Promise.all(services);
-  }
-
-  // ── 4. Run suites ─────────────────────────────────────────
+  // ── 3. Run suites ─────────────────────────────────────────
   const results: SuiteResult[] = await runSuites(suites, { noCrossService });
 
-  // ── 5. Cleanup ────────────────────────────────────────────
+  // ── 4. Cleanup ────────────────────────────────────────────
+  await stopServices().catch(() => {});
   await stopAllDevServers().catch(() => {});
   await stopEmulators().catch(() => {});
 
-  // ── 6. Report ─────────────────────────────────────────────
+  // ── 5. Report ─────────────────────────────────────────────
   const dur = Date.now() - overallStart;
   printTerminalReport(results, dur);
   writeJsonReport(results, dur);
@@ -116,8 +156,19 @@ async function main() {
   process.exit(results.filter((r) => r.status === 'fail').length > 0 ? 1 : 0);
 }
 
+/** Checks if tmux is available on the system. */
+async function checkTmuxAvailable(): Promise<boolean> {
+  const { spawn } = await import('node:child_process');
+  return new Promise((resolve) => {
+    const proc = spawn('tmux', ['-V'], { stdio: 'ignore' });
+    proc.on('close', (code) => resolve(code === 0));
+    proc.on('error', () => resolve(false));
+  });
+}
+
 main().catch((e) => {
   console.error('Unhandled:', e);
+  stopServices().catch(() => {});
   stopAllDevServers().catch(() => {});
   stopEmulators().catch(() => {});
   process.exit(1);

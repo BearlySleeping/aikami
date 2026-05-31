@@ -184,7 +184,9 @@
               </select>
               {#if viewModel.preferencesErrors.theme}
                 <div class="label">
-                  <span class="label-text-alt text-error"> {viewModel.preferencesErrors.theme} </span>
+                  <span class="label-text-alt text-error">
+                    {viewModel.preferencesErrors.theme}
+                  </span>
                 </div>
               {/if}
             </div>

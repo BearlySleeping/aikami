@@ -9,6 +9,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
+import { PWA_EMULATOR_PORT, PWA_PORT } from '../../../packages/shared/constants/src/index';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
@@ -63,7 +64,7 @@ function forceExternalPlugin(): PluginOption {
 }
 
 export default defineConfig(({ mode }) => {
-  const port = Number(process.env.PORT || mode === 'emulator' ? 5173 : 5174);
+  const port = Number(process.env.PORT || mode === 'emulator' ? PWA_EMULATOR_PORT : PWA_PORT);
 
   const plugins: PluginOption[] = [
     forceExternalPlugin(),

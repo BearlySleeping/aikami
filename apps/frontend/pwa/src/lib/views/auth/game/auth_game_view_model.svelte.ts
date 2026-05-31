@@ -8,7 +8,7 @@ import {
 import { toAppError, toAppErrorFromUnknownError } from '@aikami/utils';
 import { authService } from '$services';
 
-type AuthState = 'idle' | 'signing_in' | 'success' | 'error';
+type AuthState = 'idle' | 'signing_in' | 'success' | 'error' | 'handoff_complete';
 
 export type AuthGameViewModelOptions = BaseViewModelOptions;
 
@@ -42,6 +42,11 @@ export type AuthGameViewModelInterface = BaseViewModelInterface & {
    * Whether the page was opened from the Godot game.
    */
   readonly isGameAuth: boolean;
+
+  /**
+   * The device flow auth code from the URL (e.g., `?code=ABC123`).
+   */
+  readonly gameCode: string | null;
 
   /**
    * Whether a postMessage can be sent to the opener window.
@@ -83,6 +88,7 @@ class AuthGameViewModel
   private _email = $state('');
   private _password = $state('');
   private _copied = $state(false);
+  private _authUid = $state('');
 
   get authState(): AuthState {
     return this._authState;
@@ -113,7 +119,15 @@ class AuthGameViewModel
   }
 
   get isGameAuth(): boolean {
-    return typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('game');
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has('game') || params.has('code');
+  }
+
+  get gameCode(): string | null {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('code');
   }
 
   get canPostMessage(): boolean {
@@ -123,10 +137,16 @@ class AuthGameViewModel
   async initialize(): Promise<void> {
     this.debug('initialize');
 
+    const isOldGameParam =
+      typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('game');
     if (!this.isGameAuth) {
       window.location.href = '/login';
       return;
     }
+
+    // Device flow: redirect from old `?game` to new `?code=` based flow is handled
+    // by this method; no redirect needed — just proceed.
+    void isOldGameParam; // keep unused variable to signal intent
 
     await super.initialize();
   }
@@ -228,6 +248,7 @@ class AuthGameViewModel
 
     try {
       const token = await authService.getIdToken();
+      const uid = authService.currentUser?.uid;
 
       if (!token) {
         throw toAppError({
@@ -237,17 +258,60 @@ class AuthGameViewModel
       }
 
       this._idToken = token;
-      this._authState = 'success';
+      this._authUid = uid || '';
 
-      if (window.opener) {
-        const origin = new URLSearchParams(window.location.search).get('origin') || '*';
-        window.opener.postMessage({ type: 'GAME_AUTH_SUCCESS', token }, origin);
+      const code = this.gameCode;
+
+      if (code) {
+        // Device Flow: write custom token to Firestore for the game to pick up
+        await this._completeHandoff(code, uid || '');
+      } else {
+        // Legacy flow: show token for copy / postMessage
+        this._authState = 'success';
+        this._sendTokenToOpener(token);
       }
     } catch (err) {
       this.error('Failed to complete authentication', err);
       this.errorMessage = toAppErrorFromUnknownError(err).message;
       this._authState = 'error';
     }
+  }
+
+  /**
+   * Completes the device flow handoff by calling the server action
+   * to mint a custom token and write it to Firestore.
+   */
+  private async _completeHandoff(code: string, uid: string): Promise<void> {
+    this.debug('completeHandoff', { code, uid });
+
+    const formData = new FormData();
+    formData.append('code', code);
+    formData.append('uid', uid);
+
+    const response = await fetch('?/completeHandoff', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw toAppError({
+        errorType: 'internal',
+        errorMessage: (errorBody as { message?: string }).message || 'Handoff failed',
+      });
+    }
+
+    this._authState = 'handoff_complete';
+  }
+
+  /**
+   * Sends the ID token to the opener window via postMessage (legacy flow).
+   */
+  private _sendTokenToOpener(token: string): void {
+    if (typeof window === 'undefined' || !window.opener) return;
+
+    const origin = new URLSearchParams(window.location.search).get('origin') || '*';
+    window.opener.postMessage({ type: 'GAME_AUTH_SUCCESS', token }, origin);
   }
 }
 

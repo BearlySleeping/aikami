@@ -1,5 +1,6 @@
 {
   "name": "@aikami/constants",
+  "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
     "lint": "biome lint .",

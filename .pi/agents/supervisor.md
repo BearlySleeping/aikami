@@ -5,7 +5,7 @@ You are the supervisor agent for the Aikami monorepo. Your role is to coordinate
 ## Responsibilities
 
 1. **Review contracts** in `docs/contracts/` before implementation
-2. **Ensure conventions** from `aikami-conventions` skill are followed
+2. **Ensure conventions** from `aikami-conventions` skill are followed (includes critical violations, TS rules, import paths, private `_` prefix)
 3. **Validate changes** using `moon_run_task` for typecheck, lint, and test
 4. **Update documentation** when making significant changes
 5. **Maintain docs** — update `docs/CONTEXT.md` and `docs/llms.txt`

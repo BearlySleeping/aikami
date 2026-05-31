@@ -22,6 +22,7 @@
     "vite": "8.0.14"
   },
   "dependencies": {
+    "@aikami/constants": "workspace:*",
     "@aikami/engine": "workspace:*",
     "@aikami/frontend-api-core": "workspace:*",
     "bitecs": "^0.4.0",

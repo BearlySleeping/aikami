@@ -3,6 +3,49 @@
 
 import type { ChatMessageData, ChatMessageResponse } from './chat.ts';
 
+/** A single chat message in the character creation DM conversation. */
+type CharacterCreationMessage = {
+  role: 'dm' | 'user' | 'system';
+  text: string;
+};
+
+/** Input for the promptCharacterCreation callable. */
+type CharacterCreationInput = {
+  messages: CharacterCreationMessage[];
+  userMessage: string;
+  phase: string;
+};
+
+/** AI-generated character sheet. */
+type CharacterSheet = {
+  name: string;
+  race: string;
+  class: string;
+  level: number;
+  abilityScores: {
+    strength: number;
+    dexterity: number;
+    constitution: number;
+    intelligence: number;
+    wisdom: number;
+    charisma: number;
+  };
+  appearanceDescription: string;
+  background: string;
+  alignment: string;
+  personalityTraits: string;
+  ideals: string;
+  bonds: string;
+  flaws: string;
+};
+
+/** Output from the promptCharacterCreation callable. */
+type CharacterCreationOutput = {
+  reply: string;
+  complete: boolean;
+  characterJson?: CharacterSheet;
+};
+
 /**
  * All registered callable functions. Each key maps to [Payload, Response].
  * Add new callables here to get full type safety in the onCall handler.
@@ -13,6 +56,7 @@ import type { ChatMessageData, ChatMessageResponse } from './chat.ts';
  */
 export type CallableFunctions = {
   chat: [ChatMessageData, ChatMessageResponse];
+  promptCharacterCreation: [CharacterCreationInput, CharacterCreationOutput];
 };
 
 export type CallableFunction = keyof CallableFunctions;

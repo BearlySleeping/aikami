@@ -17,8 +17,9 @@ class AudioContextManager {
    */
   get context(): AudioContext {
     if (!this._context) {
-      const Ctor = (window.AudioContext
-        ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) as typeof AudioContext;
+      const Ctor = (window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext) as typeof AudioContext;
 
       this._context = new Ctor();
       // context starts suspended under autoplay policy

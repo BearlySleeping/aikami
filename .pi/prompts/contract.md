@@ -19,8 +19,7 @@ User input: $ARGUMENTS
 
 For each acceptance criterion:
 1. Create/modify files per the Implementation Notes
-2. Follow `aikami-conventions` (snake_case, ViewModel pattern, Svelte 5 runes)
-3. Follow `coding-standards` (arrow functions, early returns, options objects)
+2. Follow `aikami-conventions` (snake_case files, ViewModel pattern, Svelte 5 runes, arrow functions, early returns, options objects, private `_` prefix)
 4. Use `moon_run_task` for per-project fix/typecheck — NOT raw bun commands
 5. Commit in logical groups (one per AC or file group)
 
@@ -45,5 +44,5 @@ For each acceptance criterion:
 - Never run two contracts simultaneously
 - Always use `validate()` not raw fix/typecheck/test commands
 - Always use `moon_run_task` for project-specific operations
-- Reference `aikami-conventions` + `coding-standards` skills for patterns
+- Reference `aikami-conventions` skill for patterns (covers both general TS + framework-specific)
 - Keep PROGRESS.md updated after each phase
