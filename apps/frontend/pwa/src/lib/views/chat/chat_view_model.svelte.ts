@@ -22,6 +22,8 @@ import {
 export type ChatViewModelOptions = BaseViewModelOptions & {
   chat: ChatData;
   npc: NpcData;
+  /** Entity ID of the NPC in the game engine (for expression macros). */
+  gameEntityId?: number;
 };
 
 export type ChatViewModelInterface = BaseViewModelInterface & {
@@ -69,10 +71,14 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   isPlayingTts = $state(false);
   backgroundImageUrl = $state<string | undefined>();
 
+  /** The NPC's entity ID in the game engine, for expression macro routing. */
+  private gameEntityId: number | undefined;
+
   constructor(options: ChatViewModelOptions) {
     super(options);
     this.npc = options.npc;
     this.chat = options.chat;
+    this.gameEntityId = options.gameEntityId;
   }
 
   override async initialize(): Promise<void> {
@@ -188,8 +194,8 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
         // Dispatch any macros to the engine bridge
         const bridge = createEngineBridge();
         for (const macro of chunkResult.macros) {
-          this.debug('macro in response', { name: macro.name, args: macro.args });
-          bridge.triggerMacro(macro.name, macro.args);
+          this.debug('macro in response', { name: macro.name, args: macro.args, entityId: this.gameEntityId });
+          bridge.triggerMacro(macro.name, macro.args, this.gameEntityId);
         }
 
         // Show clean text (macros stripped) in the UI

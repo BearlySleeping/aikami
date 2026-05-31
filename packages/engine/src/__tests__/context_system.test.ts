@@ -1,17 +1,19 @@
-// apps/frontend/game/src/engine/__tests__/context_system.test.ts
+// packages/engine/src/__tests__/context_system.test.ts
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
-import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import { addComponent, addEntity, createWorld, getComponent, query, set } from 'bitecs';
 import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
+import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerSpriteObservers } from '../components/sprite.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
+import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { clearContextState, updateContextSystem } from '../systems/context_system.ts';
 
 // ---------------------------------------------------------------------------
-// Helper: set up a world with all component observers registered
+// Helpers
 // ---------------------------------------------------------------------------
 
 const createTestWorld = (): World => {
@@ -22,17 +24,54 @@ const createTestWorld = (): World => {
   return world;
 };
 
+/** Query terms for context-bearing entities (used by the grid population helper). */
+const CONTEXT_QUERY_TERMS = [Position, NPCDialog];
+
+/** Grid cell size matching the default context radius. */
+const GRID_CELL_SIZE = 50;
+
+/** Capacity large enough for all test entities. */
+const GRID_CAPACITY = 1024;
+
+/** Pre-allocated position buffer for grid population in tests. */
+const testPositionBuffer = new Float32Array(GRID_CAPACITY * 2);
+
+/**
+ * Populates a spatial hash grid with all context-bearing entities from the
+ * given world. Must be called after entity creation / position changes and
+ * before `updateContextSystem`.
+ */
+const populateTestGrid = (w: World, grid: SpatialHashGrid): void => {
+  const entityIds: number[] = [];
+
+  for (const eid of query(w, CONTEXT_QUERY_TERMS)) {
+    const pos = getComponent(w, eid, Position) as PositionData | undefined;
+    if (!pos) {
+      continue;
+    }
+
+    const idx = entityIds.length;
+    testPositionBuffer[idx * 2] = pos.x;
+    testPositionBuffer[idx * 2 + 1] = pos.y;
+    entityIds.push(eid);
+  }
+
+  grid.populate(testPositionBuffer, entityIds);
+};
+
 // ---------------------------------------------------------------------------
-// ContextSystem tests
+// ContextSystem — context entry
 // ---------------------------------------------------------------------------
 
 describe('ContextSystem — context entry', () => {
   let world: World;
   let bridge: MockEngineBridge;
+  let grid: SpatialHashGrid;
 
   beforeEach(() => {
     world = createTestWorld();
     bridge = new MockEngineBridge();
+    grid = new SpatialHashGrid({ cellSize: GRID_CELL_SIZE, capacity: GRID_CAPACITY });
     clearContextState();
   });
 
@@ -62,7 +101,8 @@ describe('ContextSystem — context entry', () => {
       received.push(event);
     });
 
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     expect(received).toHaveLength(1);
     expect(received[0].type).toBe('CONTEXT_ENTERED');
@@ -95,7 +135,8 @@ describe('ContextSystem — context entry', () => {
       received.push(event);
     });
 
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     expect(received).toHaveLength(1);
     const payload = received[0].contextPayload as NPCDialogData;
@@ -131,7 +172,8 @@ describe('ContextSystem — context entry', () => {
       received.push({ type: 'CONTEXT_ENTERED' });
     });
 
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     expect(received).toHaveLength(0);
   });
@@ -163,7 +205,8 @@ describe('ContextSystem — context entry', () => {
     });
 
     // radius = 50, dist = 50, distSq = 2500, radiusSq = 2500, 2500 < 2500 = false
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     expect(received).toHaveLength(0);
   });
@@ -176,10 +219,12 @@ describe('ContextSystem — context entry', () => {
 describe('ContextSystem — context exit', () => {
   let world: World;
   let bridge: MockEngineBridge;
+  let grid: SpatialHashGrid;
 
   beforeEach(() => {
     world = createTestWorld();
     bridge = new MockEngineBridge();
+    grid = new SpatialHashGrid({ cellSize: GRID_CELL_SIZE, capacity: GRID_CAPACITY });
     clearContextState();
   });
 
@@ -205,7 +250,8 @@ describe('ContextSystem — context exit', () => {
     );
 
     // First tick — player enters context
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     // Second tick — move player far away
     addComponent(world, playerEid, set(Position, { x: 200, y: 200 }));
@@ -215,7 +261,8 @@ describe('ContextSystem — context exit', () => {
       received.push(event);
     });
 
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     expect(received).toHaveLength(1);
     expect(received[0].type).toBe('CONTEXT_EXITED');
@@ -248,7 +295,8 @@ describe('ContextSystem — context exit', () => {
       received.push({ type: 'CONTEXT_EXITED' });
     });
 
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     expect(received).toHaveLength(0);
   });
@@ -261,10 +309,12 @@ describe('ContextSystem — context exit', () => {
 describe('ContextSystem — multiple NPCs', () => {
   let world: World;
   let bridge: MockEngineBridge;
+  let grid: SpatialHashGrid;
 
   beforeEach(() => {
     world = createTestWorld();
     bridge = new MockEngineBridge();
+    grid = new SpatialHashGrid({ cellSize: GRID_CELL_SIZE, capacity: GRID_CAPACITY });
     clearContextState();
   });
 
@@ -329,7 +379,8 @@ describe('ContextSystem — multiple NPCs', () => {
       entered.push(event.entityId);
     });
 
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     expect(entered).toHaveLength(2);
     expect(entered).toEqual(expect.arrayContaining(['npc-1', 'npc-2']));
@@ -374,7 +425,8 @@ describe('ContextSystem — multiple NPCs', () => {
     );
 
     // First tick — both enter
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
     // Move player toward NPC 2 only, away from NPC 1
     addComponent(world, playerEid, set(Position, { x: 10, y: 80 }));
@@ -388,17 +440,13 @@ describe('ContextSystem — multiple NPCs', () => {
       exited.push(event.entityId);
     });
 
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
 
-    // NPC 1 should exit (distance from 0,0 to 30,0 is 30 < 50 — no wait)
-    // Actually let me recalculate. Player at (10, 80), NPC 1 at (30,0)
-    // dx = 30 - 10 = 20, dy = 0 - 80 = -80, distSq = 400 + 6400 = 6800
-    // radiusSq = 2500, 6800 > 2500 → exit
+    // NPC 1 should exit (distance from 10,80 to 30,0 is 20,80 → distSq = 400+6400 = 6800 > 2500)
     expect(exited).toContain('npc-1');
 
-    // NPC 2 at (0, 40), player at (10, 80)
-    // dx = 0 - 10 = -10, dy = 40 - 80 = -40, distSq = 100 + 1600 = 1700
-    // 1700 < 2500 → still in context
+    // NPC 2 at (0, 40), player at (10, 80) → distSq = 100+1600 = 1700 < 2500 → still in context
     expect(exited).not.toContain('npc-2');
   });
 });
@@ -410,10 +458,12 @@ describe('ContextSystem — multiple NPCs', () => {
 describe('ContextSystem — custom radius', () => {
   let world: World;
   let bridge: MockEngineBridge;
+  let grid: SpatialHashGrid;
 
   beforeEach(() => {
     world = createTestWorld();
     bridge = new MockEngineBridge();
+    grid = new SpatialHashGrid({ cellSize: GRID_CELL_SIZE, capacity: GRID_CAPACITY });
     clearContextState();
   });
 
@@ -445,7 +495,14 @@ describe('ContextSystem — custom radius', () => {
       received.push({ type: 'CONTEXT_ENTERED' });
     });
 
-    updateContextSystem(world, playerEid, bridge, 100);
+    populateTestGrid(world, grid);
+    updateContextSystem({
+      world,
+      playerEntityId: playerEid,
+      bridge,
+      spatialGrid: grid,
+      contextRadius: 100,
+    });
 
     expect(received).toHaveLength(1);
   });
@@ -476,7 +533,14 @@ describe('ContextSystem — custom radius', () => {
       received.push({ type: 'CONTEXT_ENTERED' });
     });
 
-    updateContextSystem(world, playerEid, bridge, 0);
+    populateTestGrid(world, grid);
+    updateContextSystem({
+      world,
+      playerEntityId: playerEid,
+      bridge,
+      spatialGrid: grid,
+      contextRadius: 0,
+    });
 
     expect(received).toHaveLength(0);
   });
@@ -489,10 +553,12 @@ describe('ContextSystem — custom radius', () => {
 describe('ContextSystem — safety edge cases', () => {
   let world: World;
   let bridge: MockEngineBridge;
+  let grid: SpatialHashGrid;
 
   beforeEach(() => {
     world = createTestWorld();
     bridge = new MockEngineBridge();
+    grid = new SpatialHashGrid({ cellSize: GRID_CELL_SIZE, capacity: GRID_CAPACITY });
     clearContextState();
   });
 
@@ -502,13 +568,23 @@ describe('ContextSystem — safety edge cases', () => {
     addComponent(world, playerEid, set(Position, { x: 0, y: 0 }));
 
     expect(() => {
-      updateContextSystem(world, playerEid, undefined as unknown as EngineBridge);
+      updateContextSystem({
+        world,
+        playerEntityId: playerEid,
+        bridge: undefined as unknown as EngineBridge,
+        spatialGrid: grid,
+      });
     }).not.toThrow();
   });
 
   it('safely handles undefined world', () => {
     expect(() => {
-      updateContextSystem(undefined as unknown as World, 1, bridge);
+      updateContextSystem({
+        world: undefined as unknown as World,
+        playerEntityId: 1,
+        bridge,
+        spatialGrid: grid,
+      });
     }).not.toThrow();
   });
 
@@ -532,7 +608,7 @@ describe('ContextSystem — safety edge cases', () => {
     );
 
     expect(() => {
-      updateContextSystem(world, playerEid, bridge);
+      updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
     }).not.toThrow();
   });
 
@@ -563,15 +639,18 @@ describe('ContextSystem — safety edge cases', () => {
     });
 
     // Tick 1 — enters context
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
     expect(entered).toHaveLength(1);
 
     // Tick 2 — still in range, should NOT re-emit
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
     expect(entered).toHaveLength(1);
 
     // Tick 3 — still in range, should NOT re-emit
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
     expect(entered).toHaveLength(1);
   });
 
@@ -606,20 +685,23 @@ describe('ContextSystem — safety edge cases', () => {
     });
 
     // Tick 1 — enters
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
     expect(enters).toHaveLength(1);
     expect(exits).toHaveLength(0);
 
     // Tick 2 — leaves (move far away)
     addComponent(world, playerEid, set(Position, { x: 200, y: 200 }));
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
     expect(enters).toHaveLength(1);
     expect(exits).toHaveLength(1);
     expect(exits[0]).toBe('yo-yo');
 
     // Tick 3 — re-enters (move back)
     addComponent(world, playerEid, set(Position, { x: 20, y: 0 }));
-    updateContextSystem(world, playerEid, bridge);
+    populateTestGrid(world, grid);
+    updateContextSystem({ world, playerEntityId: playerEid, bridge, spatialGrid: grid });
     expect(enters).toHaveLength(2);
     expect(exits).toHaveLength(1);
   });

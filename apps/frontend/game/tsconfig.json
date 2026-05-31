@@ -14,9 +14,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["bun"]
-  },
-  "compilerOptions": {
+    "types": ["bun"],
     "paths": {
       "@aikami/engine": ["../../packages/engine/src/index.ts"],
       "@aikami/engine/*": ["../../packages/engine/src/*"]

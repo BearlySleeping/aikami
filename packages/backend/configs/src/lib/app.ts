@@ -7,17 +7,37 @@ import {
   type ServiceAccount,
 } from 'firebase-admin/app';
 import { logger } from '$logger';
-import { getEnvironmentValue, isEmulatorMode } from './environment.ts';
+import {
+  backendEnv,
+  getMode,
+  getProjectId,
+  isEmulatorMode,
+  isRunningOnCloudRun,
+} from './environment.ts';
 
 /**
  * Parses the Firebase service account JSON string and fixes private key newlines.
  */
 const parseServiceAccount = (serviceAccountString: string): ServiceAccount => {
   try {
-    const parsed = JSON.parse(serviceAccountString) as ServiceAccount;
+    // 1. Decode Base64 if necessary
+    let jsonString = serviceAccountString;
+    if (!serviceAccountString.trim().startsWith('{')) {
+      jsonString = Buffer.from(serviceAccountString, 'base64').toString('utf-8');
+    }
+
+    // 2. THE FIX: Convert literal line breaks back into escaped \n text
+    // This prevents the "Unterminated string in JSON" error
+    jsonString = jsonString.replace(/\r?\n/g, '\\n');
+    // 3. Now it is safe to parse
+    const parsed = JSON.parse(jsonString) as ServiceAccount;
+
+    // 4. Firebase Admin SDK actually *needs* literal newlines in the private key,
+    // so we convert them back after parsing the JSON object.
     if (parsed.privateKey) {
       parsed.privateKey = parsed.privateKey.replace(/\\n/g, '\n');
     }
+
     return parsed;
   } catch (error) {
     logger.error('Invalid FIREBASE_SERVICE_ACCOUNT env:', serviceAccountString);
@@ -47,26 +67,28 @@ const buildAppOptions = (): AppOptions => {
   const options: AppOptions = {};
 
   // The Firebase Auth emulator requires a projectId to validate tokens.
-  // In emulator mode, this is optional and will default to 'aikami-dev'
-  const projectId = getEnvironmentValue('GCLOUD_PROJECT', isEmulator);
+  const projectId = getProjectId();
 
-  if (isEmulator && !projectId) {
-    return getEmulatorOptions('aikami-dev');
-  }
-
-  if (isEmulator && projectId) {
+  if (isEmulator) {
     return getEmulatorOptions(projectId);
   }
 
-  // --- Production / Live Environment Setup ---
-  const serviceAccountString = getEnvironmentValue('FIREBASE_SERVICE_ACCOUNT', true);
-  const isCloudRun = !!getEnvironmentValue('K_SERVICE', true);
+  const isCloudRun = isRunningOnCloudRun();
 
-  if (!isCloudRun && serviceAccountString) {
-    logger.debug('- Initializing Firebase Admin SDK with service account');
+  const serviceAccountString = isCloudRun ? undefined : backendEnv.FIREBASE_SERVICE_ACCOUNT;
+  logger.info('isCloudRun', isCloudRun);
+
+  // 🚨 THE FIX: Strip leaked GitHub Actions paths so they don't hijack native ADC
+  if (isCloudRun && process.env.GOOGLE_APPLICATION_CREDENTIALS?.includes('/home/runner/')) {
+    logger.warn('Detected leaked CI credential path. Deleting it to force native Cloud Run ADC.');
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+
+  if (serviceAccountString) {
+    logger.info('- Initializing Firebase Admin SDK with service account');
     options.credential = cert(parseServiceAccount(serviceAccountString));
   } else {
-    logger.debug('- Initializing Firebase Admin SDK without service account (relying on ADC)');
+    logger.info('- Initializing Firebase Admin SDK without service account (relying on ADC)');
   }
 
   if (projectId && !isEmulator) {
@@ -89,14 +111,23 @@ export const getApp = () => {
 
   const options = buildAppOptions();
 
-  logger.debug(`- Initializing Firebase Admin SDK with options`, {
-    credentials: !!options.credential,
-    ...options,
+  logger.info('- Firebase Admin SDK projectId', {
+    projectId: options.projectId,
+    hasCredential: !!options.credential,
+    // biome-ignore lint/style/useNamingConvention: temp debugging
+    hasGOOGLE_APPLICATION_CREDENTIALS: !!process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    googleApplicationCredentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    isCloudRun: isRunningOnCloudRun(),
+    isEmulator: isEmulatorMode(),
+    mode: getMode(),
   });
 
   const initializedApp = initializeApp(options);
 
-  logger.debug('- Firebase Admin SDK initialized!');
+  logger.info('- Firebase Admin SDK initialized!', {
+    appName: initializedApp.name,
+    optionsProjectId: options.projectId,
+  });
 
   return initializedApp;
 };

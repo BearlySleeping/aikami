@@ -1,6 +1,7 @@
 <script lang="ts">
   // apps/frontend/pwa/src/lib/components/chat/MessageBubble.svelte
   import type { ChatMessage as ChatMessageType } from '$lib/client/services/chat/chat.svelte.ts';
+  import { ttsService } from '$services';
 
   type Props = {
     message: ChatMessageType;
@@ -110,6 +111,12 @@
     >
       {#if isAction}
         <span class="italic">* {formatActionText(message.text)} *</span>
+      {:else if ttsService.active_message_id === message.id && ttsService.is_playing}
+        {#each message.text.split(/\s+/) as word, index}
+          <span class={index === ttsService.current_word_index ? 'text-primary-500' : ''}>
+            {word}
+          </span>
+        {/each}
       {:else}
         {message.text}
       {/if}
