@@ -172,7 +172,9 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   }
 
   updateLastAIMessage(text: string): void {
-    if (this.messages.length === 0) return;
+    if (this.messages.length === 0) {
+      return;
+    }
     const lastIndex = this.messages.length - 1;
     if (this.messages[lastIndex].sender === 'ai') {
       this.messages[lastIndex].text = text;

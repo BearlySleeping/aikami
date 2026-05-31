@@ -18,8 +18,12 @@ const parseBase64Json = (options: { base64: string }) => {
     const decoded = new TextDecoder().decode(bytes);
     const json = JSON.parse(decoded);
 
-    if (isV2Card(json)) return json.data;
-    if (json.data) return json.data;
+    if (isV2Card(json)) {
+      return json.data;
+    }
+    if (json.data) {
+      return json.data;
+    }
     return json;
   } catch {
     return undefined;
@@ -83,9 +87,9 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
 
   if (!isPng({ buffer: arrayBuffer })) {
     throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'File is not a valid PNG.'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'File is not a valid PNG.',
+    });
   }
 
   const uint8Array = new Uint8Array(arrayBuffer);
@@ -103,14 +107,16 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
 
   if (!character && textChunks.cbar) {
     const risuData = parseBase64Json({ base64: textChunks.cbar });
-    if (risuData) character = convertRisuAiToCharacter({ data: risuData });
+    if (risuData) {
+      character = convertRisuAiToCharacter({ data: risuData });
+    }
   }
 
   if (!character) {
     throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'No valid character data found in PNG.'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'No valid character data found in PNG.',
+    });
   }
 
   const avatarFile = new File([file], `${file.name.replace('.png', '')}_avatar.png`, {
@@ -134,9 +140,9 @@ export const importFromJson = async (options: { file: File }): Promise<Character
     json = JSON.parse(text);
   } catch {
     throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'Invalid JSON format.'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'Invalid JSON format.',
+    });
   }
 
   let character: Character | undefined;
@@ -151,9 +157,9 @@ export const importFromJson = async (options: { file: File }): Promise<Character
 
   if (!character) {
     throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'JSON does not match known character specifications.'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'JSON does not match known character specifications.',
+    });
   }
 
   let avatarFile: File | undefined;

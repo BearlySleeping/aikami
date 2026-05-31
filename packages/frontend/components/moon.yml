@@ -3,7 +3,6 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'library'
-stack: 'frontend'
 tags:
   - 'components'
   - 'shared'
@@ -11,7 +10,7 @@ tags:
   - 'storybook'
 
 project:
-  title: 'Frontend Components'
+  name: 'frontend-components'
   description: 'Shared UI components library for Aikami.'
   channel: '#frontend'
   owner: 'Frontend Team'
@@ -55,32 +54,3 @@ tasks:
     options:
       runInWorkspace: false
 
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  validate:
-    command: 'bun run validate'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'

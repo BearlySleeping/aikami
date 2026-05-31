@@ -54,24 +54,16 @@ AI:
 ## Continuing: Refactor .pi extensions to use relative imports
 
 ### What's been done
-- [x] Fixed 4 skill YAML conflicts (astro, contract, , project-commands)
-- [x] Refactored deployment-orchestrator.ts — fixed pwa deploy + mode bug
-- [x] Added --only support to firebase_deploy_functions
-- [x] Created .pi/README.md documenting full pi setup
+- [x] Refactored firebase-tools.ts — added --only support + mode fix
 - [x] Added blackbox_test tool
-- [x] Slimmed -rules skill (78% smaller)
-- [x] Removed astro-rules skill
 - [x] Fixed emulator stop bug (kill-session → kill-window)
 
 ### In progress
-- [ ] Import MODE_PROJECT_MAP from constants in 3 extension files
 - [ ] Sync firestack skill with upstream
 - [ ] Fix firebase-functions skill (deprecated patterns)
 
 ### Files modified
-- `.pi/extensions/deployment-orchestrator.ts` — full refactor
 - `.pi/extensions/firebase-tools.ts` — --only support, mode fix
-- `.pi/skills/-rules/SKILL.md` — slimmed to project patterns
 - `.pi/skills/firebase-functions/SKILL.md` — needs fix (current version has deprecated index.ts pattern)
 
 ### Key decisions

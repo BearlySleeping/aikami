@@ -1,15 +1,20 @@
+import type { LogLevel, Mode } from '@nordclaw/types';
+
 declare module '$env/static/private' {
   export const GEMINI_API_KEY: string;
   export const FIREBASE_SERVICE_ACCOUNT: string;
-  export const FLAVOR: string;
+  export const MODE: Mode;
+  export const LOG_LEVEL: Mode;
+  export const GMAIL_CLIENT_ID: string;
+  export const GMAIL_CLIENT_SECRET: string;
 }
 declare module '$env/static/public' {
   export const PUBLIC_FIREBASE_API_KEY: string;
   export const PUBLIC_FIREBASE_AUTH_DOMAIN: string;
-  export const PUBLIC_FIREBASE_PROJECT_ID: string;
   export const PUBLIC_FIREBASE_STORAGE_BUCKET: string;
   export const PUBLIC_FIREBASE_MESSAGING_SENDER_ID: string;
   export const PUBLIC_FIREBASE_APP_ID: string;
   export const PUBLIC_FIREBASE_MEASUREMENT_ID: string;
-  export const PUBLIC_LOG_LEVEL: string;
+  export const PUBLIC_LOG_LEVEL: LogLevel;
+  export const PUBLIC_MODE: Mode;
 }

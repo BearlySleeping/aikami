@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { test } from '@playwright/test';
 
 test.describe('Login with Emulator', () => {
   test('should login with emulator user', async ({ page }) => {
@@ -23,21 +23,15 @@ test.describe('Login with Emulator', () => {
 
     // Wait for navigation or error
     await page.waitForTimeout(3000);
-
-    // Print console logs
-    console.log('\n=== Console Logs ===');
-    consoleLogs.forEach((log) => console.log(log));
+    consoleLogs.forEach((_log) => {});
 
     // Check current URL
     const currentUrl = page.url();
-    console.log('\n=== Current URL ===');
-    console.log(currentUrl);
 
     // Get any errors visible on page
     const errors = await page.locator('[role="alert"], .alert-error, .error').allTextContents();
     if (errors.length > 0) {
-      console.log('\n=== Page Errors ===');
-      errors.forEach((err) => console.log(err));
+      errors.forEach((_err) => {});
     }
   });
 });

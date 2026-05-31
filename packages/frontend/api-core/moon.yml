@@ -3,14 +3,13 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'library'
-stack: 'frontend'
 tags:
   - 'api-core'
   - 'frontend'
   - 'library'
 
 project:
-  title: 'Frontend API Core'
+  name: 'frontend-api-core'
   description: 'Game engine API client and frontend AI provider abstraction layer.'
   channel: '#frontend'
   owner: 'Frontend Team'
@@ -32,34 +31,9 @@ fileGroups:
     - 'tests/**/*'
 
 tasks:
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
   test:
     command: 'bun test'
     inputs:
       - '@group(sources)'
       - '@group(tests)'
-      - '@group(configs)'
-  validate:
-    command: 'bun run validate'
-    inputs:
-      - '@group(sources)'
       - '@group(configs)'

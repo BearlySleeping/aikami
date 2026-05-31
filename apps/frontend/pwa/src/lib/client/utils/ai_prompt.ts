@@ -63,8 +63,54 @@ export function formatChatHistory(
 }
 
 /**
+ * Data shape for an active spatial context entry injected into the prompt.
+ */
+export type SpatialContextEntry = {
+  entityId: string;
+  npcId: string;
+  npcName: string;
+  dialog: string;
+  interactionRadius: number;
+};
+
+/**
+ * Builds a system prompt segment from a list of active spatial contexts.
+ *
+ * Serializes active_contexts as JSON and wraps it in a descriptive
+ * instruction so the AI understands the player's current surroundings.
+ *
+ * @param activeContexts - Array of context entries the player is near.
+ * @returns A string to append to the system prompt, or empty string.
+ */
+export function buildSpatialContextPrompt(activeContexts: SpatialContextEntry[]): string {
+  if (activeContexts.length === 0) {
+    return '';
+  }
+
+  const contexts = activeContexts.map((ctx) => ({
+    nearby: ctx.npcName,
+    // eslint-disable-next-line perfectionist/sort-objects -- intentionally in order of significance
+    context: ctx.dialog,
+  }));
+
+  return (
+    `
+
+The player is currently near the following characters or points of interest:
+${JSON.stringify(contexts, null, 2)}
+` +
+    'Use this spatial context to inform your responses. ' +
+    'Reference nearby characters naturally when relevant.'
+  );
+}
+
+/**
  * Creates a complete prompt context for the AI including
- * system prompt and conversation history.
+ * system prompt, spatial context, and conversation history.
+ *
+ * @param character - The character data to format.
+ * @param messages - The conversation history.
+ * @param activeContexts - Optional spatial context entries to inject.
  */
 export function createAIContext(
   character: {
@@ -79,12 +125,19 @@ export function createAIContext(
     post_history_instructions?: string;
   },
   messages: Array<{ text: string; sender: 'user' | 'ai'; timestamp?: Date }>,
+  activeContexts?: SpatialContextEntry[],
 ): {
   systemPrompt: string;
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
 } {
+  let systemPrompt = formatCharacterPrompt(character);
+
+  if (activeContexts && activeContexts.length > 0) {
+    systemPrompt += buildSpatialContextPrompt(activeContexts);
+  }
+
   return {
-    systemPrompt: formatCharacterPrompt(character),
+    systemPrompt,
     messages: formatChatHistory(messages),
   };
 }

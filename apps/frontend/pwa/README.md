@@ -33,11 +33,12 @@ bun install
 | `dev` | `bunx vite dev` | Start development server |
 | `build` | `bunx vite build` | Build for production |
 | `preview` | `bunx vite preview` | Preview production build |
-| `check` | `bun run check` | Run TypeScript checks |
-| `lint` | `bun run lint` | Lint code with Biome |
-| `format` | `bun run format` | Format code with Biome |
-| `test` | `bun run test` | Run Playwright tests |
-| `test:ci` | `bun run test-ci` | Run tests for CI |
+| `typecheck` | `svelte-kit sync && svelte-check --tsconfig ./tsconfig.json` | Run TypeScript type checking |
+| `lint` | `biome lint .` | Lint code with Biome |
+| `format` | `biome format .` | Format code with Biome |
+| `fix` | `biome check --write .` | Auto-fix lint & format issues |
+| `test` | `playwright test` | Run Playwright tests |
+| `test-ci` | `bun run test:ci` | Run tests for CI |
 
 ## Project Structure
 

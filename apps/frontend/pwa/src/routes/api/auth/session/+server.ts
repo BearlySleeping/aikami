@@ -1,37 +1,33 @@
-import { getAuth } from '@aikami/backend/configs/auth.ts';
+// apps/frontend/pwa/src/routes/api/auth/session/+server.ts
 import { onSvelteKitAPICall } from '@aikami/backend/svelte-kit/api.ts';
 import { deleteCookie, sessionAge, setCookie } from '@aikami/backend/svelte-kit/cookies.ts';
+import {
+  createSessionCookie,
+  toUserSessionDataFromToken,
+  verifyIdToken,
+} from '@aikami/backend/utils/auth.ts';
 import type { PWACalls } from '@aikami/types';
 import { logger } from '$logger';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = (event) =>
   onSvelteKitAPICall<PWACalls, 'auth/session'>('auth/session', event, async ({ token }) => {
-    logger.debug('/api/auth/session - token present:', !!token);
-
+    logger.debug('/api/auth/session', { token: !!token });
     if (token) {
-      try {
-        // Verify the token first to see what we get
-        const auth = getAuth();
-        logger.debug('/api/auth/session - verifying token...');
-
-        const decodedToken = await auth.verifyIdToken(token);
-        logger.debug('/api/auth/session - token verified, uid:', decodedToken.uid);
-
-        const session = await auth.createSessionCookie(token, {
+      const [session, decodedIdToken] = await Promise.all([
+        createSessionCookie({
+          token,
           expiresIn: sessionAge,
-        });
-        setCookie('__session', session, {
-          maxAge: sessionAge,
-          ...event,
-        });
-        logger.debug('/api/auth/session - session created successfully');
-      } catch (error) {
-        logger.error('/api/auth/session - error:', error);
-        throw error;
-      }
+        }),
+        verifyIdToken(token),
+      ]);
+      setCookie('__session', session, {
+        maxAge: sessionAge,
+        ...event,
+      });
+      event.locals.userSession = toUserSessionDataFromToken(decodedIdToken);
     } else {
       deleteCookie('__session', event);
-      delete event.locals.userSession;
+      event.locals.userSession = undefined;
     }
   });

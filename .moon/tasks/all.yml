@@ -2,34 +2,77 @@
 # Global Inherited Tasks (All Projects)
 # =============================================================================
 # Tasks defined here are inherited by EVERY project in the workspace.
-# Projects can override, extend, or exclude them.
-# All tasks use "bun run <name>" to delegate to each project's package.json.
+# Projects can override, extend, or exclude them via:
+#   workspace:
+#     inheritedTasks:
+#       exclude: ['test']
+#
+# All tasks use "bun run <name>" to defer to each project's package.json
+# scripts. This makes them universally inheritable — projects control the
+# actual command via their scripts, while moon handles caching, inputs,
+# dependency ordering, and CI gating.
 # =============================================================================
 
 $schema: "https://moonrepo.dev/schemas/tasks.json"
 
+# ============================================================
+# File Groups
+# ============================================================
+# Reusable file collections referenced by tasks across all projects.
+# Paths without a leading "/" are relative to the inheriting project's root.
+# Paths with a leading "/" are relative to the workspace root.
+# ============================================================
 fileGroups:
+  # Project source code
   sources:
     - "src/**/*"
+
+  # Project-level config files
   configs:
     - "package.json"
     - "tsconfig.json"
     - "moon.yml"
+
+  # Workspace-level root configs (shared across all projects)
   root-configs:
     - "/package.json"
     - "/bun.lock"
     - "/biome.json"
+    - "/tsconfig.base.json"
     - "/tsconfig.json"
+
+  # CI/CD and deployment pipeline files
+  deployment:
+    - "/.github/actions/setup_environment/action.yml"
+    - "/.github/workflows/main.yml"
+    - "/.github/workflows/pr_validation.yml"
+    - "/scripts/src/lib/deploy/deployment_config.ts"
+    - "/bun.lock"
+    - "/package.json"
+
+  # Test files
   tests:
     - "tests/**/*"
     - "**/*.test.{ts,js}"
     - "**/*.spec.{ts,js}"
+    - "**/__tests__/**/*"
+
+  # Static assets and styles
   assets:
     - "static/**/*"
     - "public/**/*"
+    - "assets/**/*"
     - "**/*.css"
+    - "**/*.scss"
 
+# ============================================================
+# Tasks
+# ============================================================
 tasks:
+  # ------------------------------------------------------------------
+  # Lint
+  # Runs the project's linter. All projects expose `bun run lint`.
+  # ------------------------------------------------------------------
   lint:
     command: "bun"
     args: ["run", "lint"]
@@ -40,7 +83,12 @@ tasks:
     options:
       cache: true
       runInCI: true
+      runDepsInParallel: true
 
+  # ------------------------------------------------------------------
+  # Format Check
+  # Checks formatting without writing changes.
+  # ------------------------------------------------------------------
   format:
     command: "bun"
     args: ["run", "format"]
@@ -52,6 +100,10 @@ tasks:
       cache: true
       runInCI: true
 
+  # ------------------------------------------------------------------
+  # Type Check
+  # Runs TypeScript (or project-specific) type checking.
+  # ------------------------------------------------------------------
   typecheck:
     command: "bun"
     args: ["run", "typecheck"]
@@ -63,6 +115,10 @@ tasks:
       cache: true
       runInCI: true
 
+  # ------------------------------------------------------------------
+  # Lint + Format Fix
+  # Auto-fixes lint and formatting issues in place.
+  # ------------------------------------------------------------------
   fix:
     command: "bun"
     args: ["run", "fix"]
@@ -75,17 +131,11 @@ tasks:
       runInCI: false
       affectedFiles: true
 
-  test:
-    command: "bun"
-    args: ["run", "test"]
-    inputs:
-      - "@group(sources)"
-      - "@group(tests)"
-      - "@group(configs)"
-    options:
-      cache: true
-      runInCI: true
-
+  # ------------------------------------------------------------------
+  # Validate
+  # Meta-task: runs lint + format + typecheck in sequence.
+  # Useful for pre-commit hooks and CI gates.
+  # ------------------------------------------------------------------
   validate:
     deps:
       - "~:lint"

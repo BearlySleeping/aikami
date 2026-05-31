@@ -1,8 +1,8 @@
 // packages/shared/constants/src/lib/project.ts
 
-export const modes = ['development', 'staging', 'production', 'emulator'] as const;
+export const modes = ['staging', 'production', 'emulator'] as const;
 
-export const defaultMode = 'development' as const satisfies (typeof modes)[number];
+export const defaultMode = 'staging' as const satisfies (typeof modes)[number];
 
 /**
  * Aikami backend application identifiers.
@@ -19,11 +19,11 @@ export const backendAppIds = ['firebase'] as const;
  * | App            | Location                      | Use Case                              |
  * |----------------|-------------------------------|---------------------------------------|
  * | `docs`         | `apps/frontend/docs`          | Documentation site                    |
- * | `gamejs`       | `apps/frontend/gamejs`        | GameJS rendering engine               |
+ * | `game`       | `apps/frontend/game`        | game rendering engine               |
  * | `landing_page` | `apps/frontend/landing_page`  | Marketing landing page                |
  * | `pwa`          | `apps/frontend/pwa`           | Main PWA (characters, chat, settings) |
  */
-export const frontendAppIds = ['docs', 'gamejs', 'landing_page', 'pwa'] as const;
+export const frontendAppIds = ['docs', 'game', 'landing_page', 'pwa'] as const;
 
 /**
  * All Aikami application identifiers (backend + frontend).
@@ -37,7 +37,6 @@ export const appIds = [...backendAppIds, ...frontendAppIds] as const;
  * Emulator mode uses the `demo-` prefix so Firebase doesn't attempt production project lookups.
  */
 export const MODE_PROJECT_MAP = {
-  development: 'aikami-dev',
   staging: 'aikami-dev',
   production: 'aikami-prod',
   emulator: 'demo-aikami-emulator',

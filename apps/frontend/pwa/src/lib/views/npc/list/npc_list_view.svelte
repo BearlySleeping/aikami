@@ -28,7 +28,9 @@
   let isSaving = $state(false);
 
   async function saveField(field: string, value: unknown) {
-    if (isSaving) return;
+    if (isSaving) {
+      return;
+    }
     isSaving = true;
     try {
       await viewModel.saveNpc({ data: { [field]: value } });

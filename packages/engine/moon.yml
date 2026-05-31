@@ -1,0 +1,21 @@
+# packages/engine/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'engine'
+  - 'game'
+  - 'library'
+
+project:
+  name: 'engine'
+  description: 'Shared PixiJS v8 + bitECS game engine library.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'frontend-api-core'
+
+toolchains:
+  javascript: false

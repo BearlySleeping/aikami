@@ -55,15 +55,22 @@ Models, observational memory, context-mode, theme, and Telegram bridge are globa
 
 ## Skills (`.pi/skills/`)
 
-See individual skill files for details. Key skills:
+See individual skill files for details.
 
 | Skill | When Used |
 |-------|-----------|
-| `aikami-conventions` | Writing or refactoring Aikami code |
-| `project-commands` | Build, test, lint, format commands |
-| `firestack` | Firebase deployment, emulators |
-| `contract-implementer` | Implementing features from contracts |
+| `aikami-conventions` | **All** code — TS strictness, imports, arrow functions, errors |
+| `svelte-conventions` | Svelte 5 runes, ViewModel, services, aliases |
+| `backend-conventions` | Backend patterns — repository, database abstraction, services |
+| `firebase-functions` | Cloud Functions — firestack v2, Zod wrappers, deployment |
+| `firestore-collection` | Scaffolding new Firestore collections |
 | `svelte-page` | Scaffolding new SvelteKit pages |
+| `new-project` | Scaffolding new monorepo projects/packages |
+| `contract-implementer` | Implementing features from `docs/contracts/` |
+| `project-commands` | Build, test, lint, deploy command reference |
+| `firestack` | Firebase CLI — deploy, emulate, test rules |
+| `pixijs-v8` | PixiJS v8 + bitECS + engine boundary |
+| `tauri-v2` | Tauri v2 desktop app patterns |
 
 ---
 
@@ -88,5 +95,8 @@ See individual skill files for details. Key skills:
 | Always use `validate()` instead of raw moon commands | moon-integration.ts |
 | Use `ctx_execute` for analysis, not raw file reads | context-mode |
 | Use `ctx_fetch_and_index` for web docs, not inline paste | context-mode |
-| Svelte 5 ViewModel pattern, runes, Zod schemas | aikami-conventions skill |
+| General TS rules, imports, arrow functions | `aikami-conventions` skill |
+| Svelte 5 ViewModel, services, runes | `svelte-conventions` skill |
+| Backend repository pattern, database abstraction | `backend-conventions` skill |
+| Game engine boundary, PixiJS patterns | `pixijs-v8` skill |
 | Direnv environment is always loaded — extensions read `AIKAMI_MODE`, `AIKAMI_PROJECT_ID` directly | direnv.ts |

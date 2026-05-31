@@ -1,21 +1,21 @@
 ---
 name: contract-implementer
 description: >-
-  Implements Aikami features from contract specifications in the knowledge/ repo (cloned inside main repo, gitignored).
+  Implements Aikami features from contract specifications in the docs/ repo (cloned inside main repo, gitignored).
   Steps: read contract then implement code then run fix+typecheck then write tests then verify then log findings then archive contract.
-  Use when implementing features defined in knowledge/contracts/*.md. Tracks progress in knowledge/contracts/PROGRESS.md.
+  Use when implementing features defined in docs/contracts/*.md. Tracks progress in docs/contracts/PROGRESS.md.
 ---
 
 # Contract Implementer
 
-Implements Aikami features from the `knowledge/` repo (cloned inside main repo at `knowledge/`, gitignored). Each contract is a complete feature spec with data model, acceptance criteria, test hooks, visual criteria, implementation notes, and edge cases.
+Implements Aikami features from the `docs/` repo (cloned inside main repo at `docs/`, gitignored). Each contract is a complete feature spec with data model, acceptance criteria, test hooks, visual criteria, implementation notes, and edge cases.
 
 ## Workflow
 
 ### Phase 1: Load & Analyze
 
-1. Read `knowledge/contracts/INDEX.md` to see current priority ranking
-2. Read `knowledge/contracts/PROGRESS.md` to see what's in progress / completed
+1. Read `docs/contracts/INDEX.md` to see current priority ranking
+2. Read `docs/contracts/PROGRESS.md` to see what's in progress / completed
 3. Pick the next available contract (lowest rank number, not completed or in-progress)
 4. Read the contract fully
 5. Run `moon_detect_affected` to understand what packages are currently changed
@@ -38,14 +38,14 @@ After implementation:
 
 ### Phase 4: Log & Archive
 
-1. Update `knowledge/contracts/PROGRESS.md`:
+1. Update `docs/contracts/PROGRESS.md`:
    - Mark contract as `completed`
    - Log findings, gotchas encountered, files created/modified
    - Note any deviations from the contract
    - Record limitations or future work
 2. Add `<!-- completed: YYYY-MM-DD -->` comment at top of the contract file
-3. Update `knowledge/contracts/INDEX.md` status from `not_started` → `completed`
-4. Run `cd knowledge && bun run scripts/generate_llms_txt.ts` to update the index
+3. Update `docs/contracts/INDEX.md` status from `not_started` → `completed`
+4. Run `cd docs && bun run scripts/generate_llms_txt.ts` to update the index
 
 ### Phase 5: Continue
 
@@ -111,8 +111,8 @@ Last activity: YYYY-MM-DD HH:MM
 
 ## Contracts Location
 
-All contracts live in `knowledge/contracts/`. The `knowledge/` folder is a separate git repo (gitignored in main).
+All contracts live in `docs/contracts/`. The `docs/` folder is a separate git repo (gitignored in main).
 
 ## Contracts Priority Ranking
 
-Read `knowledge/contracts/INDEX.md` for the current priority ranking. It is always the source of truth. Do not hardcode contract lists — they go stale.
+Read `docs/contracts/INDEX.md` for the current priority ranking. It is always the source of truth. Do not hardcode contract lists — they go stale.
