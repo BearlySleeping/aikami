@@ -1,7 +1,7 @@
 <script lang="ts">
   // apps/frontend/pwa/src/routes/(authenticated)/chat/[chatId]/+page.svelte
-  import ChatView from '$views/chat/ChatView.svelte';
-  import { getChatViewModel } from '$views/chat/chat-view-model.svelte.ts';
+  import ChatView from '$views/chat/chat_view.svelte';
+  import { getChatViewModel } from '$views/chat/chat_view_model.svelte';
 
   import type { PageProps } from './$types';
 
