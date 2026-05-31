@@ -1,6 +1,6 @@
 // apps/frontend/game/src/main.ts
 
-import { createEngineBridge, GameWorld } from './engine/index.ts';
+import { createEngineBridge, GameWorld } from '@aikami/engine';
 import { MenuController } from './menu/menu_controller.ts';
 
 // ---------------------------------------------------------------------------

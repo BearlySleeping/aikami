@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { authenticateAndGo, authenticatePage } from './utils/playwright_auth.ts';
+import { authenticateAndGo } from './utils/playwright_auth.ts';
 
 test.describe('Onboarding Flow', () => {
   test('new user without personas should be redirected to onboarding', async ({ page }) => {

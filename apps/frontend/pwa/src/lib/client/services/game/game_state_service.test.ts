@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { createGameStateService } from './game_state_service.ts';
+import { GameStateService, type GameStateServiceInterface } from './game_state_service.svelte.ts';
 
 describe('GameStateService', () => {
-  let service: ReturnType<typeof createGameStateService>;
+  let service: GameStateServiceInterface;
 
   beforeEach(() => {
-    service = createGameStateService({ uid: 'test-user-123' });
+    service = new GameStateService({ uid: 'test-user-123', className: 'TestGameState' });
   });
 
   test('should initialize with undefined world', () => {

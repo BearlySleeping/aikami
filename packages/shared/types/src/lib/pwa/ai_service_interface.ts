@@ -1,4 +1,5 @@
 // packages/shared/types/src/lib/pwa/ai-service-interface.ts
+// TODO: Remove this? or move to endpoints?
 import type { z } from 'zod';
 
 import type {
@@ -9,7 +10,7 @@ import type {
   ClassificationResult,
   CompletionOptions,
   EmbeddingOptions,
-} from './endpoint-ai.js';
+} from '../endpoints/ai';
 
 /**
  * Vendor-agnostic AI service contract.

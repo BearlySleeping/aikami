@@ -9,6 +9,5 @@
   },
   "extensions": ["./.pi/extensions"],
   "skills": ["./.pi/skills"],
-  "prompts": ["./.pi/prompts"],
-  "themes": ["./.pi/themes"]
+  "prompts": ["./.pi/prompts"]
 }

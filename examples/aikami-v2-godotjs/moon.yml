@@ -2,14 +2,13 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'application'
-stack: 'frontend'
 tags:
   - 'gamejs'
   - 'frontend'
   - 'application'
 
 project:
-  title: 'GameJS'
+  name: 'godotjs'
   description: 'GodotJS game using TypeScript for game logic.'
   channel: '#frontend'
   owner: 'Frontend Team'
@@ -25,39 +24,8 @@ fileGroups:
     - 'tests/**/*'
 
 tasks:
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
   test:
     command: 'bun run test'
-    inputs:
-      - '@group(sources)'
-      - '@group(tests)'
-      - '@group(configs)'
-
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  validate:
-    command: 'bun run validate'
     inputs:
       - '@group(sources)'
       - '@group(tests)'

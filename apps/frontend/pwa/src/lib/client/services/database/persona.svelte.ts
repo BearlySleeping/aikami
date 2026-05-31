@@ -47,7 +47,9 @@ export type PersonaServiceInterface = BaseFrontendClassInterface & {
 class PersonaService extends BaseFrontendClass implements PersonaServiceInterface {
   async hasPersona(): Promise<boolean> {
     const user = authService.currentUser;
-    if (!user) return false;
+    if (!user) {
+      return false;
+    }
     const personas = await personaRepository.getDocumentsByCollection({
       uid: user.id,
     });
@@ -60,7 +62,9 @@ class PersonaService extends BaseFrontendClass implements PersonaServiceInterfac
 
   async getActivePersona(): Promise<PersonaData | undefined> {
     const user = authService.currentUser;
-    if (!user) return undefined;
+    if (!user) {
+      return undefined;
+    }
 
     const personas = await personaRepository.getDocumentsByCollection({ uid: user.id });
     return personas.find((p: PersonaData) => p.isActive) ?? undefined;

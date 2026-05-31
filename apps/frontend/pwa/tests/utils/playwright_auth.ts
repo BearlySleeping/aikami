@@ -6,11 +6,11 @@ export const TEST_USER_ID_HEADER = 'x-test-user-id';
 export const TEST_USER_EMAIL_HEADER = 'x-test-user-email';
 export const TEST_USER_NAME_HEADER = 'x-test-user-name';
 
-export interface TestUserOptions {
+export type TestUserOptions = {
   userId?: string;
   email?: string;
   name?: string;
-}
+};
 
 export async function authenticatePage(page: Page, options: TestUserOptions = {}): Promise<void> {
   const userId = options.userId || TEST_USER_ID;

@@ -1,0 +1,30 @@
+# packages/shared/parser/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'parser'
+  - 'shared'
+  - 'library'
+
+project:
+  name: 'parser'
+  description: 'Macro & slash command parser for AI dialogue streams.'
+  channel: '#general'
+  owner: 'Core Team'
+
+dependsOn:
+  - 'schemas'
+
+fileGroups:
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'

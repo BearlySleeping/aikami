@@ -157,9 +157,9 @@ class NpcListViewModel
     const uid = this.currentUserId;
     if (!uid) {
       throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'You must be logged in to create NPCs'
-});
+        errorType: 'unauthorized',
+        errorMessage: 'You must be logged in to create NPCs',
+      });
     }
 
     this.isLoading = true;
@@ -261,16 +261,16 @@ class NpcListViewModel
     const uid = this.currentUserId;
     if (!uid) {
       throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'You must be logged in to chat'
-});
+        errorType: 'unauthorized',
+        errorMessage: 'You must be logged in to chat',
+      });
     }
     const npc = await npcService.get({ npcId });
     if (!npc) {
       throw toAppError({
-  errorType: 'not-found',
-  errorMessage: 'NPC not found'
-});
+        errorType: 'not-found',
+        errorMessage: 'NPC not found',
+      });
     }
     return npcChatService.getOrCreateChat({
       uid,

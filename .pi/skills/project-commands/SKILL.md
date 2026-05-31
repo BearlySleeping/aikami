@@ -48,91 +48,167 @@ aikami_help        # Full shortcut list
 
 ## Moon Project Configuration
 
-Every project in the monorepo **must** have a `moon.yml` that follows this standard:
+The monorepo has **inherited default tasks** in `.moon/tasks/all.yml` that every project gets automatically:
+
+| Inherited Task | Delegates To | When to Override |
+|---|---|---|
+| `lint` | `bun run lint` | Never — already maps to `biome lint .` |
+| `format` | `bun run format` | Never — already maps to `biome format .` |
+| `typecheck` | `bun run typecheck` | Never — already maps to `tsc --noEmit` |
+| `fix` | `bun run fix` | Never — already maps to `biome check --write .` |
+| `validate` | `~:lint` + `~:format` + `~:typecheck` | Never — internal meta-task, do NOT define in package.json |
+
+Do NOT define these tasks in your project's `moon.yml`. They are inherited for free.
+
+### Pattern A — Pure Library (no custom tasks)
 
 ```yaml
 # packages/{project}/moon.yml
 $schema: "https://moonrepo.dev/schemas/project.json"
 
 language: "typescript"
-layer: "library" # or 'application', 'tool'
+layer: "library"
 tags:
-    - "{project}"
-    - "shared"
-    - "library"
+  - "{project}"
+  - "{domain}"
+  - "library"
 
 project:
-    title: "{Title}"
-    description: "{Description}."
-    channel: "#frontend"
-    owner: "Frontend Team"
+  name: "{project-id}"      # moon key, e.g. "backend-auth"
+  description: "{Description}."
+  channel: "#frontend"
+  owner: "Frontend Team"
+
+dependsOn:
+  - "constants"
+  - "types"
+```
+
+No `fileGroups` or `tasks` sections — all inherited.
+
+### Pattern B — Library with tests
+
+```yaml
+# packages/{project}/moon.yml
+$schema: "https://moonrepo.dev/schemas/project.json"
+
+language: "typescript"
+layer: "library"
+tags:
+  - "{project}"
+  - "{domain}"
+  - "library"
+
+project:
+  name: "{project-id}"
+  description: "{Description}."
+  channel: "#frontend"
+  owner: "Frontend Team"
+
+dependsOn:
+  - "constants"
+  - "types"
 
 fileGroups:
-    sources:
-        - "src/**/*"
-    configs:
-        - "package.json"
-        - "tsconfig.json"
-    tests:
-        - "tests/**/*"
+  tests:
+    - "tests/**/*"
 
 tasks:
-    typecheck:
-        command: "bun run typecheck"
-        inputs:
-            - "@group(sources)"
-            - "@group(configs)"
+  test:
+    command: "bun run test"
+    inputs:
+      - "@group(sources)"
+      - "@group(tests)"
+      - "@group(configs)"
+```
 
-    format:
-        command: "bun run format"
-        inputs:
-            - "@group(sources)"
-            - "@group(configs)"
+Only the `test` task is defined — you can reference `@group(sources)` and `@group(configs)` from the inherited file groups.
 
-    lint:
-        command: "bun run lint"
-        inputs:
-            - "@group(sources)"
-            - "@group(configs)"
+### Pattern C — App with dev server / build / E2E tests
 
-    test:
-        command: "bun run test"
-        inputs:
-            - "@group(sources)"
-            - "@group(tests)"
-            - "@group(configs)"
+```yaml
+# apps/{project}/moon.yml
+$schema: "https://moonrepo.dev/schemas/project.json"
 
-    fix:
-        command: "bun run fix"
-        inputs:
-            - "@group(sources)"
-            - "@group(configs)"
+language: "typescript"
+layer: "application"
+tags:
+  - "{project}"
+  - "{domain}"
+  - "application"
 
-    dev:
-        command: "bun run dev"
-        inputs:
-            - "@group(sources)"
-            - "@group(configs)"
-        options:
-            runFromWorkspaceRoot: false
+project:
+  name: "{project-id}"
+  description: "{Description}."
+  channel: "#frontend"
+  owner: "Frontend Team"
 
-    build:
-        command: "bun run build"
-        inputs:
-            - "@group(sources)"
-            - "@group(configs)"
-        options:
-            runFromWorkspaceRoot: false
+dependsOn:
+  - "constants"
+  - "types"
+
+toolchains:
+  javascript: false      # use this if the app bundles its own deps (Vite, Astro)
+
+fileGroups:
+  sources:
+    - "src/**/*"
+    - "index.html"
+  configs:
+    - "package.json"
+    - "tsconfig.json"
+    - "vite.config.*"
+  tests:
+    - "tests/**/*"
+    - "playwright.config.*"
+  unitTests:
+    - "src/**/*.test.ts"
+
+tasks:
+  dev:
+    command: "bun run dev"
+    preset: "server"
+  build:
+    command: "bun run build"
+    inputs:
+      - "@group(sources)"
+      - "@group(configs)"
+    outputs:
+      - "dist"
+  preview:
+    command: "bun run preview"
+    preset: "server"
+  test:
+    script: |
+      bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
+    deps:
+      - "build"
+    inputs:
+      - "@group(tests)"
+      - "@group(sources)"
+  test-unit:
+    command: "bun run test:unit"
+    inputs:
+      - "@group(unitTests)"
+      - "@group(sources)"
+  test-e2e:
+    script: 'bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
+    deps:
+      - "build"
+    inputs:
+      - "@group(tests)"
+      - "@group(sources)"
 ```
 
 ### Key Rules
 
-1. **All tasks use `bun run <script>`** - Never call binaries directly
-2. **All scripts must be in `package.json`** - Moon delegates to package.json scripts
-3. **Use `@group()` references** - Reference fileGroups for inputs
-4. **`runFromWorkspaceRoot: false`** for dev/build - Run in project dir, not workspace root
-5. **Standard tasks**: `typecheck`, `format`, `lint`, `test`, `fix`, `dev`, `build`
-6. **No `validate` task** - The combined `typecheck && test` task has been removed
+1. **Tasks that are inherited** (`lint`, `format`, `typecheck`, `fix`, `validate`) must NOT be redefined in moon.yml or duplicated in fileGroups
+2. **Custom file groups** only need entries NOT already covered by the inherited groups (`sources`, `configs`, `tests`, `root-configs`, `deployment`, `assets`)
+3. **Custom tasks can reference** `@group(sources)`, `@group(configs)`, `@group(root-configs)` freely — they exist in the inherited groups
+4. **All tasks delegate to `bun run <script>`** — scripts must be defined in `package.json`
+5. **Use `preset: "server"`** for long-running dev servers (moon won't cache them)
+6. **Use `toolchains: javascript: false`** when the app uses its own bundler (Vite, Astro, etc.)
+7. **Use `project.name` not `project.title`** — the name is the moon key (e.g. `backend-auth`)
 
 ---
 

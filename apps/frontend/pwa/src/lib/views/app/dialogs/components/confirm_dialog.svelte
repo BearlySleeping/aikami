@@ -11,35 +11,33 @@
 </script>
 
 {#if viewModel.confirmDialog}
-  <BaseViewModelContainer {viewModel} class="modal modal-open">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">{viewModel.confirmDialog.title}</h3>
+  <BaseViewModelContainer
+    {viewModel}
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+  >
+    <div class="w-full max-w-md bg-card rounded-lg border border-border p-6 shadow-sm">
+      <h3 class="text-lg font-semibold">{viewModel.confirmDialog.title}</h3>
 
       {#if viewModel.confirmDialog.message}
-        <p class="py-4">{viewModel.confirmDialog.message}</p>
+        <p class="py-4 text-sm text-muted-foreground">{viewModel.confirmDialog.message}</p>
       {/if}
 
-      <div class="modal-action">
+      <div class="flex justify-end gap-2 mt-4">
         {#if !viewModel.confirmDialog.hideDisagreeButton}
-          <button class="btn btn-ghost" onclick={() => viewModel.confirmDialogCancel()}>
+          <button
+            class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium hover:bg-muted"
+            onclick={() => viewModel.confirmDialogCancel()}
+          >
             {viewModel.confirmDialog.disagreeLabel}
           </button>
         {/if}
-        <button class="btn btn-primary" onclick={() => viewModel.confirmDialogAgree()}>
+        <button
+          class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90"
+          onclick={() => viewModel.confirmDialogAgree()}
+        >
           {viewModel.confirmDialog.agreeLabel}
         </button>
       </div>
     </div>
-    <div
-      class="modal-backdrop"
-      onclick={() => viewModel.confirmDialogCancel()}
-      onkeydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    viewModel.confirmDialogCancel();
-                }
-            }}
-      role="button"
-      tabindex="0"
-    ></div>
   </BaseViewModelContainer>
 {/if}

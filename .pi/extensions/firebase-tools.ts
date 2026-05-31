@@ -140,7 +140,7 @@ export default function (pi: ExtensionAPI) {
         const checkResult = await pi.exec("bash", ["-c", "curl -s -o /dev/null -w '%{http_code}' http://localhost:4400 2>/dev/null || echo '000'"], { signal })
         if (checkResult.stdout?.trim() === "200") {
           return {
-            content: [{ type: "text", text: "✅ Emulator already running (port 4400 responding).\n\nRead logs: tmux_session read emulator\nAttach: tmux select-window -t aikami-dev:1" }],
+            content: [{ type: "text", text: "✅ Emulator already running (port 4400 responding)." }],
             details: { code: 0, alreadyRunning: true },
           }
         }
@@ -165,14 +165,14 @@ export default function (pi: ExtensionAPI) {
 
         if (!ready) {
           return {
-            content: [{ type: "text", text: "⚠️  Emulator start timed out after 60s.\nCheck: tmux select-window -t aikami-dev:1\nOr: tmux_session read emulator" }],
+            content: [{ type: "text", text: "⚠️  Emulator start timed out after 60s. Check port 4400 manually or try again." }],
             isError: true,
             details: { code: 1 },
           }
         }
 
         return {
-          content: [{ type: "text", text: "✅ Emulator started in tmux (aikami-dev:1).\nRead logs: tmux_session read emulator\nAttach: tmux select-window -t aikami-dev:1" }],
+          content: [{ type: "text", text: "✅ Emulator started and responding on port 4400." }],
           details: { code: 0 },
         }
       }

@@ -1,7 +1,8 @@
+import { publicEnv } from '@aikami/frontend/configs/environment';
 import { BaseClass, type BaseClassInterface } from '@aikami/utils';
 import type { MessagePayload, NextFn, Observer, Unsubscribe } from 'firebase/messaging';
 
-type FCM = typeof import('./configs/fcm.ts');
+type Fcm = typeof import('@aikami/frontend/configs/fcm.ts');
 
 export type FirebaseCloudMessagingServiceInterface = {
   registerFCM(): Promise<string>;
@@ -15,7 +16,7 @@ class FirebaseCloudMessagingService
   extends BaseClass
   implements FirebaseCloudMessagingServiceInterface
 {
-  private static _fcm?: FCM;
+  private static _fcm?: Fcm;
 
   constructor() {
     super({
@@ -54,12 +55,12 @@ class FirebaseCloudMessagingService
 
     const token = await getToken(messaging, {
       serviceWorkerRegistration: registration,
-      vapidKey: import.meta.env.PUBLIC_VAPID_KEY,
+      vapidKey: publicEnv.PUBLIC_VAPID_KEY ?? '',
     });
     return token;
   }
 
-  private async _getFCM(): Promise<FCM> {
+  private async _getFCM(): Promise<Fcm> {
     if (FirebaseCloudMessagingService._fcm) {
       return FirebaseCloudMessagingService._fcm;
     }
@@ -68,9 +69,10 @@ class FirebaseCloudMessagingService
       throw new Error(`${this._className} is not available on SSR`);
     }
 
-    FirebaseCloudMessagingService._fcm = await import('./configs/fcm.ts');
+    FirebaseCloudMessagingService._fcm = await import('@aikami/frontend/configs/fcm.ts');
     return FirebaseCloudMessagingService._fcm;
   }
 }
 
-export const firebaseCloudMessagingService = new FirebaseCloudMessagingService();
+export const firebaseCloudMessagingService: FirebaseCloudMessagingServiceInterface =
+  new FirebaseCloudMessagingService();

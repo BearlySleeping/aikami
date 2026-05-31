@@ -38,8 +38,7 @@
     "format": "biome format .",
     "format:fix": "biome format --write .",
     "fix": "biome check --write . && biome format --write .",
-    "typecheck": "tsc --noEmit",
-    "validate": "biome check ."
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

@@ -2,7 +2,6 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'application'
-stack: 'frontend'
 tags:
   - 'game'
   - 'frontend'
@@ -16,7 +15,7 @@ toolchains:
   javascript: false
 
 project:
-  title: 'Game'
+  name: 'game'
   description: 'Standalone PixiJS + bitECS game with vanilla TypeScript frontend.'
   channel: '#frontend'
   owner: 'Frontend Team'
@@ -70,29 +69,4 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  validate:
-    command: 'bun run validate'
-    inputs:
-      - '@group(sources)'
-      - '@group(tests)'
-      - '@group(configs)'
+

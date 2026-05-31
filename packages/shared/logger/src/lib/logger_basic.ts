@@ -1,7 +1,8 @@
-import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts';
-import { Timer, type TimerInterface } from './timer.ts';
+import type { LogEntry, LoggerInterface, TimerInterface } from '@aikami/types';
+import { BaseLoggerService } from './base.ts';
+import { Timer } from './timer.ts';
 
-export type BasicLoggerInterface = BaseLoggerInterface;
+export type BasicLoggerInterface = LoggerInterface;
 
 class BasicTimer extends Timer implements TimerInterface {}
 class BasicLoggerService extends BaseLoggerService implements BasicLoggerInterface {
@@ -13,6 +14,7 @@ class BasicLoggerService extends BaseLoggerService implements BasicLoggerInterfa
 
       const { logType, message } = entry;
 
+      // biome-ignore lint/suspicious/noConsole: logger implementation
       const log = console[logType ?? 'log'];
 
       log(logType, message);

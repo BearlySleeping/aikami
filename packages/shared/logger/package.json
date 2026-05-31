@@ -4,8 +4,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsc --noEmit",
-    "fix": "biome check --write .",
-    "validate": "bun run typecheck"
+    "fix": "biome check --write ."
   },
   "devDependencies": {
     "@types/node": "25.9.1"

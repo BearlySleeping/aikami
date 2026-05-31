@@ -1,4 +1,5 @@
 export * from './lib/api/fcm.ts';
+export * from './lib/api/game.ts';
 export * from './lib/api/oauth.ts';
 export * from './lib/auth.ts';
 export * from './lib/common/position.ts';
@@ -24,6 +25,7 @@ export * from './lib/database/world.ts';
 export * from './lib/fields.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/image_generation.ts';
+export * from './lib/parser.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/project.ts';
 export type { Persona } from './persona.schema.ts';

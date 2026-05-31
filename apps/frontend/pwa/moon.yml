@@ -3,7 +3,6 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'application'
-stack: 'frontend'
 tags:
   - 'pwa'
   - 'svelte'
@@ -14,12 +13,13 @@ toolchains:
   javascript: false
 
 project:
-  title: 'PWA'
+  name: 'pwa'
   description: 'Main Progressive Web Application built with SvelteKit.'
   channel: '#frontend'
   owner: 'Frontend Team'
 
 dependsOn:
+  - 'parser'
   - 'frontend-utils'
   - 'frontend-services'
   - 'schemas'
@@ -90,26 +90,6 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
   tauri-dev:
     command: 'bun run tauri:dev'
     preset: 'server'
@@ -120,10 +100,4 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(srcTauri)'
-      - '@group(configs)'
-  validate:
-    command: 'bun run validate'
-    inputs:
-      - '@group(sources)'
-      - '@group(tests)'
       - '@group(configs)'

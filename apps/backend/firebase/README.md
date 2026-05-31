@@ -30,10 +30,11 @@ bun install
 |------|---------|-------------|
 | `build` | `bun run build` | Compile TypeScript for deployment |
 | `deploy` | `bun run deploy` | Deploy functions to Firebase |
-| `check` | `bun run check` | Run TypeScript checks |
-| `lint` | `bun run lint` | Lint code with Biome |
-| `format` | `bun run format` | Format code with Biome |
-| `test` | `bun run test` | Run function tests |
+| `typecheck` | `tsc --noEmit --skipLibCheck` | Run TypeScript type checking |
+| `lint` | `biome lint .` | Lint code with Biome |
+| `format` | `biome format .` | Format code with Biome |
+| `fix` | `biome check --write .` | Auto-fix lint & format issues |
+| `test` | `bun test tests/controllers.test.ts` | Run function tests |
 
 ## Dependencies
 

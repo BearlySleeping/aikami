@@ -4,15 +4,14 @@
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
     "strictNullChecks": true,
-    "baseUrl": ".",
     "paths": {
-      "$lib/*": ["src/lib/*"],
-      "$utils": ["src/utils"],
-      "$utils/*": ["src/utils/*"],
-      "$components/*": ["src/components/*"],
-      "$layouts/*": ["src/layouts/*"],
-      "$assets/*": ["src/assets/*"],
-      "$pages/*": ["src/pages/*"]
+      "$lib/*": ["./src/lib/*"],
+      "$utils": ["./src/utils"],
+      "$utils/*": ["./src/utils/*"],
+      "$components/*": ["./src/components/*"],
+      "$layouts/*": ["./src/layouts/*"],
+      "$assets/*": ["./src/assets/*"],
+      "$pages/*": ["./src/pages/*"]
     }
   },
   "include": [".astro/types.d.ts", "src", "astro.config.ts"],

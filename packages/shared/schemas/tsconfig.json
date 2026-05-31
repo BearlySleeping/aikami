@@ -1,5 +1,15 @@
 {
-	"extends": "../../../tsconfig.options.json",
-	"include": ["src/**/*"],
-	"exclude": ["node_modules", "dist"]
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Schemas",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "dist",
+    "paths": {
+      "@aikami/constants": ["../constants/src/index.ts"],
+      "@aikami/constants/*": ["../constants/src/lib/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js"]
 }
