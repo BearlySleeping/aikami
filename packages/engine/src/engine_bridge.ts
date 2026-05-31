@@ -66,8 +66,10 @@ export type EngineBridge = {
    * Macros like `{{trigger_anim:attack}}` are stripped from the
    * displayed chat text and dispatched to the game engine for
    * animation, sound, or other side effects.
+   *
+   * @param entityId - Optional entity ID of the character the macro applies to.
    */
-  triggerMacro(macro: string, args: string[]): void;
+  triggerMacro(macro: string, args: string[], entityId?: number): void;
 };
 
 // ===========================================================================
@@ -177,12 +179,13 @@ class EngineBridgeImpl implements EngineBridge {
   }
 
   /** @inheritdoc */
-  triggerMacro(macro: string, args: string[]): void {
+  triggerMacro(macro: string, args: string[], entityId?: number): void {
     // Dispatch as a TRIGGER_MACRO for game systems that register handlers
     const command: GameCommand = {
       type: 'TRIGGER_MACRO',
       macro,
       args,
+      entityId,
     };
     this.send(command);
   }
@@ -286,8 +289,8 @@ export class MockEngineBridge implements EngineBridge {
     this.impl.executeCommand(cmd, args);
   }
 
-  triggerMacro(macro: string, args: string[]): void {
-    this.impl.triggerMacro(macro, args);
+  triggerMacro(macro: string, args: string[], entityId?: number): void {
+    this.impl.triggerMacro(macro, args, entityId);
   }
 
   /** @see EngineBridgeImpl.onCommand */

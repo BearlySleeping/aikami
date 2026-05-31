@@ -1,4 +1,4 @@
-import { getAuth, getBucket, getEnvironmentValue } from '@aikami/backend-configs';
+import { getAuth, getBucket, getProjectId } from '@aikami/backend-configs';
 // @ts-expect-error
 import firebase from 'firebase-tools';
 
@@ -14,7 +14,7 @@ import firebase from 'firebase-tools';
 export const clearDatabase = async (): Promise<void> => {
   await firebase.firestore.delete(null, {
     allCollections: true,
-    project: getEnvironmentValue('GCP_PROJECT_ID'),
+    project: getProjectId(),
     recursive: true,
     yes: true,
   });

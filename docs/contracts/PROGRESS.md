@@ -1,5 +1,31 @@
 # Contract Implementation Progress
 
+## C-025 — TTS Audio Streaming & Synchronization — ✅ completed
+
+### Findings
+- AudioContextManager singleton created with browser autoplay policy handling (pointerdown/keydown unlock).
+- TTS service refactored with Svelte 5 `$state` runes (`is_playing`, `current_word_index`, `active_message_id`).
+- Streaming chunk queue with gapless `nextStartTime` scheduling via Web Audio API `decodeAudioData` + `AudioBufferSourceNode`.
+- `requestAnimationFrame` word-tracking loop updates `current_word_index` in real-time using binary search over time boundaries.
+- Message bubble and chat message components now render per-word `<span>` elements with `text-primary-500` highlight on the active word when TTS is playing.
+- All changes typecheck cleanly — zero new errors. Pre-existing PWA errors (bun:test types, stale type refs, a11y warnings) are unrelated.
+
+### AC Status
+- [x] AC-1: AudioContext resumes on user click — `audio_context_manager.ts` with `unlock()` bound to pointerdown/keydown.
+- [x] AC-2: Sequential chunks play gaplessly — `enqueueChunk()` with `Math.max(currentTime, nextStartTime)` scheduling.
+- [x] AC-3: `current_word_index` updates in real-time — rAF loop with binary search over word boundaries.
+- [x] AC-4: UI highlights spoken words — `message_bubble.svelte` + `chat_message.svelte` with per-word spans and `text-primary-500` class.
+
+### Files created
+- `apps/frontend/pwa/src/lib/client/services/media/audio_context_manager.ts` — Singleton AudioContext with autoplay policy unlock
+
+### Files modified
+- `apps/frontend/pwa/src/lib/client/services/media/tts.svelte.ts` — Full refactor: added `$state` runes, `enqueueChunk()`, `startStream()`, `endStream()`, rAF word tracking
+- `apps/frontend/pwa/src/lib/components/chat/message_bubble.svelte` — Per-word TTS highlighting with `text-primary-500`
+- `apps/frontend/pwa/src/lib/components/chat/chat_message.svelte` — Per-word TTS highlighting with `text-primary-500`
+
+---
+
 ## C-014 — Database Abstraction & Data Connect — ✅ completed
 
 ### Findings

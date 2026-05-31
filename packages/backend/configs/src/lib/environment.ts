@@ -1,10 +1,10 @@
 // biome-ignore-all lint/style/useNamingConvention: mapped type index signature
 // packages/backend/configs/src/lib/environment.ts
 import process from 'node:process';
-import { MODE_PROJECT_MAP } from '@nordclaw/constants';
-import { AppIdSchema } from '@nordclaw/schemas';
-import type { Mode } from '@nordclaw/types';
-import { isEmptyObject, toAppError, toMode } from '@nordclaw/utils';
+import { MODE_PROJECT_MAP } from '@aikami/constants';
+import { AppIdSchema } from '@aikami/schemas';
+import type { Mode } from '@aikami/types';
+import { isEmptyObject, toAppError, toMode } from '@aikami/utils';
 // We need dotenv for firebase functions
 import { config } from 'dotenv';
 import { z } from 'zod';

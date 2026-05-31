@@ -7,6 +7,7 @@ import { Position } from '../components/position.ts';
 import type { SpriteData } from '../components/sprite.ts';
 import { Sprite } from '../components/sprite.ts';
 import { COMPONENT_STRIDE } from '../config/memory_config.ts';
+import type { SpriteComposer } from '../rendering/sprite_composer.ts';
 
 // ---------------------------------------------------------------------------
 // RenderSystem — sync bitECS entities to PixiJS display objects
@@ -104,8 +105,17 @@ const ensureDisplayObject = (spriteData: SpriteData, stage: Container): Containe
 export type RenderEntry = {
   /** The PixiJS display object for this entity. */
   displayObject: Container;
-  /** Tint color for the entity. */
+  /** Tint color for the entity (ignored when `layerIds` is set). */
   tint: number;
+  /**
+   * Optional asset layer IDs for dynamic sprite composition.
+   *
+   * When provided, the render system delegates to {@link SpriteComposer}
+   * instead of drawing a primitive `Graphics` rectangle. The display
+   * object is replaced with a layered container that is flattened via
+   * `cacheAsTexture`.
+   */
+  layerIds?: readonly number[];
 };
 
 /**
@@ -119,12 +129,21 @@ export type RenderEntry = {
  * The buffer layout is: `[eid * COMPONENT_STRIDE + 0] = x`,
  * `[eid * COMPONENT_STRIDE + 1] = y`, `[eid * COMPONENT_STRIDE + 2] = rotation`.
  *
+ * When a {@link SpriteComposer} is provided and a render entry has
+ * `layerIds`, the system delegates container creation and texture
+ * replacement to the composer. A placeholder is shown immediately while
+ * textures load asynchronously.
+ *
  * @param renderView - Float32Array view into the entity state buffer.
  * @param renderEntries - Map of entity ID → render entry.
+ * @param stage - The PixiJS stage container (required when using composer).
+ * @param spriteComposer - Optional composer for dynamic multi-layer sprites.
  */
 const updateRenderFromBuffer = (
   renderView: Float32Array,
   renderEntries: Map<number, RenderEntry>,
+  stage?: Container,
+  spriteComposer?: SpriteComposer,
 ): void => {
   if (!renderView || !renderEntries) {
     return;
@@ -139,9 +158,110 @@ const updateRenderFromBuffer = (
       continue;
     }
 
+    // Delegate to SpriteComposer when layer IDs are present
+    if (spriteComposer && stage && entry.layerIds && entry.layerIds.length > 0) {
+      ensureComposedSprite({ eid, entry, stage, spriteComposer });
+    }
+
     entry.displayObject.x = x;
     entry.displayObject.y = y;
   }
 };
 
-export { updateRender, updateRenderFromBuffer };
+// -------------------------------------------------------------------------
+// Dynamic sprite helpers
+// -------------------------------------------------------------------------
+
+/** Tracks entity IDs that have already been composed to avoid re-composition. */
+const composedEntities = new Set<number>();
+
+/**
+ * Ensures a render entry has a composed sprite container, creating one
+ * on the first call and skipping subsequent calls for the same entity.
+ *
+ * @param options - Composition options.
+ */
+const ensureComposedSprite = (options: {
+  eid: number;
+  entry: RenderEntry;
+  stage: Container;
+  spriteComposer: SpriteComposer;
+}): void => {
+  const { eid, entry, stage, spriteComposer } = options;
+
+  if (composedEntities.has(eid)) {
+    return;
+  }
+
+  composedEntities.add(eid);
+
+  // Replace the primitive display object with a composed container.
+  // The composer returns a placeholder immediately and replaces it
+  // asynchronously with layered sprites.
+  const oldDisplayObject = entry.displayObject;
+  if (oldDisplayObject && oldDisplayObject.parent) {
+    oldDisplayObject.parent.removeChild(oldDisplayObject);
+    oldDisplayObject.destroy();
+  }
+
+  const composedContainer = spriteComposer.composeSprite({
+    layerIds: entry.layerIds ?? [],
+  });
+
+  stage.addChild(composedContainer);
+  entry.displayObject = composedContainer;
+};
+
+/**
+ * Removes a composed entity from the tracking set so it can be
+ * re-composed (e.g., when layers change).
+ *
+ * @param eid - The entity ID to invalidate.
+ */
+const invalidateComposedSprite = (eid: number): void => {
+  composedEntities.delete(eid);
+};
+
+// -------------------------------------------------------------------------
+// Appearance dirty-check
+// -------------------------------------------------------------------------
+
+/**
+ * Tracks the previous frame's layer IDs per entity for dirty-checking.
+ * Key: entity ID, Value: snapshot of layer IDs from the last comparison.
+ */
+const previousLayerSnapshots = new Map<number, readonly number[]>();
+
+/**
+ * Compares the current Appearance layer IDs for an entity against the
+ * previous frame's snapshot. If they differ, calls
+ * {@link invalidateComposedSprite} so the {@link SpriteComposer}
+ * rebuilds the composite texture on the next render pass.
+ *
+ * Called when an `APPEARANCE_CHANGED` event arrives from the worker.
+ *
+ * @param eid - The entity ID to check.
+ * @param layerIds - The current layer IDs from the event payload.
+ */
+const dirtyCheckAppearance = (eid: number, layerIds: readonly number[]): void => {
+  const prev = previousLayerSnapshots.get(eid);
+
+  if (prev && prev.length === layerIds.length) {
+    let hasChanged = false;
+    for (let i = 0; i < layerIds.length; i++) {
+      if (prev[i] !== layerIds[i]) {
+        hasChanged = true;
+        break;
+      }
+    }
+    if (!hasChanged) {
+      return;
+    }
+  }
+
+  // Snapshot differs (or is new) — invalidate and store new snapshot
+  invalidateComposedSprite(eid);
+  previousLayerSnapshots.set(eid, [...layerIds]);
+};
+
+export { dirtyCheckAppearance, invalidateComposedSprite, updateRender, updateRenderFromBuffer };

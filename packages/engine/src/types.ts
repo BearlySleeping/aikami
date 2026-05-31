@@ -75,6 +75,8 @@ export type GameCommand =
       type: 'TRIGGER_MACRO';
       macro: string;
       args: string[];
+      /** Entity ID of the character the macro applies to. */
+      entityId?: number;
     };
 
 // ---------------------------------------------------------------------------
@@ -134,6 +136,13 @@ export type GameEvent =
   | {
       type: 'CONTEXT_EXITED';
       entityId: string;
+    }
+  | {
+      /** Emitted when an entity's Appearance component layers change. */
+      type: 'APPEARANCE_CHANGED';
+      eid: number;
+      /** The new layer IDs (all 5 layers) for dirty-check comparison. */
+      layerIds: number[];
     };
 
 // ---------------------------------------------------------------------------

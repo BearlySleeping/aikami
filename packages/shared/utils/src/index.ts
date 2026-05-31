@@ -17,6 +17,7 @@ export * from './lib/device.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/form/oauth2.ts';
 export * from './lib/form/validation.ts';
+export * from './lib/project.ts';
 // export * from './lib/repository/base-repository-backend-class.ts';
 export * from './lib/repository/base_repository_class.ts';
 export * from './lib/transform.ts';
