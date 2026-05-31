@@ -1,5 +1,40 @@
 # Contract Implementation Progress
 
+## C-029 — Menu Auth Wiring & Vanilla PixiJS Character Creation — ✅ completed
+
+### Findings
+- Auth wiring: Added Login button to DOM menu, PixiJS AuthPixiScene renders shortcode on canvas, polls AuthController state.
+- Character creation: Hybrid PixiJS + Vanilla DOM chat overlay with state machine (INTRO→CHAT→TWEKA→COMPLETE).
+- Stat tweaking: Pure PixiJS view with +/- buttons on canvas using Graphics+Text. Point buy-style adjustment.
+- AI integration: Backend callable function `promptCharacterCreation` uses vendor-agnostic AiServiceInterface with D&D 2024 DM persona.
+- All 3 affected projects (game, types, firebase) typecheck clean. Pre-existing PWA lint issues unrelated.
+
+### AC Status
+- [x] AC-1: Login button triggers PixiJS auth scene with code display and polling
+- [x] AC-2: Authenticated user sees "New Game" button that transitions to character creation chat
+- [x] AC-3: AI DM conversation yields structured JSON with stats and appearance
+- [x] AC-4: Stat tweaking view with +/- PixiJS buttons for STR/DEX/CON/INT/WIS/CHA
+
+### Files created
+- `apps/frontend/game/src/menu/auth_pixi_scene.ts` — PixiJS v8 overlay for device auth code display
+- `apps/frontend/game/src/ui/character_creation_controller.ts` — State machine, DOM overlay, chat management
+- `apps/frontend/game/src/core/ai/prompts/dnd_creation.ts` — D&D 2024 DM system prompt
+- `apps/backend/firebase/src/controllers/callable/prompt_character_creation.ts` — AI-powered character creation callable
+
+### Files modified
+- `apps/frontend/game/src/menu/menu_controller.ts` — Added Login/New Game buttons, auth state display, callback hooks
+- `apps/frontend/game/src/main.ts` — Wired AuthController → AuthPixiScene → MenuController lifecycle
+- `apps/frontend/game/index.html` — Added login/new-game buttons, auth-status display, chat overlay DOM
+- `packages/shared/types/src/lib/endpoints/callable_functions.ts` — Added promptCharacterCreation type mapping
+
+### Deviations from contract
+- Auth code displayed in PixiJS scene (not DOM) per contract, using dedicated AuthPixiScene class.
+- Chat overlay uses Vanilla DOM for text input (PixiJS has no native text input), positioned absolute over canvas.
+- Image generation is stubbed — production requires image generation API integration.
+- bitECS entity initialization on character save is deferred to a follow-up contract.
+
+---
+
 ## C-025 — TTS Audio Streaming & Synchronization — ✅ completed
 
 ### Findings

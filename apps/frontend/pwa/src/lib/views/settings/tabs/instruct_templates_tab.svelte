@@ -1,10 +1,6 @@
 <script lang="ts">
   // apps/frontend/pwa/src/lib/views/settings/tabs/instruct_templates_tab.svelte
-  import {
-    aiSettingsService,
-    INSTRUCT_TEMPLATES,
-    type InstructTemplate,
-  } from '$services';
+  import { aiSettingsService, INSTRUCT_TEMPLATES, type InstructTemplate } from '$services';
 
   /** Human-readable labels for each template. */
   const templateLabels: Record<InstructTemplate, string> = {
@@ -75,7 +71,9 @@
       <div class="form-control">
         <label class="label" for="temperature-slider">
           <span class="label-text">Temperature</span>
-          <span class="label-text-alt">{aiSettingsService.generationParams.temperature.toFixed(1)}</span>
+          <span class="label-text-alt"
+            >{aiSettingsService.generationParams.temperature.toFixed(1)}</span
+          >
         </label>
         <input
           id="temperature-slider"
@@ -125,7 +123,9 @@
       <div class="form-control">
         <label class="label" for="repetition-slider">
           <span class="label-text">Repetition Penalty</span>
-          <span class="label-text-alt">{aiSettingsService.generationParams.repetitionPenalty.toFixed(1)}</span>
+          <span class="label-text-alt"
+            >{aiSettingsService.generationParams.repetitionPenalty.toFixed(1)}</span
+          >
         </label>
         <input
           id="repetition-slider"
@@ -175,7 +175,9 @@
       <div class="form-control">
         <label class="label" for="context-size-slider">
           <span class="label-text">Context Size</span>
-          <span class="label-text-alt">{aiSettingsService.generationParams.contextSize.toLocaleString()}</span>
+          <span class="label-text-alt"
+            >{aiSettingsService.generationParams.contextSize.toLocaleString()}</span
+          >
         </label>
         <input
           id="context-size-slider"
@@ -200,10 +202,7 @@
 
   <!-- Save button -->
   <div class="flex justify-end">
-    <button
-      class="btn btn-primary"
-      onclick={() => aiSettingsService.saveToVault()}
-    >
+    <button class="btn btn-primary" onclick={() => aiSettingsService.saveToVault()}>
       Save Parameters
     </button>
   </div>

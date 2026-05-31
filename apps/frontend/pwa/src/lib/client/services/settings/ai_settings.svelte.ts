@@ -9,7 +9,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { encrypt, decrypt, clearVault } from '$lib/client/utils/crypto_vault';
+import { clearVault, decrypt, encrypt } from '$lib/client/utils/crypto_vault';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,13 +158,22 @@ class AISettingsService
       const data = JSON.parse(raw) as Record<string, unknown>;
 
       if (data.textProvider && typeof data.textProvider === 'object') {
-        this.textProvider = { ...DEFAULT_PROVIDER, ...(data.textProvider as Partial<ProviderConfig>) };
+        this.textProvider = {
+          ...DEFAULT_PROVIDER,
+          ...(data.textProvider as Partial<ProviderConfig>),
+        };
       }
       if (data.ttsProvider && typeof data.ttsProvider === 'object') {
-        this.ttsProvider = { ...DEFAULT_PROVIDER, ...(data.ttsProvider as Partial<ProviderConfig>) };
+        this.ttsProvider = {
+          ...DEFAULT_PROVIDER,
+          ...(data.ttsProvider as Partial<ProviderConfig>),
+        };
       }
       if (data.imageProvider && typeof data.imageProvider === 'object') {
-        this.imageProvider = { ...DEFAULT_PROVIDER, ...(data.imageProvider as Partial<ProviderConfig>) };
+        this.imageProvider = {
+          ...DEFAULT_PROVIDER,
+          ...(data.imageProvider as Partial<ProviderConfig>),
+        };
       }
       if (data.generationParams && typeof data.generationParams === 'object') {
         this.generationParams = {

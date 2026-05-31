@@ -17,7 +17,9 @@
     "types": ["bun"],
     "paths": {
       "@aikami/engine": ["../../packages/engine/src/index.ts"],
-      "@aikami/engine/*": ["../../packages/engine/src/*"]
+      "@aikami/engine/*": ["../../packages/engine/src/*"],
+      "@aikami/constants": ["../../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../packages/shared/constants/src/*"]
     }
   },
   "include": ["src/**/*.ts"],
