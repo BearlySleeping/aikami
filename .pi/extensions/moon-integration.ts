@@ -214,7 +214,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use blackbox_test after making backend changes that affect multiple services.",
       "Use blackbox_test suites=['functions'] to run only function tests (faster).",
-      "Ensure emulator is running first: firebase_emulator start (or tmux_session start emulator).",
+      "Ensure emulator is running first: firebase_emulator start.",
       "Blackbox tests start/stop their own dev servers — no need to pre-start.",
       "Use noCrossService=true to skip multi-service flow tests during rapid iteration.",
       "Current mode from direnv: emulator=local, development/production=live GCP. Blackbox tests require emulator mode.",

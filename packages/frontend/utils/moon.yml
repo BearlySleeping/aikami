@@ -3,14 +3,13 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'library'
-stack: 'frontend'
 tags:
   - 'utils'
   - 'frontend'
   - 'library'
 
 project:
-  title: 'Frontend Utilities'
+  name: 'frontend-utils'
   description: 'Shared frontend utility functions and browser helpers.'
   channel: '#frontend'
   owner: 'Frontend Team'
@@ -21,38 +20,3 @@ dependsOn:
   - 'types'
   - 'logger'
 
-fileGroups:
-  sources:
-    - 'src/**/*'
-  configs:
-    - 'package.json'
-    - 'tsconfig.json'
-  tests:
-    - 'tests/**/*'
-
-tasks:
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  validate:
-    command: 'bun run validate'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'

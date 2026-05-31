@@ -23,16 +23,7 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
-    "paths": {
-      "@aikami/*": ["./packages/shared/*/src/index.ts"],
-      "$lib/*": ["./src/lib/*"],
-      "$routes": ["./src/routes.ts"],
-      "$env/static/private": ["./src/env.d.ts"],
-      "$env/static/public": ["./src/env.d.ts"],
-      "$logger": ["./src/lib/logger.ts"]
-    }
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "build", ".svelte-kit"]

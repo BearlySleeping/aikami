@@ -49,8 +49,12 @@
 
   function formatActionText(text: string): string {
     let processed = text.trim();
-    if (processed.startsWith('/me ')) processed = processed.slice(4);
-    if (processed.startsWith('*') && processed.endsWith('*')) processed = processed.slice(1, -1);
+    if (processed.startsWith('/me ')) {
+      processed = processed.slice(4);
+    }
+    if (processed.startsWith('*') && processed.endsWith('*')) {
+      processed = processed.slice(1, -1);
+    }
     return processed;
   }
 

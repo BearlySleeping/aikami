@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Engine",
+  "extends": "../../config/tsconfig/tsconfig.frontend.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "paths": {
+      "@aikami/frontend-api-core": ["../../packages/frontend/api-core/src/index.ts"],
+      "@aikami/frontend-api-core/*": ["../../packages/frontend/api-core/src/lib/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/__tests__"]
+}

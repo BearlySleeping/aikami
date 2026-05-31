@@ -16,6 +16,12 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["bun"]
   },
+  "compilerOptions": {
+    "paths": {
+      "@aikami/engine": ["../../packages/engine/src/index.ts"],
+      "@aikami/engine/*": ["../../packages/engine/src/*"]
+    }
+  },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

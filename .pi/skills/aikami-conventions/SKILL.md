@@ -1,212 +1,285 @@
 ---
 name: aikami-conventions
-description: Project-specific conventions for Aikami — Svelte 5 ViewModel pattern, Firebase backend, services architecture, strict TypeScript, path comments. Use when writing or refactoring Aikami code.
-version: 1.0.0
-tags: ["aikami", "svelte5", "sveltekit", "firebase", "conventions"]
+description: >-
+  General TypeScript and monorepo conventions for Aikami — strict TS rules,
+  import path discipline, arrow functions, `as const` / `satisfies`, error
+  handling, validation boundaries, project structure, and direnv environment.
+  Use when writing or refactoring ANY Aikami code.
+version: 2.0.0
+tags: ["aikami", "conventions", "typescript", "monorepo"]
 ---
 
 # Aikami Conventions
 
-Project-specific patterns for the Aikami monorepo. For universal TypeScript rules (function style, early returns, type system, JSDoc), see the `coding-standards` skill.
+General TypeScript and monorepo conventions that apply across the entire Aikami
+codebase. For framework-specific patterns, also load the relevant skill:
+
+| Skill | Covers |
+|-------|--------|
+| `svelte-conventions` | Svelte 5 runes, ViewModel pattern, services, import aliases |
+| `backend-conventions` | Firebase Functions, backend services, security rules |
+| `pixijs-v8` | PixiJS v8 + bitECS, game engine boundary, ECS patterns |
+| `firebase-functions` | Firebase Cloud Functions v2 best practices |
+| `firestore-collection` | Scaffolding Firestore collections |
 
 ## 1. File Path Comments
 
-Every file must include its relative path from the monorepo root as a comment at the very top of the file.
+Every source file must include its relative path from the monorepo root as a
+comment at the very top of the file.
 
-### TypeScript Files (`.ts` / `.svelte.ts`)
-
-The path comment must be placed on **line 1**, at the absolute top of the file before any imports.
+**TypeScript / Svelte `.ts` files** — line 1, before any imports:
 
 ```typescript
-// apps/frontend/pwa/src/lib/views/app/drawer/notification/NotificationDrawer.svelte.ts
-import {
-	BaseViewModel,
-	type BaseViewModelInterface,
-} from "$lib/components/BaseViewModel.svelte";
+// apps/frontend/pwa/src/lib/views/feature/view_model.svelte.ts
+import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
 ```
 
-### Svelte Files (`.svelte`)
-
-The path comment must be placed exactly on the **first line inside the `<script>` tag**.
+**Svelte `.svelte` files** — first line inside `<script>`:
 
 ```svelte
 <script lang="ts">
-  // apps/frontend/pwa/src/lib/views/app/drawer/notification/NotificationDrawer.svelte
-  import t from '$i18n';
+  // apps/frontend/pwa/src/lib/views/feature/view.svelte
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 </script>
 ```
 
 ## 2. TypeScript Strictness
 
-### ❌ Forbidden — Use the alternative
+### ❌ Forbidden — Use the Alternative
 
-| Forbidden                  | Use Instead                                           |
-| -------------------------- | ----------------------------------------------------- |
-| `any`                      | `unknown` + type guards                               |
-| `null`                     | `undefined` everywhere                                |
-| `!` (non-null assertion)   | Early returns or optional chaining                    |
-| `as unknown as Type`       | Proper data transformation functions                  |
-| `interface` (default)      | `type` alias (unless you need `extends` / class impl) |
-| Exporting single-use types | Define near/inside the method that uses it            |
+| Forbidden                  | Use Instead                                        |
+| -------------------------- | -------------------------------------------------- |
+| `any`                      | `unknown` + type guards                            |
+| `null`                     | `undefined` everywhere                             |
+| `!` (non-null assertion)   | Early returns or optional chaining                 |
+| `as unknown as Type`       | Proper data transformation functions               |
+| `interface`                | `type` alias                                       |
+| Exporting single-use types | Define near/inside the function that uses it       |
+| `function` declarations    | Arrow functions (`const fn = () => {}`)            |
 
-### ❌ Forbidden patterns
+### ❌ Forbidden Patterns
 
-- **Chained arguments** — All methods must use an options object `{...}`, even for single arguments
-- **Single-line `if` statements** — Always use curly braces `{}` even for a single statement
+- **Chained arguments** — Functions with more than 1 argument must use an options object `{...}`
+- **Single-line `if`** — Always use curly braces `{}` even for a single statement
 - **Abbreviations** — Write out full words (`options` not `opts`, `functionName` not `fnName`)
+- **Nested ternaries** — Use `if/else` or extract to a helper function
 
-### ✅ Required patterns
+### ✅ Required Patterns
 
-- **Escape Early** — Always use the return-early pattern to avoid deep nesting
-- **Arrow Functions** — Default to arrow functions for standard methods and callbacks
-- **Extract Logic** — If a section within a method can stand alone, extract it into a separate private method
-- **Debug Logging** — All service and view model methods must call `this.debug()` at the start. For standalone functions, import logger from `$logger` and call `logger.debug()`
-- **JSDoc Everything** — All methods, properties, and complex types must be thoroughly JSDoc commented
-- **Standardized Logging** — Always use the logger from `$logger`. Use `logger.debug` for detailed tracking
+- **Arrow Functions** — Use arrow functions everywhere. The sole exception is class methods: use regular method syntax (`methodName() {}` instead of `methodName = () => {}`) so that `this` and `super` work correctly.
+- **Escape Early** — Return-early pattern to avoid deep nesting
+- **Extract Logic** — If a section within a function can stand alone, extract it into a separate private function
+- **JSDoc Everything** — All exported functions, types, and complex internals must have JSDoc comments
+- **Debug Logging** — Every function must call `logger.debug('{methodName}', options)` at the start, passing the function name as a string. Skip for trivial one-liners (simple getters, passthroughs, pure computed values).
 
-## 3. Svelte 5 Core
+### Options Object Pattern
 
-### Reactivity is Runes ONLY
-
-No `$:` syntax. No stores (`writable`, `readable`).
+When a function has more than 1 argument, always group them into an options object:
 
 ```typescript
-let count = $state(0); // State
-let doubled = $derived(count * 2); // Derived
-$effect(() => {
-	console.log(count);
-}); // Side effects
-```
-
-### Props
-
-```svelte
-let { user, theme = 'dark' } = $props();
-let { value = $bindable() } = $props();
-```
-
-### Event handlers
-
-Use HTML `onclick`, not Svelte 4 `on:click`:
-
-```svelte
-<button onclick={handleClick}>Click</button>
-```
-
-### Engine Boundary Constraint
-
-**`$state` runes are banned in game code.** The PixiJS v8 + bitECS game engine runs at 60fps via `requestAnimationFrame` and lives in `apps/frontend/pwa/src/lib/game/`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame, crashing the microtask queue (`ERR_SVELTE_TOO_MANY_UPDATES`).
-
-- **Svelte UI**: Handles low-frequency state — menus, chat wrappers, stats blocks, inventory. Uses `$state` runes.
-- **Game Engine**: Handles high-frequency tick data — movement, rendering, physics. Pure imperative TypeScript. No Svelte imports.
-- **Bridge**: All UI↔Game communication goes through the typed `EngineBridge` (`GameCommand` →, `GameEvent` ←). See Section 11.
-
-## 4. ViewModel Pattern
-
-**Views are thin wrappers. ViewModels own all logic.** No local `$state` in views. No `onMount`.
-
-### Architecture rules (from AGENTS.md)
-
-- ❌ **Svelte stores** (`writable`, `readable`) → Use singleton services with `$state`
-- ❌ **Local `$state` in views** → All state belongs in the ViewModels
-- ❌ **`onMount` for initialization** → Use the `initialize()` method in your ViewModels
-- ❌ **Destructuring ViewModels** → Never destructure reactive properties. Always access directly (`viewModel.show`)
-- ❌ **`$derived` to proxy external service state** → Always use **native getters**
-    - **❌ WRONG:** `confirmDialog = $derived(dialogService.confirmDialog);`
-    - **✅ CORRECT:** `get confirmDialog() { return dialogService.confirmDialog; }`
-
-### ViewModel template
-
-```typescript
-// apps/frontend/pwa/src/lib/views/feature/feature_view_model.svelte.ts
-import {
-	BaseViewModel,
-	type BaseViewModelInterface,
-	type BaseViewModelOptions,
-} from "$lib/components/BaseViewModel.svelte";
-
-export type FeatureViewModelInterface = BaseViewModelInterface & {
-	items: string[];
+// ✅ CORRECT — options object for 2+ arguments
+export const createUser = (options: {
+  email: string;
+  displayName: string;
+  role?: string;
+}): Promise<User> => {
+  logger.debug("createUser", options);
+  // ...
 };
 
-export interface FeatureViewModelOptions extends BaseViewModelOptions {}
+// ✅ OK — single argument, no options object needed
+export const findById = (id: string): Promise<User | undefined> => {
+  logger.debug("findById", { id });
+  // ...
+};
 
-export class FeatureViewModel
-	extends BaseViewModel<FeatureViewModelOptions>
-	implements FeatureViewModelInterface
-{
-	items = $state<string[]>([]);
+// ❌ WRONG — multiple positional arguments
+export const createUser = (email: string, displayName: string, role?: string) => { ... };
+```
 
-	async initialize(): Promise<void> {
-		this.debug("initialize");
-		this.items = ["Item A", "Item B"];
-	}
+### Debug Logging Pattern
+
+```typescript
+// ✅ Standard pattern — logger.debug first line with method name and options
+const loadItems = async (options: { filter: string }) => {
+  logger.debug("loadItems", options);
+  // ... implementation
+};
+
+// ✅ Class method — regular method syntax (access to this/super)
+class MyService extends BaseClass {
+  async loadItems(options: { filter: string }) {
+    this.debug("loadItems", options);
+    // ... implementation
+  }
 }
 
-export const getFeatureViewModel = (
-	options: FeatureViewModelOptions,
-): FeatureViewModel => {
-	return new FeatureViewModel(options);
-};
+// ✅ Skip debug logging for trivial functions
+const isActive = () => this.status === "active";
+const getFullName = () => `${this.firstName} ${this.lastName}`;
 ```
 
-### View template
+### `as const` and `satisfies`
 
-```svelte
-<script lang="ts">
-  // apps/frontend/pwa/src/lib/views/feature/feature_view.svelte
-  import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
-  import type { FeatureViewModelInterface } from './feature_view_model.svelte.ts';
-
-  type Props = { viewModel: FeatureViewModelInterface };
-  const { viewModel }: Props = $props();
-</script>
-
-<BaseViewModelContainer {viewModel}>
-  {#each viewModel.items as item}
-    <p>{item}</p>
-  {/each}
-</BaseViewModelContainer>
-```
-
-## 5. Services Architecture
-
-Singleton classes with `$state` for external state management. Never use Svelte stores.
+Prefer `as const` on object literals to infer the narrowest types. Use
+`satisfies` to validate against a type without widening:
 
 ```typescript
-// packages/frontend/services/src/lib/my_service.svelte.ts
-import { BaseClass, type BaseClassInterface } from "@aikami/utils";
+// ✅ as const for narrow inference
+const PATTERNS = {
+  command: /^\/([\w-]+)(?:\s+(.+))?$/s,
+  macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
+} as const;
 
-export type MyServiceInterface = BaseClassInterface & {
-	items: string[];
-	loadItems: () => Promise<void>;
-};
-
-export class MyService extends BaseClass implements MyServiceInterface {
-	items = $state<string[]>([]);
-
-	async loadItems(): Promise<void> {
-		this.debug("loadItems");
-	}
-}
-
-export const myService = new MyService();
+// ✅ satisfies for type-checking without widening
+const CONFIG = {
+  timeout: 5000,
+  retries: 3,
+  endpoint: "/api/v2",
+} as const satisfies Record<string, string | number>;
 ```
 
-Access in ViewModels via native getters (NOT `$derived`).
+## 3. Import Path Rules
 
-## 6. Import Aliases
+### Always Import from Package Root
 
-| Alias       | Target                      |
-| ----------- | --------------------------- |
-| `$lib`      | `apps/frontend/pwa/src/lib` |
-| `$types`    | `@aikami/types`             |
-| `$services` | Services layer              |
-| `$logger`   | `@aikami/logger`            |
-| `$views`    | `$lib/views`                |
+When importing from any `@aikami/*` package, import from the **package root**
+— never from `lib/` sub-paths:
 
-## 7. Error Handling
+```typescript
+// ✅ CORRECT — import from package root (maps to src/index.ts)
+import type { CommandNode, MacroNode, TextNode } from "@aikami/schemas";
+import { CommandNodeSchema } from "@aikami/schemas";
+import type { User, Session } from "@aikami/types";
+import { toAppError } from "@aikami/utils";
+import { FIREBASE_REGION } from "@aikami/constants";
+
+// ❌ WRONG — never import from lib/ sub-paths
+import type { CommandNode } from "@aikami/schemas/lib/parser";
+import { toAppError } from "@aikami/utils/lib/errors";
+```
+
+**Rationale**: Tree-shaking removes unused exports. The `src/index.ts` file is
+the public API surface; `lib/` is an implementation detail.
+
+### Same Rule for Local Aliases
+
+This applies to path aliases too:
+
+```typescript
+// ✅ CORRECT
+import type { User } from "$types";              // maps to @aikami/types → src/index.ts
+import { userSchema } from "@aikami/schemas";    // maps to src/index.ts
+
+// ❌ WRONG
+import type { User } from "$types/lib/user";
+import { userSchema } from "@aikami/schemas/lib/user";
+```
+
+### Logger: Always `$logger`, Never `@aikami/logger`
+
+The logger has an environment-specific alias `$logger`. Never import from
+`@aikami/logger` directly.
+
+```typescript
+// ✅ CORRECT — $logger resolves to the right impl for this environment
+import { logger } from "$logger";
+
+// ❌ WRONG — bypasses environment-specific resolution
+import { logger } from "@aikami/logger";
+```
+
+| Environment | `$logger` resolves to |
+|---|---|
+| SvelteKit (PWA) | `shared/logger/src/lib/svelte_kit.ts` |
+| Firebase Functions | `shared/logger/src/lib/logger_functions.ts` |
+| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts` |
+| AWS / Node.js | `shared/logger/src/lib/logger_aws.ts` |
+
+### Wildcard Imports (Only When Needed)
+
+```typescript
+// ✅ Only use wildcard when you genuinely need multiple sub-module exports
+import * as v from "valibot";
+import * as z from "zod";
+```
+
+## 4. Type Definitions — Where Types and Schemas Live
+
+### Never Export Types or Schemas from Services
+
+Types and schemas are **not** business logic. A service file should export
+functions and classes, not data shape definitions.
+
+| Location | What goes there |
+|---|---|
+| `packages/shared/schemas/` | Zod schemas (cross-project data validation) |
+| `packages/shared/types/` | Cross-project types (used by 2+ apps/packages) |
+| `apps/<app>/src/lib/types/` | Single-app types (100% specific to one app) |
+| Inline / top of file | Single-method type used in exactly one function |
+
+```typescript
+// ❌ WRONG — type and schema exported from a service
+// apps/frontend/pwa/src/lib/client/services/game/game_state_service.ts
+export type ActiveContextEntry = { entityId: string; ... };
+export const ActiveSessionSchema = z.object({ ... });
+
+// ✅ CORRECT — schema in @aikami/schemas
+// packages/shared/schemas/src/lib/api/game.ts
+export const ActiveSessionSchema = z.object({ ... });
+
+// ✅ CORRECT — type in @aikami/types, derived from schema
+// packages/shared/types/src/lib/api/game.ts
+import type { z } from "zod";
+import type { ActiveSessionSchema } from "@aikami/schemas";
+export type ActiveSessionData = z.infer<typeof ActiveSessionSchema>;
+
+// ✅ CORRECT — shared type in @aikami/types
+// packages/shared/types/src/lib/api/chat.ts
+import type { z } from "zod";
+import type { ChatMessageSchema } from "@aikami/schemas";
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+// ✅ CORRECT — app-local type when 100% pwa-only
+// apps/frontend/pwa/src/lib/types/index.ts
+export type ChatMessage = {
+  id: string;
+  text: string;
+};
+```
+
+### Schema-First: Derive Types from Zod Schemas
+
+When data crosses project boundaries (service ↔ ViewModel, backend ↔ frontend),
+define a Zod schema in `@aikami/schemas` first, then derive the TypeScript
+type from it:
+
+```typescript
+// packages/shared/schemas/src/lib/api/chat.ts
+import { z } from "zod";
+
+export const ChatMessageSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  timestamp: z.number(),
+});
+
+// packages/shared/types/src/lib/api/chat.ts
+import type { z } from "zod";
+import { ChatMessageSchema } from "@aikami/schemas";
+
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+```
+
+This ensures runtime validation and TypeScript types are always in sync. The
+schema in `@aikami/schemas` is the source of truth; `@aikami/types` re-exports
+the inferred type.
+
+**Rule of thumb**: If a type is passed from one project to another, it should
+exist as a Zod schema in `@aikami/schemas` and be re-exported as a type from
+`@aikami/types`.
+
+## 5. Error Handling
 
 Use `AppError` from `@aikami/utils`:
 
@@ -220,7 +293,7 @@ throw toAppError("unauthorized", "User not logged in");
 
 Valid types: `not-found`, `invalid-argument`, `unauthorized`, `unauthenticated`, `internal`, `captcha-required`.
 
-## 8. Validation
+## 6. Validation
 
 ### Server-Side (Zod)
 
@@ -233,7 +306,7 @@ import { userSchema } from "@aikami/schemas";
 
 ### Client-Side (Valibot)
 
-Client-side perimeter validation uses Valibot for lightweight, tree-shakeable validation (~1.5KB vs Zod's ~12KB):
+Client-side perimeter validation uses Valibot for lightweight, tree-shakeable validation:
 
 ```typescript
 import * as v from "valibot";
@@ -242,7 +315,7 @@ import { userSchema } from "@aikami/valibot-schemas";
 
 **Rule**: Zod stays on the server; Valibot is preferred on the client (PWA).
 
-## 9. Project Structure
+## 7. Project Structure
 
 ```
 aikami/
@@ -250,20 +323,33 @@ aikami/
     frontend/pwa/          — SvelteKit PWA
     frontend/landing_page/ — Landing page (Astro)
     frontend/docs/         — Documentation site (Astro)
-    frontend/game/         — PixiJS v8 + bitECS engine (C-016)
-    backend/firebase/     — Firebase Cloud Functions v2
+    frontend/game/         — PixiJS v8 + bitECS game engine
+    backend/firebase/      — Firebase Cloud Functions v2
   packages/
-    shared/                — constants, logger, mocks, schemas, types, utils, valibot-schemas
+    shared/                — constants, logger, mocks, schemas, types, utils, valibot-schemas, parser
     backend/               — ai, auth, configs, database, svelte-kit, utils
     frontend/              — components, configs, repositories, services, utils, tanstack-db
     scripts/               — CI, setup, ops scripts
 ```
 
-## 10. Direnv Development Environment
+## 8. Moon Commands
 
-The project uses direnv for deterministic, zero-setup development. `.envrc` sources Nix flakes, resolves environment mode, loads secrets from GCP Secret Manager, and provides shell aliases. All pi extensions inherit this environment.
+Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected` before tests.
 
-### Environment Variables (Always Available)
+```bash
+bun moon run pwa:dev              # Start PWA dev server
+bun moon run :typecheck            # Type-check all projects
+bun moon run :lint                 # Lint all projects
+bun moon run :fix                  # Auto-fix lint issues
+bun moon run :test                 # Run all tests
+bun moon run :validate             # Full CI validation
+```
+
+## 9. Direnv Development Environment
+
+The project uses direnv for deterministic, zero-setup development. Environment
+variables are always available via the loaded `.envrc`. All pi extensions
+inherit this environment.
 
 | Variable                   | Source                  | Purpose                               |
 | -------------------------- | ----------------------- | ------------------------------------- |
@@ -277,158 +363,16 @@ The project uses direnv for deterministic, zero-setup development. `.envrc` sour
 ### Mode Switching
 
 ```bash
-# Switch mode (creates/updates .env.local)
 aikami_switch emulator     # Local development (Firebase emulators)
 aikami_switch development  # Staging (live GCP aikami-dev)
 aikami_switch production   # Production (live GCP aikami-prod)
-
-# Or use the pi extension tool
-direnv_switch_mode emulator
 ```
 
-### Adding Tools to the Environment
+### Adding Tools
 
 When the LLM needs a CLI tool not in the Nix devShell:
 
 ```bash
-# Via pi extension (preferred)
 direnv_add_package python3   # Adds to flake.nix, triggers direnv reload
-direnv_add_package ffmpeg    # Same for any nixpkgs package
-
-# After reload, the package is available in the shell and pi.exec()
-```
-
-### Secrets Management
-
-```bash
-# Add a new secret key to the managed list
-direnv_add_secret OPENAI_API_KEY
-
-# Then create it in GCP Secret Manager and refresh
-# (Only for development/production modes)
-aikami_secrets_refresh
-```
-
-## 11. Moon Commands
-
-Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected()` before running tests.
-
-```bash
-bun moon run pwa:dev              # Start PWA dev server (includes game engine)
-bun moon run :typecheck            # Type-check all projects
-bun moon run :lint                 # Lint all projects
-bun moon run :fix                  # Auto-fix lint issues
-bun moon run :test                 # Run all tests
-bun moon run :validate             # Full CI validation
-```
-
-## 12. Architectural Boundary Pattern
-
-The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit PWA through a strict architectural boundary. This decoupling prevents the 60fps game loop from triggering Svelte 5 reactivity and crashing the browser microtask queue.
-
-### Boundary Diagram
-
-```
-┌──────────────────────────────────────────────────────┐
-│  SVELTEKIT UI LAYER  ($state runes)                   │
-│  ┌───────────┐  ┌──────────┐  ┌───────────────────┐ │
-│  │ ChatView   │  │ HUDView  │  │ GameViewModel     │ │
-│  │ $state()   │  │ $state() │  │ $state(): messages│ │
-│  └─────┬──────┘  └────┬─────┘  └────────┬──────────┘ │
-│        │              │                  │            │
-│        └──────────────┼──────────────────┘            │
-│                       │ EngineBridge.send()            │
-│           EngineBridge.on() listen for events          │
-├───────────────────────┼───────────────────────────────┤
-│  ENGINE BRIDGE        │  (typed message channel)       │
-│                       │  GameCommand →                 │
-│                       │  GameEvent ←                   │
-├───────────────────────┼───────────────────────────────┤
-│  PIXIJS + bitECS RUNTIME (imperative, no $state)      │
-│  ┌────────────────────┴──────────────────────────────┐│
-│  │  GameWorld (bitECS world)                          ││
-│  │  ┌─────────┐  ┌─────────┐  ┌───────────────────┐ ││
-│  │  │ Systems │  │Entities │  │ PixiJS Application │ ││
-│  │  │ movement│  │  NPCs   │  │  <canvas> 60fps    │ ││
-│  │  │ render  │  │  player │  │  requestAnimation  │ ││
-│  │  │ physics │  │  items  │  │  Frame loop        │ ││
-│  │  └─────────┘  └─────────┘  └───────────────────┘ ││
-│  └───────────────────────────────────────────────────┘│
-└──────────────────────────────────────────────────────┘
-```
-
-### Critical Rules
-
-#### 1. No `$state` in Game Code
-
-Game code in `apps/frontend/pwa/src/lib/game/` runs at 60fps via `requestAnimationFrame`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame — catastrophic performance impact. The game directory is a **pure imperative TypeScript zone** with zero Svelte imports.
-
-```typescript
-// ❌ Forbidden — $state in game code
-// apps/frontend/pwa/src/lib/game/systems/movement.ts
-let playerX = $state(0); // Crashes Svelte microtask queue!
-
-// ✅ Correct — plain variable updated by the ticker
-// apps/frontend/pwa/src/lib/game/systems/movement.ts
-let playerX = 0;
-```
-
-#### 2. Svelte UI Handles Low-Frequency State
-
-ViewModels in `apps/frontend/pwa/src/lib/views/` handle UI-relevant state only:
-
-- **Menus** — open/closed, selected item
-- **Chat wrappers** — message lists, input text, loading flags
-- **Stats blocks** — health bars, inventory counts, character sheets
-- **HUD** — minimap toggle, skill cooldowns, quest trackers
-
-These update at human-perceptible rates (seconds, not milliseconds). The bitECS engine ticker handles per-frame tick metrics (position deltas, collision results, animation frames) natively via structural array (SoA) configurations — never through Svelte runes.
-
-#### 3. Bridge Serialization
-
-All payloads crossing the `EngineBridge` must be **plain serializable objects** only:
-
-- ✅ `string`, `number`, `boolean`, arrays of primitives
-- ❌ Class instances, functions, PixiJS objects (`Sprite`, `Container`), bitECS handles (`World`, entity references)
-
-```typescript
-// ✅ Correct — plain serializable command
-type MoveCommand = {
-	type: "MOVE_PLAYER";
-	direction: "up" | "down" | "left" | "right";
-};
-
-// ✅ Correct — plain serializable event
-type DialogEvent = { type: "DIALOG_TRIGGER"; npcId: string; message: string };
-
-// ❌ Forbidden — PixiJS object crossing the bridge
-type BadEvent = { type: "RENDER"; sprite: Sprite };
-```
-
-#### 4. Event Emission at UI-Relevant Intervals
-
-Bridge events must be emitted at UI-relevant intervals — not per-frame:
-
-- ✅ **Dialog triggers** — when player interacts with NPC
-- ✅ **Health changes** — when damage taken (not every frame of an animation)
-- ✅ **Scene transitions** — when entering/exiting a location
-- ❌ **Position updates** — every frame (handle in-game only, smooth via PixiJS tweening)
-- ❌ **Animation frames** — every frame (handled by PixiJS `AnimatedSprite`)
-
-#### 5. No Blocking the Game Loop
-
-Bridge message handlers on the Svelte side must not perform synchronous heavy work:
-
-```typescript
-// ✅ Correct — offload heavy work
-bridge.on("EVENT", (event) => {
-	requestIdleCallback(() => {
-		processEvent(event);
-	});
-});
-
-// ❌ Forbidden — synchronous heavy work blocks the game loop
-bridge.on("EVENT", (event) => {
-	heavySynchronousWork(event);
-});
+direnv_add_package ffmpeg
 ```

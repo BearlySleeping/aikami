@@ -3,6 +3,7 @@
  * 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
  * https://gist.github.com/evolkmann/740d24889c509c08484a8ff72af5dd64
  */
+/** biome-ignore-all lint/style/useNamingConvention: We let this stay like this for backwards compatibility (for now) */
 export const CountryToCode = {
   // cSpell:disable
   AD: 'Andorra',

@@ -3,16 +3,17 @@
   "display": "Utils",
   "extends": "../../../config/tsconfig/tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": "../../../",
+    "rootDir": "..",
     "outDir": "dist",
     "paths": {
-      "@aikami/constants": ["packages/shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["packages/shared/constants/src/*"],
-      "@aikami/types": ["packages/shared/types/src/index.ts"],
-      "@aikami/types/*": ["packages/shared/types/src/*"],
-      "@aikami/schemas": ["packages/shared/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["packages/shared/schemas/src/*"],
-      "$logger": ["packages/shared/logger/src/index.ts"]
+      "@aikami/constants": ["../constants/src/index.ts"],
+      "@aikami/constants/*": ["../constants/src/lib/*"],
+      "@aikami/schemas": ["../schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../schemas/src/lib/*"],
+      "@aikami/types": ["../types/src/index.ts"],
+      "@aikami/types/*": ["../types/src/lib/*"],
+      "$logger": ["../logger/src/index.ts"],
+      "$logger/*": ["../logger/src/lib/*"]
     }
   },
   "include": ["src/**/*"],

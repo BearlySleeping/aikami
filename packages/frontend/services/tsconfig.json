@@ -3,8 +3,36 @@
   "display": "Frontend Services",
   "extends": "../../../config/tsconfig/tsconfig.frontend.json",
   "compilerOptions": {
-    "baseUrl": "../../../",
-    "outDir": "dist"
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "paths": {
+      "@aikami/frontend/configs": ["../configs/src/index.ts"],
+      "@aikami/frontend/configs/*": ["../configs/src/lib/*"],
+      "@aikami/frontend/components": ["../components/src/index.ts"],
+      "@aikami/frontend/components/*": ["../components/src/lib/*"],
+      "@aikami/frontend/repositories": ["../repositories/src/index.ts"],
+      "@aikami/frontend/repositories/*": ["../repositories/src/lib/*"],
+      "@aikami/frontend/services": ["./src/index.ts"],
+      "@aikami/frontend/services/*": ["./src/lib/*"],
+      "@aikami/frontend/utils": ["../utils/src/index.ts"],
+      "@aikami/frontend/utils/*": ["../utils/src/lib/*"],
+      "@aikami/constants": ["../../shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../shared/constants/src/*"],
+      "@aikami/mocks": ["../../shared/mocks/src/index.ts"],
+      "@aikami/mocks/*": ["../../shared/mocks/src/*"],
+      "@aikami/schemas": ["../../shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../shared/schemas/src/*"],
+      "@aikami/types": ["../../shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../shared/types/src/*"],
+      "@aikami/utils": ["../../shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../shared/utils/src/*"],
+      "$logger": ["../../shared/logger/src/index.ts"],
+      "$logger/*": ["../../shared/logger/src/*"],
+      "$router": ["./src/index.ts"],
+      "$router/*": ["./src/*"],
+      "$routes": ["../../../apps/frontend/pwa/src/lib/constants/routes"],
+      "$routes/*": ["../../../apps/frontend/pwa/src/lib/constants/routes"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

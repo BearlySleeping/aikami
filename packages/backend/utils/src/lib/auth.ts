@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { getAuth } from '@aikami/backend/configs/auth';
-import { getEnvironmentValue } from '@aikami/backend/configs/environment';
-import { timestampFromDate } from '@aikami/backend/configs/firestore';
+import { getAuth } from '@aikami/backend/configs/auth.ts';
+import { backendEnv, requireEnv } from '@aikami/backend/configs/environment.ts';
+import { timestampFromDate } from '@aikami/backend/configs/firestore.ts';
 import type {
   AuthCreateRequest,
   AuthUpdateRequest,
@@ -33,6 +33,14 @@ export const isValidPhoneForE164 = (phoneNumber: string): boolean => {
   const regEx = /^\+[1-9]\d{10,14}$/;
 
   return regEx.test(phoneNumber);
+};
+
+export const createSessionCookie = async (options: {
+  token: string;
+  expiresIn: number;
+}): Promise<string> => {
+  const auth = getAuth();
+  return auth.createSessionCookie(options.token, { expiresIn: options.expiresIn });
 };
 
 export const verifyIdToken = async (idToken: string): Promise<DecodedIdToken> => {
@@ -85,8 +93,10 @@ export const getFirebaseAuthUserByEmail = async (email: string): Promise<UserLit
 const toUserLiteDataFromUserRecord = (userRecord: UserRecord): UserLiteData => {
   const createdAt = timestampFromDate(new Date(userRecord.metadata.creationTime));
   const signInProviders = userRecord.providerData
-    .filter((provider) => provider.providerId)
-    .map((provider) => toSignInProvider((provider as FirebaseUserInfo).providerId));
+    .filter((provider: { providerId: string }) => provider.providerId)
+    .map((provider: { providerId: string }) =>
+      toSignInProvider((provider as FirebaseUserInfo).providerId),
+    );
 
   const email = userRecord.email;
 
@@ -194,12 +204,12 @@ export const getEmailVerificationLink = async ({
 
 const convertLink = (link: string, supportedLocale: SupportedLocale) => {
   return link.replace(
-    `https://${getEnvironmentValue('GCP_PROJECT_ID')}.firebaseapp.com/__/auth/action`,
-    `${getEnvironmentValue('PWA_URL')}/${toSupportedLocaleURLPrefix(supportedLocale)}auth/userMgmt`,
+    `https://${requireEnv(backendEnv.GCP_PROJECT_ID, 'GCP_PROJECT_ID')}.firebaseapp.com/__/auth/action`,
+    `${requireEnv(backendEnv.PWA_URL, 'PWA_URL')}/${toSupportedLocaleUrlPrefix(supportedLocale)}auth/userMgmt`,
   );
 };
 
-const toSupportedLocaleURLPrefix = (supportedLocale: SupportedLocale) => {
+const toSupportedLocaleUrlPrefix = (supportedLocale: SupportedLocale) => {
   switch (supportedLocale) {
     case 'en':
       return '/';
@@ -216,10 +226,7 @@ export const canManageUser = ({ currentUserClaims }: { currentUserClaims: UserCl
   const currentUserRole = currentUserClaims.userRole;
 
   if (currentUserRole !== 'superAdmin') {
-    throw toAppError({
-  errorType: 'permission-denied',
-  errorMessage: 'unauthorized_user_role'
-});
+    throw toAppError({ errorType: 'permission-denied', errorMessage: 'unauthorized_user_role' });
   }
 };
 
@@ -234,7 +241,7 @@ export const toUserSessionDataFromToken = (decodedIdToken: DecodedIdToken): User
 
   const displayName = decodedIdToken.name;
   const phoneNumber = decodedIdToken.phone_number;
-  const photoURL = decodedIdToken.picture;
+  const photoUrl = decodedIdToken.picture;
   const claims = decodedIdToken;
   const currentSignInProvider = toSignInProvider(decodedIdToken.firebase.sign_in_provider);
 
@@ -245,7 +252,7 @@ export const toUserSessionDataFromToken = (decodedIdToken: DecodedIdToken): User
       displayName: displayName ?? '',
       email: email ?? undefined,
       phoneNumber: phoneNumber ?? undefined,
-      photoURL: photoURL ?? undefined,
+      photoURL: photoUrl ?? undefined,
     }),
     id: uid,
   };

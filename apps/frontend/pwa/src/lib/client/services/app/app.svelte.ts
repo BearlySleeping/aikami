@@ -1,3 +1,4 @@
+import { isDevelopmentModePublic } from '@aikami/frontend/configs';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -25,6 +26,11 @@ export type AppServiceInterface = BaseFrontendClassInterface & {
    * Controls the visibility of the navigation drawer button.
    */
   readonly showNavigationDrawer: boolean;
+
+  /**
+   * Current session ID for this page visit.
+   */
+  sessionId: string | null;
 
   readonly initialized: boolean;
   readonly isDevelopment: boolean;
@@ -58,9 +64,12 @@ export class AppService
   showNavigationDrawer = $state(false);
   showNotificationDrawer = $state(false);
 
+  /** Current session ID for this page visit. */
+  sessionId = $state<string | null>(null);
+
   isMobileOrTablet = $derived(isMobileDevice(this._currentDevice));
 
-  isDevelopment = $state(import.meta.env.PUBLIC_FLAVOR === 'development' || !import.meta.env.PROD);
+  isDevelopment = $state(isDevelopmentModePublic());
   initialized = $state(false);
 
   setCurrentDevice(device: DeviceData): void {

@@ -3,9 +3,61 @@
   "display": "Backend Utils",
   "extends": "../../../config/tsconfig/tsconfig.backend.json",
   "compilerOptions": {
-    "baseUrl": "../../../",
-    "outDir": "dist"
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "paths": {
+      "@aikami/backend/configs": [
+        "../configs/src/index.ts"
+      ],
+      "@aikami/backend/configs/*": [
+        "../configs/src/lib/*"
+      ],
+      "@aikami/backend/utils": [
+        "./src/index.ts"
+      ],
+      "@aikami/backend/utils/*": [
+        "./src/lib/*"
+      ],
+      "@aikami/constants": [
+        "../../shared/constants/src/index.ts"
+      ],
+      "@aikami/constants/*": [
+        "../../shared/constants/src/lib/*"
+      ],
+      "@aikami/schemas": [
+        "../../shared/schemas/src/index.ts"
+      ],
+      "@aikami/schemas/*": [
+        "../../shared/schemas/src/lib/*"
+      ],
+      "@aikami/types": [
+        "../../shared/types/src/index.ts"
+      ],
+      "@aikami/types/*": [
+        "../../shared/types/src/lib/*"
+      ],
+      "@aikami/utils": [
+        "../../shared/utils/src/index.ts"
+      ],
+      "@aikami/utils/*": [
+        "../../shared/utils/src/lib/*"
+      ],
+      "$logger": [
+        "../../shared/logger/src/index.ts"
+      ],
+      "$logger/*": [
+        "../../shared/logger/src/lib/*"
+      ],
+      "$env/*": [
+        "../../../config/tsconfig/stubs/env/*"
+      ]
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

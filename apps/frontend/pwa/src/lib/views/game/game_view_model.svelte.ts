@@ -1,10 +1,13 @@
 // apps/frontend/pwa/src/lib/views/game/game-view-model.svelte.ts
+
+import type { GameCommand } from '@aikami/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { GameCommand } from '$game/types';
+import type { ActiveContextEntry } from '$types';
+import { GameStateService } from '../../client/services/game/game_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // GameViewModel — Svelte 5 ViewModel for the game canvas
@@ -32,6 +35,12 @@ export type GameViewModelInterface = BaseViewModelInterface & {
   readonly gameError: string | undefined;
 
   /**
+   * Array of active spatial contexts — entities the player is currently
+   * within proximity of. Updated reactively via bridge events.
+   */
+  readonly activeContexts: ActiveContextEntry[];
+
+  /**
    * Sends a command to the game engine across the EngineBridge boundary.
    * All UI→Game communication flows through this method.
    */
@@ -52,7 +61,7 @@ export type GameViewModelInterface = BaseViewModelInterface & {
  *
  * **Critical boundary rule**: This ViewModel NEVER imports PixiJS, bitECS,
  * or any game-internal types. All communication with the game engine goes
- * through the typed {@link import('$game/engine-bridge').EngineBridge}.
+ * through the typed {@link import('@aikami/engine').EngineBridge}.
  */
 class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameViewModelInterface {
   activeDialog = $state<ActiveDialog | undefined>(undefined);
@@ -63,11 +72,19 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   gameError = $state<string | undefined>(undefined);
 
+  activeContexts: ActiveContextEntry[] = $state([]);
+
   /** Cached bridge instance — created lazily on first use. */
-  private bridge: import('$game/engine-bridge').EngineBridge | undefined;
+  private bridge: import('@aikami/engine').EngineBridge | undefined;
 
   /** Cached GameWorld instance — created lazily after bridge init. */
-  private gameWorld: import('$game/game-world').GameWorld | undefined;
+  private gameWorld: import('@aikami/engine').GameWorld | undefined;
+
+  /** Singleton game state service for persisting context data. */
+  private readonly gameStateService = new GameStateService({
+    uid: 'game-viewmodel',
+    className: 'GameStateService',
+  });
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
@@ -76,7 +93,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     try {
       // Lazy-import game modules — PixiJS is SSR-incompatible.
       // `BaseViewModelContainer` ensures `initialize()` runs only client-side.
-      const { createEngineBridge } = await import('$game/engine-bridge');
+      const { createEngineBridge } = await import('@aikami/engine');
 
       this.bridge = createEngineBridge();
 
@@ -106,6 +123,28 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
       this.bridge.on('SCENE_LOADED', (event) => {
         this.playerScene = event.sceneId;
+      });
+
+      // ── Spatial context events ──
+      this.bridge.on('CONTEXT_ENTERED', (event) => {
+        const entry: ActiveContextEntry = {
+          entityId: event.entityId,
+          npcId: event.contextPayload.npcId,
+          npcName: event.contextPayload.npcName,
+          dialog: event.contextPayload.dialog,
+          interactionRadius: event.contextPayload.interactionRadius,
+        };
+        // Update ViewModel's reactive state
+        this.activeContexts = [...this.activeContexts, entry];
+        // Persist in game state service
+        this.gameStateService.addActiveContext(entry);
+      });
+
+      this.bridge.on('CONTEXT_EXITED', (event) => {
+        // Update ViewModel's reactive state
+        this.activeContexts = this.activeContexts.filter((ctx) => ctx.entityId !== event.entityId);
+        // Persist in game state service
+        this.gameStateService.removeActiveContext(event.entityId);
       });
     } catch (error) {
       this.debug('Failed to initialize game bridge', error);
@@ -139,7 +178,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     }
 
     try {
-      const { GameWorld } = await import('$game/game-world');
+      const { GameWorld } = await import('@aikami/engine');
 
       this.gameWorld = new GameWorld(this.bridge);
       await this.gameWorld.initialize({

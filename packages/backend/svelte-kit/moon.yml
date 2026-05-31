@@ -3,14 +3,13 @@ $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'library'
-stack: 'backend'
 tags:
   - 'svelte-kit'
   - 'backend'
   - 'library'
 
 project:
-  title: 'SvelteKit Backend'
+  name: 'backend-svelte-kit'
   description: 'Backend utilities and helpers for SvelteKit applications.'
   channel: '#backend'
   owner: 'Backend Team'
@@ -22,38 +21,3 @@ dependsOn:
   - 'logger'
   - 'backend-utils'
 
-fileGroups:
-  sources:
-    - 'src/**/*'
-  configs:
-    - 'package.json'
-    - 'tsconfig.json'
-  tests:
-    - 'tests/**/*'
-
-tasks:
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  format:
-    command: 'bun run format'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  fix:
-    command: 'bun run fix'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-  validate:
-    command: 'bun run validate'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'

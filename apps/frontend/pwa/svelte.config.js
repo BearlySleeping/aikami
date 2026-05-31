@@ -1,7 +1,8 @@
+// apps/frontend/pwa/svelte.config.js
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import adapter from '@sveltejs/adapter-node';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import adapter from 'svelte-adapter-bun';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const packagesDirectory = resolve(projectDirectory, '../../../packages');
@@ -22,7 +23,6 @@ const toSrcPath = (path) => join(projectDirectory, 'src', path);
 
 const config = {
   preprocess: [vitePreprocess()],
-  extensions: ['.svelte', '.svx'],
   kit: {
     adapter: adapter({
       out: 'build',
@@ -32,14 +32,12 @@ const config = {
       $i18n: toSrcPath('lib/client/utils/i18n'),
       $lib: toPackagesPath('lib'),
       '$lib/*': toSrcPath('lib/*'),
-      $router: toPackagesPath('frontend/services/src/lib/router/router-utils'),
+      $router: toPackagesPath('frontend/services/src/lib/router/router_utils'),
       $routes: toSrcPath('lib/constants/routes'),
-      $logger: toPackagesPath('shared/logger/src/lib/svelte-kit.ts'),
+      $logger: toPackagesPath('shared/logger/src/lib/svelte_kit.ts'),
+      $loggerServer: toPackagesPath('shared/logger/src/lib/svelte_kit_server.ts'),
       $services: toSrcPath('lib/client/services'),
       '$services/*': toSrcPath('lib/services/*'),
-
-      $game: toSrcPath('lib/game'),
-      '$game/*': toSrcPath('lib/game/*'),
 
       $types: toSrcPath('lib/types'),
       $utils: toSrcPath('lib/utils'),
@@ -47,20 +45,32 @@ const config = {
       '$views/*': toSrcPath('lib/views/*'),
 
       '@aikami/backend/svelte-kit/*': toPackagesPath('backend/svelte-kit/src/lib/*'),
+      '@aikami/backend/database': toPackagesPath('backend/database/src'),
       '@aikami/backend/database/*': toPackagesPath('backend/database/src/lib/*'),
       '@aikami/backend/auth/*': toPackagesPath('backend/auth/src/lib/*'),
+      '@aikami/backend/onboarding': toPackagesPath('backend/onboarding/src'),
+      '@aikami/backend/agent': toPackagesPath('backend/agent/src'),
+      '@aikami/backend/chat': toPackagesPath('backend/chat/src'),
+      '@aikami/backend/knowledge': toPackagesPath('backend/knowledge/src'),
+      '@aikami/backend/team': toPackagesPath('backend/team/src'),
+      '@aikami/backend/admin': toPackagesPath('backend/admin/src'),
       '@aikami/backend/utils/*': toPackagesPath('backend/utils/src/lib/*'),
       '@aikami/backend/configs/*': toPackagesPath('backend/configs/src/lib/*'),
-
-      '@aikami/backend/svelte-kit': toPackagesPath('backend/svelte-kit/src'),
-      '@aikami/backend/database': toPackagesPath('backend/database/src'),
-      '@aikami/backend/auth': toPackagesPath('backend/auth/src'),
-      '@aikami/backend/utils': toPackagesPath('backend/utils/src'),
-      '@aikami/backend/configs': toPackagesPath('backend/configs/src'),
 
       '@aikami/constants': toPackagesPath('shared/constants/src'),
       '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
       '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib'),
+      '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
+      '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
+
+      '@aikami/frontend/dataconnect': toPackagesPath('frontend/dataconnect/src'),
+      '@aikami/frontend/dataconnect/*': toPackagesPath('frontend/dataconnect/src/lib/*'),
+
+      '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
+      '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
+      '@aikami/frontend/svelte-kit': toPackagesPath('frontend/svelte-kit/src'),
+      '@aikami/frontend-svelte-kit/*': toPackagesPath('frontend/svelte-kit/src/lib/*'),
+
       '@aikami/frontend/test': toPackagesPath('frontend/test/src'),
       '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
       '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),

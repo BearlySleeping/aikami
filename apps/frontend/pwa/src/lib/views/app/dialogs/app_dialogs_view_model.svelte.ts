@@ -1,5 +1,5 @@
-// apps/frontend/pwa/src/lib/views/app/dialogs/app-dialogs-view-model.svelte.ts
-import type { AppLoadingData, ConfirmDialogData, SnackbarData } from '@aikami/frontend/services';
+// apps/frontend/pwa/src/lib/views/app/dialogs/app_dialogs_view_model.svelte.ts
+import type { ConfirmDialogData, DialogState } from '@aikami/frontend/services';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -10,34 +10,34 @@ import { dialogService } from '$services';
 export type AppDialogsViewModelOptions = BaseViewModelOptions;
 
 export type AppDialogsViewModelInterface = BaseViewModelInterface & {
-  /**
-   * The data for the confirm dialog.
-   */
-  readonly confirmDialog: ConfirmDialogData | undefined;
+  /** The currently open dialog (generic). */
+  readonly currentDialog: DialogState | undefined;
 
-  /**
-   * The data for the snackbar.
-   */
-  readonly snackbar: SnackbarData | undefined;
+  /** The data for the snackbar. */
+  readonly snackbar: typeof dialogService.snackbar;
 
-  /**
-   * The data for the app loading indicator.
-   */
-  readonly appLoading: AppLoadingData | undefined;
+  /** The data for the app loading indicator. */
+  readonly appLoading: typeof dialogService.appLoading;
 
-  /**
-   * Hides the snackbar.
-   */
+  /** Close the current dialog with an optional result. */
+  closeDialog(result?: unknown): void;
+
+  /** Hides the snackbar. */
   hideSnackbar(): void;
 
-  /**
-   * Agrees to the confirm dialog.
-   */
-  confirmDialogAgree(): void;
+  // ── Backward-compat ────────────────────────────────────
 
-  /**
-   * Cancels the confirm dialog.
-   */
+  /** @deprecated Use `currentDialog` instead. */
+  readonly confirmDialog: ConfirmDialogData | undefined;
+
+  /** @deprecated Use `currentDialog` instead. */
+  readonly inviteDialog: unknown;
+
+  /** @deprecated Use `closeDialog()` instead. */
+  closeInviteDialog(): void;
+  /** @deprecated Use `closeDialog(true)` via the generic flow. */
+  confirmDialogAgree(): void;
+  /** @deprecated Use `closeDialog(false)` via the generic flow. */
   confirmDialogCancel(): void;
 };
 
@@ -45,8 +45,8 @@ class AppDialogsViewModel
   extends BaseViewModel<AppDialogsViewModelOptions>
   implements AppDialogsViewModelInterface
 {
-  get confirmDialog() {
-    return dialogService.confirmDialog;
+  get currentDialog() {
+    return dialogService.currentDialog;
   }
 
   get snackbar() {
@@ -57,33 +57,47 @@ class AppDialogsViewModel
     return dialogService.appLoading;
   }
 
+  closeDialog = (result?: unknown): void => {
+    dialogService.close(result);
+  };
+
   hideSnackbar(): void {
-    this.debug('Hiding snackbar');
     dialogService.hideSnackbar();
   }
 
-  confirmDialogAgree(): void {
-    const dialog = dialogService.confirmDialog;
-    if (!dialog?.resolve) {
-      this.warn('No confirm dialog to agree to');
-      return;
-    }
+  // ── Backward-compat passthroughs ─────────────────────────
 
-    this.debug('Confirm dialog agreed');
-    dialog.resolve(true);
-    dialogService.confirmDialog = undefined;
+  get confirmDialog(): ConfirmDialogData | undefined {
+    if (dialogService.currentDialog?.type !== 'confirm') {
+      return undefined;
+    }
+    const props = (dialogService.currentDialog.props ?? {}) as Partial<ConfirmDialogData>;
+    return {
+      title: (props.title as string) ?? '',
+      message: (props.message as string) ?? '',
+      agreeLabel: (props.agreeLabel as string) ?? 'OK',
+      disagreeLabel: (props.disagreeLabel as string) ?? 'Cancel',
+      hideDisagreeButton: (props.hideDisagreeButton as boolean) ?? false,
+      resolve: (value: boolean) => dialogService.close(value),
+    };
+  }
+
+  get inviteDialog() {
+    return dialogService.currentDialog?.type === 'invite-member'
+      ? dialogService.currentDialog
+      : undefined;
+  }
+
+  closeInviteDialog(): void {
+    dialogService.close(true);
+  }
+
+  confirmDialogAgree(): void {
+    dialogService.close(true);
   }
 
   confirmDialogCancel(): void {
-    const dialog = dialogService.confirmDialog;
-    if (!dialog?.resolve) {
-      this.warn('No confirm dialog to cancel');
-      return;
-    }
-
-    this.debug('Confirm dialog cancelled');
-    dialog.resolve(false);
-    dialogService.confirmDialog = undefined;
+    dialogService.close(false);
   }
 }
 

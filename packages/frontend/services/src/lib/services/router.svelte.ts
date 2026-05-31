@@ -91,12 +91,15 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
     },
   ): Promise<void>;
 
-  initialize(options: {
-    goto: GoTo;
-    page: Page;
-    navigating: Navigation | null;
-    initialRoute?: RouteName;
-  }): void;
+  /** Stores the SvelteKit goto function and marks the service as initialized. */
+  initialize(options: { goto: GoTo }): void;
+
+  /**
+   * Must be called from a reactive context (inside $effect) so Svelte
+   * tracks changes to `navigating` and `page` from `$app/state`.
+   * Updates internal navigation state accordingly.
+   */
+  syncNavigation(navigating: Navigation | null, page: Page): void;
 
   /**
    * Navigate to the app. This is used when the user comes from
@@ -123,7 +126,8 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   private _pageValue = $state<Page | undefined>();
   private _navigating = $state<Navigation | undefined>();
   private _currentRoute = $state<RouteName | undefined>();
-
+  private _lastSyncedUrl = '';
+  private _lastNavType: string | undefined = undefined;
   private readonly _redirectToKey = REDIRECT_TO_URL_SEARCH_PARAM_KEY;
 
   protected get redirectToHref(): string | undefined {
@@ -138,10 +142,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   async goToHref(goto: string): Promise<void> {
     this.log('goToHref', { goto });
     if (!this._goto) {
-      throw toAppError({
-  errorType: 'internal',
-  errorMessage: 'RouterService is not initialized'
-});
+      throw toAppError({ errorType: 'internal', errorMessage: 'RouterService is not initialized' });
     }
 
     return await this._goto(goto);
@@ -165,7 +166,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   }
 
   onPageChanged(listener: Listener<Page | undefined>): void {
-    return this._pageChangedListener.subscribe(listener);
+    this._pageChangedListener.subscribe(listener);
   }
 
   get previousPage(): Page | undefined {
@@ -173,6 +174,9 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   }
 
   setCurrentRoute(route?: RouteName): void {
+    if (route === this._currentRoute) {
+      return;
+    }
     this.log('setCurrentRoute', { route });
     this._currentRoute = route;
   }
@@ -180,9 +184,9 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   get url(): URL {
     if (!this._pageValue) {
       throw toAppError({
-  errorType: 'internal',
-  errorMessage: 'RouterService not initialized or page not set'
-});
+        errorType: 'internal',
+        errorMessage: 'RouterService not initialized or page not set',
+      });
     }
     return this._pageValue.url;
   }
@@ -191,7 +195,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   }
 
   get isNavigating(): boolean {
-    return !!this._navigating;
+    return !!this._navigating?.type;
   }
 
   get navigatingToRoute(): RouteName | undefined {
@@ -229,7 +233,8 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   }
 
   toRoutePathFromRouteId(routeId: string): RouteName | undefined {
-    this.debug('toRoutePathFromRouteId', { routeId });
+    // Memoized in toRoutePathFromRouteId (router-utils.ts) — O(1) after first call.
+    // Debug log removed: this getter fires 40+ times per navigation otherwise.
     return toRoutePathFromRouteId(routeId);
   }
   private _isNavigatingToApp = false;
@@ -281,66 +286,63 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     this._isNavigatingToApp = false;
   }
 
-  initialize(options: {
-    goto: GoTo;
-    page: Page;
-    navigating: Navigation | null;
-    initialRoute?: RouteName;
-  }): void {
+  initialize(options: { goto: GoTo }): void {
     this.log('initialize', options);
     this._goto = options.goto;
-
-    $effect.root(() => {
-      $effect(() => {
-        // 1. TRACKED PHASE: Read the SvelteKit properties we want to react to.
-        // Svelte will re-run this effect ONLY when these specific values change.
-        const currentNavigating = options.navigating;
-        const currentPage = options.page;
-        const routeId = currentPage.route.id;
-        const urlPathname = currentPage.url.pathname;
-        const urlObj = currentPage.url;
-
-        // 2. UNTRACKED PHASE: Do all our internal state mutations safely.
-        // This guarantees we never trigger our own effect.
-        untrack(() => {
-          this._navigating = currentNavigating ?? undefined;
-          this._pageValue = currentPage;
-
-          this.log('page changed:routeId', routeId);
-
-          const currentRoute = routeId
-            ? this.toRoutePathFromRouteId(routeId)
-            : toRoutePathFromURL(urlObj);
-
-          this.log('page changed:route', currentRoute);
-
-          if (!currentRoute) {
-            return this.warn('Page has no route');
-          }
-
-          this.setCurrentRoute(currentRoute);
-          this.currentPathName = urlPathname;
-
-          // No more infinite loops from mutating the $state array!
-          this._pushPageToHistory(currentPage);
-        });
-      });
-    });
-
-    // Fix the second effect as well, using the same pattern!
-    $effect.root(() => {
-      $effect(() => {
-        // Track the previous page...
-        const prev = this.previousPage;
-
-        // ...but untrack the listener emission so it doesn't cause cascades
-        untrack(() => {
-          this._pageChangedListener.publish(prev);
-        });
-      });
-    });
-
     this.initialized = true;
+  }
+
+  /**
+   * Must be called from a reactive context (inside $effect) so Svelte
+   * tracks changes to `navigating` and `page` from `$app/state`.
+   *
+   * The caller passes the reactive values directly — not through a
+   * captured parameter — so the $effect re-runs when navigation
+   * starts and ends.
+   */
+  syncNavigation(navigating: Navigation | null, page: Page): void {
+    // Guard: skip if page URL hasn't changed. Prevents infinite loops
+    // during SSR hydration where $app/state may return new page references
+    // for the same route, triggering this effect repeatedly.
+    const urlKey = `${page.url.pathname}${page.url.search}`;
+    const navType = navigating?.type; // Will be null when NOT navigating
+    this.debug('syncNavigation', {
+      urlKey,
+      navType,
+    });
+
+    // Guard: Prevent loops by checking if the URL and active navigation type are unchanged
+    if (urlKey === this._lastSyncedUrl && navType === this._lastNavType) {
+      return;
+    }
+    this._lastSyncedUrl = urlKey;
+    this._lastNavType = navType ?? undefined;
+
+    untrack(() => {
+      this._navigating = navigating ?? undefined;
+      this._pageValue = page;
+
+      this.log('page changed:routeId', page.route.id);
+
+      const currentRoute = page.route.id
+        ? this.toRoutePathFromRouteId(page.route.id)
+        : toRoutePathFromURL(page.url);
+
+      this.log('page changed:route', currentRoute);
+
+      if (!currentRoute) {
+        this.warn('Page has no route');
+        return;
+      }
+
+      this.setCurrentRoute(currentRoute);
+      this.currentPathName = page.url.pathname;
+
+      this._pushPageToHistory(page);
+
+      const prev = this.previousPage;
+      this._pageChangedListener.publish(prev);
+    });
   }
 
   private _pushPageToHistory(route: Page): void {

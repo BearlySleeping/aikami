@@ -1,28 +1,26 @@
 import type { Cookies } from '@sveltejs/kit';
-import type { SerializeOptions } from 'cookie';
 import { logger } from '$logger';
 
 // The original, public-facing CookieKey type.
-export type CookieKey = '__session' | 'locale';
+export type CookieKey = '__session' | 'locale' | 'sessionId';
 
 /**
  * The internal shape of the data stored within the __session cookie. The
  * 'session' key is reserved for the Firebase Auth JWT.
  */
 type SessionStore = {
-  'crm-is-refreshing'?: boolean;
-  'crm-phone-number'?: string;
-  'crm-redirect'?: string;
   locale?: string;
+  sessionId?: string;
   session?: string;
 };
+
+export type SerializeOptions = Parameters<Cookies['set']>[2];
 
 // Your original baseCookieOptions, unchanged.
 export const baseCookieOptions = {
   httpOnly: true,
   path: '/',
-  sameSite: 'none',
-  // sameSite: 'lax',
+  sameSite: 'lax',
   secure: true,
 } as const satisfies SerializeOptions;
 
@@ -30,11 +28,15 @@ export const sessionAge = 60 * 60 * 24 * 14 * 1000; // 14 days
 
 // Your original getCorrectDomain function, unchanged.
 const getCorrectDomain = (options: { domain?: string; request: Request; url: URL }): string => {
-  if (options.domain) return options.domain;
+  if (options.domain) {
+    return options.domain;
+  }
   const forwardedHost = options.request.headers.get('x-forwarded-host');
   if (forwardedHost) {
     const hosts = forwardedHost.split(',');
-    if (hosts[0]) return hosts[0].trim();
+    if (hosts[0]) {
+      return hosts[0].trim();
+    }
   }
   return options.url.hostname;
 };
@@ -47,7 +49,9 @@ const getCorrectDomain = (options: { domain?: string; request: Request; url: URL
  */
 const getStore = (cookies: Cookies): SessionStore => {
   const cookieValue = cookies.get('__session');
-  if (!cookieValue) return {};
+  if (!cookieValue) {
+    return {};
+  }
 
   try {
     const data = JSON.parse(cookieValue);
@@ -90,9 +94,7 @@ const saveStore = (cookies: Cookies, data: SessionStore, domain: string) => {
 };
 
 /**
- * Gets a value from the session store, preserving the original signature. Note:
- * This may return types other than string (e.g., boolean for
- * 'crm-is-refreshing'). The caller should be aware of the expected type.
+ * Gets a value from the session store.
  *
  * @param key The key of the cookie to retrieve.
  * @param options The options object containing the cookies object.

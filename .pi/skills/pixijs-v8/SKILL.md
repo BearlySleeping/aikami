@@ -1,6 +1,9 @@
 ---
 name: pixijs-v8
-description: PixiJS v8 rendering engine patterns — Application setup, Container/Sprite/Graphics/Text APIs, Asset loading (async), WebGPU/WebGL context, and bitECS integration for ECS game architecture.
+description: >-
+  PixiJS v8 rendering engine patterns — Application setup, Container/Sprite/Graphics/Text APIs,
+  Asset loading (async), WebGPU/WebGL context, bitECS integration for ECS game architecture,
+  and the SvelteKit ↔ game engine architectural boundary.
 version: 1.0.0
 tags: ["pixijs", "pixijs-v8", "game-engine", "webgl", "webgpu", "rendering", "ecs"]
 ---
@@ -375,7 +378,133 @@ app.ticker.add(() => {
 
 ---
 
-## 8. Gotchas
+## 9. SvelteKit ↔ Game Engine Boundary
+
+The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit PWA through a
+strict architectural boundary. This decoupling prevents the 60fps game loop
+from triggering Svelte 5 reactivity and crashing the browser microtask queue.
+
+### Boundary Diagram
+
+```
+┌──────────────────────────────────────────────────────┐
+│  SVELTEKIT UI LAYER  ($state runes)                   │
+│  ┌───────────┐  ┌──────────┐  ┌───────────────────┐ │
+│  │ ChatView   │  │ HUDView  │  │ GameViewModel     │ │
+│  │ $state()   │  │ $state() │  │ $state(): messages│ │
+│  └─────┬──────┘  └────┬─────┘  └────────┬──────────┘ │
+│        │              │                  │            │
+│        └──────────────┼──────────────────┘            │
+│                       │ EngineBridge.send()            │
+│           EngineBridge.on() listen for events          │
+├───────────────────────┼───────────────────────────────┤
+│  ENGINE BRIDGE        │  (typed message channel)       │
+│                       │  GameCommand →                 │
+│                       │  GameEvent ←                   │
+├───────────────────────┼───────────────────────────────┤
+│  PIXIJS + bitECS RUNTIME (imperative, no $state)      │
+│  ┌────────────────────┴──────────────────────────────┐│
+│  │  GameWorld (bitECS world)                          ││
+│  │  ┌─────────┐  ┌─────────┐  ┌───────────────────┐ ││
+│  │  │ Systems │  │Entities │  │ PixiJS Application │ ││
+│  │  │ movement│  │  NPCs   │  │  <canvas> 60fps    │ ││
+│  │  │ render  │  │  player │  │  requestAnimation  │ ││
+│  │  │ physics │  │  items  │  │  Frame loop        │ ││
+│  │  └─────────┘  └─────────┘  └───────────────────┘ ││
+│  └───────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────┘
+```
+
+### Critical Rules
+
+#### 9.1 No `$state` in Game Code
+
+Game code in `apps/frontend/pwa/src/lib/game/` runs at 60fps via
+`requestAnimationFrame`. Any `$state` variable touched in the game loop
+triggers a full DOM re-render every frame — catastrophic performance impact.
+The game directory is a **pure imperative TypeScript zone** with zero Svelte
+imports.
+
+```typescript
+// ❌ Forbidden — $state in game code
+// apps/frontend/pwa/src/lib/game/systems/movement.ts
+let playerX = $state(0); // Crashes Svelte microtask queue!
+
+// ✅ Correct — plain variable updated by the ticker
+// apps/frontend/pwa/src/lib/game/systems/movement.ts
+let playerX = 0;
+```
+
+#### 9.2 Svelte UI Handles Low-Frequency State
+
+ViewModels in `apps/frontend/pwa/src/lib/views/` handle UI-relevant state only:
+
+- **Menus** — open/closed, selected item
+- **Chat wrappers** — message lists, input text, loading flags
+- **Stats blocks** — health bars, inventory counts, character sheets
+- **HUD** — minimap toggle, skill cooldowns, quest trackers
+
+These update at human-perceptible rates (seconds, not milliseconds). The bitECS
+engine ticker handles per-frame tick metrics (position deltas, collision
+results, animation frames) natively via structural array (SoA) configurations
+— never through Svelte runes.
+
+#### 9.3 Bridge Serialization
+
+All payloads crossing the `EngineBridge` must be **plain serializable objects**
+only:
+
+- ✅ `string`, `number`, `boolean`, arrays of primitives
+- ❌ Class instances, functions, PixiJS objects (`Sprite`, `Container`),
+  bitECS handles (`World`, entity references)
+
+```typescript
+// ✅ Correct — plain serializable command
+type MoveCommand = {
+  type: "MOVE_PLAYER";
+  direction: "up" | "down" | "left" | "right";
+};
+
+// ✅ Correct — plain serializable event
+type DialogEvent = { type: "DIALOG_TRIGGER"; npcId: string; message: string };
+
+// ❌ Forbidden — PixiJS object crossing the bridge
+type BadEvent = { type: "RENDER"; sprite: Sprite };
+```
+
+#### 9.4 Event Emission at UI-Relevant Intervals
+
+Bridge events must be emitted at UI-relevant intervals — not per-frame:
+
+- ✅ **Dialog triggers** — when player interacts with NPC
+- ✅ **Health changes** — when damage taken (not every frame of an animation)
+- ✅ **Scene transitions** — when entering/exiting a location
+- ❌ **Position updates** — every frame (handle in-game only, smooth via
+  PixiJS tweening)
+- ❌ **Animation frames** — every frame (handled by PixiJS `AnimatedSprite`)
+
+#### 9.5 No Blocking the Game Loop
+
+Bridge message handlers on the Svelte side must not perform synchronous heavy
+work:
+
+```typescript
+// ✅ Correct — offload heavy work
+bridge.on("EVENT", (event) => {
+  requestIdleCallback(() => {
+    processEvent(event);
+  });
+});
+
+// ❌ Forbidden — synchronous heavy work blocks the game loop
+bridge.on("EVENT", (event) => {
+  heavySynchronousWork(event);
+});
+```
+
+---
+
+## 10. Gotchas
 
 ### 8.1 Async Init
 PixiJS v8 `Application.init()` is async. You MUST `await` it. The v7 pattern `new Application({...})` does NOT work in v8.

@@ -1,7 +1,7 @@
 import { BaseClass, type BaseClassInterface } from '@aikami/utils';
 import type { Value } from 'firebase/remote-config';
 
-type RemoteConfig = typeof import('./configs/remote_config.ts');
+type RemoteConfig = typeof import('@aikami/frontend/configs/remote_config.ts');
 
 export type FirebaseRemoteConfigServiceInterface = {
   initialize(): Promise<boolean>;
@@ -56,9 +56,13 @@ class FirebaseRemoteConfigService
       throw new Error(`${this._className} is not available on SSR`);
     }
 
-    FirebaseRemoteConfigService._remoteConfig = await import('./configs/remote_config.ts');
+    FirebaseRemoteConfigService._remoteConfig = await import(
+      '@aikami/frontend/configs/remote_config.ts'
+    );
+
     return FirebaseRemoteConfigService._remoteConfig;
   }
 }
 
-export const firebaseRemoteConfigService = new FirebaseRemoteConfigService();
+export const firebaseRemoteConfigService: FirebaseRemoteConfigServiceInterface =
+  new FirebaseRemoteConfigService();

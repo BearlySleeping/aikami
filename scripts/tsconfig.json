@@ -8,13 +8,13 @@
     "types": ["bun"],
     "paths": {
       "@aikami/constants": ["../packages/shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["../packages/shared/constants/src/*"],
+      "@aikami/constants/*": ["../packages/shared/constants/src/lib/*"],
       "@aikami/mocks": ["../packages/shared/mocks/src/index.ts"],
-      "@aikami/mocks/*": ["../packages/shared/mocks/src/*"],
+      "@aikami/mocks/*": ["../packages/shared/mocks/src/lib/*"],
       "@aikami/types": ["../packages/shared/types/src/index.ts"],
-      "@aikami/types/*": ["../packages/shared/types/src/*"],
+      "@aikami/types/*": ["../packages/shared/types/src/lib/*"],
       "@aikami/schemas": ["../packages/shared/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["../packages/shared/schemas/src/*"]
+      "@aikami/schemas/*": ["../packages/shared/schemas/src/lib/*"]
     }
   },
   "include": ["src/**/*.ts"],

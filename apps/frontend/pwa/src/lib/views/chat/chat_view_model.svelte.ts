@@ -1,9 +1,12 @@
 // apps/frontend/pwa/src/lib/views/chat/chat-view-model.svelte.ts
+
+import { createEngineBridge } from '@aikami/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
 import type { ChatData, MessageData, NpcData } from '@aikami/types';
 import {
   aiService,
@@ -137,6 +140,30 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
       return;
     }
     this.showGreeting = false;
+
+    // ── Parser intercept: slash commands ──
+    if (text.startsWith('/')) {
+      const parsed = parseLine(text);
+      if (parsed.command) {
+        const { command, args } = parsed.command;
+        this.debug('command detected', { command, args });
+
+        // Dispatch to game engine bridge
+        const bridge = createEngineBridge();
+        bridge.executeCommand(command, args);
+
+        // Echo a local system message into the chat
+        chatService.addMessage({
+          id: crypto.randomUUID(),
+          text: `Command: ${parsed.command.raw}`,
+          sender: 'ai',
+          timestamp: new Date(),
+        });
+        return; // Do NOT send to AI
+      }
+    }
+
+    // ── Normal AI message flow ──
     chatService.setSending(true);
     chatService.setTyping(true);
     chatService.setError(undefined);
@@ -148,11 +175,26 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     };
     chatService.addMessage(userMessage);
     await this.saveMessage(text, 'user');
+
+    // Stream buffer for incremental macro parsing (future streaming use)
+    const streamBuf: StreamBuffer = createStreamBuffer();
+
     try {
       const response = await aiService.sendMessageToAI(text, this.npc ?? undefined);
       if (response) {
-        chatService.appendAIMessage(response);
-        await this.saveMessage(response, 'ai');
+        // Process macros from the AI response
+        const chunkResult = parseStreamChunk(response, streamBuf);
+
+        // Dispatch any macros to the engine bridge
+        const bridge = createEngineBridge();
+        for (const macro of chunkResult.macros) {
+          this.debug('macro in response', { name: macro.name, args: macro.args });
+          bridge.triggerMacro(macro.name, macro.args);
+        }
+
+        // Show clean text (macros stripped) in the UI
+        chatService.appendAIMessage(chunkResult.displayText);
+        await this.saveMessage(chunkResult.displayText, 'ai');
       }
     } catch {
       chatService.setError('Failed to get response from AI');
@@ -166,7 +208,9 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     this.debug('editMessage', messageId, newText);
     const msgs = [...chatService.messages] as unknown as MessageData[];
     const idx = msgs.findIndex((m) => m.id === messageId);
-    if (idx === -1) return;
+    if (idx === -1) {
+      return;
+    }
     msgs[idx] = { ...msgs[idx], text: newText };
     chatService.setMessages(msgs);
     await this.persistMessages(msgs);
@@ -185,7 +229,9 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     this.debug('regenerateMessage', messageId);
     const msgs = [...chatService.messages] as unknown as MessageData[];
     const idx = msgs.findIndex((m) => m.id === messageId);
-    if (idx === -1 || msgs[idx].sender !== 'ai') return;
+    if (idx === -1 || msgs[idx].sender !== 'ai') {
+      return;
+    }
     chatService.setTyping(true);
     try {
       const context = msgs
@@ -221,7 +267,9 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   async playTts(messageId: string): Promise<void> {
     this.debug('playTts', messageId);
     const msg = (chatService.messages as unknown as MessageData[]).find((m) => m.id === messageId);
-    if (!msg) return;
+    if (!msg) {
+      return;
+    }
     this.isPlayingTts = true;
     try {
       await ttsService.speak({ text: msg.text });
@@ -239,7 +287,9 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     this.debug('attachFile', messageId, file.name);
     const msgs = [...chatService.messages] as unknown as MessageData[];
     const idx = msgs.findIndex((m) => m.id === messageId);
-    if (idx === -1) return;
+    if (idx === -1) {
+      return;
+    }
     const url = URL.createObjectURL(file);
     msgs[idx] = {
       ...msgs[idx],
@@ -251,7 +301,9 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
 
   async updateAffection(change: number): Promise<void> {
     this.debug('updateAffection', change);
-    if (!this.chatData) return;
+    if (!this.chatData) {
+      return;
+    }
     this.chatData = { ...this.chatData, affection: (this.chatData.affection ?? 0) + change };
   }
 
@@ -289,7 +341,9 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
       const bg = prompt ?? `Fantasy chat background, ${this.npc?.name ?? 'mysterious'} atmosphere`;
       const result = await imageGenerationService.generateImage({ prompt: bg });
       this.backgroundImageUrl = result.url;
-      if (this.chatData) this.chatData.backgroundImageUrl = result.url;
+      if (this.chatData) {
+        this.chatData.backgroundImageUrl = result.url;
+      }
     } finally {
       this.isGeneratingImage = false;
     }
@@ -329,10 +383,14 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
 
   private async persistMessages(msgs: MessageData[]): Promise<void> {
     const uid = authService.uid;
-    if (!uid || !this.npc) return;
+    if (!uid || !this.npc) {
+      return;
+    }
     try {
       const chat = await npcChatService.getChat({ uid, npcId: this.npc.id });
-      if (chat?.id) await npcChatService.updateChat({ chatId: chat.id, messages: msgs });
+      if (chat?.id) {
+        await npcChatService.updateChat({ chatId: chat.id, messages: msgs });
+      }
     } catch {}
   }
 }

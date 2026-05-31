@@ -1,19 +1,6 @@
 {
-  "extends": ["./tsconfig.base.json", "./tsconfig.paths.shared.json"],
+  "extends": ["./tsconfig.base.json"],
   "compilerOptions": {
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "paths": {
-      "@aikami/constants": ["packages/shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["packages/shared/constants/src/*"],
-      "@aikami/types": ["packages/shared/types/src/index.ts"],
-      "@aikami/types/*": ["packages/shared/types/src/*"],
-      "@aikami/schemas": ["packages/shared/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["packages/shared/schemas/src/*"],
-      "@aikami/utils": ["packages/shared/utils/src/index.ts"],
-      "@aikami/utils/*": ["packages/shared/utils/src/*"],
-      "$logger": ["packages/shared/logger/src/lib/svelte-kit.ts"],
-      "$logger/*": ["packages/shared/logger/src/*"],
-      "$env/*": ["config/tsconfig/stubs/env/*"]
-    }
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   }
 }

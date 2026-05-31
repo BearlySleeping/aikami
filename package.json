@@ -5,6 +5,7 @@
     "packages/shared/*",
     "packages/backend/*",
     "packages/frontend/*",
+    "packages/engine",
     "apps/frontend/*",
     "apps/backend/*"
   ],
@@ -20,7 +21,6 @@
     "format": "moon run :format",
     "fix": "moon run :fix",
     "typecheck": "moon run :typecheck",
-    "validate": "moon run :validate",
     "ci": "bun run validate && bun run test",
     "scripts": "bun run scripts/src/index.ts",
     "setup": "bun run scripts/src/lib/setup/setup.ts",

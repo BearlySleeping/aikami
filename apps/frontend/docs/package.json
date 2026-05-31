@@ -9,8 +9,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsc --noEmit",
-    "fix": "biome check --write src",
-    "validate": "bun run typecheck"
+    "fix": "biome check --write src"
   },
   "devDependencies": {
     "astro": "6.4.2"

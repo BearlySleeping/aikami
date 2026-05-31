@@ -1,4 +1,4 @@
-export interface Character {
+export type Character = {
   name: string;
   description: string;
   personality: string;
@@ -15,19 +15,19 @@ export interface Character {
   extensions: Record<string, unknown>;
   avatarUrl?: string;
   voiceConfigId?: string;
-}
+};
 
-export interface CharacterCardV2 {
+export type CharacterCardV2 = {
   spec: 'chara_card_v2';
   spec_version: '2.0';
   data: Character;
-}
+};
 
-export interface CharacterCardV1 {
+export type CharacterCardV1 = {
   name: string;
   description: string;
   personality: string;
   scenario: string;
   first_mes: string;
   mes_example: string;
-}
+};

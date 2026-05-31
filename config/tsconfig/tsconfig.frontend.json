@@ -1,30 +1,6 @@
 {
-  "extends": ["./tsconfig.base.json", "./tsconfig.paths.shared.json"],
+  "extends": ["./tsconfig.base.json"],
   "compilerOptions": {
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "paths": {
-      "@aikami/constants": ["packages/shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["packages/shared/constants/src/*"],
-      "@aikami/types": ["packages/shared/types/src/index.ts"],
-      "@aikami/types/*": ["packages/shared/types/src/*"],
-      "@aikami/schemas": ["packages/shared/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["packages/shared/schemas/src/*"],
-      "@aikami/utils": ["packages/shared/utils/src/index.ts"],
-      "@aikami/utils/*": ["packages/shared/utils/src/*"],
-      "$logger": ["packages/shared/logger/src/lib/logger-browser.ts"],
-      "$logger/*": ["packages/shared/logger/src/*"],
-      "$router": ["packages/frontend/services/src/lib/router/router-utils.ts"],
-      "$router/*": ["packages/frontend/services/src/lib/router/router-utils/*"],
-      "$routes": ["apps/frontend/pwa/src/lib/constants/routes.ts"],
-      "$routes/*": ["apps/frontend/pwa/src/lib/constants/routes/*"],
-      "@aikami/frontend/configs": ["packages/frontend/configs/src/index.ts"],
-      "@aikami/frontend/configs/*": ["packages/frontend/configs/src/lib/*"],
-      "@aikami/frontend/services": ["packages/frontend/services/src/index.ts"],
-      "@aikami/frontend/services/*": ["packages/frontend/services/src/lib/*"],
-      "@aikami/frontend/utils": ["packages/frontend/utils/src/index.ts"],
-      "@aikami/frontend/utils/*": ["packages/frontend/utils/src/*"],
-      "@aikami/frontend/repositories": ["packages/frontend/repositories/src/index.ts"],
-      "@aikami/frontend/repositories/*": ["packages/frontend/repositories/src/*"]
-    }
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   }
 }

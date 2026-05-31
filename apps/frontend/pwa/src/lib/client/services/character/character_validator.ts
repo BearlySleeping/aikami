@@ -7,13 +7,19 @@ import type { Character, CharacterCardV2 } from '$types';
  * @returns True if valid V2 card, false otherwise
  */
 export const isV2Card = (data: unknown): data is CharacterCardV2 => {
-  if (typeof data !== 'object' || data === null) return false;
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
 
   const card = data as Record<string, unknown>;
-  if (card.spec !== 'chara_card_v2' || card.spec_version !== '2.0') return false;
+  if (card.spec !== 'chara_card_v2' || card.spec_version !== '2.0') {
+    return false;
+  }
 
   const cardData = card.data;
-  if (typeof cardData !== 'object' || cardData === null) return false;
+  if (typeof cardData !== 'object' || cardData === null) {
+    return false;
+  }
 
   const requiredFields = [
     'name',
@@ -33,7 +39,9 @@ export const isV2Card = (data: unknown): data is CharacterCardV2 => {
   ];
 
   const hasAllFields = requiredFields.every((field) => Object.hasOwn(cardData, field));
-  if (!hasAllFields) return false;
+  if (!hasAllFields) {
+    return false;
+  }
 
   return (
     Array.isArray((cardData as Record<string, unknown>).alternate_greetings) &&
@@ -48,7 +56,9 @@ export const isV2Card = (data: unknown): data is CharacterCardV2 => {
  * @returns True if valid V1 character, false otherwise
  */
 export const isV1Card = (data: unknown): data is Character => {
-  if (typeof data !== 'object' || data === null) return false;
+  if (typeof data !== 'object' || data === null) {
+    return false;
+  }
 
   const requiredFields = [
     'name',

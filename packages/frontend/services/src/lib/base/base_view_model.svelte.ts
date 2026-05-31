@@ -39,6 +39,15 @@ export abstract class BaseViewModel<Options extends BaseViewModelOptions = BaseV
 
   errorMessage = $state<string | undefined>();
 
+  /**
+   * Array to hold all the $effect.root cleanup functions
+   */
+  private _effectCleanups: Array<() => void> = [];
+
+  get showLoadingView(): boolean {
+    return this._showLoadingView;
+  }
+
   constructor(options: Options) {
     super(options);
     const { startWithLoadingView } = options;
@@ -52,7 +61,26 @@ export abstract class BaseViewModel<Options extends BaseViewModelOptions = BaseV
     await Promise.resolve();
   }
 
-  get showLoadingView(): boolean {
-    return this._showLoadingView;
+  /**
+   * Safely registers reactive $effect blocks.
+   * They will be automatically destroyed when the ViewModel is disposed.
+   */
+  protected registerEffectRoot(fn: () => void): void {
+    const cleanup = $effect.root(fn);
+    this._effectCleanups.push(cleanup);
+  }
+
+  /**
+   * Override the dispose method to kill all Svelte 5 reactive roots
+   * before running the standard class cleanup.
+   */
+  override async dispose(): Promise<void> {
+    // Fire every cleanup function to kill the $effects and prevent memory leaks
+    for (const cleanup of this._effectCleanups) {
+      cleanup();
+    }
+    this._effectCleanups = []; // clear the array
+
+    return await super.dispose();
   }
 }

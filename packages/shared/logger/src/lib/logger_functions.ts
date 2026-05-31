@@ -1,9 +1,10 @@
 import process from 'node:process';
+import type { LogEntry, LoggerInterface, TimerInterface } from '@aikami/types';
 import { logger as firebaseFunctionsLogger } from 'firebase-functions/logger';
-import { type BaseLoggerInterface, BaseLoggerService, type LogEntry } from './base.ts';
-import { Timer, type TimerInterface } from './timer.ts';
+import { BaseLoggerService } from './base.ts';
+import { Timer } from './timer.ts';
 
-export type FunctionsLoggerInterface = BaseLoggerInterface;
+export type FunctionsLoggerInterface = LoggerInterface;
 
 class FunctionsTimer extends Timer implements TimerInterface {}
 
@@ -22,7 +23,9 @@ class FunctionsLoggerService extends BaseLoggerService implements FunctionsLogge
       }
 
       const baseLog =
-        process.env.FIREBASE_CONFIG && !process.env.FUNCTIONS_EMULATOR ? firebaseFunctionsLogger : console;
+        process.env.FIREBASE_CONFIG && !process.env.FUNCTIONS_EMULATOR
+          ? firebaseFunctionsLogger
+          : console;
 
       const log = baseLog[logType ?? 'log'];
 
@@ -40,7 +43,6 @@ class FunctionsLoggerService extends BaseLoggerService implements FunctionsLogge
   }
 }
 
-
 export const logger = new FunctionsLoggerService({
-	logLevel: process.env.LOG_LEVEL,
+  logLevel: process.env.LOG_LEVEL,
 });
