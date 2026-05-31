@@ -16,3 +16,14 @@ export type {
   ParseResult,
   TextNode,
 } from "./lib/types.js";
+export {
+  formatAlpaca,
+  formatChatML,
+  formatDeepSeek,
+  formatInstruct,
+  formatLlama3,
+  formatMistral,
+  formatVicuna,
+  INSTRUCT_FORMATTERS,
+} from "./lib/instruct.js";
+export type { InstructTemplateName } from "./lib/instruct.js";
