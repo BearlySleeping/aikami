@@ -1,32 +1,5 @@
-/// <reference types="../env.d.ts" />
-
-import {
-  addDoc,
-  arrayRemove,
-  arrayUnion,
-  collection,
-  collectionGroup,
-  deleteDoc,
-  deleteField,
-  doc,
-  documentId,
-  getCountFromServer,
-  getDoc,
-  getDocs,
-  getFirestoreInstance,
-  increment,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  startAfter,
-  Timestamp,
-  updateDoc,
-  where,
-  writeBatch,
-} from '@aikami/frontend/services/firebase/configs/firestore';
+import { publicEnv } from '@aikami/frontend/configs/environment';
+import type { Timestamp } from '@aikami/frontend/configs/firestore.ts';
 import type {
   BatchCommand,
   DocumentListener,
@@ -35,6 +8,7 @@ import type {
   DocumentsObservable,
   FieldValue,
   GetQueryOptions,
+  ParseLevel,
   PostSortDocuments,
   QueryFilter,
   RepositoryType,
@@ -70,6 +44,8 @@ type CustomTimestamp = {
   _nanoseconds: number;
 };
 
+type Database = typeof import('@aikami/frontend/configs/firestore.ts');
+
 // Type guard to check if an object is a CustomTimestamp
 const isCustomTimestamp = (obj: unknown): obj is CustomTimestamp => {
   return (
@@ -98,6 +74,7 @@ export type FrontendRepositoryInterface<T extends RepositoryType> = {
     arrayRemove: ServerArrayRemove;
     serverDelete: ServerDelete;
     documentId: () => FieldValue;
+    // biome-ignore lint/style/useNamingConvention: Firebase class and method names
     Timestamp: typeof Timestamp;
   }>;
 
@@ -135,21 +112,24 @@ export class FrontendRepository<T extends RepositoryType>
   extends BaseRepository<T>
   implements FrontendRepositoryInterface<T>
 {
+  private static _database?: Database;
+
   constructor(options: BaseRepositoryOptions<T>) {
     super({
       ...options,
-      parseLevel: options.parseLevel ?? import.meta.env.PUBLIC_PARSE_LEVEL,
+      parseLevel: options.parseLevel ?? (publicEnv.PUBLIC_PARSE_LEVEL as ParseLevel | undefined),
     });
   }
 
   async getDocument(
     getDocumentPathArguments: T['getDocumentPathArgument'],
   ): Promise<z.infer<T['data']> | undefined> {
-    const db = this._getDatabase();
-    const documentReference =
-      await this.getDocumentReference<z.infer<T['data']>>(getDocumentPathArguments);
+    const [{ getDoc }, documentReference] = await Promise.all([
+      this._getDatabase(),
+      this.getDocumentReference<z.infer<T['data']>>(getDocumentPathArguments),
+    ]);
 
-    const documentSnap = await db.getDoc(documentReference);
+    const documentSnap = await getDoc(documentReference);
     if (!documentSnap.exists()) {
       return;
     }
@@ -202,7 +182,17 @@ export class FrontendRepository<T extends RepositoryType>
       this.getQuery(query),
     ]);
 
-    const querySnapshot = await getDocs(currentQuery);
+    let querySnapshot: QuerySnapshot;
+    try {
+      querySnapshot = await getDocs(currentQuery);
+    } catch (error) {
+      // Firestore SDK internally aborts queries when concurrent queries race.
+      // This is harmless — silently suppress DOMException AbortError.
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return [];
+      }
+      throw error;
+    }
     if (querySnapshot.empty) {
       return [];
     }
@@ -212,7 +202,15 @@ export class FrontendRepository<T extends RepositoryType>
   async getDocumentsByRawQuery(query: Query): Promise<z.infer<T['data']>[]> {
     const [{ getDocs }] = await Promise.all([this._getDatabase()]);
 
-    const querySnapshot = await getDocs(query);
+    let querySnapshot: QuerySnapshot;
+    try {
+      querySnapshot = await getDocs(query);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return [];
+      }
+      throw error;
+    }
     if (querySnapshot.empty) {
       return [];
     }
@@ -222,31 +220,6 @@ export class FrontendRepository<T extends RepositoryType>
     query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
     postSort?: PostSortDocuments<z.infer<T['data']>>,
   ): Promise<DocumentsObservable<z.infer<T['data']>>> {
-    // if (!this._snapshotListenerSupported) {
-    // 	return (
-    // 		listener: DocumentsListener<z.infer<T['data']>>,
-    // 		onError?: (error: FirestoreError) => void,
-    // 		onCompletion?: () => void,
-    // 	) => {
-    // 		const fetchDocuments = async () => {
-    // 			try {
-    // 				const documents = await this.getDocumentsByQuery(query);
-
-    // 				void listener(
-    // 					postSort ? postSort(documents) : documents,
-    // 				);
-    // 			} catch (error) {
-    // 				this.error('getDocumentsStreamByQuery', error);
-    // 				onError?.(error as FirestoreError);
-    // 			}
-    // 			onCompletion?.();
-    // 		};
-
-    // 		void fetchDocuments();
-    // 		return { unsubscribe: () => {} };
-    // 	};
-    // }
-
     const [{ onSnapshot }, currentQuery] = await Promise.all([
       this._getDatabase(),
       this.getQuery(query),
@@ -331,6 +304,7 @@ export class FrontendRepository<T extends RepositoryType>
 
     return response.id;
   }
+
   async commit(batchCommands: BatchCommand[]): Promise<void> {
     const batch = await this.getWriteBatch();
 
@@ -353,6 +327,7 @@ export class FrontendRepository<T extends RepositoryType>
 
     await batch.commit();
   }
+
   async setDocument({
     getDocumentPathArgument,
     options,
@@ -378,6 +353,7 @@ export class FrontendRepository<T extends RepositoryType>
       merge: options?.merge,
     });
   }
+
   async deleteDocument(getDocumentPathArgument: T['getDocumentPathArgument']): Promise<void> {
     const [{ deleteDoc }, documentReference] = await Promise.all([
       this._getDatabase(),
@@ -385,8 +361,9 @@ export class FrontendRepository<T extends RepositoryType>
     ]);
     await deleteDoc(documentReference);
   }
+
   async deleteDocuments(getDocumentPathArguments: T['getDocumentPathArgument'][]): Promise<void> {
-    const { firestore, writeBatch } = this._getDatabase();
+    const { firestore, writeBatch } = await this._getDatabase();
     const batch = writeBatch(firestore);
 
     const documentReferences = await Promise.all(
@@ -405,40 +382,9 @@ export class FrontendRepository<T extends RepositoryType>
     queries: Query<z.infer<T['data']>>[],
     postSort?: PostSortDocuments<z.infer<T['data']>>,
   ): Promise<DocumentsObservable<z.infer<T['data']>>> {
-    // if (!this._snapshotListenerSupported) {
-    // 	return (
-    // 		listener: DocumentsListener<z.infer<T['data']>>,
-    // 		onError?: (error: FirestoreError) => void,
-    // 		onCompletion?: () => void,
-    // 	) => {
-    // 		const fetchDocuments = async () => {
-    // 			try {
-    // 				const documents = await Promise.all(
-    // 					queries.map(async (query) => {
-    // 						return this.getDocumentsByRawQuery(query);
-    // 					}),
-    // 				);
-
-    // 				void listener(
-    // 					postSort
-    // 						? postSort(documents.flat())
-    // 						: documents.flat(),
-    // 				);
-    // 			} catch (error) {
-    // 				this.error('getDocumentsStreamByQuery', error);
-    // 				onError?.(error as FirestoreError);
-    // 			}
-    // 			onCompletion?.();
-    // 		};
-
-    // 		void fetchDocuments();
-    // 		return { unsubscribe: () => {} };
-    // 	};
-    // }
-
     const documents: z.infer<T['data']>[] = [];
     const unsubscribes: Unsubscribe[] = [];
-    const { onSnapshot } = this._getDatabase();
+    const { onSnapshot } = await this._getDatabase();
     let completionCount = 0;
     return (
       listener: DocumentsListener<z.infer<T['data']>>,
@@ -477,7 +423,13 @@ export class FrontendRepository<T extends RepositoryType>
         );
       }
 
-      return { unsubscribe: () => unsubscribes.forEach((u) => u()) };
+      return {
+        unsubscribe: () => {
+          for (const u of unsubscribes) {
+            u();
+          }
+        },
+      };
     };
   }
   /**
@@ -492,7 +444,7 @@ export class FrontendRepository<T extends RepositoryType>
     filters: QueryFilter<z.infer<T['data']>>[];
     collectionPath: string;
   }): Promise<Query<z.infer<T['data']>>> {
-    const { collection, documentId, firestore, query, where } = this._getDatabase();
+    const { collection, documentId, firestore, query, where } = await this._getDatabase();
     const { collectionPath, filters } = options;
     const constraints: QueryConstraint[] = [];
     for (const { field, operator, value } of filters) {
@@ -502,7 +454,7 @@ export class FrontendRepository<T extends RepositoryType>
     this.debug('getQuery', constraints);
 
     return query<z.infer<T['data']>, z.infer<T['data']>>(
-      // @ts-expect-error Firebase CollectionReference is not assignable to Query generic
+      // @ts-expect-error TODO: Remove this when firebase don't require index signature
       collection(firestore, collectionPath),
       ...constraints,
     );
@@ -510,32 +462,7 @@ export class FrontendRepository<T extends RepositoryType>
   async getDocumentStream(
     getDocumentPathArgument: T['getDocumentPathArgument'],
   ): Promise<DocumentObservable<z.infer<T['data']>>> {
-    // if (!this._snapshotListenerSupported) {
-    // 	return (
-    // 		listener: DocumentListener<z.infer<T['data']>>,
-    // 		onError?: (error: FirestoreError) => void,
-    // 		onCompletion?: () => void,
-    // 	) => {
-    // 		const fetchDocuments = async () => {
-    // 			try {
-    // 				const document = await this.getDocument(
-    // 					getDocumentPathArgument,
-    // 				);
-
-    // 				void listener(document);
-    // 			} catch (error) {
-    // 				this.error('getDocumentsStreamByQuery', error);
-    // 				onError?.(error as FirestoreError);
-    // 			}
-    // 			onCompletion?.();
-    // 		};
-
-    // 		void fetchDocuments();
-    // 		return { unsubscribe: () => {} };
-    // 	};
-    // }
-
-    const { onSnapshot } = this._getDatabase();
+    const { onSnapshot } = await this._getDatabase();
     const documentReference =
       await this.getDocumentReference<z.infer<T['data']>>(getDocumentPathArgument);
 
@@ -562,13 +489,14 @@ export class FrontendRepository<T extends RepositoryType>
       return { unsubscribe };
     };
   }
+
   async getDocumentReference<
     Document extends
       | z.infer<T['data']>
       | z.infer<T['createData']>
       | Partial<z.infer<T['updateData']>>,
   >(documentArgument: T['getDocumentPathArgument']): Promise<DocumentReference<Document>> {
-    const { doc, firestore } = this._getDatabase();
+    const { doc, firestore } = await this._getDatabase();
 
     return doc(firestore, this.getDocumentPath(documentArgument)) as DocumentReference<Document>;
   }
@@ -603,17 +531,17 @@ export class FrontendRepository<T extends RepositoryType>
     }
   }
   async getWriteBatch(): Promise<WriteBatch> {
-    const { firestore, writeBatch } = this._getDatabase();
+    const { firestore, writeBatch } = await this._getDatabase();
 
     return writeBatch(firestore);
   }
   async getRawCollectionReference(collectionPath: string): Promise<CollectionReference> {
-    const { collection, firestore } = this._getDatabase();
+    const { collection, firestore } = await this._getDatabase();
 
     return collection(firestore, collectionPath);
   }
   async getRawDocumentReference(documentPath: string): Promise<DocumentReference> {
-    const { doc, firestore } = this._getDatabase();
+    const { doc, firestore } = await this._getDatabase();
 
     return doc(firestore, documentPath);
   }
@@ -625,8 +553,8 @@ export class FrontendRepository<T extends RepositoryType>
       documentId,
       increment,
       serverTimestamp,
-      Timestamp: FBTimestamp,
-    } = this._getDatabase();
+      Timestamp: FbTimestamp,
+    } = await this._getDatabase();
     return {
       arrayRemove,
       arrayUnion,
@@ -634,18 +562,19 @@ export class FrontendRepository<T extends RepositoryType>
       serverDelete: deleteField,
       serverIncrement: increment,
       serverTimestamp,
-      Timestamp: FBTimestamp,
+      // biome-ignore lint/style/useNamingConvention: Firebase class and method names
+      Timestamp: FbTimestamp,
     };
   }
   async getQueryCount(query: Query): Promise<number> {
-    const { getCountFromServer } = this._getDatabase();
+    const { getCountFromServer } = await this._getDatabase();
     const querySnapshot = await getCountFromServer(query);
     return querySnapshot.data().count;
   }
   async getCollectionReference<Document extends z.infer<T['data']> | z.infer<T['createData']>>(
     getCollectionPathArgument: T['getCollectionPathArgument'],
   ): Promise<CollectionReference<Document>> {
-    const { collection, firestore } = this._getDatabase();
+    const { collection, firestore } = await this._getDatabase();
 
     return collection(
       firestore,
@@ -655,7 +584,7 @@ export class FrontendRepository<T extends RepositoryType>
   async getCollectionGroupReference<Document extends z.infer<T['data']> | z.infer<T['createData']>>(
     collectionGroupName: string,
   ): Promise<Query<Document>> {
-    const { collectionGroup, firestore } = this._getDatabase();
+    const { collectionGroup, firestore } = await this._getDatabase();
 
     return collectionGroup(firestore, collectionGroupName) as Query<Document>;
   }
@@ -671,7 +600,8 @@ export class FrontendRepository<T extends RepositoryType>
   async getQuery(
     options: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
   ): Promise<Query<z.infer<T['data']>>> {
-    const { documentId, limit, orderBy, query, startAfter, Timestamp, where } = this._getDatabase();
+    const { documentId, limit, orderBy, query, startAfter, Timestamp, where } =
+      await this._getDatabase();
 
     const { filters, limit: limitTo, orderBy: orderByParameter } = options;
     let startAfterParameter = options.startAfter;
@@ -708,7 +638,7 @@ export class FrontendRepository<T extends RepositoryType>
     }
 
     return query<z.infer<T['data']>, z.infer<T['data']>>(
-      // @ts-expect-error Firebase Query generic type incompatibility with CollectionReference
+      // @ts-expect-error TODO: Remove this when firebase don't require index signature
       options.collectionGroupName
         ? await this.getCollectionGroupReference(options.collectionGroupName)
         : await this.getCollectionReference(options.getCollectionPathArgument),
@@ -716,47 +646,16 @@ export class FrontendRepository<T extends RepositoryType>
     );
   }
 
-  private _getDatabase() {
+  private async _getDatabase(): Promise<Database> {
+    if (FrontendRepository._database) {
+      return FrontendRepository._database;
+    }
+
     if (import.meta.env.SSR || typeof window === 'undefined' || import.meta.env.STORYBOOK) {
       throw new Error(`${this._className} is not available on SSR`);
     }
 
-    const firestoreInstance = getFirestoreInstance();
-
-    return {
-      addDoc,
-      arrayRemove,
-      arrayUnion,
-      collection,
-      collectionGroup,
-      deleteDoc,
-      deleteField,
-      doc,
-      documentId,
-      firestore: firestoreInstance,
-      getCountFromServer,
-      getDoc,
-      getDocs,
-      increment,
-      limit,
-      onSnapshot,
-      orderBy,
-      query,
-      serverTimestamp,
-      setDoc,
-      startAfter,
-      Timestamp,
-      updateDoc,
-      where,
-      writeBatch,
-    };
+    FrontendRepository._database = await import('@aikami/frontend/configs/firestore');
+    return FrontendRepository._database;
   }
-
-  // private get _snapshotListenerSupported(): boolean {
-  // 	if (typeof window === 'undefined') {
-  // 		return false;
-  // 	}
-
-  // 	return true;
-  // }
 }
