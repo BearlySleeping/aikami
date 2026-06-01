@@ -552,7 +552,7 @@ export class FrontendRepository<T extends RepositoryType>
       serverDelete: deleteField,
       serverIncrement: increment,
       serverTimestamp,
-      Timestamp: FbTimestamp,
+      timestamp: FbTimestamp,
     };
   }
   async getQueryCount(query: Query): Promise<number> {

@@ -9,12 +9,16 @@ import Type, { Composite } from 'typebox';
  * utilities like getDeletableFields.
  */
 export const mergeSchemas = (schemas: TObject[]): TObject => {
-  if (schemas.length === 0) {
+  const first = schemas[0];
+  if (!first) {
     return Type.Object({});
   }
-  let result = schemas[0]!;
+  let result = first;
   for (let i = 1; i < schemas.length; i++) {
-    result = Composite(result, schemas[i]!) as unknown as TObject;
+    const next = schemas[i];
+    if (next) {
+      result = Composite(result, next) as unknown as TObject;
+    }
   }
   return result;
 };

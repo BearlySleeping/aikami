@@ -98,7 +98,9 @@ function checkTool(name: string, installHint?: string): boolean {
     ok(`${name} found`);
   } else {
     fail(`${name} NOT found`);
-    if (installHint) info(`Install: ${installHint}`);
+    if (installHint) {
+      info(`Install: ${installHint}`);
+    }
   }
   return found;
 }
@@ -134,10 +136,14 @@ async function checkPrerequisites(): Promise<boolean> {
 
   info('\nOptional tools:');
   const hasFirebase = checkTool('firebase', 'npm install -g firebase-tools');
-  if (!hasFirebase) warn('Firebase CLI not found — Firebase deploy/emulator tasks will not work');
+  if (!hasFirebase) {
+    warn('Firebase CLI not found — Firebase deploy/emulator tasks will not work');
+  }
 
   const hasMoon = Bun.which('moon') || existsSync(join(ROOT, 'node_modules/.bin/moon'));
-  if (hasMoon) ok('moon CLI available');
+  if (hasMoon) {
+    ok('moon CLI available');
+  }
 
   return checks.every(Boolean);
 }
@@ -157,8 +163,12 @@ async function installDependencies(): Promise<boolean> {
     }
   }
 
-  if (!(await run('bun install', ['bun', 'install']))) return false;
-  if (!(await run('moon sync', ['bun', 'run', 'moon', 'sync']))) return false;
+  if (!(await run('bun install', ['bun', 'install']))) {
+    return false;
+  }
+  if (!(await run('moon sync', ['bun', 'run', 'moon', 'sync']))) {
+    return false;
+  }
 
   return true;
 }
@@ -254,7 +264,9 @@ async function verifySetup(): Promise<boolean> {
 
   info('\nRunning lint checks...');
   const lintPassed = await run('Lint', ['bun', 'run', 'moon', 'run', ':lint']);
-  if (!lintPassed) warn('Lint had issues — run `bun run fix` to auto-fix');
+  if (!lintPassed) {
+    warn('Lint had issues — run `bun run fix` to auto-fix');
+  }
 
   return typecheckPassed;
 }

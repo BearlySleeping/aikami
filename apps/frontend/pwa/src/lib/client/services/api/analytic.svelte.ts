@@ -68,7 +68,7 @@ export class AnalyticService
   async logAction(action: LogAction): Promise<void> {
     try {
       this.debug('logAction', { action });
-      await this.logEvent('pwa_action', {
+      await this.logEvent('pwaAction', {
         action,
       });
     } catch (error) {

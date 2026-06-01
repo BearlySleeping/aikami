@@ -1,14 +1,14 @@
 export type AllAnalyticsEvents = {
   // Auth
-  sign_up: { method: string };
+  signUp: { method: string };
   login: { method: string };
   logout: undefined;
-  pwa_action: { action: string };
+  pwaAction: { action: string };
 
-  invalid_url: {
+  invalidUrl: {
     url: string;
   };
-  unknown_error: {
+  unknownError: {
     code: number;
     message?: string;
   };

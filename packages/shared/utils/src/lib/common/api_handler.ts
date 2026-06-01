@@ -1,4 +1,5 @@
 type Actions = {
+  // biome-ignore lint/style/useNamingConvention: mapped type key
   [key in string]: [unknown, unknown];
 };
 type MessageType<T extends Actions> = keyof T;
@@ -23,6 +24,7 @@ type Response<T extends Actions, Type extends MessageType<T> = MessageType<T>> =
  *   action's payload and response.
  */
 export type APIActions<T extends Actions, Context = unknown> = {
+  // biome-ignore lint/style/useNamingConvention: mapped type key
   [key in MessageType<T>]: (
     payload: Payload<T, key>,
     context: Context,

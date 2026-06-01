@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application, Container } from 'pixi.js';
-import { Graphics } from 'pixi.js';
+import { Graphics, Rectangle } from 'pixi.js';
 import {
   BUFFER_SIZE,
   COMPONENT_STRIDE,
@@ -41,6 +41,8 @@ type RenderEntry = {
   displayObject: Container;
   /** Tint color for the entity. */
   tint: number;
+  /** When `true`, spatial culling is enabled for this entity. */
+  cullable: boolean;
 };
 
 /**
@@ -55,6 +57,14 @@ type NpcMetaEntry = {
   interactionRadius: number;
   relationshipValue: number;
 };
+
+/**
+ * Default cell geometry rectangle for filterArea pre-allocation.
+ *
+ * Assigning a fixed `filterArea` to every character display object
+ * avoids per-frame `getBounds()` recalculations inside PixiJS.
+ */
+const CELL_GEOMETRY_RECT = new Rectangle(0, 0, 32, 32);
 
 /** Callback invoked when the player presses the interact key. */
 type InteractRequestCallback = (npc: NpcMetaEntry) => void;
@@ -422,11 +432,17 @@ class GameWorld {
     graphic.rect(0, 0, 32, 32);
     graphic.fill({ color: tint });
 
+    // Per-contract C-032: bypass layout hit-tests for character visuals
+    graphic.eventMode = 'none';
+    // Pre-assign filter area to avoid per-frame bounds recalc overhead
+    graphic.filterArea = CELL_GEOMETRY_RECT;
+
     this.app.stage.addChild(graphic);
 
     this.renderEntries.set(eid, {
       displayObject: graphic,
       tint,
+      cullable: true,
     });
   }
 
@@ -653,12 +669,17 @@ class GameWorld {
    * Reads entity positions (x, y) from the Float32Array buffer and applies
    * them to the display objects stored in {@link renderEntries}.
    *
+   * Applies spatial culling: entities flagged as `cullable` that are
+   * outside the visible stage bounds are hidden (`visible = false`).
+   *
    * Runs every frame on the PixiJS ticker (~60fps).
    *
    * @param renderView - The Float32Array view into the active buffer.
    * @param stage - The PixiJS stage container.
    */
-  private updateRenderFromBuffer(renderView: Float32Array, _stage: Container): void {
+  private updateRenderFromBuffer(renderView: Float32Array, stage: Container): void {
+    const stageBounds = stage.filterArea ?? stage.getBounds();
+
     for (const [eid, entry] of this.renderEntries) {
       const offset = eid * COMPONENT_STRIDE;
       const x = renderView[offset];
@@ -670,6 +691,17 @@ class GameWorld {
 
       entry.displayObject.x = x;
       entry.displayObject.y = y;
+
+      // Spatial culling for cullable entities
+      if (entry.cullable) {
+        const isOffScreen =
+          x + 32 < stageBounds.x ||
+          x > stageBounds.x + stageBounds.width ||
+          y + 32 < stageBounds.y ||
+          y > stageBounds.y + stageBounds.height;
+
+        entry.displayObject.visible = !isOffScreen;
+      }
     }
   }
 }

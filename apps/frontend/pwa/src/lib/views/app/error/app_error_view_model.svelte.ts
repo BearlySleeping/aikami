@@ -137,11 +137,11 @@ class AppErrorViewModel
     const { error, status, url } = page;
 
     if (status === 404) {
-      void this.logEvent('invalid_url', {
+      void this.logEvent('invalidUrl', {
         url: url.href,
       });
     } else {
-      void this.logEvent('unknown_error', {
+      void this.logEvent('unknownError', {
         code: status,
         message: error?.message,
       });

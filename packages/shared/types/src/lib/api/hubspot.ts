@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: HubSpot API uses snake_case fields */
 import type { UniversalValue } from './oauth2.ts';
 /** @see https://legacydocs.hubspot.com/docs/methods/crm-extensions/crm-extensions-overview#data-fetch-request */
 export type HubSpotWebhookSearchParams = {

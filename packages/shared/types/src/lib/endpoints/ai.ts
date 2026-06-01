@@ -3,23 +3,23 @@
 import type { PersonaData } from '../database/persona.ts';
 export type AIProviderType = 'openai' | 'anthropic' | 'openrouter' | 'gemini';
 
-export interface AIChatMessage {
+export type AIChatMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;
-}
+};
 
-export interface AIProviderConfig {
+export type AIProviderConfig = {
   type: AIProviderType;
   apiKey: string;
   model?: string;
-}
+};
 
-export interface ChatContext {
+export type ChatContext = {
   npcId?: string;
   characterId?: string;
   messages: AIChatMessage[];
   systemPrompt?: string;
-}
+};
 
 /** Token usage statistics returned with AI responses. */
 export type AiTokenUsage = {

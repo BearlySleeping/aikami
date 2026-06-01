@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: OAuth2 API uses snake_case fields */
 /* eslint-disable @typescript-eslint/no-invalid-void-type */
 import type { OAuthExecuteData } from '../database/oauth2.ts';
 

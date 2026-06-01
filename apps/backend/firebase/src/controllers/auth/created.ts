@@ -1,8 +1,7 @@
 import { onAuthCreate } from '@snorreks/firestack';
-import type { UserRecord } from 'firebase-functions/v1/auth';
 import { logger } from '$logger';
 
-export default onAuthCreate(async (user: UserRecord, context) => {
+export default onAuthCreate(async (user, context) => {
   logger.log('User created', {
     uid: user.uid,
     email: user.email,

@@ -1,6 +1,6 @@
 ---
 name: firestore-collection
-description: Scaffold a new Firestore collection with standardized artifacts across the aikami monorepo. Generates Zod schema, Firestore paths, types, backend repository, frontend repository, security rules, and tests.
+description: Scaffold a new Firestore collection with standardized artifacts across the aikami monorepo. Generates TypeBox schema, Firestore paths, types, backend repository, frontend repository, security rules, and tests.
 ---
 
 # Firestore Collection Scaffolding Skill
@@ -15,14 +15,14 @@ Use this skill when adding a new Firestore collection to the aikami project. It 
 
 ## Workflow
 
-### 1. Create Zod Schema
+### 1. Create TypeBox Schema
 
 **File**: `packages/schemas/src/lib/database/{collection}.ts`
 
 Pattern:
 
 ```typescript
-import { z } from "zod";
+import { Type, type Static } from "@sinclair/typebox";
 import {
   CoreCreateSchema,
   CoreOmitSchema,
@@ -31,29 +31,31 @@ import {
 } from "../core.ts";
 import { getDeletableFields } from "../utils.ts";
 
-export const {Collection}Schema = CoreSchema.extend({
-  // Collection-specific fields
-  uid: z.string().describe("User ID").optional(),
-  // ... more fields
-});
+export const {Collection}Schema = Type.Composite([
+  CoreSchema,
+  Type.Object({
+    // Collection-specific fields
+    uid: Type.Optional(Type.String({ description: "User ID" })),
+    // ... more fields
+  }),
+]);
 
-export const {Collection}CreateSchema = {Collection}Schema.omit(CoreOmitSchema).extend(
-  CoreCreateSchema.shape,
-);
+export const {Collection}CreateSchema = Type.Composite([
+  Type.Omit({Collection}Schema, CoreOmitSchema),
+  Type.Pick(CoreCreateSchema, Object.keys(CoreCreateSchema.properties)),
+]);
 
-export const {Collection}UpdateSchema = {Collection}Schema.extend(
+export const {Collection}UpdateSchema = Type.Composite([
+  Type.Omit({Collection}Schema, CoreOmitSchema),
+  Type.Pick(CoreUpdateSchema, Object.keys(CoreUpdateSchema.properties)),
   getDeletableFields({Collection}Schema),
-)
-  .omit(CoreOmitSchema)
-  .extend(CoreUpdateSchema.shape);
+]);
 ```
 
 **Rules**:
 
-- Always extend `CoreSchema` for `id`, `createdAt`, `updatedAt`
-- Use `.describe()` on every field for documentation
-- Mark optional fields with `.optional()`
-- Use `.default()` for sensible defaults
+- Always compose with `CoreSchema` for `id`, `createdAt`, `updatedAt`
+- Use `Type.Optional()` for optional fields
 - Export `Schema`, `CreateSchema`, and `UpdateSchema`
 
 ### 2. Create Type Exports
@@ -63,14 +65,18 @@ export const {Collection}UpdateSchema = {Collection}Schema.extend(
 Pattern:
 
 ```typescript
-import type { {Collection}CreateSchema, {Collection}Schema, {Collection}UpdateSchema } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Static } from "@sinclair/typebox";
+import type {
+  {Collection}CreateSchema,
+  {Collection}Schema,
+  {Collection}UpdateSchema,
+} from '@aikami/schemas';
 
-export type {Collection}Data = z.infer<typeof {Collection}Schema>;
+export type {Collection}Data = Static<typeof {Collection}Schema>;
 
-export type {Collection}CreateData = z.infer<typeof {Collection}CreateSchema>;
+export type {Collection}CreateData = Static<typeof {Collection}CreateSchema>;
 
-export type {Collection}UpdateData = z.infer<typeof {Collection}UpdateSchema>;
+export type {Collection}UpdateData = Static<typeof {Collection}UpdateSchema>;
 ```
 
 ### 3. Add Firestore Paths
@@ -186,7 +192,7 @@ Pattern:
 
 ```typescript
 import { describe, expect, test } from "bun:test";
-import { z } from "zod";
+import { Value } from "@sinclair/typebox/value";
 import {
   {Collection}CreateSchema,
   {Collection}Schema,
@@ -199,30 +205,29 @@ describe("{Collection}Schema", () => {
     // ... required fields
   };
 
-  test("should parse valid data", () => {
-    const result = {Collection}Schema.parse(validData);
-    expect(result.id).toBe("test-123");
+  test("should validate valid data", () => {
+    expect(Value.Check({Collection}Schema, validData)).toBe(true);
   });
 
   test("should reject invalid data", () => {
-    expect(() => {Collection}Schema.parse({})).toThrow(z.ZodError);
+    expect(Value.Check({Collection}Schema, {})).toBe(false);
   });
 });
 
 describe("{Collection}CreateSchema", () => {
-  test("should parse valid create data", () => {
-    const result = {Collection}CreateSchema.parse({ /* ... */ });
-    expect(result).toBeDefined();
+  test("should validate valid create data", () => {
+    const result = Value.Check({Collection}CreateSchema, { /* ... */ });
+    expect(result).toBe(true);
   });
 });
 
 describe("{Collection}UpdateSchema", () => {
-  test("should parse valid update data", () => {
-    const result = {Collection}UpdateSchema.parse({
+  test("should validate valid update data", () => {
+    const result = Value.Check({Collection}UpdateSchema, {
       updatedAt: { seconds: 1700000000, nanoseconds: 0 },
       // ... fields to update
     });
-    expect(result).toBeDefined();
+    expect(result).toBe(true);
   });
 });
 ```

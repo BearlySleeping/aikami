@@ -77,7 +77,7 @@ export type QueryOptions = {
  * classes satisfy via `implements`.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-interface -- intentional OOP contract
-export interface BaseDatabaseService {
+export type BaseDatabaseService = {
   /**
    * Retrieve a single document by its collection-qualified path and unique id.
    *
@@ -127,4 +127,4 @@ export interface BaseDatabaseService {
    * @returns An array of result rows.
    */
   runQuery<T = unknown>(query: string, params?: Record<string, unknown>): Promise<T[]>;
-}
+};

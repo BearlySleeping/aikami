@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Google/Microsoft API uses snake_case fields */
 // packages/shared/schemas/src/lib/auth.ts
 import Type, { Composite } from 'typebox';
 import { SupportedLocaleSchema } from './common/preference.ts';

@@ -98,10 +98,16 @@ export const toAppErrorFromUnknownError = (error: unknown): AppError => {
 
     // Map Firebase codes to our AppError types
     let mappedErrorType: ErrorType = 'unknown';
-    if (firebaseCode === 'auth/user-not-found') mappedErrorType = 'user-not-found';
-    else if (firebaseCode === 'auth/invalid-credential' || firebaseCode === 'auth/wrong-password')
+    if (firebaseCode === 'auth/user-not-found') {
+      mappedErrorType = 'user-not-found';
+    } else if (
+      firebaseCode === 'auth/invalid-credential' ||
+      firebaseCode === 'auth/wrong-password'
+    ) {
       mappedErrorType = 'invalid-credentials';
-    else if (firebaseCode.startsWith('auth/')) mappedErrorType = 'unauthenticated';
+    } else if (firebaseCode.startsWith('auth/')) {
+      mappedErrorType = 'unauthenticated';
+    }
 
     return {
       message: error.message, // Keep the original Firebase message

@@ -82,7 +82,7 @@ class GameApiClient implements GameApiClientInterface {
     };
 
     if (this.authToken !== null) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
+      headers.Authorization = `Bearer ${this.authToken}`;
     }
 
     const url = `${this.baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;

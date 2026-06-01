@@ -5,129 +5,55 @@ description: Scaffold a new SvelteKit page conforming to the Svelte 5 View and V
 
 # Svelte Page Scaffolding Skill
 
-Use this skill when adding a new page or view component to the SvelteKit app. It enforces a strict, SSR-safe View-ViewModel pattern where the View handles only UI rendering and wraps its content inside the `<BaseViewModelContainer>` to safely execute client-side initialization.
+Use this skill when adding a new page or view component to the SvelteKit app.
 
-## Prerequisites
-- The target route path (e.g., `authenticated/chat/[chat_id]`)
-- The page name in snake_case (e.g., `chat_room`)
-
-## Directory and File Rules
-1. **Directory**: Create a dedicated view directory under `apps/frontend/pwa/src/lib/views/{page_name_snake}/`.
-2. **Files**: All filenames must be strictly `snake_case`:
-   - View component: `{page_name_snake}_view.svelte`
-   - ViewModel: `{page_name_snake}_view_model.svelte.ts`
-3. **Route Page**: `apps/frontend/pwa/src/routes/{route}/+page.svelte` (no capital letters or dashes).
+> **See `svelte-conventions` for**: full ViewModel template, View template, interface patterns, import aliases, and all conventions.
+>
+> **See `aikami-conventions` for**: snake_case file naming, `_` prefix, arrow functions, error handling.
 
 ---
 
-## 1. Create the ViewModel
-**File**: `apps/frontend/pwa/src/lib/views/{page_name_snake}/{page_name_snake}_view_model.svelte.ts`
+## What to Create
 
-```typescript
-// apps/frontend/pwa/src/lib/views/{page_name_snake}/{page_name_snake}_view_model.svelte.ts
-import {
-	BaseViewModel,
-	type BaseViewModelInterface,
-	type BaseViewModelOptions,
-} from "@aikami/frontend/services";
+Three files per page:
 
-/**
- * Public API of the {PageNameCamel} ViewModel.
- */
-export type {PageNameCamel}ViewModelInterface = BaseViewModelInterface & {
-	/** Reactive indicator for loading state. */
-	isLoading: boolean;
-	/** Reactive data array or resource object. */
-	data: string[];
-};
-
-/**
- * Configuration options for the {PageNameCamel} ViewModel.
- */
-export interface {PageNameCamel}ViewModelOptions extends BaseViewModelOptions {
-	// ... any page-specific constructor options, route params, or server load data
-}
-
-export class {PageNameCamel}ViewModel
-	extends BaseViewModel<{PageNameCamel}ViewModelOptions>
-	implements {PageNameCamel}ViewModelInterface
-{
-	isLoading = $state<boolean>(true);
-	data = $state<string[]>([]);
-
-	/**
-	 * Client-side only initialization. Runs safely onMount inside the view container.
-	 */
-	async initialize(): Promise<void> {
-		this.debug("initialize");
-		try {
-			this.isLoading = true;
-			// Perform client-only SDK calls (e.g. Firebase Auth, Firestore)
-			this.data = ["Nord", "Claw", "Agent"];
-		} catch (error) {
-			this.error("Failed to initialize", error);
-		} finally {
-			this.isLoading = false;
-		}
-	}
-}
-
-/**
- * Factory function to retrieve a new {PageNameCamel} ViewModel instance.
- */
-export const get{PageNameCamel}ViewModel = (options: {PageNameCamel}ViewModelOptions): {PageNameCamel}ViewModel => {
-	return new {PageNameCamel}ViewModel(options);
-};
-```
+| # | File | Location |
+|---|------|----------|
+| 1 | ViewModel | `apps/frontend/pwa/src/lib/views/<name>/<name>_view_model.svelte.ts` |
+| 2 | View | `apps/frontend/pwa/src/lib/views/<name>/<name>_view.svelte` |
+| 3 | Route page | `apps/frontend/pwa/src/routes/<route>/+page.svelte` |
 
 ---
 
-## 2. Create the View
-**File**: `apps/frontend/pwa/src/lib/views/{page_name_snake}/{page_name_snake}_view.svelte`
+## 1. ViewModel
 
-Wrap all markup inside `<BaseViewModelContainer>` to guarantee that `viewModel.initialize()` is called safely client-side.
+Follow the template in `svelte-conventions` → ViewModel Pattern.
+
+- Extend `BaseViewModel`, implement `<Name>ViewModelInterface`
+- Export `get<Name>ViewModel` factory function
+- `initialize()` calls `super.initialize()` at the end
+- File: `{name}_view_model.svelte.ts`
+
+## 2. View
+
+Follow the template in `svelte-conventions` → View Template.
+
+- Wrap in `<BaseViewModelContainer {viewModel}>`
+- Zero logic — only property access on `viewModel`
+- File: `{name}_view.svelte`
+
+## 3. Route Page
 
 ```svelte
 <script lang="ts">
-  // apps/frontend/pwa/src/lib/views/{page_name_snake}/{page_name_snake}_view.svelte
-  import BaseViewModelContainer from '@aikami/frontend/components/base_view_model_container.svelte';
-  import type { {PageNameCamel}ViewModelInterface } from './{page_name_snake}_view_model.svelte.ts';
+  // apps/frontend/pwa/src/routes/<route>/+page.svelte
+  import <Name>View from '$views/<name>/<name>_view.svelte';
+  import { get<Name>ViewModel } from '$views/<name>/<name>_view_model.svelte.ts';
 
-  type Props = { viewModel: {PageNameCamel}ViewModelInterface };
-  const { viewModel }: Props = $props();
+  const viewModel = get<Name>ViewModel({ className: '<Name>ViewModel' });
 </script>
 
-<BaseViewModelContainer {viewModel} class="p-8 md:p-12 max-w-4xl">
-  {#if viewModel.isLoading}
-    <div class="font-mono text-xs text-muted-foreground">Loading...</div>
-  {:else}
-    <h1 class="text-2xl font-bold font-serif mb-4">Welcome to {PageNameCamel}</h1>
-    <ul>
-      {#each viewModel.data as item}
-        <li class="font-mono text-sm">{item}</li>
-      {/each}
-    </ul>
-  {/if}
-</BaseViewModelContainer>
+<<Name>View {viewModel} />
 ```
 
----
-
-## 3. Create the Route Page
-**File**: `apps/frontend/pwa/src/routes/{route}/+page.svelte`
-
-Instantiate the ViewModel in the SvelteKit route page and pass it to the View as a single prop. Do not call `.initialize()` here.
-
-```svelte
-<script lang="ts">
-  // apps/frontend/pwa/src/routes/{route}/+page.svelte
-  import {PageNameCamel}View from '$views/{page_name_snake}/{page_name_snake}_view.svelte';
-  import { get{PageNameCamel}ViewModel } from '$views/{page_name_snake}/{page_name_snake}_view_model.svelte.ts';
-
-  const viewModel = get{PageNameCamel}ViewModel({
-    className: '{PageNameCamel}ViewModel',
-  });
-</script>
-
-<{PageNameCamel}View {viewModel} />
-```
+Do NOT call `.initialize()` here — `BaseViewModelContainer` handles that.

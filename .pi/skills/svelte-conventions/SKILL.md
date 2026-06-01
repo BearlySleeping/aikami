@@ -4,16 +4,17 @@ description: >-
   Svelte 5 + SvelteKit conventions for Aikami — runes-only reactivity,
   ViewModel pattern, singleton services with $state, import aliases.
   Use when writing SvelteKit pages, views, ViewModels, or services.
-  Also load `aikami-conventions` for general TS rules.
-version: 1.0.0
+  Builds on `aikami-conventions` (foundational skill — loaded first).
+version: 2.0.0
 tags: ["svelte5", "sveltekit", "viewmodel", "frontend"]
 ---
 
 # Svelte Conventions
 
-Svelte 5 + SvelteKit patterns for the Aikami PWA. Always pair with
-`aikami-conventions` for general TypeScript rules (arrow functions, no
-`interface`, import paths, `as const`, error handling).
+Svelte 5 + SvelteKit patterns for the Aikami PWA.
+`aikami-conventions` is the foundational skill — it covers arrow functions,
+type rules, import paths, error handling, logging (`$logger`), and file
+naming.
 
 ## 1. Svelte 5 Core
 
@@ -324,44 +325,20 @@ my_service.svelte.ts
 my_service.ts
 ```
 
-#### 2. Never Export Schemas from Services
+#### 2. Never Export Schemas or Types from Services
 
-Zod schemas belong in `@aikami/schemas`. Services import them, never define
-or re-export them:
+Schemas and types belong in `@aikami/schemas` / `@aikami/types` (cross-project)
+or local `types/index.ts` (app-local). Services import them, never define or
+re-export them. See `aikami-conventions`.
 
-```typescript
-// ✅ CORRECT — import schema from @aikami/schemas
-import { ActiveSessionSchema } from "@aikami/schemas";
-
-// ❌ WRONG — schema defined/exported from a service file
-export const ActiveSessionSchema = z.object({ ... });
-```
-
-#### 3. Never Export Types from Services
-
-Types belong in `@aikami/types` (cross-project) or a local `types/index.ts`
-(app-local). Services import types, never define or re-export them:
-
-```typescript
-// ✅ CORRECT — import type from @aikami/types
-import type { WorldLocation } from "@aikami/types";
-
-// ✅ CORRECT — import type from local types
-import type { ActiveContextEntry } from "$types/game.ts";
-
-// ❌ WRONG — type defined in a service file
-export type WorldLocation = { id: string; ... };
-```
-
-The only exception is the service's own **interface and options type** which
-must live alongside the class:
+The only exception is the service's own **interface and options type**:
 
 ```typescript
 export type MyServiceOptions = BaseFrontendClassOptions & { ... };
 export type MyServiceInterface = BaseFrontendClassInterface & { ... };
 ```
 
-#### 4. Export Singleton Instance at Bottom
+#### 3. Export Singleton Instance at Bottom
 
 Every service exports a singleton instance at the end of the file with the
 interface type annotation and `className`. Private internal members (caches,
@@ -386,7 +363,7 @@ export const myService = new MyService();
 export const createMyService = () => new MyService();
 ```
 
-#### 5. Export from Services Index
+#### 4. Export from Services Index
 
 Every service must be re-exported from `apps/frontend/pwa/src/lib/client/services/index.ts`
 so consumers can import from a single path:
@@ -403,33 +380,10 @@ export * from './game/game_state_service.svelte.ts';
 | `$lib`      | `apps/frontend/pwa/src/lib` |
 | `$types`    | `@aikami/types`             |
 | `$services` | Services layer              |
-| `$logger`   | Environment-specific (see below) |
+| `$logger`   | Environment-specific (see `aikami-conventions`) |
 | `$views`    | `$lib/views`                |
 
-### `$logger` Resolution
-
-The `$logger` alias resolves to the correct implementation for each environment.
-Never import from `@aikami/logger` directly — always use `$logger`.
-
-| Environment | `$logger` resolves to |
-|---|---|
-| SvelteKit (PWA) | `packages/shared/logger/src/lib/svelte_kit.ts` |
-| Firebase Functions | `packages/shared/logger/src/lib/logger_functions.ts` |
-| Browser (game, landing) | `packages/shared/logger/src/lib/logger_browser.ts` |
-| AWS / Node.js | `packages/shared/logger/src/lib/logger_aws.ts` |
-
-Each app configures this in its own `tsconfig.json` `paths`. SvelteKit
-additionally overrides it in `svelte.config.js`.
-
-```typescript
-// ✅ ALWAYS use $logger
-import { logger } from "$logger";
-
-// ❌ NEVER import from @aikami/logger directly
-import { logger } from "@aikami/logger";
-```
-
-Always import from the alias root (maps to `src/index.ts`):
+Always import from alias root (no `lib/` sub-paths — see `aikami-conventions`):
 
 ```typescript
 // ✅ CORRECT

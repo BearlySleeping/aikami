@@ -5,5 +5,5 @@ import type { Type } from 'typebox';
 export type SupportedLocale = Type.Static<typeof SupportedLocaleSchema>;
 
 export type LangData = {
-  [key in SupportedLocale]?: string;
+  [Key in SupportedLocale]?: string;
 };

@@ -160,7 +160,7 @@ export const toRoutePathFromURL = (url: URL): RouteName | undefined => {
     // nb remember to remove / after the } in the routeId
     // find (...)/ and replace it with ''
     // Convert dynamic segments like [id] to regex wildcards so /chat/123 matches chat/[id]
-    const routeRegex = new RegExp('^' + cleanRouteId.replace(/\[.*?\]/g, '[^/]+') + '$');
+    const routeRegex = new RegExp(`^${cleanRouteId.replace(/\[.*?\]/g, '[^/]+')}$`);
 
     if (routeRegex.test(pathname)) {
       return routeName as RouteName;

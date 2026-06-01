@@ -1,5 +1,3 @@
-import { getRandomId } from '@aikami/utils';
-
 export const mockDate = new Date();
 
 export const mockUID = 'MXW7gAxnSOSxYAU5wyf6naMvDiE2';

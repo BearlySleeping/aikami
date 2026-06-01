@@ -2,7 +2,7 @@
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
 
-const USER_AGENT = 'AiKami';
+const _USER_AGENT = 'AiKami';
 
 const getHostFromUrl = (options: { url: string }): string | undefined => {
   try {
@@ -54,6 +54,7 @@ const downloadChub = async (options: { url: string }): Promise<File> => {
 
   const response = await fetch(
     `https://api.chub.ai/api/characters/${creatorName}/${projectName}?full=true`,
+    // biome-ignore lint/style/useNamingConvention: HTTP header name
     { headers: { Accept: 'application/json' } },
   );
 

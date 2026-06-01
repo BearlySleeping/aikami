@@ -1,12 +1,9 @@
 import process from 'node:process';
-import type { LogEntry, LoggerInterface, TimerInterface } from '@aikami/types';
+import type { LogEntry, LoggerInterface } from '@aikami/types';
 import { logger as firebaseFunctionsLogger } from 'firebase-functions/logger';
 import { BaseLoggerService } from './base.ts';
-import { Timer } from './timer.ts';
 
 export type FunctionsLoggerInterface = LoggerInterface;
-
-class FunctionsTimer extends Timer implements TimerInterface {}
 
 class FunctionsLoggerService extends BaseLoggerService implements FunctionsLoggerInterface {
   override write(entry: LogEntry, ...data: unknown[]): void {
@@ -36,10 +33,6 @@ class FunctionsLoggerService extends BaseLoggerService implements FunctionsLogge
     } catch (_error) {
       // console.log(e);
     }
-  }
-
-  override createTimer(): TimerInterface {
-    return new FunctionsTimer();
   }
 }
 
