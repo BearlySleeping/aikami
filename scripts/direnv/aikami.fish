@@ -30,14 +30,22 @@ end
 # ── md: dev server shortcut ─────────────────────────────────────────────
 function md
     set -l proj $argv[1]
+    set -l mode $argv[2]
     if test -z "$proj"
-        echo "Usage: md <project>  (pwa, docs, landing-page, gamejs, firebase)"
+        echo "Usage: md <project> [--mode emulator]  (pwa, docs, landing-page, game, firebase)"
         return 1
     end
-    if test "$proj" = firebase
-        bunx moon run firebase:emulate
-    else
-        bunx moon run {$proj}:dev
+    switch $proj
+        case firebase
+            bunx moon run firebase:emulate
+        case game
+            if test "$mode" = "--mode"; and test "$argv[3]" = emulator
+                cd apps/frontend/game && bun run dev -- --mode emulator
+            else
+                bunx moon run game:dev
+            end
+        case '*'
+            bunx moon run {$proj}:dev
     end
 end
 
@@ -102,13 +110,69 @@ function aikami_dev
     echo "🎴 Starting Aikami local dev environment..."
     echo "   Mode: "(set -q AIKAMI_MODE; and echo $AIKAMI_MODE; or echo emulator)
     echo ""
-    bunx moon run firebase:emulate
+    bun run scripts/src/lib/tmux/start.ts all
+    echo ""
+    aikami_tmux_join all 2>/dev/null; or true
 end
 
 function aikami_emulate
     echo "🔥 Starting backend emulators..."
-    bunx moon run firebase:emulate
+    bun run scripts/src/lib/tmux/start.ts emulators
+    echo ""
+    aikami_tmux_join emulators 2>/dev/null; or true
 end
+
+function aikami_game_emulate
+    echo "🎮 Starting game in emulator mode..."
+    bun run scripts/src/lib/tmux/start.ts game
+    echo ""
+    aikami_tmux_join game 2>/dev/null; or true
+end
+
+# ── Tmux Session Management ─────────────────────────────────────────────
+
+function aikami_tmux_start
+    set -l service $argv[1]
+    if test -z "$service"
+        echo "Usage: aikami_tmux_start <emulators|pwa|game|all> [--force]"
+        return 1
+    end
+    bun run scripts/src/lib/tmux/start.ts $argv
+end
+
+function aikami_tmux_join
+    set -l service $argv[1]
+    if test -z "$service"
+        echo "Usage: aikami_tmux_join <emulators|pwa|game|all>"
+        return 1
+    end
+    bun run scripts/src/lib/tmux/join.ts $argv
+end
+
+function aikami_tmux_stop
+    set -l service $argv[1]
+    if test -z "$service"
+        echo "Usage: aikami_tmux_stop <emulators|pwa|game|all>"
+        echo "       aikami_tmux_stop_all  — stop all sessions"
+        return 1
+    end
+    bun run scripts/src/lib/tmux/stop.ts $argv
+end
+
+function aikami_tmux_stop_all
+    bun run scripts/src/lib/tmux/stop_all.ts
+end
+
+function aikami_tmux_status
+    bun run scripts/src/lib/tmux/status.ts
+end
+
+# Short aliases
+alias atstart 'aikami_tmux_start'
+alias atjoin 'aikami_tmux_join'
+alias atstop 'aikami_tmux_stop'
+alias atstopall 'aikami_tmux_stop_all'
+alias atstatus 'aikami_tmux_status'
 
 function aikami_validate
     set -l do_test $argv[1]
@@ -197,7 +261,8 @@ function aikami_help
     echo ""
     echo "  CORE MOON TASKS"
     echo "    m <target>       Run any moon task (e.g., m pwa:dev, m firebase:build)"
-    echo "    md <project>     Start dev server (pwa, docs, landing-page, gamejs, firebase)"
+    echo "    md <project>     Start dev server (pwa, docs, landing-page, game, firebase)"
+    echo "                     md game --mode emulator → game emulator mode"
     echo "    mt <project>     Run tests"
     echo "    mb <project>     Build"
     echo "    mf               Fix (lint + format) affected projects"
@@ -206,11 +271,20 @@ function aikami_help
     echo "    ma [task]        Run all affected tasks (optional: specific task)"
     echo ""
     echo "  WORKFLOWS"
-    echo "    aikami_dev              Start full local dev environment"
-    echo "    aikami_emulate          Start backend emulators only"
+    echo "    aikami_dev              Start full stack in tmux (auto-attach)"
+    echo "    aikami_emulate          Start backend emulators in tmux (auto-attach)"
+    echo "    aikami_game_emulate     Start game in emulator mode in tmux (auto-attach)"
     echo "    aikami_validate         Fix → typecheck (add --test for build+test)"
     echo "    aikami_affected         Show which projects changed"
     echo "    aikami_graph            Open project dependency graph"
+    echo ""
+    echo "  TMUX SESSIONS"
+    echo "    aikami_tmux_start <svc> Start tmux session (emulators|pwa|game|all)"
+    echo "    aikami_tmux_join <svc>  Attach to running tmux session"
+    echo "    aikami_tmux_stop <svc>  Stop tmux session"
+    echo "    aikami_tmux_stop_all    Stop all aikami tmux sessions"
+    echo "    aikami_tmux_status      List running aikami sessions"
+    echo "    atstart/atjoin/atstop   Short aliases for the above"
     echo ""
     echo "  LOGS"
     echo "    aikami_logs <app>       View recent logs (firebase)"

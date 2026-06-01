@@ -1,11 +1,16 @@
-// apps/frontend/game/src/core/firebase/functions.ts
+// apps/frontend/game/src/lib/services/firebase/functions.ts
 /**
  * Firebase Cloud Functions REST client — no Firebase SDK.
  * Calls HTTP and callable functions via fetch.
  */
 
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
 import { getConfig } from './config.ts';
-import type { FirebaseHttpClient } from './http_client.ts';
+import type { FirebaseHttpClientInterface } from './http_client.ts';
 
 /**
  * Response from a Cloud Function call.
@@ -15,14 +20,35 @@ export type FunctionsResponse<T = unknown> = {
   error?: string;
 };
 
+export type FirebaseFunctionsOptions = BaseGameClassOptions & {
+  http: FirebaseHttpClientInterface;
+};
+
+export type FirebaseFunctionsInterface = BaseGameClassInterface & {
+  callFunction<T = unknown>(
+    name: string,
+    data?: Record<string, unknown>,
+    region?: string,
+  ): Promise<FunctionsResponse<T>>;
+  callHttpFunction<T = unknown>(
+    name: string,
+    data?: Record<string, unknown>,
+    region?: string,
+  ): Promise<FunctionsResponse<T>>;
+};
+
 /**
  * Service for calling Firebase Cloud Functions via REST API.
  */
-export class FirebaseFunctions {
-  private readonly _http: FirebaseHttpClient;
+class FirebaseFunctions
+  extends BaseGameClass<FirebaseFunctionsOptions>
+  implements FirebaseFunctionsInterface
+{
+  private readonly _http: FirebaseHttpClientInterface;
 
-  constructor(http: FirebaseHttpClient) {
-    this._http = http;
+  constructor(options: FirebaseFunctionsOptions) {
+    super(options);
+    this._http = options.http;
   }
 
   /**
@@ -90,4 +116,12 @@ export class FirebaseFunctions {
       return { error: err instanceof Error ? err.message : String(err) };
     }
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getFirebaseFunctions = (
+  options: FirebaseFunctionsOptions,
+): FirebaseFunctionsInterface => new FirebaseFunctions(options);

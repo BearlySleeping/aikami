@@ -1,9 +1,10 @@
 // scripts/src/lib/test_blackbox/suites/functions.api.ts
 // Test Firebase Functions via HTTP calls against local emulators.
 
+import { EMULATOR_PORTS } from '@aikami/constants';
 import type { TestSuite } from '../types.ts';
 
-const FUNCTIONS_URL = 'http://localhost:5001';
+const FUNCTIONS_URL = `http://localhost:${EMULATOR_PORTS.functions}`;
 
 export const functionsSuite: TestSuite = {
   name: 'functions',

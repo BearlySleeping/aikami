@@ -1,11 +1,16 @@
-// apps/frontend/game/src/core/firebase/auth.ts
+// apps/frontend/game/src/lib/services/firebase/auth.ts
 /**
  * Firebase Auth module for the game client — REST-based, no Firebase SDK.
  * Uses browser fetch + localStorage for session persistence.
  */
 
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
 import { getConfig } from './config.ts';
-import type { FirebaseHttpClient } from './http_client.ts';
+import type { FirebaseHttpClientInterface } from './http_client.ts';
 
 const SESSION_KEY = 'aikami_firebase_auth_session';
 
@@ -34,15 +39,31 @@ export type FirebaseUser = {
   refreshToken: string;
 };
 
+export type FirebaseAuthOptions = BaseGameClassOptions & {
+  http: FirebaseHttpClientInterface;
+};
+
+export type FirebaseAuthInterface = BaseGameClassInterface & {
+  readonly currentUser: FirebaseUser | null;
+  readonly isAuthenticated: boolean;
+  clearSession(): void;
+  signInAnonymous(): Promise<FirebaseUser | null>;
+  signInWithEmail(email: string, password: string): Promise<FirebaseUser | null>;
+  signUpWithEmail(email: string, password: string): Promise<FirebaseUser | null>;
+  signInWithCustomToken(customToken: string): Promise<FirebaseUser | null>;
+  signOut(): void;
+};
+
 /**
  * Service for Firebase Authentication via REST API.
  */
-export class FirebaseAuth {
+class FirebaseAuth extends BaseGameClass<FirebaseAuthOptions> implements FirebaseAuthInterface {
   private _currentUser: FirebaseUser | null = null;
-  private readonly _http: FirebaseHttpClient;
+  private readonly _http: FirebaseHttpClientInterface;
 
-  constructor(http: FirebaseHttpClient) {
-    this._http = http;
+  constructor(options: FirebaseAuthOptions) {
+    super(options);
+    this._http = options.http;
     this._restoreSession();
   }
 
@@ -216,8 +237,12 @@ export class FirebaseAuth {
         return null;
       }
 
+      // signInWithCustomToken does NOT return localId in the response.
+      // Extract uid from the idToken JWT's `sub` claim instead.
+      const uid = data.localId || this._decodeJwtSub(data.idToken || '');
+
       this._currentUser = {
-        uid: data.localId || '',
+        uid,
         email: data.email || null,
         idToken: data.idToken || '',
         refreshToken: data.refreshToken || '',
@@ -230,9 +255,30 @@ export class FirebaseAuth {
   }
 
   /**
+   * Decodes the `sub` claim from a JWT payload without verifying the signature.
+   */
+  private _decodeJwtSub(jwt: string): string {
+    try {
+      const payload = jwt.split('.')[1];
+      if (!payload) return '';
+      const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+      return decoded.sub || '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
    * Signs out and clears the session.
    */
   signOut(): void {
     this.clearSession();
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getFirebaseAuth = (options: FirebaseAuthOptions): FirebaseAuthInterface =>
+  new FirebaseAuth(options);

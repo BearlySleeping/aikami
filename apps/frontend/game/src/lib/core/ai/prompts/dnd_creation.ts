@@ -1,4 +1,4 @@
-// apps/frontend/game/src/core/ai/prompts/dnd_creation.ts
+// apps/frontend/game/src/lib/core/ai/prompts/dnd_creation.ts
 
 // ---------------------------------------------------------------------------
 // System prompt for the D&D 2024 Dungeon Master character creation persona.

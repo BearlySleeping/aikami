@@ -155,8 +155,6 @@ export function resolveCloudRunServiceId(appId: AppId): string | undefined {
 const BRANCH_MODE_MAP: Record<string, string> = {
   master: 'production',
   main: 'production',
-  staging: 'staging',
-  dev: 'staging',
 } as const;
 
 /**
@@ -167,7 +165,7 @@ export function resolveMode(branchName: string): string {
   const mode = BRANCH_MODE_MAP[branchName];
   if (!mode) {
     throw new Error(
-      `Unknown branch "${branchName}". Expected one of: ${Object.keys(BRANCH_MODE_MAP).join(', ')} (maps to staging, production, or emulator)`,
+      `Unknown branch "${branchName}". Expected one of: ${Object.keys(BRANCH_MODE_MAP).join(', ')} (maps to development, production, or emulator)`,
     );
   }
   return mode;

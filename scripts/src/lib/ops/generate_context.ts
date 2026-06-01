@@ -18,11 +18,19 @@ async function main() {
   const pkgJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 
   const projects = [
-    { name: 'PWA', path: 'apps/frontend/pwa', desc: 'Main Progressive Web App (SvelteKit 2, Svelte 5)' },
+    {
+      name: 'PWA',
+      path: 'apps/frontend/pwa',
+      desc: 'Main Progressive Web App (SvelteKit 2, Svelte 5)',
+    },
     { name: 'Landing', path: 'apps/frontend/landing_page', desc: 'Public landing page' },
     { name: 'Docs', path: 'apps/frontend/docs', desc: 'Documentation site (Astro)' },
-    { name: 'GameJS', path: 'apps/frontend/gamejs', desc: 'GodotJS game (TypeScript)' },
-    { name: 'Firebase', path: 'apps/backend/firebase', desc: 'Firebase Cloud Functions + Data Connect' },
+    { name: 'Game', path: 'apps/frontend/game', desc: 'PixiJS game (TypeScript)' },
+    {
+      name: 'Firebase',
+      path: 'apps/backend/firebase',
+      desc: 'Firebase Cloud Functions + Data Connect',
+    },
   ];
 
   const libs = [
@@ -50,7 +58,7 @@ async function main() {
     '',
     '---',
     '',
-    '## What We\'re Building',
+    "## What We're Building",
     '',
     'Aikami is a monorepo application platform: SvelteKit PWA + Firebase backend + Bun runtime.',
     '',

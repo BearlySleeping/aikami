@@ -103,6 +103,15 @@
         min-height: 20px;
       }
 
+      .loading-pulse {
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+
       /* ---- Chat Overlay (character creation) ---- */
       #chat-overlay {
         position: absolute;
@@ -309,7 +318,7 @@
       <div id="menu-screen">
         <h1>AIKAMI</h1>
         <h2>Chronicles of the Lost Realm</h2>
-        <div id="auth-status">Not logged in</div>
+        <div id="auth-status"><span class="loading-pulse">Loading…</span></div>
         <button id="btn-login" class="menu-btn">Login</button>
         <button id="btn-new-game" class="menu-btn" style="display:none">New Game</button>
         <button id="btn-start" class="menu-btn">Start Game</button>

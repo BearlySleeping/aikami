@@ -257,5 +257,5 @@ export const getProjectId = (): string => {
     return MODE_PROJECT_MAP.emulator;
   }
   const mode = getMode();
-  return (MODE_PROJECT_MAP as Record<string, string>)[mode] ?? MODE_PROJECT_MAP.staging;
+  return (MODE_PROJECT_MAP as Record<string, string>)[mode] ?? MODE_PROJECT_MAP.development;
 };

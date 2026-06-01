@@ -34,12 +34,21 @@ ms                 # Moon sync
 ma [task]          # Run affected tasks
 
 # Aikami workflows
-aikami_dev         # Full local dev (emulators)
-aikami_emulate     # Backend emulators only
-aikami_validate    # Fix → typecheck → build → test
-aikami_affected    # Show changed projects
-aikami_switch      # Switch mode (emulator/dev/prod)
-aikami_help        # Full shortcut list
+aikami_dev              # Full stack in tmux (auto-attach)
+aikami_emulate          # Backend emulators in tmux (auto-attach)
+aikami_game_emulate     # Game in emulator mode in tmux (auto-attach)
+aikami_validate         # Fix → typecheck → build → test
+aikami_affected         # Show changed projects
+aikami_switch           # Switch mode (emulator/dev/prod)
+aikami_help             # Full shortcut list
+
+# Tmux session management
+aikami_tmux_start <svc> # Start tmux session (emulators|pwa|game|all)
+aikami_tmux_join <svc>  # Attach to running tmux session
+aikami_tmux_stop <svc>  # Stop tmux session
+aikami_tmux_stop_all    # Stop all aikami tmux sessions
+aikami_tmux_status      # List running aikami sessions
+atstart/atjoin/atstop   # Short aliases for the above
 ```
 
 **AI agents**: Use the pi extension tools (moon_run_task, validate, firestore_query, etc.) instead of these shell aliases. The tools route through `bun moon run` and respect the direnv environment automatically.
@@ -221,10 +230,12 @@ The root `package.json` provides shortcuts for common operations:
 | Script            | Command                                    | Purpose                                                      |
 | ----------------- | ------------------------------------------ | ------------------------------------------------------------ |
 | `dev`             | `moon run $APP:dev`                        | Start dev server for $APP                                    |
-| `dev:all`         | `moon run root:dev-all`                    | Start full stack (emulator + PWA + vm-controller + ZeroClaw) |
-| `emulate:backend` | `bunx moon run functions:emulate`          | Firebase Functions emulator                                  |
-| `emulate:pwa`     | `bunx moon run pwa:dev -- --mode emulator` | PWA in emulator mode                                         |
-| `emulate:podman`  | `bunx moon run vm-controller:emulate`      | VM Controller with Podman                                    |
+| `dev:all`         | `bun run scripts/src/lib/ops/dev_all.ts`   | Start full stack in tmux (mode from $AIKAMI_MODE)            |
+| `tmux:start`      | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (emulators/pwa/game/all)                |
+| `tmux:join`       | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session                             |
+| `tmux:stop`       | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                                          |
+| `tmux:stop-all`   | `bun run scripts/src/lib/tmux/stop_all.ts` | Stop all aikami tmux sessions                                |
+| `tmux:status`     | `bun run scripts/src/lib/tmux/status.ts`   | List running aikami tmux sessions                            |
 
 ### Validation (Run Separately)
 
@@ -259,7 +270,7 @@ The root `package.json` provides shortcuts for common operations:
 | -------------- | --------------------------------------- | --------------------- |
 | `ops:secrets`  | `bun run scripts/ops/upload_secrets.ts` | Upload secrets to GCP |
 | `ops:add-user` | `bun run scripts/ops/add_user.ts`       | Add user to GCP IAM   |
-| `ops:dev-all`  | `bun run scripts/ops/dev_all.ts`        | Start dev-all stack   |
+| `ops:dev-all`  | `bun run scripts/src/lib/ops/dev_all.ts`   | Start full stack in tmux |
 
 ### Logging
 
@@ -382,3 +393,86 @@ bun run test:blackbox vm-controller --no-cross-service
 ### Debugging loop prevention
 
 The AI enforces: 2 failed attempts → diagnostic script. Never ask user to "try again" without gathering data first.
+
+---
+
+## Running Dev Servers in Tmux
+
+All tmux sessions use a unified naming convention: `aikami-{mode}-{service}`.
+
+| Variable | Values |
+|----------|--------|
+| `mode` | `emulator`, `development`, `production` |
+| `service` | `emulators`, `pwa`, `game`, `all` |
+
+### Root package.json scripts
+
+| Script | Purpose |
+|--------|---------|
+| `bun run tmux:start <service>` | Start a session (background) |
+| `bun run tmux:join <service>` | Attach to a running session |
+| `bun run tmux:stop <service>` | Stop a session |
+| `bun run tmux:stop-all` | Stop all aikami sessions |
+| `bun run tmux:status` | List all running sessions |
+
+All scripts respect `$AIKAMI_MODE` from direnv. Override with `--mode <mode>`.
+Use `--force` with `tmux:start` to kill and recreate an existing session.
+
+### Quick reference
+
+```bash
+# Start services (mode from $AIKAMI_MODE, defaults to emulator)
+bun run tmux:start emulators        # Firebase emulators only
+bun run tmux:start pwa               # PWA dev server
+bun run tmux:start game              # Game dev server
+bun run tmux:start all               # Full stack (emulators + pwa + game)
+
+# Override mode
+bun run tmux:start emulators --mode development
+
+# Force recreate
+bun run tmux:start all --force
+
+# Join / watch
+bun run tmux:join emulators          # Attach to emulators session
+bun run tmux:join all                # Attach to full stack session
+
+# Manage
+bun run tmux:status                  # List all aikami sessions
+bun run tmux:stop pwa                # Stop PWA session
+bun run tmux:stop-all                # Stop everything
+
+# Direct tmux commands also work
+tmux attach -t aikami-emulator-all
+tmux kill-session -t aikami-emulator-emulators
+```
+
+### Blackbox testing
+
+Blackbox tests automatically use the unified tmux manager. Sessions are named
+`aikami-emulator-{service}`.
+
+```bash
+# Normal run — reuses existing sessions if already running in emulator mode
+bun run test:blackbox
+
+# Force recreate all sessions from scratch
+bun run test:blackbox --force
+
+# Skip service startup entirely (sessions must already be running)
+bun run test:blackbox --no-emulator
+```
+
+### How it works
+
+The unified library (`scripts/src/lib/tmux/session.ts`) handles:
+
+1. **Session naming**: `aikami-{mode}-{service}` stored as a tmux env var
+2. **Mode detection**: Checks `AIKAMI_TMUX_MODE` env var in the session
+3. **Start logic**:
+   - Session doesn't exist → create new
+   - Session exists, same mode → reuse (no-op)
+   - Session exists, different mode → error (use `--force` to override)
+4. **Command wrapping**: Uses `direnv exec . bash -c '...'` to load Nix env
+5. **Keepalive**: Appends `; echo; echo '=== Stopped. Press Enter to close ==='; read`
+   so the pane stays open after the command exits

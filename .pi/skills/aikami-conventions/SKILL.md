@@ -459,10 +459,16 @@ inherit this environment.
 
 ### Mode Switching
 
+| Mode | Project | What it means |
+|------|---------|---------------|
+| `emulator` | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break. |
+| `development` | `aikami-dev` | Live GCP project with real deployed services. Acts as staging — deployed Cloud Functions, live Firestore data. Can also run locally against live backend. |
+| `production` | `aikami-prod` | Live production. Deploy with care. |
+
 ```bash
-aikami_switch emulator     # Local development (Firebase emulators)
-aikami_switch development  # Staging (live GCP aikami-dev)
-aikami_switch production   # Production (live GCP aikami-prod)
+aikami_switch emulator     # Local emulators, no GCP
+aikami_switch development  # Live staging (aikami-dev)
+aikami_switch production   # Live production (aikami-prod)
 ```
 
 ### Adding Tools

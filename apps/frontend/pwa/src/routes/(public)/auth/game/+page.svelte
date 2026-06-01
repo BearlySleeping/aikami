@@ -1,10 +1,10 @@
 <script lang="ts">
   // apps/frontend/pwa/src/routes/(public)/auth/game/+page.svelte
-  import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
+  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import {
     type AuthGameViewModelInterface,
     getAuthGameViewModel,
-  } from '$lib/views/auth/game/auth-game-view-model.svelte.ts';
+  } from '$lib/views/auth/game/auth_game_view_model.svelte';
 
   const viewModel: AuthGameViewModelInterface = getAuthGameViewModel({
     className: 'AuthGameViewModel',

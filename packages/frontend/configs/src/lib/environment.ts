@@ -26,8 +26,8 @@ const masterSchema = z.object({
   PUBLIC_FIREBASE_API_KEY: z.string(),
   PUBLIC_FIREBASE_AUTH_DOMAIN: z.string(),
   PUBLIC_FIREBASE_STORAGE_BUCKET: z.string(),
-  PUBLIC_FIREBASE_MESSAGING_SENDER_ID: z.string(),
   PUBLIC_FIREBASE_APP_ID: z.string(),
+  PUBLIC_FIREBASE_MESSAGING_SENDER_ID: z.string(),
   PUBLIC_FIREBASE_MEASUREMENT_ID: z.string(),
   PUBLIC_DISABLE_APP_CHECK: z.string().optional(),
   PUBLIC_RECAPTCHA_SITE_KEY: z.string().optional(),
@@ -42,6 +42,9 @@ const masterSchema = z.object({
   PUBLIC_SITE_URL: z.string().optional(),
   PUBLIC_APP_CHECK_DEBUG_TOKEN: z.string().optional(),
   PUBLIC_LOG_PERSIST_LEVEL: z.string().optional(),
+
+  //
+  PUBLIC_PWA_URL: z.string().optional(),
 });
 
 type MasterEnv = z.infer<typeof masterSchema>;
@@ -49,7 +52,7 @@ type AppID = z.infer<typeof FrontendAppIdSchema>;
 
 const APP_REQUIREMENTS: Record<AppID, (keyof MasterEnv)[]> = {
   docs: [],
-  gamejs: [],
+  game: ['PUBLIC_PWA_URL'],
   landing_page: [],
   pwa: [],
 };
