@@ -1,8 +1,13 @@
-// apps/frontend/game/src/ui/character_creation_controller.ts
+// apps/frontend/game/src/lib/ui/character_creation_controller.ts
 
 import type { Application } from 'pixi.js';
 import { type Container, Graphics, Text, TextStyle } from 'pixi.js';
-import type { FirebaseFunctions } from '../core/firebase/functions.ts';
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
+import type { FirebaseFunctionsInterface } from '$lib/services/firebase/functions.ts';
 
 // ---------------------------------------------------------------------------
 // CharacterCreationController — narrative-driven D&D character creation
@@ -52,17 +57,30 @@ export type CharacterCreationCallbacks = {
   onCancel: () => void;
 };
 
+export type CharacterCreationControllerOptions = BaseGameClassOptions & {
+  functions: FirebaseFunctionsInterface;
+  callbacks: CharacterCreationCallbacks;
+};
+
+export type CharacterCreationControllerInterface = BaseGameClassInterface & {
+  start(options: { pixiApp: Application; pixiRoot: Container }): void;
+  destroy(): void;
+};
+
 /**
  * Controls the hybrid PixiJS + Vanilla DOM character creation flow.
  *
  * Manages the state machine, chat overlay DOM manipulation, AI service
  * communication via Firebase Functions, and stat tweaking PixiJS view.
  */
-export class CharacterCreationController {
+class CharacterCreationController
+  extends BaseGameClass<CharacterCreationControllerOptions>
+  implements CharacterCreationControllerInterface
+{
   private _phase: CreationPhase = 'intro';
   private _messages: ChatMessage[] = [];
   private _generatedCharacter: GeneratedCharacter | undefined;
-  private _functions: FirebaseFunctions;
+  private _functions: FirebaseFunctionsInterface;
   private _callbacks: CharacterCreationCallbacks;
   private _pixiApp: Application | undefined;
   private _pixiRoot: Container | undefined;
@@ -77,10 +95,8 @@ export class CharacterCreationController {
   private _statTexts: Map<string, Text> = new Map();
   private _statButtons: Container[] = [];
 
-  constructor(options: {
-    functions: FirebaseFunctions;
-    callbacks: CharacterCreationCallbacks;
-  }) {
+  constructor(options: CharacterCreationControllerOptions) {
+    super(options);
     this._functions = options.functions;
     this._callbacks = options.callbacks;
 
@@ -579,4 +595,12 @@ export class CharacterCreationController {
     }
     return el;
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getCharacterCreationController = (
+  options: CharacterCreationControllerOptions,
+): CharacterCreationControllerInterface => new CharacterCreationController(options);

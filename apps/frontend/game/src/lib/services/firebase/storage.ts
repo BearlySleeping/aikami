@@ -1,20 +1,39 @@
-// apps/frontend/game/src/core/firebase/storage.ts
+// apps/frontend/game/src/lib/services/firebase/storage.ts
 /**
  * Firebase Storage REST API client — no Firebase SDK.
  * Supports upload, download, and delete via fetch.
  */
 
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
 import { getConfig } from './config.ts';
-import type { FirebaseHttpClient } from './http_client.ts';
+import type { FirebaseHttpClientInterface } from './http_client.ts';
+
+export type FirebaseStorageOptions = BaseGameClassOptions & {
+  http: FirebaseHttpClientInterface;
+};
+
+export type FirebaseStorageInterface = BaseGameClassInterface & {
+  uploadFile(path: string, content: string | Blob, contentType: string): Promise<string | null>;
+  downloadFile(path: string): Promise<string | null>;
+  deleteFile(path: string): Promise<boolean>;
+};
 
 /**
  * Service for Firebase Storage operations via REST API.
  */
-export class FirebaseStorage {
-  private readonly _http: FirebaseHttpClient;
+class FirebaseStorage
+  extends BaseGameClass<FirebaseStorageOptions>
+  implements FirebaseStorageInterface
+{
+  private readonly _http: FirebaseHttpClientInterface;
 
-  constructor(http: FirebaseHttpClient) {
-    this._http = http;
+  constructor(options: FirebaseStorageOptions) {
+    super(options);
+    this._http = options.http;
   }
 
   /**
@@ -103,4 +122,11 @@ export class FirebaseStorage {
       return false;
     }
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getFirebaseStorage = (options: FirebaseStorageOptions): FirebaseStorageInterface =>
+  new FirebaseStorage(options);

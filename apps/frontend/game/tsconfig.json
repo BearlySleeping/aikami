@@ -1,4 +1,8 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Functions",
+  "extends": "../../../config/tsconfig/tsconfig.backend.json",
+
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
@@ -15,13 +19,34 @@
     "verbatimModuleSyntax": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["bun"],
+    "rootDir": "../../..",
     "paths": {
+      "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../../packages/shared/constants/src/*"],
+      "@aikami/mocks": ["../../../packages/shared/mocks/src/index.ts"],
+      "@aikami/mocks/*": ["../../../packages/shared/mocks/src/*"],
+      "@aikami/schemas": ["../../../packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../../packages/shared/schemas/src/*"],
+      "@aikami/types": ["../../../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../../packages/shared/types/src/*"],
+      "@aikami/utils": ["../../../packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../../packages/shared/utils/src/*"],
+      "$logger": ["./src/lib/core/logger.ts"],
+      "$lib/*": ["./src/lib/*"],
+      "$services": ["./src/lib/services/index.ts"],
+      "$services/*": ["./src/lib/services/*"],
+      "$types/*": ["./src/lib/types/index.ts"],
+
       "@aikami/engine": ["../../packages/engine/src/index.ts"],
       "@aikami/engine/*": ["../../packages/engine/src/*"],
-      "@aikami/constants": ["../../packages/shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["../../packages/shared/constants/src/*"]
+      "@aikami/logger": ["../../../packages/shared/logger/src/index.ts"],
+
+      "@aikami/frontend/configs": ["../../../packages/frontend/configs/src/index.ts"],
+      "@aikami/frontend/configs/*": ["../../../packages/frontend/configs/src/lib/*"],
+      "@aikami/frontend/utils": ["../../../packages/frontend/utils/src/index.ts"],
+      "@aikami/frontend/utils/*": ["../../../packages/frontend/utils/src/lib/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

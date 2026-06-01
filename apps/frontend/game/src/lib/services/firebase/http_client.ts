@@ -1,8 +1,9 @@
-// apps/frontend/game/src/core/firebase/http_client.ts
-/**
- * Lightweight HTTP client for Firebase REST API calls using browser fetch.
- * Replaces the Godot HTTPRequest node with async/await Promise-based API.
- */
+// apps/frontend/game/src/lib/services/firebase/http_client.ts
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
 
 /**
  * Result of an HTTP request to a Firebase REST API.
@@ -16,15 +17,31 @@ export type HttpResult = {
   headers: Record<string, string>;
 };
 
+export type FirebaseHttpClientOptions = BaseGameClassOptions & {
+  apiKey: string;
+};
+
+export type FirebaseHttpClientInterface = BaseGameClassInterface & {
+  readonly apiKey: string;
+  get(url: string): Promise<HttpResult>;
+  post(url: string, body: unknown): Promise<HttpResult>;
+  patch(url: string, body: unknown): Promise<HttpResult>;
+  delete(url: string): Promise<HttpResult>;
+};
+
 /**
  * Lightweight HTTP client using browser `fetch` API.
  * Supports GET, POST, PATCH, and DELETE with JSON handling.
  */
-export class FirebaseHttpClient {
+class FirebaseHttpClient
+  extends BaseGameClass<FirebaseHttpClientOptions>
+  implements FirebaseHttpClientInterface
+{
   /** Base config: API key for request auth. */
   private readonly _apiKey: string;
 
-  constructor(options: { apiKey: string }) {
+  constructor(options: FirebaseHttpClientOptions) {
+    super(options);
     this._apiKey = options.apiKey;
   }
 
@@ -121,4 +138,12 @@ export class FirebaseHttpClient {
   get apiKey(): string {
     return this._apiKey;
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getFirebaseHttpClient = (
+  options: FirebaseHttpClientOptions,
+): FirebaseHttpClientInterface => new FirebaseHttpClient(options);

@@ -1,4 +1,10 @@
-// apps/frontend/game/src/menu/menu_controller.ts
+// apps/frontend/game/src/lib/menu/menu_controller.ts
+
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
 
 // ---------------------------------------------------------------------------
 // MenuController — manages menu ↔ game screen transitions
@@ -24,13 +30,34 @@ const getEl = (id: string): HTMLElement => {
   return el;
 };
 
+export type MenuControllerOptions = BaseGameClassOptions;
+
+export type MenuControllerInterface = BaseGameClassInterface & {
+  getScreen(): Screen;
+  showMenu(): void;
+  showOptions(): void;
+  showLogin(): void;
+  showGame(): void;
+  showQuitConfirm(): void;
+  hideQuitConfirm(): void;
+  getResolution(): { width: number; height: number };
+  setAuthState(state: AuthUiState): void;
+  setAuthStatusMessage(message: string): void;
+  onScreenChange(cb: MenuCallback): () => void;
+  onLoginRequest(cb: LoginCallback): () => void;
+  onNewGameRequest(cb: NewGameCallback): () => void;
+};
+
 /**
  * Simple menu controller that manages visibility of the four main screens:
  * main menu, options panel, login/auth screen, and game canvas.
  *
  * Pure imperative DOM manipulation — no framework needed.
  */
-export class MenuController {
+class MenuController
+  extends BaseGameClass<MenuControllerOptions>
+  implements MenuControllerInterface
+{
   private menuScreen = getEl('menu-screen');
   private optionsPanel = getEl('options-panel');
   private gameScreen = getEl('game-screen');
@@ -52,7 +79,8 @@ export class MenuController {
   private loginListeners: LoginCallback[] = [];
   private newGameListeners: NewGameCallback[] = [];
 
-  constructor() {
+  constructor(options: MenuControllerOptions) {
+    super(options);
     this.bindEvents();
   }
 
@@ -195,4 +223,11 @@ export class MenuController {
       listener(screen);
     }
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getMenuController = (options: MenuControllerOptions): MenuControllerInterface =>
+  new MenuController(options);

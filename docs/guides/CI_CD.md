@@ -23,12 +23,12 @@ The workflow is triggered by a push to the `main` branch or a tag that starts wi
 
 The workflow has the following jobs:
 
--   `determine-environment`: This job determines the environment to deploy to. If the workflow is triggered by a push to the `main` branch, the environment is `staging`. If the workflow is triggered by a tag that starts with `v`, the environment is `production`. If the workflow is triggered manually, the environment is selected from a dropdown list.
+-   `determine-environment`: This job determines the environment to deploy to. If the workflow is triggered by a push to the `main` branch, the environment is `development`. If the workflow is triggered by a tag that starts with `v`, the environment is `production`. If the workflow is triggered manually, the environment is selected from a dropdown list.
 -   `build-backend`: This job builds the backend Docker image and pushes it to Google Container Registry.
 -   `build-frontend`: This job builds the frontend and uploads the build artifacts.
 -   `deploy-backend`: This job deploys the backend to Google Cloud Run.
 -   `deploy-frontend`: This job deploys the frontend to Firebase Hosting.
--   `integration-test`: This job runs integration tests against the staging environment.
+-   `integration-test`: This job runs integration tests against the development environment.
 -   `rollback`: This job rolls back the backend to the previous revision if the deployment fails.
 -   `notify`: This job sends a notification to a Slack channel to report the status of the deployment.
 
@@ -36,7 +36,7 @@ The workflow has the following jobs:
 
 The CI/CD pipeline has two environments:
 
--   **Staging:** The staging environment is used for testing and QA. It is deployed to on every push to the `main` branch.
+-   **Development:** The development environment (`aikami-dev`) is used for testing and QA. It is deployed to on every push to the `main` branch.
 -   **Production:** The production environment is the live environment that is used by end-users. It is deployed to when a new version is tagged.
 
 ### Secrets

@@ -248,7 +248,7 @@ class AuthGameViewModel
 
     try {
       const token = await authService.getIdToken();
-      const uid = authService.currentUser?.uid;
+      const uid = authService.currentUser?.id;
 
       if (!token) {
         throw toAppError({

@@ -149,7 +149,8 @@ class EngineBridgeImpl implements EngineBridge {
     // ── Stub implementations ──
     switch (cmd) {
       case 'roll': {
-        const _diceExpr = args[0] ?? '1d20';
+        // TODO: implement dice rolling via slash commands
+        void (args[0] ?? '1d20');
         break;
       }
       case 'move': {
