@@ -144,7 +144,6 @@ export type LoggerInterface = {
   error(...args: unknown[]): void;
 };
 
-
 /**
  * Context automatically attached to every persisted log entry.
  * Populated via `AsyncLocalStorage` in SSR / Functions, or

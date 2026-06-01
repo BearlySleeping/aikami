@@ -1,103 +1,75 @@
-import { firebaseSignInProviderNames, userRoles } from "@aikami/constants";
-import { z } from "zod";
-import { SupportedLocaleSchema } from "./common/preference.ts";
+// packages/shared/schemas/src/lib/auth.ts
+import Type, { Composite } from 'typebox';
+import { SupportedLocaleSchema } from './common/preference.ts';
 
-export const FirebaseAuthMetadataSchema = z.object({
-	displayName: z.string().optional(),
-	email: z.string().email().optional(),
-	phoneNumber: z.string().optional(),
-	photoURL: z.string().optional(),
+export const FirebaseAuthMetadataSchema = Type.Object({
+  displayName: Type.Optional(Type.String()),
+  email: Type.Optional(Type.String({ format: 'email' })),
+  phoneNumber: Type.Optional(Type.String()),
+  photoURL: Type.Optional(Type.String()),
 });
 
-export const SignInSocialProviderSchema = z.enum(["google", "github"]);
+export const SignInSocialProviderSchema = Type.Union([
+  Type.Literal('google'),
+  Type.Literal('github'),
+]);
 
-export const SignInProviderSchema = z
-	.enum(["email"])
-	.or(SignInSocialProviderSchema);
+export const SignInProviderSchema = Type.Union([Type.Literal('email'), SignInSocialProviderSchema]);
 
-export const UserMetadataSchema = z.object({
-	firstName: z.string().optional(),
-	lastName: z.string().optional(),
-	localeCode: z.string().optional(),
-	phoneNumber: z.string().optional(),
-	photoURL: z.string().optional(),
+export const UserMetadataSchema = Type.Object({
+  firstName: Type.Optional(Type.String()),
+  lastName: Type.Optional(Type.String()),
+  localeCode: Type.Optional(Type.String()),
+  phoneNumber: Type.Optional(Type.String()),
+  photoURL: Type.Optional(Type.String()),
 });
 
-export const RegisterDataSchema = z.object({
-	email: z.string(),
-	signInProvider: SignInProviderSchema,
-	uid: z.string().optional(),
-	userMetadata: UserMetadataSchema.optional(),
+export const RegisterDataSchema = Type.Object({
+  email: Type.String(),
+  signInProvider: SignInProviderSchema,
+  uid: Type.Optional(Type.String()),
+  userMetadata: Type.Optional(UserMetadataSchema),
 });
 
-export const GoogleMetadataSchema = z.object({
-	email: z.string().optional(),
-	family_name: z.string().optional(),
-	given_name: z.string().optional(),
-	locale: z.string().optional(),
-	name: z.string().optional(),
-	picture: z.string().optional(),
-	verified_email: z.boolean().optional(),
+export const GoogleMetadataSchema = Type.Object({
+  email: Type.Optional(Type.String()),
+  family_name: Type.Optional(Type.String()),
+  given_name: Type.Optional(Type.String()),
+  locale: Type.Optional(Type.String()),
+  name: Type.Optional(Type.String()),
+  picture: Type.Optional(Type.String()),
+  verified_email: Type.Optional(Type.Boolean()),
 });
 
-export const MicrosoftMetadataSchema = z.object({
-	email: z.string().optional(),
-	family_name: z.string().optional(),
-	given_name: z.string().optional(),
-	locale: z.string().optional(),
-	name: z.string().optional(),
-	picture: z.string().optional(),
-	verified_email: z.boolean().optional(),
+export const MicrosoftMetadataSchema = Type.Object({
+  email: Type.Optional(Type.String()),
+  family_name: Type.Optional(Type.String()),
+  given_name: Type.Optional(Type.String()),
+  locale: Type.Optional(Type.String()),
+  name: Type.Optional(Type.String()),
+  picture: Type.Optional(Type.String()),
+  verified_email: Type.Optional(Type.Boolean()),
 });
 
-export const UserRoleSchema = z.enum(userRoles);
+// userRoles = ['member', 'superAdmin'] as const
+export const UserRoleSchema = Type.Union([Type.Literal('member'), Type.Literal('superAdmin')]);
 
-export const FirebaseSignInProviderNameSchema = z.enum(
-	firebaseSignInProviderNames,
-);
+// firebaseSignInProviderNames = ['google', 'github'] as const
+export const FirebaseSignInProviderNameSchema = Type.Union([
+  Type.Literal('google'),
+  Type.Literal('github'),
+]);
 
-/**
- * The status of the user.
- *
- * If this is 'unconfirmed-terms' then the user has not confirmed the terms
- *
- * TODO: add more statuses
- */
-export const UserStatusSchema = z.enum(["unconfirmed-terms", "active"]);
+export const UserStatusSchema = Type.Union([
+  Type.Literal('unconfirmed-terms'),
+  Type.Literal('active'),
+]);
 
-/**
- * Fields in the user token data only created by createCustomToken. These fields
- * are not stored globally in the database.
- */
-
-export const UserTokenSchema = z.object({
-	/**
-	 * If this is true show beta features.
-	 *
-	 * @default undefined
-	 */
-	isBetaTester: z.literal(true).optional(),
-
-	/**
-	 * The status of the user.
-	 *
-	 * If this is 'unconfirmed-terms' then the user has not confirmed the terms
-	 *
-	 * TODO: add all statuses and make required
-	 */
-
-	/**
-	 * The supported language codes on the frontend.
-	 * https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-	 */
-	preferredLocale: SupportedLocaleSchema.optional(),
-
-	status: UserStatusSchema.optional(),
-
-	/** If this is undefined, then the user has not finished the registration. */
-	userRole: UserRoleSchema.optional(),
+export const UserTokenSchema = Type.Object({
+  isBetaTester: Type.Optional(Type.Literal(true)),
+  preferredLocale: Type.Optional(SupportedLocaleSchema),
+  status: Type.Optional(UserStatusSchema),
+  userRole: Type.Optional(UserRoleSchema),
 });
 
-export const UserClaimsSchema = UserTokenSchema.extend({
-	id: z.string(),
-});
+export const UserClaimsSchema = Composite(UserTokenSchema, Type.Object({ id: Type.String() }));

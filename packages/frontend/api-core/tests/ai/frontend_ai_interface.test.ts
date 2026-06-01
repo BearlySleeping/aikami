@@ -179,7 +179,11 @@ describe('FrontendAiInterface contract (MockAiClient)', () => {
 
     // Seed a response for deterministic test
     mock.seedStructured('quest', { name: 'Dragon Hunt', level: 5 });
-    const result = await client.generateStructured('Generate a quest', schema, 'fantasy world') as { name: string; level: number };
+    const result = (await client.generateStructured(
+      'Generate a quest',
+      schema,
+      'fantasy world',
+    )) as { name: string; level: number };
 
     expect(result.name).toBe('Dragon Hunt');
     expect(result.level).toBe(5);

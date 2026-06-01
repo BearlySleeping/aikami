@@ -1,19 +1,16 @@
 // packages/shared/types/src/lib/api/game.ts
-import type { z } from 'zod';
-import type {
-  ActiveSessionSchema,
-  GeneratedAudioSchema,
-  SceneImageSchema,
-} from '@aikami/schemas';
+
+import type { ActiveSessionSchema, GeneratedAudioSchema, SceneImageSchema } from '@aikami/schemas';
+import type { Type } from 'typebox';
 
 /** Active session derived from its schema. */
-export type ActiveSessionData = z.infer<typeof ActiveSessionSchema>;
+export type ActiveSessionData = Type.Static<typeof ActiveSessionSchema>;
 
 /** Scene image derived from its schema. */
-export type SceneImageData = z.infer<typeof SceneImageSchema>;
+export type SceneImageData = Type.Static<typeof SceneImageSchema>;
 
 /** Generated audio derived from its schema. */
-export type GeneratedAudioData = z.infer<typeof GeneratedAudioSchema>;
+export type GeneratedAudioData = Type.Static<typeof GeneratedAudioSchema>;
 
 /** A location within a game world. */
 export type WorldLocation = {

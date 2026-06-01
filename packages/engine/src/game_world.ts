@@ -10,9 +10,9 @@ import {
 import type { EngineBridge } from './engine_bridge.ts';
 import type { PixiAppOptions } from './pixi_app.ts';
 import { createPixiApp } from './pixi_app.ts';
-import { dirtyCheckAppearance } from './systems/render_system.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
+import { dirtyCheckAppearance } from './systems/render_system.ts';
 import type { Direction, GameEvent } from './types.ts';
 
 // ---------------------------------------------------------------------------

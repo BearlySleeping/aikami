@@ -53,9 +53,9 @@ const getRoute = (routeName: RouteName): AllRoutes[RouteName] => {
   }
 
   throw toAppError({
-  errorType: 'not-found',
-  errorMessage: `Route ${routeName} not found`
-});
+    errorType: 'not-found',
+    errorMessage: `Route ${routeName} not found`,
+  });
 };
 
 export const toRouteHref = <T extends RouteName>(
@@ -123,9 +123,7 @@ export const toRouteHref = <T extends RouteName>(
 export const toRoutePathFromRouteId = (routeId: string): RouteName | undefined => {
   // 1. Clean the incoming SvelteKit routeId
   // Removes leading slashes AND any layout groups like "(authenticated)/"
-  const cleanInput = routeId
-    .replace(/^\/+/, '')
-    .replace(/\(.*?\)\//g, '');
+  const cleanInput = routeId.replace(/^\/+/, '').replace(/\(.*?\)\//g, '');
 
   for (const [routeName, routeOptions] of Object.entries(routes) as [
     string,
@@ -133,9 +131,7 @@ export const toRoutePathFromRouteId = (routeId: string): RouteName | undefined =
   ][]) {
     // 2. Clean the config routeId exactly the same way
     // This makes it safe even if your routes.ts has inconsistent routeIds
-    const cleanConfigRouteId = routeOptions.routeId
-      .replace(/^\/+/, '')
-      .replace(/\(.*?\)\//g, '');
+    const cleanConfigRouteId = routeOptions.routeId.replace(/^\/+/, '').replace(/\(.*?\)\//g, '');
 
     // 3. Compare the cleaned strings (e.g., 'characters' === 'characters')
     if (cleanConfigRouteId === cleanInput) {

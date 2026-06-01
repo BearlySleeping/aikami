@@ -9,9 +9,9 @@ export const blobToBase64 = (blob: Blob): Promise<string> => {
       const base64 = base64String.split(',')[1];
       if (!base64) {
         throw toAppError({
-  errorType: 'internal',
-  errorMessage: 'base64 is not defined'
-});
+          errorType: 'internal',
+          errorMessage: 'base64 is not defined',
+        });
       }
       resolve(base64);
     };

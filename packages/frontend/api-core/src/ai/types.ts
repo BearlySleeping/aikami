@@ -20,7 +20,7 @@ export type AiProviderCapabilities = {
   speech: boolean;
   /** Can generate images (text-to-image). */
   image: boolean;
-  /** Can generate structured game data (JSON with Zod validation). */
+  /** Can generate structured game data (JSON with TypeBox validation). */
   structured: boolean;
   /** Provider requires backend API keys (cloud). */
   requiresBackend: boolean;

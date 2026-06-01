@@ -1,54 +1,46 @@
 // apps/backend/firebase/src/controllers/callable/prompt_character_creation.ts
 
+import { createAiService } from '@aikami/backend-ai';
 import type { CallableFunctions } from '@aikami/types';
 import { onCall } from '@snorreks/firestack';
-import { z } from 'zod';
-import { createAiService } from '@aikami/backend-ai';
+import Type from 'typebox';
 import { logger } from '$logger';
 
-// ---------------------------------------------------------------------------
-// Character creation input / output schemas
-// ---------------------------------------------------------------------------
-
-const chatMessageSchema = z.object({
-  role: z.enum(['dm', 'user', 'system']),
-  text: z.string(),
+const chatMessageSchema = Type.Object({
+  role: Type.Union([Type.Literal('dm'), Type.Literal('user'), Type.Literal('system')]),
+  text: Type.String(),
 });
 
-const characterCreationInputSchema = z.object({
-  messages: z.array(chatMessageSchema),
-  userMessage: z.string().min(1),
-  phase: z.string(),
+const characterCreationInputSchema = Type.Object({
+  messages: Type.Array(chatMessageSchema),
+  userMessage: Type.String({ minLength: 1 }),
+  phase: Type.String(),
 });
 
-const abilityScoresSchema = z.object({
-  strength: z.number().int().min(8).max(18),
-  dexterity: z.number().int().min(8).max(18),
-  constitution: z.number().int().min(8).max(18),
-  intelligence: z.number().int().min(8).max(18),
-  wisdom: z.number().int().min(8).max(18),
-  charisma: z.number().int().min(8).max(18),
+const abilityScoresSchema = Type.Object({
+  strength: Type.Integer({ minimum: 8, maximum: 18 }),
+  dexterity: Type.Integer({ minimum: 8, maximum: 18 }),
+  constitution: Type.Integer({ minimum: 8, maximum: 18 }),
+  intelligence: Type.Integer({ minimum: 8, maximum: 18 }),
+  wisdom: Type.Integer({ minimum: 8, maximum: 18 }),
+  charisma: Type.Integer({ minimum: 8, maximum: 18 }),
 });
 
-const characterJsonSchema = z.object({
-  name: z.string(),
-  race: z.string(),
-  class: z.string(),
-  level: z.number().int(),
+const characterJsonSchema = Type.Object({
+  name: Type.String(),
+  race: Type.String(),
+  class: Type.String(),
+  level: Type.Integer(),
   abilityScores: abilityScoresSchema,
-  appearanceDescription: z.string(),
-  background: z.string(),
-  alignment: z.string(),
-  personalityTraits: z.string(),
-  ideals: z.string(),
-  bonds: z.string(),
-  flaws: z.string(),
+  appearanceDescription: Type.String(),
+  background: Type.String(),
+  alignment: Type.String(),
+  personalityTraits: Type.String(),
+  ideals: Type.String(),
+  bonds: Type.String(),
+  flaws: Type.String(),
 });
 
-/**
- * D&D 2024 Dungeon Master persona for character creation.
- * Guides the player through a natural conversation to create their character.
- */
 const DM_SYSTEM_PROMPT = [
   'You are a Dungeon Master guiding a player through character creation using the D&D 2024 (5.5e) ruleset.',
   '',
@@ -95,96 +87,88 @@ const DM_SYSTEM_PROMPT = [
   '{ "reply": "DM question", "complete": false }',
 ].join('\n');
 
-/**
- * Callable: promptCharacterCreation
- *
- * Guides a player through D&D 2024 character creation via AI conversation.
- * Called by the game client via Firebase REST API.
- */
-export default onCall<CallableFunctions, 'promptCharacterCreation'>(async (request) => {
-  logger.debug('promptCharacterCreation', { phase: request.data?.phase });
+export default onCall<CallableFunctions, 'promptCharacterCreation'>(
+  async (request) => {
+    logger.debug('promptCharacterCreation', { phase: request.data?.phase });
 
-  // Parse and validate input
-  const parsed = characterCreationInputSchema.safeParse(request.data);
-  if (!parsed.success) {
-    logger.warn('promptCharacterCreation: invalid input', { errors: parsed.error.issues });
-    return {
-      reply: 'Invalid request. Please try again.',
-      complete: false,
-    };
-  }
+    // Validate input — basic structural check
+    const input = request.data;
+    if (!input || typeof input !== 'object') {
+      return { reply: 'Invalid request. Please try again.', complete: false };
+    }
 
-  const { messages, userMessage, phase } = parsed.data;
+    const userMessage = typeof input.userMessage === 'string' ? input.userMessage : '';
+    const phase = typeof input.phase === 'string' ? input.phase : '';
 
-  // Build conversation context (last 15 messages for context window management)
-  const recentMessages = messages.slice(-15);
-  const chatMessages = recentMessages.map((m) => ({
-    role: m.role === 'dm' ? ('assistant' as const) : ('user' as const),
-    content: m.text,
-  }));
+    if (!userMessage) {
+      logger.warn('promptCharacterCreation: invalid input — missing userMessage');
+      return { reply: 'Invalid request. Please try again.', complete: false };
+    }
 
-  try {
-    const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
-    const aiService = createAiService({ provider });
+    // Build conversation context (last 15 messages)
+    const rawMessages = Array.isArray(input.messages) ? input.messages : [];
+    const recentMessages = rawMessages.slice(-15);
+    const chatMessages = recentMessages.map((m: Record<string, unknown>) => ({
+      role: (m.role === 'dm' ? 'assistant' : 'user') as 'assistant' | 'user',
+      content: String(m.text ?? ''),
+    }));
 
-    const response = await aiService.generateChat([
-      { role: 'system', content: DM_SYSTEM_PROMPT },
-      ...chatMessages,
-      { role: 'user', content: userMessage },
-    ]);
+    try {
+      const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
+      const aiService = createAiService({ provider });
 
-    const replyText = response.text || 'Hmm, I seem to be at a loss for words. Let me gather my thoughts...';
-
-    // Check if the response signals completion
-    const isComplete = replyText.includes('YOUR CHARACTER IS READY');
-
-    if (isComplete) {
-      // Attempt to extract character JSON by asking the AI to output structured data
-      const extractionResponse = await aiService.generateChat([
+      const response = await aiService.generateChat([
         { role: 'system', content: DM_SYSTEM_PROMPT },
         ...chatMessages,
         { role: 'user', content: userMessage },
-        { role: 'assistant', content: replyText },
-        {
-          role: 'user',
-          content:
-            'Based on the conversation above, output ONLY a valid JSON object with the character data. Do not include any other text. The JSON must have: name, race, class, level, abilityScores (strength, dexterity, constitution, intelligence, wisdom, charisma all as integers), appearanceDescription, background, alignment, personalityTraits, ideals, bonds, flaws.',
-        },
       ]);
 
-      try {
-        // Extract JSON from the response
-        const jsonMatch = extractionResponse.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const characterJson = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-          const validated = characterJsonSchema.safeParse(characterJson);
+      const replyText = response.text || 'Hmm, I seem to be at a loss for words...';
+      const isComplete = replyText.includes('YOUR CHARACTER IS READY');
 
-          if (validated.success) {
+      if (isComplete) {
+        const extractionResponse = await aiService.generateChat([
+          { role: 'system', content: DM_SYSTEM_PROMPT },
+          ...chatMessages,
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: replyText },
+          {
+            role: 'user',
+            content:
+              'Based on the conversation above, output ONLY a valid JSON object with the character data.',
+          },
+        ]);
+
+        try {
+          const jsonMatch = extractionResponse.text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const characterJson = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
             return {
               reply: replyText,
               complete: true,
-              characterJson: validated.data,
+              characterJson,
             };
           }
+        } catch {
+          logger.warn('promptCharacterCreation: failed to parse character JSON');
         }
-      } catch {
-        logger.warn('promptCharacterCreation: failed to parse character JSON');
       }
-    }
 
-    return {
-      reply: replyText,
-      complete: false,
-    };
-  } catch (error) {
-    logger.error('promptCharacterCreation: AI service error', { error });
-    return {
-      reply: 'The mystical forces are clouded... Please try again in a moment.',
-      complete: false,
-    };
-  }
-}, {
-  region: 'europe-west1',
-  memory: '256MiB',
-  timeoutSeconds: 60,
-});
+      return {
+        reply: replyText,
+        complete: false,
+      };
+    } catch (error) {
+      logger.error('promptCharacterCreation: AI service error', { error });
+      return {
+        reply: 'The mystical forces are clouded... Please try again in a moment.',
+        complete: false,
+      };
+    }
+  },
+  {
+    region: 'europe-west1',
+    memory: '256MiB',
+    timeoutSeconds: 60,
+  },
+);

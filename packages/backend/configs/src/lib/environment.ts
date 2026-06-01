@@ -1,78 +1,51 @@
-// biome-ignore-all lint/style/useNamingConvention: mapped type index signature
 // packages/backend/configs/src/lib/environment.ts
 import process from 'node:process';
 import { MODE_PROJECT_MAP } from '@aikami/constants';
-import { AppIdSchema } from '@aikami/schemas';
 import type { Mode } from '@aikami/types';
 import { isEmptyObject, toAppError, toMode } from '@aikami/utils';
 // We need dotenv for firebase functions
 import { config } from 'dotenv';
-import { z } from 'zod';
 // biome-ignore lint/suspicious/noTsIgnore: See explanation below, pwa gets wrong type error saying $env/static/private is not defined but it is not that deep
 // @ts-ignore We need to use this for local debugging of sveltekit apps since it only has access to process.env when you build the app
 import * as env from '$env/static/private';
 
-// ── Zod Schema ────────────────────────────────────────────────
+// ── Env Type ──────────────────────────────────────────────────
 
 /**
- * Zod schema for backend environment variables.
+ * Backend environment variables type.
  * All keys are optional by default — the reading layer validates
  * presence at call sites via the type system.
  */
-export const BackendEnvSchema = z
-  .object({
-    // Core app identity — optional in shared schema. Required at call site via
-    // requireEnv for standalone backend apps (functions).
-    // Optional when backend modules are imported from a SvelteKit SSR context
-    // (pwa/admin) where these are unavailable during build.
-    APP_ID: AppIdSchema.optional(),
-    MODE: z.string().optional(),
-
-    // Required (will throw if missing when accessed without fallback)
-    GCP_CLIENT_ID: z.string().optional(),
-    GCP_CLIENT_SECRET: z.string().optional(),
-    PARSE_LEVEL: z.enum(['off', 'safe', 'on']).optional(),
-    NODE_ENV: z.string().optional(),
-    K_SERVICE: z.string().optional(),
-    PWA_URL: z.string().optional(),
-
-    // Firebase & GCP
-    FIREBASE_SERVICE_ACCOUNT: z.string().optional(),
-    FIRESTORE_EMULATOR_HOST: z.string().optional(),
-    FIREBASE_AUTH_EMULATOR_HOST: z.string().optional(),
-    GCP_PROJECT_ID: z.string().optional(),
-
-    // Auth
-    GMAIL_CLIENT_ID: z.string().optional(),
-    GMAIL_CLIENT_SECRET: z.string().optional(),
-
-    // Logging
-    LOG_LEVEL: z.string().optional(),
-    LOG_PERSIST_LEVEL: z.string().optional(),
-    FIRESTACK_FUNCTION_NAME: z.string().optional(),
-    GA4_PROPERTY_ID: z.string().optional(),
-
-    // External services — required at call site via requireEnv, optional in shared schema
-    // because build contexts may not have these set.
-    VM_CONTROLLER_URL: z.string().optional(),
-    VM_CONTROLLER_API_KEY: z.string().optional(),
-    EMAIL_SERVICE_URL: z.string().optional(),
-    EMAIL_SERVICE_API_KEY: z.string().optional(),
-
-    // LLM provider — deepseek | anthropic | stub
-    LLM_PROVIDER: z.string().optional(),
-    DEEPSEEK_API_KEY: z.string().optional(),
-    DEEPSEEK_BASE_URL: z.string().optional(),
-    DEEPSEEK_MODEL: z.string().optional(),
-    ANTHROPIC_API_KEY: z.string().optional(),
-
-    // Misc
-    VITE_MODE: z.string().optional(),
-  })
-  .passthrough();
-
-/** Infer the backend env type from the schema. */
-export type BackendEnv = z.infer<typeof BackendEnvSchema>;
+export type BackendEnv = {
+  readonly APP_ID?: string;
+  readonly MODE?: string;
+  readonly GCP_CLIENT_ID?: string;
+  readonly GCP_CLIENT_SECRET?: string;
+  readonly PARSE_LEVEL?: 'off' | 'safe' | 'on';
+  readonly NODE_ENV?: string;
+  readonly K_SERVICE?: string;
+  readonly PWA_URL?: string;
+  readonly FIREBASE_SERVICE_ACCOUNT?: string;
+  readonly FIRESTORE_EMULATOR_HOST?: string;
+  readonly FIREBASE_AUTH_EMULATOR_HOST?: string;
+  readonly GCP_PROJECT_ID?: string;
+  readonly GMAIL_CLIENT_ID?: string;
+  readonly GMAIL_CLIENT_SECRET?: string;
+  readonly LOG_LEVEL?: string;
+  readonly LOG_PERSIST_LEVEL?: string;
+  readonly FIRESTACK_FUNCTION_NAME?: string;
+  readonly GA4_PROPERTY_ID?: string;
+  readonly VM_CONTROLLER_URL?: string;
+  readonly VM_CONTROLLER_API_KEY?: string;
+  readonly EMAIL_SERVICE_URL?: string;
+  readonly EMAIL_SERVICE_API_KEY?: string;
+  readonly LLM_PROVIDER?: string;
+  readonly DEEPSEEK_API_KEY?: string;
+  readonly DEEPSEEK_BASE_URL?: string;
+  readonly DEEPSEEK_MODEL?: string;
+  readonly ANTHROPIC_API_KEY?: string;
+  readonly VITE_MODE?: string;
+};
 
 // ── Multi-source reading ──────────────────────────────────────
 
@@ -84,7 +57,7 @@ let parsedDotEnv: Record<string, string | undefined> | undefined;
 
 /**
  * Reads a single key from the 3 env sources (process.env → SvelteKit → dotenv).
- * Does NOT validate against the Zod schema — returns the raw string.
+ * Does NOT validate against the TypeBox schema — returns the raw string.
  */
 const readRawEnvValue = (key: string): string | undefined => {
   // 1. process.env — runtime (always checked, fastest)
@@ -137,27 +110,51 @@ const readRawEnvValue = (key: string): string | undefined => {
 
 let _backendEnv: BackendEnv | undefined;
 
+const BACKEND_ENV_KEYS: (keyof BackendEnv)[] = [
+  'APP_ID',
+  'MODE',
+  'GCP_CLIENT_ID',
+  'GCP_CLIENT_SECRET',
+  'PARSE_LEVEL',
+  'NODE_ENV',
+  'K_SERVICE',
+  'PWA_URL',
+  'FIREBASE_SERVICE_ACCOUNT',
+  'FIRESTORE_EMULATOR_HOST',
+  'FIREBASE_AUTH_EMULATOR_HOST',
+  'GCP_PROJECT_ID',
+  'GMAIL_CLIENT_ID',
+  'GMAIL_CLIENT_SECRET',
+  'LOG_LEVEL',
+  'LOG_PERSIST_LEVEL',
+  'FIRESTACK_FUNCTION_NAME',
+  'GA4_PROPERTY_ID',
+  'VM_CONTROLLER_URL',
+  'VM_CONTROLLER_API_KEY',
+  'EMAIL_SERVICE_URL',
+  'EMAIL_SERVICE_API_KEY',
+  'LLM_PROVIDER',
+  'DEEPSEEK_API_KEY',
+  'DEEPSEEK_BASE_URL',
+  'DEEPSEEK_MODEL',
+  'ANTHROPIC_API_KEY',
+  'VITE_MODE',
+];
+
 /**
- * Builds the backend env object by reading all schema-known keys
- * from the 3 env sources, then validates them against the Zod schema.
- * Fallback values are used for keys not found in any source.
+ * Builds the backend env object by reading all known keys
+ * from the 3 env sources.
  */
 const buildEnv = (): BackendEnv => {
-  const raw: Record<string, string | undefined> = {};
-  for (const key of Object.keys(BackendEnvSchema.shape)) {
-    raw[key] = readRawEnvValue(key);
+  const raw: BackendEnv = {};
+  for (const key of BACKEND_ENV_KEYS) {
+    const value = readRawEnvValue(key);
+    if (value !== undefined) {
+      (raw as Record<string, string | undefined>)[key] = value;
+    }
   }
 
-  const result = BackendEnvSchema.safeParse(raw);
-
-  if (!result.success) {
-    throw toAppError({
-      errorType: 'internal',
-      errorMessage: `Backend env validation failed: ${result.error.issues[0].message}`,
-    });
-  }
-
-  return Object.freeze(result.data);
+  return Object.freeze(raw);
 };
 
 /**

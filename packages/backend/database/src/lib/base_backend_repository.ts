@@ -1,3 +1,4 @@
+// packages/backend/database/src/lib/base_backend_repository.ts
 import { getFirestore } from '@aikami/backend/configs/database';
 import { backendEnv } from '@aikami/backend/configs/environment';
 import { documentId, serverTimestamp } from '@aikami/backend/configs/firestore';
@@ -16,70 +17,44 @@ import type {
   PartialWithFieldValue,
   Query,
 } from '@google-cloud/firestore';
-import type { z } from 'zod';
+import type Type from 'typebox';
 
 export type BackendRepositoryInterface<T extends RepositoryType> = BaseRepositoryInterface<T> & {
-  /**
-   * Deletes an array of documents based on a query.
-   * @param query The query to find documents to delete.
-   * @param shouldDelete An optional function to conditionally delete a document. Return true to delete.
-   */
   deleteDocumentsByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-    shouldDelete?: (document: z.infer<T['data']>) => Promise<boolean> | boolean,
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+    shouldDelete?: (document: Type.Static<T['data']>) => Promise<boolean> | boolean,
   ): Promise<void>;
 
-  /**
-   * Updates an array of documents based on a query.
-   * @param query The query to find documents to update.
-   * @param update A function that returns the partial data to update. Return undefined to skip the update.
-   * @param options Optional merge options.
-   */
   updateDocumentsByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
     update: (
-      document: z.infer<T['data']>,
+      document: Type.Static<T['data']>,
     ) =>
-      | Promise<Partial<z.infer<T['updateData']>> | undefined>
-      | Partial<z.infer<T['updateData']>>
+      | Promise<Partial<Type.Static<T['updateData']>> | undefined>
+      | Partial<Type.Static<T['updateData']>>
       | undefined,
     options?: { merge?: boolean },
   ): Promise<void>;
 
-  /**
-   * Updates a given array of document snapshots.
-   * @param documents The document snapshots to update.
-   * @param update A function that returns the partial data to update. Return undefined to skip the update.
-   * @param options Optional merge options.
-   */
   updateDocuments(
     documents: DocumentSnapshot[],
     update: (
-      document: z.infer<T['data']>,
+      document: Type.Static<T['data']>,
     ) =>
-      | Promise<Partial<z.infer<T['updateData']>> | undefined>
-      | Partial<z.infer<T['updateData']>>
+      | Promise<Partial<Type.Static<T['updateData']>> | undefined>
+      | Partial<Type.Static<T['updateData']>>
       | undefined,
     options?: { merge?: boolean },
   ): Promise<void>;
 
-  /**
-   * Retrieves documents based on a list of IDs.
-   * @param getCollectionPathArgument Argument for the collection path function.
-   * @param ids An array of document IDs to retrieve.
-   * @returns A promise that resolves to an array of document snapshots.
-   */
   getDocumentsBaseOnIds(
     getCollectionPathArgument: T['getCollectionPathArgument'],
     ids: string[],
   ): Promise<DocumentSnapshot[]>;
 
-  /**
-   * A utility function to construct a query filter array.
-   * @param filters The filters to apply.
-   * @returns An array of query filters.
-   */
-  getFilters(...filters: QueryFilter<z.infer<T['data']>>[]): QueryFilter<z.infer<T['data']>>[];
+  getFilters(
+    ...filters: QueryFilter<Type.Static<T['data']>>[]
+  ): QueryFilter<Type.Static<T['data']>>[];
 };
 
 export class BackendRepository<T extends RepositoryType>
@@ -97,9 +72,9 @@ export class BackendRepository<T extends RepositoryType>
 
   async getDocument(
     getDocumentPathArguments: T['getDocumentPathArgument'],
-  ): Promise<z.infer<T['data']> | undefined> {
+  ): Promise<Type.Static<T['data']> | undefined> {
     const documentReference =
-      await this.getDocumentReference<z.infer<T['data']>>(getDocumentPathArguments);
+      await this.getDocumentReference<Type.Static<T['data']>>(getDocumentPathArguments);
     const documentSnap = await documentReference.get();
     if (!documentSnap.exists) {
       return;
@@ -111,9 +86,9 @@ export class BackendRepository<T extends RepositoryType>
 
   async getDocumentsByCollection(
     getCollectionPathArgument: T['getCollectionPathArgument'],
-  ): Promise<z.infer<T['data']>[]> {
+  ): Promise<Type.Static<T['data']>[]> {
     const collectionReference =
-      await this.getCollectionReference<z.infer<T['data']>>(getCollectionPathArgument);
+      await this.getCollectionReference<Type.Static<T['data']>>(getCollectionPathArgument);
 
     const querySnapshot = await collectionReference.get();
     if (querySnapshot.empty) {
@@ -131,8 +106,8 @@ export class BackendRepository<T extends RepositoryType>
   }
 
   async getDocumentsByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-  ): Promise<z.infer<T['data']>[]> {
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+  ): Promise<Type.Static<T['data']>[]> {
     const queryReference = await this._getQuery(query);
     const querySnapshot = await queryReference.get();
     if (querySnapshot.empty) {
@@ -147,12 +122,12 @@ export class BackendRepository<T extends RepositoryType>
     getCollectionPathArgument,
   }: {
     getCollectionPathArgument: T['getCollectionPathArgument'];
-    createData: Omit<z.infer<T['createData']>, 'createdAt'>;
+    createData: Omit<Type.Static<T['createData']>, 'createdAt'>;
   }): Promise<string> {
     this.debug('addDocument', createData);
 
     const collectionReference =
-      await this.getCollectionReference<z.infer<T['createData']>>(getCollectionPathArgument);
+      await this.getCollectionReference<Type.Static<T['createData']>>(getCollectionPathArgument);
 
     const data = await this.parse('createData', {
       createdAt: serverTimestamp(),
@@ -169,7 +144,7 @@ export class BackendRepository<T extends RepositoryType>
     setData,
   }: {
     getDocumentPathArgument: T['getDocumentPathArgument'];
-    setData: Omit<z.infer<T['createData']>, 'createdAt'>;
+    setData: Omit<Type.Static<T['createData']>, 'createdAt'>;
     options?: {
       merge?: boolean;
     };
@@ -209,8 +184,8 @@ export class BackendRepository<T extends RepositoryType>
   }
 
   async deleteDocumentsByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-    shouldDelete?: (document: z.infer<T['data']>) => Promise<boolean> | boolean,
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+    shouldDelete?: (document: Type.Static<T['data']>) => Promise<boolean> | boolean,
   ): Promise<void> {
     const queryReference = await this._getQuery(query);
     const querySnapshot = await queryReference.get();
@@ -251,9 +226,9 @@ export class BackendRepository<T extends RepositoryType>
 
   async getDocumentReference<
     Document extends
-      | z.infer<T['data']>
-      | z.infer<T['createData']>
-      | Partial<z.infer<T['updateData']>>,
+      | Type.Static<T['data']>
+      | Type.Static<T['createData']>
+      | Partial<Type.Static<T['updateData']>>,
   >(documentArgument: T['getDocumentPathArgument']): Promise<DocumentReference<Document>> {
     const database = await this._getDatabase();
 
@@ -266,17 +241,13 @@ export class BackendRepository<T extends RepositoryType>
     updateData,
   }: {
     getDocumentPathArgument: T['getDocumentPathArgument'];
-    // updateData: FirestoreUpdateData<Partial<z.infer<T['updateData']>>>;
-    updateData: Omit<Partial<z.infer<T['updateData']>>, 'updatedAt'>;
+    updateData: Omit<Partial<Type.Static<T['updateData']>>, 'updatedAt'>;
     options?: {
       merge?: boolean;
     };
   }): Promise<void> {
-    // Change the type argument for getDocumentReference to the main document model
     const documentReference =
-      await this.getDocumentReference<
-        z.infer<T['data']> // Changed from Partial<z.infer<T["updateData"]>>
-      >(getDocumentPathArgument);
+      await this.getDocumentReference<Type.Static<T['data']>>(getDocumentPathArgument);
 
     const data = await this.parse('updateData', {
       updatedAt: serverTimestamp(),
@@ -284,22 +255,17 @@ export class BackendRepository<T extends RepositoryType>
     });
 
     if (options?.merge) {
-      // For set with merge, data (z.infer<T["updateData"]>) should be assignable
-      // to Partial<z.infer<T["data"]>> which is expected by documentReference.set()
-      // Cast 'data' to what .set with merge expects: PartialWithFieldValue<FullModel>
-      // This assumes that z.infer<T["updateData"]> is structurally compatible
-      // as a partial update for z.infer<T["data"]>.
-      await documentReference.set(data as PartialWithFieldValue<z.infer<T['data']>>, {
+      await documentReference.set(data as PartialWithFieldValue<Type.Static<T['data']>>, {
         merge: true,
       });
     } else {
-      // For update, data (z.infer<T["updateData"]>) should be assignable
-      // to UpdateData<z.infer<T["data"]>> which is expected by documentReference.update()
-      await documentReference.update(data); // Removed the problematic cast
+      await documentReference.update(data);
     }
   }
 
-  async getCollectionReference<Document extends z.infer<T['data']> | z.infer<T['createData']>>(
+  async getCollectionReference<
+    Document extends Type.Static<T['data']> | Type.Static<T['createData']>,
+  >(
     getCollectionPathArgument: T['getCollectionPathArgument'],
   ): Promise<CollectionReference<Document>> {
     const database = await this._getDatabase();
@@ -309,12 +275,12 @@ export class BackendRepository<T extends RepositoryType>
     ) as CollectionReference<Document>;
   }
   async updateDocumentsByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
     update: (
-      document: z.infer<T['data']>,
+      document: Type.Static<T['data']>,
     ) =>
-      | Promise<Partial<z.infer<T['updateData']>> | undefined>
-      | Partial<z.infer<T['updateData']>>
+      | Promise<Partial<Type.Static<T['updateData']>> | undefined>
+      | Partial<Type.Static<T['updateData']>>
       | undefined,
     options?: { merge?: boolean },
   ): Promise<void> {
@@ -333,10 +299,10 @@ export class BackendRepository<T extends RepositoryType>
   async updateDocuments(
     documents: DocumentSnapshot[],
     update: (
-      document: z.infer<T['data']>,
+      document: Type.Static<T['data']>,
     ) =>
-      | Promise<Partial<z.infer<T['updateData']>> | undefined>
-      | Partial<z.infer<T['updateData']>>
+      | Promise<Partial<Type.Static<T['updateData']>> | undefined>
+      | Partial<Type.Static<T['updateData']>>
       | undefined,
     options?: { merge?: boolean },
   ) {
@@ -405,21 +371,15 @@ export class BackendRepository<T extends RepositoryType>
     return allDocs;
   }
 
-  getFilters(...filters: QueryFilter<z.infer<T['data']>>[]): QueryFilter<z.infer<T['data']>>[] {
+  getFilters(
+    ...filters: QueryFilter<Type.Static<T['data']>>[]
+  ): QueryFilter<Type.Static<T['data']>>[] {
     return filters;
   }
 
-  /**
-   * NB: You cannot order your query by any field included in an equality (=)
-   * or in clause.
-   * https://firebase.google.com/docs/firestore/query-data/order-limit-data#limitations
-   *
-   * @param options - Options
-   * @returns Query
-   */
   private async _getQuery(
-    options: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-  ): Promise<Query<z.infer<T['data']>>> {
+    options: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+  ): Promise<Query<Type.Static<T['data']>>> {
     const {
       collectionGroupName,
       filters,
@@ -433,7 +393,7 @@ export class BackendRepository<T extends RepositoryType>
     let query = (collectionGroupName
       ? database.collectionGroup(collectionGroupName)
       : database.collection(this.getCollectionPath(getCollectionPathArgument))) as unknown as Query<
-      z.infer<T['data']>
+      Type.Static<T['data']>
     >;
 
     if (filters) {
@@ -461,7 +421,6 @@ export class BackendRepository<T extends RepositoryType>
       return BackendRepository._database;
     }
     await Promise.resolve();
-    // const { database } = await import('@aikami/backend/configs/database');
     BackendRepository._database = getFirestore();
     return BackendRepository._database!;
   }

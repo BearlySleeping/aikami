@@ -8,7 +8,7 @@
     "astro": "astro",
     "lint": "biome lint .",
     "format": "biome format .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "fix": "biome check --write src"
   },
   "devDependencies": {
@@ -17,6 +17,7 @@
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "@astrojs/starlight": "^0.39.2"
   }
 }

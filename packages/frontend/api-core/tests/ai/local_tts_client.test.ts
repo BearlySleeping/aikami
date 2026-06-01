@@ -30,7 +30,9 @@ function mockSpeechSynthesis(voices: string[] = ['Google US English']): void {
     pitch = 1;
     volume = 1;
     voice: unknown = null;
-    constructor(text: string) { this.text = text; }
+    constructor(text: string) {
+      this.text = text;
+    }
   };
 }
 
@@ -109,9 +111,9 @@ describe('LocalTtsClient', () => {
 
     const client = new LocalTtsClient();
 
-    expect(
-      client.generateContentDescription('test'),
-    ).rejects.toThrow('does not support content description');
+    expect(client.generateContentDescription('test')).rejects.toThrow(
+      'does not support content description',
+    );
   });
 
   it('generateImage throws', async () => {
@@ -119,9 +121,7 @@ describe('LocalTtsClient', () => {
 
     const client = new LocalTtsClient();
 
-    expect(
-      client.generateImage('test'),
-    ).rejects.toThrow('does not support image generation');
+    expect(client.generateImage('test')).rejects.toThrow('does not support image generation');
   });
 
   it('generateStructured throws', async () => {
@@ -131,9 +131,9 @@ describe('LocalTtsClient', () => {
 
     const { z } = await import('zod');
 
-    expect(
-      client.generateStructured('test', z.object({})),
-    ).rejects.toThrow('does not support structured data');
+    expect(client.generateStructured('test', z.object({}))).rejects.toThrow(
+      'does not support structured data',
+    );
   });
 
   // -----------------------------------------------------------------------

@@ -1,33 +1,27 @@
-// deno-lint-ignore-file no-explicit-any
-import type { ZodObject, ZodOptional, ZodUnion } from "zod";
-import { FieldValueSchema } from "./fields.ts";
+// packages/shared/schemas/src/lib/utils.ts
+import Type, { type TSchema } from 'typebox';
+import { FieldValueSchema } from './fields.ts';
 
 /**
- * Creates a shape object from a Zod schema where optional fields are made "deletable"
+ * Creates a shape object from a TypeBox schema where optional fields are made "deletable"
  * by allowing them to be a `FieldValue` (e.g., for Firestore's `FieldValue.delete()`).
  *
- * This returns a type-safe object with specific keys, avoiding type inference issues with `z.extend`.
+ * In TypeBox, optionality is tracked via the Object's `required` array rather than
+ * per-property flags. This function uses `schema.required` to identify optional fields.
  *
- * @param schema The input Zod object schema.
- * @returns A new shape object with optional fields modified, for use with `.extend()`.
+ * @param schema - The input TypeBox object schema (or Intersect/Composite result).
+ * @returns A new properties object with optional fields modified, for use with `Type.Object()`.
  */
-export function getDeletableFields<T extends ZodObject<any>>(
-	schema: T,
-): {
-	[K in keyof T["shape"] as T["shape"][K] extends ZodOptional<any>
-		? K
-		: never]: ZodUnion<[T["shape"][K], typeof FieldValueSchema]>;
-} {
-	const shape = schema.shape;
-	const deletableShape: any = {};
+export const getDeletableFields = (schema: Record<string, unknown>): Record<string, TSchema> => {
+  const properties = (schema as { properties?: Record<string, TSchema> }).properties ?? {};
+  const requiredSet = new Set((schema as { required?: string[] }).required ?? []);
+  const deletableProperties: Record<string, TSchema> = {};
 
-	for (const key in shape) {
-		const field = shape[key];
+  for (const key in properties) {
+    if (!requiredSet.has(key)) {
+      deletableProperties[key] = Type.Union([properties[key]!, FieldValueSchema]);
+    }
+  }
 
-		if (field.isOptional()) {
-			deletableShape[key] = field.or(FieldValueSchema);
-		}
-	}
-
-	return deletableShape as any;
-}
+  return deletableProperties;
+};

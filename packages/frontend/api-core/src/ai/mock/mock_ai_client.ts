@@ -1,6 +1,6 @@
 // packages/frontend/api-core/src/ai/mock/mock_ai_client.ts
 
-import type { z } from 'zod';
+import type { TSchema } from 'typebox';
 
 import type { FrontendAiInterface } from '../frontend_ai_interface.ts';
 import type {
@@ -145,7 +145,10 @@ class MockAiClient implements FrontendAiInterface {
   // FrontendAiInterface Implementation
   // -----------------------------------------------------------------------
 
-  async generateDialogue(context: DialogueContext, options?: DialogueOptions): Promise<DialogueResponse> {
+  async generateDialogue(
+    context: DialogueContext,
+    options?: DialogueOptions,
+  ): Promise<DialogueResponse> {
     this.recordCall('generateDialogue', [context, options]);
     await this.simulateLatency();
     this.checkFailMode();
@@ -164,7 +167,10 @@ class MockAiClient implements FrontendAiInterface {
     };
   }
 
-  async generateContentDescription(prompt: string, options?: ContentDescriptionOptions): Promise<string> {
+  async generateContentDescription(
+    prompt: string,
+    options?: ContentDescriptionOptions,
+  ): Promise<string> {
     this.recordCall('generateContentDescription', [prompt, options]);
     await this.simulateLatency();
     this.checkFailMode();
@@ -203,16 +209,12 @@ class MockAiClient implements FrontendAiInterface {
     };
   }
 
-  async generateStructured<T>(
-    instruction: string,
-    schema: z.ZodSchema<T>,
-    context?: string,
-  ): Promise<T> {
+  async generateStructured<T>(instruction: string, schema: TSchema, context?: string): Promise<T> {
     this.recordCall('generateStructured', [instruction, schema, context]);
     await this.simulateLatency();
     this.checkFailMode();
 
-    const schemaName = schema.description ?? instruction;
+    const schemaName = String((schema as Record<string, unknown>).description) || instruction;
 
     // Check seeded responses
     for (const [pattern, data] of this.structuredSeeds) {
@@ -224,7 +226,8 @@ class MockAiClient implements FrontendAiInterface {
     // Try to parse a default from the schema
     // Wrap in try/catch since some schemas require non-optional fields
     try {
-      return schema.parse({}) as T;
+      // TypeBox v1.x: no built-in parse — returning empty object
+      return {} as T;
     } catch {
       // Fallback: return a minimal stub object with string/number defaults
       return {} as T;
@@ -272,5 +275,5 @@ class MockAiClient implements FrontendAiInterface {
   }
 }
 
-export { MockAiClient };
 export type { CallRecord, FailMode };
+export { MockAiClient };

@@ -4,7 +4,7 @@
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "fix": "biome check --write ."
   },
   "dependencies": {
@@ -12,6 +12,6 @@
     "@aikami/schemas": "workspace:*",
     "firebase": "12.14.0",
     "firebase-functions": "7.2.5",
-    "zod": "4.4.3"
+    "typebox": "^1.1.39"
   }
 }

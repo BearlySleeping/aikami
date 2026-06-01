@@ -1,41 +1,50 @@
 // packages/shared/schemas/src/lib/api/game.ts
-import { z } from 'zod';
+import Type from 'typebox';
 
-export const ActiveSessionSchema = z.object({
-  id: z.string(),
-  worldId: z.string(),
-  uid: z.string(),
-  characterIds: z.string().array().default([]),
-  npcIds: z.string().array().default([]),
-  currentLocationId: z.string().optional(),
-  startedAt: z.string().datetime(),
-  lastActiveAt: z.string().datetime(),
-  isActive: z.boolean().default(true),
+export const ActiveSessionSchema = Type.Object({
+  id: Type.String(),
+  worldId: Type.String(),
+  uid: Type.String(),
+  characterIds: Type.Array(Type.String(), { default: [] }),
+  npcIds: Type.Array(Type.String(), { default: [] }),
+  currentLocationId: Type.Optional(Type.String()),
+  startedAt: Type.String({ format: 'date-time' }),
+  lastActiveAt: Type.String({ format: 'date-time' }),
+  isActive: Type.Boolean({ default: true }),
 });
 
-export const SceneImageSchema = z.object({
-  id: z.string(),
-  worldId: z.string(),
-  locationId: z.string(),
-  imageUrl: z.string().url(),
-  thumbnailUrl: z.string().url().optional(),
-  provider: z.enum(['dalle', 'stable-diffusion', 'comfyui']),
-  prompt: z.string(),
-  seed: z.number().optional(),
-  width: z.number(),
-  height: z.number(),
-  createdAt: z.string().datetime(),
-  isActive: z.boolean().default(true),
+export const SceneImageSchema = Type.Object({
+  id: Type.String(),
+  worldId: Type.String(),
+  locationId: Type.String(),
+  imageUrl: Type.String({ format: 'uri' }),
+  thumbnailUrl: Type.Optional(Type.String({ format: 'uri' })),
+  provider: Type.Union([
+    Type.Literal('dalle'),
+    Type.Literal('stable-diffusion'),
+    Type.Literal('comfyui'),
+  ]),
+  prompt: Type.String(),
+  seed: Type.Optional(Type.Number()),
+  width: Type.Number(),
+  height: Type.Number(),
+  createdAt: Type.String({ format: 'date-time' }),
+  isActive: Type.Boolean({ default: true }),
 });
 
-export const GeneratedAudioSchema = z.object({
-  id: z.string(),
-  messageId: z.string().optional(),
-  characterId: z.string().optional(),
-  audioUrl: z.string().url(),
-  provider: z.enum(['elevenlabs', 'silero', 'coqui', 'edge']),
-  voiceId: z.string(),
-  duration: z.number(),
-  text: z.string(),
-  createdAt: z.string().datetime(),
+export const GeneratedAudioSchema = Type.Object({
+  id: Type.String(),
+  messageId: Type.Optional(Type.String()),
+  characterId: Type.Optional(Type.String()),
+  audioUrl: Type.String({ format: 'uri' }),
+  provider: Type.Union([
+    Type.Literal('elevenlabs'),
+    Type.Literal('silero'),
+    Type.Literal('coqui'),
+    Type.Literal('edge'),
+  ]),
+  voiceId: Type.String(),
+  duration: Type.Number(),
+  text: Type.String(),
+  createdAt: Type.String({ format: 'date-time' }),
 });

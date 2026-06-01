@@ -1,8 +1,8 @@
 // packages/frontend/api-core/src/api/game_api_client.ts
 
+import { ApiError } from './errors.ts';
 import type { GameApiClientInterface } from './game_api_client_interface.ts';
 import type { GameApiClientConfig, RequestOptions } from './types.ts';
-import { ApiError } from './errors.ts';
 
 /**
  * Default implementation of {@link GameApiClientInterface}.
@@ -123,10 +123,7 @@ class GameApiClient implements GameApiClientInterface {
 
         // Error response — map to ApiError
         const errorText = await response.text().catch(() => '');
-        lastError = ApiError.fromStatus(
-          response.status,
-          errorText || `HTTP ${response.status}`,
-        );
+        lastError = ApiError.fromStatus(response.status, errorText || `HTTP ${response.status}`);
 
         // Only retry on transient statuses (5xx, 408, 429)
         if (!isRetryable(response.status)) {

@@ -6,23 +6,23 @@
 
 // ECS components
 
+export type { AppearanceData } from './components/appearance.ts';
 export {
-  Appearance,
   APPEARANCE_LAYER_COUNT,
+  Appearance,
   EXPRESSION_MAP,
   FACE_LAYER_INDEX,
   getAppearanceLayers,
   registerAppearanceObservers,
 } from './components/appearance.ts';
-export type { AppearanceData } from './components/appearance.ts';
-export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { NPCDialogData } from './components/npc_dialog.ts';
-export { Position, registerPositionObservers } from './components/position.ts';
+export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { PositionData } from './components/position.ts';
-export { registerSpriteObservers, Sprite } from './components/sprite.ts';
+export { Position, registerPositionObservers } from './components/position.ts';
 export type { SpriteData } from './components/sprite.ts';
-export { registerVelocityObservers, Velocity } from './components/velocity.ts';
+export { registerSpriteObservers, Sprite } from './components/sprite.ts';
 export type { VelocityData } from './components/velocity.ts';
+export { registerVelocityObservers, Velocity } from './components/velocity.ts';
 
 // Memory config (buffer constants and allocator)
 export {
@@ -43,13 +43,19 @@ export { GameAiService } from './services/ai_service.ts';
 export type { ActionResult, GameState, NpcData, PlayerAction } from './services/api_service.ts';
 // Services
 export { GameApiService } from './services/api_service.ts';
+
 // Rendering
 
-export type { RenderEntry } from './systems/render_system.ts';
-export { dirtyCheckAppearance, invalidateComposedSprite, updateRender, updateRenderFromBuffer } from './systems/render_system.ts';
 export { SpriteComposer } from './rendering/sprite_composer.ts';
-export { TextureManager } from './rendering/texture_manager.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
+export { TextureManager } from './rendering/texture_manager.ts';
+export type { RenderEntry } from './systems/render_system.ts';
+export {
+  dirtyCheckAppearance,
+  invalidateComposedSprite,
+  updateRender,
+  updateRenderFromBuffer,
+} from './systems/render_system.ts';
 
 // Types (plain serializable — safe for UI consumption)
 export type {

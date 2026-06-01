@@ -90,10 +90,7 @@ export interface BaseDatabaseService {
    *
    * @returns An array of matching documents (empty array when none match).
    */
-  getDocuments<T = unknown>(
-    collection: string,
-    options?: QueryOptions,
-  ): Promise<T[]>;
+  getDocuments<T = unknown>(collection: string, options?: QueryOptions): Promise<T[]>;
 
   /**
    * Insert a new document into a collection.  The engine assigns the id.
@@ -110,11 +107,7 @@ export interface BaseDatabaseService {
   /**
    * Merge partial data into an existing document.
    */
-  updateDocument<T = unknown>(
-    path: string,
-    id: string,
-    data: Partial<T>,
-  ): Promise<void>;
+  updateDocument<T = unknown>(path: string, id: string, data: Partial<T>): Promise<void>;
 
   /**
    * Remove a document.
@@ -133,8 +126,5 @@ export interface BaseDatabaseService {
    * @param params  - Optional parameter bindings (GraphQL variables, SQL params, etc.).
    * @returns An array of result rows.
    */
-  runQuery<T = unknown>(
-    query: string,
-    params?: Record<string, unknown>,
-  ): Promise<T[]>;
+  runQuery<T = unknown>(query: string, params?: Record<string, unknown>): Promise<T[]>;
 }

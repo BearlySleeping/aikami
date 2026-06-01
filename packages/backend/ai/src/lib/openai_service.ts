@@ -9,7 +9,7 @@ import type {
   CompletionOptions,
   EmbeddingOptions,
 } from '@aikami/types';
-import type { z } from 'zod';
+import type { TSchema } from 'typebox';
 
 import { BaseAiService } from './base_ai_service.ts';
 import { AiServiceError } from './errors.ts';
@@ -135,7 +135,7 @@ export class OpenAiService extends BaseAiService {
   /** @inheritDoc */
   protected _extractStructuredJSONRaw = async <T>(
     prompt: string,
-    _schema: z.ZodSchema<T>,
+    _schema: TSchema,
     input: string,
   ): Promise<T> => {
     const client = this._getClient();

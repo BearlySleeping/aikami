@@ -33,16 +33,16 @@ type User @table {
 
   # Auth / profile fields
   displayName: String @col(name: "display_name")
-  email:        String @col(name: "email")
-  photoURL:     String @col(name: "photo_url")
-  phoneNumber:  String @col(name: "phone_number")
-  role:         String @col(name: "role")
+  email: String @col(name: "email")
+  photoURL: String @col(name: "photo_url")
+  phoneNumber: String @col(name: "phone_number")
+  role: String @col(name: "role")
 
   # Optional profile details
-  firstName:    String @col(name: "first_name")
-  lastName:     String @col(name: "last_name")
-  countryCode:  String @col(name: "country_code")
-  localeCode:   String @col(name: "locale_code")
+  firstName: String @col(name: "first_name")
+  lastName: String @col(name: "last_name")
+  countryCode: String @col(name: "country_code")
+  localeCode: String @col(name: "locale_code")
 
   # Connected Google accounts (stored as JSONB array of email strings).
   connectedEmails: Any @col(name: "connected_emails")
@@ -62,13 +62,13 @@ type User @table {
 # ---------------------------------------------------------------------------
 
 type Npc @table {
-  id:         String! @col(name: "id")
-  createdAt:  Date    @col(name: "created_at")
-  updatedAt:  Date    @col(name: "updated_at")
+  id: String! @col(name: "id")
+  createdAt: Date @col(name: "created_at")
+  updatedAt: Date @col(name: "updated_at")
 
-  name:        String @col(name: "name")
+  name: String @col(name: "name")
   description: String @col(name: "description")
-  avatarUrl:   String @col(name: "avatar_url")
+  avatarUrl: String @col(name: "avatar_url")
   personality: String @col(name: "personality")
   systemPrompt: String @col(name: "system_prompt")
 
@@ -90,13 +90,13 @@ type Npc @table {
 # ---------------------------------------------------------------------------
 
 type Persona @table {
-  id:         String! @col(name: "id")
-  createdAt:  Date    @col(name: "created_at")
-  updatedAt:  Date    @col(name: "updated_at")
+  id: String! @col(name: "id")
+  createdAt: Date @col(name: "created_at")
+  updatedAt: Date @col(name: "updated_at")
 
-  name:        String @col(name: "name")
+  name: String @col(name: "name")
   description: String @col(name: "description")
-  avatarUrl:   String @col(name: "avatar_url")
+  avatarUrl: String @col(name: "avatar_url")
 
   # Owner uid.
   uid: String @col(name: "uid")
@@ -110,16 +110,16 @@ type Persona @table {
 # ---------------------------------------------------------------------------
 
 type Chat @table {
-  id:         String! @col(name: "id")
-  createdAt:  Date    @col(name: "created_at")
-  updatedAt:  Date    @col(name: "updated_at")
+  id: String! @col(name: "id")
+  createdAt: Date @col(name: "created_at")
+  updatedAt: Date @col(name: "updated_at")
 
   # Owner uid (Firebase Auth).
   uid: String @col(name: "uid")
 
   # Associated NPC (denormalised for display).
-  npcId:        String @col(name: "npc_id")
-  npcName:      String @col(name: "npc_name")
+  npcId: String @col(name: "npc_id")
+  npcName: String @col(name: "npc_name")
   npcAvatarUrl: String @col(name: "npc_avatar_url")
 
   # Visibility (private / public).
@@ -127,7 +127,7 @@ type Chat @table {
 
   # Aggregate counters.
   messageCount: Int @col(name: "message_count")
-  affection:    Int @col(name: "affection")
+  affection: Int @col(name: "affection")
 
   # Timestamp of the last message.
   lastMessageAt: Date @col(name: "last_message_at")
@@ -146,27 +146,27 @@ type Chat @table {
 # ---------------------------------------------------------------------------
 
 type Message @table {
-  id:         String! @col(name: "id")
-  createdAt:  Date    @col(name: "created_at")
-  updatedAt:  Date    @col(name: "updated_at")
+  id: String! @col(name: "id")
+  createdAt: Date @col(name: "created_at")
+  updatedAt: Date @col(name: "updated_at")
 
   # Owning chat (foreign key into Chat.id).
   chatId: String! @col(name: "chat_id")
 
   # Message content.
-  text:   String @col(name: "text")
-  sender: String @col(name: "sender")   # "user" | "ai"
+  text: String @col(name: "text")
+  sender: String @col(name: "sender") # "user" | "ai"
 
   # Edit tracking.
-  editedAt: Date   @col(name: "edited_at")
-  editedBy: String @col(name: "edited_by")  # "user" | "ai"
+  editedAt: Date @col(name: "edited_at")
+  editedBy: String @col(name: "edited_by") # "user" | "ai"
 
   # If this message was regenerated, points to the original message id.
   regeneratedFrom: String @col(name: "regenerated_from")
 
   # Denormalised chat owner / visibility for security rules.
-  chatOwnerUid:    String @col(name: "chat_owner_uid")
-  chatVisibility:  String @col(name: "chat_visibility")
+  chatOwnerUid: String @col(name: "chat_owner_uid")
+  chatVisibility: String @col(name: "chat_visibility")
 
   # Attachments (JSONB array of { type, url, name, mimeType, size }).
   attachments: Any @col(name: "attachments")
@@ -180,9 +180,9 @@ type Message @table {
 # ---------------------------------------------------------------------------
 
 type Notification @table {
-  id:         String! @col(name: "id")
-  createdAt:  Date    @col(name: "created_at")
-  updatedAt:  Date    @col(name: "updated_at")
+  id: String! @col(name: "id")
+  createdAt: Date @col(name: "created_at")
+  updatedAt: Date @col(name: "updated_at")
 
   # Recipient uid.
   uid: String @col(name: "uid")
@@ -191,7 +191,7 @@ type Notification @table {
   type: String @col(name: "type")
 
   title: String @col(name: "title")
-  body:  String @col(name: "body")
+  body: String @col(name: "body")
 
   # Whether the notification has been read.
   isRead: Boolean @col(name: "is_read")
@@ -208,9 +208,9 @@ type Notification @table {
 # ---------------------------------------------------------------------------
 
 type Config @table {
-  id:         String! @col(name: "id")
-  createdAt:  Date    @col(name: "created_at")
-  updatedAt:  Date    @col(name: "updated_at")
+  id: String! @col(name: "id")
+  createdAt: Date @col(name: "created_at")
+  updatedAt: Date @col(name: "updated_at")
 
   # Configuration key (unique).
   key: String @col(name: "key")

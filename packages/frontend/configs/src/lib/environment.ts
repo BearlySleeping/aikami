@@ -4,51 +4,39 @@
 import { MODE_PROJECT_MAP } from '@aikami/constants';
 import { FrontendAppIdSchema, LogLevelSchema, ModeSchema } from '@aikami/schemas';
 import { toAppError } from '@aikami/utils';
-import { z } from 'zod';
-import { logger } from '$logger';
+import Type from 'typebox';
 
 export { EMULATOR_PORTS } from '@aikami/constants';
 
 /**
- * 1. MASTER SCHEMA
- * Note: SvelteKit requires 'VITE_' or 'PUBLIC_' prefixes for client-side access.
- * We'll stick to 'PUBLIC_' as per your convention.
+ * 1. MASTER SCHEMA (TypeBox — used for type inference only)
  */
-const masterSchema = z.object({
+const masterSchema = Type.Object({
   PUBLIC_APP_ID: FrontendAppIdSchema,
-  // Core Configuration — validated against shared mode schemas
   PUBLIC_MODE: ModeSchema,
-
-  // Log level validation using the shared LogLevelSchema
-  PUBLIC_LOG_LEVEL: LogLevelSchema.default('INFO'),
-
-  // Firebase client SDK config — set via .env files for all modes.
-  PUBLIC_FIREBASE_API_KEY: z.string(),
-  PUBLIC_FIREBASE_AUTH_DOMAIN: z.string(),
-  PUBLIC_FIREBASE_STORAGE_BUCKET: z.string(),
-  PUBLIC_FIREBASE_APP_ID: z.string(),
-  PUBLIC_FIREBASE_MESSAGING_SENDER_ID: z.string(),
-  PUBLIC_FIREBASE_MEASUREMENT_ID: z.string(),
-  PUBLIC_DISABLE_APP_CHECK: z.string().optional(),
-  PUBLIC_RECAPTCHA_SITE_KEY: z.string().optional(),
-  PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE: z.string().optional(),
-
-  // Feature flags & client config
-  PUBLIC_GMAIL_CLIENT_ID: z.string().optional(),
-  PUBLIC_EDGE_PROXY_URL: z.string().optional(),
-  PUBLIC_DEFAULT_COMPANY_ID: z.string().optional(),
-  PUBLIC_VAPID_KEY: z.string().optional(),
-  PUBLIC_PARSE_LEVEL: z.string().optional(),
-  PUBLIC_SITE_URL: z.string().optional(),
-  PUBLIC_APP_CHECK_DEBUG_TOKEN: z.string().optional(),
-  PUBLIC_LOG_PERSIST_LEVEL: z.string().optional(),
-
-  //
-  PUBLIC_PWA_URL: z.string().optional(),
+  PUBLIC_LOG_LEVEL: LogLevelSchema,
+  PUBLIC_FIREBASE_API_KEY: Type.String(),
+  PUBLIC_FIREBASE_AUTH_DOMAIN: Type.String(),
+  PUBLIC_FIREBASE_STORAGE_BUCKET: Type.String(),
+  PUBLIC_FIREBASE_APP_ID: Type.String(),
+  PUBLIC_FIREBASE_MESSAGING_SENDER_ID: Type.String(),
+  PUBLIC_FIREBASE_MEASUREMENT_ID: Type.String(),
+  PUBLIC_DISABLE_APP_CHECK: Type.Optional(Type.String()),
+  PUBLIC_RECAPTCHA_SITE_KEY: Type.Optional(Type.String()),
+  PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE: Type.Optional(Type.String()),
+  PUBLIC_GMAIL_CLIENT_ID: Type.Optional(Type.String()),
+  PUBLIC_EDGE_PROXY_URL: Type.Optional(Type.String()),
+  PUBLIC_DEFAULT_COMPANY_ID: Type.Optional(Type.String()),
+  PUBLIC_VAPID_KEY: Type.Optional(Type.String()),
+  PUBLIC_PARSE_LEVEL: Type.Optional(Type.String()),
+  PUBLIC_SITE_URL: Type.Optional(Type.String()),
+  PUBLIC_APP_CHECK_DEBUG_TOKEN: Type.Optional(Type.String()),
+  PUBLIC_LOG_PERSIST_LEVEL: Type.Optional(Type.String()),
+  PUBLIC_PWA_URL: Type.Optional(Type.String()),
 });
 
-type MasterEnv = z.infer<typeof masterSchema>;
-type AppID = z.infer<typeof FrontendAppIdSchema>;
+type MasterEnv = Type.Static<typeof masterSchema>;
+type AppID = Type.Static<typeof FrontendAppIdSchema>;
 
 const APP_REQUIREMENTS: Record<AppID, (keyof MasterEnv)[]> = {
   docs: [],
@@ -59,36 +47,61 @@ const APP_REQUIREMENTS: Record<AppID, (keyof MasterEnv)[]> = {
 
 /**
  * 2. THE VALIDATOR
- * We add a check for 'import.meta.env' existence to prevent
- * early-load crashes in weird test environments.
+ * Basic runtime check — TypeBox schemas define the shape but don't provide
+ * built-in validation in v1.x. We validate presence of required fields manually.
  */
 const validateEnv = (): MasterEnv => {
-  const envSource = import.meta.env;
+  const rawEnv = import.meta.env as unknown as Record<string, string | undefined>;
 
-  if (!envSource) {
+  if (!rawEnv) {
     throw toAppError({
       errorType: 'internal',
       errorMessage: 'Environment source (import.meta.env) is unavailable.',
     });
   }
 
-  const result = masterSchema.safeParse(envSource);
-
-  if (!result.success) {
-    // We log to console here because SSR errors can sometimes be swallowed
-    logger.error('❌ Env Validation Failed:', result.error.format());
-
+  // Basic check: ensure PUBLIC_APP_ID and PUBLIC_MODE are present
+  if (!rawEnv.PUBLIC_APP_ID || !rawEnv.PUBLIC_MODE) {
     throw toAppError({
       errorType: 'internal',
-      errorMessage: `Env Validation Failed: ${result.error.issues[0].message}`,
+      errorMessage: 'PUBLIC_APP_ID and PUBLIC_MODE are required.',
     });
   }
 
-  const env = result.data;
-  const appId = env.PUBLIC_APP_ID;
+  if (!rawEnv.PUBLIC_FIREBASE_API_KEY) {
+    throw toAppError({
+      errorType: 'internal',
+      errorMessage: 'PUBLIC_FIREBASE_API_KEY is required.',
+    });
+  }
 
-  // Enforce specific app requirements
-  const missing = APP_REQUIREMENTS[appId].filter((key) => !envSource[key]);
+  // Build typed env from source (cast raw string values to schema types)
+  const env: MasterEnv = {
+    PUBLIC_APP_ID: rawEnv.PUBLIC_APP_ID as MasterEnv['PUBLIC_APP_ID'],
+    PUBLIC_MODE: rawEnv.PUBLIC_MODE as MasterEnv['PUBLIC_MODE'],
+    PUBLIC_LOG_LEVEL: (rawEnv.PUBLIC_LOG_LEVEL ?? 'INFO') as MasterEnv['PUBLIC_LOG_LEVEL'],
+    PUBLIC_FIREBASE_API_KEY: rawEnv.PUBLIC_FIREBASE_API_KEY as string,
+    PUBLIC_FIREBASE_AUTH_DOMAIN: rawEnv.PUBLIC_FIREBASE_AUTH_DOMAIN as string,
+    PUBLIC_FIREBASE_STORAGE_BUCKET: rawEnv.PUBLIC_FIREBASE_STORAGE_BUCKET as string,
+    PUBLIC_FIREBASE_APP_ID: rawEnv.PUBLIC_FIREBASE_APP_ID as string,
+    PUBLIC_FIREBASE_MESSAGING_SENDER_ID: rawEnv.PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
+    PUBLIC_FIREBASE_MEASUREMENT_ID: rawEnv.PUBLIC_FIREBASE_MEASUREMENT_ID as string,
+    PUBLIC_DISABLE_APP_CHECK: rawEnv.PUBLIC_DISABLE_APP_CHECK,
+    PUBLIC_RECAPTCHA_SITE_KEY: rawEnv.PUBLIC_RECAPTCHA_SITE_KEY,
+    PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE: rawEnv.PUBLIC_ENABLE_FIRESTORE_OFFLINE_PERSISTENCE,
+    PUBLIC_GMAIL_CLIENT_ID: rawEnv.PUBLIC_GMAIL_CLIENT_ID,
+    PUBLIC_EDGE_PROXY_URL: rawEnv.PUBLIC_EDGE_PROXY_URL,
+    PUBLIC_DEFAULT_COMPANY_ID: rawEnv.PUBLIC_DEFAULT_COMPANY_ID,
+    PUBLIC_VAPID_KEY: rawEnv.PUBLIC_VAPID_KEY,
+    PUBLIC_PARSE_LEVEL: rawEnv.PUBLIC_PARSE_LEVEL,
+    PUBLIC_SITE_URL: rawEnv.PUBLIC_SITE_URL,
+    PUBLIC_APP_CHECK_DEBUG_TOKEN: rawEnv.PUBLIC_APP_CHECK_DEBUG_TOKEN,
+    PUBLIC_LOG_PERSIST_LEVEL: rawEnv.PUBLIC_LOG_PERSIST_LEVEL,
+    PUBLIC_PWA_URL: rawEnv.PUBLIC_PWA_URL,
+  };
+
+  const appId = env.PUBLIC_APP_ID as AppID;
+  const missing = APP_REQUIREMENTS[appId].filter((key) => !rawEnv[key]);
 
   if (missing.length > 0) {
     throw toAppError({
@@ -97,25 +110,20 @@ const validateEnv = (): MasterEnv => {
     });
   }
 
-  return Object.freeze(env);
+  return Object.freeze(env as MasterEnv);
 };
 
 /**
  * 3. EXPORTED SINGLETON
- * Because SvelteKit runs this file on both Server and Client,
- * this validation will run on your Node/Edge runtime AND your Browser.
  */
 export const publicEnv = validateEnv();
 
-/** * Helpers that reference the singleton
- */
 export const isEmulatorModePublic = () => publicEnv.PUBLIC_MODE === 'emulator';
 export const isDevelopmentModePublic = () => publicEnv.PUBLIC_MODE !== 'production';
 export const getPublicMode = () => publicEnv.PUBLIC_MODE;
 
 /**
  * The Firebase/GCP project ID for the current mode.
- * Derived from MODE_PROJECT_MAP — no need for a PUBLIC_FIREBASE_PROJECT_ID env var.
  */
 export const getProjectId = (): string => {
   const currentMode = publicEnv?.PUBLIC_MODE;
@@ -133,11 +141,6 @@ export const getProjectId = (): string => {
     errorType: 'internal',
     errorMessage:
       `[Configuration Error]: Missing or invalid project ID mapping for mode: "${currentMode}".\n\n` +
-      `👉 HOW TO FIX THIS:\n` +
-      `1. Ensure you have created the correct environment file (e.g., .env.${currentMode || 'local'} or .env.production).\n` +
-      `2. Verify that 'PUBLIC_MODE' is explicitly defined in that file.\n` +
-      `3. 'PUBLIC_MODE' must exactly match one of the keys in MODE_PROJECT_MAP.\n\n` +
-      `Current received value: ${currentMode ? `"${currentMode}"` : 'undefined'}\n` +
       `Expected one of: [${validModes}]`,
   });
 };

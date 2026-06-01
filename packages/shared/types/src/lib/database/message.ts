@@ -1,8 +1,9 @@
+// packages/shared/types/src/lib/database/message.ts
 import type { MessageCreateSchema, MessageSchema, MessageUpdateSchema } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
-export type MessageCreateData = z.infer<typeof MessageCreateSchema>;
+export type MessageCreateData = Type.Static<typeof MessageCreateSchema>;
 
-export type MessageUpdateData = z.infer<typeof MessageUpdateSchema>;
+export type MessageUpdateData = Type.Static<typeof MessageUpdateSchema>;
 
-export type MessageData = z.infer<typeof MessageSchema>;
+export type MessageData = Type.Static<typeof MessageSchema>;

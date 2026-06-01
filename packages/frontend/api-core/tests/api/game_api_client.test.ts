@@ -107,16 +107,12 @@ describe('GameApiClient', () => {
         init: init ?? {},
       });
 
-      return mockFetch({ status: 200, body: { result: 'success' }, ok: true })(
-        input,
-        init,
-      );
+      return mockFetch({ status: 200, body: { result: 'success' }, ok: true })(input, init);
     };
 
-    const result = await client.post<{ result: string }, { name: string }>(
-      '/api/prompt_ai',
-      { name: 'test' },
-    );
+    const result = await client.post<{ result: string }, { name: string }>('/api/prompt_ai', {
+      name: 'test',
+    });
 
     expect(result.result).toBe('success');
 
@@ -227,7 +223,9 @@ describe('GameApiClient', () => {
         url: '',
         body: null as unknown as ReadableStream<Uint8Array>,
         bodyUsed: false,
-        json: async () => { throw new Error('No body'); },
+        json: async () => {
+          throw new Error('No body');
+        },
         text: async () => '',
       } as Response;
     };

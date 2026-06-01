@@ -13,9 +13,9 @@ export const updateEmail = async (
     const { email, uid } = options;
     if (!(await checkUniqueEmail({ email }))) {
       throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'email already exists'
-});
+        errorType: 'invalid-argument',
+        errorMessage: 'email already exists',
+      });
     }
 
     await Promise.all([updateFirebaseAuthUser(uid, { email }), updateUserData(uid, { email })]);

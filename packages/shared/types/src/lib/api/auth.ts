@@ -1,3 +1,4 @@
+// packages/shared/types/src/lib/api/auth.ts
 import type { FirebaseAuthMetadataSchema } from '@aikami/schemas';
 import type {
   Auth,
@@ -7,7 +8,7 @@ import type {
   UserInfo as FirebaseUserInfo,
   User,
 } from '@firebase/auth';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
 export type {
   FirebaseAuthCredential,
@@ -19,6 +20,6 @@ export type {
 export type FirebaseUser = User;
 export type FirebaseAuth = Auth;
 
-export type FirebaseAuthMetadata = z.infer<typeof FirebaseAuthMetadataSchema>;
+export type FirebaseAuthMetadata = Type.Static<typeof FirebaseAuthMetadataSchema>;
 
 export type FirebaseAuthErrorCode = 'auth/user-not-found' | string;
