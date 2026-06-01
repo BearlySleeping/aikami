@@ -21,9 +21,7 @@
 <svelte:window on:beforeunload={(event) => viewModel.handleAppClose(event)} />
 
 {#if viewModel.isFullscreen}
-  <BaseViewModelContainer {viewModel}>
-    {@render children()}
-  </BaseViewModelContainer>
+  <BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
 {:else}
   <BaseViewModelContainer {viewModel} class="drawer lg:drawer-open">
     <input id="left-drawer" type="checkbox" class="drawer-toggle">

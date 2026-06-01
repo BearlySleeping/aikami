@@ -12,7 +12,7 @@ import type { RequestOptions } from './types.ts';
  * All payloads and responses are plain serializable objects.
  * No Firebase SDK imports in this interface or its implementations.
  */
-export interface GameApiClientInterface {
+export type GameApiClientInterface = {
   /** Base URL for all requests. */
   readonly baseUrl: string;
 
@@ -51,4 +51,4 @@ export interface GameApiClientInterface {
    * @returns Parsed response body.
    */
   get<TResponse>(path: string, options?: RequestOptions): Promise<TResponse>;
-}
+};

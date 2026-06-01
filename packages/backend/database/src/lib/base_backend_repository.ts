@@ -422,6 +422,7 @@ export class BackendRepository<T extends RepositoryType>
     }
     await Promise.resolve();
     BackendRepository._database = getFirestore();
+    // biome-ignore lint/style/noNonNullAssertion: just assigned above
     return BackendRepository._database!;
   }
 }

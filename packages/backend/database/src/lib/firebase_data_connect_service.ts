@@ -155,6 +155,7 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
     const variables: Record<string, unknown> = {};
 
     if (options?.filters && options.filters.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: guarded by length check above
       const first = options.filters[0]!;
       variables[`filter_${first.field.replace(/\./g, '_')}`] = first.value;
     }
@@ -279,6 +280,7 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
         return [];
       }
 
+      // biome-ignore lint/style/noNonNullAssertion: guarded by length check
       const firstValue = result.data[keys[0]!] as unknown;
 
       return (Array.isArray(firstValue) ? firstValue : [firstValue]) as T[];

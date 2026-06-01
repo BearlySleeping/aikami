@@ -30,15 +30,11 @@ export const getCountryData = async (
   const [name, _, regions] = country;
   return {
     name,
-    regions: regions.reduce(
-      (result, [value, key]) =>
-        key
-          ? {
-              ...result,
-              [key.toString()]: value,
-            }
-          : result,
-      {},
-    ),
+    regions: regions.reduce<Record<string, string>>((result, [value, key]) => {
+      if (key) {
+        result[key.toString()] = value;
+      }
+      return result;
+    }, {}),
   };
 };

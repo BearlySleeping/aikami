@@ -8,7 +8,7 @@ import { GameApiClient } from '../../src/api/game_api_client.ts';
  * Creates a mock fetch that returns the given response.
  */
 function mockFetch(response: { status: number; body: unknown; ok: boolean }): typeof fetch {
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  return async (input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
     return {
       ok: response.ok,
       status: response.status,
@@ -29,7 +29,7 @@ function mockFetch(response: { status: number; body: unknown; ok: boolean }): ty
 /**
  * Creates a mock fetch that simulates a timeout (never resolves).
  */
-function timeoutFetch(): typeof fetch {
+function _timeoutFetch(): typeof fetch {
   return async (): Promise<Response> => {
     // Never resolves — triggers the AbortController timeout
     return new Promise<Response>((_resolve) => {
@@ -142,7 +142,7 @@ describe('GameApiClient', () => {
 
     await client.post('/test', {});
 
-    expect(capturedHeaders['Authorization']).toBe('Bearer test-token');
+    expect(capturedHeaders.Authorization).toBe('Bearer test-token');
   });
 
   // -----------------------------------------------------------------------

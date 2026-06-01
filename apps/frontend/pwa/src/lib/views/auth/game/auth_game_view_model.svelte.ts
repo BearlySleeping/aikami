@@ -88,7 +88,6 @@ class AuthGameViewModel
   private _email = $state('');
   private _password = $state('');
   private _copied = $state(false);
-  private _authUid = $state('');
 
   get authState(): AuthState {
     return this._authState;
@@ -119,13 +118,17 @@ class AuthGameViewModel
   }
 
   get isGameAuth(): boolean {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined') {
+      return false;
+    }
     const params = new URLSearchParams(window.location.search);
     return params.has('game') || params.has('code');
   }
 
   get gameCode(): string | null {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === 'undefined') {
+      return null;
+    }
     const params = new URLSearchParams(window.location.search);
     return params.get('code');
   }
@@ -308,7 +311,9 @@ class AuthGameViewModel
    * Sends the ID token to the opener window via postMessage (legacy flow).
    */
   private _sendTokenToOpener(token: string): void {
-    if (typeof window === 'undefined' || !window.opener) return;
+    if (typeof window === 'undefined' || !window.opener) {
+      return;
+    }
 
     const origin = new URLSearchParams(window.location.search).get('origin') || '*';
     window.opener.postMessage({ type: 'GAME_AUTH_SUCCESS', token }, origin);

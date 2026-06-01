@@ -186,11 +186,11 @@ export function browserDetector(
     matchItem(string: string, data: { name: string; value: string; version: string }[]) {
       let index = 0;
       let index_ = 0;
-      let regex;
-      let regexV;
-      let match;
-      let matches;
-      let version;
+      let regex: RegExp;
+      let regexV: RegExp;
+      let match: boolean;
+      let matches: RegExpMatchArray | null | string | string[];
+      let version: string;
 
       for (index = 0; index < data.length; index += 1) {
         regex = new RegExp(data[index].value, 'i');

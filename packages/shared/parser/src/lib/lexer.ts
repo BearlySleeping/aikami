@@ -118,11 +118,12 @@ export const extractMacros = (text: string): MacroNode[] => {
   const macros: MacroNode[] = [];
   // Clone regex to reset lastIndex per call
   const re = new RegExp(PATTERNS.macro.source, 'g');
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(text)) !== null) {
+  let match = re.exec(text);
+  while (match !== null) {
     const name = match[1];
     const argsRaw = match[2];
     if (!name) {
+      match = re.exec(text);
       continue;
     }
     const args = argsRaw
@@ -147,6 +148,7 @@ export const extractMacros = (text: string): MacroNode[] => {
     ) {
       macros.push(parsedMacro);
     }
+    match = re.exec(text);
   }
   return macros;
 };

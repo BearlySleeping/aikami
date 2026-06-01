@@ -3,18 +3,18 @@ name: backend-conventions
 description: >-
   Backend architecture patterns for Aikami — repository pattern, database
   abstraction, service layer, controller structure. For Cloud Function specifics
-  (firestack, Zod wrappers, deployment) also load `firebase-functions`.
-  Always pair with `aikami-conventions` for general TS rules.
-version: 1.0.0
+  (firestack, deployment) also load `firebase-functions`.
+  Builds on `aikami-conventions` (foundational skill — loaded first).
+version: 2.0.0
 tags: ["backend", "database", "repository", "services"]
 ---
 
 # Backend Conventions
 
-Backend architecture patterns for the Aikami monorepo. Always pair with
-`aikami-conventions` for general TypeScript rules (arrow functions, no
-`interface`, import paths, `as const`, error handling). For Cloud Function
-specifics, also load `firebase-functions`.
+Backend architecture patterns for the Aikami monorepo.
+`aikami-conventions` is the foundational skill — it covers arrow functions,
+type rules, import paths, `as const`, error handling, logging, and file
+naming. For Cloud Function specifics, also load `firebase-functions`.
 
 ## 1. Architecture Layers
 
@@ -245,51 +245,16 @@ export default onCreated<UserData>(({ data }) => {
 - **One `export default` per file**
 - **Thin handlers** — parse input, delegate to service, return response
 - **No business logic in controllers** — that lives in services
-- **Zod-validated wrappers preferred** — use `onCallZod`, `onCreatedZod` etc.
+- **Validated wrappers preferred** — use `onCall`, `onCreated` etc.
   (see `firebase-functions` skill for details)
 
-## 6. Error Handling
+## 6. Error Handling & Logging
 
-Use `toAppError` from `@aikami/utils`:
+See `aikami-conventions` for error handling (`toAppError`) and logging
+(`$logger` alias). In Cloud Functions, the logger is auto-imported via
+`includeFilePath` in `firestack.config.ts`.
 
-```typescript
-import { toAppError } from "@aikami/utils";
-
-throw toAppError("not-found", "User not found");
-throw toAppError("invalid-argument", "Email is required");
-throw toAppError("unauthorized", "User must be logged in");
-```
-
-See `aikami-conventions` Section 4 for the full error type list.
-
-## 7. Logging
-
-Always import from `$logger`:
-
-```typescript
-import { logger } from "$logger";
-
-logger.debug("operation", { userId, action });
-logger.info("completed", { result });
-logger.error("failed", { error: toAppError("internal", message) });
-logger.warn("deprecated", { path });
-```
-
-In Cloud Functions, the logger is auto-imported via `includeFilePath` in
-`firestack.config.ts`. The `$logger` alias resolves to the correct
-implementation for each environment:
-
-| Environment | `$logger` resolves to |
-|---|---|
-| SvelteKit (PWA) | `packages/shared/logger/src/lib/svelte_kit.ts` |
-| Firebase Functions | `packages/shared/logger/src/lib/logger_functions.ts` |
-| Browser (game, landing) | `packages/shared/logger/src/lib/logger_browser.ts` |
-| AWS / Node.js | `packages/shared/logger/src/lib/logger_aws.ts` |
-
-Each environment configures the alias in its own `tsconfig.json` `paths`.
-SvelteKit additionally overrides it in `svelte.config.js`.
-
-## 8. Testing
+## 7. Testing
 
 Backend packages and functions use `bun:test`:
 
@@ -319,11 +284,11 @@ describe("UserRepository", () => {
 - Mock `BaseDatabaseService` — never mock Firestore SDK directly
 - Test files: `*.test.ts`
 
-## 9. Related Skills
+## 8. Related Skills
 
 | Skill | Covers |
 |-------|--------|
-| `firebase-functions` | Cloud Function specifics: firestack.config.ts, Zod wrappers, deployment, triggers |
+| `aikami-conventions` | Foundational TS rules, logging, error handling, file naming |
+| `firebase-functions` | Cloud Function specifics: firestack.config.ts, deployment, triggers |
 | `firestack` | CLI reference: deploy, emulate, test rules |
 | `firestore-collection` | Scaffolding new Firestore collections |
-| `aikami-conventions` | General TS rules: arrow functions, types, imports, error handling |

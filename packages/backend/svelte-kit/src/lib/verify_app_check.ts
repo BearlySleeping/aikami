@@ -1,4 +1,4 @@
-import { getAppCheck } from '@aikami/backend-configs';
+import { getAppCheck } from '@aikami/backend/configs';
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
 

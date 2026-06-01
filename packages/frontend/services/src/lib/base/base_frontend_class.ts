@@ -34,10 +34,10 @@ export abstract class BaseFrontendClass<
   }
 
   protected showSnackbar(action: SnackbarData): void {
-    return dialogService.showSnackbar(action);
+    dialogService.showSnackbar(action);
   }
   protected showConditionalSnackbar(options: ConditionalSnackbarData): void {
-    return dialogService.showConditionalSnackbar(options);
+    dialogService.showConditionalSnackbar(options);
   }
   protected async openConfirmDialog(
     confirmDialog: Omit<ConfirmDialogData, 'resolve'>,
@@ -46,7 +46,7 @@ export abstract class BaseFrontendClass<
   }
 
   protected setAppLoading(loading: boolean, label?: string): void {
-    return dialogService.setAppLoading(loading, label);
+    dialogService.setAppLoading(loading, label);
   }
   /**
    * A helper wrapper to handle service methods. It will show success/error

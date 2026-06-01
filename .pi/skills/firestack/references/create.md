@@ -64,24 +64,6 @@ export default onRequest(
 );
 ```
 
-### Template: HTTP with Zod Validation (`api/<name>.ts`)
-
-```typescript
-import { onRequestZod } from '@snorreks/firestack';
-import { z } from 'zod';
-
-const BodySchema = z.object({
-  message: z.string().min(1),
-});
-
-export default onRequestZod(
-  BodySchema,
-  (request, response) => {
-    response.send({ received: request.body.message });
-  }
-);
-```
-
 ### Template: Callable (`callable/<name>.ts`)
 
 ```typescript
@@ -101,25 +83,6 @@ import { onCreated } from '@snorreks/firestack';
 export default onCreated(({ data }) => {
   console.log(`Document ${data.id} created:`, data);
 });
-```
-
-### Template: Firestore Create with Zod (`firestore/<path>/created.ts`)
-
-```typescript
-import { onCreatedZod } from '@snorreks/firestack';
-import { z } from 'zod';
-
-const DocSchema = z.object({
-  name: z.string(),
-  email: z.string().email(),
-});
-
-export default onCreatedZod(
-  DocSchema,
-  ({ data }) => {
-    console.log(`Valid document ${data.id} created`);
-  }
-);
 ```
 
 ### Template: Firestore Update (`firestore/<path>/updated.ts`)

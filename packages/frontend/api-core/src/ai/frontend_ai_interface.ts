@@ -33,7 +33,7 @@ import type {
  *
  * Zero vendor SDKs. No OpenAI, Google AI, or Firebase imports.
  */
-export interface FrontendAiInterface {
+export type FrontendAiInterface = {
   /** Human-readable provider name (e.g. 'ollama', 'openai', 'local-tts'). */
   readonly name: string;
 
@@ -106,4 +106,4 @@ export interface FrontendAiInterface {
    * @returns Health check result with availability and latency.
    */
   healthCheck(): Promise<HealthCheckResult>;
-}
+};

@@ -67,10 +67,14 @@ async function main() {
 
   const suites: TestSuites = [];
   for (const ref of suiteRefs) {
-    if (suiteFilterSet.size > 0 && !suiteFilterSet.has(ref.name)) continue;
+    if (suiteFilterSet.size > 0 && !suiteFilterSet.has(ref.name)) {
+      continue;
+    }
     try {
       const mod = await import(ref.path);
-      if (mod[ref.key]) suites.push(mod[ref.key]);
+      if (mod[ref.key]) {
+        suites.push(mod[ref.key]);
+      }
     } catch {
       if (suiteFilterSet.size === 0) {
         console.warn(`  ⚠️  ${ref.name} suite not available`);
@@ -95,9 +99,15 @@ async function main() {
 
     if (tmuxAvailable) {
       const only: string[] = [];
-      if (needsEmulator) only.push('emulators');
-      if (needsGame) only.push('game');
-      if (needsPwa) only.push('pwa');
+      if (needsEmulator) {
+        only.push('emulators');
+      }
+      if (needsGame) {
+        only.push('game');
+      }
+      if (needsPwa) {
+        only.push('pwa');
+      }
 
       if (only.length > 0) {
         const startupDesc = force

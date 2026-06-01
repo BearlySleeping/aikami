@@ -35,7 +35,9 @@
 
   <!-- Player HUD — top-left overlay -->
   {#if viewModel.isGameReady}
-    <div class="absolute top-3 left-3 z-10 rounded-lg bg-base-200/80 px-3 py-1.5 shadow backdrop-blur-sm">
+    <div
+      class="absolute top-3 left-3 z-10 rounded-lg bg-base-200/80 px-3 py-1.5 shadow backdrop-blur-sm"
+    >
       <span class="text-xs font-medium text-base-content/70">Player</span>
       <span class="ml-1.5 text-sm font-semibold text-primary">{viewModel.playerDisplayName}</span>
     </div>
@@ -53,24 +55,16 @@
         <h2 class="text-center text-lg font-bold text-base-content">Options</h2>
 
         <div class="mt-4 space-y-2">
-          <button
-            class="btn btn-primary btn-block"
-            onclick={() => viewModel.closeOptions()}
-          >
+          <button class="btn btn-primary btn-block" onclick={() => viewModel.closeOptions()}>
             Resume
           </button>
 
-          <button
-            class="btn btn-outline btn-block"
-            onclick={() => viewModel.goToDashboard()}
-          >
+          <button class="btn btn-outline btn-block" onclick={() => viewModel.goToDashboard()}>
             Back to PWA
           </button>
         </div>
 
-        <p class="mt-4 text-center text-xs text-base-content/50">
-          Press Escape to close
-        </p>
+        <p class="mt-4 text-center text-xs text-base-content/50">Press Escape to close</p>
       </div>
     </div>
   {/if}

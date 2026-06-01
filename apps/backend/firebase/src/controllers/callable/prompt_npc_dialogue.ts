@@ -1,6 +1,6 @@
 // apps/backend/firebase/src/controllers/callable/prompt_npc_dialogue.ts
 
-import { createAiService } from '@aikami/backend-ai';
+import { createAiService } from '@aikami/backend/ai';
 import type { CallableFunctions } from '@aikami/types';
 import { onCall } from '@snorreks/firestack';
 import Type from 'typebox';
@@ -11,13 +11,13 @@ const dialogueMessageSchema = Type.Object({
   text: Type.String(),
 });
 
-const promptNpcDialogueInputSchema = Type.Object({
+const _promptNpcDialogueInputSchema = Type.Object({
   npcId: Type.String({ minLength: 1 }),
   personaId: Type.String({ minLength: 1 }),
   npcName: Type.String({ minLength: 1 }),
   playerData: Type.Record(Type.String(), Type.Unknown()),
   relationshipValue: Type.Integer({ minimum: -100, maximum: 100, default: 0 }),
-  messageHistory: Type.Array(dialogueMessageSchema, { default: [] } as any),
+  messageHistory: Type.Array(dialogueMessageSchema, { default: [] } as Type.Options<unknown>),
 });
 
 const buildSystemPrompt = (options: {
@@ -35,7 +35,7 @@ const buildSystemPrompt = (options: {
         ? 'warm and friendly'
         : 'neutral and guarded';
 
-  const playerName = (playerData['name'] as string) || 'a traveler';
+  const playerName = (playerData.name as string) || 'a traveler';
 
   return [
     `You are ${npcName}, a character in a fantasy role-playing game.`,
@@ -86,7 +86,7 @@ export default onCall<CallableFunctions, 'promptNpcDialogue'>(
     }
 
     try {
-      const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
+      const provider = (process.env.AI_PROVIDER as 'openai' | 'gemini' | undefined) ?? 'gemini';
       const aiService = createAiService({ provider });
 
       const systemPrompt = buildSystemPrompt({

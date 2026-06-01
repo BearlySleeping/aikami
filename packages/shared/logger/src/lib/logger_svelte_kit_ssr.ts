@@ -1,11 +1,8 @@
 import process from 'node:process';
-import type { LogEntry, LoggerInterface, TimerInterface } from '@aikami/types';
+import type { LogEntry, LoggerInterface } from '@aikami/types';
 import { BaseLoggerService } from './base.ts';
-import { Timer } from './timer.ts';
 
 export type SvelteKitBackendLoggerInterface = LoggerInterface;
-
-class SvelteKitTimer extends Timer implements TimerInterface {}
 
 class SvelteKitBackendLoggerService
   extends BaseLoggerService
@@ -45,10 +42,6 @@ class SvelteKitBackendLoggerService
     } catch (_error) {
       // console.log(_error);
     }
-  }
-
-  override createTimer(): TimerInterface {
-    return new SvelteKitTimer();
   }
 }
 

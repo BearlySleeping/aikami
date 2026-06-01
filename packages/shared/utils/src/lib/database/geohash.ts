@@ -200,7 +200,9 @@ const Geohash = {
       for (let p = 1; p <= 12; p++) {
         const hash = Geohash.encode(lat, lon, p);
         const posn = Geohash.decode(hash);
-        if (posn.lat === lat && posn.lon === lon) return hash;
+        if (posn.lat === lat && posn.lon === lon) {
+          return hash;
+        }
       }
       precision = 12; // set to maximum
     }

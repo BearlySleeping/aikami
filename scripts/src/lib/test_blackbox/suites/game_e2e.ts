@@ -40,7 +40,7 @@ const probePort = async (port: number, timeoutMs = 3000): Promise<boolean> => {
  * Polls all emulator ports in parallel until healthy or timeout.
  */
 const waitForEmulators = async (timeoutMs = 30_000): Promise<void> => {
-  const ports = [AUTH_PORT, FIRESTORE_PORT, STORAGE_PORT, FUNCTIONS_PORT];
+  const _ports = [AUTH_PORT, FIRESTORE_PORT, STORAGE_PORT, FUNCTIONS_PORT];
   const deadline = Date.now() + timeoutMs;
 
   const waitForPort = async (port: number): Promise<void> => {
@@ -102,6 +102,7 @@ export const gameE2eSuite: TestSuite = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // biome-ignore lint/style/useNamingConvention: HTTP header name
         Authorization: 'Bearer owner',
       },
       body: JSON.stringify({
@@ -116,6 +117,7 @@ export const gameE2eSuite: TestSuite = {
     }
 
     const listResp = await fetch(`${firestoreUrl}/test_ping/${docId}`, {
+      // biome-ignore lint/style/useNamingConvention: HTTP header name
       headers: { Authorization: 'Bearer owner' },
     });
     if (!listResp.ok) {
@@ -130,6 +132,7 @@ export const gameE2eSuite: TestSuite = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // biome-ignore lint/style/useNamingConvention: HTTP header name
         Authorization: 'Bearer owner',
       },
       body: JSON.stringify({ returnSecureToken: true }),

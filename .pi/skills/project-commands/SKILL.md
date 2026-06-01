@@ -5,53 +5,9 @@ description: Aikami monorepo commands reference — moon tasks, validation, depl
 
 # Project Commands
 
-## Direnv Environment (Always Loaded)
-
-The project uses direnv (`.envrc` + `scripts/direnv/`) to provision the entire development environment. These env vars are **always available** when pi runs in this project:
-
-| Env Var | Description |
-|---------|-------------|
-| `AIKAMI_ROOT` | Project root directory |
-| `AIKAMI_MODE` | emulator, development, or production |
-| `AIKAMI_PROJECT_ID` | GCP project id (resolved from mode) |
-| `AIKAMI_IS_EMULATOR` | "1" if emulator, "0" otherwise |
-| `AIKAMI_NIX_READY` | "1" if Nix devShell is loaded |
-| `GEMINI_API_KEY` | Loaded from GSM (mock in emulator) |
-
-### Shell Shortcuts (bash/zsh)
-
-When working in a terminal, these aliases are available:
-
-```bash
-# Moon task aliases
-m <target>         # bunx moon run <target>       (e.g., m pwa:dev)
-md <project>       # Start dev server              (e.g., md pwa)
-mt <project>       # Run tests                     (e.g., mt schemas)
-mb <project>       # Build                         (e.g., mb pwa)
-mf                 # Fix affected projects
-mc                 # Typecheck affected projects
-ms                 # Moon sync
-ma [task]          # Run affected tasks
-
-# Aikami workflows
-aikami_dev              # Full stack in tmux (auto-attach)
-aikami_emulate          # Backend emulators in tmux (auto-attach)
-aikami_game_emulate     # Game in emulator mode in tmux (auto-attach)
-aikami_validate         # Fix → typecheck → build → test
-aikami_affected         # Show changed projects
-aikami_switch           # Switch mode (emulator/dev/prod)
-aikami_help             # Full shortcut list
-
-# Tmux session management
-aikami_tmux_start <svc> # Start tmux session (emulators|pwa|game|all)
-aikami_tmux_join <svc>  # Attach to running tmux session
-aikami_tmux_stop <svc>  # Stop tmux session
-aikami_tmux_stop_all    # Stop all aikami tmux sessions
-aikami_tmux_status      # List running aikami sessions
-atstart/atjoin/atstop   # Short aliases for the above
-```
-
-**AI agents**: Use the pi extension tools (moon_run_task, validate, firestore_query, etc.) instead of these shell aliases. The tools route through `bun moon run` and respect the direnv environment automatically.
+> **See `aikami-conventions` for**: direnv environment, mode switching, PWA dev server defaults, logger alias.
+>
+> This skill covers moon configs, root scripts, commit directives, and tmux.
 
 ---
 
@@ -227,26 +183,10 @@ The root `package.json` provides shortcuts for common operations:
 
 ### Development
 
-**`bun run dev` and `moon run pwa:dev` now default to emulator mode.**
-Emulator is the primary development environment (90% of dev time).
-
 | Script            | Command                                    | Purpose                                                      |
 | ----------------- | ------------------------------------------ | ------------------------------------------------------------ |
 | `dev`             | `moon run $APP:dev`                        | Start dev server for $APP (defaults to emulator for PWA)    |
 | `dev:all`         | `bun run scripts/src/lib/ops/dev_all.ts`   | Start full stack in tmux (mode from $AIKAMI_MODE)            |
-
-**PWA dev server — emulator is the default:**
-
-```bash
-# ✅ Default — emulator mode (primary dev environment)
-cd apps/frontend/pwa && bun run dev
-bun moon run pwa:dev
-bun run tmux:start pwa
-
-# ✅ Explicit mode override when needed
-cd apps/frontend/pwa && bun run dev:development
-cd apps/frontend/pwa && bun run dev:production
-```
 
 | Tmux Script       | Command                                 | Purpose                                                      |
 | ----------------- | --------------------------------------- | ------------------------------------------------------------ |

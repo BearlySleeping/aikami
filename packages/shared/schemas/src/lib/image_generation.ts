@@ -74,7 +74,7 @@ export const ImageGenerationResultSchema = Type.Object({
 
 export type ImageGenerationResult = Type.Static<typeof ImageGenerationResultSchema>;
 
-export interface ImageGenerationProviderInterface {
+export type ImageGenerationProviderInterface = {
   readonly name: string;
   readonly provider: ImageGenerationProvider;
   readonly supportsStyles: boolean;
@@ -84,9 +84,9 @@ export interface ImageGenerationProviderInterface {
 
   generate(request: ImageGenerationRequest): Promise<ImageGenerationResult>;
   getCapabilities(): ProviderCapabilities;
-}
+};
 
-export interface ProviderCapabilities {
+export type ProviderCapabilities = {
   provider: ImageGenerationProvider;
   name: string;
   supportedStyles: ImageStyle[];
@@ -97,7 +97,7 @@ export interface ProviderCapabilities {
   supportsSteps: boolean;
   maxResolution: { width: number; height: number };
   avgGenerationTime: number;
-}
+};
 
 export const DEFAULT_IMAGE_SIZES: Record<ImageSize, { width: number; height: number }> = {
   '256x256': { width: 256, height: 256 },

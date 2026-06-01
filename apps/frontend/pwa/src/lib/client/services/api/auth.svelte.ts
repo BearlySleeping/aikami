@@ -281,7 +281,7 @@ export class AuthService
 
       await this.setAuthUser(user);
 
-      void this.logEvent('sign_up', {
+      void this.logEvent('signUp', {
         method: registerForm.signInProvider,
       });
       this.setIsChangingAuthState(false);

@@ -1,6 +1,8 @@
 import { LogLevelPriority } from '@aikami/constants';
 import type { LogEntry, LoggerInterface, LogLevel, LogSink, TimerInterface } from '@aikami/types';
 
+import { Timer } from './timer.ts';
+
 export const isValidLogLevel = (logLevel?: string): logLevel is LogLevel =>
   !!logLevel && logLevel in LogLevelPriority;
 
@@ -51,7 +53,9 @@ export abstract class BaseLoggerService implements LoggerInterface {
     return currentLogLevelPriority > entryLogLevelPriority;
   }
 
-  abstract createTimer(): TimerInterface;
+  createTimer(): TimerInterface {
+    return new Timer();
+  }
 
   protected toLogLevelPriority(logLevel: LogLevel): LogLevelPriority {
     return LogLevelPriority[logLevel];

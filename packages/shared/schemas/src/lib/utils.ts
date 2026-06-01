@@ -19,7 +19,10 @@ export const getDeletableFields = (schema: Record<string, unknown>): Record<stri
 
   for (const key in properties) {
     if (!requiredSet.has(key)) {
-      deletableProperties[key] = Type.Union([properties[key]!, FieldValueSchema]);
+      const prop = properties[key];
+      if (prop) {
+        deletableProperties[key] = Type.Union([prop, FieldValueSchema]);
+      }
     }
   }
 
