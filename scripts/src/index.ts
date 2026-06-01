@@ -36,6 +36,18 @@ const SCRIPT_MAP: Record<string, string> = {
   test_blackbox: 'test_blackbox/run.ts',
   test_bb: 'test_blackbox/run.ts',
   bb: 'test_blackbox/run.ts',
+
+  // Tmux session management
+  'tmux:start': 'tmux/start.ts',
+  tstart: 'tmux/start.ts',
+  'tmux:join': 'tmux/join.ts',
+  tjoin: 'tmux/join.ts',
+  'tmux:stop': 'tmux/stop.ts',
+  tstop: 'tmux/stop.ts',
+  'tmux:stop-all': 'tmux/stop_all.ts',
+  tstopall: 'tmux/stop_all.ts',
+  'tmux:status': 'tmux/status.ts',
+  tstatus: 'tmux/status.ts',
 };
 
 const SCRIPT_DIR = join(import.meta.dir, 'lib');

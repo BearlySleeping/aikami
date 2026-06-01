@@ -2,15 +2,13 @@
 // Start dev servers for browser-based test suites.
 
 import { resolve } from 'node:path';
-import { PWA_EMULATOR_PORT } from '@aikami/constants';
-
-const GAME_PORT = 5174;
+import { EMULATOR_PORTS } from '@aikami/constants';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 const DEV_SERVER_CONFIG = {
-  pwa: { cwd: 'apps/frontend/pwa', port: PWA_EMULATOR_PORT },
-  game: { cwd: 'apps/frontend/game', port: GAME_PORT },
+  pwa: { cwd: 'apps/frontend/pwa', port: EMULATOR_PORTS.pwa },
+  game: { cwd: 'apps/frontend/game', port: EMULATOR_PORTS.game },
 } as const;
 
 type AppName = keyof typeof DEV_SERVER_CONFIG;
@@ -41,8 +39,14 @@ export async function startDevServer(app: AppName, timeoutMs = 30_000): Promise<
   });
 
   // Drain stdout/stderr to prevent backpressure
-  (async () => { for await (const _chunk of proc.stdout) {} })().catch(() => {});
-  (async () => { for await (const _chunk of proc.stderr) {} })().catch(() => {});
+  (async () => {
+    for await (const _chunk of proc.stdout) {
+    }
+  })().catch(() => {});
+  (async () => {
+    for await (const _chunk of proc.stderr) {
+    }
+  })().catch(() => {});
 
   running.set(app, proc);
 

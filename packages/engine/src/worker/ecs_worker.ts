@@ -152,11 +152,18 @@ const handleSpawnNPC = (npcData: NPCSpawnData): void => {
 
   const eid = createNPC(world, npcData);
 
-  // Notify main thread so it can create a display object
+  // Notify main thread with full NPC metadata for interaction tracking
   postMessage({
     type: 'ENTITY_CREATED',
     eid,
     tint: 0xffcc00, // gold tint for NPCs
+    npcData: {
+      npcId: npcData.npcId,
+      npcName: npcData.npcName,
+      personaId: npcData.personaId || 'default',
+      interactionRadius: npcData.interactionRadius,
+      relationshipValue: npcData.relationshipValue || 0,
+    },
   });
 };
 

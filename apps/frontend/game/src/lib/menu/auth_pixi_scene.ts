@@ -1,6 +1,11 @@
-// apps/frontend/game/src/menu/auth_pixi_scene.ts
+// apps/frontend/game/src/lib/menu/auth_pixi_scene.ts
 
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
 
 // ---------------------------------------------------------------------------
 // AuthPixiScene — PixiJS v8 overlay for device auth code display
@@ -13,13 +18,23 @@ import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 /** Callback when the user presses Escape or the cancel button. */
 type CancelCallback = () => void;
 
+export type AuthPixiSceneOptions = BaseGameClassOptions & {
+  canvas: HTMLCanvasElement;
+};
+
+export type AuthPixiSceneInterface = BaseGameClassInterface & {
+  show(options: { code: string; pwaUrl: string; onCancel: CancelCallback }): Promise<void>;
+  updateStatus(text: string): void;
+  destroy(): Promise<void>;
+};
+
 /**
  * Manages a PixiJS rendering overlay specifically for the device auth flow.
  *
  * Renders the shortcode, PWA URL, and polling status as PixiJS Text objects.
  * Handles cleanup when the scene is dismissed.
  */
-export class AuthPixiScene {
+class AuthPixiScene extends BaseGameClass<AuthPixiSceneOptions> implements AuthPixiSceneInterface {
   private _app: Application | undefined;
   private _root: Container | undefined;
   private _codeText: Text | undefined;
@@ -28,8 +43,9 @@ export class AuthPixiScene {
   private _cancelCallback: CancelCallback | null = null;
   private _canvas: HTMLCanvasElement;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this._canvas = canvas;
+  constructor(options: AuthPixiSceneOptions) {
+    super(options);
+    this._canvas = options.canvas;
   }
 
   /**
@@ -179,6 +195,7 @@ export class AuthPixiScene {
    * Destroys the PixiJS application and releases all resources.
    */
   async destroy(): Promise<void> {
+    this.debug('destroy');
     if (this._app) {
       this._app.destroy(true, { children: true });
       this._app = undefined;
@@ -189,4 +206,11 @@ export class AuthPixiScene {
     this._statusText = undefined;
     this._cancelCallback = null;
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getAuthPixiScene = (options: AuthPixiSceneOptions): AuthPixiSceneInterface =>
+  new AuthPixiScene(options);

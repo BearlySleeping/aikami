@@ -21,7 +21,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 ## Architecture Limitations
 
 1. **No CI/CD pipeline** — No GitHub Actions workflow. All testing and deployment is local.
-2. **No staging environment** — Only development (emulator) and production Firebase projects configured.
+2. **No separate staging environment** — The development project (`aikami-dev`) serves as both local dev target and deployed staging. Production is `aikami-prod`.
 3. **Pre-existing TS errors in schema tests** — `packages/shared/schemas` test files have 7 TypeScript errors (unused vars, strict null checks). Tests pass at runtime but `tsc --noEmit` fails.
 4. **PWA accessibility warnings** — svelte-check reports 7 errors + 9 warnings, mostly a11y violations in chat components.
 5. **Firebase config hardcoded** — `.env` template uses placeholder values; no automated Firebase project creation.

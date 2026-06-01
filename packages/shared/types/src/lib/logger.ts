@@ -1,5 +1,5 @@
 import type { LogLevelPriority } from '@aikami/constants';
-import { DeviceData } from './device';
+import type { DeviceData } from './device';
 
 export type TimerInterface = {
   /**

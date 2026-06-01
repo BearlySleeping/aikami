@@ -1,123 +1,67 @@
+#!/usr/bin/env bun
 // scripts/src/lib/ops/dev_all.ts
 /**
- * Start all development services using tmux for parallel execution.
+ * Start all development services using the unified tmux session library.
  *
- * Creates a tmux session "aikami-dev" with:
- *   - Left pane:  Firebase emulators (firestack emulate)
- *   - Right pane: PWA dev server (bun run dev)
+ * Creates a tmux session "aikami-{mode}-all" with windows for:
+ *   - Firebase emulators (firestack emulate)
+ *   - PWA dev server
+ *   - Game dev server
  *
  * Usage:
- *   bun run dev:all              # Start session (attached)
- *   bun run dev:all --detach     # Start in background
- *   tmux attach -t aikami-dev    # Reattach later
- *   tmux kill-session -t aikami-dev  # Stop everything
+ *   bun run dev:all                  # Start session (attached)
+ *   bun run dev:all --detach         # Start in background
+ *   bun run tmux:join all            # Reattach later
+ *   bun run tmux:stop all            # Stop everything
  */
 
-import { execSync, spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { startSession, joinSession, hasTmux, type AikamiMode } from '../tmux/session.ts';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
-const FIREBASE_DIR = resolve(PROJECT_ROOT, 'apps/backend/firebase');
-const PWA_DIR = resolve(PROJECT_ROOT, 'apps/frontend/pwa');
-const SESSION = 'aikami-dev';
-
-const GREEN = '\x1b[32m';
-const CYAN = '\x1b[36m';
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
-
+const VALID_MODES: AikamiMode[] = ['emulator', 'development', 'production'];
 const args = process.argv.slice(2);
 const detach = args.includes('--detach') || args.includes('-d');
 
-function hasTmux(): boolean {
-  try {
-    execSync('tmux -V', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
+// Read mode from env or default to emulator
+const mode: AikamiMode = (() => {
+  const envMode = process.env.AIKAMI_MODE;
+  if (envMode && VALID_MODES.includes(envMode as AikamiMode)) {
+    return envMode as AikamiMode;
   }
-}
-
-function killExistingSession() {
-  try {
-    execSync(`tmux kill-session -t ${SESSION} 2>/dev/null`, { stdio: 'ignore' });
-  } catch {
-    // Session doesn't exist
-  }
-}
-
-async function startInBackground(name: string, dir: string, cmd: string[]): Promise<void> {
-  const proc = spawn(cmd[0], cmd.slice(1), {
-    cwd: dir,
-    stdio: 'ignore',
-    detached: true,
-  });
-  proc.unref();
-  console.log(`  ${GREEN}✓${RESET} ${name} started (PID ${proc.pid})`);
-}
-
-async function startForeground(cmd: string, dir: string): Promise<void> {
-  const proc = spawn('bash', ['-c', cmd], {
-    cwd: dir,
-    stdio: 'inherit',
-  });
-  await new Promise<void>((resolve) => proc.on('exit', () => resolve()));
-}
+  return 'emulator';
+})();
 
 async function main() {
-  console.log(`\n${BOLD}╔══════════════════════════════════════════╗${RESET}`);
-  console.log(`${BOLD}║     Aikami Development Services           ║${RESET}`);
-  console.log(`${BOLD}╚══════════════════════════════════════════╝${RESET}\n`);
+  console.log(`
+╔══════════════════════════════════════════╗
+║     Aikami Development Services           ║
+║     Mode: ${mode.padEnd(32)}║
+╚══════════════════════════════════════════╝
+`);
 
-  if (!hasTmux()) {
-    console.log(`${DIM}tmux not found — falling back to background mode${RESET}\n`);
-    console.log('Starting services in background...');
-    await startInBackground('Firebase Emulators', FIREBASE_DIR, ['bun', 'run', 'emulate']);
-    await Bun.sleep(2000);
-    await startInBackground('PWA Dev Server', PWA_DIR, ['bun', 'run', 'dev']);
-    console.log(`\n  ${CYAN}Firebase emulators${RESET} → http://localhost:4000`);
-    console.log(`  ${CYAN}PWA dev server${RESET}     → http://localhost:5173`);
-    console.log(`\n${DIM}Use 'lsof -ti:4000,5173 | xargs kill' to stop${RESET}\n`);
-    return;
+  if (!(await hasTmux())) {
+    console.error('❌ tmux is not installed. Install it with your package manager.');
+    console.error('   Fallback: start services manually with bun run dev in each project.');
+    process.exit(1);
   }
 
-  // ── Tmux mode ──────────────────────────────────────────────
-  killExistingSession();
-
-  const flags = detach ? '-d' : '';
-  console.log(`Creating tmux session: ${CYAN}${SESSION}${RESET}`);
-
-  // Create session with first pane (emulators)
-  execSync(
-    `tmux new-session ${flags} -s ${SESSION} -n emulators -c '${FIREBASE_DIR}' "echo '🚀 Firebase Emulators'; echo ''; bun run emulate; read"`,
-    { stdio: 'ignore' },
-  );
-
-  // Wait for session to exist
-  await Bun.sleep(500);
-
-  // Split vertically for PWA
-  execSync(
-    `tmux split-window -h -t ${SESSION} -c '${PWA_DIR}' "echo '📱 PWA Dev Server'; echo ''; bun run dev; read"`,
-    { stdio: 'ignore' },
-  );
-
-  // Set layout
-  execSync(`tmux select-layout -t ${SESSION} even-horizontal`, { stdio: 'ignore' });
+  // Start (or reuse) the session
+  const sessionName = await startSession({
+    service: 'all',
+    mode,
+    force: false, // Don't force kill — let startSession handle mode mismatch
+  });
 
   if (detach) {
-    console.log(`\n  ${GREEN}✓${RESET} Session started detached`);
-    console.log(`  Attach: ${CYAN}tmux attach -t ${SESSION}${RESET}`);
-    console.log(`  Stop:   ${CYAN}tmux kill-session -t ${SESSION}${RESET}\n`);
+    console.log(`\n✓ Session started detached: ${sessionName}`);
+    console.log(`  Attach:  bun run tmux:join all`);
+    console.log(`  Stop:    bun run tmux:stop all\n`);
   } else {
-    // Attach to session
-    console.log(`\n${DIM}Attaching to session (Ctrl+B D to detach)...${RESET}\n`);
-    execSync(`tmux attach -t ${SESSION}`, { stdio: 'inherit' });
+    console.log(`\nAttaching to session (Ctrl+B D to detach)...\n`);
+    await joinSession({ service: 'all', mode });
   }
 }
 
 main().catch((err) => {
-  console.error('Failed:', err);
+  console.error('Failed:', err instanceof Error ? err.message : err);
   process.exit(1);
 });

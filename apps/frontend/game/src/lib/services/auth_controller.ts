@@ -1,4 +1,4 @@
-// apps/frontend/game/src/core/auth/auth_controller.ts
+// apps/frontend/game/src/lib/core/auth/auth_controller.ts
 /**
  * Device Flow Auth Handoff between game and PWA.
  *
@@ -9,7 +9,12 @@
  * State changes are communicated via the `onStateChange` callback.
  */
 
-import { getFirebase } from '../firebase/firebase_app.ts';
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '../core/base_game_class.ts';
+import { getFirebase } from './firebase/firebase_app.ts';
 
 const AUTH_REQUEST_COLLECTION = 'auth_requests';
 const POLL_INTERVAL_MS = 2000;
@@ -38,11 +43,24 @@ type AuthRequestDocument = {
   completedAt?: string;
 };
 
+export type AuthControllerOptions = BaseGameClassOptions;
+
+export type AuthControllerInterface = BaseGameClassInterface & {
+  readonly state: AuthHandoffState;
+  onStateChange(callback: (state: AuthHandoffState) => void): void;
+  startHandoff(options: { pwaBaseUrl: string }): Promise<void>;
+  cancel(): void;
+  reset(): void;
+};
+
 /**
  * Controller for the Device Flow authentication handoff.
  * Game → PWA → Firestore → Game token retrieval flow.
  */
-export class AuthController {
+class AuthController
+  extends BaseGameClass<AuthControllerOptions>
+  implements AuthControllerInterface
+{
   private _state: AuthHandoffState = { type: 'idle' };
   private _onChange: ((state: AuthHandoffState) => void) | null = null;
 
@@ -183,4 +201,11 @@ export class AuthController {
     // Start polling after a brief delay
     setTimeout(poll, POLL_INTERVAL_MS);
   }
+
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
 }
+
+export const getAuthController = (options: AuthControllerOptions): AuthControllerInterface =>
+  new AuthController(options);

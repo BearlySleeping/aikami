@@ -225,7 +225,7 @@ PUBLIC_FIREBASE_MEASUREMENT_ID=your-measurement-id
 
   // Interactive: prompt for Firebase project
   const projectId = await prompt('Firebase project ID (leave blank for default)', 'demo-aikami');
-  const flavor = await prompt('Environment flavor (development/emulator/staging/production)', 'development');
+  const flavor = await prompt('Environment flavor (development/emulator/production)', 'development');
 
   const envContent = readFileSync(ENV_EXAMPLE, 'utf8')
     .replace('PUBLIC_FLAVOR=development', `PUBLIC_FLAVOR=${flavor}`)

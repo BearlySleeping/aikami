@@ -46,6 +46,32 @@ type CharacterCreationOutput = {
   characterJson?: CharacterSheet;
 };
 
+// ---------------------------------------------------------------------------
+// promptNpcDialogue
+// ---------------------------------------------------------------------------
+
+/** A single message in the NPC dialogue conversation. */
+type DialogueMessage = {
+  role: 'npc' | 'player' | 'system';
+  text: string;
+};
+
+/** Input for the promptNpcDialogue callable. */
+type PromptNpcDialogueInput = {
+  npcId: string;
+  personaId: string;
+  npcName: string;
+  playerData: Record<string, unknown>;
+  relationshipValue: number;
+  messageHistory: DialogueMessage[];
+};
+
+/** Output from the promptNpcDialogue callable. */
+type PromptNpcDialogueOutput = {
+  reply: string;
+  relationshipDelta: number;
+};
+
 /**
  * All registered callable functions. Each key maps to [Payload, Response].
  * Add new callables here to get full type safety in the onCall handler.
@@ -57,6 +83,7 @@ type CharacterCreationOutput = {
 export type CallableFunctions = {
   chat: [ChatMessageData, ChatMessageResponse];
   promptCharacterCreation: [CharacterCreationInput, CharacterCreationOutput];
+  promptNpcDialogue: [PromptNpcDialogueInput, PromptNpcDialogueOutput];
 };
 
 export type CallableFunction = keyof CallableFunctions;
