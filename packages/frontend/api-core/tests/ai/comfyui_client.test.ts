@@ -26,9 +26,7 @@ describe('ComfyUiClient', () => {
   });
 
   it('throws when workflowId is missing', () => {
-    expect(
-      () => new ComfyUiClient({}),
-    ).toThrow('requires a workflowId');
+    expect(() => new ComfyUiClient({})).toThrow('requires a workflowId');
   });
 
   // -----------------------------------------------------------------------
@@ -62,17 +60,15 @@ describe('ComfyUiClient', () => {
   it('generateContentDescription throws (not supported)', async () => {
     const client = new ComfyUiClient({ workflowId: 'test-wf' });
 
-    expect(
-      client.generateContentDescription('test'),
-    ).rejects.toThrow('does not support content description');
+    expect(client.generateContentDescription('test')).rejects.toThrow(
+      'does not support content description',
+    );
   });
 
   it('synthesizeSpeech throws (not supported)', async () => {
     const client = new ComfyUiClient({ workflowId: 'test-wf' });
 
-    expect(
-      client.synthesizeSpeech('hello'),
-    ).rejects.toThrow('does not support speech');
+    expect(client.synthesizeSpeech('hello')).rejects.toThrow('does not support speech');
   });
 
   it('generateStructured throws (not supported)', async () => {
@@ -80,9 +76,9 @@ describe('ComfyUiClient', () => {
 
     const { z } = await import('zod');
 
-    expect(
-      client.generateStructured('test', z.object({})),
-    ).rejects.toThrow('does not support structured data');
+    expect(client.generateStructured('test', z.object({}))).rejects.toThrow(
+      'does not support structured data',
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -132,9 +128,7 @@ describe('ComfyUiClient', () => {
             [promptId]: {
               outputs: {
                 '9': {
-                  images: [
-                    { filename: 'game-gen_0001.png', subfolder: null, type: 'output' },
-                  ],
+                  images: [{ filename: 'game-gen_0001.png', subfolder: null, type: 'output' }],
                 },
               },
               status: { completed: true, messages: [] },

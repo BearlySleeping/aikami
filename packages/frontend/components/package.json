@@ -18,7 +18,7 @@
     "test": "test-storybook",
     "lint": "biome lint .",
     "format": "biome format .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "fix": "biome check --write ."
   },
   "devDependencies": {

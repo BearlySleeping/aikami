@@ -1,8 +1,9 @@
+// packages/shared/types/src/lib/database/persona.ts
 import type { PersonaCreateSchema, PersonaSchema, PersonaUpdateSchema } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
-export type PersonaData = z.infer<typeof PersonaSchema>;
+export type PersonaData = Type.Static<typeof PersonaSchema>;
 
-export type PersonaCreateData = z.infer<typeof PersonaCreateSchema>;
+export type PersonaCreateData = Type.Static<typeof PersonaCreateSchema>;
 
-export type PersonaUpdateData = z.infer<typeof PersonaUpdateSchema>;
+export type PersonaUpdateData = Type.Static<typeof PersonaUpdateSchema>;

@@ -8,37 +8,23 @@ import {
 import { CoreFormSchema } from '@aikami/schemas';
 import type { FirebaseSignInProviderName } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
-import { z } from 'zod';
+import Type from 'typebox';
 import { authService, routerService } from '$services';
 
-const RegisterFormSchema = CoreFormSchema.extend({
-  email: z.string().min(1, 'Email is required').email('Invalid email address'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
-  displayName: z.string().min(1, 'Display name is required'),
-});
+const RegisterFormSchema = Type.Intersect([
+  CoreFormSchema,
+  Type.Object({
+    email: Type.String({ minLength: 1, format: 'email' }),
+    password: Type.String({ minLength: 8 }),
+    displayName: Type.String({ minLength: 1 }),
+  }),
+]);
 
 export type RegisterViewModelOptions = BaseViewModelOptions;
 
 export type RegisterViewModelInterface = BaseFormViewModelInterface<typeof RegisterFormSchema> & {
-  /**
-   * The social sign-in provider that is currently in progress.
-   */
   readonly isSocialSigningIn: FirebaseSignInProviderName | undefined;
-
-  /**
-   * Handles social registration with Google or GitHub.
-   * @param provider The social provider to use.
-   */
   socialRegister(provider: FirebaseSignInProviderName): Promise<void>;
-
-  /**
-   * Navigates to the login page.
-   */
   goToLogin(): Promise<void>;
 };
 
@@ -46,9 +32,6 @@ class RegisterViewModel
   extends BaseFormViewModel<typeof RegisterFormSchema, RegisterViewModelOptions>
   implements RegisterViewModelInterface
 {
-  /**
-   * The social sign-in provider that is currently in progress.
-   */
   private _isSocialSigningIn = $state<FirebaseSignInProviderName | undefined>();
 
   constructor(options: RegisterViewModelOptions) {
@@ -61,7 +44,11 @@ class RegisterViewModel
       },
       schema: RegisterFormSchema,
       onSubmit: async (values) => {
-        await this._registerWithEmail(values.email, values.password, values.displayName);
+        await this._registerWithEmail(
+          String(values.email ?? ''),
+          String(values.password ?? ''),
+          String(values.displayName ?? ''),
+        );
       },
     });
   }
@@ -70,13 +57,6 @@ class RegisterViewModel
     return this._isSocialSigningIn;
   }
 
-  /**
-   * Registers a new user with email and password.
-   * @param email User's email
-   * @param password User's password
-   * @param displayName User's full name
-   * @param phoneNumber User's phone number (optional)
-   */
   private async _registerWithEmail(
     email: string,
     password: string,

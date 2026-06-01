@@ -27,8 +27,7 @@ fileGroups:
     - 'src/**/*'
     - 'scripts/**/*'
   configs:
-    - 'firestack.json'
-    - '*.ts'
+    - 'firestack.config.ts'
   tests:
     - 'tests/**/*'
   deployment:

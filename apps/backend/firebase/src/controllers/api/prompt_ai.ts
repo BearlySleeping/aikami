@@ -1,6 +1,7 @@
 // apps/backend/firebase/src/controllers/api/prompt_ai.ts
-import type { RequestFunctions } from '@aikami/types';
+
 import { createAiService } from '@aikami/backend-ai';
+import type { RequestFunctions } from '@aikami/types';
 import { onRequest } from '@snorreks/firestack';
 import { logger } from '$logger';
 

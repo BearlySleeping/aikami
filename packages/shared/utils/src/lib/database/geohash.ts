@@ -35,15 +35,15 @@ const Geohash = {
 
     if (geohash.length === 0) {
       throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'Invalid geohash'
-});
+        errorType: 'invalid-argument',
+        errorMessage: 'Invalid geohash',
+      });
     }
     if (!'nsew'.includes(direction)) {
       throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'Invalid direction'
-});
+        errorType: 'invalid-argument',
+        errorMessage: 'Invalid direction',
+      });
     }
 
     const neighbour = {
@@ -95,9 +95,9 @@ const Geohash = {
   } {
     if (geohash.length === 0) {
       throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'Invalid geohash'
-});
+        errorType: 'invalid-argument',
+        errorMessage: 'Invalid geohash',
+      });
     }
 
     geohash = geohash.toLowerCase();
@@ -113,9 +113,9 @@ const Geohash = {
       const index_ = base32.indexOf(chr);
       if (index_ === -1) {
         throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'Invalid geohash'
-});
+          errorType: 'invalid-argument',
+          errorMessage: 'Invalid geohash',
+        });
       }
 
       for (let n = 4; n >= 0; n--) {
@@ -211,9 +211,9 @@ const Geohash = {
 
     if (Number.isNaN(lat) || Number.isNaN(lon) || Number.isNaN(precision)) {
       throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'Invalid geohash'
-});
+        errorType: 'invalid-argument',
+        errorMessage: 'Invalid geohash',
+      });
     }
 
     let index = 0; // index into base32 map

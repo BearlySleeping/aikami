@@ -48,7 +48,7 @@ describe('TextureManager — LRU cache', () => {
     tracker = { textures: new Map(), loadCount: 0 };
     manager = new TextureManager({
       maxTextures: 3,
-      maxBytes: Infinity, // Only test count-based eviction
+      maxBytes: Number.POSITIVE_INFINITY, // Only test count-based eviction
       loadTexture: createMockLoader(tracker),
     });
   });
@@ -111,7 +111,7 @@ describe('TextureManager — LRU cache', () => {
   it('evicts multiple entries if needed to satisfy the limit', async () => {
     const smallManager = new TextureManager({
       maxTextures: 2,
-      maxBytes: Infinity,
+      maxBytes: Number.POSITIVE_INFINITY,
       loadTexture: createMockLoader(tracker),
     });
 
@@ -240,7 +240,7 @@ describe('TextureManager — LRU cache', () => {
   it('handles maxTextures = 0 gracefully', async () => {
     const zeroManager = new TextureManager({
       maxTextures: 0,
-      maxBytes: Infinity,
+      maxBytes: Number.POSITIVE_INFINITY,
       loadTexture: createMockLoader(tracker),
     });
 

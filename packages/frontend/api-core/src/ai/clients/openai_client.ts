@@ -1,6 +1,6 @@
 // packages/frontend/api-core/src/ai/clients/openai_client.ts
 
-import type { z } from 'zod';
+import type { TSchema } from 'typebox';
 
 import type { GameApiClientInterface } from '../../api/game_api_client_interface.ts';
 import type { FrontendAiInterface } from '../frontend_ai_interface.ts';
@@ -50,14 +50,19 @@ class OpenAiClient implements FrontendAiInterface {
     this.model = model;
   }
 
-  async generateDialogue(context: DialogueContext, options?: DialogueOptions): Promise<DialogueResponse> {
+  async generateDialogue(
+    context: DialogueContext,
+    options?: DialogueOptions,
+  ): Promise<DialogueResponse> {
     const response = await this.apiClient.post<DialogueResponse>('/api/prompt_ai', {
       provider: 'openai',
       model: options?.model ?? this.model,
       messages: [
-        ...(context.systemPrompt ? [{ role: 'system' as const, content: context.systemPrompt }] : []),
+        ...(context.systemPrompt
+          ? [{ role: 'system' as const, content: context.systemPrompt }]
+          : []),
         ...(context.history ?? []).map((msg) => ({
-          role: msg.role === 'npc' ? 'assistant' as const : 'user' as const,
+          role: msg.role === 'npc' ? ('assistant' as const) : ('user' as const),
           content: msg.text,
         })),
         { role: 'user' as const, content: context.playerInput },
@@ -69,7 +74,10 @@ class OpenAiClient implements FrontendAiInterface {
     return response;
   }
 
-  async generateContentDescription(prompt: string, options?: ContentDescriptionOptions): Promise<string> {
+  async generateContentDescription(
+    prompt: string,
+    options?: ContentDescriptionOptions,
+  ): Promise<string> {
     const response = await this.apiClient.post<DialogueResponse>('/api/prompt_ai', {
       provider: 'openai',
       model: options?.model ?? this.model,
@@ -99,11 +107,7 @@ class OpenAiClient implements FrontendAiInterface {
     return response;
   }
 
-  async generateStructured<T>(
-    instruction: string,
-    schema: z.ZodSchema<T>,
-    context?: string,
-  ): Promise<T> {
+  async generateStructured<T>(instruction: string, schema: TSchema, context?: string): Promise<T> {
     const fullContext = context ? `${instruction}\n\nContext: ${context}` : instruction;
 
     const response = await this.apiClient.post<{ data: T }>('/api/prompt_ai', {
@@ -112,7 +116,7 @@ class OpenAiClient implements FrontendAiInterface {
       messages: [
         {
           role: 'system',
-          content: `You generate structured JSON matching this schema: ${schema.description ?? 'No description provided'}`,
+          content: `You generate structured JSON matching this schema: ${(schema as Record<string, unknown>).description ?? 'No description provided'}`,
         },
         { role: 'user', content: fullContext },
       ],
@@ -130,7 +134,11 @@ class OpenAiClient implements FrontendAiInterface {
 
       return { available: true, latencyMs, message: 'OpenAI backend reachable' };
     } catch {
-      return { available: false, latencyMs: 0, message: 'Backend unreachable or OpenAI unavailable' };
+      return {
+        available: false,
+        latencyMs: 0,
+        message: 'Backend unreachable or OpenAI unavailable',
+      };
     }
   }
 }

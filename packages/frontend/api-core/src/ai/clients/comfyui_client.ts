@@ -1,10 +1,11 @@
 // packages/frontend/api-core/src/ai/clients/comfyui_client.ts
 
-import type { z } from 'zod';
+import type { TSchema } from 'typebox';
 
 import type { FrontendAiInterface } from '../frontend_ai_interface.ts';
 import type {
   AiProviderCapabilities,
+  ComfyUiClientOptions,
   ContentDescriptionOptions,
   DialogueContext,
   DialogueOptions,
@@ -14,7 +15,6 @@ import type {
   ImageResult,
   SpeechResult,
   TtsOptions,
-  ComfyUiClientOptions,
 } from '../types.ts';
 
 /**
@@ -49,7 +49,9 @@ class ComfyUiClient implements FrontendAiInterface {
    */
   constructor(options: ComfyUiClientOptions) {
     if (!options.workflowId) {
-      throw new Error('ComfyUiClient requires a workflowId. Configure a pre-defined workflow in ComfyUI first.');
+      throw new Error(
+        'ComfyUiClient requires a workflowId. Configure a pre-defined workflow in ComfyUI first.',
+      );
     }
 
     this.baseUrl = (options.baseUrl ?? 'http://localhost:8188').replace(/\/+$/, '');
@@ -61,12 +63,22 @@ class ComfyUiClient implements FrontendAiInterface {
   // Unsupported capabilities
   // -----------------------------------------------------------------------
 
-  async generateDialogue(_context: DialogueContext, _options?: DialogueOptions): Promise<DialogueResponse> {
-    throw new Error('ComfyUI does not support dialogue generation. Use OllamaClient or a cloud provider.');
+  async generateDialogue(
+    _context: DialogueContext,
+    _options?: DialogueOptions,
+  ): Promise<DialogueResponse> {
+    throw new Error(
+      'ComfyUI does not support dialogue generation. Use OllamaClient or a cloud provider.',
+    );
   }
 
-  async generateContentDescription(_prompt: string, _options?: ContentDescriptionOptions): Promise<string> {
-    throw new Error('ComfyUI does not support content description. Use OllamaClient or a cloud provider.');
+  async generateContentDescription(
+    _prompt: string,
+    _options?: ContentDescriptionOptions,
+  ): Promise<string> {
+    throw new Error(
+      'ComfyUI does not support content description. Use OllamaClient or a cloud provider.',
+    );
   }
 
   async synthesizeSpeech(_text: string, _options?: TtsOptions): Promise<SpeechResult> {
@@ -115,10 +127,12 @@ class ComfyUiClient implements FrontendAiInterface {
 
   async generateStructured<T>(
     _instruction: string,
-    _schema: z.ZodSchema<T>,
+    _schema: TSchema,
     _context?: string,
   ): Promise<T> {
-    throw new Error('ComfyUI does not support structured data generation. Use OllamaClient or a cloud provider.');
+    throw new Error(
+      'ComfyUI does not support structured data generation. Use OllamaClient or a cloud provider.',
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -210,8 +224,10 @@ class ComfyUiClient implements FrontendAiInterface {
 
   /**
    * Polls ComfyUI's `/history/{promptId}` endpoint until the image is ready.
-     */
-  private async pollForResult(promptId: string): Promise<{ filename: string; subfolder: string | null }> {
+   */
+  private async pollForResult(
+    promptId: string,
+  ): Promise<{ filename: string; subfolder: string | null }> {
     const pollInterval = 1000;
     const maxAttempts = Math.ceil(this.timeoutMs / pollInterval);
 
@@ -317,7 +333,10 @@ type ComfyUiHistoryResponse = Record<
   string,
   {
     prompt: unknown;
-    outputs: Record<string, { images: Array<{ filename: string; subfolder: string | null; type: string }> }>;
+    outputs: Record<
+      string,
+      { images: Array<{ filename: string; subfolder: string | null; type: string }> }
+    >;
     status: { completed: boolean; messages: Array<[string, unknown]> };
   }
 >;

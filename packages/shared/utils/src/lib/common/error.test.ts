@@ -33,10 +33,10 @@ describe('toHttpErrorStatusCode', () => {
 describe('toAppError', () => {
   test('should create an Error with correct cause', () => {
     const error = toAppError({
-  errorType: 'not-found',
-  errorMessage: 'Resource not found',
-  details: { extra: 'data' }
-});
+      errorType: 'not-found',
+      errorMessage: 'Resource not found',
+      details: { extra: 'data' },
+    });
 
     expect(error.message).toBe('Resource not found');
     expect(error.cause).toBeDefined();
@@ -48,9 +48,9 @@ describe('toAppError', () => {
 
   test('should create error without details', () => {
     const error = toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'Invalid input'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'Invalid input',
+    });
 
     expect(error.message).toBe('Invalid input');
     const cause = error.cause as AppError['cause'];

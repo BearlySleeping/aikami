@@ -22,9 +22,9 @@ const apiHandler = createApiHandler<AuthApiEvents, UserClaims | undefined>({
   createCustomFirebaseSignInToken: (_payload, user) => {
     if (!user) {
       throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'User not logged in'
-});
+        errorType: 'unauthorized',
+        errorMessage: 'User not logged in',
+      });
     }
     return createCustomFirebaseSignInToken({
       uid: user.id,
@@ -33,9 +33,9 @@ const apiHandler = createApiHandler<AuthApiEvents, UserClaims | undefined>({
   deleteAccount: (_payload, user) => {
     if (!user) {
       throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'User not logged in'
-});
+        errorType: 'unauthorized',
+        errorMessage: 'User not logged in',
+      });
     }
     return deleteAccount(user.id);
   },
@@ -45,9 +45,9 @@ const apiHandler = createApiHandler<AuthApiEvents, UserClaims | undefined>({
   updateEmail: (payload, user) => {
     if (!user) {
       throw toAppError({
-  errorType: 'unauthorized',
-  errorMessage: 'User not logged in'
-});
+        errorType: 'unauthorized',
+        errorMessage: 'User not logged in',
+      });
     }
     return updateEmail({
       ...payload,

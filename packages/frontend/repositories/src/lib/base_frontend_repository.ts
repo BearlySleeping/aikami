@@ -1,3 +1,4 @@
+// packages/frontend/repositories/src/lib/base_frontend_repository.ts
 import { publicEnv } from '@aikami/frontend/configs/environment';
 import type { Timestamp } from '@aikami/frontend/configs/firestore.ts';
 import type {
@@ -35,7 +36,7 @@ import type {
   Unsubscribe,
   WriteBatch,
 } from 'firebase/firestore';
-import type { z } from 'zod';
+import type Type from 'typebox';
 
 export type { QueryFilter, RepositoryType };
 
@@ -46,7 +47,6 @@ type CustomTimestamp = {
 
 type Database = typeof import('@aikami/frontend/configs/firestore.ts');
 
-// Type guard to check if an object is a CustomTimestamp
 const isCustomTimestamp = (obj: unknown): obj is CustomTimestamp => {
   return (
     !!obj &&
@@ -60,12 +60,12 @@ const isCustomTimestamp = (obj: unknown): obj is CustomTimestamp => {
 
 export type FrontendRepositoryInterface<T extends RepositoryType> = {
   getDocumentsStreamByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-    postSort?: PostSortDocuments<z.infer<T['data']>>,
-  ): Promise<DocumentsObservable<z.infer<T['data']>>>;
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+    postSort?: PostSortDocuments<Type.Static<T['data']>>,
+  ): Promise<DocumentsObservable<Type.Static<T['data']>>>;
   getDocumentStream(
     getDocumentPathArgument: T['getDocumentPathArgument'],
-  ): Promise<DocumentObservable<z.infer<T['data']>>>;
+  ): Promise<DocumentObservable<Type.Static<T['data']>>>;
 
   getFieldOperators(): Promise<{
     arrayUnion: ServerArrayUnion;
@@ -87,24 +87,23 @@ export type FrontendRepositoryInterface<T extends RepositoryType> = {
   ): Promise<() => string>;
 
   getDocumentsStreamMultipleQuery(
-    queries: Query<z.infer<T['data']>>[],
-    postSort?: PostSortDocuments<z.infer<T['data']>>,
-  ): Promise<DocumentsObservable<z.infer<T['data']>>>;
+    queries: Query<Type.Static<T['data']>>[],
+    postSort?: PostSortDocuments<Type.Static<T['data']>>,
+  ): Promise<DocumentsObservable<Type.Static<T['data']>>>;
 
   getRawQuery(query: {
-    filters: QueryFilter<z.infer<T['data']>>[];
+    filters: QueryFilter<Type.Static<T['data']>>[];
     collectionPath: string;
-  }): Promise<Query<z.infer<T['data']>>>;
+  }): Promise<Query<Type.Static<T['data']>>>;
 
   getQueryCount(query: Query): Promise<number>;
 
   getDocumentsByGroupQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-  ): Promise<z.infer<T['data']>[]>;
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+  ): Promise<Type.Static<T['data']>[]>;
 
-  getDocumentsByRawQuery(query: Query): Promise<z.infer<T['data']>[]>;
+  getDocumentsByRawQuery(query: Query): Promise<Type.Static<T['data']>[]>;
 
-  // commit(batchCommands: BatchCommand[]): Promise<void>;
   getWriteBatch(): Promise<WriteBatch>;
 } & BaseRepositoryInterface<T>;
 
@@ -123,10 +122,10 @@ export class FrontendRepository<T extends RepositoryType>
 
   async getDocument(
     getDocumentPathArguments: T['getDocumentPathArgument'],
-  ): Promise<z.infer<T['data']> | undefined> {
+  ): Promise<Type.Static<T['data']> | undefined> {
     const [{ getDoc }, documentReference] = await Promise.all([
       this._getDatabase(),
-      this.getDocumentReference<z.infer<T['data']>>(getDocumentPathArguments),
+      this.getDocumentReference<Type.Static<T['data']>>(getDocumentPathArguments),
     ]);
 
     const documentSnap = await getDoc(documentReference);
@@ -140,10 +139,10 @@ export class FrontendRepository<T extends RepositoryType>
 
   async getDocumentsByCollection(
     getCollectionPathArgument: T['getCollectionPathArgument'],
-  ): Promise<z.infer<T['data']>[]> {
+  ): Promise<Type.Static<T['data']>[]> {
     const [{ getDocs }, collectionReference] = await Promise.all([
       this._getDatabase(),
-      this.getCollectionReference<z.infer<T['data']>>(getCollectionPathArgument),
+      this.getCollectionReference<Type.Static<T['data']>>(getCollectionPathArgument),
     ]);
 
     const querySnapshot = await getDocs(collectionReference);
@@ -175,8 +174,8 @@ export class FrontendRepository<T extends RepositoryType>
     return () => doc(collectionReference).id;
   }
   async getDocumentsByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-  ): Promise<z.infer<T['data']>[]> {
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+  ): Promise<Type.Static<T['data']>[]> {
     const [{ getDocs }, currentQuery] = await Promise.all([
       this._getDatabase(),
       this.getQuery(query),
@@ -186,8 +185,6 @@ export class FrontendRepository<T extends RepositoryType>
     try {
       querySnapshot = await getDocs(currentQuery);
     } catch (error) {
-      // Firestore SDK internally aborts queries when concurrent queries race.
-      // This is harmless — silently suppress DOMException AbortError.
       if (error instanceof DOMException && error.name === 'AbortError') {
         return [];
       }
@@ -199,7 +196,7 @@ export class FrontendRepository<T extends RepositoryType>
 
     return this.parseDocuments(querySnapshot.docs);
   }
-  async getDocumentsByRawQuery(query: Query): Promise<z.infer<T['data']>[]> {
+  async getDocumentsByRawQuery(query: Query): Promise<Type.Static<T['data']>[]> {
     const [{ getDocs }] = await Promise.all([this._getDatabase()]);
 
     let querySnapshot: QuerySnapshot;
@@ -217,15 +214,15 @@ export class FrontendRepository<T extends RepositoryType>
     return this.parseDocuments(querySnapshot.docs);
   }
   async getDocumentsStreamByQuery(
-    query: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-    postSort?: PostSortDocuments<z.infer<T['data']>>,
-  ): Promise<DocumentsObservable<z.infer<T['data']>>> {
+    query: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+    postSort?: PostSortDocuments<Type.Static<T['data']>>,
+  ): Promise<DocumentsObservable<Type.Static<T['data']>>> {
     const [{ onSnapshot }, currentQuery] = await Promise.all([
       this._getDatabase(),
       this.getQuery(query),
     ]);
     return (
-      listener: DocumentsListener<z.infer<T['data']>>,
+      listener: DocumentsListener<Type.Static<T['data']>>,
       onError?: (error: FirestoreError) => void,
       onCompletion?: () => void,
       onDeleted?: (ids: string[]) => void,
@@ -233,14 +230,14 @@ export class FrontendRepository<T extends RepositoryType>
       let completed = false;
       const unsubscribe = onSnapshot(
         currentQuery,
-        async (querySnapshot: QuerySnapshot<z.infer<T['data']>>) => {
+        async (querySnapshot: QuerySnapshot<Type.Static<T['data']>>) => {
           const documents = await this.parseDocuments(querySnapshot.docs);
 
           void listener(postSort ? postSort(documents) : documents);
           const deletedIds = querySnapshot
             .docChanges()
-            .filter((change: DocumentChange<z.infer<T['data']>>) => change.type === 'removed')
-            .map((change: DocumentChange<z.infer<T['data']>>) => change.doc.id);
+            .filter((change: DocumentChange<Type.Static<T['data']>>) => change.type === 'removed')
+            .map((change: DocumentChange<Type.Static<T['data']>>) => change.doc.id);
 
           if (deletedIds.length > 0) {
             onDeleted?.(deletedIds);
@@ -269,8 +266,8 @@ export class FrontendRepository<T extends RepositoryType>
     };
   }
   async getDocumentsByGroupQuery(
-    options: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-  ): Promise<z.infer<T['data']>[]> {
+    options: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+  ): Promise<Type.Static<T['data']>[]> {
     const [{ getDocs }, currentQuery] = await Promise.all([
       this._getDatabase(),
       this.getQuery(options),
@@ -288,7 +285,7 @@ export class FrontendRepository<T extends RepositoryType>
     getCollectionPathArgument,
   }: {
     getCollectionPathArgument: T['getCollectionPathArgument'];
-    createData: Omit<z.infer<T['createData']>, 'createdAt'>;
+    createData: Omit<Type.Static<T['createData']>, 'createdAt'>;
   }): Promise<string> {
     const [{ addDoc, serverTimestamp }, collectionReference] = await Promise.all([
       this._getDatabase(),
@@ -312,7 +309,7 @@ export class FrontendRepository<T extends RepositoryType>
       const documentReference = await this.getDocumentReference(documentPathArgument);
       switch (type) {
         case 'set':
-          batch.set(documentReference, data as z.infer<T['createData']>);
+          batch.set(documentReference, data as Type.Static<T['createData']>);
           break;
         case 'update':
           batch.update(documentReference, data);
@@ -334,7 +331,7 @@ export class FrontendRepository<T extends RepositoryType>
     setData,
   }: {
     getDocumentPathArgument: T['getDocumentPathArgument'];
-    setData: Omit<z.infer<T['createData']>, 'createdAt'>;
+    setData: Omit<Type.Static<T['createData']>, 'createdAt'>;
     options?: {
       merge?: boolean;
     };
@@ -379,15 +376,15 @@ export class FrontendRepository<T extends RepositoryType>
   }
 
   async getDocumentsStreamMultipleQuery(
-    queries: Query<z.infer<T['data']>>[],
-    postSort?: PostSortDocuments<z.infer<T['data']>>,
-  ): Promise<DocumentsObservable<z.infer<T['data']>>> {
-    const documents: z.infer<T['data']>[] = [];
+    queries: Query<Type.Static<T['data']>>[],
+    postSort?: PostSortDocuments<Type.Static<T['data']>>,
+  ): Promise<DocumentsObservable<Type.Static<T['data']>>> {
+    const documents: Type.Static<T['data']>[] = [];
     const unsubscribes: Unsubscribe[] = [];
     const { onSnapshot } = await this._getDatabase();
     let completionCount = 0;
     return (
-      listener: DocumentsListener<z.infer<T['data']>>,
+      listener: DocumentsListener<Type.Static<T['data']>>,
       onError?: (error: FirestoreError) => void,
       onCompletion?: () => void,
     ) => {
@@ -395,7 +392,7 @@ export class FrontendRepository<T extends RepositoryType>
         unsubscribes.push(
           onSnapshot(
             query,
-            async (querySnapshot: QuerySnapshot<z.infer<T['data']>>) => {
+            async (querySnapshot: QuerySnapshot<Type.Static<T['data']>>) => {
               const newDocuments = await this.parseDocuments(querySnapshot.docs);
               this.log('----newDocuments', newDocuments);
 
@@ -432,18 +429,11 @@ export class FrontendRepository<T extends RepositoryType>
       };
     };
   }
-  /**
-   * async NB: You cannot order your query by any field included in an
-   * equality (=) or in clause.
-   * https://firebase.google.com/docs/firestore/query-data/order-limit-data#limitations
-   *
-   * @param options - Options
-   * @returns Query
-   */
+
   async getRawQuery(options: {
-    filters: QueryFilter<z.infer<T['data']>>[];
+    filters: QueryFilter<Type.Static<T['data']>>[];
     collectionPath: string;
-  }): Promise<Query<z.infer<T['data']>>> {
+  }): Promise<Query<Type.Static<T['data']>>> {
     const { collection, documentId, firestore, query, where } = await this._getDatabase();
     const { collectionPath, filters } = options;
     const constraints: QueryConstraint[] = [];
@@ -453,7 +443,7 @@ export class FrontendRepository<T extends RepositoryType>
 
     this.debug('getQuery', constraints);
 
-    return query<z.infer<T['data']>, z.infer<T['data']>>(
+    return query<Type.Static<T['data']>, Type.Static<T['data']>>(
       // @ts-expect-error TODO: Remove this when firebase don't require index signature
       collection(firestore, collectionPath),
       ...constraints,
@@ -461,19 +451,19 @@ export class FrontendRepository<T extends RepositoryType>
   }
   async getDocumentStream(
     getDocumentPathArgument: T['getDocumentPathArgument'],
-  ): Promise<DocumentObservable<z.infer<T['data']>>> {
+  ): Promise<DocumentObservable<Type.Static<T['data']>>> {
     const { onSnapshot } = await this._getDatabase();
     const documentReference =
-      await this.getDocumentReference<z.infer<T['data']>>(getDocumentPathArgument);
+      await this.getDocumentReference<Type.Static<T['data']>>(getDocumentPathArgument);
 
     return (
-      listener: DocumentListener<z.infer<T['data']>>,
+      listener: DocumentListener<Type.Static<T['data']>>,
       onError?: (error: FirestoreError) => void,
       onCompletion?: () => void,
     ) => {
       const unsubscribe = onSnapshot(
         documentReference,
-        async (documentSnapshot: DocumentSnapshot<z.infer<T['data']>>) => {
+        async (documentSnapshot: DocumentSnapshot<Type.Static<T['data']>>) => {
           void listener(
             documentSnapshot.exists()
               ? await this.parse('data', this.toData(documentSnapshot))
@@ -492,9 +482,9 @@ export class FrontendRepository<T extends RepositoryType>
 
   async getDocumentReference<
     Document extends
-      | z.infer<T['data']>
-      | z.infer<T['createData']>
-      | Partial<z.infer<T['updateData']>>,
+      | Type.Static<T['data']>
+      | Type.Static<T['createData']>
+      | Partial<Type.Static<T['updateData']>>,
   >(documentArgument: T['getDocumentPathArgument']): Promise<DocumentReference<Document>> {
     const { doc, firestore } = await this._getDatabase();
 
@@ -507,14 +497,14 @@ export class FrontendRepository<T extends RepositoryType>
     updateData,
   }: {
     getDocumentPathArgument: T['getDocumentPathArgument'];
-    updateData: Omit<Partial<z.infer<T['updateData']>>, 'updatedAt'>;
+    updateData: Omit<Partial<Type.Static<T['updateData']>>, 'updatedAt'>;
     options?: {
       merge?: boolean;
     };
   }): Promise<void> {
     const [{ serverTimestamp, setDoc, updateDoc }, documentReference] = await Promise.all([
       this._getDatabase(),
-      this.getDocumentReference<Partial<z.infer<T['updateData']>>>(getDocumentPathArgument),
+      this.getDocumentReference<Partial<Type.Static<T['updateData']>>>(getDocumentPathArgument),
     ]);
 
     const data = await this.parse('updateData', {
@@ -562,7 +552,6 @@ export class FrontendRepository<T extends RepositoryType>
       serverDelete: deleteField,
       serverIncrement: increment,
       serverTimestamp,
-      // biome-ignore lint/style/useNamingConvention: Firebase class and method names
       Timestamp: FbTimestamp,
     };
   }
@@ -571,7 +560,7 @@ export class FrontendRepository<T extends RepositoryType>
     const querySnapshot = await getCountFromServer(query);
     return querySnapshot.data().count;
   }
-  async getCollectionReference<Document extends z.infer<T['data']> | z.infer<T['createData']>>(
+  async getCollectionReference<Document extends Type.Static<T['data']> | Type.Static<T['createData']>>(
     getCollectionPathArgument: T['getCollectionPathArgument'],
   ): Promise<CollectionReference<Document>> {
     const { collection, firestore } = await this._getDatabase();
@@ -581,25 +570,17 @@ export class FrontendRepository<T extends RepositoryType>
       this.getCollectionPath(getCollectionPathArgument),
     ) as CollectionReference<Document>;
   }
-  async getCollectionGroupReference<Document extends z.infer<T['data']> | z.infer<T['createData']>>(
+  async getCollectionGroupReference<Document extends Type.Static<T['data']> | Type.Static<T['createData']>>(
     collectionGroupName: string,
   ): Promise<Query<Document>> {
     const { collectionGroup, firestore } = await this._getDatabase();
 
     return collectionGroup(firestore, collectionGroupName) as Query<Document>;
   }
-  /**
-   * async NB: You cannot order your query by any field included in an
-   * equality (=) or in clause.
-   * https://firebase.google.com/docs/firestore/query-data/order-limit-data#limitations
-   *
-   * @param options - Options
-   * @param collectionGroupName - Collection group name
-   * @returns Query
-   */
+
   async getQuery(
-    options: GetQueryOptions<z.infer<T['data']>, T['getCollectionPathArgument']>,
-  ): Promise<Query<z.infer<T['data']>>> {
+    options: GetQueryOptions<Type.Static<T['data']>, T['getCollectionPathArgument']>,
+  ): Promise<Query<Type.Static<T['data']>>> {
     const { documentId, limit, orderBy, query, startAfter, Timestamp, where } =
       await this._getDatabase();
 
@@ -622,9 +603,7 @@ export class FrontendRepository<T extends RepositoryType>
       );
     }
     if (startAfterParameter) {
-      // If startAfterParameter is a timestamp, ensure it is a firestore timestamp
       if (isCustomTimestamp(startAfterParameter)) {
-        // Convert seconds to milliseconds and add nanoseconds converted to milliseconds
         const millis =
           startAfterParameter._seconds * 1000 + startAfterParameter._nanoseconds / 1000000;
         startAfterParameter = Timestamp.fromMillis(millis);
@@ -637,7 +616,7 @@ export class FrontendRepository<T extends RepositoryType>
       constraints.push(limit(limitTo));
     }
 
-    return query<z.infer<T['data']>, z.infer<T['data']>>(
+    return query<Type.Static<T['data']>, Type.Static<T['data']>>(
       // @ts-expect-error TODO: Remove this when firebase don't require index signature
       options.collectionGroupName
         ? await this.getCollectionGroupReference(options.collectionGroupName)

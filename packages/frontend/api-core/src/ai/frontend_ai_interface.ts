@@ -1,6 +1,6 @@
 // packages/frontend/api-core/src/ai/frontend_ai_interface.ts
 
-import type { z } from 'zod';
+import type { TSchema } from 'typebox';
 
 import type {
   AiProviderCapabilities,
@@ -84,22 +84,18 @@ export interface FrontendAiInterface {
   generateImage(prompt: string, options?: ImageOptions): Promise<ImageResult>;
 
   /**
-   * Generate structured game content validated against a Zod schema.
+   * Generate structured game content validated against a TypeBox schema.
    *
    * Used for item definitions, quest data, NPC stats, etc.
    * The returned data is guaranteed to match the provided schema.
    *
    * @typeParam T — The expected output type.
    * @param instruction — What to generate (e.g. "Generate a fantasy sword item").
-   * @param schema — Zod schema defining the expected output shape.
+   * @param schema — TypeBox schema defining the expected output shape.
    * @param context — Optional additional context (e.g. game world setting).
    * @returns A typed object matching the schema.
    */
-  generateStructured<T>(
-    instruction: string,
-    schema: z.ZodSchema<T>,
-    context?: string,
-  ): Promise<T>;
+  generateStructured<T>(instruction: string, schema: TSchema, context?: string): Promise<T>;
 
   /**
    * Check if the provider is currently reachable.

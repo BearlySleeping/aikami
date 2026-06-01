@@ -1,3 +1,4 @@
+// packages/shared/types/src/lib/auth.ts
 import type {
   FirebaseSignInProviderNameSchema,
   SignInProviderSchema,
@@ -7,11 +8,11 @@ import type {
   UserStatusSchema,
   UserTokenSchema,
 } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
-export type SignInSocialProvider = z.infer<typeof SignInSocialProviderSchema>;
+export type SignInSocialProvider = Type.Static<typeof SignInSocialProviderSchema>;
 
-export type SignInProvider = z.infer<typeof SignInProviderSchema>;
+export type SignInProvider = Type.Static<typeof SignInProviderSchema>;
 
 export type UserMetadata = {
   firstName?: string;
@@ -48,18 +49,12 @@ export type MicrosoftMetadata = {
   verified_email?: boolean;
 };
 
-export type FirebaseSignInProviderName = z.infer<typeof FirebaseSignInProviderNameSchema>;
+export type FirebaseSignInProviderName = Type.Static<typeof FirebaseSignInProviderNameSchema>;
 
-export type UserClaims = z.infer<typeof UserClaimsSchema>;
+export type UserClaims = Type.Static<typeof UserClaimsSchema>;
 
-export type UserRole = z.infer<typeof UserRoleSchema>;
-/**
- * The status of the user.
- *
- * If this is 'unconfirmed-terms' then the user has not confirmed the terms
- *
- * TODO: add more statuses
- */
-export type UserStatus = z.infer<typeof UserStatusSchema>;
+export type UserRole = Type.Static<typeof UserRoleSchema>;
 
-export type UserTokenData = z.infer<typeof UserTokenSchema>;
+export type UserStatus = Type.Static<typeof UserStatusSchema>;
+
+export type UserTokenData = Type.Static<typeof UserTokenSchema>;

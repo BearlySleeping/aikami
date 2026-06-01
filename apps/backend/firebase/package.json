@@ -4,7 +4,7 @@
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
-    "typecheck": "tsc --noEmit --skipLibCheck",
+    "typecheck": "tsgo --noEmit --skipLibCheck",
     "fix": "biome check --write .",
     "build": "firestack deploy --dry-run",
     "deploy": "firestack deploy",

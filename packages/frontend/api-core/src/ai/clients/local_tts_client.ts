@@ -1,6 +1,6 @@
 // packages/frontend/api-core/src/ai/clients/local_tts_client.ts
 
-import type { z } from 'zod';
+import type { TSchema } from 'typebox';
 
 import type { FrontendAiInterface } from '../frontend_ai_interface.ts';
 import type {
@@ -12,9 +12,9 @@ import type {
   HealthCheckResult,
   ImageOptions,
   ImageResult,
+  LocalTtsClientOptions,
   SpeechResult,
   TtsOptions,
-  LocalTtsClientOptions,
 } from '../types.ts';
 
 /**
@@ -70,11 +70,17 @@ class LocalTtsClient implements FrontendAiInterface {
   // Unsupported capabilities
   // -----------------------------------------------------------------------
 
-  async generateDialogue(_context: DialogueContext, _options?: DialogueOptions): Promise<DialogueResponse> {
+  async generateDialogue(
+    _context: DialogueContext,
+    _options?: DialogueOptions,
+  ): Promise<DialogueResponse> {
     throw new Error('LocalTtsClient does not support dialogue generation. Use a text AI provider.');
   }
 
-  async generateContentDescription(_prompt: string, _options?: ContentDescriptionOptions): Promise<string> {
+  async generateContentDescription(
+    _prompt: string,
+    _options?: ContentDescriptionOptions,
+  ): Promise<string> {
     throw new Error('LocalTtsClient does not support content description. Use a text AI provider.');
   }
 
@@ -84,7 +90,7 @@ class LocalTtsClient implements FrontendAiInterface {
 
   async generateStructured<T>(
     _instruction: string,
-    _schema: z.ZodSchema<T>,
+    _schema: TSchema,
     _context?: string,
   ): Promise<T> {
     throw new Error('LocalTtsClient does not support structured data generation.');
@@ -146,9 +152,10 @@ class LocalTtsClient implements FrontendAiInterface {
     return {
       available: voices.length > 0,
       latencyMs: 0,
-      message: voices.length > 0
-        ? `Web Speech API ready (${voices.length} voices available)`
-        : 'Web Speech API available but no voices found',
+      message:
+        voices.length > 0
+          ? `Web Speech API ready (${voices.length} voices available)`
+          : 'Web Speech API available but no voices found',
     };
   }
 
@@ -161,10 +168,12 @@ class LocalTtsClient implements FrontendAiInterface {
    */
   private checkTtsAvailability(): boolean {
     try {
-      return typeof window !== 'undefined'
-        && typeof window.speechSynthesis !== 'undefined'
-        && window.speechSynthesis !== null
-        && typeof SpeechSynthesisUtterance !== 'undefined';
+      return (
+        typeof window !== 'undefined' &&
+        typeof window.speechSynthesis !== 'undefined' &&
+        window.speechSynthesis !== null &&
+        typeof SpeechSynthesisUtterance !== 'undefined'
+      );
     } catch {
       return false;
     }

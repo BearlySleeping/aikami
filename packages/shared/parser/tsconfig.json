@@ -3,11 +3,17 @@
   "display": "Parser",
   "extends": "../../../config/tsconfig/tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "../..",
+    "rootDir": "..",
     "outDir": "dist",
     "paths": {
+      "@aikami/constants": ["../constants/src/index.ts"],
+      "@aikami/constants/*": ["../constants/src/lib/*"],
       "@aikami/schemas": ["../schemas/src/index.ts"],
-      "@aikami/schemas/*": ["../schemas/src/lib/*"]
+      "@aikami/schemas/*": ["../schemas/src/lib/*"],
+      "@aikami/types": ["../types/src/index.ts"],
+      "@aikami/types/*": ["../types/src/lib/*"],
+      "$logger": ["../logger/src/index.ts"],
+      "$logger/*": ["../logger/src/lib/*"]
     }
   },
   "include": ["src/**/*"],

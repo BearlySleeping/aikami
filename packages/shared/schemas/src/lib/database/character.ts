@@ -1,87 +1,107 @@
-import { z } from 'zod';
+// packages/shared/schemas/src/lib/database/character.ts
+import Type from 'typebox';
 import { AppearanceSchema } from './appearance.ts';
 import { DEFAULT_SAVING_THROWS, DEFAULT_SKILLS, SavingThrowSchema, SkillSchema } from './skills.ts';
 
-export const BaseCharacterSheetSchema = z
-  .object({
-    name: z.string().describe('Character Name (Required, max 100 characters)'),
-    race: z.string().describe('Character Race').optional(),
-    class: z.string().describe('Character Class').optional(),
-    subclass: z.string().describe('Character Subclass (Optional)').optional(),
-    level: z.number().int().describe('Character Level (integer between 1 and 20)').optional(),
-    experiencePoints: z
-      .number()
-      .int()
-      .describe('Experience Points (non-negative integer)')
-      .default(0),
+export const BaseCharacterSheetSchema = Type.Object(
+  {
+    name: Type.String({ description: 'Character Name (Required, max 100 characters)' }),
+    race: Type.Optional(Type.String({ description: 'Character Race' })),
+    class: Type.Optional(Type.String({ description: 'Character Class' })),
+    subclass: Type.Optional(Type.String({ description: 'Character Subclass (Optional)' })),
+    level: Type.Optional(
+      Type.Integer({ description: 'Character Level (integer between 1 and 20)' }),
+    ),
+    experiencePoints: Type.Number({
+      description: 'Experience Points (non-negative integer)',
+      default: 0,
+    }),
 
-    abilityScores: z
-      .object({
-        strength: z.number().int().describe('Strength Score (integer between 1 and 30)').optional(),
-        dexterity: z
-          .number()
-          .int()
-          .describe('Dexterity Score (integer between 1 and 30)')
-          .optional(),
-        constitution: z
-          .number()
-          .int()
-          .describe('Constitution Score (integer between 1 and 30)')
-          .optional(),
-        intelligence: z
-          .number()
-          .int()
-          .describe('Intelligence Score (integer between 1 and 30)')
-          .optional(),
-        wisdom: z.number().int().describe('Wisdom Score (integer between 1 and 30)').optional(),
-        charisma: z.number().int().describe('Charisma Score (integer between 1 and 30)').optional(),
-      })
-      .describe('Ability Scores')
-      .optional(),
+    abilityScores: Type.Optional(
+      Type.Object(
+        {
+          strength: Type.Optional(
+            Type.Integer({ description: 'Strength Score (integer between 1 and 30)' }),
+          ),
+          dexterity: Type.Optional(
+            Type.Integer({ description: 'Dexterity Score (integer between 1 and 30)' }),
+          ),
+          constitution: Type.Optional(
+            Type.Integer({ description: 'Constitution Score (integer between 1 and 30)' }),
+          ),
+          intelligence: Type.Optional(
+            Type.Integer({ description: 'Intelligence Score (integer between 1 and 30)' }),
+          ),
+          wisdom: Type.Optional(
+            Type.Integer({ description: 'Wisdom Score (integer between 1 and 30)' }),
+          ),
+          charisma: Type.Optional(
+            Type.Integer({ description: 'Charisma Score (integer between 1 and 30)' }),
+          ),
+        },
+        { description: 'Ability Scores' },
+      ),
+    ),
 
-    hitPoints: z.number().int().describe('Hit Points').default(10),
-    hitPointsMax: z.number().int().describe('Maximum Hit Points').optional(),
-    temporaryHitPoints: z.number().int().describe('Temporary Hit Points').default(0),
-    armorClass: z.number().int().describe('Armor Class').default(10),
-    speed: z.number().int().describe('Speed').default(30),
-    initiative: z.number().int().describe('Initiative modifier').optional(),
+    hitPoints: Type.Integer({ description: 'Hit Points', default: 10 }),
+    hitPointsMax: Type.Optional(Type.Integer({ description: 'Maximum Hit Points' })),
+    temporaryHitPoints: Type.Integer({ description: 'Temporary Hit Points', default: 0 }),
+    armorClass: Type.Integer({ description: 'Armor Class', default: 10 }),
+    speed: Type.Integer({ description: 'Speed', default: 30 }),
+    initiative: Type.Optional(Type.Integer({ description: 'Initiative modifier' })),
 
-    proficiencyBonus: z
-      .number()
-      .int()
-      .describe('Proficiency bonus (derived from level)')
-      .optional(),
+    proficiencyBonus: Type.Optional(
+      Type.Integer({ description: 'Proficiency bonus (derived from level)' }),
+    ),
 
-    savingThrows: SavingThrowSchema.array()
-      .describe('Saving throw proficiencies')
-      .default(DEFAULT_SAVING_THROWS),
+    savingThrows: Type.Array(SavingThrowSchema, {
+      description: 'Saving throw proficiencies',
+      default: DEFAULT_SAVING_THROWS,
+    }),
 
-    skills: SkillSchema.array().describe('Skill proficiencies').default(DEFAULT_SKILLS),
+    skills: Type.Array(SkillSchema, {
+      description: 'Skill proficiencies',
+      default: DEFAULT_SKILLS,
+    }),
 
-    alignment: z
-      .string()
-      .describe(
-        'Alignment (one of: Lawful Good, Neutral Good, Chaotic Good, Lawful Neutral, Neutral, Chaotic Neutral, Lawful Evil, Neutral Evil, Chaotic Evil)',
-      )
-      .optional(),
-    background: z.string().describe('Background').optional(),
+    alignment: Type.Optional(
+      Type.String({
+        description:
+          'Alignment (one of: Lawful Good, Neutral Good, Chaotic Good, Lawful Neutral, Neutral, Chaotic Neutral, Lawful Evil, Neutral Evil, Chaotic Evil)',
+      }),
+    ),
+    background: Type.Optional(Type.String({ description: 'Background' })),
 
-    proficiencies: z.string().array().describe('Proficiencies (Array of strings)').default([]),
-    languages: z.string().array().describe('Languages (Array of strings)').default(['Common']),
+    proficiencies: Type.Array(Type.String(), {
+      description: 'Proficiencies (Array of strings)',
+      default: [],
+    }),
+    languages: Type.Array(Type.String(), {
+      description: 'Languages (Array of strings)',
+      default: ['Common'],
+    }),
 
-    equipment: z.string().array().describe('Equipment (Array of strings)').default([]),
-    inventory: z.string().array().describe('Inventory (Array of strings)').default([]),
+    equipment: Type.Array(Type.String(), {
+      description: 'Equipment (Array of strings)',
+      default: [],
+    }),
+    inventory: Type.Array(Type.String(), {
+      description: 'Inventory (Array of strings)',
+      default: [],
+    }),
 
-    personalityTraits: z
-      .string()
-      .describe('Personality Traits (Optional, max 500 characters)')
-      .optional(),
-    ideals: z.string().describe('Ideals (Optional, max 500 characters)').optional(),
-    bonds: z.string().describe('Bonds (Optional, max 500 characters)').optional(),
-    flaws: z.string().describe('Flaws (Optional, max 500 characters)').optional(),
+    personalityTraits: Type.Optional(
+      Type.String({ description: 'Personality Traits (Optional, max 500 characters)' }),
+    ),
+    ideals: Type.Optional(Type.String({ description: 'Ideals (Optional, max 500 characters)' })),
+    bonds: Type.Optional(Type.String({ description: 'Bonds (Optional, max 500 characters)' })),
+    flaws: Type.Optional(Type.String({ description: 'Flaws (Optional, max 500 characters)' })),
 
-    appearance: AppearanceSchema.describe('Character appearance details').optional(),
+    appearance: Type.Optional(AppearanceSchema),
 
-    notes: z.string().describe('Additional Notes (Optional, max 1000 characters)').optional(),
-  })
-  .describe('D&D Character Sheet');
+    notes: Type.Optional(
+      Type.String({ description: 'Additional Notes (Optional, max 1000 characters)' }),
+    ),
+  },
+  { description: 'D&D Character Sheet' },
+);

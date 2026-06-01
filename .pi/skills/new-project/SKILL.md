@@ -11,13 +11,13 @@ Use this skill when adding a new project to the aikami monorepo — whether a sh
 
 The monorepo has these **inherited defaults** in `.moon/tasks/all.yml`:
 
-| Inherited Task | What It Does |
-|---|---|
-| `lint` | `bun run lint` — biome lint check |
-| `format` | `bun run format` — biome format check |
-| `typecheck` | `bun run typecheck` — `tsc --noEmit` |
-| `fix` | `bun run fix` — `biome check --write .` |
-| `validate` | Internal meta-task (deps: lint + format + typecheck) — do NOT define in moon.yml or package.json |
+| Inherited Task | What It Does                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------ |
+| `lint`         | `bun run lint` — biome lint check                                                                |
+| `format`       | `bun run format` — biome format check                                                            |
+| `typecheck`    | `bun run typecheck` — `tsc --noEmit`                                                             |
+| `fix`          | `bun run fix` — `biome check --write .`                                                          |
+| `validate`     | Internal meta-task (deps: lint + format + typecheck) — do NOT define in moon.yml or package.json |
 
 These tasks are automatically inherited by **every** project. You do NOT need to define them in your `moon.yml` or duplicate their `fileGroups` unless you need custom behaviour.
 
@@ -34,7 +34,7 @@ Register the project in `.moon/workspace.yml` under `projects:`:
 
 ```yaml
 projects:
-  project-id: "packages/backend/<name>"
+    project-id: "packages/backend/<name>"
 ```
 
 The key (`project-id`) is the short name used in `dependsOn` across the monorepo.
@@ -47,28 +47,29 @@ Use this `moon.yml` structure when the project only needs `lint`, `format`, `typ
 
 ```yaml
 # packages/backend/auth/moon.yml
-$schema: 'https://moonrepo.dev/schemas/project.json'
+$schema: "https://moonrepo.dev/schemas/project.json"
 
-language: 'typescript'
-layer: 'library'
+language: "typescript"
+layer: "library"
 tags:
-  - '<name>'
-  - '<backend|frontend|shared>'
-  - 'library'
+    - "<name>"
+    - "<backend|frontend|shared>"
+    - "library"
 
 project:
-  name: '<package-name>'              # e.g. 'backend-auth' — matches moon key
-  description: 'What this package does.'
-  channel: '#<team>'
-  owner: '<Team Name>'
+    name: "<package-name>" # e.g. 'backend-auth' — matches moon key
+    description: "What this package does."
+    channel: "#<team>"
+    owner: "<Team Name>"
 
 dependsOn:
-  - 'constants'
-  - 'schemas'
-  - 'types'
+    - "constants"
+    - "schemas"
+    - "types"
 ```
 
 **Rules:**
+
 - Do NOT include `fileGroups` or `tasks` sections — all inherited from `.moon/tasks/all.yml`
 - Do NOT include `stack:` line unless it provides useful information (leave it off for shared packages)
 - `project.name` is the short moon key, not the npm package name
@@ -80,41 +81,42 @@ Only add `fileGroups` and `tasks` when you have a task **beyond** the inherited 
 
 ```yaml
 # packages/backend/database/moon.yml
-$schema: 'https://moonrepo.dev/schemas/project.json'
+$schema: "https://moonrepo.dev/schemas/project.json"
 
-language: 'typescript'
-layer: 'library'
+language: "typescript"
+layer: "library"
 tags:
-  - 'database'
-  - 'backend'
-  - 'library'
+    - "database"
+    - "backend"
+    - "library"
 
 project:
-  name: 'backend-database'
-  description: 'Database services and utilities for Firestore operations.'
-  channel: '#backend'
-  owner: 'Backend Team'
+    name: "backend-database"
+    description: "Database services and utilities for Firestore operations."
+    channel: "#backend"
+    owner: "Backend Team"
 
 dependsOn:
-  - 'constants'
-  - 'schemas'
-  - 'types'
-  - 'logger'
+    - "constants"
+    - "schemas"
+    - "types"
+    - "logger"
 
 fileGroups:
-  tests:
-    - 'tests/**/*'
+    tests:
+        - "tests/**/*"
 
 tasks:
-  test:
-    command: 'bun run test'
-    inputs:
-      - '@group(sources)'     # inherited sources — OK to reference
-      - '@group(tests)'        # custom file group for test files
-      - '@group(configs)'      # inherited configs — OK to reference
+    test:
+        command: "bun run test"
+        inputs:
+            - "@group(sources)" # inherited sources — OK to reference
+            - "@group(tests)" # custom file group for test files
+            - "@group(configs)" # inherited configs — OK to reference
 ```
 
 **Rules:**
+
 - Custom file groups only need to define what is NOT already in inherited groups
 - You CAN reference `@group(sources)`, `@group(configs)`, `@group(root-configs)` in custom tasks — they're inherited from `.moon/tasks/all.yml`
 - Do NOT re-define `lint`, `format`, `typecheck`, `fix`, or `validate` tasks — they're inherited
@@ -123,80 +125,81 @@ tasks:
 
 ```yaml
 # apps/frontend/game/moon.yml
-$schema: 'https://moonrepo.dev/schemas/project.json'
+$schema: "https://moonrepo.dev/schemas/project.json"
 
-language: 'typescript'
-layer: 'application'
+language: "typescript"
+layer: "application"
 tags:
-  - 'game'
-  - 'frontend'
-  - 'application'
-  - 'playwright'
+    - "game"
+    - "frontend"
+    - "application"
+    - "playwright"
 
 dependsOn:
-  - 'frontend-api-core'
+    - "frontend-api-core"
 
 toolchains:
-  javascript: false         # use this if the app manages its own deps (non-Bun-proxy)
+    javascript: false # use this if the app manages its own deps (non-Bun-proxy)
 
 project:
-  name: 'game'
-  description: 'Standalone PixiJS + bitECS game with vanilla TypeScript frontend.'
-  channel: '#frontend'
-  owner: 'Frontend Team'
+    name: "game"
+    description: "Standalone PixiJS + bitECS game with vanilla TypeScript frontend."
+    channel: "#frontend"
+    owner: "Frontend Team"
 
 fileGroups:
-  sources:
-    - 'src/**/*'
-    - 'index.html'
-  configs:
-    - 'package.json'
-    - 'tsconfig.json'
-    - 'tsconfig.test.json'
-    - 'vite.config.*'
-  tests:
-    - 'tests/**/*'
-    - 'playwright.config.*'
-  unitTests:
-    - 'src/**/*.test.ts'
+    sources:
+        - "src/**/*"
+        - "index.html"
+    configs:
+        - "package.json"
+        - "tsconfig.json"
+        - "tsconfig.test.json"
+        - "vite.config.*"
+    tests:
+        - "tests/**/*"
+        - "playwright.config.*"
+    unitTests:
+        - "src/**/*.test.ts"
 
 tasks:
-  dev:
-    command: 'bun run dev'
-    preset: 'server'
-  build:
-    command: 'bun run build'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-    outputs:
-      - 'dist'
-  preview:
-    command: 'bun run preview'
-    preset: 'server'
-  test:
-    script: |
-      bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
-    deps:
-      - 'build'
-    inputs:
-      - '@group(tests)'
-      - '@group(sources)'
-  test-unit:
-    command: 'bun run test:unit'
-    inputs:
-      - '@group(unitTests)'
-      - '@group(sources)'
-  test-e2e:
-    script: 'bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
-    deps:
-      - 'build'
-    inputs:
-      - '@group(tests)'
-      - '@group(sources)'
+    dev:
+        command: "bun run dev"
+        preset: "server"
+    build:
+        command: "bun run build"
+        inputs:
+            - "@group(sources)"
+            - "@group(configs)"
+        outputs:
+            - "dist"
+    preview:
+        command: "bun run preview"
+        preset: "server"
+    test:
+        script: |
+            bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
+        deps:
+            - "build"
+        inputs:
+            - "@group(tests)"
+            - "@group(sources)"
+    test-unit:
+        command: "bun run test:unit"
+        inputs:
+            - "@group(unitTests)"
+            - "@group(sources)"
+    test-e2e:
+        script: "bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT"
+        deps:
+            - "build"
+        inputs:
+            - "@group(tests)"
+            - "@group(sources)"
 ```
 
 **Rules:**
+
 - Do NOT define `lint`, `format`, `typecheck`, `fix`, or `validate` tasks — they're inherited
 - Use `preset: 'server'` for long-running dev servers (moon won't cache them)
 - For E2E tests, use the `script:` field to build → preview → test → cleanup
@@ -207,76 +210,76 @@ tasks:
 
 ```yaml
 # apps/backend/firebase/moon.yml
-$schema: 'https://moonrepo.dev/schemas/project.json'
+$schema: "https://moonrepo.dev/schemas/project.json"
 
-language: 'typescript'
-layer: 'application'
+language: "typescript"
+layer: "application"
 tags:
-  - 'firebase'
-  - 'application'
+    - "firebase"
+    - "application"
 
 project:
-  name: 'firebase'
-  description: 'Backend Firebase project: Cloud Functions, Firestore Rules, and Data Connect.'
-  channel: '#backend'
-  owner: 'Backend Team'
+    name: "firebase"
+    description: "Backend Firebase project: Cloud Functions, Firestore Rules, and Data Connect."
+    channel: "#backend"
+    owner: "Backend Team"
 
 dependsOn:
-  - 'backend-configs'
-  - 'backend-utils'
-  - 'backend-database'
-  - 'schemas'
-  - 'types'
-  - 'constants'
-  - 'logger'
+    - "backend-configs"
+    - "backend-utils"
+    - "backend-database"
+    - "schemas"
+    - "types"
+    - "constants"
+    - "logger"
 
 fileGroups:
-  sources:
-    - 'src/**/*'
-    - 'scripts/**/*'
-  configs:
-    - 'firestack.json'
-    - '*.ts'
-  tests:
-    - 'tests/**/*'
-  deployment:
-    - 'functions_cache.ts'
+    sources:
+        - "src/**/*"
+        - "scripts/**/*"
+    configs:
+        - "firestack.json"
+        - "*.ts"
+    tests:
+        - "tests/**/*"
+    deployment:
+        - "functions_cache.ts"
 
 tasks:
-  deploy:
-    command: 'bun run deploy'
-    inputs:
-      - '@group(deployment)'
-    options:
-      cache: false
-      runInCI: true
-  test:
-    command: 'bun run test'
-    inputs:
-      - '@group(sources)'
-      - '@group(tests)'
-      - '@group(configs)'
-  test-rules:
-    command: 'bun run test:rules'
-    inputs:
-      - '@group(sources)'
-      - '@group(tests)'
-      - '@group(configs)'
-  emulate:
-    command: 'bun run emulate'
-    options:
-      cache: false
-      runInCI: false
-  scripts:
-    command: 'bun run scripts'
-    options:
-      cache: false
-      runInCI: false
-  logs:
-    command: 'bun run logs'
-    options:
-      cache: false
-      runInCI: false
+    deploy:
+        command: "bun run deploy"
+        inputs:
+            - "@group(deployment)"
+        options:
+            cache: false
+            runInCI: true
+    test:
+        command: "bun run test"
+        inputs:
+            - "@group(sources)"
+            - "@group(tests)"
+            - "@group(configs)"
+    test-rules:
+        command: "bun run test:rules"
+        inputs:
+            - "@group(sources)"
+            - "@group(tests)"
+            - "@group(configs)"
+    emulate:
+        command: "bun run emulate"
+        options:
+            cache: false
+            runInCI: false
+    scripts:
+        command: "bun run scripts"
+        options:
+            cache: false
+            runInCI: false
+    logs:
+        command: "bun run logs"
+        options:
+            cache: false
+            runInCI: false
 ```
 
 ## 3. package.json
@@ -285,51 +288,54 @@ tasks:
 
 ```json
 {
-  "name": "@aikami/<package-name>",
-  "main": "src/index.ts",
-  "scripts": {
-    "lint": "biome lint .",
-    "format": "biome format .",
-    "typecheck": "tsc --noEmit",
-    "fix": "biome check --write ."
-  },
-  "dependencies": {
-    "@aikami/constants": "workspace:*"
-  }
+	"name": "@aikami/<package-name>",
+	"main": "src/index.ts",
+	"scripts": {
+		"lint": "biome lint .",
+		"format": "biome format .",
+		"typecheck": "tsgo --noEmit",
+		"fix": "biome check --write ."
+	},
+	"dependencies": {
+		"@aikami/constants": "workspace:*"
+	}
 }
 ```
 
 Add `"test": "bun test"` if the package has unit tests.
 
 **Required scripts** (mapped by inherited moon tasks):
+
 - `typecheck` — `tsc --noEmit`
 - `lint` — `biome lint .`
 - `format` — `biome format .`
 - `fix` — `biome check --write .`
 
 **Do NOT include:**
+
 - `validate` script — this is a moon meta-task managed via `.moon/tasks/all.yml`
 
 ### App
 
 ```json
 {
-  "name": "@app/<app-name>",
-  "type": "module",
-  "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "biome lint src",
-    "format": "biome format src",
-    "typecheck": "tsc --noEmit",
-    "fix": "biome check --write src"
-  },
-  "dependencies": {}
+	"name": "@app/<app-name>",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"lint": "biome lint src",
+		"format": "biome format src",
+		"typecheck": "tsgo --noEmit",
+		"fix": "biome check --write src"
+	},
+	"dependencies": {}
 }
 ```
 
 For SvelteKit apps, the `typecheck` command is:
+
 ```json
 "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
 ```
@@ -353,19 +359,19 @@ Each project extends the appropriate base config and defines its own path aliase
 
 ```json
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
-  "display": "Package Name",
-  "extends": "../../../config/tsconfig/tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "..",
-    "outDir": "dist",
-    "paths": {
-      "@aikami/<dep>": ["../<dep>/src/index.ts"],
-      "@aikami/<dep>/*": ["../<dep>/src/lib/*"]
-    }
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"display": "Package Name",
+	"extends": "../../../config/tsconfig/tsconfig.base.json",
+	"compilerOptions": {
+		"rootDir": "..",
+		"outDir": "dist",
+		"paths": {
+			"@aikami/<dep>": ["../<dep>/src/index.ts"],
+			"@aikami/<dep>/*": ["../<dep>/src/lib/*"]
+		}
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist"]
 }
 ```
 
@@ -373,23 +379,23 @@ Each project extends the appropriate base config and defines its own path aliase
 
 ```json
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
-  "display": "Backend XYZ",
-  "extends": "../../../config/tsconfig/tsconfig.backend.json",
-  "compilerOptions": {
-    "rootDir": "../..",
-    "paths": {
-      "@aikami/backend/<name>/*": ["./src/lib/*"],
-      "@aikami/constants": ["../../shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
-      "@aikami/schemas": ["../../shared/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["../../shared/schemas/src/lib/*"],
-      "@aikami/types": ["../../shared/types/src/index.ts"],
-      "@aikami/types/*": ["../../shared/types/src/lib/*"]
-    }
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"display": "Backend XYZ",
+	"extends": "../../../config/tsconfig/tsconfig.backend.json",
+	"compilerOptions": {
+		"rootDir": "../..",
+		"paths": {
+			"@aikami/backend/<name>/*": ["./src/lib/*"],
+			"@aikami/constants": ["../../shared/constants/src/index.ts"],
+			"@aikami/constants/*": ["../../shared/constants/src/lib/*"],
+			"@aikami/schemas": ["../../shared/schemas/src/index.ts"],
+			"@aikami/schemas/*": ["../../shared/schemas/src/lib/*"],
+			"@aikami/types": ["../../shared/types/src/index.ts"],
+			"@aikami/types/*": ["../../shared/types/src/lib/*"]
+		}
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist"]
 }
 ```
 
@@ -397,22 +403,22 @@ Each project extends the appropriate base config and defines its own path aliase
 
 ```json
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
-  "display": "Frontend XYZ",
-  "extends": "../../../config/tsconfig/tsconfig.frontend.json",
-  "compilerOptions": {
-    "rootDir": "../..",
-    "outDir": "dist",
-    "paths": {
-      "@aikami/frontend/<name>/*": ["./src/lib/*"],
-      "@aikami/constants": ["../../shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
-      "@aikami/types": ["../../shared/types/src/index.ts"],
-      "@aikami/types/*": ["../../shared/types/src/lib/*"]
-    }
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+	"$schema": "https://json.schemastore.org/tsconfig",
+	"display": "Frontend XYZ",
+	"extends": "../../../config/tsconfig/tsconfig.frontend.json",
+	"compilerOptions": {
+		"rootDir": "../..",
+		"outDir": "dist",
+		"paths": {
+			"@aikami/frontend/<name>/*": ["./src/lib/*"],
+			"@aikami/constants": ["../../shared/constants/src/index.ts"],
+			"@aikami/constants/*": ["../../shared/constants/src/lib/*"],
+			"@aikami/types": ["../../shared/types/src/index.ts"],
+			"@aikami/types/*": ["../../shared/types/src/lib/*"]
+		}
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist"]
 }
 ```
 
@@ -420,36 +426,36 @@ Each project extends the appropriate base config and defines its own path aliase
 
 ```json
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "allowJs": false,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["bun"]
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"allowJs": false,
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"types": ["bun"]
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["node_modules", "dist"]
 }
 ```
 
 ### Base Configs Reference
 
-| Base Config | Path | When to Use |
-|---|---|---|
-| `tsconfig.base.json` | `config/tsconfig/tsconfig.base.json` | Shared packages (no DOM, strict TS) |
-| `tsconfig.backend.json` | `config/tsconfig/tsconfig.backend.json` | Backend packages (extends base, ES2023) |
-| `tsconfig.frontend.json` | `config/tsconfig/tsconfig.frontend.json` | Frontend packages (extends base, DOM lib) |
-| `tsconfig.svelte-kit.json` | `config/tsconfig/tsconfig.svelte-kit.json` | SvelteKit apps (extends base, DOM lib) |
+| Base Config                | Path                                       | When to Use                               |
+| -------------------------- | ------------------------------------------ | ----------------------------------------- |
+| `tsconfig.base.json`       | `config/tsconfig/tsconfig.base.json`       | Shared packages (no DOM, strict TS)       |
+| `tsconfig.backend.json`    | `config/tsconfig/tsconfig.backend.json`    | Backend packages (extends base, ES2023)   |
+| `tsconfig.frontend.json`   | `config/tsconfig/tsconfig.frontend.json`   | Frontend packages (extends base, DOM lib) |
+| `tsconfig.svelte-kit.json` | `config/tsconfig/tsconfig.svelte-kit.json` | SvelteKit apps (extends base, DOM lib)    |
 
 > The base configs (`backend.json`, `frontend.json`, `svelte-kit.json`) no longer carry shared path aliases.
 > Each project defines its own `paths` using relative references.
@@ -483,22 +489,22 @@ to the correct environment-specific implementation. Never import from
 
 ```json
 {
-  "compilerOptions": {
-    "paths": {
-      "$logger": ["../../shared/logger/src/lib/<env_impl>.ts"]
-    }
-  }
+	"compilerOptions": {
+		"paths": {
+			"$logger": ["../../shared/logger/src/lib/<env_impl>.ts"]
+		}
+	}
 }
 ```
 
 Choose the right implementation:
 
-| Environment | Implementation file |
-|---|---|
-| SvelteKit (PWA) | `shared/logger/src/lib/svelte_kit.ts` |
-| Firebase Functions | `shared/logger/src/lib/logger_functions.ts` |
-| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts` |
-| AWS / Node.js | `shared/logger/src/lib/logger_aws.ts` |
+| Environment             | Implementation file                         |
+| ----------------------- | ------------------------------------------- |
+| SvelteKit (PWA)         | `shared/logger/src/lib/svelte_kit.ts`       |
+| Firebase Functions      | `shared/logger/src/lib/logger_functions.ts` |
+| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts`   |
+| AWS / Node.js           | `shared/logger/src/lib/logger_aws.ts`       |
 
 ```typescript
 // ✅ ALWAYS — use the $logger alias
@@ -520,6 +526,7 @@ src/
 ```
 
 **Rules:**
+
 - `src/index.ts` re-exports public API from `src/lib/` — do NOT put implementation directly in `index.ts`
 - Use `src/lib/` for all implementation modules
 - Keep directory depth flat in `src/lib/` — avoid sub-folders unless there's a clear grouping (e.g., `lib/clients/`, `lib/services/`)
@@ -529,9 +536,27 @@ Example `src/index.ts`:
 
 ```typescript
 // packages/shared/parser/src/index.ts
-export { extractMacros, hasUnclosedMacro, stripMacros, tokenizeLine } from "./lib/lexer.js";
-export { buildSystemMessage, createStreamBuffer, flushStreamBuffer, parseLine, parseStreamChunk } from "./lib/parser.js";
-export type { ASTNode, CommandNode, MacroNode, ParseNode, ParseResult, TextNode } from "./lib/types.js";
+export {
+	extractMacros,
+	hasUnclosedMacro,
+	stripMacros,
+	tokenizeLine,
+} from "./lib/lexer.js";
+export {
+	buildSystemMessage,
+	createStreamBuffer,
+	flushStreamBuffer,
+	parseLine,
+	parseStreamChunk,
+} from "./lib/parser.js";
+export type {
+	ASTNode,
+	CommandNode,
+	MacroNode,
+	ParseNode,
+	ParseResult,
+	TextNode,
+} from "./lib/types.js";
 ```
 
 ## 6. Tests Structure
@@ -543,6 +568,7 @@ tests/
 ```
 
 **Rules:**
+
 - Place tests in `tests/` at project root (not in `src/`)
 - Use `bun:test` for all unit tests
 - Naming: `<description>.test.ts`
@@ -557,11 +583,11 @@ import { describe, expect, test } from "bun:test";
 import { extractMacros } from "../src/index.ts";
 
 describe("extractMacros", () => {
-  test("should extract macros from text", () => {
-    const result = extractMacros("Hello {{name}}!");
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("name");
-  });
+	test("should extract macros from text", () => {
+		const result = extractMacros("Hello {{name}}!");
+		expect(result).toHaveLength(1);
+		expect(result[0].name).toBe("name");
+	});
 });
 ```
 
@@ -569,7 +595,7 @@ describe("extractMacros", () => {
 
 Every project needs a `README.md` at its root. Follow this template:
 
-```markdown
+````markdown
 # @aikami/<package-name>
 
 One-line summary of what this package does.
@@ -589,6 +615,7 @@ This is a workspace package managed by moon. Install via:
 ```bash
 bun install
 ```
+````
 
 ## Dependencies
 
@@ -597,18 +624,18 @@ bun install
 
 ## Tasks
 
-| Task | Command | Description |
-|------|---------|-------------|
-| `typecheck` | `tsc --noEmit` | Run TypeScript type checking |
-| `format` | `biome format .` | Format code with Biome |
-| `lint` | `biome lint .` | Lint code with Biome |
-| `fix` | `biome check --write .` | Auto-fix lint & format issues |
-| `test` | `bun test` | Run tests (if applicable) |
+| Task        | Command                 | Description                   |
+| ----------- | ----------------------- | ----------------------------- |
+| `typecheck` | `tsc --noEmit`          | Run TypeScript type checking  |
+| `format`    | `biome format .`        | Format code with Biome        |
+| `lint`      | `biome lint .`          | Lint code with Biome          |
+| `fix`       | `biome check --write .` | Auto-fix lint & format issues |
+| `test`      | `bun test`              | Run tests (if applicable)     |
 
 ## Usage
 
 ```typescript
-import { someFunction } from '@aikami/<package-name>';
+import { someFunction } from "@aikami/<package-name>";
 ```
 
 ## Project Structure
@@ -624,6 +651,7 @@ src/
 ## Architecture
 
 Brief description of internal architecture (for complex packages/apps).
+
 ```
 
 **Rules:**
@@ -656,13 +684,15 @@ The entry point `src/index.ts` re-exports from `src/lib/`. Implementation files
 MUST live in `src/lib/`, not directly in `src/`.
 
 ```
-✅ CORRECT                    ❌ WRONG
-src/                          src/
-├── index.ts                  ├── index.ts
-└── lib/                      ├── lexer.ts      ← should be in lib/
-    ├── lexer.ts              ├── parser.ts     ← should be in lib/
-    └── parser.ts             └── types.ts      ← should be in lib/
-```
+
+✅ CORRECT ❌ WRONG
+src/ src/
+├── index.ts ├── index.ts
+└── lib/ ├── lexer.ts ← should be in lib/
+├── lexer.ts ├── parser.ts ← should be in lib/
+└── parser.ts └── types.ts ← should be in lib/
+
+````
 
 ### ❌ Importing from `lib/` Sub-Paths
 
@@ -676,7 +706,7 @@ import { CommandNodeSchema } from "@aikami/schemas";
 
 // ❌ WRONG
 import type { CommandNode } from "@aikami/schemas/lib/parser";
-```
+````
 
 Tree-shaking handles unused exports — `lib/` is an implementation detail.
 
@@ -689,14 +719,14 @@ engine-specific classes).
 ```typescript
 // ✅ CORRECT
 export type ParseResult = {
-  nodes: ASTNode[];
-  raw: string;
+	nodes: ASTNode[];
+	raw: string;
 };
 
 // ❌ WRONG
 export interface ParseResult {
-  nodes: ASTNode[];
-  raw: string;
+	nodes: ASTNode[];
+	raw: string;
 }
 ```
 
@@ -707,26 +737,26 @@ All standalone functions must use arrow syntax. Class methods are the exception:
 ```typescript
 // ✅ CORRECT — arrow for standalone functions
 export const parseLine = (line: string): ParseResult => {
-  // ...
+	// ...
 };
 
 // ✅ CORRECT — regular method for classes (this/super)
 export class MyService {
-  async loadItems(options: { filter: string }) {
-    this.debug("loadItems", options);
-  }
+	async loadItems(options: { filter: string }) {
+		this.debug("loadItems", options);
+	}
 }
 
 // ❌ WRONG — function keyword
 export function parseLine(line: string): ParseResult {
-  // ...
+	// ...
 }
 
 // ❌ WRONG — arrow class field (no super, per-instance copy)
 export class MyService {
-  loadItems = async (options: { filter: string }) => {
-    this.debug("loadItems", options);
-  };
+	loadItems = async (options: { filter: string }) => {
+		this.debug("loadItems", options);
+	};
 }
 ```
 
@@ -738,14 +768,14 @@ Object literals that represent constants, patterns, or configs should use
 ```typescript
 // ✅ CORRECT
 const PATTERNS = {
-  command: /^\/([\w-]+)(?:\s+(.+))?$/s,
-  macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
+	command: /^\/([\w-]+)(?:\s+(.+))?$/s,
+	macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
 } as const;
 
 // ❌ WRONG
 const PATTERNS = {
-  command: /^\/([\w-]+)(?:\s+(.+))?$/s,
-  macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
+	command: /^\/([\w-]+)(?:\s+(.+))?$/s,
+	macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
 };
 ```
 
@@ -762,11 +792,11 @@ All exported functions and types must have JSDoc comments:
  * @returns Parsed nodes and optional command reference.
  */
 export const parseLine = (line: string): ParseResult => {
-  // ...
+	// ...
 };
 
 // ❌ WRONG — no JSDoc
 export const parseLine = (line: string): ParseResult => {
-  // ...
+	// ...
 };
 ```

@@ -1,9 +1,5 @@
 // packages/shared/mocks/src/lib/mock-database-service.ts
-import type {
-  BaseDatabaseService,
-  QueryFilter,
-  QueryOptions,
-} from '@aikami/backend-database';
+import type { BaseDatabaseService, QueryFilter, QueryOptions } from '@aikami/backend-database';
 
 // ---------------------------------------------------------------------------
 // In-memory document store
@@ -43,10 +39,7 @@ export class MockDatabaseService implements BaseDatabaseService {
    * @param collection - Collection path (e.g. `'users'`, `'chats/abc/messages'`).
    * @param documents  - Array of document-shaped objects to seed.
    */
-  seedCollection = (
-    collection: string,
-    documents: Array<Record<string, unknown>>,
-  ): void => {
+  seedCollection = (collection: string, documents: Array<Record<string, unknown>>): void => {
     let coll = this.store.get(collection);
 
     if (!coll) {
@@ -75,10 +68,7 @@ export class MockDatabaseService implements BaseDatabaseService {
   // -----------------------------------------------------------------------
 
   /** @inheritdoc */
-  getDocument = async <T = unknown>(
-    path: string,
-    id: string,
-  ): Promise<T | undefined> => {
+  getDocument = async <T = unknown>(path: string, id: string): Promise<T | undefined> => {
     const coll = this.store.get(path);
 
     if (!coll) {
@@ -95,10 +85,7 @@ export class MockDatabaseService implements BaseDatabaseService {
   };
 
   /** @inheritdoc */
-  getDocuments = async <T = unknown>(
-    collection: string,
-    options?: QueryOptions,
-  ): Promise<T[]> => {
+  getDocuments = async <T = unknown>(collection: string, options?: QueryOptions): Promise<T[]> => {
     const coll = this.store.get(collection);
 
     if (!coll) {
@@ -114,11 +101,7 @@ export class MockDatabaseService implements BaseDatabaseService {
 
     // Apply ordering
     if (options?.orderBy) {
-      results = applyOrderBy(
-        results,
-        options.orderBy.field,
-        options.orderBy.direction ?? 'asc',
-      );
+      results = applyOrderBy(results, options.orderBy.field, options.orderBy.direction ?? 'asc');
     }
 
     // Apply startAfter cursor
@@ -146,10 +129,7 @@ export class MockDatabaseService implements BaseDatabaseService {
   };
 
   /** @inheritdoc */
-  addDocument = async <T = unknown>(
-    collection: string,
-    data: T,
-  ): Promise<string> => {
+  addDocument = async <T = unknown>(collection: string, data: T): Promise<string> => {
     const id = crypto.randomUUID();
     const dataWithId = { ...(data as Record<string, unknown>), id };
 
@@ -166,11 +146,7 @@ export class MockDatabaseService implements BaseDatabaseService {
   };
 
   /** @inheritdoc */
-  setDocument = async <T = unknown>(
-    path: string,
-    id: string,
-    data: T,
-  ): Promise<void> => {
+  setDocument = async <T = unknown>(path: string, id: string, data: T): Promise<void> => {
     let coll = this.store.get(path);
 
     if (!coll) {
@@ -190,17 +166,13 @@ export class MockDatabaseService implements BaseDatabaseService {
     const coll = this.store.get(path);
 
     if (!coll) {
-      throw new Error(
-        `Collection "${path}" does not exist — cannot update document "${id}".`,
-      );
+      throw new Error(`Collection "${path}" does not exist — cannot update document "${id}".`);
     }
 
     const existing = coll.get(id);
 
     if (existing === undefined) {
-      throw new Error(
-        `Document "${id}" does not exist in collection "${path}" — cannot update.`,
-      );
+      throw new Error(`Document "${id}" does not exist in collection "${path}" — cannot update.`);
     }
 
     coll.set(id, {
@@ -240,10 +212,7 @@ export class MockDatabaseService implements BaseDatabaseService {
  *
  * @example resolveNestedValue({ a: { b: 3 } }, 'a.b') → 3
  */
-const resolveNestedValue = (
-  doc: Record<string, unknown>,
-  path: string,
-): unknown => {
+const resolveNestedValue = (doc: Record<string, unknown>, path: string): unknown => {
   const segments = path.split('.');
 
   let current: unknown = doc;
@@ -265,10 +234,7 @@ const resolveNestedValue = (
 /**
  * Apply an array of {@link QueryFilter} conditions against in-memory documents.
  */
-const applyFilters = (
-  documents: unknown[],
-  filters: QueryFilter[],
-): unknown[] => {
+const applyFilters = (documents: unknown[], filters: QueryFilter[]): unknown[] => {
   return documents.filter((doc) => {
     const record = doc as Record<string, unknown>;
 
@@ -367,15 +333,11 @@ const evaluateFilter = (
  */
 const assertComparable = (a: unknown, b: unknown): void => {
   if (typeof a !== 'number' && typeof a !== 'string') {
-    throw new TypeError(
-      `Cannot compare value of type ${typeof a} with operator.`,
-    );
+    throw new TypeError(`Cannot compare value of type ${typeof a} with operator.`);
   }
 
   if (typeof b !== 'number' && typeof b !== 'string') {
-    throw new TypeError(
-      `Cannot compare value of type ${typeof b} with operator.`,
-    );
+    throw new TypeError(`Cannot compare value of type ${typeof b} with operator.`);
   }
 };
 

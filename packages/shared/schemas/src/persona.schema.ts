@@ -1,28 +1,22 @@
-import { z } from "zod";
+// packages/shared/schemas/src/persona.schema.ts
+import Type from 'typebox';
 
-export const PersonaSchema = z.object({
-	id: z.string().min(1, "ID is required"),
-	name: z
-		.string()
-		.min(1, "Name is required")
-		.max(100, "Name must be 100 characters or less"),
-	race: z.string().min(1, "Race is required"),
-	characterClass: z.string().min(1, "Character class is required"),
-	level: z
-		.number()
-		.int()
-		.min(1, "Level must be at least 1")
-		.max(20, "Level cannot exceed 20"),
-	background: z.string().min(1, "Background is required"),
-	attributes: z.object({
-		strength: z.number().int().min(1).max(20),
-		dexterity: z.number().int().min(1).max(20),
-		constitution: z.number().int().min(1).max(20),
-		intelligence: z.number().int().min(1).max(20),
-		wisdom: z.number().int().min(1).max(20),
-		charisma: z.number().int().min(1).max(20),
-	}),
-	proficiencies: z.array(z.string()).default([]),
+export const PersonaSchema = Type.Object({
+  id: Type.String({ minLength: 1 }),
+  name: Type.String({ minLength: 1, maxLength: 100 }),
+  race: Type.String({ minLength: 1 }),
+  characterClass: Type.String({ minLength: 1 }),
+  level: Type.Integer({ minimum: 1, maximum: 20 }),
+  background: Type.String({ minLength: 1 }),
+  attributes: Type.Object({
+    strength: Type.Integer({ minimum: 1, maximum: 20 }),
+    dexterity: Type.Integer({ minimum: 1, maximum: 20 }),
+    constitution: Type.Integer({ minimum: 1, maximum: 20 }),
+    intelligence: Type.Integer({ minimum: 1, maximum: 20 }),
+    wisdom: Type.Integer({ minimum: 1, maximum: 20 }),
+    charisma: Type.Integer({ minimum: 1, maximum: 20 }),
+  }),
+  proficiencies: Type.Array(Type.String(), { default: [] }),
 });
 
-export type Persona = z.infer<typeof PersonaSchema>;
+export type Persona = Type.Static<typeof PersonaSchema>;

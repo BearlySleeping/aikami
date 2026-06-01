@@ -1,5 +1,5 @@
-import type { CoreCreateSchema, CoreSchema, CoreUpdateSchema } from '@aikami/schemas';
-import type { ZodType, z } from 'zod';
+// packages/shared/types/src/lib/repository/utils.ts
+import type { TSchema } from 'typebox';
 import type { FieldPath, Timestamp, WhereFilterOp } from '../api/firestore.ts';
 import type { Listener, Observable } from '../class.ts';
 import type { CoreCreateData, CoreData, CoreUpdateData } from '../database/core.ts';
@@ -101,13 +101,9 @@ export type BatchCommand<
 };
 
 export type RepositoryType<
-  Data extends ZodType<z.infer<typeof CoreSchema>> = ZodType<z.infer<typeof CoreSchema>>,
-  CreateData extends ZodType<z.infer<typeof CoreCreateSchema>> = ZodType<
-    z.infer<typeof CoreCreateSchema>
-  >,
-  UpdateData extends ZodType<z.infer<typeof CoreUpdateSchema>> = ZodType<
-    z.infer<typeof CoreUpdateSchema>
-  >,
+  Data extends TSchema = TSchema,
+  CreateData extends TSchema = TSchema,
+  UpdateData extends TSchema = TSchema,
   GetCollectionPathArgument extends GetBasePathArguments = GetBasePathArguments,
   GetDocumentPathArgument extends GetBasePathArguments = GetBasePathArguments,
 > = {

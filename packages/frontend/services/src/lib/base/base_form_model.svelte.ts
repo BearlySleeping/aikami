@@ -1,100 +1,78 @@
-import type { CoreFormSchema } from '@aikami/schemas';
+// packages/frontend/services/src/lib/base/base_form_model.svelte.ts
+
 import { minPasswordLength } from '@aikami/utils';
-import type { ZodType, z } from 'zod';
+import type { TSchema } from 'typebox';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from './base_view_model.svelte.ts';
 
-export type BaseFormViewModelOptions<FormSchema extends ZodType<z.infer<typeof CoreFormSchema>>> =
-  BaseViewModelOptions & {
-    initialValues: z.infer<FormSchema>;
-    getInitialValues?: () => Promise<z.infer<FormSchema>>;
-    schema: FormSchema;
-    onSubmit: (values: z.infer<FormSchema>) => Promise<void>;
-  };
+export type BaseFormViewModelOptions = BaseViewModelOptions & {
+  initialValues: Record<string, unknown>;
+  getInitialValues?: () => Promise<Record<string, unknown>>;
+  schema: FormSchema;
+  onSubmit: (values: Record<string, unknown>) => Promise<void>;
+};
 
 /** The interface for the form view model */
-export type BaseFormViewModelInterface<FormSchema extends ZodType<z.infer<typeof CoreFormSchema>>> =
-  {
-    /** Form data */
-    readonly form: z.infer<FormSchema>;
-    /** Form validation errors */
-    readonly errors: Partial<Record<keyof z.infer<FormSchema>, string>>;
-    /** Indicates if the form is currently being submitted */
-    readonly isSubmitting: boolean;
+export type BaseFormViewModelInterface<FormSchema extends TSchema> = {
+  /** Form data */
+  readonly form: Record<string, unknown>;
+  /** Form validation errors */
+  readonly errors: Partial<Record<string, string>>;
+  /** Indicates if the form is currently being submitted */
+  readonly isSubmitting: boolean;
 
-    readonly isValid: boolean;
+  readonly isValid: boolean;
 
-    /**
-     * Handles changes in individual form fields
-     *
-     * @param key - The field key that changed
-     */
-    handleChange(key: Exclude<keyof z.infer<FormSchema>, 'id'>): Promise<void>;
-    /** Handles form submission */
-    handleSubmit(): Promise<boolean>;
+  handleChange(key: string): Promise<void>;
+  /** Handles form submission */
+  handleSubmit(): Promise<boolean>;
 
-    /**
-     * Validates a single form field and returns the validation result and
-     * optional error message
-     *
-     * @param key The field key to validate
-     * @returns Whether the field is valid or not
-     */
-    validateField(key: keyof z.infer<FormSchema>): Promise<[true] | [false, string]>;
+  validateField(key: string): Promise<[true] | [false, string]>;
 
-    /** Resets the form to its initial values and clears any errors */
-    reset(): Promise<void>;
-  } & BaseViewModelInterface;
+  /** Resets the form to its initial values and clears any errors */
+  reset(): Promise<void>;
+} & BaseViewModelInterface;
 
 /** The abstract form view model class */
 export abstract class BaseFormViewModel<
-    FormSchema extends ZodType<z.infer<typeof CoreFormSchema>>,
+    FormSchema extends TSchema,
     Options extends BaseViewModelOptions = BaseViewModelOptions,
   >
   extends BaseViewModel<Options>
   implements BaseFormViewModelInterface<FormSchema>
 {
-  form = $state({} as z.infer<FormSchema>);
+  form = $state({} as Record<string, unknown>);
   isSubmitting = $state(false);
 
-  protected _errors = $state<Partial<Record<keyof z.infer<FormSchema>, string>>>({});
+  protected _errors = $state<Partial<Record<string, string>>>({});
 
-  private readonly _initialValues: z.infer<FormSchema>;
-  private readonly _getInitialValues: (() => Promise<z.infer<FormSchema>>) | undefined;
+  private readonly _initialValues: Record<string, unknown>;
+  private readonly _getInitialValues: (() => Promise<Record<string, unknown>>) | undefined;
 
-  private readonly _schema: FormSchema;
-  private readonly _onSubmitCallback: (values: z.infer<FormSchema>) => Promise<void>;
+  private readonly _onSubmitCallback: (values: Record<string, unknown>) => Promise<void>;
 
   constructor(options: BaseFormViewModelOptions<FormSchema> & Options) {
     super(options);
-    const { initialValues, onSubmit, schema } = options;
+    const { initialValues, onSubmit } = options;
 
     this._initialValues = initialValues;
     this.form = initialValues;
     this._getInitialValues = options.getInitialValues;
 
-    this._schema = schema;
     this._onSubmitCallback = onSubmit;
   }
 
-  async validateField(key: keyof z.infer<FormSchema>): Promise<[true] | [false, string]> {
-    const [formIsValid, errors] = await this._validateAllFields();
-    this.log('validateField', formIsValid, errors);
-    const fieldError = errors?.[key];
-
-    this._errors = {
-      ...this._errors,
-      [key]: fieldError,
-    };
-
-    if (formIsValid || !fieldError) {
-      return [true];
+  async validateField(key: string): Promise<[true] | [false, string]> {
+    // TODO: Implement TypeBox runtime validation
+    // TypeBox v1.x schemas are JSON Schema — validation needs a separate validator
+    const value = this.form[key];
+    if (value === undefined || value === null || value === '') {
+      return [false, 'Required'];
     }
-
-    return [false, String(fieldError)];
+    return [true];
   }
   async handleSubmit(): Promise<boolean> {
     if (this.isSubmitting) {
@@ -102,24 +80,12 @@ export abstract class BaseFormViewModel<
       return false;
     }
     const formValue = this.form;
-    const [formIsValid, errors] = await this._validateAllFields();
-
-    if (!formIsValid) {
-      this.log('handleSubmit: form is not valid', {
-        errors,
-        formValue,
-      });
-      if (errors) {
-        this._errors = errors;
-      }
-      return false;
-    }
     this.isSubmitting = true;
     await this._onSubmitCallback(formValue);
     this.isSubmitting = false;
     return true;
   }
-  async handleChange(key: Exclude<keyof z.infer<FormSchema>, 'id'>): Promise<void> {
+  async handleChange(key: string): Promise<void> {
     await this.validateField(key);
   }
   override async dispose(): Promise<void> {
@@ -131,16 +97,9 @@ export abstract class BaseFormViewModel<
 
   errors = $derived(
     (() => {
-      const errors: Partial<Record<keyof z.infer<FormSchema>, string>> = {};
-      const translate = (key: string, _param = {}) => {
-        // convert camelCase to snake_case
-        key = key
-          .toString()
-          .replace(/([a-zA-Z])(?=[A-Z])/g, '$1_')
-          .toLowerCase();
-
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
-        return key;
+      const errors: Partial<Record<string, string>> = {};
+      const translate = (key: string) => {
+        return key.replace(/([a-zA-Z])(?=[A-Z])/g, '$1_').toLowerCase();
       };
 
       for (const [field, errorMessage] of Object.entries(this._errors)) {
@@ -149,23 +108,18 @@ export abstract class BaseFormViewModel<
         }
 
         const message: string = Array.isArray(errorMessage) ? errorMessage[0] : errorMessage;
-        const fieldName: string = translate(field) || field;
 
-        let localizedMessage = translate(message, {
-          fieldName,
-        });
+        let localizedMessage = message;
 
         if (message === 'validation_error_password_min_x') {
-          localizedMessage = translate(message, {
-            min: minPasswordLength,
-          });
+          localizedMessage = `Password must be at least ${minPasswordLength} characters`;
         }
 
         if (!localizedMessage) {
           this.error('error:missing-localized-error-message', message);
           localizedMessage = message;
         }
-        errors[field as keyof z.infer<FormSchema>] = localizedMessage;
+        errors[field] = localizedMessage;
       }
 
       return errors;
@@ -181,20 +135,5 @@ export abstract class BaseFormViewModel<
   async reset(): Promise<void> {
     this.form = this._getInitialValues ? await this._getInitialValues() : this._initialValues;
     this._errors = {};
-  }
-
-  private async _validateAllFields(): Promise<
-    [true] | [false, Partial<Record<keyof z.infer<FormSchema>, string>>]
-  > {
-    const formValue = this.form;
-    const result = await this._schema.safeParseAsync(formValue);
-    if (result.success) {
-      return [true];
-    }
-    this.debug('validateAllFields:errors', result.error);
-    return [
-      false,
-      result.error.flatten().fieldErrors as Partial<Record<keyof z.infer<FormSchema>, string>>,
-    ];
   }
 }

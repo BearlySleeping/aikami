@@ -19,7 +19,10 @@ import { logger } from '$logger';
  * @returns A single string of all message contents.
  */
 const joinMessages = (messages: AIChatMessage[]): string => {
-  return messages.map((m) => m.content).filter(Boolean).join('\n');
+  return messages
+    .map((m) => m.content)
+    .filter(Boolean)
+    .join('\n');
 };
 
 // ---------------------------------------------------------------------------
@@ -167,10 +170,7 @@ export const formatLlama3 = (messages: AIChatMessage[]): string => {
 
   const body = messages
     .filter((m) => m.content.length > 0)
-    .map(
-      (m) =>
-        `<|start_header_id|>${m.role}<|end_header_id|>\n${m.content}<|eot_id|>`,
-    )
+    .map((m) => `<|start_header_id|>${m.role}<|end_header_id|>\n${m.content}<|eot_id|>`)
     .join('');
 
   return `<|begin_of_text|>${body}`;
@@ -267,12 +267,7 @@ export const formatDeepSeek = (messages: AIChatMessage[]): string => {
     if (msg.content.length === 0) {
       continue;
     }
-    const label =
-      msg.role === 'system'
-        ? 'System'
-        : msg.role === 'user'
-          ? 'User'
-          : 'Assistant';
+    const label = msg.role === 'system' ? 'System' : msg.role === 'user' ? 'User' : 'Assistant';
     parts.push(`### ${label}:\n${msg.content}`);
   }
 
