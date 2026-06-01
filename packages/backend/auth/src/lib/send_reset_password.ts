@@ -16,9 +16,9 @@ export const sendResetPassword = async (
   const user = await getUserByEmail(email);
   if (!user) {
     throw toAppError({
-  errorType: 'not-found',
-  errorMessage: `User with email ${email} not found`
-});
+      errorType: 'not-found',
+      errorMessage: `User with email ${email} not found`,
+    });
   }
 
   const isFirstTime = !user.agreedAt;

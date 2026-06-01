@@ -3,8 +3,8 @@
 // Parser — coordinates lexer with AST node construction for
 // full-line commands, inline macro extraction, and stream buffering.
 
-import type { ASTNode, CommandNode, MacroNode, TextNode } from "@aikami/schemas";
-import { extractMacros, hasUnclosedMacro, stripMacros, tokenizeLine } from "./lexer.js";
+import type { ASTNode, CommandNode, MacroNode, TextNode } from '@aikami/schemas';
+import { extractMacros, hasUnclosedMacro, stripMacros, tokenizeLine } from './lexer.js';
 
 /**
  * Parse a complete user-input line.
@@ -16,15 +16,13 @@ import { extractMacros, hasUnclosedMacro, stripMacros, tokenizeLine } from "./le
  * @param line - The raw input string from the user.
  * @returns Parsed nodes and optional command reference.
  */
-export const parseLine = (
-  line: string,
-): { nodes: ASTNode[]; command: CommandNode | null } => {
+export const parseLine = (line: string): { nodes: ASTNode[]; command: CommandNode | null } => {
   const tokens = tokenizeLine(line);
   let command: CommandNode | null = null;
   const nodes: ASTNode[] = [];
 
   for (const token of tokens) {
-    if (token.type === "command") {
+    if (token.type === 'command') {
       command = token;
     }
     nodes.push(token);
@@ -56,7 +54,7 @@ export type StreamBuffer = {
  * @returns A new, empty StreamBuffer.
  */
 export const createStreamBuffer = (): StreamBuffer => {
-  return { buffer: "", emitted: "" };
+  return { buffer: '', emitted: '' };
 };
 
 /**
@@ -87,21 +85,18 @@ export type StreamChunkResult = {
  * @param buffer - The mutable stream buffer carrying state across chunks.
  * @returns Parsed display text, macros, and pending state.
  */
-export const parseStreamChunk = (
-  chunk: string,
-  buffer: StreamBuffer,
-): StreamChunkResult => {
+export const parseStreamChunk = (chunk: string, buffer: StreamBuffer): StreamChunkResult => {
   // Prepend any buffered text from a previous partial-chunk
   const combined = buffer.buffer + chunk;
 
   // If the combined text still has an unclosed macro, buffer it
   if (hasUnclosedMacro(combined)) {
     buffer.buffer = combined;
-    return { displayText: "", macros: [], pending: true };
+    return { displayText: '', macros: [], pending: true };
   }
 
   // Fully-resolved text — extract macros and return clean display
-  buffer.buffer = "";
+  buffer.buffer = '';
   const macros = extractMacros(combined);
   const displayText = stripMacros(combined);
   buffer.emitted += displayText;
@@ -120,9 +115,9 @@ export const parseStreamChunk = (
  */
 export const flushStreamBuffer = (buffer: StreamBuffer): StreamChunkResult => {
   const remaining = buffer.buffer;
-  buffer.buffer = "";
+  buffer.buffer = '';
   if (remaining.length === 0) {
-    return { displayText: "", macros: [], pending: false };
+    return { displayText: '', macros: [], pending: false };
   }
   return { displayText: remaining, macros: [], pending: false };
 };
@@ -139,7 +134,7 @@ export const flushStreamBuffer = (buffer: StreamBuffer): StreamChunkResult => {
  */
 export const buildSystemMessage = (text: string): TextNode => {
   return {
-    type: "text" as const,
+    type: 'text' as const,
     content: text,
     raw: text,
   };

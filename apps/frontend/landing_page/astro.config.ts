@@ -1,4 +1,3 @@
-import mdx from '@astrojs/mdx';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, passthroughImageService } from 'astro/config';
@@ -9,7 +8,6 @@ const monorepoRoot = new URL('../../..', import.meta.url).pathname;
 // https://astro.build/config
 export default defineConfig({
   integrations: [
-    mdx(),
     sitemap(),
     icon({
       iconDir: 'src/assets/icons',

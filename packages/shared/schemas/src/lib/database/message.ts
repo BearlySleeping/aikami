@@ -1,54 +1,60 @@
-import { z } from 'zod';
-import { CoreCreateSchema, CoreOmitSchema, CoreSchema, CoreUpdateSchema } from '../core.ts';
+// packages/shared/schemas/src/lib/database/message.ts
+import Type, { Composite } from 'typebox';
+import { CoreOmitKeys, CoreSchema } from '../core.ts';
 import { FieldValueSchema, TimestampSchema } from '../fields.ts';
 import { getDeletableFields } from '../utils.ts';
 
-export const MessageSchema = CoreSchema.extend({
-  text: z.string(),
-  sender: z.enum(['user', 'ai']),
-  editedAt: TimestampSchema.optional().or(z.date()).or(FieldValueSchema).optional(),
-  editedBy: z.enum(['user', 'ai']).optional(),
-  regeneratedFrom: z.string().optional().describe('ID of the message this was regenerated from'),
-  attachments: z
-    .array(
-      z.object({
-        type: z.enum(['image', 'file']),
-        url: z.string(),
-        name: z.string().optional(),
-        mimeType: z.string().optional(),
-        size: z.number().optional(),
-      }),
-    )
-    .optional()
-    .default([]),
-  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+const _senderUnion = Type.Union([Type.Literal('user'), Type.Literal('ai')]);
+const _attachmentTypeUnion = Type.Union([Type.Literal('image'), Type.Literal('file')]);
+const _chatVisibilityUnion = Type.Union([Type.Literal('private'), Type.Literal('public')]);
 
-  /**
-   * Denormalized chat owner UID for subcollection security rules.
-   * When messages are stored as a subcollection of chats, this field
-   * allows rules to enforce access control without an expensive get()
-   * on the parent chat document.
-   */
-  chatOwnerUid: z.string().optional(),
+export const MessageSchema = Composite(
+  CoreSchema,
+  Type.Object({
+    text: Type.String(),
+    sender: _senderUnion,
+    editedAt: Type.Optional(
+      Type.Union([TimestampSchema, Type.Unsafe<any>(Type.Any()), FieldValueSchema]),
+    ),
+    editedBy: Type.Optional(_senderUnion),
+    regeneratedFrom: Type.Optional(
+      Type.String({ description: 'ID of the message this was regenerated from' }),
+    ),
+    attachments: Object.assign(
+      Type.Optional(
+        Type.Array(
+          Type.Object({
+            type: _attachmentTypeUnion,
+            url: Type.String(),
+            name: Type.Optional(Type.String()),
+            mimeType: Type.Optional(Type.String()),
+            size: Type.Optional(Type.Number()),
+          }),
+        ),
+      ),
+      { default: [] },
+    ),
+    metadata: Object.assign(Type.Optional(Type.Record(Type.String(), Type.Unknown())), {
+      default: {},
+    }),
+    chatOwnerUid: Type.Optional(Type.String()),
+    chatVisibility: Type.Optional(_chatVisibilityUnion),
+  }),
+);
 
-  /**
-   * Denormalized chat visibility for subcollection security rules.
-   * When messages are stored as a subcollection of chats, this field
-   * allows rules to permit public reads without an expensive get()
-   * on the parent chat document.
-   */
-  chatVisibility: z.enum(['private', 'public']).optional(),
-});
+export const MessageCreateSchema = Type.Intersect([
+  Type.Omit(MessageSchema, [...CoreOmitKeys]),
+  Type.Object({ createdAt: Type.Optional(FieldValueSchema) }),
+  Type.Object({
+    editedAt: MessageSchema.properties.editedAt as Type.TSchema,
+  }),
+]);
 
-export const MessageCreateSchema = MessageSchema.omit(CoreOmitSchema)
-  .extend(CoreCreateSchema.shape)
-  .extend({
-    editedAt: MessageSchema.shape.editedAt,
-  });
-
-export const MessageUpdateSchema = MessageSchema.extend(getDeletableFields(MessageSchema))
-  .omit(CoreOmitSchema)
-  .extend(CoreUpdateSchema.shape)
-  .extend({
-    editedAt: MessageSchema.shape.editedAt,
-  });
+export const MessageUpdateSchema = Type.Intersect([
+  Type.Omit(MessageSchema, [...CoreOmitKeys]),
+  Type.Object(getDeletableFields(MessageSchema as unknown as Record<string, unknown>)),
+  Type.Object({ updatedAt: FieldValueSchema }),
+  Type.Object({
+    editedAt: MessageSchema.properties.editedAt as Type.TSchema,
+  }),
+]);

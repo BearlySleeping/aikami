@@ -7,7 +7,7 @@
     "astro": "astro",
     "lint": "biome lint .",
     "format": "biome format .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "fix": "biome check --write ."
   },
   "devDependencies": {
@@ -16,6 +16,8 @@
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "@astrojs/sitemap": "^3.7.3",
+    "astro-icon": "^1.1.5"
   }
 }

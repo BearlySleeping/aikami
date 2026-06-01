@@ -15,7 +15,7 @@ export type AppResult<T = void, E = AppError> =
 export type CountryCode = keyof typeof CountryToCode;
 
 /**
- * The zod parse level.
+ * The schema parse level.
  *
  * - `off` - No parsing is done.
  * - `safe` - Only safe parsing is done. This won't throw error, but will still

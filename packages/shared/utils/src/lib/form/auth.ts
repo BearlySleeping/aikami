@@ -128,9 +128,9 @@ export const getUserLiteData = async ({
   const creationTime = user.metadata.creationTime;
   if (!creationTime) {
     throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'getUserLiteData: Creation time is required'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'getUserLiteData: Creation time is required',
+    });
   }
   const email = user.email;
 
@@ -139,9 +139,9 @@ export const getUserLiteData = async ({
 
   if (!claims) {
     throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'getUserLiteData: Claims are required'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'getUserLiteData: Claims are required',
+    });
   }
 
   return toUserLiteData({

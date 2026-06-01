@@ -1,4 +1,5 @@
+// packages/shared/types/src/lib/form/auth.ts
 import type { RegisterFormSchema } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
-export type RegisterForm = z.infer<typeof RegisterFormSchema>;
+export type RegisterForm = Type.Static<typeof RegisterFormSchema>;

@@ -1,48 +1,57 @@
 // packages/shared/schemas/src/lib/parser.ts
 //
-// Zod schemas for macro & slash command AST nodes.
+// TypeBox schemas for macro & slash command AST nodes.
 // Used by @aikami/parser for runtime validation of parsed tokens.
 
-import { z } from "zod";
+import Type from 'typebox';
 
 /**
  * Base AST node shared shape.
  */
-export const ASTNodeSchema = z.object({
-  type: z.string(),
+export const ASTNodeSchema = Type.Object({
+  type: Type.String(),
 });
 
 /**
  * A recognized slash command: `/roll 1d20` → { type: "command", command: "roll", args: ["1d20"] }
  */
-export const CommandNodeSchema = ASTNodeSchema.extend({
-  type: z.literal("command"),
-  command: z.string().min(1),
-  args: z.array(z.string()),
-  raw: z.string(),
-});
+export const CommandNodeSchema = Type.Intersect([
+  ASTNodeSchema,
+  Type.Object({
+    type: Type.Literal('command'),
+    command: Type.String({ minLength: 1 }),
+    args: Type.Array(Type.String()),
+    raw: Type.String(),
+  }),
+]);
 
 /**
  * A mustache-style macro within text: `{{trigger_anim:attack}}` → { type: "macro", name: "trigger_anim", args: ["attack"] }
  */
-export const MacroNodeSchema = ASTNodeSchema.extend({
-  type: z.literal("macro"),
-  name: z.string().min(1),
-  args: z.array(z.string()),
-  raw: z.string(),
-});
+export const MacroNodeSchema = Type.Intersect([
+  ASTNodeSchema,
+  Type.Object({
+    type: Type.Literal('macro'),
+    name: Type.String({ minLength: 1 }),
+    args: Type.Array(Type.String()),
+    raw: Type.String(),
+  }),
+]);
 
 /**
  * Plain dialogue text.
  */
-export const TextNodeSchema = ASTNodeSchema.extend({
-  type: z.literal("text"),
-  content: z.string(),
-  raw: z.string(),
-});
+export const TextNodeSchema = Type.Intersect([
+  ASTNodeSchema,
+  Type.Object({
+    type: Type.Literal('text'),
+    content: Type.String(),
+    raw: Type.String(),
+  }),
+]);
 
 // Inferred types
-export type ASTNode = z.infer<typeof ASTNodeSchema>;
-export type CommandNode = z.infer<typeof CommandNodeSchema>;
-export type MacroNode = z.infer<typeof MacroNodeSchema>;
-export type TextNode = z.infer<typeof TextNodeSchema>;
+export type ASTNode = Type.Static<typeof ASTNodeSchema>;
+export type CommandNode = Type.Static<typeof CommandNodeSchema>;
+export type MacroNode = Type.Static<typeof MacroNodeSchema>;
+export type TextNode = Type.Static<typeof TextNodeSchema>;

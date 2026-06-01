@@ -7,13 +7,17 @@ import { npcRepository } from '@aikami/backend/database/npc';
 import { personaRepository } from '@aikami/backend/database/persona';
 import { setUserData } from '@aikami/backend/database/user';
 import { uploadToFirebase } from '@aikami/backend/utils/storage';
-import { EMULATOR_NPCS, EMULATOR_PASSWORD, EMULATOR_PERSONA_DATA, EMULATOR_USERS } from '@aikami/mocks';
+import {
+  EMULATOR_NPCS,
+  EMULATOR_PASSWORD,
+  EMULATOR_PERSONA_DATA,
+  EMULATOR_USERS,
+} from '@aikami/mocks';
 
 import type { NpcCreateData, PersonaCreateData, UserCreateData } from '@aikami/types';
 import { logger } from '$logger';
 
 const ASSETS_DIR = join(__dirname, '../assets');
-
 
 async function uploadNpcImages(npcDir: string): Promise<Record<string, string>> {
   const expressions: Record<string, string> = {};
@@ -46,7 +50,6 @@ async function uploadNpcImages(npcDir: string): Promise<Record<string, string>> 
 
   return expressions;
 }
-
 
 const deleteAllEmulatorUsers = async () => {
   const auth = getAuth();

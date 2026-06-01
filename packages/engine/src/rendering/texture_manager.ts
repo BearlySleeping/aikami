@@ -192,10 +192,7 @@ export class TextureManager {
    * byte limits are satisfied.
    */
   private evictIfNeeded(): void {
-    while (
-      this.cache.size > this.maxTextures ||
-      this.totalBytes > this.maxBytes
-    ) {
+    while (this.cache.size > this.maxTextures || this.totalBytes > this.maxBytes) {
       this.evictOne();
     }
   }
@@ -213,7 +210,7 @@ export class TextureManager {
     }
 
     let oldestKey = -1;
-    let oldestTime = Infinity;
+    let oldestTime = Number.POSITIVE_INFINITY;
 
     for (const [key, entry] of this.cache) {
       if (entry.lastAccessedAt < oldestTime) {

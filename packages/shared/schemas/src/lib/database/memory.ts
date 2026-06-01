@@ -1,44 +1,45 @@
-import { z } from "zod";
+// packages/shared/schemas/src/lib/database/memory.ts
+import Type from 'typebox';
 
-export const ChatSummarySchema = z.object({
-	id: z.string().describe("Unique identifier"),
-	chatId: z.string().describe("Related chat ID"),
-	summary: z.string().describe("Summary text"),
-	keyEvents: z.string().array().describe("Key events").default([]),
-	mentionedCharacterIds: z
-		.string()
-		.array()
-		.describe("Characters mentioned")
-		.default([]),
-	mentionedLocations: z
-		.string()
-		.array()
-		.describe("Locations mentioned")
-		.default([]),
-	tokenCount: z.number().int().describe("Token count"),
-	createdAt: z.string().datetime().describe("Creation timestamp"),
+export const ChatSummarySchema = Type.Object({
+  id: Type.String({ description: 'Unique identifier' }),
+  chatId: Type.String({ description: 'Related chat ID' }),
+  summary: Type.String({ description: 'Summary text' }),
+  keyEvents: Type.Array(Type.String(), { description: 'Key events', default: [] }),
+  mentionedCharacterIds: Type.Array(Type.String(), {
+    description: 'Characters mentioned',
+    default: [],
+  }),
+  mentionedLocations: Type.Array(Type.String(), {
+    description: 'Locations mentioned',
+    default: [],
+  }),
+  tokenCount: Type.Integer({ description: 'Token count' }),
+  createdAt: Type.String({ format: 'date-time', description: 'Creation timestamp' }),
 });
 
-export const MemoryEntrySchema = z.object({
-	id: z.string().describe("Unique identifier"),
-	chatId: z.string().describe("Source chat ID"),
-	summary: z.string().describe("Memory summary"),
-	importance: z.number().int().min(0).max(100).describe("Importance score"),
-	entities: z.string().array().describe("Entities mentioned").default([]),
-	emotionalTone: z
-		.enum(["positive", "negative", "neutral"])
-		.describe("Emotional tone"),
-	createdAt: z.string().datetime().describe("Creation timestamp"),
+export const MemoryEntrySchema = Type.Object({
+  id: Type.String({ description: 'Unique identifier' }),
+  chatId: Type.String({ description: 'Source chat ID' }),
+  summary: Type.String({ description: 'Memory summary' }),
+  importance: Type.Integer({ minimum: 0, maximum: 100, description: 'Importance score' }),
+  entities: Type.Array(Type.String(), { description: 'Entities mentioned', default: [] }),
+  emotionalTone: Type.Union([
+    Type.Literal('positive'),
+    Type.Literal('negative'),
+    Type.Literal('neutral'),
+  ]),
+  createdAt: Type.String({ format: 'date-time', description: 'Creation timestamp' }),
 });
 
-export const CharacterMemorySchema = z.object({
-	id: z.string().describe("Unique identifier"),
-	characterId: z.string().describe("Character ID"),
-	uid: z.string().describe("Owner user ID"),
-	memories: MemoryEntrySchema.array().describe("Memory entries").default([]),
-	lastConsolidated: z.string().datetime().optional(),
+export const CharacterMemorySchema = Type.Object({
+  id: Type.String({ description: 'Unique identifier' }),
+  characterId: Type.String({ description: 'Character ID' }),
+  uid: Type.String({ description: 'Owner user ID' }),
+  memories: Type.Array(MemoryEntrySchema, { description: 'Memory entries', default: [] }),
+  lastConsolidated: Type.Optional(Type.String({ format: 'date-time' })),
 });
 
-export type ChatSummaryData = z.infer<typeof ChatSummarySchema>;
-export type MemoryEntryData = z.infer<typeof MemoryEntrySchema>;
-export type CharacterMemoryData = z.infer<typeof CharacterMemorySchema>;
+export type ChatSummaryData = Type.Static<typeof ChatSummarySchema>;
+export type MemoryEntryData = Type.Static<typeof MemoryEntrySchema>;
+export type CharacterMemoryData = Type.Static<typeof CharacterMemorySchema>;

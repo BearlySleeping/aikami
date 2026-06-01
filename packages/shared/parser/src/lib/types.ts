@@ -2,7 +2,7 @@
 //
 // Core type definitions for the macro/slash command parser.
 
-import type { ASTNode, CommandNode, MacroNode, TextNode } from "@aikami/schemas";
+import type { ASTNode, CommandNode, MacroNode, TextNode } from '@aikami/schemas';
 
 export type { ASTNode, CommandNode, MacroNode, TextNode };
 

@@ -1,3 +1,4 @@
+// packages/shared/types/src/lib/database/user.ts
 import type {
   UserCreateSchema,
   UserLiteCreateSchema,
@@ -6,7 +7,7 @@ import type {
   UserSessionSchema,
   UserUpdateSchema,
 } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 import type { SignInProvider } from '../auth.ts';
 
 export type CurrentUser = CurrentUserData | CurrentUserLiteData | CurrentUserSessionData;
@@ -23,13 +24,13 @@ export type CurrentUserLiteData = UserLiteData & {
 export type CurrentUserSessionData = UserSessionData & {
   fetchedUserData?: true;
 };
-export type UserCreateData = z.infer<typeof UserCreateSchema>;
+export type UserCreateData = Type.Static<typeof UserCreateSchema>;
 
-export type UserData = z.infer<typeof UserSchema>;
+export type UserData = Type.Static<typeof UserSchema>;
 
-export type UserLiteCreateData = z.infer<typeof UserLiteCreateSchema>;
-export type UserLiteData = z.infer<typeof UserLiteSchema>;
+export type UserLiteCreateData = Type.Static<typeof UserLiteCreateSchema>;
+export type UserLiteData = Type.Static<typeof UserLiteSchema>;
 
-export type UserSessionData = z.infer<typeof UserSessionSchema>;
+export type UserSessionData = Type.Static<typeof UserSessionSchema>;
 
-export type UserUpdateData = z.infer<typeof UserUpdateSchema>;
+export type UserUpdateData = Type.Static<typeof UserUpdateSchema>;

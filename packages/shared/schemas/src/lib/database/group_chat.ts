@@ -1,43 +1,52 @@
-import { z } from "zod";
-import {
-	CoreCreateSchema,
-	CoreOmitSchema,
-	CoreSchema,
-	CoreUpdateSchema,
-} from "../core.ts";
-import { getDeletableFields } from "../utils.ts";
+// packages/shared/schemas/src/lib/database/group_chat.ts
+import Type, { Composite } from 'typebox';
+import { CoreOmitKeys, CoreSchema } from '../core.ts';
+import { getDeletableFields } from '../utils.ts';
 
-export const GroupChatSchema = CoreSchema.extend({
-	uid: z.string().describe("Owner user ID"),
-	name: z.string().describe("Group chat name"),
-	characterIds: z.string().array().describe("NPC IDs in the group").default([]),
-	personaId: z.string().optional(),
-	lorebookId: z.string().optional(),
-	replyMode: z
-		.enum(["sequential", "random", "simultaneous"])
-		.describe("How characters respond")
-		.default("sequential"),
+const _replyModeUnion = Type.Union([
+  Type.Literal('sequential'),
+  Type.Literal('random'),
+  Type.Literal('simultaneous'),
+]);
+
+export const GroupChatSchema = Composite(
+  CoreSchema,
+  Type.Object({
+    uid: Type.String({ description: 'Owner user ID' }),
+    name: Type.String({ description: 'Group chat name' }),
+    characterIds: Object.assign(Type.Array(Type.String()), {
+      description: 'NPC IDs in the group',
+      default: [],
+    }),
+    personaId: Type.Optional(Type.String()),
+    lorebookId: Type.Optional(Type.String()),
+    replyMode: Object.assign(_replyModeUnion, {
+      description: 'How characters respond',
+      default: 'sequential',
+    }),
+  }),
+);
+
+export const GroupChatCreateSchema = Type.Intersect([
+  Type.Omit(GroupChatSchema, [...CoreOmitKeys]),
+  Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
+]);
+
+export const GroupChatUpdateSchema = Type.Intersect([
+  Type.Omit(GroupChatSchema, [...CoreOmitKeys]),
+  Type.Object(getDeletableFields(GroupChatSchema as unknown as Record<string, unknown>)),
+  Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
+]);
+
+export const GroupMessageSchema = Type.Object({
+  id: Type.String({ description: 'Unique identifier' }),
+  groupChatId: Type.String({ description: 'Group chat ID' }),
+  characterId: Type.String({ description: 'Character who sent this' }),
+  sender: Type.Union([Type.Literal('user'), Type.Literal('character')]),
+  text: Type.String({ description: 'Message text' }),
+  timestamp: Type.String({ format: 'date-time', description: 'Timestamp' }),
 });
 
-export const GroupChatCreateSchema = GroupChatSchema.omit(
-	CoreOmitSchema,
-).extend(CoreCreateSchema.shape);
-
-export const GroupChatUpdateSchema = GroupChatSchema.extend(
-	getDeletableFields(GroupChatSchema),
-)
-	.omit(CoreOmitSchema)
-	.extend(CoreUpdateSchema.shape);
-
-export const GroupMessageSchema = z.object({
-	id: z.string().describe("Unique identifier"),
-	groupChatId: z.string().describe("Group chat ID"),
-	characterId: z.string().describe("Character who sent this"),
-	sender: z.enum(["user", "character"]).describe("Message sender"),
-	text: z.string().describe("Message text"),
-	timestamp: z.string().datetime().describe("Timestamp"),
-});
-
-export type GroupChatData = z.infer<typeof GroupChatSchema>;
-export type GroupChatUpdateData = z.infer<typeof GroupChatUpdateSchema>;
-export type GroupMessageData = z.infer<typeof GroupMessageSchema>;
+export type GroupChatData = Type.Static<typeof GroupChatSchema>;
+export type GroupChatUpdateData = Type.Static<typeof GroupChatUpdateSchema>;
+export type GroupMessageData = Type.Static<typeof GroupMessageSchema>;

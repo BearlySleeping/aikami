@@ -22,9 +22,9 @@ export const getTranslatedText = (text: LangData, locale: string | SupportedLoca
 
   if (!translatedText) {
     throw toAppError({
-  errorType: 'invalid-argument',
-  errorMessage: 'No text found'
-});
+      errorType: 'invalid-argument',
+      errorMessage: 'No text found',
+    });
   }
   return translatedText;
 };

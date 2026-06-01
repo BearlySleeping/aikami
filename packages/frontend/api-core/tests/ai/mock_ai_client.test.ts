@@ -134,7 +134,12 @@ describe('MockAiClient', () => {
   // -----------------------------------------------------------------------
 
   it('generateStructured returns seeded data', async () => {
-    const holySword = { name: 'Holy Sword', description: 'A radiant blade', value: 500, requiredLevel: 20 };
+    const holySword = {
+      name: 'Holy Sword',
+      description: 'A radiant blade',
+      value: 500,
+      requiredLevel: 20,
+    };
     client.seedStructured('sword', holySword);
 
     const result = await client.generateStructured('Generate a sword', ItemSchema);
@@ -190,7 +195,11 @@ describe('MockAiClient', () => {
     expect(client.getCallHistory()).toHaveLength(0);
 
     // After reset, seed is gone — returns default response
-    const response = await client.generateDialogue({ npcId: 'n1', npcName: 'N', playerInput: 'hello' });
+    const response = await client.generateDialogue({
+      npcId: 'n1',
+      npcName: 'N',
+      playerInput: 'hello',
+    });
     expect(response.text).not.toBe('Hi');
   });
 

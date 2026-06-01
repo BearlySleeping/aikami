@@ -1,8 +1,9 @@
+// packages/shared/types/src/lib/database/chat.ts
 import type { ChatCreateSchema, ChatSchema, ChatUpdateSchema } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
-export type ChatData = z.infer<typeof ChatSchema>;
+export type ChatData = Type.Static<typeof ChatSchema>;
 
-export type ChatCreateData = z.infer<typeof ChatCreateSchema>;
+export type ChatCreateData = Type.Static<typeof ChatCreateSchema>;
 
-export type ChatUpdateData = z.infer<typeof ChatUpdateSchema>;
+export type ChatUpdateData = Type.Static<typeof ChatUpdateSchema>;
