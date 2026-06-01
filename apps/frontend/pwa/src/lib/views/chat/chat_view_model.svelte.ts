@@ -1,6 +1,6 @@
 // apps/frontend/pwa/src/lib/views/chat/chat-view-model.svelte.ts
 
-import { createEngineBridge } from '@aikami/engine';
+import { createEngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -16,12 +16,15 @@ import {
   diceService,
   imageGenerationService,
   npcChatService,
+  npcService,
   ttsService,
 } from '$services';
 
 export type ChatViewModelOptions = BaseViewModelOptions & {
-  chat: ChatData;
-  npc: NpcData;
+  /** The chat document ID to load. */
+  chatId: string;
+  /** The NPC ID (from URL query param). If omitted, resolved from the chat document. */
+  npcId?: string;
   /** Entity ID of the NPC in the game engine (for expression macros). */
   gameEntityId?: number;
 };
@@ -37,6 +40,7 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   readonly isSending: boolean;
   readonly isTyping: boolean;
   readonly chatError: string | undefined;
+  readonly errorMessage: string | undefined;
   readonly messages: ChatMessage[];
   readonly showGreeting: boolean;
   readonly isGeneratingImage: boolean;
@@ -60,8 +64,12 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
 };
 
 class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatViewModelInterface {
-  npc = $state<NpcData | undefined>();
-  chat = $state<ChatData | undefined>();
+  npc: NpcData | undefined = $state();
+  chat: ChatData | undefined = $state();
+  errorMessage: string | undefined = $state();
+
+  private _chatId: string;
+  private _npcId: string | undefined;
 
   showGreeting = $state(true);
   chatData = $state<
@@ -76,16 +84,47 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
 
   constructor(options: ChatViewModelOptions) {
     super(options);
-    this.npc = options.npc;
-    this.chat = options.chat;
+    this._chatId = options.chatId;
+    this._npcId = options.npcId;
     this.gameEntityId = options.gameEntityId;
   }
 
   override async initialize(): Promise<void> {
     this.debug('initialize');
-    if (this.chat) {
-      await this.loadChatHistory(this.chat);
+
+    const chatDataLookup = await npcChatService.getChatById({ chatId: this._chatId });
+    if (!chatDataLookup) {
+      this.error('Chat not found', { chatId: this._chatId });
+      this.errorMessage = 'Chat not found';
+      return super.initialize();
     }
+
+    const resolvedNpcId = this._npcId ?? (chatDataLookup as { npcId?: string }).npcId;
+    if (resolvedNpcId) {
+      this.npc = await npcService.get({ npcId: resolvedNpcId });
+      if (!this.npc) {
+        this.error('NPC not found', { npcId: resolvedNpcId });
+        this.errorMessage = 'NPC not found';
+        return super.initialize();
+      }
+    }
+
+    const chatData: ChatData = {
+      id: chatDataLookup.id,
+      npcId: (chatDataLookup as { npcId?: string }).npcId ?? '',
+      npcName: (chatDataLookup as { npcName?: string }).npcName ?? '',
+      npcAvatarUrl: (chatDataLookup as { npcAvatarUrl?: string }).npcAvatarUrl,
+      uid: (chatDataLookup as { uid?: string }).uid ?? '',
+      visibility: (chatDataLookup as { visibility?: 'private' | 'public' }).visibility ?? 'private',
+      messages: (chatDataLookup as { messages?: MessageData[] }).messages ?? [],
+      messageCount: (chatDataLookup as { messageCount?: number }).messageCount ?? 0,
+      affection: (chatDataLookup as { affection?: number }).affection ?? 0,
+      stats: (chatDataLookup as { stats?: Record<string, unknown> }).stats ?? {},
+      backgroundImageUrl: (chatDataLookup as { backgroundImageUrl?: string }).backgroundImageUrl,
+    };
+    this.chat = chatData;
+    await this.loadChatHistory(chatData);
+
     return super.initialize();
   }
 
@@ -99,7 +138,7 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
     return chatService.isTyping;
   }
   get chatError() {
-    return chatService.errorMessage;
+    return this.errorMessage ?? chatService.errorMessage;
   }
   get messages(): ChatMessage[] {
     const msgs = this.chat?.messages ?? [];

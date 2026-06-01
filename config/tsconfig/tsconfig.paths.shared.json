@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "paths": {
-      "@aikami/engine": ["../../packages/engine/src/index.ts"],
-      "@aikami/engine/*": ["../../packages/engine/src/*"]
+      "@aikami/frontend/engine": ["../../packages/frontend/engine/src/index.ts"],
+      "@aikami/frontend/engine/*": ["../../packages/frontend/engine/src/*"]
     }
   }
 }

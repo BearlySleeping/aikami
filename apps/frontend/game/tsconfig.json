@@ -37,8 +37,8 @@
       "$services/*": ["./src/lib/services/*"],
       "$types/*": ["./src/lib/types/index.ts"],
 
-      "@aikami/engine": ["../../packages/engine/src/index.ts"],
-      "@aikami/engine/*": ["../../packages/engine/src/*"],
+      "@aikami/frontend/engine": ["../../../packages/frontend/engine/src/index.ts"],
+      "@aikami/frontend/engine/*": ["../../../packages/frontend/engine/src/*"],
       "@aikami/logger": ["../../../packages/shared/logger/src/index.ts"],
 
       "@aikami/frontend/configs": ["../../../packages/frontend/configs/src/index.ts"],

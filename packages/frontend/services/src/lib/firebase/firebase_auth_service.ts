@@ -82,12 +82,6 @@ export type FirebaseAuthServiceInterface = BaseClassInterface & {
 class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterface {
   private static _auth?: Auth;
 
-  constructor() {
-    super({
-      className: 'AuthService',
-    });
-  }
-
   async confirmPasswordReset(options: {
     password: string;
     email: string;
@@ -321,4 +315,6 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
   }
 }
 
-export const firebaseAuthService: FirebaseAuthServiceInterface = new FirebaseAuthService();
+export const firebaseAuthService: FirebaseAuthServiceInterface = new FirebaseAuthService({
+  className: 'FirebaseAuthService',
+});

@@ -1,4 +1,19 @@
 {
+  "hosting": {
+    "public": "apps/frontend/pwa/build",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "emulators": {
+    "hosting": {
+      "port": 5000
+    }
+  },
   "dataconnect": {
     "source": "apps/backend/firebase/dataconnect"
   }

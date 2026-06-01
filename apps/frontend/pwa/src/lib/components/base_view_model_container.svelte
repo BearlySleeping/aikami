@@ -1,4 +1,5 @@
 <script lang="ts">
+  // apps/frontend/pwa/src/lib/components/base_view_model_container.svelte
   import type { BaseViewModelInterface } from '@aikami/frontend/services';
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';

@@ -106,11 +106,7 @@ function checkTool(name: string, installHint?: string): boolean {
 function checkVersion(name: string, minVersion: number): boolean {
   try {
     const proc = Bun.spawnSync({ cmd: [name, '--version'], stdout: 'pipe' });
-    const ver = new TextDecoder()
-      .decode(proc.stdout)
-      .trim()
-      .replace(/^v/, '')
-      .split('.')[0];
+    const ver = new TextDecoder().decode(proc.stdout).trim().replace(/^v/, '').split('.')[0];
     const major = Number.parseInt(ver, 10);
     const pass = major >= minVersion;
     if (pass) {
@@ -137,10 +133,7 @@ async function checkPrerequisites(): Promise<boolean> {
   checks.push(checkTool('git', 'Install from https://git-scm.com'));
 
   info('\nOptional tools:');
-  const hasFirebase = checkTool(
-    'firebase',
-    'npm install -g firebase-tools',
-  );
+  const hasFirebase = checkTool('firebase', 'npm install -g firebase-tools');
   if (!hasFirebase) warn('Firebase CLI not found — Firebase deploy/emulator tasks will not work');
 
   const hasMoon = Bun.which('moon') || existsSync(join(ROOT, 'node_modules/.bin/moon'));
@@ -225,11 +218,17 @@ PUBLIC_FIREBASE_MEASUREMENT_ID=your-measurement-id
 
   // Interactive: prompt for Firebase project
   const projectId = await prompt('Firebase project ID (leave blank for default)', 'demo-aikami');
-  const flavor = await prompt('Environment flavor (development/emulator/production)', 'development');
+  const flavor = await prompt(
+    'Environment flavor (development/emulator/production)',
+    'development',
+  );
 
   const envContent = readFileSync(ENV_EXAMPLE, 'utf8')
     .replace('PUBLIC_FLAVOR=development', `PUBLIC_FLAVOR=${flavor}`)
-    .replace('PUBLIC_FIREBASE_PROJECT_ID=your-project-id', `PUBLIC_FIREBASE_PROJECT_ID=${projectId}`);
+    .replace(
+      'PUBLIC_FIREBASE_PROJECT_ID=your-project-id',
+      `PUBLIC_FIREBASE_PROJECT_ID=${projectId}`,
+    );
 
   writeFileSync(ENV_FILE, envContent, 'utf8');
   ok('.env created');
@@ -269,7 +268,9 @@ function printNextSteps() {
   console.log(`  ${CYAN}bun run test${RESET}             Run all tests (requires emulators)`);
   console.log(`  ${CYAN}bun run fix${RESET}              Auto-fix lint/format issues`);
   console.log(`  ${CYAN}bun run typecheck${RESET}        Typecheck all projects`);
-  console.log(`  ${CYAN}bun run validate${RESET}         Full validation (lint + format + typecheck)`);
+  console.log(
+    `  ${CYAN}bun run validate${RESET}         Full validation (lint + format + typecheck)`,
+  );
   console.log(`  ${CYAN}bun run scripts${RESET}          Interactive script runner`);
   console.log(`\n${BOLD}Documentation:${RESET}\n`);
   console.log(`  ${DIM}.context/CONTEXT.md${RESET}      AI briefing — read this first`);

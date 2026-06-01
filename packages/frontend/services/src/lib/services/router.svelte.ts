@@ -92,7 +92,7 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
   ): Promise<void>;
 
   /** Stores the SvelteKit goto function and marks the service as initialized. */
-  initialize(options: { goto: GoTo }): void;
+  initialize(options: { goto: GoTo; page: Page }): void;
 
   /**
    * Must be called from a reactive context (inside $effect) so Svelte
@@ -113,6 +113,8 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
   setCurrentRoute(route?: RouteName): void;
 
   onPageChanged(listener: Listener<Page | undefined>): void;
+
+  getRouteFromPage(page: Page): RouteName | undefined;
 };
 
 export class RouterService extends BaseClass implements RouterServiceInterface {
@@ -240,6 +242,8 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   private _isNavigatingToApp = false;
 
   async navigateToApp(options?: { defaultHref?: string; forceRefresh?: boolean }): Promise<void> {
+    this.log('navigateToApp', { _isNavigatingToApp: this._isNavigatingToApp });
+
     if (this._isNavigatingToApp) {
       return;
     }
@@ -286,10 +290,20 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     this._isNavigatingToApp = false;
   }
 
-  initialize(options: { goto: GoTo }): void {
+  initialize(options: { goto: GoTo; page: Page }): void {
     this.log('initialize', options);
     this._goto = options.goto;
     this.initialized = true;
+    const currentRoute = this.getRouteFromPage(options.page);
+    if (currentRoute) {
+      this._currentRoute = currentRoute;
+    }
+  }
+
+  getRouteFromPage(page: Page): RouteName | undefined {
+    return page.route.id
+      ? this.toRoutePathFromRouteId(page.route.id)
+      : toRoutePathFromURL(page.url);
   }
 
   /**

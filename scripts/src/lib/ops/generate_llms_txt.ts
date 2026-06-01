@@ -64,7 +64,7 @@ function generate(): string {
   lines.push('');
   lines.push('## Quick Start (Read These First)');
   lines.push('');
-  lines.push('1. [AI Briefing](CONTEXT.md) — what we\'re building, tech stack, active contracts');
+  lines.push("1. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts");
   lines.push('2. [Contracts Index](contracts/INDEX.md) — active feature contracts');
   lines.push('3. [Architecture](guides/ARCHITECTURE.md) — system design');
   lines.push('4. [Tech Stack](guides/STACK.md) — technology stack');
@@ -92,7 +92,7 @@ function generate(): string {
   lines.push('## How to Use');
   lines.push('');
   lines.push('**For AI tools:**');
-  lines.push('1. Read this entire file first — it\'s the map');
+  lines.push("1. Read this entire file first — it's the map");
   lines.push('2. Identify 2-5 files relevant to your task');
   lines.push('3. Read those files before writing anything');
   lines.push('');

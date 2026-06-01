@@ -5,7 +5,7 @@
 // Usage: bun run tmux:stop <service> [--mode <mode>]
 
 import { parseArgs } from './cli.ts';
-import { stopSession, hasTmux } from './session.ts';
+import { hasTmux, stopSession } from './session.ts';
 
 const args = process.argv.slice(2);
 const config = parseArgs(args);

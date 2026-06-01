@@ -84,7 +84,9 @@ async function main() {
   }
 
   // ── 2. Start services ─────────────────────────────────────
-  const needsEmulator = suites.some((s) => s.category === 'service' || s.category === 'cross-service');
+  const needsEmulator = suites.some(
+    (s) => s.category === 'service' || s.category === 'cross-service',
+  );
   const needsPwa = suites.some((s) => s.name === 'pwa');
   const needsGame = suites.some((s) => s.name === 'game-e2e');
 
@@ -98,7 +100,9 @@ async function main() {
       if (needsPwa) only.push('pwa');
 
       if (only.length > 0) {
-        const startupDesc = force ? `🚀 Force-starting services via tmux (${only.join(', ')})...` : `🚀 Starting services via tmux (${only.join(', ')})...`;
+        const startupDesc = force
+          ? `🚀 Force-starting services via tmux (${only.join(', ')})...`
+          : `🚀 Starting services via tmux (${only.join(', ')})...`;
         console.log(startupDesc);
         try {
           await startServices({ only, force });

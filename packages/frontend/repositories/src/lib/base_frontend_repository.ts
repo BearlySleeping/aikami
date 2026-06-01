@@ -560,7 +560,9 @@ export class FrontendRepository<T extends RepositoryType>
     const querySnapshot = await getCountFromServer(query);
     return querySnapshot.data().count;
   }
-  async getCollectionReference<Document extends Type.Static<T['data']> | Type.Static<T['createData']>>(
+  async getCollectionReference<
+    Document extends Type.Static<T['data']> | Type.Static<T['createData']>,
+  >(
     getCollectionPathArgument: T['getCollectionPathArgument'],
   ): Promise<CollectionReference<Document>> {
     const { collection, firestore } = await this._getDatabase();
@@ -570,9 +572,9 @@ export class FrontendRepository<T extends RepositoryType>
       this.getCollectionPath(getCollectionPathArgument),
     ) as CollectionReference<Document>;
   }
-  async getCollectionGroupReference<Document extends Type.Static<T['data']> | Type.Static<T['createData']>>(
-    collectionGroupName: string,
-  ): Promise<Query<Document>> {
+  async getCollectionGroupReference<
+    Document extends Type.Static<T['data']> | Type.Static<T['createData']>,
+  >(collectionGroupName: string): Promise<Query<Document>> {
     const { collectionGroup, firestore } = await this._getDatabase();
 
     return collectionGroup(firestore, collectionGroupName) as Query<Document>;

@@ -1,12 +1,13 @@
 /** biome-ignore-all lint/style/useNamingConvention lint/style/noNonNullAssertion lint/style/useBlockStatements lint/style/noParameterAssign lint/suspicious/noAssignInExpressions lint/suspicious/noExplicitAny: pre-existing, external API field names and Svelte 5 patterns */
 
-// apps/frontend/pwa/src/lib/views/app/app-view-model.svelte.ts
+// apps/frontend/pwa/src/lib/views/app/app_view_model.svelte.ts
 
-import { isDevelopmentModePublic } from '@aikami/frontend/configs';
+import { isDevelopmentModePublic, publicEnv } from '@aikami/frontend/configs';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
+  isPublicPage,
 } from '@aikami/frontend/services';
 import type { CurrentUser } from '@aikami/types';
 import { untrack } from 'svelte';
@@ -33,6 +34,7 @@ export type AppViewModelInterface = BaseViewModelInterface & {
   readonly navigationDrawerEnabled: boolean;
   readonly showAppBar: boolean;
   readonly isLoggedIn: boolean;
+  readonly isFullscreen: boolean;
   readonly currentRoute: RouteName | undefined;
   readonly currentUser: CurrentUser | undefined;
   readonly showFooter: boolean;
@@ -46,6 +48,8 @@ export type AppViewModelInterface = BaseViewModelInterface & {
 
 class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppViewModelInterface {
   isNavigationDrawerMinified = $state(false);
+  private _isInitialized = $state(false);
+  private _initialRouteHandled = false;
 
   // Set initial SSR data synchronously
   constructor(options: AppViewModelOptions) {
@@ -91,6 +95,10 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     return authService.isLoggedIn;
   }
 
+  get isAuthReady() {
+    return authService.isAuthReady;
+  }
+
   get currentUser() {
     return authService.currentUser;
   }
@@ -99,10 +107,24 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     return routerService.currentRoute;
   }
 
+  /** Routes that render fullscreen without the app shell (app bar, drawer, footer). */
+  private static readonly _FULLSCREEN_ROUTES: ReadonlySet<RouteName> = new Set(['game']);
+
+  get isFullscreen() {
+    if (!this.currentRoute) {
+      return false;
+    }
+    return AppViewModel._FULLSCREEN_ROUTES.has(this.currentRoute);
+  }
+
   get showFooter() {
     return false;
   }
   get showAppLoading() {
+    if (!this._isInitialized) {
+      return true;
+    }
+
     return routerService.isNavigating;
   }
   get navigationDrawerEnabled() {
@@ -116,7 +138,10 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
 
   get showAppBar() {
     if (!this.currentRoute) {
-      return false;
+      // During auth initialization the route may not be synced yet.
+      // Default to showing the app bar to avoid a white-screen flash.
+      // The auth guard handles redirects once isAuthReady resolves.
+      return true;
     }
     return !this._isMinimalRouteView(this.currentRoute, this.isLoggedIn);
   }
@@ -135,28 +160,31 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
 
   override async initialize(): Promise<void> {
     // 1. Inject static dependencies into our framework-agnostic service.
-    routerService.initialize({ goto });
+    routerService.initialize({ goto, page });
 
-    // 2. Set up our reactive tracking safely attached to the class lifecycle
+    // 2. Set up reactive listeners for future route/auth changes.
     this._setupReactiveListeners();
 
-    await authService.initialize();
+    // 3. Resolve initial auth state and make the first routing decision.
+    //    This runs while _isInitialized is false, so the loading view
+    //    covers any redirect — no visible flash.
+    const user = await authService.initialize();
 
-    // Log build version for cache-busting debugging
-    try {
-      const constants = await import('@aikami/constants');
-      this.log('App version', {
-        version: (constants as { APP_VERSION?: string }).APP_VERSION ?? 'unknown',
-      });
-    } catch {
-      this.log('App version', { error: 'could not load constants' });
-    }
+    this.log('initialize', {
+      version: publicEnv.APP_VERSION,
+      route: this.currentRoute,
+      user,
+    });
+
+    await this._handleRouteTransitions(this.currentRoute, user);
+    this._initialRouteHandled = true;
 
     if (isDevelopmentModePublic()) {
       const eruda = (await import('eruda')).default;
       eruda.init();
     }
 
+    this._isInitialized = true;
     return await super.initialize();
   }
 
@@ -181,17 +209,30 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
         routerService.syncNavigation(navigating, page);
       });
 
-      // EFFECT 2: The Business Logic Guards
-      // This effect strictly watches OUR internal application state.
+      // EFFECT 2: Reactive auth + route guards for SUBSEQUENT changes.
+      // The initial route decision is made in initialize(), before the
+      // loading view disappears. This effect only handles changes after
+      // initialization (logout, session expiry, manual navigation).
       $effect(() => {
         // Read dependencies at the top level to explicitly register them with Svelte.
         const route = this.currentRoute;
         const user = this.currentUser;
         const isNavigating = routerService.isNavigating;
+        const isAuthReady = authService.isAuthReady;
 
         // GUARD: Bail out if SvelteKit is currently processing a navigation.
-        // We only want to evaluate auth/routing rules on fully resolved pages.
         if (isNavigating) {
+          return;
+        }
+
+        // GUARD: Don't redirect until Firebase Auth has resolved.
+        if (!isAuthReady) {
+          return;
+        }
+
+        // GUARD: Initial routing is handled in initialize(). This effect
+        // only manages subsequent auth/route changes.
+        if (!this._initialRouteHandled) {
           return;
         }
 
@@ -216,10 +257,16 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     user: CurrentUser | undefined,
   ) {
     if (!route) {
-      return;
+      // if we don't have a route defined, it is most likely a bug we should fallback to either login or dashboard
+      return user
+        ? await routerService.navigateToApp()
+        : await routerService.goToRoute('login', {
+            pathParameters: undefined,
+            queryParameters: undefined,
+          });
     }
 
-    const isPublicRoute = ['login', 'register'].includes(route);
+    const isPublicRoute = isPublicPage(route);
 
     // Rule 1: Authenticated users shouldn't be on auth pages
     if (user && isPublicRoute && route !== 'register') {

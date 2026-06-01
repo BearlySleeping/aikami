@@ -12,6 +12,7 @@ export const EMULATOR_PORTS = {
   auth: 9099,
   functions: 5001,
   firestore: 8080,
+  hosting: 5000,
   pubsub: 8085,
   storage: 9199,
   dataconnect: 9399,
@@ -34,6 +35,7 @@ export const EMULATOR_HOSTS = {
   auth: `localhost:${EMULATOR_PORTS.auth}`,
   firestore: `localhost:${EMULATOR_PORTS.firestore}`,
   functions: `localhost:${EMULATOR_PORTS.functions}`,
+  hosting: `localhost:${EMULATOR_PORTS.hosting}`,
   storage: `localhost:${EMULATOR_PORTS.storage}`,
   pubsub: `localhost:${EMULATOR_PORTS.pubsub}`,
 } as const;

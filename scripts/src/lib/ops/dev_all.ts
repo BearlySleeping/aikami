@@ -15,7 +15,7 @@
  *   bun run tmux:stop all            # Stop everything
  */
 
-import { startSession, joinSession, hasTmux, type AikamiMode } from '../tmux/session.ts';
+import { type AikamiMode, hasTmux, joinSession, startSession } from '../tmux/session.ts';
 
 const VALID_MODES: AikamiMode[] = ['emulator', 'development', 'production'];
 const args = process.argv.slice(2);

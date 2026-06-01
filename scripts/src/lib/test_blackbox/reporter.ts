@@ -23,9 +23,11 @@ export function printTerminalReport(results: SuiteResult[], duration: number): v
 
   for (const r of results) {
     const icon =
-      r.status === 'pass' ? `${GREEN}✓${RESET}` :
-      r.status === 'fail' ? `${RED}✗${RESET}` :
-      `${YELLOW}⏭${RESET}`;
+      r.status === 'pass'
+        ? `${GREEN}✓${RESET}`
+        : r.status === 'fail'
+          ? `${RED}✗${RESET}`
+          : `${YELLOW}⏭${RESET}`;
     const dur = r.duration > 0 ? ` (${r.duration}ms)` : '';
     console.log(`  ${icon} ${r.name}${dur}`);
     if (r.error) {
@@ -33,7 +35,9 @@ export function printTerminalReport(results: SuiteResult[], duration: number): v
     }
   }
 
-  console.log(`\n${BOLD}Summary:${RESET} ${GREEN}${passed} passed${RESET}, ${RED}${failed} failed${RESET}, ${YELLOW}${skipped} skipped${RESET}`);
+  console.log(
+    `\n${BOLD}Summary:${RESET} ${GREEN}${passed} passed${RESET}, ${RED}${failed} failed${RESET}, ${YELLOW}${skipped} skipped${RESET}`,
+  );
   console.log(`Duration: ${CYAN}${(duration / 1000).toFixed(1)}s${RESET}\n`);
 }
 

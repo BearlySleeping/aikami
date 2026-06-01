@@ -2,7 +2,7 @@
 // scripts/src/lib/tmux/stop_all.ts
 // Stop all aikami tmux sessions regardless of mode/service.
 
-import { stopAllSessions, hasTmux } from './session.ts';
+import { hasTmux, stopAllSessions } from './session.ts';
 
 if (!(await hasTmux())) {
   console.error('❌ tmux is not installed.');

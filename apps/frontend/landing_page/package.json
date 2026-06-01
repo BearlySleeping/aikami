@@ -1,7 +1,10 @@
 {
   "name": "@app/landing_page",
   "scripts": {
-    "dev": "astro dev",
+    "dev": "astro dev --mode emulator",
+    "dev:development": "astro dev --mode development",
+    "dev:emulator": "astro dev --mode emulator",
+    "dev:production": "astro dev --mode production",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",

@@ -5,21 +5,18 @@
 // Pattern ported from nordclaw's blackbox test infrastructure.
 
 import { resolve } from 'node:path';
+import type { AikamiMode, TmuxService } from '../tmux/session.ts';
 import {
   buildSessionName,
   startSession,
+  stopAllSessions,
   stopSession,
   waitForReady,
-  stopAllSessions,
 } from '../tmux/session.ts';
-import type { AikamiMode, TmuxService } from '../tmux/session.ts';
 
 const MODE: AikamiMode = 'emulator'; // Blackbox tests always run in emulator mode
 
-const buildServiceOptions = (
-  only: string[],
-  projectRoot: string,
-): { service: TmuxService }[] => {
+const buildServiceOptions = (only: string[], projectRoot: string): { service: TmuxService }[] => {
   const map: Record<string, TmuxService> = {
     emulators: 'emulators',
     pwa: 'pwa',
