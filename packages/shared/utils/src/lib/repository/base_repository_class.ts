@@ -1,4 +1,6 @@
 // packages/shared/utils/src/lib/repository/base_repository_class.ts
+
+import { validateWithLevel } from '@aikami/schemas';
 import type {
   CollectionReference,
   DocumentReference,
@@ -10,6 +12,7 @@ import type {
   RepositoryType,
 } from '@aikami/types';
 import type Type from 'typebox';
+import type { TSchema } from 'typebox';
 import { BaseClass } from '../common/base_class.ts';
 import { toCoreData } from '../database/firestore_data_converters.ts';
 
@@ -116,6 +119,9 @@ export abstract class BaseRepository<T extends RepositoryType> extends BaseClass
   protected readonly getCollectionPath: GetPathFunction<T['getCollectionPathArgument']>;
   protected readonly getDocumentPath: GetPathFunction<T['getDocumentPathArgument']>;
   private readonly _parseLevel: ParseLevel;
+  private readonly _schema: TSchema;
+  private readonly _createSchema: TSchema | undefined;
+  private readonly _updateSchema: TSchema | undefined;
 
   constructor(options: BaseRepositoryOptions<T>) {
     super({
@@ -124,6 +130,9 @@ export abstract class BaseRepository<T extends RepositoryType> extends BaseClass
     this.getCollectionPath = options.getCollectionPath;
     this.getDocumentPath = options.getDocumentPath;
     this._parseLevel = options.parseLevel ?? 'safe';
+    this._schema = options.schema as TSchema;
+    this._createSchema = options.createSchema as TSchema | undefined;
+    this._updateSchema = options.updateSchema as TSchema | undefined;
   }
 
   protected async parseDocuments(documents: DocumentSnapshot[]): Promise<Type.Static<T['data']>[]> {
@@ -155,36 +164,37 @@ export abstract class BaseRepository<T extends RepositoryType> extends BaseClass
     dataToParse: unknown,
     // biome-ignore lint/suspicious/noExplicitAny: Generic parse method returns inferred type
   ): Promise<any> {
-    if (this._parseLevel === 'off') {
-      switch (type) {
-        case 'createData':
-          return dataToParse as Type.Static<T['createData']>;
-        case 'updateData':
-          return dataToParse as Type.Static<T['updateData']>;
-        case 'data':
-          return dataToParse as Type.Static<T['data']>;
-        default: {
-          const _exhaustiveCheck: never = type;
-          throw new Error(`Unhandled parse type: ${_exhaustiveCheck}`);
-        }
-      }
+    const schema = this._getSchemaForType(type);
+    if (!schema) {
+      // Schema not provided for this operation type — pass through.
+      return dataToParse;
     }
 
-    // TODO: Implement TypeBox runtime validation
-    // TypeBox v1.x schemas produce JSON Schema but don't include a built-in
-    // validator. For now, pass through data and log warnings in 'on' mode.
-    // Future: integrate ajv or @sinclair/typebox/value for validation.
-    if (this._parseLevel === 'on') {
-      this.debug('parse: validation on — passing through (no TypeBox validator yet)');
+    const valid = validateWithLevel({
+      schema,
+      value: dataToParse,
+      parseLevel: this._parseLevel,
+      context: `${this._className}.parse(${type})`,
+    });
+
+    // valid is true in 'off' and 'on' (on throws on failure).
+    // In 'safe' mode, valid may be false but we still return original data.
+    if (!valid) {
+      this.warn(`parse(${type}): validation failed, returning original data`);
     }
 
+    return dataToParse;
+  }
+
+  /** Map parse type string to the corresponding TypeBox schema. */
+  private _getSchemaForType(type: 'data' | 'createData' | 'updateData'): TSchema | undefined {
     switch (type) {
-      case 'createData':
-        return dataToParse as Type.Static<T['createData']>;
-      case 'updateData':
-        return dataToParse as Type.Static<T['updateData']>;
       case 'data':
-        return dataToParse as Type.Static<T['data']>;
+        return this._schema;
+      case 'createData':
+        return this._createSchema;
+      case 'updateData':
+        return this._updateSchema;
       default: {
         const _exhaustiveCheck: never = type;
         throw new Error(`Unhandled parse type: ${_exhaustiveCheck}`);

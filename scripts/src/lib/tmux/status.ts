@@ -2,7 +2,7 @@
 // scripts/src/lib/tmux/status.ts
 // List all aikami tmux sessions.
 
-import { printSessionStatus, hasTmux } from './session.ts';
+import { hasTmux, printSessionStatus } from './session.ts';
 
 if (!(await hasTmux())) {
   console.error('❌ tmux is not installed.');

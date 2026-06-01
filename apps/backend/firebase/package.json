@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@aikami/backend-ai": "workspace:*",
+    "@aikami/backend-auth": "workspace:*",
     "@aikami/backend-configs": "workspace:*",
     "@aikami/backend-database": "workspace:*",
     "@aikami/backend-utils": "workspace:*",

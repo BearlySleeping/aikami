@@ -1,5 +1,5 @@
 <script lang="ts">
-  // apps/frontend/pwa/src/lib/views/app/AppView.svelte
+  // apps/frontend/pwa/src/lib/views/app/app_view.svelte
   import type { Snippet } from 'svelte';
   import AppLoading from '$components/app_loading.svelte';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
@@ -20,33 +20,41 @@
 <HeadTagsView data={viewModel.defaultMetaTags} />
 <svelte:window on:beforeunload={(event) => viewModel.handleAppClose(event)} />
 
-<BaseViewModelContainer {viewModel} class="drawer lg:drawer-open">
-  <input id="left-drawer" type="checkbox" class="drawer-toggle">
+{#if viewModel.isFullscreen}
+  <BaseViewModelContainer {viewModel}>
+    {@render children()}
+  </BaseViewModelContainer>
+{:else}
+  <BaseViewModelContainer {viewModel} class="drawer lg:drawer-open">
+    <input id="left-drawer" type="checkbox" class="drawer-toggle">
 
-  <div class="drawer-content flex h-screen flex-col">
-    {#if viewModel.showAppBar}
-      <header><AppBar /></header>
-    {/if}
-
-    <main class="flex-1 overflow-y-auto relative">
-      {#if viewModel.showAppLoading}
-        <div class="absolute inset-0 z-50 flex items-center justify-center bg-background">
-          <AppLoading />
-        </div>
+    <div class="drawer-content flex h-screen flex-col">
+      {#if viewModel.showAppBar}
+        <header><AppBar /></header>
       {/if}
 
-      {@render children()}
-    </main>
+      <main class="flex-1 overflow-y-auto relative">
+        {#if viewModel.showAppLoading}
+          <div class="absolute inset-0 z-50 flex items-center justify-center bg-background">
+            <AppLoading />
+          </div>
+        {/if}
 
-    {#if viewModel.showFooter}
-      <AppFooter />
+        <div class:hidden={viewModel.showAppLoading}>
+          {@render children()}
+        </div>
+      </main>
+
+      {#if viewModel.showFooter}
+        <AppFooter />
+      {/if}
+    </div>
+
+    {#if viewModel.navigationDrawerEnabled && viewModel.isLoggedIn}
+      <NavigationDrawer />
     {/if}
-  </div>
-
-  {#if viewModel.navigationDrawerEnabled && viewModel.isLoggedIn}
-    <NavigationDrawer />
-  {/if}
-</BaseViewModelContainer>
+  </BaseViewModelContainer>
+{/if}
 
 {#await import('./dialogs/app_dialogs_view.svelte') then { default: AppDialogsView }}
   <AppDialogsView />

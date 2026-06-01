@@ -59,7 +59,10 @@ export const run = async (cmd: string[]): Promise<RunResult> => {
  * Run a shell command, streaming output to the console.
  * Returns the exit code.
  */
-export const runStream = async (cmd: string[], options: { cwd?: string; env?: Record<string, string> } = {}): Promise<number> => {
+export const runStream = async (
+  cmd: string[],
+  options: { cwd?: string; env?: Record<string, string> } = {},
+): Promise<number> => {
   const proc = Bun.spawn(cmd, {
     cwd: options.cwd,
     env: { ...process.env, ...options.env },

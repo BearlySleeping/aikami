@@ -8,9 +8,9 @@ export const verifyAppCheck = async (request: { headers: Headers }) => {
     // logger.log('verifyAppCheck:appCheckToken', appCheckToken);
     if (!appCheckToken) {
       throw toAppError({
-  errorType: 'captcha-required',
-  errorMessage: 'Missing app check token'
-});
+        errorType: 'captcha-required',
+        errorMessage: 'Missing app check token',
+      });
     }
 
     await getAppCheck().verifyToken(appCheckToken);
@@ -18,9 +18,9 @@ export const verifyAppCheck = async (request: { headers: Headers }) => {
   } catch (error) {
     logger.error('verifyAppCheck:error', error);
     throw toAppError({
-  errorType: 'internal',
-  errorMessage: 'Failed to verify app check token',
-  details: error
-});
+      errorType: 'internal',
+      errorMessage: 'Failed to verify app check token',
+      details: error,
+    });
   }
 };

@@ -31,13 +31,16 @@
           # Playwright with Nix-fixed browsers
           playwright-test
 
+          # Firebase Emulator (requires JDK)
+          jdk
+
           # Hybrid Cloud Emulation
           google-cloud-sql-proxy
 
           # Developer Experience
           direnv
           nix-direnv
-                  python3
+          python3
           git-filter-repo
 ];
 

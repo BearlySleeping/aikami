@@ -432,7 +432,9 @@ aikami/
 Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected` before tests.
 
 ```bash
-bun moon run pwa:dev              # Start PWA dev server
+bun moon run pwa:dev              # Start PWA dev server (defaults to emulator mode)
+bun moon run pwa:dev:development   # Start PWA in development mode
+bun moon run pwa:dev:production    # Start PWA in production mode
 bun moon run :typecheck            # Type-check all projects
 bun moon run :lint                 # Lint all projects
 bun moon run :fix                  # Auto-fix lint issues
@@ -443,6 +445,41 @@ bun moon run :validate             # Full CI validation
 ---
 
 ## Direnv Development Environment
+
+### 🔴 CRITICAL: Mode-Aware Dev Server Commands
+
+**`bun run dev` and `moon run pwa:dev` now default to emulator mode.**
+Emulator is the primary development environment (90% of dev time).
+Use explicit mode scripts when you need a different backend.
+
+```bash
+# ✅ Default — emulator mode (primary dev environment)
+cd apps/frontend/pwa && bun run dev
+bun moon run pwa:dev
+bun run tmux:start pwa
+
+# ✅ Explicit mode override when needed
+cd apps/frontend/pwa && bun run dev:development
+cd apps/frontend/pwa && bun run dev:production
+
+# ❌ None — dev now defaults to emulator, no footgun
+```
+
+**How to check** (from the PWA package.json):
+```json
+{
+  "dev": "vite dev --mode emulator",
+  "dev:development": "vite dev --mode development",
+  "dev:emulator": "vite dev --mode emulator",
+  "dev:production": "vite dev --mode production"
+}
+```
+
+The `--mode` flag tells Vite which `.env.{mode}` file to load, which sets
+`PUBLIC_FIREBASE_PROJECT_ID`, `PUBLIC_MODE`, and other environment-specific
+variables.
+
+---
 
 The project uses direnv for deterministic, zero-setup development. Environment
 variables are always available via the loaded `.envrc`. All pi extensions

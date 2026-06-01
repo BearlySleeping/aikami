@@ -1,7 +1,7 @@
 // apps/frontend/game/src/main.ts
 
-import { createEngineBridge, GameWorld } from '@aikami/engine';
 import { publicEnv } from '@aikami/frontend/configs/environment';
+import { createEngineBridge, GameWorld } from '@aikami/frontend/engine';
 import { getAuthPixiScene } from '$lib/menu/auth_pixi_scene.ts';
 import { getMenuController } from '$lib/menu/menu_controller.ts';
 import { type AuthHandoffState, getAuthController } from '$lib/services/auth_controller.ts';

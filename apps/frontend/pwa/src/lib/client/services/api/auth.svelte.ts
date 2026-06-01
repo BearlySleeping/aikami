@@ -6,6 +6,7 @@ import {
   type BaseFrontendClassOptions,
   type FirebaseAuthServiceInterface,
   firebaseAuthService,
+  firebaseFunctionsService,
   type SocialSignInError,
   type SocialSignInResponse,
 } from '@aikami/frontend/services';
@@ -21,7 +22,6 @@ import type {
 } from '@aikami/types';
 import { getUserLiteData, toAppErrorFromUnknownError } from '@aikami/utils';
 import { analyticService } from './analytic.svelte.ts';
-import { internalAPIService } from './internal.svelte.ts';
 
 export type AuthServiceOptions = BaseFrontendClassOptions & {
   auth: FirebaseAuthServiceInterface;
@@ -32,6 +32,12 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    * The currently signed-in user.
    */
   readonly currentUser: CurrentUser | undefined;
+
+  /**
+   * Whether Firebase Auth has completed its initial auth state resolution.
+   * Before this is true, redirects based on auth state should be suppressed.
+   */
+  readonly isAuthReady: boolean;
 
   /**
    * Whether a user is currently signed in.
@@ -51,9 +57,11 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
   setCurrentUser(user: CurrentUser | undefined, onlyIfEmpty?: boolean): void;
 
   /**
-   * Initializes the service.
+   * Initializes Firebase Auth and resolves the initial user state.
+   * Returns the current user (or undefined) before setting up the
+   * reactive listener for future auth state changes.
    */
-  initialize(): Promise<void>;
+  initialize(): Promise<CurrentUser | undefined>;
 
   /**
    * Signs in a user with email and password.
@@ -107,6 +115,7 @@ export class AuthService
   implements AuthServiceInterface
 {
   currentUser = $state<CurrentUser | undefined>();
+  isAuthReady = $state(false);
   isLoggedIn = $derived(!!this.currentUser);
   uid = $derived(this.currentUser?.id);
 
@@ -124,29 +133,53 @@ export class AuthService
 
   private _currentToken: string | undefined;
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<CurrentUser | undefined> {
     this.log('initialize');
     try {
       if (this._initialized) {
-        return;
+        return this.currentUser;
       }
       this._initialized = true;
 
-      await this._auth.onIdTokenChanged(
-        async (user) => {
-          if (this._isChangingAuthState) {
-            return;
-          }
+      // Register onIdTokenChanged and capture the initial auth state.
+      // Firebase Auth resolves the initial state asynchronously (IndexedDB),
+      // so getAuthUser() returns null until the first callback fires.
+      const initialUser = await new Promise<FirebaseUser | undefined>((resolve) => {
+        let firstCall = true;
 
-          await this.setAuthUser(user, true);
-        },
-        (error) => {
-          this.error(error.message);
-          this.currentUser = undefined;
-        },
-      );
+        this._auth.onIdTokenChanged(
+          async (user) => {
+            if (this._isChangingAuthState) {
+              return;
+            }
+
+            if (firstCall) {
+              firstCall = false;
+              resolve(user);
+              return;
+            }
+
+            await this.setAuthUser(user, true);
+          },
+          (error) => {
+            this.error(error.message);
+            this.currentUser = undefined;
+            if (firstCall) {
+              firstCall = false;
+              resolve(undefined);
+            }
+          },
+        );
+      });
+
+      await this.setAuthUser(initialUser, true);
+      this.isAuthReady = true;
+
+      return this.currentUser;
     } catch (error) {
       this.error('initialize', error);
+      this.isAuthReady = true;
+      return undefined;
     }
   }
 
@@ -345,7 +378,7 @@ export class AuthService
   protected async callAuthEndpoint<T extends AuthMessageType>(
     data: AuthMessageData<T>,
   ): Promise<AuthMessageResponse<T>> {
-    return await internalAPIService.callAuthEndpoint(data);
+    return await firebaseFunctionsService.call('auth', data);
   }
 
   async syncAuthWithBackend(forceEmpty = false): Promise<boolean> {
@@ -384,7 +417,9 @@ export class AuthService
 
     this.log('_setToken', { forceRefresh, uid: user?.uid });
 
-    return await internalAPIService.setToken(token ?? undefined);
+    // In SPA mode, Firebase callable functions handle auth automatically.
+    // The ID token is managed by the Firebase Auth SDK and included in
+    // callable function requests without manual synchronization.
   }
 }
 

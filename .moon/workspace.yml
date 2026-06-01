@@ -30,7 +30,7 @@ projects:
   backend-svelte-kit: "packages/backend/svelte-kit"
 
   # Frontend Packages
-  engine: "packages/engine"
+  frontend-engine: "packages/frontend/engine"
   frontend-api-core: "packages/frontend/api-core"
   frontend-dataconnect: "packages/frontend/dataconnect"
   frontend-services: "packages/frontend/services"

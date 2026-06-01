@@ -42,12 +42,6 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
   // Private static property to cache the dynamically imported module
   private static _storageModule?: StorageModule;
 
-  constructor() {
-    super({
-      className: 'FirebaseStorageService',
-    });
-  }
-
   public async getRef(path: string): Promise<StorageReference> {
     const { ref, storage } = await this._getStorageModule();
     return ref(storage, path);
@@ -96,4 +90,6 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
 }
 
 // Export a singleton instance of the service
-export const firebaseStorageService: FirebaseStorageServiceInterface = new FirebaseStorageService();
+export const firebaseStorageService: FirebaseStorageServiceInterface = new FirebaseStorageService({
+  className: 'FirebaseStorageService',
+});

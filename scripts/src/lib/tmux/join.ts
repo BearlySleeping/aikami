@@ -6,7 +6,7 @@
 //   service: emulators | pwa | game | all
 
 import { parseArgs } from './cli.ts';
-import { joinSession, hasTmux } from './session.ts';
+import { hasTmux, joinSession } from './session.ts';
 
 const args = process.argv.slice(2);
 const config = parseArgs(args);

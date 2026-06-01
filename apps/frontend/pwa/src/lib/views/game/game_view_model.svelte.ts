@@ -1,12 +1,13 @@
-// apps/frontend/pwa/src/lib/views/game/game-view-model.svelte.ts
+// apps/frontend/pwa/src/lib/views/game/game_view_model.svelte.ts
 
-import type { GameCommand } from '@aikami/engine';
+import type { GameCommand } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ActiveContextEntry } from '$types';
+import { authService, routerService } from '$services';
 import { GameStateService } from '../../client/services/game/game_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,12 @@ export type GameViewModelInterface = BaseViewModelInterface & {
    */
   readonly activeContexts: ActiveContextEntry[];
 
+  /** Whether the options overlay is visible. */
+  readonly showOptions: boolean;
+
+  /** The logged-in player's display name, or 'Unknown' if not available. */
+  readonly playerDisplayName: string;
+
   /**
    * Sends a command to the game engine across the EngineBridge boundary.
    * All UI→Game communication flows through this method.
@@ -51,6 +58,15 @@ export type GameViewModelInterface = BaseViewModelInterface & {
    * Called by the View after the canvas element is mounted.
    */
   attachCanvas(canvas: HTMLCanvasElement): Promise<void>;
+
+  /** Closes the options overlay and resumes the game. */
+  closeOptions(): void;
+
+  /** Toggles the options overlay and locks/unlocks game input. */
+  toggleOptions(): void;
+
+  /** Navigates back to the PWA dashboard. */
+  goToDashboard(): Promise<void>;
 };
 
 /**
@@ -61,7 +77,7 @@ export type GameViewModelInterface = BaseViewModelInterface & {
  *
  * **Critical boundary rule**: This ViewModel NEVER imports PixiJS, bitECS,
  * or any game-internal types. All communication with the game engine goes
- * through the typed {@link import('@aikami/engine').EngineBridge}.
+ * through the typed {@link import('@aikami/frontend/engine').EngineBridge}.
  */
 class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameViewModelInterface {
   activeDialog = $state<ActiveDialog | undefined>(undefined);
@@ -74,11 +90,27 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   activeContexts: ActiveContextEntry[] = $state([]);
 
+  showOptions = $state<boolean>(false);
+
+  /**
+   * The logged-in player's display name.
+   * Derived from authService — updates reactively when auth state changes.
+   */
+  get playerDisplayName() {
+    return authService.currentUser?.displayName || authService.currentUser?.email || 'Unknown';
+  }
+
   /** Cached bridge instance — created lazily on first use. */
-  private bridge: import('@aikami/engine').EngineBridge | undefined;
+  private bridge: import('@aikami/frontend/engine').EngineBridge | undefined;
 
   /** Cached GameWorld instance — created lazily after bridge init. */
-  private gameWorld: import('@aikami/engine').GameWorld | undefined;
+  private gameWorld: import('@aikami/frontend/engine').GameWorld | undefined;
+
+  /**
+   * Canvas element passed in before the bridge finished initializing.
+   * When the bridge becomes ready, auto-attach to this canvas.
+   */
+  private pendingCanvas: HTMLCanvasElement | undefined;
 
   /** Singleton game state service for persisting context data. */
   private readonly gameStateService = new GameStateService({
@@ -93,7 +125,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     try {
       // Lazy-import game modules — PixiJS is SSR-incompatible.
       // `BaseViewModelContainer` ensures `initialize()` runs only client-side.
-      const { createEngineBridge } = await import('@aikami/engine');
+      const { createEngineBridge } = await import('@aikami/frontend/engine');
 
       this.bridge = createEngineBridge();
 
@@ -146,6 +178,13 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
         // Persist in game state service
         this.gameStateService.removeActiveContext(event.entityId);
       });
+
+      // ── Auto-attach if canvas arrived before bridge was ready ──
+      if (this.pendingCanvas) {
+        const canvas = this.pendingCanvas;
+        this.pendingCanvas = undefined;
+        await this.attachCanvasNow(canvas);
+      }
     } catch (error) {
       this.debug('Failed to initialize game bridge', error);
     }
@@ -172,15 +211,29 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   async attachCanvas(canvas: HTMLCanvasElement): Promise<void> {
     this.debug('attachCanvas');
 
+    // Bridge not ready yet — store canvas and attach when initialize completes
     if (!this.bridge) {
-      this.gameError = 'Game bridge not initialized';
+      this.pendingCanvas = canvas;
+      return;
+    }
+
+    await this.attachCanvasNow(canvas);
+  }
+
+  /**
+   * Internal: creates the GameWorld and attaches to the canvas.
+   * Assumes this.bridge is already initialized.
+   */
+  private async attachCanvasNow(canvas: HTMLCanvasElement): Promise<void> {
+    const bridge = this.bridge;
+    if (!bridge) {
       return;
     }
 
     try {
-      const { GameWorld } = await import('@aikami/engine');
+      const { GameWorld } = await import('@aikami/frontend/engine');
 
-      this.gameWorld = new GameWorld(this.bridge);
+      this.gameWorld = new GameWorld(bridge);
       await this.gameWorld.initialize({
         canvas,
         width: canvas.clientWidth,
@@ -193,6 +246,30 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   /** @inheritdoc */
+  closeOptions(): void {
+    this.showOptions = false;
+    if (this.gameWorld) {
+      this.gameWorld.setInputLocked(false);
+    }
+  }
+
+  /** @inheritdoc */
+  async goToDashboard(): Promise<void> {
+    await routerService.navigateToApp();
+  }
+
+  /**
+   * Toggles the options overlay and locks/unlocks game input.
+   * Called when the user presses Escape.
+   */
+  toggleOptions(): void {
+    this.showOptions = !this.showOptions;
+    if (this.gameWorld) {
+      this.gameWorld.setInputLocked(this.showOptions);
+    }
+  }
+
+  /** @inheritdoc */
   override async dispose(): Promise<void> {
     if (this.gameWorld) {
       this.gameWorld.destroy();
@@ -200,6 +277,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     }
 
     this.bridge = undefined;
+    this.pendingCanvas = undefined;
     this.isGameReady = false;
 
     await super.dispose();

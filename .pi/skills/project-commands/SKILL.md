@@ -227,10 +227,29 @@ The root `package.json` provides shortcuts for common operations:
 
 ### Development
 
+**`bun run dev` and `moon run pwa:dev` now default to emulator mode.**
+Emulator is the primary development environment (90% of dev time).
+
 | Script            | Command                                    | Purpose                                                      |
 | ----------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| `dev`             | `moon run $APP:dev`                        | Start dev server for $APP                                    |
+| `dev`             | `moon run $APP:dev`                        | Start dev server for $APP (defaults to emulator for PWA)    |
 | `dev:all`         | `bun run scripts/src/lib/ops/dev_all.ts`   | Start full stack in tmux (mode from $AIKAMI_MODE)            |
+
+**PWA dev server — emulator is the default:**
+
+```bash
+# ✅ Default — emulator mode (primary dev environment)
+cd apps/frontend/pwa && bun run dev
+bun moon run pwa:dev
+bun run tmux:start pwa
+
+# ✅ Explicit mode override when needed
+cd apps/frontend/pwa && bun run dev:development
+cd apps/frontend/pwa && bun run dev:production
+```
+
+| Tmux Script       | Command                                 | Purpose                                                      |
+| ----------------- | --------------------------------------- | ------------------------------------------------------------ |
 | `tmux:start`      | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (emulators/pwa/game/all)                |
 | `tmux:join`       | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session                             |
 | `tmux:stop`       | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                                          |

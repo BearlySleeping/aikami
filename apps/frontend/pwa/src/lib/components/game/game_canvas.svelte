@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { EngineBridge, GameWorld } from '@aikami/engine';
+  import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
   // apps/frontend/pwa/src/lib/components/game/game_canvas.svelte
   import { onMount } from 'svelte';
 
