@@ -18,7 +18,7 @@ const FIRESTORE_PORT = EMULATOR_PORTS.firestore;
 const STORAGE_PORT = EMULATOR_PORTS.storage;
 const FUNCTIONS_PORT = EMULATOR_PORTS.functions;
 
-const GAME_URL = 'http://localhost:5174';
+const GAME_URL = `http://localhost:${EMULATOR_PORTS.game}`;
 
 /**
  * Probes a port to check if an emulator service is healthy.

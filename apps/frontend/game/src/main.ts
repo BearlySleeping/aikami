@@ -1,10 +1,12 @@
 // apps/frontend/game/src/main.ts
 
 import { createEngineBridge, GameWorld } from '@aikami/engine';
-import { AuthController, type AuthHandoffState } from './core/auth/auth_controller.ts';
-import { getFirebase } from './core/firebase/firebase_app.ts';
-import { AuthPixiScene } from './menu/auth_pixi_scene.ts';
-import { MenuController } from './menu/menu_controller.ts';
+import { publicEnv } from '@aikami/frontend/configs/environment';
+import { getAuthPixiScene } from '$lib/menu/auth_pixi_scene.ts';
+import { getMenuController } from '$lib/menu/menu_controller.ts';
+import { type AuthHandoffState, getAuthController } from '$lib/services/auth_controller.ts';
+import { getFirebase } from '$lib/services/firebase/firebase_app.ts';
+import { getDialogueController } from '$lib/ui/dialogue_controller.ts';
 
 // ---------------------------------------------------------------------------
 // Application entry point — boots menu first, game on demand
@@ -18,11 +20,25 @@ if (!canvas) {
 // Ensure TypeScript sees canvas as non-null after guard
 const gameCanvas: HTMLCanvasElement = canvas;
 
-const menu = new MenuController();
-const auth = new AuthController();
-const authScene = new AuthPixiScene(gameCanvas);
+const menu = getMenuController({ className: 'MenuController' });
+const auth = getAuthController({ className: 'AuthController' });
+const authScene = getAuthPixiScene({ className: 'AuthPixiScene', canvas: gameCanvas });
 
 let gameWorld: GameWorld | undefined;
+let dialogueController: ReturnType<typeof getDialogueController> | undefined;
+
+// ── Restore existing session on page load ────────────────────────
+
+const fb = getFirebase();
+if (fb.auth.isAuthenticated && fb.auth.currentUser) {
+  const user = fb.auth.currentUser;
+  menu.setAuthState({
+    isLoggedIn: true,
+    displayName: user.email || user.uid || 'Player',
+  });
+} else {
+  menu.setAuthState({ isLoggedIn: false, displayName: '' });
+}
 
 // ── Auth state → menu UI ─────────────────────────────────────────
 
@@ -77,7 +93,10 @@ menu.onLoginRequest(() => {
   gameCanvas.height = canvasHeight;
 
   // Determine PWA base URL (same domain for local dev)
-  const pwaBaseUrl = `${window.location.protocol}//${window.location.hostname}:5173`;
+  const pwaBaseUrl = publicEnv.PUBLIC_PWA_URL;
+  if (!pwaBaseUrl) {
+    throw new Error('PUBLIC_PWA_URL not defined');
+  }
 
   // Start the auth handoff — this generates the code and opens the PWA
   auth.startHandoff({ pwaBaseUrl }).then(() => {
@@ -133,7 +152,42 @@ async function startGame(): Promise<void> {
   gameCanvas.height = height;
 
   const bridge = createEngineBridge();
+
+  // Get Firebase Functions client for dialogue API calls
+  const fb = getFirebase();
+  const functions = fb.functions;
+
   gameWorld = new GameWorld(bridge);
+
+  // Wire dialogue controller to interaction requests
+  gameWorld.onInteractRequest((npcMeta) => {
+    // Lock input while dialogue is active
+    gameWorld?.setInputLocked(true);
+
+    // Create or reuse dialogue controller
+    if (!dialogueController) {
+      dialogueController = getDialogueController({ className: 'DialogueController', functions });
+    }
+
+    dialogueController.start({
+      eid: npcMeta.eid,
+      npcId: npcMeta.npcId,
+      personaId: npcMeta.personaId,
+      npcName: npcMeta.npcName,
+      relationshipValue: npcMeta.relationshipValue,
+      radius: npcMeta.interactionRadius,
+      position: { x: 0, y: 0 },
+      inRange: false,
+    });
+
+    // When dialogue ends (via close button), unlock input
+    const checkDialogueEnd = setInterval(() => {
+      if (!dialogueController?.isActive && gameWorld) {
+        gameWorld.setInputLocked(false);
+        clearInterval(checkDialogueEnd);
+      }
+    }, 200);
+  });
 
   try {
     await gameWorld.initialize({ canvas: gameCanvas, width, height });
@@ -148,6 +202,11 @@ async function startGame(): Promise<void> {
  * Stops the game engine and returns to menu.
  */
 function stopGame(): void {
+  if (dialogueController?.isActive) {
+    dialogueController.end();
+  }
+  dialogueController = undefined;
+
   if (gameWorld) {
     gameWorld.destroy();
     gameWorld = undefined;

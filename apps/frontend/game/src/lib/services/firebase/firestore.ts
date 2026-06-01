@@ -1,11 +1,16 @@
-// apps/frontend/game/src/core/firebase/firestore.ts
+// apps/frontend/game/src/lib/services/firebase/firestore.ts
 /**
  * Firestore REST API client for the game — no Firebase SDK.
  * Lightweight wrapper over the Firestore v1 REST API.
  */
 
+import {
+  BaseGameClass,
+  type BaseGameClassInterface,
+  type BaseGameClassOptions,
+} from '$lib/core/base_game_class.ts';
 import { getConfig } from './config.ts';
-import type { FirebaseHttpClient } from './http_client.ts';
+import type { FirebaseHttpClientInterface } from './http_client.ts';
 
 /**
  * A Firestore document value (wrapped for REST API).
@@ -30,14 +35,33 @@ export type FirestoreDocument = {
   updateTime?: string;
 };
 
+export type FirebaseFirestoreOptions = BaseGameClassOptions & {
+  http: FirebaseHttpClientInterface;
+};
+
+export type FirebaseFirestoreInterface = BaseGameClassInterface & {
+  getDocument<T = Record<string, unknown>>(path: string): Promise<T | null>;
+  setDocument(path: string, data: Record<string, unknown>): Promise<boolean>;
+  deleteDocument(path: string): Promise<boolean>;
+  queryDocuments<T = Record<string, unknown>>(
+    collection: string,
+    field: string,
+    value: string,
+  ): Promise<T[]>;
+};
+
 /**
  * Service for Firestore document operations via REST API.
  */
-export class FirebaseFirestore {
-  private readonly _http: FirebaseHttpClient;
+class FirebaseFirestore
+  extends BaseGameClass<FirebaseFirestoreOptions>
+  implements FirebaseFirestoreInterface
+{
+  private readonly _http: FirebaseHttpClientInterface;
 
-  constructor(http: FirebaseHttpClient) {
-    this._http = http;
+  constructor(options: FirebaseFirestoreOptions) {
+    super(options);
+    this._http = options.http;
   }
 
   /**
@@ -145,6 +169,10 @@ export class FirebaseFirestore {
     }
   }
 
+  override async setup(): Promise<void> {
+    this.debug('setup');
+  }
+
   /**
    * Packs a plain JS object into Firestore REST field format.
    */
@@ -230,3 +258,7 @@ export class FirebaseFirestore {
     return null;
   }
 }
+
+export const getFirebaseFirestore = (
+  options: FirebaseFirestoreOptions,
+): FirebaseFirestoreInterface => new FirebaseFirestore(options);

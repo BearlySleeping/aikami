@@ -44,6 +44,22 @@ type RenderEntry = {
 };
 
 /**
+ * Metadata for an interactable NPC entity stored on the main thread.
+ * Populated when ENTITY_CREATED fires for NPCs.
+ */
+type NpcMetaEntry = {
+  eid: number;
+  npcId: string;
+  npcName: string;
+  personaId: string;
+  interactionRadius: number;
+  relationshipValue: number;
+};
+
+/** Callback invoked when the player presses the interact key. */
+type InteractRequestCallback = (npc: NpcMetaEntry) => void;
+
+/**
  * Manages the complete game engine lifecycle: PixiJS Application, Web Worker
  * for bitECS simulation, shared memory buffers, and the per-frame render loop.
  *
@@ -71,6 +87,15 @@ class GameWorld {
 
   /** The entity ID of the player entity (set from worker ENTITY_CREATED). */
   private playerEntityId = 0;
+
+  /** NPC metadata keyed by entity ID (populated from NPC spawn events). */
+  private npcMeta = new Map<number, NpcMetaEntry>();
+
+  /** Global input lock — set true when dialogue/UI is active. */
+  private inputLocked = false;
+
+  /** Callback invoked when the interaction key is pressed near an NPC. */
+  private interactRequestCallback: InteractRequestCallback | undefined;
 
   /** Cleanup function for keyboard listeners. */
   private inputTeardown: (() => void) | undefined;
@@ -364,7 +389,7 @@ class GameWorld {
    * Handles an ENTITY_CREATED message from the worker.
    *
    * Creates a PixiJS display object for the entity and registers it
-   * in the main-thread render map.
+   * in the main-thread render map. For NPCs, also stores NPC metadata.
    */
   private handleEntityCreated(message: { type: string } & Record<string, unknown>): void {
     const eid = message.eid as number;
@@ -374,9 +399,22 @@ class GameWorld {
       return;
     }
 
-    // Track player entity ID
+    // Track player entity ID (first entity created is the player)
     if (this.playerEntityId === 0) {
       this.playerEntityId = eid;
+    } else {
+      // Non-player entities are NPCs — store metadata if provided
+      const npcData = message.npcData as NpcMetaEntry | undefined;
+      if (npcData) {
+        this.npcMeta.set(eid, {
+          eid,
+          npcId: npcData.npcId || `npc_${eid}`,
+          npcName: npcData.npcName || 'Unknown',
+          personaId: npcData.personaId || 'default',
+          interactionRadius: npcData.interactionRadius || 64,
+          relationshipValue: npcData.relationshipValue || 0,
+        });
+      }
     }
 
     // Create a colored rectangle as the entity's visual representation
@@ -460,6 +498,35 @@ class GameWorld {
   }
 
   // -----------------------------------------------------------------------
+  // Public: input locking & interaction
+  // -----------------------------------------------------------------------
+
+  /**
+   * Sets the global input lock state.
+   *
+   * When `true`, keyboard movement keys (WASD/arrows) are suppressed.
+   * Interaction keys ('E', 'Enter') continue to work.
+   */
+  setInputLocked(locked: boolean): void {
+    this.inputLocked = locked;
+  }
+
+  /** Returns the current input lock state. */
+  get isInputLocked(): boolean {
+    return this.inputLocked;
+  }
+
+  /**
+   * Registers a callback for interaction requests.
+   *
+   * Called when the player presses 'E' or 'Enter' while within
+   * interaction range of an NPC.
+   */
+  onInteractRequest(callback: InteractRequestCallback): void {
+    this.interactRequestCallback = callback;
+  }
+
+  // -----------------------------------------------------------------------
   // Internal: Keyboard input (main thread)
   // -----------------------------------------------------------------------
 
@@ -467,10 +534,25 @@ class GameWorld {
    * Registers keyboard input listeners that forward movement commands
    * to the simulation worker.
    *
+   * Movement is suppressed when {@link inputLocked} is `true` (dialogue/UI active).
+   * The 'E' and 'Enter' keys trigger the {@link interactRequestCallback}.
+   *
    * @returns A cleanup function that removes all listeners.
    */
   private setupKeyboardInput(): () => void {
     const handleKeyDown = (event: KeyboardEvent): void => {
+      // Interaction key — check for nearby NPCs regardless of lock state
+      if (event.key === 'e' || event.key === 'E' || event.key === 'Enter') {
+        event.preventDefault();
+        this.handleInteractKey();
+        return;
+      }
+
+      // Block movement keys when input is locked
+      if (this.inputLocked) {
+        return;
+      }
+
       const direction = keyToDirection(event.key);
       if (!direction) {
         return;
@@ -485,6 +567,10 @@ class GameWorld {
     };
 
     const handleKeyUp = (event: KeyboardEvent): void => {
+      if (this.inputLocked) {
+        return;
+      }
+
       const direction = keyToDirection(event.key);
       if (!direction) {
         return;
@@ -512,6 +598,49 @@ class GameWorld {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
+  }
+
+  /**
+   * Handles the interaction keypress ('E' or 'Enter').
+   *
+   * Checks squared distance between the player and all registered NPCs.
+   * If the player is within interaction range of any NPC, fires the
+   * {@link interactRequestCallback}.
+   */
+  private handleInteractKey(): void {
+    if (this.inputLocked || !this.activeRenderView) {
+      return;
+    }
+
+    // Read player position from the render buffer
+    const pOffset = this.playerEntityId * COMPONENT_STRIDE;
+    const playerX = this.activeRenderView[pOffset];
+    const playerY = this.activeRenderView[pOffset + 1];
+
+    if (playerX === undefined || playerY === undefined) {
+      return;
+    }
+
+    // Check distance to all NPCs
+    for (const [eid, npc] of this.npcMeta) {
+      const nOffset = eid * COMPONENT_STRIDE;
+      const npcX = this.activeRenderView[nOffset];
+      const npcY = this.activeRenderView[nOffset + 1];
+
+      if (npcX === undefined || npcY === undefined) {
+        continue;
+      }
+
+      const dx = npcX - playerX;
+      const dy = npcY - playerY;
+      const distSq = dx * dx + dy * dy;
+      const radiusSq = npc.interactionRadius * npc.interactionRadius;
+
+      if (distSq <= radiusSq && this.interactRequestCallback) {
+        this.interactRequestCallback(npc);
+        return;
+      }
+    }
   }
 
   // -----------------------------------------------------------------------

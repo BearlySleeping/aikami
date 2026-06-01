@@ -1,10 +1,15 @@
-// apps/frontend/game/src/core/firebase/config.ts
+// apps/frontend/game/src/lib/services/firebase/config.ts
 /**
  * Firebase configuration for the game client.
  * Resolves endpoints based on environment (emulator vs production).
  * Uses environment variables injected at build time via Vite.
  */
-import { EMULATOR_PORTS, EMULATOR_PROJECT_ID, MODE_PROJECT_MAP } from '@aikami/constants';
+import { EMULATOR_PORTS } from '@aikami/constants';
+import {
+  getProjectId,
+  isEmulatorModePublic,
+  publicEnv,
+} from '@aikami/frontend/configs/environment';
 
 /**
  * Firebase config for the lightweight game client.
@@ -25,17 +30,10 @@ export type FirebaseConfig = {
  */
 export const resolveConfig = (): FirebaseConfig => {
   // Check if running against emulator (set by Vite env or detected from host)
-  const isEmulator =
-    import.meta.env.VITE_USE_EMULATOR === 'true' ||
-    (typeof window !== 'undefined' && window.location.hostname === 'localhost');
+  const isEmulator = isEmulatorModePublic();
+  const projectId = getProjectId();
 
-  const projectId = isEmulator
-    ? EMULATOR_PROJECT_ID
-    : (import.meta.env.VITE_FIREBASE_PROJECT_ID as string) || MODE_PROJECT_MAP.staging;
-
-  const apiKey = isEmulator
-    ? 'fake-api-key'
-    : (import.meta.env.VITE_FIREBASE_API_KEY as string) || '';
+  const apiKey = isEmulator ? 'fake-api-key' : publicEnv.PUBLIC_FIREBASE_API_KEY;
 
   const base = isEmulator ? 'http://127.0.0.1' : '';
 

@@ -15,10 +15,20 @@ export const EMULATOR_PORTS = {
   pubsub: 8085,
   storage: 9199,
   dataconnect: 9399,
+  // apps:
+  pwa: 5174,
+  game: 5176,
 } as const;
 
-export const PWA_PORT = 5173;
-export const PWA_EMULATOR_PORT = 5174;
+export const DEVELOPMENT_PORTS = {
+  pwa: 5173,
+  game: 5175,
+} as const;
+
+export const PRODUCTION_PORTS = {
+  pwa: 5177,
+  game: 5178,
+} as const;
 
 export const EMULATOR_HOSTS = {
   auth: `localhost:${EMULATOR_PORTS.auth}`,

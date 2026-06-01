@@ -15,6 +15,7 @@ const args = process.argv.slice(2);
 const suiteFilterSet = new Set(args.filter((a) => !a.startsWith('--')));
 const noCrossService = args.includes('--no-cross-service');
 const noEmulator = args.includes('--no-emulator');
+const force = args.includes('--force') || args.includes('--recreate');
 const help = args.includes('--help') || args.includes('-h');
 
 if (help) {
@@ -29,6 +30,7 @@ Arguments:
 Options:
   --no-cross-service  Skip cross-service tests
   --no-emulator       Skip service startup (if already running)
+  --force, --recreate Kill existing sessions and recreate from scratch
   --help, -h          Show help
 
 Suites:
@@ -96,9 +98,10 @@ async function main() {
       if (needsPwa) only.push('pwa');
 
       if (only.length > 0) {
-        console.log(`🚀 Starting services via tmux (${only.join(', ')})...`);
+        const startupDesc = force ? `🚀 Force-starting services via tmux (${only.join(', ')})...` : `🚀 Starting services via tmux (${only.join(', ')})...`;
+        console.log(startupDesc);
         try {
-          await startServices({ only });
+          await startServices({ only, force });
         } catch (e) {
           console.error('  ⚠ Tmux startup failed:', e instanceof Error ? e.message : e);
         }

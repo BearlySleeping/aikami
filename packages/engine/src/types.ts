@@ -13,13 +13,17 @@ export type NPCSpawnData = {
   y: number;
   /** Texture key loaded via PixiJS Assets. */
   textureKey: string;
-  /** Dialog text triggered on interaction. */
+  /** Dialog text triggered on interaction (fallback greeting). */
   dialog: string;
   /**
    * Interaction radius in pixels. The player must be within this distance
    * from the NPC to trigger dialog.
    */
   interactionRadius: number;
+  /** AI persona template ID for prompt injection. */
+  personaId?: string;
+  /** Dynamic relationship value (-100 to 100). */
+  relationshipValue?: number;
 };
 
 // ---------------------------------------------------------------------------

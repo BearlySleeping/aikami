@@ -49,15 +49,26 @@ m() {
 #   md firebase      — start Firebase emulators
 md() {
   local proj="${1:-}"
+  local mode="${2:-}"
   if [ -z "$proj" ]; then
-    echo "Usage: md <project>  (pwa, docs, landing-page, gamejs, firebase)"
+    echo "Usage: md <project> [--mode emulator]  (pwa, docs, landing-page, game, firebase)"
     return 1
   fi
-  if [ "$proj" = "firebase" ]; then
-    bunx moon run firebase:emulate
-  else
-    bunx moon run "${proj}:dev"
-  fi
+  case "$proj" in
+    firebase)
+      bunx moon run firebase:emulate
+      ;;
+    game)
+      if [ "$mode" = "--mode" ] && [ "${3:-}" = "emulator" ]; then
+        cd apps/frontend/game && bun run dev -- --mode emulator
+      else
+        bunx moon run game:dev
+      fi
+      ;;
+    *)
+      bunx moon run "${proj}:dev"
+      ;;
+  esac
 }
 
 # ── mt: test shortcut ───────────────────────────────────────────────────
@@ -117,19 +128,76 @@ ma() {
 
 # ── Convenience: Aikami-specific workflows ──────────────────────────────
 
-# Start the full local dev environment (emulators + dev servers)
+# Start the full local dev environment in tmux (emulators + pwa + game)
 aikami_dev() {
   echo "🎴 Starting Aikami local dev environment..."
   echo "   Mode: ${AIKAMI_MODE:-emulator}"
   echo ""
-  bunx moon run firebase:emulate
+  bun run scripts/src/lib/tmux/start.ts all
+  echo ""
+  aikami_tmux_join all 2>/dev/null || true
 }
 
-# Start just the backend emulators (Firestore, Auth, Functions, Storage)
+# Start just the backend emulators in tmux
 aikami_emulate() {
   echo "🔥 Starting backend emulators..."
-  bunx moon run firebase:emulate
+  bun run scripts/src/lib/tmux/start.ts emulators
+  echo ""
+  aikami_tmux_join emulators 2>/dev/null || true
 }
+
+# Start game in emulator mode in tmux
+aikami_game_emulate() {
+  echo "🎮 Starting game in emulator mode..."
+  bun run scripts/src/lib/tmux/start.ts game
+  echo ""
+  aikami_tmux_join game 2>/dev/null || true
+}
+
+# ── Tmux Session Management ─────────────────────────────────────────────
+
+aikami_tmux_start() {
+  local service="${1:-}"
+  if [ -z "$service" ]; then
+    echo "Usage: aikami_tmux_start <emulators|pwa|game|all> [--force]"
+    return 1
+  fi
+  bun run scripts/src/lib/tmux/start.ts "$@"
+}
+
+aikami_tmux_join() {
+  local service="${1:-}"
+  if [ -z "$service" ]; then
+    echo "Usage: aikami_tmux_join <emulators|pwa|game|all>"
+    return 1
+  fi
+  bun run scripts/src/lib/tmux/join.ts "$@"
+}
+
+aikami_tmux_stop() {
+  local service="${1:-}"
+  if [ -z "$service" ]; then
+    echo "Usage: aikami_tmux_stop <emulators|pwa|game|all>"
+    echo "       aikami_tmux_stop_all  — stop all sessions"
+    return 1
+  fi
+  bun run scripts/src/lib/tmux/stop.ts "$@"
+}
+
+aikami_tmux_stop_all() {
+  bun run scripts/src/lib/tmux/stop_all.ts
+}
+
+aikami_tmux_status() {
+  bun run scripts/src/lib/tmux/status.ts
+}
+
+# Aliases
+alias atstart='aikami_tmux_start'
+alias atjoin='aikami_tmux_join'
+alias atstop='aikami_tmux_stop'
+alias atstopall='aikami_tmux_stop_all'
+alias atstatus='aikami_tmux_status'
 
 # Run blackbox integration tests
 aikami_test_blackbox() {
@@ -249,7 +317,8 @@ aikami_help() {
 
   CORE MOON TASKS
     m <target>       Run any moon task (e.g., m pwa:dev, m firebase:build)
-    md <project>     Start dev server (pwa, docs, landing-page, gamejs, firebase)
+    md <project>     Start dev server (pwa, docs, landing-page, game, firebase)
+                     md game --mode emulator → game emulator mode
     mt <project>     Run tests
     mb <project>     Build
     mf               Fix (lint + format) affected projects
@@ -258,11 +327,20 @@ aikami_help() {
     ma [task]        Run all affected tasks (optional: specific task)
 
   WORKFLOWS
-    aikami_dev              Start full local dev environment
-    aikami_emulate          Start backend emulators only
+    aikami_dev              Start full stack in tmux (auto-attach)
+    aikami_emulate          Start backend emulators in tmux (auto-attach)
+    aikami_game_emulate     Start game in emulator mode in tmux (auto-attach)
     aikami_validate         Fix → typecheck (add --test for build+test)
     aikami_affected         Show which projects changed
     aikami_graph            Open project dependency graph
+
+  TMUX SESSIONS
+    aikami_tmux_start <svc> Start tmux session (emulators|pwa|game|all)
+    aikami_tmux_join <svc>  Attach to running tmux session
+    aikami_tmux_stop <svc>  Stop tmux session
+    aikami_tmux_stop_all    Stop all aikami tmux sessions
+    aikami_tmux_status      List running aikami sessions
+    atstart/atjoin/atstop   Short aliases for the above
 
   LOGS
     aikami_logs <app>       View recent logs (firebase, pwa)
