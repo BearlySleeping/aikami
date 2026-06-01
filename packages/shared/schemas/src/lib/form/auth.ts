@@ -1,12 +1,13 @@
-import { z } from "zod";
-import { SignInProviderSchema } from "../auth.ts";
+// packages/shared/schemas/src/lib/form/auth.ts
+import Type from 'typebox';
+import { SignInProviderSchema } from '../auth.ts';
 
-export const RegisterFormSchema = z.object({
-	email: z.string().email(),
-	password: z.string().min(8),
-	signInProvider: SignInProviderSchema,
-	displayName: z.string(),
-	uid: z.string().optional(),
+export const RegisterFormSchema = Type.Object({
+  email: Type.String({ format: 'email' }),
+  password: Type.String({ minLength: 8 }),
+  signInProvider: SignInProviderSchema,
+  displayName: Type.String(),
+  uid: Type.Optional(Type.String()),
 });
 
-export type RegisterForm = z.infer<typeof RegisterFormSchema>;
+export type RegisterForm = Type.Static<typeof RegisterFormSchema>;

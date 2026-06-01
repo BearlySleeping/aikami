@@ -1,34 +1,33 @@
-import { z } from "zod";
+// packages/shared/schemas/src/lib/database/lorebook.ts
+import Type from 'typebox';
 
-export const LorebookEntrySchema = z.object({
-	id: z.string().describe("Unique identifier"),
-	key: z.string().describe("Primary trigger keywords (comma-separated)"),
-	content: z.string().describe("The lore content to insert"),
-	secondaryKeys: z
-		.string()
-		.array()
-		.describe("Additional trigger keywords")
-		.default([]),
-	insertionOrder: z.number().int().describe("Priority order").default(0),
-	randomChance: z
-		.number()
-		.int()
-		.min(0)
-		.max(100)
-		.describe("Activation chance %")
-		.default(100),
-	useProbability: z.boolean().describe("Use random chance").default(false),
+export const LorebookEntrySchema = Type.Object({
+  id: Type.String({ description: 'Unique identifier' }),
+  key: Type.String({ description: 'Primary trigger keywords (comma-separated)' }),
+  content: Type.String({ description: 'The lore content to insert' }),
+  secondaryKeys: Type.Array(Type.String(), {
+    description: 'Additional trigger keywords',
+    default: [],
+  }),
+  insertionOrder: Type.Integer({ description: 'Priority order', default: 0 }),
+  randomChance: Type.Integer({
+    minimum: 0,
+    maximum: 100,
+    description: 'Activation chance %',
+    default: 100,
+  }),
+  useProbability: Type.Boolean({ description: 'Use random chance', default: false }),
 });
 
-export const LorebookSchema = z.object({
-	id: z.string().describe("Unique identifier"),
-	uid: z.string().describe("Owner user ID"),
-	name: z.string().describe("Lorebook name"),
-	description: z.string().optional(),
-	entries: LorebookEntrySchema.array().default([]),
-	createdAt: z.string().datetime().describe("Creation timestamp"),
-	updatedAt: z.string().datetime().describe("Last update timestamp"),
+export const LorebookSchema = Type.Object({
+  id: Type.String({ description: 'Unique identifier' }),
+  uid: Type.String({ description: 'Owner user ID' }),
+  name: Type.String({ description: 'Lorebook name' }),
+  description: Type.Optional(Type.String()),
+  entries: Type.Array(LorebookEntrySchema, { default: [] }),
+  createdAt: Type.String({ format: 'date-time', description: 'Creation timestamp' }),
+  updatedAt: Type.String({ format: 'date-time', description: 'Last update timestamp' }),
 });
 
-export type LorebookEntryData = z.infer<typeof LorebookEntrySchema>;
-export type LorebookData = z.infer<typeof LorebookSchema>;
+export type LorebookEntryData = Type.Static<typeof LorebookEntrySchema>;
+export type LorebookData = Type.Static<typeof LorebookSchema>;

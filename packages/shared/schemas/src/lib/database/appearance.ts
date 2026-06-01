@@ -1,30 +1,25 @@
-import { z } from "zod";
+// packages/shared/schemas/src/lib/database/appearance.ts
+import Type from 'typebox';
 
-export const AppearanceSchema = z.object({
-	avatarUrl: z
-		.string()
-		.url()
-		.describe("URL to the character avatar image")
-		.optional(),
-	portraitUrl: z
-		.string()
-		.url()
-		.describe("URL to the character portrait")
-		.optional(),
-	physicalDescription: z
-		.string()
-		.describe("Physical description of the character")
-		.optional(),
-	age: z.string().describe("Character age").optional(),
-	height: z.string().describe("Character height").optional(),
-	weight: z.string().describe("Character weight").optional(),
-	eyeColor: z.string().describe("Eye color").optional(),
-	hairColor: z.string().describe("Hair color").optional(),
-	skinColor: z.string().describe("Skin color").optional(),
-	distinguishingMarks: z
-		.string()
-		.describe("Scars, tattoos, or other distinguishing marks")
-		.optional(),
+export const AppearanceSchema = Type.Object({
+  avatarUrl: Type.Optional(
+    Type.String({ format: 'uri', description: 'URL to the character avatar image' }),
+  ),
+  portraitUrl: Type.Optional(
+    Type.String({ format: 'uri', description: 'URL to the character portrait' }),
+  ),
+  physicalDescription: Type.Optional(
+    Type.String({ description: 'Physical description of the character' }),
+  ),
+  age: Type.Optional(Type.String({ description: 'Character age' })),
+  height: Type.Optional(Type.String({ description: 'Character height' })),
+  weight: Type.Optional(Type.String({ description: 'Character weight' })),
+  eyeColor: Type.Optional(Type.String({ description: 'Eye color' })),
+  hairColor: Type.Optional(Type.String({ description: 'Hair color' })),
+  skinColor: Type.Optional(Type.String({ description: 'Skin color' })),
+  distinguishingMarks: Type.Optional(
+    Type.String({ description: 'Scars, tattoos, or other distinguishing marks' }),
+  ),
 });
 
-export type AppearanceData = z.infer<typeof AppearanceSchema>;
+export type AppearanceData = Type.Static<typeof AppearanceSchema>;

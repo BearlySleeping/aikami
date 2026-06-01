@@ -7,8 +7,8 @@ import type { BaseDatabaseService, QueryOptions } from './base-database-service'
 
 import { type FirebaseApp, initializeApp } from 'firebase/app';
 import {
-  type DataConnect,
   connectDataConnectEmulator,
+  type DataConnect,
   executeMutation,
   executeQuery,
   getDataConnect,
@@ -133,19 +133,12 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
   // -----------------------------------------------------------------------
 
   /** @inheritdoc */
-  getDocument = async <T = unknown>(
-    path: string,
-    id: string,
-  ): Promise<T | undefined> => {
+  getDocument = async <T = unknown>(path: string, id: string): Promise<T | undefined> => {
     const dc = this.ensureInitialized();
     const queryName = `Get_${toQuerySuffix(path)}`;
 
     try {
-      const ref = queryRef<{ [key: string]: T | undefined }, { id: string }>(
-        dc,
-        queryName,
-        { id },
-      );
+      const ref = queryRef<{ [key: string]: T | undefined }, { id: string }>(dc, queryName, { id });
       const result = await executeQuery(ref);
 
       return result.data?.[path] ?? undefined;
@@ -155,10 +148,7 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
   };
 
   /** @inheritdoc */
-  getDocuments = async <T = unknown>(
-    collection: string,
-    options?: QueryOptions,
-  ): Promise<T[]> => {
+  getDocuments = async <T = unknown>(collection: string, options?: QueryOptions): Promise<T[]> => {
     const dc = this.ensureInitialized();
     const queryName = `List_${toQuerySuffix(collection)}`;
 
@@ -174,10 +164,11 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
     }
 
     try {
-      const ref = queryRef<
-        { [key: string]: T[] },
-        Record<string, unknown>
-      >(dc, queryName, variables);
+      const ref = queryRef<{ [key: string]: T[] }, Record<string, unknown>>(
+        dc,
+        queryName,
+        variables,
+      );
       const result = await executeQuery(ref);
 
       return (result.data?.[collection] as T[]) ?? [];
@@ -187,10 +178,7 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
   };
 
   /** @inheritdoc */
-  addDocument = async <T = unknown>(
-    collection: string,
-    data: T,
-  ): Promise<string> => {
+  addDocument = async <T = unknown>(collection: string, data: T): Promise<string> => {
     const dc = this.ensureInitialized();
     const mutationName = `Insert_${toQuerySuffix(collection)}`;
 
@@ -200,10 +188,11 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
     insertData.updatedAt = new Date().toISOString();
 
     try {
-      const ref = mutationRef<
-        { [key: string]: { id: string } },
-        { data: Record<string, unknown> }
-      >(dc, mutationName, { data: insertData });
+      const ref = mutationRef<{ [key: string]: { id: string } }, { data: Record<string, unknown> }>(
+        dc,
+        mutationName,
+        { data: insertData },
+      );
       const result = await executeMutation(ref);
 
       return result.data?.[`${collection}_insert`]?.id ?? '';
@@ -213,21 +202,16 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
   };
 
   /** @inheritdoc */
-  setDocument = async <T = unknown>(
-    path: string,
-    id: string,
-    data: T,
-  ): Promise<void> => {
+  setDocument = async <T = unknown>(path: string, id: string, data: T): Promise<void> => {
     const dc = this.ensureInitialized();
     const mutationName = `Upsert_${toQuerySuffix(path)}`;
 
     const fields = { ...(data as Record<string, unknown>), id };
 
     try {
-      const ref = mutationRef<
-        unknown,
-        { data: Record<string, unknown> }
-      >(dc, mutationName, { data: fields });
+      const ref = mutationRef<unknown, { data: Record<string, unknown> }>(dc, mutationName, {
+        data: fields,
+      });
       await executeMutation(ref);
     } catch (error) {
       throw toDomainError('setDocument', path, mutationName, error);
@@ -247,10 +231,11 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
     patch.updatedAt = new Date().toISOString();
 
     try {
-      const ref = mutationRef<
-        unknown,
-        { id: string; data: Record<string, unknown> }
-      >(dc, mutationName, { id, data: patch });
+      const ref = mutationRef<unknown, { id: string; data: Record<string, unknown> }>(
+        dc,
+        mutationName,
+        { id, data: patch },
+      );
       await executeMutation(ref);
     } catch (error) {
       throw toDomainError('updateDocument', path, mutationName, error);
@@ -263,11 +248,7 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
     const mutationName = `Delete_${toQuerySuffix(path)}`;
 
     try {
-      const ref = mutationRef<unknown, { id: string }>(
-        dc,
-        mutationName,
-        { id },
-      );
+      const ref = mutationRef<unknown, { id: string }>(dc, mutationName, { id });
       await executeMutation(ref);
     } catch (error) {
       throw toDomainError('deleteDocument', path, mutationName, error);
@@ -275,10 +256,7 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
   };
 
   /** @inheritdoc */
-  runQuery = async <T = unknown>(
-    query: string,
-    params?: Record<string, unknown>,
-  ): Promise<T[]> => {
+  runQuery = async <T = unknown>(query: string, params?: Record<string, unknown>): Promise<T[]> => {
     const dc = this.ensureInitialized();
     // Named query — use the query name directly.
     const queryName = query;

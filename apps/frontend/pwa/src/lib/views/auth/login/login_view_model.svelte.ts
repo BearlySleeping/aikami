@@ -8,46 +8,25 @@ import {
 import { CoreFormSchema } from '@aikami/schemas';
 import type { FirebaseSignInProviderName } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
-import { z } from 'zod';
+import Type from 'typebox';
 import { authService, routerService } from '$services';
 
-const LoginFormSchema = CoreFormSchema.extend({
-  email: z.string().min(1, 'Email is required').email('Invalid email address'),
-  password: z.string().min(1, 'Password is required'),
-});
+const LoginFormSchema = Type.Intersect([
+  CoreFormSchema,
+  Type.Object({
+    email: Type.String({ minLength: 1, format: 'email' }),
+    password: Type.String({ minLength: 1 }),
+  }),
+]);
 
 export type LoginViewModelOptions = BaseViewModelOptions;
 
 export type LoginViewModelInterface = BaseFormViewModelInterface<typeof LoginFormSchema> & {
-  /**
-   * The social sign-in provider that is currently in progress.
-   */
   readonly isSocialSigningIn: FirebaseSignInProviderName | undefined;
-
-  /**
-   * Whether to show the forgot password dialog.
-   */
   readonly showForgotPasswordDialog: boolean;
-
-  /**
-   * Handles social login with Google or GitHub.
-   * @param provider The social provider to use
-   */
   socialLogin(provider: FirebaseSignInProviderName): Promise<void>;
-
-  /**
-   * Navigates to the register page.
-   */
   goToRegister(): Promise<void>;
-
-  /**
-   * Opens the forgot password dialog.
-   */
   openForgotPasswordDialog(): void;
-
-  /**
-   * Closes the forgot password dialog.
-   */
   closeForgotPasswordDialog(): void;
 };
 
@@ -55,14 +34,7 @@ class LoginViewModel
   extends BaseFormViewModel<typeof LoginFormSchema, LoginViewModelOptions>
   implements LoginViewModelInterface
 {
-  /**
-   * The social sign-in provider that is currently in progress.
-   */
   private _isSocialSigningIn = $state<FirebaseSignInProviderName | undefined>();
-
-  /**
-   * Whether to show the forgot password dialog.
-   */
   private _showForgotPasswordDialog = $state(false);
 
   constructor(options: LoginViewModelOptions) {
@@ -74,7 +46,7 @@ class LoginViewModel
       },
       schema: LoginFormSchema,
       onSubmit: async (values) => {
-        await this._loginWithEmail(values.email, values.password);
+        await this._loginWithEmail(String(values.email ?? ''), String(values.password ?? ''));
       },
     });
   }
@@ -87,11 +59,6 @@ class LoginViewModel
     return this._showForgotPasswordDialog;
   }
 
-  /**
-   * Performs email/password login.
-   * @param email User's email
-   * @param password User's password
-   */
   private async _loginWithEmail(email: string, password: string): Promise<void> {
     try {
       const result = await authService.signInWithEmailAndPassword({ email, password });
@@ -128,10 +95,8 @@ class LoginViewModel
     authService.setIsChangingAuthState(true);
 
     const socialSignInResponse = await authService.socialSignIn(provider);
-
     await this._handleSocialLoginResponse(socialSignInResponse);
     authService.setIsChangingAuthState(false);
-
     this._isSocialSigningIn = undefined;
   }
 

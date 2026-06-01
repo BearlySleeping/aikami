@@ -1,50 +1,25 @@
-import type {
-  FieldValue as BackendFieldValue,
-  GeoPoint as BackendGeoPoint,
-  Timestamp as BackendTimestamp,
-} from '@google-cloud/firestore';
-import type {
-  FieldValue as FrontendFieldValue,
-  GeoPoint as FrontendGeoPoint,
-  Timestamp as FrontendTimestamp,
-} from 'firebase/firestore';
-import { z } from 'zod';
+// packages/shared/schemas/src/lib/fields.ts
+import Type from 'typebox';
 
-// Fields
-type Timestamp = FrontendTimestamp | BackendTimestamp;
-type FieldValue = FrontendFieldValue | BackendFieldValue;
-type GeoPoint = FrontendGeoPoint | BackendGeoPoint;
+/**
+ * Schema for Firestore Timestamp or Date values.
+ * Uses Type.Unsafe to bypass JSON Schema validation for Firestore-specific types.
+ */
+export const TimestampSchema = Type.Unsafe<any>(Type.Any());
 
-const isTimestamp = (value: unknown): value is Timestamp =>
-  typeof value === 'object' &&
-  value !== null &&
-  'seconds' in value &&
-  'nanoseconds' in value &&
-  'toDate' in value &&
-  'toMillis' in value;
+/**
+ * Schema for Firestore FieldValue (sentinel values like serverTimestamp).
+ * Uses Type.Unsafe to bypass JSON Schema validation for Firestore-specific types.
+ */
+export const FieldValueSchema = Type.Unsafe<any>(Type.Any());
 
-export const TimestampSchema = z.custom<Timestamp | Date>(
-  (timestamp) => isTimestamp(timestamp) || timestamp instanceof Date,
-);
+/**
+ * Schema for Firestore GeoPoint.
+ * Uses Type.Unsafe to bypass JSON Schema validation for Firestore-specific types.
+ */
+export const GeoPointSchema = Type.Unsafe<any>(Type.Any());
 
-// Check if value is a Firestore FieldValue (including sentinel values like serverTimestamp)
-const isFieldValue = (value: unknown): value is FieldValue => {
-  if (value === null) return false;
-  if (typeof value !== 'object') return false;
-  // Check for serverTimestamp sentinel: { _methodName: 'serverTimestamp' }
-  const obj = value as Record<string, unknown>;
-  if (obj._methodName === 'serverTimestamp') return true;
-  // Check for other FieldValue sentinels (increment, delete, etc.)
-  if (typeof obj._methodName === 'string') return true;
-  // Check for regular Firestore FieldValue (has type and elements for arrays, etc.)
-  if ('type' in obj || 'elements' in obj || 'fields' in obj) return true;
-  return false;
-};
-
-export const FieldValueSchema = z.custom<FieldValue>((value) => isFieldValue(value));
-
-const isGeoPoint = (value: unknown): value is GeoPoint => value !== null;
-
-export const GeoPointSchema = z.custom<GeoPoint>((value) => isGeoPoint(value));
-
-export const UniversalValueSchema = z.union([z.string(), z.number()]);
+/**
+ * Universal value schema accepting string or number.
+ */
+export const UniversalValueSchema = Type.Union([Type.String(), Type.Number()]);

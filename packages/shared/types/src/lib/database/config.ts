@@ -1,8 +1,9 @@
+// packages/shared/types/src/lib/database/config.ts
 import type { ConfigCreateSchema, ConfigSchema, ConfigUpdateSchema } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
-export type ConfigData = z.infer<typeof ConfigSchema>;
+export type ConfigData = Type.Static<typeof ConfigSchema>;
 
-export type ConfigCreateData = z.infer<typeof ConfigCreateSchema>;
+export type ConfigCreateData = Type.Static<typeof ConfigCreateSchema>;
 
-export type ConfigUpdateData = z.infer<typeof ConfigUpdateSchema>;
+export type ConfigUpdateData = Type.Static<typeof ConfigUpdateSchema>;

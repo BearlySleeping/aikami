@@ -1,7 +1,8 @@
+// packages/shared/types/src/lib/database/core.ts
 import type { CoreCreateSchema, CoreSchema, CoreUpdateSchema } from '@aikami/schemas';
-import type { z } from 'zod';
+import type { Type } from 'typebox';
 
-export type CoreData = z.infer<typeof CoreSchema>;
+export type CoreData = Type.Static<typeof CoreSchema>;
 
-export type CoreCreateData = z.infer<typeof CoreCreateSchema>;
-export type CoreUpdateData = z.infer<typeof CoreUpdateSchema>;
+export type CoreCreateData = Type.Static<typeof CoreCreateSchema>;
+export type CoreUpdateData = Type.Static<typeof CoreUpdateSchema>;

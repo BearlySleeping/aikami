@@ -1,6 +1,6 @@
 // packages/frontend/api-core/src/ai/clients/ollama_client.ts
 
-import type { z } from 'zod';
+import type { TSchema } from 'typebox';
 
 import type { FrontendAiInterface } from '../frontend_ai_interface.ts';
 import type {
@@ -12,9 +12,9 @@ import type {
   HealthCheckResult,
   ImageOptions,
   ImageResult,
+  OllamaClientOptions,
   SpeechResult,
   TtsOptions,
-  OllamaClientOptions,
 } from '../types.ts';
 
 /**
@@ -60,7 +60,10 @@ class OllamaClient implements FrontendAiInterface {
   // Dialogue
   // -----------------------------------------------------------------------
 
-  async generateDialogue(context: DialogueContext, options?: DialogueOptions): Promise<DialogueResponse> {
+  async generateDialogue(
+    context: DialogueContext,
+    options?: DialogueOptions,
+  ): Promise<DialogueResponse> {
     const messages: Array<{ role: string; content: string }> = [];
 
     if (context.systemPrompt) {
@@ -104,7 +107,10 @@ class OllamaClient implements FrontendAiInterface {
   // Content Description
   // -----------------------------------------------------------------------
 
-  async generateContentDescription(prompt: string, options?: ContentDescriptionOptions): Promise<string> {
+  async generateContentDescription(
+    prompt: string,
+    options?: ContentDescriptionOptions,
+  ): Promise<string> {
     const body = {
       model: options?.model ?? this.model,
       messages: [
@@ -144,11 +150,7 @@ class OllamaClient implements FrontendAiInterface {
   // Structured
   // -----------------------------------------------------------------------
 
-  async generateStructured<T>(
-    instruction: string,
-    _schema: z.ZodSchema<T>,
-    context?: string,
-  ): Promise<T> {
+  async generateStructured<T>(instruction: string, _schema: TSchema, context?: string): Promise<T> {
     const fullContext = context ? `${instruction}\n\nContext: ${context}` : instruction;
 
     const body = {
@@ -156,7 +158,8 @@ class OllamaClient implements FrontendAiInterface {
       messages: [
         {
           role: 'system',
-          content: 'You generate structured JSON output only. No explanations, no markdown formatting.',
+          content:
+            'You generate structured JSON output only. No explanations, no markdown formatting.',
         },
         { role: 'user', content: fullContext },
       ],

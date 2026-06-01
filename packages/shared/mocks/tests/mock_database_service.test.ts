@@ -1,5 +1,5 @@
 // packages/shared/mocks/tests/mock-database-service.test.ts
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { MockDatabaseService } from '../src/lib/mock-database-service';
 
 // ---------------------------------------------------------------------------
@@ -283,10 +283,7 @@ describe('MockDatabaseService', () => {
       db.seedCollection('users', [alice]);
       await db.setDocument('users', 'user-1', { name: 'Replaced', age: 99 });
 
-      const doc = await db.getDocument<{ name: string; age: number }>(
-        'users',
-        'user-1',
-      );
+      const doc = await db.getDocument<{ name: string; age: number }>('users', 'user-1');
       expect(doc!.name).toBe('Replaced');
       expect(doc!.age).toBe(99);
     });
@@ -310,9 +307,7 @@ describe('MockDatabaseService', () => {
     it('should throw when collection does not exist', async () => {
       const promise = db.updateDocument('ghost', 'any', { x: 1 });
 
-      await expect(promise).rejects.toThrow(
-        'Collection "ghost" does not exist',
-      );
+      await expect(promise).rejects.toThrow('Collection "ghost" does not exist');
     });
 
     it('should throw when document does not exist', async () => {

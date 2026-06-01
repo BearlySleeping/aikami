@@ -1,13 +1,13 @@
 // packages/shared/schemas/src/lib/logging/log_entry.ts
-import { z } from 'zod';
+import Type from 'typebox';
 
-export const LogLevelSchema = z.enum([
-  'DEBUG',
-  'INFO',
-  'NOTICE',
-  'WARNING',
-  'ERROR',
-  'CRITICAL',
-  'ALERT',
-  'EMERGENCY',
+export const LogLevelSchema = Type.Union([
+  Type.Literal('DEBUG'),
+  Type.Literal('INFO'),
+  Type.Literal('NOTICE'),
+  Type.Literal('WARNING'),
+  Type.Literal('ERROR'),
+  Type.Literal('CRITICAL'),
+  Type.Literal('ALERT'),
+  Type.Literal('EMERGENCY'),
 ]);

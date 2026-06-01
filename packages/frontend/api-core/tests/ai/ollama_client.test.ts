@@ -162,9 +162,7 @@ describe('OllamaClient', () => {
   // -----------------------------------------------------------------------
 
   it('synthesizeSpeech throws (not supported)', async () => {
-    expect(
-      client.synthesizeSpeech('Hello'),
-    ).rejects.toThrow('does not support speech');
+    expect(client.synthesizeSpeech('Hello')).rejects.toThrow('does not support speech');
   });
 
   // -----------------------------------------------------------------------
@@ -172,9 +170,7 @@ describe('OllamaClient', () => {
   // -----------------------------------------------------------------------
 
   it('generateImage throws (not supported)', async () => {
-    expect(
-      client.generateImage('a castle'),
-    ).rejects.toThrow('does not support image generation');
+    expect(client.generateImage('a castle')).rejects.toThrow('does not support image generation');
   });
 
   // -----------------------------------------------------------------------

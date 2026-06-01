@@ -12,9 +12,7 @@ import { connectorConfig } from './lib/generated';
 
 const dataConnect = getDataConnect(connectorConfig);
 
-// Re-export the connector config for consumers that need it.
-export { connectorConfig };
-export { dataConnect };
-
 // Re-export generated types so consumers can use typed variables.
 export type * from './lib/generated';
+// Re-export the connector config for consumers that need it.
+export { connectorConfig, dataConnect };

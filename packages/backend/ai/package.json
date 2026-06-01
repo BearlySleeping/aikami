@@ -4,7 +4,7 @@
   "scripts": {
     "lint": "biome lint .",
     "format": "biome format .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "fix": "biome check --write .",
     "test": "bun test"
   },
@@ -14,7 +14,7 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "zod": "4.4.3"
+    "typebox": "^1.1.39"
   },
   "devDependencies": {
     "@aikami/mocks": "workspace:*"

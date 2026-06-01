@@ -1,3 +1,8 @@
-import { z } from "zod";
+// packages/shared/schemas/src/lib/api/fcm.ts
+import Type from 'typebox';
 
-export const FCMPlatformSchema = z.enum(["android", "ios", "web"]);
+export const FCMPlatformSchema = Type.Union([
+  Type.Literal('android'),
+  Type.Literal('ios'),
+  Type.Literal('web'),
+]);

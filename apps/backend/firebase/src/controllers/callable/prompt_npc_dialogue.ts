@@ -1,40 +1,25 @@
 // apps/backend/firebase/src/controllers/callable/prompt_npc_dialogue.ts
 
+import { createAiService } from '@aikami/backend-ai';
 import type { CallableFunctions } from '@aikami/types';
 import { onCall } from '@snorreks/firestack';
-import { z } from 'zod';
-import { createAiService } from '@aikami/backend-ai';
+import Type from 'typebox';
 import { logger } from '$logger';
 
-// ---------------------------------------------------------------------------
-// NPC dialogue input / output schemas
-// ---------------------------------------------------------------------------
-
-const dialogueMessageSchema = z.object({
-  role: z.enum(['npc', 'player', 'system']),
-  text: z.string(),
+const dialogueMessageSchema = Type.Object({
+  role: Type.Union([Type.Literal('npc'), Type.Literal('player'), Type.Literal('system')]),
+  text: Type.String(),
 });
 
-const promptNpcDialogueInputSchema = z.object({
-  npcId: z.string().min(1),
-  personaId: z.string().min(1),
-  npcName: z.string().min(1),
-  playerData: z.record(z.string(), z.unknown()).default({}),
-  relationshipValue: z.number().int().min(-100).max(100).default(0),
-  messageHistory: z.array(dialogueMessageSchema).default([]),
+const promptNpcDialogueInputSchema = Type.Object({
+  npcId: Type.String({ minLength: 1 }),
+  personaId: Type.String({ minLength: 1 }),
+  npcName: Type.String({ minLength: 1 }),
+  playerData: Type.Record(Type.String(), Type.Unknown()),
+  relationshipValue: Type.Integer({ minimum: -100, maximum: 100, default: 0 }),
+  messageHistory: Type.Array(dialogueMessageSchema, { default: [] } as any),
 });
 
-/**
- * System prompt template for NPC dialogue generation.
- *
- * Injects the NPC's persona rules, the player's character data, and the
- * current relationship value to dynamically adjust the response tone.
- *
- * @param npcName - Display name of the NPC.
- * @param personaId - Identifier for the NPC's persona definition.
- * @param relationshipValue - Current relationship (-100 to 100).
- * @param playerData - The player's character data.
- */
 const buildSystemPrompt = (options: {
   npcName: string;
   personaId: string;
@@ -71,76 +56,79 @@ const buildSystemPrompt = (options: {
     '- If the player is friendly, be more open.',
     '- You may reveal information about quests, the world, or your personal story.',
     '',
-    'Respond ONLY with the NPC\'s dialogue. Do not include narration or actions in asterisks unless it is essential context.',
+    "Respond ONLY with the NPC's dialogue. Do not include narration or actions in asterisks unless it is essential context.",
   ].join('\n');
 };
 
-/**
- * Callable: promptNpcDialogue
- *
- * Generates context-aware NPC dialogue responses using the AI service.
- * Called by the game client via Firebase REST API.
- */
-export default onCall<CallableFunctions, 'promptNpcDialogue'>(async (request) => {
-  logger.debug('promptNpcDialogue', { npcId: request.data?.npcId });
+export default onCall<CallableFunctions, 'promptNpcDialogue'>(
+  async (request) => {
+    logger.debug('promptNpcDialogue', { npcId: request.data?.npcId });
 
-  // Parse and validate input
-  const parsed = promptNpcDialogueInputSchema.safeParse(request.data);
-  if (!parsed.success) {
-    logger.warn('promptNpcDialogue: invalid input', { errors: parsed.error.issues });
-    return {
-      reply: '...',
-      relationshipDelta: 0,
-    };
-  }
+    const input = request.data;
+    if (!input || typeof input !== 'object') {
+      return { reply: '...', relationshipDelta: 0 };
+    }
 
-  const { npcId, personaId, npcName, playerData, relationshipValue, messageHistory } = parsed.data;
+    const npcId = typeof input.npcId === 'string' ? input.npcId : '';
+    const personaId = typeof input.personaId === 'string' ? input.personaId : '';
+    const npcName = typeof input.npcName === 'string' ? input.npcName : 'NPC';
+    const playerData =
+      typeof input.playerData === 'object' && input.playerData !== null
+        ? (input.playerData as Record<string, unknown>)
+        : {};
+    const relationshipValue =
+      typeof input.relationshipValue === 'number' ? input.relationshipValue : 0;
+    const rawMessages = Array.isArray(input.messageHistory) ? input.messageHistory : [];
 
-  try {
-    const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
-    const aiService = createAiService({ provider });
+    if (!npcId || !personaId || !npcName) {
+      logger.warn('promptNpcDialogue: invalid input');
+      return { reply: '...', relationshipDelta: 0 };
+    }
 
-    // Build the system prompt with dynamic persona + relationship injection
-    const systemPrompt = buildSystemPrompt({
-      npcName,
-      personaId,
-      relationshipValue,
-      playerData,
-    });
+    try {
+      const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
+      const aiService = createAiService({ provider });
 
-    // Convert message history to AI chat format
-    const historyMessages = messageHistory.slice(-15).map((m) => ({
-      role: m.role === 'player'
-        ? ('user' as const)
-        : m.role === 'system'
-          ? ('system' as const)
-          : ('assistant' as const),
-      content: m.text,
-    }));
+      const systemPrompt = buildSystemPrompt({
+        npcName,
+        personaId,
+        relationshipValue,
+        playerData,
+      });
 
-    const response = await aiService.generateChat([
-      { role: 'system', content: systemPrompt },
-      ...historyMessages,
-    ]);
+      const historyMessages = rawMessages.slice(-15).map((m: Record<string, unknown>) => ({
+        role:
+          m.role === 'player'
+            ? ('user' as const)
+            : m.role === 'system'
+              ? ('system' as const)
+              : ('assistant' as const),
+        content: String(m.text ?? ''),
+      }));
 
-    const replyText = response.text || '*The NPC stares at you silently.*';
+      const response = await aiService.generateChat([
+        { role: 'system', content: systemPrompt },
+        ...historyMessages,
+      ]);
 
-    // Calculate a small random relationship delta for dynamic tone shifts
-    const relationshipDelta = Math.floor(Math.random() * 5) - 2; // -2 to +2
+      const replyText = response.text || '*The NPC stares at you silently.*';
+      const relationshipDelta = Math.floor(Math.random() * 5) - 2;
 
-    return {
-      reply: replyText,
-      relationshipDelta,
-    };
-  } catch (error) {
-    logger.error('promptNpcDialogue: AI service error', { error, npcId });
-    return {
-      reply: '*The NPC seems distracted and unable to speak right now.*',
-      relationshipDelta: 0,
-    };
-  }
-}, {
-  region: 'europe-west1',
-  memory: '256MiB',
-  timeoutSeconds: 30,
-});
+      return {
+        reply: replyText,
+        relationshipDelta,
+      };
+    } catch (error) {
+      logger.error('promptNpcDialogue: AI service error', { error, npcId });
+      return {
+        reply: '*The NPC seems distracted and unable to speak right now.*',
+        relationshipDelta: 0,
+      };
+    }
+  },
+  {
+    region: 'europe-west1',
+    memory: '256MiB',
+    timeoutSeconds: 30,
+  },
+);

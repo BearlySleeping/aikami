@@ -1,33 +1,62 @@
-import { z } from 'zod';
-import { CoreCreateSchema, CoreOmitSchema, CoreSchema, CoreUpdateSchema } from '../core.ts';
+// packages/shared/schemas/src/lib/database/config.ts
+import Type, { Composite } from 'typebox';
+import { CoreOmitKeys, CoreSchema } from '../core.ts';
 import { getDeletableFields } from '../utils.ts';
 
-export const ThemeSchema = z
-  .enum(['dark', 'light', 'system'])
-  .describe('UI theme preference')
-  .default('system');
+const _themeUnion = Type.Union([
+  Type.Literal('dark'),
+  Type.Literal('light'),
+  Type.Literal('system'),
+]);
 
-export const GameDifficultySchema = z
-  .enum(['easy', 'normal', 'hard'])
-  .describe('Game difficulty setting')
-  .default('normal');
+const _gameDifficultyUnion = Type.Union([
+  Type.Literal('easy'),
+  Type.Literal('normal'),
+  Type.Literal('hard'),
+]);
 
-export const ConfigSchema = CoreSchema.extend({
-  uid: z.string().describe('User ID — matches the document ID and Firebase Auth uid'),
-  theme: ThemeSchema,
-  locale: z.string().describe('ISO 639-1 language code (e.g., en, da, es)').default('en'),
-  notificationsEnabled: z
-    .boolean()
-    .describe('Whether push notifications are enabled')
-    .default(true),
-  soundEnabled: z.boolean().describe('Whether sound effects and audio are enabled').default(true),
-  gameDifficulty: GameDifficultySchema,
-  autoSave: z.boolean().describe('Whether game progress auto-saves to cloud').default(true),
-  showTutorial: z.boolean().describe('Whether to show tutorial on next launch').default(true),
-});
+export const ConfigSchema = Composite(
+  CoreSchema,
+  Type.Object({
+    uid: Type.String({ description: 'User ID — matches the document ID and Firebase Auth uid' }),
+    theme: Object.assign(_themeUnion, { description: 'UI theme preference', default: 'system' }),
+    locale: Type.String({
+      description: 'ISO 639-1 language code (e.g., en, da, es)',
+      default: 'en',
+    }),
+    notificationsEnabled: Type.Boolean({
+      description: 'Whether push notifications are enabled',
+      default: true,
+    }),
+    soundEnabled: Type.Boolean({
+      description: 'Whether sound effects and audio are enabled',
+      default: true,
+    }),
+    gameDifficulty: Object.assign(_gameDifficultyUnion, {
+      description: 'Game difficulty setting',
+      default: 'normal',
+    }),
+    autoSave: Type.Boolean({
+      description: 'Whether game progress auto-saves to cloud',
+      default: true,
+    }),
+    showTutorial: Type.Boolean({
+      description: 'Whether to show tutorial on next launch',
+      default: true,
+    }),
+  }),
+);
 
-export const ConfigCreateSchema = ConfigSchema.omit(CoreOmitSchema).extend(CoreCreateSchema.shape);
+export const ThemeSchema = _themeUnion;
+export const GameDifficultySchema = _gameDifficultyUnion;
 
-export const ConfigUpdateSchema = ConfigSchema.extend(getDeletableFields(ConfigSchema))
-  .omit(CoreOmitSchema)
-  .extend(CoreUpdateSchema.shape);
+export const ConfigCreateSchema = Type.Intersect([
+  Type.Omit(ConfigSchema, [...CoreOmitKeys]),
+  Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
+]);
+
+export const ConfigUpdateSchema = Type.Intersect([
+  Type.Omit(ConfigSchema, [...CoreOmitKeys]),
+  Type.Object(getDeletableFields(ConfigSchema as unknown as Record<string, unknown>)),
+  Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
+]);

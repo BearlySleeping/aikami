@@ -1,10 +1,10 @@
 // packages/shared/parser/src/lib/lexer.ts
 //
 // Regex-based tokenizer that splits input into commands, macros, and text.
-// All outputs are strictly validated against @aikami/schemas Zod schemas.
+// All outputs are strictly validated against @aikami/schemas TypeBox schemas.
 
-import type { CommandNode, MacroNode, TextNode } from "@aikami/schemas";
-import { CommandNodeSchema, MacroNodeSchema, TextNodeSchema } from "@aikami/schemas";
+import type { CommandNode, MacroNode, TextNode } from '@aikami/schemas';
+import { CommandNodeSchema, MacroNodeSchema, schemaCheck, TextNodeSchema } from '@aikami/schemas';
 
 /**
  * Regex patterns for token detection.
@@ -53,7 +53,7 @@ export const tokenizeLine = (line: string): Array<CommandNode | TextNode> => {
   }
 
   // --- Slash command (full-line match) ---
-  if (trimmed.startsWith("/")) {
+  if (trimmed.startsWith('/')) {
     const match = trimmed.match(PATTERNS.command);
     if (match) {
       const command = match[1];
@@ -62,25 +62,28 @@ export const tokenizeLine = (line: string): Array<CommandNode | TextNode> => {
         return [];
       }
       const args = rawArgs ? rawArgs.split(/\s+/).filter(Boolean) : [];
-      const result = CommandNodeSchema.safeParse({
-        type: "command" as const,
+      const parsedCommand = {
+        type: 'command' as const,
         command,
         args,
         raw: trimmed,
-      });
-      if (result.success) {
-        return [result.data];
+      };
+      if (schemaCheck(CommandNodeSchema, parsedCommand)) {
+        return [parsedCommand];
       }
     }
   }
 
   // --- Plain text ---
-  const result = TextNodeSchema.safeParse({
-    type: "text" as const,
+  const parsedText: TextNode = {
+    type: 'text' as const,
     content: trimmed,
     raw: trimmed,
-  });
-  return result.success ? [result.data] : [];
+  };
+  if (schemaCheck(TextNodeSchema, parsedText)) {
+    return [parsedText];
+  }
+  return [];
 };
 
 /**
@@ -95,7 +98,7 @@ export const tokenizeLine = (line: string): Array<CommandNode | TextNode> => {
 export const extractMacros = (text: string): MacroNode[] => {
   const macros: MacroNode[] = [];
   // Clone regex to reset lastIndex per call
-  const re = new RegExp(PATTERNS.macro.source, "g");
+  const re = new RegExp(PATTERNS.macro.source, 'g');
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     const name = match[1];
@@ -104,16 +107,19 @@ export const extractMacros = (text: string): MacroNode[] => {
       continue;
     }
     const args = argsRaw
-      ? argsRaw.split(",").map((a) => a.trim()).filter(Boolean)
+      ? argsRaw
+          .split(',')
+          .map((a) => a.trim())
+          .filter(Boolean)
       : [];
-    const result = MacroNodeSchema.safeParse({
-      type: "macro" as const,
+    const parsedMacro: MacroNode = {
+      type: 'macro' as const,
       name,
       args,
       raw: match[0],
-    });
-    if (result.success) {
-      macros.push(result.data);
+    };
+    if (schemaCheck(MacroNodeSchema, parsedMacro)) {
+      macros.push(parsedMacro);
     }
   }
   return macros;
@@ -126,7 +132,7 @@ export const extractMacros = (text: string): MacroNode[] => {
  * @returns Clean text with all `{{macro}}` tokens removed.
  */
 export const stripMacros = (text: string): string => {
-  return text.replace(PATTERNS.macro, "");
+  return text.replace(PATTERNS.macro, '');
 };
 
 /**

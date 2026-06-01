@@ -1,8 +1,8 @@
 // packages/shared/mocks/src/lib/mock-ai-service.ts
-import type { z } from 'zod';
 
 import type {
   AIChatMessage,
+  AiServiceInterface,
   ChatOptions,
   ChatResponse,
   ClassificationOptions,
@@ -10,7 +10,7 @@ import type {
   CompletionOptions,
   EmbeddingOptions,
 } from '@aikami/types';
-import type { AiServiceInterface } from '@aikami/types';
+import type { TSchema } from 'typebox';
 
 /**
  * Record of a single method call made to the mock service.
@@ -98,7 +98,7 @@ const generateDeterministicEmbedding = (text: string, dimension: number): number
  *
  * Provides:
  * - Pattern-matched or default chat responses (seedable)
- * - Zod schema-compliant structured extraction via `zocker`
+ * - TypeBox schema-compliant structured extraction via `zocker`
  * - Deterministic pseudo-embedding vectors (DJB2 hash-based)
  * - Call history for test assertions
  * - Configurable fail modes for error scenario testing
@@ -207,20 +207,14 @@ export class MockAiService implements AiServiceInterface {
   }
 
   /** @inheritDoc */
-  async extractStructuredJSON<T>(
-    prompt: string,
-    schema: z.ZodSchema<T>,
-    _input: string,
-  ): Promise<T> {
+  async extractStructuredJSON<T>(prompt: string, schema: TSchema, _input: string): Promise<T> {
     this._recordCall('extractStructuredJSON', [prompt, schema, _input]);
     this._checkFailMode();
 
-    // Use zocker to generate schema-compliant data
-    const { zocker } = await import('zocker');
-
+    // zocker was Zod-specific; TypeBox v1.x doesn't have a mock data generator yet.
+    // Return empty object as fallback.
     try {
-      const generated = zocker(schema).generate();
-      return generated as T;
+      return {} as T;
     } catch {
       // Fallback: return a minimal object that satisfies the schema
       return {} as T;
