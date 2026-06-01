@@ -4,7 +4,12 @@
 // All outputs are strictly validated against @aikami/schemas TypeBox schemas.
 
 import type { CommandNode, MacroNode, TextNode } from '@aikami/schemas';
-import { CommandNodeSchema, MacroNodeSchema, schemaCheck, TextNodeSchema } from '@aikami/schemas';
+import {
+  CommandNodeSchema,
+  MacroNodeSchema,
+  TextNodeSchema,
+  validateWithLevel,
+} from '@aikami/schemas';
 
 /**
  * Regex patterns for token detection.
@@ -68,7 +73,14 @@ export const tokenizeLine = (line: string): Array<CommandNode | TextNode> => {
         args,
         raw: trimmed,
       };
-      if (schemaCheck(CommandNodeSchema, parsedCommand)) {
+      if (
+        validateWithLevel({
+          schema: CommandNodeSchema,
+          value: parsedCommand,
+          parseLevel: 'on',
+          context: 'tokenizeLine:command',
+        })
+      ) {
         return [parsedCommand];
       }
     }
@@ -80,7 +92,14 @@ export const tokenizeLine = (line: string): Array<CommandNode | TextNode> => {
     content: trimmed,
     raw: trimmed,
   };
-  if (schemaCheck(TextNodeSchema, parsedText)) {
+  if (
+    validateWithLevel({
+      schema: TextNodeSchema,
+      value: parsedText,
+      parseLevel: 'on',
+      context: 'tokenizeLine:text',
+    })
+  ) {
     return [parsedText];
   }
   return [];
@@ -118,7 +137,14 @@ export const extractMacros = (text: string): MacroNode[] => {
       args,
       raw: match[0],
     };
-    if (schemaCheck(MacroNodeSchema, parsedMacro)) {
+    if (
+      validateWithLevel({
+        schema: MacroNodeSchema,
+        value: parsedMacro,
+        parseLevel: 'on',
+        context: 'extractMacros',
+      })
+    ) {
       macros.push(parsedMacro);
     }
   }

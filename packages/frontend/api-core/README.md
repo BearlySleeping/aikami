@@ -43,7 +43,7 @@ bun install
 ## Usage
 
 ```typescript
-import { createAiClient, GameApiClient } from '@aikami/frontend-api-core';
+import { createAiClient, GameApiClient } from '@aikami/frontend/api-core';
 
 // Create an AI client (auto-selected by config)
 const ai = createAiClient({ provider: 'openai' });

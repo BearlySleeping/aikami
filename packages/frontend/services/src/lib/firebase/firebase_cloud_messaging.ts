@@ -18,12 +18,6 @@ class FirebaseCloudMessagingService
 {
   private static _fcm?: Fcm;
 
-  constructor() {
-    super({
-      className: 'FirebaseCloudMessagingService',
-    });
-  }
-
   async onMessage(
     nextOrObserver: NextFn<MessagePayload> | Observer<MessagePayload>,
   ): Promise<Unsubscribe> {
@@ -75,4 +69,6 @@ class FirebaseCloudMessagingService
 }
 
 export const firebaseCloudMessagingService: FirebaseCloudMessagingServiceInterface =
-  new FirebaseCloudMessagingService();
+  new FirebaseCloudMessagingService({
+    className: 'FirebaseCloudMessagingService',
+  });

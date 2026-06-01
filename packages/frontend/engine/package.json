@@ -1,0 +1,22 @@
+{
+  "name": "@aikami/frontend-engine",
+  "main": "src/index.ts",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@aikami/frontend-api-core": "workspace:*",
+    "@aikami/constants": "workspace:*",
+    "@aikami/frontend-utils": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
+    "bitecs": "^0.4.0",
+    "pixi.js": "^8.18.1"
+  }
+}

@@ -2,6 +2,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
+  firebaseFunctionsService,
 } from '@aikami/frontend/services';
 import type {
   AIMessageData,
@@ -10,7 +11,6 @@ import type {
   NpcData,
   PersonaData,
 } from '@aikami/types';
-import { internalAPIService } from './internal.svelte.ts';
 
 export type AIServiceOptions = BaseFrontendClassOptions;
 
@@ -73,7 +73,7 @@ export class AIService extends BaseFrontendClass<AIServiceOptions> implements AI
   private async _callAIEndpoint<T extends AIMessageType>(
     data: AIMessageData<T>,
   ): Promise<AIMessageResponse<T>> {
-    return await internalAPIService.callAIEndpoint(data);
+    return await firebaseFunctionsService.call('ai', data);
   }
 }
 

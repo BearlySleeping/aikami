@@ -3,7 +3,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite dev --mode emulator",
+    "dev:development": "vite dev --mode development",
+    "dev:emulator": "vite dev --mode emulator",
+    "dev:production": "vite dev --mode production",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "playwright test",
@@ -23,7 +26,7 @@
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
-    "@aikami/engine": "workspace:*",
+    "@aikami/frontend/engine": "workspace:*",
     "@aikami/frontend-api-core": "workspace:*",
     "bitecs": "^0.4.0",
     "pixi.js": "^8.18.1"

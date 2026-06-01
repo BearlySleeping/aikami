@@ -22,12 +22,6 @@ export type FirebaseFunctionsServiceInterface = {
 class FirebaseFunctionsService extends BaseClass implements FirebaseFunctionsServiceInterface {
   private static _functions?: Functions;
 
-  constructor() {
-    super({
-      className: 'FunctionsService',
-    });
-  }
-
   async call<T extends CallableFunction>(
     name: T,
     payload: CallableFunctionRequest<T>,
@@ -64,4 +58,6 @@ class FirebaseFunctionsService extends BaseClass implements FirebaseFunctionsSer
 }
 
 export const firebaseFunctionsService: FirebaseFunctionsServiceInterface =
-  new FirebaseFunctionsService();
+  new FirebaseFunctionsService({
+    className: 'FirebaseFunctionsService',
+  });

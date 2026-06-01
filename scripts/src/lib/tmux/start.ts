@@ -7,7 +7,7 @@
 //   --force:  kill and recreate even if already running
 
 import { parseArgs } from './cli.ts';
-import { startSession, hasTmux } from './session.ts';
+import { hasTmux, startSession } from './session.ts';
 
 const args = process.argv.slice(2);
 const config = parseArgs(args);

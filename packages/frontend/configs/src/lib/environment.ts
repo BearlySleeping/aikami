@@ -33,6 +33,7 @@ const masterSchema = Type.Object({
   PUBLIC_APP_CHECK_DEBUG_TOKEN: Type.Optional(Type.String()),
   PUBLIC_LOG_PERSIST_LEVEL: Type.Optional(Type.String()),
   PUBLIC_PWA_URL: Type.Optional(Type.String()),
+  APP_VERSION: Type.Optional(Type.String()),
 });
 
 type MasterEnv = Type.Static<typeof masterSchema>;
