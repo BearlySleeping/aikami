@@ -1,4 +1,4 @@
-import { npcRepository } from '@aikami/backend-database';
+import { npcRepository } from '@aikami/backend/database';
 import { DEFAULT_SAVING_THROWS, DEFAULT_SKILLS } from '@aikami/schemas';
 import type { NpcCreateData } from '@aikami/types';
 

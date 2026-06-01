@@ -7,11 +7,11 @@ import type { AikamiMode, TmuxService } from './session.ts';
 const VALID_MODES: AikamiMode[] = ['emulator', 'development', 'production'];
 const VALID_SERVICES: TmuxService[] = ['emulators', 'pwa', 'game', 'all'];
 
-export interface ParsedArgs {
+export type ParsedArgs = {
   service: TmuxService;
   mode: AikamiMode;
   force: boolean;
-}
+};
 
 export const parseArgs = (args: string[]): ParsedArgs => {
   // First positional arg is service

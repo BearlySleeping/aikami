@@ -53,6 +53,7 @@ export type OAuthProviderData<MetaData = Record<string, unknown>> = OAuthProfile
 
 /** Data used to access the user's Oath2 account. */
 export type OAuthProvidersData<OAuthProviderName extends string = string> = {
+  // biome-ignore lint/style/useNamingConvention: mapped type key
   [key in OAuthProviderName]?: OAuthProviderData;
 };
 
@@ -64,6 +65,7 @@ export type OAuthProviderCreateData = {
 } & Omit<OAuthProviderData, 'expiresAt' | 'createdAt'>;
 
 export type OAuthProvidersCreateData<OAuthProviderName extends string = string> = {
+  // biome-ignore lint/style/useNamingConvention: mapped type key
   [key in OAuthProviderName]?: OAuthProviderCreateData;
 };
 
@@ -78,5 +80,6 @@ export type OAuthProviderUpdateData = {
 >;
 
 export type OAuthProvidersUpdateData<OAuthProviderName extends string = string> = {
+  // biome-ignore lint/style/useNamingConvention: mapped type key
   [key in OAuthProviderName]?: OAuthProviderUpdateData;
 };

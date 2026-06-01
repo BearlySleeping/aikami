@@ -37,34 +37,6 @@ export default onRequest<RequestFunctions, 'getUser', { id: string }>(
 );
 ```
 
-### `onRequestZod`
-
-HTTP endpoint with automatic Zod body validation.
-
-```typescript
-import { onRequestZod } from '@snorreks/firestack';
-import { z } from 'zod';
-
-const BodySchema = z.object({
-  email: z.string().email(),
-  message: z.string().min(1),
-});
-
-export default onRequestZod(
-  BodySchema,
-  (request, response) => {
-    // request.body is now typed and validated
-    response.send({ received: request.body.email });
-  },
-  {
-    validationStrategy: 'warn', // 'warn' | 'error' | 'ignore'
-    onValidationError: (error) => {
-      // custom reporting, e.g., Sentry
-    },
-  }
-);
-```
-
 ## Callable Triggers
 
 ### `onCall`
@@ -79,24 +51,6 @@ export default onCall<CallableFunctions, 'test_callable'>(
   ({ data, auth }) => {
     console.log(`message ${data.message} from ${auth?.uid}`);
     return { success: true };
-  }
-);
-```
-
-### `onCallZod`
-
-Callable function with Zod validation.
-
-```typescript
-import { onCallZod } from '@snorreks/firestack';
-import { z } from 'zod';
-
-const DataSchema = z.object({ prompt: z.string() });
-
-export default onCallZod(
-  DataSchema,
-  ({ data, auth }) => {
-    return { result: `You said: ${data.prompt}` };
   }
 );
 ```
@@ -147,30 +101,6 @@ export default onWritten<UserData>(({ data }) => {
   if (data.before) console.log('Was:', data.before.email);
   if (data.after) console.log('Now:', data.after.email);
 });
-```
-
-### Zod-Validated Helpers (`onCreatedZod`, `onUpdatedZod`, `onDeletedZod`, `onWrittenZod`)
-
-Same as typed helpers but with runtime Zod schema validation.
-
-```typescript
-import { onCreatedZod } from '@snorreks/firestack';
-import { z } from 'zod';
-
-const UserSchema = z.object({
-  email: z.string().email(),
-  name: z.string(),
-});
-
-export default onCreatedZod(
-  UserSchema,
-  ({ data }) => {
-    console.log(`Valid user ${data.email} created`);
-  },
-  {
-    validationStrategy: 'warn', // 'warn' | 'error' | 'ignore'
-  }
-);
 ```
 
 ## Auth Triggers
@@ -372,9 +302,9 @@ if (functionName) {
 
 | Category | Triggers | Directory |
 |---|---|---|
-| HTTP | `onRequest`, `onRequestZod` | `api/` |
-| Callable | `onCall`, `onCallZod` | `callable/` |
-| Firestore | `onDocumentCreated`, `onDocumentDeleted`, `onDocumentUpdated`, `onDocumentWritten`, `onCreated`, `onDeleted`, `onUpdated`, `onWritten`, `onCreatedZod`, `onDeletedZod`, `onUpdatedZod`, `onWrittenZod` | `firestore/` |
+| HTTP | `onRequest` | `api/` |
+| Callable | `onCall` | `callable/` |
+| Firestore | `onDocumentCreated`, `onDocumentDeleted`, `onDocumentUpdated`, `onDocumentWritten`, `onCreated`, `onDeleted`, `onUpdated`, `onWritten` | `firestore/` |
 | Auth | `onAuthCreate`, `onAuthDelete`, `beforeAuthCreate`, `beforeAuthSignIn` | `auth/` |
 | Storage | `onObjectFinalized`, `onObjectDeleted`, `onObjectArchived`, `onObjectMetadataUpdated` | `storage/` |
 | Scheduler | `onSchedule` | `scheduler/` |

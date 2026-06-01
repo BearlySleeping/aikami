@@ -14,7 +14,9 @@ export const createObserver = <EventType = void>(): {
   let listeners: Listener<EventType>[] = [];
   return {
     publish: (event: EventType) => {
-      for (const l of listeners) l(event);
+      for (const l of listeners) {
+        l(event);
+      }
     },
     subscribe: (listener: Listener<EventType>): UnsubscribeFunction => {
       listeners.push(listener);

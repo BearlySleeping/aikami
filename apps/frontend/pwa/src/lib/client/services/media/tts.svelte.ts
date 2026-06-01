@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: TTS service naming convention */
 // apps/frontend/pwa/src/lib/client/services/media/tts.svelte.ts
 import {
   BaseFrontendClass,
@@ -82,7 +83,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private wordBoundaries: WordBoundary[] = [];
   private sourceNodes: AudioBufferSourceNode[] = [];
   private rafId: ReturnType<typeof requestAnimationFrame> | undefined;
-  private streamMessageId: string | undefined;
 
   isDemoMode(): boolean {
     return this.isDemo;

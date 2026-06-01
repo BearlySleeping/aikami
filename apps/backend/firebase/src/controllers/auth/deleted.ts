@@ -1,8 +1,7 @@
 import { onAuthDelete } from '@snorreks/firestack';
-import type { UserRecord } from 'firebase-functions/v1/auth';
 import { logger } from '$logger';
 
-export default onAuthDelete(async (user: UserRecord, context) => {
+export default onAuthDelete(async (user, context) => {
   logger.log('User deleted', {
     uid: user.uid,
     email: user.email,

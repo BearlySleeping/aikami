@@ -18,7 +18,7 @@ import { logger } from '$logger';
  * @param messages - The messages to join.
  * @returns A single string of all message contents.
  */
-const joinMessages = (messages: AIChatMessage[]): string => {
+const _joinMessages = (messages: AIChatMessage[]): string => {
   return messages
     .map((m) => m.content)
     .filter(Boolean)

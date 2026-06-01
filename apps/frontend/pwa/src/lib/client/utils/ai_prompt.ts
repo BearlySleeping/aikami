@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Character card format uses snake_case fields */
 /**
  * Formats a character/NPC into a system prompt for AI conversations.
  * Creates a detailed prompt that includes the character's personality,

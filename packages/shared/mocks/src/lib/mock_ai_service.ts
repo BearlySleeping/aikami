@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: FailMode enum keys match external conventions */
 // packages/shared/mocks/src/lib/mock-ai-service.ts
 
 import type {

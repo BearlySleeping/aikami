@@ -72,6 +72,7 @@ export const updateExpressions = (world: World, bridge: EngineBridge): void => {
 
   // Drain the queue — process all pending macros in one tick
   while (macroQueue.length > 0) {
+    // biome-ignore lint/style/noNonNullAssertion: safe because length > 0 was just checked
     const macro = macroQueue.shift()!;
 
     if (macro.name !== 'anim') {

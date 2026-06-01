@@ -23,15 +23,13 @@ test.describe('Login with Emulator', () => {
 
     // Wait for navigation or error
     await page.waitForTimeout(3000);
-    consoleLogs.forEach((_log) => {});
+    void consoleLogs;
 
     // Check current URL
-    const currentUrl = page.url();
+    const _currentUrl = page.url();
 
     // Get any errors visible on page
     const errors = await page.locator('[role="alert"], .alert-error, .error').allTextContents();
-    if (errors.length > 0) {
-      errors.forEach((_err) => {});
-    }
+    void errors;
   });
 });

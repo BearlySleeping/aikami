@@ -260,7 +260,9 @@ class FirebaseAuth extends BaseGameClass<FirebaseAuthOptions> implements Firebas
   private _decodeJwtSub(jwt: string): string {
     try {
       const payload = jwt.split('.')[1];
-      if (!payload) return '';
+      if (!payload) {
+        return '';
+      }
       const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
       return decoded.sub || '';
     } catch {

@@ -16,7 +16,7 @@ import type {
  * All method signatures use domain types from this package.
  * No vendor-specific types (OpenAI, Gemini, Genkit, etc.) appear in this interface.
  */
-export interface AiServiceInterface {
+export type AiServiceInterface = {
   /** Human-readable provider name (e.g. 'openai', 'gemini'). */
   readonly name: string;
 
@@ -56,4 +56,4 @@ export interface AiServiceInterface {
    * Generate embedding vectors for multiple texts in batch.
    */
   generateEmbeddings(texts: string[], options?: EmbeddingOptions): Promise<number[][]>;
-}
+};

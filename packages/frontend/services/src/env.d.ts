@@ -9,6 +9,7 @@ declare global {
     readonly STORYBOOK?: boolean;
     readonly PUBLIC_PARSE_LEVEL?: ParseLevel;
     readonly PUBLIC_VAPID_KEY?: string;
+    // biome-ignore lint/style/useNamingConvention: SvelteKit env var name
     SSR: boolean;
     // Add other environment variables used by your application
   }

@@ -1,8 +1,8 @@
 ---
 name: firebase-functions
-description: Best practices for Aikami Firebase Cloud Functions — firestack v2, Zod validation helpers (onRequestZod, onCallZod, onCreatedZod), firestack.config.ts, typed generics, schema-driven patterns.
-version: 3.0.0
-tags: ["firebase", "cloud-functions", "firestack", "zod", "typescript"]
+description: Best practices for Aikami Firebase Cloud Functions — firestack v2, typed generics, firestack.config.ts, trigger patterns.
+version: 4.0.0
+tags: ["firebase", "cloud-functions", "firestack", "typescript"]
 ---
 
 # Aikami — Cloud Functions
@@ -68,46 +68,27 @@ apps/backend/functions/
 
 ---
 
-## 3. Function Patterns — Zod First
+## 3. Function Patterns
 
-**ALWAYS use Zod-validated wrappers:**
-- `onRequestZod` for HTTP endpoints
-- `onCallZod` for callable functions
-- `onCreatedZod`, `onDeletedZod`, `onUpdatedZod` for Firestore triggers
-- `onWrittenZod` for combined write triggers
+All functions use the standard firestack wrappers:
+- `onRequest` for HTTP endpoints
+- `onCall` for callable functions
+- `onCreated`, `onDeleted`, `onUpdated` for Firestore triggers
+- `onWritten` for combined write triggers
 
-These validate input at the edge and provide type-safe handlers. If a Zod schema exists in `@aikami/schemas`, use it.
+These provide type-safe handlers. Validation at the edge is handled by schemas
+from `@aikami/schemas`.
 
 ---
 
-### HTTP Function (onRequestZod)
+### HTTP Function (onRequest)
 
 ```ts
 // apps/backend/functions/src/controllers/api/webhooks/telegram.ts
-import { onRequestZod } from '@snorreks/firestack';
-import { z } from 'zod';
+import { onRequest } from '@snorreks/firestack';
 import { logger } from '$logger';
 
-const telegramUpdateSchema = z.object({
-  update_id: z.number().optional(),
-  message: z.object({
-    message_id: z.number(),
-    from: z.object({
-      id: z.number(),
-      username: z.string().optional(),
-      first_name: z.string().optional(),
-    }).optional(),
-    chat: z.object({
-      id: z.number(),
-      type: z.string(),
-    }),
-    text: z.string().optional(),
-    date: z.number(),
-  }).optional(),
-});
-
-export default onRequestZod(telegramUpdateSchema, async (request, response) => {
-  // request.body is now typed as z.infer<typeof telegramUpdateSchema>
+export default onRequest(async (request, response) => {
   const { message } = request.body;
 
   if (!message) {
@@ -127,21 +108,14 @@ export default onRequestZod(telegramUpdateSchema, async (request, response) => {
 
 ---
 
-### Callable Function (onCallZod)
+### Callable Function (onCall)
 
 ```ts
 // apps/backend/functions/src/controllers/callable/process_email_triage.ts
-import { onCallZod } from '@snorreks/firestack';
-import { z } from 'zod';
+import { onCall } from '@snorreks/firestack';
 import { logger } from '$logger';
 
-const triageInputSchema = z.object({
-  emailText: z.string().min(1).max(10_000),
-  departmentId: z.string().optional(),
-});
-
-export default onCallZod(triageInputSchema, async (request) => {
-  // request.data is typed: { emailText: string; departmentId?: string }
+export default onCall(async (request) => {
   if (!request.auth) throw new Error('unauthenticated');
 
   const result = await processEmailTriage(request.data);
@@ -151,16 +125,14 @@ export default onCallZod(triageInputSchema, async (request) => {
 
 ---
 
-### Firestore Trigger (onCreatedZod)
+### Firestore Trigger (onCreated)
 
 ```ts
 // apps/backend/functions/src/controllers/firestore/agent_checkpoints/[checkpointId]/created.ts
-import { onCreatedZod } from '@snorreks/firestack';
-import { AgentCheckpointSchema } from '@aikami/schemas';
+import { onCreated } from '@snorreks/firestack';
 import { logger } from '$logger';
 
-export default onCreatedZod(AgentCheckpointSchema, async ({ data, params }) => {
-  // data is typed: z.infer<typeof AgentCheckpointSchema>
+export default onCreated(async ({ data, params }) => {
   const checkpointId = params.checkpointId;
 
   if (data.status !== 'pending') return;
@@ -173,14 +145,12 @@ export default onCreatedZod(AgentCheckpointSchema, async ({ data, params }) => {
 
 ---
 
-### Firestore Trigger (onUpdatedZod)
+### Firestore Trigger (onUpdated)
 
 ```ts
-import { onUpdatedZod } from '@snorreks/firestack';
-import { UserSchema } from '@aikami/schemas';
+import { onUpdated } from '@snorreks/firestack';
 
-export default onUpdatedZod(UserSchema, async ({ data, params }) => {
-  // data.before and data.after are both typed
+export default onUpdated(async ({ data, params }) => {
   if (data.before.role !== data.after.role) {
     logger.log('User role changed', {
       uid: params.uid,
@@ -349,21 +319,10 @@ const { data } = await callable({ field: 'value' });
 
 ## 8. Logger
 
-Logger is auto-imported into every function via `includeFilePath: 'src/logger.ts'` in firestack.config.ts. Use it via `$logger` alias:
-
-```ts
-import { logger } from '$logger';
-
-logger.debug('Processing', { userId, action });
-logger.log('Completed', { result });
-logger.error('Failed', { error });
-logger.warn('Deprecated call', { path });
-
-// Flush buffered log entries (call at end of handlers that do fire-and-forget)
-await logger.flush().catch(() => {});
-```
-
-Log context (source, trigger, requestId) is automatically set by firestack wrappers.
+See `aikami-conventions` for logger setup (`$logger` alias). Logger is
+auto-imported into every function via `includeFilePath: 'src/logger.ts'` in
+`firestack.config.ts`. Log context (source, trigger, requestId) is
+automatically set by firestack wrappers.
 
 ---
 
@@ -383,26 +342,21 @@ bun moon run functions:test-rules
 
 ## 10. Best Practices
 
-1. **Zod at the edge** — always use `*Zod` wrappers for type-safe, validated inputs
-2. **Schema from @aikami/schemas** — reuse existing schemas, don't define ad-hoc
-3. **Use firestack.config.ts** — no global index.ts, no setGlobalOptions
-4. **Const arrow functions** — all handlers use `const handler = ...` pattern
-5. **Options objects** — accept more than one arg? Use `{ a, b }` object
-6. **Early returns** — validate → early return → business logic
-7. **Cold start** — init heavy deps outside handler
-8. **Snake_case files** — enforced by Biome
-9. **Private members `_` prefixed** — `_cache`, `_normalizeInput()` (see `aikami-conventions`)
-10. **Always `$logger`, never `@aikami/logger`** — environment-specific alias breaks otherwise
+1. **Use firestack.config.ts** — no global index.ts, no setGlobalOptions
+2. **Const arrow functions** — all handlers use `const handler = ...` pattern
+3. **Options objects** — accept more than one arg? Use `{ a, b }` object
+4. **Early returns** — validate → early return → business logic
+5. **Cold start** — init heavy deps outside handler
+6. **Typed generics** — use `onCall<CallableFunctions, 'name'>` for end-to-end types
+7. **See `aikami-conventions`** for: snake_case files, `_` private prefix, `$logger` alias, error handling
 
 ---
 
 ## 11. Anti-Patterns
 
-- ❌ Defining schemas inline instead of importing from `@aikami/schemas`
-- ❌ Using `onRequest` without Zod when a schema exists
 - ❌ Using `firestack.json` — use `firestack.config.ts`
 - ❌ Creating `src/index.ts` with global `setGlobalOptions` — firestack.config.ts handles this
 - ❌ Calling `getBackendEnvironmentValue` — deprecated, use env vars directly
-- ❌ Raw type assertions (`as Record<string, unknown>`) when Zod is available
 - ❌ Multiple functions per file — one `export default` per file
-- ❌ PascalCase/camelCase filenames — must be snake_case
+- ❌ PascalCase/camelCase filenames — must be snake_case (see `aikami-conventions`)
+- ❌ Defining types/schemas inline — import from `@aikami/types` / `@aikami/schemas`

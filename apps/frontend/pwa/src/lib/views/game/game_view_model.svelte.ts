@@ -6,8 +6,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { ActiveContextEntry } from '$types';
 import { authService, routerService } from '$services';
+import type { ActiveContextEntry } from '$types';
 import { GameStateService } from '../../client/services/game/game_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------

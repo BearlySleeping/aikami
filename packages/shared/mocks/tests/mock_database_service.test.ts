@@ -56,8 +56,8 @@ describe('MockDatabaseService', () => {
       const result = await db.getDocument<TestUser>('users', 'user-1');
 
       expect(result).toBeDefined();
-      expect(result!.name).toBe('Alice');
-      expect(result!.email).toBe('alice@example.com');
+      expect(result?.name).toBe('Alice');
+      expect(result?.email).toBe('alice@example.com');
     });
 
     it('should return the correct number of documents via getDocuments', async () => {
@@ -119,11 +119,12 @@ describe('MockDatabaseService', () => {
     it('should return a cloned copy (not a reference)', async () => {
       db.seedCollection('users', [alice]);
       const doc = await db.getDocument<TestUser>('users', 'user-1');
+      // biome-ignore lint/style/noNonNullAssertion: intentional test of clone semantics
       doc!.name = 'Mutated';
 
       const fresh = await db.getDocument<TestUser>('users', 'user-1');
 
-      expect(fresh!.name).toBe('Alice');
+      expect(fresh?.name).toBe('Alice');
     });
   });
 
@@ -154,7 +155,7 @@ describe('MockDatabaseService', () => {
       });
 
       expect(results).toHaveLength(1);
-      expect(results[0]!.name).toBe('Alice');
+      expect(results[0]?.name).toBe('Alice');
     });
 
     it('should filter with != operator', async () => {
@@ -165,7 +166,7 @@ describe('MockDatabaseService', () => {
       });
 
       expect(results).toHaveLength(1);
-      expect(results[0]!.name).toBe('Bob');
+      expect(results[0]?.name).toBe('Bob');
     });
 
     it('should filter with > operator', async () => {
@@ -203,9 +204,9 @@ describe('MockDatabaseService', () => {
         orderBy: { field: 'name', direction: 'asc' },
       });
 
-      expect(results[0]!.name).toBe('Alice');
-      expect(results[1]!.name).toBe('Bob');
-      expect(results[2]!.name).toBe('Carol');
+      expect(results[0]?.name).toBe('Alice');
+      expect(results[1]?.name).toBe('Bob');
+      expect(results[2]?.name).toBe('Carol');
     });
 
     it('should order by field descending', async () => {
@@ -215,9 +216,9 @@ describe('MockDatabaseService', () => {
         orderBy: { field: 'age', direction: 'desc' },
       });
 
-      expect(results[0]!.age).toBe(35);
-      expect(results[1]!.age).toBe(30);
-      expect(results[2]!.age).toBe(25);
+      expect(results[0]?.age).toBe(35);
+      expect(results[1]?.age).toBe(30);
+      expect(results[2]?.age).toBe(25);
     });
 
     it('should combine filter, order, and limit', async () => {
@@ -230,8 +231,8 @@ describe('MockDatabaseService', () => {
       });
 
       expect(results).toHaveLength(2);
-      expect(results[0]!.age).toBe(35);
-      expect(results[1]!.age).toBe(30);
+      expect(results[0]?.age).toBe(35);
+      expect(results[1]?.age).toBe(30);
     });
   });
 
@@ -284,8 +285,8 @@ describe('MockDatabaseService', () => {
       await db.setDocument('users', 'user-1', { name: 'Replaced', age: 99 });
 
       const doc = await db.getDocument<{ name: string; age: number }>('users', 'user-1');
-      expect(doc!.name).toBe('Replaced');
-      expect(doc!.age).toBe(99);
+      expect(doc?.name).toBe('Replaced');
+      expect(doc?.age).toBe(99);
     });
   });
 
@@ -300,8 +301,8 @@ describe('MockDatabaseService', () => {
       await db.updateDocument('users', 'user-1', { age: 31 });
 
       const doc = await db.getDocument<TestUser>('users', 'user-1');
-      expect(doc!.age).toBe(31);
-      expect(doc!.name).toBe('Alice'); // unchanged
+      expect(doc?.age).toBe(31);
+      expect(doc?.name).toBe('Alice'); // unchanged
     });
 
     it('should throw when collection does not exist', async () => {

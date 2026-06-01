@@ -23,20 +23,20 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 export type AikamiMode = 'emulator' | 'development' | 'production';
 export type TmuxService = 'emulators' | 'pwa' | 'game' | 'all';
 
-export interface SessionConfig {
+export type SessionConfig = {
   mode: AikamiMode;
   service: TmuxService;
   force?: boolean;
   projectRoot?: string;
-}
+};
 
-export interface ServiceDef {
+export type ServiceDef = {
   window: number;
   name: string;
   command: string;
   cwd: (root: string) => string;
   readyPort: number;
-}
+};
 
 // ── Service definitions ────────────────────────────────────
 
@@ -75,7 +75,9 @@ export const parseSessionName = (
   name: string,
 ): { mode: AikamiMode; service: TmuxService } | null => {
   const m = name.match(/^aikami-(emulator|development|production)-(emulators|pwa|game|all)$/);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   return { mode: m[1] as AikamiMode, service: m[2] as TmuxService };
 };
 
@@ -341,17 +343,19 @@ export const stopAllSessions = async (): Promise<void> => {
 
 // ── Listing ────────────────────────────────────────────────
 
-export interface SessionInfo {
+export type SessionInfo = {
   name: string;
   mode: AikamiMode | 'unknown';
   service: TmuxService | 'unknown';
   windows: number;
   attached: boolean;
-}
+};
 
 export const listAllSessions = async (): Promise<SessionInfo[]> => {
   const r = await tmux(['list-sessions', '-F', '#{session_name}']);
-  if (r.code !== 0) return [];
+  if (r.code !== 0) {
+    return [];
+  }
 
   return r.stdout
     .split('\n')
@@ -401,27 +405,27 @@ export const printSessionStatus = async (): Promise<void> => {
     return;
   }
 
-  const GREEN = '\x1b[32m';
-  const YELLOW = '\x1b[33m';
-  const CYAN = '\x1b[36m';
-  const DIM = '\x1b[2m';
-  const RESET = '\x1b[0m';
-  const BOLD = '\x1b[1m';
+  const Green = '\x1b[32m';
+  const Yellow = '\x1b[33m';
+  const Cyan = '\x1b[36m';
+  const Dim = '\x1b[2m';
+  const Reset = '\x1b[0m';
+  const Bold = '\x1b[1m';
 
-  console.log(`\n${BOLD}Aikami Tmux Sessions${RESET}\n`);
-  console.log(`${DIM}${'SESSION'.padEnd(32)} MODE          SERVICE    WINS  STATUS${RESET}`);
+  console.log(`\n${Bold}Aikami Tmux Sessions${Reset}\n`);
+  console.log(`${Dim}${'SESSION'.padEnd(32)} MODE          SERVICE    WINS  STATUS${Reset}`);
 
   for (const s of sessions) {
-    const statusIcon = s.attached ? `${GREEN}● attached${RESET}` : `${YELLOW}○ detached${RESET}`;
+    const statusIcon = s.attached ? `${Green}● attached${Reset}` : `${Yellow}○ detached${Reset}`;
     console.log(
       ` ${s.name.padEnd(31)} ${s.mode.padEnd(13)} ${s.service.padEnd(10)} ${String(s.windows).padEnd(5)} ${statusIcon}`,
     );
   }
 
   console.log(
-    `\n${DIM}Attach:  ${CYAN}tmux attach -t <session>${RESET}  or  ${CYAN}bun run tmux:join <service>${RESET}${DIM}`,
+    `\n${Dim}Attach:  ${Cyan}tmux attach -t <session>${Reset}  or  ${Cyan}bun run tmux:join <service>${Reset}${Dim}`,
   );
   console.log(
-    `Stop:    ${CYAN}tmux kill-session -t <session>${RESET}  or  ${CYAN}bun run tmux:stop <service>${RESET}\n`,
+    `Stop:    ${Cyan}tmux kill-session -t <session>${Reset}  or  ${Cyan}bun run tmux:stop <service>${Reset}\n`,
   );
 };

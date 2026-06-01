@@ -20,12 +20,17 @@ import { c, error, log, ok } from './lib/cli_utils';
 // ---------------------------------------------------------------------------
 const SCRIPT_MAP: Record<string, string> = {
   // Ops scripts
+  // biome-ignore lint/style/useNamingConvention: CLI command names
   dev_all: 'ops/dev_all.ts',
   dev: 'ops/dev_all.ts',
+  // biome-ignore lint/style/useNamingConvention: CLI command names
   generate_llms: 'ops/generate_llms_txt.ts',
+  // biome-ignore lint/style/useNamingConvention: CLI command names
   generate_context: 'ops/generate_context.ts',
+  // biome-ignore lint/style/useNamingConvention: CLI command names
   cleanup_vendor_dirs: 'ops/cleanup_vendor_dirs.ts',
   cleanup: 'ops/cleanup_vendor_dirs.ts',
+  // biome-ignore lint/style/useNamingConvention: CLI command names
   validate_all: 'ops/validate_all.ts',
   validate: 'ops/validate_all.ts',
 
@@ -33,7 +38,9 @@ const SCRIPT_MAP: Record<string, string> = {
   setup: 'setup/setup.ts',
 
   // Test scripts
+  // biome-ignore lint/style/useNamingConvention: CLI command names
   test_blackbox: 'test_blackbox/run.ts',
+  // biome-ignore lint/style/useNamingConvention: CLI command names
   test_bb: 'test_blackbox/run.ts',
   bb: 'test_blackbox/run.ts',
 

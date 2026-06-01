@@ -6,7 +6,6 @@ declare namespace App {
   // interface Error {}
   // interface Locals {}
   // interface PageData {}
-  // biome-disable-next-line ban-types
-  type PageState = {};
+  type PageState = Record<string, never>;
   // interface Platform {}
 }

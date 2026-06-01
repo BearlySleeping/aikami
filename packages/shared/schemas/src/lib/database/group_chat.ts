@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/group_chat.ts
 import Type, { Composite } from 'typebox';
 import { CoreOmitKeys, CoreSchema } from '../core.ts';

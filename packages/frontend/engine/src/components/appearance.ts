@@ -37,6 +37,26 @@ export const FACE_LAYER_INDEX = 1;
 /** Number of asset layers an entity can compose from. */
 export const APPEARANCE_LAYER_COUNT = 5;
 
+/**
+ * Describes a single layer in an AI-generated LPC character manifest.
+ *
+ * Each recipe maps a named body/clothing slot to a grayscale asset ID
+ * and a 1024-byte palette LUT (256 RGBA pixels) that recolours the
+ * grayscale base sheet via the Zero-Branch LUT shader pipeline.
+ *
+ * The `hexPalette` is a Uint8Array produced by
+ * `TextureManager.preparePaletteLUT()` — raw RGBA bytes in sequential
+ * per-pixel order: [R0,G0,B0,A0, R1,G1,B1,A1, … R255,G255,B255,A255].
+ */
+export type LpcLayerRecipe = {
+  /** Body/clothing slot name (e.g. "body", "hair", "shirt", "pants", "shoes"). */
+  slot: string;
+  /** Numeric grayscale asset ID for this layer. */
+  assetId: string;
+  /** 1024-byte palette LUT (256 RGBA pixels) for this layer. */
+  hexPalette: Uint8Array;
+};
+
 /** SoA storage for appearance data. Indexed by entity ID. */
 export const Appearance = {
   /** Asset hash / texture key for each compositing layer (0 = empty). */

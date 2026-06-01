@@ -12,7 +12,9 @@ export async function runSuites(
   const results: SuiteResult[] = [];
 
   for (const suite of suites) {
-    if (options.suite && suite.name !== options.suite) continue;
+    if (options.suite && suite.name !== options.suite) {
+      continue;
+    }
     if (options.noCrossService && suite.category === 'cross-service') {
       console.log(`⏭  Skipping ${suite.name} (--no-cross-service)`);
       results.push({ name: suite.name, status: 'skipped', duration: 0 });

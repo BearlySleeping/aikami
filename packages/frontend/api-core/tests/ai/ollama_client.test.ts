@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Test data mocks Ollama API responses */
 // packages/frontend/api-core/tests/ai/ollama_client.test.ts
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -12,7 +13,7 @@ function mockOllamaFetch(
   endpoint: string,
   response: { status: number; body: unknown },
 ): typeof fetch {
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  return async (input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : input.toString();
 
     // Verify it's hitting the right endpoint

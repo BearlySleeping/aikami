@@ -74,7 +74,7 @@ describe('Auth Functions', () => {
 describe('Callable Functions', () => {
   describe('testCallable', () => {
     test('should return flavor and message', () => {
-      const callableRequest = {
+      const _callableRequest = {
         data: {
           message: 'Hello',
         },

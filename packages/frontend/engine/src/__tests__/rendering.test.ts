@@ -255,9 +255,9 @@ describe('TextureManager — LRU cache', () => {
   });
 
   it('handles load errors gracefully in getTexture', async () => {
-    let callCount = 0;
+    let _callCount = 0;
     const errorLoader = async (_key: number): Promise<Texture> => {
-      callCount += 1;
+      _callCount += 1;
       throw new Error('Network failure');
     };
 

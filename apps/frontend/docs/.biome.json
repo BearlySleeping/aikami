@@ -5,10 +5,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": [
-      "src/**/*.ts",
-      "src/**/*.astro"
-    ]
+    "includes": ["src/**/*.ts", "src/**/*.astro"]
   },
   "linter": {
     "enabled": true,

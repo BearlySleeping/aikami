@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
 import { NpcCreateSchema, NpcSchema, NpcSheetSchema, NpcUpdateSchema } from './npc.ts';
 
 describe('NpcSheetSchema', () => {

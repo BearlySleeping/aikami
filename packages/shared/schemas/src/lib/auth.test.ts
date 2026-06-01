@@ -109,11 +109,14 @@ describe('GoogleMetadataSchema', () => {
   test('should parse valid google metadata', () => {
     const validData = {
       email: 'john@gmail.com',
+      // biome-ignore lint/style/useNamingConvention: Google API field name
       family_name: 'Doe',
+      // biome-ignore lint/style/useNamingConvention: Google API field name
       given_name: 'John',
       locale: 'en',
       name: 'John Doe',
       picture: 'https://example.com/photo.jpg',
+      // biome-ignore lint/style/useNamingConvention: Google API field name
       verified_email: true,
     };
     const result = GoogleMetadataSchema.parse(validData);
@@ -126,11 +129,14 @@ describe('MicrosoftMetadataSchema', () => {
   test('should parse valid microsoft metadata', () => {
     const validData = {
       email: 'john@outlook.com',
+      // biome-ignore lint/style/useNamingConvention: Microsoft API field name
       family_name: 'Doe',
+      // biome-ignore lint/style/useNamingConvention: Microsoft API field name
       given_name: 'John',
       locale: 'en',
       name: 'John Doe',
       picture: 'https://example.com/photo.jpg',
+      // biome-ignore lint/style/useNamingConvention: Microsoft API field name
       verified_email: true,
     };
     const result = MicrosoftMetadataSchema.parse(validData);

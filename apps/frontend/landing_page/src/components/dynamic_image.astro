@@ -1,7 +1,7 @@
 ---
 import type { ImageMetadata, ImageQuality } from 'astro';
 
-interface Props {
+type Props = {
   altText: string;
   class?: string;
   eager?: boolean;
@@ -9,7 +9,7 @@ interface Props {
   imagePath: string;
   width?: number;
   quality?: ImageQuality;
-}
+};
 
 const { altText, class: className, eager, height, imagePath, width, quality } = Astro.props;
 
