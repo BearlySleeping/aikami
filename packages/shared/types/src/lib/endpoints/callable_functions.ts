@@ -1,6 +1,8 @@
 // packages/shared/types/src/lib/api/callable_functions.ts
 // biome-ignore-all lint/style/useNamingConvention: Firestack derives Cloud Function names from file names, which must be snake_case. Keys in this type map match those file names.
 
+import type { AIMessageData, AIMessageResponse } from './ai.ts';
+import type { AuthMessageData, AuthMessageResponse } from './auth.ts';
 import type { ChatMessageData, ChatMessageResponse } from './chat.ts';
 
 /** A single chat message in the character creation DM conversation. */
@@ -81,6 +83,8 @@ type PromptNpcDialogueOutput = {
  * not `unknown`.
  */
 export type CallableFunctions = {
+  ai: [AIMessageData, AIMessageResponse];
+  auth: [AuthMessageData, AuthMessageResponse];
   chat: [ChatMessageData, ChatMessageResponse];
   promptCharacterCreation: [CharacterCreationInput, CharacterCreationOutput];
   promptNpcDialogue: [PromptNpcDialogueInput, PromptNpcDialogueOutput];

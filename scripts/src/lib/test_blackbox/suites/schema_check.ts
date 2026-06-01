@@ -20,7 +20,9 @@ export const schemaCheckSuite: TestSuite = {
     });
 
     // Timeout after 30s
-    const timer = setTimeout(() => { proc.kill(); }, 30_000);
+    const timer = setTimeout(() => {
+      proc.kill();
+    }, 30_000);
 
     const exitCode = await proc.exited;
     clearTimeout(timer);

@@ -1,8 +1,8 @@
 // apps/frontend/pwa/svelte.config.js
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import adapter from 'svelte-adapter-bun';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const packagesDirectory = resolve(projectDirectory, '../../../packages');
@@ -25,7 +25,8 @@ const config = {
   preprocess: [vitePreprocess()],
   kit: {
     adapter: adapter({
-      out: 'build',
+      fallback: 'index.html',
+      pages: 'build',
     }),
     alias: {
       '$components/*': toSrcPath('lib/components/*'),
@@ -68,6 +69,7 @@ const config = {
 
       '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
       '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
+      '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
       '@aikami/frontend/svelte-kit': toPackagesPath('frontend/svelte-kit/src'),
       '@aikami/frontend-svelte-kit/*': toPackagesPath('frontend/svelte-kit/src/lib/*'),
 
@@ -76,6 +78,8 @@ const config = {
       '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
       '@aikami/frontend/repositories': toPackagesPath('frontend/repositories/src'),
       '@aikami/frontend/repositories/*': toPackagesPath('frontend/repositories/src/lib'),
+      '@aikami/frontend/api-core': toPackagesPath('frontend/api-core/src'),
+      '@aikami/frontend/api-core/*': toPackagesPath('frontend/api-core/src/lib'),
 
       '@aikami/mocks': toPackagesPath('shared/mocks/src'),
       '@aikami/schemas': toPackagesPath('shared/schemas/src'),

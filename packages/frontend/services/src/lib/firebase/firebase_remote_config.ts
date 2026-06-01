@@ -15,12 +15,6 @@ class FirebaseRemoteConfigService
 {
   private static _remoteConfig?: RemoteConfig;
 
-  constructor() {
-    super({
-      className: 'RemoteConfigService',
-    });
-  }
-
   async initialize(): Promise<boolean> {
     const { fetchAndActivate, isSupported, remoteConfig } = await this._getRemoteConfig();
     if (!(await isSupported())) {
@@ -65,4 +59,6 @@ class FirebaseRemoteConfigService
 }
 
 export const firebaseRemoteConfigService: FirebaseRemoteConfigServiceInterface =
-  new FirebaseRemoteConfigService();
+  new FirebaseRemoteConfigService({
+    className: 'FirebaseRemoteConfigService',
+  });

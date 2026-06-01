@@ -73,6 +73,12 @@ export const routes = {
     routeId: '/(authenticated)/npcs',
     type: 'authenticated',
   },
+  game: {
+    getPath: () => '/game',
+    queryParameters: undefined,
+    routeId: '/(authenticated)/game',
+    type: 'authenticated',
+  },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;

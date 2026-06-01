@@ -8,7 +8,6 @@ export {
 export * from './api/ai.svelte.ts';
 export * from './api/analytic.svelte.ts';
 export * from './api/auth.svelte.ts';
-export * from './api/internal.svelte.ts';
 export * from './api/storage.svelte.ts';
 export * from './app/app.svelte.ts';
 export * from './app/preference.svelte.ts';

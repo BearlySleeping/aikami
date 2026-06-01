@@ -51,7 +51,7 @@ const SERVICE_DEFS: Record<Exclude<TmuxService, 'all'>, ServiceDef> = {
   pwa: {
     window: 2,
     name: 'pwa',
-    command: 'bun run dev -- --mode emulator',
+    command: 'bun run dev',
     cwd: (root) => resolve(root, 'apps/frontend/pwa'),
     readyPort: EMULATOR_PORTS.pwa,
   },
@@ -252,15 +252,10 @@ export const startSession = async (config: SessionConfig): Promise<string> => {
 /**
  * Wait for services in a session to be ready on their ports.
  */
-export const waitForReady = async (
-  config: SessionConfig,
-  timeoutMs = 180_000,
-): Promise<void> => {
+export const waitForReady = async (config: SessionConfig, timeoutMs = 180_000): Promise<void> => {
   const { service, mode } = config;
   const targets: ServiceDef[] =
-    service === 'all'
-      ? ORDERED_SERVICES.map((s) => SERVICE_DEFS[s])
-      : [SERVICE_DEFS[service]];
+    service === 'all' ? ORDERED_SERVICES.map((s) => SERVICE_DEFS[s]) : [SERVICE_DEFS[service]];
 
   const sessionName = buildSessionName(mode, service);
 
@@ -289,12 +284,17 @@ export const waitForReady = async (
  * Join (attach to) an existing tmux session.
  * Throws if the session does not exist.
  */
-export const joinSession = async (config: { mode: AikamiMode; service: TmuxService }): Promise<void> => {
+export const joinSession = async (config: {
+  mode: AikamiMode;
+  service: TmuxService;
+}): Promise<void> => {
   const { mode, service } = config;
   const sessionName = buildSessionName(mode, service);
 
   if (!(await sessionExists(sessionName))) {
-    throw new Error(`Session ${sessionName} is not running. Start it first with: bun run tmux:start`);
+    throw new Error(
+      `Session ${sessionName} is not running. Start it first with: bun run tmux:start`,
+    );
   }
 
   console.log(`🖥  Attaching to ${sessionName} (Ctrl+B D to detach)...`);
@@ -308,7 +308,10 @@ export const joinSession = async (config: { mode: AikamiMode; service: TmuxServi
  * Stop (kill) a tmux session.
  * No-ops if the session does not exist.
  */
-export const stopSession = async (config: { mode: AikamiMode; service: TmuxService }): Promise<void> => {
+export const stopSession = async (config: {
+  mode: AikamiMode;
+  service: TmuxService;
+}): Promise<void> => {
   const { mode, service } = config;
   const sessionName = buildSessionName(mode, service);
 
@@ -373,22 +376,10 @@ export const listSessions = async (): Promise<SessionInfo[]> => {
   return await Promise.all(
     sessions.map(async (s) => {
       try {
-        const winR = await tmux([
-          'list-windows',
-          '-t',
-          s.name,
-          '-F',
-          '#{window_index}',
-        ]);
+        const winR = await tmux(['list-windows', '-t', s.name, '-F', '#{window_index}']);
         s.windows = winR.stdout.split('\n').filter((l) => l.trim()).length;
 
-        const attachR = await tmux([
-          'list-clients',
-          '-t',
-          s.name,
-          '-F',
-          '#{client_name}',
-        ]);
+        const attachR = await tmux(['list-clients', '-t', s.name, '-F', '#{client_name}']);
         s.attached = attachR.stdout.trim().length > 0;
       } catch {
         // Session may have died between listing and querying

@@ -5,7 +5,6 @@
     "packages/shared/*",
     "packages/backend/*",
     "packages/frontend/*",
-    "packages/engine",
     "apps/frontend/*",
     "apps/backend/*"
   ],

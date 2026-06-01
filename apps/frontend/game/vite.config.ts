@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => {
         '@aikami/schemas': toPackagesPath('shared/schemas/src'),
         '@aikami/types': toPackagesPath('shared/types/src'),
         '@aikami/utils': toPackagesPath('shared/utils/src'),
-        '@aikami/engine': toPackagesPath('engine/src'),
+        '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
         '@aikami/logger': toPackagesPath('shared/logger/src'),
 
         '@aikami/frontend/configs/environment': toPackagesPath(
