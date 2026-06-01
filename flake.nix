@@ -42,6 +42,7 @@
           nix-direnv
           python3
           git-filter-repo
+          chromium
 ];
 
         # nix-direnv location — used by .envrc on subsequent loads to

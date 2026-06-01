@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: ComfyUI API uses snake_case fields */
 // packages/frontend/api-core/src/ai/clients/comfyui_client.ts
 
 import type { TSchema } from 'typebox';

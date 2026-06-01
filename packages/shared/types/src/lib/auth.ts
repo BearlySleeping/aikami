@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Firebase Auth API uses snake_case fields */
 // packages/shared/types/src/lib/auth.ts
 import type {
   FirebaseSignInProviderNameSchema,

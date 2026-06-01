@@ -39,7 +39,7 @@ function mockSpeechSynthesis(voices: string[] = ['Google US English']): void {
 /**
  * Removes mock speech synthesis (simulating SSR/headless).
  */
-function removeSpeechSynthesis(): void {
+function _removeSpeechSynthesis(): void {
   // @ts-expect-error - cleanup
   delete globalThis.window;
   // @ts-expect-error - cleanup

@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Ollama API uses snake_case fields */
 // packages/frontend/api-core/src/ai/clients/ollama_client.ts
 
 import type { TSchema } from 'typebox';

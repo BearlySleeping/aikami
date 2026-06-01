@@ -32,7 +32,9 @@ function walk(dir: string, base: string): DocFile[] {
   const entries = readdirSync(dir, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+    if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+      continue;
+    }
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...walk(full, base));

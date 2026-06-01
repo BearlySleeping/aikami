@@ -1,6 +1,6 @@
 // apps/backend/firebase/src/controllers/callable/prompt_character_creation.ts
 
-import { createAiService } from '@aikami/backend-ai';
+import { createAiService } from '@aikami/backend/ai';
 import type { CallableFunctions } from '@aikami/types';
 import { onCall } from '@snorreks/firestack';
 import Type from 'typebox';
@@ -11,7 +11,7 @@ const chatMessageSchema = Type.Object({
   text: Type.String(),
 });
 
-const characterCreationInputSchema = Type.Object({
+const _characterCreationInputSchema = Type.Object({
   messages: Type.Array(chatMessageSchema),
   userMessage: Type.String({ minLength: 1 }),
   phase: Type.String(),
@@ -26,7 +26,7 @@ const abilityScoresSchema = Type.Object({
   charisma: Type.Integer({ minimum: 8, maximum: 18 }),
 });
 
-const characterJsonSchema = Type.Object({
+const _characterJsonSchema = Type.Object({
   name: Type.String(),
   race: Type.String(),
   class: Type.String(),
@@ -98,7 +98,7 @@ export default onCall<CallableFunctions, 'promptCharacterCreation'>(
     }
 
     const userMessage = typeof input.userMessage === 'string' ? input.userMessage : '';
-    const phase = typeof input.phase === 'string' ? input.phase : '';
+    const _phase = typeof input.phase === 'string' ? input.phase : '';
 
     if (!userMessage) {
       logger.warn('promptCharacterCreation: invalid input — missing userMessage');
@@ -114,7 +114,7 @@ export default onCall<CallableFunctions, 'promptCharacterCreation'>(
     }));
 
     try {
-      const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
+      const provider = (process.env.AI_PROVIDER as 'openai' | 'gemini' | undefined) ?? 'gemini';
       const aiService = createAiService({ provider });
 
       const response = await aiService.generateChat([

@@ -1,6 +1,6 @@
 // apps/backend/firebase/src/controllers/callable/ai.ts
 
-import { createAiService } from '@aikami/backend-ai';
+import { createAiService } from '@aikami/backend/ai';
 import type { CallableFunctions } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { onCall } from '@snorreks/firestack';
@@ -24,7 +24,7 @@ export default onCall<CallableFunctions, 'ai'>(
 
     logger.debug('callable/ai', { type: data.type });
 
-    const provider = (process.env['AI_PROVIDER'] as 'openai' | 'gemini' | undefined) ?? 'gemini';
+    const provider = (process.env.AI_PROVIDER as 'openai' | 'gemini' | undefined) ?? 'gemini';
     const aiService = createAiService({ provider });
 
     switch (data.type) {

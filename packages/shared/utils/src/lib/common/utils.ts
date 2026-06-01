@@ -117,7 +117,7 @@ export const shuffle = <T>(array: T[]): T[] => {
   const shuffledArray = [...array];
   let m = shuffledArray.length;
   let t: T | undefined;
-  let index;
+  let index = 0;
 
   // While there remain elements to shuffle…
   while (m) {
@@ -272,7 +272,7 @@ export const getPathFromURL = (url: string): string => {
   const urlParts = new URL(url);
   const pathname = urlParts.pathname;
   if (pathname.startsWith('/')) {
-    return pathname.substring(1);
+    return pathname.slice(1);
   }
   return urlParts.pathname;
 };
@@ -282,7 +282,7 @@ export const getPathAndSearchParamsFromURL = (url: string): string => {
   const pathname = urlParts.pathname;
   const searchParams = urlParts.searchParams.toString();
   if (pathname.startsWith('/')) {
-    return `${pathname.substring(1)}${searchParams ? `?${searchParams}` : ''}`;
+    return `${pathname.slice(1)}${searchParams ? `?${searchParams}` : ''}`;
   }
   return `${urlParts.pathname}${searchParams ? `?${searchParams}` : ''}`;
 };

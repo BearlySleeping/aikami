@@ -84,7 +84,7 @@ const runRepositoryTests = (
       const user = await repo.findById(id);
 
       expect(user).toBeDefined();
-      expect(user!.email).toBe(input.email);
+      expect(user?.email).toBe(input.email);
     });
 
     it('should throw when email is missing', async () => {
@@ -112,8 +112,8 @@ const runRepositoryTests = (
       const id = await repo.create(input);
       const user = await repo.findById(id);
 
-      expect(user!.displayName).toBe(input.displayName);
-      expect(user!.role).toBe('user');
+      expect(user?.displayName).toBe(input.displayName);
+      expect(user?.role).toBe('user');
     });
 
     // -------------------------------------------------------------------
@@ -161,7 +161,7 @@ const runRepositoryTests = (
       const user = await repo.findById(id);
 
       expect(user).toBeDefined();
-      expect(user!.id).toBe(id);
+      expect(user?.id).toBe(id);
     });
 
     // -------------------------------------------------------------------
@@ -176,8 +176,8 @@ const runRepositoryTests = (
 
       const user = await repo.findById(id);
 
-      expect(user!.displayName).toBe('Updated Name');
-      expect(user!.email).toBe(input.email); // unchanged
+      expect(user?.displayName).toBe('Updated Name');
+      expect(user?.email).toBe(input.email); // unchanged
     });
 
     // -------------------------------------------------------------------

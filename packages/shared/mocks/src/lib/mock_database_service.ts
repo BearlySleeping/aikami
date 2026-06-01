@@ -1,5 +1,5 @@
 // packages/shared/mocks/src/lib/mock-database-service.ts
-import type { BaseDatabaseService, QueryFilter, QueryOptions } from '@aikami/backend-database';
+import type { BaseDatabaseService, QueryFilter, QueryOptions } from '@aikami/backend/database';
 
 // ---------------------------------------------------------------------------
 // In-memory document store

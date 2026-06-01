@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
+// biome-ignore lint/suspicious/noExplicitAny: Svelte mock
 (globalThis as any).$state = (val: any) => val;
+// biome-ignore lint/suspicious/noExplicitAny: Svelte mock
 (globalThis as any).$derived = (val: any) => val;
 
 mock.module('@aikami/frontend/services', () => {
   return {
+    // biome-ignore lint/style/useNamingConvention: class name as property key
     BaseFrontendClass: class BaseFrontendClass {},
   };
 });
 
 describe('DiceService', () => {
+  // biome-ignore lint/suspicious/noExplicitAny: service mock
   let diceService: any;
 
   beforeEach(async () => {

@@ -318,8 +318,7 @@ with `@aikami/backend/auth/*`, `@aikami/backend/configs/*`, etc.
 
 ```typescript
 // ✅ Only use wildcard when you genuinely need multiple sub-module exports
-import * as v from "valibot";
-import * as z from "zod";
+import { Type, type Static } from "@sinclair/typebox";
 ```
 
 ---
@@ -330,32 +329,32 @@ See CRITICAL VIOLATION #3 above. Additional details:
 
 | Location | What goes there |
 |---|---|
-| `packages/shared/schemas/` | Zod schemas (cross-project data validation) |
+| `packages/shared/schemas/` | TypeBox schemas (cross-project data validation) |
 | `packages/shared/types/` | Cross-project types (used by 2+ apps/packages) |
 | `apps/<app>/src/lib/types/` | Single-app types (100% specific to one app) |
 | Inline / top of file | Single-method type used in exactly one function |
 
-### Schema-First: Derive Types from Zod Schemas
+### Schema-First: Derive Types from TypeBox Schemas
 
 When data crosses project boundaries (service ↔ ViewModel, backend ↔ frontend),
-define a Zod schema in `@aikami/schemas` first, then derive the TypeScript
+define a TypeBox schema in `@aikami/schemas` first, then derive the TypeScript
 type from it:
 
 ```typescript
 // packages/shared/schemas/src/lib/api/chat.ts
-import { z } from "zod";
+import { Type, type Static } from "@sinclair/typebox";
 
-export const ChatMessageSchema = z.object({
-  id: z.string(),
-  text: z.string(),
-  timestamp: z.number(),
+export const ChatMessageSchema = Type.Object({
+  id: Type.String(),
+  text: Type.String(),
+  timestamp: Type.Number(),
 });
 
 // packages/shared/types/src/lib/api/chat.ts
-import type { z } from "zod";
+import type { Static } from "@sinclair/typebox";
 import { ChatMessageSchema } from "@aikami/schemas";
 
-export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+export type ChatMessage = Static<typeof ChatMessageSchema>;
 ```
 
 This ensures runtime validation and TypeScript types are always in sync. The
@@ -363,7 +362,7 @@ schema in `@aikami/schemas` is the source of truth; `@aikami/types` re-exports
 the inferred type.
 
 **Rule of thumb**: If a type is passed from one project to another, it should
-exist as a Zod schema in `@aikami/schemas` and be re-exported as a type from
+exist as a TypeBox schema in `@aikami/schemas` and be re-exported as a type from
 `@aikami/types`.
 
 ---
@@ -386,25 +385,19 @@ Valid types: `not-found`, `invalid-argument`, `unauthorized`, `unauthenticated`,
 
 ## Validation
 
-### Server-Side (Zod)
-
-All server-side runtime validation (Firebase Functions, API boundaries) uses Zod from `@aikami/schemas`:
+All runtime validation uses **TypeBox** from `@aikami/schemas`:
 
 ```typescript
-import { z } from "zod";
+import { Type, type Static } from "@sinclair/typebox";
 import { userSchema } from "@aikami/schemas";
+
+// Use Static<> to derive the type from the schema
+export type User = Static<typeof userSchema>;
 ```
 
-### Client-Side (Valibot)
-
-Client-side perimeter validation uses Valibot for lightweight, tree-shakeable validation:
-
-```typescript
-import * as v from "valibot";
-import { userSchema } from "@aikami/valibot-schemas";
-```
-
-**Rule**: Zod stays on the server; Valibot is preferred on the client (PWA).
+TypeBox schemas provide runtime validation + static type inference. They work
+on both server (Firebase Functions) and client (PWA) — no separate validation
+library needed.
 
 ---
 
@@ -419,7 +412,7 @@ aikami/
     frontend/game/         — PixiJS v8 + bitECS game engine
     backend/firebase/      — Firebase Cloud Functions v2
   packages/
-    shared/                — constants, logger, mocks, schemas, types, utils, valibot-schemas, parser
+    shared/                — constants, logger, mocks, schemas, types, utils, parser
     backend/               — ai, auth, configs, database, svelte-kit, utils
     frontend/              — components, configs, repositories, services, utils, tanstack-db
     scripts/               — CI, setup, ops scripts

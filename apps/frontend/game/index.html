@@ -108,8 +108,13 @@
       }
 
       @keyframes pulse {
-        0%, 100% { opacity: 0.4; }
-        50% { opacity: 1; }
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 1;
+        }
       }
 
       /* ---- Chat Overlay (character creation) ---- */
@@ -319,11 +324,13 @@
         <h1>AIKAMI</h1>
         <h2>Chronicles of the Lost Realm</h2>
         <div id="auth-status"><span class="loading-pulse">Loading…</span></div>
-        <button id="btn-login" class="menu-btn">Login</button>
-        <button id="btn-new-game" class="menu-btn" style="display:none">New Game</button>
-        <button id="btn-start" class="menu-btn">Start Game</button>
-        <button id="btn-options" class="menu-btn">Options</button>
-        <button id="btn-quit" class="menu-btn">Quit</button>
+        <button id="btn-login" class="menu-btn" type="button">Login</button>
+        <button id="btn-new-game" class="menu-btn" style="display:none" type="button">
+          New Game
+        </button>
+        <button id="btn-start" class="menu-btn" type="button">Start Game</button>
+        <button id="btn-options" class="menu-btn" type="button">Options</button>
+        <button id="btn-quit" class="menu-btn" type="button">Quit</button>
       </div>
 
       <!-- Options panel (shown/hidden by JS) -->
@@ -334,7 +341,7 @@
           <option value="1024x768">1024 × 768</option>
           <option value="1280x720">1280 × 720</option>
         </select>
-        <button id="btn-options-back" class="options-back-btn">← Back</button>
+        <button id="btn-options-back" class="options-back-btn" type="button">← Back</button>
       </div>
 
       <!-- Game screen -->
@@ -347,8 +354,8 @@
         <div class="quit-box">
           <p>Quit to menu?</p>
           <div class="quit-btn-row">
-            <button id="btn-quit-confirm" class="danger">Quit</button>
-            <button id="btn-quit-cancel">Cancel</button>
+            <button id="btn-quit-confirm" class="danger" type="button">Quit</button>
+            <button id="btn-quit-cancel" type="button">Cancel</button>
           </div>
         </div>
       </div>
@@ -358,7 +365,7 @@
         <div id="chat-history"></div>
         <div id="chat-input-row">
           <input id="chat-input" type="text" placeholder="Describe your character...">
-          <button id="chat-send-btn">Send</button>
+          <button id="chat-send-btn" type="button">Send</button>
         </div>
       </div>
     </div>

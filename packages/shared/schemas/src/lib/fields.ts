@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/fields.ts
 import Type from 'typebox';
 

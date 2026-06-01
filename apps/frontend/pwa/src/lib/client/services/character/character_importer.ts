@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Character card format uses snake_case fields */
 // apps/frontend/pwa/src/lib/client/services/character/character-importer.ts
 
 import { toAppError } from '@aikami/utils';
@@ -36,6 +37,7 @@ const dataUriToFile = async (options: { dataUri: string; fileName: string }): Pr
   return new File([blob], options.fileName, { type: blob.type });
 };
 
+// biome-ignore lint/suspicious/noExplicitAny: external data format conversion
 const convertV1ToV2 = (options: { data: any }): Character => {
   const { data } = options;
   return {
@@ -56,6 +58,7 @@ const convertV1ToV2 = (options: { data: any }): Character => {
   };
 };
 
+// biome-ignore lint/suspicious/noExplicitAny: external data format conversion
 const convertRisuAiToCharacter = (options: { data: any }): Character => {
   const { data } = options;
   return {

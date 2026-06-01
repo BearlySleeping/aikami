@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Character card format uses snake_case */
 export type Character = {
   name: string;
   description: string;

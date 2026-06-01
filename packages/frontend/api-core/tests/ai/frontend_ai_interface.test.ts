@@ -1,7 +1,6 @@
 // packages/frontend/api-core/tests/ai/frontend_ai_interface.test.ts
 
 import { describe, expect, it } from 'bun:test';
-import type { z } from 'zod';
 
 import type { FrontendAiInterface } from '../../src/ai/frontend_ai_interface.ts';
 import { MockAiClient } from '../../src/ai/mock/mock_ai_client.ts';

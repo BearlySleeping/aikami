@@ -55,10 +55,11 @@ export const addMobileLoggerUI = (): void => {
       output.scrollTop = output.scrollHeight;
     };
     // (console as any).warn = log;
-    const oldLog = console.log; // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    // biome-disable-next-line noExplicitAny
-    (console as any).mobileLog = log; // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    // biome-disable-next-line noExplicitAny
+    // biome-ignore lint/suspicious/noConsole: intentional console wrapper
+    const oldLog = console.log;
+    // biome-ignore lint/suspicious/noExplicitAny: intentional console monkey-patching
+    (console as any).mobileLog = log;
+    // biome-ignore lint/suspicious/noExplicitAny: intentional console monkey-patching
     (console as any).error = function (...items: unknown[]) {
       log(items);
       // eslint-disable-next-line @typescript-eslint/no-unsafe-argument

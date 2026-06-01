@@ -44,11 +44,13 @@ export async function startEmulators(timeoutMs = 90_000): Promise<void> {
 
   // Read stdout/stderr from Bun.spawn
   (async () => {
-    const reader = firebaseProcess!.stdout.getReader();
+    const reader = firebaseProcess?.stdout.getReader();
     const decoder = new TextDecoder();
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
       const text = decoder.decode(value);
       if (text.includes('All emulators ready') || text.includes('Emulator')) {
         console.log(`  ${text.trim().slice(0, 120)}`);
@@ -57,11 +59,13 @@ export async function startEmulators(timeoutMs = 90_000): Promise<void> {
   })().catch(() => {});
 
   (async () => {
-    const reader = firebaseProcess!.stderr.getReader();
+    const reader = firebaseProcess?.stderr.getReader();
     const decoder = new TextDecoder();
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
       lastStderr = decoder.decode(value);
     }
   })().catch(() => {});
@@ -116,7 +120,9 @@ async function waitForPort(port: number, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const open = await probePort(port, 2000);
-    if (open) return;
+    if (open) {
+      return;
+    }
     await new Promise((r) => setTimeout(r, 1000));
   }
   throw new Error(`Timeout (${timeoutMs}ms) waiting for port ${port}`);

@@ -89,7 +89,7 @@ export type VoiceGenerationResult = Type.Static<typeof VoiceGenerationResultSche
 export type VoiceConfigData = Type.Static<typeof VoiceConfigSchema>;
 export type GeneratedSpeechData = Type.Static<typeof GeneratedSpeechSchema>;
 
-export interface VoiceProviderInterface {
+export type VoiceProviderInterface = {
   readonly name: string;
   readonly provider: VoiceProvider;
   readonly supportsVoices: boolean;
@@ -101,17 +101,17 @@ export interface VoiceProviderInterface {
   generate(request: VoiceGenerationRequest): Promise<VoiceGenerationResult>;
   listVoices(language?: string): Promise<VoiceInfo[]>;
   getCapabilities(): VoiceProviderCapabilities;
-}
+};
 
-export interface VoiceInfo {
+export type VoiceInfo = {
   id: string;
   name: string;
   language: string;
   gender?: 'male' | 'female' | 'neutral';
   previewUrl?: string;
-}
+};
 
-export interface VoiceProviderCapabilities {
+export type VoiceProviderCapabilities = {
   provider: VoiceProvider;
   name: string;
   supportedLanguages: string[];
@@ -121,7 +121,7 @@ export interface VoiceProviderCapabilities {
   supportsVolume: boolean;
   maxTextLength: number;
   avgLatency: number;
-}
+};
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   speed: 1.0,

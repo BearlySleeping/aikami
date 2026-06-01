@@ -1,10 +1,8 @@
-import type { LogEntry, LoggerInterface, TimerInterface } from '@aikami/types';
+import type { LogEntry, LoggerInterface } from '@aikami/types';
 import { BaseLoggerService } from './base.ts';
-import { Timer } from './timer.ts';
 
 export type BasicLoggerInterface = LoggerInterface;
 
-class BasicTimer extends Timer implements TimerInterface {}
 class BasicLoggerService extends BaseLoggerService implements BasicLoggerInterface {
   write(entry: LogEntry, ...data: unknown[]): void {
     try {
@@ -25,10 +23,6 @@ class BasicLoggerService extends BaseLoggerService implements BasicLoggerInterfa
     } catch (_error) {
       // console.log(e);
     }
-  }
-
-  override createTimer(): TimerInterface {
-    return new BasicTimer();
   }
 }
 

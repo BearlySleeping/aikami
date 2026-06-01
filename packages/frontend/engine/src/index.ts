@@ -6,7 +6,7 @@
 
 // ECS components
 
-export type { AppearanceData } from './components/appearance.ts';
+export type { AppearanceData, LpcLayerRecipe } from './components/appearance.ts';
 export {
   APPEARANCE_LAYER_COUNT,
   Appearance,
@@ -46,13 +46,16 @@ export { GameApiService } from './services/api_service.ts';
 
 // Rendering
 
-export { SpriteComposer } from './rendering/sprite_composer.ts';
+export type { PaletteSpriteOptions } from './rendering/sprite_composer.ts';
+export { packRecipeToUboBuffer, SpriteComposer } from './rendering/sprite_composer.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   dirtyCheckAppearance,
+  hasAppearanceChanged,
   invalidateComposedSprite,
+  updateEntityUbo,
   updateRender,
   updateRenderFromBuffer,
 } from './systems/render_system.ts';

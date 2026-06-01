@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/user.ts
 import Type, { Composite } from 'typebox';
 import {

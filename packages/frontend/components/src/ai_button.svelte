@@ -2,14 +2,14 @@
   // packages/frontend/components/src/ai-button.svelte
   import type { Snippet } from 'svelte';
 
-  interface Props {
+  type Props = {
     variant?: 'primary' | 'secondary' | 'ghost';
     size?: 'sm' | 'md' | 'lg';
     disabled?: boolean;
     loading?: boolean;
     onClick?: (event: MouseEvent) => void;
     children?: Snippet;
-  }
+  };
 
   let {
     variant = 'primary',

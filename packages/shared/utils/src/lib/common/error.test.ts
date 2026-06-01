@@ -19,11 +19,11 @@ describe('toHttpErrorStatusCode', () => {
     ['unauthenticated', 401],
   ] as const;
 
-  errorTypeToStatusCode.forEach(([errorType, expectedStatusCode]) => {
+  for (const [errorType, expectedStatusCode] of errorTypeToStatusCode) {
     test(`should return ${expectedStatusCode} for ${errorType}`, () => {
       expect(toHttpErrorStatusCode(errorType)).toBe(expectedStatusCode);
     });
-  });
+  }
 
   test('should return 500 for unknown error type', () => {
     expect(toHttpErrorStatusCode('unknown' as ErrorType)).toBe(500);

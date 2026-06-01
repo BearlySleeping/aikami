@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: Test data mocks ComfyUI API responses */
 // packages/frontend/api-core/tests/ai/comfyui_client.test.ts
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';

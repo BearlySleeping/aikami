@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: ISO country code keys */
 import type { CountryCode } from '@aikami/types';
 
 const COUNTRY_CODE_TAX_ID_TYPE_MAP = {

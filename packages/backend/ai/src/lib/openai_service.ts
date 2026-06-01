@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/useNamingConvention: OpenAI API uses snake_case fields */
 // packages/backend/ai/src/lib/openai-service.ts
 
 import type {
