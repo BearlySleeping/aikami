@@ -4,6 +4,13 @@
 // Public game engine exports
 // ---------------------------------------------------------------------------
 
+export {
+  addItemStack,
+  deductItem,
+  hasItemCapacity,
+  processTransaction,
+  resetEconomyTracking,
+} from './systems/economy_system.ts';
 // Systems
 export { resetMovementTracking, updateMovement } from './systems/movement_system.ts';
 
@@ -18,6 +25,14 @@ export {
   getAppearanceLayers,
   registerAppearanceObservers,
 } from './components/appearance.ts';
+export type { InventoryData, WalletData } from './components/inventory.ts';
+export {
+  Inventory,
+  MAX_INVENTORY_SLOTS,
+  registerInventoryObservers,
+  registerWalletObservers,
+  Wallet,
+} from './components/inventory.ts';
 export type { NPCDialogData } from './components/npc_dialog.ts';
 export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { PositionData } from './components/position.ts';
