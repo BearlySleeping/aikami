@@ -1,5 +1,5 @@
 // packages/frontend/engine/src/rendering/texture_manager.ts
-import { Texture } from 'pixi.js';
+import { Rectangle, Texture } from 'pixi.js';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 
 // ---------------------------------------------------------------------------
@@ -30,6 +30,26 @@ type GrayscaleSheetEntry = {
   lastAccessedAt: number;
   /** Approximate VRAM footprint in bytes. */
   byteSize: number;
+};
+
+/**
+ * Describes the grid layout of an LPC spritesheet.
+ *
+ * Each LPC spritesheet is a regular grid of animation frames.
+ * The layout specifies frame dimensions and either `columns` or `rows`;
+ * the other dimension is auto-derived from the sheet's pixel size.
+ *
+ * Standard LPC: 13 columns × 21 rows (832×1344 px at 64×64 per frame).
+ */
+export type LpcSpritesheetLayout = {
+  /** Frame width in pixels. Default: 64. */
+  frameWidth: number;
+  /** Frame height in pixels. Default: 64. */
+  frameHeight: number;
+  /** Number of frame columns. Auto-derived from width when omitted. */
+  columns?: number;
+  /** Number of frame rows. Auto-derived from height when omitted. */
+  rows?: number;
 };
 
 /** Standard LPC color ramp size — one entry per palette index (0–255). */
@@ -161,6 +181,25 @@ export class TextureManager {
    */
   private readonly _grayscaleCache: Map<number, GrayscaleSheetEntry>;
 
+  /**
+   * Cache for sliced frame sub-textures.
+   *
+   * Key: composite string `${assetId}:${frameIndex}`.
+   * Each slice is a PixiJS Texture sharing the same GPU resource
+   * as the base spritesheet — only the UV `frame` rectangle differs.
+   * This means frame cache entries do NOT count against VRAM budget.
+   */
+  private readonly _frameSliceCache: Map<string, Texture>;
+
+  /**
+   * Reference counts for frame slices.
+   *
+   * When a slice's count drops to zero, it is removed from the
+   * frame slice cache without destroying the GPU resource (which
+   * belongs to the base sheet).
+   */
+  private readonly _frameSliceRefCounts: Map<string, number>;
+
   /** Maximum textures before eviction. */
   private readonly _maxTextures: number;
 
@@ -185,6 +224,8 @@ export class TextureManager {
   constructor(config?: Partial<TextureManagerConfig>) {
     this._cache = new Map();
     this._grayscaleCache = new Map();
+    this._frameSliceCache = new Map();
+    this._frameSliceRefCounts = new Map();
     this._maxTextures = config?.maxTextures ?? DEFAULT_MAX_TEXTURES;
     this._maxBytes = config?.maxBytes ?? DEFAULT_MAX_BYTES;
     this._maxGrayscaleSheets = DEFAULT_MAX_GRAYSCALE_SHEETS;
@@ -301,20 +342,42 @@ export class TextureManager {
    * Recipes with invalid or missing `assetId` get `Texture.EMPTY` at
    * their slot position, keeping the index alignment intact.
    *
-   * @param recipes - Array of up to 8 LPC layer recipes.
+   * When `frameIndex` and `layout` are provided, each loaded sheet is
+   * sliced to the specified animation frame before being returned.
+   * This eliminates per-frame draw-call splits — the shader receives
+   * pre-sliced 64×64 sub-textures aligned to exact grid boundaries.
+   *
+   * @param options - Batch loading options.
+   * @param options.recipes - Array of up to 8 LPC layer recipes.
+   * @param options.frameIndex - Optional animation frame index to slice to.
+   * @param options.layout - Spritesheet grid dimensions for slicing.
    * @returns A promise resolving to an array of textures indexed by slot.
    */
-  async getLayeredTextureBatch(recipes: readonly LpcLayerRecipe[]): Promise<Texture[]> {
+  async getLayeredTextureBatch(options: {
+    recipes: readonly LpcLayerRecipe[];
+    frameIndex?: number;
+    layout?: LpcSpritesheetLayout;
+  }): Promise<Texture[]> {
     const textures: Texture[] = [];
 
-    for (const recipe of recipes) {
+    for (const recipe of options.recipes) {
       if (recipe?.assetId) {
         const key = Number.parseInt(recipe.assetId, 10);
         if (Number.isNaN(key) || key <= 0) {
           textures.push(Texture.EMPTY);
         } else {
-          const tex = await this.getGrayscaleSheet(key);
-          textures.push(tex);
+          const sheet = await this.getGrayscaleSheet(key);
+
+          if (options.frameIndex !== undefined && options.frameIndex >= 0 && options.layout) {
+            const frame = this.getFrameAt({
+              texture: sheet,
+              layout: options.layout,
+              frameIndex: options.frameIndex,
+            });
+            textures.push(frame ?? Texture.EMPTY);
+          } else {
+            textures.push(sheet);
+          }
         }
       } else {
         textures.push(Texture.EMPTY);
@@ -342,7 +405,13 @@ export class TextureManager {
   }
 
   /**
-   * Releases a grayscale sheet from the dedicated grayscale cache.
+   * Releases a grayscale sheet from the dedicated grayscale cache
+   * along with all cached frame slices derived from it.
+   *
+   * Frame slices share the same GPU resource as the base sheet,
+   * so they are invalidated when the base is destroyed. Their cache
+   * entries and reference counts are cleared without separate destroy
+   * calls (the GPU resource is already freed by the sheet destroy).
    *
    * @param key - Numeric grayscale asset ID to release.
    */
@@ -350,6 +419,16 @@ export class TextureManager {
     const entry = this._grayscaleCache.get(key);
     if (!entry) {
       return;
+    }
+
+    // Purge all frame slices derived from this base sheet.
+    // Slices are keyed as "{assetId}:{frameIndex}".
+    const prefix = `${key}:`;
+    for (const sliceKey of this._frameSliceCache.keys()) {
+      if (sliceKey.startsWith(prefix)) {
+        this._frameSliceCache.delete(sliceKey);
+        this._frameSliceRefCounts.delete(sliceKey);
+      }
     }
 
     entry.texture.destroy();
@@ -378,7 +457,8 @@ export class TextureManager {
   }
 
   /**
-   * Destroys all cached textures (both main and grayscale) and clears both caches.
+   * Destroys all cached textures (main, grayscale, frame slices) and
+   * clears all caches.
    */
   destroy(): void {
     for (const entry of this._cache.values()) {
@@ -391,11 +471,159 @@ export class TextureManager {
       entry.texture.destroy();
     }
     this._grayscaleCache.clear();
+
+    // Frame slices share GPU resources — no separate destroy needed.
+    // Just clear the cache and reference counts.
+    this._frameSliceCache.clear();
+    this._frameSliceRefCounts.clear();
+  }
+
+  // -----------------------------------------------------------------------
+  // Spritesheet slicing — frame grid extraction
+  // -----------------------------------------------------------------------
+
+  /**
+   * Slices a loaded LPC spritesheet texture into an array of frame
+   * sub-textures.
+   *
+   * Each sub-texture shares the same GPU resource as the base sheet —
+   * only the UV `frame` rectangle differs. This avoids allocating
+   * redundant VRAM for individual animation frames.
+   *
+   * The layout determines the grid: `columns` or `rows` (or both)
+   * must be provided. When one dimension is omitted, it is derived
+   * from the sheet's pixel dimensions divided by `frameWidth` /
+   * `frameHeight`.
+   *
+   * Partial rows/columns (when sheet dimensions are not exact
+   * multiples of frame size) are clamped — frames that would extend
+   * beyond the sheet boundary are not emitted.
+   *
+   * @param options - Slicing options.
+   * @param options.texture - The loaded spritesheet texture.
+   * @param options.layout - Grid layout descriptor.
+   * @returns An array of frame sub-textures in row-major order.
+   * @throws If frame dimensions are zero or layout is invalid.
+   */
+  sliceSpritesheet(options: { texture: Texture; layout: LpcSpritesheetLayout }): Texture[] {
+    const { texture, layout } = options;
+    this._validateLayout(layout, texture.width, texture.height);
+
+    const frameWidth = layout.frameWidth;
+    const frameHeight = layout.frameHeight;
+    const columns = layout.columns ?? Math.floor(texture.width / frameWidth);
+    const rows = layout.rows ?? Math.floor(texture.height / frameHeight);
+
+    if (columns <= 0 || rows <= 0) {
+      return [];
+    }
+
+    const frames: Texture[] = [];
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < columns; col++) {
+        const frame = this.getFrameAt({
+          texture,
+          layout,
+          frameIndex: row * columns + col,
+        });
+        if (frame) {
+          frames.push(frame);
+        }
+      }
+    }
+
+    return frames;
+  }
+
+  /**
+   * Retrieves a single frame sub-texture at the given index from a
+   * loaded spritesheet.
+   *
+   * The frame index is row-major: `row = floor(index / columns)`,
+   * `col = index % columns`. The returned sub-texture shares the
+   * base sheet's GPU resource — only the UV frame rectangle is unique.
+   *
+   * Results are cached in `_frameSliceCache` keyed by
+   * `"{assetId}:{frameIndex}"` so repeat lookups are O(1). When the
+   * texture has no associated asset ID (direct slice), caching is
+   * skipped.
+   *
+   * @param options - Frame lookup options.
+   * @param options.texture - The spritesheet texture.
+   * @param options.layout - Grid layout descriptor.
+   * @param options.frameIndex - Zero-based frame index (row-major).
+   * @returns The frame sub-texture, or null if out of bounds.
+   */
+  getFrameAt(options: {
+    texture: Texture;
+    layout: LpcSpritesheetLayout;
+    frameIndex: number;
+  }): Texture | null {
+    const { texture, layout, frameIndex } = options;
+
+    if (frameIndex < 0) {
+      return null;
+    }
+
+    const frameWidth = layout.frameWidth;
+    const frameHeight = layout.frameHeight;
+    const columns = layout.columns ?? Math.floor(texture.width / frameWidth);
+    const rows = layout.rows ?? Math.floor(texture.height / frameHeight);
+
+    const totalFrames = columns * rows;
+    if (frameIndex >= totalFrames) {
+      return null;
+    }
+
+    const col = frameIndex % columns;
+    const row = Math.floor(frameIndex / columns);
+    const x = col * frameWidth;
+    const y = row * frameHeight;
+
+    // Clamp: ensure the frame does not extend past texture boundaries
+    if (x + frameWidth > texture.width || y + frameHeight > texture.height) {
+      return null;
+    }
+
+    const frameRect = new Rectangle(x, y, frameWidth, frameHeight);
+
+    return new Texture({
+      source: texture.source,
+      frame: frameRect,
+    });
   }
 
   // -----------------------------------------------------------------------
   // Internal
   // -----------------------------------------------------------------------
+
+  /**
+   * Validates a spritesheet layout and throws on invalid parameters.
+   *
+   * @param layout - The layout to validate.
+   * @param sheetWidth - Source sheet width for context in error messages.
+   * @param sheetHeight - Source sheet height for context in error messages.
+   */
+  private _validateLayout(
+    layout: LpcSpritesheetLayout,
+    sheetWidth: number,
+    sheetHeight: number,
+  ): void {
+    if (layout.frameWidth <= 0 || layout.frameHeight <= 0) {
+      throw new Error(
+        `Invalid frame dimensions: ${layout.frameWidth}×${layout.frameHeight}. ` +
+          `Sheet is ${sheetWidth}×${sheetHeight}.`,
+      );
+    }
+
+    if (layout.columns === undefined && layout.rows === undefined) {
+      throw new Error(
+        'Spritesheet layout must specify at least `columns` or `rows`. ' +
+          `Sheet is ${sheetWidth}×${sheetHeight}, frame: ${layout.frameWidth}×${layout.frameHeight}.`,
+      );
+    }
+  }
 
   /**
    * Evicts the least recently accessed entries from the main cache until

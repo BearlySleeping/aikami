@@ -257,13 +257,15 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     user: CurrentUser | undefined,
   ) {
     if (!route) {
+      // I have it commented out now, since i am debugging with test pages and i don't want to declare them in routes.ts
       // if we don't have a route defined, it is most likely a bug we should fallback to either login or dashboard
-      return user
-        ? await routerService.navigateToApp()
-        : await routerService.goToRoute('login', {
-            pathParameters: undefined,
-            queryParameters: undefined,
-          });
+      // return user
+      //   ? await routerService.navigateToApp()
+      //   : await routerService.goToRoute('login', {
+      //       pathParameters: undefined,
+      //       queryParameters: undefined,
+      //     });
+      return;
     }
 
     const isPublicRoute = isPublicPage(route);
