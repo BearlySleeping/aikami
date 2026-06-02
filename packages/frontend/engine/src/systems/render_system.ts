@@ -20,7 +20,18 @@ import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
 
 // ---------------------------------------------------------------------------
 // RenderSystem — sync bitECS entities to PixiJS display objects
+//
+// Contract C-040: Cell position calculation layer converts floating-point
+// simulation data into grid-aligned visual screen transforms before flushing
+// frame drawing allocations. The cell grid uses a fixed 32×32 pixel stride
+// synchronized with the movement system's tile constraints.
 // ---------------------------------------------------------------------------
+
+/** Pixel size of a single grid cell (must match movement_system.ts). */
+const CELL_PIXEL_SIZE = 32;
+
+/** Half-cell offset for center-of-cell alignment. */
+const CELL_HALF = CELL_PIXEL_SIZE / 2;
 
 /**
  * Default cell geometry dimensions in pixels.
@@ -28,7 +39,7 @@ import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
  * Used to pre-assign {@link filterArea} bounds so the PixiJS renderer
  * skips per-frame boundary recalculations for static-sized entities.
  */
-const CELL_GEOMETRY_RECT = new Rectangle(0, 0, 32, 32);
+const CELL_GEOMETRY_RECT = new Rectangle(0, 0, CELL_PIXEL_SIZE, CELL_PIXEL_SIZE);
 
 /** Cached query terms — entities with Position + Sprite are rendered. */
 const RENDER_QUERY_TERMS = [Position, Sprite];
@@ -90,9 +101,9 @@ const updateRender = (world: World, stage: Container): void => {
     // Spatial culling: hide entities outside the visible stage bounds
     const stageBounds = stage.filterArea ?? stage.getBounds();
     const isOffScreen =
-      pos.x + 32 < stageBounds.x ||
+      pos.x + CELL_PIXEL_SIZE < stageBounds.x ||
       pos.x > stageBounds.x + stageBounds.width ||
-      pos.y + 32 < stageBounds.y ||
+      pos.y + CELL_PIXEL_SIZE < stageBounds.y ||
       pos.y > stageBounds.y + stageBounds.height;
 
     displayObject.visible = !isOffScreen;
@@ -1213,6 +1224,43 @@ const resetAnimationTracking = (): void => {
   _entityFrameIndices.clear();
 };
 
+/**
+ * Snaps a single coordinate to the nearest grid cell center.
+ *
+ * Cell centers are at CELL_HALF + n * CELL_PIXEL_SIZE for n ≥ 0.
+ * Negative coordinates clamp to the origin cell center.
+ *
+ * @param coord - The raw pixel coordinate.
+ * @returns The nearest cell center coordinate.
+ */
+const toGridCellCenter = (coord: number): number => {
+  const cellIndex = Math.round((coord - CELL_HALF) / CELL_PIXEL_SIZE);
+  const clampedIndex = Math.max(0, cellIndex);
+  return clampedIndex * CELL_PIXEL_SIZE + CELL_HALF;
+};
+
+/**
+ * Converts floating-point simulation position data to a cell-aligned
+ * display position for visual rendering.
+ *
+ * This is the C-040 cell position calculation layer: it bridges the
+ * continuous simulation coordinate space into the discrete 32×32 pixel
+ * tile grid used by the PixiJS display tree. Positions from the movement
+ * system are already grid-aligned; this function provides the explicit
+ * conversion layer for consumers that need guaranteed cell center alignment.
+ *
+ * @param options - Position conversion options.
+ * @param options.x - Raw simulation x coordinate.
+ * @param options.y - Raw simulation y coordinate.
+ * @returns Cell-aligned display position.
+ */
+const toCellDisplayPosition = (options: { x: number; y: number }): { x: number; y: number } => {
+  return {
+    x: toGridCellCenter(options.x),
+    y: toGridCellCenter(options.y),
+  };
+};
+
 export {
   animateEntitySystem,
   dirtyCheckAppearance,
@@ -1223,6 +1271,8 @@ export {
   resetAnimationTracking,
   resetAppearanceTracking,
   syncAppearanceSystem,
+  toCellDisplayPosition,
+  toGridCellCenter,
   updateEntityUbo,
   updateRender,
   updateRenderFromBuffer,
