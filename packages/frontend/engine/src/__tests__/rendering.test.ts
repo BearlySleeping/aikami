@@ -8,11 +8,22 @@ import {
   type LpcLayerRecipe,
   registerAppearanceObservers,
 } from '../components/appearance.ts';
+import { registerVelocityObservers, Velocity, type VelocityData } from '../components/velocity.ts';
+import {
+  getLpcFrameIndex,
+  getLpcStateRow,
+  LpcAnimationState,
+  LpcDirection,
+  velocityToDirection,
+} from '../rendering/animation_controller.ts';
 import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
 import type { LpcSpritesheetLayout } from '../rendering/texture_manager.ts';
 import { TextureManager } from '../rendering/texture_manager.ts';
 import {
+  animateEntitySystem,
+  getEntityAnimationFrame,
   LpcBatchManager,
+  resetAnimationTracking,
   resetAppearanceTracking,
   syncAppearanceSystem,
 } from '../systems/render_system.ts';
@@ -1630,5 +1641,423 @@ describe('C-036 ECS Bridge — Edge Cases', () => {
 
     resetAppearanceTracking(world);
     batchManager.destroy();
+  });
+});
+
+// ===========================================================================
+// C-039 LPC Animation Controller — Velocity-to-Frame Translation Tests
+// ===========================================================================
+
+const setVelocity = (
+  world: ReturnType<typeof createWorld>,
+  eid: number,
+  vel: VelocityData,
+): void => {
+  addComponent(world, eid, set(Velocity, vel));
+};
+
+// === velocityToDirection — velocity vector to directional row translation ===
+
+describe('C-039 Animation Controller — velocityToDirection', () => {
+  it('returns DOWN for zero velocity (default idle facing)', () => {
+    expect(velocityToDirection(0, 0)).toBe(LpcDirection.Down);
+  });
+
+  it('returns RIGHT when vx is positive and dominant', () => {
+    expect(velocityToDirection(5, 0)).toBe(LpcDirection.Right);
+    expect(velocityToDirection(5, 2)).toBe(LpcDirection.Right);
+  });
+
+  it('returns LEFT when vx is negative and dominant', () => {
+    expect(velocityToDirection(-5, 0)).toBe(LpcDirection.Left);
+    expect(velocityToDirection(-5, 2)).toBe(LpcDirection.Left);
+  });
+
+  it('returns DOWN when vy is positive and dominant', () => {
+    expect(velocityToDirection(0, 5)).toBe(LpcDirection.Down);
+    expect(velocityToDirection(2, 5)).toBe(LpcDirection.Down);
+  });
+
+  it('returns UP when vy is negative and dominant', () => {
+    expect(velocityToDirection(0, -5)).toBe(LpcDirection.Up);
+    expect(velocityToDirection(2, -5)).toBe(LpcDirection.Up);
+  });
+
+  it('prefers horizontal axis when |vx| == |vy| and vy is dominant by default', () => {
+    // When |vx| == |vy|, the > check fails; falls through to return based on vy
+    expect(velocityToDirection(5, 5)).toBe(LpcDirection.Down);
+    expect(velocityToDirection(5, -5)).toBe(LpcDirection.Up);
+    expect(velocityToDirection(-5, -5)).toBe(LpcDirection.Up);
+  });
+});
+
+// === getLpcStateRow — absolute spritesheet row address ===
+
+describe('C-039 Animation Controller — getLpcStateRow', () => {
+  it('maps WALK_UP to row 8', () => {
+    expect(getLpcStateRow(LpcAnimationState.Walk, LpcDirection.Up)).toBe(8);
+  });
+
+  it('maps WALK_LEFT to row 9', () => {
+    expect(getLpcStateRow(LpcAnimationState.Walk, LpcDirection.Left)).toBe(9);
+  });
+
+  it('maps WALK_DOWN to row 10', () => {
+    expect(getLpcStateRow(LpcAnimationState.Walk, LpcDirection.Down)).toBe(10);
+  });
+
+  it('maps WALK_RIGHT to row 11', () => {
+    expect(getLpcStateRow(LpcAnimationState.Walk, LpcDirection.Right)).toBe(11);
+  });
+
+  it('maps SLASH_UP to row 12', () => {
+    expect(getLpcStateRow(LpcAnimationState.Slash, LpcDirection.Up)).toBe(12);
+  });
+
+  it('maps THRUST_DOWN to row 6', () => {
+    expect(getLpcStateRow(LpcAnimationState.Thrust, LpcDirection.Down)).toBe(6);
+  });
+
+  it('ignores direction for DIE state (single row)', () => {
+    expect(getLpcStateRow(LpcAnimationState.Die, LpcDirection.Up)).toBe(20);
+    expect(getLpcStateRow(LpcAnimationState.Die, LpcDirection.Down)).toBe(20);
+    expect(getLpcStateRow(LpcAnimationState.Die, LpcDirection.Left)).toBe(20);
+    expect(getLpcStateRow(LpcAnimationState.Die, LpcDirection.Right)).toBe(20);
+  });
+});
+
+// === getLpcFrameIndex — frame index computation with modulus wrapping ===
+
+describe('C-039 Animation Controller — getLpcFrameIndex', () => {
+  // WALK has 9 frames per direction, starting at row 8, columns 0-8.
+  // Frame index = row * 13 + column.
+
+  it('computes WALK_UP frame 0 index: row 8, col 0 → 104', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Up, 0);
+    expect(index).toBe(8 * 13 + 0); // 104
+  });
+
+  it('computes WALK_UP frame 8 (last) index: row 8, col 8 → 112', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Up, 8);
+    expect(index).toBe(8 * 13 + 8); // 112
+  });
+
+  it('computes WALK_DOWN frame 4 index: row 10, col 4 → 134', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Down, 4);
+    expect(index).toBe(10 * 13 + 4); // 134
+  });
+
+  it('computes WALK_RIGHT frame 2 index: row 11, col 2 → 145', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Right, 2);
+    expect(index).toBe(11 * 13 + 2); // 145
+  });
+
+  it('computes SLASH_LEFT frame 3 index: row 13, col 3 → 172', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Slash, LpcDirection.Left, 3);
+    expect(index).toBe(13 * 13 + 3); // 172
+  });
+
+  it('computes DIE frame 5 index: row 20, col 5 → 265', () => {
+    // DIE ignores direction — only uses row 20
+    const index = getLpcFrameIndex(LpcAnimationState.Die, LpcDirection.Up, 5);
+    expect(index).toBe(20 * 13 + 5); // 265
+  });
+
+  // ---- AC-2: Modulus wrapping — no overflow boundary leaks ----
+
+  it('wraps WALK back to frame 0 when tick exceeds frame count (9 → 0)', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Down, 9);
+    expect(index).toBe(10 * 13 + 0); // row 10, col 0 = 130
+  });
+
+  it('wraps WALK to frame 1 when tick = 10 (10 % 9 = 1)', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Down, 10);
+    expect(index).toBe(10 * 13 + 1); // 131
+  });
+
+  it('handles extreme tick counts without overflow (tick = 1_000_000)', () => {
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Up, 1_000_000);
+    // 1_000_000 % 9 = 1 → col 1, row 8
+    expect(index).toBe(8 * 13 + 1); // 105
+  });
+
+  it('wraps SLASH correctly at boundary (6 frames)', () => {
+    // SLASH has 6 frames. tick 6 → wraps to frame 0.
+    expect(getLpcFrameIndex(LpcAnimationState.Slash, LpcDirection.Up, 5)).toBe(12 * 13 + 5); // last frame
+    expect(getLpcFrameIndex(LpcAnimationState.Slash, LpcDirection.Up, 6)).toBe(12 * 13 + 0); // wrap
+    expect(getLpcFrameIndex(LpcAnimationState.Slash, LpcDirection.Up, 7)).toBe(12 * 13 + 1);
+  });
+
+  it('wraps THRUST correctly at boundary (8 frames)', () => {
+    expect(getLpcFrameIndex(LpcAnimationState.Thrust, LpcDirection.Right, 7)).toBe(7 * 13 + 7); // last
+    expect(getLpcFrameIndex(LpcAnimationState.Thrust, LpcDirection.Right, 8)).toBe(7 * 13 + 0); // wrap
+  });
+
+  it('wraps SHOOT correctly at boundary (13 frames — full row)', () => {
+    expect(getLpcFrameIndex(LpcAnimationState.Shoot, LpcDirection.Down, 12)).toBe(18 * 13 + 12); // last
+    expect(getLpcFrameIndex(LpcAnimationState.Shoot, LpcDirection.Down, 13)).toBe(18 * 13 + 0); // wrap
+  });
+
+  it('wraps SPELLCAST correctly at boundary (7 frames)', () => {
+    expect(getLpcFrameIndex(LpcAnimationState.Spellcast, LpcDirection.Left, 6)).toBe(1 * 13 + 6); // last
+    expect(getLpcFrameIndex(LpcAnimationState.Spellcast, LpcDirection.Left, 7)).toBe(1 * 13 + 0); // wrap
+  });
+
+  it('wraps DIE correctly at boundary (6 frames)', () => {
+    expect(getLpcFrameIndex(LpcAnimationState.Die, LpcDirection.Down, 5)).toBe(20 * 13 + 5); // last
+    expect(getLpcFrameIndex(LpcAnimationState.Die, LpcDirection.Down, 6)).toBe(20 * 13 + 0); // wrap
+  });
+
+  // ---- Stress: multi-cycle modulus safety ----
+
+  it('produces consistent frame sequence over 1000 ticks (no drift)', () => {
+    const frames: number[] = [];
+    for (let tick = 0; tick < 1000; tick++) {
+      frames.push(getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Down, tick));
+    }
+
+    // Every frame index should be within WALK_DOWN range: row 10, cols 0-8
+    // Index range: 130 (10*13+0) to 138 (10*13+8)
+    for (const frame of frames) {
+      expect(frame).toBeGreaterThanOrEqual(130);
+      expect(frame).toBeLessThanOrEqual(138);
+    }
+
+    // Sequence should repeat every 9 ticks
+    for (let tick = 0; tick < 990; tick++) {
+      expect(frames[tick]).toBe(frames[tick + 9]);
+    }
+  });
+
+  it('handles negative tick values safely (defensive)', () => {
+    // While tick should never be negative in normal use, the modulus
+    // wrapping handles it defensively.
+    const index = getLpcFrameIndex(LpcAnimationState.Walk, LpcDirection.Up, -1);
+    // (-1 % 9 + 9) % 9 = (-1 + 9) % 9 = 8 → col 8
+    expect(index).toBe(8 * 13 + 8); // 112
+  });
+});
+
+// === AC-1: Velocity Vector to Directional Row Translation (Integration) ===
+
+describe('C-039 Animation Controller — AC-1: Velocity → Frame Row (Integration)', () => {
+  it('shifts frame range to WALK_UP row 8 when vy is negative', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    const eid = addEntity(world);
+    setVelocity(world, eid, { x: 0, y: -2 });
+
+    // Velocity.y < 0 → dominant vertical → UP
+    // UP offset + WALK (8) = row 8
+    const direction = velocityToDirection(Velocity.x[eid] ?? 0, Velocity.y[eid] ?? 0);
+    expect(direction).toBe(LpcDirection.Up);
+    expect(getLpcStateRow(LpcAnimationState.Walk, direction)).toBe(8);
+  });
+
+  it('shifts frame range to WALK_DOWN row 10 when vy is positive', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    const eid = addEntity(world);
+    setVelocity(world, eid, { x: 0, y: 2 });
+
+    const direction = velocityToDirection(Velocity.x[eid] ?? 0, Velocity.y[eid] ?? 0);
+    expect(direction).toBe(LpcDirection.Down);
+    expect(getLpcStateRow(LpcAnimationState.Walk, direction)).toBe(10);
+  });
+
+  it('shifts frame range to WALK_LEFT row 9 when vx is negative and dominant', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    const eid = addEntity(world);
+    setVelocity(world, eid, { x: -3, y: 1 });
+
+    const direction = velocityToDirection(Velocity.x[eid] ?? 0, Velocity.y[eid] ?? 0);
+    expect(direction).toBe(LpcDirection.Left);
+    expect(getLpcStateRow(LpcAnimationState.Walk, direction)).toBe(9);
+  });
+
+  it('shifts frame range to WALK_RIGHT row 11 when vx is positive and dominant', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    const eid = addEntity(world);
+    setVelocity(world, eid, { x: 5, y: -1 });
+
+    const direction = velocityToDirection(Velocity.x[eid] ?? 0, Velocity.y[eid] ?? 0);
+    expect(direction).toBe(LpcDirection.Right);
+    expect(getLpcStateRow(LpcAnimationState.Walk, direction)).toBe(11);
+  });
+
+  it('defaults to DOWN idle when velocity returns to zero', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    const eid = addEntity(world);
+
+    // Start moving
+    setVelocity(world, eid, { x: -3, y: 0 });
+    let direction = velocityToDirection(Velocity.x[eid] ?? 0, Velocity.y[eid] ?? 0);
+    expect(direction).toBe(LpcDirection.Left);
+
+    // Stop
+    setVelocity(world, eid, { x: 0, y: 0 });
+    direction = velocityToDirection(Velocity.x[eid] ?? 0, Velocity.y[eid] ?? 0);
+    expect(direction).toBe(LpcDirection.Down);
+  });
+});
+
+// === animateEntitySystem — bitECS integration ===
+
+describe('C-039 Animation Controller — animateEntitySystem (bitECS Integration)', () => {
+  beforeEach(() => {
+    resetAnimationTracking();
+  });
+
+  it('assigns a frame index to entities with both Velocity and Appearance', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    registerAppearanceObservers(world);
+
+    const eid = addEntity(world);
+    setAppearance(world, eid, { layer0: 1 });
+    setVelocity(world, eid, { x: 0, y: -150 }); // Moving up
+
+    animateEntitySystem(world);
+
+    const frameIndex = getEntityAnimationFrame(eid);
+    expect(frameIndex).toBeGreaterThanOrEqual(0);
+    // WALK_UP, tick 0 → col 0, row 8 → 104
+    // But tick counter is per-entity and advances each call
+    // First call: rawTicks = 1, effective = floor(1/8) = 0, frame = 104
+    expect(frameIndex).toBe(104);
+  });
+
+  it('advances tick counter across multiple calls', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    registerAppearanceObservers(world);
+
+    const eid = addEntity(world);
+    setAppearance(world, eid, { layer0: 1 });
+    setVelocity(world, eid, { x: 3, y: 0 }); // Moving right
+
+    // Call 1: tick 0→1, effective 0, frame col 0
+    animateEntitySystem(world);
+    expect(getEntityAnimationFrame(eid)).toBe(11 * 13 + 0); // 143
+
+    // Call 2: tick 1→2, effective 0 (still same frame, divisor=8)
+    animateEntitySystem(world);
+    expect(getEntityAnimationFrame(eid)).toBe(11 * 13 + 0);
+
+    // Call 9 (8 more calls): tick reaches 9→10, effective 1
+    for (let i = 0; i < 7; i++) {
+      animateEntitySystem(world);
+    }
+    // After 8 total calls: rawTicks = 8, effective = 1, col 1
+    expect(getEntityAnimationFrame(eid)).toBe(11 * 13 + 1); // 144
+  });
+
+  it('returns -1 for entities without Animation components', () => {
+    const world = createWorld();
+    const eid = addEntity(world);
+    // No Velocity or Appearance — not matched by query
+
+    animateEntitySystem(world);
+
+    expect(getEntityAnimationFrame(eid)).toBe(-1);
+  });
+
+  it('handles empty world without error', () => {
+    const world = createWorld();
+    expect(() => {
+      animateEntitySystem(world);
+    }).not.toThrow();
+  });
+
+  it('handles entity with Appearance but no Velocity (not animated)', () => {
+    const world = createWorld();
+    registerAppearanceObservers(world);
+
+    const eid = addEntity(world);
+    setAppearance(world, eid, { layer0: 1 });
+    // No Velocity component — not matched by query
+
+    animateEntitySystem(world);
+
+    expect(getEntityAnimationFrame(eid)).toBe(-1);
+  });
+
+  it('computes correct direction from active velocity', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    registerAppearanceObservers(world);
+
+    const eidUp = addEntity(world);
+    setAppearance(world, eidUp, { layer0: 1 });
+    setVelocity(world, eidUp, { x: 0, y: -150 });
+
+    const eidDown = addEntity(world);
+    setAppearance(world, eidDown, { layer0: 2 });
+    setVelocity(world, eidDown, { x: 0, y: 150 });
+
+    const eidLeft = addEntity(world);
+    setAppearance(world, eidLeft, { layer0: 3 });
+    setVelocity(world, eidLeft, { x: -150, y: 0 });
+
+    const eidRight = addEntity(world);
+    setAppearance(world, eidRight, { layer0: 4 });
+    setVelocity(world, eidRight, { x: 150, y: 0 });
+
+    animateEntitySystem(world);
+
+    // UP: row 8, col 0 → 104
+    expect(getEntityAnimationFrame(eidUp)).toBe(8 * 13 + 0);
+    // DOWN: row 10, col 0 → 130
+    expect(getEntityAnimationFrame(eidDown)).toBe(10 * 13 + 0);
+    // LEFT: row 9, col 0 → 117
+    expect(getEntityAnimationFrame(eidLeft)).toBe(9 * 13 + 0);
+    // RIGHT: row 11, col 0 → 143
+    expect(getEntityAnimationFrame(eidRight)).toBe(11 * 13 + 0);
+  });
+
+  it('handles entities that lose Appearance component between frames', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    registerAppearanceObservers(world);
+
+    const eid = addEntity(world);
+    setAppearance(world, eid, { layer0: 1 });
+    setVelocity(world, eid, { x: 0, y: -50 });
+
+    // Frame 1: active
+    animateEntitySystem(world);
+    expect(getEntityAnimationFrame(eid)).toBeGreaterThanOrEqual(0);
+
+    // Remove Appearance — now has only Velocity, not matched by query
+    removeComponent(world, eid, Appearance);
+
+    // Frame 2: should not crash, and previous frame index persists
+    // (cleaned up by resetAnimationTracking at teardown)
+    expect(() => {
+      animateEntitySystem(world);
+    }).not.toThrow();
+
+    // Frame index from previous frame still accessible until reset
+    expect(getEntityAnimationFrame(eid)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('resetAnimationTracking clears all per-entity state', () => {
+    const world = createWorld();
+    registerVelocityObservers(world);
+    registerAppearanceObservers(world);
+
+    const eid = addEntity(world);
+    setAppearance(world, eid, { layer0: 1 });
+    setVelocity(world, eid, { x: 0, y: -150 });
+
+    animateEntitySystem(world);
+    expect(getEntityAnimationFrame(eid)).toBeGreaterThanOrEqual(0);
+
+    resetAnimationTracking();
+
+    expect(getEntityAnimationFrame(eid)).toBe(-1);
   });
 });

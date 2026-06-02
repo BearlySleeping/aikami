@@ -8,7 +8,13 @@ import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { SpriteData } from '../components/sprite.ts';
 import { Sprite } from '../components/sprite.ts';
+import { Velocity } from '../components/velocity.ts';
 import { COMPONENT_STRIDE } from '../config/memory_config.ts';
+import {
+  getLpcFrameIndex,
+  LpcAnimationState,
+  velocityToDirection,
+} from '../rendering/animation_controller.ts';
 import type { SpriteComposer } from '../rendering/sprite_composer.ts';
 import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
 
@@ -1100,11 +1106,121 @@ class LpcBatchManager {
   }
 }
 
+// ---------------------------------------------------------------------------
+// animateEntitySystem — velocity-driven LPC animation frame computation
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-entity monotonic animation tick counters.
+ *
+ * Each tick advances the animation clock by 1. The tick count feeds
+ * into `getLpcFrameIndex` to compute the current spritesheet frame.
+ */
+const _entityTickCounters = new Map<number, number>();
+
+/**
+ * Per-entity computed LPC frame index for the current frame.
+ *
+ * Written by `animateEntitySystem` and read by render code that
+ * needs to pass a `frameIndex` to `TextureManager.getFrameAt()`.
+ */
+const _entityFrameIndices = new Map<number, number>();
+
+/**
+ * Cached query terms — entities with Velocity + Appearance are animated.
+ */
+const ANIMATION_QUERY_TERMS = [Velocity, Appearance];
+
+/**
+ * Default WALK tick divisor.
+ *
+ * Divides the raw tick count to slow animation playback so sprites
+ * don't cycle through all 9 walk frames in 9 consecutive ticks
+ * (which would look like a blur at 60 fps).
+ *
+ * At 60 fps with divisor=8, the walk cycle completes in ~1.2 seconds
+ * (9 frames × 8 ticks / 60 fps).
+ */
+const ANIMATION_TICK_DIVISOR = 8;
+
+/**
+ * Advances the per-entity animation clock and computes the current
+ * LPC spritesheet frame index for all entities with Velocity and
+ * Appearance components.
+ *
+ * Runs every frame, right before uniform buffer flushes in the
+ * render pipeline. For each animated entity:
+ *
+ * 1. Reads velocity from the Velocity component (SoA arrays).
+ * 2. Derives `LpcDirection` from the velocity vector via
+ *    `velocityToDirection`.
+ * 3. Increments the entity's animation tick counter.
+ * 4. Computes the spritesheet frame index via `getLpcFrameIndex`
+ *    (WALK state, modulus-wrapped to stay within bounds).
+ * 5. Stores the frame index in `_entityFrameIndices` for render
+ *    code to consume.
+ *
+ * Entities with zero velocity still advance their tick counter but
+ * use `DOWN` as the default idle-facing direction — this produces
+ * a static idle pose on frame 0 of the walk cycle.
+ *
+ * @param world - The bitECS world.
+ */
+const animateEntitySystem = (world: World): void => {
+  if (!world) {
+    return;
+  }
+
+  const entities = query(world, ANIMATION_QUERY_TERMS);
+  for (const eid of entities) {
+    // Read velocity from SoA arrays (not getComponent — Velocity is SoA)
+    const vx = Velocity.x[eid] ?? 0;
+    const vy = Velocity.y[eid] ?? 0;
+
+    const direction = velocityToDirection(vx, vy);
+
+    // Advance tick counter
+    const rawTicks = (_entityTickCounters.get(eid) ?? 0) + 1;
+    _entityTickCounters.set(eid, rawTicks);
+
+    // Divide to slow animation playback
+    const effectiveTicks = Math.floor(rawTicks / ANIMATION_TICK_DIVISOR);
+
+    // Compute frame index for WALK state (default movement animation)
+    const frameIndex = getLpcFrameIndex(LpcAnimationState.Walk, direction, effectiveTicks);
+
+    _entityFrameIndices.set(eid, frameIndex);
+  }
+};
+
+/**
+ * Returns the computed LPC frame index for an entity.
+ *
+ * @param eid - The entity ID.
+ * @returns The frame index, or -1 if not animated.
+ */
+const getEntityAnimationFrame = (eid: number): number => {
+  return _entityFrameIndices.get(eid) ?? -1;
+};
+
+/**
+ * Clears all per-entity animation tracking state.
+ *
+ * Call during world teardown to prevent stale entity references.
+ */
+const resetAnimationTracking = (): void => {
+  _entityTickCounters.clear();
+  _entityFrameIndices.clear();
+};
+
 export {
+  animateEntitySystem,
   dirtyCheckAppearance,
+  getEntityAnimationFrame,
   hasAppearanceChanged,
   invalidateComposedSprite,
   LpcBatchManager,
+  resetAnimationTracking,
   resetAppearanceTracking,
   syncAppearanceSystem,
   updateEntityUbo,
