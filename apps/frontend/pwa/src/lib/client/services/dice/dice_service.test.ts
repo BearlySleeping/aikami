@@ -1,20 +1,18 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// biome-ignore lint/suspicious/noExplicitAny: Svelte mock
-(globalThis as any).$state = (val: any) => val;
-// biome-ignore lint/suspicious/noExplicitAny: Svelte mock
-(globalThis as any).$derived = (val: any) => val;
+(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$state = (val) => val;
+(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$derived = (val) => val;
 
 mock.module('@aikami/frontend/services', () => {
   return {
-    // biome-ignore lint/style/useNamingConvention: class name as property key
     BaseFrontendClass: class BaseFrontendClass {},
   };
 });
 
+import type { DiceServiceInterface } from './dice_service.svelte.ts';
+
 describe('DiceService', () => {
-  // biome-ignore lint/suspicious/noExplicitAny: service mock
-  let diceService: any;
+  let diceService: DiceServiceInterface;
 
   beforeEach(async () => {
     const mod = await import('./dice_service.svelte.ts');

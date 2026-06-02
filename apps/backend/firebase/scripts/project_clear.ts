@@ -1,4 +1,6 @@
-import { getAuth, getBucket, getProjectId } from '@aikami/backend/configs';
+import { getAuth } from '@aikami/backend/configs/auth';
+import { getBucket } from '@aikami/backend/configs/bucket';
+import { getProjectId } from '@aikami/backend/configs/environment';
 // @ts-expect-error
 import firebase from 'firebase-tools';
 

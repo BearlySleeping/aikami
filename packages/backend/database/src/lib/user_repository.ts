@@ -1,5 +1,5 @@
 // packages/backend/database/src/lib/user-repository.ts
-import type { BaseDatabaseService, QueryOptions } from './base-database-service';
+import type { BaseDatabaseService, QueryOptions } from './base_database_service.ts';
 
 // ---------------------------------------------------------------------------
 // Domain types

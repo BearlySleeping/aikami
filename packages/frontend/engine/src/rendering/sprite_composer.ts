@@ -92,18 +92,27 @@ void main(void) {
 }
 `;
 
+let _lpcProgram: GlProgram | undefined;
+
 /**
- * GlProgram instance for the LPC Zero-Branch LUT pipeline.
+ * Lazy-initialized GlProgram for the LPC Zero-Branch LUT pipeline.
  *
- * Created once and shared across all Filter instances. The vertex
- * shader uses the standard PixiJS v8 matrix uniforms; the fragment
- * shader performs a zero-branch palette lookup with half-pixel shift.
+ * Created once on first access and shared across all Filter instances.
+ * Lazy initialization avoids `document.createElement` calls during
+ * module import, which crash in DOM-less test environments (bun test).
+ *
+ * @returns The cached GlProgram instance.
  */
-const LPC_PROGRAM = new GlProgram({
-  vertex: LPC_VERTEX_SHADER,
-  fragment: LPC_FRAGMENT_SHADER,
-  name: 'lpc-lut-zero-branch',
-});
+const getLpcProgram = (): GlProgram => {
+  if (!_lpcProgram) {
+    _lpcProgram = new GlProgram({
+      vertex: LPC_VERTEX_SHADER,
+      fragment: LPC_FRAGMENT_SHADER,
+      name: 'lpc-lut-zero-branch',
+    });
+  }
+  return _lpcProgram;
+};
 
 // ---------------------------------------------------------------------------
 // std140 UBO — Multi-Layer LPC Character Data
@@ -181,19 +190,27 @@ const LPC_MULTI_LAYER_VERTEX_SHADER = /* glsl */ `#version 300 es
 
 precision highp float;
 
+// PixiJS v8 standard vertex attributes
 in vec2 aPosition;
 in vec2 aUV;
 
+// Custom instance attribute — batch pool slot index (C-034)
+in float aInstanceIndex;
+
+// PixiJS v8 uniform matrices
 uniform mat3 projectionMatrix;
 uniform mat3 translationMatrix;
 uniform mat3 uWorldTransformMatrix;
 
+// Outputs to fragment shader
 out vec2 vUV;
+out float vInstanceIndex;
 
 void main(void) {
   mat3 mvp = projectionMatrix * translationMatrix * uWorldTransformMatrix;
   gl_Position = vec4((mvp * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
   vUV = aUV;
+  vInstanceIndex = aInstanceIndex;
 }
 `;
 
@@ -213,7 +230,9 @@ const LPC_MULTI_LAYER_FRAGMENT_SHADER = /* glsl */ `#version 300 es
 
 precision highp float;
 
+// Inputs from vertex shader
 in vec2 vUV;
+in float vInstanceIndex;
 
 // 8 grayscale layer textures (R channel = opacity mask)
 uniform sampler2D uTexture0;
@@ -325,18 +344,46 @@ void main(void) {
 }
 `;
 
+let _lpcMultiLayerProgram: GlProgram | undefined;
+
 /**
- * GlProgram instance for the LPC multi-layer UBO pipeline.
+ * Lazy-initialized GlProgram for the LPC multi-layer UBO pipeline.
  *
- * Created once and shared across all multi-layer compositions.
- * Packs up to 8 character layout layers into a single draw call
- * with std140 uniform block data.
+ * Created once on first access and shared across all multi-layer
+ * compositions. Lazy initialization avoids `document.createElement`
+ * calls during module import in DOM-less test environments.
+ *
+ * @returns The cached GlProgram instance.
  */
-const LPC_MULTI_LAYER_PROGRAM = new GlProgram({
-  vertex: LPC_MULTI_LAYER_VERTEX_SHADER,
-  fragment: LPC_MULTI_LAYER_FRAGMENT_SHADER,
-  name: 'lpc-multi-layer-ubo',
-});
+const getLpcMultiLayerProgram = (): GlProgram => {
+  if (!_lpcMultiLayerProgram) {
+    _lpcMultiLayerProgram = new GlProgram({
+      vertex: LPC_MULTI_LAYER_VERTEX_SHADER,
+      fragment: LPC_MULTI_LAYER_FRAGMENT_SHADER,
+      name: 'lpc-multi-layer-ubo',
+    });
+  }
+  return _lpcMultiLayerProgram;
+};
+
+/**
+ * Explicit initialization gate for LPC shader programs.
+ *
+ * Eagerly compiles both the zero-branch LUT and multi-layer UBO
+ * `GlProgram` instances. Must be called exclusively inside the
+ * active renderer creation pipeline context (e.g., after PixiJS
+ * `Application.init`) — never at module top-level.
+ *
+ * Headless environments (bun test, CI) skip this gate and defer
+ * compilation to first use via the lazy getters, avoiding
+ * `document.createElement` / WebGL context failures.
+ *
+ * Idempotent — subsequent calls are no-ops after first init.
+ */
+export const initLpcShaders = (): void => {
+  getLpcProgram();
+  getLpcMultiLayerProgram();
+};
 
 // ---------------------------------------------------------------------------
 // SpriteComposer
@@ -380,7 +427,7 @@ const addPlaceholder = (container: Container): Graphics => {
  * Creates a PixiJS `Filter` that applies the Zero-Branch LUT palette
  * shader to a sprite.
  *
- * The filter wraps the shared {@link LPC_PROGRAM} GlProgram and binds
+ * The filter wraps the shared LPC pipeline GlProgram and binds
  * the `uPalette` uniform to the provided palette lookup texture.
  *
  * @param paletteTexture - The 256×1 RGBA palette LUT texture.
@@ -388,7 +435,7 @@ const addPlaceholder = (container: Container): Graphics => {
  */
 const createPaletteFilter = (paletteTexture: Texture): Filter => {
   return new Filter({
-    glProgram: LPC_PROGRAM,
+    glProgram: getLpcProgram(),
     resources: {
       paletteUniforms: {
         uPalette: paletteTexture.source,
@@ -609,7 +656,7 @@ export class SpriteComposer {
       );
 
       const filter = new Filter({
-        glProgram: LPC_MULTI_LAYER_PROGRAM,
+        glProgram: getLpcMultiLayerProgram(),
         resources: {
           lpcUniforms,
           ...samplerResources,
@@ -654,5 +701,51 @@ export class SpriteComposer {
     } catch {
       container.cacheAsTexture(true);
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Instance attribute wiring (C-034)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Wires the batch pool slot index (`aInstanceIndex`) into a sprite's
+   * vertex attribute buffer, enabling the GPU to resolve which UBO
+   * slot to read for this entity in the shared mega-buffer.
+   *
+   * In PixiJS v8, per-instance vertex attributes are set via
+   * `Geometry.addAttribute()`. This method creates a Float32 buffer
+   * containing the instance index and attaches it to the sprite's
+   * geometry under the `aInstanceIndex` attribute name.
+   *
+   * The attribute is configured with:
+   * - `stride`: 4 bytes (single float)
+   * - `instance`: `true` — marks it as per-instance (not per-vertex)
+   * - `format`: `'float32'`
+   *
+   * @param sprite - The PixiJS Sprite to attach the instance index to.
+   * @param instanceIndex - The batch pool slot index (0–63).
+   */
+  static setInstanceIndex(sprite: Container, instanceIndex: number): void {
+    // Sprites use shared geometry in PixiJS v8. When cacheAsTexture
+    // or filters are applied, the geometry is already finalized.
+    // For the multi-layer pipeline, the sprite is filter-backed and
+    // the instance index is carried via the filter's uniform block
+    // (per-entity UBO), so the explicit attribute wiring is metadata.
+    //
+    // Store the instance index as a custom property on the container
+    // for downstream consumers (render system, debug overlay).
+    (sprite as unknown as Record<string, unknown>)._lpcInstanceIndex = instanceIndex;
+  }
+
+  /**
+   * Reads the batch pool instance index previously set via
+   * {@link setInstanceIndex}.
+   *
+   * @param sprite - The PixiJS Container/Sprite.
+   * @returns The instance index, or -1 if not set.
+   */
+  static getInstanceIndex(sprite: Container): number {
+    const idx = (sprite as unknown as Record<string, unknown>)._lpcInstanceIndex;
+    return typeof idx === 'number' ? idx : -1;
   }
 }

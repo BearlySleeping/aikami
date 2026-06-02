@@ -19,7 +19,7 @@ export type TimerInterface = {
    */
   getTimeInMS(): bigint;
 };
-export abstract class Timer implements TimerInterface {
+export class Timer implements TimerInterface {
   private readonly _start: number; // Changed from bigint to number
 
   constructor() {

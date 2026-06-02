@@ -1,32 +1,70 @@
 // packages/shared/types/src/lib/endpoints/chat.ts
-// TODO: merge with ai.ts
 
-/**
- * A single chat message in a conversation.
- */
-export type ChatMessage = {
-  role: 'user' | 'assistant';
-  content: string;
+/** A single chat message in the character creation DM conversation. */
+export type CharacterCreationMessage = {
+  role: 'dm' | 'user' | 'system';
+  text: string;
+};
+
+/** AI-generated character sheet. */
+export type CharacterSheet = {
+  name: string;
+  race: string;
+  class: string;
+  level: number;
+  abilityScores: {
+    strength: number;
+    dexterity: number;
+    constitution: number;
+    intelligence: number;
+    wisdom: number;
+    charisma: number;
+  };
+  appearanceDescription: string;
+  background: string;
+  alignment: string;
+  personalityTraits: string;
+  ideals: string;
+  bonds: string;
+  flaws: string;
+};
+
+/** A single message in the NPC dialogue conversation. */
+export type DialogueMessage = {
+  role: 'npc' | 'player' | 'system';
+  text: string;
 };
 
 /**
  * Chat API event types.
+ *
+ * Each entry maps an event name to a `[Request, Response]` tuple.
  */
 export type ChatApiEvents = {
-  sendMessage: [
+  promptCharacterCreation: [
     {
-      /** The conversation / agent id. */
-      agentId: string;
-      /** Messages sent so far (for context). */
-      messages: { role: 'user' | 'assistant'; content: string }[];
-      /** The new user message. */
-      content: string;
+      messages: CharacterCreationMessage[];
+      userMessage: string;
+      phase: string;
     },
     {
-      /** The AI response content. */
-      response: string;
-      /** Unique request id for tracing. */
-      requestId: string;
+      reply: string;
+      complete: boolean;
+      characterJson?: Record<string, unknown>;
+    },
+  ];
+  promptNpcDialogue: [
+    {
+      npcId: string;
+      personaId: string;
+      npcName: string;
+      playerData: Record<string, unknown>;
+      relationshipValue: number;
+      messageHistory: DialogueMessage[];
+    },
+    {
+      reply: string;
+      relationshipDelta: number;
     },
   ];
 };

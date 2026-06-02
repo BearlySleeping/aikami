@@ -5,7 +5,7 @@ description: >-
   abstraction, service layer, controller structure. For Cloud Function specifics
   (firestack, deployment) also load `firebase-functions`.
   Builds on `aikami-conventions` (foundational skill — loaded first).
-version: 2.0.0
+version: 3.0.0
 tags: ["backend", "database", "repository", "services"]
 ---
 
@@ -248,13 +248,156 @@ export default onCreated<UserData>(({ data }) => {
 - **Validated wrappers preferred** — use `onCall`, `onCreated` etc.
   (see `firebase-functions` skill for details)
 
-## 6. Error Handling & Logging
+## 6. Creating New Endpoints (Callable / Request)
+
+When adding a new Cloud Function endpoint, first check whether the new logic can
+live inside an **existing** backend package and endpoint. If the feature shares
+dependencies and domain logic with an existing endpoint, bundle them together —
+this saves cold starts and keeps the surface area small. If the feature has
+heavy dependencies or logic that is completely unrelated to any existing
+endpoint, create a new one.
+
+### Decision Flow
+
+```
+New feature needed
+   │
+   ├─ Same domain + deps as existing \[backend/ai, backend/auth, backend/chat]?
+   │     → Add new event to that package's ChatApiEvents / AIApiEvents / etc.
+   │     → Add new handler in that package's api_handler.ts
+   │
+   └─ New domain OR unique heavy dependencies?
+         → Create new packages/backend/<name>/ package
+         → Create new endpoint entry in CallableFunctions or RequestFunctions
+         → Register in .moon/workspace.yml
+```
+
+### Callable Endpoint Workflow
+
+1. **Create endpoint types** in `packages/shared/types/src/lib/endpoints/<name>.ts`:
+
+   ```typescript
+   // packages/shared/types/src/lib/endpoints/chat.ts
+   export type ChatApiEvents = {
+     myNewAction: [
+       { input: string },
+       { output: string },
+     ];
+   };
+
+   export type ChatMessageType = keyof ChatApiEvents;
+   export type ChatMessageData<T extends ChatMessageType = ChatMessageType> = {
+     payload: ChatMessagePayload<T>;
+     type: T;
+   };
+   export type ChatMessagePayload<T extends ChatMessageType = ChatMessageType> = ChatApiEvents[T][0];
+   export type ChatMessageResponse<T extends ChatMessageType = ChatMessageType> = ChatApiEvents[T][1];
+   ```
+
+2. **Register in `callable_functions.ts`**:
+
+   ```typescript
+   // packages/shared/types/src/lib/endpoints/callable_functions.ts
+   import type { ChatMessageData, ChatMessageResponse } from './chat.ts';
+
+   export type CallableFunctions = {
+     chat: [ChatMessageData, ChatMessageResponse];
+   };
+   ```
+
+   🔴 The key name (`chat`, `auth`, `ai`) **must match the file name** of the
+   controller in `apps/backend/firebase/src/controllers/callable/<name>.ts`.
+   snake_case only.
+
+3. **Create the backend package** at `packages/backend/<name>/`:\
+   Follow the pattern in `packages/backend/chat/` or `packages/backend/auth/`:
+
+   - `moon.yml` — project config, depends on types, utils, logger, etc.
+   - `package.json` — `"name": "@aikami/backend-<name>"`, workspace deps
+   - `tsconfig.json` — extends `tsconfig.backend.json`, `rootDir: "../../.."`,
+     paths for all workspace deps
+   - `src/index.ts` — exports `handle<Name>Endpoint`
+   - `src/lib/api_handler.ts` — handlers using `createApiHandler` pattern
+
+   Register in `.moon/workspace.yml`:
+
+   ```yaml
+   backend-<name>: "packages/backend/<name>"
+   ```
+
+   Add to `apps/backend/firebase/moon.yml` dependsOn:
+
+   ```yaml
+   dependsOn:
+     - 'backend-<name>'
+   ```
+
+4. **Create the controller** at `apps/backend/firebase/src/controllers/callable/<name>.ts`:
+
+   ```typescript
+   // apps/backend/firebase/src/controllers/callable/chat.ts
+   import { handleChatEndpoint } from '@aikami/backend/chat';
+   import type { CallableFunctions } from '@aikami/types';
+   import { toAppError } from '@aikami/utils';
+   import { onCall } from '@snorreks/firestack';
+   import { logger } from '$logger';
+
+   export default onCall<CallableFunctions, 'chat'>(
+     async (request) => {
+       const data = request.data;
+       if (!data || typeof data.type !== 'string') {
+         logger.warn('callable/chat: invalid request — missing type');
+         throw toAppError({
+           errorType: 'invalid-argument',
+           errorMessage: 'Missing or invalid type field',
+         });
+       }
+
+       logger.debug('callable/chat', { type: data.type });
+
+       return await handleChatEndpoint({
+         payload: data.payload,
+         type: data.type,
+       });
+     },
+     { region: 'europe-west1', memory: '256MiB', timeoutSeconds: 120 },
+   );
+   ```
+
+### Request Endpoint (HTTP) Workflow
+
+Same pattern but uses `RequestFunctions` and `onRequest` instead:
+
+- Types: `packages/shared/types/src/lib/endpoints/request_functions.ts`
+- Controllers: `apps/backend/firebase/src/controllers/api/<name>.ts`
+- Use clean destructuring from request body:
+
+  ```typescript
+  export default onRequest<RequestFunctions, 'ai'>(
+    async (request, response) => {
+      try {
+        const { body } = request;
+        const { type, payload } = body;
+        logger.debug('api/prompt_ai', { type });
+        const result = await handleAIEndpoint({ payload, type });
+        response.send(result);
+      } catch (error) {
+        logger.error('api/prompt_ai: error', error);
+        const res = response as { status: (code: number) => { send: (body: unknown) => void } };
+        res.status(500).send({ error: String(error) });
+      }
+    },
+    { region: 'europe-west1' },
+  );
+  ```
+
+## 7. Error Handling & Logging
 
 See `aikami-conventions` for error handling (`toAppError`) and logging
 (`$logger` alias). In Cloud Functions, the logger is auto-imported via
 `includeFilePath` in `firestack.config.ts`.
 
-## 7. Testing
+## 8. Testing
 
 Backend packages and functions use `bun:test`:
 
@@ -284,7 +427,7 @@ describe("UserRepository", () => {
 - Mock `BaseDatabaseService` — never mock Firestore SDK directly
 - Test files: `*.test.ts`
 
-## 8. Related Skills
+## 9. Related Skills
 
 | Skill | Covers |
 |-------|--------|

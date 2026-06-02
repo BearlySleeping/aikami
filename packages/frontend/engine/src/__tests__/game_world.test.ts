@@ -35,11 +35,9 @@ const createTestWorld = (): World => {
 
 describe('GameWorld — entity creation', () => {
   let world: World;
-  let _bridge: EngineBridge;
 
   beforeEach(() => {
     world = createTestWorld();
-    _bridge = new MockEngineBridge();
   });
 
   it('createPlayer() adds an entity with Position, Velocity, and Sprite', () => {

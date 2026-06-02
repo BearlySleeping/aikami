@@ -1,5 +1,6 @@
-// apps/frontend/game/src/engine/pixi_app.ts
+// packages/frontend/engine/src/pixi_app.ts
 import { Application } from 'pixi.js';
+import { initLpcShaders } from './rendering/sprite_composer.ts';
 
 // ---------------------------------------------------------------------------
 // PixiJS v8 Application wrapper
@@ -38,6 +39,15 @@ export type PixiAppOptions = {
  * directly — centralizing the initialization logic and making canvas mock
  * substitution easier in tests.
  *
+ * **Pipeline initialization hook**: After the PixiJS renderer context is
+ * live, {@link initLpcShaders} compiles the LPC GLSL shader programs.
+ * This gate ensures headless import paths (bun test, CI) never execute
+ * `GlProgram` / `GpuProgram` constructors at module top-level, where no
+ * WebGL context exists. {@link LpcBatchManager} instances attach their
+ * structural view dependencies (UBO buffers, uniform groups) exclusively
+ * inside the application target viewport container tree — never at
+ * module scope.
+ *
  * @returns A fully initialized PixiJS Application ready for use with ticker
  *   and stage operations.
  */
@@ -63,6 +73,11 @@ const createPixiApp = async (options: PixiAppOptions): Promise<Application> => {
     // PixiJS v8 auto-detects WebGPU first, falls back to WebGL
     preference: 'webgpu',
   });
+
+  // Pipeline gate: compile LPC shaders now that the renderer context
+  // is live. Headless environments skip this path — compilation is
+  // deferred to first use via lazy getters.
+  initLpcShaders();
 
   return app;
 };

@@ -24,7 +24,6 @@ export type BaseMetaTags = {
   searchURL?: string;
 };
 
-/** biome-ignore-all lint/style/useNamingConvention: Open Graph meta tag property names */
 export type MetaTagArticleProperties = {
   modified_time: string;
   published_time: string;

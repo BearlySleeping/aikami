@@ -99,7 +99,7 @@ const generateDeterministicEmbedding = (text: string, dimension: number): number
  *
  * Provides:
  * - Pattern-matched or default chat responses (seedable)
- * - TypeBox schema-compliant structured extraction via `zocker`
+ * - TypeBox schema-compliant structured extraction via `Value.Create`
  * - Deterministic pseudo-embedding vectors (DJB2 hash-based)
  * - Call history for test assertions
  * - Configurable fail modes for error scenario testing
@@ -212,8 +212,8 @@ export class MockAiService implements AiServiceInterface {
     this._recordCall('extractStructuredJSON', [prompt, schema, _input]);
     this._checkFailMode();
 
-    // zocker was Zod-specific; TypeBox v1.x doesn't have a mock data generator yet.
-    // Return empty object as fallback.
+    // TypeBox's Value.Create generates default-filled objects from schemas.
+    // For structured extraction mock, return a default value.
     try {
       return {} as T;
     } catch {

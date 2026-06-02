@@ -1,0 +1,37 @@
+# packages/backend/chat/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'chat'
+  - 'backend'
+  - 'library'
+
+project:
+  name: 'backend-chat'
+  description: 'Chat domain handlers for character creation and NPC dialogue.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+  - 'logger'
+  - 'utils'
+  - 'backend-ai'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+
+tasks:
+  test:
+    command: 'bun test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'

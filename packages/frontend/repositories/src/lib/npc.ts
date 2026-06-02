@@ -1,4 +1,4 @@
-import { NpcSchema } from '@aikami/schemas';
+import { NpcCreateSchema, NpcSchema, NpcUpdateSchema } from '@aikami/schemas';
 import type { RepositoryType } from '@aikami/types';
 import { getNpcDocumentPath, getNpcsCollectionPath } from '@aikami/utils';
 import {
@@ -8,8 +8,8 @@ import {
 
 export type NpcRepositoryType = RepositoryType<
   typeof NpcSchema,
-  never,
-  never,
+  typeof NpcCreateSchema,
+  typeof NpcUpdateSchema,
   undefined,
   { npcId: string }
 >;
@@ -18,9 +18,9 @@ export type NpcRepositoryInterface = FrontendRepositoryInterface<NpcRepositoryTy
 
 export const npcRepository: NpcRepositoryInterface = new FrontendRepository<NpcRepositoryType>({
   className: 'NpcRepository',
-  createSchema: undefined,
+  createSchema: NpcCreateSchema,
   getCollectionPath: getNpcsCollectionPath,
   getDocumentPath: getNpcDocumentPath,
   schema: NpcSchema,
-  updateSchema: undefined,
+  updateSchema: NpcUpdateSchema,
 });
