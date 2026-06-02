@@ -46,6 +46,8 @@ export { GameApiService } from './services/api_service.ts';
 
 // Rendering
 
+export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
+export { createPixiApp } from './pixi_app.ts';
 export type { PaletteSpriteOptions } from './rendering/sprite_composer.ts';
 export {
   initLpcShaders,

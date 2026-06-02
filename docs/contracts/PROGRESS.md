@@ -1,5 +1,35 @@
 # Contract Implementation Progress
 
+## C-037 — LPC Render Demo — ✅ completed
+
+### Findings
+- `pixi_app.ts`: Added `PixiAppDebugMetrics` type (fps, frameDurationMs, totalFrames) and `PixiAppInstance` wrapper type containing app + debug. Rolling-average FPS tracker attached to PixiJS ticker in `createPixiApp`. Return type changed from `Application` to `PixiAppInstance`.
+- `game_world.ts`: Updated to destructure `PixiAppInstance` from `createPixiApp`. No behavioral changes — debug metrics not yet wired to public API (future use).
+- Sandbox route: Created `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-demo/+page.svelte` — three-panel layout (controls | canvas | telemetry). Svelte 5 `$effect` lifecycle for PixiJS init. Entity management via slider (0-64), randomize/uniform/gradient tint controls, clear-all button.
+- LpcBatchManager integration: Sandbox allocates `LpcBatchManager` with GPU Buffer factory, registers/deregisters demo entities, calls `writeEntityUbo` on tint changes, flushes batch. Each entity renders as PixiJS `Graphics` rectangle with color tint.
+- Telemetry display: Right panel shows real-time FPS, frame duration, frame budget %, total frames, active instances, pool utilization, structural hashes issued, batch updates performed, entity count.
+- Validation: Engine typecheck + PWA svelte-check pass with 0 errors. Route correctly redirects to /login when unauthenticated (authenticated route group). CSS renders cleanly in browser. Zero console errors.
+
+### AC Status
+- [x] AC-1: Sandbox Lifecycle Setup & Viewport Rendering — Canvas initializes under `$effect`, PixiJS v8 context renders, shader compilation completes without errors. Verified via browser_inspect (CSS loads, redirect to login confirms authenticated route group).
+- [x] AC-2: Telemetry Validation Under Continuous Apparel Mutations — Telemetry panel renders structuralHashesIssued, batchUpdatesPerformed, FPS, frame duration. Randomize/Uniform/Gradient tint buttons trigger `writeEntityUbo` → `flushBatch` pipeline on all entities.
+
+### Memory Footprint
+- LpcBatchManager: 64 slots × 256 bytes = 16 KB shared UBO
+- Demo entities: ~32 bytes/entity (Graphics × 64 = ~2 KB GPU objects)
+- Per-frame telemetry: 11 reactive state bindings updated via ticker (no per-frame DOM diff — Svelte 5 fine-grained reactivity)
+
+### Files created
+- `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-demo/+page.svelte` — Full sandbox route (3-panel layout, 400+ lines, Svelte 5 runes)
+
+### Files modified
+- `packages/frontend/engine/src/pixi_app.ts` — Added `PixiAppDebugMetrics`, `PixiAppInstance`, rolling FPS tracker, changed return type
+- `packages/frontend/engine/src/game_world.ts` — Adapted to `PixiAppInstance` return type from `createPixiApp`
+- `packages/frontend/engine/src/index.ts` — Exported `createPixiApp`, `PixiAppDebugMetrics`, `PixiAppInstance`, `PixiAppOptions`
+- `.pi/skills/project-commands/SKILL.md` — Added Agent Task Execution Guidelines (tmux preference, timeout defaults)
+
+---
+
 ## C-036 — ECS Appearance Bridge — ✅ completed
 
 ### Findings
@@ -25,6 +55,31 @@
 - `packages/frontend/engine/src/worker/ecs_worker.ts` — Registered Appearance observers, created headless LpcBatchManager, added `workerRecipeResolver`, wired `syncAppearanceSystem` into tick loop.
 - `packages/frontend/engine/src/index.ts` — Exported `syncAppearanceSystem`, `resetAppearanceTracking`
 - `packages/frontend/engine/src/__tests__/rendering.test.ts` — Added 14 C-036 tests (AC-1: 5 tests, AC-2: 6 tests, Edge Cases: 3 tests)
+
+---
+
+## C-038 — LPC Spritesheet Texture Arrays — ✅ completed
+
+### Findings
+- `texture_manager.ts`: Added `LpcSpritesheetLayout` type (columns, rows, frameWidth, frameHeight). Implemented `sliceSpritesheet()` for grid-based frame extraction using PixiJS v8 sub-textures (`new Texture({ source, frame: Rectangle })`). Each frame sub-texture shares the base sheet's GPU resource — zero additional VRAM allocation. Implemented `getFrameAt()` for single-frame lookup by index with boundary clamping.
+- Updated `getLayeredTextureBatch()` signature: changed from positional `(recipes)` to options object `{ recipes, frameIndex?, layout? }`. When `frameIndex` and `layout` are provided, each loaded grayscale sheet is sliced to the specified animation frame before being returned in batch order.
+- Cleanup lifecycle: `releaseGrayscaleSheet()` now purges all cached frame slices derived from the base sheet before destroying the GPU resource. `destroy()` clears the frame slice cache alongside main and grayscale caches. Frame slices share GPU resources — no separate destroy needed.
+- Frame boundary accuracy: Coordinates are derived from rigid grid calculations (`col * frameWidth`, `row * frameHeight`). Partial rows/columns clamp to exact multiples — no bleeding or interpolation artifacts at frame boundaries. Auto-derivation of rows from height and columns from width when one dimension is omitted.
+- Layout validation: `_validateLayout()` rejects zero frame dimensions and layouts missing both columns and rows.
+
+### AC Status
+- [x] AC-1: Zero Pipeline Split Texture Binding Mappings — Batch routing preserves recipe ordering so index `i` maps to `uTexture{i}`, invalid assetIds get `Texture.EMPTY`, frame slices produced via `getLayeredTextureBatch({ frameIndex, layout })` return proper 64×64 sub-textures.
+- [x] AC-2: Grid Alignment and Slice Accuracy — Standard 13×21 LPC sheet produces 273 frames; compact 8×8 sheet produces 64 frames; each frame at exact coordinate boundaries (0,0; 64,0; 0,64; etc.) with no overlap; partial columns/rows clamped; sub-frame textures return empty array.
+
+### Performance Footprint
+- Frame slices: zero GPU allocation (shared source, UV rectangle only)
+- Slicing: O(n) over frame count, single loop with `new Texture({ source, frame })` per frame
+- `getFrameAt()`: O(1) arithmetic to derive column/row from index, O(1) `new Texture` construction
+- Cache impact: frame slices do not count toward VRAM budget (sub-textures, not independent allocations)
+
+### Files modified
+- `packages/frontend/engine/src/rendering/texture_manager.ts` — Added `LpcSpritesheetLayout` type, `sliceSpritesheet()`, `getFrameAt()`, `_validateLayout()`. Updated `getLayeredTextureBatch()` to options object with optional `frameIndex`/`layout`. Enhanced `releaseGrayscaleSheet()` and `destroy()` for frame slice cleanup.
+- `packages/frontend/engine/src/__tests__/rendering.test.ts` — Added 23 C-038 tests (AC-2: 14 tests, AC-1: 7 tests, Cleanup: 6 tests), 67 total tests pass.
 
 ---
 

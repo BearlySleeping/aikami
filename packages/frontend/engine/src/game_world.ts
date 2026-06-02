@@ -8,7 +8,7 @@ import {
   FALLBACK_BUFFER_COUNT,
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
-import type { PixiAppOptions } from './pixi_app.ts';
+import type { PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 import { createPixiApp } from './pixi_app.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
@@ -165,7 +165,8 @@ class GameWorld {
     }
 
     // ---- 1. Create PixiJS Application (main thread) -------------------
-    this.app = await createPixiApp({ canvas, width, height });
+    const pixiInstance: PixiAppInstance = await createPixiApp({ canvas, width, height });
+    this.app = pixiInstance.app;
 
     // ---- 2. Allocate shared memory buffers ----------------------------
     this.allocateBuffers();

@@ -13,6 +13,9 @@ const DEFAULT_HEIGHT = 600;
 /** Default background color (dark slate). */
 const DEFAULT_BACKGROUND = 0x1a1a2e;
 
+/** Rolling-average window size for FPS calculation (in frames). */
+const FPS_SAMPLE_WINDOW = 60;
+
 /**
  * Options for creating a PixiJS application.
  */
@@ -32,6 +35,45 @@ export type PixiAppOptions = {
 };
 
 /**
+ * Read-only debug metrics collected from the PixiJS application runtime.
+ *
+ * Updated every frame via the PixiJS ticker. Consumers read this snapshot
+ * to display real-time telemetry without touching internal engine state.
+ */
+export type PixiAppDebugMetrics = {
+  /** Rolling-average frames per second over the last {@link FPS_SAMPLE_WINDOW} frames. */
+  readonly fps: number;
+  /** Average frame duration in milliseconds over the last {@link FPS_SAMPLE_WINDOW} frames. */
+  readonly frameDurationMs: number;
+  /** Total frames rendered since initialization. */
+  readonly totalFrames: number;
+};
+
+/**
+ * A fully initialized PixiJS Application paired with a live debug
+ * metrics snapshot.
+ *
+ * Returned by {@link createPixiApp}. The `.debug` property is a
+ * plain object updated every frame — safe to read from any
+ * consumer (ViewModels, dev tooling, telemetry panels).
+ */
+export type PixiAppInstance = {
+  /** The PixiJS v8 Application instance. */
+  readonly app: Application;
+  /** Read-only debug metrics updated every frame. */
+  readonly debug: PixiAppDebugMetrics;
+};
+
+/**
+ * Internal mutable counters backing a {@link PixiAppDebugMetrics} view.
+ */
+type DebugCounters = {
+  fps: number;
+  frameDurationMs: number;
+  totalFrames: number;
+};
+
+/**
  * Creates and initializes a PixiJS v8 {@link Application} bound to the
  * given canvas element.
  *
@@ -48,10 +90,15 @@ export type PixiAppOptions = {
  * inside the application target viewport container tree — never at
  * module scope.
  *
- * @returns A fully initialized PixiJS Application ready for use with ticker
- *   and stage operations.
+ * **Debug metrics**: A rolling-average FPS counter is attached to the
+ * PixiJS ticker. The returned `debug` object is updated every frame and
+ * is safe to read from any context (ViewModels, dev tooling).
+ *
+ * @param options - Canvas and renderer configuration.
+ * @returns A fully initialized {@link PixiAppInstance} with the PixiJS
+ *   Application and live debug metrics.
  */
-const createPixiApp = async (options: PixiAppOptions): Promise<Application> => {
+const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> => {
   const {
     canvas,
     width = DEFAULT_WIDTH,
@@ -79,7 +126,36 @@ const createPixiApp = async (options: PixiAppOptions): Promise<Application> => {
   // deferred to first use via lazy getters.
   initLpcShaders();
 
-  return app;
+  // -- Debug metrics: rolling-average FPS via ticker -------------------
+  const counters: DebugCounters = {
+    fps: 0,
+    frameDurationMs: 0,
+    totalFrames: 0,
+  };
+
+  const frameDurations: number[] = [];
+  let lastTimestamp = performance.now();
+
+  app.ticker.add(() => {
+    const now = performance.now();
+    const delta = now - lastTimestamp;
+    lastTimestamp = now;
+
+    frameDurations.push(delta);
+    if (frameDurations.length > FPS_SAMPLE_WINDOW) {
+      frameDurations.shift();
+    }
+
+    const avgDuration = frameDurations.reduce((sum, d) => sum + d, 0) / frameDurations.length;
+
+    counters.frameDurationMs = Math.round(avgDuration * 100) / 100;
+    counters.fps = Math.round((1000 / avgDuration) * 100) / 100;
+    counters.totalFrames += 1;
+  });
+
+  const debug = counters as PixiAppDebugMetrics;
+
+  return { app, debug };
 };
 
 export { createPixiApp, DEFAULT_BACKGROUND, DEFAULT_HEIGHT, DEFAULT_WIDTH };
