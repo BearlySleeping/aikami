@@ -48,6 +48,13 @@ export { GameApiService } from './services/api_service.ts';
 
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
+export {
+  getLpcFrameIndex,
+  getLpcStateRow,
+  LpcAnimationState,
+  LpcDirection,
+  velocityToDirection,
+} from './rendering/animation_controller.ts';
 export type { PaletteSpriteOptions } from './rendering/sprite_composer.ts';
 export {
   initLpcShaders,
@@ -58,10 +65,13 @@ export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
+  animateEntitySystem,
   dirtyCheckAppearance,
+  getEntityAnimationFrame,
   hasAppearanceChanged,
   invalidateComposedSprite,
   LpcBatchManager,
+  resetAnimationTracking,
   resetAppearanceTracking,
   syncAppearanceSystem,
   updateEntityUbo,
