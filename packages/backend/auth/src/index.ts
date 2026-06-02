@@ -16,39 +16,35 @@ import { register } from './lib/register.ts';
 import { sendResetPassword } from './lib/send_reset_password.ts';
 import { updateEmail } from './lib/update_email.ts';
 
+type AssertUserFn = (value: UserClaims | undefined) => asserts value is UserClaims;
+
+export const assertAuthUser: AssertUserFn = (value) => {
+  if (!value) {
+    throw toAppError({ errorType: 'unauthorized', errorMessage: 'User not logged in' });
+  }
+};
+
 const apiHandler = createApiHandler<AuthApiEvents, UserClaims | undefined>({
   checkUniqueEmail,
   confirmTermsAndService,
   createCustomFirebaseSignInToken: (_payload, user) => {
-    if (!user) {
-      throw toAppError({
-        errorType: 'unauthorized',
-        errorMessage: 'User not logged in',
-      });
-    }
+    assertAuthUser(user);
+
     return createCustomFirebaseSignInToken({
       uid: user.id,
     });
   },
   deleteAccount: (_payload, user) => {
-    if (!user) {
-      throw toAppError({
-        errorType: 'unauthorized',
-        errorMessage: 'User not logged in',
-      });
-    }
+    assertAuthUser(user);
+
     return deleteAccount(user.id);
   },
 
   register,
   sendResetPassword,
   updateEmail: (payload, user) => {
-    if (!user) {
-      throw toAppError({
-        errorType: 'unauthorized',
-        errorMessage: 'User not logged in',
-      });
-    }
+    assertAuthUser(user);
+
     return updateEmail({
       ...payload,
       uid: user.id,

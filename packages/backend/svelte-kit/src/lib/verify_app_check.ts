@@ -8,7 +8,7 @@ export const verifyAppCheck = async (request: { headers: Headers }) => {
     // logger.log('verifyAppCheck:appCheckToken', appCheckToken);
     if (!appCheckToken) {
       throw toAppError({
-        errorType: 'captcha-required',
+        errorType: 'unauthenticated',
         errorMessage: 'Missing app check token',
       });
     }

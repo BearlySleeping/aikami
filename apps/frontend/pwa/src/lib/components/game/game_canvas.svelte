@@ -1,7 +1,5 @@
 <script lang="ts">
-  import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
   // apps/frontend/pwa/src/lib/components/game/game_canvas.svelte
-  import { onMount } from 'svelte';
 
   type Props = {
     /** Called when the canvas is mounted and ready for engine initialization. */
@@ -14,7 +12,7 @@
 
   let canvasElement: HTMLCanvasElement | undefined = $state();
 
-  onMount(() => {
+  $effect(() => {
     if (canvasElement) {
       void onReady(canvasElement);
     }

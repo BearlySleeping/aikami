@@ -18,7 +18,6 @@ export default defineConfig({
   },
   vite: {
     // see https://github.com/tailwindlabs/tailwindcss/issues/18802
-    // biome-ignore lint/suspicious/noExplicitAny: Tailwind plugin type mismatch
     plugins: [tailwindcss() as any],
     server: {
       fs: {

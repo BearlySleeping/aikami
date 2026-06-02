@@ -3,6 +3,7 @@
   "display": "Frontend Data Connect SDK",
   "extends": "../../../config/tsconfig/tsconfig.frontend.json",
   "compilerOptions": {
+    "types": ["bun-types"],
     "rootDir": "../..",
     "outDir": "dist",
     "paths": {

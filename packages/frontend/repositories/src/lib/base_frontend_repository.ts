@@ -7,7 +7,7 @@ import type {
   DocumentObservable,
   DocumentsListener,
   DocumentsObservable,
-  FieldValue,
+  FieldPath,
   GetQueryOptions,
   ParseLevel,
   PostSortDocuments,
@@ -73,7 +73,7 @@ export type FrontendRepositoryInterface<T extends RepositoryType> = {
     serverTimestamp: ServerTimestamp;
     arrayRemove: ServerArrayRemove;
     serverDelete: ServerDelete;
-    documentId: () => FieldValue;
+    documentId: () => FieldPath;
     // biome-ignore lint/style/useNamingConvention: Firebase class and method names
     Timestamp: typeof Timestamp;
   }>;
@@ -552,7 +552,8 @@ export class FrontendRepository<T extends RepositoryType>
       serverDelete: deleteField,
       serverIncrement: increment,
       serverTimestamp,
-      timestamp: FbTimestamp,
+      // biome-ignore lint/style/useNamingConvention: Firebase class and method names
+      Timestamp: FbTimestamp,
     };
   }
   async getQueryCount(query: Query): Promise<number> {

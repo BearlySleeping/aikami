@@ -102,7 +102,6 @@ export const gameE2eSuite: TestSuite = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // biome-ignore lint/style/useNamingConvention: HTTP header name
         Authorization: 'Bearer owner',
       },
       body: JSON.stringify({
@@ -117,7 +116,6 @@ export const gameE2eSuite: TestSuite = {
     }
 
     const listResp = await fetch(`${firestoreUrl}/test_ping/${docId}`, {
-      // biome-ignore lint/style/useNamingConvention: HTTP header name
       headers: { Authorization: 'Bearer owner' },
     });
     if (!listResp.ok) {
@@ -132,7 +130,6 @@ export const gameE2eSuite: TestSuite = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // biome-ignore lint/style/useNamingConvention: HTTP header name
         Authorization: 'Bearer owner',
       },
       body: JSON.stringify({ returnSecureToken: true }),

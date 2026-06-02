@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -127,13 +127,11 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.svelte", "**/*.astro"],
+      "includes": ["**/*.css"],
       "linter": {
         "rules": {
-          "a11y": {
-            "useButtonType": "off",
-            "noSvgWithoutTitle": "off",
-            "useAnchorContent": "off"
+          "suspicious": {
+            "noUnknownAtRules": "off"
           }
         }
       }
@@ -143,7 +141,8 @@
       "linter": {
         "rules": {
           "style": {
-            "useConsistentTypeDefinitions": "off"
+            "useConsistentTypeDefinitions": "off",
+            "useNamingConvention": "off"
           }
         }
       }
@@ -159,15 +158,33 @@
       }
     },
     {
-      "includes": [
-        "apps/frontend/landing_page/astro.config.ts",
-        "apps/frontend/docs/astro.config.js",
-        "apps/frontend/docs/src/content.config.js"
-      ],
+      "includes": ["**/astro.config.ts"],
       "linter": {
         "rules": {
           "suspicious": {
-            "noConsole": "off"
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.svelte", "**/*.astro"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useButtonType": "off",
+            "noSvgWithoutTitle": "off",
+            "useAnchorContent": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/tailwind.config.mjs"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
           }
         }
       }
@@ -175,18 +192,18 @@
     {
       "includes": [
         "apps/frontend/pwa/**",
-        "packages/shared/utils/**",
-        "packages/shared/constants/**",
-        "packages/frontend/utils/**"
+        "apps/frontend/game/tests/**",
+        "scripts/src/lib/test_blackbox/**",
+        "scripts/src/index.ts",
+        "scripts/src/lib/deploy/deployment_config.ts"
       ],
       "linter": {
         "rules": {
           "a11y": {
-            "useValidLang": "off",
-            "noSvgWithoutTitle": "off",
-            "useButtonType": "off"
+            "useValidLang": "off"
           },
           "style": {
+            "useNamingConvention": "off",
             "useFilenamingConvention": "off"
           }
         }

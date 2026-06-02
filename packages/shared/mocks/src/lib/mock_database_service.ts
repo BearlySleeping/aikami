@@ -115,8 +115,9 @@ export class MockDatabaseService implements BaseDatabaseService {
 
       results = results.filter((doc) => {
         const val = resolveNestedValue(doc as Record<string, unknown>, field);
+        const comparison = compareValues(val, cursorValue);
 
-        return direction === 'asc' ? val > cursorValue : val < cursorValue;
+        return direction === 'asc' ? comparison > 0 : comparison < 0;
       });
     }
 
@@ -339,6 +340,41 @@ const assertComparable = (a: unknown, b: unknown): void => {
   if (typeof b !== 'number' && typeof b !== 'string') {
     throw new TypeError(`Cannot compare value of type ${typeof b} with operator.`);
   }
+};
+
+/**
+ * Compare two values for cursor-based pagination.
+ *
+ * Returns negative if `a < b`, positive if `a > b`, 0 if equal.
+ * Handles string, number, and nullish values consistently.
+ */
+const compareValues = (a: unknown, b: unknown): number => {
+  if (a === b) {
+    return 0;
+  }
+
+  if (a === undefined || a === null) {
+    return 1;
+  }
+
+  if (b === undefined || b === null) {
+    return -1;
+  }
+
+  if (typeof a === 'string' && typeof b === 'string') {
+    if (a < b) {
+      return -1;
+    }
+    if (a > b) {
+      return 1;
+    }
+    return 0;
+  }
+
+  const numA = Number(a);
+  const numB = Number(b);
+
+  return numA - numB;
 };
 
 /**

@@ -31,6 +31,8 @@ export * from './lib/endpoints/auth.ts';
 export * from './lib/endpoints/callable_functions.ts';
 export * from './lib/endpoints/chat.ts';
 export * from './lib/endpoints/pwa_endpoints.ts';
+export * from './lib/endpoints/request_functions.ts';
+
 export * from './lib/error.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/helpers.ts';

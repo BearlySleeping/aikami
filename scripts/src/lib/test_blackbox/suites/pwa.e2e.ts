@@ -21,7 +21,6 @@ export const pwaSuite: TestSuite = {
         timeout: 120_000,
         env: {
           ...process.env,
-          // biome-ignore lint/style/useNamingConvention: env var name
           CI: process.env.CI || 'true', // Ensure non-interactive mode
         },
       });

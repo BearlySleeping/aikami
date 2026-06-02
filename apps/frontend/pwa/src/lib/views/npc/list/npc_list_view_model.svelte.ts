@@ -4,7 +4,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { NpcChatData, NpcCreateData, NpcData } from '@aikami/types';
+import type { ChatData, NpcCreateData, NpcData } from '@aikami/types';
 import { toAppError, toAppErrorFromUnknownError } from '@aikami/utils';
 import { authService, npcChatService, npcService, routerService } from '$services';
 
@@ -17,7 +17,7 @@ export type NpcListViewModelInterface = BaseViewModelInterface & {
   readonly systemNpcs: NpcData[];
   readonly userNpcs: NpcData[];
   readonly publicNpcs: NpcData[];
-  readonly userChats: NpcChatData[];
+  readonly userChats: ChatData[];
   readonly isLoading: boolean;
   readonly isImporting: boolean;
   readonly activeTab: NpcTab;
@@ -44,7 +44,7 @@ class NpcListViewModel
   systemNpcs = $state<NpcData[]>([]);
   userNpcs = $state<NpcData[]>([]);
   publicNpcs = $state<NpcData[]>([]);
-  userChats = $state<NpcChatData[]>([]);
+  userChats = $state<ChatData[]>([]);
   isLoading = $state<boolean>(false);
   isImporting = $state<boolean>(false);
   activeTab = $state<NpcTab>('all');

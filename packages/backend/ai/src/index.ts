@@ -1,5 +1,6 @@
 // packages/backend/ai/src/index.ts
 export type { AiServiceInterface } from './lib/ai_service_interface.ts';
+export { handleAIEndpoint } from './lib/api_handler.ts';
 export { BaseAiService } from './lib/base_ai_service.ts';
 export { CircuitBreaker } from './lib/circuit_breaker.ts';
 export { AiServiceError } from './lib/errors.ts';

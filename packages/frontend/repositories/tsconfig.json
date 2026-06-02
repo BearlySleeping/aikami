@@ -3,6 +3,7 @@
   "display": "Frontend Repositories",
   "extends": "../../../config/tsconfig/tsconfig.frontend.json",
   "compilerOptions": {
+    "types": ["bun-types"],
     "rootDir": "../..",
     "outDir": "dist",
     "paths": {

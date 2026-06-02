@@ -25,5 +25,11 @@
     ".svelte-kit/non-ambient.d.ts",
     ".svelte-kit/types/**/$types.d.ts"
   ],
-  "exclude": ["node_modules", ".svelte-kit", "build", "src/lib/paraglide/messages"]
+  "exclude": [
+    "node_modules",
+    ".svelte-kit",
+    "build",
+    "src/lib/paraglide/messages",
+    "src/**/*.test.ts"
+  ]
 }
