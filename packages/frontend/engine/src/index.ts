@@ -4,6 +4,9 @@
 // Public game engine exports
 // ---------------------------------------------------------------------------
 
+// Systems
+export { resetMovementTracking, updateMovement } from './systems/movement_system.ts';
+
 // ECS components
 
 export type { AppearanceData, LpcLayerRecipe } from './components/appearance.ts';
@@ -74,6 +77,8 @@ export {
   resetAnimationTracking,
   resetAppearanceTracking,
   syncAppearanceSystem,
+  toCellDisplayPosition,
+  toGridCellCenter,
   updateEntityUbo,
   updateRender,
   updateRenderFromBuffer,
