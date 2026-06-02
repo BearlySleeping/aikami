@@ -10,6 +10,12 @@ Libs:  constants, schemas, types, logger, utils, mocks, backend-*, frontend-*`
 export default function (pi: ExtensionAPI) {
   let workspaceSummary = FALLBACK_SUMMARY
 
+  /** Default timeout for short-running CLI commands (3 min). */
+  const DEFAULT_TIMEOUT = 180_000;
+
+  /** Extended timeout for heavy tasks like builds and integration tests (5 min). */
+  const HEAVY_TIMEOUT = 300_000;
+
   // ── Fetch workspace dynamically on session start ─────────────────────
   pi.on("session_start", async (_event, _ctx) => {
     try {
@@ -46,7 +52,7 @@ export default function (pi: ExtensionAPI) {
         "query",
         "projects",
         "--affected",
-      ], { signal })
+      ], { signal, timeout: DEFAULT_TIMEOUT })
       return {
         content: [{ type: "text", text: result.stdout || result.stderr }],
         details: { code: result.code },
@@ -76,7 +82,7 @@ export default function (pi: ExtensionAPI) {
         "moon",
         "run",
         params.target,
-      ], { signal })
+      ], { signal, timeout: DEFAULT_TIMEOUT })
       return {
         content: [{ type: "text", text: result.stdout || result.stderr }],
         details: { code: result.code },
@@ -98,7 +104,7 @@ export default function (pi: ExtensionAPI) {
         "moon",
         "query",
         "projects",
-      ], { signal })
+      ], { signal, timeout: DEFAULT_TIMEOUT })
       return {
         content: [{ type: "text", text: result.stdout || result.stderr }],
         details: { code: result.code },
@@ -138,7 +144,7 @@ export default function (pi: ExtensionAPI) {
         "query",
         "projects",
         "--affected",
-      ], { signal })
+      ], { signal, timeout: DEFAULT_TIMEOUT })
       let affectedProjects: string[] = []
       try {
         const parsed = JSON.parse(affectedResult.stdout || "{}")
@@ -156,14 +162,14 @@ export default function (pi: ExtensionAPI) {
 
       const projList = affectedProjects.join(", ")
       // 2. Run fix + typecheck via workspace-level --affected (moon handles parallelism)
-      const fixResult = await pi.exec("bun", ["moon", "run", ":fix", "--affected"], { signal })
+      const fixResult = await pi.exec("bun", ["moon", "run", ":fix", "--affected"], { signal, timeout: DEFAULT_TIMEOUT })
       if (fixResult.code !== 0) {
         errors.push(":fix failed (see output for details)")
       } else {
         ok.push(":fix")
       }
 
-      const tcResult = await pi.exec("bun", ["moon", "run", ":typecheck", "--affected"], { signal })
+      const tcResult = await pi.exec("bun", ["moon", "run", ":typecheck", "--affected"], { signal, timeout: DEFAULT_TIMEOUT })
       if (tcResult.code !== 0) {
         errors.push(":typecheck failed (see output for details)")
       } else {
@@ -172,14 +178,14 @@ export default function (pi: ExtensionAPI) {
 
       // 3. Build + test (optional, only if fix+typecheck passed)
       if (params.test && errors.length === 0) {
-        const buildResult = await pi.exec("bun", ["moon", "run", ":build", "--affected"], { signal })
+        const buildResult = await pi.exec("bun", ["moon", "run", ":build", "--affected"], { signal, timeout: HEAVY_TIMEOUT })
         if (buildResult.code !== 0) {
           errors.push(":build failed (see output for details)")
         } else {
           ok.push(":build")
         }
 
-        const testResult = await pi.exec("bun", ["moon", "run", ":test", "--affected"], { signal })
+        const testResult = await pi.exec("bun", ["moon", "run", ":test", "--affected"], { signal, timeout: HEAVY_TIMEOUT })
         if (testResult.code !== 0) {
           errors.push(":test failed (see output for details)")
         } else {
@@ -241,7 +247,7 @@ export default function (pi: ExtensionAPI) {
 
       _onUpdate?.({ content: [{ type: "text", text: `Running blackbox tests (${params.suites?.join(", ") || "all"})...` }] })
 
-      const result = await pi.exec("bun", args, { signal, timeout: 300000 }) // 5 min timeout
+      const result = await pi.exec("bun", args, { signal, timeout: HEAVY_TIMEOUT }) // 5 min timeout
 
       // Try to parse JSON report for structured output
       let parsedReport: any = null

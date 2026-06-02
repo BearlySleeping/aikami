@@ -29,6 +29,8 @@ const APP_SERVICE_TYPES: Record<string, string> = Object.fromEntries(
 const VALID_APPS = Object.keys(APP_SERVICE_TYPES)
 
 export default function (pi: ExtensionAPI) {
+  const DEFAULT_TIMEOUT = 180_000;  // 3 min
+
   pi.registerTool({
     name: "service_logs",
     label: "Logs: View Service Logs",
@@ -138,7 +140,7 @@ export default function (pi: ExtensionAPI) {
         if (params.only) args.push("--only", params.only)
         if (params.since) args.push("--since", params.since)
 
-        const result = await pi.exec("env", args, { signal })
+        const result = await pi.exec("env", args, { signal, timeout: DEFAULT_TIMEOUT })
         return {
           content: [{ type: "text", text: result.stdout || result.stderr }],
           details: { code: result.code, source: "firebase-functions", tail },
@@ -156,7 +158,7 @@ export default function (pi: ExtensionAPI) {
         if (params.only) args.push("--only", params.only)
         if (params.since) args.push("--since", params.since)
 
-        const result = await pi.exec("env", args, { signal })
+        const result = await pi.exec("env", args, { signal, timeout: DEFAULT_TIMEOUT })
         return {
           content: [{ type: "text", text: result.stdout || result.stderr }],
           details: { code: result.code, source: serviceType, tail },

@@ -11,6 +11,72 @@ description: Aikami monorepo commands reference — moon tasks, validation, depl
 
 ---
 
+## 🔴 Agent Task Execution Guidelines
+
+These rules govern how AI agents spawn commands for this project.
+
+### 1. Long-Running Processes → Tmux
+
+**Always prefer `bun run tmux:start <service>` for processes that stay alive**
+(dev servers, emulators, watchers). Never use `moon_run_task pwa:dev` or
+`moon_run_task game:dev` — these start foreground processes that block the
+agent indefinitely.
+
+```bash
+# ✅ CORRECT — background tmux session
+bun run tmux:start pwa          # PWA dev server in tmux
+bun run tmux:start all          # Full stack
+bun run tmux:start emulators    # Firebase emulators
+
+# ❌ WRONG — foreground dev server blocks agent
+bun moon run pwa:dev
+```
+
+After starting a tmux session, wait 3-5 seconds then use `browser_inspect` to
+verify the page is accessible.
+
+### 2. Finite Tasks → Set Timeout & Predict Duration
+
+For `moon_run_task` and `bash` commands that should complete within a finite
+time, **always provide a `timeout` value**. Default to **5 minutes (300s)**
+unless you have a concrete reason to expect a different duration.
+
+```bash
+# ✅ CORRECT — timeout provided
+bash("npm test 2>&1", timeout=300)
+moon_run_task("pwa:build", timeout=600)   # longer for build
+
+# ❌ WRONG — no timeout, may hang forever
+bash("npm test 2>&1")
+```
+
+| Task Type | Default Timeout | Notes |
+|-----------|----------------|--------|
+| Fix / Lint | 120s | Fast static analysis |
+| Typecheck | 180s | Slower but bounded |
+| Test (unit) | 300s | Default 5 minutes |
+| Build | 600s | Bundling can be slow |
+| Test (E2E) | 600s | Includes server startup |
+
+### 3. Tmux Session Lifecycle
+
+```bash
+# Check what's already running
+bun run tmux:status
+
+# Start (only if not already running)
+bun run tmux:start pwa
+bun run tmux:start all --force     # Kill + recreate
+
+# Join to inspect
+bun run tmux:join emulators
+
+# Cleanup when done
+bun run tmux:stop pwa
+```
+
+---
+
 ## Moon Project Configuration
 
 The monorepo has **inherited default tasks** in `.moon/tasks/all.yml` that every project gets automatically:
