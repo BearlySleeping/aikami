@@ -2,6 +2,7 @@
 /// <reference lib="webworker" />
 import type { World } from 'bitecs';
 import { addComponent, createWorld, getComponent, query, set } from 'bitecs';
+import { type LpcLayerRecipe, registerAppearanceObservers } from '../components/appearance.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
@@ -18,6 +19,7 @@ import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
+import { LpcBatchManager, syncAppearanceSystem } from '../systems/render_system.ts';
 import type { Direction, GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +55,16 @@ let spatialGrid: SpatialHashGrid | undefined;
 
 /** Pre-allocated position buffer for grid population. */
 let positionBuffer: Float32Array | undefined;
+
+/**
+ * Headless LPC batch manager for slot tracking and fingerprint evaluation.
+ *
+ * Operates without GPU Buffers (no `createBuffer` factory) so it runs
+ * safely inside the Web Worker. Slot allocation, deregistration, and
+ * structural fingerprint comparison happen here; the main thread
+ * handles GPU uploads via a separate producer path.
+ */
+let lpcBatchManager: LpcBatchManager | undefined;
 
 /** Cached query terms for context-bearing entities. */
 const CONTEXT_QUERY_TERMS = [Position, NPCDialog];
@@ -208,6 +220,37 @@ const handleBridgeCommand = (command: GameCommand): void => {
   }
 };
 
+// -- Worker-side recipe resolver --------------------------------------------
+
+/** Slot name lookup for converting Appearance layer IDs to recipes. */
+const WORKER_SLOT_NAMES = ['body', 'hair', 'torso', 'legs', 'feet'] as const;
+
+/**
+ * Converts entity layer IDs to {@link LpcLayerRecipe} arrays using
+ * empty palettes (zero-filled 1024-byte LUTs).
+ *
+ * The structural fingerprint computed by {@link recipeStructuralFingerprint}
+ * only compares slot names and asset IDs — palette data is ignored.
+ * This means fingerprint evaluation in the worker matches the main
+ * thread even without access to the actual palette textures.
+ *
+ * @param layerIds - Array of 5 layer asset IDs from the Appearance component.
+ * @returns Layer recipes with empty palettes for structural tracking.
+ */
+const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
+  const recipes: LpcLayerRecipe[] = [];
+  for (let i = 0; i < layerIds.length; i++) {
+    if (layerIds[i] > 0) {
+      recipes.push({
+        slot: WORKER_SLOT_NAMES[i] ?? `layer_${i}`,
+        assetId: String(layerIds[i]),
+        hexPalette: new Uint8Array(1024),
+      });
+    }
+  }
+  return recipes;
+};
+
 // -- Initialization ---------------------------------------------------------
 
 /**
@@ -224,14 +267,19 @@ const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
   registerVelocityObservers(world);
   registerSpriteObservers(world);
   registerNPCDialogObservers(world);
+  registerAppearanceObservers(world);
 
-  // 3. Spawn entities
+  // 3. Create headless LpcBatchManager for slot tracking + fingerprint eval
+  //    No createBuffer factory → operates without GPU Buffers in the worker.
+  lpcBatchManager = new LpcBatchManager({ maxInstances: 64 });
+
+  // 4. Spawn entities
   playerEntityId = createPlayer(world);
   if (canvasWidth && canvasHeight) {
     createTestSprite(world, canvasWidth, canvasHeight);
   }
 
-  // 4. Notify main thread about renderable entities
+  // 5. Notify main thread about renderable entities
   // Player (green tint)
   postMessage({
     type: 'ENTITY_CREATED',
@@ -247,10 +295,10 @@ const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
     });
   });
 
-  // 5. Start the tick loop (~60fps = 16ms interval)
+  // 6. Start the tick loop (~60fps = 16ms interval)
   running = true;
 
-  // 6. Initialize spatial hash grid (cellSize 50, capacity = MAX_ENTITIES * 2)
+  // 7. Initialize spatial hash grid (cellSize 50, capacity = MAX_ENTITIES * 2)
   spatialGrid = new SpatialHashGrid({
     cellSize: 50,
     capacity: MAX_ENTITIES * 2,
@@ -295,6 +343,18 @@ const tickLoop = (): void => {
       playerEntityId,
       bridge: workerBridge,
       spatialGrid,
+    });
+  }
+
+  // Synchronize bitECS Appearance state into the LPC batch UBO pool.
+  // Handles entity enter/exit lifecycle (slot allocation/free) and
+  // structural fingerprint comparison to skip redundant UBO re-packs.
+  // Uses a headless LpcBatchManager — no GPU Buffers in the worker.
+  if (lpcBatchManager) {
+    syncAppearanceSystem({
+      world,
+      batchManager: lpcBatchManager,
+      recipeResolver: workerRecipeResolver,
     });
   }
 
