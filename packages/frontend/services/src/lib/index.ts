@@ -6,8 +6,8 @@ export * from './firebase/firebase_analytics_service.ts';
 export * from './firebase/firebase_auth_service.ts';
 export * from './firebase/firebase_cloud_messaging.ts';
 export * from './firebase/firebase_functions_service.ts';
+export * from './firebase/firebase_remote_config.ts';
 export * from './firebase/firebase_storage.ts';
-export * from './firebase/firebase-remote_config.ts';
 // router
 export * from './router/router_utils.ts';
 export * from './router/routes.ts';

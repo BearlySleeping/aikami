@@ -1,6 +1,6 @@
-// apps/backend/firebase/src/controllers/api/prompt_ai.ts
+// packages/backend/firebase/src/controllers/api/prompt_ai.ts
 
-import { createAiService } from '@aikami/backend/ai';
+import { handleAIEndpoint } from '@aikami/backend/ai';
 import type { RequestFunctions } from '@aikami/types';
 import { onRequest } from '@snorreks/firestack';
 import { logger } from '$logger';
@@ -8,37 +8,26 @@ import { logger } from '$logger';
 /**
  * POST /api/prompt_ai
  *
- * AI prompt endpoint using the vendor-agnostic AI service abstraction.
- * Provider is selected via the `AI_PROVIDER` environment variable
- * (`openai` or `gemini`), defaulting to `gemini`.
+ * AI prompt endpoint routed through the shared `handleAIEndpoint` from
+ * @aikami/backend/ai. Dispatches based on `body.type` to the appropriate
+ * handler (sendMessage, createPersona, getProviders).
  *
- * Request body: `{ prompt: string }`
- * Response: `{ chatResponse: { text: string, ... }, user: UserData }`
+ * Request body: `{ type: string, payload: object }`
+ * Falls back to `sendMessage` if no type is specified.
  */
-export default onRequest<RequestFunctions, 'prompt_ai'>(
+export default onRequest<RequestFunctions, 'ai'>(
   async (request, response) => {
     try {
-      logger.log('Request body:', request.body);
-
-      const provider = (process.env.AI_PROVIDER as 'openai' | 'gemini' | undefined) ?? 'gemini';
-      logger.log('AI provider:', provider);
-
-      const aiService = createAiService({ provider });
-
-      const system = 'You are a helpful assistant. Keep your answers brief.';
-      const prompt = request.body.prompt || 'Tell me a short fact.';
-
-      const chatResponse = await aiService.generateChat([
-        { role: 'system', content: system },
-        { role: 'user', content: prompt },
-      ]);
-
-      response.send({
-        chatResponse,
-      });
+      const { body } = request;
+      const { type, payload } = body;
+      logger.debug('api/prompt_ai', { type });
+      const result = await handleAIEndpoint({ payload, type });
+      response.send(result);
     } catch (error) {
-      logger.error(error);
-      response.status(500).send({ error: 'AI service error', message: String(error) });
+      logger.error('api/prompt_ai: error', error);
+      // Express error response — typed outside the normal contract
+      const res = response as { status: (code: number) => { send: (body: unknown) => void } };
+      res.status(500).send({ error: String(error) });
     }
   },
   {

@@ -4,6 +4,6 @@
 //
 // This file IS the logger for this environment. It imports from the shared
 // logger package as a bridge; consumers always use `import { logger } from '$logger'`.
-import { logger } from '@aikami/logger';
+import { type LogEntry, logger } from '@aikami/logger';
 
-export { logger };
+export { type LogEntry, logger };

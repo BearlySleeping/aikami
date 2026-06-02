@@ -41,6 +41,8 @@
       "@aikami/frontend/engine/*": ["../../../packages/frontend/engine/src/*"],
       "@aikami/logger": ["../../../packages/shared/logger/src/index.ts"],
 
+      "@aikami/frontend/api-core": ["../../../packages/frontend/api-core/src/index.ts"],
+      "@aikami/frontend/api-core/*": ["../../../packages/frontend/api-core/src/lib/*"],
       "@aikami/frontend/configs": ["../../../packages/frontend/configs/src/index.ts"],
       "@aikami/frontend/configs/*": ["../../../packages/frontend/configs/src/lib/*"],
       "@aikami/frontend/utils": ["../../../packages/frontend/utils/src/index.ts"],

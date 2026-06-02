@@ -1,6 +1,7 @@
 // packages/backend/utils/src/lib/storage.ts
 
-import { getBucket, isEmulatorMode } from '@aikami/backend/configs';
+import { getBucket } from '@aikami/backend/configs/bucket';
+import { isEmulatorMode } from '@aikami/backend/configs/environment';
 import { v4 } from 'uuid';
 import { logger } from '$logger';
 

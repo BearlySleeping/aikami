@@ -23,6 +23,7 @@ projects:
 
   # Backend Packages
   backend-ai: "packages/backend/ai"
+  backend-chat: "packages/backend/chat"
   backend-configs: "packages/backend/configs"
   backend-utils: "packages/backend/utils"
   backend-database: "packages/backend/database"

@@ -52,7 +52,6 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     prefix: 'PWA',
     cloudRunServiceId: 'pwa',
   },
-  // biome-ignore lint/style/useNamingConvention: config key matching directory name
   landing_page: {
     serviceType: 'firebase-hosting',
     path: 'apps/frontend/landing',

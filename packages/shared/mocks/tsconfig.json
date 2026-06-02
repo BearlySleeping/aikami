@@ -3,7 +3,8 @@
   "display": "Mocks",
   "extends": "../../../config/tsconfig/tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "..",
+    "types": ["bun-types"],
+    "rootDir": "../../..",
     "outDir": "dist",
     "paths": {
       "@aikami/constants": ["../constants/src/index.ts"],
@@ -16,6 +17,7 @@
       "@aikami/utils/*": ["../utils/src/lib/*"],
       "@aikami/backend/configs/*": ["../../backend/configs/src/lib/*"],
       "@aikami/backend/utils/*": ["../../backend/utils/src/lib/*"],
+      "@aikami/backend/database": ["../../backend/database/src/index.ts"],
       "@aikami/backend/database/*": ["../../backend/database/src/lib/*"],
       "$env/*": ["../../../config/tsconfig/stubs/env/*"],
       "$logger": ["../logger/src/index.ts"],

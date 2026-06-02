@@ -1,5 +1,5 @@
 // packages/backend/database/src/lib/firebase-data-connect-service.ts
-import type { BaseDatabaseService, QueryOptions } from './base-database-service';
+import type { BaseDatabaseService, QueryOptions } from './base_database_service.ts';
 
 // ---------------------------------------------------------------------------
 // Firebase Data Connect imports (actual SDK surface)
@@ -113,9 +113,9 @@ export class FirebaseDataConnectService implements BaseDatabaseService {
     this.app = initializeApp(firebaseConfig, 'dataconnect');
 
     this.connector = getDataConnect(this.app, {
-      connectorId: this.config.connectorId,
+      connector: this.config.connectorId,
       location: this.config.location,
-      serviceId: this.config.serviceId,
+      service: this.config.serviceId,
     });
 
     if (this.config.useEmulator) {
