@@ -19,7 +19,11 @@ import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
-import { LpcBatchManager, syncAppearanceSystem } from '../systems/render_system.ts';
+import {
+  animateEntitySystem,
+  LpcBatchManager,
+  syncAppearanceSystem,
+} from '../systems/render_system.ts';
 import type { Direction, GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
 // ---------------------------------------------------------------------------
@@ -345,6 +349,12 @@ const tickLoop = (): void => {
       spatialGrid,
     });
   }
+
+  // Compute per-entity animation frame indices from velocity vectors.
+  // Runs right before the uniform buffer flush so that the frame index
+  // is available for any render-path consumers (UBO packing, texture
+  // slicing via TextureManager.getFrameAt, etc.).
+  animateEntitySystem(world);
 
   // Synchronize bitECS Appearance state into the LPC batch UBO pool.
   // Handles entity enter/exit lifecycle (slot allocation/free) and

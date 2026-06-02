@@ -564,7 +564,35 @@ Updated all knowledge files with current project state after full audit:
 
 ---
 
-## C-035 — Viewport Layer Integration — ✅ completed
+## C-039 — LPC Animation Controller — ✅ completed
+
+### Findings
+- `animation_controller.ts`: Created pure frame configuration lookup engine with `LpcAnimationState` and `LpcDirection` enums (TypeScript `enum` for Biome PascalCase compliance). `getLpcFrameIndex()` performs safe modulus wrapping via `((tick % frameCount) + frameCount) % frameCount` — handles negative ticks and overflow. `velocityToDirection()` uses dominant-axis selection (horizontal preferred on tie).
+- Per-state frame counts: Spellcast=7, Thrust=8, Walk=9, Slash=6, Shoot=13, Die=6 — mapped via `FRAMES_PER_STATE` const object with `as const`.
+- `render_system.ts`: Added `animateEntitySystem(world)` running right before uniform buffer flushes. Queries Velocity+Appearance entities, reads SoA arrays directly, advances per-entity tick counters (divisor=8 for ~1.2s walk cycle at 60fps), stores computed frame indices in `_entityFrameIndices` Map. Exported `getEntityAnimationFrame()` accessor and `resetAnimationTracking()` cleanup.
+- `ecs_worker.ts`: Wired `animateEntitySystem(world)` call in tick loop right before `syncAppearanceSystem` — frame indices computed before the UBO flush.
+- Barrel exports: Animation controller enums/functions exported from `rendering/index.ts` and `engine/src/index.ts`. `animateEntitySystem`, `getEntityAnimationFrame`, `resetAnimationTracking` exported from `render_system.ts`.
+
+### AC Status
+- [x] AC-1: Velocity Vector to Directional Row Translation — `velocityToDirection` correctly maps vx/vy to LpcDirection using dominant axis. Integration tests verify Velocity component → direction → LPC row. WALK+RIGHT at vx=5 maps to row 11, WALK+UP at vy=-2 maps to row 8, etc.
+- [x] AC-2: Modulus Frame Wrapping Without Index Overflow — `getLpcFrameIndex` wraps WALK at tick 9 back to col 0, handles 1,000,000 ticks without overflow, SLASH/THRUST/SHOOT/SPELLCAST all wrap at their respective boundaries. Negative tick values handled defensively. 1000-tick consistency test confirms no drift (frames[tick] === frames[tick + 9]).
+
+### Performance Footprint
+- Frame index computation: O(1) arithmetic per entity per frame (modulus + multiply + add)
+- Tick counter: O(1) Map.get/Map.set per entity
+- Direction derivation: O(1) comparisons per entity
+- Total per-frame cost for N animated entities: O(N)
+- No GPU calls, no allocations — pure CPU arithmetic
+
+### Files created
+- `packages/frontend/engine/src/rendering/animation_controller.ts` — LPC animation controller (pure frame index computation, direction derivation)
+
+### Files modified
+- `packages/frontend/engine/src/rendering/index.ts` — Exported animation controller enums/functions
+- `packages/frontend/engine/src/index.ts` — Exported animation controller + animateEntitySystem/getEntityAnimationFrame/resetAnimationTracking
+- `packages/frontend/engine/src/systems/render_system.ts` — Added `animateEntitySystem()`, per-entity tick/frame maps, `getEntityAnimationFrame()`, `resetAnimationTracking()`. Added Velocity import.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Wired `animateEntitySystem(world)` into tick loop
+- `packages/frontend/engine/src/__tests__/rendering.test.ts` — Added C-039 test suites: velocityToDirection (6), getLpcStateRow (8), getLpcFrameIndex (18), AC-1 Integration (5), animateEntitySystem (8) — 45 new tests, 109 total
 
 ### Findings
 - `sprite_composer.ts`: Already had deferred `GlProgram` compilation via lazy getters (`getLpcProgram`, `getLpcMultiLayerProgram`). Added explicit `initLpcShaders()` gate function that eagerly compiles both shader programs when called from an active renderer pipeline context. The lazy getters remain as the fallback for headless import paths.
