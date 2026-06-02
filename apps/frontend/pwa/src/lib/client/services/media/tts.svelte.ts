@@ -1,4 +1,3 @@
-/** biome-ignore-all lint/style/useNamingConvention: TTS service naming convention */
 // apps/frontend/pwa/src/lib/client/services/media/tts.svelte.ts
 import {
   BaseFrontendClass,
@@ -16,13 +15,13 @@ export type TtsResult = {
 
 export type TtsServiceInterface = BaseFrontendClassInterface & {
   /** Whether audio is currently playing. */
-  readonly is_playing: boolean;
+  readonly isPlaying: boolean;
 
   /** Index of the currently spoken word (-1 when idle). */
-  readonly current_word_index: number;
+  readonly currentWordIndex: number;
 
   /** ID of the message whose TTS is currently active (undefined when idle). */
-  readonly active_message_id: string | undefined;
+  readonly activeMessageId: string | undefined;
 
   /**
    * Converts text to speech via full-request API.
@@ -71,9 +70,9 @@ type WordBoundary = {
 };
 
 class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInterface {
-  is_playing = $state(false);
-  current_word_index = $state(-1);
-  active_message_id = $state<string | undefined>(undefined);
+  isPlaying = $state(false);
+  currentWordIndex = $state(-1);
+  activeMessageId = $state<string | undefined>(undefined);
 
   private isDemo = true;
   private currentAudio: HTMLAudioElement | null = null;
@@ -149,12 +148,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       this.rafId = undefined;
     }
 
-    this.is_playing = false;
-    this.current_word_index = -1;
-    this.active_message_id = undefined;
+    this.isPlaying = false;
+    this.currentWordIndex = -1;
+    this.activeMessageId = undefined;
     this.nextStartTime = 0;
     this.wordBoundaries = [];
-    this.streamMessageId = undefined;
   }
 
   startStream(options: { messageId: string; text: string }): void {
@@ -162,8 +160,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
     this.stop();
 
-    this.streamMessageId = options.messageId;
-    this.active_message_id = options.messageId;
+    this.activeMessageId = options.messageId;
 
     // Split text into words for proportional timing
     const words = options.text.split(/\s+/).filter(Boolean);
@@ -177,7 +174,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     audioContextManager.unlock();
     this.nextStartTime = audioContextManager.context.currentTime;
 
-    this.is_playing = true;
+    this.isPlaying = true;
 
     // Start the rAF word-tracking loop
     this.startWordTrackingLoop();
@@ -261,12 +258,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
       // If we're past the last word, check if sources are all done
       if (wordIdx >= this.wordBoundaries.length && this.sourceNodes.length === 0) {
-        this.is_playing = false;
-        this.current_word_index = -1;
-        this.active_message_id = undefined;
+        this.isPlaying = false;
+        this.currentWordIndex = -1;
+        this.activeMessageId = undefined;
         this.nextStartTime = 0;
         this.wordBoundaries = [];
-        this.streamMessageId = undefined;
         this.rafId = undefined;
         return;
       }
@@ -275,7 +271,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         wordIdx = this.wordBoundaries.length - 1;
       }
 
-      this.current_word_index = wordIdx;
+      this.currentWordIndex = wordIdx;
       this.rafId = requestAnimationFrame(tick);
     };
 

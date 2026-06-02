@@ -1,4 +1,4 @@
-import type { SvelteKitError } from '@aikami/types';
+import type { ErrorType, SvelteKitError } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
 
@@ -42,11 +42,11 @@ export const callSvelteKitAPI = async <
     const svelteKitError = body as SvelteKitError;
     logger.error(`Error calling endpoint ${`/api/${callEndpoint}`}`, body);
 
-    throw toAppError(
-      svelteKitError.type,
-      svelteKitError.message ?? 'Unknown error',
-      svelteKitError.details,
-    );
+    throw toAppError({
+      errorType: svelteKitError.type as ErrorType,
+      errorMessage: svelteKitError.message ?? 'Unknown error',
+      details: svelteKitError.details,
+    });
   }
   const { response: responseData } = body as {
     response: AllFunctions[Endpoint][1];

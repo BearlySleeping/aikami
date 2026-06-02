@@ -173,7 +173,17 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
       const uid = authService.uid;
       if (uid) {
         const { chatRepository } = await import('@aikami/frontend/repositories/chat.ts');
-        await chatRepository.deleteDocument({ npcId, uid });
+        // Query all chats for this NPC+user pair, then delete each one
+        const chats = await chatRepository.getDocumentsByQuery({
+          getCollectionPathArgument: undefined,
+          filters: [
+            { field: 'npcId', operator: '==', value: npcId },
+            { field: 'uid', operator: '==', value: uid },
+          ],
+        });
+        for (const chat of chats) {
+          await chatRepository.deleteDocument({ chatId: chat.id });
+        }
       }
     }
   }

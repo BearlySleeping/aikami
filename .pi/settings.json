@@ -8,6 +8,6 @@
     "keepRecentTokens": 20000
   },
   "extensions": ["./.pi/extensions"],
-  "skills": ["./.pi/skills"],
+  "skills": ["./.pi/skills", "./.pi/skills-pixijs"],
   "prompts": ["./.pi/prompts"]
 }

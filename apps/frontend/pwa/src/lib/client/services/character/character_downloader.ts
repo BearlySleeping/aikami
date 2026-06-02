@@ -54,7 +54,6 @@ const downloadChub = async (options: { url: string }): Promise<File> => {
 
   const response = await fetch(
     `https://api.chub.ai/api/characters/${creatorName}/${projectName}?full=true`,
-    // biome-ignore lint/style/useNamingConvention: HTTP header name
     { headers: { Accept: 'application/json' } },
   );
 

@@ -18,7 +18,10 @@ export default onCall<CallableFunctions, 'auth'>(
     const data = request.data;
     if (!data || typeof data.type !== 'string') {
       logger.warn('callable/auth: invalid request — missing type');
-      throw toAppError('invalid-argument', 'Missing or invalid type field');
+      throw toAppError({
+        errorType: 'invalid-argument',
+        errorMessage: 'Missing or invalid type field',
+      });
     }
 
     logger.debug('callable/auth', { type: data.type });

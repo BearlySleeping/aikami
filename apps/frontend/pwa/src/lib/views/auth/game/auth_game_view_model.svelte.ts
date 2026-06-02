@@ -84,6 +84,7 @@ class AuthGameViewModel
   implements AuthGameViewModelInterface
 {
   private _authState = $state<AuthState>('idle');
+  private _authUid = $state('');
   private _idToken = $state('');
   private _email = $state('');
   private _password = $state('');

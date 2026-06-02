@@ -1,3 +1,4 @@
+// packages/shared/mocks/src/lib/mock_generators.ts
 import {
   BaseCharacterSheetSchema,
   MessageSchema,
@@ -6,16 +7,38 @@ import {
   PersonaSchema,
   UserSchema,
 } from '@aikami/schemas';
-import { zocker } from 'zocker';
+import { Value } from 'typebox/value';
 
-export const generateMockUser = () => zocker(UserSchema).generate();
+/**
+ * Generate a structurally-valid mock User from the TypeBox schema.
+ *
+ * Uses `Value.Create` which produces a default-filled object (empty strings,
+ * zeroes, empty arrays) that satisfies the schema shape. For tests that need
+ * specific values, modify the returned object after generation.
+ */
+export const generateMockUser = () => Value.Create(UserSchema);
 
-export const generateMockCharacter = () => zocker(BaseCharacterSheetSchema).generate();
+/**
+ * Generate a structurally-valid mock character sheet.
+ */
+export const generateMockCharacter = () => Value.Create(BaseCharacterSheetSchema);
 
-export const generateMockNpc = () => zocker(NpcSchema).generate();
+/**
+ * Generate a structurally-valid mock NPC.
+ */
+export const generateMockNpc = () => Value.Create(NpcSchema);
 
-export const generateMockPersona = () => zocker(PersonaSchema).generate();
+/**
+ * Generate a structurally-valid mock Persona.
+ */
+export const generateMockPersona = () => Value.Create(PersonaSchema);
 
-export const generateMockMessage = () => zocker(MessageSchema).generate();
+/**
+ * Generate a structurally-valid mock Message.
+ */
+export const generateMockMessage = () => Value.Create(MessageSchema);
 
-export const generateMockNotification = () => zocker(NotificationSchema).generate();
+/**
+ * Generate a structurally-valid mock Notification.
+ */
+export const generateMockNotification = () => Value.Create(NotificationSchema);

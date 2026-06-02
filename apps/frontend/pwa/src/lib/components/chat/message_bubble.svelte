@@ -111,9 +111,9 @@
     >
       {#if isAction}
         <span class="italic">* {formatActionText(message.text)} *</span>
-      {:else if ttsService.active_message_id === message.id && ttsService.is_playing}
+      {:else if ttsService.activeMessageId === message.id && ttsService.isPlaying}
         {#each message.text.split(/\s+/) as word, index}
-          <span class={index === ttsService.current_word_index ? 'text-primary-500' : ''}>
+          <span class={index === ttsService.currentWordIndex ? 'text-primary-500' : ''}>
             {word}
           </span>
         {/each}

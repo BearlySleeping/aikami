@@ -11,20 +11,6 @@ import { logger } from '$logger';
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Joins an array of messages into a single concatenated string,
- * separated by newlines. Skips messages with empty content.
- *
- * @param messages - The messages to join.
- * @returns A single string of all message contents.
- */
-const _joinMessages = (messages: AIChatMessage[]): string => {
-  return messages
-    .map((m) => m.content)
-    .filter(Boolean)
-    .join('\n');
-};
-
 // ---------------------------------------------------------------------------
 // Template: ChatML
 // ---------------------------------------------------------------------------

@@ -13,6 +13,6 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "zocker": "3.0.0"
+    "typebox": "^1.1.39"
   }
 }

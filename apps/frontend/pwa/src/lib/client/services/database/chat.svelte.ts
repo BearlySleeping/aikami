@@ -91,7 +91,7 @@ export type NpcChatServiceInterface = BaseFrontendClassInterface & {
         npcName: string;
         npcAvatarUrl?: string;
         affection: number;
-        stats: Record<string, unknown>;
+        stats?: Record<string, unknown>;
         messages?: unknown[];
       }
     | undefined
@@ -324,7 +324,7 @@ class NpcChatService
         npcName: string;
         npcAvatarUrl?: string;
         affection: number;
-        stats: Record<string, unknown>;
+        stats?: Record<string, unknown>;
         messages?: unknown[];
       }
     | undefined
