@@ -1,5 +1,34 @@
 # Contract Implementation Progress
 
+## C-041 — World Economy Inventory Core — ✅ completed
+
+### Findings
+- `components/inventory.ts`: New bitECS SoA components — `Inventory` (3 flat arrays: `itemIds[][]`, `quantities[][]`, `itemTypes[][]`, each slot = 24 element arrays) and `Wallet` (single `balance[]` array). `MAX_INVENTORY_SLOTS = 24`. Observer pattern clones arrays on set, returns direct references on get for zero-allocation mutation. Types: `InventoryData`, `WalletData`.
+- `systems/economy_system.ts`: Zero-allocation transaction pipeline. `processTransaction()` validates both entities have Inventory, finds item slot on source, checks quantity, finds/create target slot, validates wallet balance if price > 0, then executes all mutations via direct array index access — no intermediate objects. Wallet writes use `Wallet.balance[eid]` directly (not getComponent snapshot) to avoid primitive copy issue. Exported helpers: `hasItemCapacity()`, `deductItem()`, `addItemStack()`. All slot search helpers (`_findItemSlot`, `_findOrCreateTargetSlot`, `_findEmptySlot`) traverse arrays inline.
+- `economy.test.ts`: 25 TDD tests — 6 AC-1 transfer tests (basic, stacking, new slot, clear, wallet, walletless), 9 AC-2 boundary tests (missing item, over-deduct, state preservation, full inventory, insufficient funds, missing components, zero quantity), 10 utility helper tests (capacity, deduct, add).
+- All 206 engine tests pass (25 economy). Fix task passes clean. Pre-existing bun-types typecheck failure unrelated.
+
+### AC Status
+- [x] AC-1: Zero-Allocation Structural Inventory Transfers — Source decrement, target increment, wallet transfer all via direct array index mutation. No heap allocations during transaction processing. Verified across 6 integration tests.
+- [x] AC-2: Boundary Enforcement & Underflow Guard Rails — Over-deduction throws, full inventory throws, insufficient wallet throws, missing components throw. All failures preserve state unmodified. Zero quantity rejected. Verified across 9 boundary tests.
+
+### Memory Footprint
+- Inventory: 3 × 24 × N floats per entity (N = component instances), each array allocated once at component set
+- Wallet: 1 × N floats per entity
+- Slot search: O(24) = constant time per operation
+- Transaction: zero heap allocations — all reads/writes are direct array index accesses
+- Module-level state: none (economy system is stateless, operates on bitECS SoA directly)
+
+### Files created
+- `packages/frontend/engine/src/components/inventory.ts` — Inventory + Wallet SoA components (MAX_INVENTORY_SLOTS=24, observers, types)
+- `packages/frontend/engine/src/systems/economy_system.ts` — processTransaction, hasItemCapacity, deductItem, addItemStack, internal slot helpers
+- `packages/frontend/engine/src/__tests__/economy.test.ts` — 25 TDD tests (AC-1: 6, AC-2: 9, utilities: 10)
+
+### Files modified
+- `packages/frontend/engine/src/index.ts` — Exported Inventory, Wallet, MAX_INVENTORY_SLOTS, observers, economy system functions
+
+---
+
 ## C-040 — Grid Movement Transform Pipeline — ✅ completed
 
 ### Findings
