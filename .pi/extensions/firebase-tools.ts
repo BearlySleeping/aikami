@@ -15,6 +15,11 @@ function getProjectId(mode: Mode): string {
 }
 
 export default function (pi: ExtensionAPI) {
+  const DEFAULT_TIMEOUT = 180_000;  // 3 min
+  const HEAVY_TIMEOUT = 300_000;    // 5 min (deploys, emulator starts)
+  const QUICK_TIMEOUT = 10_000;     // 10s (healthchecks, status queries)
+  const TMUX_TIMEOUT = 30_000;      // 30s (tmux operations)
+
   // Query Firestore directly from pi
   pi.registerTool({
     name: "firestore_query",
@@ -54,7 +59,7 @@ export default function (pi: ExtensionAPI) {
           "--limit",
           String(params.limit ?? 10),
           "--emulator",
-        ], { signal })
+        ], { signal, timeout: DEFAULT_TIMEOUT })
         return {
           content: [{ type: "text", text: result.stdout || result.stderr }],
           details: { code: result.code },
@@ -70,7 +75,7 @@ export default function (pi: ExtensionAPI) {
         String(params.limit ?? 10),
         "--project",
         projectId,
-      ], { signal })
+      ], { signal, timeout: DEFAULT_TIMEOUT })
       return {
         content: [{ type: "text", text: result.stdout || result.stderr }],
         details: { code: result.code, projectId, mode },
@@ -109,7 +114,7 @@ export default function (pi: ExtensionAPI) {
       const mode = params.mode ?? (process.env.AIKAMI_MODE as string | undefined) ?? "development"
       const args = ["bun", "moon", "run", "functions:deploy", "--", mode]
       if (params.only) args.push("--only", params.only)
-      const result = await pi.exec("env", args, { signal })
+      const result = await pi.exec("env", args, { signal, timeout: HEAVY_TIMEOUT })
       return {
         content: [{ type: "text", text: result.stdout || result.stderr }],
         details: { code: result.code, mode, only: params.only },
@@ -137,7 +142,7 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       if (params.action === "start") {
         // Check if emulator is already running (port 4400 = emulator UI)
-        const checkResult = await pi.exec("bash", ["-c", "curl -s -o /dev/null -w '%{http_code}' http://localhost:4400 2>/dev/null || echo '000'"], { signal })
+        const checkResult = await pi.exec("bash", ["-c", "curl -s -o /dev/null -w '%{http_code}' http://localhost:4400 2>/dev/null || echo '000'"], { signal, timeout: QUICK_TIMEOUT })
         if (checkResult.stdout?.trim() === "200") {
           return {
             content: [{ type: "text", text: "✅ Emulator already running (port 4400 responding)." }],
@@ -152,7 +157,7 @@ export default function (pi: ExtensionAPI) {
           'tmux has-session -t aikami-dev 2>/dev/null || tmux new-session -d -s aikami-dev -c "$(pwd)" -n main',
           'W=$(tmux list-windows -t aikami-dev -F "#{window_index}" 2>/dev/null)',
           'echo "$W" | grep -qx "1" || tmux new-window -d -t aikami-dev -n emulator -c "$(pwd)" "bun emulate:backend"',
-        ].join(" && ")], { signal })
+        ].join(" && ")], { signal, timeout: TMUX_TIMEOUT })
 
         // Poll for readiness (up to 60s)
         let ready = false
@@ -179,17 +184,17 @@ export default function (pi: ExtensionAPI) {
       if (params.action === "stop") {
         // Only kill the emulator window, not the entire session.
         // Checking if window 1 is the ONLY window — if so, kill session.
-        const check = await pi.exec("bash", ["-c", "tmux list-windows -t aikami-dev -F '#{window_index}' 2>/dev/null"], { signal })
+        const check = await pi.exec("bash", ["-c", "tmux list-windows -t aikami-dev -F '#{window_index}' 2>/dev/null"], { signal, timeout: TMUX_TIMEOUT })
         const windows = (check.stdout || "").split("\n").filter(Boolean)
         if (windows.length <= 1) {
           // Only emulator window (or none) — safe to kill session
-          await pi.exec("bash", ["-c", "tmux kill-session -t aikami-dev 2>/dev/null; true"], { signal })
+          await pi.exec("bash", ["-c", "tmux kill-session -t aikami-dev 2>/dev/null; true"], { signal, timeout: TMUX_TIMEOUT })
         } else {
           // Other services running (pwa, vm-controller) — only kill window 1
-          await pi.exec("bash", ["-c", "tmux kill-window -t aikami-dev:1 2>/dev/null; true"], { signal })
+          await pi.exec("bash", ["-c", "tmux kill-window -t aikami-dev:1 2>/dev/null; true"], { signal, timeout: TMUX_TIMEOUT })
         }
         // Also stop any orphaned emulator processes
-        await pi.exec("bun", ["firebase", "emulators:stop"], { signal }).catch(() => {})
+        await pi.exec("bun", ["firebase", "emulators:stop"], { signal, timeout: TMUX_TIMEOUT }).catch(() => {})
         return {
           content: [{ type: "text", text: "🛑 Emulator stopped." }],
           details: { code: 0 },
@@ -199,7 +204,7 @@ export default function (pi: ExtensionAPI) {
       const result = await pi.exec("ss", [
         "-tlnp",
         "( sport = :4000 or sport = :4400 or sport = :5001 or sport = :8080 or sport = :9099 or sport = :8085 or sport = :9199 or sport = :9150 or sport = :4500 or sport = :9299 or sport = :9499 )",
-      ], { signal })
+      ], { signal, timeout: QUICK_TIMEOUT })
       return {
         content: [{ type: "text", text: result.stdout || result.stderr }],
         details: { code: result.code },
