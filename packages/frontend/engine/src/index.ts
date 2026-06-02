@@ -47,7 +47,11 @@ export { GameApiService } from './services/api_service.ts';
 // Rendering
 
 export type { PaletteSpriteOptions } from './rendering/sprite_composer.ts';
-export { packRecipeToUboBuffer, SpriteComposer } from './rendering/sprite_composer.ts';
+export {
+  initLpcShaders,
+  packRecipeToUboBuffer,
+  SpriteComposer,
+} from './rendering/sprite_composer.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type { RenderEntry } from './systems/render_system.ts';
@@ -55,6 +59,9 @@ export {
   dirtyCheckAppearance,
   hasAppearanceChanged,
   invalidateComposedSprite,
+  LpcBatchManager,
+  resetAppearanceTracking,
+  syncAppearanceSystem,
   updateEntityUbo,
   updateRender,
   updateRenderFromBuffer,

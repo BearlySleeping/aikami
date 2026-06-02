@@ -1,5 +1,33 @@
 # Contract Implementation Progress
 
+## C-036 — ECS Appearance Bridge — ✅ completed
+
+### Findings
+- `syncAppearanceSystem()`: New system function connecting bitECS `Appearance` component queries directly to `LpcBatchManager` slot allocation. Uses manual enter/exit tracking (Set diff) for entity lifecycle management — registerEntity on enter, deregisterEntity on exit.
+- Headless LpcBatchManager: Added optional `createBuffer` factory to `LpcBatchManagerOptions`. When omitted, GPU Buffer management is disabled but slot tracking, fingerprint comparison, and dirty segment accumulation still operate — enabling worker-side pre-flighting and headless testing.
+- Worker integration: `ecs_worker.ts` now registers `Appearance` observers, creates a headless `LpcBatchManager` (no GPU buffers), and calls `syncAppearanceSystem` in the tick loop after mutation systems. Worker-side `workerRecipeResolver` converts layer IDs to recipes with empty palettes — structural fingerprints ignore palette data so worker/main fingerprints remain consistent.
+- Structural fingerprint evaluation: `hasAppearanceChanged` + `recipeStructuralFingerprint` compare only slot names and asset IDs (JSON.stringify of `{s, a}` pairs). Palette data is excluded — re-tinting the same slot/asset combination does not trigger a UBO re-pack.
+- Tests: 14 new C-036 integration tests (39 total rendering tests) covering enter/exit lifecycle, slot reuse, fingerprint optimization, stress testing, and edge cases. All 102 engine tests pass.
+
+### AC Status
+- [x] AC-1: Automated Slot Allocation & LIFO Tracking — 5 incoming entities reserve consecutive slots; exit detection deregisters on component removal; freed slots reused via LIFO stack; empty world handled; multi-enter+exit batched in single frame.
+- [x] AC-2: Fingerprint Evaluation Optimization — 50-frame stable loop produces zero additional structural hashes; layer change triggers hash increment; `batchUpdatesPerformed` only increments when dirty data exists; single-entity changes produce exactly 1 hash; 100-frame stress test correctly tracks toggles.
+
+### Performance Footprint
+- Enter/exit tracking: O(n) per frame (Set diff over entity IDs, n = active Appearance entities)
+- Fingerprint comparison: O(1) per entity (JSON.stringify over slot+assetID pairs, Map.get for cache)
+- Slot allocation: O(1) via pre-filled free-slot stack (Array.pop/Array.push)
+- Worker UBO data: empty palettes (zero-cost allocation, 1024 zero-bytes per recipe — structural fingerprint ignores palette anyway)
+- Headless batch manager: zero PixiJS Buffer allocations, zero GPU calls — pure CPU slot/fingerprint tracking
+
+### Files modified
+- `packages/frontend/engine/src/systems/render_system.ts` — Added `syncAppearanceSystem()`, `resetAppearanceTracking()`, per-world `_trackedAppearanceEntities` Map. Made `LpcBatchManager` headless-compatible via optional `createBuffer` factory. Exported new functions.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Registered Appearance observers, created headless LpcBatchManager, added `workerRecipeResolver`, wired `syncAppearanceSystem` into tick loop.
+- `packages/frontend/engine/src/index.ts` — Exported `syncAppearanceSystem`, `resetAppearanceTracking`
+- `packages/frontend/engine/src/__tests__/rendering.test.ts` — Added 14 C-036 tests (AC-1: 5 tests, AC-2: 6 tests, Edge Cases: 3 tests)
+
+---
+
 ## C-029 — Menu Auth Wiring & Vanilla PixiJS Character Creation — ✅ completed
 
 ### Findings
@@ -451,3 +479,62 @@ Updated all knowledge files with current project state after full audit:
 - knowledge/CONTEXT.md — fixed contract statuses, removed stale AGENTS.md ref
 - knowledge/guides/*.md — 12 files copied from docs/
 - docs/ — removed
+
+---
+
+## C-034 — LPC Render Pipeline — ✅ completed
+
+### Findings
+- LpcBatchManager: Centralized batch UBO allocation tracking pool with shared 64-entity Float32Array backing store. Single Buffer.update() per system tick with dirty segment merging for optimal GPU sub-data streaming.
+- DenseObjectPool: Generic pre-allocated object pool for Buffer instances — zero runtime allocation during frame-critical paths.
+- Instance attribute wiring: `aInstanceIndex` custom vertex attribute added to LPC multi-layer vertex/fragment shaders. Static `setInstanceIndex`/`getInstanceIndex` methods on SpriteComposer enable per-sprite batch pool slot indexing.
+- Performance tests: Zero structural re-hash assertions, per-tick single-update verification, dirty segment offset coverage, contiguous slot index assignment, free-slot reuse after deregistration, std140 alignment validation (256-byte per-entity UBO slots).
+- All frontend-engine lint/typecheck pass clean. Pre-existing bun:test module errors and pixi.js DOM dependency in test environment are unrelated.
+
+### AC Status
+- [x] AC-1: Zero Bind Group Reallocation — Shared Float32Array pool with slot-based entity mapping; `structuralHashesIssued` counter; `writeEntityUbo()` skips re-pack on identical fingerprint.
+- [x] AC-2: WebGL2 Sub-Data Streaming — Dirty segment merging (`_mergeDirtySegments`); concentrated offset ranges; single `flushBatch()` per tick; `batchUpdatesPerformed` counter verified at 100 frames.
+
+### Memory Footprint
+- Per-entity UBO slot: 64 floats × 4 bytes = 256 bytes (std140 aligned)
+- Shared buffer for 64 entities: 64 × 256 = 16,384 bytes (16 KB)
+- Pool slot assignment: contiguous 0-based indices, free-slot stack (LIFO reuse)
+- Zero re-allocation guarantee: `_sharedUbo` allocated once in constructor
+
+### Files modified
+- `packages/frontend/engine/src/systems/render_system.ts` — Added LpcBatchManager class (350+ lines), DenseObjectPool<T> generic pool
+- `packages/frontend/engine/src/rendering/sprite_composer.ts` — Added `aInstanceIndex` vertex attribute to multi-layer shaders, static `setInstanceIndex`/`getInstanceIndex` methods
+- `packages/frontend/engine/src/index.ts` — Exported LpcBatchManager
+- `packages/frontend/engine/src/__tests__/rendering.test.ts` — Added C-034 performance integration tests (AC-1, AC-2, structural alignment suites)
+
+---
+
+## C-035 — Viewport Layer Integration — ✅ completed
+
+### Findings
+- `sprite_composer.ts`: Already had deferred `GlProgram` compilation via lazy getters (`getLpcProgram`, `getLpcMultiLayerProgram`). Added explicit `initLpcShaders()` gate function that eagerly compiles both shader programs when called from an active renderer pipeline context. The lazy getters remain as the fallback for headless import paths.
+- `pixi_app.ts`: Added pipeline initialization hook — `createPixiApp` now calls `initLpcShaders()` after `app.init()` completes, ensuring WebGL/WebGPU context is live before shader compilation. Documented that `LpcBatchManager` UBO buffers attach exclusively inside the viewport container tree (never at module scope).
+- `game_canvas.svelte`: Switched from `onMount` to Svelte 5 `$effect` for engine initialization lifecycle binding. Removed unused `EngineBridge`/`GameWorld` type imports.
+- Barrel exports: `initLpcShaders` exported from `rendering/index.ts` and `engine/src/index.ts` for consumer access.
+- Engine tests: 88/88 pass in headless mode (bun test). Zero failures.
+
+### AC Status
+- [x] AC-1: Elimination of Headless Import Environment Crashes — Module imports without DOM/WebGL context succeed. Engine tests run clean (88 pass, 0 fail). No runtime GPU structural evaluations at top-level scope.
+- [x] AC-2: Structured View Frame Injection Mappings — `initLpcShaders()` gate ensures `aInstanceIndex` attribute buffers bind inside the active viewport canvas. Frame updates execute within loop budgets via `writeEntityUbo` → `flushBatch` path from C-034 pipeline.
+
+### Files modified
+- `packages/frontend/engine/src/rendering/sprite_composer.ts` — Added `initLpcShaders()` gate function (eager compilation in renderer context)
+- `packages/frontend/engine/src/rendering/index.ts` — Exported `initLpcShaders`
+- `packages/frontend/engine/src/pixi_app.ts` — Added pipeline init hook calling `initLpcShaders()` after `app.init()`
+- `packages/frontend/engine/src/index.ts` — Exported `initLpcShaders` from public API
+- `apps/frontend/pwa/src/lib/components/game/game_canvas.svelte` — `onMount` → `$effect`, removed unused imports
+
+### Pre-existing failures fixed during C-035 validation
+- `packages/frontend/repositories/src/lib/base_frontend_repository.ts:555` — Added `biome-ignore` for `Timestamp` Firebase naming convention
+- `apps/frontend/pwa/tsconfig.json` — Excluded `src/**/*.test.ts` from svelte-check (bun:test types unavailable in SvelteKit tsconfig)
+- `apps/frontend/pwa/src/lib/client/services/dice/dice_service.test.ts` — `DiceService` → `DiceServiceInterface` type import fix
+- `apps/frontend/pwa/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — Declared missing `_authUid` private property
+- `apps/frontend/pwa/src/lib/views/npc/list/npc_list_view_model.svelte.ts` — `NpcChatData` → `ChatData` import fix
+- `apps/frontend/pwa/src/lib/client/services/database/chat.svelte.ts` — `stats: Record<string, unknown>` → `stats?: Record<string, unknown>` (optional, matches schema)
+- `apps/frontend/pwa/src/lib/client/services/database/npc.svelte.ts` — Fixed chat deletion to query by npcId+uid then delete by chatId; chatRepository type error resolved
+- `packages/frontend/repositories/src/lib/npc.ts` — Changed `never` to `typeof NpcCreateSchema`/`typeof NpcUpdateSchema`, wired actual schemas
