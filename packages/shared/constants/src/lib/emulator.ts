@@ -1,35 +1,12 @@
 // packages/shared/constants/src/lib/emulator.ts
 // Single source of truth for emulator ports, hosts, project ID.
 
+import { EMULATOR_PORTS } from './development_ports.ts';
 import { CLOUD_FUNCTIONS_REGION, MODE_PROJECT_MAP } from './project.ts';
 
 // ── Project & Region ──────────────────────────────────────────
 export const EMULATOR_PROJECT_ID = MODE_PROJECT_MAP.emulator;
 export const EMULATOR_REGION = CLOUD_FUNCTIONS_REGION;
-
-// ── Emulator Ports ────────────────────────────────────────────
-export const EMULATOR_PORTS = {
-  auth: 9099,
-  functions: 5001,
-  firestore: 8080,
-  hosting: 5000,
-  pubsub: 8085,
-  storage: 9199,
-  dataconnect: 9399,
-  // apps:
-  pwa: 5174,
-  game: 5176,
-} as const;
-
-export const DEVELOPMENT_PORTS = {
-  pwa: 5173,
-  game: 5175,
-} as const;
-
-export const PRODUCTION_PORTS = {
-  pwa: 5177,
-  game: 5178,
-} as const;
 
 export const EMULATOR_HOSTS = {
   auth: `localhost:${EMULATOR_PORTS.auth}`,

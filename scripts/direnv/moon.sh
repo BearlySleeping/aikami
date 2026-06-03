@@ -265,7 +265,7 @@ aikami_graph() {
 
 aikami_logs() {
   local app="${1:-firebase}"
-  local mode="${AIKAMI_MODE:-development}"
+  local mode="${AIKAMI_MODE:-staging}"
 
   case "$app" in
     firebase|functions)
@@ -282,19 +282,19 @@ aikami_logs() {
 
 # ── Environment Switcher ─────────────────────────────────────────────────
 #
-# Usage: aikami_switch emulator|development|production
+# Usage: aikami_switch emulator|staging|production
 aikami_switch() {
   local mode="${1:-}"
   if [ -z "$mode" ]; then
-    echo "Usage: aikami_switch <emulator|development|production>"
+    echo "Usage: aikami_switch <emulator|staging|production>"
     echo "Current mode: ${AIKAMI_MODE:-emulator}"
     return 1
   fi
 
   case "$mode" in
-    emulator|development|production) ;;
+    emulator|staging|production) ;;
     *)
-      echo "Invalid mode: $mode (use emulator, development, or production)"
+      echo "Invalid mode: $mode (use emulator, staging, or production)"
       return 1
       ;;
   esac

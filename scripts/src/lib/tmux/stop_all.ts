@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // scripts/src/lib/tmux/stop_all.ts
-// Stop all aikami tmux sessions regardless of mode/service.
+// Stop all aikami tmux sessions regardless of mode.
 
 import { hasTmux, stopAllSessions } from './session.ts';
 

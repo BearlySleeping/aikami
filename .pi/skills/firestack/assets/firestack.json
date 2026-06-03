@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/@snorreks/firestack/firestack.schema.json",
   "modes": {
-    "development": "my-project-dev",
+    "staging": "my-project-dev",
     "production": "my-project-prod"
   },
   "region": "us-central1",
