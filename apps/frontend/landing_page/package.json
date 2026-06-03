@@ -1,10 +1,7 @@
 {
   "name": "@app/landing_page",
   "scripts": {
-    "dev": "astro dev --mode emulator",
-    "dev:development": "astro dev --mode development",
-    "dev:emulator": "astro dev --mode emulator",
-    "dev:production": "astro dev --mode production",
+    "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
@@ -14,7 +11,7 @@
     "fix": "biome check --write ."
   },
   "devDependencies": {
-    "astro": "6.4.2"
+    "astro": "6.4.3"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

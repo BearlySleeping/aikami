@@ -12,19 +12,19 @@ import { defineConfig } from "@snorreks/firestack";
 import { defaultRegion } from "@myproject/constants";
 
 export default defineConfig(({ mode }) => {
-  const isProduction = mode === "production";
+	const isProduction = mode === "production";
 
-  return {
-    region: isProduction ? "us-east1" : defaultRegion,
-    modes: {
-      development: "my-project-dev",
-      production: "my-project-prod",
-    },
-    functionsDirectory: "src/controllers",
-    rulesDirectory: "src/rules",
-    minify: isProduction,
-    nodeVersion: "24",
-  };
+	return {
+		region: isProduction ? "us-east1" : defaultRegion,
+		modes: {
+			staging: "my-project-dev",
+			production: "my-project-prod",
+		},
+		functionsDirectory: "src/controllers",
+		rulesDirectory: "src/rules",
+		minify: isProduction,
+		nodeVersion: "24",
+	};
 });
 ```
 
@@ -39,44 +39,43 @@ If you prefer a static config file:
 
 ```json
 {
-  "$schema": "./node_modules/@snorreks/firestack/firestack.schema.json",
-  "modes": {
-    "development": "my-project-dev",
-    "staging": "my-project-staging",
-    "production": "my-project-prod"
-  },
-  "region": "us-central1",
-  "functionsDirectory": "src/controllers",
-  "rulesDirectory": "src/rules",
-  "firestoreRules": "src/rules/firestore.rules",
-  "storageRules": "src/rules/storage.rules",
-  "scriptsDirectory": "scripts",
-  "initScript": "on_emulate.ts",
-  "nodeVersion": "22",
-  "engine": "bun",
-  "packageManager": "global",
-  "minify": true,
-  "sourcemap": true,
-  "keepNames": false,
-  "external": [],
-  "emulators": ["auth", "firestore", "functions", "pubsub", "storage"],
-  "emulatorPorts": {
-    "auth": 9099,
-    "firestore": 8080,
-    "functions": 5001
-  },
-  "rulesTests": {
-    "firestore": {
-      "rulesFile": "src/rules/firestore.rules",
-      "testPattern": "tests/rules/**/*.rules.test.ts",
-      "projectId": "firestack-rules-test"
-    },
-    "storage": {
-      "rulesFile": "src/rules/storage.rules",
-      "testPattern": "tests/storage-rules/**/*.rules.test.ts",
-      "projectId": "firestack-rules-test"
-    }
-  }
+	"$schema": "./node_modules/@snorreks/firestack/firestack.schema.json",
+	"modes": {
+		"staging": "my-project-dev",
+		"production": "my-project-prod"
+	},
+	"region": "us-central1",
+	"functionsDirectory": "src/controllers",
+	"rulesDirectory": "src/rules",
+	"firestoreRules": "src/rules/firestore.rules",
+	"storageRules": "src/rules/storage.rules",
+	"scriptsDirectory": "scripts",
+	"initScript": "on_emulate.ts",
+	"nodeVersion": "22",
+	"engine": "bun",
+	"packageManager": "global",
+	"minify": true,
+	"sourcemap": true,
+	"keepNames": false,
+	"external": [],
+	"emulators": ["auth", "firestore", "functions", "pubsub", "storage"],
+	"emulatorPorts": {
+		"auth": 9099,
+		"firestore": 8080,
+		"functions": 5001
+	},
+	"rulesTests": {
+		"firestore": {
+			"rulesFile": "src/rules/firestore.rules",
+			"testPattern": "tests/rules/**/*.rules.test.ts",
+			"projectId": "firestack-rules-test"
+		},
+		"storage": {
+			"rulesFile": "src/rules/storage.rules",
+			"testPattern": "tests/storage-rules/**/*.rules.test.ts",
+			"projectId": "firestack-rules-test"
+		}
+	}
 }
 ```
 
@@ -110,18 +109,18 @@ Configure `firestack test:rules` via the `rulesTests` object:
 
 ```json
 {
-  "rulesTests": {
-    "firestore": {
-      "rulesFile": "src/rules/firestore.rules",
-      "testPattern": "tests/rules/**/*.rules.test.ts",
-      "projectId": "demo-rules-test"
-    },
-    "storage": {
-      "rulesFile": "src/rules/storage.rules",
-      "testPattern": "tests/storage-rules/**/*.rules.test.ts",
-      "projectId": "demo-rules-test"
-    }
-  }
+	"rulesTests": {
+		"firestore": {
+			"rulesFile": "src/rules/firestore.rules",
+			"testPattern": "tests/rules/**/*.rules.test.ts",
+			"projectId": "demo-rules-test"
+		},
+		"storage": {
+			"rulesFile": "src/rules/storage.rules",
+			"testPattern": "tests/storage-rules/**/*.rules.test.ts",
+			"projectId": "demo-rules-test"
+		}
+	}
 }
 ```
 

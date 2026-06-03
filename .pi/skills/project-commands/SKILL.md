@@ -50,13 +50,13 @@ moon_run_task("pwa:build", timeout=600)   # longer for build
 bash("npm test 2>&1")
 ```
 
-| Task Type | Default Timeout | Notes |
-|-----------|----------------|--------|
-| Fix / Lint | 120s | Fast static analysis |
-| Typecheck | 180s | Slower but bounded |
-| Test (unit) | 300s | Default 5 minutes |
-| Build | 600s | Bundling can be slow |
-| Test (E2E) | 600s | Includes server startup |
+| Task Type   | Default Timeout | Notes                   |
+| ----------- | --------------- | ----------------------- |
+| Fix / Lint  | 120s            | Fast static analysis    |
+| Typecheck   | 180s            | Slower but bounded      |
+| Test (unit) | 300s            | Default 5 minutes       |
+| Build       | 600s            | Bundling can be slow    |
+| Test (E2E)  | 600s            | Includes server startup |
 
 ### 3. Tmux Session Lifecycle
 
@@ -81,13 +81,13 @@ bun run tmux:stop pwa
 
 The monorepo has **inherited default tasks** in `.moon/tasks/all.yml` that every project gets automatically:
 
-| Inherited Task | Delegates To | When to Override |
-|---|---|---|
-| `lint` | `bun run lint` | Never — already maps to `biome lint .` |
-| `format` | `bun run format` | Never — already maps to `biome format .` |
-| `typecheck` | `bun run typecheck` | Never — already maps to `tsc --noEmit` |
-| `fix` | `bun run fix` | Never — already maps to `biome check --write .` |
-| `validate` | `~:lint` + `~:format` + `~:typecheck` | Never — internal meta-task, do NOT define in package.json |
+| Inherited Task | Delegates To                          | When to Override                                          |
+| -------------- | ------------------------------------- | --------------------------------------------------------- |
+| `lint`         | `bun run lint`                        | Never — already maps to `biome lint .`                    |
+| `format`       | `bun run format`                      | Never — already maps to `biome format .`                  |
+| `typecheck`    | `bun run typecheck`                   | Never — already maps to `tsc --noEmit`                    |
+| `fix`          | `bun run fix`                         | Never — already maps to `biome check --write .`           |
+| `validate`     | `~:lint` + `~:format` + `~:typecheck` | Never — internal meta-task, do NOT define in package.json |
 
 Do NOT define these tasks in your project's `moon.yml`. They are inherited for free.
 
@@ -100,19 +100,19 @@ $schema: "https://moonrepo.dev/schemas/project.json"
 language: "typescript"
 layer: "library"
 tags:
-  - "{project}"
-  - "{domain}"
-  - "library"
+    - "{project}"
+    - "{domain}"
+    - "library"
 
 project:
-  name: "{project-id}"      # moon key, e.g. "backend-auth"
-  description: "{Description}."
-  channel: "#frontend"
-  owner: "Frontend Team"
+    name: "{project-id}" # moon key, e.g. "backend-auth"
+    description: "{Description}."
+    channel: "#frontend"
+    owner: "Frontend Team"
 
 dependsOn:
-  - "constants"
-  - "types"
+    - "constants"
+    - "types"
 ```
 
 No `fileGroups` or `tasks` sections — all inherited.
@@ -126,31 +126,31 @@ $schema: "https://moonrepo.dev/schemas/project.json"
 language: "typescript"
 layer: "library"
 tags:
-  - "{project}"
-  - "{domain}"
-  - "library"
+    - "{project}"
+    - "{domain}"
+    - "library"
 
 project:
-  name: "{project-id}"
-  description: "{Description}."
-  channel: "#frontend"
-  owner: "Frontend Team"
+    name: "{project-id}"
+    description: "{Description}."
+    channel: "#frontend"
+    owner: "Frontend Team"
 
 dependsOn:
-  - "constants"
-  - "types"
+    - "constants"
+    - "types"
 
 fileGroups:
-  tests:
-    - "tests/**/*"
+    tests:
+        - "tests/**/*"
 
 tasks:
-  test:
-    command: "bun run test"
-    inputs:
-      - "@group(sources)"
-      - "@group(tests)"
-      - "@group(configs)"
+    test:
+        command: "bun run test"
+        inputs:
+            - "@group(sources)"
+            - "@group(tests)"
+            - "@group(configs)"
 ```
 
 Only the `test` task is defined — you can reference `@group(sources)` and `@group(configs)` from the inherited file groups.
@@ -164,71 +164,71 @@ $schema: "https://moonrepo.dev/schemas/project.json"
 language: "typescript"
 layer: "application"
 tags:
-  - "{project}"
-  - "{domain}"
-  - "application"
+    - "{project}"
+    - "{domain}"
+    - "application"
 
 project:
-  name: "{project-id}"
-  description: "{Description}."
-  channel: "#frontend"
-  owner: "Frontend Team"
+    name: "{project-id}"
+    description: "{Description}."
+    channel: "#frontend"
+    owner: "Frontend Team"
 
 dependsOn:
-  - "constants"
-  - "types"
+    - "constants"
+    - "types"
 
 toolchains:
-  javascript: false      # use this if the app bundles its own deps (Vite, Astro)
+    javascript: false # use this if the app bundles its own deps (Vite, Astro)
 
 fileGroups:
-  sources:
-    - "src/**/*"
-    - "index.html"
-  configs:
-    - "package.json"
-    - "tsconfig.json"
-    - "vite.config.*"
-  tests:
-    - "tests/**/*"
-    - "playwright.config.*"
-  unitTests:
-    - "src/**/*.test.ts"
+    sources:
+        - "src/**/*"
+        - "index.html"
+    configs:
+        - "package.json"
+        - "tsconfig.json"
+        - "vite.config.*"
+    tests:
+        - "tests/**/*"
+        - "playwright.config.*"
+    unitTests:
+        - "src/**/*.test.ts"
 
 tasks:
-  dev:
-    command: "bun run dev"
-    preset: "server"
-  build:
-    command: "bun run build"
-    inputs:
-      - "@group(sources)"
-      - "@group(configs)"
-    outputs:
-      - "dist"
-  preview:
-    command: "bun run preview"
-    preset: "server"
-  test:
-    script: |
-      bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
-    deps:
-      - "build"
-    inputs:
-      - "@group(tests)"
-      - "@group(sources)"
-  test-unit:
-    command: "bun run test:unit"
-    inputs:
-      - "@group(unitTests)"
-      - "@group(sources)"
-  test-e2e:
-    script: 'bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
-    deps:
-      - "build"
-    inputs:
-      - "@group(tests)"
-      - "@group(sources)"
+    dev:
+        command: "bun run dev"
+        preset: "server"
+    build:
+        command: "bun run build"
+        inputs:
+            - "@group(sources)"
+            - "@group(configs)"
+        outputs:
+            - "dist"
+    preview:
+        command: "bun run preview"
+        preset: "server"
+    test:
+        script: |
+            bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
+        deps:
+            - "build"
+        inputs:
+            - "@group(tests)"
+            - "@group(sources)"
+    test-unit:
+        command: "bun run test:unit"
+        inputs:
+            - "@group(unitTests)"
+            - "@group(sources)"
+    test-e2e:
+        script: "bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT"
+        deps:
+            - "build"
+        inputs:
+            - "@group(tests)"
+            - "@group(sources)"
 ```
 
 ### Key Rules
@@ -249,36 +249,36 @@ The root `package.json` provides shortcuts for common operations:
 
 ### Development
 
-| Script            | Command                                    | Purpose                                                      |
-| ----------------- | ------------------------------------------ | ------------------------------------------------------------ |
-| `dev`             | `moon run $APP:dev`                        | Start dev server for $APP (defaults to emulator for PWA)    |
-| `dev:all`         | `bun run scripts/src/lib/ops/dev_all.ts`   | Start full stack in tmux (mode from $AIKAMI_MODE)            |
+| Script    | Command                                  | Purpose                                                  |
+| --------- | ---------------------------------------- | -------------------------------------------------------- |
+| `dev`     | `moon run $APP:dev`                      | Start dev server for $APP (defaults to emulator for PWA) |
+| `dev:all` | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in tmux (mode from $AIKAMI_MODE)        |
 
-| Tmux Script       | Command                                 | Purpose                                                      |
-| ----------------- | --------------------------------------- | ------------------------------------------------------------ |
-| `tmux:start`      | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (emulators/pwa/game/all)                |
-| `tmux:join`       | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session                             |
-| `tmux:stop`       | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                                          |
-| `tmux:stop-all`   | `bun run scripts/src/lib/tmux/stop_all.ts` | Stop all aikami tmux sessions                                |
-| `tmux:status`     | `bun run scripts/src/lib/tmux/status.ts`   | List running aikami tmux sessions                            |
+| Tmux Script     | Command                                    | Purpose                                       |
+| --------------- | ------------------------------------------ | --------------------------------------------- |
+| `tmux:start`    | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (emulators/pwa/game/all) |
+| `tmux:join`     | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session              |
+| `tmux:stop`     | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                           |
+| `tmux:stop-all` | `bun run scripts/src/lib/tmux/stop_all.ts` | Stop all aikami tmux sessions                 |
+| `tmux:status`   | `bun run scripts/src/lib/tmux/status.ts`   | List running aikami tmux sessions             |
 
 ### Validation (Run Separately)
 
 **AI agents: always use the `:affected` variants.**
 
-| Script              | Command                          | Purpose                    |
-| ------------------- | -------------------------------- | -------------------------- |
-| `fix`               | `moon run :fix`                  | Fix all projects           |
-| `fix:affected`      | `moon run :fix --affected`       | Fix affected only          |
-| `typecheck`         | `moon run :typecheck`            | Typecheck all projects     |
-| `typecheck:affected` | `moon run :typecheck --affected` | Typecheck affected only    |
-| `test`              | `moon run $APP:test`             | Run tests (single app)     |
-| `test:affected`     | `moon run :test --affected`      | Test all affected          |
-| `lint`              | `moon run :lint`                 | Lint all projects          |
-| `lint:affected`     | `moon run :lint --affected`      | Lint affected only         |
-| `format`            | `moon run :format`               | Check formatting           |
-| `format:affected`   | `moon run :format --affected`    | Format affected only       |
-| `format:write`      | Write formatting fixes           |                            |
+| Script               | Command                          | Purpose                 |
+| -------------------- | -------------------------------- | ----------------------- |
+| `fix`                | `moon run :fix`                  | Fix all projects        |
+| `fix:affected`       | `moon run :fix --affected`       | Fix affected only       |
+| `typecheck`          | `moon run :typecheck`            | Typecheck all projects  |
+| `typecheck:affected` | `moon run :typecheck --affected` | Typecheck affected only |
+| `test`               | `moon run $APP:test`             | Run tests (single app)  |
+| `test:affected`      | `moon run :test --affected`      | Test all affected       |
+| `lint`               | `moon run :lint`                 | Lint all projects       |
+| `lint:affected`      | `moon run :lint --affected`      | Lint affected only      |
+| `format`             | `moon run :format`               | Check formatting        |
+| `format:affected`    | `moon run :format --affected`    | Format affected only    |
+| `format:write`       | Write formatting fixes           |                         |
 
 ### Setup (One-Time)
 
@@ -291,11 +291,11 @@ The root `package.json` provides shortcuts for common operations:
 
 ### Operations (Daily)
 
-| Script         | Command                                 | Purpose               |
-| -------------- | --------------------------------------- | --------------------- |
-| `ops:secrets`  | `bun run scripts/ops/upload_secrets.ts` | Upload secrets to GCP |
-| `ops:add-user` | `bun run scripts/ops/add_user.ts`       | Add user to GCP IAM   |
-| `ops:dev-all`  | `bun run scripts/src/lib/ops/dev_all.ts`   | Start full stack in tmux |
+| Script         | Command                                  | Purpose                  |
+| -------------- | ---------------------------------------- | ------------------------ |
+| `ops:secrets`  | `bun run scripts/ops/upload_secrets.ts`  | Upload secrets to GCP    |
+| `ops:add-user` | `bun run scripts/ops/add_user.ts`        | Add user to GCP IAM      |
+| `ops:dev-all`  | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in tmux |
 
 ### Logging
 
@@ -349,12 +349,12 @@ The root `package.json` provides shortcuts for common operations:
 
 Pushing commits with these directives in the commit message controls what gets deployed:
 
-| Directive | Effect |
-| :--- | :--- |
+| Directive      | Effect                                                    |
+| :------------- | :-------------------------------------------------------- |
 | `[only <app>]` | Deploy only specified app(s), ignoring affected detection |
-| `[skip <app>]` | Skip specified app(s) even if affected |
-| `[skip all]` | Skip all deployments |
-| `[deploy all]` | Deploy all apps regardless of changes (Alias: `[force]`) |
+| `[skip <app>]` | Skip specified app(s) even if affected                    |
+| `[skip all]`   | Skip all deployments                                      |
+| `[deploy all]` | Deploy all apps regardless of changes (Alias: `[force]`)  |
 
 ---
 
@@ -386,6 +386,63 @@ bun run typecheck:affected
 ---
 
 ## Debugging & Testing
+
+### Debugging Workflow
+
+**Code-first debugging.** Most issues are solved by reading source files, tmux logs, and
+checking the Firestore emulator data. Browser tools are a LAST resort — they are expensive
+in tokens and time.
+
+#### Debugging Priority (use in order)
+
+| Priority | Tool                         | When to use                                      |
+| -------- | ---------------------------- | ------------------------------------------------ |
+| 1        | `read` source files          | Always — understand the code FIRST               |
+| 2        | `tmux_session read`          | Check live server logs for errors                |
+| 3        | `firestore_query`            | Verify data state in the emulator                |
+| 4        | `browser_inspect`            | UI rendering bug, 404, blank page, env var check |
+| 5        | `browser_console`            | Evidence of a JS runtime error in the browser    |
+| 6        | `browser_network`            | Specific hypothesis about a failing API call     |
+| 7        | `browser_screenshot`         | User asks to see the page, or final verification |
+
+#### Browser Tool Rules
+
+1. **`browser_inspect`** — Most useful browser tool. Use ONCE with a focused `selector`.
+   It exposes `PUBLIC_*` env vars in the DOM, which is invaluable for diagnosing
+   wrong-env or wrong-app issues. Do NOT inspect the same page repeatedly.
+
+2. **`browser_console`** — Only after browser_inspect, and only when you have reason to
+   believe JS errors are happening (blank page, broken UI). The output is a buffer of
+   intercepted console.* calls; one call is enough.
+
+3. **`browser_network`** — Only when you have a SPECIFIC hypothesis about a failing API
+   call. Does NOT capture Firestore gRPC traffic — only XHR/fetch/WebSocket.
+   A single capture with appropriate `durationMs` is sufficient.
+
+4. **`browser_screenshot`** — Only when the user explicitly asks to see the page, or
+   for one final verification after a fix. Do NOT screenshot during debugging.
+
+5. **`browser_lighthouse`** — Specialized audit tool. Only use when the user asks about
+   performance or accessibility specifically.
+
+#### Common Patterns
+
+```bash
+# Pattern: "Something is broken in the PWA"
+# Step 1: Check what's actually running
+bash: ss -tlnp | grep <port>
+# Step 2: Read the server logs
+tmux_session read pwa
+# Step 3: Check the DOM once
+browser_inspect app=pwa selector="body"
+# Step 4: Read relevant source files based on findings
+
+# Pattern: "API call is failing"
+# Step 1: Read the service/repository code
+# Step 2: Check tmux logs for backend errors
+# Step 3: browser_network ONLY if the call is XHR/fetch (not Firestore gRPC)
+# Step 4: Read security rules if permission errors suspected
+```
 
 ### Diagnostic scripts (create instead of asking user to run commands)
 
@@ -425,20 +482,20 @@ The AI enforces: 2 failed attempts → diagnostic script. Never ask user to "try
 
 All tmux sessions use a unified naming convention: `aikami-{mode}-{service}`.
 
-| Variable | Values |
-|----------|--------|
-| `mode` | `emulator`, `development`, `production` |
-| `service` | `emulators`, `pwa`, `game`, `all` |
+| Variable  | Values                              |
+| --------- | ----------------------------------- |
+| `mode`    | `emulator`, `staging`, `production` |
+| `service` | `emulators`, `pwa`, `game`, `all`   |
 
 ### Root package.json scripts
 
-| Script | Purpose |
-|--------|---------|
+| Script                         | Purpose                      |
+| ------------------------------ | ---------------------------- |
 | `bun run tmux:start <service>` | Start a session (background) |
-| `bun run tmux:join <service>` | Attach to a running session |
-| `bun run tmux:stop <service>` | Stop a session |
-| `bun run tmux:stop-all` | Stop all aikami sessions |
-| `bun run tmux:status` | List all running sessions |
+| `bun run tmux:join <service>`  | Attach to a running session  |
+| `bun run tmux:stop <service>`  | Stop a session               |
+| `bun run tmux:stop-all`        | Stop all aikami sessions     |
+| `bun run tmux:status`          | List all running sessions    |
 
 All scripts respect `$AIKAMI_MODE` from direnv. Override with `--mode <mode>`.
 Use `--force` with `tmux:start` to kill and recreate an existing session.
@@ -453,7 +510,7 @@ bun run tmux:start game              # Game dev server
 bun run tmux:start all               # Full stack (emulators + pwa + game)
 
 # Override mode
-bun run tmux:start emulators --mode development
+bun run tmux:start emulators --mode staging
 
 # Force recreate
 bun run tmux:start all --force
@@ -495,9 +552,9 @@ The unified library (`scripts/src/lib/tmux/session.ts`) handles:
 1. **Session naming**: `aikami-{mode}-{service}` stored as a tmux env var
 2. **Mode detection**: Checks `AIKAMI_TMUX_MODE` env var in the session
 3. **Start logic**:
-   - Session doesn't exist → create new
-   - Session exists, same mode → reuse (no-op)
-   - Session exists, different mode → error (use `--force` to override)
+    - Session doesn't exist → create new
+    - Session exists, same mode → reuse (no-op)
+    - Session exists, different mode → error (use `--force` to override)
 4. **Command wrapping**: Uses `direnv exec . bash -c '...'` to load Nix env
 5. **Keepalive**: Appends `; echo; echo '=== Stopped. Press Enter to close ==='; read`
    so the pane stays open after the command exits

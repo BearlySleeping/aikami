@@ -80,7 +80,7 @@ class AuthController
   /**
    * Initiates the device flow auth handoff.
    * Generates a short code, writes it to Firestore, and begins polling.
-   * @param pwaBaseUrl - Base URL of the PWA (e.g. "http://localhost:5174")
+   * @param pwaBaseUrl - Base URL of the PWA (e.g. "http://localhost:5274")
    */
   async startHandoff(options: { pwaBaseUrl: string }): Promise<void> {
     const { pwaBaseUrl } = options;

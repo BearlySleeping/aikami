@@ -1,8 +1,9 @@
 import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import type { Mode } from '@aikami/types';
 import { defineConfig } from 'vite';
-import { DEVELOPMENT_PORTS, EMULATOR_PORTS } from '../../../packages/shared/constants/src/index';
+import { PORTS } from '../../../packages/shared/constants/src/index';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
@@ -25,9 +26,8 @@ const toPackagesPath = (path: string) => join(packagesDirectory, path);
 const toSrcPath = (path: string) => join(projectDirectory, 'src', path);
 
 export default defineConfig(({ mode }) => {
-  const port = Number(
-    process.env.PORT || mode === 'emulator' ? EMULATOR_PORTS.game : DEVELOPMENT_PORTS.game,
-  );
+  const port = Number(process.env.PORT || PORTS[mode as Mode].game);
+
   return {
     envPrefix: ['PUBLIC_'],
     resolve: {

@@ -3,7 +3,7 @@
   "display": "Utils",
   "extends": "../../../config/tsconfig/tsconfig.base.json",
   "compilerOptions": {
-    "types": ["bun-types"],
+    "types": ["bun"],
     "rootDir": "..",
     "outDir": "dist",
     "paths": {

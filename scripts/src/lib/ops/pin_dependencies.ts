@@ -12,7 +12,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const MONOREPO_ROOT = resolve(import.meta.dir, '../../..');
+const MONOREPO_ROOT = resolve(import.meta.dir, '../../../..');
 
 function findCurrentPlaywrightVersion(): string {
   // 1. Try reading the installed npm package version

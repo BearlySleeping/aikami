@@ -5,10 +5,10 @@ import Type from 'typebox';
 
 /**
  * TypeBox schema for Aikami deployment mode.
- * modes = ['development', 'production', 'emulator'] as const
+ * modes = ['staging', 'production', 'emulator'] as const
  */
 export const ModeSchema = Type.Union([
-  Type.Literal('development'),
+  Type.Literal('staging'),
   Type.Literal('production'),
   Type.Literal('emulator'),
 ]);

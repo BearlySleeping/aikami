@@ -12,13 +12,13 @@ set -euo pipefail
 # ── Constants ────────────────────────────────────────────────────────────
 
 # Valid modes
-readonly _AIKAMI_VALID_MODES=("emulator" "development" "production")
+readonly _AIKAMI_VALID_MODES=("emulator" "staging" "production")
 readonly _AIKAMI_DEFAULT_MODE="emulator"
 
 # GCP project mapping
 declare -A _AIKAMI_PROJECT_MAP=(
   [emulator]="demo-aikami-emulator"
-  [development]="aikami-dev"
+  [staging]="aikami-dev"
   [production]="aikami-prod"
 )
 
@@ -50,7 +50,7 @@ _aikami_root() {
 #   3. Default: "emulator"
 #
 # Sets and exports:
-#   AIKAMI_MODE        — "emulator" | "development" | "production"
+#   AIKAMI_MODE        — "emulator" | "staging" | "production"
 #   AIKAMI_ENV         — alias for AIKAMI_MODE
 #   AIKAMI_PROJECT_ID  — GCP project ID
 #   AIKAMI_IS_EMULATOR — "1" if emulator mode, "0" otherwise

@@ -2,21 +2,20 @@
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import type { Mode } from '@aikami/types';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
-import { DEVELOPMENT_PORTS, EMULATOR_PORTS } from '../../../packages/shared/constants/src/index';
+import { PORTS } from '../../../packages/shared/constants/src/index';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
 
 export default defineConfig(({ mode }) => {
-  const port = Number(
-    process.env.PORT || mode === 'emulator' ? EMULATOR_PORTS.pwa : DEVELOPMENT_PORTS.pwa,
-  );
+  const port = Number(process.env.PORT || PORTS[mode as Mode].pwa);
 
   const plugins: PluginOption[] = [
     tailwindcss(),
@@ -27,7 +26,7 @@ export default defineConfig(({ mode }) => {
     }) as PluginOption,
   ];
 
-  if (mode === 'development' && process.env.DEBUG === '1') {
+  if (mode === 'staging' && process.env.DEBUG === '1') {
     plugins.unshift(devtoolsJson());
   }
 
