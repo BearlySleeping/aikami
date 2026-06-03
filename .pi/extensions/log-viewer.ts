@@ -10,7 +10,7 @@
 // Also delegates Firestore log_entries queries to firestore_query tool.
 //
 // Direnv env vars (set by .envrc) — always available:
-//   AIKAMI_MODE          — emulator | development | production
+//   AIKAMI_MODE          — emulator | staging | production
 //   AIKAMI_PROJECT_ID    — GCP project id
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
@@ -42,7 +42,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet:
       "Use service_logs to view Cloud Run / Firebase logs. For Firestore log_entries use firestore_query.",
     promptGuidelines: [
-      "Use service_logs when user says 'the PWA crashed in dev' → app=pwa, mode=development.",
+      "Use service_logs when user says 'the PWA crashed in dev' → app=pwa, mode=staging.",
       "Use service_logs when user says 'check function logs for pollGmail' → app=functions, only=pollGmail.",
       "Use service_logs when user says 'tail the logs' → tail=true.",
       "Use firestore_query(collection='log_entries', env='emulator') for structured Firestore logs.",
@@ -67,8 +67,8 @@ export default function (pi: ExtensionAPI) {
       mode: Type.Optional(
         Type.String({
           description: "Deployment mode",
-          enum: ["development", "production", "emulator"],
-          default: "development",
+          enum: ["staging", "production", "emulator"],
+          default: "staging",
         })
       ),
       lines: Type.Optional(
@@ -92,8 +92,8 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       const app = params.app ?? "functions"
-      // Resolve mode: explicit param > direnv env > "development" default
-      const mode = params.mode ?? (process.env.AIKAMI_MODE as string | undefined) ?? "development"
+      // Resolve mode: explicit param > direnv env > "staging" default
+      const mode = params.mode ?? (process.env.AIKAMI_MODE as string | undefined) ?? "staging"
       const lines = params.lines ?? 50
       const serviceType = APP_SERVICE_TYPES[app]
 

@@ -1,14 +1,17 @@
 #!/usr/bin/env bun
 // scripts/src/lib/tmux/stop.ts
-// Stop a tmux session.
+// Stop aikami services by killing their tmux windows or the whole session.
 //
-// Usage: bun run tmux:stop <service> [--mode <mode>]
+// Usage:
+//   bun tmux:stop pwa              # kill pwa tab only
+//   bun tmux:stop emulator,game    # kill two tabs
+//   bun tmux:stop all              # kill entire session
 
-import { parseArgs } from './cli.ts';
-import { hasTmux, stopSession } from './session.ts';
+import { parseServiceArgs } from './cli.ts';
+import { hasTmux, stopServices } from './session.ts';
 
 const args = process.argv.slice(2);
-const config = parseArgs(args);
+const config = parseServiceArgs(args);
 
 if (!(await hasTmux())) {
   console.error('❌ tmux is not installed.');
@@ -16,7 +19,7 @@ if (!(await hasTmux())) {
 }
 
 try {
-  await stopSession({ service: config.service, mode: config.mode });
+  await stopServices({ mode: config.mode, services: config.services });
 } catch (e) {
   console.error('❌', e instanceof Error ? e.message : e);
   process.exit(1);

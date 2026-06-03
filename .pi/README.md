@@ -9,12 +9,12 @@
 
 Aikami's `.pi/` directory extends the global `~/.pi/` setup with project-specific tooling:
 
-| Layer | Location | Scope |
-|-------|----------|-------|
-| Global extensions | `~/.pi/agent/extensions/` | All projects (auto-fallback, git-checkpoint, log-offloader, model-modes, scroll-to-end) |
-| Global skills | `~/.pi/skills/`, `~/.agents/skills/` | All projects (browser-tools, find-skills) |
-| **Project extensions** | `.pi/extensions/` | Aikami only — moon integration, firebase tools, log viewer |
-| **Project skills** | `.pi/skills/` | Aikami only — conventions, firestack, firestore, svelte, contracts, commands |
+| Layer                  | Location                             | Scope                                                                                   |
+| ---------------------- | ------------------------------------ | --------------------------------------------------------------------------------------- |
+| Global extensions      | `~/.pi/agent/extensions/`            | All projects (auto-fallback, git-checkpoint, log-offloader, model-modes, scroll-to-end) |
+| Global skills          | `~/.pi/skills/`, `~/.agents/skills/` | All projects (browser-tools, find-skills)                                               |
+| **Project extensions** | `.pi/extensions/`                    | Aikami only — moon integration, firebase tools, log viewer                              |
+| **Project skills**     | `.pi/skills/`                        | Aikami only — conventions, firestack, firestore, svelte, contracts, commands            |
 
 Models, observational memory, context-mode, theme, and Telegram bridge are global — configured in `~/.pi/`.
 
@@ -23,32 +23,36 @@ Models, observational memory, context-mode, theme, and Telegram bridge are globa
 ## Project Extensions (`.pi/extensions/`)
 
 ### 1. `direnv.ts` — Environment Awareness
-| Tool | Purpose |
-|------|--------|
-| `direnv_status` | Show current environment: mode, project, Nix shell, secrets |
-| `direnv_switch_mode` | Switch between emulator, development, production |
-| `direnv_add_package` | Add a Nix package to flake.nix and reload direnv |
-| `direnv_add_secret` | Register a new secret key in secrets.sh |
+
+| Tool                 | Purpose                                                     |
+| -------------------- | ----------------------------------------------------------- |
+| `direnv_status`      | Show current environment: mode, project, Nix shell, secrets |
+| `direnv_switch_mode` | Switch between emulator, staging, production                |
+| `direnv_add_package` | Add a Nix package to flake.nix and reload direnv            |
+| `direnv_add_secret`  | Register a new secret key in secrets.sh                     |
 
 ### 2. `moon-integration.ts` — Monorepo Orchestration
-| Tool | Purpose |
-|------|---------|
-| `moon_detect_affected` | Query moon for changed projects |
-| `moon_run_task` | Run any moon task |
-| `moon_list_projects` | List all monorepo projects |
-| `validate` | Fix+typecheck → optionally build+test on affected projects |
-| `blackbox_test` | Run full-stack blackbox integration tests |
+
+| Tool                   | Purpose                                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| `moon_detect_affected` | Query moon for changed projects                            |
+| `moon_run_task`        | Run any moon task                                          |
+| `moon_list_projects`   | List all monorepo projects                                 |
+| `validate`             | Fix+typecheck → optionally build+test on affected projects |
+| `blackbox_test`        | Run full-stack blackbox integration tests                  |
 
 ### 3. `firebase-tools.ts` — Firebase Operations
-| Tool | Purpose |
-|------|---------|
-| `firestore_query` | Query Firestore collections |
-| `firebase_deploy_functions` | Deploy functions via firestack |
-| `firebase_emulator` | Start/stop/status of Firebase emulators |
+
+| Tool                        | Purpose                                 |
+| --------------------------- | --------------------------------------- |
+| `firestore_query`           | Query Firestore collections             |
+| `firebase_deploy_functions` | Deploy functions via firestack          |
+| `firebase_emulator`         | Start/stop/status of Firebase emulators |
 
 ### 4. `log-viewer.ts` — Unified Logs
-| Tool | Purpose |
-|------|---------|
+
+| Tool           | Purpose                       |
+| -------------- | ----------------------------- |
 | `service_logs` | View logs for Aikami services |
 
 ---
@@ -57,48 +61,48 @@ Models, observational memory, context-mode, theme, and Telegram bridge are globa
 
 See individual skill files for details.
 
-| Skill | When Used |
-|-------|-----------|
-| `aikami-conventions` | **🔴 LOAD FIRST** before ANY code — critical violations, TS strictness, imports, arrow functions, errors, private member `_` prefix, snake_case files, output style |
-| `svelte-conventions` | Svelte 5 runes, ViewModel, services, aliases |
-| `backend-conventions` | Backend patterns — repository, database abstraction, services |
-| `firebase-functions` | Cloud Functions — firestack v2, Zod wrappers, deployment |
-| `firestore-collection` | Scaffolding new Firestore collections |
-| `svelte-page` | Scaffolding new SvelteKit pages |
-| `new-project` | Scaffolding new monorepo projects/packages |
-| `contract-implementer` | Implementing features from `docs/contracts/` |
-| `project-commands` | Build, test, lint, deploy command reference |
-| `firestack` | Firebase CLI — deploy, emulate, test rules |
-| `pixijs-v8` | PixiJS v8 + bitECS + engine boundary |
-| `tauri-v2` | Tauri v2 desktop app patterns |
+| Skill                  | When Used                                                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aikami-conventions`   | **🔴 LOAD FIRST** before ANY code — critical violations, TS strictness, imports, arrow functions, errors, private member `_` prefix, snake_case files, output style |
+| `svelte-conventions`   | Svelte 5 runes, ViewModel, services, aliases                                                                                                                        |
+| `backend-conventions`  | Backend patterns — repository, database abstraction, services                                                                                                       |
+| `firebase-functions`   | Cloud Functions — firestack v2, Zod wrappers, deployment                                                                                                            |
+| `firestore-collection` | Scaffolding new Firestore collections                                                                                                                               |
+| `svelte-page`          | Scaffolding new SvelteKit pages                                                                                                                                     |
+| `new-project`          | Scaffolding new monorepo projects/packages                                                                                                                          |
+| `contract-implementer` | Implementing features from `docs/contracts/`                                                                                                                        |
+| `project-commands`     | Build, test, lint, deploy command reference                                                                                                                         |
+| `firestack`            | Firebase CLI — deploy, emulate, test rules                                                                                                                          |
+| `pixijs-v8`            | PixiJS v8 + bitECS + engine boundary                                                                                                                                |
+| `tauri-v2`             | Tauri v2 desktop app patterns                                                                                                                                       |
 
 ---
 
 ## Prompts (`.pi/prompts/`)
 
-| Prompt | Purpose |
-|--------|---------|
-| `contract.md` | Writing feature contracts |
-| `dev.md` | Development workflow and debugging protocol |
-| `pre-commit.md` | Pre-commit checklist |
-| `handoff.md` | Session handoff for $0 context spend |
-| `anti-loop.md` | Anti-loop enforcement rules |
-| `pi-test.md` | Testing .pi changes |
+| Prompt          | Purpose                                     |
+| --------------- | ------------------------------------------- |
+| `contract.md`   | Writing feature contracts                   |
+| `dev.md`        | Development workflow and debugging protocol |
+| `pre-commit.md` | Pre-commit checklist                        |
+| `handoff.md`    | Session handoff for $0 context spend        |
+| `anti-loop.md`  | Anti-loop enforcement rules                 |
+| `pi-test.md`    | Testing .pi changes                         |
 
 ---
 
 ## Conventions
 
-| Convention | Enforced By |
-|------------|------------|
-| Always use `moon_run_task` for build/test/typecheck | moon-integration.ts |
-| Always use `validate()` instead of raw moon commands | moon-integration.ts |
-| Use `ctx_execute` for analysis, not raw file reads | context-mode |
-| Use `ctx_fetch_and_index` for web docs, not inline paste | context-mode |
-| Load `aikami-conventions` first before any code | dev.md prompt 🔴 |
-| General TS rules, imports, arrow functions, private `_` prefix, snake_case files, output style | `aikami-conventions` skill 🔴 |
-| Svelte 5 ViewModel, services, runes | `svelte-conventions` skill |
-| Backend repository pattern, database abstraction | `backend-conventions` skill |
-| Game engine boundary, PixiJS patterns | `pixijs-v8` skill |
-| Private class members use `_` prefix | `aikami-conventions` skill |
-| Direnv environment is always loaded — extensions read `AIKAMI_MODE`, `AIKAMI_PROJECT_ID` directly | direnv.ts |
+| Convention                                                                                        | Enforced By                   |
+| ------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Always use `moon_run_task` for build/test/typecheck                                               | moon-integration.ts           |
+| Always use `validate()` instead of raw moon commands                                              | moon-integration.ts           |
+| Use `ctx_execute` for analysis, not raw file reads                                                | context-mode                  |
+| Use `ctx_fetch_and_index` for web docs, not inline paste                                          | context-mode                  |
+| Load `aikami-conventions` first before any code                                                   | dev.md prompt 🔴              |
+| General TS rules, imports, arrow functions, private `_` prefix, snake_case files, output style    | `aikami-conventions` skill 🔴 |
+| Svelte 5 ViewModel, services, runes                                                               | `svelte-conventions` skill    |
+| Backend repository pattern, database abstraction                                                  | `backend-conventions` skill   |
+| Game engine boundary, PixiJS patterns                                                             | `pixijs-v8` skill             |
+| Private class members use `_` prefix                                                              | `aikami-conventions` skill    |
+| Direnv environment is always loaded — extensions read `AIKAMI_MODE`, `AIKAMI_PROJECT_ID` directly | direnv.ts                     |

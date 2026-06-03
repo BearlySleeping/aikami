@@ -229,16 +229,16 @@ end
 function aikami_switch
     set -l mode $argv[1]
     if test -z "$mode"
-        echo "Usage: aikami_switch <emulator|development|production>"
+        echo "Usage: aikami_switch <emulator|staging|production>"
         echo "Current mode: "(set -q AIKAMI_MODE; and echo $AIKAMI_MODE; or echo emulator)
         return 1
     end
 
     switch $mode
-        case emulator development production
+        case emulator staging production
             # valid
         case '*'
-            echo "Invalid mode: $mode (use emulator, development, or production)"
+            echo "Invalid mode: $mode (use emulator, staging, or production)"
             return 1
     end
 

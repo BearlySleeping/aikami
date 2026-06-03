@@ -249,10 +249,10 @@ export const getProjectId = (): string => {
   // When running in emulator mode, always use the emulator project ID
   // regardless of what getMode() reports. This handles the case where
   // FIRESTORE_EMULATOR_HOST is set but MODE env var still reads as
-  // "development" from the base .env file.
+  // "staging" from the base .env file.
   if (isEmulatorMode()) {
     return MODE_PROJECT_MAP.emulator;
   }
   const mode = getMode();
-  return (MODE_PROJECT_MAP as Record<string, string>)[mode] ?? MODE_PROJECT_MAP.development;
+  return (MODE_PROJECT_MAP as Record<string, string>)[mode] ?? MODE_PROJECT_MAP.staging;
 };

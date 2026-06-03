@@ -17,25 +17,25 @@ Configuration lives in `apps/backend/functions/firestack.config.ts`. **There is 
 
 ```ts
 // apps/backend/functions/firestack.config.ts
-import { defineConfig } from '@snorreks/firestack';
+import { defineConfig } from "@snorreks/firestack";
 import {
-  CLOUD_FUNCTIONS_REGION,
-  MODE_PROJECT_MAP,
-} from '../../../packages/shared/constants/src/index.ts';
+	CLOUD_FUNCTIONS_REGION,
+	MODE_PROJECT_MAP,
+} from "../../../packages/shared/constants/src/index.ts";
 
 export default defineConfig(() => ({
-  modes: {
-    development: MODE_PROJECT_MAP.development,
-    production: MODE_PROJECT_MAP.production,
-    emulator: MODE_PROJECT_MAP.emulator,
-  },
-  region: CLOUD_FUNCTIONS_REGION,          // europe-west3
-  nodeVersion: '24',
-  engine: 'bun' as const,
-  minify: true,
-  sourcemap: true,
-  cloudCacheFileName: 'functions_cache.ts',  // Remote deploy cache
-  includeFilePath: 'src/logger.ts',          // Auto-imported into every function
+	modes: {
+		staging: MODE_PROJECT_MAP.staging,
+		production: MODE_PROJECT_MAP.production,
+		emulator: MODE_PROJECT_MAP.emulator,
+	},
+	region: CLOUD_FUNCTIONS_REGION, // europe-west3
+	nodeVersion: "24",
+	engine: "bun" as const,
+	minify: true,
+	sourcemap: true,
+	cloudCacheFileName: "functions_cache.ts", // Remote deploy cache
+	includeFilePath: "src/logger.ts", // Auto-imported into every function
 }));
 ```
 
@@ -71,6 +71,7 @@ apps/backend/functions/
 ## 3. Function Patterns
 
 All functions use the standard firestack wrappers:
+
 - `onRequest` for HTTP endpoints
 - `onCall` for callable functions
 - `onCreated`, `onDeleted`, `onUpdated` for Firestore triggers
@@ -85,24 +86,24 @@ from `@aikami/schemas`.
 
 ```ts
 // apps/backend/functions/src/controllers/api/webhooks/telegram.ts
-import { onRequest } from '@snorreks/firestack';
-import { logger } from '$logger';
+import { onRequest } from "@snorreks/firestack";
+import { logger } from "$logger";
 
 export default onRequest(async (request, response) => {
-  const { message } = request.body;
+	const { message } = request.body;
 
-  if (!message) {
-    logger.debug('telegram_webhook: no message in update');
-    response.status(200).send('ok');
-    return;
-  }
+	if (!message) {
+		logger.debug("telegram_webhook: no message in update");
+		response.status(200).send("ok");
+		return;
+	}
 
-  logger.info('telegram_webhook: received', {
-    chatId: message.chat.id,
-    text: message.text,
-  });
+	logger.info("telegram_webhook: received", {
+		chatId: message.chat.id,
+		text: message.text,
+	});
 
-  response.status(200).send('ok');
+	response.status(200).send("ok");
 });
 ```
 
@@ -112,14 +113,14 @@ export default onRequest(async (request, response) => {
 
 ```ts
 // apps/backend/functions/src/controllers/callable/process_email_triage.ts
-import { onCall } from '@snorreks/firestack';
-import { logger } from '$logger';
+import { onCall } from "@snorreks/firestack";
+import { logger } from "$logger";
 
 export default onCall(async (request) => {
-  if (!request.auth) throw new Error('unauthenticated');
+	if (!request.auth) throw new Error("unauthenticated");
 
-  const result = await processEmailTriage(request.data);
-  return result;
+	const result = await processEmailTriage(request.data);
+	return result;
 });
 ```
 
@@ -129,17 +130,20 @@ export default onCall(async (request) => {
 
 ```ts
 // apps/backend/functions/src/controllers/firestore/agent_checkpoints/[checkpointId]/created.ts
-import { onCreated } from '@snorreks/firestack';
-import { logger } from '$logger';
+import { onCreated } from "@snorreks/firestack";
+import { logger } from "$logger";
 
 export default onCreated(async ({ data, params }) => {
-  const checkpointId = params.checkpointId;
+	const checkpointId = params.checkpointId;
 
-  if (data.status !== 'pending') return;
+	if (data.status !== "pending") return;
 
-  logger.log('agent_checkpoint created', { checkpointId, companyId: data.companyId });
+	logger.log("agent_checkpoint created", {
+		checkpointId,
+		companyId: data.companyId,
+	});
 
-  // ... business logic
+	// ... business logic
 });
 ```
 
@@ -148,16 +152,16 @@ export default onCreated(async ({ data, params }) => {
 ### Firestore Trigger (onUpdated)
 
 ```ts
-import { onUpdated } from '@snorreks/firestack';
+import { onUpdated } from "@snorreks/firestack";
 
 export default onUpdated(async ({ data, params }) => {
-  if (data.before.role !== data.after.role) {
-    logger.log('User role changed', {
-      uid: params.uid,
-      from: data.before.role,
-      to: data.after.role,
-    });
-  }
+	if (data.before.role !== data.after.role) {
+		logger.log("User role changed", {
+			uid: params.uid,
+			from: data.before.role,
+			to: data.after.role,
+		});
+	}
 });
 ```
 
@@ -166,21 +170,21 @@ export default onUpdated(async ({ data, params }) => {
 ### Scheduled Function
 
 ```ts
-import { onSchedule } from '@snorreks/firestack';
-import { logger } from '$logger';
+import { onSchedule } from "@snorreks/firestack";
+import { logger } from "$logger";
 
 export default onSchedule(
-  async (_context) => {
-    logger.log('Scheduled job running');
-    // ... work
-    return { status: 'completed' };
-  },
-  {
-    schedule: 'every 5 minutes',
-    region: 'europe-west3',
-    memory: '256MiB',
-    timeoutSeconds: 300,
-  },
+	async (_context) => {
+		logger.log("Scheduled job running");
+		// ... work
+		return { status: "completed" };
+	},
+	{
+		schedule: "every 5 minutes",
+		region: "europe-west3",
+		memory: "256MiB",
+		timeoutSeconds: 300,
+	},
 );
 ```
 
@@ -192,28 +196,26 @@ Firestack wrappers support typed generics for full type-safety:
 
 ```ts
 // onRequest with typed body/params/response
-import type { RequestFunctions } from '@shared/types';
-import { onRequest } from '@snorreks/firestack';
+import type { RequestFunctions } from "@shared/types";
+import { onRequest } from "@snorreks/firestack";
 
-export default onRequest<RequestFunctions, 'myFunction', { id: string }>(
-  async (request, response) => {
-    // request.body: MyRequestBody
-    // request.params: { id: string }
-    // response.send() expects MyResponseBody
-  },
-  { region: 'europe-west3' }
+export default onRequest<RequestFunctions, "myFunction", { id: string }>(
+	async (request, response) => {
+		// request.body: MyRequestBody
+		// request.params: { id: string }
+		// response.send() expects MyResponseBody
+	},
+	{ region: "europe-west3" },
 );
 
 // onCall with typed data/response
-import type { CallableFunctions } from '@shared/types';
-import { onCall } from '@snorreks/firestack';
+import type { CallableFunctions } from "@shared/types";
+import { onCall } from "@snorreks/firestack";
 
-export default onCall<CallableFunctions, 'myCallable'>(
-  async (request) => {
-    // request.data: MyCallableInput
-    // return: MyCallableOutput
-  }
-);
+export default onCall<CallableFunctions, "myCallable">(async (request) => {
+	// request.data: MyCallableInput
+	// return: MyCallableOutput
+});
 ```
 
 Use these types from `packages/shared/types/src/lib/api/` — they serve as the canonical interface between frontend and backend.
@@ -226,11 +228,11 @@ Options are passed as the second argument to the wrapper:
 
 ```ts
 export default onRequest(myHandler, {
-  region: 'europe-west3',       // Override global region
-  memory: '512MiB',             // Override memory
-  timeoutSeconds: 120,          // Max 540
-  functionName: 'custom_name',  // Override auto-derived name
-  external: ['sharp'],          // Keep dep external (installed at deploy time)
+	region: "europe-west3", // Override global region
+	memory: "512MiB", // Override memory
+	timeoutSeconds: 120, // Max 540
+	functionName: "custom_name", // Override auto-derived name
+	external: ["sharp"], // Keep dep external (installed at deploy time)
 });
 ```
 
@@ -242,11 +244,11 @@ export default onRequest(myHandler, {
 # Deploy all functions
 bun moon run functions:deploy
 
-# Deploy to development
-bun moon run functions:deploy -- development
+# Deploy to staging
+bun moon run functions:deploy -- staging
 
 # Deploy single function
-bun moon run functions:deploy -- development --only pollGmail
+bun moon run functions:deploy -- staging --only pollGmail
 
 # Start emulator
 bun moon run functions:emulate
@@ -257,9 +259,10 @@ bun moon run functions:logs:tail
 ```
 
 Via AI tools:
+
 ```
-firebase_deploy_functions mode=development
-firebase_deploy_functions mode=development only=pollGmail,sendNotification
+firebase_deploy_functions mode=staging
+firebase_deploy_functions mode=staging only=pollGmail,sendNotification
 ```
 
 ---
@@ -280,9 +283,9 @@ export type MyFunctionResponse = { result: string };
 
 ```typescript
 export type CallableFunctions = {
-  my_function: [MyFunctionRequest, MyFunctionResponse];
-  // ... existing entries
-  [key: string]: [unknown, unknown]; // index signature for extensibility
+	my_function: [MyFunctionRequest, MyFunctionResponse];
+	// ... existing entries
+	[key: string]: [unknown, unknown]; // index signature for extensibility
 };
 ```
 
@@ -291,11 +294,11 @@ export type CallableFunctions = {
 ### 3. Controller — `apps/backend/functions/src/controllers/callable/<function_name>.ts`
 
 ```typescript
-import type { CallableFunctions } from '@aikami/types';
+import type { CallableFunctions } from "@aikami/types";
 
-export default onCall<CallableFunctions, 'my_function'>(async (request) => {
-  // request.data is typed as MyFunctionRequest
-  // return type is MyFunctionResponse
+export default onCall<CallableFunctions, "my_function">(async (request) => {
+	// request.data is typed as MyFunctionRequest
+	// return type is MyFunctionResponse
 });
 ```
 
@@ -305,10 +308,10 @@ export default onCall<CallableFunctions, 'my_function'>(async (request) => {
 ### 4. Frontend — `firebaseFunctionsService.getTypedCallable('name')`
 
 ```typescript
-import { firebaseFunctionsService } from '@aikami/frontend/services';
+import { firebaseFunctionsService } from "@aikami/frontend/services";
 
-const callable = await firebaseFunctionsService.getTypedCallable('my_function');
-const { data } = await callable({ field: 'value' });
+const callable = await firebaseFunctionsService.getTypedCallable("my_function");
+const { data } = await callable({ field: "value" });
 // data is typed as MyFunctionResponse
 ```
 
@@ -348,7 +351,7 @@ bun moon run functions:test-rules
 4. **Early returns** — validate → early return → business logic
 5. **Cold start** — init heavy deps outside handler
 6. **Typed generics** — use `onCall<CallableFunctions, 'name'>` for end-to-end types
-7. **See `aikami-conventions`** for: snake_case files, `_` private prefix, `$logger` alias, error handling
+7. **See `aikami-conventions`** for: snake*case files, `*`private prefix,`$logger` alias, error handling
 
 ---
 

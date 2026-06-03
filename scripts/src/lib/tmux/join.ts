@@ -1,15 +1,16 @@
 #!/usr/bin/env bun
 // scripts/src/lib/tmux/join.ts
-// Join (attach to) an existing tmux session.
+// Join (attach to) an existing aikami tmux session by mode.
 //
-// Usage: bun run tmux:join <service> [--mode <mode>]
-//   service: emulators | pwa | game | all
+// Usage:
+//   bun tmux:join                 # uses $AIKAMI_MODE
+//   bun tmux:join --mode emulator
 
-import { parseArgs } from './cli.ts';
+import { resolveMode } from './cli.ts';
 import { hasTmux, joinSession } from './session.ts';
 
 const args = process.argv.slice(2);
-const config = parseArgs(args);
+const mode = resolveMode(args);
 
 if (!(await hasTmux())) {
   console.error('❌ tmux is not installed. Install it with your package manager.');
@@ -17,7 +18,7 @@ if (!(await hasTmux())) {
 }
 
 try {
-  await joinSession({ service: config.service, mode: config.mode });
+  await joinSession(mode);
 } catch (e) {
   console.error('❌', e instanceof Error ? e.message : e);
   process.exit(1);

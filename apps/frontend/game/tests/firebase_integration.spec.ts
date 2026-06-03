@@ -9,11 +9,12 @@
  * - Game page load
  */
 
+import { PORTS } from '@aikami/constants';
 import { expect, test } from '@playwright/test';
 
-const AUTH_PORT = 9099;
-const FIRESTORE_PORT = 8080;
-const GAME_URL = 'http://localhost:5174';
+const AUTH_PORT = PORTS.emulator.auth;
+const FIRESTORE_PORT = PORTS.emulator.firestore;
+const GAME_URL = `http://localhost:${PORTS.emulator.game}`;
 
 // ── Helpers ─────────────────────────────────────────────────
 

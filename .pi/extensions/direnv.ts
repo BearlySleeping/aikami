@@ -7,7 +7,7 @@
 //
 // Env vars guaranteed by .envrc (always available):
 //   AIKAMI_ROOT          — project root (git rev-parse --show-toplevel)
-//   AIKAMI_MODE          — emulator | development | production
+//   AIKAMI_MODE          — emulator | staging | production
 //   AIKAMI_ENV           — alias for AIKAMI_MODE
 //   AIKAMI_PROJECT_ID    — GCP project id
 //   AIKAMI_IS_EMULATOR   — "1" or "0"
@@ -21,7 +21,7 @@ import { Type } from "typebox"
 import * as fs from "node:fs"
 import * as path from "node:path"
 
-const VALID_MODES = ["emulator", "development", "production"] as const
+const VALID_MODES = ["emulator", "staging", "production"] as const
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ async function switchMode(mode: string): Promise<string> {
     // same PATH that pi was launched with). Fall back to manual env export.
     const projectMap: Record<string, string> = {
       emulator: "demo-aikami-emulator",
-      development: "aikami-dev",
+      staging: "aikami-dev",
       production: "aikami-prod",
     }
     process.env.AIKAMI_MODE = mode
@@ -246,13 +246,13 @@ export default function (pi: ExtensionAPI) {
     name: "direnv_switch_mode",
     label: "Direnv: Switch Mode",
     description:
-      "Switch Aikami environment mode (emulator, development, production). "
+      "Switch Aikami environment mode (emulator, staging, production). "
       + "Updates .env.local and reloads direnv so all env vars refresh.",
     promptSnippet:
-      "Use direnv_switch_mode to change between emulator, development, and production environments.",
+      "Use direnv_switch_mode to change between emulator, staging, and production environments.",
     promptGuidelines: [
       "Prefer emulator mode for local development and testing.",
-      "Switch to development/production before deploying to live Firebase.",
+      "Switch to staging/production before deploying to live Firebase.",
       "After switching, firestore_query and service_logs will automatically target the new project.",
     ],
     parameters: Type.Object({

@@ -49,6 +49,13 @@
       "@aikami/frontend/utils/*": ["../../../packages/frontend/utils/src/lib/*"]
     }
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts"],
+  "include": [
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    "*.ts",
+    ".svelte-kit/types/**/$types.d.ts",
+    "src/**/*.svelte",
+    "src/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

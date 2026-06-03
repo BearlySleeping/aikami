@@ -23,16 +23,12 @@ import { Type } from "typebox"
 import { spawn, execSync } from "node:child_process"
 import * as fs from "node:fs"
 import * as path from "node:path"
+import { PORTS } from "../../packages/shared/constants/src/lib/development_ports"
 
 // ── Constants ─────────────────────────────────────────────────────────
 
 const CDP_PORT = 9222
 const CDP_BASE = `http://localhost:${CDP_PORT}`
-
-const APP_PORTS: Record<string, Record<string, number>> = {
-  pwa: { emulator: 5174, development: 5173, production: 5177 },
-  game: { emulator: 5176, development: 5175, production: 5178 },
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -46,8 +42,13 @@ function getRoot(): string {
 
 function getAppUrl(app: string): string {
   const mode = getMode()
-  const port = APP_PORTS[app]?.[mode] ?? APP_PORTS.pwa?.[mode] ?? 5174
-  return `http://localhost:${port}`
+  const modePorts = PORTS[mode as keyof typeof PORTS]
+  if (modePorts && app in modePorts) {
+    const port = (modePorts as Record<string, number>)[app]
+    return `http://localhost:${port}`
+  }
+  // Fallback: use emulator pwa
+  return `http://localhost:${PORTS.emulator.pwa}`
 }
 
 /** Check if Chromium is already running with remote debugging. */
@@ -94,7 +95,6 @@ async function ensureBrowser(app: string): Promise<{ ok: boolean; message: strin
     }
   }
 
-  const url = getAppUrl(app)
   const userDataDir = path.join(getRoot(), ".pi", ".chromium-profile")
   fs.mkdirSync(userDataDir, { recursive: true })
 
@@ -111,7 +111,7 @@ async function ensureBrowser(app: string): Promise<{ ok: boolean; message: strin
     "--metrics-recording-only",
     "--no-sandbox",
     `--user-data-dir=${userDataDir}`,
-    url,
+    "about:blank",
   ]
 
   const proc = spawn(chromiumPath, args, {
@@ -124,7 +124,7 @@ async function ensureBrowser(app: string): Promise<{ ok: boolean; message: strin
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
     if (await isCdpAlive()) {
-      return { ok: true, message: `✅ Chromium launched (headless) → ${url}` }
+      return { ok: true, message: `✅ Chromium launched (headless) with CDP on port ${CDP_PORT}` }
     }
     await new Promise((r) => setTimeout(r, 500))
   }
@@ -214,10 +214,11 @@ export default function (pi: ExtensionAPI) {
     promptSnippet:
       "Use browser_inspect to see the live DOM of the running PWA or Game app.",
     promptGuidelines: [
-      "Use browser_inspect when the user reports a UI bug or wants to verify rendering.",
-      "Use browser_inspect after deploying a change to confirm it rendered correctly.",
-      "Prefer this over reading terminal logs for frontend issues.",
-      "The DOM snapshot is returned as a simplified text tree, not raw HTML.",
+      "Use browser_inspect when the user reports a UI bug, blank page, or unexpected rendering.",
+      "Use ONCE — do not repeatedly inspect the same page without navigating or triggering new state.",
+      "Prefer reading source code and tmux logs before resorting to browser_inspect.",
+      "Use the `selector` parameter to narrow output — full DOM dumps are wasteful.",
+      "The DOM snapshot is a simplified text tree, not raw HTML.",
     ],
     parameters: Type.Object({
       app: Type.Optional(
@@ -308,8 +309,8 @@ export default function (pi: ExtensionAPI) {
     promptSnippet:
       "Use browser_screenshot to capture a visual snapshot of the running app.",
     promptGuidelines: [
-      "Use after UI changes to visually verify the result.",
-      "Use when the user asks 'what does it look like right now?'",
+      "ONLY use when the user explicitly asks to see the page, or for final verification after a fix.",
+      "Do NOT screenshot repeatedly during debugging — one is enough.",
       "Screenshots are saved to .pi/.screenshots/ with timestamps.",
     ],
     parameters: Type.Object({
@@ -399,14 +400,18 @@ export default function (pi: ExtensionAPI) {
     name: "browser_console",
     label: "Browser: Console Logs",
     description:
-      "Read the browser console output (errors, warnings, logs) from the "
-      + "running PWA or Game. Much cleaner than parsing terminal output.",
+      "Read the browser console output (errors, warnings, logs) from the " +
+      "running PWA or Game. Intercepts console.* calls and uncaught errors " +
+      "to surface what the app is actually logging. Prefer this over terminal " +
+      "logs only when you have a specific reason to believe JS errors are " +
+      "occurring in the browser.",
     promptSnippet:
       "Use browser_console to read browser console errors and warnings.",
     promptGuidelines: [
-      "Use when debugging runtime JS errors in the PWA or Game.",
-      "Use when the user reports 'it's broken' but terminal logs are clean.",
-      "Console entries include the source URL and line number.",
+      "ONLY use when you have evidence of a browser-side JS error (e.g., blank page, broken UI).",
+      "Do NOT call preemptively — use code inspection + tmux logs first.",
+      "A single call is sufficient; repeated calls yield the same buffer.",
+      "Console entries show source URL and line number for stack traces.",
     ],
     parameters: Type.Object({
       app: Type.Optional(
@@ -426,6 +431,7 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const app = params.app ?? "pwa"
+      const level = params.level ?? "all"
       const launch = await ensureBrowser(app)
       if (!launch.ok) {
         return {
@@ -434,84 +440,231 @@ export default function (pi: ExtensionAPI) {
         }
       }
 
-      // Navigate to ensure page is loaded
-      await navigateTo(getAppUrl(app))
+      // Instead of monkey-patching console.* (which has timing issues),
+      // use CDP's native Runtime.consoleAPICalled event to capture
+      // all console output from page load onward.
+      const targetUrl = getAppUrl(app)
 
-      // Enable console and collect messages
-      await cdpSend("Console.enable")
-      await cdpSend("Runtime.enable")
-
-      // Evaluate a script that captures console output
-      const script = `(() => {
-        const entries = [];
-        const levels = ['log', 'warn', 'error', 'info', 'debug'];
-        // Check for any caught errors
-        if (window.__PI_CONSOLE_BUFFER) {
-          return JSON.stringify(window.__PI_CONSOLE_BUFFER.slice(-100));
+      const pagesRes = await fetch(`${CDP_BASE}/json/list`, {
+        signal: AbortSignal.timeout(3000),
+      })
+      const pages = (await pagesRes.json()) as Array<{
+        id: string
+        webSocketDebuggerUrl: string
+        type: string
+      }>
+      const target = pages.find((p) => p.type === "page")
+      if (!target) {
+        return {
+          content: [{ type: "text", text: "❌ No page target found in Chromium." }],
+          details: { success: false },
         }
-        return JSON.stringify([{ level: 'info', message: 'Console buffer not initialized. Refresh the page to start capturing.' }]);
-      })()`
+      }
 
-      // Instead, use Log.enable to get existing entries
-      const logResult = (await cdpSend("Runtime.evaluate", {
-        expression: `(() => {
-          const errors = [];
-          // Get any unhandled errors from the page
-          try {
-            if (window.onerror) errors.push('Has global error handler');
-          } catch(e) {}
-          return JSON.stringify({
-            url: location.href,
-            title: document.title,
-            errors: errors,
-            readyState: document.readyState
-          });
-        })()`,
-        returnByValue: true,
-      })) as { result?: { value?: string } }
+      // Collect console entries via CDP events over a persistent WebSocket.
+      const entries: Array<{
+        level: string
+        args: string[]
+        ts: number
+        stack: string
+      }> = []
 
-      // Get JS errors via Runtime.evaluate of performance entries
-      const perfResult = (await cdpSend("Runtime.evaluate", {
-        expression: `JSON.stringify(
-          performance.getEntriesByType('resource')
-            .filter(e => e.responseStatus >= 400 || e.responseStatus === 0)
-            .slice(-20)
-            .map(e => ({ name: e.name, status: e.responseStatus, duration: Math.round(e.duration) }))
-        )`,
-        returnByValue: true,
-      })) as { result?: { value?: string } }
+      let pageUrl = "unknown"
+      let pageTitle = "unknown"
+      let readyState = "unknown"
+      let loadComplete = false
 
-      const pageInfo = logResult?.result?.value
-        ? JSON.parse(logResult.result.value)
-        : {}
-      const failedResources = perfResult?.result?.value
-        ? JSON.parse(perfResult.result.value)
-        : []
+      const ws = new WebSocket(target.webSocketDebuggerUrl)
+
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          resolve() // Timeout — return whatever we collected
+        }, 8000)
+
+        ws.onopen = () => {
+          // Enable Runtime domain to receive console events
+          ws.send(JSON.stringify({ id: 1, method: "Runtime.enable" }))
+        }
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(String(event.data))
+
+          // Handle console API calls
+          if (msg.method === "Runtime.consoleAPICalled") {
+            const entry = msg.params as {
+              type: string
+              args: Array<{ value?: string; description?: string }>
+              timestamp: number
+              stackTrace?: { callFrames: Array<{ functionName: string; url: string; lineNumber: number }> }
+            }
+            const entryLevel = entry.type
+            const args: string[] = entry.args.map((a: { value?: string }) => {
+              try {
+                return typeof a.value === "object"
+                  ? JSON.stringify(a.value).slice(0, 500)
+                  : String(a.value ?? "").slice(0, 500)
+              } catch {
+                return "[unserializable]"
+              }
+            })
+            const stack =
+              entry.stackTrace?.callFrames
+                ?.map(
+                  (f: { functionName: string; url: string; lineNumber: number }) =>
+                    `    at ${f.functionName || "(anonymous)"} (${f.url}:${f.lineNumber})`
+                )
+                .join("\n") ?? ""
+            entries.push({
+              level: entryLevel,
+              args,
+              ts: entry.timestamp,
+              stack,
+            })
+          }
+
+          // Handle exceptions
+          if (msg.method === "Runtime.exceptionThrown") {
+            const details = msg.params.exceptionDetails as {
+              text?: string
+              url?: string
+              lineNumber?: number
+              stackTrace?: { callFrames: Array<{ functionName: string; url: string; lineNumber: number }> }
+            }
+            entries.push({
+              level: "error",
+              args: [
+                details.text ?? "Uncaught exception",
+                `at ${details.url ?? ""}:${details.lineNumber ?? "?"}`,
+              ],
+              ts: msg.params.timestamp,
+              stack:
+                details.stackTrace?.callFrames
+                  ?.map(
+                    (f: { functionName: string; url: string; lineNumber: number }) =>
+                      `    at ${f.functionName || "(anonymous)"} (${f.url}:${f.lineNumber})`
+                  )
+                  .join("\n") ?? "",
+            })
+          }
+
+          // Handle command responses
+          if (msg.id === 1) {
+            // Runtime.enable done — now enable Page domain and navigate
+            ws.send(JSON.stringify({ id: 2, method: "Page.enable" }))
+          }
+          if (msg.id === 2) {
+            ws.send(
+              JSON.stringify({
+                id: 3,
+                method: "Page.navigate",
+                params: { url: targetUrl },
+              })
+            )
+          }
+          if (msg.id === 3) {
+            // Navigation started. Wait for load event, then collect.
+          }
+
+          // Detect page load complete
+          if (msg.method === "Page.loadEventFired") {
+            loadComplete = true
+            // Give the page a moment to settle, then resolve
+            setTimeout(() => {
+              clearTimeout(timer)
+              resolve()
+            }, 2000)
+          }
+        }
+
+        ws.onerror = (err) => {
+          clearTimeout(timer)
+          reject(new Error(`WebSocket error: ${err}`))
+        }
+      })
+
+      ws.close()
+
+      // Fetch page metadata
+      if (entries.length > 0) {
+        try {
+          const metaResult = (await cdpSend("Runtime.evaluate", {
+            expression:
+              "JSON.stringify({ title: document.title, url: location.href, readyState: document.readyState })",
+            returnByValue: true,
+          })) as { result?: { value?: string } }
+          const meta = metaResult?.result?.value
+            ? JSON.parse(metaResult.result.value)
+            : { title: "unknown", url: targetUrl, readyState: "unknown" }
+          pageTitle = meta.title
+          pageUrl = meta.url
+          readyState = meta.readyState
+        } catch {
+          // Use defaults
+        }
+      } else {
+        pageUrl = targetUrl
+      }
+
+      const levelFilter = params.level ?? "all"
+      const filtered =
+        levelFilter === "all"
+          ? entries
+          : levelFilter === "warning"
+            ? entries.filter(
+                (e) => e.level === "warn" || e.level === "error"
+              )
+            : entries.filter((e) => e.level === levelFilter)
 
       const lines: string[] = [
-        `🖥  Console — ${app} (${pageInfo.url ?? "unknown"})`,
-        `   State: ${pageInfo.readyState ?? "unknown"}`,
+        `🖥  Console — ${app} (${pageUrl})`,
+        `   State: ${readyState}${loadComplete ? " (load complete)" : " (capturing...)"}`,
+        `   Buffered: ${filtered.length} entries shown${entries.length !== filtered.length ? ` (${entries.length} total, filtered by level: ${level})` : ""}`,
+        `   Interceptor: ✅ CDP native event capture`,
         "",
       ]
 
-      if (failedResources.length > 0) {
-        lines.push("── Failed Resources ──")
-        for (const r of failedResources) {
-          lines.push(`  ❌ ${r.status} ${r.name} (${r.duration}ms)`)
+      if (filtered.length === 0) {
+        lines.push("No console output captured.")
+        if (entries.length === 0) {
+          lines.push("")
+          lines.push(
+            "💡 The page may not have generated console output, or it loaded too quickly."
+          )
+          lines.push(
+            "   Try triggering an action on the page and check again."
+          )
         }
       } else {
-        lines.push("✅ No failed resource loads detected.")
+        lines.push("── Console Entries (newest last) ──")
+        for (const entry of filtered.slice(-50)) {
+          const icon =
+            entry.level === "error"
+              ? "❌"
+              : entry.level === "warn"
+                ? "⚠️ "
+                : "📋"
+          const time = new Date(entry.ts).toISOString().slice(11, 23)
+          lines.push(
+            `  ${icon} [${time}] ${entry.level}: ${entry.args.join(" ")}`
+          )
+          if (
+            entry.stack &&
+            (entry.level === "error" || entry.level === "warn")
+          ) {
+            for (const frame of entry.stack.split("\n").slice(0, 3)) {
+              lines.push(`       ${frame.trim()}`)
+            }
+          }
+        }
       }
-
-      lines.push("")
-      lines.push(
-        "💡 Tip: For real-time console streaming, inject the console buffer "
-        + "by running browser_inspect first, then browser_console."
-      )
 
       return {
         content: [{ type: "text", text: lines.join("\n") }],
-        details: { success: true, failedResources: failedResources.length },
+        details: {
+          success: true,
+          total: entries.length,
+          filtered: filtered.length,
+        },
       }
     },
   })
@@ -527,8 +680,9 @@ export default function (pi: ExtensionAPI) {
     promptSnippet:
       "Use browser_network to see what API calls the app is making.",
     promptGuidelines: [
-      "Use when debugging API integration issues.",
-      "Use when the user reports 'data isn't loading'.",
+      "ONLY use when you have a specific hypothesis about a failing API call.",
+      "Do NOT call preemptively — inspect code and tmux logs first.",
+      "A single capture is sufficient; increase durationMs if needed.",
       "Shows status codes, URLs, and timing for each request.",
     ],
     parameters: Type.Object({
@@ -614,10 +768,10 @@ export default function (pi: ExtensionAPI) {
     promptSnippet:
       "Use browser_lighthouse for a quick performance/a11y check on the running app.",
     promptGuidelines: [
-      "Use after making performance-related changes.",
-      "Use when the user asks about page speed or accessibility.",
-      "This is a lightweight check — for full Lighthouse, run it via CLI.",
-    ],
+      "ONLY use when the user specifically asks about performance or accessibility.",
+      "Do NOT use during general debugging — this is a specialized audit tool.",
+      "This is a lightweight check — for full Lighthouse, run via CLI.",
+    ],,
     parameters: Type.Object({
       app: Type.Optional(
         Type.String({

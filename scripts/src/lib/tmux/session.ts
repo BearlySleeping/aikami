@@ -1,18 +1,29 @@
 // scripts/src/lib/tmux/session.ts
 // Unified tmux session management for Aikami services.
 //
-// Session naming:  aikami-{mode}-{service}
-//   mode:    emulator | development | production
-//   service: emulators | pwa | game | all
+// Architecture:
+//   One tmux session per mode:  aikami-{mode}
+//   Each service is a tmux window (tab) inside that session.
+//   Windows are matched by name, not fixed indices.
 //
-// Mode is stored as a tmux environment variable so we can
-// detect mismatches without inspecting running processes.
+//   Tab layout:
+//     emulators  → bun run emulate
+//     pwa        → bun run dev
+//     game       → bun run dev -- --mode emulator
 //
-// Usage from scripts:
-//   import { startSession, joinSession, stopSession, listSessions } from './session';
-//   await startSession({ service: 'pwa', mode: 'emulator' });
-//   await joinSession({ service: 'pwa', mode: 'emulator' });
-//   await stopSession({ service: 'pwa', mode: 'emulator' });
+// Three consumers share the exact same tmux session:
+//   1. pi extension (tmux-orchestrator.ts)
+//   2. test_blackbox
+//   3. root package.json scripts (tmux:start, tmux:stop, etc.)
+//
+// CLI:
+//   bun tmux:start emulator          # emulators tab
+//   bun tmux:start pwa               # add pwa tab
+//   bun tmux:start game              # add game tab
+//   bun tmux:start all --join        # all three + attach
+//   bun tmux:stop pwa                # kill pwa tab
+//   bun tmux:stop all                # kill entire session
+//   bun tmux:list                    # show sessions + tabs + ports
 
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -20,43 +31,65 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 
 // ── Types ──────────────────────────────────────────────────
 
-export type AikamiMode = 'emulator' | 'development' | 'production';
-export type TmuxService = 'emulators' | 'pwa' | 'game' | 'all';
+export type AikamiMode = 'emulator' | 'staging' | 'production';
 
-export type SessionConfig = {
-  mode: AikamiMode;
-  service: TmuxService;
-  force?: boolean;
-  projectRoot?: string;
-};
+/** Canonical service names (used internally). */
+export type DevService = 'emulators' | 'pwa' | 'game';
+
+/** Accepted CLI values (includes singular aliases and 'all'). */
+export type ServiceInput = DevService | 'emulator' | 'all';
 
 export type ServiceDef = {
-  window: number;
   name: string;
   command: string;
   cwd: (root: string) => string;
   readyPort: number;
 };
 
+// Keep old TmuxService alias for backward compat
+/** @deprecated Use DevService or ServiceInput instead. */
+export type TmuxService = DevService | 'all';
+
+export type SessionConfig = {
+  mode: AikamiMode;
+  /** Canonical service names to start. */
+  services: DevService[];
+  force?: boolean;
+  join?: boolean;
+  projectRoot?: string;
+};
+
+export type ServiceStatus = {
+  service: DevService;
+  name: string;
+  running: boolean;
+  readyPort: number;
+  portOpen: boolean;
+};
+
+export type SessionInfo = {
+  name: string;
+  mode: AikamiMode;
+  attached: boolean;
+  services: ServiceStatus[];
+};
+
 // ── Service definitions ────────────────────────────────────
 
-const SERVICE_DEFS: Record<Exclude<TmuxService, 'all'>, ServiceDef> = {
+const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   emulators: {
-    window: 1,
     name: 'emulators',
     command: 'bun run emulate',
     cwd: (root) => resolve(root, 'apps/backend/firebase'),
     readyPort: EMULATOR_PORTS.auth,
   },
   pwa: {
-    window: 2,
     name: 'pwa',
     command: 'bun run dev',
     cwd: (root) => resolve(root, 'apps/frontend/pwa'),
     readyPort: EMULATOR_PORTS.pwa,
   },
   game: {
-    window: 3,
     name: 'game',
     command: 'bun run dev -- --mode emulator',
     cwd: (root) => resolve(root, 'apps/frontend/game'),
@@ -64,21 +97,45 @@ const SERVICE_DEFS: Record<Exclude<TmuxService, 'all'>, ServiceDef> = {
   },
 };
 
-const ORDERED_SERVICES: Exclude<TmuxService, 'all'>[] = ['emulators', 'pwa', 'game'];
+const ALL_SERVICES: DevService[] = ['emulators', 'pwa', 'game'];
+
+/** Map CLI aliases to canonical names. */
+export const normalizeService = (input: string): DevService | 'all' => {
+  const alias: Record<string, DevService | 'all'> = {
+    emulator: 'emulators',
+    emulators: 'emulators',
+    pwa: 'pwa',
+    game: 'game',
+    all: 'all',
+  };
+  const result = alias[input];
+  if (!result) {
+    throw new Error(`Unknown service: "${input}". Valid: emulator(s), pwa, game, all`);
+  }
+  return result;
+};
+
+/** Expand 'all' to the full list of canonical services. */
+export const expandServices = (inputs: ServiceInput[]): DevService[] => {
+  if (inputs.includes('all')) {
+    return [...ALL_SERVICES];
+  }
+  const normalized = inputs.map((s) => (s === 'emulator' ? 'emulators' : s)) as DevService[];
+  return [...new Set(normalized)];
+};
 
 // ── Session naming ─────────────────────────────────────────
 
-export const buildSessionName = (mode: AikamiMode, service: TmuxService): string =>
-  `aikami-${mode}-${service}`;
+/** Build the session name for a given mode. */
+export const buildSessionName = (mode: AikamiMode): string => `aikami-${mode}`;
 
-export const parseSessionName = (
-  name: string,
-): { mode: AikamiMode; service: TmuxService } | null => {
-  const m = name.match(/^aikami-(emulator|development|production)-(emulators|pwa|game|all)$/);
+/** Parse a session name back to mode, or null if not an aikami session. */
+export const parseSessionName = (name: string): AikamiMode | null => {
+  const m = name.match(/^aikami-(emulator|staging|production)$/);
   if (!m) {
     return null;
   }
-  return { mode: m[1] as AikamiMode, service: m[2] as TmuxService };
+  return m[1] as AikamiMode;
 };
 
 // ── Tmux CLI helpers ───────────────────────────────────────
@@ -105,14 +162,12 @@ export const sessionExists = async (sessionName: string): Promise<boolean> => {
   return r.code === 0;
 };
 
-// ── Mode detection ─────────────────────────────────────────
-
 /** Returns the mode stored in the session's AIKAMI_TMUX_MODE env var, or null. */
 export const getSessionMode = async (sessionName: string): Promise<AikamiMode | null> => {
   try {
     const r = await tmux(['show-environment', '-t', sessionName, 'AIKAMI_TMUX_MODE']);
     const match = r.stdout.trim().match(/^AIKAMI_TMUX_MODE=(.+)$/);
-    if (match && ['emulator', 'development', 'production'].includes(match[1])) {
+    if (match && ['emulator', 'staging', 'production'].includes(match[1])) {
       return match[1] as AikamiMode;
     }
     return null;
@@ -135,27 +190,59 @@ export const isPortReady = async (port: number): Promise<boolean> => {
 };
 
 // ── Direnv wrapper ─────────────────────────────────────────
-// Tmux spawns a fresh shell without direnv hooks, so we need
-// `direnv exec` to load the Nix environment before running commands.
 
 const wrapCommand = (command: string): string => {
-  // Keep the pane alive after the command exits so the user can see output.
-  // For emulators, we print a message and wait for Enter.
   const keepalive = "; echo; echo '=== Stopped. Press Enter to close ==='; read";
   return `direnv exec . bash -c '${command}${keepalive}'`;
 };
 
-// ── Start service ──────────────────────────────────────────
+// ── Window (tab) management ────────────────────────────────
 
-const startSingleService = async (
-  sessionName: string,
-  svc: ServiceDef,
-  projectRoot: string,
-): Promise<void> => {
-  const cwd = svc.cwd(projectRoot);
+/** Get window names in the session. */
+const getSessionWindowNames = async (sessionName: string): Promise<string[]> => {
+  const r = await tmux(['list-windows', '-t', sessionName, '-F', '#{window_name}']);
+  return r.stdout
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+};
 
+// ── Start services ─────────────────────────────────────────
+
+/**
+ * Start one or more services as tmux windows in the mode session.
+ */
+export const startServices = async (config: SessionConfig): Promise<string> => {
+  const { mode, services, force = false, join = false, projectRoot = process.cwd() } = config;
+  const sessionName = buildSessionName(mode);
+
+  if (services.length === 0) {
+    throw new Error('No services specified. Use: emulator(s), pwa, game, all');
+  }
+
+  // ── Mode mismatch guard ──────────────────────────────
+  if (await sessionExists(sessionName)) {
+    const existingMode = await getSessionMode(sessionName);
+
+    if (force) {
+      const modeInfo = existingMode ? ` (was ${existingMode})` : '';
+      console.log(`🔄 Force mode: recreating session ${sessionName}${modeInfo}...`);
+      await tmux(['kill-session', '-t', sessionName]);
+      await new Promise((r) => setTimeout(r, 500));
+    } else if (existingMode && existingMode !== mode) {
+      throw new Error(
+        `Session ${sessionName} is already running in ${existingMode} mode (requested ${mode}). Use --force to recreate.`,
+      );
+    }
+  }
+
+  // ── Create session if needed ──────────────────────────
   if (!(await sessionExists(sessionName))) {
-    // Create new session with the first window
+    const first = services[0];
+    const svc = SERVICE_DEFS[first];
+    const cwd = svc.cwd(projectRoot);
+
+    console.log(`🚀 Creating session ${sessionName} (${mode} mode)...`);
     await tmux([
       'new-session',
       '-d',
@@ -166,100 +253,260 @@ const startSingleService = async (
       '-n',
       svc.name,
       '-e',
-      `AIKAMI_TMUX_MODE=${sessionName.split('-')[1]}`,
+      `AIKAMI_TMUX_MODE=${mode}`,
       wrapCommand(svc.command),
     ]);
-    return;
-  }
+    console.log(`  ✓ Tab: ${svc.name}`);
 
-  // Session exists — add window if not already present
-  const list = await tmux(['list-windows', '-t', sessionName, '-F', '#{window_index}']);
-  const existing = list.stdout
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  if (!existing.includes(String(svc.window))) {
-    await tmux([
-      'new-window',
-      '-d',
-      '-t',
-      sessionName,
-      '-n',
-      svc.name,
-      '-c',
-      cwd,
-      wrapCommand(svc.command),
-    ]);
-  }
-};
-
-// ── Public API ─────────────────────────────────────────────
-
-/**
- * Start a tmux session for the given mode and service.
- *
- * - If session does NOT exist: create it
- * - If session exists, same mode: attach (no-op for background start)
- * - If session exists, different mode:
- *   - force=true: kill then recreate
- *   - force=false: throw error
- *
- * Returns the session name.
- */
-export const startSession = async (config: SessionConfig): Promise<string> => {
-  const { mode, service, force = false, projectRoot = process.cwd() } = config;
-  const sessionName = buildSessionName(mode, service);
-
-  // Check if session already exists
-  if (await sessionExists(sessionName)) {
-    const existingMode = await getSessionMode(sessionName);
-
-    if (force) {
-      // Force: always kill and recreate
-      const modeInfo = existingMode ? ` (was ${existingMode})` : '';
-      console.log(`🔄 Force mode: recreating session ${sessionName}${modeInfo}...`);
-      await tmux(['kill-session', '-t', sessionName]);
-      // Brief pause to let tmux clean up
-      await new Promise((r) => setTimeout(r, 500));
-    } else if (existingMode && existingMode !== mode) {
-      throw new Error(
-        `Session ${sessionName} is already running in ${existingMode} mode (requested ${mode}). Use --force to recreate.`,
-      );
-    } else {
-      // Same mode (or unknown) — session is already running, reuse it
-      console.log(`✓ Session ${sessionName} is already running (${mode} mode)`);
-      return sessionName;
-    }
-  }
-
-  console.log(`🚀 Starting ${service} in ${mode} mode (session: ${sessionName})...`);
-
-  if (service === 'all') {
-    // Multi-window: emulators + pwa + game
-    for (const s of ORDERED_SERVICES) {
-      await startSingleService(sessionName, SERVICE_DEFS[s], projectRoot);
+    // Add remaining services as new windows
+    for (let i = 1; i < services.length; i++) {
+      const s = SERVICE_DEFS[services[i]];
+      await tmux([
+        'new-window',
+        '-d',
+        '-t',
+        sessionName,
+        '-n',
+        s.name,
+        '-c',
+        s.cwd(projectRoot),
+        wrapCommand(s.command),
+      ]);
+      console.log(`  ✓ Tab: ${s.name}`);
     }
   } else {
-    await startSingleService(sessionName, SERVICE_DEFS[service], projectRoot);
+    // ── Session exists — add missing windows ────────────
+    const existing = await getSessionWindowNames(sessionName);
+
+    for (const service of services) {
+      const svc = SERVICE_DEFS[service];
+      if (existing.includes(svc.name)) {
+        console.log(`  ○ Tab: ${svc.name} already running, skipping`);
+        continue;
+      }
+      await tmux([
+        'new-window',
+        '-d',
+        '-t',
+        sessionName,
+        '-n',
+        svc.name,
+        '-c',
+        svc.cwd(projectRoot),
+        wrapCommand(svc.command),
+      ]);
+      console.log(`  ✓ Tab: ${svc.name}`);
+    }
   }
 
-  // Wait briefly for the shell to start processing commands
   await new Promise((r) => setTimeout(r, 1500));
 
-  console.log(`✓ Session ${sessionName} started (attach: tmux attach -t ${sessionName})`);
+  // ── Attach if requested ───────────────────────────────
+  if (join) {
+    console.log(`🖥  Attaching to ${sessionName} (Ctrl+B D to detach)...`);
+    const proc = spawn('tmux', ['attach-session', '-t', sessionName], { stdio: 'inherit' });
+    await new Promise<number>((resolve) => proc.on('exit', resolve));
+  } else {
+    console.log(`\n✓ Session ${sessionName} ready (attach: tmux attach -t ${sessionName})`);
+  }
+
   return sessionName;
 };
 
-/**
- * Wait for services in a session to be ready on their ports.
- */
-export const waitForReady = async (config: SessionConfig, timeoutMs = 180_000): Promise<void> => {
-  const { service, mode } = config;
-  const targets: ServiceDef[] =
-    service === 'all' ? ORDERED_SERVICES.map((s) => SERVICE_DEFS[s]) : [SERVICE_DEFS[service]];
+// ── Stop services ──────────────────────────────────────────
 
-  const sessionName = buildSessionName(mode, service);
+/**
+ * Stop services by killing their tmux windows.
+ */
+export const stopServices = async (config: {
+  mode: AikamiMode;
+  services: DevService[] | 'all';
+}): Promise<void> => {
+  const { mode, services } = config;
+  const sessionName = buildSessionName(mode);
+
+  if (!(await sessionExists(sessionName))) {
+    console.log(`ℹ Session ${sessionName} is not running`);
+    return;
+  }
+
+  const targets = services === 'all' ? ALL_SERVICES : services;
+
+  if (targets.length === 0) {
+    console.log('ℹ No services specified to stop');
+    return;
+  }
+
+  const existing = await getSessionWindowNames(sessionName);
+  const targetNames = targets.map((s) => SERVICE_DEFS[s].name);
+
+  // If killing all existing windows, just nuke the session
+  if (targetNames.length >= existing.length && existing.every((w) => targetNames.includes(w))) {
+    await tmux(['kill-session', '-t', sessionName]);
+    console.log(`✓ Session ${sessionName} stopped`);
+    return;
+  }
+
+  for (const name of targetNames) {
+    if (existing.includes(name)) {
+      await tmux(['kill-window', '-t', `${sessionName}:=${name}`]);
+      console.log(`  ✓ Stopped ${name}`);
+    } else {
+      console.log(`  ○ ${name} not running`);
+    }
+  }
+};
+
+/**
+ * Stop all aikami sessions (all modes).
+ */
+export const stopAllSessions = async (): Promise<void> => {
+  const sessions = await listAllSessionNames();
+  for (const name of sessions) {
+    await tmux(['kill-session', '-t', name]).catch(() => {});
+  }
+  if (sessions.length > 0) {
+    console.log(`✓ Stopped ${sessions.length} aikami session(s)`);
+  } else {
+    console.log('ℹ No aikami sessions running');
+  }
+};
+
+// ── Join session ───────────────────────────────────────────
+
+export const joinSession = async (mode: AikamiMode): Promise<void> => {
+  const sessionName = buildSessionName(mode);
+
+  if (!(await sessionExists(sessionName))) {
+    throw new Error(
+      `Session ${sessionName} is not running. Start it first with: bun tmux:start all`,
+    );
+  }
+
+  console.log(`🖥  Attaching to ${sessionName} (Ctrl+B D to detach)...`);
+  const proc = spawn('tmux', ['attach-session', '-t', sessionName], { stdio: 'inherit' });
+  await new Promise<number>((resolve) => proc.on('exit', resolve));
+};
+
+// ── List sessions & services ───────────────────────────────
+
+const listAllSessionNames = async (): Promise<string[]> => {
+  const r = await tmux(['list-sessions', '-F', '#{session_name}']);
+  if (r.code !== 0) {
+    return [];
+  }
+  return r.stdout
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((n) => n.startsWith('aikami-'));
+};
+
+export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> => {
+  const names =
+    mode != null
+      ? (await sessionExists(buildSessionName(mode)))
+        ? [buildSessionName(mode)]
+        : []
+      : await listAllSessionNames();
+
+  const results: SessionInfo[] = [];
+
+  for (const name of names) {
+    const parsed = parseSessionName(name);
+    const sessionMode = parsed ?? 'emulator';
+
+    let attached = false;
+    try {
+      const attachR = await tmux(['list-clients', '-t', name, '-F', '#{client_name}']);
+      attached = attachR.stdout.trim().length > 0;
+    } catch {
+      // Session may have died
+    }
+
+    const existing = await getSessionWindowNames(name);
+
+    const servicesStatus: ServiceStatus[] = ALL_SERVICES.map((svc) => {
+      const def = SERVICE_DEFS[svc];
+      const running = existing.includes(def.name);
+      return {
+        service: svc,
+        name: def.name,
+        running,
+        readyPort: def.readyPort,
+        portOpen: false,
+      };
+    });
+
+    const portChecks = await Promise.all(
+      servicesStatus
+        .filter((s) => s.running)
+        .map(async (s) => ({ ...s, portOpen: await isPortReady(s.readyPort) })),
+    );
+
+    for (const check of portChecks) {
+      const svc = servicesStatus.find((s) => s.service === check.service);
+      if (svc) {
+        svc.portOpen = check.portOpen;
+      }
+    }
+
+    results.push({ name, mode: sessionMode, attached, services: servicesStatus });
+  }
+
+  return results;
+};
+
+export const printServiceList = async (mode?: AikamiMode): Promise<void> => {
+  const sessions = await listServices(mode);
+
+  if (sessions.length === 0) {
+    console.log('No aikami tmux sessions running.');
+    console.log('  Start one:  bun tmux:start all');
+    return;
+  }
+
+  const Green = '\x1b[32m';
+  const Yellow = '\x1b[33m';
+  const Cyan = '\x1b[36m';
+  const Dim = '\x1b[2m';
+  const Red = '\x1b[31m';
+  const Reset = '\x1b[0m';
+  const Bold = '\x1b[1m';
+
+  for (const session of sessions) {
+    const statusIcon = session.attached
+      ? `${Green}● attached${Reset}`
+      : `${Yellow}○ detached${Reset}`;
+    console.log(`\n${Bold}${session.name}${Reset}  ${Dim}${session.mode}${Reset}  ${statusIcon}`);
+
+    for (const svc of session.services) {
+      const runningIcon = svc.running ? `${Green}✓${Reset}` : `${Dim}✗${Reset}`;
+      const portIndicator = svc.running
+        ? svc.portOpen
+          ? `${Green}:${svc.readyPort} ready${Reset}`
+          : `${Yellow}:${svc.readyPort} booting${Reset}`
+        : '';
+      const name = svc.running ? svc.name : `${Red}${svc.name}${Reset}`;
+      console.log(`  ${runningIcon} ${name.padEnd(14)} ${portIndicator}`);
+    }
+  }
+
+  console.log(
+    `\n${Dim}Start:  ${Cyan}bun tmux:start <service>${Reset}  ${Dim}Stop:  ${Cyan}bun tmux:stop <service>${Reset}`,
+  );
+  console.log(
+    `${Dim}Join:   ${Cyan}bun tmux:join${Reset}               ${Dim}List:  ${Cyan}bun tmux:list${Reset}\n`,
+  );
+};
+
+// ── Wait for readiness ─────────────────────────────────────
+
+export const waitForReady = async (
+  config: { services: DevService[]; mode: AikamiMode },
+  timeoutMs = 180_000,
+): Promise<void> => {
+  const { services, mode } = config;
+  const sessionName = buildSessionName(mode);
 
   if (!(await sessionExists(sessionName))) {
     console.warn(`⚠ Session ${sessionName} not found, skipping readiness check`);
@@ -267,6 +514,8 @@ export const waitForReady = async (config: SessionConfig, timeoutMs = 180_000): 
   }
 
   console.log('  Waiting for services...');
+  const targets = services.map((s) => SERVICE_DEFS[s]);
+
   await Promise.allSettled(
     targets.map(async (svc) => {
       const deadline = Date.now() + timeoutMs;
@@ -279,153 +528,5 @@ export const waitForReady = async (config: SessionConfig, timeoutMs = 180_000): 
       }
       console.error(`  ✗ ${svc.name} timed out on :${svc.readyPort}`);
     }),
-  );
-};
-
-/**
- * Join (attach to) an existing tmux session.
- * Throws if the session does not exist.
- */
-export const joinSession = async (config: {
-  mode: AikamiMode;
-  service: TmuxService;
-}): Promise<void> => {
-  const { mode, service } = config;
-  const sessionName = buildSessionName(mode, service);
-
-  if (!(await sessionExists(sessionName))) {
-    throw new Error(
-      `Session ${sessionName} is not running. Start it first with: bun run tmux:start`,
-    );
-  }
-
-  console.log(`🖥  Attaching to ${sessionName} (Ctrl+B D to detach)...`);
-  const proc = spawn('tmux', ['attach-session', '-t', sessionName], {
-    stdio: 'inherit',
-  });
-  await new Promise<number>((resolve) => proc.on('exit', resolve));
-};
-
-/**
- * Stop (kill) a tmux session.
- * No-ops if the session does not exist.
- */
-export const stopSession = async (config: {
-  mode: AikamiMode;
-  service: TmuxService;
-}): Promise<void> => {
-  const { mode, service } = config;
-  const sessionName = buildSessionName(mode, service);
-
-  if (!(await sessionExists(sessionName))) {
-    console.log(`ℹ Session ${sessionName} is not running`);
-    return;
-  }
-
-  await tmux(['kill-session', '-t', sessionName]);
-  console.log(`✓ Session ${sessionName} stopped`);
-};
-
-/**
- * Stop all aikami tmux sessions regardless of mode/service.
- */
-export const stopAllSessions = async (): Promise<void> => {
-  const sessions = await listAllSessions();
-  for (const s of sessions) {
-    await tmux(['kill-session', '-t', s.name]).catch(() => {});
-  }
-  if (sessions.length > 0) {
-    console.log(`✓ Stopped ${sessions.length} aikami session(s)`);
-  } else {
-    console.log('ℹ No aikami sessions running');
-  }
-};
-
-// ── Listing ────────────────────────────────────────────────
-
-export type SessionInfo = {
-  name: string;
-  mode: AikamiMode | 'unknown';
-  service: TmuxService | 'unknown';
-  windows: number;
-  attached: boolean;
-};
-
-export const listAllSessions = async (): Promise<SessionInfo[]> => {
-  const r = await tmux(['list-sessions', '-F', '#{session_name}']);
-  if (r.code !== 0) {
-    return [];
-  }
-
-  return r.stdout
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((n) => n.startsWith('aikami-'))
-    .map((name) => {
-      const parsed = parseSessionName(name);
-      return {
-        name,
-        mode: parsed?.mode ?? 'unknown',
-        service: parsed?.service ?? 'unknown',
-        windows: 0,
-        attached: false,
-      };
-    });
-};
-
-export const listSessions = async (): Promise<SessionInfo[]> => {
-  const sessions = await listAllSessions();
-
-  // Enrich with window count and attachment status
-  return await Promise.all(
-    sessions.map(async (s) => {
-      try {
-        const winR = await tmux(['list-windows', '-t', s.name, '-F', '#{window_index}']);
-        s.windows = winR.stdout.split('\n').filter((l) => l.trim()).length;
-
-        const attachR = await tmux(['list-clients', '-t', s.name, '-F', '#{client_name}']);
-        s.attached = attachR.stdout.trim().length > 0;
-      } catch {
-        // Session may have died between listing and querying
-      }
-      return s;
-    }),
-  );
-};
-
-/**
- * Print a formatted table of running aikami sessions.
- */
-export const printSessionStatus = async (): Promise<void> => {
-  const sessions = await listSessions();
-
-  if (sessions.length === 0) {
-    console.log('No aikami tmux sessions running.');
-    console.log(`  Start one:  bun run tmux:start emulators`);
-    return;
-  }
-
-  const Green = '\x1b[32m';
-  const Yellow = '\x1b[33m';
-  const Cyan = '\x1b[36m';
-  const Dim = '\x1b[2m';
-  const Reset = '\x1b[0m';
-  const Bold = '\x1b[1m';
-
-  console.log(`\n${Bold}Aikami Tmux Sessions${Reset}\n`);
-  console.log(`${Dim}${'SESSION'.padEnd(32)} MODE          SERVICE    WINS  STATUS${Reset}`);
-
-  for (const s of sessions) {
-    const statusIcon = s.attached ? `${Green}● attached${Reset}` : `${Yellow}○ detached${Reset}`;
-    console.log(
-      ` ${s.name.padEnd(31)} ${s.mode.padEnd(13)} ${s.service.padEnd(10)} ${String(s.windows).padEnd(5)} ${statusIcon}`,
-    );
-  }
-
-  console.log(
-    `\n${Dim}Attach:  ${Cyan}tmux attach -t <session>${Reset}  or  ${Cyan}bun run tmux:join <service>${Reset}${Dim}`,
-  );
-  console.log(
-    `Stop:    ${Cyan}tmux kill-session -t <session>${Reset}  or  ${Cyan}bun run tmux:stop <service>${Reset}\n`,
   );
 };

@@ -161,15 +161,16 @@ export default function (pi: ExtensionAPI) {
       }
 
       const projList = affectedProjects.join(", ")
-      // 2. Run fix + typecheck via workspace-level --affected (moon handles parallelism)
-      const fixResult = await pi.exec("bun", ["moon", "run", ":fix", "--affected"], { signal, timeout: DEFAULT_TIMEOUT })
+      // 2. Run fix + typecheck via workspace-level --affected.
+      // --concurrency 4 caps parallel project builds to prevent OOM crashes.
+      const fixResult = await pi.exec("bun", ["moon", "run", ":fix", "--affected", "--concurrency", "4"], { signal, timeout: DEFAULT_TIMEOUT })
       if (fixResult.code !== 0) {
         errors.push(":fix failed (see output for details)")
       } else {
         ok.push(":fix")
       }
 
-      const tcResult = await pi.exec("bun", ["moon", "run", ":typecheck", "--affected"], { signal, timeout: DEFAULT_TIMEOUT })
+      const tcResult = await pi.exec("bun", ["moon", "run", ":typecheck", "--affected", "--concurrency", "4"], { signal, timeout: DEFAULT_TIMEOUT })
       if (tcResult.code !== 0) {
         errors.push(":typecheck failed (see output for details)")
       } else {
@@ -178,14 +179,14 @@ export default function (pi: ExtensionAPI) {
 
       // 3. Build + test (optional, only if fix+typecheck passed)
       if (params.test && errors.length === 0) {
-        const buildResult = await pi.exec("bun", ["moon", "run", ":build", "--affected"], { signal, timeout: HEAVY_TIMEOUT })
+        const buildResult = await pi.exec("bun", ["moon", "run", ":build", "--affected", "--concurrency", "4"], { signal, timeout: HEAVY_TIMEOUT })
         if (buildResult.code !== 0) {
           errors.push(":build failed (see output for details)")
         } else {
           ok.push(":build")
         }
 
-        const testResult = await pi.exec("bun", ["moon", "run", ":test", "--affected"], { signal, timeout: HEAVY_TIMEOUT })
+        const testResult = await pi.exec("bun", ["moon", "run", ":test", "--affected", "--concurrency", "4"], { signal, timeout: HEAVY_TIMEOUT })
         if (testResult.code !== 0) {
           errors.push(":test failed (see output for details)")
         } else {
@@ -223,7 +224,7 @@ export default function (pi: ExtensionAPI) {
       "Ensure emulator is running first: firebase_emulator start.",
       "Blackbox tests start/stop their own dev servers — no need to pre-start.",
       "Use noCrossService=true to skip multi-service flow tests during rapid iteration.",
-      "Current mode from direnv: emulator=local, development/production=live GCP. Blackbox tests require emulator mode.",
+      "Current mode from direnv: emulator=local, staging/production=live GCP. Blackbox tests require emulator mode.",
     ],
     parameters: Type.Object({
       suites: Type.Optional(
