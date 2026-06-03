@@ -25,7 +25,7 @@ export const downloadVideoFile = ({
     try {
       const response = await axios.get<BlobPart>(url, {
         cancelToken: cancelSource.token,
-        onDownloadProgress: (event) => {
+        onDownloadProgress: (event: { loaded: number; total?: number }) => {
           if (onDownloadProgress) {
             onDownloadProgress({
               bytesTransferred: event.loaded,

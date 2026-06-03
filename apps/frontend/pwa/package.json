@@ -36,6 +36,7 @@
     "@sveltejs/vite-plugin-svelte": "7.1.2",
     "@tailwindcss/vite": "4.3.0",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^25.9.1",
     "@types/png-chunks-extract": "1.0.2",
     "@types/text-encoding": "0.0.40",
     "daisyui": "5.5.20",
@@ -62,6 +63,7 @@
     "bitecs": "^0.4.0",
     "device-detector-js": "3.0.3",
     "eruda": "3.4.3",
+    "firebase-admin": "^13.10.0",
     "pixi.js": "^8.18.1",
     "png-chunks-extract": "1.0.0",
     "text-encoding": "0.7.0"

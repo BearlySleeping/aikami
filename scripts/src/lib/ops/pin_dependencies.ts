@@ -44,51 +44,6 @@ function findCurrentPlaywrightVersion(): string {
   return '1.60.0';
 }
 
-function _getInstalledBrowserVersion(): string | null {
-  const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  const homeCache = process.env.HOME ? `${process.env.HOME}/.cache/ms-playwright` : null;
-
-  const dirs = [browsersPath, homeCache].filter(Boolean) as string[];
-  for (const dir of dirs) {
-    if (!existsSync(dir)) {
-      continue;
-    }
-    try {
-      const entries = execSync(`ls -d ${dir}/chromium-[0-9]* 2>/dev/null`, {
-        encoding: 'utf8',
-        shell: true,
-      })
-        .trim()
-        .split('\n')
-        .filter(Boolean)
-        .sort()
-        .reverse();
-      if (entries.length > 0) {
-        // Chromium revision → Playwright version (rough mapping)
-        const rev = entries[0].match(/chromium-(\d+)/)?.[1];
-        if (rev) {
-          // Approximate mapping: rev 1223 ≈ Playwright 1.60, rev 1217 ≈ 1.59
-          const revNum = Number.parseInt(rev, 10);
-          if (revNum >= 1223) {
-            return '1.60.0';
-          }
-          if (revNum >= 1217) {
-            return '1.59.1';
-          }
-          if (revNum >= 1208) {
-            return '1.58.0';
-          }
-          return '1.57.0';
-        }
-      }
-    } catch {
-      /* fall through */
-    }
-  }
-
-  return null;
-}
-
 // ── Main ────────────────────────────────────────────────────────
 
 const currentVersion = findCurrentPlaywrightVersion();

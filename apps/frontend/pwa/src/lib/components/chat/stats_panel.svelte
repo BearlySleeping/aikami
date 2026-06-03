@@ -29,7 +29,13 @@
 
 <div class="card bg-base-200 shadow-xl">
   <div class="card-body p-4">
-    <div class="flex items-center justify-between cursor-pointer" onclick={onToggle}>
+    <div
+      class="flex items-center justify-between cursor-pointer"
+      onclick={() => onToggle?.()}
+      onkeydown={(e) => e.key === 'Enter' && onToggle?.()}
+      role="button"
+      tabindex="0"
+    >
       <h3 class="card-title text-sm">{npcName} Stats</h3>
       <button class="btn btn-xs btn-ghost">{isExpanded ? '▼' : '▶'}</button>
     </div>
