@@ -619,11 +619,12 @@ export class FrontendRepository<T extends RepositoryType>
       constraints.push(limit(limitTo));
     }
 
+    const ref = options.collectionGroupName
+      ? await this.getCollectionGroupReference(options.collectionGroupName)
+      : await this.getCollectionReference(options.getCollectionPathArgument);
+
     return query<Type.Static<T['data']>, Type.Static<T['data']>>(
-      // @ts-expect-error TODO: Remove this when firebase don't require index signature
-      options.collectionGroupName
-        ? await this.getCollectionGroupReference(options.collectionGroupName)
-        : await this.getCollectionReference(options.getCollectionPathArgument),
+      ref as Query<Type.Static<T['data']>, Type.Static<T['data']>>,
       ...constraints,
     );
   }

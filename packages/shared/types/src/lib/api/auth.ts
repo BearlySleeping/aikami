@@ -7,7 +7,7 @@ import type {
   UserCredential as FirebaseAuthUserCredential,
   UserInfo as FirebaseUserInfo,
   User,
-} from '@firebase/auth';
+} from 'firebase/auth';
 import type { Type } from 'typebox';
 
 export type {

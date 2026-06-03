@@ -40,7 +40,7 @@ const probePort = async (port: number, timeoutMs = 3000): Promise<boolean> => {
  * Polls all emulator ports in parallel until healthy or timeout.
  */
 const waitForEmulators = async (timeoutMs = 30_000): Promise<void> => {
-  const _ports = [AUTH_PORT, FIRESTORE_PORT, STORAGE_PORT, FUNCTIONS_PORT];
+  void [AUTH_PORT, FIRESTORE_PORT, STORAGE_PORT, FUNCTIONS_PORT];
   const deadline = Date.now() + timeoutMs;
 
   const waitForPort = async (port: number): Promise<void> => {

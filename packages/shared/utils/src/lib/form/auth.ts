@@ -152,7 +152,9 @@ export const getUserLiteData = async ({
 
     phoneNumber: user.phoneNumber,
     photoURL: user.photoURL,
-    signInProviders: user.providerData.map((provider) => toSignInProvider(provider.providerId)),
+    signInProviders: user.providerData.map((provider: { providerId: string }) =>
+      toSignInProvider(provider.providerId),
+    ),
     uid: user.uid,
   });
 };

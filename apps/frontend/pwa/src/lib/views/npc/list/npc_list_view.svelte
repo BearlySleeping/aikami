@@ -213,7 +213,13 @@
           <button class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
         </div>
       </div>
-      <div class="modal-backdrop" onclick={() => (showUrlModal = false)}></div>
+      <div
+        class="modal-backdrop"
+        onclick={() => (showUrlModal = false)}
+        onkeydown={(e) => { if (e.key === 'Enter') { showUrlModal = false; } }}
+        role="button"
+        tabindex="0"
+      ></div>
     </div>
   {/if}
 
@@ -227,7 +233,13 @@
           <button class="btn btn-ghost" onclick={() => (showCreateModal = false)}>Close</button>
         </div>
       </div>
-      <div class="modal-backdrop" onclick={() => (showCreateModal = false)}></div>
+      <div
+        class="modal-backdrop"
+        onclick={() => (showCreateModal = false)}
+        onkeydown={(e) => { if (e.key === 'Enter') { showCreateModal = false; } }}
+        role="button"
+        tabindex="0"
+      ></div>
     </div>
   {/if}
 
@@ -318,7 +330,13 @@
           <button class="btn btn-primary" onclick={() => viewModel.closeEditModal()}>Done</button>
         </div>
       </div>
-      <div class="modal-backdrop" onclick={() => viewModel.closeEditModal()}></div>
+      <div
+        class="modal-backdrop"
+        onclick={() => viewModel.closeEditModal()}
+        onkeydown={(e) => { if (e.key === 'Enter') { viewModel.closeEditModal(); } }}
+        role="button"
+        tabindex="0"
+      ></div>
     </div>
   {/if}
 </BaseViewModelContainer>

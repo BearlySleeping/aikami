@@ -15,7 +15,7 @@ async function main() {
   console.log('Generating CONTEXT.md...');
 
   // Read project metadata
-  const _pkgJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  void JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 
   const projects = [
     {
@@ -43,11 +43,10 @@ async function main() {
   ];
 
   // Try reading contracts index for status
-  let _contractsIndex = '';
   try {
-    _contractsIndex = readFileSync(join(DOCS_DIR, 'contracts/INDEX.md'), 'utf8');
+    void readFileSync(join(DOCS_DIR, 'contracts/INDEX.md'), 'utf8');
   } catch {
-    _contractsIndex = '';
+    // contracts index not available
   }
 
   const lines = [
