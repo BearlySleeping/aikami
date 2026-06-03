@@ -3,7 +3,6 @@
   "display": "Frontend Data Connect SDK",
   "extends": "../../../config/tsconfig/tsconfig.frontend.json",
   "compilerOptions": {
-    "types": ["bun-types"],
     "rootDir": "../..",
     "outDir": "dist",
     "paths": {
@@ -16,7 +15,9 @@
       "@aikami/types": ["../../shared/types/src/index.ts"],
       "@aikami/types/*": ["../../shared/types/src/lib/*"],
       "@aikami/utils": ["../../shared/utils/src/index.ts"],
-      "@aikami/utils/*": ["../../shared/utils/src/lib/*"]
+      "@aikami/utils/*": ["../../shared/utils/src/lib/*"],
+      "$logger": ["../../shared/logger/src/index.ts"],
+      "$logger/*": ["../../shared/logger/src/lib/*"]
     }
   },
   "include": ["src/**/*"],

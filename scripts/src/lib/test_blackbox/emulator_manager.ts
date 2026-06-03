@@ -44,7 +44,11 @@ export async function startEmulators(timeoutMs = 90_000): Promise<void> {
 
   // Read stdout/stderr from Bun.spawn
   (async () => {
-    const reader = firebaseProcess?.stdout.getReader();
+    const stdout = firebaseProcess?.stdout;
+    if (!stdout || typeof stdout === 'number') {
+      return;
+    }
+    const reader = stdout.getReader();
     const decoder = new TextDecoder();
     while (true) {
       const { done, value } = await reader.read();
@@ -59,7 +63,11 @@ export async function startEmulators(timeoutMs = 90_000): Promise<void> {
   })().catch(() => {});
 
   (async () => {
-    const reader = firebaseProcess?.stderr.getReader();
+    const stderr = firebaseProcess?.stderr;
+    if (!stderr || typeof stderr === 'number') {
+      return;
+    }
+    const reader = stderr.getReader();
     const decoder = new TextDecoder();
     while (true) {
       const { done, value } = await reader.read();

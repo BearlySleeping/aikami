@@ -61,12 +61,14 @@
       return;
     }
 
+    const canvas = canvasElement;
+
     const init = async () => {
       try {
         logger.debug('lpcDemo.init');
 
         const result = await createPixiApp({
-          canvas: canvasElement!,
+          canvas,
           width: 960,
           height: 540,
           backgroundColor: 0x0d0d1a,

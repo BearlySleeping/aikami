@@ -18,6 +18,12 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
+    "firebase": "^12.14.0",
     "idb-keyval": "6.2.5"
+  },
+  "devDependencies": {
+    "@sveltejs/kit": "^2.62.0",
+    "svelte": "^5.56.1",
+    "vite": "^8.0.16"
   }
 }
