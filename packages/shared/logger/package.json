@@ -8,7 +8,8 @@
     "fix": "biome check --write ."
   },
   "devDependencies": {
-    "@types/node": "25.9.1"
+    "@types/node": "25.9.1",
+    "vite": "^8.0.16"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

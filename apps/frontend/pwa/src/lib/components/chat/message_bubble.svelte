@@ -31,7 +31,10 @@
     onCancelEdit,
   }: Props = $props();
 
-  let localEditText = $state(editText);
+  let localEditText = $state('');
+  $effect(() => {
+    localEditText = editText;
+  });
 
   function formatTime(date: Date): string {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

@@ -261,7 +261,6 @@ class AuthGameViewModel
       }
 
       this._idToken = token;
-      this._authUid = uid || '';
 
       const code = this.gameCode;
 

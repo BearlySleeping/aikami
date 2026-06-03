@@ -771,7 +771,7 @@ export default function (pi: ExtensionAPI) {
       "ONLY use when the user specifically asks about performance or accessibility.",
       "Do NOT use during general debugging — this is a specialized audit tool.",
       "This is a lightweight check — for full Lighthouse, run via CLI.",
-    ],,
+    ],
     parameters: Type.Object({
       app: Type.Optional(
         Type.String({
