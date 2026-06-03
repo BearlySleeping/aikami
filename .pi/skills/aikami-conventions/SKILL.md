@@ -1,11 +1,11 @@
 ---
 name: aikami-conventions
 description: >-
-  🔴 LOAD BEFORE writing ANY Aikami code — TypeScript and monorepo conventions
-  including critical violations (logger, imports, types), strict TS rules, import
-  path discipline, arrow functions, `as const` / `satisfies`, error handling,
-  validation boundaries, project structure, private member naming, file naming,
-  output style, and direnv environment.
+    🔴 LOAD BEFORE writing ANY Aikami code — TypeScript and monorepo conventions
+    including critical violations (logger, imports, types), strict TS rules, import
+    path discipline, arrow functions, `as const` / `satisfies`, error handling,
+    validation boundaries, project structure, private member naming, file naming,
+    output style, and direnv environment.
 version: 3.0.0
 tags: ["aikami", "conventions", "typescript", "monorepo", "critical"]
 ---
@@ -18,13 +18,13 @@ compile. Load this skill first, before touching any file.
 
 For framework-specific patterns, also load:
 
-| Skill | Covers |
-|-------|--------|
-| `svelte-conventions` | Svelte 5 runes, ViewModel pattern, services, import aliases |
-| `backend-conventions` | Firebase Functions, backend services, security rules |
-| `pixijs-v8` | PixiJS v8 + bitECS, game engine boundary, ECS patterns |
-| `firebase-functions` | Firebase Cloud Functions v2 best practices |
-| `firestore-collection` | Scaffolding Firestore collections |
+| Skill                  | Covers                                                      |
+| ---------------------- | ----------------------------------------------------------- |
+| `svelte-conventions`   | Svelte 5 runes, ViewModel pattern, services, import aliases |
+| `backend-conventions`  | Firebase Functions, backend services, security rules        |
+| `pixijs-v8`            | PixiJS v8 + bitECS, game engine boundary, ECS patterns      |
+| `firebase-functions`   | Firebase Cloud Functions v2 best practices                  |
+| `firestore-collection` | Scaffolding Firestore collections                           |
 
 ---
 
@@ -44,12 +44,12 @@ import { logger } from "$logger";
 import { logger } from "@aikami/logger";
 ```
 
-| Environment | `$logger` resolves to |
-|---|---|
-| SvelteKit (PWA) | `shared/logger/src/lib/svelte_kit.ts` |
-| Firebase Functions | `shared/logger/src/lib/logger_functions.ts` |
-| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts` |
-| AWS / Node.js | `shared/logger/src/lib/logger_aws.ts` |
+| Environment             | `$logger` resolves to                       |
+| ----------------------- | ------------------------------------------- |
+| SvelteKit (PWA)         | `shared/logger/src/lib/svelte_kit.ts`       |
+| Firebase Functions      | `shared/logger/src/lib/logger_functions.ts` |
+| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts`   |
+| AWS / Node.js           | `shared/logger/src/lib/logger_aws.ts`       |
 
 **Why**: Each environment configures `$logger` in its own `tsconfig.json` `paths`
 (or `svelte.config.js`). `@aikami/logger` is a NPM package alias — it doesn't
@@ -164,15 +164,15 @@ pleasantries, hedging. Fragments are OK. Every word must earn its place.
 
 ### ❌ Forbidden — Use the Alternative
 
-| Forbidden                  | Use Instead                                        |
-| -------------------------- | -------------------------------------------------- |
-| `any`                      | `unknown` + type guards                            |
-| `null`                     | `undefined` everywhere                             |
-| `!` (non-null assertion)   | Early returns or optional chaining                 |
-| `as unknown as Type`       | Proper data transformation functions               |
-| `interface`                | `type` alias                                       |
-| Exporting single-use types | Define near/inside the function that uses it       |
-| `function` declarations    | Arrow functions (`const fn = () => {}`)            |
+| Forbidden                  | Use Instead                                  |
+| -------------------------- | -------------------------------------------- |
+| `any`                      | `unknown` + type guards                      |
+| `null`                     | `undefined` everywhere                       |
+| `!` (non-null assertion)   | Early returns or optional chaining           |
+| `as unknown as Type`       | Proper data transformation functions         |
+| `interface`                | `type` alias                                 |
+| Exporting single-use types | Define near/inside the function that uses it |
+| `function` declarations    | Arrow functions (`const fn = () => {}`)      |
 
 ### ❌ Forbidden Patterns
 
@@ -219,16 +219,16 @@ export const createUser = (email: string, displayName: string, role?: string) =>
 ```typescript
 // ✅ Standard pattern — logger.debug first line with method name and options
 const loadItems = async (options: { filter: string }) => {
-  logger.debug("loadItems", options);
-  // ... implementation
+	logger.debug("loadItems", options);
+	// ... implementation
 };
 
 // ✅ Class method — regular method syntax (access to this/super)
 class MyService extends BaseClass {
-  async loadItems(options: { filter: string }) {
-    this.debug("loadItems", options);
-    // ... implementation
-  }
+	async loadItems(options: { filter: string }) {
+		this.debug("loadItems", options);
+		// ... implementation
+	}
 }
 
 // ✅ Skip debug logging for trivial functions
@@ -244,15 +244,15 @@ Prefer `as const` on object literals to infer the narrowest types. Use
 ```typescript
 // ✅ as const for narrow inference
 const PATTERNS = {
-  command: /^\/([\w-]+)(?:\s+(.+))?$/s,
-  macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
+	command: /^\/([\w-]+)(?:\s+(.+))?$/s,
+	macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
 } as const;
 
 // ✅ satisfies for type-checking without widening
 const CONFIG = {
-  timeout: 5000,
-  retries: 3,
-  endpoint: "/api/v2",
+	timeout: 5000,
+	retries: 3,
+	endpoint: "/api/v2",
 } as const satisfies Record<string, string | number>;
 ```
 
@@ -282,8 +282,8 @@ import { toAppError } from "@aikami/utils/lib/errors";
 
 ```typescript
 // ✅ CORRECT
-import type { User } from "$types";              // maps to @aikami/types → src/index.ts
-import { userSchema } from "@aikami/schemas";    // maps to src/index.ts
+import type { User } from "$types"; // maps to @aikami/types → src/index.ts
+import { userSchema } from "@aikami/schemas"; // maps to src/index.ts
 
 // ❌ WRONG
 import type { User } from "$types/lib/user";
@@ -307,6 +307,7 @@ import { ChatService } from "@aikami/backend-chat";
 ```
 
 This applies to:
+
 - `apps/frontend/pwa/svelte.config.js` — Vite/SvelteKit aliases
 - `apps/backend/firebase/tsconfig.json` — Functions tsconfig paths
 - All `import` statements referencing these packages
@@ -327,12 +328,12 @@ import { Type, type Static } from "@sinclair/typebox";
 
 See CRITICAL VIOLATION #3 above. Additional details:
 
-| Location | What goes there |
-|---|---|
-| `packages/shared/schemas/` | TypeBox schemas (cross-project data validation) |
-| `packages/shared/types/` | Cross-project types (used by 2+ apps/packages) |
-| `apps/<app>/src/lib/types/` | Single-app types (100% specific to one app) |
-| Inline / top of file | Single-method type used in exactly one function |
+| Location                    | What goes there                                 |
+| --------------------------- | ----------------------------------------------- |
+| `packages/shared/schemas/`  | TypeBox schemas (cross-project data validation) |
+| `packages/shared/types/`    | Cross-project types (used by 2+ apps/packages)  |
+| `apps/<app>/src/lib/types/` | Single-app types (100% specific to one app)     |
+| Inline / top of file        | Single-method type used in exactly one function |
 
 ### Schema-First: Derive Types from TypeBox Schemas
 
@@ -345,9 +346,9 @@ type from it:
 import { Type, type Static } from "@sinclair/typebox";
 
 export const ChatMessageSchema = Type.Object({
-  id: Type.String(),
-  text: Type.String(),
-  timestamp: Type.Number(),
+	id: Type.String(),
+	text: Type.String(),
+	timestamp: Type.Number(),
 });
 
 // packages/shared/types/src/lib/api/chat.ts
@@ -426,7 +427,7 @@ Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_aff
 
 ```bash
 bun moon run pwa:dev              # Start PWA dev server (defaults to emulator mode)
-bun moon run pwa:dev:development   # Start PWA in development mode
+bun moon run pwa:dev:staging   # Start PWA in staging mode
 bun moon run pwa:dev:production    # Start PWA in production mode
 bun moon run :typecheck            # Type-check all projects
 bun moon run :lint                 # Lint all projects
@@ -452,19 +453,20 @@ bun moon run pwa:dev
 bun run tmux:start pwa
 
 # ✅ Explicit mode override when needed
-cd apps/frontend/pwa && bun run dev:development
+cd apps/frontend/pwa && bun run dev:staging
 cd apps/frontend/pwa && bun run dev:production
 
 # ❌ None — dev now defaults to emulator, no footgun
 ```
 
 **How to check** (from the PWA package.json):
+
 ```json
 {
-  "dev": "vite dev --mode emulator",
-  "dev:development": "vite dev --mode development",
-  "dev:emulator": "vite dev --mode emulator",
-  "dev:production": "vite dev --mode production"
+	"dev": "vite dev --mode emulator",
+	"dev:staging": "vite dev --mode staging",
+	"dev:emulator": "vite dev --mode emulator",
+	"dev:production": "vite dev --mode production"
 }
 ```
 
@@ -480,7 +482,7 @@ inherit this environment.
 
 | Variable                   | Source                  | Purpose                               |
 | -------------------------- | ----------------------- | ------------------------------------- |
-| `AIKAMI_MODE`              | `.env.local` or default | emulator / development / production   |
+| `AIKAMI_MODE`              | `.env.local` or default | emulator / staging / production       |
 | `AIKAMI_PROJECT_ID`        | Resolved from mode      | GCP project id for current mode       |
 | `AIKAMI_IS_EMULATOR`       | Resolved from mode      | "1" = local emulators, "0" = live GCP |
 | `AIKAMI_NIX_READY`         | flake.nix shellHook     | "1" when Nix devShell loaded          |
@@ -489,15 +491,15 @@ inherit this environment.
 
 ### Mode Switching
 
-| Mode | Project | What it means |
-|------|---------|---------------|
-| `emulator` | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break. |
-| `development` | `aikami-dev` | Live GCP project with real deployed services. Acts as staging — deployed Cloud Functions, live Firestore data. Can also run locally against live backend. |
-| `production` | `aikami-prod` | Live production. Deploy with care. |
+| Mode          | Project                | What it means                                                                                                                                             |
+| ------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `emulator`    | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break.                                                                                                  |
+| `staging`     | `aikami-dev`           | Live GCP project with real deployed services. Acts as staging — deployed Cloud Functions, live Firestore data. Can also run locally against live backend. |
+| `production`  | `aikami-prod`          | Live production. Deploy with care.                                                                                                                        |
 
 ```bash
 aikami_switch emulator     # Local emulators, no GCP
-aikami_switch development  # Live staging (aikami-dev)
+aikami_switch staging  # Live staging (aikami-dev)
 aikami_switch production   # Live production (aikami-prod)
 ```
 

@@ -41,11 +41,13 @@ We use the Context Mode MCP to protect the context window. One unrouted command
 dumps 56 KB into context.
 
 ### Think in Code
+
 Analyze/count/filter/compare/search/parse/transform: **write code** via
 `ctx_execute(language, code)`, `console.log()` only the answer. No raw data
 in context.
 
 ### BLOCKED & REDIRECTED
+
 - **Shell (>20 lines output)**: Only for `git`, `mkdir`, `rm`, `mv`, `cd`,
   `ls`, `bun install`. Use `ctx_batch_execute()` or `ctx_execute()`.
 - **File reading (for analysis)**: Reading to **edit** = fine. Reading to
@@ -53,11 +55,14 @@ in context.
 - **grep / search**: Use `ctx_execute(language: "shell", code: "grep ...")`.
 
 ### Parallel I/O
+
 Multi-command research: `ctx_batch_execute()` with `concurrency`. Network/API
 bounds: concurrency `4-8`. CPU bounds (build, test): concurrency `1`.
 
 ### Session Continuity
+
 Session history is persistent. On resume, **search BEFORE asking user:**
+
 - What did we decide? → `ctx_search(queries: ["decision"], source: "decision", sort: "timeline")`
 - What constraints exist? → `ctx_search(queries: ["constraint"], source: "constraint")`
 
@@ -67,7 +72,7 @@ Session history is persistent. On resume, **search BEFORE asking user:**
 
 The project uses direnv to provision the entire development environment. These env vars are always available:
 
-- `AIKAMI_MODE` — emulator (local), development (staging), or production (live)
+- `AIKAMI_MODE` — emulator (local), staging, or production
 - `AIKAMI_PROJECT_ID` — resolved GCP project id
 - `AIKAMI_IS_EMULATOR` — "1" when running locally
 
@@ -138,12 +143,12 @@ If user is already on the recommended mode, say nothing about it.
 When the same thing is attempted twice and fails, STOP trying.
 **Immediately pivot to gathering diagnostic data.**
 
-| Situation | Instead of... | Do THIS |
-|-----------|--------------|---------|
-| "I sent /start, is it working?" ×2 | "Try sending /start again" | Create a test script that hits the webhook directly |
-| Deploy fails twice | "Try deploying again" | Read deploy logs, check moon affected, check service status |
-| Service unreachable ×2 | "Try checking" | `service_logs` + write a health check script |
-| Any error ×2 | "Try again" | Write a minimal reproduction script, run it locally, capture output |
+| Situation                          | Instead of...              | Do THIS                                                             |
+| ---------------------------------- | -------------------------- | ------------------------------------------------------------------- |
+| "I sent /start, is it working?" ×2 | "Try sending /start again" | Create a test script that hits the webhook directly                 |
+| Deploy fails twice                 | "Try deploying again"      | Read deploy logs, check moon affected, check service status         |
+| Service unreachable ×2             | "Try checking"             | `service_logs` + write a health check script                        |
+| Any error ×2                       | "Try again"                | Write a minimal reproduction script, run it locally, capture output |
 
 ### Always prefer local testing over production
 
@@ -160,14 +165,25 @@ Put it in a temp file, run it, capture output, then delete it.
 // instead of asking user to "try /start again":
 
 // Save to /tmp/debug_webhook.ts
-const response = await fetch('http://localhost:5001/.../webhook_telegram', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'x-telegram-bot-api-secret-token': TOKEN },
-  body: JSON.stringify({ update_id: 1, message: { message_id: 1, chat: { id: 123, type: 'private' }, date: 0, text: '/start' } })
+const response = await fetch("http://localhost:5001/.../webhook_telegram", {
+	method: "POST",
+	headers: {
+		"Content-Type": "application/json",
+		"x-telegram-bot-api-secret-token": TOKEN,
+	},
+	body: JSON.stringify({
+		update_id: 1,
+		message: {
+			message_id: 1,
+			chat: { id: 123, type: "private" },
+			date: 0,
+			text: "/start",
+		},
+	}),
 });
-console.log('Status:', response.status);
+console.log("Status:", response.status);
 const logs = await response.text();
-console.log('Body:', logs);
+console.log("Body:", logs);
 // ... check downstream logs too
 ```
 
@@ -176,6 +192,7 @@ Run with: `bun /tmp/debug_webhook.ts`
 ### Use ALL available diagnostic tools before guessing
 
 Before concluding what's wrong, exhaust these in order:
+
 1. `service_logs` — View logs for the relevant service
 2. `firestore_query` — Check if data was written
 3. `firebase_emulator status` — Verify emulator is running
@@ -192,12 +209,14 @@ Before concluding what's wrong, exhaust these in order:
 ### Signal that you're stuck early
 
 After 2 failed attempts at the same approach:
+
 ```
 ⚠️ Two attempts at [approach] have failed. Pivoting to:
 [local testing | diagnostic script | log analysis | unit test]
 ```
 
 After 5 total failed attempts across approaches:
+
 ```
 🛑 I'm stuck. Here's what I've tried:
 1. [approach 1] → [result]

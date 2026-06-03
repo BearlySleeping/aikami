@@ -69,7 +69,7 @@ export const callSvelteKitAPI = async <
 // 		return response?.token;
 // 	} catch (error) {
 // 		logger.warn('Failed to get app check token', error);
-// 		const flavorsToIgnore = ['production', 'development']; // TODO: Remove this when app check works in all flavors
+// 		const flavorsToIgnore = ['production', 'staging']; // TODO: Remove this when app check works in all flavors
 // 		if (
 // 			!flavorsToIgnore.includes(
 // 				import.meta.env['PUBLIC_FLAVOR'] as string,

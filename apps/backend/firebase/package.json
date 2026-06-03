@@ -19,7 +19,7 @@
     "scripts": "firestack scripts",
     "scripts:local": "node ../../../../firestack/dist/main.js scripts",
     "test": "bun test tests/controllers.test.ts",
-    "test:rules": "firestack test:rules --flavor development",
+    "test:rules": "firestack test:rules --flavor staging",
     "populate-npcs": "bun run scripts/populate-npcs.ts"
   },
   "dependencies": {
@@ -34,7 +34,7 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@genkit-ai/googleai": "1.28.0",
-    "@snorreks/firestack": "0.0.66",
+    "@snorreks/firestack": "0.0.67",
     "axios": "1.16.1",
     "firebase-admin": "13.10.0",
     "firebase-functions": "7.2.5",

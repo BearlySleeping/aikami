@@ -3,21 +3,21 @@
 /**
  * Start all development services using the unified tmux session library.
  *
- * Creates a tmux session "aikami-{mode}-all" with windows for:
- *   - Firebase emulators (firestack emulate)
+ * Creates a tmux session "aikami-{mode}" with windows for:
+ *   - Firebase emulators (bun run emulate)
  *   - PWA dev server
  *   - Game dev server
  *
  * Usage:
- *   bun run dev:all                  # Start session (attached)
+ *   bun run dev:all                  # Start all + attach
  *   bun run dev:all --detach         # Start in background
- *   bun run tmux:join all            # Reattach later
+ *   bun run tmux:join                # Reattach later
  *   bun run tmux:stop all            # Stop everything
  */
 
-import { type AikamiMode, hasTmux, joinSession, startSession } from '../tmux/session.ts';
+import { type AikamiMode, hasTmux, startServices } from '../tmux/session.ts';
 
-const VALID_MODES: AikamiMode[] = ['emulator', 'development', 'production'];
+const VALID_MODES: AikamiMode[] = ['emulator', 'staging', 'production'];
 const args = process.argv.slice(2);
 const detach = args.includes('--detach') || args.includes('-d');
 
@@ -44,20 +44,17 @@ async function main() {
     process.exit(1);
   }
 
-  // Start (or reuse) the session
-  const sessionName = await startSession({
-    service: 'all',
+  // Start all three services in the mode session
+  await startServices({
+    services: ['emulators', 'pwa', 'game'],
     mode,
-    force: false, // Don't force kill — let startSession handle mode mismatch
+    force: false,
+    join: !detach,
   });
 
   if (detach) {
-    console.log(`\n✓ Session started detached: ${sessionName}`);
-    console.log(`  Attach:  bun run tmux:join all`);
+    console.log(`\n  Attach:  bun run tmux:join`);
     console.log(`  Stop:    bun run tmux:stop all\n`);
-  } else {
-    console.log(`\nAttaching to session (Ctrl+B D to detach)...\n`);
-    await joinSession({ service: 'all', mode });
   }
 }
 

@@ -1,4 +1,7 @@
+import { PORTS } from '@aikami/constants';
 import { test } from '@playwright/test';
+
+const BASE = `http://localhost:${PORTS.emulator.pwa}`;
 
 test.describe('Login with Emulator', () => {
   test('should login with emulator user', async ({ page }) => {
@@ -9,7 +12,7 @@ test.describe('Login with Emulator', () => {
     });
 
     // Navigate to login page
-    await page.goto('http://localhost:5173/login');
+    await page.goto(`${BASE}/login`);
 
     // Wait for page to load
     await page.waitForLoadState('networkidle');

@@ -3,15 +3,15 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Type } from "typebox"
 
 // Direnv env vars (set by .envrc / scripts/direnv/) — always available:
-//   AIKAMI_MODE          — emulator | development | production
+//   AIKAMI_MODE          — emulator | staging | production
 //   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
-const MODES = ["development", "production"] as const
+const MODES = ["staging", "production"] as const
 type Mode = (typeof MODES)[number]
 
 /** Resolve GCP project id from direnv env; fall back to known defaults */
 function getProjectId(mode: Mode): string {
   return process.env.AIKAMI_PROJECT_ID
-    ?? (mode === "development" ? "aikami-dev" : "aikami-prod")
+    ?? (mode === "staging" ? "aikami-dev" : "aikami-prod")
 }
 
 export default function (pi: ExtensionAPI) {
@@ -25,7 +25,7 @@ export default function (pi: ExtensionAPI) {
     name: "firestore_query",
     label: "Firestore: Query Collection",
     description:
-      "Queries a Firestore collection via the admin SDK. Uses emulator when env=emulator, or live GCP project for development/production.",
+      "Queries a Firestore collection via the admin SDK. Uses emulator when env=emulator, or live GCP project for staging/production.",
     promptSnippet:
       "Use firestore_query to inspect Firestore data during debugging.",
     promptGuidelines: [
@@ -99,8 +99,8 @@ export default function (pi: ExtensionAPI) {
       mode: Type.Optional(
         Type.String({
           description: "Deployment mode",
-          enum: ["development", "production"],
-          default: "development",
+          enum: ["staging", "production"],
+          default: "staging",
         })
       ),
       only: Type.Optional(
@@ -110,8 +110,8 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
-      // Resolve mode: explicit param > direnv env > "development" default
-      const mode = params.mode ?? (process.env.AIKAMI_MODE as string | undefined) ?? "development"
+      // Resolve mode: explicit param > direnv env > "staging" default
+      const mode = params.mode ?? (process.env.AIKAMI_MODE as string | undefined) ?? "staging"
       const args = ["bun", "moon", "run", "functions:deploy", "--", mode]
       if (params.only) args.push("--only", params.only)
       const result = await pi.exec("env", args, { signal, timeout: HEAVY_TIMEOUT })

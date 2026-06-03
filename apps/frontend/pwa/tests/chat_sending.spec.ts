@@ -1,5 +1,8 @@
+import { PORTS } from '@aikami/constants';
 import { expect, test } from '@playwright/test';
 import { authenticatePage } from './utils/playwright_auth.ts';
+
+const BASE = `http://localhost:${PORTS.emulator.pwa}`;
 
 test.describe('Chat Message Sending', () => {
   test('should send and receive a chat message in emulator mode', async ({ page }) => {
@@ -10,7 +13,7 @@ test.describe('Chat Message Sending', () => {
     });
 
     // Navigate to login page first
-    await page.goto('http://localhost:5173/login');
+    await page.goto(`${BASE}/login`);
     await page.waitForLoadState('networkidle');
 
     // Login with emulator user
@@ -28,7 +31,7 @@ test.describe('Chat Message Sending', () => {
       await npcCard.click();
     } else {
       // If no NPCs exist, try navigating directly to a chat
-      await page.goto('http://localhost:5173/chat/4YwVvY5y52OArJoG7zMh');
+      await page.goto(`${BASE}/chat/4YwVvY5y52OArJoG7zMh`);
     }
 
     // Wait for chat page to load
@@ -65,7 +68,7 @@ test.describe('Chat Message Sending', () => {
     await authenticatePage(page);
 
     // Navigate to an NPC chat
-    await page.goto('http://localhost:5173/chat/4YwVvY5y52OArJoG7zMh');
+    await page.goto(`${BASE}/chat/4YwVvY5y52OArJoG7zMh`);
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
 

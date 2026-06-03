@@ -1,8 +1,8 @@
 // packages/shared/constants/src/lib/project.ts
 
-export const modes = ['development', 'production', 'emulator'] as const;
+export const modes = ['staging', 'production', 'emulator'] as const;
 
-export const defaultMode = 'development' as const satisfies (typeof modes)[number];
+export const defaultMode = 'staging' as const satisfies (typeof modes)[number];
 
 /**
  * Aikami backend application identifiers.
@@ -37,7 +37,7 @@ export const appIds = [...backendAppIds, ...frontendAppIds] as const;
  * Emulator mode uses the `demo-` prefix so Firebase doesn't attempt production project lookups.
  */
 export const MODE_PROJECT_MAP = {
-  development: 'aikami-dev',
+  staging: 'aikami-dev',
   production: 'aikami-prod',
   emulator: 'demo-aikami-emulator',
 } as const satisfies Record<(typeof modes)[number], string>;
