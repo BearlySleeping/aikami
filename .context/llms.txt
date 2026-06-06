@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-05-30
-> Files: 52 across 10 categories
+> Generated: 2026-06-06
+> Files: 87 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -44,6 +44,41 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [C 015 ai service abstraction](contracts/C-015-ai-service-abstraction.md)
 - [C 016 game engine boundary](contracts/C-016-game-engine-boundary.md)
 - [C 017 update knowledge base](contracts/C-017-update-knowledge-base.md)
+- [C 018 frontend api abstraction](contracts/C-018-frontend-api-abstraction.md)
+- [Contract: C-019 Macro & Slash Command Engine](contracts/C-019-macro-slash-engine.md)
+- [Contract: C-020 Spatial Context Injection](contracts/C-020-spatial-context-injection.md)
+- [Contract: C-021 Engine Package Extraction](contracts/C-021-engine-package-extraction.md)
+- [C-022: Web Worker ECS Synchronization](contracts/C-022-worker-ecs-synchronization.md)
+- [Contract C-023: Dense Spatial Hash Implementation](contracts/C-023-dense-spatial-hash.md)
+- [Contract: C-024 Dynamic Sprite Caching & Composition](contracts/C-024-dynamic-sprite-caching.md)
+- [Contract: C-025 TTS Audio Streaming & Synchronization](contracts/C-025-tts-audio-sync.md)
+- [Contract: C-026 Expression & Sprite State Mapping](contracts/C-026-expression-sprite-mapping.md)
+- [Contract: C-027 Provider Configuration & Secrets Engine](contracts/C-027-provider-configuration.md)
+- [Contract C-028: Game Firebase REST Integration & PWA Auth Handoff](contracts/C-028-game-firebase-auth-testing.md)
+- [Contract C-029: Menu Auth Wiring & Vanilla PixiJS Character Creation](contracts/C-029-dynamic-character-creation.md)
+- [Contract C-030: Persistent NPC Interactivity & Spatial Triggers](contracts/C-030-persistent-npc-interaction.md)
+- [Contract: C-031 SvelteKit Adapter Static Conversion & Firebase Hosting Setup](contracts/C-031-adapter-static-and-hosting.md)
+- [Execution Contract: C-032 - LPC Spritesheet Shader and Pipeline Integration](contracts/C-032-lpc-spritesheet-pipeline.md)
+- [Execution Contract: C-033 - LPC Multi-Layer UBO Batching and Reactive Buffer Pipeline](contracts/C-033-lpc-ubo-batching.md)
+- [Contract: C-034 LPC Render Pipeline](contracts/C-034-lpc-render-pipeline.md)
+- [C 035 ecs svelte sync](contracts/C-035-ecs-svelte-sync.md)
+- [Contract: C-035 Viewport Layer Integration](contracts/C-035-viewport-layer-integration.md)
+- [Contract: C-036 ECS Appearance Bridge](contracts/C-036-ecs-appearance-bridge.md)
+- [Contract: C-037 LPC Render Demo](contracts/C-037-lpc-render-demo.md)
+- [Contract: C-038 LPC Spritesheet Texture Arrays](contracts/C-038-lpc-spritesheet-texture-arrays.md)
+- [Contract: C-039 LPC Animation Controller](contracts/C-039-lpc-animation-controller.md)
+- [Contract: C-040 Grid Movement Transform Pipeline](contracts/C-040-grid-movement-transform-pipeline.md)
+- [Contract: C-040 World Economy Inventory Core](contracts/C-041-world-economy-inventory-core.md)
+- [Contract — C-042 Reusable LPC Sprite Component](contracts/C-042-reusable-lpc-sprite-component.md)
+- [Contract — C-043 LPC Layer Visual Debugger](contracts/C-043-lpc-layer-visual-debugger.md)
+- [Contract — C-044 LPC Fallback Grid Projection](contracts/C-044-lpc-fallback-grid-projection.md)
+- [Contract — C-045 Pixi Graphics Dirty Flag Synchronizer](contracts/C-045-pixi-graphics-dirty-flag-synchronizer.md)
+- [Contract — C-046 Nix Chromium Extension Injection](contracts/C-046-nix-chromium-extension-injection.md)
+- [Contract — C-047 Pixi DevTools Emulator Wiring](contracts/C-047-pixi-devtools-emulator-wiring.md)
+- [Contract — C-048 LPC Laboratory and Texture Projection](contracts/C-048-lpc-laboratory-and-texture-projection.md)
+- [Contract — C-049 LPC Asset Injector and Visual Workbench](contracts/C-049-lpc-asset-injector-and-visual-workbench.md)
+- [Overview](contracts/C-050-lpc-visual-testing-harness.md)
+- [Overview](contracts/C-051-lpc-rendering-fixes.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [MIG 002 backend dataconnect](contracts/MIG-002-backend-dataconnect.md)
