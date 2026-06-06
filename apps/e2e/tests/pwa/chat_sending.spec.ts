@@ -1,6 +1,6 @@
 import { PORTS } from '@aikami/constants';
 import { expect, test } from '@playwright/test';
-import { authenticatePage } from './utils/playwright_auth.ts';
+import { authenticatePage } from '../utils/playwright_auth.ts';
 
 const BASE = `http://localhost:${PORTS.emulator.pwa}`;
 

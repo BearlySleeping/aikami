@@ -6,7 +6,6 @@ layer: 'application'
 tags:
   - 'pwa'
   - 'svelte'
-  - 'playwright'
   - 'application'
 
 toolchains:
@@ -40,9 +39,6 @@ fileGroups:
     - 'vite.config.*'
   srcTauri:
     - 'src-tauri/**/*'
-  tests:
-    - 'tests/**/*'
-    - 'playwright.config.*'
   unitTests:
     - 'src/**/*.test.ts'
 
@@ -62,33 +58,14 @@ tasks:
     command: 'bun run preview'
     preset: 'server'
   test:
-    script: |
-      bun run test:unit
-      bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT
-    deps:
-      - 'build'
+    command: 'bun run test:unit'
     inputs:
-      - '@group(tests)'
       - '@group(unitTests)'
       - '@group(sources)'
   test-unit:
     command: 'bun run test:unit'
     inputs:
       - '@group(unitTests)'
-      - '@group(sources)'
-  test-e2e:
-    script: 'bun run build && bun run preview & PID=$!; sleep 5; bun run test; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
-    deps:
-      - 'build'
-    inputs:
-      - '@group(tests)'
-      - '@group(sources)'
-  test-ci:
-    script: 'bun run build && bun run preview -- --host & PID=$!; sleep 8; bun run test -- --reporter=github; RESULT=$?; kill $PID 2>/dev/null || true; exit $RESULT'
-    deps:
-      - 'build'
-    inputs:
-      - '@group(tests)'
       - '@group(sources)'
   tauri-dev:
     command: 'bun run tauri:dev'

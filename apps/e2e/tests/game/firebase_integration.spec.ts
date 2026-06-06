@@ -28,7 +28,7 @@ const createAnonymousUser = async (): Promise<{ uid: string }> => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-
+        // biome-ignore lint/style/useNamingConvention: HTTP header name
         Authorization: 'Bearer owner',
       },
       body: JSON.stringify({ returnSecureToken: true }),
@@ -48,6 +48,7 @@ test.describe('Firebase REST Integration', () => {
     const baseUrl = `http://localhost:${FIRESTORE_PORT}/v1/projects/demo-aikami-emulator/databases/(default)/documents`;
     const headers = {
       'Content-Type': 'application/json',
+      // biome-ignore lint/style/useNamingConvention: HTTP header name
       Authorization: 'Bearer owner',
     };
 
