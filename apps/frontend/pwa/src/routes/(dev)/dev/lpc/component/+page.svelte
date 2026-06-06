@@ -25,7 +25,10 @@
     ANIMATION_STATE_OPTIONS,
     buildPaletteBuffer,
     DIRECTION_OPTIONS,
+    hexToPixiTint,
     LPC_DEFAULT_PALETTE,
+    LPC_LAYER_Z_INDEX,
+    LPC_SLOT_PALETTE_INDEX,
   } from '$lib/data/lpc_asset_catalog.ts';
   import { generateMockLpcSheet, LPC_MOCK_LAYOUT } from '$lib/data/lpc_asset_path_mapper.ts';
   import {
@@ -181,7 +184,7 @@
   // -----------------------------------------------------------------------
 
   let canvasElement: HTMLCanvasElement | undefined = $state();
-  let pixiApp: Application | undefined;
+  let pixiApp: Application | undefined = $state();
 
   // -----------------------------------------------------------------------
   // Status banner
@@ -204,7 +207,6 @@
 
   let isPlaying = $state(false);
   let playbackFps = $state(12);
-  let animationTickRef: number | undefined;
 
   /** Ticks elapsed since last frame advance — used to throttle at playbackFps. */
   let _tickAccumulator = 0;
@@ -301,7 +303,6 @@
         continue;
       }
 
-      // Respect isolate layer filter
       if (isolateLayerIndex >= 0 && i !== isolateLayerIndex) {
         continue;
       }
@@ -321,6 +322,13 @@
         hexPalette: buildPaletteBuffer(layer.palette),
       });
     }
+
+    logger.debug('lpcComponent.recipes.derived', {
+      recipeCount: result.length,
+      activeLayerCount: activeLayers.length,
+      isolatedIndex: isolateLayerIndex,
+      slots: result.map((r) => r.slot),
+    });
 
     return result;
   });
@@ -349,6 +357,12 @@
   let compositionFailed = $state(false);
 
   // -----------------------------------------------------------------------
+  // Zoom control — synced with URL via lpc_url_config
+  // -----------------------------------------------------------------------
+
+  let zoom = $state(1);
+
+  // -----------------------------------------------------------------------
   // Character visual display object
   // -----------------------------------------------------------------------
 
@@ -360,47 +374,122 @@
   // Initialization
   // -----------------------------------------------------------------------
 
-  onMount(async () => {
+  onMount(() => {
+    logger.debug('lpcComponent.onMount.start', {
+      hasCanvas: !!canvasElement,
+      canvasWidth: CANVAS_WIDTH,
+      canvasHeight: CANVAS_HEIGHT,
+    });
+
     if (!canvasElement) {
+      logger.error('lpcComponent.onMount.noCanvas');
       setStatus('Canvas element not found.', 'error');
       return;
     }
 
-    try {
-      const result = await createPixiApp({
-        canvas: canvasElement,
-        width: CANVAS_WIDTH,
-        height: CANVAS_HEIGHT,
-        backgroundColor: 0x0d0d1a,
+    const initApp = async (): Promise<void> => {
+      try {
+        logger.debug('lpcComponent.createPixiApp.start', {
+          width: CANVAS_WIDTH,
+          height: CANVAS_HEIGHT,
+        });
+
+        const result = await createPixiApp({
+          canvas: canvasElement!,
+          width: CANVAS_WIDTH,
+          height: CANVAS_HEIGHT,
+          backgroundColor: 0x0d0d1a,
+        });
+
+        pixiApp = result.app;
+
+        logger.debug('lpcComponent.pixiApp.created', {
+          width: pixiApp.renderer.width,
+          height: pixiApp.renderer.height,
+          rendererType: pixiApp.renderer.type,
+          fps: result.debug.fps,
+        });
+
+        pixiApp.stage.addChild(stageContainer);
+
+        logger.debug('lpcComponent.stageContainer.added', {
+          stageChildren: pixiApp.stage.children.length,
+        });
+
+        // Listen for WebGL context loss
+        const canvas = pixiApp.renderer.canvas as HTMLCanvasElement;
+        canvas.addEventListener('webglcontextlost', (event: Event) => {
+          logger.error('lpcComponent.webglContextLost', { event: String(event) });
+        });
+        canvas.addEventListener('webglcontextrestored', () => {
+          logger.warn('lpcComponent.webglContextRestored');
+        });
+
+        // Per-frame telemetry ticker + playback ticker
+        const app = result.app;
+        app.ticker.add(() => {
+          const delta = app.ticker.deltaMS;
+
+          fps = result.debug.fps;
+          frameDurationMs = result.debug.frameDurationMs;
+          totalFrames = result.debug.totalFrames;
+          structuralHashes = batchManager.structuralHashesIssued;
+          batchUpdates = batchManager.batchUpdatesPerformed;
+          activeInstances = batchManager.activeInstances;
+          tickerFrame += 1;
+
+          if (isPlaying) {
+            const frameInterval = 1000 / playbackFps;
+            _tickAccumulator += delta;
+
+            while (_tickAccumulator >= frameInterval) {
+              _tickAccumulator -= frameInterval;
+              animationFrame = (animationFrame + 1) % (maxFrame + 1);
+            }
+          }
+        });
+
+        _applyUrlParamsToState();
+
+        setStatus('LPC debugger initialized.', 'info');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('lpcDebugger.initFailed', {
+          error: message,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        setStatus(`Initialization failed: ${message}`, 'error');
+      }
+    };
+
+    void initApp();
+
+    // Cleanup: destroy PixiJS app on unmount to release WebGL context
+    return () => {
+      logger.debug('lpcComponent.unmount.cleanup', {
+        hasApp: !!pixiApp,
+        hasCharContainer: !!characterContainer,
+        spriteCount: layerSprites.length,
+        sheetCacheSize: _mockSheetCanvasCache.size,
+        frameCacheSize: _frameTextureCache.size,
       });
 
-      pixiApp = result.app;
+      _destroyAllSprites();
 
-      // Add the pre-created stage container to the PixiJS stage now that
-      // the app is ready. The container was created at component init
-      // so setContext could reference it during initialization.
-      pixiApp.stage.addChild(stageContainer);
+      _mockSheetCanvasCache.clear();
+      _mockSheetTextureCache.clear();
+      _frameTextureCache.clear();
 
-      // Per-frame telemetry ticker
-      pixiApp.ticker.add(() => {
-        fps = result.debug.fps;
-        frameDurationMs = result.debug.frameDurationMs;
-        totalFrames = result.debug.totalFrames;
-        structuralHashes = batchManager.structuralHashesIssued;
-        batchUpdates = batchManager.batchUpdatesPerformed;
-        activeInstances = batchManager.activeInstances;
-        tickerFrame += 1;
-      });
+      if (stageContainer.parent) {
+        stageContainer.parent.removeChild(stageContainer);
+      }
+      stageContainer.destroy({ children: true });
 
-      // Seed layers from URL params (or defaults if empty)
-      _applyUrlParamsToState();
-
-      setStatus('LPC debugger initialized.', 'info');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('lpcDebugger.initFailed', { error: message });
-      setStatus(`Initialization failed: ${message}`, 'error');
-    }
+      if (pixiApp) {
+        pixiApp.destroy(true, { children: true });
+        pixiApp = undefined;
+      }
+    };
   });
 
   // -----------------------------------------------------------------------
@@ -418,6 +507,16 @@
     const currentParams = $page.url.searchParams;
     const urlState = searchParamsToLpcState(currentParams);
 
+    logger.debug('lpcComponent.applyUrlState', {
+      layers: urlState.layers.length,
+      state: urlState.state,
+      direction: urlState.direction,
+      frame: urlState.frame,
+      playing: urlState.playing,
+      zoom: urlState.zoom,
+      paletteOverrides: urlState.paletteOverrides.size,
+    });
+
     if (urlState.layers.length > 0) {
       activeLayers = _urlStateToActiveLayers(urlState);
     } else {
@@ -429,10 +528,7 @@
     facingDirection = urlState.direction;
     animationFrame = urlState.frame;
     isPlaying = urlState.playing;
-
-    if (isPlaying) {
-      _startPlayback();
-    }
+    zoom = urlState.zoom;
 
     _isApplyingUrlState = false;
   };
@@ -484,7 +580,7 @@
         direction: facingDirection,
         frame: animationFrame,
         playing: isPlaying,
-        zoom: 1,
+        zoom,
       };
 
       const params = lpcStateToSearchParams(urlState);
@@ -522,57 +618,18 @@
   };
 
   // -----------------------------------------------------------------------
-  // Animation ticker — requestAnimationFrame loop for Playback
+  // Animation ticker — driven by PixiJS ticker (per-frame, always active)
   // -----------------------------------------------------------------------
 
   /**
-   * Starts the animation playback ticker using requestAnimationFrame.
-   *
-   * Advances `animationFrame` at the configured `playbackFps` rate
-   * with modulus wrapping at action boundaries (AC-2).
-   */
-  const _startPlayback = (): void => {
-    if (animationTickRef !== undefined) {
-      return; // Already running
-    }
-
-    _tickAccumulator = 0;
-    let lastTimestamp = performance.now();
-
-    const tick = (now: number): void => {
-      if (!isPlaying) {
-        animationTickRef = undefined;
-        return;
-      }
-
-      const delta = now - lastTimestamp;
-      lastTimestamp = now;
-
-      const frameInterval = 1000 / playbackFps;
-      _tickAccumulator += delta;
-
-      while (_tickAccumulator >= frameInterval) {
-        _tickAccumulator -= frameInterval;
-        animationFrame = (animationFrame + 1) % (maxFrame + 1);
-      }
-
-      animationTickRef = requestAnimationFrame(tick);
-    };
-
-    animationTickRef = requestAnimationFrame(tick);
-  };
-
-  /**
    * Toggles the Play/Pause state for the animation ticker.
-   * Starts/stops the requestAnimationFrame loop accordingly.
+   * Frame advancement is handled inside the PixiJS ticker callback
+   * (registered in onMount) — no separate rAF loop needed.
    */
   const togglePlayback = (): void => {
+    logger.debug('lpcComponent.togglePlayback', { wasPlaying: isPlaying, willPlay: !isPlaying });
     isPlaying = !isPlaying;
-
-    if (isPlaying) {
-      _startPlayback();
-    }
-    // Stop is handled inside the tick loop via `!isPlaying` check
+    _tickAccumulator = 0;
   };
 
   /**
@@ -787,8 +844,8 @@
     gfx.lineTo(64, 48);
     gfx.stroke({ color: 0x4444ff, width: 1, alpha: 0.18 });
 
-    gfx.x = ENTITY_X - 32;
-    gfx.y = ENTITY_Y - 32;
+    gfx.x = CANVAS_WIDTH / 2 - 32;
+    gfx.y = CANVAS_HEIGHT / 2 - 32;
     gfx.eventMode = 'none';
 
     pixiApp.stage.addChild(gfx);
@@ -817,6 +874,7 @@
     void facingDirection;
     void animationFrame;
     void isPlaying;
+    void zoom;
 
     if (pixiApp && !_isApplyingUrlState) {
       _pushStateToUrl();
@@ -835,10 +893,24 @@
   $effect(() => {
     const currentRecipes = recipes;
     const currentFrame = animationFrame;
+    const currentZoom = zoom;
     void animationState;
     void facingDirection;
 
+    logger.debug('lpcComponent.render.trigger', {
+      recipes: currentRecipes.length,
+      frame: currentFrame,
+      zoom: currentZoom,
+      hasApp: !!pixiApp,
+    });
+
     if (!pixiApp || currentRecipes.length === 0) {
+      if (!pixiApp) {
+        logger.warn('lpcComponent.render.noApp');
+      }
+      if (currentRecipes.length === 0) {
+        logger.warn('lpcComponent.render.noRecipes');
+      }
       return;
     }
 
@@ -848,6 +920,7 @@
     try {
       const container = new Container();
       container.eventMode = 'none';
+      container.sortableChildren = true;
 
       for (let i = 0; i < currentRecipes.length; i++) {
         const recipe = currentRecipes[i];
@@ -875,17 +948,42 @@
 
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
+        // Offset to center the 64×64 sprite on the container origin
+        sprite.x = -32;
+        sprite.y = -32;
         sprite.alpha = slotDef.slot === 'body' ? 1.0 : 0.85;
+
+        // Apply deterministic Z-index based on equipment slot
+        const zIndex = LPC_LAYER_Z_INDEX[slotDef.slot];
+        if (zIndex !== undefined) {
+          sprite.zIndex = zIndex;
+        }
+
+        // Apply palette-based tint from the layer's hex palette
+        const paletteIndex = LPC_SLOT_PALETTE_INDEX[slotDef.slot] ?? 0;
+        const hexColor = layer.palette[paletteIndex];
+        sprite.tint = hexToPixiTint(hexColor);
+
         container.addChild(sprite);
         layerSprites.push(sprite);
       }
 
-      container.x = ENTITY_X - 32;
-      container.y = ENTITY_Y - 32;
+      // Apply zoom scaling at container level, centered on character
+      container.scale.set(currentZoom, currentZoom);
+      container.x = CANVAS_WIDTH / 2;
+      container.y = CANVAS_HEIGHT / 2;
 
       pixiApp.stage.addChild(container);
       characterContainer = container;
       compositionFailed = false;
+
+      logger.debug('lpcComponent.render.complete', {
+        stageChildren: pixiApp.stage.children.length,
+        spriteCount: layerSprites.length,
+        containerX: container.x,
+        containerY: container.y,
+        zoom: currentZoom,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('lpcDebugger.composeFailed', { error: message });
@@ -896,8 +994,8 @@
       fallbackGfx.rect(0, 0, 64, 64);
       fallbackGfx.stroke({ color: 0xff0000, width: 2 });
 
-      fallbackGfx.x = ENTITY_X - 32;
-      fallbackGfx.y = ENTITY_Y - 32;
+      fallbackGfx.x = CANVAS_WIDTH / 2 - 32;
+      fallbackGfx.y = CANVAS_HEIGHT / 2 - 32;
       fallbackGfx.eventMode = 'none';
 
       pixiApp.stage.addChild(fallbackGfx);
@@ -1130,6 +1228,16 @@
           >
         </label>
       </fieldset>
+    </fieldset>
+
+    <!-- Zoom Control -->
+    <fieldset class="control-section">
+      <legend class="section-legend">Canvas Zoom</legend>
+
+      <label class="control-label">
+        Zoom: {zoom.toFixed(1)}x
+        <input type="range" class="slider" min="0.5" max="10" step="0.1" bind:value={zoom}>
+      </label>
     </fieldset>
 
     <!-- Diagnostic Overlays -->
