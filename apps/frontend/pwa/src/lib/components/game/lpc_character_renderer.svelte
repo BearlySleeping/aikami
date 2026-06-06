@@ -10,6 +10,7 @@
   // apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte
   import { Container, Sprite, Texture } from 'pixi.js';
   import { getContext, onMount } from 'svelte';
+  import { LPC_LAYER_Z_INDEX, LPC_SLOT_PALETTE_INDEX } from '$lib/data/lpc_asset_catalog.ts';
   import {
     createMockSheetTexture,
     createPlaceholderTexture,
@@ -190,6 +191,7 @@
     // Create layer container for sprites
     if (showSprites && stageContainer) {
       layerContainer = new Container();
+      layerContainer.sortableChildren = true;
       layerContainer.x = x;
       layerContainer.y = y;
       stageContainer.addChild(layerContainer);
@@ -245,24 +247,48 @@
 
   /**
    * Creates PixiJS Sprites from pre-loaded textures, positioned in the
-   * layer container. Each layer recipe gets one sprite back-to-front.
+   * layer container. Each layer recipe gets one sprite with the correct
+   * Z-index for deterministic back-to-front compositing and palette-based
+   * tinting applied to the grayscale base texture.
    *
    * @param textures - Array of PixiJS Textures in recipe order.
+   * @param layerRecipes - Parallel array of LpcLayerRecipe for zIndex + tint.
    */
-  const _createSprites = (textures: Texture[]): void => {
+  const _createSprites = (textures: Texture[], layerRecipes: readonly LpcLayerRecipe[]): void => {
     _destroySprites();
 
     if (!layerContainer) {
       return;
     }
 
-    for (const texture of textures) {
+    for (let i = 0; i < textures.length; i++) {
+      const texture = textures[i];
       if (!texture || texture === Texture.EMPTY) {
         continue;
       }
 
+      const recipe = layerRecipes[i];
+
       const sprite = new Sprite(texture);
       sprite.eventMode = 'none';
+
+      // Apply deterministic Z-index based on equipment slot
+      if (recipe) {
+        const zIndex = LPC_LAYER_Z_INDEX[recipe.slot];
+        if (zIndex !== undefined) {
+          sprite.zIndex = zIndex;
+        }
+
+        // Apply palette-based tint from hexPalette buffer
+        const paletteIndex = LPC_SLOT_PALETTE_INDEX[recipe.slot] ?? 0;
+        const offset = paletteIndex * 4;
+        const r = recipe.hexPalette[offset] ?? 0xff;
+        const g = recipe.hexPalette[offset + 1] ?? 0xff;
+        const b = recipe.hexPalette[offset + 2] ?? 0xff;
+        // Pack RGB into a 24-bit numeric tint; force unsigned via >>> 0
+        sprite.tint = ((r << 16) | (g << 8) | b) >>> 0;
+      }
+
       layerContainer.addChild(sprite);
       layerSprites.push(sprite);
     }
@@ -362,7 +388,7 @@
         }
       }
 
-      _createSprites(textures);
+      _createSprites(textures, currentRecipes as LpcLayerRecipe[]);
     };
 
     void loadAndSlice();
