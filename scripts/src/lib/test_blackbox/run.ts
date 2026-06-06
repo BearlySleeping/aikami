@@ -1,10 +1,14 @@
 #!/usr/bin/env bun
+
 // scripts/src/lib/test_blackbox/run.ts
 // Entry point for blackbox tests. Starts emulators + dev servers, runs suites, reports.
 // Primary service lifecycle: tmux (bypasses Nix posix_spawn PATH loss).
 // Fallback: process spawn (when tmux unavailable).
 
+import { resolve } from 'node:path';
 import { startDevServer, stopAllDevServers } from './dev_server_manager.ts';
+import type { DockerServiceConfig } from './docker_manager.ts';
+import { DockerManager } from './docker_manager.ts';
 import { startEmulators, stopEmulators } from './emulator_manager.ts';
 import { printTerminalReport, writeJsonReport } from './reporter.ts';
 import { runSuites } from './test_runner.ts';
@@ -15,6 +19,7 @@ const args = process.argv.slice(2);
 const suiteFilterSet = new Set(args.filter((a) => !a.startsWith('--')));
 const noCrossService = args.includes('--no-cross-service');
 const noEmulator = args.includes('--no-emulator');
+const withDocker = args.includes('--with-docker');
 const force = args.includes('--force') || args.includes('--recreate');
 const help = args.includes('--help') || args.includes('-h');
 
@@ -30,6 +35,7 @@ Arguments:
 Options:
   --no-cross-service  Skip cross-service tests
   --no-emulator       Skip service startup (if already running)
+  --with-docker       Start Docker containers for AI backend services
   --force, --recreate Kill existing sessions and recreate from scratch
   --help, -h          Show help
 
@@ -49,6 +55,13 @@ Examples:
   `);
   process.exit(0);
 }
+
+/** Docker services to start when --with-docker flag is passed. */
+const DOCKER_SERVICES: DockerServiceConfig[] = [];
+
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
+
+let dockerManager: DockerManager | undefined;
 
 async function main() {
   const overallStart = Date.now();
@@ -93,6 +106,22 @@ async function main() {
   );
   const needsPwa = suites.some((s) => s.name === 'pwa');
   const needsGame = suites.some((s) => s.name === 'game-e2e');
+  const needsAiServices = suites.some((s) => s.name === 'ai-services');
+
+  // ── 2a. Docker services (AI backends) ────────────────────
+  if ((withDocker || needsAiServices) && DOCKER_SERVICES.length > 0) {
+    dockerManager = new DockerManager({ projectRoot: PROJECT_ROOT });
+    const dockerAvailable = await dockerManager.isDockerAvailable();
+    if (dockerAvailable) {
+      try {
+        await dockerManager.startServices(DOCKER_SERVICES);
+      } catch (e) {
+        console.error('  ⚠ Docker startup failed:', e instanceof Error ? e.message : e);
+      }
+    } else {
+      console.warn('  ⚠ Docker not available — skipping AI backend services');
+    }
+  }
 
   if (!noEmulator) {
     const tmuxAvailable = await checkTmuxAvailable();
@@ -161,6 +190,9 @@ async function main() {
   const results: SuiteResult[] = await runSuites(suites, { noCrossService });
 
   // ── 4. Cleanup ────────────────────────────────────────────
+  if (dockerManager) {
+    await dockerManager.stopAllServices().catch(() => {});
+  }
   await stopServices().catch(() => {});
   await stopAllDevServers().catch(() => {});
   await stopEmulators().catch(() => {});
@@ -185,6 +217,9 @@ async function checkTmuxAvailable(): Promise<boolean> {
 
 main().catch((e) => {
   console.error('Unhandled:', e);
+  if (dockerManager) {
+    dockerManager.stopAllServices().catch(() => {});
+  }
   stopServices().catch(() => {});
   stopAllDevServers().catch(() => {});
   stopEmulators().catch(() => {});

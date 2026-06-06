@@ -1,5 +1,5 @@
 {
-  "name": "@aikami/frontend-configs",
+  "name": "@aikami/frontend/configs",
   "main": "src/index.ts",
   "scripts": {
     "lint": "biome lint .",

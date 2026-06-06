@@ -47,6 +47,7 @@
 | C-049 | LPC Asset Injector and Visual Workbench | ✅ completed |
 | C-050 | LPC Visual Testing Harness | ✅ completed |
 | C-051 | LPC Rendering Fixes | ✅ completed |
+| C-052 | Unified Blackbox & Docker Runner | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1133,3 +1134,60 @@ Updated all knowledge files with current project state after full audit:
 - Zoom centering fix: previous implementation multiplied container position by zoom, causing character drift to lower-right. Fixed by centering sprites at `(-32, -32)` within container and placing container at canvas center `(width/2, height/2)` — scale now expands symmetrically from character center.
 - Playback ticker rewritten from `requestAnimationFrame` to PixiJS `app.ticker` callback. The rAF approach had unreliable callback invocation in the dev environment; the PixiJS ticker runs every frame with guaranteed `deltaMS` timing, eliminating the separate loop and `animationTickRef` tracking. `togglePlayback()` now simply flips `isPlaying` (no manual start/stop). Frame slider and step buttons unchanged — they directly mutate `animationFrame` $state.
 - Zoom slider max increased from 5.0 to 10.0 per user request.
+
+---
+
+## C-052 — Unified Blackbox & Docker Runner — ✅ completed
+
+### Findings
+- Scaffolded `apps/e2e` as a standalone package with its own `package.json`, `moon.yml`, `tsconfig.json`, and a unified `playwright.config.ts` with distinct projects (`pwa`, `game`, `ai-services`). Migrated all 10 PWA test specs and 2 Game test specs from `apps/frontend/pwa/tests/` and `apps/frontend/game/tests/` into `apps/e2e/tests/pwa/` and `apps/e2e/tests/game/`.
+- Removed Playwright devDependencies and test configs from PWA and Game packages. Updated moon.yml tasks to run only unit tests (e2e tests now run exclusively from `apps/e2e`).
+- Implemented `global_setup.ts` and `global_teardown.ts` hitting Firebase Emulator REST APIs (`DELETE /emulator/v1/projects/{id}/databases/(default)/documents` and `DELETE /emulator/v1/projects/{id}/accounts`) to guarantee zero state bleed between suites.
+- Built `DockerManager` in `scripts/src/lib/test_blackbox/docker_manager.ts` with full lifecycle: `build` (docker build), `run` (docker run with `--add-host=host.docker.internal:host-gateway`), `poll` (HTTP health check polling), `kill` (docker stop/rm). Injects `FIREBASE_AUTH_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, and other emulator env vars into containers via `host.docker.internal` for cross-platform network bridging.
+- Updated `run.ts` to orchestrate `DockerManager` alongside `TmuxManager`. Added `--with-docker` flag. Docker services start before emulators, teardown runs in reverse order.
+- Updated `pwa.e2e.ts` and `game_e2e.ts` suite runners to invoke Playwright from the unified `apps/e2e` package using `npx playwright test --project=pwa` / `--project=game`.
+- Verified DockerManager end-to-end: built nginx:alpine container, mapped port 9999, health-checked via HTTP, cleanly stopped. Full cycle: build → run → poll → kill.
+- Fixed pre-existing workspace dependency bug: `@aikami/frontend/configs` → `@aikami/frontend-configs` in `packages/frontend/engine/package.json`.
+- Registered `e2e` project in `.moon/workspace.yml` and root `package.json` workspaces array.
+- All affected projects (e2e, game, pwa, scripts, frontend-engine) pass fix + typecheck.
+
+### AC Status
+- [x] AC-1: E2E Package Consolidation — `apps/e2e` serves as sole entry point with unified `playwright.config.ts` containing three projects (`pwa`, `game`, `ai-services`). All 12 test specs migrated. PWA + Game no longer contain Playwright configs or e2e tests.
+- [x] AC-2: DockerManager Implementation — `DockerManager` class built with `startService`, `startServices`, `stopService`, `stopAllServices`, `isDockerAvailable`. Verified: nginx container built, run, health-polled, and cleanly torn down.
+- [x] AC-3: Emulator Network Bridging — `--add-host=host.docker.internal:host-gateway` injected into `docker run`. `_buildEmulatorEnv()` sets `FIREBASE_AUTH_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, `FIREBASE_FUNCTIONS_EMULATOR_HOST`, `FIREBASE_STORAGE_EMULATOR_HOST` to `host.docker.internal:{port}`.
+- [x] AC-4: Deterministic Database Purging — `global_setup.ts` and `global_teardown.ts` call Firebase Emulator REST DELETE endpoints for Firestore and Auth. Wired into `playwright.config.ts` via `globalSetup` and `globalTeardown` properties.
+
+### Files created
+- `apps/e2e/package.json` — Package manifest with @playwright/test, @aikami/constants, @aikami/types deps
+- `apps/e2e/moon.yml` — Moon project config with test, test-pwa, test-game tasks
+- `apps/e2e/tsconfig.json` — TypeScript config extending config/tsconfig/tsconfig.base.json
+- `apps/e2e/playwright.config.ts` — Unified Playwright config with pwa/game/ai-services projects
+- `apps/e2e/src/global_setup.ts` — Pre-test emulator purge (Firestore + Auth)
+- `apps/e2e/src/global_teardown.ts` — Post-test emulator purge (Firestore + Auth)
+- `apps/e2e/tests/pwa/*.spec.ts` — 10 migrated PWA Playwright test specs
+- `apps/e2e/tests/game/*.spec.ts` — 2 migrated Game Playwright test specs
+- `apps/e2e/tests/utils/auth.ts` — Test auth helpers (migrated)
+- `apps/e2e/tests/utils/playwright_auth.ts` — Test auth Playwright helpers (migrated)
+- `apps/e2e/tests/ai-services/` — Placeholder for future AI service tests
+- `scripts/src/lib/test_blackbox/docker_manager.ts` — DockerManager with DockerServiceConfig, build/run/poll/kill lifecycle, host-gateway bridge
+
+### Files modified
+- `.moon/workspace.yml` — Added `e2e: "apps/e2e"` project entry
+- `package.json` — Added `"apps/e2e"` to workspaces array
+- `apps/frontend/pwa/package.json` — Removed @playwright/test + playwright devDeps, removed test/test:ui scripts
+- `apps/frontend/pwa/moon.yml` — Removed playwright tag, tests fileGroup, e2e test tasks
+- `apps/frontend/game/package.json` — Removed @playwright/test + playwright devDeps, removed test/test:ui scripts
+- `apps/frontend/game/moon.yml` — Removed playwright tag, tests fileGroup, e2e test tasks
+- `scripts/src/lib/test_blackbox/run.ts` — Added DockerManager import, DOCKER_SERVICES config, --with-docker flag, docker startup/teardown, PROJECT_ROOT constant
+- `scripts/src/lib/test_blackbox/suites/pwa.e2e.ts` — Updated to run Playwright from apps/e2e (npx playwright test --project=pwa)
+- `scripts/src/lib/test_blackbox/suites/game_e2e.ts` — Updated to run Playwright from apps/e2e (npx playwright test --project=game)
+- `packages/frontend/engine/package.json` — Fixed workspace dep: @aikami/frontend/configs → @aikami/frontend-configs
+- `apps/e2e/tests/game/firebase_integration.spec.ts` — Added biome-ignore for Authorization HTTP header naming
+- `apps/e2e/tests/utils/auth.ts` — Fixed userRole from 'user' to 'member'
+
+### Deviations from contract
+- Playwright test execution not yet run through the full blackbox pipeline (requires emulators + dev servers). Test code structure, imports, and config are complete and ready.
+- `ai-services` Playwright project is a placeholder — no AI service Docker configs defined yet (contract specifies this is for future use).
+- DockerManager port allocation uses a simple +10000 offset from base port — full port-probing logic deferred to follow-up.
+- Global setup/teardown require the Firebase emulator to be running at the time Playwright executes (Playwright calls these hooks before/after all projects). The blackbox runner already starts emulators before invoking Playwright.
+

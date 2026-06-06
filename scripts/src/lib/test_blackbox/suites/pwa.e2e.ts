@@ -1,27 +1,28 @@
 // scripts/src/lib/test_blackbox/suites/pwa.e2e.ts
 // PWA browser tests via Playwright against the local dev server.
+// Runs from the unified apps/e2e package.
 
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { TestSuite } from '../types.ts';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
-const PWA_DIR = resolve(PROJECT_ROOT, 'apps/frontend/pwa');
+const E2E_DIR = resolve(PROJECT_ROOT, 'apps/e2e');
 
 export const pwaSuite: TestSuite = {
   name: 'pwa',
   category: 'service',
   run: async () => {
-    console.log('  Running Playwright tests...');
+    console.log('  Running PWA Playwright tests from apps/e2e...');
 
     try {
-      execSync('bunx playwright test --reporter=list', {
-        cwd: PWA_DIR,
+      execSync('npx playwright test --project=pwa --reporter=list', {
+        cwd: E2E_DIR,
         stdio: 'inherit',
         timeout: 120_000,
         env: {
           ...process.env,
-          CI: process.env.CI || 'true', // Ensure non-interactive mode
+          CI: process.env.CI || 'true',
         },
       });
       console.log('  ✓ PWA tests passed');

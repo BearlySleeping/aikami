@@ -13,7 +13,7 @@ export function createMockUserSession(overrides?: Partial<UserSessionData>): Use
     photoURL: undefined,
     disabled: false,
     customClaims: {},
-    userRole: 'user',
+    userRole: 'member',
     status: 'active',
     preferredLocale: 'en',
     currentSignInProvider: 'email',

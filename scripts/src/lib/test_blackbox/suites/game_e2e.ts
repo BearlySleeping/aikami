@@ -3,7 +3,7 @@
  * Game E2E blackbox test suite.
  *
  * Validates Firebase emulators (Auth, Firestore, Storage, Functions)
- * and optionally runs Playwright tests against the game frontend.
+ * and optionally runs Playwright tests from the unified apps/e2e package.
  */
 
 import { resolve } from 'node:path';
@@ -11,7 +11,7 @@ import { EMULATOR_PORTS, PORTS } from '@aikami/constants';
 import type { TestSuite } from '../types.ts';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../../..');
-const GAME_DIR = resolve(PROJECT_ROOT, 'apps/frontend/game');
+const E2E_DIR = resolve(PROJECT_ROOT, 'apps/e2e');
 
 const AUTH_PORT = EMULATOR_PORTS.auth;
 const FIRESTORE_PORT = EMULATOR_PORTS.firestore;
@@ -156,10 +156,10 @@ export const gameE2eSuite: TestSuite = {
 
     // ── 7. Optionally trigger Playwright ───────────────────
     if (process.env.RUN_PLAYWRIGHT === 'true') {
-      console.log('  Running Playwright tests...');
+      console.log('  Running Game Playwright tests from apps/e2e...');
       const proc = Bun.spawn({
-        cmd: ['bun', 'run', 'test'],
-        cwd: GAME_DIR,
+        cmd: ['npx', 'playwright', 'test', '--project=game'],
+        cwd: E2E_DIR,
         stdout: 'inherit',
         stderr: 'inherit',
       });

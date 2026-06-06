@@ -1,0 +1,25 @@
+{
+  "name": "@aikami/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:ui": "npx playwright test --ui",
+    "test:pwa": "npx playwright test --project=pwa",
+    "test:game": "npx playwright test --project=game",
+    "test:ai-services": "npx playwright test --project=ai-services",
+    "lint": "biome lint tests",
+    "format": "biome format tests",
+    "fix": "biome check --write tests && biome format --write tests",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "playwright": "1.60.0",
+    "typescript": "6.0.3"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/types": "workspace:*"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "extends": "../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "../../",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["bun"],
+    "skipLibCheck": true,
+    "paths": {
+      "@aikami/constants": ["../../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../packages/shared/constants/src/lib/*"],
+      "@aikami/types": ["../../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../packages/shared/types/src/lib/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests"]
+}
