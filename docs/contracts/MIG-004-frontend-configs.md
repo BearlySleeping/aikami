@@ -6,7 +6,7 @@
 | **Target** | `packages/frontend/configs/src/lib/` — Align singleton pattern, environment schema, and barrel exports |
 | **Priority** | P0 — Architectural boundary; all frontend apps depend on this module for Firebase initialization |
 | **Dependencies** | MIG-003 (Scripting), `@aikami/constants`, `@aikami/schemas`, `@aikami/utils`, `@aikami/types` |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

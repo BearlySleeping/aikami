@@ -7,7 +7,7 @@
 | Target | PWA Rendering Layer / Dev Tools View & Component |
 | Priority | P1 |
 | Dependencies | C-044, C-045, C-047 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0.0 |
 
 ## Overview
