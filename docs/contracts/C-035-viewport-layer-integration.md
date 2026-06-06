@@ -3,7 +3,7 @@
 ## Metadata
 | Source | Target | Priority | Dependencies | Status | Version |
 |--------|--------|----------|--------------|--------|---------|
-| Engine Architecture | Game Client View | High | C-034 | not_started | 1.0.0 |
+| Engine Architecture | Game Client View | High | C-034 | completed | 1.0.0 |
 
 ## Overview
 This contract bridges the engine's high-performance `LpcBatchManager` mega-UBO structure with the actual SvelteKit view layer client (`game_canvas.svelte`). It establishes a deterministic initialization sequence that eliminates module-level PixiJS instantiation crashes during unit test execution and maps reactive bitECS entities into concrete custom-shaded render layers inside the visible view hierarchy.

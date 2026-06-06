@@ -4,7 +4,7 @@
 ## Metadata
 | Source | Target | Priority | Dependencies | Status | Version |
 |--------|--------|----------|--------------|--------|---------|
-| Engine Architecture | Game Client View | High | C-036, C-038 | not_started | 1.0.0 |
+| Engine Architecture | Game Client View | High | C-036, C-038 | completed | 1.0.0 |
 
 ## Overview
 This contract establishes a zero-allocation sprite state and animation controller that wires bitECS entity velocity/movement directional vectors to individual LPC spritesheet frames. It calculates runtime frame indices using continuous tick counters, updating the UV textures processed by the custom multi-layer shader without invalidating pipeline or geometry structures.
