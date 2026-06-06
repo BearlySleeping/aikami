@@ -3,7 +3,7 @@
 ## Metadata
 | Source | Target | Priority | Dependencies | Status | Version |
 |--------|--------|----------|--------------|--------|---------|
-| Engine Architecture | Game Client View | High | C-034, C-037 | not_started | 1.0.0 |
+| Engine Architecture | Game Client View | High | C-034, C-037 | completed | 1.0.0 |
 
 ## Overview
 This contract implements the asset loading and slicing architecture inside `TextureManager` to supply our custom multi-layer shader with batchable sprite arrays. It converts Universal LPC grayscale spritesheet texture frames into unified, runtime-accessible layer configurations, completely eliminating draw-call fragmenting and pipeline splits when character equipment slots are modified.

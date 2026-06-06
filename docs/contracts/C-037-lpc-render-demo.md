@@ -3,7 +3,7 @@
 ## Metadata
 | Source | Target | Priority | Dependencies | Status | Version |
 |--------|--------|----------|--------------|--------|---------|
-| Engine Architecture | PWA Dev Tooling | Medium | C-035, C-036 | not_started | 1.0.0 |
+| Engine Architecture | PWA Dev Tooling | Medium | C-035, C-036 | completed | 1.0.0 |
 
 ## Overview
 This contract implements an interactive sandbox route (`/dev/lpc-demo`) inside the SvelteKit frontend client workspace to validate the performance metrics of the unified `LpcBatchManager` mega-UBO pipeline. The demo provisions real-time configuration arrays to spawn up to 64 active concurrent bitECS entities with live apparel layer randomization controls, tracking structural fingerprints and update metrics directly on screen.
