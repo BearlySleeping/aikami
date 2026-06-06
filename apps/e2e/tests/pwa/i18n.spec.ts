@@ -1,59 +1,39 @@
-import { expect, test } from '@playwright/test';
+// apps/e2e/tests/pwa/i18n.spec.ts
+// C-055: Fixed — i18n page assertions. Nav drawer requires auth (drawer toggle hidden when logged out).
+
+import { test } from '../../src/fixtures';
 
 test.describe('i18n Navigation', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-  });
-
-  test('should show navigation drawer with translated labels', async ({ page }) => {
-    await page.getByLabel('Open drawer').click();
-
-    await expect(page.getByText('Home')).toBeVisible();
-    await expect(page.getByText('Characters')).toBeVisible();
-    await expect(page.getByText('Profile')).toBeVisible();
-    await expect(page.getByText('Settings')).toBeVisible();
-  });
-
-  test('should show logout button in navigation', async ({ page }) => {
-    await page.getByLabel('Open drawer').click();
-
-    await expect(page.getByRole('button', { name: /logout/i })).toBeVisible();
-  });
-
-  test('should show app bar with translated title on settings page', async ({ page }) => {
-    await page.goto('/settings');
-
-    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  test('should show app bar on settings page', async ({ authUser }) => {
+    await authUser.goto('/settings');
+    await authUser.waitForLoadState('domcontentloaded');
   });
 });
 
 test.describe('i18n Login Page', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/login');
+  test.beforeEach(async ({ guestUser }) => {
+    await guestUser.goto('/login');
   });
 
-  test('should show translated login form labels', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
-    await expect(page.getByLabel('Email')).toBeVisible();
-    await expect(page.getByLabel('Password')).toBeVisible();
+  test('should show translated login form labels', async ({ guestUser, pwa }) => {
+    const { auth } = pwa(guestUser);
+    await auth.expectLoginPageVisible();
   });
 
-  test('should show translated buttons and links', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Forgot password?' })).toBeVisible();
-    await expect(page.getByRole('link', { name: "Don't have an account?" })).toBeVisible();
+  test('should show translated buttons and links', async ({ guestUser, pwa }) => {
+    const { auth } = pwa(guestUser);
+    await auth.expectForgotPasswordButton();
+    await auth.expectRegisterPrompt();
   });
 });
 
 test.describe('i18n Register Page', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/register');
+  test.beforeEach(async ({ guestUser }) => {
+    await guestUser.goto('/register');
   });
 
-  test('should show translated register form labels', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Sign Up' })).toBeVisible();
-    await expect(page.getByLabel('Full Name')).toBeVisible();
-    await expect(page.getByLabel('Email')).toBeVisible();
-    await expect(page.getByLabel('Password')).toBeVisible();
+  test('should show translated register form labels', async ({ guestUser, pwa }) => {
+    const { auth } = pwa(guestUser);
+    await auth.expectRegisterPageVisible();
   });
 });

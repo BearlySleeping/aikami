@@ -194,6 +194,7 @@ coverage/
 test-results/
 playwright-report/
 playwright/.cache/
+.auth/
 .vscode-test/
 
 # --- 7. OS & Editor Specific ---
