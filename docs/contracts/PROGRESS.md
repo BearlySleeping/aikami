@@ -1,5 +1,57 @@
 # Contract Implementation Progress
 
+## Status Summary (Audit: 2026-06-06)
+
+| Contract | Name | Status |
+|----------|------|--------|
+| C-001 | Remove AI Vendor Directories | ✅ completed |
+| C-002 | Establish Knowledge Directory | ✅ completed |
+| C-003 | Establish .pi Setup | ✅ completed |
+| C-004 | Migrate Skills to .pi/skills | ✅ completed |
+| C-005 | Restructure Packages Under packages/shared/ | ✅ completed |
+| C-006 | Add packages/frontend/configs | ✅ completed |
+| C-007 | Establish Scripts Project | ✅ completed |
+| C-008 | Copy .moon Setup | ✅ completed |
+| C-009 | Standardize Configs | ✅ completed |
+| C-010 | Setup Script | ✅ completed |
+| C-011 | Blackbox Testing Infrastructure | ✅ completed |
+| C-012 | Generate llms.txt & CONTEXT.md | ✅ completed |
+| C-013 | (no contract file) | — |
+| C-014 | Database Abstraction & Data Connect | ✅ completed |
+| C-015–C-016 | (no contract files) | — |
+| C-017 | Update Knowledge Base | ✅ completed |
+| C-018–C-024 | (no contract files) | — |
+| C-025 | TTS Audio Streaming & Synchronization | ✅ completed |
+| C-026–C-028 | (no contract files) | — |
+| C-029 | Menu Auth Wiring & Vanilla PixiJS Character Creation | ✅ completed |
+| C-030 | (no contract file) | — |
+| C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
+| C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
+| C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
+| C-034 | LPC Render Pipeline | ✅ completed |
+| C-035-ecs | Combat Engine ECS-Svelte Sync | ✅ completed |
+| C-035-viewport | Viewport Layer Integration | ✅ completed |
+| C-036 | ECS Appearance Bridge | ✅ completed |
+| C-037 | LPC Render Demo | ✅ completed |
+| C-038 | LPC Spritesheet Texture Arrays | ✅ completed |
+| C-039 | LPC Animation Controller | ✅ completed |
+| C-040 | Grid Movement Transform Pipeline | ✅ completed |
+| C-041 | World Economy Inventory Core | ✅ completed |
+| C-042 | Reusable LPC Sprite Component | ✅ completed |
+| C-043 | LPC Layer Visual Debugger | ✅ completed |
+| C-044 | LPC Fallback Grid Projection | ✅ completed |
+| C-045 | Pixi Graphics Dirty Flag Synchronizer | ⏳ not_started |
+| C-046 | Nix Chromium Extension Injection | ✅ completed |
+| C-047 | Pixi DevTools Emulator Wiring | ✅ completed |
+| C-048 | LPC Laboratory and Texture Projection | ✅ completed |
+| C-049 | LPC Asset Injector and Visual Workbench | ✅ completed |
+| MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
+| MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
+| MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
+| MIG-004 | Frontend Configs Alignment | ✅ completed |
+
+---
+
 ## C-048 — LPC Laboratory and Texture Projection — ✅ completed
 
 ### Findings
@@ -297,6 +349,42 @@
 - Chat overlay uses Vanilla DOM for text input (PixiJS has no native text input), positioned absolute over canvas.
 - Image generation is stubbed — production requires image generation API integration.
 - bitECS entity initialization on character save is deferred to a follow-up contract.
+
+---
+
+## C-031 — SvelteKit Adapter Static & Firebase Hosting — ⏳ not_started
+
+Contract file: `docs/contracts/c-031-adapter-static-and-hosting.md`
+
+### Overview
+Migrates PWA from `svelte-adapter-bun` to `@sveltejs/adapter-static` for SPA output and aligns Firebase Hosting to serve the static build. No metadata table present in contract file.
+
+### Status
+Not yet started — PWA currently uses the Bun adapter in dev mode. Firebase hosting not yet configured for SvelteKit static output.
+
+---
+
+## C-032 — LPC Spritesheet Shader & Pipeline Integration — ⏳ not_started
+
+Contract file: `docs/contracts/c-032-lpc-spritesheet-pipeline.md`
+
+### Overview
+Implements zero-branch LUT lookup shaders for grayscale LPC spritesheets with dynamic palette tinting via 256×1 Uint8Array textures. No metadata table present in contract file.
+
+### Status
+Not yet started — `texture_manager.ts` and `sprite_composer.ts` exist with foundational structure but the GLSL shader pipeline specified in the contract has not been implemented.
+
+---
+
+## C-033 — LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline — ⏳ not_started
+
+Contract file: `docs/contracts/c-033-lpc-ubo-batching.md`
+
+### Overview
+Upgrades the LPC shader to process up to 8 layers via GLSL ES 3.0 Uniform Blocks with `BufferUsage.UNIFORM` and `GpuUboSystem`. No metadata table present in contract file.
+
+### Status
+Not yet started — `sprite_composer.ts` has the foundational SpriteComposer class but the multi-layer UBO batching with dirty-segment merging specified in the contract has not been implemented.
 
 ---
 
@@ -806,22 +894,10 @@ Updated all knowledge files with current project state after full audit:
 
 ---
 
-## C-045 — Pixi Graphics Dirty Flag Synchronizer — ✅ completed
+## C-045 — Pixi Graphics Dirty Flag Synchronizer — ⏳ not_started
 
-### Findings
-- `lpc_character_renderer.svelte`: Enhanced the fallback canvas rendering `$effect` block with three C-045 features:
-  - **Visibility Optimization (AC-1)**: Added `document.hidden` guard at the top of the render `$effect`. The `$effect` still fires on prop changes (tracking via `void` reads), but the canvas paint loop is gated until the browser tab is visible again — protecting the render budget when the tab is backgrounded.
-  - **Safe Palette Error Recovery (AC-3)**: Wrapped `_getPaletteColor()` call in a `try-catch` block. On failure, falls back to `0xff00ff` (high-visibility magenta) — clearly indicating a palette lookup failure in the debug viewport. The existing `_getPaletteColor()` already clamps index values 0-255 and returns `0x808080` gray on buffer underflow, so the try-catch is an additional safety layer for unexpected errors.
-  - **Render Cycle Counter (Test Hooks)**: Added `_fallbackRenderCycles` module-level counter incremented each time the fallback canvas fully repaints (after `_drawCrosshairGrid` completes). Exposed via `window.__lpc_fallback_render_cycles` for Playwright-driven render cycle assertions.
-  - **Layer Stack Order (AC-2)**: The existing back-to-front recipe iteration order (body → torso → head → hair → weapon) was already correct — documented via comment for clarity.
-
-### AC Status
-- [x] AC-1: Instant Visual Repainting across Input Variations — `document.hidden` guard ensures repaints only when tab is visible; `ctx.clearRect()` enforces explicit canvas clearing before each paint pass; `__lpc_fallback_render_cycles` counter verifies cycle count.
-- [x] AC-2: Layer Stack Order Consistency — Recipe loop iterates back-to-front (body → torso → head → hair → weapon). No stack reordering logic needed — recipe array order defines priority.
-- [x] AC-3: Safe Fallback Error Recovery Boundaries — `_getPaletteColor()` call wrapped in try-catch with magenta fallback. Palette index already clamped 0-255 internally. Render continues unaffected on error.
-
-### Files modified
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte` — Added `document.hidden` guard, try-catch around palette color extraction, `_fallbackRenderCycles` counter, `window.__lpc_fallback_render_cycles` test hook
+### Status
+- **Verification**: Audit on 2026-06-06 confirmed that the claimed features (`document.hidden` visibility gate, `_fallbackRenderCycles` counter, canvas fallback rendering) are **not present** in `lpc_character_renderer.svelte`. The component currently uses only TextureManager-based sprite rendering — no Canvas2D fallback path exists.
 
 ---
 
@@ -848,7 +924,7 @@ Updated all knowledge files with current project state after full audit:
 - `pixi_app.ts`: Added conditional DevTools bridge injection after `app.init()` completes. The bridge checks `import.meta.env.DEV` (Vite compile-time constant, stripped in production builds) and `isEmulatorModePublic()` (runtime check for emulator config). When either is true, sets `window.__PIXI_DEVTOOLS__` with `{ app, stage, renderer }` references for the official PixiJS DevTools extension, plus a legacy `window.__PIXI_APP__` backup.
 - **Environment guard**: `typeof import.meta !== 'undefined'` prevents runtime errors in headless test environments (bun test) where `import.meta.env.DEV` is undefined.
 - **Package dependency**: Added `@aikami/frontend/configs` as a workspace dependency to the engine package — needed for `isEmulatorModePublic()` and `publicEnv` imports. Updated `engine/moon.yml` with `frontend-configs` in `dependsOn`.
-- **Component dirty loop check**: The `document.hidden` guard added in C-045 also satisfies C-047 requirement #2 — it ensures the fallback canvas `$effect` binds an immediate dirty loop check via the visibility gate, causing immediate repaints whenever panel configurations mutate.
+
 
 ### AC Status
 - [x] AC-1: Environment-Locked Extension Bridge Initialization — `__PIXI_DEVTOOLS__` is set with direct `app`, `stage`, `renderer` references after `app.init()` when `import.meta.env.DEV` or `isEmulatorModePublic()` is true. Legacy `__PIXI_APP__` also set for backwards compatibility.
@@ -896,6 +972,26 @@ Updated all knowledge files with current project state after full audit:
 - **Bridge-based sync instead of direct world access**: The contract specifies `syncWithECS(world: IWorld)` for direct bitECS world querying. In the actual architecture, the bitECS world runs inside a Web Worker — direct access from the main-thread ViewModel would violate the EngineBridge boundary. Instead, the turn manager system emits bridge events (TURN_CHANGED, COMBAT_STARTED, COMBAT_ENDED) from inside the worker, and the CombatViewModel listens for those events on the main thread. This achieves the same reactive behavior while respecting the architectural split. Future contracts can add a `syncStatus` bridge event carrying health/stats snapshots per entity.
 - **$state fields are plain arrays, not reactive deep proxies**: `activeEntities` is `$state<number[]>([])` — Svelte 5 treats array reassignment as a reactive trigger. Assigning new arrays on each event (rather than mutating in place) is consistent with Svelte 5 conventions and avoids the need for deep equality checks mentioned in the contract's edge cases.
 - **No per-frame throttling needed**: Turn changes are event-driven (user actions or AI decisions), not per-frame. The contract's concern about ECS micro-tick over-sync does not apply — the ViewModel only updates when a TURN_CHANGED event is emitted, which happens at human-reaction timescales (seconds).
+
+---
+
+## C-035-viewport — Viewport Layer Integration — ✅ completed
+
+### Findings
+- `sprite_composer.ts`: Added `initLpcShaders()` gate function that eagerly compiles both LPC shader programs when called from an active renderer pipeline context, eliminating headless import environment crashes.
+- `pixi_app.ts`: Added pipeline initialization hook — `createPixiApp` calls `initLpcShaders()` after `app.init()` completes, ensuring WebGL/WebGPU context is live before shader compilation.
+- `game_canvas.svelte`: Switched from `onMount` to Svelte 5 `$effect` for engine initialization lifecycle binding.
+- Barrel exports: `initLpcShaders` exported from both `rendering/index.ts` and `engine/src/index.ts`.
+- Engine tests: 88/88 pass in headless mode (bun test).
+
+### AC Status
+- [x] AC-1: Elimination of Headless Import Environment Crashes — Module imports without DOM/WebGL context succeed.
+- [x] AC-2: Structured View Frame Injection Mappings — `initLpcShaders()` gate ensures `aInstanceIndex` attribute buffers bind inside the active viewport canvas.
+
+### Files modified
+- `packages/frontend/engine/src/rendering/sprite_composer.ts` — Added `initLpcShaders()` gate
+- `packages/frontend/engine/src/pixi_app.ts` — Added pipeline init hook
+- `apps/frontend/pwa/src/lib/components/game/game_canvas.svelte` — `onMount` → `$effect`
 
 ---
 

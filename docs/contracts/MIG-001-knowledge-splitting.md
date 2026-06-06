@@ -6,7 +6,7 @@
 | **Target** | Migrate `knowledge/` to `.context/` (AI instructions) + `docs/` (human-readable) |
 | **Priority** | P1 — structural refactoring, unblocks aikami alignment |
 | **Dependencies** | None (standalone migration) |
-| **Status** | in_progress |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

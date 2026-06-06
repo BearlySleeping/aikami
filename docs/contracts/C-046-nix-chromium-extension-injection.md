@@ -8,7 +8,7 @@
 | Target       | Dev Environment Infrastructure (`flake.nix`) |
 | Priority     | P1                                           |
 | Dependencies | C-043, C-044                                 |
-| Status       | not_started                                  |
+| Status       | completed                                     |
 | Version      | 1.0.0                                        |
 
 ## Overview
