@@ -73,6 +73,9 @@ export default defineConfig(({ mode }) => {
         'Cross-Origin-Embedder-Policy': 'require-corp',
       },
       port,
+      watch: {
+        ignored: ['**/examples/**', '**/docs/**', '**/dist/**', '**/.svelte-kit/**', '**/.pi/**'],
+      },
     },
   };
 });

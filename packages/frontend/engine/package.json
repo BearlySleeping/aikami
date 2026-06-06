@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aikami/frontend-api-core": "workspace:*",
+    "@aikami/frontend/configs": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/frontend-utils": "workspace:*",
     "@aikami/logger": "workspace:*",
