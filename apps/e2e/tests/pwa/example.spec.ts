@@ -1,26 +1,31 @@
-import { expect, test } from '@playwright/test';
+// apps/e2e/tests/pwa/example.spec.ts
+// C-055: Fixed — uses corrected PwaAuthPage methods.
+// "Forgot password?" and "Don't have an account?" are buttons, not links.
 
-test.describe('PWA', () => {
-  test('should load the home page', async ({ page }) => {
-    await page.goto('/');
-    await expect(page).toHaveTitle(/Aikami/);
+import { test } from '../../src/fixtures';
+
+test.describe('PWA Public Pages', () => {
+  test('should show login page for unauthenticated users', async ({ guestUser, pwa }) => {
+    const { auth } = pwa(guestUser);
+    await auth.gotoLogin();
+    await auth.expectLoginPageVisible();
   });
 
-  test('should show login page for unauthenticated users', async ({ page }) => {
-    await page.goto('/login');
-    await expect(page.locator('text=Login')).toBeVisible();
+  test('should show register page for unauthenticated users', async ({ guestUser, pwa }) => {
+    const { auth } = pwa(guestUser);
+    await auth.gotoRegister();
+    await auth.expectRegisterPageVisible();
   });
 
-  test('should show register page for unauthenticated users', async ({ page }) => {
-    await page.goto('/register');
-    await expect(page.locator('text=Register')).toBeVisible();
+  test('should show forgot password button on login page', async ({ guestUser, pwa }) => {
+    const { auth } = pwa(guestUser);
+    await auth.gotoLogin();
+    await auth.expectForgotPasswordButton();
   });
 
-  test('should navigate between public pages', async ({ page }) => {
-    await page.goto('/login');
-    await expect(page.locator('text=Login')).toBeVisible();
-
-    await page.click('text=Register');
-    await expect(page.locator('text=Register')).toBeVisible();
+  test('should show register prompt on login page', async ({ guestUser, pwa }) => {
+    const { auth } = pwa(guestUser);
+    await auth.gotoLogin();
+    await auth.expectRegisterPrompt();
   });
 });

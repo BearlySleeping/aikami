@@ -10,7 +10,7 @@
 <BaseViewModelContainer {viewModel} class="navbar bg-base-100 shadow-sm">
   <div class="navbar-start">
     {#if viewModel.showDrawerButton && viewModel.isLoggedIn}
-      <label for="left-drawer" class="btn btn-ghost btn-circle lg:hidden">
+      <label for="left-drawer" class="btn btn-ghost btn-circle lg:hidden" data-testid="drawer-toggle">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           class="h-5 w-5"
