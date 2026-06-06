@@ -21,7 +21,6 @@
     LpcDirection,
     TextureManager,
   } from '@aikami/frontend/engine';
-  // apps/frontend/pwa/src/routes/(dev)/dev/lpc/component-lite/+page.svelte
   import type { Application } from 'pixi.js';
   import { Container, Graphics, Sprite, Texture } from 'pixi.js';
   import { onMount, setContext } from 'svelte';
@@ -33,8 +32,10 @@
   import type { LpcMockShapeType } from '$lib/data/lpc_asset_catalog';
   import {
     ALL_LPC_SLOTS,
-    buildPaletteBuffer,
+    hexToPixiTint,
     LPC_DEFAULT_PALETTE,
+    LPC_LAYER_Z_INDEX,
+    LPC_SLOT_PALETTE_INDEX,
   } from '$lib/data/lpc_asset_catalog';
   import { generateMockLpcSheet, LPC_MOCK_LAYOUT } from '$lib/data/lpc_asset_path_mapper';
   import { type LpcUrlState, searchParamsToLpcState } from '$lib/data/lpc_url_config';
@@ -55,6 +56,18 @@
   // -----------------------------------------------------------------------
 
   const urlConfig = $derived(searchParamsToLpcState($page.url.searchParams));
+
+  $effect(() => {
+    logger.debug('lpcLite.urlConfig', {
+      layers: urlConfig.layers.length,
+      state: urlConfig.state,
+      direction: urlConfig.direction,
+      frame: urlConfig.frame,
+      zoom: urlConfig.zoom,
+      paletteOverrides: urlConfig.paletteOverrides.size,
+    });
+  });
+
   const zoom = $derived(urlConfig.zoom);
 
   // -----------------------------------------------------------------------
@@ -63,6 +76,14 @@
 
   const canvasWidth = $derived(Math.round(CANVAS_BASE_WIDTH * zoom));
   const canvasHeight = $derived(Math.round(CANVAS_BASE_HEIGHT * zoom));
+
+  $effect(() => {
+    logger.debug('lpcLite.canvasSize', {
+      zoom,
+      canvasWidth,
+      canvasHeight,
+    });
+  });
 
   // -----------------------------------------------------------------------
   // Active layers derived from URL config
@@ -75,7 +96,7 @@
   };
 
   const activeLayers = $derived.by((): ActiveLayerEntry[] => {
-    return urlConfig.layers.map((entry, layerIndex) => {
+    const result = urlConfig.layers.map((entry, layerIndex) => {
       const palette = [...LPC_DEFAULT_PALETTE];
 
       for (const [key, hex] of urlConfig.paletteOverrides) {
@@ -99,11 +120,23 @@
         palette,
       };
     });
+
+    logger.debug('lpcLite.activeLayers', {
+      count: result.length,
+      slots: result.map((l) => {
+        const def = ALL_LPC_SLOTS[l.slotDefIndex];
+        return def?.slot ?? 'unknown';
+      }),
+    });
+
+    return result;
   });
 
   // -----------------------------------------------------------------------
   // Batch manager + stage container
   // -----------------------------------------------------------------------
+
+  logger.debug('lpcLite.createBatchManager', { maxInstances: 8 });
 
   const batchManager = new LpcBatchManager({ maxInstances: 8 });
   setContext(LPC_BATCH_MANAGER_KEY, batchManager);
@@ -121,17 +154,28 @@
     const cacheKey = `${slot}:${shapeType}`;
     const cached = _mockSheetTextureCache.get(cacheKey);
     if (cached) {
+      logger.debug('lpcLite.mockSheetTexture.cacheHit', { slot, shapeType });
       return cached;
     }
 
+    logger.debug('lpcLite.mockSheetTexture.generate', { slot, shapeType });
+
     const canvas = generateMockLpcSheet(slot, shapeType);
     if (!canvas) {
+      logger.warn('lpcLite.mockSheetTexture.generateFailed', { slot, shapeType });
       return Texture.EMPTY;
     }
 
     const texture = Texture.from(canvas);
     texture.source.scaleMode = 'nearest';
     _mockSheetTextureCache.set(cacheKey, texture);
+
+    logger.debug('lpcLite.mockSheetTexture.generated', {
+      slot,
+      shapeType,
+      cacheSize: _mockSheetTextureCache.size,
+    });
+
     return texture;
   };
 
@@ -148,6 +192,7 @@
 
     const sheet = _getMockSheetTexture(slot, shapeType);
     if (sheet === Texture.EMPTY) {
+      logger.warn('lpcLite.mockFrameTexture.emptySheet', { slot, shapeType, frameIndex });
       return Texture.EMPTY;
     }
 
@@ -162,6 +207,7 @@
       return frame;
     }
 
+    logger.warn('lpcLite.mockFrameTexture.noFrame', { slot, shapeType, frameIndex });
     return Texture.EMPTY;
   };
 
@@ -174,46 +220,103 @@
   // -----------------------------------------------------------------------
 
   let canvasElement: HTMLCanvasElement | undefined = $state();
-  let pixiApp: Application | undefined;
+  let pixiApp: Application | undefined = $state();
+  /** Non-reactive — mutated in render $effect, read in destroy/cleanup only. */
   let characterContainer: Container | undefined;
   let layerSprites: Sprite[] = [];
-
-  // -----------------------------------------------------------------------
-  // PixiJS loaded flag for Playwright
-  // -----------------------------------------------------------------------
-
-  $effect(() => {
-    if (pixiApp && characterContainer && typeof window !== 'undefined') {
-      (window as unknown as Record<string, unknown>).__PIXI_LOADED__ = true;
-    }
-  });
 
   // -----------------------------------------------------------------------
   // Initialize PixiJS
   // -----------------------------------------------------------------------
 
-  onMount(async () => {
+  onMount(() => {
+    logger.debug('lpcLite.onMount.start', {
+      hasCanvas: !!canvasElement,
+      canvasWidth,
+      canvasHeight,
+      zoom,
+    });
+
     if (!canvasElement) {
       logger.error('lpcLite.noCanvas');
       return;
     }
 
-    try {
-      const result = await createPixiApp({
-        canvas: canvasElement,
-        width: canvasWidth,
-        height: canvasHeight,
-        backgroundColor: 0x0d0d1a,
+    const initApp = async (): Promise<void> => {
+      try {
+        logger.debug('lpcLite.createPixiApp.start', {
+          width: canvasWidth,
+          height: canvasHeight,
+        });
+
+        const result = await createPixiApp({
+          canvas: canvasElement!,
+          width: canvasWidth,
+          height: canvasHeight,
+          backgroundColor: 0x0d0d1a,
+        });
+
+        pixiApp = result.app;
+
+        logger.debug('lpcLite.pixiApp.created', {
+          width: pixiApp.renderer.width,
+          height: pixiApp.renderer.height,
+          rendererType: pixiApp.renderer.type,
+          fps: result.debug.fps,
+        });
+
+        pixiApp.stage.addChild(stageContainer);
+
+        logger.debug('lpcLite.stageContainer.added', {
+          stageChildren: pixiApp.stage.children.length,
+        });
+
+        // Listen for WebGL context loss
+        const canvas = pixiApp.renderer.canvas as HTMLCanvasElement;
+        canvas.addEventListener('webglcontextlost', (event: Event) => {
+          logger.error('lpcLite.webglContextLost', { event: String(event) });
+        });
+        canvas.addEventListener('webglcontextrestored', () => {
+          logger.warn('lpcLite.webglContextRestored');
+        });
+
+        logger.debug('lpcLite.initialized', { zoom, layers: activeLayers.length });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error('lpcLite.initFailed', {
+          error: message,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+    };
+
+    void initApp();
+
+    // Cleanup: destroy PixiJS app on unmount to release WebGL context
+    return () => {
+      logger.debug('lpcLite.unmount.cleanup', {
+        hasApp: !!pixiApp,
+        hasContainer: !!characterContainer,
+        spriteCount: layerSprites.length,
+        sheetCacheSize: _mockSheetTextureCache.size,
+        frameCacheSize: _frameTextureCache.size,
       });
 
-      pixiApp = result.app;
-      pixiApp.stage.addChild(stageContainer);
+      _destroyAllSprites();
 
-      logger.debug('lpcLite.initialized', { zoom, layers: activeLayers.length });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error('lpcLite.initFailed', { error: message });
-    }
+      _mockSheetTextureCache.clear();
+      _frameTextureCache.clear();
+
+      if (stageContainer.parent) {
+        stageContainer.parent.removeChild(stageContainer);
+      }
+      stageContainer.destroy({ children: true });
+
+      if (pixiApp) {
+        pixiApp.destroy(true, { children: true });
+        pixiApp = undefined;
+      }
+    };
   });
 
   // -----------------------------------------------------------------------
@@ -225,8 +328,24 @@
     const currentFrame = urlConfig.frame;
     const currentState = urlConfig.state;
     const currentDirection = urlConfig.direction;
+    const currentZoom = zoom;
 
-    if (!pixiApp || currentLayers.length === 0) {
+    logger.debug('lpcLite.render.trigger', {
+      layers: currentLayers.length,
+      frame: currentFrame,
+      state: currentState,
+      direction: currentDirection,
+      zoom: currentZoom,
+      hasApp: !!pixiApp,
+    });
+
+    if (!pixiApp) {
+      logger.warn('lpcLite.render.noApp');
+      return;
+    }
+
+    if (currentLayers.length === 0) {
+      logger.warn('lpcLite.render.noLayers');
       return;
     }
 
@@ -236,57 +355,116 @@
     const row = getLpcStateRow(currentState, currentDirection);
     const frameIndex = row * LPC_LAYOUT.columns + currentFrame;
 
+    logger.debug('lpcLite.render.frameGrid', {
+      state: currentState,
+      direction: currentDirection,
+      row,
+      frame: currentFrame,
+      frameIndex,
+    });
+
     try {
       const container = new Container();
       container.eventMode = 'none';
+      container.sortableChildren = true;
+
+      let spriteCount = 0;
+      let skippedCount = 0;
 
       for (let i = 0; i < currentLayers.length; i++) {
         const layer = currentLayers[i];
         if (!layer) {
+          skippedCount += 1;
           continue;
         }
 
         const slotDef = ALL_LPC_SLOTS[layer.slotDefIndex];
         const variant = slotDef?.variants[layer.variantIndex];
         if (!variant) {
+          logger.warn('lpcLite.render.noVariant', {
+            i,
+            slotDefIndex: layer.slotDefIndex,
+            variantIndex: layer.variantIndex,
+          });
+          skippedCount += 1;
           continue;
         }
 
         const frameTexture = _getMockFrameTexture(slotDef.slot, variant.shapeType, frameIndex);
         if (frameTexture === Texture.EMPTY) {
+          logger.warn('lpcLite.render.emptyTexture', {
+            i,
+            slot: slotDef.slot,
+            shapeType: variant.shapeType,
+            frameIndex,
+          });
+          skippedCount += 1;
           continue;
         }
 
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
+        sprite.x = -32;
+        sprite.y = -32;
         sprite.alpha = slotDef.slot === 'body' ? 1.0 : 0.85;
+
+        const zIndex = LPC_LAYER_Z_INDEX[slotDef.slot];
+        if (zIndex !== undefined) {
+          sprite.zIndex = zIndex;
+        }
+
+        const paletteIndex = LPC_SLOT_PALETTE_INDEX[slotDef.slot] ?? 0;
+        const hexColor = layer.palette[paletteIndex];
+        sprite.tint = hexToPixiTint(hexColor);
+
         container.addChild(sprite);
         layerSprites.push(sprite);
+        spriteCount += 1;
       }
 
-      // Apply zoom scaling at container level
-      container.scale.set(zoom, zoom);
-      container.x = ENTITY_X * zoom - 32 * zoom;
-      container.y = ENTITY_Y * zoom - 32 * zoom;
+      logger.debug('lpcLite.render.composed', {
+        totalRecipes: currentLayers.length,
+        spritesCreated: spriteCount,
+        spritesSkipped: skippedCount,
+        containerChildren: container.children.length,
+        zoom: currentZoom,
+        containerX: canvasWidth / 2,
+        containerY: canvasHeight / 2,
+      });
+
+      container.scale.set(currentZoom, currentZoom);
+      container.x = canvasWidth / 2;
+      container.y = canvasHeight / 2;
 
       pixiApp.stage.addChild(container);
       characterContainer = container;
 
-      // Signal PixiJS loaded for Playwright
+      logger.debug('lpcLite.render.complete', {
+        stageChildren: pixiApp.stage.children.length,
+        canvasWidth,
+        canvasHeight,
+        zoom: currentZoom,
+      });
+
       if (typeof window !== 'undefined') {
         (window as unknown as Record<string, unknown>).__PIXI_LOADED__ = true;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('lpcLite.composeFailed', { error: message });
+      logger.error('lpcLite.composeFailed', {
+        error: message,
+        stack: error instanceof Error ? error.stack : undefined,
+        zoom: currentZoom,
+        layers: currentLayers.length,
+      });
 
       const fallbackGfx = new Graphics();
       fallbackGfx.rect(0, 0, 64, 64);
       fallbackGfx.fill({ color: 0xff00ff, alpha: 0.9 });
       fallbackGfx.rect(0, 0, 64, 64);
       fallbackGfx.stroke({ color: 0xff0000, width: 2 });
-      fallbackGfx.x = ENTITY_X * zoom - 32 * zoom;
-      fallbackGfx.y = ENTITY_Y * zoom - 32 * zoom;
+      fallbackGfx.x = canvasWidth / 2 - 32 * zoom;
+      fallbackGfx.y = canvasHeight / 2 - 32 * zoom;
       fallbackGfx.eventMode = 'none';
 
       pixiApp.stage.addChild(fallbackGfx);
@@ -296,6 +474,8 @@
   });
 
   const _destroyAllSprites = (): void => {
+    logger.debug('lpcLite.destroySprites', { count: layerSprites.length });
+
     for (const sprite of layerSprites) {
       sprite.destroy();
     }
@@ -326,7 +506,6 @@
 </div>
 
 <style>
-  /* Zero-chrome full-viewport canvas */
   :global(html),
   :global(body) {
     margin: 0;
