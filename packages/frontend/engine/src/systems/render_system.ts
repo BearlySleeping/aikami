@@ -402,14 +402,100 @@ const uboRecipeSnapshots = new Map<number, string>();
  * Computes a structural fingerprint for a set of layer recipes.
  *
  * Only compares asset IDs and slot names — ignores palette data
- * to keep snapshot comparison fast. Palette changes are structural
- * changes and will be caught by the caller's own dirty check.
+ * to keep snapshot comparison fast. Palette-only changes are
+ * detected separately via {@link recipePaletteFingerprint}.
  *
  * @param recipes - The current layer recipes.
  * @returns A JSON-stringified fingerprint for fast comparison.
  */
 const recipeStructuralFingerprint = (recipes: readonly LpcLayerRecipe[]): string => {
   return JSON.stringify(recipes.map((r) => (r ? { s: r.slot, a: r.assetId } : null)));
+};
+
+/**
+ * Computes a lightweight palette fingerprint for a set of layer recipes.
+ *
+ * Samples a small subset of palette data (first 16 entries per layer)
+ * to detect colour-only mutations without triggering structural re-hashes.
+ * Uses a simple DJB2 hash over the sampled bytes for O(n) comparison speed.
+ *
+ * @param recipes - The current layer recipes.
+ * @returns A numeric hash representing palette state.
+ */
+const recipePaletteFingerprint = (recipes: readonly LpcLayerRecipe[]): number => {
+  let hash = 5381;
+  for (const recipe of recipes) {
+    if (!recipe?.hexPalette) {
+      continue;
+    }
+    // Sample first 64 bytes (16 RGBA entries) per layer — enough to
+    // catch tint changes without scanning the full 1024-byte buffer.
+    const sampleEnd = Math.min(64, recipe.hexPalette.length);
+    for (let i = 0; i < sampleEnd; i++) {
+      hash = ((hash << 5) + hash + recipe.hexPalette[i]) | 0;
+    }
+  }
+  return hash;
+};
+
+/**
+ * Tracks the last known palette fingerprint per entity for
+ * palette-only change detection.
+ *
+ * Key: entity ID, Value: DJB2 hash of palette sample bytes.
+ * Separate from structural snapshots so palette mutations don't
+ * increment the structural hash counter.
+ */
+const uboPaletteSnapshots = new Map<number, number>();
+
+/**
+ * Appearance change tri-state indicating what kind of mutation occurred.
+ *
+ * - `'none'`: No change — skip UBO repack.
+ * - `'palette'`: Only palette colours changed — repack without
+ *   incrementing structural hash counter (AC-2 compliance).
+ * - `'structural'`: Slot or asset order changed — full repack + hash bump.
+ */
+type AppearanceChangeKind = 'none' | 'palette' | 'structural';
+
+/**
+ * Returns the kind of appearance change for an entity since the last
+ * recorded snapshot.
+ *
+ * A `'structural'` change means layer order, slot assignment, or asset
+ * ID swap — anything that changes the entity's visual identity.
+ * A `'palette'` change means only tint colours changed — UBO must
+ * repack but structural hash counter should NOT increment.
+ * `'none'` returns when nothing changed.
+ *
+ * @param eid - The entity ID to check.
+ * @param recipes - The current layer recipes.
+ * @returns The kind of appearance change detected.
+ */
+const checkAppearanceChange = (
+  eid: number,
+  recipes: readonly LpcLayerRecipe[],
+): AppearanceChangeKind => {
+  const structFingerprint = recipeStructuralFingerprint(recipes);
+  const palFingerprint = recipePaletteFingerprint(recipes);
+
+  const previousStruct = uboRecipeSnapshots.get(eid);
+  const previousPalette = uboPaletteSnapshots.get(eid);
+
+  if (previousStruct === structFingerprint) {
+    // Structural identical — check palette only
+    if (previousPalette === palFingerprint) {
+      return 'none';
+    }
+    // Palette changed, structure unchanged
+    uboPaletteSnapshots.set(eid, palFingerprint);
+    return 'palette';
+  }
+
+  // Structural changed — update both snapshots
+  uboRecipeSnapshots.set(eid, structFingerprint);
+  uboPaletteSnapshots.set(eid, palFingerprint);
+  return 'structural';
 };
 
 /**
@@ -426,15 +512,7 @@ const recipeStructuralFingerprint = (recipes: readonly LpcLayerRecipe[]): string
  * @returns `true` if the appearance structurally changed.
  */
 const hasAppearanceChanged = (eid: number, recipes: readonly LpcLayerRecipe[]): boolean => {
-  const fingerprint = recipeStructuralFingerprint(recipes);
-  const previous = uboRecipeSnapshots.get(eid);
-
-  if (previous === fingerprint) {
-    return false;
-  }
-
-  uboRecipeSnapshots.set(eid, fingerprint);
-  return true;
+  return checkAppearanceChange(eid, recipes) === 'structural';
 };
 
 // ---------------------------------------------------------------------------
@@ -812,10 +890,12 @@ class LpcBatchManager {
     // Write initial UBO data
     this._writeSlotUbo(slot, recipes);
 
-    // Seed the structural fingerprint so subsequent writes with the
-    // same recipe skip the re-pack + re-upload path.
-    const fingerprint = recipeStructuralFingerprint(recipes);
-    uboRecipeSnapshots.set(eid, fingerprint);
+    // Seed both structural and palette fingerprints so subsequent
+    // writes with identical data skip the re-pack path entirely.
+    const structuralFingerprint = recipeStructuralFingerprint(recipes);
+    const paletteFingerprint = recipePaletteFingerprint(recipes);
+    uboRecipeSnapshots.set(eid, structuralFingerprint);
+    uboPaletteSnapshots.set(eid, paletteFingerprint);
 
     // Acquire a pre-allocated Buffer for this entity (only when GPU mode)
     if (this._hasGpuBuffers) {
@@ -860,9 +940,10 @@ class LpcBatchManager {
       }
     }
 
-    // Clean up structural fingerprint snapshot so a re-registration
-    // starts fresh.
+    // Clean up structural and palette fingerprint snapshots so a
+    // re-registration starts fresh.
     uboRecipeSnapshots.delete(eid);
+    uboPaletteSnapshots.delete(eid);
     uboBufferCache.delete(eid);
   }
 
@@ -907,16 +988,20 @@ class LpcBatchManager {
       return; // Entity not registered in the batch pool
     }
 
-    // Structural fingerprint — skip if layout hasn't changed.
-    // On first write after registration, set the initial snapshot
-    // without counting it as a structural change.
-    const hasChanged = hasAppearanceChanged(eid, recipes);
-    if (!hasChanged) {
-      // Recipe layout identical to previous frame — no re-pack needed
+    // Tri-state appearance change check (AC-2: palette-only changes
+    // repack without incrementing structural hashes).
+    const changeKind = checkAppearanceChange(eid, recipes);
+    if (changeKind === 'none') {
+      // Neither structural nor palette changed — skip repack
       return;
     }
 
-    this._structuralHashesIssued += 1;
+    // Only structural changes (slot/assetId swap) count toward the
+    // structural hash tracking counter. Palette-only tint changes
+    // repack but leave the counter stable (AC-2 zero-structural-hash).
+    if (changeKind === 'structural') {
+      this._structuralHashesIssued += 1;
+    }
 
     this._writeSlotUbo(slot, recipes);
 

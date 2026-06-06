@@ -1,4 +1,6 @@
 // packages/frontend/engine/src/pixi_app.ts
+
+import { isEmulatorModePublic } from '@aikami/frontend/configs';
 import { Application } from 'pixi.js';
 import { initLpcShaders } from './rendering/sprite_composer.ts';
 
@@ -125,6 +127,46 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
   // is live. Headless environments skip this path — compilation is
   // deferred to first use via lazy getters.
   initLpcShaders();
+
+  // -- PixiJS DevTools bridge (C-047) ----------------------------------
+  // Wire the official PixiJS DevTools extension bridge hooks into the
+  // window scope only when running in local/emulator development modes.
+  // This connects the underlying scene graph hierarchy, component
+  // structures, and dirty slot state to the browser extension interface
+  // without injecting analytical overhead into production builds.
+  //
+  // Guards:
+  //   - import.meta.env.DEV: Vite compile-time constant (stripped in prod)
+  //   - isEmulatorModePublic(): runtime check for emulator config
+  //
+  // References:
+  //   - PixiJS DevTools extension: aamddddknhcagpehecnhphigffljadon
+  //   - https://chromewebstore.google.com/detail/aamddddknhcagpehecnhphigffljadon
+  // -------------------------------------------------------------------
+  if (typeof import.meta !== 'undefined' && (import.meta.env?.DEV || isEmulatorModePublic())) {
+    // Primary bridge — used by the official PixiJS DevTools extension
+    (window as unknown as Record<string, unknown>).__PIXI_DEVTOOLS__ = {
+      app,
+      stage: app.stage,
+      renderer: app.renderer,
+    };
+
+    // Legacy backup locator — used by older devtool revisions
+    (window as unknown as Record<string, unknown>).__PIXI_APP__ = app;
+
+    // Notify the devtools wrapper that the PixiJS globals are now
+    // available. The extension inject script caches its initial scan
+    // result, so we must explicitly reset / re-initialize after the
+    // Application is ready (timing issue: inject runs before onMount).
+    const devtoolsWrapper = (window as unknown as Record<string, unknown>)
+      .__PIXI_DEVTOOLS_WRAPPER__ as { reset?: () => void } | undefined;
+    devtoolsWrapper?.reset?.();
+
+    const appInit = (window as unknown as Record<string, unknown>).__PIXI_APP_INIT__ as
+      | ((app: unknown, version: string) => void)
+      | undefined;
+    appInit?.(app, '8.x');
+  }
 
   // -- Debug metrics: rolling-average FPS via ticker -------------------
   const counters: DebugCounters = {
