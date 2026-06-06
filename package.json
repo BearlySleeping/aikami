@@ -6,7 +6,8 @@
     "packages/backend/*",
     "packages/frontend/*",
     "apps/frontend/*",
-    "apps/backend/*"
+    "apps/backend/*",
+    "apps/e2e"
   ],
   "scripts": {
     "moon": "moon",

@@ -1,0 +1,53 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'e2e'
+  - 'playwright'
+  - 'application'
+
+toolchains:
+  javascript: false
+
+project:
+  name: 'e2e'
+  description: 'Unified E2E Playwright tests for PWA, Game, and AI services.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'constants'
+  - 'types'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'playwright.config.ts'
+  tests:
+    - 'tests/**/*'
+    - 'playwright.config.ts'
+
+tasks:
+  dev:
+    command: 'echo "e2e has no dev server — use moon run e2e:test"'
+  build:
+    command: 'echo "e2e has no build — use moon run e2e:test"'
+  test:
+    command: 'npx playwright test'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  test-pwa:
+    command: 'npx playwright test --project=pwa'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  test-game:
+    command: 'npx playwright test --project=game'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'

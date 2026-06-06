@@ -8,7 +8,7 @@
     "fix": "biome check --write ."
   },
   "dependencies": {
-    "@aikami/frontend-configs": "workspace:*",
+    "@aikami/frontend/configs": "workspace:*",
     "firebase": "12.14.0"
   },
   "devDependencies": {
