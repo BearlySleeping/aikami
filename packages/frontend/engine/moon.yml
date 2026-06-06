@@ -16,6 +16,7 @@ project:
 
 dependsOn:
   - 'frontend-api-core'
+  - 'frontend-configs'
 
 fileGroups:
   sources:

@@ -103,3 +103,13 @@ bun run scripts -- validate_all     # Full CI validation
 - **Typecheck fails after pull**: Run `bun run moon sync` then retry
 - **Emulator port conflicts**: `lsof -ti:4000,8080,9099,5001,9199 | xargs kill`
 - **Moon cache issues**: Delete `.moon/cache` and re-run `bun run moon sync`
+- **ENOSPC: System limit for file watchers reached**: This means inotify watchers are exhausted. The monorepo's `examples/` directory (~312K files) is the primary culprit. The Vite configs already exclude it via `server.watch.ignored`. If the error persists, tighten further to `.ts`/`.svelte`-only:
+  ```ts
+  // In vite.config.ts — chokidar negation pattern
+  server: {
+    watch: {
+      ignored: ['**', '!apps/frontend/pwa/src/**', '!packages/**/src/**'],
+    },
+  },
+  ```
+  Or kill stale watchers: `pkill -f 'vite dev'` then retry.
