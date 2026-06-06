@@ -304,6 +304,75 @@ export const LPC_DEFAULT_PALETTE: readonly string[] = (() => {
 })();
 
 /**
+ * Deterministic Z-index order for LPC character layer compositing.
+ *
+ * Matches the Universal LPC spritesheet standard: base body layers render
+ * first (lowest zIndex), equipment layers stack on top, and effects render
+ * furthest in front. The PixiJS container MUST have `sortableChildren = true`
+ * for zIndex to take effect.
+ *
+ * Slot keys match {@link ALL_LPC_SLOTS} slot names and the
+ * {@link import('@aikami/frontend/engine').LpcLayerRecipe.slot} field.
+ */
+export const LPC_LAYER_Z_INDEX: Record<string, number> = {
+  body: 10,
+  head: 20,
+  hair: 30,
+  torso: 40,
+  legs: 50,
+  feet: 60,
+  weapon: 70,
+} as const satisfies Record<string, number>;
+
+/**
+ * Default palette index per LPC slot for sprite tinting.
+ *
+ * Each slot maps to the palette ramp designed for that body part:
+ * - body/head: skin tone ramp (index 0)
+ * - hair: hair colour ramp (index 64)
+ * - torso/legs/feet: cloth/leather ramp (index 16)
+ * - weapon: metal/armour ramp (index 128)
+ *
+ * When a layer has no user-overridden colour, the sprite is tinted
+ * with the default palette entry for its slot. When the user changes
+ * a palette entry, the tint updates to the new colour.
+ */
+export const LPC_SLOT_PALETTE_INDEX: Record<string, number> = {
+  body: 0,
+  head: 0,
+  hair: 64,
+  torso: 16,
+  legs: 16,
+  feet: 16,
+  weapon: 128,
+} as const satisfies Record<string, number>;
+
+/**
+ * Converts a 6-char hex colour string (no leading #) to a PixiJS numeric tint.
+ *
+ * PixiJS `Sprite.tint` expects a 24-bit RGB value as a number (e.g. 0xFFCC88).
+ * This helper parses the palette hex format into the correct numeric form.
+ * Defaults to 0xFFFFFF (white / no tint) when the input is invalid or
+ * missing, ensuring uncoloured layers render at full brightness.
+ *
+ * @param hex - 6-char hex string (e.g. "F5D0A9").
+ * @returns PixiJS-compatible numeric tint value.
+ */
+export const hexToPixiTint = (hex: string | undefined): number => {
+  if (!hex || hex.length < 6) {
+    return 0xffffff;
+  }
+
+  const value = Number.parseInt(hex.slice(0, 6), 16);
+
+  if (Number.isNaN(value)) {
+    return 0xffffff;
+  }
+
+  return value;
+};
+
+/**
  * Builds a 1024-byte Uint8Array from a palette record.
  *
  * Each key is a stringified palette index ("0"–"255").
