@@ -12,6 +12,8 @@
   import type { Application } from 'pixi.js';
   import { Container, Graphics, Sprite, Texture } from 'pixi.js';
   import { onMount, setContext } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
   import {
     LPC_BATCH_MANAGER_KEY,
@@ -26,6 +28,12 @@
     LPC_DEFAULT_PALETTE,
   } from '$lib/data/lpc_asset_catalog.ts';
   import { generateMockLpcSheet, LPC_MOCK_LAYOUT } from '$lib/data/lpc_asset_path_mapper.ts';
+  import {
+    createDefaultLpcUrlState,
+    type LpcUrlState,
+    lpcStateToSearchParams,
+    searchParamsToLpcState,
+  } from '$lib/data/lpc_url_config.ts';
   import { logger } from '$logger';
 
   // -----------------------------------------------------------------------
@@ -222,6 +230,44 @@
 
   let activeLayers: ActiveLayerConfig[] = $state([]);
 
+  /** Whether URL sync is currently applying state (suppress pushback loop). */
+  let _isApplyingUrlState = false;
+
+  /**
+   * Builds ActiveLayerConfig[] from parsed LpcUrlState.
+   *
+   * Each layer entry in the URL state maps to a full palette-backed
+   * configuration with palette overrides applied.
+   */
+  const _urlStateToActiveLayers = (urlState: LpcUrlState): ActiveLayerConfig[] => {
+    return urlState.layers.map((entry, layerIndex) => {
+      const palette = [...LPC_DEFAULT_PALETTE];
+
+      // Apply palette overrides for this layer
+      for (const [key, hex] of urlState.paletteOverrides) {
+        const colonIdx = key.indexOf(':');
+        if (colonIdx === -1) {
+          continue;
+        }
+        const overrideLayerIdx = Number.parseInt(key.slice(0, colonIdx), 10);
+        if (overrideLayerIdx !== layerIndex) {
+          continue;
+        }
+        const paletteIdx = Number.parseInt(key.slice(colonIdx + 1), 10);
+        if (!Number.isNaN(paletteIdx) && paletteIdx >= 0 && paletteIdx < 256) {
+          palette[paletteIdx] = hex;
+        }
+      }
+
+      return {
+        slotDefIndex: entry.slotDefIndex,
+        variantIndex: entry.variantIndex,
+        palette,
+        selectedPaletteIndex: 0,
+      };
+    });
+  };
+
   const _createDefaultLayers = (): ActiveLayerConfig[] => {
     const bodySlotIdx = ALL_LPC_SLOTS.findIndex((s) => s.slot === 'body');
     const hairSlotIdx = ALL_LPC_SLOTS.findIndex((s) => s.slot === 'hair');
@@ -346,8 +392,8 @@
         tickerFrame += 1;
       });
 
-      // Seed default layers
-      activeLayers = _createDefaultLayers();
+      // Seed layers from URL params (or defaults if empty)
+      _applyUrlParamsToState();
 
       setStatus('LPC debugger initialized.', 'info');
     } catch (error) {
@@ -356,6 +402,124 @@
       setStatus(`Initialization failed: ${message}`, 'error');
     }
   });
+
+  // -----------------------------------------------------------------------
+  // URL → State (on load + navigation)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Reads current page URL search params and applies them to the
+   * component's reactive state. Called on mount and whenever the
+   * URL changes externally (back/forward navigation).
+   */
+  const _applyUrlParamsToState = (): void => {
+    _isApplyingUrlState = true;
+
+    const currentParams = $page.url.searchParams;
+    const urlState = searchParamsToLpcState(currentParams);
+
+    if (urlState.layers.length > 0) {
+      activeLayers = _urlStateToActiveLayers(urlState);
+    } else {
+      activeLayers = _createDefaultLayers();
+    }
+
+    animationState = urlState.state;
+    updateMaxFrame(urlState.state);
+    facingDirection = urlState.direction;
+    animationFrame = urlState.frame;
+    isPlaying = urlState.playing;
+
+    if (isPlaying) {
+      _startPlayback();
+    }
+
+    _isApplyingUrlState = false;
+  };
+
+  /**
+   * Reactively watch page URL changes (back/forward navigation)
+   * and re-apply state.
+   */
+  $effect(() => {
+    void $page.url.searchParams;
+    if (!_isApplyingUrlState) {
+      _applyUrlParamsToState();
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // State → URL (on user interaction)
+  // -----------------------------------------------------------------------
+
+  /** Debounce timer handle for URL push — avoids rapid-fire pushes. */
+  let _pushUrlTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Pushes the current component state to the URL search params.
+   *
+   * Uses SvelteKit's `goto` with `replaceState` and `keepFocus`
+   * so the URL updates without a full page reload or focus loss.
+   * Debounced at 100ms to avoid flooding the history on slider drags.
+   */
+  const _pushStateToUrl = (): void => {
+    if (_isApplyingUrlState) {
+      return;
+    }
+
+    if (_pushUrlTimer !== undefined) {
+      clearTimeout(_pushUrlTimer);
+    }
+
+    _pushUrlTimer = setTimeout(() => {
+      _pushUrlTimer = undefined;
+
+      const urlState: LpcUrlState = {
+        layers: activeLayers.map((layer) => ({
+          slotDefIndex: layer.slotDefIndex,
+          variantIndex: layer.variantIndex,
+        })),
+        paletteOverrides: _collectPaletteOverrides(),
+        state: animationState,
+        direction: facingDirection,
+        frame: animationFrame,
+        playing: isPlaying,
+        zoom: 1,
+      };
+
+      const params = lpcStateToSearchParams(urlState);
+      const newUrl = `${$page.url.pathname}?${params.toString()}`;
+
+      void goto(newUrl, { replaceState: true, keepFocus: true, noScroll: true });
+    }, 100);
+  };
+
+  /**
+   * Collects palette colour overrides from active layers.
+   *
+   * Only colours that differ from LPC_DEFAULT_PALETTE are included
+   * to keep the URL compact.
+   */
+  const _collectPaletteOverrides = (): Map<string, string> => {
+    const overrides = new Map<string, string>();
+
+    for (let i = 0; i < activeLayers.length; i++) {
+      const layer = activeLayers[i];
+      if (!layer) {
+        continue;
+      }
+
+      for (let p = 0; p < layer.palette.length; p++) {
+        const current = layer.palette[p];
+        const default_ = LPC_DEFAULT_PALETTE[p];
+        if (current !== default_ && current !== '000000') {
+          overrides.set(`${i}:${p}`, current ?? '000000');
+        }
+      }
+    }
+
+    return overrides;
+  };
 
   // -----------------------------------------------------------------------
   // Animation ticker — requestAnimationFrame loop for Playback
@@ -638,6 +802,25 @@
   $effect(() => {
     void showGridOverlay;
     _updateGridOverlay();
+  });
+
+  // -----------------------------------------------------------------------
+  // URL sync — push state changes to the address bar
+  // -----------------------------------------------------------------------
+
+  $effect(() => {
+    // Read all URL-relevant state to register dependencies
+    void activeLayers
+      .map((l) => `${l.slotDefIndex}:${l.variantIndex}:${l.palette[l.selectedPaletteIndex]}`)
+      .join(',');
+    void animationState;
+    void facingDirection;
+    void animationFrame;
+    void isPlaying;
+
+    if (pixiApp && !_isApplyingUrlState) {
+      _pushStateToUrl();
+    }
   });
 
   // -----------------------------------------------------------------------
