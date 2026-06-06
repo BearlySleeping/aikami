@@ -13,6 +13,12 @@ export {
 } from './systems/economy_system.ts';
 // Systems
 export { resetMovementTracking, updateMovement } from './systems/movement_system.ts';
+export {
+  advanceTurn,
+  endCombat,
+  initCombat,
+  resetTurnTracking,
+} from './systems/turn_manager_system.ts';
 
 // ECS components
 
@@ -25,6 +31,8 @@ export {
   getAppearanceLayers,
   registerAppearanceObservers,
 } from './components/appearance.ts';
+export type { CombatStatsData } from './components/combat_stats.ts';
+export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export type { InventoryData, WalletData } from './components/inventory.ts';
 export {
   Inventory,
@@ -39,6 +47,8 @@ export type { PositionData } from './components/position.ts';
 export { Position, registerPositionObservers } from './components/position.ts';
 export type { SpriteData } from './components/sprite.ts';
 export { registerSpriteObservers, Sprite } from './components/sprite.ts';
+export type { TurnOrderData } from './components/turn_order.ts';
+export { registerTurnOrderObservers, TurnOrder } from './components/turn_order.ts';
 export type { VelocityData } from './components/velocity.ts';
 export { registerVelocityObservers, Velocity } from './components/velocity.ts';
 

@@ -3,10 +3,12 @@
 import type { World } from 'bitecs';
 import { addComponent, createWorld, getComponent, query, set } from 'bitecs';
 import { type LpcLayerRecipe, registerAppearanceObservers } from '../components/appearance.ts';
+import { registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerSpriteObservers } from '../components/sprite.ts';
+import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
@@ -272,6 +274,8 @@ const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
   registerSpriteObservers(world);
   registerNPCDialogObservers(world);
   registerAppearanceObservers(world);
+  registerCombatStatsObservers(world);
+  registerTurnOrderObservers(world);
 
   // 3. Create headless LpcBatchManager for slot tracking + fingerprint eval
   //    No createBuffer factory → operates without GPU Buffers in the worker.

@@ -147,6 +147,37 @@ export type GameEvent =
       eid: number;
       /** The new layer IDs (all 5 layers) for dirty-check comparison. */
       layerIds: number[];
+    }
+  | {
+      /**
+       * Emitted when the turn manager system advances combat to the next entity.
+       * The UI (CombatViewModel) listens for this event to update health bars,
+       * turn order displays, and status effects.
+       */
+      type: 'TURN_CHANGED';
+      /** The entity ID that now has the active turn. */
+      currentEntityId: number;
+      /** All entity IDs currently participating in combat (alive + active). */
+      activeEntities: number[];
+    }
+  | {
+      /**
+       * Emitted when combat is first initialized.
+       * Carries the initial turn entity and full participant list.
+       */
+      type: 'COMBAT_STARTED';
+      /** All entity IDs participating in the combat encounter. */
+      participantIds: number[];
+      /** The entity ID that has the first turn. */
+      firstTurnEntityId: number;
+    }
+  | {
+      /**
+       * Emitted when the combat encounter ends (all enemies defeated or party wiped).
+       */
+      type: 'COMBAT_ENDED';
+      /** `true` if the player's party won, `false` if they lost. */
+      victory: boolean;
     };
 
 // ---------------------------------------------------------------------------
