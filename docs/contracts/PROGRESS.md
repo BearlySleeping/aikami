@@ -861,6 +861,44 @@ Updated all knowledge files with current project state after full audit:
 
 ---
 
+## C-035 — Combat Engine ECS-Svelte Sync — ✅ completed
+
+### Findings
+- `combat_stats.ts`: New bitECS SoA component — `CombatStats` (health, maxHealth, initiative arrays). Observer pattern follows existing `Position`/`NPCDialog` component conventions. Types: `CombatStatsData`.
+- `turn_order.ts`: New bitECS SoA component — `TurnOrder` (currentTurn, initiativeValue, isActive arrays). Types: `TurnOrderData`.
+- `turn_manager_system.ts`: Turn-based combat sequencing system. `initCombat()` sorts participants by initiative (highest first), marks first entity with current turn, emits `COMBAT_STARTED`. `advanceTurn()` clears current turn flag, finds next alive entity (wrap-around), emits `TURN_CHANGED` with `currentEntityId` + `activeEntities`. Skips dead entities (health <= 0). Emits `COMBAT_ENDED` when all entities dead. `endCombat()` for manual combat termination with victory flag. `resetTurnTracking()` for test teardown. All state is module-level (not per-world) — future contracts can add per-world Maps like movement_system.
+- `types.ts`: Added 3 new GameEvent members — `TURN_CHANGED` (currentEntityId, activeEntities), `COMBAT_STARTED` (participantIds, firstTurnEntityId), `COMBAT_ENDED` (victory). All plain serializable — safe for EngineBridge transport.
+- `ecs_worker.ts`: Registered `CombatStats` and `TurnOrder` component observers alongside existing observers. Combat systems are callable from the worker but not yet wired into the tick loop — turn advancement is event-driven (called by UI commands), not per-frame.
+- `combat_view_model.svelte.ts`: Svelte 5 ViewModel for the combat UI. Extends `BaseViewModel`, exposes `$state` fields (`activeEntities`, `currentTurnEntity`, `totalParticipants`) and a derived `aliveCount` getter. Listens for `TURN_CHANGED`, `COMBAT_STARTED`, `COMBAT_ENDED` bridge events in `initialize()`. `dispose()` unregisters all listeners (AC-3). **Never imports bitECS or PixiJS** — all communication through EngineBridge. Follows exact GameViewModel pattern (lazy bridge import, factory export, BaseViewModelContainer-compatible).
+- `combat_view.svelte`: Thin view template — renders participant list with active turn highlighting and alive count. Empty state message when no combat active.
+- Tests: 17 turn manager tests (initCombat, advanceTurn, endCombat, resetTurnTracking) + 10 combat sync tests (AC-1 initialization, AC-2 reactive updates, AC-3 cleanup/dispose, state isolation). All 27 tests pass alongside existing 161 engine tests.
+
+### AC Status
+- [x] AC-1: ViewModel Initialization — `CombatViewModel.initialize()` registers 3 bridge listeners (TURN_CHANGED, COMBAT_STARTED, COMBAT_ENDED). Verified via TestCombatViewModel in combat_sync.test.ts: `listenerCount > 0` on construction, COMBAT_STARTED correctly populates activeEntities.
+- [x] AC-2: Reactive Turn Updates — `TURN_CHANGED` events immediately update `currentTurnEntity` and `activeEntities` via direct `$state` assignment. Dead entities removed from activeEntities automatically. Rapid consecutive events (10x) handled without corruption. Verified across 6 AC-2 tests.
+- [x] AC-3: Cleanup and Memory — `dispose()` calls all unregister functions, clears state arrays, sets bridge ref to undefined. Post-dispose events do not affect ViewModel state (verified). Isolated between instances — two ViewModels on separate bridges have independent state.
+
+### Files created
+- `packages/frontend/engine/src/components/combat_stats.ts` — Combat stats SoA component (health, maxHealth, initiative)
+- `packages/frontend/engine/src/components/turn_order.ts` — Turn order SoA component (currentTurn, initiativeValue, isActive)
+- `packages/frontend/engine/src/systems/turn_manager_system.ts` — Turn-based combat sequencing system
+- `packages/frontend/engine/src/__tests__/turn_manager.test.ts` — 17 ECS-level unit tests
+- `packages/frontend/engine/src/__tests__/combat_sync.test.ts` — 10 ViewModel behavior tests (AC-1, AC-2, AC-3)
+- `apps/frontend/pwa/src/lib/views/combat/combat_view_model.svelte.ts` — Svelte 5 Combat ViewModel
+- `apps/frontend/pwa/src/lib/views/combat/combat_view.svelte` — Combat UI view template
+
+### Files modified
+- `packages/frontend/engine/src/types.ts` — Added TURN_CHANGED, COMBAT_STARTED, COMBAT_ENDED to GameEvent union
+- `packages/frontend/engine/src/index.ts` — Exported CombatStats, TurnOrder, combat observers, turn manager system
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Registered combat component observers
+
+### Deviations from contract
+- **Bridge-based sync instead of direct world access**: The contract specifies `syncWithECS(world: IWorld)` for direct bitECS world querying. In the actual architecture, the bitECS world runs inside a Web Worker — direct access from the main-thread ViewModel would violate the EngineBridge boundary. Instead, the turn manager system emits bridge events (TURN_CHANGED, COMBAT_STARTED, COMBAT_ENDED) from inside the worker, and the CombatViewModel listens for those events on the main thread. This achieves the same reactive behavior while respecting the architectural split. Future contracts can add a `syncStatus` bridge event carrying health/stats snapshots per entity.
+- **$state fields are plain arrays, not reactive deep proxies**: `activeEntities` is `$state<number[]>([])` — Svelte 5 treats array reassignment as a reactive trigger. Assigning new arrays on each event (rather than mutating in place) is consistent with Svelte 5 conventions and avoids the need for deep equality checks mentioned in the contract's edge cases.
+- **No per-frame throttling needed**: Turn changes are event-driven (user actions or AI decisions), not per-frame. The contract's concern about ECS micro-tick over-sync does not apply — the ViewModel only updates when a TURN_CHANGED event is emitted, which happens at human-reaction timescales (seconds).
+
+---
+
 ## C-049 — LPC Asset Injector and Visual Workbench — ✅ completed
 
 ### Implementation Summary
