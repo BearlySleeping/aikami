@@ -50,6 +50,7 @@
 | C-052 | Unified Blackbox & Docker Runner | ✅ completed |
 | C-054 | Shared E2E Pattern Refactor | ✅ completed |
 | C-055 | Secure E2E Baseline & Fix UI Assertions | ✅ completed |
+| C-056 | Hybrid Text Generation Gateway | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1272,3 +1273,66 @@ Updated all knowledge files with current project state after full audit:
 - DockerManager port allocation uses a simple +10000 offset from base port — full port-probing logic deferred to follow-up.
 - Global setup/teardown require the Firebase emulator to be running at the time Playwright executes (Playwright calls these hooks before/after all projects). The blackbox runner already starts emulators before invoking Playwright.
 
+---
+
+## C-056 — Hybrid Text Generation Gateway — ✅ completed
+
+### Summary
+Built the foundational Text Generation Gateway for NPC orchestration. Integrated OpenRouter (primary) and Ollama (fallback) providers with aggressive VRAM eviction. Includes a Synthetic SSE Mock for testing without real LLM calls. Exposed via a SvelteKit +server.ts endpoint with AbortSignal passthrough.
+
+### Architecture
+- **SyntheticSseMock** — Pure in-memory mock yielding configurable SSE streams. No network calls. Supports seedable chunks, [DONE] termination, error simulation, and call history. (AC-4)
+- **Ollama Adapter** — Wraps Ollama's `/api/generate` streaming endpoint. Forcibly merges `keep_alive: 0`, `options.num_parallel: 1`, and `stream: true` into every request to ensure instant VRAM eviction and prevent thread locking. (AC-2)
+- **OpenRouter Adapter** — OpenAI-compatible streaming client for OpenRouter's `/chat/completions` endpoint. Supports Bearer token auth, configurable base URL, and message history. (AC-1 routing)
+- **Provider Router** — Reads `config.provider` (or `request.provider` override) to select adapter. Falls back to Ollama when OpenRouter fails. AbortSignal passed through to upstream fetches.
+- **SvelteKit API Endpoint** — `POST /api/text` SSE endpoint. Accepts `TextGenerationRequest` JSON body, returns `text/event-stream`. Client `AbortSignal` passed all the way down to cancel upstream requests on disconnect. Test mode via `x-test-mode: true` header returns synthetic mock stream.
+
+### AC Status
+- [x] AC-1: Provider Routing Configuration — Router selects adapter based on config.provider. Per-request override via `request.provider`. OpenRouter→Ollama fallback on failure. 7 tests.
+- [x] AC-2: Ollama Aggressive VRAM Eviction — Outgoing fetch payload strictly includes `keep_alive: 0`, `options.num_parallel: 1`, `stream: true`. Forcibly merged, not overridable. Payload structure intercepted and asserted. 17 tests.
+- [x] AC-3: SSE Streaming — Endpoint returns `text/event-stream` headers. Properly formatted `data: {"text":"..."}\n\n` chunks with terminal `data: [DONE]`. AbortSignal passthrough cancels upstream fetch on client disconnect.
+- [x] AC-4: Synthetic Mocking — `SyntheticSseMock` yields fake SSE streams without network calls. 15 tests covering chunk seeding, SSE format, error simulation, call history, reset.
+
+### Files created
+- `packages/backend/ai/src/lib/text_generation_types.ts` — Types: `SseStreamEvent`, `TextGenerationRequest`, `TextGenerationConfig`, `OLLAMA_VRAM_EVICTION_PARAMS`
+- `packages/backend/ai/src/lib/synthetic_sse_mock.ts` — `SyntheticSseMock` class: synthetic SSE streaming mock (AC-4)
+- `packages/backend/ai/src/lib/ollama_adapter.ts` — `buildOllamaPayload`, `parseOllamaStream`, `createOllamaStream` (AC-2)
+- `packages/backend/ai/src/lib/openrouter_adapter.ts` — `buildOpenRouterPayload`, `parseOpenRouterStream`, `createOpenRouterStream`
+- `packages/backend/ai/src/lib/text_generation_router.ts` — `routeTextGeneration` provider router with fallback (AC-1)
+- `packages/backend/ai/tests/synthetic_sse_mock.test.ts` — 15 tests (AC-4)
+- `packages/backend/ai/tests/ollama_adapter.test.ts` — 17 tests (AC-2)
+- `packages/backend/ai/tests/openrouter_adapter.test.ts` — 16 tests
+- `packages/backend/ai/tests/text_generation_router.test.ts` — 7 tests (AC-1)
+- `apps/frontend/pwa/src/routes/api/text/+server.ts` — SvelteKit SSE endpoint (AC-3)
+
+### Files modified
+- `packages/backend/ai/src/index.ts` — Barrel exports for new modules
+- `apps/frontend/pwa/svelte.config.js` — Added `@aikami/backend/ai` alias (removed after build fix)
+- `apps/frontend/pwa/vite.config.ts` — Added SSR externalization config (rolled back for static adapter compatibility)
+- `apps/frontend/pwa/.env.emulator` — Added `PUBLIC_TEXT_GEN_PROVIDER`, `PUBLIC_OLLAMA_BASE_URL`
+
+### Deviations from contract
+- **Static adapter limitation**: The PWA uses `@sveltejs/adapter-static` for production builds. A `+server.ts` API endpoint cannot function in a fully static deployment (no server process). The endpoint is operational in dev mode (Vite dev server). Production deployment of the SSE endpoint requires `adapter-node`, Cloud Run, or a separate Cloud Function.
+- **Self-contained endpoint**: The `+server.ts` file is self-contained — it inlines the adapter and router logic rather than importing from `@aikami/backend/ai`. This avoids bundling the Gemini service (`@google/generative-ai` dependency) into the static PWA build. The `packages/backend/ai` adapters remain the canonical implementation for Cloud Functions and server-side use.
+- **Pre-existing test failure**: `ai_service.test.ts` fails due to missing `zod` dependency (unrelated to this contract). All 55 new tests pass (0 failures).
+
+### Test results
+| Suite | Tests | Pass | Fail |
+|-------|-------|------|------|
+| synthetic_sse_mock.test.ts | 15 | 15 | 0 |
+| ollama_adapter.test.ts | 17 | 17 | 0 |
+| openrouter_adapter.test.ts | 16 | 16 | 0 |
+| text_generation_router.test.ts | 7 | 7 | 0 |
+| **Total** | **55** | **55** | **0** |
+
+### Commit message
+```
+feat(ai): hybrid text generation gateway with SSE streaming
+
+- Add SyntheticSseMock for testing without real LLM calls (AC-4)
+- Add Ollama adapter with aggressive VRAM eviction (AC-2)
+- Add OpenRouter adapter (OpenAI-compatible streaming)
+- Add provider router with OpenRouter→Ollama fallback (AC-1)
+- Add SvelteKit SSE API endpoint with AbortSignal passthrough (AC-3)
+- 55 tests, 0 failures across 4 test suites
+```
