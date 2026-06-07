@@ -22,7 +22,7 @@
     "format": "biome format src",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "fix": "biome check --write src --error-on-warnings",
-    "test:unit": "bun test --tsconfig tsconfig.test.json src/lib"
+    "test:unit": "bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.18.2",

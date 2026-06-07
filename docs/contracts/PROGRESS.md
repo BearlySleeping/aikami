@@ -60,6 +60,7 @@
 | C-063 | Hybrid Expression Extraction & Caching | ✅ completed |
 | C-064 | Dev Console & View-Model Layout Integration | ✅ completed |
 | C-065 | Dev UI Tailwind Refactor & Text Sandbox | ✅ completed |
+| C-066 | Dev UI Voice & Image Sandboxes | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1834,3 +1835,80 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - **browser_inspect**: LPC page renders with correct grid layout, DaisyUI components, status banner; Text page renders with card, textarea, buttons, output terminal
 - **browser_console**: No errors on /dev/text or /dev/lpc pages
 - **browser_screenshot**: Both pages visually confirmed
+
+---
+
+## C-066: Dev UI Voice & Image Sandboxes
+
+### Changes Made
+
+**Test Suite Repair (AC1):**
+- Created `apps/frontend/pwa/src/lib/test_preload.ts` — shared preload for Bun test runner
+  - Polyfills Svelte 5 runes (`$state`, `$derived`, `$effect`) globally so `.svelte.ts` files parse without the Svelte compiler
+  - Provides a consistent `mock.module('@aikami/frontend/services', ...)` with both `BaseFrontendClass` and `BaseViewModel`, resolving the first-writer-wins mock conflict across different test files
+  - Sets required Vite env vars (`PUBLIC_APP_ID`, `PUBLIC_MODE`, Firebase keys) for `@aikami/frontend/configs/environment.ts` validation
+- Updated `apps/frontend/pwa/package.json` test script to include `--preload ./src/lib/test_preload.ts`
+- Removed redundant inline `$state`/`$derived` polyfills and `mock.module` calls from:
+  - `apps/frontend/pwa/src/lib/client/services/dice/dice_service.test.ts`
+  - `apps/frontend/pwa/src/lib/client/services/game/game_state_service.test.ts`
+  - `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts`
+- Added `src/lib/test_preload.ts` to tsconfig.json exclude list for svelte-check
+
+**Voice Sandbox (AC2):**
+- Service: `apps/frontend/pwa/src/lib/client/services/dev/dev_voice_service.svelte.ts`
+  - Extends `BaseFrontendClass`, singleton `devVoiceService` exported from `$services`
+  - Owns all fetch, AudioContext, audio chunk decoding, gapless playback, and `AbortController` logic
+  - Reactive state via `$state`: `text`, `isPlaying`, `queueSize`
+- ViewModel: `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts`
+  - Thin bridge — owns only `text` `$state` (bound to textarea), proxies `isPlaying`/`queueSize` via native getters
+  - `generateAndPlay()` calls `devVoiceService.setText()` then `devVoiceService.generateAndPlay()`
+  - `cancel()` delegates to `devVoiceService.cancel()`
+- DaisyUI card layout with textarea, Generate Audio / Cancel buttons, audio queue status indicator with progress bar and chunk counter
+- Ctrl+Enter keyboard shortcut
+
+**Image Sandbox (AC3):**
+- Service: `apps/frontend/pwa/src/lib/client/services/dev/dev_image_service.svelte.ts`
+  - Extends `BaseFrontendClass`, singleton `devImageService` exported from `$services`
+  - Owns all fetch, blob → Object URL, `URL.revokeObjectURL()` memory management, and `AbortController` logic
+  - Reactive state via `$state`: `prompt`, `imageUrl`, `isGenerating`
+- ViewModel: `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts`
+  - Thin bridge — owns only `prompt` `$state` (bound to textarea), proxies `imageUrl`/`isGenerating` via native getters
+  - `generate()` calls `devImageService.setPrompt()` then `devImageService.generate()`
+  - `cancel()` delegates to `devImageService.cancel()`
+- DaisyUI card layout with textarea, Generate Image / Cancel buttons, loading spinner during generation, `<img>` tag with `max-w-full max-h-96 rounded object-contain`
+- Ctrl+Enter keyboard shortcut
+
+**Abort Flow (AC4):**
+- Both ViewModels implement identical abort pattern: `AbortController` created per generation, `signal` passed to fetch, `cancel()` calls `controller.abort()` and resets UI state
+- Voice: additionally stops all `AudioBufferSourceNode`s and suspends `AudioContext`
+- Image: does NOT revoke Object URL on cancel (user may want to keep the last generated image); only revokes on next generation
+
+### Files Modified
+
+- `apps/frontend/pwa/src/lib/test_preload.ts` — New shared preload for Bun test runner
+- `apps/frontend/pwa/package.json` — Added `--preload` to test script
+- `apps/frontend/pwa/tsconfig.json` — Excluded test_preload.ts from svelte-check
+- `apps/frontend/pwa/src/lib/client/services/dice/dice_service.test.ts` — Removed redundant polyfills/mocks
+- `apps/frontend/pwa/src/lib/client/services/game/game_state_service.test.ts` — Removed redundant polyfills/mocks
+- `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Removed redundant polyfills and `@aikami/frontend/services` mock
+- `apps/frontend/pwa/src/lib/client/services/dev/dev_voice_service.svelte.ts` — New DevVoiceService (fetch, AudioContext, chunk decoding, abort)
+- `apps/frontend/pwa/src/lib/client/services/dev/dev_image_service.svelte.ts` — New DevImageService (fetch, blob→Object URL, memory-safe revocation, abort)
+- `apps/frontend/pwa/src/lib/client/services/index.ts` — Re-exports dev services
+- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts` — Thin ViewModel bridging to devVoiceService
+- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view.svelte` — Full DaisyUI voice sandbox UI
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` — Thin ViewModel bridging to devImageService
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view.svelte` — Full DaisyUI image sandbox UI
+- `docs/contracts/PROGRESS.md` — Status entry for C-066
+
+### AC Status
+
+- [x] AC1: Test Suite Repair — 135 tests pass, 0 fail; `dev_layout_view_model.test.ts` 6/6 pass via shared preload
+- [x] AC2: Voice Sandbox UI & Logic — ViewModel with text input, generate/abort, chunk queueing with Web Audio API; DaisyUI view with status indicator
+- [x] AC3: Image Sandbox UI & Logic — ViewModel with prompt input, binary blob → Object URL conversion, memory-safe `URL.revokeObjectURL()`; DaisyUI view with loading spinner and `<img>`
+- [x] AC4: Unified Abort Flow — Both ViewModels use `AbortController` pattern; cancel severs network request and resets UI state
+
+### Verification
+
+- **validate({ test: true })**: fix → typecheck → build → test: 135 pass, 0 fail
+- **browser_inspect**: `/dev/voice` renders with DaisyUI cards, textarea, Generate Audio button; `/dev/image` renders with prompt textarea, Generate Image button, output card with loading spinner placeholder
+- **browser_console**: No errors on either page
