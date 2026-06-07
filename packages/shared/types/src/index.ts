@@ -30,6 +30,7 @@ export * from './lib/endpoints/ai.ts';
 export * from './lib/endpoints/auth.ts';
 export * from './lib/endpoints/callable_functions.ts';
 export * from './lib/endpoints/chat.ts';
+export * from './lib/endpoints/image.ts';
 export * from './lib/endpoints/pwa_endpoints.ts';
 export * from './lib/endpoints/request_functions.ts';
 

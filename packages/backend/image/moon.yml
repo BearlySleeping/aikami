@@ -1,0 +1,38 @@
+# packages/backend/image/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'image'
+  - 'backend'
+  - 'library'
+
+project:
+  name: 'backend-image'
+  description: 'ComfyUI image generation orchestration — workflow builder, REST client, WebSocket receiver, VRAM eviction.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'constants'
+  - 'types'
+  - 'logger'
+  - 'utils'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
