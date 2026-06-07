@@ -156,6 +156,19 @@
         "@aikami/mocks": "workspace:*",
       },
     },
+    "packages/backend/audio": {
+      "name": "@aikami/backend-audio",
+      "dependencies": {
+        "@aikami/constants": "workspace:*",
+        "@aikami/logger": "workspace:*",
+        "@aikami/schemas": "workspace:*",
+        "@aikami/types": "workspace:*",
+        "@aikami/utils": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+    },
     "packages/backend/auth": {
       "name": "@aikami/backend-auth",
       "dependencies": {
@@ -412,6 +425,8 @@
     "@adobe/css-tools": ["@adobe/css-tools@4.5.0", "", {}, "sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q=="],
 
     "@aikami/backend-ai": ["@aikami/backend-ai@workspace:packages/backend/ai"],
+
+    "@aikami/backend-audio": ["@aikami/backend-audio@workspace:packages/backend/audio"],
 
     "@aikami/backend-auth": ["@aikami/backend-auth@workspace:packages/backend/auth"],
 
