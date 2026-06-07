@@ -40,7 +40,6 @@ export const ProjectIdMapSchema = Type.Object(
 export const AppIdSchema = Type.Union([
   Type.Literal('firebase'),
   Type.Literal('docs'),
-  Type.Literal('game'),
   Type.Literal('landing_page'),
   Type.Literal('pwa'),
 ]);
@@ -49,7 +48,6 @@ export const BackendAppIdSchema = Type.Union([Type.Literal('firebase')]);
 
 export const FrontendAppIdSchema = Type.Union([
   Type.Literal('docs'),
-  Type.Literal('game'),
   Type.Literal('landing_page'),
   Type.Literal('pwa'),
 ]);

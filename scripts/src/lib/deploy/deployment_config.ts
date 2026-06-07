@@ -71,13 +71,6 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     prefix: 'Docs',
     deployBranches: ['master', 'dev'],
   },
-  game: {
-    serviceType: 'cloud-run-sveltekit',
-    path: 'apps/frontend/game',
-    shortName: 'game',
-    prefix: 'Game',
-    cloudRunServiceId: 'game',
-  },
 };
 
 export const DEPLOYABLE_APPS = Object.keys(APP_CONFIG);

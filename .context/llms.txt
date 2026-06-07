@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-06
-> Files: 87 across 10 categories
+> Generated: 2026-06-07
+> Files: 92 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -79,6 +79,11 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract — C-049 LPC Asset Injector and Visual Workbench](contracts/C-049-lpc-asset-injector-and-visual-workbench.md)
 - [Overview](contracts/C-050-lpc-visual-testing-harness.md)
 - [Overview](contracts/C-051-lpc-rendering-fixes.md)
+- [Metadata](contracts/C-052-shared-unified-blackbox-docker-runner.md)
+- [Metadata](contracts/C-054-shared-e2e-pattern-refactor.md)
+- [Metadata](contracts/C-055-shared-e2e-assertion-fix.md)
+- [Contract: C-056 — Hybrid Text Generation Gateway](contracts/C-056-hybrid-text-gateway.md)
+- [Contract: C-057 — Edge-Native TTS Worker](contracts/C-057-edge-tts-worker.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [MIG 002 backend dataconnect](contracts/MIG-002-backend-dataconnect.md)

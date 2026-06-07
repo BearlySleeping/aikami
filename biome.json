@@ -192,7 +192,6 @@
     {
       "includes": [
         "apps/frontend/pwa/**",
-        "apps/frontend/game/tests/**",
         "scripts/src/lib/test_blackbox/**",
         "scripts/src/index.ts",
         "scripts/src/lib/deploy/deployment_config.ts"
