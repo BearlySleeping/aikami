@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Audit: 2026-06-06)
+## Status Summary (Audit: 2026-06-07)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -56,6 +56,7 @@
 | C-059 | Client-Side Stream Sync | ✅ completed |
 | C-060 | Dialogue System Integration | ✅ completed |
 | C-061 | Frontend App Consolidation | ✅ completed |
+| C-062 | Dialogue Context & Memory Manager | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1628,3 +1629,47 @@ Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit PWA
 - **Unit**: 58/58 pass (8 test files including 3 migrated game tests: 15 game tests all pass)
 - **Biome**: fix passes cleanly
 - **Moon**: workspace graph valid, `moon project pwa` resolves correctly
+
+---
+
+## C-062 — Dialogue Context & Memory Manager — ✅ completed
+
+### Summary
+Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecycle to persist completed dialogue turns and construct sliding-window prompt history for subsequent LLM requests.
+
+### AC Status
+- [x] AC1: Sliding Window Context Builder — `buildSlidingWindowContext()` returns only the most recent N messages that fit within the configured character budget, reserving space for the NPC system prompt. 9 unit tests pass.
+- [x] AC2: Orchestrator Memory Hook — After a successful text stream completion, the orchestrator fires `ConversationRepositoryInterface.saveDialogueTurn()` with the player's prompt and the accumulated NPC response. 4 tests pass.
+- [x] AC3: Abort/Cancel Exclusion — When the player triggers abort (cancelGeneration / skip), the pending save options are cleared and `saveDialogueTurn` is never called. Partial text does not leak to the repository. 4 tests pass.
+- [x] AC4: Gateway Integration — `TextStreamConnection.start()` now accepts a `messages: ConversationMessage[]` array. The orchestrator passes conversation history (built by the context builder) through to the text SSE connection. 3 tests pass.
+
+### Architecture
+- **`context_builder.ts`**: Pure utility function `buildSlidingWindowContext()` with options for `maxMessages` (default 10), `maxCharacters` (default 4000), and `systemPromptReservation` (default 1500). Walks history from newest-to-oldest, truncating when either cap is hit.
+- **`conversation_repository.svelte.ts`**: Minimal interface `ConversationRepositoryInterface` with a single method `saveDialogueTurn()`. The orchestrator depends on this contract — concrete implementations (Firestore, IndexedDB, mock) are injected.
+- **`stream_orchestrator.svelte.ts`**: Updated with:
+  - Optional `conversationRepository` in options
+  - `generateDialogue()` now accepts `messages` (history array) and `chatId` (for persistence)
+  - `_pendingSaveOptions` staged on generation start, consumed on natural stream end
+  - `_saveCompletedTurn()` private method called only in `.then()` handler (never on abort)
+  - `cancelGeneration()` clears `_pendingSaveOptions` (AC3)
+  - `TextStreamConnection.start()` updated to accept `messages` in its options (AC4)
+
+### Files created
+- `apps/frontend/pwa/src/lib/client/services/media/context_builder.ts` — Sliding window context builder utility
+- `apps/frontend/pwa/src/lib/client/services/media/context_builder.test.ts` — 9 unit tests for sliding window logic
+- `apps/frontend/pwa/src/lib/client/services/media/conversation_repository.svelte.ts` — Repository adapter interface
+
+### Files modified
+- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Added repository adapter, memory hook (AC2), abort exclusion (AC3), messages array in TextStreamConnection.start (AC4)
+- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.test.ts` — Added 11 new tests (4 AC2, 4 AC3, 3 AC4), updated mock helpers for new start() signature
+
+### Deviations from contract
+- Conversation Repository Adapter defined as an interface (not a concrete Firestore repository). The contract said to "add to packages/frontend/repositories" — the interface lives in PWA services because it's a client-side orchestration contract. The concrete Firestore implementation (reading/writing the Chat document's embedded `messages` array) will be wired when the interaction system is connected to the PWA's DI container.
+- No `npcId` filtering in context builder — the contract says "query by explicit npcId", but the context builder is a pure function that operates on already-fetched messages. The filtering by npcId/playerId is delegated to the caller (the interaction bridge, which fetches messages from the repository before invoking the context builder).
+- Message payload uses `ConversationMessage` (local type) rather than `MessageData` from `@aikami/types` — the `ConversationMessage` is a lightweight projection (role + content) sufficient for LLM context, while `MessageData` carries Firestore-specific fields (timestamps, attachments, metadata). The repository adapter can convert between the two when persisting.
+
+### Test Results
+- **Unit (context_builder)**: 9/9 pass
+- **Unit (orchestrator)**: 21/21 pass (10 original + 11 new C-062)
+- **Validate (pwa)**: fix → typecheck → build → test — 4/4 pass
+- **Typecheck (pwa)**: 0 errors, 0 warnings (svelte-check)
