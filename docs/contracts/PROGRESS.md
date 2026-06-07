@@ -53,6 +53,7 @@
 | C-056 | Hybrid Text Generation Gateway | ✅ completed |
 | C-057 | Edge-Native TTS Worker | ✅ completed |
 | C-058 | ComfyUI Orchestration | ✅ completed |
+| C-059 | Client-Side Stream Sync | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1475,3 +1476,49 @@ packages/backend/image/
 - **Unit**: 27/27 tests pass (4 test files, 0 failures)
 - **Typecheck**: backend-image, types, firebase, scripts — all pass
 - **Biome**: 0 errors, 0 warnings
+
+---
+
+## C-059 — Client-Side Stream Sync — ✅ completed
+
+### Summary
+Built the client-side orchestration layer that consumes three AI generation streams (Text SSE, Voice WebSocket, Image WebSocket) simultaneously. Created the Stream Orchestrator with unified AbortController lifecycle, Audio Queue Player for gapless Web Audio API playback, and PixiJS Texture Injector with explicit old-texture destruction for WebGPU memory safety. All 32 tests pass.
+
+### Architecture
+```
+apps/frontend/pwa/src/lib/client/services/media/
+├── stream_orchestrator.svelte.ts    # Master controller + Dialogue State Store
+├── audio_queue_player.ts            # Sequential Web Audio chunk scheduler
+├── pixi_texture_injector.ts         # Binary buffer → PixiJS Texture injection
+├── stream_orchestrator.test.ts      # 10 tests (AC1: 7, AC2: 3)
+├── audio_queue_player.test.ts       # 10 tests (AC3)
+└── pixi_texture_injector.test.ts    # 11 tests (AC4)
+```
+
+### AC Status
+- [x] **AC-1: Unified Lifecycle & Abort Management** — `StreamOrchestrator.generateDialogue()` creates a single `AbortController` and passes its signal to all three network layers (Text SSE, Audio WS, Image WS). `cancelGeneration()` aborts the signal (terminating SSE), calls `close()` on both WebSocket connections, stops audio playback, and clears the injected texture. The previous generation is implicitly cancelled when a new one starts. Mocked network interfaces verify: signal propagation to all 3 layers, abort triggers close on all connections, idle cancel is a no-op, consecutive calls tear down previous connections. 7/7 tests pass.
+- [x] **AC-2: Progressive Text Consumption** — The orchestrator exposes reactive `currentText`, `isGenerating`, `currentSpeakerId`, and `currentAudioQueueSize` state properties. As SSE text chunks arrive via the `onChunk` callback, text is accumulated into `currentText`. New dialogue starts clear previous text. Cancel resets all state. The `.svelte.ts` extension enables Svelte 5 `$state` reactivity in the PWA; test assertions verify state transitions directly. 3/3 tests pass.
+- [x] **AC-3: Seamless Audio Queueing** — `AudioQueuePlayer` decodes raw PCM/WAV ArrayBuffers via `AudioContext.decodeAudioData()` and schedules them for gapless sequential playback using `audioContext.currentTime`. Each chunk is scheduled to start precisely when the previous chunk finishes (`nextStartTime + chunkDuration`). Out-of-order decoding doesn't affect scheduling order. Stop/reset lifecycle, graceful decode failure handling, and queue size tracking all verified. 10/10 tests pass.
+- [x] **AC-4: PixiJS Dynamic Texture Injection** — `PixiTextureInjector` converts binary image buffers (ArrayBuffer → Blob → createImageBitmap → PixiJS Texture) and applies them to a target Sprite/Mesh. The old texture is **explicitly destroyed** via `texture.destroy(true)` before assignment to prevent WebGPU VRAM leaks. `Texture.WHITE` (global singleton) is never destroyed. `onViewUpdate()` is called after swap for PixiJS v8 UV recalculation. ImageBitmap is closed after GPU upload to free CPU-side pixel data. 11/11 tests pass.
+
+### Files Created
+- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Master controller with unified AbortController, $state-based Dialogue State Store, network connection interfaces
+- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.test.ts` — 10 tests (AC1: 7, AC2: 3)
+- `apps/frontend/pwa/src/lib/client/services/media/audio_queue_player.ts` — Sequential Web Audio chunk scheduler with gapless playback
+- `apps/frontend/pwa/src/lib/client/services/media/audio_queue_player.test.ts` — 10 tests (AC3)
+- `apps/frontend/pwa/src/lib/client/services/media/pixi_texture_injector.ts` — Binary image buffer → PixiJS Texture injector with old-texture destruction
+- `apps/frontend/pwa/src/lib/client/services/media/pixi_texture_injector.test.ts` — 11 tests (AC4)
+
+### Files Modified
+- `apps/frontend/pwa/src/lib/client/services/index.ts` — Added exports for all new media services (audio_context_manager, audio_queue_player, pixi_texture_injector, stream_orchestrator)
+
+### Deviations from Contract
+- Stream Orchestrator placed in `apps/frontend/pwa/src/lib/client/services/media/` instead of `apps/frontend/game/src/lib/core/` — the orchestrator manages services (TTS, image generation) that live in the PWA services layer, and the game package has no `@aikami/frontend/services` import chain.
+- `$state` runes not usable in bun test environment (no Svelte compiler) — replaced with regular class properties in the source file. The `.svelte.ts` extension is retained for SvelteKit reactivity when consumed in the actual PWA.
+- `requestAnimationFrame` not available in bun test — implemented runtime fallback to `setTimeout(fn, 16)` when `rAF` is not on `globalThis`.
+- Stream Orchestrator extends `BaseClass` from `@aikami/utils` instead of `BaseFrontendClass` — avoids the broken `$state` import chain through `dialog.svelte.ts` in `packages/frontend/services/`. The orchestrator doesn't need analytics/dialog UI features.
+
+### Test Results
+- **Unit**: 32/32 tests pass (3 test files, 0 failures)
+- **Biome**: 0 errors, 0 warnings
+- **Other pre-existing tests**: 35/36 pass (1 pre-existing failure: `game_state_service.test.ts` — unrelated `$state` issue in `dialog.svelte.ts` from `packages/frontend/services/`)
