@@ -58,6 +58,7 @@
 | C-061 | Frontend App Consolidation | ✅ completed |
 | C-062 | Dialogue Context & Memory Manager | ✅ completed |
 | C-063 | Hybrid Expression Extraction & Caching | ✅ completed |
+| C-064 | Dev Console & View-Model Layout Integration | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1721,3 +1722,54 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - **Total**: 72/72 pass across 3 test files
 - **Validate (pwa)**: fix → typecheck → build → test — 4/4 pass
 - **Typecheck (pwa)**: 0 errors, 0 warnings (svelte-check)
+
+---
+
+## C-064: Dev Console & View-Model Layout Integration
+
+**Status**: ✅ completed
+**Completed**: 2026-06-07
+
+### Files Created
+
+- `apps/frontend/pwa/src/lib/views/dev/dev_view_model.svelte.ts` — DevViewModel with drawer state, nav items, and active route tracking
+- `apps/frontend/pwa/src/lib/views/dev/dev_view.svelte` — DevView with DaisyUI drawer layout (drawer-side + drawer-content)
+- `apps/frontend/pwa/src/routes/(dev)/+layout.svelte` — (dev) group layout wrapping children in DevView
+- `apps/frontend/pwa/src/routes/(dev)/dev/text/+page.svelte` — Text generation test endpoint
+- `apps/frontend/pwa/src/routes/(dev)/dev/voice/+page.svelte` — Voice generation test endpoint
+- `apps/frontend/pwa/src/routes/(dev)/dev/image/+page.svelte` — Image generation test endpoint
+- `apps/frontend/pwa/src/routes/(dev)/dev/character/+page.svelte` — Character creation test endpoint
+
+### Files Deleted
+
+- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/` — Entire legacy lpc route directory (component, component-lite, demo)
+
+### Files Verified (Already Compliant)
+
+- `apps/frontend/pwa/src/routes/+layout.svelte` — Already renders only `{@render children()}` — no changes needed
+- `apps/frontend/pwa/src/routes/(authenticated)/+layout.svelte` — Already initializes `getAppViewModel` and wraps in `<AppView>` — no changes needed
+
+### Unit Tests
+
+- `apps/frontend/pwa/src/lib/views/dev/dev_view_model.test.ts` — 6 tests covering instantiation, navItems structure, activeRoute tracking, drawer toggle (6/6 pass)
+
+### AC Status
+
+- [x] AC1: Root Layout Standardization + Authenticated Layout MVVM — root layout is clean, authenticated layout already wraps in AppView
+- [x] AC2: Dev Console Navigation — drawer renders with 5 nav items, active route highlights correctly, toggle works
+- [x] AC3: Test Endpoints — 4 new routes at /dev/text, /dev/voice, /dev/image, /dev/character all return 200
+- [x] AC4: Legacy Cleanup — lpc/component, lpc/component-lite, lpc/demo directories deleted; no remaining references
+
+### Architectural Decisions
+
+- **DaisyUI drawer pattern**: Uses the same `drawer lg:drawer-open` layout as the main AppView navigation drawer for visual consistency
+- **Dev routes excluded from RouterService**: Dev routes use SvelteKit directory routing (no entries in routes.ts). This is intentional — dev routes are test-only and should not appear in production navigation logic
+- **View-only ViewModel**: DevViewModel has no services — it manages local UI state only (drawer state, active route). No `initialize()` override needed
+- **Sandbox link preserved**: The existing sandbox route is included in the dev nav as a convenience for PixiJS testing
+
+### Verification
+
+- **validate({ test: true })**: fix → typecheck → build → test — 4/4 pass
+- **browser_inspect**: Drawer renders correctly on /dev/text and /dev/voice; active class applied to current route
+- **HTTP 200 on all 4 new endpoints** verified via curl
+- **lpc routes confirmed gone**: `find (dev)/dev/lpc` returns no such file or directory
