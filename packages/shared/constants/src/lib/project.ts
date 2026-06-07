@@ -23,7 +23,7 @@ export const backendAppIds = ['firebase'] as const;
  * | `landing_page` | `apps/frontend/landing_page`  | Marketing landing page                |
  * | `pwa`          | `apps/frontend/pwa`           | Main PWA (characters, chat, settings) |
  */
-export const frontendAppIds = ['docs', 'game', 'landing_page', 'pwa'] as const;
+export const frontendAppIds = ['docs', 'landing_page', 'pwa'] as const;
 
 /**
  * All Aikami application identifiers (backend + frontend).

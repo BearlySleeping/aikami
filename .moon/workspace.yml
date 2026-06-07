@@ -9,7 +9,6 @@ projects:
   pwa: "apps/frontend/pwa"
   landing-page: "apps/frontend/landing_page"
   docs: "apps/frontend/docs"
-  game: "apps/frontend/game"
   e2e: "apps/e2e"
   firebase: "apps/backend/firebase"
 
