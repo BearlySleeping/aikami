@@ -1,4 +1,61 @@
 /** biome-ignore-all lint/style/useNamingConvention: Character card format uses snake_case fields */
+// apps/frontend/pwa/src/lib/client/utils/ai_prompt.ts
+
+// ---------------------------------------------------------------------------
+// Core emotions that the LLM may emit as <emotion:value> tags (AC2).
+//
+// Must match the EXPRESSION_MAP keys in
+// packages/frontend/engine/src/components/appearance.ts
+// so the expression system can resolve them.
+// ---------------------------------------------------------------------------
+
+const CORE_EMOTIONS = [
+  'neutral',
+  'joy',
+  'anger',
+  'sadness',
+  'surprise',
+  'fear',
+  'disgust',
+  'blush',
+  'wink',
+  'pout',
+] as const;
+
+/**
+ * Builds the emotion tag instruction string for the system prompt.
+ *
+ * Tells the LLM exactly when and how to emit `<emotion:value>` tags
+ * so the StreamOrchestrator can extract them invisibly from the SSE
+ * stream and drive the hybrid expression pipeline.
+ *
+ * @param emotions — The list of allowed emotion values.
+ * @returns A string to append to the system prompt.
+ */
+export const buildEmotionTagInstruction = (emotions: readonly string[] = CORE_EMOTIONS): string => {
+  const list = emotions.map((e) => `\`${e}\``).join(', ');
+  return [
+    '',
+    '## Expression Tags',
+    "You control the character's facial expression using inline tags.",
+    "When the character's emotion changes, emit a tag at the exact moment:",
+    '',
+    'Format: `<emotion:value>`',
+    '',
+    `Allowed values: ${list}`,
+    '',
+    'Rules:',
+    '- Place the tag at the exact point the emotion shifts.',
+    '- Only emit a tag when the emotion actually changes — do not repeat the same tag consecutively.',
+    '- The tag is invisible to the player — it only drives visuals.',
+    '- Do NOT use angle brackets `<` or `>` for any other purpose in your response.',
+    '- If you need to express "less than" or "greater than", use words ("less than", "greater than").',
+    '',
+    'Example:',
+    '`<emotion:joy> Welcome, traveler! It is so good to see you.`',
+  ].join('\n');
+};
+
 /**
  * Formats a character/NPC into a system prompt for AI conversations.
  * Creates a detailed prompt that includes the character's personality,
@@ -132,6 +189,10 @@ export function createAIContext(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
 } {
   let systemPrompt = formatCharacterPrompt(character);
+
+  // Inject emotion tag instructions so the LLM emits <emotion:value>
+  // tags that the StreamOrchestrator intercepts invisibly (AC2)
+  systemPrompt += buildEmotionTagInstruction();
 
   if (activeContexts && activeContexts.length > 0) {
     systemPrompt += buildSpatialContextPrompt(activeContexts);

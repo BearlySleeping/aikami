@@ -57,6 +57,7 @@
 | C-060 | Dialogue System Integration | ✅ completed |
 | C-061 | Frontend App Consolidation | ✅ completed |
 | C-062 | Dialogue Context & Memory Manager | ✅ completed |
+| C-063 | Hybrid Expression Extraction & Caching | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1671,5 +1672,52 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 ### Test Results
 - **Unit (context_builder)**: 9/9 pass
 - **Unit (orchestrator)**: 21/21 pass (10 original + 11 new C-062)
+- **Validate (pwa)**: fix → typecheck → build → test — 4/4 pass
+- **Typecheck (pwa)**: 0 errors, 0 warnings (svelte-check)
+
+## C-063 — Hybrid Expression Extraction & Caching — ✅ completed
+
+**Started**: 2026-06-07
+**Completed**: 2026-06-07
+
+### Findings
+
+- **Infinite loop bug**: Extracting the regex match from the while-loop assignment to a separate statement required adding `match = tagRegex.exec(combined)` at loop end. Missing this caused an infinite loop.
+- **rAF resource leak**: The `_syncAudioQueueSize` rAF loop continued running across tests; fixed by adding `afterEach(() => orchestrator.cancelGeneration())` in the C-063 test describes.
+- **Non-null assertion**: Biome flagged `this._expressionGenerator!()` — resolved by extracting to a local `const generator` with an early-return guard.
+- **Timeout configurability**: Exposed `tagBufferTimeoutMs` as an option to enable fast timeout tests without subclass hacks.
+- **basePath default**: Changed `ExpressionAssetResolver` to respect explicit `undefined` basePath (disabling predictable path resolution) while defaulting to `/images/npc` when the option is omitted entirely.
+
+### Files Created
+
+- `apps/frontend/pwa/src/lib/client/services/media/expression_asset_resolver.ts` — ExpressionAssetResolver class (AC3)
+- `apps/frontend/pwa/src/lib/client/services/media/expression_asset_resolver.test.ts` — 12 tests (AC3)
+- `apps/frontend/pwa/src/lib/client/utils/ai_prompt.test.ts` — 9 tests (AC2)
+
+### Files Modified
+
+- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Tag buffer (AC1), hybrid trigger pipeline (AC3, AC4), expression generator & resolver wiring
+- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.test.ts` — +19 AC1 tests, +10 AC3/AC4 tests (51 total)
+- `apps/frontend/pwa/src/lib/client/utils/ai_prompt.ts` — `buildEmotionTagInstruction` + injection into `createAIContext` (AC2)
+
+### AC Status
+
+- [x] AC1: UI Stream Interception — tag buffer with regex extraction, fragmented chunk handling, math equation edge case, timeout flush
+- [x] AC2: System Prompt Enforcement — emotion instruction injected into `createAIContext` systemPrompt
+- [x] AC3: Pre-generated Asset Fast-Path — `ExpressionAssetResolver` with manifest + predictable path, manifest preferred
+- [x] AC4: ComfyUI Dynamic Fallback & Cancellation — `expressionGenerator` with `AbortController`, dedup, rapid emotion shift abort
+
+### Architectural Deviations
+
+- **Hybrid pipeline integrated into StreamOrchestrator**: Rather than a separate orchestrator, the expression resolver and generator are injected as options. AC4 fires from the internal `_handleExtractedEmotion` method, keeping the Svelte UI boundary clean.
+- **External callback preserved**: `onEmotionExtracted` still works alongside the internal pipeline for custom consumer logic.
+- **ExpressionGenerator is optional**: When omitted, missing static assets are silently skipped (no dynamic generation fallback).
+
+### Test Results
+
+- **Unit (stream_orchestrator)**: 51/51 pass (18 original + 19 AC1 + 10 AC3/AC4 + 4 unchanged)
+- **Unit (expression_asset_resolver)**: 12/12 pass
+- **Unit (ai_prompt)**: 9/9 pass
+- **Total**: 72/72 pass across 3 test files
 - **Validate (pwa)**: fix → typecheck → build → test — 4/4 pass
 - **Typecheck (pwa)**: 0 errors, 0 warnings (svelte-check)
