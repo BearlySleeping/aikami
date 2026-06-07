@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-06-07
-> Files: 92 across 10 categories
+> Files: 99 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -84,6 +84,13 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Metadata](contracts/C-055-shared-e2e-assertion-fix.md)
 - [Contract: C-056 — Hybrid Text Generation Gateway](contracts/C-056-hybrid-text-gateway.md)
 - [Contract: C-057 — Edge-Native TTS Worker](contracts/C-057-edge-tts-worker.md)
+- [Contract: C-058 — ComfyUI Orchestration](contracts/C-058-comfyui-orchestrator.md)
+- [Contract: C-059 — Client-Side Stream Sync](contracts/C-059-client-stream-sync.md)
+- [Contract: C-060 — Dialogue System Integration](contracts/C-060-dialogue-system-integration.md)
+- [Contract: C-061 — Frontend App Consolidation](contracts/C-061-frontend-app-consolidation.md)
+- [Contract: C-062 — Dialogue Context & Memory Manager](contracts/C-062-dialogue-memory-manager.md)
+- [Contract: C-063 — Hybrid Expression Extraction & Caching](contracts/C-063-hybrid-expression-extraction.md)
+- [Contract: C-064 — Dev Console & View-Model Layout Integration](contracts/C-064-dev-console-layouts.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [MIG 002 backend dataconnect](contracts/MIG-002-backend-dataconnect.md)

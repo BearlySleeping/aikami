@@ -34,7 +34,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
-export type DevService = 'emulators' | 'pwa' | 'game';
+export type DevService = 'emulators' | 'pwa';
 
 /** Accepted CLI values (includes singular aliases and 'all'). */
 export type ServiceInput = DevService | 'emulator' | 'all';
@@ -91,7 +91,7 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   },
 };
 
-const ALL_SERVICES: DevService[] = ['emulators', 'pwa', 'game'];
+const ALL_SERVICES: DevService[] = ['emulators', 'pwa'];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
@@ -99,7 +99,6 @@ export const normalizeService = (input: string): DevService | 'all' => {
     emulator: 'emulators',
     emulators: 'emulators',
     pwa: 'pwa',
-    game: 'game',
     all: 'all',
   };
   const result = alias[input];
