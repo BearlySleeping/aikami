@@ -1,17 +1,7 @@
 // apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts
 import { describe, expect, mock, test } from 'bun:test';
 
-// Bun test setup: $state and $derived are Svelte 5 runes that need polyfilling in Bun
-(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$state = (val) => val;
-(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$derived = (val) => val;
-
-// Mock @aikami/frontend/services for BaseViewModel
-mock.module('@aikami/frontend/services', () => {
-  return {
-    BaseViewModel: class MockBaseViewModel {},
-    __esModule: true,
-  };
-});
+// $state and $derived are polyfilled globally via test_preload.ts
 
 // Mock $app/state for page.url.pathname
 mock.module('$app/state', () => {

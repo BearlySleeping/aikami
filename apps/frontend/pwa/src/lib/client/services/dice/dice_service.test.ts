@@ -1,13 +1,6 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 
-(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$state = (val) => val;
-(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$derived = (val) => val;
-
-mock.module('@aikami/frontend/services', () => {
-  return {
-    BaseFrontendClass: class BaseFrontendClass {},
-  };
-});
+// $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
 
 import type { DiceServiceInterface } from './dice_service.svelte.ts';
 

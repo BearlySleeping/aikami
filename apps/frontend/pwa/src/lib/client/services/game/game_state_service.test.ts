@@ -1,25 +1,6 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 
-// Polyfill Svelte 5 runes — Bun doesn't transform .svelte.ts files
-(globalThis as Record<string, unknown>).$state = (val: unknown) => val;
-(globalThis as Record<string, unknown>).$derived = (val: unknown) => val;
-
-// Mock @aikami/frontend/services to avoid loading dialog.svelte.ts with $state
-mock.module('@aikami/frontend/services', () => {
-  class MockBaseFrontendClass {
-    protected readonly _options: { className: string };
-    constructor(options: { className: string }) {
-      this._options = options;
-    }
-    protected debug(..._args: unknown[]): void {}
-    protected log(..._args: unknown[]): void {}
-    protected warn(..._args: unknown[]): void {}
-    protected error(..._args: unknown[]): void {}
-  }
-  return {
-    BaseFrontendClass: MockBaseFrontendClass,
-  };
-});
+// $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
 
 describe('GameStateService', () => {
   let GameStateService: typeof import('./game_state_service.svelte.ts').GameStateService;
