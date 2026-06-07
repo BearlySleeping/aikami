@@ -54,6 +54,7 @@
 | C-057 | Edge-Native TTS Worker | ✅ completed |
 | C-058 | ComfyUI Orchestration | ✅ completed |
 | C-059 | Client-Side Stream Sync | ✅ completed |
+| C-060 | Dialogue System Integration | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1522,3 +1523,61 @@ apps/frontend/pwa/src/lib/client/services/media/
 - **Unit**: 32/32 tests pass (3 test files, 0 failures)
 - **Biome**: 0 errors, 0 warnings
 - **Other pre-existing tests**: 35/36 pass (1 pre-existing failure: `game_state_service.test.ts` — unrelated `$state` issue in `dialog.svelte.ts` from `packages/frontend/services/`)
+
+---
+
+## C-060 — Dialogue System Integration — ✅ completed
+
+### Summary
+Connected the Client-Side Stream Sync orchestration layer (C-059) to the game's ECS interaction system and vanilla DOM dialogue overlay. Fixed a pre-existing `$state` test failure in the PWA package, implemented an Interaction Bridge that converts ECS interaction events into Stream Orchestrator `generateDialogue` calls, extended the DialogueController with streaming progressive text support and abort button wiring, and built a Target Resolver that maps NPC string IDs to PixiJS DisplayObject references for the Texture Injector.
+
+### AC Status
+- [x] **AC-1: Test Suite Repair** — Fixed `game_state_service.test.ts` by polyfilling Svelte 5 `$state`/`$derived` runes as global identity functions and mocking `@aikami/frontend/services` to avoid the `dialog.svelte.ts` → `$state` import chain. All 8 game state tests pass (was 0 pass, 1 error).
+- [x] **AC-2: ECS Interaction Trigger** — `InteractionBridge` class accepts a `DialogueGeneratorInterface` (dependency-injected Stream Orchestrator) and an `InputLockTarget`. `handleInteractStart(npc)` guards against rapid re-triggering via `isGenerating`, locks player input, and calls `generateDialogue({ npcId, personaId })`. `handleInteractEnd()` calls `cancelGeneration()` and unlocks input. 5/5 unit tests pass.
+- [x] **AC-3: UI State Mapping & Abort** — `DialogueController` extended with optional `DialogueGeneratorInterface`. When a generator is provided, `start(npc)` enters streaming mode: hides the text input row, shows a Skip button, creates a streaming message bubble with blinking cursor, polls `generator.currentText` at ~30fps, and updates the bubble in-place. When generation completes, the cursor is removed and the input UI restored. The close/Skip button calls `generator.cancelGeneration()` via `end()`. Legacy Firebase Callable mode preserved when no generator is provided. 5/5 streaming tests pass.
+- [x] **AC-4: Sprite Target Resolution** — `TargetResolver` wraps the GameWorld's NPC metadata and render entry maps. `resolveTarget(npcId)` walks registered NPC entity IDs, matches the string ID, and returns the associated PixiJS `Container` (display object). Gracefully returns `undefined` when the NPC has no metadata or no render entry yet (sprite not loaded). 5/5 unit tests pass.
+
+### Files Created
+- `apps/frontend/game/src/lib/systems/interaction_bridge.ts` — ECS→Orchestrator adapter with re-trigger guard, input lock, generator/cancel wiring
+- `apps/frontend/game/src/lib/systems/interaction_bridge.test.ts` — 5 tests (AC2: rapid re-trigger, metadata forwarding, input locking, cancel/end lifecycle)
+- `apps/frontend/game/src/lib/systems/target_resolver.ts` — NPC string ID → PixiJS DisplayObject resolver
+- `apps/frontend/game/src/lib/systems/target_resolver.test.ts` — 5 tests (AC4: correct sprite, different NPCs, missing NPC, missing render entry, empty source)
+- `apps/frontend/game/src/lib/ui/dialogue_controller_streaming.test.ts` — 5 tests (AC3: generateDialogue call, streaming mode enter, cancel on end, progressive text polling, teardown)
+
+### Files Modified
+- `apps/frontend/pwa/src/lib/client/services/game/game_state_service.test.ts` — Added `$state`/`$derived` polyfills, `mock.module('@aikami/frontend/services')`, switched to dynamic import pattern
+- `apps/frontend/game/src/lib/ui/dialogue_controller.ts` — Added optional `DialogueGeneratorInterface` support, streaming mode with progressive text polling, Skip button, `_startStreamingGeneration`, `_finalizeStreamingMessage`, `isStreaming` getter
+
+### Architecture
+```
+GameWorld.onInteractRequest
+    │
+    ▼
+InteractionBridge.handleInteractStart(npc)
+    │ guards isGenerating, locks input
+    ▼
+DialogueController.start(npc)
+    │ shows overlay, starts polling
+    ▼
+StreamOrchestrator.generateDialogue({ npcId, personaId })
+    │ streams text → currentText
+    ▼
+DialogueController polling → _updateStreamingMessage(text)
+    │ progressive text in bubble
+    ▼
+Player clicks Skip → controller.end()
+    │ calls generator.cancelGeneration()
+    ▼
+InteractionBridge.handleInteractEnd()
+    │ unlocks input
+```
+
+### Deviations from Contract
+- Dialogue streaming uses `setInterval` polling at 33ms (~30fps) instead of a reactive subscription — the game package is vanilla TypeScript with no Svelte reactivity. The orchestrator's `$state`-based `currentText` is consumed via imperative polling in a non-Svelte context.
+- AC3 test uses a hand-rolled DOM polyfill instead of jsdom/happy-dom — Bun test has no built-in DOM and the game package doesn't use a DOM test runner. The polyfill is sufficient for the controller's DOM manipulation patterns.
+- Abort/Skip button reuses the close button (`✕`) with an additional dedicated Skip button during streaming mode — the close button always calls `end()` which cancels generation and destroys the overlay.
+
+### Test Results
+- **Unit**: 23/23 pass (4 test files: 8 game_state + 5 interaction_bridge + 5 dialogue_controller_streaming + 5 target_resolver)
+- **Biome**: 0 errors, 0 warnings (pre-existing `tests/` directory not found is unrelated)
+- **Validate**: 4/4 tasks pass (fix, typecheck on game + pwa + firebase, test on all affected projects)

@@ -6,6 +6,7 @@ import {
   type BaseGameClassOptions,
 } from '$lib/core/base_game_class.ts';
 import type { FirebaseFunctionsInterface } from '$lib/services/firebase/functions.ts';
+import type { DialogueGeneratorInterface } from '$lib/systems/interaction_bridge.ts';
 import type { InteractableNpcEntry } from '$lib/systems/interaction_system.ts';
 import { endInteraction } from '$lib/systems/interaction_system.ts';
 
@@ -44,10 +45,18 @@ type PromptNpcDialogueOutput = {
 
 export type DialogueControllerOptions = BaseGameClassOptions & {
   functions: FirebaseFunctionsInterface;
+  /**
+   * Optional streaming dialogue generator (StreamOrchestrator or compatible).
+   * When provided, the controller operates in streaming mode: progressive
+   * text from the generator is displayed in a streaming message bubble,
+   * and a Skip button is shown to cancel generation.
+   */
+  generator?: DialogueGeneratorInterface;
 };
 
 export type DialogueControllerInterface = BaseGameClassInterface & {
   readonly isActive: boolean;
+  readonly isStreaming: boolean;
   start(npc: InteractableNpcEntry, initialMessage?: string): void;
   end(): void;
 };
@@ -63,9 +72,13 @@ class DialogueController
   implements DialogueControllerInterface
 {
   private _functions: FirebaseFunctionsInterface;
+  private _generator: DialogueGeneratorInterface | undefined;
   private _currentNpc: InteractableNpcEntry | undefined;
   private _messages: DialogueMessage[] = [];
   private _isActive = false;
+  private _isStreaming = false;
+  private _streamingPollInterval: ReturnType<typeof setInterval> | undefined;
+  private _streamingText = '';
 
   // DOM elements (created lazily during mount)
   private _overlay: HTMLDivElement | undefined;
@@ -74,10 +87,13 @@ class DialogueController
   private _sendButton: HTMLButtonElement | undefined;
   private _nameLabel: HTMLHeadingElement | undefined;
   private _relationshipBar: HTMLDivElement | undefined;
+  private _skipButton: HTMLButtonElement | undefined;
+  private _streamingMessageDiv: HTMLDivElement | undefined;
 
   constructor(options: DialogueControllerOptions) {
     super(options);
     this._functions = options.functions;
+    this._generator = options.generator;
   }
 
   // -- Public lifecycle ----------------------------------------------------
@@ -102,6 +118,12 @@ class DialogueController
     this._setNpcName(npc.npcName);
     this._updateRelationshipBar(npc.relationshipValue);
 
+    // If a streaming generator is available, start streaming mode
+    if (this._generator) {
+      this._startStreamingGeneration(npc);
+      return;
+    }
+
     // Show initial NPC greeting (or a default)
     const greeting = initialMessage || `*${npc.npcName} looks at you expectantly.*`;
     this._addMessage('npc', greeting);
@@ -115,7 +137,16 @@ class DialogueController
       return;
     }
 
+    this._stopStreamingPoll();
+
+    // Cancel any active streaming generation
+    if (this._isStreaming && this._generator) {
+      this._generator.cancelGeneration();
+    }
+
     this._isActive = false;
+    this._isStreaming = false;
+    this._streamingText = '';
     this._destroyOverlay();
     this._currentNpc = undefined;
     this._messages = [];
@@ -127,6 +158,11 @@ class DialogueController
   /** Returns whether the dialogue overlay is currently active. */
   get isActive(): boolean {
     return this._isActive;
+  }
+
+  /** Whether the controller is currently in streaming generation mode. */
+  get isStreaming(): boolean {
+    return this._isStreaming;
   }
 
   // -- DOM Mounting --------------------------------------------------------
@@ -336,6 +372,32 @@ class DialogueController
 
     overlay.appendChild(inputRow);
 
+    // Skip button (hidden by default, shown in streaming mode)
+    const skipButton = document.createElement('button');
+    skipButton.id = 'dialogue_skip';
+    skipButton.textContent = 'Skip ▸';
+    skipButton.style.cssText = [
+      'display: none',
+      'background: none',
+      'border: none',
+      'color: #8899aa',
+      'font-size: 14px',
+      'cursor: pointer',
+      'padding: 0 4px',
+      'transition: color 0.2s',
+    ].join(';');
+    skipButton.addEventListener('mouseenter', () => {
+      skipButton.style.color = '#cc6666';
+    });
+    skipButton.addEventListener('mouseleave', () => {
+      skipButton.style.color = '#8899aa';
+    });
+    skipButton.addEventListener('click', () => {
+      this.end();
+    });
+    header.appendChild(skipButton);
+    this._skipButton = skipButton;
+
     // Append to body (or game container for scoped positioning)
     const gameScreen = document.getElementById('game-screen');
     if (gameScreen) {
@@ -416,6 +478,7 @@ class DialogueController
    * Removes the dialogue overlay from the DOM and clears references.
    */
   private _destroyOverlay(): void {
+    this._stopStreamingPoll();
     if (this._overlay) {
       this._overlay.remove();
       this._overlay = undefined;
@@ -425,6 +488,202 @@ class DialogueController
     this._sendButton = undefined;
     this._nameLabel = undefined;
     this._relationshipBar = undefined;
+    this._skipButton = undefined;
+    this._streamingMessageDiv = undefined;
+  }
+
+  // -- Streaming generation ----------------------------------------------
+
+  /**
+   * Starts streaming dialogue generation for the given NPC.
+   *
+   * Switches the overlay to streaming mode: hides the input row, shows a
+   * Skip button, creates a streaming message bubble, calls
+   * {@link DialogueGeneratorInterface.generateDialogue}, and polls
+   * {@link DialogueGeneratorInterface.currentText} to update the bubble.
+   */
+  private _startStreamingGeneration(npc: InteractableNpcEntry): void {
+    if (!this._generator) {
+      return;
+    }
+
+    this._isStreaming = true;
+    this._streamingText = '';
+
+    // Hide the text input row — streaming mode is read-only
+    this._setInputRowVisible(false);
+
+    // Show the skip button
+    if (this._skipButton) {
+      this._skipButton.style.display = '';
+    }
+
+    // Create a streaming message bubble for progressive text
+    this._createStreamingMessageBubble();
+
+    // Start polling the generator's currentText
+    this._startStreamingPoll();
+
+    // Initiate generation
+    void this._generator.generateDialogue({
+      prompt: `Player interacts with ${npc.npcName}`,
+      npcId: npc.npcId,
+      personaId: npc.personaId,
+    });
+  }
+
+  /**
+   * Creates a streaming message bubble in the chat history.
+   *
+   * The bubble is updated in-place each poll tick rather than creating
+   * new DOM elements on every text change.
+   */
+  private _createStreamingMessageBubble(): void {
+    if (!this._history) {
+      return;
+    }
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'dialogue-msg dialogue-msg-npc dialogue-msg-streaming';
+    msgDiv.style.cssText = [
+      'color: #a78bfa',
+      'margin-bottom: 8px',
+      'padding: 6px 10px',
+      'background: rgba(167, 139, 250, 0.08)',
+      'border-radius: 8px',
+      'border-left: 3px solid #a78bfa',
+      'min-height: 1.5em',
+    ].join(';');
+
+    // Append a blinking cursor span
+    const cursor = document.createElement('span');
+    cursor.className = 'dialogue-streaming-cursor';
+    cursor.textContent = '▌';
+    cursor.style.cssText = ['animation: blink 1s step-end infinite', 'color: #a78bfa'].join(';');
+
+    msgDiv.appendChild(cursor);
+    this._history.appendChild(msgDiv);
+    this._streamingMessageDiv = msgDiv;
+
+    this._scrollToBottom();
+  }
+
+  /**
+   * Starts polling the generator's `currentText` at ~30fps to update
+   * the streaming message bubble.
+   */
+  private _startStreamingPoll(): void {
+    this._stopStreamingPoll();
+
+    this._streamingPollInterval = setInterval(() => {
+      if (!this._generator || !this._streamingMessageDiv) {
+        return;
+      }
+
+      const text = this._generator.currentText;
+      const textChanged = text !== this._streamingText;
+
+      if (textChanged) {
+        this._streamingText = text;
+        this._updateStreamingMessage(text);
+      }
+
+      // When generation ends, finalize the message and restore input UI
+      if (!this._generator.isGenerating && text.length > 0) {
+        this._finalizeStreamingMessage();
+      }
+    }, 33);
+  }
+
+  /**
+   * Stops the streaming poll interval.
+   */
+  private _stopStreamingPoll(): void {
+    if (this._streamingPollInterval !== undefined) {
+      clearInterval(this._streamingPollInterval);
+      this._streamingPollInterval = undefined;
+    }
+  }
+
+  /**
+   * Updates the streaming message bubble with the current progressive text.
+   */
+  private _updateStreamingMessage(text: string): void {
+    if (!this._streamingMessageDiv) {
+      return;
+    }
+
+    // Remove existing text nodes and cursor, keep only the cursor span
+    const cursor = this._streamingMessageDiv.querySelector('.dialogue-streaming-cursor');
+
+    // Clear all child nodes except the cursor
+    while (this._streamingMessageDiv.firstChild) {
+      if (this._streamingMessageDiv.firstChild === cursor) {
+        break;
+      }
+      this._streamingMessageDiv.removeChild(this._streamingMessageDiv.firstChild);
+    }
+
+    // Insert text before the cursor
+    const textNode = document.createTextNode(text);
+    if (cursor) {
+      this._streamingMessageDiv.insertBefore(textNode, cursor);
+    } else {
+      this._streamingMessageDiv.appendChild(textNode);
+    }
+
+    this._scrollToBottom();
+  }
+
+  /**
+   * Finalizes the streaming message: removes the cursor, converts it
+   * to a permanent message in the history, and restores the input UI.
+   */
+  private _finalizeStreamingMessage(): void {
+    this._stopStreamingPoll();
+
+    // Remove the cursor from the streaming div
+    if (this._streamingMessageDiv) {
+      const cursor = this._streamingMessageDiv.querySelector('.dialogue-streaming-cursor');
+      if (cursor) {
+        cursor.remove();
+      }
+      // Reset streaming message reference so future polls won't touch it
+      this._streamingMessageDiv = undefined;
+    }
+
+    // Add the finalized text as a permanent message
+    if (this._streamingText) {
+      this._messages.push({
+        role: 'npc',
+        text: this._streamingText,
+        timestamp: Date.now(),
+      });
+    }
+
+    this._isStreaming = false;
+    this._streamingText = '';
+
+    // Restore the input row and hide skip button
+    this._setInputRowVisible(true);
+    if (this._skipButton) {
+      this._skipButton.style.display = 'none';
+    }
+
+    // Focus the input for the player to type a response
+    setTimeout(() => {
+      this._input?.focus();
+    }, 100);
+  }
+
+  /**
+   * Shows or hides the input row (text input + send button).
+   */
+  private _setInputRowVisible(visible: boolean): void {
+    const inputRow = document.getElementById('dialogue_input_row');
+    if (inputRow) {
+      inputRow.style.display = visible ? 'flex' : 'none';
+    }
   }
 
   // -- Message handling ----------------------------------------------------
