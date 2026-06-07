@@ -10,7 +10,7 @@
     "test:ai-services": "npx playwright test --project=ai-services",
     "lint": "biome lint tests",
     "format": "biome format tests",
-    "fix": "biome check --write tests && biome format --write tests",
+    "fix": "biome check --write tests --error-on-warnings && biome format --write tests",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {

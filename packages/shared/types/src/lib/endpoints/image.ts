@@ -45,7 +45,7 @@ export type GenerateImageResult = {
 /** Events exposed through the image callable endpoint. */
 export type ImageApiEvents = {
   generateImage: [GenerateImageOptions, GenerateImageResult];
-  getQueueStatus: [{}, { queueRemaining: number }];
+  getQueueStatus: [Record<string, never>, { queueRemaining: number }];
 };
 
 export type ImageMessageType = keyof ImageApiEvents;
