@@ -25,7 +25,6 @@ async function main() {
     },
     { name: 'Landing', path: 'apps/frontend/landing_page', desc: 'Public landing page' },
     { name: 'Docs', path: 'apps/frontend/docs', desc: 'Documentation site (Astro)' },
-    { name: 'Game', path: 'apps/frontend/game', desc: 'PixiJS game (TypeScript)' },
     {
       name: 'Firebase',
       path: 'apps/backend/firebase',

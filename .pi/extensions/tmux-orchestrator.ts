@@ -49,17 +49,7 @@ function makeServices(): Record<string, ServiceDef> {
       },
       readyPath: "/",
     },
-    game: {
-      name: "game",
-      key: "game",
-      command: "bun run dev -- --mode emulator",
-      cwd: "apps/frontend/game",
-      getReadyPort: (mode: AikamiMode) => {
-        const { PORTS } = require("../../packages/shared/constants/src/lib/development_ports") as any
-        return (PORTS as any)[mode]?.game ?? EMULATOR_PORTS.game
-      },
-      readyPath: "/",
-    },
+    // game service consolidated into PWA (C-061)
   }
 }
 

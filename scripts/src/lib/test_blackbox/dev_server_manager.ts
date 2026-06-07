@@ -8,7 +8,6 @@ const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 const DEV_SERVER_CONFIG = {
   pwa: { cwd: 'apps/frontend/pwa', port: EMULATOR_PORTS.pwa },
-  game: { cwd: 'apps/frontend/game', port: EMULATOR_PORTS.game },
 } as const;
 
 type AppName = keyof typeof DEV_SERVER_CONFIG;
