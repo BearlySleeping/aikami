@@ -5,7 +5,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit --skipLibCheck",
-    "fix": "biome check --write .",
+    "fix": "biome check --write . --error-on-warnings",
     "build": "firestack deploy --dry-run",
     "deploy": "firestack deploy",
     "deploy:local": "node ../../../../firestack/dist/main.js deploy",

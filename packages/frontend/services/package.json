@@ -5,7 +5,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
-    "fix": "biome check --write ."
+    "fix": "biome check --write . --error-on-warnings"
   },
   "imports": {
     "$router": "./src/lib/router/router-utils.ts",
