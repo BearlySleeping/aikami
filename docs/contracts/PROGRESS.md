@@ -51,6 +51,7 @@
 | C-054 | Shared E2E Pattern Refactor | ✅ completed |
 | C-055 | Secure E2E Baseline & Fix UI Assertions | ✅ completed |
 | C-056 | Hybrid Text Generation Gateway | ✅ completed |
+| C-057 | Edge-Native TTS Worker | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1335,4 +1336,68 @@ feat(ai): hybrid text generation gateway with SSE streaming
 - Add provider router with OpenRouter→Ollama fallback (AC-1)
 - Add SvelteKit SSE API endpoint with AbortSignal passthrough (AC-3)
 - 55 tests, 0 failures across 4 test suites
+```
+
+## C-057 — Edge-Native TTS Worker — ✅ completed
+
+### Summary
+Built the full audio generation pipeline for edge-native TTS: sentence boundary chunker, synthetic ONNX runtime mock, Bun worker thread pool with IPC, and WebSocket streaming endpoint with binary audio + JSON control messages. All 43 tests pass (16 chunker, 10 ONNX mock, 9 worker pool, 8 WebSocket).
+
+### Architecture
+```
+SSE text stream → SentenceBoundaryChunker → sentences → TtsWorkerPool (Bun Workers) → binary audio → WebSocket client
+```
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Sentence Boundary Chunker | `packages/backend/audio/src/lib/sentence_boundary_chunker.ts` | Buffers fragmented SSE text, emits complete sentences on punctuation |
+| Synthetic ONNX Runtime | `packages/backend/audio/src/lib/synthetic_onnx_runtime.ts` | Returns static Float32Array of silence (0.1s @ 24kHz) |
+| Worker Script | `packages/backend/audio/src/lib/tts_worker_script.ts` | Bun Worker entry point — receives jobs via IPC, runs ONNX, posts results |
+| Worker Pool | `packages/backend/audio/src/lib/tts_worker_pool.ts` | Manages Bun Worker threads, dispatches jobs, handles concurrency & abort |
+| WebSocket Handler | `packages/backend/audio/src/lib/tts_websocket_handler.ts` | Wires chunker + pool, streams binary audio frames + JSON control messages |
+
+### AC Status
+- [x] AC-1: Sentence Boundary Chunker — 16 tests. Handles ellipsis (not a boundary), abbreviations (Mr./Mrs./Dr.), whitespace normalization, trailing flush, reset, empty input.
+- [x] AC-2: Synthetic ONNX Runtime Mock — 10 tests. Returns Float32Array of configurable duration/sampleRate. Unique buffers per call. Near-instant.
+- [x] AC-3: Bun Worker Isolation — 9 tests. Workers run in separate threads via Bun Worker API. IPC messaging verified. Concurrency, abort, terminate, sequence ordering, pool info.
+- [x] AC-4: WebSocket Streaming & Lifecycle — 8 tests. JSON control messages (audio_start/audio_end/error), binary Float32Array frames, client disconnect → worker termination, server remains usable after reconnect.
+
+### Files created
+- `packages/backend/audio/moon.yml` — Project config (tags: audio, backend, library)
+- `packages/backend/audio/package.json` — `@aikami/backend-audio` with Bun types
+- `packages/backend/audio/tsconfig.json` — Extends tsconfig.backend.json, types: ["bun"]
+- `packages/backend/audio/src/index.ts` — Barrel exports
+- `packages/backend/audio/src/lib/sentence_boundary_chunker.ts` — Chunker implementation
+- `packages/backend/audio/src/lib/synthetic_onnx_runtime.ts` — Mock ONNX runtime
+- `packages/backend/audio/src/lib/tts_worker_script.ts` — Bun Worker entry point
+- `packages/backend/audio/src/lib/tts_worker_pool.ts` — Worker pool orchestrator
+- `packages/backend/audio/src/lib/tts_websocket_handler.ts` — WebSocket handler
+- `packages/backend/audio/tests/sentence_boundary_chunker.test.ts` — 16 chunker tests
+- `packages/backend/audio/tests/synthetic_onnx_runtime.test.ts` — 10 ONNX mock tests
+- `packages/backend/audio/tests/tts_worker_pool.test.ts` — 9 worker pool tests
+- `packages/backend/audio/tests/tts_websocket_handler.test.ts` — 8 WebSocket tests
+
+### Files modified
+- `.moon/workspace.yml` — Added `backend-audio: "packages/backend/audio"` project entry
+
+### Deviations from contract
+- **Ellipsis boundary**: Contract implied `...` might be a sentence boundary, but NLP-correct behavior treats ellipsis as MID-sentence continuation (not a boundary). The chunker ONLY splits on `.` when it is NOT part of `..` or `...`. All contract test scenarios satisfied.
+- **WebSocket handler API**: Bun's `ServerWebSocket` does not have `addEventListener`. Handler returns `{ onMessage, onClose }` callbacks instead, wired from `Bun.serve()` websocket config `message`/`close` hooks.
+- **No WS endpoint in SvelteKit yet**: The WebSocket handler is standalone — it can be mounted on any Bun server. Integration with SvelteKit/PWA is deferred to a follow-up contract.
+- **`@types/bun` added**: Required for `Worker`, `MessageEvent`, `DOMException` types. Added to devDependencies + `"types": ["bun"]` in tsconfig.
+
+### Test results
+```
+43 pass, 0 fail across 4 test suites
+```
+
+### Commit message
+```
+feat(audio): edge-native TTS worker pipeline
+
+- Add SentenceBoundaryChunker with 16 tests (ellipsis, abbreviations, whitespace)
+- Add SyntheticOnnxRuntime mock returning Float32Array silence (10 tests)
+- Add TtsWorkerPool with Bun Worker threads + IPC dispatch (9 tests)
+- Add WebSocket handler streaming binary audio + JSON control messages (8 tests)
+- Register backend-audio project in moon workspace
 ```
