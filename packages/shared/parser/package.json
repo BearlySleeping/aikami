@@ -6,7 +6,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
-    "fix": "biome check --write ."
+    "fix": "biome check --write . --error-on-warnings"
   },
   "dependencies": {
     "@aikami/schemas": "workspace:*"

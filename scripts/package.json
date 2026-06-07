@@ -8,7 +8,7 @@
     "typecheck": "bunx tsc --noEmit",
     "lint": "bunx biome check .",
     "format": "bunx biome format .",
-    "fix": "bunx biome check --write ."
+    "fix": "bunx biome check --write . --error-on-warnings"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

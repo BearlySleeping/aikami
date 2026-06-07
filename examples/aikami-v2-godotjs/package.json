@@ -34,10 +34,10 @@
     "test:game-systems": "bun run scripts/test.ts --mode=emulator game_systems",
     "test:godot": "godot --headless --test --test-case=\"[jsb]*\"",
     "lint": "biome check .",
-    "lint:fix": "biome check --write .",
+    "lint:fix": "biome check --write . --error-on-warnings",
     "format": "biome format .",
     "format:fix": "biome format --write .",
-    "fix": "biome check --write . && biome format --write .",
+    "fix": "biome check --write . --error-on-warnings && biome format --write .",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
