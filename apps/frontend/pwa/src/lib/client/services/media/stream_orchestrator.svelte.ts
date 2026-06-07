@@ -1,6 +1,8 @@
 // apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts
 import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
 import type { AudioQueuePlayerInterface } from './audio_queue_player';
+import type { ConversationMessage } from './context_builder.ts';
+import type { ConversationRepositoryInterface } from './conversation_repository.svelte.ts';
 import type { PixiTextureInjectorInterface } from './pixi_texture_injector';
 
 // ---------------------------------------------------------------------------
@@ -20,8 +22,15 @@ export type TextStreamConnection = {
    * The `onChunk` callback is invoked for each text delta received.
    * The connection is long-lived and only terminates when the
    * {@link AbortSignal} is aborted.
+   *
+   * @param options.messages — conversation history sent to the backend
+   *   so the LLM has full dialogue context.
    */
-  start(options: { signal: AbortSignal; onChunk: (text: string) => void }): Promise<void>;
+  start(options: {
+    signal: AbortSignal;
+    onChunk: (text: string) => void;
+    messages: ConversationMessage[];
+  }): Promise<void>;
 };
 
 /** WebSocket-based audio (TTS) stream connection. */
@@ -64,6 +73,12 @@ export type StreamOrchestratorOptions = BaseClassOptions & {
   imageStream: ImageStreamConnection;
   audioQueuePlayer: AudioQueuePlayerInterface;
   textureInjector: PixiTextureInjectorInterface;
+  /**
+   * Optional repository adapter for persisting completed dialogue turns.
+   * When omitted, dialogue history is NOT saved (useful for transient
+   * NPCs or testing).
+   */
+  conversationRepository?: ConversationRepositoryInterface;
 };
 
 export type StreamOrchestratorInterface = BaseClassInterface & {
@@ -90,8 +105,20 @@ export type StreamOrchestratorInterface = BaseClassInterface & {
    *
    * If a generation is already in progress, it is cancelled before the
    * new one starts.
+   *
+   * @param options.messages — conversation history to pass to the LLM
+   *   gateway.  Should be built by the {@link ContextBuilder} before
+   *   calling this method.
+   * @param options.chatId — ID of the chat document for persisting
+   *   completed turns.  Required when `conversationRepository` is set.
    */
-  generateDialogue(options: { prompt: string; npcId: string; personaId: string }): Promise<void>;
+  generateDialogue(options: {
+    prompt: string;
+    npcId: string;
+    personaId: string;
+    messages?: ConversationMessage[];
+    chatId?: string;
+  }): Promise<void>;
 
   /**
    * Immediately aborts all active streams, stops audio playback, and
@@ -132,8 +159,13 @@ export class StreamOrchestrator
   private readonly _imageStream: ImageStreamConnection;
   private readonly _audioQueue: AudioQueuePlayerInterface;
   private readonly _textureInjector: PixiTextureInjectorInterface;
+  private readonly _conversationRepository: ConversationRepositoryInterface | undefined;
 
   private _abortController: AbortController | undefined;
+  /** Staged save options for the current generation — populated in generateDialogue, consumed in _onStreamComplete. */
+  private _pendingSaveOptions:
+    | { chatId: string; npcId: string; playerMessage: ConversationMessage }
+    | undefined;
 
   constructor(options: StreamOrchestratorOptions) {
     super(options);
@@ -142,6 +174,7 @@ export class StreamOrchestrator
     this._imageStream = options.imageStream;
     this._audioQueue = options.audioQueuePlayer;
     this._textureInjector = options.textureInjector;
+    this._conversationRepository = options.conversationRepository;
   }
 
   // -- Public API ----------------------------------------------------------
@@ -150,9 +183,11 @@ export class StreamOrchestrator
     prompt: string;
     npcId: string;
     personaId: string;
+    messages?: ConversationMessage[];
+    chatId?: string;
   }): Promise<void> {
     this.debug('generateDialogue', options);
-    const { npcId } = options;
+    const { chatId, messages, npcId, prompt } = options;
 
     // Cancel any in-progress generation
     this.cancelGeneration();
@@ -166,12 +201,24 @@ export class StreamOrchestrator
     this.currentSpeakerId = npcId;
     this.currentAudioQueueSize = 0;
 
+    // Stage the save payload for the repository hook (AC2).
+    // Cleared on cancel / new generation — only consumed on successful
+    // stream completion.
+    this._pendingSaveOptions =
+      chatId && this._conversationRepository
+        ? {
+            chatId,
+            npcId,
+            playerMessage: { role: 'user', content: prompt },
+          }
+        : undefined;
+
     // Start audio queue for the new stream
     this._audioQueue.startStream();
     this._syncAudioQueueSize();
 
     // ── Text SSE ──────────────────────────────────────────────────────
-    this._startTextStream(signal);
+    this._startTextStream({ signal, messages: messages ?? [] });
 
     // ── Audio WS ──────────────────────────────────────────────────────
     this._audioStream.connect({
@@ -222,6 +269,9 @@ export class StreamOrchestrator
     // Clear injected texture
     this._textureInjector.clearTexture();
 
+    // Discard pending save — aborted streams must not persist (AC3)
+    this._pendingSaveOptions = undefined;
+
     // Reset state
     this.isGenerating = false;
     this.currentText = '';
@@ -237,11 +287,20 @@ export class StreamOrchestrator
    * Each text chunk is accumulated into {@link currentText}. The
    * Promise from `start()` is intentionally not awaited — it resolves
    * only when the stream ends or is aborted.
+   *
+   * On natural stream completion (NOT abort), fires the memory hook
+   * to persist the completed dialogue turn (AC2).
    */
-  private _startTextStream(signal: AbortSignal): void {
+  private _startTextStream(options: {
+    signal: AbortSignal;
+    messages: ConversationMessage[];
+  }): void {
+    const { signal, messages } = options;
+
     this._textStream
       .start({
         signal,
+        messages,
         onChunk: (text: string) => {
           if (signal.aborted) {
             return;
@@ -254,11 +313,14 @@ export class StreamOrchestrator
         if (!signal.aborted) {
           this.isGenerating = false;
           this._audioQueue.endStream();
+
+          // ── Memory Hook (AC2): persist completed dialogue turn ──
+          void this._saveCompletedTurn();
         }
       })
       .catch(() => {
-        // AbortError or network error — silently handled, cancelGeneration
-        // already updated the state if the abort came from us
+        // AbortError or network error — silently handled.
+        // cancelGeneration / abort path DOES NOT call _saveCompletedTurn (AC3).
         if (!signal.aborted) {
           this.isGenerating = false;
           this._audioQueue.stop();
@@ -293,6 +355,42 @@ export class StreamOrchestrator
     };
 
     schedule(tick);
+  }
+
+  /**
+   * Persists the completed dialogue turn via the {@link ConversationRepositoryInterface}.
+   *
+   * Only called when the text stream completes naturally (never on abort).
+   * The save payload is staged in {@link _pendingSaveOptions} during
+   * `generateDialogue` and consumed here.
+   */
+  private async _saveCompletedTurn(): Promise<void> {
+    const saveOptions = this._pendingSaveOptions;
+    this._pendingSaveOptions = undefined;
+
+    if (!saveOptions || !this._conversationRepository) {
+      return;
+    }
+
+    const npcText = this.currentText;
+    if (npcText.length === 0) {
+      return;
+    }
+
+    try {
+      await this._conversationRepository.saveDialogueTurn({
+        chatId: saveOptions.chatId,
+        npcId: saveOptions.npcId,
+        playerMessage: saveOptions.playerMessage,
+        npcMessage: { role: 'assistant', content: npcText },
+      });
+      this.debug('_saveCompletedTurn:saved', {
+        chatId: saveOptions.chatId,
+        textLength: npcText.length,
+      });
+    } catch (error) {
+      this.error('_saveCompletedTurn:failed', error);
+    }
   }
 
   override async dispose(): Promise<void> {
