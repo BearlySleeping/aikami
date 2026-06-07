@@ -19,7 +19,7 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
-    "fix": "biome check --write ."
+    "fix": "biome check --write . --error-on-warnings"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "10.4.2",

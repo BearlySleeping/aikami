@@ -248,7 +248,7 @@ export const POST = async ({ request }: { request: Request }) => {
       };
 
       if (config.openrouterApiKey) {
-        headers['Authorization'] = `Bearer ${config.openrouterApiKey}`;
+        headers.Authorization = `Bearer ${config.openrouterApiKey}`;
       }
 
       try {
