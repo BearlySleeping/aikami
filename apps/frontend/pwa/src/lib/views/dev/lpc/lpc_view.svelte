@@ -15,30 +15,33 @@
   <title>LPC Layer Visual Debugger</title>
 </svelte:head>
 
-<BaseViewModelContainer {viewModel} class={viewModel.isFullscreen ? 'fullscreen-viewport' : ''}>
+<BaseViewModelContainer
+  {viewModel}
+  class={viewModel.isFullscreen ? 'fixed inset-0 z-[9999] bg-[#0d0d1a]' : ''}
+>
   {#if viewModel.isFullscreen}
     <!-- Fullscreen mode: bare canvas only — no debug controls -->
-    <div class="lite-viewport">
+    <div class="flex items-center justify-center w-screen h-screen bg-[#0d0d1a] overflow-hidden">
       <canvas
         bind:this={viewModel.canvasElement}
-        class="lite-canvas"
+        class="block [image-rendering:pixelated]"
         width={viewModel.CANVAS_WIDTH}
         height={viewModel.CANVAS_HEIGHT}
       ></canvas>
     </div>
   {:else}
-    <div class="debug-workbench">
+    <div
+      class="grid grid-cols-[1fr_360px_260px] h-[calc(100vh-4rem)] bg-base-100 text-base-content relative font-sans"
+    >
       <!-- Status Banner -->
       {#if viewModel.statusBanner}
+        {@const bannerLevel = viewModel.statusBanner.level}
         <div
-          class="status-banner"
-          class:status-info={viewModel.statusBanner.level === 'info'}
-          class:status-warn={viewModel.statusBanner.level === 'warn'}
-          class:status-error={viewModel.statusBanner.level === 'error'}
+          class="col-span-3 flex items-center justify-between px-4 py-2 text-xs border-b z-20 {bannerLevel === 'info' ? 'bg-info/10 border-info text-info' : ''}{bannerLevel === 'warn' ? 'bg-warning/10 border-warning text-warning' : ''}{bannerLevel === 'error' ? 'bg-error/10 border-error text-error' : ''}"
         >
-          <span class="status-text">{viewModel.statusBanner.message}</span>
+          <span class="flex-1">{viewModel.statusBanner.message}</span>
           <button
-            class="status-dismiss"
+            class="btn btn-ghost btn-xs opacity-70 hover:opacity-100"
             onclick={() => viewModel.clearStatus()}
             aria-label="Dismiss notification"
           >
@@ -50,16 +53,21 @@
       <!-- ================================================================= -->
       <!-- LEFT PANEL — Viewport                                             -->
       <!-- ================================================================= -->
-      <div class="viewport-panel">
+      <div
+        class="flex items-center justify-center bg-base-200 border-r border-base-300 relative overflow-hidden"
+      >
         <canvas
           bind:this={viewModel.canvasElement}
-          class="debug-canvas"
+          class="block max-w-full max-h-full rounded-sm"
           width={viewModel.CANVAS_WIDTH}
           height={viewModel.CANVAS_HEIGHT}
         ></canvas>
 
         <!-- UBO data management (invisible) -->
-        <div class="ubo-sink" aria-hidden="true">
+        <div
+          class="absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden"
+          aria-hidden="true"
+        >
           <LpcCharacterRenderer
             x={viewModel.ENTITY_X}
             y={viewModel.ENTITY_Y}
@@ -72,7 +80,9 @@
         </div>
 
         {#if viewModel.compositionFailed}
-          <div class="fallback-overlay">
+          <div
+            class="absolute bottom-2 left-2 right-2 bg-error/20 border border-error text-error px-3 py-1 rounded text-xs text-center z-10"
+          >
             ⚠️ Fallback rendering active — see status banner for details
           </div>
         {/if}
@@ -81,24 +91,32 @@
       <!-- ================================================================= -->
       <!-- CENTER PANEL — Layer Assembly + Ticker + Palette                  -->
       <!-- ================================================================= -->
-      <aside class="assembly-panel">
-        <div class="panel-header">
-          <h2 class="panel-title">Layer Assembly</h2>
-          <span class="layer-count"
+      <aside
+        class="bg-base-200 border-r border-base-300 flex flex-col overflow-y-auto overflow-x-hidden"
+      >
+        <div
+          class="flex items-baseline justify-between px-4 py-3 border-b border-base-300 shrink-0"
+        >
+          <h2 class="text-sm font-semibold text-primary uppercase tracking-wider">
+            Layer Assembly
+          </h2>
+          <span class="text-xs text-base-content/40 tabular-nums"
             >{viewModel.activeLayers.length}
             / {viewModel.MAX_LAYERS} layers</span
           >
         </div>
 
         <!-- Animation Controls -->
-        <fieldset class="control-section">
-          <legend class="section-legend">Animation</legend>
+        <fieldset class="border-0 border-b border-base-300 px-4 py-3 m-0 shrink-0">
+          <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
+            Animation
+          </legend>
 
-          <div class="control-row">
-            <label class="control-label">
+          <div class="flex gap-2 mb-2">
+            <label class="flex flex-col gap-1 text-xs text-base-content/60 flex-1 min-w-0 mb-2">
               State
               <select
-                class="control-select"
+                class="select select-sm select-ghost w-full"
                 value={viewModel.animationState}
                 onchange={(e: Event) => {
                   const target = e.target as HTMLSelectElement;
@@ -111,10 +129,10 @@
               </select>
             </label>
 
-            <label class="control-label">
+            <label class="flex flex-col gap-1 text-xs text-base-content/60 flex-1 min-w-0 mb-2">
               Direction
               <select
-                class="control-select"
+                class="select select-sm select-ghost w-full"
                 value={viewModel.facingDirection}
                 onchange={(e: Event) => {
                   const target = e.target as HTMLSelectElement;
@@ -129,13 +147,18 @@
           </div>
 
           <!-- Animation Playback Ticker Deck -->
-          <fieldset class="ticker-controls">
-            <legend class="ticker-legend">Playback Ticker</legend>
+          <fieldset
+            class="border border-base-300 rounded-lg p-2.5 mt-1 bg-base-300 flex flex-col gap-1.5"
+          >
+            <legend class="text-[0.7rem] font-semibold text-primary/70 uppercase tracking-wider">
+              Playback Ticker
+            </legend>
 
-            <div class="ticker-row">
+            <div class="flex gap-1.5 items-center">
               <button
-                class="btn btn-play"
-                class:btn-pause={viewModel.isPlaying}
+                class="btn btn-sm flex-1"
+                class:btn-success={!viewModel.isPlaying}
+                class:btn-warning={viewModel.isPlaying}
                 onclick={() => viewModel.togglePlayback()}
                 aria-label={viewModel.isPlaying ? 'Pause animation' : 'Play animation'}
               >
@@ -143,7 +166,7 @@
               </button>
 
               <button
-                class="btn btn-step"
+                class="btn btn-ghost btn-sm flex-1"
                 onclick={() => viewModel.stepPrev()}
                 disabled={viewModel.isPlaying}
                 aria-label="Step previous frame"
@@ -152,7 +175,7 @@
               </button>
 
               <button
-                class="btn btn-step"
+                class="btn btn-ghost btn-sm flex-1"
                 onclick={() => viewModel.stepNext()}
                 disabled={viewModel.isPlaying}
                 aria-label="Step next frame"
@@ -161,11 +184,11 @@
               </button>
             </div>
 
-            <label class="control-label">
+            <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
               Speed: {viewModel.playbackFps} FPS
               <input
                 type="range"
-                class="slider"
+                class="range range-sm range-primary w-full mt-1"
                 min="1"
                 max="60"
                 value={viewModel.playbackFps}
@@ -173,11 +196,11 @@
               >
             </label>
 
-            <label class="control-label">
+            <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
               Frame: {viewModel.animationFrame} / {viewModel.maxFrame}
               <input
                 type="range"
-                class="slider"
+                class="range range-sm range-primary w-full mt-1 disabled:opacity-40"
                 min="0"
                 value={viewModel.animationFrame}
                 max={viewModel.maxFrame}
@@ -189,14 +212,16 @@
         </fieldset>
 
         <!-- Zoom Control -->
-        <fieldset class="control-section">
-          <legend class="section-legend">Canvas Zoom</legend>
+        <fieldset class="border-0 border-b border-base-300 px-4 py-3 m-0 shrink-0">
+          <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
+            Canvas Zoom
+          </legend>
 
-          <label class="control-label">
+          <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
             Zoom: {viewModel.zoom.toFixed(1)}x
             <input
               type="range"
-              class="slider"
+              class="range range-sm range-primary w-full mt-1"
               min="0.5"
               max="10"
               step="0.1"
@@ -207,22 +232,25 @@
         </fieldset>
 
         <!-- Diagnostic Overlays -->
-        <fieldset class="control-section">
-          <legend class="section-legend">Diagnostic Overlays</legend>
+        <fieldset class="border-0 border-b border-base-300 px-4 py-3 m-0 shrink-0">
+          <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
+            Diagnostic Overlays
+          </legend>
 
-          <label class="control-checkbox">
+          <label class="flex items-center gap-2 text-xs text-base-content/80 mb-2 cursor-pointer">
             <input
               type="checkbox"
+              class="checkbox checkbox-sm checkbox-primary"
               checked={viewModel.showGridOverlay}
               onchange={(e: Event) => viewModel.setShowGridOverlay((e.target as HTMLInputElement).checked)}
             >
             <span>Show Grid Layout (64×64)</span>
           </label>
 
-          <label class="control-label">
+          <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
             Isolate Layer
             <select
-              class="control-select"
+              class="select select-sm select-ghost w-full"
               value={viewModel.isolateLayerIndex}
               onchange={(e: Event) => {
                 const target = e.target as HTMLSelectElement;
@@ -238,21 +266,27 @@
         </fieldset>
 
         <!-- Layer Cards -->
-        <div class="layer-list">
+        <div class="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
           {#each viewModel.activeLayers as layer, i (i)}
             {@const slotDef = viewModel.allSlots[layer.slotDefIndex]}
             {@const variant = slotDef?.variants[layer.variantIndex]}
             {@const paletteHex = viewModel.getPaletteHex(i)}
             {@const isIsolated = viewModel.isolateLayerIndex >= 0 && i !== viewModel.isolateLayerIndex}
 
-            <div class="layer-card" class:layer-isolated={isIsolated}>
-              <div class="layer-card-header">
-                <span class="layer-index">Layer {i}</span>
+            <div
+              class="card bg-base-300 border border-base-300 rounded-lg p-2.5 flex flex-col gap-1.5"
+              class:opacity-40={isIsolated}
+              class:border-error={isIsolated}
+            >
+              <div class="flex justify-between items-center">
+                <span class="text-xs font-semibold text-primary/70 uppercase tracking-wider"
+                  >Layer {i}</span
+                >
                 {#if isIsolated}
-                  <span class="layer-isolated-badge">hidden</span>
+                  <span class="badge badge-error badge-xs uppercase">hidden</span>
                 {/if}
                 <button
-                  class="btn btn-remove"
+                  class="btn btn-ghost btn-xs"
                   onclick={() => viewModel.removeLayer(i)}
                   aria-label="Remove layer {i}"
                   title="Remove layer"
@@ -261,10 +295,10 @@
                 </button>
               </div>
 
-              <label class="control-label">
+              <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
                 Slot
                 <select
-                  class="control-select"
+                  class="select select-sm select-ghost w-full"
                   value={layer.slotDefIndex}
                   onchange={(e: Event) => {
                     const target = e.target as HTMLSelectElement;
@@ -278,10 +312,10 @@
               </label>
 
               {#if slotDef}
-                <label class="control-label">
+                <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
                   Variant
                   <select
-                    class="control-select"
+                    class="select select-sm select-ghost w-full"
                     value={layer.variantIndex}
                     onchange={(e: Event) => {
                       const target = e.target as HTMLSelectElement;
@@ -296,12 +330,12 @@
               {/if}
 
               <!-- Palette colour picker -->
-              <div class="palette-section">
-                <label class="control-label">
+              <div class="border-t border-base-300 pt-2 flex flex-col gap-1.5">
+                <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
                   Palette Index: {layer.selectedPaletteIndex}
                   <input
                     type="range"
-                    class="slider"
+                    class="range range-sm range-primary w-full mt-1"
                     min="0"
                     max={viewModel.PALETTE_DISPLAY_COUNT - 1}
                     value={layer.selectedPaletteIndex}
@@ -312,25 +346,29 @@
                   >
                 </label>
 
-                <div class="color-picker-row">
+                <div class="flex items-center gap-2">
                   <input
                     type="color"
-                    class="color-input"
+                    class="w-8 h-6 border border-base-300 rounded p-0 cursor-pointer bg-transparent"
                     value="#{paletteHex}"
                     oninput={(e: Event) => {
                       const target = e.target as HTMLInputElement;
                       viewModel.setPaletteColor(i, layer.selectedPaletteIndex, target.value.replace('#', ''));
                     }}
                   >
-                  <code class="color-hex">#{paletteHex}</code>
+                  <code
+                    class="text-xs font-mono text-base-content/70 bg-base-200 px-1.5 py-0.5 rounded"
+                    >#{paletteHex}</code
+                  >
                 </div>
 
                 <!-- Palette swatch strip (first 16 entries) -->
-                <div class="palette-strip">
+                <div class="flex gap-px flex-wrap">
                   {#each layer.palette.slice(0, viewModel.PALETTE_DISPLAY_COUNT) as color, pIdx}
                     <button
-                      class="palette-swatch"
-                      class:palette-swatch-active={pIdx === layer.selectedPaletteIndex}
+                      class="w-[18px] h-[18px] border border-base-300 rounded-sm p-0 cursor-pointer hover:border-primary transition-transform hover:scale-115"
+                      class:border-white={pIdx === layer.selectedPaletteIndex}
+                      class:shadow-[0_0_4px_rgba(136,136,204,0.6)]={pIdx === layer.selectedPaletteIndex}
                       style="background-color: #{color}"
                       onclick={() => viewModel.setSelectedPaletteIndex(i, pIdx)}
                       title="Index {pIdx}: #{color}"
@@ -344,7 +382,7 @@
         </div>
 
         <button
-          class="btn btn-add"
+          class="btn btn-ghost btn-sm mx-2 mb-4 shrink-0"
           onclick={() => viewModel.addLayer()}
           disabled={viewModel.activeLayers.length >= viewModel.MAX_LAYERS}
         >
@@ -355,128 +393,167 @@
       <!-- ================================================================= -->
       <!-- RIGHT PANEL — Telemetry                                            -->
       <!-- ================================================================= -->
-      <aside class="telemetry-panel">
-        <h2 class="panel-title">Runtime Telemetry</h2>
+      <aside class="bg-base-200 p-3 flex flex-col gap-0 overflow-y-auto overflow-x-hidden">
+        <h2 class="text-sm font-semibold text-primary uppercase tracking-wider mb-2">
+          Runtime Telemetry
+        </h2>
 
-        <div class="metric-card">
-          <div class="metric-row">
-            <span class="metric-label">FPS</span>
+        <div class="flex flex-col gap-1">
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">FPS</span>
             <span
-              class="metric-value"
-              class:metric-warn={viewModel.fps < 30}
-              class:metric-danger={viewModel.fps < 15}
+              class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              class:text-warning={viewModel.fps < 30}
+              class:text-error={viewModel.fps < 15}
             >
               {viewModel.fps.toFixed(1)}
             </span>
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Frame Duration</span>
-            <span class="metric-value">{viewModel.frameDurationMs.toFixed(2)} ms</span>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Frame Duration</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.frameDurationMs.toFixed(2)}
+              ms</span
+            >
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Frame Budget</span>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Frame Budget</span>
             <span
-              class="metric-value"
-              class:metric-warn={Number.parseFloat(viewModel.frameBudgetPercent) > 80}
-              class:metric-danger={Number.parseFloat(viewModel.frameBudgetPercent) > 95}
+              class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              class:text-warning={Number.parseFloat(viewModel.frameBudgetPercent) > 80}
+              class:text-error={Number.parseFloat(viewModel.frameBudgetPercent) > 95}
             >
               {viewModel.frameBudgetPercent}%
             </span>
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Total Frames</span>
-            <span class="metric-value">{viewModel.totalFrames}</span>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Total Frames</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.totalFrames}</span
+            >
           </div>
         </div>
 
-        <hr class="metric-divider">
+        <div class="divider my-2"></div>
 
-        <div class="metric-card">
-          <div class="metric-row">
-            <span class="metric-label">Active Instances</span>
-            <span class="metric-value">{viewModel.activeInstances} / {viewModel.poolSize}</span>
+        <div class="flex flex-col gap-1">
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Active Instances</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.activeInstances}
+              / {viewModel.poolSize}</span
+            >
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Pool Utilization</span>
-            <span class="metric-value">
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Pool Utilization</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums">
               {viewModel.poolSize > 0 ? ((viewModel.activeInstances / viewModel.poolSize) * 100).toFixed(1) : '0.0'}%
             </span>
           </div>
         </div>
 
-        <hr class="metric-divider">
+        <div class="divider my-2"></div>
 
-        <div class="metric-card">
-          <div class="metric-header">Pipeline Counters</div>
-
-          <div class="metric-row">
-            <span class="metric-label">Structural Hashes</span>
-            <span class="metric-value">{viewModel.structuralHashes}</span>
+        <div class="flex flex-col gap-1">
+          <div
+            class="text-[0.68rem] font-semibold text-base-content/40 uppercase tracking-wider pb-1"
+          >
+            Pipeline Counters
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Batch Updates</span>
-            <span class="metric-value">{viewModel.batchUpdates}</span>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Structural Hashes</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.structuralHashes}</span
+            >
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Ticker Frame</span>
-            <span class="metric-value">{viewModel.tickerFrame}</span>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Batch Updates</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.batchUpdates}</span
+            >
+          </div>
+
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Ticker Frame</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.tickerFrame}</span
+            >
           </div>
         </div>
 
-        <hr class="metric-divider">
+        <div class="divider my-2"></div>
 
-        <div class="metric-card">
-          <div class="metric-header">Animation State</div>
-
-          <div class="metric-row">
-            <span class="metric-label">State</span>
-            <span class="metric-value">{viewModel.animationState}</span>
+        <div class="flex flex-col gap-1">
+          <div
+            class="text-[0.68rem] font-semibold text-base-content/40 uppercase tracking-wider pb-1"
+          >
+            Animation State
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Direction</span>
-            <span class="metric-value">{viewModel.facingDirection}</span>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">State</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.animationState}</span
+            >
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Frame</span>
-            <span class="metric-value">{viewModel.animationFrame} / {viewModel.maxFrame}</span>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Direction</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.facingDirection}</span
+            >
           </div>
 
-          <div class="metric-row">
-            <span class="metric-label">Playback</span>
-            <span class="metric-value" class:metric-warn={viewModel.isPlaying}>
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Frame</span>
+            <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              >{viewModel.animationFrame}
+              / {viewModel.maxFrame}</span
+            >
+          </div>
+
+          <div class="flex justify-between items-baseline py-0.5">
+            <span class="text-xs text-base-content/60">Playback</span>
+            <span
+              class="text-xs font-semibold text-base-content font-mono tabular-nums"
+              class:text-warning={viewModel.isPlaying}
+            >
               {viewModel.isPlaying ? `▶ ${viewModel.playbackFps} FPS` : '⏸ Paused'}
             </span>
           </div>
         </div>
 
-        <hr class="metric-divider">
+        <div class="divider my-2"></div>
 
         {#if viewModel.isolateLayerIndex >= 0}
-          <div class="metric-card">
-            <div class="metric-header">Isolate Layer Active</div>
-            <div class="metric-row">
-              <span class="metric-value">Only showing Layer {viewModel.isolateLayerIndex}</span>
+          <div class="flex flex-col gap-1">
+            <div
+              class="text-[0.68rem] font-semibold text-base-content/40 uppercase tracking-wider pb-1"
+            >
+              Isolate Layer Active
+            </div>
+            <div class="flex justify-between items-baseline py-0.5">
+              <span class="text-xs font-semibold text-base-content font-mono tabular-nums"
+                >Only showing Layer {viewModel.isolateLayerIndex}</span
+              >
             </div>
           </div>
-          <hr class="metric-divider">
+          <div class="divider my-2"></div>
         {/if}
 
         {#if viewModel.compositionFailed}
-          <div
-            class="metric-card"
-            style="background: rgba(255, 0, 0, 0.1); border-radius: 4px; padding: 0.5rem;"
-          >
-            <div class="metric-header" style="color: #ff6666;">⚠️ Composition Failed</div>
-            <div class="metric-row">
-              <span class="metric-label" style="color: #ff8888;">
+          <div class="flex flex-col gap-1 bg-error/10 rounded p-2">
+            <div class="text-[0.68rem] font-semibold text-error uppercase tracking-wider pb-1">
+              ⚠️ Composition Failed
+            </div>
+            <div class="flex justify-between items-baseline py-0.5">
+              <span class="text-xs text-error/70">
                 Fallback render block active. Check console for details.
               </span>
             </div>
@@ -486,526 +563,3 @@
     </div>
   {/if}
 </BaseViewModelContainer>
-
-<style>
-  /* ================================================================== */
-  /* Layout                                                              */
-  /* ================================================================== */
-
-  .debug-workbench {
-    display: grid;
-    grid-template-columns: 1fr 360px 260px;
-    grid-template-rows: auto 1fr;
-    height: calc(100vh - 4rem);
-    gap: 0;
-    background: #0a0a14;
-    color: #d0d0e0;
-    font-family: "Inter", system-ui, sans-serif;
-    position: relative;
-  }
-
-  /* ================================================================== */
-  /* Status Banner                                                       */
-  /* ================================================================== */
-
-  .status-banner {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 1rem;
-    font-size: 0.8rem;
-    border-bottom: 1px solid transparent;
-    z-index: 20;
-  }
-
-  .status-info {
-    background: #1a2a44;
-    border-color: #4488cc;
-    color: #88bbff;
-  }
-
-  .status-warn {
-    background: #3a2a14;
-    border-color: #cc8844;
-    color: #ffcc88;
-  }
-
-  .status-error {
-    background: #441a1a;
-    border-color: #cc4444;
-    color: #ff8888;
-  }
-
-  .status-text {
-    flex: 1;
-  }
-  .status-dismiss {
-    background: none;
-    border: none;
-    color: inherit;
-    cursor: pointer;
-    font-size: 0.9rem;
-    padding: 0 0.25rem;
-    opacity: 0.7;
-  }
-  .status-dismiss:hover {
-    opacity: 1;
-  }
-
-  /* ================================================================== */
-  /* Viewport Panel                                                      */
-  /* ================================================================== */
-
-  .viewport-panel {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #0d0d1a;
-    border-right: 1px solid #1a1a2e;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .debug-canvas {
-    display: block;
-    max-width: 100%;
-    max-height: 100%;
-    border-radius: 2px;
-  }
-  .ubo-sink {
-    position: absolute;
-    pointer-events: none;
-    opacity: 0;
-    width: 0;
-    height: 0;
-    overflow: hidden;
-  }
-
-  .fallback-overlay {
-    position: absolute;
-    bottom: 0.5rem;
-    left: 0.5rem;
-    right: 0.5rem;
-    background: rgba(255, 0, 0, 0.2);
-    border: 1px solid #ff4444;
-    color: #ff6666;
-    padding: 0.3rem 0.75rem;
-    border-radius: 4px;
-    font-size: 0.72rem;
-    text-align: center;
-    z-index: 10;
-  }
-
-  /* ================================================================== */
-  /* Assembly Panel (Center)                                             */
-  /* ================================================================== */
-
-  .assembly-panel {
-    background: #0e0e1c;
-    border-right: 1px solid #1a1a2e;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-
-  .panel-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid #1a1a2e;
-    flex-shrink: 0;
-  }
-  .panel-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #8888cc;
-    margin: 0;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
-  .layer-count {
-    font-size: 0.72rem;
-    color: #666688;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .control-section {
-    border: none;
-    border-bottom: 1px solid #1a1a2e;
-    padding: 0.75rem 1rem;
-    margin: 0;
-    flex-shrink: 0;
-  }
-  .section-legend {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #6666aa;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0;
-    margin-bottom: 0.5rem;
-  }
-  .control-row {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-  .control-label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.72rem;
-    color: #8888aa;
-    margin-bottom: 0.5rem;
-  }
-  .control-row .control-label {
-    flex: 1;
-    min-width: 0;
-  }
-  .control-select {
-    background: #111122;
-    border: 1px solid #2a2a3e;
-    border-radius: 4px;
-    color: #ccccdd;
-    padding: 0.3rem 0.5rem;
-    font-size: 0.78rem;
-    font-family: inherit;
-    cursor: pointer;
-    width: 100%;
-  }
-  .control-select:focus {
-    outline: none;
-    border-color: #5555aa;
-  }
-  .control-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.78rem;
-    color: #aaaacc;
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-  }
-  .control-checkbox input[type="checkbox"] {
-    accent-color: #6666cc;
-    width: 14px;
-    height: 14px;
-  }
-  .slider {
-    width: 100%;
-    accent-color: #6666cc;
-    margin-top: 0.25rem;
-  }
-  .slider:disabled {
-    opacity: 0.4;
-  }
-
-  /* Playback */
-  .ticker-controls {
-    border: 1px solid #1a1a2e;
-    border-radius: 6px;
-    padding: 0.6rem;
-    margin-top: 0.3rem;
-    background: #0a0a18;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .ticker-legend {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: #5555aa;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0;
-  }
-  .ticker-row {
-    display: flex;
-    gap: 0.35rem;
-    align-items: center;
-  }
-  .btn-play {
-    background: #1a2a1a;
-    color: #66cc66;
-    border-color: #2a4a2a;
-    flex: 1;
-  }
-  .btn-play:hover {
-    background: #224422;
-    border-color: #44aa44;
-  }
-  .btn-pause {
-    background: #3a2a14;
-    color: #ffcc66;
-    border-color: #554422;
-  }
-  .btn-pause:hover {
-    background: #4a3a1a;
-    border-color: #886622;
-  }
-  .btn-step {
-    background: #1a1a2e;
-    color: #8888cc;
-    border-color: #2a2a4a;
-    flex: 1;
-  }
-  .btn-step:hover:not(:disabled) {
-    background: #222255;
-    border-color: #5555aa;
-  }
-  .btn-step:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .layer-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0.75rem 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  .layer-card {
-    background: #111122;
-    border: 1px solid #1a1a2e;
-    border-radius: 6px;
-    padding: 0.6rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .layer-isolated {
-    opacity: 0.4;
-    border-color: #2a1a1a;
-  }
-  .layer-isolated-badge {
-    font-size: 0.62rem;
-    color: #cc4444;
-    font-weight: 600;
-    text-transform: uppercase;
-    padding: 0.05rem 0.3rem;
-    background: rgba(255, 0, 0, 0.1);
-    border-radius: 3px;
-  }
-  .layer-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .layer-index {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: #6666aa;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .palette-section {
-    border-top: 1px solid #1a1a2e;
-    padding-top: 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-  .color-picker-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .color-input {
-    width: 32px;
-    height: 24px;
-    border: 1px solid #2a2a3e;
-    border-radius: 3px;
-    padding: 0;
-    cursor: pointer;
-    background: none;
-  }
-  .color-input:focus {
-    outline: none;
-    border-color: #5555aa;
-  }
-  .color-hex {
-    font-size: 0.78rem;
-    font-family: "JetBrains Mono", "Fira Code", monospace;
-    color: #aaaacc;
-    background: #1a1a2e;
-    padding: 0.1rem 0.4rem;
-    border-radius: 3px;
-  }
-  .palette-strip {
-    display: flex;
-    gap: 1px;
-    flex-wrap: wrap;
-  }
-  .palette-swatch {
-    width: 18px;
-    height: 18px;
-    border: 1px solid #2a2a3e;
-    border-radius: 2px;
-    padding: 0;
-    cursor: pointer;
-    transition: border-color 0.1s;
-  }
-  .palette-swatch:hover {
-    border-color: #8888cc;
-    transform: scale(1.15);
-  }
-  .palette-swatch-active {
-    border-color: #ffffff;
-    box-shadow: 0 0 4px rgba(136, 136, 204, 0.6);
-  }
-
-  .btn {
-    padding: 0.4rem 0.75rem;
-    border: 1px solid transparent;
-    border-radius: 5px;
-    font-size: 0.76rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition:
-      background 0.15s,
-      border-color 0.15s;
-    text-align: center;
-    font-family: inherit;
-  }
-  .btn-add {
-    background: #1a1a3a;
-    color: #8888cc;
-    border-color: #2a2a4a;
-    margin: 0.5rem 1rem 1rem;
-    flex-shrink: 0;
-  }
-  .btn-add:hover:not(:disabled) {
-    background: #222255;
-    border-color: #5555aa;
-  }
-  .btn-add:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .btn-remove {
-    background: none;
-    border: 1px solid transparent;
-    color: #666688;
-    cursor: pointer;
-    padding: 0.1rem 0.35rem;
-    border-radius: 3px;
-    font-size: 0.7rem;
-    line-height: 1;
-  }
-  .btn-remove:hover {
-    background: #332222;
-    border-color: #553333;
-    color: #ff6666;
-  }
-
-  /* ================================================================== */
-  /* Telemetry Panel (Right)                                             */
-  /* ================================================================== */
-
-  .telemetry-panel {
-    background: #0e0e1c;
-    padding: 0.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-  .telemetry-panel .panel-title {
-    margin-bottom: 0.5rem;
-  }
-  .metric-card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-  }
-  .metric-header {
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: #666688;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding-bottom: 0.2rem;
-  }
-  .metric-divider {
-    border: none;
-    border-top: 1px solid #1a1a2e;
-    margin: 0.5rem 0;
-  }
-  .metric-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding: 0.15rem 0;
-  }
-  .metric-label {
-    font-size: 0.72rem;
-    color: #7777aa;
-  }
-  .metric-value {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: #ccccff;
-    font-variant-numeric: tabular-nums;
-    font-family: "JetBrains Mono", "Fira Code", monospace;
-  }
-  .metric-warn {
-    color: #ffaa44;
-  }
-  .metric-danger {
-    color: #ff4444;
-  }
-
-  /* ================================================================== */
-  /* Scrollbar                                                           */
-  /* ================================================================== */
-
-  .assembly-panel::-webkit-scrollbar,
-  .telemetry-panel::-webkit-scrollbar,
-  .layer-list::-webkit-scrollbar {
-    width: 5px;
-  }
-  .assembly-panel::-webkit-scrollbar-track,
-  .telemetry-panel::-webkit-scrollbar-track,
-  .layer-list::-webkit-scrollbar-track {
-    background: #0a0a14;
-  }
-  .assembly-panel::-webkit-scrollbar-thumb,
-  .telemetry-panel::-webkit-scrollbar-thumb,
-  .layer-list::-webkit-scrollbar-thumb {
-    background: #2a2a3e;
-    border-radius: 3px;
-  }
-
-  /* ================================================================== */
-  /* Fullscreen Mode (component-lite behavior for Playwright)           */
-  /* ================================================================== */
-
-  :global(.fullscreen-viewport) {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    background: #0d0d1a;
-  }
-
-  .lite-viewport {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100vw;
-    height: 100vh;
-    background: #0d0d1a;
-    overflow: hidden;
-  }
-
-  .lite-canvas {
-    display: block;
-    image-rendering: pixelated;
-  }
-</style>
