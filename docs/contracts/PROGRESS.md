@@ -59,6 +59,7 @@
 | C-062 | Dialogue Context & Memory Manager | ✅ completed |
 | C-063 | Hybrid Expression Extraction & Caching | ✅ completed |
 | C-064 | Dev Console & View-Model Layout Integration | ✅ completed |
+| C-065 | Dev UI Tailwind Refactor & Text Sandbox | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1773,3 +1774,63 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - **browser_inspect**: Drawer renders correctly on /dev/text and /dev/voice; active class applied to current route
 - **HTTP 200 on all 4 new endpoints** verified via curl
 - **lpc routes confirmed gone**: `find (dev)/dev/lpc` returns no such file or directory
+
+## C-065: Dev UI Tailwind Refactor & Text Sandbox
+
+### Changes Made
+
+**LPC View Tailwind Refactor (AC1):**
+- Removed entire `<style>` block (~400 lines) from `lpc_view.svelte`
+- Replaced all custom CSS classes with Tailwind utility classes and DaisyUI components:
+  - Layout: `grid grid-cols-[1fr_360px_260px] h-[calc(100vh-4rem)]`
+  - Backgrounds: `bg-base-100`, `bg-base-200`, `bg-base-300`
+  - Buttons: `btn btn-sm`, `btn-success`, `btn-warning`, `btn-ghost`, `btn-xs`
+  - Selects: `select select-sm select-ghost`
+  - Ranges: `range range-sm range-primary`
+  - Checkbox: `checkbox checkbox-sm checkbox-primary`
+  - Cards: `card bg-base-300`
+  - Dividers: `divider my-2`
+  - Badges: `badge badge-error badge-xs`
+  - Status banner colors: `bg-info/10`, `bg-warning/10`, `bg-error/10` (conditional)
+  - Typography: `text-base-content`, `text-base-content/40`, `text-primary`, `text-primary/70`
+- Status banner uses `@const` + conditional class string (Svelte 5 `class:` directive doesn't support Tailwind opacity syntax like `bg-info/10`)
+
+**Text ViewModel Implementation (AC2, AC3):**
+- File: `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts`
+- State: `prompt` ($state), `output` ($state), `isGenerating` ($state)
+- `generate()`: POSTs to `/api/text` with `x-test-mode: true`, reads SSE response stream via `ReadableStream` reader, parses `data: {...}` lines, accumulates `text` fields into `output`
+- `cancel()`: aborts `AbortController`, resets `isGenerating`
+- Empty prompt validation — no-op if prompt is whitespace-only
+- Graceful error handling: `AbortError` silently swallowed, network errors captured in `output`
+- Follows conventions: arrow functions (standalone), private `_` prefix, JSDoc, debug logging
+
+**Text View UI (AC4):**
+- File: `apps/frontend/pwa/src/lib/views/dev/text/text_view.svelte`
+- DaisyUI card layout with form-control, textarea, primary Generate button, ghost Cancel button
+- `<pre>` output terminal with `overflow-y-auto max-h-96`, monospace font, word wrap
+- Auto-scroll to bottom via `$effect` on `viewModel.output`
+- Ctrl+Enter keyboard shortcut to generate
+- Loading dots indicator during generation
+- Character count when generation complete
+- Generate button disabled when prompt is empty
+
+### Files Modified
+
+- `apps/frontend/pwa/src/lib/views/dev/lpc/lpc_view.svelte` — Full Tailwind/DaisyUI refactor (style block removed)
+- `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts` — Full SSE streaming implementation
+- `apps/frontend/pwa/src/lib/views/dev/text/text_view.svelte` — Full DaisyUI sandbox UI
+- `docs/contracts/PROGRESS.md` — Status entry for C-065
+
+### AC Status
+
+- [x] AC1: LPC Tailwind Refactor — zero `<style>` blocks, all classes are Tailwind/DaisyUI (`grid`, `flex`, `btn`, `select`, `range`, `badge`, `checkbox`, `card`, `divider`)
+- [x] AC2: TextGen ViewModel Implementation — `generate()` opens SSE connection, accumulates chunks into `output` $state, sets `isGenerating`
+- [x] AC3: TextGen Abort Controller — `cancel()` aborts fetch via `AbortController`, `isGenerating` reverts to false, `AbortError` silently handled
+- [x] AC4: Text View UI — DaisyUI interface with prompt textarea, Generate/Cancel buttons, streaming output terminal with auto-scroll
+
+### Verification
+
+- **validate({ test: true })**: fix → typecheck → build pass; 6 pre-existing test failures in dev_layout_view_model.test.ts (BaseViewModel export resolution — unrelated)
+- **browser_inspect**: LPC page renders with correct grid layout, DaisyUI components, status banner; Text page renders with card, textarea, buttons, output terminal
+- **browser_console**: No errors on /dev/text or /dev/lpc pages
+- **browser_screenshot**: Both pages visually confirmed
