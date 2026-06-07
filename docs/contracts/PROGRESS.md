@@ -55,6 +55,7 @@
 | C-058 | ComfyUI Orchestration | ✅ completed |
 | C-059 | Client-Side Stream Sync | ✅ completed |
 | C-060 | Dialogue System Integration | ✅ completed |
+| C-061 | Frontend App Consolidation | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1581,3 +1582,49 @@ InteractionBridge.handleInteractEnd()
 - **Unit**: 23/23 pass (4 test files: 8 game_state + 5 interaction_bridge + 5 dialogue_controller_streaming + 5 target_resolver)
 - **Biome**: 0 errors, 0 warnings (pre-existing `tests/` directory not found is unrelated)
 - **Validate**: 4/4 tasks pass (fix, typecheck on game + pwa + firebase, test on all affected projects)
+
+---
+
+## C-061 — Frontend App Consolidation — ✅ completed
+
+### Summary
+Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit PWA. All game source code now lives at `apps/frontend/pwa/src/lib/client/game/`. Created dedicated SvelteKit routes for `/game` and `/dev/sandbox` with proper `ssr = false` enforcement and PixiJS lifecycle hooks (`onMount`/`onDestroy`). Removed the game project from the moon workspace and cleaned up all infrastructure references.
+
+### AC Status
+- [x] **AC-1: Code Relocation & Import Fixing** — 26 source files moved from `apps/frontend/game/src/lib/` to `apps/frontend/pwa/src/lib/client/game/`. All `$lib/...` imports updated to `$lib/client/game/...`. File path comments updated. `svelte-check` passes with 0 errors.
+- [x] **AC-2: SvelteKit SSR Enforcement** — `+page.ts` files created for both `(authenticated)/game/` and `(dev)/dev/sandbox/` with `export const ssr = false; export const prerender = false;`. Game engine only instantiates on the client.
+- [x] **AC-3: PixiJS Lifecycle Hooking** — `(authenticated)/game/+page.svelte` uses `onMount(() => { viewModel.initialize(); return () => viewModel.dispose(); })` and `onDestroy(() => viewModel.dispose())` for failsafe WebGL cleanup. `(dev)/dev/sandbox/+page.svelte` uses `onMount()` to init PixiJS app and `onDestroy()` to call `app.destroy(true, { children: true })`. BaseViewModelContainer already handles `initialize()` → `dispose()` lifecycle via onMount return.
+- [x] **AC-4: Workspace Deprecation** — `apps/frontend/game/` directory deleted. Removed from `.moon/workspace.yml`. Cleaned up references in `biome.json`, `deployment_config.ts`, `dev_server_manager.ts`, `tmux/session.ts`, `tmux-orchestrator.ts`, `generate_context.ts`, `constants/project.ts`, `schemas/project.ts`, and `environment.ts`.
+
+### Files Created
+- `apps/frontend/pwa/src/routes/(authenticated)/game/+page.ts` — SSR disabled, prerender disabled
+- `apps/frontend/pwa/src/routes/(authenticated)/game/+page.svelte` — Game route with onMount/onDestroy lifecycle
+- `apps/frontend/pwa/src/routes/(dev)/dev/sandbox/+page.ts` — SSR disabled, prerender disabled
+- `apps/frontend/pwa/src/routes/(dev)/dev/sandbox/+page.svelte` — PixiJS sandbox with test pattern and FPS counter
+
+### Files Migrated
+- 26 source files from `apps/frontend/game/src/lib/` → `apps/frontend/pwa/src/lib/client/game/`
+- 3 test files (`interaction_bridge.test.ts`, `target_resolver.test.ts`, `dialogue_controller_streaming.test.ts`) migrated and passing under PWA test runner
+
+### Files Deleted
+- `apps/frontend/game/` directory (entire project)
+- `apps/frontend/pwa/src/routes/(authenticated)/game/+page@.svelte` (replaced with regular `+page.svelte`)
+
+### Files Modified
+- `.moon/workspace.yml` — removed `game` project entry
+- `packages/shared/constants/src/lib/project.ts` — removed `'game'` from `frontendAppIds`
+- `packages/shared/schemas/src/lib/project.ts` — removed `'game'` from `AppIdSchema` and `FrontendAppIdSchema`
+- `packages/frontend/configs/src/lib/environment.ts` — removed `game: ['PUBLIC_PWA_URL']` app requirements
+- `biome.json` — removed `apps/frontend/game/tests/**` exclude pattern
+- `scripts/src/lib/deploy/deployment_config.ts` — removed `game` deployment config
+- `scripts/src/lib/test_blackbox/dev_server_manager.ts` — removed `game` dev server
+- `scripts/src/lib/tmux/session.ts` — removed `game` tmux session
+- `.pi/extensions/tmux-orchestrator.ts` — removed `game` window config
+- `scripts/src/lib/ops/generate_context.ts` — removed `Game` entry
+
+### Test Results
+- **Typecheck**: 0 errors, 0 warnings (svelte-check)
+- **Build**: SvelteKit build succeeds (SSR + client)
+- **Unit**: 58/58 pass (8 test files including 3 migrated game tests: 15 game tests all pass)
+- **Biome**: fix passes cleanly
+- **Moon**: workspace graph valid, `moon project pwa` resolves correctly

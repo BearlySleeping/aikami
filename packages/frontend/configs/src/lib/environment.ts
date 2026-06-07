@@ -41,7 +41,6 @@ type AppID = Type.Static<typeof FrontendAppIdSchema>;
 
 const APP_REQUIREMENTS: Record<AppID, (keyof MasterEnv)[]> = {
   docs: [],
-  game: ['PUBLIC_PWA_URL'],
   landing_page: [],
   pwa: [],
 };

@@ -89,12 +89,6 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/frontend/pwa'),
     readyPort: EMULATOR_PORTS.pwa,
   },
-  game: {
-    name: 'game',
-    command: 'bun run dev -- --mode emulator',
-    cwd: (root) => resolve(root, 'apps/frontend/game'),
-    readyPort: EMULATOR_PORTS.game,
-  },
 };
 
 const ALL_SERVICES: DevService[] = ['emulators', 'pwa', 'game'];
