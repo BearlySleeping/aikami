@@ -11,6 +11,7 @@ import type { DockerServiceConfig } from './docker_manager.ts';
 import { DockerManager } from './docker_manager.ts';
 import { startEmulators, stopEmulators } from './emulator_manager.ts';
 import { printTerminalReport, writeJsonReport } from './reporter.ts';
+import { COMFYUI_DOCKER_CONFIG } from './suites/comfyui.ts';
 import { runSuites } from './test_runner.ts';
 import { startServices, stopServices } from './tmux_manager.ts';
 import type { SuiteResult, TestSuites } from './types.ts';
@@ -57,7 +58,7 @@ Examples:
 }
 
 /** Docker services to start when --with-docker flag is passed. */
-const DOCKER_SERVICES: DockerServiceConfig[] = [];
+const DOCKER_SERVICES: DockerServiceConfig[] = [COMFYUI_DOCKER_CONFIG];
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
@@ -73,6 +74,7 @@ async function main() {
     { name: 'functions', path: './suites/functions.api.ts', key: 'functionsSuite' },
     { name: 'pwa', path: './suites/pwa.e2e.ts', key: 'pwaSuite' },
     { name: 'game-e2e', path: './suites/game_e2e.ts', key: 'gameE2eSuite' },
+    { name: 'comfyui', path: './suites/comfyui.ts', key: 'comfyuiSuite' },
   ];
   if (!noCrossService) {
     // cross-service suite can be added later
