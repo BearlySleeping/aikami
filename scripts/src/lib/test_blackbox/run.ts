@@ -171,14 +171,6 @@ async function main() {
         );
       }
 
-      if (needsGame) {
-        services.push(
-          startDevServer('game').catch((e) => {
-            console.error('  ⚠ Game dev server failed:', e instanceof Error ? e.message : e);
-          }),
-        );
-      }
-
       if (services.length > 0) {
         console.log(`🚀 Starting ${services.length} service(s)...`);
         await Promise.all(services);
