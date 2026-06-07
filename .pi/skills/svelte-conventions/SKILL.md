@@ -68,6 +68,8 @@ No local `$state` in views. No `onMount`.
 - ❌ **Destructuring ViewModels** → Always access directly (`viewModel.show`)
 - ❌ **`$derived` to proxy service state** → Use native getters
 - ❌ **Business logic in ViewModels** → Delegate to services, never import repositories or call APIs
+- ❌ **`fetch`, `AudioContext`, `URL.createObjectURL`, or any browser API in ViewModels** → All I/O and platform APIs belong in services
+- ❌ **Private `_service` field storing a service singleton** → Reference the singleton directly (`ttsService.speak()`, not `this._service.speak()`)
 - ❌ **Conditionals / data transforms in views** → Compute in the ViewModel, expose ready-to-render data
 - ✅ **Private members prefixed with `_`** — `_cache`, `_pendingRequests`, `_normalizeInput()`
 
@@ -97,8 +99,8 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from "$lib/components/BaseViewModel.svelte";
-import { myService } from "$services/my_service";
+} from "@aikami/frontend/services";
+import { myService } from "$services";
 
 export type FeatureViewModelInterface = BaseViewModelInterface & {
   readonly items: string[];
@@ -110,18 +112,39 @@ export class FeatureViewModel
   extends BaseViewModel<FeatureViewModelOptions>
   implements FeatureViewModelInterface
 {
-  items = $state<string[]>([]);
+  // ViewModel-owned $state for form inputs bound to the view
+  inputText = $state('');
+
+  // Service state proxied via native getters — never $derived
+  get items(): string[] {
+    return myService.items;
+  }
+
+  get isLoading(): boolean {
+    return myService.isLoading;
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────
 
   async initialize(): Promise<void> {
     this.debug("initialize");
-    // Thin bridge to service — no direct API calls
-    this.items = myService.getItems();
+    await myService.loadItems();
+  }
+
+  async submit(): Promise<void> {
+    this.debug("submit");
+    await myService.process(this.inputText);
+  }
+
+  cancel(): void {
+    this.debug("cancel");
+    myService.cancel();
   }
 }
 
 export const getFeatureViewModel = (
   options: FeatureViewModelOptions,
-): FeatureViewModel => {
+): FeatureViewModelInterface => {
   return new FeatureViewModel(options);
 };
 ```
@@ -153,6 +176,10 @@ export const getFeatureViewModel = (
 - Always extend `BaseViewModel` and `implements *Interface`
 - ViewModel files: `{name}_view_model.svelte.ts` (NOT `vm` shorthand)
 - ViewModel imports services, **never** repositories or Firebase SDK directly
+- **Reference service singletons directly** — `myService.doThing()`, never `this._service.doThing()`
+- **Proxy service state via native getters** — `get items() { return myService.items; }`, never `$derived`
+- **Never call `fetch`, `AudioContext`, or any browser API** — all I/O belongs in services
+- ViewModel-owned `$state` is for form inputs bound to the view (`inputText`, `prompt`, `text`), never for business state
 
 ### ViewModel — `super.initialize()` Placement
 
