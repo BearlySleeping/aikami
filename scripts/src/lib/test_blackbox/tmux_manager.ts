@@ -14,7 +14,7 @@ import {
 const MODE: AikamiMode = 'emulator'; // Blackbox tests always run in emulator mode
 
 const toCanonicalServices = (names: string[]): DevService[] => {
-  const valid: DevService[] = ['emulators', 'pwa', 'game'];
+  const valid: DevService[] = ['emulators', 'pwa'];
   return names.filter((n) => valid.includes(n as DevService)) as DevService[];
 };
 
