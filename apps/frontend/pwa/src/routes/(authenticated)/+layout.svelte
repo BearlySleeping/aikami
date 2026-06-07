@@ -1,6 +1,5 @@
 <script lang="ts">
-  // apps/frontend/pwa/src/routes/+layout.svelte
-  import '../../app.css';
+	// apps/frontend/pwa/src/routes/(authenticated)/+layout.svelte
   import AppView from '$lib/views/app/app_view.svelte';
   import { getAppViewModel } from '$lib/views/app/app_view_model.svelte';
   import type { LayoutProps } from './$types';
