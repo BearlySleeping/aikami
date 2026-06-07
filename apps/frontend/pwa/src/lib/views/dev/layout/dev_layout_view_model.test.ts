@@ -1,0 +1,84 @@
+// apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts
+import { describe, expect, mock, test } from 'bun:test';
+
+// Bun test setup: $state and $derived are Svelte 5 runes that need polyfilling in Bun
+(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$state = (val) => val;
+(globalThis as { $state: <T>(val: T) => T; $derived: <T>(val: T) => T }).$derived = (val) => val;
+
+// Mock @aikami/frontend/services for BaseViewModel
+mock.module('@aikami/frontend/services', () => {
+  return {
+    BaseViewModel: class MockBaseViewModel {},
+    __esModule: true,
+  };
+});
+
+// Mock $app/state for page.url.pathname
+mock.module('$app/state', () => {
+  return {
+    page: { url: { pathname: '/dev/text' } },
+    navigating: null,
+    __esModule: true,
+  };
+});
+
+import type { DevViewModelInterface } from './dev_layout_view_model.svelte.ts';
+
+const getDevViewModel = async (): Promise<DevViewModelInterface> => {
+  const mod = await import('./dev_layout_view_model.svelte.ts');
+  return mod.getDevViewModel({ className: 'DevViewModel' });
+};
+
+describe('DevViewModel', () => {
+  test('getDevViewModel should return a ViewModel instance', async () => {
+    const viewModel = await getDevViewModel();
+    expect(viewModel).toBeDefined();
+    expect(viewModel.navItems).toBeDefined();
+  });
+
+  test('navItems should contain all 6 dev console links', async () => {
+    const viewModel = await getDevViewModel();
+    expect(viewModel.navItems.length).toBe(6);
+
+    const routes = viewModel.navItems.map((item) => item.route);
+    expect(routes).toContain('/dev/text');
+    expect(routes).toContain('/dev/voice');
+    expect(routes).toContain('/dev/image');
+    expect(routes).toContain('/dev/character');
+    expect(routes).toContain('/dev/sandbox');
+    expect(routes).toContain('/dev/lpc');
+  });
+
+  test('each navItem should have route, label, and icon', async () => {
+    const viewModel = await getDevViewModel();
+    for (const item of viewModel.navItems) {
+      expect(typeof item.route).toBe('string');
+      expect(item.route.length).toBeGreaterThan(0);
+      expect(typeof item.label).toBe('string');
+      expect(item.label.length).toBeGreaterThan(0);
+      expect(typeof item.icon).toBe('string');
+      expect(item.icon.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('activeRoute should reflect the mocked page.pathname', async () => {
+    const viewModel = await getDevViewModel();
+    expect(viewModel.activeRoute).toBe('/dev/text');
+  });
+
+  test('isDrawerOpen should default to false', async () => {
+    const viewModel = await getDevViewModel();
+    expect(viewModel.isDrawerOpen).toBe(false);
+  });
+
+  test('toggleDrawer should flip isDrawerOpen', async () => {
+    const viewModel = await getDevViewModel();
+    expect(viewModel.isDrawerOpen).toBe(false);
+
+    viewModel.toggleDrawer();
+    expect(viewModel.isDrawerOpen).toBe(true);
+
+    viewModel.toggleDrawer();
+    expect(viewModel.isDrawerOpen).toBe(false);
+  });
+});
