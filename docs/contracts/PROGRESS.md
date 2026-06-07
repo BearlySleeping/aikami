@@ -52,6 +52,7 @@
 | C-055 | Secure E2E Baseline & Fix UI Assertions | ✅ completed |
 | C-056 | Hybrid Text Generation Gateway | ✅ completed |
 | C-057 | Edge-Native TTS Worker | ✅ completed |
+| C-058 | ComfyUI Orchestration | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1401,3 +1402,76 @@ feat(audio): edge-native TTS worker pipeline
 - Add WebSocket handler streaming binary audio + JSON control messages (8 tests)
 - Register backend-audio project in moon workspace
 ```
+
+## C-058 — ComfyUI Orchestration — ✅ completed
+
+### Summary
+Built the orchestration client for Headless ComfyUI image generation. Created a new `packages/backend/image` module with Workflow Builder (SaveImageWebsocket injection), REST Client (queue, history, VRAM eviction), WebSocket Receiver (binary frame parsing, 8-byte header stripping), and Image Generation Orchestrator (full lifecycle with zombie timeout). Added Docker health check via blackbox test infrastructure.
+
+### AC Status
+- [x] AC-1: Workflow Builder Injection — `ComfyUIWorkflowBuilder.injectSaveImageWebsocket()` detects the final image-producing node, removes existing SaveImage/SaveImageWebsocket nodes, and appends a new `SaveImageWebsocket` linked to the image tensor output. 6 unit tests verify injection, replacement, non-mutating behavior, and error cases.
+- [x] AC-2: VRAM Eviction Enforcement — `ComfyUIRestClient.freeMemory()` sends `POST /api/free` with `{ unload_models: true, free_memory: true }`. `ImageGenerationOrchestrator.generate()` calls freeMemory immediately after WS completion, on timeout, and on abort. 3 orchestrator tests + 2 freeMemory tests verify enforcement.
+- [x] AC-3: WebSocket Binary Receiver — `ComfyUIWsReceiver.listenForGeneration()` connects to ComfyUI WS, listens for `executing` status (filtering by prompt_id), captures binary frames, and strips the 8-byte ComfyUI header. 9 unit tests validate header stripping (dedicated test verifies 8 bytes removed from JPEG/PNG payloads), error handling, AbortSignal, and timeout behavior.
+- [x] AC-4: Minimal Container Health Check — Created `scripts/src/lib/test_blackbox/suites/comfyui.ts` with a Docker health check suite. Registers `COMFYUI_DOCKER_CONFIG` in `run.ts` for the `--with-docker` flag. Minimal ComfyUI Dockerfile at `scripts/docker/comfyui/Dockerfile` runs CPU-only ComfyUI without model weights, exposed on port 8188. Test boots container, pings `/system_stats` and `/history`, asserts 200 OK, and tears down.
+
+### Architecture
+```
+packages/backend/image/
+├── moon.yml
+├── package.json
+├── tsconfig.json
+├── src/
+│   ├── index.ts                      # Barrel exports
+│   └── lib/
+│       ├── types.ts                  # ComfyUIPromptNode, ComfyUIPrompt, GenerationResult, etc.
+│       ├── workflow_builder.ts       # Injects SaveImageWebsocket into prompt graphs
+│       ├── rest_client.ts            # POST /prompt, GET /history, POST /api/free, GET /system_stats
+│       ├── ws_receiver.ts            # WebSocket listener, binary frame parser, 8-byte header strip
+│       └── orchestrator.ts           # Full lifecycle: build → queue → WS → eviction → timeout
+└── tests/
+    ├── workflow_builder.test.ts       # 6 tests (AC1)
+    ├── rest_client.test.ts           # 9 tests (AC2)
+    ├── ws_receiver.test.ts           # 9 tests (AC3)
+    └── orchestrator.test.ts          # 3 tests (integration: full flow, timeout, abort)
+```
+
+### Integration Points
+- **Types**: `packages/shared/types/src/lib/endpoints/image.ts` — `ImageApiEvents`, `GenerateImageOptions`, `GenerateImageResult`
+- **Callable Registry**: `packages/shared/types/src/lib/endpoints/callable_functions.ts` — added `image: [ImageMessageData, ImageMessageResponse]`
+- **Monorepo**: `.moon/workspace.yml` — registered `backend-image`; `apps/backend/firebase/moon.yml` — added `backend-image` to dependsOn
+- **Blackbox**: `scripts/src/lib/test_blackbox/run.ts` — registers ComfyUI Docker service config; `scripts/src/lib/test_blackbox/suites/comfyui.ts` — AC4 Docker health check
+- **Docker**: `scripts/docker/comfyui/Dockerfile` — CPU-only ComfyUI v0.3.27, no model weights
+
+### Files Created
+- `packages/backend/image/package.json`
+- `packages/backend/image/tsconfig.json`
+- `packages/backend/image/moon.yml`
+- `packages/backend/image/src/index.ts`
+- `packages/backend/image/src/lib/types.ts`
+- `packages/backend/image/src/lib/workflow_builder.ts`
+- `packages/backend/image/src/lib/rest_client.ts`
+- `packages/backend/image/src/lib/ws_receiver.ts`
+- `packages/backend/image/src/lib/orchestrator.ts`
+- `packages/backend/image/tests/workflow_builder.test.ts`
+- `packages/backend/image/tests/rest_client.test.ts`
+- `packages/backend/image/tests/ws_receiver.test.ts`
+- `packages/backend/image/tests/orchestrator.test.ts`
+- `packages/shared/types/src/lib/endpoints/image.ts`
+- `scripts/src/lib/test_blackbox/suites/comfyui.ts`
+- `scripts/docker/comfyui/Dockerfile`
+
+### Files Modified
+- `.moon/workspace.yml` — registered `backend-image` project
+- `apps/backend/firebase/moon.yml` — added `backend-image` to dependsOn
+- `scripts/src/lib/test_blackbox/run.ts` — registered ComfyUI Docker config and suite
+- `packages/shared/types/src/lib/endpoints/callable_functions.ts` — added `image` endpoint
+- `packages/shared/types/src/index.ts` — exported image endpoint types
+
+### Deviations from Contract
+- No callable controller (`apps/backend/firebase/src/controllers/callable/image.ts`) created yet — deferred until the full image generation endpoint is wired up to the PWA frontend. The package infrastructure is ready for it.
+- `WIP`
+
+### Test Results
+- **Unit**: 27/27 tests pass (4 test files, 0 failures)
+- **Typecheck**: backend-image, types, firebase, scripts — all pass
+- **Biome**: 0 errors, 0 warnings

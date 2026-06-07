@@ -4,6 +4,7 @@
 import type { AIMessageData, AIMessageResponse } from './ai.ts';
 import type { AuthMessageData, AuthMessageResponse } from './auth.ts';
 import type { ChatMessageData, ChatMessageResponse } from './chat.ts';
+import type { ImageMessageData, ImageMessageResponse } from './image.ts';
 
 /**
  * All registered callable functions. Each key maps to [Payload, Response].
@@ -17,6 +18,7 @@ export type CallableFunctions = {
   ai: [AIMessageData, AIMessageResponse];
   auth: [AuthMessageData, AuthMessageResponse];
   chat: [ChatMessageData, ChatMessageResponse];
+  image: [ImageMessageData, ImageMessageResponse];
 };
 
 export type CallableFunction = keyof CallableFunctions;

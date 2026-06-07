@@ -30,6 +30,7 @@ projects:
   backend-database: "packages/backend/database"
   backend-auth: "packages/backend/auth"
   backend-audio: "packages/backend/audio"
+  backend-image: "packages/backend/image"
   backend-svelte-kit: "packages/backend/svelte-kit"
 
   # Frontend Packages
