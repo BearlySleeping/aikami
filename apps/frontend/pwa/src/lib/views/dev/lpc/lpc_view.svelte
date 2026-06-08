@@ -23,6 +23,7 @@
     <!-- Fullscreen mode: bare canvas only — no debug controls -->
     <div class="flex items-center justify-center w-screen h-screen bg-[#0d0d1a] overflow-hidden">
       <canvas
+        id="game-canvas"
         bind:this={viewModel.canvasElement}
         class="block [image-rendering:pixelated]"
         width={viewModel.CANVAS_WIDTH}
@@ -57,6 +58,7 @@
         class="flex items-center justify-center bg-base-200 border-r border-base-300 relative overflow-hidden"
       >
         <canvas
+          id="game-canvas"
           bind:this={viewModel.canvasElement}
           class="block max-w-full max-h-full rounded-sm"
           width={viewModel.CANVAS_WIDTH}

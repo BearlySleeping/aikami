@@ -9,6 +9,7 @@
 //   bun run apps/e2e/scripts/lpc_smoke.ts
 //   bun run apps/e2e/scripts/lpc_smoke.ts --capture-only   (skip AI evaluation)
 //   bun run apps/e2e/scripts/lpc_smoke.ts --eval-only      (skip Playwright capture)
+//   bun run apps/e2e/scripts/lpc_smoke.ts --recapture      (force re-capture, skip cache)
 
 import { $ } from 'bun';
 import { existsSync, readdirSync } from 'node:fs';
@@ -27,6 +28,12 @@ const PWA_PORT = 5274;
 const args = process.argv.slice(2);
 const captureOnly = args.includes('--capture-only');
 const evalOnly = args.includes('--eval-only');
+const recapture = args.includes('--recapture');
+
+/** Check whether existing screenshots are present in the output dir. */
+const hasExistingScreenshots = (): boolean =>
+  existsSync(SCREENSHOT_DIR) &&
+  readdirSync(SCREENSHOT_DIR).some((f) => f.endsWith('.png'));
 
 // ── Health check ───────────────────────────────────────────
 
@@ -42,35 +49,42 @@ const checkPwaRunning = async (): Promise<boolean> => {
 // ── Step 1: Playwright capture ─────────────────────────────
 
 if (!evalOnly) {
-  console.log('📸 Step 1/2: Capturing LPC visual screenshots...\n');
+  const skipCapture = hasExistingScreenshots() && !recapture;
 
-  if (!(await checkPwaRunning())) {
-    console.error(`❌ PWA dev server not reachable at http://localhost:${PWA_PORT}/`);
-    console.error('   Start it first:');
-    console.error('     bun moon run pwa:dev');
-    console.error('   Or run the full lifecycle script:');
-    console.error('     bun run apps/e2e/scripts/run_lpc_smoke_full.ts');
-    process.exit(1);
-  }
-
-  const result = await $`bunx playwright test --project=pwa-visual`.cwd(E2E_DIR).nothrow();
-
-  if (result.exitCode !== 0) {
-    console.log('⚠️  Playwright capture had failures.');
-  }
-
-  // Verify screenshots were written
-  if (existsSync(SCREENSHOT_DIR)) {
-    const files = readdirSync(SCREENSHOT_DIR).filter((f) => f.endsWith('.png'));
-    console.log(`\n   ${files.length} screenshot(s) written to ${SCREENSHOT_DIR}`);
-    for (const f of files) {
-      console.log(`   • ${f}`);
-    }
+  if (skipCapture) {
+    console.log('📸 Step 1/2: Screenshots already exist — skipping capture.');
+    console.log('   Use --recapture to force re-capture.\n');
   } else {
-    console.log('\n⚠️  Screenshot directory not found. Check PWA dev server is running.');
-  }
+    console.log('📸 Step 1/2: Capturing LPC visual screenshots...\n');
 
-  console.log();
+    if (!(await checkPwaRunning())) {
+      console.error(`❌ PWA dev server not reachable at http://localhost:${PWA_PORT}/`);
+      console.error('   Start it first:');
+      console.error('     bun moon run pwa:dev');
+      console.error('   Or run the full lifecycle script:');
+      console.error('     bun run apps/e2e/scripts/run_lpc_smoke_full.ts');
+      process.exit(1);
+    }
+
+    const result = await $`bunx playwright test --project=pwa-visual`.cwd(E2E_DIR).nothrow();
+
+    if (result.exitCode !== 0) {
+      console.log('⚠️  Playwright capture had failures.');
+    }
+
+    // Verify screenshots were written
+    if (existsSync(SCREENSHOT_DIR)) {
+      const files = readdirSync(SCREENSHOT_DIR).filter((f) => f.endsWith('.png'));
+      console.log(`\n   ${files.length} screenshot(s) written to ${SCREENSHOT_DIR}`);
+      for (const f of files) {
+        console.log(`   • ${f}`);
+      }
+    } else {
+      console.log('\n⚠️  Screenshot directory not found. Check PWA dev server is running.');
+    }
+
+    console.log();
+  }
 }
 
 // ── Step 2: AI evaluation ──────────────────────────────────

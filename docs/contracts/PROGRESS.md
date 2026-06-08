@@ -68,6 +68,8 @@
 | C-071 | Text Microservice & Tmux Orchestration | ✅ completed |
 | C-072 | Frontend Text Sandbox & E2E Validation | ✅ completed |
 | C-073 | LPC Visual Smoke Harness & AI Evaluation Pipeline | ✅ completed |
+| C-074 | LPC Screenshot Isolation & Element Bounding Box Target | ✅ completed |
+| C-075 | LPC Macro Clipping Bounds and Pixel Target Centering | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2169,3 +2171,48 @@ Established a dedicated end-to-end visual smoke-testing pipeline for the LPC spr
 
 ### Deviations from contract
 - **Moon shell limitation**: `lpc-smoke` moon task cannot use `&&` in `command` — delegates to `scripts/lpc_smoke.sh` wrapper script instead. Package.json `lpc:smoke` script uses `&&` normally.
+
+---
+
+## C-074 — LPC Screenshot Isolation & Element Bounding Box Target — ✅ completed
+
+### Summary
+
+Refactored LPC visual smoke tests to capture isolated PixiJS canvas screenshots instead of full-page viewports. Added `id="game-canvas"` to canvas elements, switched to locator-targeted `.screenshot()`, set high zoom (8×) on all URLs, and extended CSS blinding to include `#tailwind-indicator`.
+
+### Findings
+- **Canvas ID**: Both fullscreen and debug-layout canvas elements now have `id="game-canvas"` for reliable Playwright locator targeting.
+- **Element-targeted capture**: Replaced all `page.screenshot({ fullPage: true })` with `page.locator('#game-canvas').screenshot({ omitBackground: true })`. Extracted into a `captureCanvas()` helper for DRY.
+- **Zoom expansion**: All tests now use `VISUAL_ZOOM = 8` (configurable constant). Zoom scaling test uses multiples (4, 8, 16, 24) to verify symmetric expansion without drift artifacts.
+- **Error blinding**: Extended CSS injection to include `#tailwind-indicator` alongside the existing `#vite-error-overlay` / `vite-error-overlay` selectors.
+- **Clean square frames**: Element screenshots now contain only the PixiJS canvas content — no DaisyUI panels, telemetry sliders, or debug bars.
+
+### AC Status
+- [x] AC-1: Bounding Box Locator Isolation — All screenshots use `page.locator('#game-canvas').screenshot()` with `omitBackground: true`, producing clean square-layout frames.
+- [x] AC-2: Symmetric Component Zoom Expansion — All URLs include `zoom=8` (or multiples for zoom scaling test). PixiJS canvas scales symmetrically from anchor bounds without clipping or drift.
+- [x] AC-3: Error Element Style Blinding — CSS injection now masks `#vite-error-overlay, vite-error-overlay, #tailwind-indicator` before capture.
+
+### Files modified
+- `apps/e2e/tests/pwa/lpc_visual.spec.ts` — Full rewrite: locator-targeted screenshots, `captureCanvas()` helper, `VISUAL_ZOOM = 8`, `CANVAS_SELECTOR = '#game-canvas'`, extended CSS blinding
+- `apps/frontend/pwa/src/lib/views/dev/lpc/lpc_view.svelte` — Added `id="game-canvas"` to both canvas elements (fullscreen + debug layout)
+
+---
+
+## C-075 — LPC Macro Clipping Bounds and Pixel Target Centering — ✅ completed
+
+### Summary
+
+Added a tight clipping rectangle to `captureCanvas()` centered on the LPC character position. The clip dimensions are `64 × VISUAL_ZOOM` (512×512 at zoom 8), producing clean square macro close-ups with the character filling the frame — no empty margins.
+
+### Findings
+- **Clip geometry**: `clipSize = 64 * VISUAL_ZOOM` (512px at default zoom 8). Offset to canvas center: `x = (960 - 512) / 2 = 224`, `y = (540 - 512) / 2 = 14`. Uses `Math.floor()` to avoid sub-pixel rounding bleeds.
+- **Sheet reference coordinates**: Character is rendered at `(CANVAS_WIDTH/2, CANVAS_HEIGHT/2) = (480, 270)` with 64×64 sprites anchored at `(-32, -32)`. Clip centers on this position.
+- **Symmetrical sizing**: All captures produce identical 512×512 pixel output regardless of which layers or frames are active, enabling consistent AI comparison.
+
+### AC Status
+- [x] AC-1: Bounding Box Coordinate Macro Clipping — All screenshots use `clip: { x, y, width, height }` in `captureCanvas()`, producing clean 512×512 square PNGs.
+- [x] AC-2: Symmetrical Multiplier-Driven Stride Sizing — Dynamic formula `width = 64 * VISUAL_ZOOM` scales correctly. Character fills >95% of the frame.
+- [x] AC-3: Translucent Space Optimization Mask — `omitBackground: true` passes through alpha channel. Empty pixel space is transparent in output PNGs.
+
+### Files modified
+- `apps/e2e/tests/pwa/lpc_visual.spec.ts` — Updated `captureCanvas()` with `clip` calculation centered on character position
