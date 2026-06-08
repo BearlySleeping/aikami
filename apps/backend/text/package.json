@@ -7,7 +7,7 @@
     "typecheck": "true",
     "fix": "true",
     "dev": "bun run dev:docker",
-    "dev:docker": "mkdir -p src/cache/ollama; docker rm -f aikami-text-dev 2>/dev/null; podman run --rm --name aikami-text-dev --pull=newer --security-opt label=disable -p 11436:11434 -v ./src/cache/ollama:/root/.ollama ollama/ollama",
+    "dev:docker": "bun run scripts/start.ts",
     "test": "echo 'no tests — container-only'",
     "test:text": "bun run scripts/check_health.ts",
     "download:model": "bun run scripts/download_model.ts",

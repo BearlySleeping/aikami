@@ -58,22 +58,33 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
   };
 
   /**
-   * Mock fetch that handles the ComfyUI queue-then-poll pattern:
-   *  1. POST /prompt  → returns { prompt_id }
-   *  2. GET  /history/{id} → returns outputs with image data
+   * Mock fetch that handles the ComfyUI queue-then-poll-blob pattern:
+   *  1. POST /prompt          → returns { prompt_id }
+   *  2. GET  /history/{id}    → returns outputs with image data
+   *  3. GET  /view?...        → returns image blob
    */
   const mockFetchComfyUiGenerate = (
     promptId: string,
     filename: string,
     subfolder: string,
   ): void => {
-    let _historyCalled = false;
+    const imageBlob = new Blob(['fake-png-data'], { type: 'image/png' });
 
     globalThis.fetch = mock((url: string, options: RequestInit): Promise<Response> => {
       fetchCalls.push({ url, options });
 
+      // GET /view?... — return image blob (bypasses CORP)
+      if (url.includes('/view')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          blob: () => Promise.resolve(imageBlob),
+        } as Response);
+      }
+
       // POST /prompt — return prompt_id
-      if (options.method === 'POST' && url.includes('/prompt')) {
+      if (options?.method === 'POST' && url.includes('/prompt')) {
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -84,7 +95,6 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
 
       // GET /history/{id} — return image output (succeed on first poll)
       if (url.includes('/history/')) {
-        _historyCalled = true;
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -261,16 +271,14 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
         mockFetchComfyUiGenerate('prompt-001', 'game-gen_00001_.png', '');
       });
 
-      test('should POST workflow to /prompt and poll /history for result', async () => {
+      test('should POST workflow to /prompt, poll /history, and return blob URL', async () => {
         const result = await service.generateImage({ prompt: 'a dragon' });
 
         expect(result.isDemo).toBe(false);
-        // URL should be ComfyUI view URL
-        expect(result.url).toBe(
-          'http://localhost:8188/view?filename=game-gen_00001_.png&subfolder=&type=output',
-        );
+        // URL should be a blob: object URL (not a ComfyUI view URL)
+        expect(result.url).toStartWith('blob:');
 
-        // Should have called /prompt (POST) and /history/{id} (GET)
+        // Should have called /prompt (POST), /history/{id} (GET), and /view (GET)
         const promptCall = fetchCalls.find(
           (c) => c.options.method === 'POST' && c.url.includes('/prompt'),
         );
@@ -278,6 +286,9 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
 
         const historyCall = fetchCalls.find((c) => c.url.includes('/history/'));
         expect(historyCall).toBeDefined();
+
+        const viewCall = fetchCalls.find((c) => c.url.includes('/view'));
+        expect(viewCall).toBeDefined();
       });
 
       test('should include checkpoint filename in workflow', async () => {
@@ -344,15 +355,21 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
         expect(checkpointLoader?.inputs.ckpt_name).toBe('sd_xl_base_1.0.safetensors');
       });
 
-      test('should handle subfolder in image output URL', async () => {
+      test('should fetch image blob via /view endpoint', async () => {
         fetchCalls = [];
         mockFetchComfyUiGenerate('prompt-002', 'img_00042_.png', 'subdir');
 
         const result = await service.generateImage({ prompt: 'a castle' });
 
-        expect(result.url).toBe(
-          'http://localhost:8188/view?filename=img_00042_.png&subfolder=subdir&type=output',
-        );
+        // Blob URL should be created
+        expect(result.url).toStartWith('blob:');
+        expect(result.isDemo).toBe(false);
+
+        // Should have called /view endpoint
+        const viewCall = fetchCalls.find((c) => c.url.includes('/view'));
+        expect(viewCall).toBeDefined();
+        expect(viewCall?.url).toContain('filename=img_00042_.png');
+        expect(viewCall?.url).toContain('subfolder=subdir');
       });
     });
 
