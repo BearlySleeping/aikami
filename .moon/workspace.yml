@@ -13,6 +13,7 @@ projects:
   firebase: "apps/backend/firebase"
   voice: "apps/backend/voice"
   image: "apps/backend/image"
+  text: "apps/backend/text"
 
   # Shared Packages
   constants: "packages/shared/constants"
