@@ -2076,7 +2076,7 @@ Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the
 - [x] AC-1: Ports & Config Refactor — `text` property added to `EMULATOR_PORTS` (11434), `STAGING_PORTS` (11433), and `PRODUCTION_PORTS` (11435) in `development_ports.ts`. Downstream typechecks pass.
 - [x] AC-2: Tmux Scripts Refactored — `'text'` added to `DevService` union, `SERVICE_DEFS`, `normalizeService` aliases, and `ALL_SERVICES`. `bun tmux:start text` creates a `text` tmux window running `bun run dev` in `apps/backend/text`. CLI help text updated.
 - [x] AC-3: Text Microservice Containerization — `apps/backend/text/` created with `Dockerfile` (`FROM ollama/ollama`), `package.json` with `dev:docker` script mapping volume `./src/cache/ollama:/root/.ollama` and exposing port 11434, `moon.yml` with server preset, `tsconfig.json`, and `README.md`.
-- [x] AC-4: API Verification Script — `scripts/check_health.ts` fetches `/`, checks for string `"Ollama is running"`, reports readiness. Gracefully handles ECONNREFUSED with actionable message to run `bun tmux:start text`.
+- [x] AC-4: API Verification & Model Setup — `scripts/check_health.ts` fetches `/`, checks for string `"Ollama is running"`, reports readiness. `scripts/download_model.ts` health-checks then POSTs `/api/pull` with `{"name": "qwen3.5:4b"}`, streaming NDJSON with progress reporting. Idempotent — skips if cached. Both handle ECONNREFUSED gracefully.
 
 ### Files created
 - `apps/backend/text/package.json` — Container-only microservice with `dev:docker` and `test:text` scripts
@@ -2084,6 +2084,8 @@ Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the
 - `apps/backend/text/tsconfig.json` — Extends `tsconfig.backend.json` with `$logger` alias
 - `apps/backend/text/Dockerfile` — `FROM ollama/ollama`, exposes port 11434
 - `apps/backend/text/scripts/check_health.ts` — Health check via `/` endpoint, checks for `"Ollama is running"`
+- `apps/backend/text/scripts/download_model.ts` — Idempotent model puller; health-checks, then POSTs `/api/pull` with `{"name": "qwen3.5:4b"}` (streaming NDJSON progress)
+- `apps/backend/text/scripts/test_generate.ts` — Test generation; sends prompt to `/api/generate`, streams token-by-token output with timing metrics
 - `apps/backend/text/README.md` — Usage, tasks, architecture docs
 - `apps/backend/text/.gitignore` — Ignores `src/cache/` (model weights)
 
