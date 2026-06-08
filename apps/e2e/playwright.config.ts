@@ -117,6 +117,19 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
+    // ── PWA Visual (no auth, no setup dep) ────────────────
+    // Isolated from setup so visual smoke tests can run without
+    // Firebase emulators. Uses guestUser fixture for clean contexts.
+    {
+      name: 'pwa-visual',
+      testDir: './tests/pwa',
+      testMatch: /lpc_visual\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: PWA_BASE_URL,
+      },
+    },
+
     // ── Game Domain ────────────────────────────────────────
     {
       name: 'game',

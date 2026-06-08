@@ -51,3 +51,13 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
+  test-visual:
+    command: 'bunx playwright test --project=pwa-visual'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+  lpc-smoke:
+    command: 'bun run scripts/lpc_smoke.ts'
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'

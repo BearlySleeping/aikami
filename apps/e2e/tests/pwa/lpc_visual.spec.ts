@@ -15,7 +15,7 @@ import { expect, test } from '../../src/fixtures';
 // ---------------------------------------------------------------------------
 
 /** Base path for the LPC lite route. */
-const LPC_LITE_BASE = '/dev/lpc/component-lite';
+const LPC_LITE_BASE = '/dev/lpc';
 
 /** Output directory for captured screenshots (Playwright project-relative). */
 const SCREENSHOT_DIR = join('test-results', 'lpc-visual');
@@ -67,6 +67,10 @@ const buildLpcUrl = (options: {
     params.set('zoom', String(options.zoom));
   }
 
+  // Signal to the PWA that this is a visual-testing capture — disables
+  // animations, debug overlays, and other non-deterministic rendering.
+  params.set('visual-testing', 'true');
+
   return `${LPC_LITE_BASE}?${params.toString()}`;
 };
 
@@ -92,6 +96,12 @@ test.describe('LPC Visual Testing Harness', () => {
   test.beforeEach(async ({ guestUser }) => {
     // Suppress noisy console logs during visual tests
     guestUser.on('console', () => {});
+
+    // Hide Vite error overlay — uncaught runtime warnings can spawn a DOM
+    // overlay that blocks pointer events and appears in screenshots.
+    await guestUser.addStyleTag({
+      content: '#vite-error-overlay, vite-error-overlay { display: none !important; }',
+    });
   });
 
   test('bare body — single body layer at default zoom', async ({ guestUser }) => {

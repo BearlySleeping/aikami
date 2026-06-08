@@ -67,6 +67,7 @@
 | C-070 | Image Microservice & Tmux Orchestration | ✅ completed |
 | C-071 | Text Microservice & Tmux Orchestration | ✅ completed |
 | C-072 | Frontend Text Sandbox & E2E Validation | ✅ completed |
+| C-073 | LPC Visual Smoke Harness & AI Evaluation Pipeline | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2134,3 +2135,37 @@ Wired the PWA voice/TTS client to use `PUBLIC_VOICE_URL` environment variable in
 - `import.meta.env` used instead of `$env/static/public` — `svelte-check` cannot resolve `$env/static/public` for `.svelte.ts` files in the `services/` directory. `import.meta.env` is the Vite-native mechanism and resolves correctly during both typecheck and runtime.
 - `VoiceViewModel` uses HTTP POST instead of WebSocket — the Kokoro container (`hwdsl2/docker-kokoro`) only serves a REST API at `/v1/audio/speech`. WebSocket connections to the container are rejected with 403. Audio is fetched as a complete WAV response and played via `ttsService`.
 - E2E tests use `authUser` fixture (pre-authenticated) rather than guest context — the dev routes require authentication via the PWA middleware. Guest context would redirect to login. Test-mode headers on `authUser` bypass Firebase Auth verification.
+
+---
+
+## C-073 — LPC Visual Smoke Harness & AI Evaluation Pipeline — ✅ completed
+
+### Summary
+
+Established a dedicated end-to-end visual smoke-testing pipeline for the LPC sprite composition system. Migrated the existing visual test suite into the unified Playwright E2E package, updated the AI evaluation script to enforce the VisualFidelityReport contract schema, and added moon tasks for orchestrating capture + evaluation sequentially.
+
+### Findings
+- **Test already relocated**: `lpc_visual.spec.ts` existed at `apps/e2e/tests/pwa/lpc_visual.spec.ts` (pre-migrated during C-054 refactor). Imports already used `../../src/fixtures` with `guestUser` fixture correctly.
+- **Vite overlay suppression**: Added `#vite-error-overlay, vite-error-overlay { display: none !important; }` in `beforeEach` via `addStyleTag`, matching the C-055 pattern from `game_menu_page.ts`. Both ID and tag name selectors used for robustness.
+- **visual-testing param**: Added `params.set('visual-testing', 'true')` to `buildLpcUrl()` so the PWA can disable animations and debug overlays during capture.
+- **Evaluation script output directory**: `SCREENSHOT_DIR` changed from `test-results/lpc-visual` (relative to scripts/) to `apps/e2e/test-results/lpc-visual` (monorepo-root-relative via `resolve`).
+- **Prompt schema enforcement**: `buildLpcPrompt()` now includes `recipeId`, `componentSlot`, `variantAssetId` in the expected JSON response. The schema uses `passed` (boolean) instead of `is_acceptable` and `detectedAnomalies` instead of `issues_detected`. Parser is backwards-compatible with legacy field names.
+- **Moon task architecture**: `test-visual` runs `npx playwright test --project=pwa --grep "LPC Visual"` for capture-only. `lpc-smoke` delegates to `scripts/lpc_smoke.sh` which chains capture + evaluation since moon `command` doesn't support shell operators.
+- **Exit code quality gate**: Script still exits 1 when any config scores below `PASSING_SCORE` (70), halting CI pipelines (AC-3).
+
+### AC Status
+- [x] AC-1: Playwright Parameterized Isolation Capture — Screenshots output to `apps/e2e/test-results/lpc-visual/`, Vite overlay suppressed, visual-testing param set, `__PIXI_LOADED__` polled.
+- [x] AC-2: Vision Prompting & Discrepancy Evaluation — Prompt enforces VisualFidelityReport JSON schema with `recipeId`, `componentSlot`, `variantAssetId`, `score`, `passed`, `detectedAnomalies`. Report written to `report.json`.
+- [x] AC-3: Automated Quality Gate Integration — Script exits non-zero when `passed === false` for any config, prints discrepancies to stdout, writes report for CI artifact capture.
+
+### Files created
+- `apps/e2e/scripts/lpc_smoke.sh` — Shell wrapper for Playwright capture + bun evaluation sequential pipeline
+
+### Files modified
+- `apps/e2e/tests/pwa/lpc_visual.spec.ts` — Added Vite overlay CSS injection, `visual-testing=true` query param
+- `scripts/src/lib/ops/validate_lpc_visuals.ts` — Updated `SCREENSHOT_DIR` to `apps/e2e/test-results/lpc-visual/`, enforced VisualFidelityReport JSON schema in prompt and parser
+- `apps/e2e/moon.yml` — Added `test-visual` and `lpc-smoke` tasks
+- `apps/e2e/package.json` — Added `test:visual` and `lpc:smoke` scripts
+
+### Deviations from contract
+- **Moon shell limitation**: `lpc-smoke` moon task cannot use `&&` in `command` — delegates to `scripts/lpc_smoke.sh` wrapper script instead. Package.json `lpc:smoke` script uses `&&` normally.
