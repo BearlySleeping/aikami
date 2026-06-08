@@ -45,6 +45,18 @@
         "firebase-tools": "15.19.0",
       },
     },
+    "apps/backend/voice": {
+      "name": "@aikami/voice",
+      "dependencies": {
+        "@aikami/backend-audio": "workspace:*",
+        "@aikami/constants": "workspace:*",
+        "@aikami/logger": "workspace:*",
+        "hono": "^4",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+    },
     "apps/e2e": {
       "name": "@aikami/e2e",
       "dependencies": {
@@ -67,22 +79,6 @@
       },
       "devDependencies": {
         "astro": "6.4.3",
-      },
-    },
-    "apps/frontend/game": {
-      "name": "@aikami/game",
-      "version": "0.0.0",
-      "dependencies": {
-        "@aikami/constants": "workspace:*",
-        "@aikami/frontend-api-core": "workspace:*",
-        "@aikami/frontend/engine": "workspace:*",
-        "bitecs": "^0.4.0",
-        "pixi.js": "^8.18.1",
-      },
-      "devDependencies": {
-        "bun-automock": "0.2.7",
-        "typescript": "6.0.3",
-        "vite": "8.0.16",
       },
     },
     "apps/frontend/landing_page": {
@@ -206,6 +202,15 @@
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
         "firebase": "12.14.0",
+      },
+    },
+    "packages/backend/image": {
+      "name": "@aikami/backend-image",
+      "dependencies": {
+        "@aikami/constants": "workspace:*",
+        "@aikami/logger": "workspace:*",
+        "@aikami/types": "workspace:*",
+        "@aikami/utils": "workspace:*",
       },
     },
     "packages/backend/svelte-kit": {
@@ -436,6 +441,8 @@
 
     "@aikami/backend-database": ["@aikami/backend-database@workspace:packages/backend/database"],
 
+    "@aikami/backend-image": ["@aikami/backend-image@workspace:packages/backend/image"],
+
     "@aikami/backend-svelte-kit": ["@aikami/backend-svelte-kit@workspace:packages/backend/svelte-kit"],
 
     "@aikami/backend-utils": ["@aikami/backend-utils@workspace:packages/backend/utils"],
@@ -462,8 +469,6 @@
 
     "@aikami/frontend/engine": ["@aikami/frontend/engine@workspace:packages/frontend/engine"],
 
-    "@aikami/game": ["@aikami/game@workspace:apps/frontend/game"],
-
     "@aikami/logger": ["@aikami/logger@workspace:packages/shared/logger"],
 
     "@aikami/mocks": ["@aikami/mocks@workspace:packages/shared/mocks"],
@@ -475,6 +480,8 @@
     "@aikami/types": ["@aikami/types@workspace:packages/shared/types"],
 
     "@aikami/utils": ["@aikami/utils@workspace:packages/shared/utils"],
+
+    "@aikami/voice": ["@aikami/voice@workspace:apps/backend/voice"],
 
     "@antfu/install-pkg": ["@antfu/install-pkg@1.1.0", "", { "dependencies": { "package-manager-detector": "^1.3.0", "tinyexec": "^1.0.1" } }, "sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ=="],
 

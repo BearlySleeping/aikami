@@ -4,13 +4,13 @@ description: CLI for Firebase Cloud Functions (v2). Use when the user wants to d
 user-invocable: true
 argument-hint: "[{{command_hint}}] [target] [options]"
 allowed-tools:
-    - Bash(firestack *)
-    - Bash(bun *)
-    - Bash(npm *)
-    - Bash(node *)
-    - Read
-    - Write
-    - Edit
+  - Bash(firestack *)
+  - Bash(bun *)
+  - Bash(npm *)
+  - Bash(node *)
+  - Read
+  - Write
+  - Edit
 ---
 
 # Firestack Skill
@@ -23,23 +23,49 @@ Firestack is a TypeScript-first CLI for Firebase Cloud Functions v2. This skill 
 2. **Auto-Derived Names** — The deployed function name comes from the file path: `api/hello.ts` → `hello`, `firestore/users/[uid]/created.ts` → `users_created`. Override with `functionName` in options.
 3. **Always check `firestack.config.ts` (or `firestack.json`)** before running any command. If neither exists, offer to run `/firestack setup config` first.
 
+## Post-Task Workflow
+
+After EVERY code change task (fix, feature, refactor), run these steps in order:
+
+```bash
+bun run fix        # Biome lint/format fix
+bun run check      # TypeScript type check
+cd example
+bun run sync       # Rebuild + reinstall dependencies
+bun run check      # TypeScript type check (example)
+bun run test       # Run test suite
+```
+
+If any step fails, fix it before marking the task complete. Pre-existing unrelated test failures (e.g., timeouts) are acceptable — note them.
+
 ## Command Registry
 
-| Command                           | Description                                  | Reference                                      |
-| --------------------------------- | -------------------------------------------- | ---------------------------------------------- |
-| `deploy [mode]`                   | Build and deploy functions/rules to Firebase | [references/deploy.md](references/deploy.md)   |
-| `emulate [mode]`                  | Start Firebase emulators with live reload    | [references/emulate.md](references/emulate.md) |
-| `create api <name>`               | Scaffold a new HTTP function                 | [references/create.md](references/create.md)   |
-| `create callable <name>`          | Scaffold a new callable function             | [references/create.md](references/create.md)   |
-| `create firestore <path> <event>` | Scaffold a Firestore trigger                 | [references/create.md](references/create.md)   |
-| `create auth <event>`             | Scaffold an Auth trigger                     | [references/create.md](references/create.md)   |
-| `create scheduler <name>`         | Scaffold a scheduled function                | [references/create.md](references/create.md)   |
-| `create storage <event>`          | Scaffold a Storage trigger                   | [references/create.md](references/create.md)   |
-| `create database <ref> <event>`   | Scaffold a Realtime Database trigger         | [references/create.md](references/create.md)   |
-| `test rules`                      | Run Firestore/Storage security rule tests    | [references/test.md](references/test.md)       |
-| `setup config`                    | Create or update `firestack.json`            | [references/setup.md](references/setup.md)     |
-| `setup testing`                   | Initialize rules testing infrastructure      | [references/setup.md](references/setup.md)     |
-| `setup emulate`                   | Create `scripts/on_emulate.ts` seed script   | [references/setup.md](references/setup.md)     |
+| Command | Description | Reference |
+|---|---|---|
+| `deploy [mode]` | Build and deploy functions/rules to Firebase | [references/deploy.md](references/deploy.md) |
+| `dataconnect [mode]` | Deploy Data Connect schema and connectors | [references/dataconnect.md](references/dataconnect.md) |
+| `emulate [mode]` | Start Firebase emulators with live reload | [references/emulate.md](references/emulate.md) |
+| `sync [mode]` | Sync Firestore/Storage rules and indexes from Firebase | [references/sync.md](references/sync.md) |
+| `generate` | Generate Data Connect SDKs from local schema | [references/generate.md](references/generate.md) |
+| `create api <name>` | Scaffold a new HTTP function | [references/create.md](references/create.md) |
+| `create callable <name>` | Scaffold a new callable function | [references/create.md](references/create.md) |
+| `create firestore <path> <event>` | Scaffold a Firestore trigger | [references/create.md](references/create.md) |
+| `create auth <event>` | Scaffold an Auth trigger | [references/create.md](references/create.md) |
+| `create identity <event>` | Scaffold an Identity Platform trigger | [references/create.md](references/create.md) |
+| `create scheduler <name>` | Scaffold a scheduled function | [references/create.md](references/create.md) |
+| `create storage <event>` | Scaffold a Storage trigger | [references/create.md](references/create.md) |
+| `create database <ref> <event>` | Scaffold a Realtime Database trigger | [references/create.md](references/create.md) |
+| `create pubsub <name>` | Scaffold a Pub/Sub trigger | [references/create.md](references/create.md) |
+| `create tasks <name>` | Scaffold a Task Queue trigger | [references/create.md](references/create.md) |
+| `create eventarc <name>` | Scaffold an Eventarc trigger | [references/create.md](references/create.md) |
+| `create testLab <name>` | Scaffold a Test Lab trigger | [references/create.md](references/create.md) |
+| `create remoteConfig <name>` | Scaffold a Remote Config trigger | [references/create.md](references/create.md) |
+| `create alerts <type> <name>` | Scaffold an Alerts trigger | [references/create.md](references/create.md) |
+| `create ai <event>` | Scaffold an AI blocking trigger | [references/create.md](references/create.md) |
+| `test rules` | Run Firestore/Storage security rule tests | [references/test.md](references/test.md) |
+| `setup config` | Create or update `firestack.json` | [references/setup.md](references/setup.md) |
+| `setup testing` | Initialize rules testing infrastructure | [references/setup.md](references/setup.md) |
+| `setup emulate` | Create `scripts/on_emulate.ts` seed script | [references/setup.md](references/setup.md) |
 
 ## Routing Rules
 
@@ -54,11 +80,10 @@ When executing any Firestack command, the agent should:
 
 1. Read `firestack.config.ts` (or `firestack.json`) to understand the project configuration.
 2. Read `package.json` to check if `@snorreks/firestack` is installed.
-3. Use the `functionsDirectory` (default: `src/controllers`) as the root for all function scaffolding.
+3. Use the `functionsDirectory` (default: `src/controllers`) as the root for all function scaffolding. Sub-directories map to trigger types: `api/`, `callable/`, `firestore/`, `auth/`, `identity/`, `storage/`, `scheduler/`, `database/`, `pubsub/`, `tasks/`, `eventarc/`, `test_lab/`, `remote_config/`, `alerts/`, `ai/`.
 4. Use the `scriptsDirectory` (default: `scripts`) for custom scripts and `on_emulate.ts`.
 5. Use the `rulesDirectory` (default: `src/rules`) for rules and indexes.
 6. Assume the package manager is `bun` unless `engine` or `packageManager` says otherwise.
-7. **Respect the direnv environment**: `AIKAMI_MODE` (emulator/staging/production) determines the deployment target. Use `direnv_status` to check the current mode before deploying or emulating. The `firebase_deploy_functions` and `firebase_emulator` pi tools already handle mode resolution automatically.
 
 ## References
 

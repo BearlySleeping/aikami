@@ -16,6 +16,7 @@ Parse the command:
 - `create callable <name>` → Callable function in `callable/<name>.ts`
 - `create firestore <path> <event>` → Firestore trigger in `firestore/<path>/<event>.ts`
 - `create auth <event>` → Auth trigger in `auth/<event>.ts`
+- `create identity <event>` → Identity Platform trigger in `identity/<event>.ts`
 - `create scheduler <name>` → Scheduled function in `scheduler/<name>.ts`
 - `create storage <event>` → Storage trigger in `storage/<event>.ts`
 - `create database <ref> <event>` → RTDB trigger in `database/<ref>/<event>.ts`
@@ -64,6 +65,24 @@ export default onRequest(
 );
 ```
 
+### Template: HTTP with Zod Validation (`api/<name>.ts`)
+
+```typescript
+import { onRequestZod } from '@snorreks/firestack';
+import { z } from 'zod';
+
+const BodySchema = z.object({
+  message: z.string().min(1),
+});
+
+export default onRequestZod(
+  BodySchema,
+  (request, response) => {
+    response.send({ received: request.body.message });
+  }
+);
+```
+
 ### Template: Callable (`callable/<name>.ts`)
 
 ```typescript
@@ -83,6 +102,25 @@ import { onCreated } from '@snorreks/firestack';
 export default onCreated(({ data }) => {
   console.log(`Document ${data.id} created:`, data);
 });
+```
+
+### Template: Firestore Create with Zod (`firestore/<path>/created.ts`)
+
+```typescript
+import { onCreatedZod } from '@snorreks/firestack';
+import { z } from 'zod';
+
+const DocSchema = z.object({
+  name: z.string(),
+  email: z.string().email(),
+});
+
+export default onCreatedZod(
+  DocSchema,
+  ({ data }) => {
+    console.log(`Valid document ${data.id} created`);
+  }
+);
 ```
 
 ### Template: Firestore Update (`firestore/<path>/updated.ts`)
@@ -130,6 +168,66 @@ export default onAuthDelete(
     return { success: true };
   }
 );
+```
+
+### Template: Identity Before User Created (`identity/before_user_created.ts`)
+
+```typescript
+import { beforeUserCreated } from '@snorreks/firestack';
+
+type CustomClaims = {
+  role: 'admin' | 'user';
+};
+
+export default beforeUserCreated<CustomClaims>(
+  async (user, context) => {
+    if (user.email?.endsWith('@example.com')) {
+      throw new Error('User registration is restricted for this domain.');
+    }
+
+    return {
+      customClaims: { role: 'user' },
+      displayName: user.displayName ?? user.email?.split('@')[0],
+    };
+  }
+);
+```
+
+### Template: Identity Before User Signed In (`identity/before_user_signed_in.ts`)
+
+```typescript
+import { beforeUserSignedIn } from '@snorreks/firestack';
+
+export default beforeUserSignedIn((user, context) => {
+  if (user.disabled) {
+    throw new Error('User account is disabled.');
+  }
+
+  return {
+    customClaims: { role: user.customClaims?.role ?? 'user' },
+    sessionClaims: { lastLoginIp: context.ipAddress },
+  };
+});
+```
+
+### Template: Identity Before Email Sent (`identity/before_email_sent.ts`)
+
+```typescript
+import { beforeEmailSent } from '@snorreks/firestack';
+
+export default beforeEmailSent((user, context) => {
+  return { recaptchaActionOverride: 'ALLOW' };
+});
+```
+
+### Template: Identity Before SMS Sent (`identity/before_sms_sent.ts`)
+
+```typescript
+import { beforeSmsSent } from '@snorreks/firestack';
+
+export default beforeSmsSent((user, context) => {
+  return { recaptchaActionOverride: 'ALLOW' };
+});
 ```
 
 ### Template: Scheduler (`scheduler/<name>.ts`)
@@ -183,6 +281,86 @@ export default onValueCreated(
 ```
 
 ---
+
+### Template: Pub/Sub (`pubsub/<name>.ts`)
+
+```typescript
+import { onMessagePublished } from '@snorreks/firestack';
+
+export default onMessagePublished(
+  (event) => {
+    const message = event.data.message;
+    console.log('Message received:', message.json);
+    return { processed: true };
+  },
+  { topic: 'my-topic' }
+);
+```
+
+### Template: Task Queue (`tasks/<name>.ts`)
+
+```typescript
+import { onTaskDispatched } from '@snorreks/firestack';
+
+export default onTaskDispatched((request) => {
+  console.log('Task dispatched', request.data);
+});
+```
+
+### Template: Eventarc (`eventarc/<name>.ts`)
+
+```typescript
+import { onCustomEventPublished } from '@snorreks/firestack';
+
+export default onCustomEventPublished(
+  (event) => {
+    console.log('Custom event:', event.type, event.data);
+  },
+  { eventType: 'com.example.my-event' }
+);
+```
+
+### Template: Test Lab (`test_lab/<name>.ts`)
+
+```typescript
+import { onTestMatrixCompleted } from '@snorreks/firestack';
+
+export default onTestMatrixCompleted((event) => {
+  console.log('Test matrix completed:', event.data.state);
+});
+```
+
+### Template: Remote Config (`remote_config/<name>.ts`)
+
+```typescript
+import { onConfigUpdated } from '@snorreks/firestack';
+
+export default onConfigUpdated((event) => {
+  console.log('Config updated to version:', event.data.versionNumber);
+});
+```
+
+### Template: Alerts (`alerts/<name>.ts`)
+
+```typescript
+// Crashlytics fatal issue alert
+import { onNewFatalIssuePublished } from '@snorreks/firestack';
+
+export default onNewFatalIssuePublished((event) => {
+  console.log('Fatal issue:', event.data.payload.issue.title);
+});
+```
+
+### Template: AI (`ai/<name>.ts`)
+
+```typescript
+import { beforeGenerateContent } from '@snorreks/firestack';
+
+export default beforeGenerateContent((event) => {
+  console.log('AI request for model:', event.data.model);
+  // Return void to allow, or partial request to override
+});
+```
 
 ### Step 4: Write the File
 
