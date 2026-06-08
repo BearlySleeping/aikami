@@ -7,34 +7,27 @@ tags:
   - 'voice'
   - 'backend'
   - 'application'
+  - 'container'
 
 project:
   name: 'voice'
-  description: 'Voice microservice — Bun WebSocket server wrapping the TTS engine from @aikami/backend-audio.'
+  description: 'Headless Kokoro TTS container — Docker-only, no Bun source.'
   channel: '#backend'
   owner: 'Backend Team'
 
-dependsOn:
-  - 'backend-audio'
-  - 'constants'
-  - 'logger'
+dependsOn: []
 
 fileGroups:
-  sources:
-    - 'src/**/*'
   configs:
     - 'package.json'
-    - 'tsconfig.json'
-  tests:
-    - 'tests/**/*'
 
 tasks:
+  build:
+    command: 'true'
+
   dev:
-    command: 'bun run dev'
+    command: 'bun run dev:docker'
     preset: 'server'
+
   test:
     command: 'bun run test'
-    inputs:
-      - '@group(sources)'
-      - '@group(tests)'
-      - '@group(configs)'

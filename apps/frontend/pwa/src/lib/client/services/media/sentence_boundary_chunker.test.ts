@@ -1,6 +1,6 @@
-// packages/backend/audio/tests/sentence_boundary_chunker.test.ts
+// apps/frontend/pwa/src/lib/client/services/media/sentence_boundary_chunker.test.ts
 import { describe, expect, test } from 'bun:test';
-import { SentenceBoundaryChunker } from '../src/lib/sentence_boundary_chunker.ts';
+import { SentenceBoundaryChunker } from './sentence_boundary_chunker.ts';
 
 describe('SentenceBoundaryChunker', () => {
   test('emits complete sentence on terminal punctuation (period)', () => {

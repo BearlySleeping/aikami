@@ -62,6 +62,8 @@
 | C-065 | Dev UI Tailwind Refactor & Text Sandbox | ✅ completed |
 | C-066 | Dev UI Voice & Image Sandboxes | ✅ completed |
 | C-067 | Voice Microservice & Tmux Orchestration | ✅ completed |
+| C-068 | Voice Microservice Containerization | ✅ completed |
+| C-069 | Direct Kokoro Orchestration | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1961,3 +1963,71 @@ Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the 
 - **validate({ test: true })**: fix → typecheck → build → test: 135 pass, 0 fail
 - **browser_inspect**: `/dev/voice` renders with DaisyUI cards, textarea, Generate Audio button; `/dev/image` renders with prompt textarea, Generate Image button, output card with loading spinner placeholder
 - **browser_console**: No errors on either page
+
+## C-068 — Voice Microservice Containerization — ✅ completed
+
+### Summary
+Containerized the `apps/backend/voice` microservice for both production and local dev.
+Created a minimal `oven/bun:1-distroless` Dockerfile following the Nordclaw `audit-worker` pattern
+(pre-built `dist/index.js` via `bun build`, no source or node_modules in production image),
+added a `dev:docker` script for hot-reloading local development via volume mounts,
+and updated moon.yml to route `voice:dev` through the container.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/backend/voice/Dockerfile` | Created — multi-stage `oven/bun:1-distroless` image, copies `dist/index.js`, exposes 8089 |
+| `apps/backend/voice/package.json` | Added `build` script (`bun build → dist/index.js`) and `dev:docker` script |
+| `apps/backend/voice/moon.yml` | Added `build` task with `dist/` output; `dev` now runs `dev:docker` |
+| `apps/backend/voice/src/main.ts` | Added SIGTERM handler + refactored to Hono HTTP (Nordclaw pattern): `/` and `/healthz` |
+
+### Deviations from contract
+- Used `oven/bun:1-distroless` (per Nordclaw pattern) instead of `oven/bun:1` for the production image to minimize footprint.
+- Dockerfile copies pre-built `dist/index.js` rather than running `bun install` in the container — no monorepo context needed at runtime.
+- Local dev (`dev:docker`) mounts the workspace root at `/app` for correct TypeScript alias resolution.
+
+### AC Status
+
+- [x] AC1: Dockerfile Creation — `docker build -t aikami-voice apps/backend/voice` succeeds (uses root context for build step)
+- [x] AC2: Local Dev Container — `dev:docker` runs container with port 8089 bound; `curl localhost:8089` returns `200 "Voice API Status: OK"`
+- [x] AC3: Graceful Teardown — `docker stop` sends SIGTERM, container logs "Voice microservice shutting down", `--rm` removes container
+
+## C-069 — Direct Kokoro Orchestration — ✅ completed
+
+### Summary
+Eliminated the Bun/Hono WebSocket proxy layer from the voice microservice, reducing it to a pure
+infrastructure container (`hwdsl2/kokoro-server:latest`). Relocated sentence boundary chunking into
+the PWA frontend so SvelteKit orchestrates TTS via direct HTTP REST calls to the Kokoro endpoint
+(`POST /v1/audio/speech`). Deleted the entire `packages/backend/audio` package.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `packages/backend/audio/` | **Deleted** — entire package (worker pool, WS handlers, chunker) |
+| `.moon/workspace.yml` | Removed `backend-audio` project entry |
+| `apps/backend/voice/Dockerfile` | Replaced with `FROM hwdsl2/kokoro-server:latest` |
+| `apps/backend/voice/package.json` | Stripped to no-op container-only scripts |
+| `apps/backend/voice/moon.yml` | Removed `dependsOn`, `build`; added no-op `build`/`test` |
+| `apps/backend/voice/src/` | **Deleted** — no Bun/Hono source needed |
+| `apps/backend/voice/tsconfig.json` | **Deleted** — no TypeScript source |
+| `apps/frontend/pwa/.../sentence_boundary_chunker.ts` | **Created** — chunker relocated from backend |
+| `apps/frontend/pwa/.../sentence_boundary_chunker.test.ts` | **Created** — 16 unit tests ported |
+| `apps/frontend/pwa/.../stream_orchestrator.svelte.ts` | Refactored — removed `AudioStreamConnection`, added inline chunker + `_dispatchToKokoro` |
+| `apps/frontend/pwa/.../stream_orchestrator.test.ts` | Updated — removed audio mock, added 6 Kokoro HTTP tests |
+| `apps/frontend/pwa/.../audio_queue_player.ts` | Added `sentenceIndex` param + out-of-order buffering |
+
+### AC Status
+
+- [x] AC1: Headless Container — `voice/` Dockerfile uses `hwdsl2/kokoro-server:latest`, `dev:docker` maps 8089:8880
+- [x] AC2: Frontend Chunker — 16/16 chunker tests pass in PWA test suite
+- [x] AC3: Direct TTS HTTP — 6 Kokoro tests: POST to `/v1/audio/speech`, correct JSON payload, WAV enqueued, abort suppression, flush-on-close
+- [x] AC4: Audio Package Deprecation — `packages/backend/audio` deleted, workspace typecheck 29/29 tasks pass, 0 errors
+
+### Test Results
+- chunker: 16 pass / 0 fail
+- orchestrator: 34 pass / 0 fail (6 new Kokoro, 28 updated)
+- audio queue player: 11 pass / 0 fail
+- all media: 93 pass / 0 fail
+- workspace typecheck: 29/29 tasks, 0 errors
