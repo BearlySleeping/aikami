@@ -88,6 +88,9 @@ export default defineConfig(({ mode }) => {
           '**/.git/**', // Git history
           '**/node_modules/**', // Let Vite handle deps via pre-bundling
           '**/.pi/**', // Pi agent cache
+          '**/pi-offloads/**',
+          '**/tmp/**',
+          '**/.screenshots/**',
 
           // 2. Build Outputs
           '**/.svelte-kit/**',
@@ -97,6 +100,7 @@ export default defineConfig(({ mode }) => {
           // 3. Project Documentation & Examples
           '**/docs/**',
           '**/examples/**',
+          '**/references/**',
 
           // 4. Firebase Emulator Churn (Very important!)
           // The emulator constantly writes logs and database states which
@@ -115,6 +119,12 @@ export default defineConfig(({ mode }) => {
           '**/blob-report/**',
         ],
       },
+    },
+
+    // Use the same port for vite preview so Playwright E2E tests
+    // can target a single port regardless of dev vs preview mode.
+    preview: {
+      port,
     },
   };
 });
