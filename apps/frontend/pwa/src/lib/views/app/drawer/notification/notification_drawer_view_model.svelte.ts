@@ -95,12 +95,10 @@ class NotificationDrawerViewModel
   }
 
   toggleNotificationDrawer(isOpen: boolean): void {
-    this.debug('Notification drawer toggled', { isOpen });
     appService.toggleNotificationDrawer(isOpen);
   }
 
-  handleNotificationClick(notification: NotificationDrawerItem): void {
-    this.debug('Notification clicked', notification);
+  handleNotificationClick(_notification: NotificationDrawerItem): void {
     // Add any additional click handling logic here
     // For example: navigate to specific route based on notification type
   }

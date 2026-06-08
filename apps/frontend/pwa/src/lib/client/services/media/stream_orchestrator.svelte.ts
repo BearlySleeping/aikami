@@ -150,7 +150,6 @@ export class StreamOrchestrator
     messages?: ConversationMessage[];
     chatId?: string;
   }): Promise<void> {
-    this.debug('generateDialogue', options);
     const { chatId, messages, npcId, prompt } = options;
 
     this.cancelGeneration();
@@ -204,8 +203,6 @@ export class StreamOrchestrator
   }
 
   cancelGeneration(): void {
-    this.debug('cancelGeneration');
-
     const controller = this._abortController;
     if (controller) {
       controller.abort();

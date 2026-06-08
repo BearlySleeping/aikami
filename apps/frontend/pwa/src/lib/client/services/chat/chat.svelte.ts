@@ -131,7 +131,6 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   }
 
   setMessages(messages: MessageData[]): void {
-    this.debug('setMessages: raw messages', messages);
     this.messages = messages.map((msg) => {
       let timestamp: Date;
       const createdAt = msg.createdAt as unknown;
@@ -192,6 +191,6 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   }
 }
 
-export const chatService: ChatServiceInterface = new ChatService({
+export const chatService: ChatServiceInterface = ChatService.create({
   className: 'ChatService',
 });

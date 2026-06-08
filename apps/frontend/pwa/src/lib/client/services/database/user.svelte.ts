@@ -121,7 +121,7 @@ export class UserService
   }
 }
 
-export const userService: UserServiceInterface = new UserService({
+export const userService: UserServiceInterface = UserService.create({
   database: userRepository,
   className: 'UserService',
 });

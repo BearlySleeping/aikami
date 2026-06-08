@@ -86,13 +86,11 @@ class NpcListViewModel
   }
 
   setActiveTab(tab: NpcTab): void {
-    this.debug('setActiveTab', tab);
     this.activeTab = tab;
     this.npcs = this._getFilteredNpcs();
   }
 
   async handleFileImport(options: { event: Event }): Promise<void> {
-    this.debug('handleFileImport', options);
     const { event } = options;
     const target = event.target as HTMLInputElement;
 
@@ -126,7 +124,6 @@ class NpcListViewModel
   }
 
   async handleUrlImport(options: { url: string }): Promise<void> {
-    this.debug('handleUrlImport', options);
     const { url } = options;
 
     const uid = this.currentUserId;
@@ -151,7 +148,6 @@ class NpcListViewModel
   }
 
   async createNpc(options: { data: Partial<NpcCreateData> }): Promise<void> {
-    this.debug('createNpc', options);
     const { data } = options;
 
     const uid = this.currentUserId;
@@ -179,7 +175,6 @@ class NpcListViewModel
   }
 
   async handleForkNpc(options: { npcId: string }): Promise<void> {
-    this.debug('handleForkNpc', options);
     const { npcId } = options;
 
     const uid = this.currentUserId;
@@ -204,7 +199,6 @@ class NpcListViewModel
   }
 
   async handleDeleteNpc(options: { npcId: string }): Promise<void> {
-    this.debug('handleDeleteNpc', options);
     const { npcId } = options;
 
     this.isLoading = true;
@@ -223,7 +217,6 @@ class NpcListViewModel
   }
 
   async navigateToChat(options: { npcId: string; chatId?: string }): Promise<void> {
-    this.debug('navigateToChat', options);
     const { npcId, chatId } = options;
     let finalChatId = chatId;
 
@@ -238,7 +231,6 @@ class NpcListViewModel
   }
 
   async handleDeleteChat(options: { chatId: string }): Promise<void> {
-    this.debug('handleDeleteChat', options);
     const { chatId } = options;
 
     this.isLoading = true;
@@ -256,7 +248,6 @@ class NpcListViewModel
   }
 
   async getOrCreateChat(options: { npcId: string }): Promise<{ id: string }> {
-    this.debug('getOrCreateChat', options);
     const { npcId } = options;
     const uid = this.currentUserId;
     if (!uid) {
@@ -281,17 +272,14 @@ class NpcListViewModel
   }
 
   openEditModal(options: { npc: NpcData }): void {
-    this.debug('openEditModal', options);
     this.editingNpc = options.npc;
   }
 
   closeEditModal(): void {
-    this.debug('closeEditModal');
     this.editingNpc = undefined;
   }
 
   async saveNpc(options: { data: Partial<NpcData> }): Promise<void> {
-    this.debug('saveNpc', options);
     const { data } = options;
 
     if (!this.editingNpc) {

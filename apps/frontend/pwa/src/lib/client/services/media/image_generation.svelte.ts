@@ -19,7 +19,7 @@ export type CheckpointInfo = {
 
 export type ImageGenerationOptions = BaseFrontendClassOptions & {
   /** If true, the service operates in demo mode (mock data, no real API calls). */
-  isDemo?: boolean;
+  isDemo: boolean;
 };
 
 export type ImageGenerationResult = {
@@ -93,8 +93,6 @@ export class ImageGenerationService
   }
 
   async loadCheckpoints(): Promise<void> {
-    this.debug('loadCheckpoints');
-
     if (this.isDemo) {
       this.debug('loadCheckpoints: demo mode - loading mock checkpoint');
       this.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'SDXL Base 1.0 (Demo)' }];
@@ -140,7 +138,6 @@ export class ImageGenerationService
     prompt: string;
     checkpoint?: string;
   }): Promise<ImageGenerationResult> {
-    this.debug('generateImage', options);
     const { prompt, checkpoint } = options;
     const effectiveCheckpoint = checkpoint ?? this.selectedCheckpoint;
 
@@ -345,7 +342,8 @@ export class ImageGenerationService
   }
 }
 
-export const imageGenerationService: ImageGenerationServiceInterface = new ImageGenerationService({
-  className: 'ImageGenerationService',
-  isDemo: false,
-});
+export const imageGenerationService: ImageGenerationServiceInterface =
+  ImageGenerationService.create({
+    className: 'ImageGenerationService',
+    isDemo: false,
+  });

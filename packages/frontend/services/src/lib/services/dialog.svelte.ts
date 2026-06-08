@@ -128,6 +128,6 @@ export class DialogService
   }
 }
 
-export const dialogService: DialogServiceInterface = new DialogService({
+export const dialogService: DialogServiceInterface = DialogService.create({
   className: 'DialogService',
 });

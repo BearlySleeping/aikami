@@ -53,7 +53,7 @@ class StorageService
   }
 }
 
-export const storageService: StorageServiceInterface = new StorageService({
+export const storageService: StorageServiceInterface = StorageService.create({
   storage: firebaseStorageService,
   className: 'StorageService',
 });

@@ -310,9 +310,8 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     return minimalRoutes.includes(route);
   }
 
-  handleAppClose(event: BeforeUnloadEvent): void {
+  handleAppClose(_event: BeforeUnloadEvent): void {
     // Check uploads or active processes here before close
-    this.debug('handleAppClose', { event });
   }
 
   toggleNavigationDrawer(): void {

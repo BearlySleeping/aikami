@@ -90,6 +90,7 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
 }
 
 // Export a singleton instance of the service
-export const firebaseStorageService: FirebaseStorageServiceInterface = new FirebaseStorageService({
-  className: 'FirebaseStorageService',
-});
+export const firebaseStorageService: FirebaseStorageServiceInterface =
+  FirebaseStorageService.create({
+    className: 'FirebaseStorageService',
+  });

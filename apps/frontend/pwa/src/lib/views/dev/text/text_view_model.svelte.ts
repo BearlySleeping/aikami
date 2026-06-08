@@ -52,8 +52,6 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   }
 
   async generate(): Promise<void> {
-    this.debug('generate', { promptLength: this.prompt.length });
-
     if (!this.prompt.trim()) {
       return;
     }
@@ -106,8 +104,6 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   }
 
   cancel(): void {
-    this.debug('cancel');
-
     const controller = this._abortController;
     if (controller) {
       controller.abort();

@@ -27,7 +27,5 @@ export abstract class BaseGameClass<Options extends BaseGameClassOptions = BaseG
    * Async setup hook. Override in subclasses that need async initialization
    * after construction. Called once, before the class enters its ready state.
    */
-  async setup(): Promise<void> {
-    this.debug('setup');
-  }
+  async setup(): Promise<void> {}
 }
