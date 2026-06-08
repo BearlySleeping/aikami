@@ -6,16 +6,20 @@ import {
 } from '@aikami/frontend/services';
 import { audioContextManager } from './audio_context_manager';
 
-export type TtsOptions = BaseFrontendClassOptions;
-
-export type TtsResult = {
-  audioUrl: string;
-  isDemo: boolean;
+/** Voice descriptor returned by GET /v1/voices. */
+export type VoiceInfo = {
+  readonly id: string;
+  readonly description: string;
 };
+
+export type TtsOptions = BaseFrontendClassOptions;
 
 export type TtsServiceInterface = BaseFrontendClassInterface & {
   /** Whether audio is currently playing. */
   readonly isPlaying: boolean;
+
+  /** Whether a speech synthesis request is in progress. */
+  readonly isSynthesizing: boolean;
 
   /** Index of the currently spoken word (-1 when idle). */
   readonly currentWordIndex: number;
@@ -23,17 +27,28 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
   /** ID of the message whose TTS is currently active (undefined when idle). */
   readonly activeMessageId: string | undefined;
 
-  /**
-   * Converts text to speech via full-request API.
-   * @param options - Configuration object.
-   * @param options.text The text to convert to speech.
-   * @param options.voiceId Optional voice ID to use.
-   * @returns A promise that resolves to the audio URL.
-   */
-  speak(options: { text: string; voiceId?: string }): Promise<TtsResult>;
+  /** Available Kokoro voice presets. */
+  readonly voices: readonly VoiceInfo[];
+
+  /** The currently selected voice ID. */
+  selectedVoice: string;
+
+  /** Fetches the list of available voices from the Kokoro REST API. */
+  loadVoices(): Promise<void>;
 
   /**
-   * Stops any currently playing audio and resets state.
+   * Converts text to speech and plays the resulting audio immediately.
+   * Fetches from the Kokoro REST endpoint and pipes the WAV response
+   * through the audio streaming pipeline.
+   *
+   * @param options.text The text to convert to speech.
+   * @param options.voiceId Optional voice ID to use (defaults to {@link selectedVoice}).
+   */
+  speak(options: { text: string; voiceId?: string }): Promise<void>;
+
+  /**
+   * Stops any currently playing audio, aborts the in-progress synthesis
+   * request, and resets state.
    */
   stop(): void;
 
@@ -71,60 +86,115 @@ type WordBoundary = {
 
 class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInterface {
   isPlaying = $state(false);
+  isSynthesizing = $state(false);
   currentWordIndex = $state(-1);
   activeMessageId = $state<string | undefined>(undefined);
+  voices: VoiceInfo[] = $state([]);
+  selectedVoice = $state('af_heart');
 
-  private isDemo = true;
+  private _abortController: AbortController | undefined;
   private currentAudio: HTMLAudioElement | null = null;
 
   // --- Streaming state ---
+  private _streamEnded = false;
   private nextStartTime = 0;
   private wordBoundaries: WordBoundary[] = [];
   private sourceNodes: AudioBufferSourceNode[] = [];
   private rafId: ReturnType<typeof requestAnimationFrame> | undefined;
 
   isDemoMode(): boolean {
-    return this.isDemo;
+    return false;
   }
 
-  async speak(options: { text: string; voiceId?: string }): Promise<TtsResult> {
-    this.debug('speak', options);
+  async loadVoices(): Promise<void> {
+    try {
+      const response = await fetch('/api/voice/v1/voices');
+      if (!response.ok) {
+        this.error('loadVoices:fetch-failed', { status: response.status });
+        return;
+      }
+
+      const data = (await response.json()) as { voices?: VoiceInfo[] };
+      if (data.voices && data.voices.length > 0) {
+        this.voices = data.voices;
+        this.debug('loadVoices', { count: this.voices.length });
+      }
+    } catch (error) {
+      this.error('loadVoices:failed', error);
+    }
+  }
+
+  async speak(options: { text: string; voiceId?: string }): Promise<void> {
+    this.debug('speak', { textLength: options.text.length, voiceId: options.voiceId });
     const { text, voiceId } = options;
 
-    this.stop();
-
-    if (this.isDemo) {
-      this.debug('speak: demo mode - returning mock audio');
-      return {
-        audioUrl: `https://placehold.co/1x1.mp3?text=${encodeURIComponent(text.slice(0, 20))}`,
-        isDemo: true,
-      };
+    if (!text.trim()) {
+      return;
     }
 
+    // Cancel any in-progress request
+    this.stop();
+
+    const abortController = new AbortController();
+    this._abortController = abortController;
+    const { signal } = abortController;
+
+    this.isSynthesizing = true;
+
     try {
-      const response = await fetch('/api/tts', {
+      const speechUrl = '/api/voice/v1/audio/speech';
+
+      const response = await fetch(speechUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voiceId }),
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: text,
+          voice: voiceId ?? this.selectedVoice,
+          response_format: 'wav',
+        }),
+        signal,
       });
 
       if (!response.ok) {
-        throw new Error(`TTS failed: ${response.statusText}`);
+        this.error('speak:fetch-failed', {
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return;
       }
 
-      const data = await response.json();
-      return {
-        audioUrl: data.audioUrl,
-        isDemo: false,
-      };
-    } catch (error) {
-      this.error('speak failed', error);
-      throw error;
+      const buffer = await response.arrayBuffer();
+      if (signal.aborted) {
+        return;
+      }
+
+      // Play the WAV audio through the streaming pipeline.
+      // Pass words so the rAF tracking loop can detect when playback ends.
+      const words = text.split(/\s+/).filter(Boolean);
+      this.startStream({ messageId: `tts_${Date.now()}`, text });
+      await this.enqueueChunk({ buffer, words });
+      this.endStream();
+    } catch (error: unknown) {
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
+      this.error('speak:failed', error);
+    } finally {
+      this.isSynthesizing = false;
+      this._abortController = undefined;
     }
   }
 
   stop(): void {
     this.debug('stop');
+
+    // Abort in-progress synthesis fetch
+    const controller = this._abortController;
+    if (controller) {
+      controller.abort();
+      this._abortController = undefined;
+    }
 
     // Stop legacy HTMLAudioElement playback
     if (this.currentAudio) {
@@ -149,10 +219,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     }
 
     this.isPlaying = false;
+    this.isSynthesizing = false;
     this.currentWordIndex = -1;
     this.activeMessageId = undefined;
     this.nextStartTime = 0;
     this.wordBoundaries = [];
+    this._streamEnded = false;
   }
 
   startStream(options: { messageId: string; text: string }): void {
@@ -242,7 +314,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   endStream(): void {
     this.debug('endStream');
-    // rAF loop will naturally detect when all audio is done and reset state
+    this._streamEnded = true;
   }
 
   // ── Private ──
@@ -258,12 +330,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
       // If we're past the last word, check if sources are all done
       if (wordIdx >= this.wordBoundaries.length && this.sourceNodes.length === 0) {
-        this.isPlaying = false;
-        this.currentWordIndex = -1;
-        this.activeMessageId = undefined;
-        this.nextStartTime = 0;
-        this.wordBoundaries = [];
-        this.rafId = undefined;
+        this._cleanupStream();
+        return;
+      }
+
+      // Fallback: if the stream has explicitly ended and all audio nodes
+      // are consumed, clean up regardless of word boundary tracking state.
+      if (this._streamEnded && this.sourceNodes.length === 0) {
+        this._cleanupStream();
         return;
       }
 
@@ -276,6 +350,22 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     };
 
     this.rafId = requestAnimationFrame(tick);
+  }
+
+  /**
+   * Shared stream cleanup — resets all streaming state and stops the rAF
+   * loop. Called both when word tracking detects completion and as a
+   * fallback when {@link endStream} has been called and all audio nodes
+   * have finished.
+   */
+  private _cleanupStream(): void {
+    this.isPlaying = false;
+    this.currentWordIndex = -1;
+    this.activeMessageId = undefined;
+    this.nextStartTime = 0;
+    this.wordBoundaries = [];
+    this._streamEnded = false;
+    this.rafId = undefined;
   }
 
   private findWordIndex(currentTime: number): number {
@@ -307,6 +397,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }
 }
 
-export const ttsService: TtsServiceInterface = new TtsService({
+export const ttsService: TtsServiceInterface = TtsService.create({
   className: 'TtsService',
 });

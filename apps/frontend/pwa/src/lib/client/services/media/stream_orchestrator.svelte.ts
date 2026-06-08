@@ -39,7 +39,7 @@ type KokoroRequest = {
 };
 
 /** Endpoint for the headless Kokoro container. */
-const KOKORO_SPEECH_URL = 'http://localhost:8089/v1/audio/speech';
+const KOKORO_SPEECH_URL = `${import.meta.env.PUBLIC_VOICE_URL ?? 'http://localhost:8089'}/v1/audio/speech`;
 
 // ---------------------------------------------------------------------------
 // StreamOrchestrator
