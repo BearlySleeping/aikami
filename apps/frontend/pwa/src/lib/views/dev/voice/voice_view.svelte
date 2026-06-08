@@ -22,6 +22,34 @@
         Test and debug voice synthesis and speech-to-text pipelines.
       </p>
 
+      <!-- Voice selector -->
+      <div class="card bg-base-200 shadow mb-6">
+        <div class="card-body p-4">
+          <label class="form-control w-full">
+            <div class="label">
+              <span class="label-text font-semibold">Voice</span>
+              {#if viewModel.voices.length === 0}
+                <span class="label-text-alt text-base-content/40">Loading voices...</span>
+              {:else}
+                <span class="label-text-alt text-base-content/40"
+                  >{viewModel.voices.length}
+                  voices available</span
+                >
+              {/if}
+            </div>
+            <select
+              class="select select-bordered w-full"
+              bind:value={viewModel.selectedVoice}
+              disabled={viewModel.isPlaying || viewModel.voices.length === 0}
+            >
+              {#each viewModel.voices as voice}
+                <option value={voice.id}>{voice.id} — {voice.description}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+      </div>
+
       <!-- Script input -->
       <div class="card bg-base-200 shadow mb-6">
         <div class="card-body p-6">

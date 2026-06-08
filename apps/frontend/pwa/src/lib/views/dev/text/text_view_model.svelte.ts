@@ -1,9 +1,11 @@
 // apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts
+
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { page } from '$app/state';
 import { logger } from '$logger';
 
 export type TextViewModelInterface = BaseViewModelInterface & {
@@ -29,6 +31,25 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   private _abortController: AbortController | undefined;
 
   // ── Public API ────────────────────────────────────────────────────────
+
+  /**
+   * Initializes the view model. If the URL contains `?instant=true&text=...`,
+   * auto-populates the prompt and triggers generation immediately.
+   */
+  override async initialize(): Promise<void> {
+    await super.initialize();
+
+    const url = new URL(page.url);
+    const instantParam = url.searchParams.get('instant');
+    if (instantParam === 'true') {
+      const textParam = url.searchParams.get('text');
+      if (textParam) {
+        this.prompt = decodeURIComponent(textParam);
+        this.debug('initialize:instant-auto', { promptLength: this.prompt.length });
+        void this.generate();
+      }
+    }
+  }
 
   async generate(): Promise<void> {
     this.debug('generate', { promptLength: this.prompt.length });

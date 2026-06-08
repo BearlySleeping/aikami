@@ -66,6 +66,7 @@
 | C-069 | Direct Kokoro Orchestration | ✅ completed |
 | C-070 | Image Microservice & Tmux Orchestration | ✅ completed |
 | C-071 | Text Microservice & Tmux Orchestration | ✅ completed |
+| C-072 | Frontend Text Sandbox & E2E Validation | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2097,3 +2098,39 @@ Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the
 
 ### Deviations from contract
 - Emulator port shifted to 11436 (contract specified 11434). Host system runs a Nix-installed ollama service binding 11434 as root. Container can't bind the same port. Staging (11433) and production (11435) ports unaffected.
+
+---
+
+## C-072 — Frontend Text Sandbox & E2E Validation — ✅ completed
+
+### Summary
+Wired the PWA voice/TTS client to use `PUBLIC_VOICE_URL` environment variable instead of hardcoded localhost URLs. Added instant auto-generation support to the dev text sandbox page via `?instant=true&text=...` query parameters. Created a dedicated E2E test suite validating the streaming pipeline end-to-end.
+
+### Findings
+- **Environment variable mapping**: `PUBLIC_VOICE_URL=http://localhost:8089` added to `.env.emulator`, matching the voice microservice port from `development_ports.ts`. Variable flows through the central `environment.ts` schema in `@aikami/frontend/configs` with optional TypeBox validation. `stream_orchestrator.svelte.ts`, `tts.svelte.ts`, and `voice_view_model.svelte.ts` resolve via `import.meta.env.PUBLIC_VOICE_URL` (Vite-injected) with `http://localhost:8089` fallback for safety.
+- **VoiceViewModel WebSocket→HTTP**: Rewired the dev voice sandbox to POST to `PUBLIC_VOICE_URL/v1/audio/speech` (Kokoro REST API) instead of opening a WebSocket. The Kokoro container only serves HTTP — WebSocket connections are rejected with 403. Uses `AbortController` for cancellation. Audio is played through `ttsService.enqueueChunk()` after the full WAV response arrives.
+- **Query parameter fast-path**: `TextViewModel.initialize()` override checks `page.url` (SvelteKit `$app/state`) for `instant=true` query parameter. When present and `text` param is also truthy, auto-populates `this.prompt` with decoded text via `decodeURIComponent()` and triggers `this.generate()`. Handles edge cases: missing `text` param (no-op), URL-encoded spaces (`+` → ` `), exotic text structures.
+- **E2E test suite**: `dev_text_stream.spec.ts` (5 test cases) validates: page load integrity (200 status, placeholder text), instant auto-generation (prompt textarea populated, output transitions from placeholder), streaming output appears in terminal display box, no connection errors during streaming, graceful handling of missing `text` parameter.
+- **Environment config alignment**: `env.d.ts` updated with `PUBLIC_VOICE_URL` type declaration. `packages/frontend/configs/src/lib/environment.ts` master schema and validator both include the new optional string field.
+
+### AC Status
+- [x] AC-1: Environment Variable Mapping Configuration — `PUBLIC_VOICE_URL` populated in `.env.emulator`, validated through central environment schema, wires into `stream_orchestrator` and `tts` service without breaking existing baseline. TypeBox schema extended, type declarations updated.
+- [x] AC-2: Parameter-Driven Instant Generation — `?instant=true&text=TestAutomatedStream` auto-triggers the text generation engine on mount. ViewModel `initialize()` checks URL params and fires `generate()` with decoded prompt text. Prompt textarea shows populated value. Output container transitions out of empty placeholder state.
+- [x] AC-3: Unified Cross-Service E2E Orchestration — E2E test suite navigates to `/dev/text?instant=true&text=Hello+World`, tracks terminal display box frames, asserts streaming output appears, and verifies no container connection errors. Test infrastructure uses existing `authUser` fixture with test-mode headers.
+
+### Files created
+- `apps/e2e/tests/pwa/dev_text_stream.spec.ts` — 5-case E2E spec: page load, instant auto-generation, output streaming, connection error detection, missing-text graceful handling
+
+### Files modified
+- `apps/frontend/pwa/.env.emulator` — Added `PUBLIC_VOICE_URL=http://localhost:8089`
+- `apps/frontend/pwa/src/env.d.ts` — Added `PUBLIC_VOICE_URL: string` type declaration
+- `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts` — Added `initialize()` override with `?instant=true&text=...` query param handling; imports `page` from `$app/state`
+- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts` — Rewired from WebSocket to HTTP POST; WebSocket rejected with 403 by Kokoro REST container. Now POSTs to `PUBLIC_VOICE_URL/v1/audio/speech` with `AbortController` support, plays WAV via `ttsService.enqueueChunk()`
+- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — `KOKORO_SPEECH_URL` now derived from `import.meta.env.PUBLIC_VOICE_URL` with fallback
+- `apps/frontend/pwa/src/lib/client/services/media/tts.svelte.ts` — `speak()` uses `import.meta.env.PUBLIC_VOICE_URL` for Kokoro endpoint, aligned payload to OpenAI-compatible schema
+- `packages/frontend/configs/src/lib/environment.ts` — Added `PUBLIC_VOICE_URL` to `masterSchema` TypeBox definition and validator mapping
+
+### Deviations from contract
+- `import.meta.env` used instead of `$env/static/public` — `svelte-check` cannot resolve `$env/static/public` for `.svelte.ts` files in the `services/` directory. `import.meta.env` is the Vite-native mechanism and resolves correctly during both typecheck and runtime.
+- `VoiceViewModel` uses HTTP POST instead of WebSocket — the Kokoro container (`hwdsl2/docker-kokoro`) only serves a REST API at `/v1/audio/speech`. WebSocket connections to the container are rejected with 403. Audio is fetched as a complete WAV response and played via `ttsService`.
+- E2E tests use `authUser` fixture (pre-authenticated) rather than guest context — the dev routes require authentication via the PWA middleware. Guest context would redirect to login. Test-mode headers on `authUser` bypass Firebase Auth verification.
