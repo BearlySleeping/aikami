@@ -33,6 +33,7 @@ const masterSchema = Type.Object({
   PUBLIC_APP_CHECK_DEBUG_TOKEN: Type.Optional(Type.String()),
   PUBLIC_LOG_PERSIST_LEVEL: Type.Optional(Type.String()),
   PUBLIC_PWA_URL: Type.Optional(Type.String()),
+  PUBLIC_VOICE_URL: Type.Optional(Type.String()),
   APP_VERSION: Type.Optional(Type.String()),
 });
 
@@ -98,6 +99,7 @@ const validateEnv = (): MasterEnv => {
     PUBLIC_APP_CHECK_DEBUG_TOKEN: rawEnv.PUBLIC_APP_CHECK_DEBUG_TOKEN,
     PUBLIC_LOG_PERSIST_LEVEL: rawEnv.PUBLIC_LOG_PERSIST_LEVEL,
     PUBLIC_PWA_URL: rawEnv.PUBLIC_PWA_URL,
+    PUBLIC_VOICE_URL: rawEnv.PUBLIC_VOICE_URL,
   };
 
   const appId = env.PUBLIC_APP_ID as AppID;

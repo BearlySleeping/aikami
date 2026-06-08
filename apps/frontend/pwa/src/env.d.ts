@@ -9,6 +9,8 @@ declare module '$env/static/private' {
   export const GMAIL_CLIENT_SECRET: string;
 }
 declare module '$env/static/public' {
+  /** Base URL for the voice/TTS microservice (Kokoro container). */
+  export const PUBLIC_VOICE_URL: string;
   export const PUBLIC_FIREBASE_API_KEY: string;
   export const PUBLIC_FIREBASE_AUTH_DOMAIN: string;
   export const PUBLIC_FIREBASE_STORAGE_BUCKET: string;

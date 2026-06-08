@@ -73,8 +73,47 @@ export default defineConfig(({ mode }) => {
         'Cross-Origin-Embedder-Policy': 'require-corp',
       },
       port,
+      proxy: {
+        '/api/voice': {
+          target: `http://localhost:${PORTS.emulator.voice}`,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/voice/, ''),
+        },
+      },
       watch: {
-        ignored: ['**/examples/**', '**/docs/**', '**/dist/**', '**/.svelte-kit/**', '**/.pi/**'],
+        ignored: [
+          // 1. Tooling & OS Caches (The biggest culprits)
+          '**/.direnv/**', // Nix store symlinks (Infinite depth)
+          '**/.moon/**', // Moonrepo cache
+          '**/.git/**', // Git history
+          '**/node_modules/**', // Let Vite handle deps via pre-bundling
+          '**/.pi/**', // Pi agent cache
+
+          // 2. Build Outputs
+          '**/.svelte-kit/**',
+          '**/dist/**',
+          '**/build/**',
+
+          // 3. Project Documentation & Examples
+          '**/docs/**',
+          '**/examples/**',
+
+          // 4. Firebase Emulator Churn (Very important!)
+          // The emulator constantly writes logs and database states which
+          // triggers unnecessary watcher events
+          '**/apps/backend/firebase/tmp/**',
+          '**/*.log',
+
+          // 5. Backend Generated Assets
+          // Python/ComfyUI outputs that change rapidly and don't affect the PWA code
+          '**/apps/backend/image/src/output/**',
+          '**/apps/backend/image/src/cache/**',
+
+          // 6. E2E Test Artifacts (Playwright)
+          '**/playwright-report/**',
+          '**/test-results/**',
+          '**/blob-report/**',
+        ],
       },
     },
   };
