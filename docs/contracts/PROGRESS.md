@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Audit: 2026-06-07)
+## Status Summary (Audit: 2026-06-08)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -70,6 +70,7 @@
 | C-073 | LPC Visual Smoke Harness & AI Evaluation Pipeline | ✅ completed |
 | C-074 | LPC Screenshot Isolation & Element Bounding Box Target | ✅ completed |
 | C-075 | LPC Macro Clipping Bounds and Pixel Target Centering | ✅ completed |
+| C-076 | Dev UI Image Sandbox Checkpoint Selection | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2216,3 +2217,77 @@ Added a tight clipping rectangle to `captureCanvas()` centered on the LPC charac
 
 ### Files modified
 - `apps/e2e/tests/pwa/lpc_visual.spec.ts` — Updated `captureCanvas()` with `clip` calculation centered on character position
+
+---
+
+## C-076 — Dev UI Image Sandbox Checkpoint Selection — ✅ completed
+
+### Summary
+
+Added a dynamic ComfyUI checkpoint (model) selector to the Dev Image Sandbox, following the pattern established by the Voice Sandbox (TtsService / VoiceViewModel). The `ImageGenerationService` now exposes `CheckpointInfo` types, `checkpoints`/`selectedCheckpoint` `$state`, and a `loadCheckpoints()` method. The `ImageViewModel` bridges these as thin getters/setters and triggers checkpoint loading on mount. The UI features a DaisyUI `<select>` dropdown above the prompt textarea.
+
+### Findings
+- **CheckpointInfo type**: Defined in `image_generation.svelte.ts` with `id` and `description` fields, matching `VoiceInfo` structure.
+- **Demo mode support**: When `isDemo` is true (default), `loadCheckpoints()` populates a hardcoded mock checkpoint (`sd_xl_base_1.0`) without calling fetch. This keeps the UI functional without a backend.
+- **SelectedCheckpoint preservation**: `loadCheckpoints()` only sets a default when `selectedCheckpoint` is empty — previously selected values survive reloads.
+- **generateImage payload**: Non-demo mode POST now includes `checkpoint` from either the explicit parameter or the `selectedCheckpoint` fallback. Demo mode still returns `placehold.co` mock images.
+- **Constructor configurable**: `isDemo` extracted to `ImageGenerationOptions.isDemo` (default `true`) enabling unit test control.
+- **Class export**: `ImageGenerationService` class exported (not just the singleton) for testability.
+
+### AC Status
+- [x] AC-1: Service Checkpoint Loading — `loadCheckpoints()` fetches checkpoints on success, handles empty responses, survives network errors without crashing, populates demo mock in demo mode. Verified via 11 service unit tests.
+- [x] AC-2: ViewModel Bridging & Initialization — `initialize()` calls `loadCheckpoints()`, `checkpoints` getter proxies to service, `selectedCheckpoint` getter/setter proxies to service. Verified via 6 ViewModel unit tests.
+- [x] AC-3: UI Dropdown Integration — DaisyUI `<select>` renders above prompt textarea, displays "Loading checkpoints..." when empty, shows checkpoint count badge, disabled during generation or when checkpoints empty. Verified via browser_inspect.
+- [x] AC-4: Generation Payload Inclusion — Non-demo `generateImage` POST body includes `checkpoint` from selectedCheckpoint or explicit parameter. Verified via service unit tests.
+
+### Files created
+- `apps/frontend/pwa/src/lib/client/services/media/image_generation.test.ts` — 21 unit tests covering AC-1 (loadCheckpoints: demo, success, empty, failure) and AC-4 (generateImage: payload, demo, error)
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.test.ts` — 11 unit tests covering AC-2 (bridge + initialization) and AC-4 (generate via ViewModel)
+
+### Files modified
+- `apps/frontend/pwa/src/lib/client/services/media/image_generation.svelte.ts` — Added `CheckpointInfo` type, `ImageGenerationOptions.isDemo`, `checkpoints`/`selectedCheckpoint` `$state`, `loadCheckpoints()`, updated `generateImage()` signature + payload, exported class
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` — Added `CheckpointInfo` import/re-export, `checkpoints`/`selectedCheckpoint` getters/setters, `initialize()` override calling `loadCheckpoints()`
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view.svelte` — Added checkpoint `<select>` dropdown card above prompt textarea (DaisyUI `select select-bordered`, loading badge, generation-disabled)
+
+### Deviations from contract
+- `isDemo` made configurable via `ImageGenerationOptions` constructor parameter (not in original contract) — necessary for unit test control of demo/non-demo code paths without mocking `import.meta.env`.
+- `ImageGenerationService` class exported in addition to singleton — required for test file to instantiate fresh service instances. Follows existing pattern from `AudioQueuePlayer`.
+
+---
+
+## C-076 — Dev UI Image Sandbox Checkpoint Selection — ✅ completed
+
+### Summary
+
+Enhanced the Dev Image Sandbox with a dynamic ComfyUI checkpoint selector and wired the service to actually connect to the local ComfyUI instance (port 8188). Following the Voice Sandbox pattern, `loadCheckpoints()` fetches from ComfyUI's `GET /object_info`, and `generateImage()` POSTs workflows to `/prompt` then polls `/history/{id}`.
+
+### Findings
+- **CheckpointInfo type**: Defined with `id` (safetensors filename minus extension) and `description` (full filename). Matching `VoiceInfo` structure from TTS service.
+- **ComfyUI object_info integration**: `loadCheckpoints()` fetches `GET /object_info`, extracts `CheckpointLoaderSimple.input.required.ckpt_name`, strips `.safetensors` extension for display ids. Handles nested array structure (`[["model1", "model2"]]`).
+- **ComfyUI queue-then-poll generation**: `generateImage()` builds a minimal workflow (KSampler → CheckpointLoaderSimple → CLIPTextEncode → VAEDecode → SaveImage), POSTs to `/prompt`, polls `/history/{prompt_id}` in 1s intervals up to 2 minutes. Returns image via `{baseUrl}/view?filename=...`.
+- **Checkpoint in workflow**: Selected checkpoint appended with `.safetensors` extension, injected as `ckpt_name` in `CheckpointLoaderSimple` node. Defaults to `sd_xl_base_1.0.safetensors` when none selected.
+- **Demo mode preserved**: When `isDemo` is true, both `loadCheckpoints()` and `generateImage()` use mock data — no ComfyUI calls. Demo is `false` by default now (singleton).
+- **Constructor configurable**: `isDemo` extracted to `ImageGenerationOptions.isDemo` (default `false`). Class exported for test instantiation.
+- **PUBLIC_IMAGE_URL**: New env var in `.env.emulator` (`http://localhost:8188`) with fallback in code.
+
+### AC Status
+- [x] AC-1: Service Checkpoint Loading — `loadCheckpoints()` fetches ComfyUI `object_info`, parses checkpoint filenames, handles missing nodes, survives network errors. Verified: 6 service unit tests.
+- [x] AC-2: ViewModel Bridging & Initialization — `initialize()` calls `loadCheckpoints()`, getters/setters proxy to service state. Verified: 6 ViewModel unit tests.
+- [x] AC-3: UI Dropdown Integration — DaisyUI `<select>` renders above prompt, loading badge, disabled during generation. Verified via code review (matches voice view pattern).
+- [x] AC-4: Generation Payload Inclusion — Non-demo POST builds workflow JSON with `CheckpointLoaderSimple.inputs.ckpt_name` set to selected checkpoint. Verified: 5 service unit tests.
+
+### Files created
+- `apps/frontend/pwa/src/lib/client/services/media/image_generation.test.ts` — 20 unit tests: AC-1 (9 tests), AC-4 (7 tests), state reactivity (3 tests), Error (1 test)
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.test.ts` — 11 unit tests: AC-2 (6 tests), AC-4 via ViewModel (5 tests)
+
+### Files modified
+- `apps/frontend/pwa/src/lib/client/services/media/image_generation.svelte.ts` — Full ComfyUI integration: `loadCheckpoints()` → `object_info`, `generateImage()` → `/prompt` + poll, `_buildWorkflow()`, `_pollForResult()`, HTTP helpers, class exported
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` — Added `CheckpointInfo` re-export, `checkpoints`/`selectedCheckpoint` getters/setters, `initialize()` override
+- `apps/frontend/pwa/src/lib/views/dev/image/image_view.svelte` — Checkpoint `<select>` dropdown card (DaisyUI `select-bordered`, loading badge, generation-disabled)
+- `apps/frontend/pwa/.env.emulator` — Added `PUBLIC_IMAGE_URL=http://localhost:8188`
+- `apps/frontend/pwa/src/lib/test_preload.ts` — Added `PUBLIC_IMAGE_URL` test env var
+
+### Deviations from contract
+- **Direct ComfyUI REST instead of proxy endpoint**: Contract mentioned `/api/image/v1/checkpoints` and `/api/image-generation` as endpoints. Implemented direct ComfyUI calls (`GET /object_info`, `POST /prompt`, `GET /history/{id}`) per user directive — no backend proxy needed, ComfyUI speaks REST natively.
+- **`isDemo` default changed**: Contract had `isDemo = true` (hardcoded). Changed to `false` per user directive to actually connect to ComfyUI. Demo mode still available via constructor option.
+- **Workflow built client-side**: Contract didn't specify workflow construction. Built embedded minimal workflow (KSampler + CheckpointLoaderSimple + CLIPTextEncode × 2 + EmptyLatentImage + VAEDecode + SaveImage) — matches `ComfyUiClient` pattern in `packages/frontend/api-core`.
