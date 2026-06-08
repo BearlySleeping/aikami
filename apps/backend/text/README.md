@@ -30,7 +30,9 @@ None — container-only microservice.
 | Task         | Command                           | Description                      |
 | ------------ | --------------------------------- | -------------------------------- |
 | `dev`        | `bun run dev:docker`              | Start Ollama container           |
-| `test:text`  | `bun run scripts/check_health.ts` | Health check via /               |
+| `test:text`     | `bun run scripts/check_health.ts`   | Health check via /               |
+| `download:model` | `bun run scripts/download_model.ts`  | Pull qwen3.5:4b (idempotent)     |
+| `test:generate`  | `bun run scripts/test_generate.ts`   | Test generation with a prompt    |
 | `typecheck`  | `true`                            | No TypeScript source to check    |
 | `format`     | `true`                            | No source to format              |
 | `lint`       | `true`                            | No source to lint                |
@@ -45,6 +47,10 @@ bun tmux:start text
 # Check health
 bun run test:text
 
+# Test generation with a prompt
+bun run test:generate "Hello!"
+bun run test:generate --model llama3.2:3b "Write a haiku"
+
 # Stop
 bun tmux:stop text
 ```
@@ -54,7 +60,9 @@ bun tmux:stop text
 ```
 apps/backend/text/
 ├── scripts/
-│   └── check_health.ts     # Health check → /
+│   ├── check_health.ts     # Health check → /
+│   ├── download_model.ts   # Pull qwen3.5:4b (idempotent)
+│   └── test_generate.ts    # Send prompt + stream response
 ├── src/                    # Ollama data — mounted into container (git-ignored)
 │   └── cache/ollama/       # Model weights, pulled images
 ├── Dockerfile
