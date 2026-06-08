@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Image Microservice",
+  "extends": "../../../config/tsconfig/tsconfig.backend.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "paths": {
+      "$logger": ["../../shared/logger/src/lib/logger_aws.ts"]
+    }
+  },
+  "include": ["scripts/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

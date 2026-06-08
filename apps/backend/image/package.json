@@ -1,0 +1,19 @@
+{
+  "name": "@aikami/image",
+  "type": "module",
+  "scripts": {
+    "lint": "true",
+    "format": "true",
+    "typecheck": "true",
+    "fix": "true",
+    "dev": "bun run dev:docker",
+    "dev:docker": "mkdir -p src/cache/huggingface src/cache/torch src/cache/dot-config src/models/checkpoints src/input src/output src/user src/custom_nodes; docker rm -f aikami-image-dev 2>/dev/null; podman run --rm --name aikami-image-dev --pull=newer --device nvidia.com/gpu=all --security-opt label=disable -p 8188:8188 -v ./src/cache:/root/.cache -v ./src/cache/dot-config:/root/.config -v ./src/models:/root/ComfyUI/models -v ./src/cache/huggingface:/root/.cache/huggingface/hub -v ./src/cache/torch:/root/.cache/torch/hub -v ./src/input:/root/ComfyUI/input -v ./src/output:/root/ComfyUI/output -v ./src/user:/root/ComfyUI/user -v ./src/custom_nodes:/root/ComfyUI/custom_nodes -e CLI_ARGS='--fast' -e HF_XET_HIGH_PERFORMANCE=1 yanwk/comfyui-boot:cu130-slim-v2",
+    "test": "echo 'no tests — container-only'",
+    "test:image": "bun run scripts/check_health.ts",
+    "download:model": "bun run scripts/download_model.ts",
+    "models:download": "bun run scripts/download_models.ts",
+    "generate:avatar": "bun run scripts/generate_avatar.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
