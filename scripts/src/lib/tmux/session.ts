@@ -9,7 +9,7 @@
 //   Tab layout:
 //     emulators  → bun run emulate
 //     pwa        → bun run dev
-//     game       → bun run dev -- --mode emulator
+//     voice      → bun run dev
 //
 // Three consumers share the exact same tmux session:
 //   1. pi extension (tmux-orchestrator.ts)
@@ -19,7 +19,7 @@
 // CLI:
 //   bun tmux:start emulator          # emulators tab
 //   bun tmux:start pwa               # add pwa tab
-//   bun tmux:start game              # add game tab
+//   bun tmux:start voice             # add voice tab
 //   bun tmux:start all --join        # all three + attach
 //   bun tmux:stop pwa                # kill pwa tab
 //   bun tmux:stop all                # kill entire session
@@ -34,7 +34,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
-export type DevService = 'emulators' | 'pwa';
+export type DevService = 'emulators' | 'pwa' | 'voice';
 
 /** Accepted CLI values (includes singular aliases and 'all'). */
 export type ServiceInput = DevService | 'emulator' | 'all';
@@ -89,9 +89,15 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/frontend/pwa'),
     readyPort: EMULATOR_PORTS.pwa,
   },
+  voice: {
+    name: 'voice',
+    command: 'bun run dev',
+    cwd: (root) => resolve(root, 'apps/backend/voice'),
+    readyPort: EMULATOR_PORTS.voice,
+  },
 };
 
-const ALL_SERVICES: DevService[] = ['emulators', 'pwa'];
+const ALL_SERVICES: DevService[] = ['emulators', 'pwa', 'voice'];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
@@ -99,11 +105,12 @@ export const normalizeService = (input: string): DevService | 'all' => {
     emulator: 'emulators',
     emulators: 'emulators',
     pwa: 'pwa',
+    voice: 'voice',
     all: 'all',
   };
   const result = alias[input];
   if (!result) {
-    throw new Error(`Unknown service: "${input}". Valid: emulator(s), pwa, game, all`);
+    throw new Error(`Unknown service: "${input}". Valid: emulator(s), pwa, voice, all`);
   }
   return result;
 };
@@ -210,7 +217,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   const sessionName = buildSessionName(mode);
 
   if (services.length === 0) {
-    throw new Error('No services specified. Use: emulator(s), pwa, game, all');
+    throw new Error('No services specified. Use: emulator(s), pwa, voice, all');
   }
 
   // ── Mode mismatch guard ──────────────────────────────

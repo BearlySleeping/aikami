@@ -11,6 +11,7 @@ projects:
   docs: "apps/frontend/docs"
   e2e: "apps/e2e"
   firebase: "apps/backend/firebase"
+  voice: "apps/backend/voice"
 
   # Shared Packages
   constants: "packages/shared/constants"

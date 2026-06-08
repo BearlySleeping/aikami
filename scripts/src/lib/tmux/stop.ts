@@ -4,7 +4,7 @@
 //
 // Usage:
 //   bun tmux:stop pwa              # kill pwa tab only
-//   bun tmux:stop emulator,game    # kill two tabs
+//   bun tmux:stop emulator,voice   # kill two tabs
 //   bun tmux:stop all              # kill entire session
 
 import { parseServiceArgs } from './cli.ts';

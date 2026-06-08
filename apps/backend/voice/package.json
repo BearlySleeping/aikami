@@ -1,0 +1,20 @@
+{
+  "name": "@aikami/voice",
+  "type": "module",
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "fix": "biome check --write . --error-on-warnings",
+    "dev": "bun run src/main.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@aikami/backend-audio": "workspace:*",
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

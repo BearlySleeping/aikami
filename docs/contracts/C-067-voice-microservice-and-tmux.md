@@ -6,7 +6,7 @@
 | Target | Pi |
 | Priority | High |
 | Dependencies | C-066 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0 |
 
 ## Overview
