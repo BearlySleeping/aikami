@@ -35,7 +35,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
-export type DevService = 'emulators' | 'pwa' | 'voice' | 'image';
+export type DevService = 'emulators' | 'pwa' | 'voice' | 'image' | 'text';
 
 /** Accepted CLI values (includes singular aliases and 'all'). */
 export type ServiceInput = DevService | 'emulator' | 'all';
@@ -102,9 +102,15 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: EMULATOR_PORTS.image,
   },
+  text: {
+    name: 'text',
+    command: 'bun run dev',
+    cwd: (root) => resolve(root, 'apps/backend/text'),
+    readyPort: EMULATOR_PORTS.text,
+  },
 };
 
-const ALL_SERVICES: DevService[] = ['emulators', 'pwa', 'voice', 'image'];
+const ALL_SERVICES: DevService[] = ['emulators', 'pwa', 'voice', 'image', 'text'];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
@@ -114,11 +120,14 @@ export const normalizeService = (input: string): DevService | 'all' => {
     pwa: 'pwa',
     voice: 'voice',
     image: 'image',
+    text: 'text',
     all: 'all',
   };
   const result = alias[input];
   if (!result) {
-    throw new Error(`Unknown service: "${input}". Valid: emulator(s), pwa, voice, image, all`);
+    throw new Error(
+      `Unknown service: "${input}". Valid: emulator(s), pwa, voice, image, text, all`,
+    );
   }
   return result;
 };

@@ -48,18 +48,21 @@ export const EMULATOR_PORTS = {
   pwa: 5274,
   voice: 8089,
   image: 8188,
+  text: 11436,
 } as const;
 
 export const STAGING_PORTS = {
   pwa: 5273,
   voice: 8088,
   image: 8187,
+  text: 11433,
 } as const;
 
 export const PRODUCTION_PORTS = {
   pwa: 5277,
   voice: 8092,
   image: 8193,
+  text: 11435,
 } as const;
 
 export const PORTS = {
