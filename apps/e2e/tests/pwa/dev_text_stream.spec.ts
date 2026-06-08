@@ -46,7 +46,7 @@ test.describe('Dev Text Stream (C-072)', () => {
     // Verify the output container has some content (streaming started)
     const outputText = await outputContainer.textContent();
     expect(outputText).toBeTruthy();
-    expect(outputText!.length).toBeGreaterThan(0);
+    expect(outputText?.length).toBeGreaterThan(0);
   });
 
   test('should display generated text in the output terminal box', async ({ authUser }) => {
@@ -64,7 +64,7 @@ test.describe('Dev Text Stream (C-072)', () => {
     // Stream has started — verify the container is not empty
     const outputText = await outputContainer.textContent();
     expect(outputText).toBeTruthy();
-    expect(outputText!.trim().length).toBeGreaterThan(0);
+    expect(outputText?.trim().length).toBeGreaterThan(0);
   });
 
   test('should not raise container connection errors during streaming', async ({ authUser }) => {
