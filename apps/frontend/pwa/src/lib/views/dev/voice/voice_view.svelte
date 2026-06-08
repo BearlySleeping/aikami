@@ -68,7 +68,12 @@
             <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider"
               >Audio Queue</span
             >
-            {#if viewModel.isPlaying}
+            {#if viewModel.isConnected}
+              <span class="badge badge-success gap-1">
+                <span class="w-2 h-2 rounded-full bg-white"></span>
+                Connected
+              </span>
+            {:else if viewModel.isPlaying}
               <span class="loading loading-dots loading-xs text-primary"></span>
             {/if}
           </div>

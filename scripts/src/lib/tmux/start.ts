@@ -4,7 +4,7 @@
 //
 // Usage:
 //   bun tmux:start emulator           # emulators tab
-//   bun tmux:start pwa,game           # two tabs
+//   bun tmux:start pwa,voice          # two tabs
 //   bun tmux:start all --join         # all three + attach
 
 import { parseServiceArgs } from './cli.ts';

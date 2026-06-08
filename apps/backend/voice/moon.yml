@@ -1,0 +1,40 @@
+# apps/backend/voice/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'voice'
+  - 'backend'
+  - 'application'
+
+project:
+  name: 'voice'
+  description: 'Voice microservice — Bun WebSocket server wrapping the TTS engine from @aikami/backend-audio.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'backend-audio'
+  - 'constants'
+  - 'logger'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  dev:
+    command: 'bun run dev'
+    preset: 'server'
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
