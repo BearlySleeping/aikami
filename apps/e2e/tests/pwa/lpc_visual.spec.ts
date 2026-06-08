@@ -1,18 +1,17 @@
 // apps/e2e/tests/pwa/lpc_visual.spec.ts
-// C-054 refactored: uses guestUser fixture for visual tests.
+// C-074: Element-targeted canvas capture with zoom expansion, C-073, C-054.
 //
-// LPC Visual Testing Harness — C-050
+// LPC Visual Testing Harness — C-050, C-073, C-074
 //
-// Navigates the isolated component-lite route with predefined layer
-// combinations to capture reference screenshots for AI visual validation.
+// Captures isolated PixiJS canvas screenshots (no UI chrome) at high zoom
+// for AI visual validation. Uses locator-targeted `.screenshot()` on
+// #game-canvas to exclude DaisyUI panels, telemetry sliders, and debug bars.
 
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../../src/fixtures';
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
+// ── Configuration ──────────────────────────────────────────────────────
 
 /** Base path for the LPC lite route. */
 const LPC_LITE_BASE = '/dev/lpc';
@@ -23,9 +22,13 @@ const SCREENSHOT_DIR = join('test-results', 'lpc-visual');
 /** Maximum time to wait for PixiJS to render (ms). */
 const PIXI_LOAD_TIMEOUT = 15_000;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/** Zoom multiplier applied to all visual test URLs for element-filling captures. */
+const VISUAL_ZOOM = 8;
+
+/** Canvas element target for isolated locator screenshots. */
+const CANVAS_SELECTOR = '#game-canvas';
+
+// ── Helpers ────────────────────────────────────────────────────────────
 
 /**
  * Builds a URL for the LPC lite route from layer slotDefIndex:variantIndex pairs.
@@ -88,19 +91,54 @@ const waitForPixiLoaded = async (page: Page): Promise<void> => {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
 };
 
-// ---------------------------------------------------------------------------
-// Test Suite
-// ---------------------------------------------------------------------------
+/**
+ * Captures a cropped macro screenshot centered on the LPC character.
+ *
+ * Uses page-level `.screenshot()` with a `clip` rectangle for tight
+ * character macro close-ups (C-075 AC-1). The clip is positioned in
+ * page coordinates centered on the canvas element's character position.
+ * UI chrome is naturally excluded because the clip only covers the
+ * character's immediate pixels within the canvas.
+ */
+const captureCanvas = async (page: Page, filename: string): Promise<void> => {
+  const clipSize = 64 * VISUAL_ZOOM;
+
+  const box = await page.locator(CANVAS_SELECTOR).boundingBox();
+  if (!box) {
+    throw new Error(`Canvas element "${CANVAS_SELECTOR}" not found for clipping`);
+  }
+
+  // Scale factor from canvas coords (960×540) to CSS pixels
+  const scaleX = box.width / 960;
+  const scaleY = box.height / 540;
+
+  // Character center in page coordinates (canvas center = 480, 270)
+  const cx = box.x + 480 * scaleX;
+  const cy = box.y + 270 * scaleY;
+
+  await page.screenshot({
+    path: join(SCREENSHOT_DIR, filename),
+    clip: {
+      x: Math.max(0, Math.floor(cx - clipSize / 2)),
+      y: Math.max(0, Math.floor(cy - clipSize / 2)),
+      width: clipSize,
+      height: clipSize,
+    },
+  });
+};
+
+// ── Test Suite ─────────────────────────────────────────────────────────
 
 test.describe('LPC Visual Testing Harness', () => {
   test.beforeEach(async ({ guestUser }) => {
     // Suppress noisy console logs during visual tests
     guestUser.on('console', () => {});
 
-    // Hide Vite error overlay — uncaught runtime warnings can spawn a DOM
-    // overlay that blocks pointer events and appears in screenshots.
+    // Hide Vite error overlay and Tailwind indicator — uncaught runtime
+    // warnings can spawn DOM overlays that pollute the captured frame (C-074 AC-3).
     await guestUser.addStyleTag({
-      content: '#vite-error-overlay, vite-error-overlay { display: none !important; }',
+      content:
+        '#vite-error-overlay, vite-error-overlay, #tailwind-indicator { display: none !important; }',
     });
   });
 
@@ -108,16 +146,12 @@ test.describe('LPC Visual Testing Harness', () => {
     const url = buildLpcUrl({
       layers: [{ slotDefIndex: 0, variantIndex: 0 }],
       frame: 0,
-      zoom: 1,
+      zoom: VISUAL_ZOOM,
     });
 
     await guestUser.goto(url);
     await waitForPixiLoaded(guestUser);
-
-    await guestUser.screenshot({
-      path: join(SCREENSHOT_DIR, 'bare-body.png'),
-      fullPage: true,
-    });
+    await captureCanvas(guestUser, 'bare-body.png');
 
     const canvasCount = await guestUser.locator('canvas').count();
     expect(canvasCount).toBeGreaterThan(0);
@@ -130,16 +164,12 @@ test.describe('LPC Visual Testing Harness', () => {
         { slotDefIndex: 1, variantIndex: 0 },
       ],
       frame: 0,
-      zoom: 1,
+      zoom: VISUAL_ZOOM,
     });
 
     await guestUser.goto(url);
     await waitForPixiLoaded(guestUser);
-
-    await guestUser.screenshot({
-      path: join(SCREENSHOT_DIR, 'body-head.png'),
-      fullPage: true,
-    });
+    await captureCanvas(guestUser, 'body-head.png');
   });
 
   test('full knight — body + head + hair + plate armor + greaves + boots + sword + shield', async ({
@@ -157,16 +187,12 @@ test.describe('LPC Visual Testing Harness', () => {
         { slotDefIndex: 6, variantIndex: 3 },
       ],
       frame: 0,
-      zoom: 1,
+      zoom: VISUAL_ZOOM,
     });
 
     await guestUser.goto(url);
     await waitForPixiLoaded(guestUser);
-
-    await guestUser.screenshot({
-      path: join(SCREENSHOT_DIR, 'full-knight.png'),
-      fullPage: true,
-    });
+    await captureCanvas(guestUser, 'full-knight.png');
   });
 
   test('tinted hair — body + head + hair with colour override at zoom 2', async ({ guestUser }) => {
@@ -183,16 +209,12 @@ test.describe('LPC Visual Testing Harness', () => {
         '0:8': '44FF44',
       },
       frame: 0,
-      zoom: 2,
+      zoom: VISUAL_ZOOM,
     });
 
     await guestUser.goto(url);
     await waitForPixiLoaded(guestUser);
-
-    await guestUser.screenshot({
-      path: join(SCREENSHOT_DIR, 'tinted-hair-zoom2.png'),
-      fullPage: true,
-    });
+    await captureCanvas(guestUser, 'tinted-hair-zoom2.png');
   });
 
   test('zoom scaling — knight at 0.5x, 1x, 2x, 3x', async ({ guestUser }) => {
@@ -203,7 +225,7 @@ test.describe('LPC Visual Testing Harness', () => {
       { slotDefIndex: 4, variantIndex: 0 },
     ];
 
-    for (const zoomLevel of [0.5, 1, 2, 3]) {
+    for (const zoomLevel of [VISUAL_ZOOM * 0.5, VISUAL_ZOOM, VISUAL_ZOOM * 2, VISUAL_ZOOM * 3]) {
       const url = buildLpcUrl({
         layers: knightLayers,
         frame: 0,
@@ -212,11 +234,10 @@ test.describe('LPC Visual Testing Harness', () => {
 
       await guestUser.goto(url);
       await waitForPixiLoaded(guestUser);
-
-      await guestUser.screenshot({
-        path: join(SCREENSHOT_DIR, `knight-zoom-${String(zoomLevel).replace('.', 'p')}.png`),
-        fullPage: true,
-      });
+      await captureCanvas(
+        guestUser,
+        `knight-zoom-${String(zoomLevel).replace('.', 'p')}.png`,
+      );
     }
   });
 
@@ -235,16 +256,12 @@ test.describe('LPC Visual Testing Harness', () => {
         state: 2,
         direction: 2,
         frame: frameIdx,
-        zoom: 1,
+        zoom: VISUAL_ZOOM,
       });
 
       await guestUser.goto(url);
       await waitForPixiLoaded(guestUser);
-
-      await guestUser.screenshot({
-        path: join(SCREENSHOT_DIR, `walk-frame-${frameIdx}.png`),
-        fullPage: true,
-      });
+      await captureCanvas(guestUser, `walk-frame-${frameIdx}.png`);
     }
   });
 });
