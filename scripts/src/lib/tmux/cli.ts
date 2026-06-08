@@ -40,7 +40,9 @@ export const parseServices = (raw: string): DevService[] => {
     .filter(Boolean) as ServiceInput[];
 
   if (inputs.length === 0) {
-    throw new Error('No services specified. Use: emulator(s), pwa, voice, all (comma-separated)');
+    throw new Error(
+      'No services specified. Use: emulator(s), pwa, voice, image, all (comma-separated)',
+    );
   }
 
   for (const input of inputs) {
@@ -78,7 +80,7 @@ export const parseServiceArgs = (args: string[]): ServiceArgs => {
   if (!serviceArg) {
     console.error(
       'Usage: bun tmux:start <services> [--mode <mode>] [--join] [--force]\n' +
-        '  services: emulator(s), pwa, voice, all (comma-separated)\n' +
+        '  services: emulator(s), pwa, voice, image, all (comma-separated)\n' +
         '  mode:     emulator | staging | production (default: $AIKAMI_MODE)\n' +
         '  --join:   attach to session after starting\n' +
         '  --force:  kill and recreate if session already exists\n',

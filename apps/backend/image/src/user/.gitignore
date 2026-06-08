@@ -1,0 +1,13 @@
+# Track config files for reproducibility across machines.
+# Ignore runtime artifacts (logs, databases, lock files, everything else).
+*.log
+*.db
+*.db.lock
+!__manager/
+__manager/*
+!__manager/config.ini
+!default/
+default/*
+!default/comfy.settings.json
+!.gitignore
+!.gitkeep

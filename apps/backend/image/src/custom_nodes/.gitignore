@@ -1,0 +1,6 @@
+# Custom nodes are bundled with the Docker image.
+# Only .gitkeep is tracked.
+*
+**/*
+!.gitignore
+!.gitkeep

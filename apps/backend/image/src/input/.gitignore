@@ -1,0 +1,8 @@
+# Ignore user-provided input images.
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+!.gitignore
+!.gitkeep
