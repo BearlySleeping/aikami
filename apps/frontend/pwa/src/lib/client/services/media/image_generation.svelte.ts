@@ -167,12 +167,15 @@ export class ImageGenerationService
       // Step 2 — poll for result
       const imageRef = await this._pollForResult(promptId);
 
-      // Step 3 — construct image URL
+      // Step 3 — fetch the image blob to bypass CORP restrictions
       const imageUrl =
         `${this._baseUrl}/view?filename=${encodeURIComponent(imageRef.filename)}` +
         `&subfolder=${encodeURIComponent(imageRef.subfolder ?? '')}&type=output`;
 
-      return { url: imageUrl, isDemo: false };
+      const blob = await this._fetchBlob(imageUrl);
+      const objectUrl = URL.createObjectURL(blob);
+
+      return { url: objectUrl, isDemo: false };
     } catch (error) {
       this.error('generateImage failed', error);
       throw error;
@@ -278,6 +281,19 @@ export class ImageGenerationService
   }
 
   // ── Private: HTTP helpers ─────────────────────────────────────────────
+
+  /**
+   * Fetches a binary resource (image) as a Blob to bypass CORP restrictions.
+   * Cross-origin images loaded via <img src> are blocked by CORP, but fetching
+   * them as a Blob and creating an object URL avoids the check.
+   */
+  private async _fetchBlob(url: string): Promise<Blob> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image (${response.status})`);
+    }
+    return response.blob();
+  }
 
   private async _post<TResponse>(path: string, body: unknown): Promise<TResponse> {
     const response = await fetch(`${this._baseUrl}${path}`, {

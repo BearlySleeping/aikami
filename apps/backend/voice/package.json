@@ -7,7 +7,7 @@
     "typecheck": "true",
     "fix": "true",
     "dev": "bun run dev:docker",
-    "dev:docker": "docker rm -f aikami-voice-dev 2>/dev/null; podman run --rm --name aikami-voice-dev -p 8089:8880 --network bridge -v aikami-kokoro-cache:/root/.cache/huggingface hwdsl2/kokoro-server:latest",
+    "dev:docker": "bun run scripts/start.ts",
     "test": "echo 'no tests — container-only'",
     "test:speech": "bun run scripts/synthesize.ts"
   },

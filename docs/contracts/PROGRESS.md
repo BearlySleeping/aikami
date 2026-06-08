@@ -2291,3 +2291,21 @@ Enhanced the Dev Image Sandbox with a dynamic ComfyUI checkpoint selector and wi
 - **Direct ComfyUI REST instead of proxy endpoint**: Contract mentioned `/api/image/v1/checkpoints` and `/api/image-generation` as endpoints. Implemented direct ComfyUI calls (`GET /object_info`, `POST /prompt`, `GET /history/{id}`) per user directive — no backend proxy needed, ComfyUI speaks REST natively.
 - **`isDemo` default changed**: Contract had `isDemo = true` (hardcoded). Changed to `false` per user directive to actually connect to ComfyUI. Demo mode still available via constructor option.
 - **Workflow built client-side**: Contract didn't specify workflow construction. Built embedded minimal workflow (KSampler + CheckpointLoaderSimple + CLIPTextEncode × 2 + EmptyLatentImage + VAEDecode + SaveImage) — matches `ComfyUiClient` pattern in `packages/frontend/api-core`.
+
+---
+
+## REFACTOR — Extract dev:docker inline commands to scripts/start.ts — ✅ completed
+
+### Summary
+
+Extracted inline Podman commands from `dev:docker` package.json scripts into typed Bun `scripts/start.ts` files for image, voice, and text backend projects. Improves readability, maintainability, and enables IDE support.
+
+### Files created
+- `apps/backend/image/scripts/start.ts` — ComfyUI GPU container start (yanwk/comfyui-boot:cu130-slim-v2, port 8188, CORS enabled)
+- `apps/backend/voice/scripts/start.ts` — Kokoro TTS container start (hwdsl2/kokoro-server, port 8089)
+- `apps/backend/text/scripts/start.ts` — Ollama text container start (ollama/ollama, port 11436)
+
+### Files modified
+- `apps/backend/image/package.json` — `dev:docker`: 1-line inline → `bun run scripts/start.ts`
+- `apps/backend/voice/package.json` — `dev:docker`: 1-line inline → `bun run scripts/start.ts`
+- `apps/backend/text/package.json` — `dev:docker`: 1-line inline → `bun run scripts/start.ts`
