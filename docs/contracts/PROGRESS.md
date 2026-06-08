@@ -61,6 +61,7 @@
 | C-064 | Dev Console & View-Model Layout Integration | ✅ completed |
 | C-065 | Dev UI Tailwind Refactor & Text Sandbox | ✅ completed |
 | C-066 | Dev UI Voice & Image Sandboxes | ✅ completed |
+| C-067 | Voice Microservice & Tmux Orchestration | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -1899,6 +1900,54 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` — Thin ViewModel bridging to devImageService
 - `apps/frontend/pwa/src/lib/views/dev/image/image_view.svelte` — Full DaisyUI image sandbox UI
 - `docs/contracts/PROGRESS.md` — Status entry for C-066
+
+---
+
+## C-067 — Voice Microservice & Tmux Orchestration — ✅ completed
+
+### Summary
+Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the TTS engine from `@aikami/backend-audio`. Replaced the deprecated `game` service references with `voice` across the tmux orchestrator suite (`scripts/src/lib/tmux/`). Updated shared development ports to remove `game` and add `voice`.
+
+### Root Changes
+- **Development Ports**: Removed `game` port from `EMULATOR_PORTS`, `STAGING_PORTS`, `PRODUCTION_PORTS`. Added `voice` ports: emulator=8089, staging=8088, production=8092. Port allocation table updated with new 8087-8092 backend services range.
+- **Voice Microservice (`apps/backend/voice`)**: Created Bun server entry point (`src/main.ts`) that instantiates `createTtsWebSocketHandler` from `@aikami/backend-audio` and binds it to Bun.serve WebSocket lifecycle. Per-connection session Map for handler lifecycle management. SIGINT graceful shutdown.
+- **Tmux Orchestrator Refactor**: All 8 files in `scripts/src/lib/tmux/` updated — `session.ts`, `cli.ts`, `start.ts`, `stop.ts`, `join.ts`, `list.ts`, `stop_all.ts`, `status.ts`. Added `voice` to `DevService` type union, `SERVICE_DEFS`, `ALL_SERVICES`, `normalizeService` alias map. Help text and error messages updated. Voice runs via `bun run dev` in `apps/backend/voice`.
+- **Workspace Registration**: Added `voice: "apps/backend/voice"` to `.moon/workspace.yml`. Scaffolded `package.json`, `tsconfig.json`, `moon.yml` with dependencies on `backend-audio`, `constants`, `logger`.
+- **PWA VoiceViewModel**: Updated to use WebSocket streaming against the voice microservice instead of REST-based `ttsService.speak()`. Connects to `ws://localhost:{EMULATOR_PORTS.voice}`. Added `isConnected` state. Svelte view shows connection badge.
+
+### Downstream Fixes
+- `scripts/src/lib/test_blackbox/suites/game_e2e.ts` — Replaced `PORTS.emulator.game` / `EMULATOR_PORTS.game` with hardcoded `GAME_DEV_PORT = 5276`.
+- `apps/e2e/src/config.ts` — Replaced `game: 5276` with `voice: 8089`.
+
+### AC Status
+- [x] AC-1: Ports & Config Refactor — `development_ports.ts` no longer contains `game`, exports `voice` for all modes. Downstream imports fixed (game_e2e.ts, e2e/config.ts). All typechecks pass.
+- [x] AC-2: Tmux Scripts Refactored — `bun run scripts/src/index.ts tmux:start voice,pwa --force` creates session with voice and pwa tabs. Both ports report ready (voice :8089, pwa :5274). `tmux:status` lists correct services.
+- [x] AC-3: Voice Microservice Bootstrapper — `Bun.serve()` starts on port 8089 (emulator). HTTP fallback returns `Voice API Status: OK` (200). WebSocket lifecycle maps to `createTtsWebSocketHandler` onMessage/onClose. Graceful shutdown on SIGINT.
+- [x] AC-4: Workspace Integration — `moon project voice` identifies the project with correct dependencies (`backend-audio`, `constants`, `logger`). Moon detect affected includes voice.
+
+### Files created
+- `apps/backend/voice/package.json` — Voice microservice package (Bun WebSocket server)
+- `apps/backend/voice/tsconfig.json` — TypeScript config extending tsconfig.backend.json
+- `apps/backend/voice/moon.yml` — Moon project config (application layer, backend tags)
+- `apps/backend/voice/src/main.ts` — Bun.serve entry point wrapping TTS WebSocket handler
+
+### Files modified
+- `packages/shared/constants/src/lib/development_ports.ts` — Removed game ports, added voice ports (8089/8088/8092)
+- `scripts/src/lib/tmux/session.ts` — Added voice service def, updated types, aliases, ALL_SERVICES, help text
+- `scripts/src/lib/tmux/cli.ts` — Updated help text (game→voice)
+- `scripts/src/lib/tmux/start.ts` — Updated usage comment
+- `scripts/src/lib/tmux/stop.ts` — Updated usage comment
+- `.moon/workspace.yml` — Added voice project entry
+- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts` — WebSocket streaming to voice service
+- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view.svelte` — Connection status badge
+- `scripts/src/lib/test_blackbox/suites/game_e2e.ts` — Hardcoded game port (5276)
+- `apps/e2e/src/config.ts` — Replaced game with voice port
+
+### Deviations from contract
+- Voice port 8089 used instead of suggested 8081 (8081 is already allocated to Firestore emulator).
+- VoiceViewModel bridges WebSocket audio chunks to the existing `ttsService` streaming API (`startStream`/`enqueueChunk`/`endStream`) rather than implementing new AudioContext playback from scratch.
+- PWA fix step reformatted 70 files (existing pre-commit formatting drift in the PWA project).
+- Validate build/test step shows pre-existing failures (scripts has no test task, e2e has dummy build) — not caused by C-067.
 
 ### AC Status
 
