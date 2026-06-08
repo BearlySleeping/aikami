@@ -18,7 +18,7 @@ export const EMULATOR_PORTS = {
   dataconnect: 9398,
   emulatorHub: 4401,
   pwa: 5274,
-  game: 5276,
+  voice: 8089,
 } as const;
 
 /** Emulator GCP project ID. */

@@ -7,7 +7,7 @@
  */
 
 import { resolve } from 'node:path';
-import { EMULATOR_PORTS, PORTS } from '@aikami/constants';
+import { EMULATOR_PORTS } from '@aikami/constants';
 import type { TestSuite } from '../types.ts';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../../..');
@@ -18,7 +18,8 @@ const FIRESTORE_PORT = EMULATOR_PORTS.firestore;
 const STORAGE_PORT = EMULATOR_PORTS.storage;
 const FUNCTIONS_PORT = EMULATOR_PORTS.functions;
 
-const GAME_URL = `http://localhost:${EMULATOR_PORTS.game}`;
+const GAME_DEV_PORT = 5276;
+const GAME_URL = `http://localhost:${GAME_DEV_PORT}`;
 
 /**
  * Probes a port to check if an emulator service is healthy.
@@ -81,9 +82,9 @@ export const gameE2eSuite: TestSuite = {
 
     // ── 2. Verify game dev server is reachable ──────────────
     console.log('  Checking game dev server...');
-    const gameReady = await probePort(PORTS.emulator.game, 10_000);
+    const gameReady = await probePort(GAME_DEV_PORT, 10_000);
     if (!gameReady) {
-      throw new Error(`Game dev server not reachable on :${PORTS.emulator.game}`);
+      throw new Error(`Game dev server not reachable on :${GAME_DEV_PORT}`);
     }
 
     // ── 3. Verify game page loads ──────────────────────────
