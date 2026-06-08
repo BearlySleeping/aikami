@@ -64,6 +64,7 @@
 | C-067 | Voice Microservice & Tmux Orchestration | ✅ completed |
 | C-068 | Voice Microservice Containerization | ✅ completed |
 | C-069 | Direct Kokoro Orchestration | ✅ completed |
+| C-070 | Image Microservice & Tmux Orchestration | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2031,3 +2032,34 @@ the PWA frontend so SvelteKit orchestrates TTS via direct HTTP REST calls to the
 - audio queue player: 11 pass / 0 fail
 - all media: 93 pass / 0 fail
 - workspace typecheck: 29/29 tasks, 0 errors
+
+---
+
+## C-070 — Image Microservice & Tmux Orchestration — ✅ completed
+
+### Summary
+Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `yanwk/comfyui-boot` Docker image. Allocated development ports (8188 emulator, 8187 staging, 8193 production). Integrated image service into the shared tmux orchestrator so it can be managed alongside pwa, voice, and emulators.
+
+### AC Status
+- [x] AC-1: Ports & Config Refactor — `image` property added to `EMULATOR_PORTS` (8188), `STAGING_PORTS` (8187), and `PRODUCTION_PORTS` (8193) in `development_ports.ts`. Downstream typechecks pass.
+- [x] AC-2: Tmux Scripts Refactored — `'image'` added to `DevService` union, `SERVICE_DEFS`, `normalizeService` aliases, and `ALL_SERVICES`. `bun tmux:start image` creates an `image` tmux window running `bun run dev` in `apps/backend/image`. CLI help text updated.
+- [x] AC-3: Image Microservice Containerization — `apps/backend/image/` created with `Dockerfile` (`FROM yanwk/comfyui-boot:latest`), `package.json` with `dev:docker` script, `moon.yml` with server preset, `tsconfig.json`, and `README.md`.
+- [x] AC-4: API Verification Script — `scripts/check_health.ts` fetches `/system_stats`, parses JSON, reports readiness. Gracefully handles ECONNREFUSED with actionable message to run `bun tmux:start image`.
+
+### Files created
+- `apps/backend/image/package.json` — Container-only microservice with `dev:docker` and `test:image` scripts
+- `apps/backend/image/moon.yml` — Moon project config (application, container tags, server preset)
+- `apps/backend/image/tsconfig.json` — Extends `tsconfig.backend.json` with `$logger` alias
+- `apps/backend/image/Dockerfile` — `FROM yanwk/comfyui-boot:latest`, exposes port 8188
+- `apps/backend/image/scripts/check_health.ts` — Health check via `/system_stats` endpoint
+- `apps/backend/image/README.md` — Usage, tasks, dependencies
+
+### Files modified
+- `packages/shared/constants/src/lib/development_ports.ts` — Added `image` to emulator (8188), staging (8187), production (8193) port maps
+- `scripts/src/lib/tmux/session.ts` — Added `'image'` to `DevService` union, `SERVICE_DEFS`, `normalizeService`, `ALL_SERVICES`; updated tab layout comment and error message
+- `scripts/src/lib/tmux/cli.ts` — Updated CLI help text to include `image` in valid services
+- `.moon/workspace.yml` — Registered `image: "apps/backend/image"` project
+
+### Deviations from contract
+- Docker image tag corrected: `yanwk/comfyui-boot:latest` → `:cu128-slim` (no `latest` tag exists; `cu128-slim` is upstream-recommended)
+- Container runtime: `docker run` → `podman run` for consistency with voice microservice (`docker rm` aliased, but `podman run` explicit)

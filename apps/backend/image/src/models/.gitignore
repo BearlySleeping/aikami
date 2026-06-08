@@ -1,0 +1,6 @@
+# Ignore all model files and subdirectories.
+# Only .gitkeep placeholders are tracked.
+*
+**/*
+!.gitignore
+!.gitkeep
