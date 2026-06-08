@@ -1,85 +1,88 @@
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | Aikami reference: `knowledge/contracts/TEMPLATE.md` |
-| **Target** | `apps/backend/text` — Text Microservice & Tmux Orchestration |
-| **Priority** | P1 — Mirror image microservice infrastructure for local LLM text generation |
-| **Dependencies** | C-070 |
-| **Status** | completed |
-| **Contract version** | 1.0.0 |
+| Field                | Value                                                           |
+| -------------------- | --------------------------------------------------------------- |
+| **Source**           | bearlysleeping/aikami                                           |
+| **Target**           | `apps/backend/text` — Text Generator Service & Tmux integration |
+| **Priority**         | P1                                                              |
+| **Dependencies**     | C-070                                                           |
+| **Status**           | not_started                                                     |
+| **Contract version** | 1.0.0                                                           |
 
 ## Overview
 
-We are scaffolding `apps/backend/text` as a standalone microservice using the official `ollama/ollama` Docker image. This mirrors the pattern established in C-070 for the image service. We will allocate development ports, integrate the service into our shared tmux orchestrator, and provide local caching volumes for downloaded LLM weights.
+Scaffold a standalone text generation microservice using the official Ollama Docker image. This completely mirrors our headless image generator framework, ensuring the local LLM runtime runs isolated from our Bun architecture but plugs perfectly into our shared tmux orchestrator workspace layer.
 
 ## Design Reference
 
-**Aikami pattern**: `apps/backend/image`
-Key structural elements:
-- Container-only Moon project (no Bun source code, just orchestration scripts).
-- `dev:docker` script in `package.json` handling cleanup and container execution (using `podman run` or `docker run` to match existing patterns).
-- Tmux orchestrator integration in `scripts/src/lib/tmux/`.
-- Dedicated port allocations in `packages/shared/constants/src/lib/development_ports.ts`.
+Follow the patterns established in `apps/backend/image`. This includes using a container-only workspace target running through local wrapper scripts rather than internal JS runtime engines, alongside automated model pre-caching routines.
 
-## Changes Detail
+## Architecture Directives
 
-1. Create `apps/backend/text` with a `Dockerfile`, `package.json`, `moon.yml`, and `tsconfig.json`.
-2. Configure `package.json` with a `dev:docker` script that binds port 11434 and mounts a local volume (e.g., `./src/cache/ollama:/root/.ollama`) for model persistence.
-3. Update `packages/shared/constants/src/lib/development_ports.ts` to include `text` (Emulator: 11434, Staging: 11433, Production: 11435).
-4. Update `scripts/src/lib/tmux/` scripts (`session.ts`, `cli.ts`, `ALL_SERVICES`, etc.) to register the `text` service.
-5. Create an API verification script `scripts/check_health.ts` that pings Ollama's base URL (`http://localhost:11434/`) expecting a 200 OK ("Ollama is running").
-6. Register the new project in `.moon/workspace.yml`.
+- **Text Service Project Workspace**: Define a lightweight package architecture containing container configuration, dependency manifests, and lifecycle management scripts.
+- **Port Constant Expositions**: Expand the central dev port architecture to expose uniform endpoint boundaries for the text processor subsystem across local, test, and production stages.
+- **Orchestrator Registry Hook**: Bind the container target into the centralized workspace shell multiplexer setup, mapping lifecycle streams to a dedicated command line frame.
+
+## State & Data Models
+
+The service will download and mount its storage partition dynamically. We will configure an initialization controller that checks if the targeting language model is loaded, pulling it automatically if absent.
+
+    Model Cache Mapping:
+    Host: ./src/cache/ollama
+    Container: /root/.ollama
+
+    Default Model: qwen3.5:4b
 
 ## Acceptance Criteria
 
-### AC-1: Ports & Config Refactor
-**Given** the shared constants package
-**When** the development ports are queried
-**Then** `text` exists in `EMULATOR_PORTS` (11434), `STAGING_PORTS` (11433), and `PRODUCTION_PORTS` (11435).
+### AC-1: Port Registry Ingestion
+
+**Given** the central workspace environment ports file
+**When** imported by internal tooling
+**Then** it must expose `text` fields mapping 11434 for development/emulator, 11433 for staging, and 11435 for production instances.
 
 **Test Hooks**:
-- Unit: Downstream typechecks must pass cleanly.
 
-### AC-2: Tmux Scripts Refactored
-**Given** the tmux orchestrator CLI
-**When** a developer runs `bun tmux:start text`
-**Then** a new tmux window is created running `bun run dev` in `apps/backend/text`.
+- Type validity matches across downstream consumer modules.
 
-**Test Hooks**:
-- Integration: `text` is recognized as a valid `DevService` union member and appears in CLI help text.
+### AC-2: Container Shell Orchestration
 
-### AC-3: Text Microservice Containerization
-**Given** the new `apps/backend/text` project
-**When** `bun run dev` is executed
-**Then** the Ollama container boots up, binds to port 11434, and persists data to `src/cache/ollama`.
+**Given** the shell orchestrator session manager
+**When** the system spawns its global layout workspace
+**Then** it must register a window titled 'text' running the microservice initialization script.
 
 **Test Hooks**:
-- Unit: `Dockerfile` uses `FROM ollama/ollama`. `moon.yml` is correctly tagged and categorized.
 
-### AC-4: API Verification Script
-**Given** the Ollama container is running
-**When** `bun run test:text` (which invokes `scripts/check_health.ts`) is executed
-**Then** it successfully fetches `/` and reports readiness, gracefully handling `ECONNREFUSED` if offline.
+- Orchestration interface lists 'text' as an operational subsystem target.
+
+### AC-3: Data-Persisted Local Image Layer
+
+**Given** the text package container specification
+**When** booted via the system runner
+**Then** it maps internal model configurations to the host cache directory and successfully initializes the Ollama daemon.
+
+**Test Hooks**:
+
+- Container image points to the official upstream Ollama distribution.
+
+### AC-4: Resilient Diagnostic Evaluator
+
+**Given** an initializing microservice pipeline
+**When** the diagnostic sequence pings the local engine port
+**Then** it gracefully asserts an active status response block once the daemon reports it is fully operational.
+
+**Test Hooks**:
+
+- Diagnostic utility execution verifies server availability without hard crashes on cold boots.
 
 ## Implementation Notes
 
-1. **Files to create**:
-    - `apps/backend/text/Dockerfile`
-    - `apps/backend/text/package.json`
-    - `apps/backend/text/moon.yml`
-    - `apps/backend/text/tsconfig.json`
-    - `apps/backend/text/scripts/check_health.ts`
-    - `apps/backend/text/README.md`
-2. **Files to modify**:
-    - `packages/shared/constants/src/lib/development_ports.ts`
-    - `scripts/src/lib/tmux/session.ts`
-    - `scripts/src/lib/tmux/cli.ts`
-    - `.moon/workspace.yml`
-3. **Order of operations**: Port constants -> Tmux orchestrator -> Scaffold text project -> Health script -> Workspace registration.
-4. **Verification**: Run `bun tmux:start text`, wait for boot, then run `bun run test:text` inside the package. Ensure `moon run text:typecheck` and global `validate()` pass.
+1. Append port constants for the text engine in the development ports shared file.
+2. Inject the text daemon handle into the tmux environment window generation matrix.
+3. Establish `apps/backend/text` containing a Dockerfile utilizing the base Ollama manifest, a package manifest handling clean runtime deletions, and an orchestrator mapping target.
+4. Draft a runtime check script using native fetch methods to evaluate health endpoints and pull the default narrative weight profile when absent.
 
 ## Edge Cases & Gotchas
 
-- **Container Engine Parity**: Ensure the `dev:docker` script syntax in `package.json` uses `podman run` (like the image service) or `docker run` depending on local environment preferences, but ensure `docker rm -f` is used to clean up old instances to prevent port collisions.
-- **Volume Permissions**: Ollama runs as root internally by default; mapping `./src/cache/ollama` might create root-owned files on the host. This is acceptable for local dev but worth noting if manual deletion is required later.
+- Run structural workspace link cleanups before starting container runs to avoid standard resource allocation collisions on the explicit engine ports.
+- Local volume mounts running under root privileges internally must map elegantly to the dev workspace without corrupting permissions across adjacent files.

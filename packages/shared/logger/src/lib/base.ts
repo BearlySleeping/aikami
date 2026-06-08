@@ -10,6 +10,11 @@ export abstract class BaseLoggerService implements LoggerInterface {
   logLevel: LogLevel;
   protected _sinks: LogSink[] = [];
 
+  // --- Infinite Loop Tracker State ---
+  private _lastLogSignature = '';
+  private _logRepeatCount = 0;
+  private _lastLogTimestamp = 0;
+
   constructor(options?: { logLevel?: LogLevel | string }) {
     const logLevel = options?.logLevel?.toUpperCase();
     this.logLevel = isValidLogLevel(logLevel) ? logLevel : 'INFO';
@@ -33,6 +38,9 @@ export abstract class BaseLoggerService implements LoggerInterface {
   }
 
   protected _flushSinks(entry: LogEntry, ...data: unknown[]): void {
+    // Check for loops BEFORE we write to sinks so we don't spam the console/network
+    this._detectInfiniteLoop(entry, data);
+
     for (const sink of this._sinks) {
       try {
         void sink.write(entry, ...data);
@@ -120,6 +128,45 @@ export abstract class BaseLoggerService implements LoggerInterface {
       element = this._limitObjectOrArray(element);
     }
     return JSON.stringify(element, stringyReplacer, 2);
+  }
+
+  /**
+   * Super lite circuit breaker to detect infinite reactivity loops.
+   * Only runs in development.
+   */
+  private _detectInfiniteLoop(entry: LogEntry, data: unknown[]): void {
+    // 1. MUST NOT RUN IN PRODUCTION!
+    // Assuming you have a way to check env here, e.g., import.meta.env.DEV
+    if (typeof import.meta !== 'undefined' && !import.meta.env?.DEV) {
+      return;
+    }
+
+    // 2. Create a fast, lightweight signature (don't deep stringify the whole object!)
+    // We just use the log level, message, or the first string argument.
+    const signature = entry.message || (typeof data[0] === 'string' ? data[0] : 'obj_log');
+
+    const now = Date.now();
+
+    // 3. Check if it's the exact same log happening very quickly (e.g., under 50ms apart)
+    if (this._lastLogSignature === signature && now - this._lastLogTimestamp < 50) {
+      this._logRepeatCount++;
+
+      // 4. If we hit 150 identical, rapid-fire logs, KILL IT.
+      if (this._logRepeatCount > 150) {
+        this._logRepeatCount = 0; // Reset so we don't trap the error handler itself
+
+        // Throwing a hard error breaks the JS execution thread, stopping the infinite loop!
+        throw new Error(
+          `🚨 EMERGENCY HALT: Infinite loop detected! The log "${signature}" fired 150+ times in a few milliseconds.`,
+        );
+      }
+    } else {
+      // Reset the tracker if it's a new log or enough time has passed
+      this._lastLogSignature = signature;
+      this._logRepeatCount = 1;
+    }
+
+    this._lastLogTimestamp = now;
   }
 
   private _limitObjectOrArray<T extends unknown[] | object | null | unknown>(object: T): T {
