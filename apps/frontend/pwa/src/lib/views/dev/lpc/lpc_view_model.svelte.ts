@@ -944,6 +944,11 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
       this._applyUrlParamsToState();
       this._setStatus('LPC debugger initialized.', 'info');
+
+      // Signal to Playwright visual tests that PixiJS is ready
+      if (typeof window !== 'undefined') {
+        (window as unknown as Record<string, unknown>).__PIXI_LOADED__ = true;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.error('lpcViewModel.initFailed', { error: message });
