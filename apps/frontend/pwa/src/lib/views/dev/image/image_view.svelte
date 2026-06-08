@@ -22,6 +22,34 @@
         Test and debug image generation and avatar creation pipelines.
       </p>
 
+      <!-- Checkpoint selector -->
+      <div class="card bg-base-200 shadow mb-6">
+        <div class="card-body p-4">
+          <label class="form-control w-full">
+            <div class="label">
+              <span class="label-text font-semibold">Checkpoint</span>
+              {#if viewModel.checkpoints.length === 0}
+                <span class="label-text-alt text-base-content/40">Loading checkpoints...</span>
+              {:else}
+                <span class="label-text-alt text-base-content/40"
+                  >{viewModel.checkpoints.length}
+                  checkpoints available</span
+                >
+              {/if}
+            </div>
+            <select
+              class="select select-bordered w-full"
+              bind:value={viewModel.selectedCheckpoint}
+              disabled={viewModel.isGenerating || viewModel.checkpoints.length === 0}
+            >
+              {#each viewModel.checkpoints as checkpoint}
+                <option value={checkpoint.id}>{checkpoint.id} — {checkpoint.description}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+      </div>
+
       <!-- Prompt input -->
       <div class="card bg-base-200 shadow mb-6">
         <div class="card-body p-6">
