@@ -40,7 +40,7 @@
     "deps:pin-dependencies": "bun run scripts/src/lib/ops/pin_dependencies.ts",
     "deps:sync": "syncpack fix --dependency-types prod,dev",
     "deps:check": "syncpack lint --dependency-types prod,dev",
-    "preview": "bun moon run pwa:build -- --mode emulator && xdg-open http://localhost:4173/dev && bun moon run pwa:preview"
+    "preview": "bun moon run pwa:build -- --mode emulator && xdg-open http://localhost:5274/dev && bun moon run pwa:preview"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
