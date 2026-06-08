@@ -1,0 +1,10 @@
+# Ignore all generated images at all depth levels.
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*
+**/*
+!.gitignore
+!.gitkeep

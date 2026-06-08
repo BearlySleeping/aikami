@@ -1,0 +1,33 @@
+# apps/backend/image/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'image'
+  - 'backend'
+  - 'application'
+  - 'container'
+
+project:
+  name: 'image'
+  description: 'Headless ComfyUI image generation container — Docker-only, no Bun source.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn: []
+
+fileGroups:
+  configs:
+    - 'package.json'
+
+tasks:
+  build:
+    command: 'true'
+
+  dev:
+    command: 'bun run dev:docker'
+    preset: 'server'
+
+  test:
+    command: 'bun run test'

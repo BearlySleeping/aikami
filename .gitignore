@@ -80,6 +80,9 @@ storybook-static/
 **/project.inlang/cache/
 src/lib/paraglide
 
+## 🖼️ Project: ComfyUI Image Microservice
+# Models and caches are too large; per-directory .gitignore keeps structure.
+
 ## 🎮 Project: Godot
 # This is a pruned version of the standard Godot template,
 # as OS/IDE rules are already handled globally.
