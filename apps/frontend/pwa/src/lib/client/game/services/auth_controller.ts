@@ -202,9 +202,7 @@ class AuthController
     setTimeout(poll, POLL_INTERVAL_MS);
   }
 
-  override async setup(): Promise<void> {
-    this.debug('setup');
-  }
+  override async setup(): Promise<void> {}
 }
 
 export const getAuthController = (options: AuthControllerOptions): AuthControllerInterface =>

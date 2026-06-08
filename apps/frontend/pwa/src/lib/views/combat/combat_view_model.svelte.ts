@@ -73,8 +73,6 @@ export class CombatViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    this.debug('initialize');
-
     try {
       const { createEngineBridge } = await import('@aikami/frontend/engine');
 

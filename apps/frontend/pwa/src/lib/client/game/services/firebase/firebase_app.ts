@@ -70,7 +70,7 @@ let _instance: FirebaseAppInterface | undefined;
  */
 export const createFirebase = (): FirebaseAppInterface => {
   if (!_instance) {
-    _instance = new FirebaseApp({ className: 'FirebaseApp' });
+    _instance = FirebaseApp.create({ className: 'FirebaseApp' });
   }
   return _instance;
 };

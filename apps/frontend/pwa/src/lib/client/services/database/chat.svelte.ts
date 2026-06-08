@@ -119,7 +119,6 @@ class NpcChatService
   implements NpcChatServiceInterface
 {
   async getChat(options: { uid: string; npcId: string }): Promise<ChatData | undefined> {
-    this.debug('getChat', options);
     const { uid, npcId } = options;
 
     try {
@@ -146,7 +145,6 @@ class NpcChatService
     npcName: string;
     npcAvatarUrl?: string;
   }): Promise<ChatData> {
-    this.debug('getOrCreateChat', options);
     const { uid, npcId, npcName, npcAvatarUrl } = options;
 
     const existingChat = await this.getChat({ uid, npcId });
@@ -198,7 +196,6 @@ class NpcChatService
     message: string;
     sender: 'user' | 'ai';
   }): Promise<void> {
-    this.debug('addMessage', options);
     const { chatId, uid, npcId, message, sender } = options;
 
     const now = new Date();
@@ -255,7 +252,6 @@ class NpcChatService
   }
 
   async getMessages(options: { uid: string; npcId: string }): Promise<MessageData[]> {
-    this.debug('getMessages', options);
     const { uid, npcId } = options;
 
     const chat = await this.getChat({ uid, npcId });
@@ -263,7 +259,6 @@ class NpcChatService
   }
 
   async deleteChat(options: { uid: string; npcId: string }): Promise<void> {
-    this.debug('deleteChat', options);
     const { uid, npcId } = options;
 
     try {
@@ -282,7 +277,6 @@ class NpcChatService
     affection?: number;
     backgroundImageUrl?: string;
   }): Promise<void> {
-    this.debug('updateChat', options);
     const { chatId, messages, affection, backgroundImageUrl } = options;
 
     try {
@@ -308,7 +302,6 @@ class NpcChatService
   }
 
   async deleteChatById(options: { chatId: string }): Promise<void> {
-    this.debug('deleteChatById', options);
     const { chatId } = options;
     try {
       await chatRepository.deleteDocument({ chatId });
@@ -329,7 +322,6 @@ class NpcChatService
       }
     | undefined
   > {
-    this.debug('getChatById', options);
     const { chatId } = options;
     try {
       const chat = await chatRepository.getDocument({ chatId });
@@ -341,6 +333,6 @@ class NpcChatService
   }
 }
 
-export const npcChatService: NpcChatServiceInterface = new NpcChatService({
+export const npcChatService: NpcChatServiceInterface = NpcChatService.create({
   className: 'NpcChatService',
 });

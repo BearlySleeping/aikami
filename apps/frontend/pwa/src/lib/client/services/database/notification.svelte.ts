@@ -113,7 +113,7 @@ export class NotificationService
   }
 }
 
-export const notificationService: NotificationServiceInterface = new NotificationService({
+export const notificationService: NotificationServiceInterface = NotificationService.create({
   database: notificationRepository,
   className: 'NotificationService',
 });

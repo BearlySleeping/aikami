@@ -234,10 +234,7 @@ test.describe('LPC Visual Testing Harness', () => {
 
       await guestUser.goto(url);
       await waitForPixiLoaded(guestUser);
-      await captureCanvas(
-        guestUser,
-        `knight-zoom-${String(zoomLevel).replace('.', 'p')}.png`,
-      );
+      await captureCanvas(guestUser, `knight-zoom-${String(zoomLevel).replace('.', 'p')}.png`);
     }
   });
 

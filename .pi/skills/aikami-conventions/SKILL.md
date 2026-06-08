@@ -187,7 +187,6 @@ pleasantries, hedging. Fragments are OK. Every word must earn its place.
 - **Escape Early** — Return-early pattern to avoid deep nesting
 - **Extract Logic** — If a section within a function can stand alone, extract it into a separate private function (with `_` prefix: `_extractedHelper()`)
 - **JSDoc Everything** — All exported functions, types, and complex internals must have JSDoc comments
-- **Debug Logging** — Every function must call `logger.debug('{methodName}', options)` at the start, passing the function name as a string. Skip for trivial one-liners (simple getters, passthroughs, pure computed values).
 
 ### Options Object Pattern
 
@@ -214,26 +213,53 @@ export const findById = (id: string): Promise<User | undefined> => {
 export const createUser = (email: string, displayName: string, role?: string) => { ... };
 ```
 
-### Debug Logging Pattern
+### Class Instantiation — Always `ClassName.create()`, Never `new`
+
+All classes extending `BaseClass` must be instantiated with the static `create()`
+factory method. The proxy wrapper auto-logs every public method call — **no manual
+`this.debug()` at method entry is needed.**
 
 ```typescript
-// ✅ Standard pattern — logger.debug first line with method name and options
-const loadItems = async (options: { filter: string }) => {
-	logger.debug("loadItems", options);
-	// ... implementation
-};
+// ✅ CORRECT — ClassName.create() factory (enables proxy auto-logging)
+export const service = MyService.create({ className: 'MyService' });
+export const authService = FirebaseAuthService.create({ className: 'FirebaseAuthService' });
 
-// ✅ Class method — regular method syntax (access to this/super)
+// ❌ WRONG — raw `new` bypasses proxy (no auto-logging)
+export const service = new MyService({ className: 'MyService' });
+```
+
+**Proxy auto-logging**: The `create()` factory wraps the instance in an ES6
+Proxy that logs `methodName + args` for every public method call. In production
+(`NODE_ENV === 'production'`), the proxy is skipped for zero overhead.
+
+**Mid-method debug logging** for state transitions or error conditions is still
+acceptable:
+
+```typescript
 class MyService extends BaseClass {
-	async loadItems(options: { filter: string }) {
-		this.debug("loadItems", options);
-		// ... implementation
-	}
-}
+  async process(options: { id: string }) {
+    // Proxy auto-logs: debug('process', { args: [options] })
+    // No manual this.debug() needed here
 
-// ✅ Skip debug logging for trivial functions
-const isActive = () => this.status === "active";
-const getFullName = () => `${this.firstName} ${this.lastName}`;
+    const result = await this._fetch(options.id);
+    if (!result) {
+      this.debug('process:not-found', { id: options.id }); // ✅ contextual
+      return;
+    }
+    this.debug('process:complete', { id: options.id }); // ✅ contextual
+  }
+}
+```
+
+**Arrow functions** that are NOT class methods should still use `logger.debug()`
+from `$logger` at entry since they don't participate in the proxy:
+
+```typescript
+// ✅ Arrow functions still manually log
+const loadItems = async (options: { filter: string }) => {
+  logger.debug("loadItems", options);
+  // ...
+};
 ```
 
 ### `as const` and `satisfies`

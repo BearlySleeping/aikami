@@ -82,8 +82,6 @@ class CharacterService
   selectedCharacter: Character | undefined = $state(undefined);
 
   async importFile(options: { file: File }): Promise<Character> {
-    this.debug('handleFileUpload', options);
-
     const { file } = options;
     const { character } = await this._extractCharacter({ file });
     this.addCharacter({ character });
@@ -91,7 +89,6 @@ class CharacterService
   }
 
   async importFileWithAvatar(options: { file: File; characterId: string }): Promise<Character> {
-    this.debug('importFileWithAvatar', options);
     const { file, characterId } = options;
     const { character, avatarFile } = await this._extractCharacter({ file });
 
@@ -107,14 +104,12 @@ class CharacterService
   }
 
   async importFromUrl(options: { url: string; characterId: string }): Promise<Character> {
-    this.debug('importFromUrl', options);
     const { url, characterId } = options;
 
     const file = await downloadFromUrl({ url });
     return this.importFileWithAvatar({ file, characterId });
   }
   async _extractCharacter(options: { file: File }) {
-    this.debug('_extractCharacter', options);
     const { file } = options;
 
     if (file.type === 'image/png') {
@@ -132,7 +127,6 @@ class CharacterService
   }
 
   async uploadAvatar(options: { file: File; characterId: string }): Promise<string | undefined> {
-    this.debug('uploadAvatar', options);
     const { file, characterId } = options;
     const uid = authService.uid;
 
@@ -155,16 +149,14 @@ class CharacterService
   }
 
   addCharacter(options: { character: Character }): void {
-    this.debug('addCharacter', options);
     this.characters.push(options.character);
   }
 
   selectCharacter(options: { character: Character }): void {
-    this.debug('selectCharacter', options);
     this.selectedCharacter = options.character;
   }
 }
 
-export const characterService: CharacterServiceInterface = new CharacterService({
+export const characterService: CharacterServiceInterface = CharacterService.create({
   className: 'CharacterService',
 });

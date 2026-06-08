@@ -100,7 +100,6 @@ export class ExpressionAssetResolver
   }
 
   resolve(options: { npcId: string; emotion: string }): string | undefined {
-    this.debug('resolve', options);
     const { npcId, emotion } = options;
 
     // 1. Check manifest for exact match

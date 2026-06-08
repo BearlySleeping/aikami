@@ -36,7 +36,11 @@ const SESSION_NAME = buildSessionName(MODE);
 /**
  * Poll a port until it responds or timeout, returning true if ready.
  */
-const pollPort = async (options: { port: number; label: string; timeoutMs: number }): Promise<boolean> => {
+const pollPort = async (options: {
+  port: number;
+  label: string;
+  timeoutMs: number;
+}): Promise<boolean> => {
   const deadline = Date.now() + options.timeoutMs;
   let lastLog = 0;
 

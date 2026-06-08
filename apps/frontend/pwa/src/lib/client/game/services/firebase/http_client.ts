@@ -139,9 +139,7 @@ class FirebaseHttpClient
     return this._apiKey;
   }
 
-  override async setup(): Promise<void> {
-    this.debug('setup');
-  }
+  override async setup(): Promise<void> {}
 }
 
 export const getFirebaseHttpClient = (

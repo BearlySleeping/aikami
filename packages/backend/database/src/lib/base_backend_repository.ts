@@ -124,8 +124,6 @@ export class BackendRepository<T extends RepositoryType>
     getCollectionPathArgument: T['getCollectionPathArgument'];
     createData: Omit<Type.Static<T['createData']>, 'createdAt'>;
   }): Promise<string> {
-    this.debug('addDocument', createData);
-
     const collectionReference =
       await this.getCollectionReference<Type.Static<T['createData']>>(getCollectionPathArgument);
 

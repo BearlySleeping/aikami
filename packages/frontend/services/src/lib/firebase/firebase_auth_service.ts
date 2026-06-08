@@ -315,6 +315,6 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
   }
 }
 
-export const firebaseAuthService: FirebaseAuthServiceInterface = new FirebaseAuthService({
+export const firebaseAuthService: FirebaseAuthServiceInterface = FirebaseAuthService.create({
   className: 'FirebaseAuthService',
 });

@@ -62,12 +62,10 @@ class VoiceViewModel
   }
 
   async generateAndPlay(): Promise<void> {
-    this.debug('generateAndPlay', { textLength: this.text.length });
     await ttsService.speak({ text: this.text });
   }
 
   cancel(): void {
-    this.debug('cancel');
     ttsService.stop();
   }
 }

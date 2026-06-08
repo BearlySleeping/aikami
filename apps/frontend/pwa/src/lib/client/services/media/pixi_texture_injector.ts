@@ -134,8 +134,6 @@ export class PixiTextureInjector
   }
 
   clearTexture(): void {
-    this.debug('clearTexture');
-
     if (this._currentTexture && this._currentTexture !== Texture.WHITE) {
       this._currentTexture.destroy(true);
     }

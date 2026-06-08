@@ -35,6 +35,6 @@ class OnboardingService
   }
 }
 
-export const onboardingService: OnboardingServiceInterface = new OnboardingService({
+export const onboardingService: OnboardingServiceInterface = OnboardingService.create({
   className: 'OnboardingService',
 });
