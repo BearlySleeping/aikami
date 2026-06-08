@@ -68,3 +68,4 @@ process.env.PUBLIC_FIREBASE_STORAGE_BUCKET = 'mock.appspot.com';
 process.env.PUBLIC_FIREBASE_APP_ID = 'mock-app-id';
 process.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID = 'mock-sender-id';
 process.env.PUBLIC_FIREBASE_MEASUREMENT_ID = 'mock-measurement-id';
+process.env.PUBLIC_IMAGE_URL = 'http://localhost:8188';
