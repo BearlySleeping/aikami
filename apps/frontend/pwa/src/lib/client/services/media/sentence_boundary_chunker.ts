@@ -1,4 +1,4 @@
-// packages/backend/audio/src/lib/sentence_boundary_chunker.ts
+// apps/frontend/pwa/src/lib/client/services/media/sentence_boundary_chunker.ts
 
 /** Configuration options for the SentenceBoundaryChunker. */
 export type ChunkerOptions = {
