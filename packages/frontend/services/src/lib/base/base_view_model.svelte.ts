@@ -57,7 +57,6 @@ export abstract class BaseViewModel<Options extends BaseViewModelOptions = BaseV
   }
 
   async initialize(): Promise<void> {
-    this.debug('initialized');
     await Promise.resolve();
   }
 

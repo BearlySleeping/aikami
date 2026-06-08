@@ -125,7 +125,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }
 
   async speak(options: { text: string; voiceId?: string }): Promise<void> {
-    this.debug('speak', { textLength: options.text.length, voiceId: options.voiceId });
     const { text, voiceId } = options;
 
     if (!text.trim()) {
@@ -187,8 +186,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }
 
   stop(): void {
-    this.debug('stop');
-
     // Abort in-progress synthesis fetch
     const controller = this._abortController;
     if (controller) {
@@ -228,8 +225,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }
 
   startStream(options: { messageId: string; text: string }): void {
-    this.debug('startStream', { messageId: options.messageId, textLength: options.text.length });
-
     this.stop();
 
     this.activeMessageId = options.messageId;
@@ -313,7 +308,6 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }
 
   endStream(): void {
-    this.debug('endStream');
     this._streamEnded = true;
   }
 

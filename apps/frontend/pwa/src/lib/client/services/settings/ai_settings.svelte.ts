@@ -146,8 +146,6 @@ class AISettingsService
   isLoaded = $state(false);
 
   async loadFromVault(pin?: string): Promise<void> {
-    this.debug('loadFromVault');
-
     const raw = await decrypt({ pin });
     if (!raw) {
       this.isLoaded = true;
@@ -201,8 +199,6 @@ class AISettingsService
   }
 
   async saveToVault(pin?: string): Promise<void> {
-    this.debug('saveToVault');
-
     const payload = JSON.stringify({
       advancedOverrides: this.advancedOverrides,
       generationParams: this.generationParams,
@@ -216,8 +212,6 @@ class AISettingsService
   }
 
   async reset(): Promise<void> {
-    this.debug('reset');
-
     this.textProvider = { ...DEFAULT_PROVIDER };
     this.ttsProvider = { ...DEFAULT_PROVIDER };
     this.imageProvider = { ...DEFAULT_PROVIDER };
@@ -252,6 +246,6 @@ class AISettingsService
   }
 }
 
-export const aiSettingsService: AISettingsInterface = new AISettingsService({
+export const aiSettingsService: AISettingsInterface = AISettingsService.create({
   className: 'AISettingsService',
 });

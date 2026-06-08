@@ -358,8 +358,6 @@ export class AuthService
     user: FirebaseUser | undefined,
     forceRefresh?: boolean,
   ): Promise<void> {
-    this.debug('setAuthUser', { forceRefresh, user });
-
     await this._setToken(user, forceRefresh);
 
     if (!user) {
@@ -423,7 +421,7 @@ export class AuthService
   }
 }
 
-export const authService: AuthServiceInterface = new AuthService({
+export const authService: AuthServiceInterface = AuthService.create({
   auth: firebaseAuthService,
   className: 'AuthService',
 });

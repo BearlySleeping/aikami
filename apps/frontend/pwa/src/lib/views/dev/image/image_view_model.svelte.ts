@@ -55,8 +55,6 @@ class ImageViewModel
   }
 
   async generate(): Promise<void> {
-    this.debug('generate', { promptLength: this.prompt.length });
-
     if (!this.prompt.trim()) {
       return;
     }
@@ -71,7 +69,6 @@ class ImageViewModel
   }
 
   cancel(): void {
-    this.debug('cancel');
     this.isGenerating = false;
   }
 }

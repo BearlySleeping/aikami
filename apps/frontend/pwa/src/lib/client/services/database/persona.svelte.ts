@@ -111,6 +111,6 @@ class PersonaService extends BaseFrontendClass implements PersonaServiceInterfac
   }
 }
 
-export const personaService: PersonaServiceInterface = new PersonaService({
+export const personaService: PersonaServiceInterface = PersonaService.create({
   className: 'PersonaService',
 });

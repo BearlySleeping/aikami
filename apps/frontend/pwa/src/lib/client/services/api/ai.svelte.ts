@@ -77,6 +77,6 @@ export class AIService extends BaseFrontendClass<AIServiceOptions> implements AI
   }
 }
 
-export const aiService: AIServiceInterface = new AIService({
+export const aiService: AIServiceInterface = AIService.create({
   className: 'AIService',
 });

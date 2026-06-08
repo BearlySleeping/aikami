@@ -90,8 +90,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   override async initialize(): Promise<void> {
-    this.debug('initialize');
-
     const chatDataLookup = await npcChatService.getChatById({ chatId: this._chatId });
     if (!chatDataLookup) {
       this.error('Chat not found', { chatId: this._chatId });
@@ -167,8 +165,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async loadChatHistory(chat: ChatData): Promise<void> {
-    this.debug('loadChatHistory', chat);
-
     this.chatData = {
       affection: chat.affection ?? 0,
       stats: chat.stats ?? {},
@@ -180,7 +176,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async sendMessage(text: string): Promise<void> {
-    this.debug('sendMessage', text);
     if (!this.npc) {
       return;
     }
@@ -254,7 +249,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async editMessage(messageId: string, newText: string): Promise<void> {
-    this.debug('editMessage', messageId, newText);
     const msgs = [...chatService.messages] as unknown as MessageData[];
     const idx = msgs.findIndex((m) => m.id === messageId);
     if (idx === -1) {
@@ -266,7 +260,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async deleteMessage(messageId: string): Promise<void> {
-    this.debug('deleteMessage', messageId);
     const msgs = (chatService.messages as unknown as MessageData[]).filter(
       (m) => m.id !== messageId,
     );
@@ -275,7 +268,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async regenerateMessage(messageId: string): Promise<void> {
-    this.debug('regenerateMessage', messageId);
     const msgs = [...chatService.messages] as unknown as MessageData[];
     const idx = msgs.findIndex((m) => m.id === messageId);
     if (idx === -1 || msgs[idx].sender !== 'ai') {
@@ -304,7 +296,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async generateImage(prompt: string): Promise<string> {
-    this.debug('generateImage', prompt);
     this.isGeneratingImage = true;
     try {
       return (await imageGenerationService.generateImage({ prompt })).url;
@@ -314,7 +305,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async playTts(messageId: string): Promise<void> {
-    this.debug('playTts', messageId);
     const msg = (chatService.messages as unknown as MessageData[]).find((m) => m.id === messageId);
     if (!msg) {
       return;
@@ -333,7 +323,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async attachFile(messageId: string, file: File): Promise<void> {
-    this.debug('attachFile', messageId, file.name);
     const msgs = [...chatService.messages] as unknown as MessageData[];
     const idx = msgs.findIndex((m) => m.id === messageId);
     if (idx === -1) {
@@ -349,7 +338,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async updateAffection(change: number): Promise<void> {
-    this.debug('updateAffection', change);
     if (!this.chatData) {
       return;
     }
@@ -357,7 +345,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async rollPerception(): Promise<{ roll: number; total: number }> {
-    this.debug('rollPerception');
     const wisdom = 3;
     const result = diceService.rollD20(wisdom);
     chatService.addMessage({
@@ -370,7 +357,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async rollPersuasion(context?: string): Promise<{ roll: number; total: number }> {
-    this.debug('rollPersuasion', context);
     const charisma = 3;
     const result = diceService.rollD20(charisma);
     const ctx = context ? ` Attempting to persuade: ${context}` : '';
@@ -384,7 +370,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   async generateBackground(prompt?: string): Promise<void> {
-    this.debug('generateBackground', prompt);
     this.isGeneratingImage = true;
     try {
       const bg = prompt ?? `Fantasy chat background, ${this.npc?.name ?? 'mysterious'} atmosphere`;
@@ -399,7 +384,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   dismissGreeting(): void {
-    this.debug('dismissGreeting');
     this.showGreeting = false;
   }
 
@@ -409,7 +393,6 @@ class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatV
   }
 
   private async saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
-    this.debug('saveMessage', text, sender);
     const uid = authService.uid;
     const chatId = this.chat?.id;
     if (!uid || !this.npc || !chatId) {

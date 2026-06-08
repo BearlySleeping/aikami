@@ -32,8 +32,7 @@ const recapture = args.includes('--recapture');
 
 /** Check whether existing screenshots are present in the output dir. */
 const hasExistingScreenshots = (): boolean =>
-  existsSync(SCREENSHOT_DIR) &&
-  readdirSync(SCREENSHOT_DIR).some((f) => f.endsWith('.png'));
+  existsSync(SCREENSHOT_DIR) && readdirSync(SCREENSHOT_DIR).some((f) => f.endsWith('.png'));
 
 // ── Health check ───────────────────────────────────────────
 

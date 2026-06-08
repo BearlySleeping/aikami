@@ -11,6 +11,6 @@
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "firebase": "12.14.0",
-    "typebox": "^1.1.39"
+    "typebox": "1.2.2"
   }
 }

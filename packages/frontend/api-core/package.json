@@ -13,6 +13,6 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "typebox": "^1.1.39"
+    "typebox": "1.2.2"
   }
 }

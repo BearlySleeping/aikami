@@ -67,7 +67,6 @@ export class AnalyticService
 
   async logAction(action: LogAction): Promise<void> {
     try {
-      this.debug('logAction', { action });
       await this.logEvent('pwaAction', {
         action,
       });
@@ -81,7 +80,6 @@ export class AnalyticService
     eventParameters: AnalyticsEventParameters<T>,
   ): Promise<void> {
     try {
-      this.debug('logEvent', { eventName, eventParameters });
       await this._analytic.logEvent(eventName, eventParameters);
     } catch (error) {
       this.error('logEvent', error);
@@ -90,8 +88,6 @@ export class AnalyticService
 
   async setAnalyticUser(user: UserData | UserLiteData): Promise<void> {
     try {
-      this.debug('setAnalyticUser', { user });
-
       await Promise.all([
         this._analytic.setUserId(user.id),
         this._analytic.setUserProperties(toAnalyticsAuthData(user)),
@@ -102,7 +98,7 @@ export class AnalyticService
   }
 }
 
-export const analyticService: AnalyticServiceInterface = new AnalyticService({
+export const analyticService: AnalyticServiceInterface = AnalyticService.create({
   analytics: firebaseAnalyticService,
   className: 'AnalyticService',
 });

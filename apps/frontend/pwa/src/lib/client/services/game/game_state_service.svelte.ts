@@ -72,8 +72,6 @@ export class GameStateService
   }
 
   async subscribeToWorld(worldId: string): Promise<void> {
-    this.debug('subscribeToWorld', { worldId });
-
     this.currentWorld = {
       id: worldId,
       uid: this.uid,
@@ -106,8 +104,6 @@ export class GameStateService
   }
 
   async updateLocation(locationId: string): Promise<void> {
-    this.debug('updateLocation', { locationId });
-
     const world = this.currentWorld;
     if (!world) {
       throw new Error('No world loaded');
@@ -134,8 +130,6 @@ export class GameStateService
   }
 
   async setVariable(key: string, value: unknown): Promise<void> {
-    this.debug('setVariable', { key });
-
     const world = this.currentWorld;
     if (!world) {
       throw new Error('No world loaded');
@@ -155,8 +149,6 @@ export class GameStateService
   }
 
   async addNpc(npcId: string): Promise<void> {
-    this.debug('addNpc', { npcId });
-
     const location = this.currentLocation;
     if (!location) {
       throw new Error('No location loaded');
@@ -177,8 +169,6 @@ export class GameStateService
   }
 
   async removeNpc(npcId: string): Promise<void> {
-    this.debug('removeNpc', { npcId });
-
     const location = this.currentLocation;
     if (!location) {
       throw new Error('No location loaded');
@@ -203,8 +193,6 @@ export class GameStateService
     locationId?: string;
     isMajor: boolean;
   }): Promise<void> {
-    this.debug('recordEvent', { title: event.title });
-
     const world = this.currentWorld;
     if (!world) {
       throw new Error('No world loaded');
@@ -241,8 +229,6 @@ export class GameStateService
   }
 
   addActiveContext(entry: ActiveContextEntry): void {
-    this.debug('addActiveContext', { entityId: entry.entityId });
-
     const existingIdx = this.activeContexts.findIndex((e) => e.entityId === entry.entityId);
     if (existingIdx >= 0) {
       this.activeContexts[existingIdx] = entry;
@@ -252,14 +238,10 @@ export class GameStateService
   }
 
   removeActiveContext(entityId: string): void {
-    this.debug('removeActiveContext', { entityId });
-
     this.activeContexts = this.activeContexts.filter((e) => e.entityId !== entityId);
   }
 
   async createSession(characterIds: string[]): Promise<ActiveSessionData> {
-    this.debug('createSession', { characterCount: characterIds.length });
-
     const session: ActiveSessionData = {
       id: crypto.randomUUID(),
       worldId: this.currentWorld?.id ?? '',
@@ -276,8 +258,6 @@ export class GameStateService
   }
 
   async endSession(): Promise<void> {
-    this.debug('endSession');
-
     if (this.activeSession) {
       this.activeSession = {
         ...this.activeSession,
@@ -300,7 +280,7 @@ export class GameStateService
   }
 }
 
-export const gameStateService: GameStateServiceInterface = new GameStateService({
+export const gameStateService: GameStateServiceInterface = GameStateService.create({
   uid: 'singleton',
   className: 'GameStateService',
 });
