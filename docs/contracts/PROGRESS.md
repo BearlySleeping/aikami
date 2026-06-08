@@ -65,6 +65,7 @@
 | C-068 | Voice Microservice Containerization | ✅ completed |
 | C-069 | Direct Kokoro Orchestration | ✅ completed |
 | C-070 | Image Microservice & Tmux Orchestration | ✅ completed |
+| C-071 | Text Microservice & Tmux Orchestration | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2063,3 +2064,34 @@ Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `
 ### Deviations from contract
 - Docker image tag corrected: `yanwk/comfyui-boot:latest` → `:cu128-slim` (no `latest` tag exists; `cu128-slim` is upstream-recommended)
 - Container runtime: `docker run` → `podman run` for consistency with voice microservice (`docker rm` aliased, but `podman run` explicit)
+
+---
+
+## C-071 — Text Microservice & Tmux Orchestration — ✅ completed
+
+### Summary
+Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the official `ollama/ollama` Docker image. Allocated development ports (11434 emulator, 11433 staging, 11435 production). Integrated text service into the shared tmux orchestrator alongside pwa, voice, image, and emulators.
+
+### AC Status
+- [x] AC-1: Ports & Config Refactor — `text` property added to `EMULATOR_PORTS` (11434), `STAGING_PORTS` (11433), and `PRODUCTION_PORTS` (11435) in `development_ports.ts`. Downstream typechecks pass.
+- [x] AC-2: Tmux Scripts Refactored — `'text'` added to `DevService` union, `SERVICE_DEFS`, `normalizeService` aliases, and `ALL_SERVICES`. `bun tmux:start text` creates a `text` tmux window running `bun run dev` in `apps/backend/text`. CLI help text updated.
+- [x] AC-3: Text Microservice Containerization — `apps/backend/text/` created with `Dockerfile` (`FROM ollama/ollama`), `package.json` with `dev:docker` script mapping volume `./src/cache/ollama:/root/.ollama` and exposing port 11434, `moon.yml` with server preset, `tsconfig.json`, and `README.md`.
+- [x] AC-4: API Verification Script — `scripts/check_health.ts` fetches `/`, checks for string `"Ollama is running"`, reports readiness. Gracefully handles ECONNREFUSED with actionable message to run `bun tmux:start text`.
+
+### Files created
+- `apps/backend/text/package.json` — Container-only microservice with `dev:docker` and `test:text` scripts
+- `apps/backend/text/moon.yml` — Moon project config (application, container tags, server preset)
+- `apps/backend/text/tsconfig.json` — Extends `tsconfig.backend.json` with `$logger` alias
+- `apps/backend/text/Dockerfile` — `FROM ollama/ollama`, exposes port 11434
+- `apps/backend/text/scripts/check_health.ts` — Health check via `/` endpoint, checks for `"Ollama is running"`
+- `apps/backend/text/README.md` — Usage, tasks, architecture docs
+- `apps/backend/text/.gitignore` — Ignores `src/cache/` (model weights)
+
+### Files modified
+- `packages/shared/constants/src/lib/development_ports.ts` — Added `text` to emulator (11434), staging (11433), production (11435) port maps
+- `scripts/src/lib/tmux/session.ts` — Added `'text'` to `DevService` union, `SERVICE_DEFS`, `normalizeService`, `ALL_SERVICES`; updated tab layout comment and error message
+- `scripts/src/lib/tmux/cli.ts` — Updated CLI help text to include `text` in valid services
+- `.moon/workspace.yml` — Registered `text: "apps/backend/text"` project
+
+### Deviations from contract
+- Emulator port shifted to 11436 (contract specified 11434). Host system runs a Nix-installed ollama service binding 11434 as root. Container can't bind the same port. Staging (11433) and production (11435) ports unaffected.

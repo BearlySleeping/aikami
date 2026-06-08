@@ -1,0 +1,33 @@
+# apps/backend/text/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'text'
+  - 'backend'
+  - 'application'
+  - 'container'
+
+project:
+  name: 'text'
+  description: 'Local Ollama LLM text generation container — Docker-only, no Bun source.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn: []
+
+fileGroups:
+  configs:
+    - 'package.json'
+
+tasks:
+  build:
+    command: 'true'
+
+  dev:
+    command: 'bun run dev:docker'
+    preset: 'server'
+
+  test:
+    command: 'bun run test'
