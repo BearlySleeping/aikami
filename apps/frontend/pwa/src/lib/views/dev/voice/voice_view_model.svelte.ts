@@ -1,23 +1,28 @@
 // apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts
 
-import { EMULATOR_PORTS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { ttsService } from '$services';
+import { ttsService, type VoiceInfo } from '$services';
+
+export type { VoiceInfo };
 
 export type VoiceViewModelInterface = BaseViewModelInterface & {
   /** The script text to synthesize. */
   readonly text: string;
   /** Whether audio generation/playback is currently active. */
   readonly isPlaying: boolean;
-  /** Whether a WebSocket connection is open to the voice service. */
+  /** Whether a voice synthesis request is in progress. */
   readonly isConnected: boolean;
-  /** Triggers TTS via WebSocket streaming to the voice microservice. */
+  /** Available Kokoro voice presets. */
+  readonly voices: readonly VoiceInfo[];
+  /** The currently selected voice ID. */
+  readonly selectedVoice: string;
+  /** POSTs text to the Kokoro TTS REST endpoint and plays the returned WAV. */
   generateAndPlay(): Promise<void>;
-  /** Stops playback and closes the WebSocket. */
+  /** Stops playback and aborts the in-progress synthesis request. */
   cancel(): void;
 };
 
@@ -28,79 +33,42 @@ class VoiceViewModel
   implements VoiceViewModelInterface
 {
   text = $state('');
-  isConnected = $state(false);
-
-  private _ws: WebSocket | undefined;
 
   get isPlaying(): boolean {
     return ttsService.isPlaying;
   }
 
+  get isConnected(): boolean {
+    return ttsService.isSynthesizing;
+  }
+
+  get voices(): readonly VoiceInfo[] {
+    return ttsService.voices;
+  }
+
+  get selectedVoice(): string {
+    return ttsService.selectedVoice;
+  }
+
+  set selectedVoice(value: string) {
+    ttsService.selectedVoice = value;
+  }
+
   // ── Public API ────────────────────────────────────────────────────────
+
+  override async initialize(): Promise<void> {
+    await super.initialize();
+    void ttsService.loadVoices();
+  }
 
   async generateAndPlay(): Promise<void> {
     this.debug('generateAndPlay', { textLength: this.text.length });
-
-    // Connect to the voice microservice via WebSocket
-    const voicePort = EMULATOR_PORTS.voice;
-    const wsUrl = `ws://localhost:${voicePort}`;
-
-    this._ws = new WebSocket(wsUrl);
-    this._ws.binaryType = 'arraybuffer';
-
-    this._ws.onopen = () => {
-      this.debug('ws:open', { wsUrl });
-      this.isConnected = true;
-
-      // Start streaming session
-      ttsService.startStream({ messageId: `voice_${Date.now()}`, text: this.text });
-
-      // Send text to the voice service
-      this._ws?.send(JSON.stringify({ type: 'text', data: this.text }));
-      this._ws?.send(JSON.stringify({ type: 'end' }));
-    };
-
-    this._ws.onmessage = (event) => {
-      if (typeof event.data === 'string') {
-        // Control message (JSON)
-        try {
-          const msg = JSON.parse(event.data);
-          this.debug('ws:control', msg);
-          if (msg.type === 'audio_end') {
-            ttsService.endStream();
-          }
-        } catch {
-          this.debug('ws:unexpected_text', { data: event.data });
-        }
-        return;
-      }
-
-      // Binary audio chunk
-      if (event.data instanceof ArrayBuffer) {
-        void ttsService.enqueueChunk({ buffer: event.data });
-      }
-    };
-
-    this._ws.onerror = (event) => {
-      this.error('ws:error', event);
-      ttsService.stop();
-    };
-
-    this._ws.onclose = () => {
-      this.debug('ws:close');
-      this.isConnected = false;
-      this._ws = undefined;
-    };
+    await ttsService.speak({ text: this.text });
   }
 
   cancel(): void {
     this.debug('cancel');
     ttsService.stop();
-    if (this._ws) {
-      this._ws.close();
-      this._ws = undefined;
-    }
-    this.isConnected = false;
   }
 }
 
