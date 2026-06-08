@@ -107,23 +107,19 @@ export type NpcServiceInterface = BaseFrontendClassInterface & {
 
 class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServiceInterface {
   async getSystemNpcs(): Promise<NpcData[]> {
-    this.debug('getSystemNpcs');
     return await npcRepository.getDocumentsByCollection(undefined);
   }
 
-  async getUserNpcs(options: { uid: string }): Promise<NpcData[]> {
-    this.debug('getUserNpcs', options);
+  async getUserNpcs(_options: { uid: string }): Promise<NpcData[]> {
     return await npcRepository.getDocumentsByCollection(undefined);
   }
 
   async getPublicNpcs(): Promise<NpcData[]> {
-    this.debug('getPublicNpcs');
     const userNpcs = await npcRepository.getDocumentsByCollection(undefined);
     return userNpcs.filter((npc: NpcData) => npc.visibility === 'public');
   }
 
   async get(options: { npcId: string }): Promise<NpcData | undefined> {
-    this.debug('get', options);
     const { npcId } = options;
 
     const userNpc = await npcRepository.getDocument({ npcId });
@@ -135,7 +131,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 
   async createNpc(options: { data: Partial<NpcCreateData>; uid: string }): Promise<string> {
-    this.debug('createNpc', options);
     const { data, uid } = options;
 
     const npcData: Omit<NpcCreateData, 'createdAt'> = {
@@ -154,7 +149,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 
   async updateNpc(options: { npcId: string; data: Partial<NpcData> }): Promise<void> {
-    this.debug('updateNpc', options);
     const { npcId, data } = options;
 
     await npcRepository.updateDocument({
@@ -164,7 +158,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 
   async deleteNpc(options: { npcId: string; deleteChatHistory?: boolean }): Promise<void> {
-    this.debug('deleteNpc', options);
     const { npcId, deleteChatHistory = true } = options;
 
     await npcRepository.deleteDocument({ npcId });
@@ -189,7 +182,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 
   async forkNpc(options: { systemNpcId: string; uid: string }): Promise<string> {
-    this.debug('forkNpc', options);
     const { systemNpcId, uid } = options;
 
     const systemNpc = await npcRepository.getDocument({ npcId: systemNpcId });
@@ -213,7 +205,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 
   async importFromFile(options: { file: File; uid: string }): Promise<string> {
-    this.debug('importFromFile', options);
     const { file, uid } = options;
 
     const { character, avatarFile } = await this._extractCharacterFromFile({ file });
@@ -240,7 +231,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 
   async importFromUrl(options: { url: string; uid: string }): Promise<string> {
-    this.debug('importFromUrl', options);
     const { url, uid } = options;
 
     const file = await downloadFromUrl({ url });
@@ -248,7 +238,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 
   async uploadAvatar(options: { file: File; npcId: string }): Promise<string | undefined> {
-    this.debug('uploadAvatar', options);
     const { file, npcId } = options;
     const uid = authService.uid;
 
@@ -288,6 +277,6 @@ class NpcService extends BaseFrontendClass<NpcServiceOptions> implements NpcServ
   }
 }
 
-export const npcService: NpcServiceInterface = new NpcService({
+export const npcService: NpcServiceInterface = NpcService.create({
   className: 'NpcService',
 });

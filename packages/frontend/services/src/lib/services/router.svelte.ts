@@ -367,6 +367,6 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   }
 }
 
-export const routerService: RouterServiceInterface = new RouterService({
+export const routerService: RouterServiceInterface = RouterService.create({
   className: 'RouterService',
 });

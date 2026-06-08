@@ -89,6 +89,6 @@ export class AppService
   }
 }
 
-export const appService: AppServiceInterface = new AppService({
+export const appService: AppServiceInterface = AppService.create({
   className: 'AppService',
 });

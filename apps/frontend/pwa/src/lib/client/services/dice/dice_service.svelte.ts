@@ -81,6 +81,6 @@ class DiceService extends BaseFrontendClass<DiceServiceOptions> implements DiceS
   }
 }
 
-export const diceService: DiceServiceInterface = new DiceService({
+export const diceService: DiceServiceInterface = DiceService.create({
   className: 'DiceService',
 });

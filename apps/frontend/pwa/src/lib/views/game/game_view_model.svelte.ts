@@ -113,15 +113,13 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   private pendingCanvas: HTMLCanvasElement | undefined;
 
   /** Singleton game state service for persisting context data. */
-  private readonly gameStateService = new GameStateService({
+  private readonly gameStateService = GameStateService.create({
     uid: 'game-viewmodel',
     className: 'GameStateService',
   });
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    this.debug('initialize');
-
     try {
       // Lazy-import game modules — PixiJS is SSR-incompatible.
       // `BaseViewModelContainer` ensures `initialize()` runs only client-side.
@@ -209,8 +207,6 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
    * @param canvas - The HTML canvas element for PixiJS to render into.
    */
   async attachCanvas(canvas: HTMLCanvasElement): Promise<void> {
-    this.debug('attachCanvas');
-
     // Bridge not ready yet — store canvas and attach when initialize completes
     if (!this.bridge) {
       this.pendingCanvas = canvas;

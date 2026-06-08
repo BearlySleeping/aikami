@@ -20,7 +20,6 @@ class DashboardViewModel
   implements DashboardViewModelInterface
 {
   async goToCharacterCreator(): Promise<void> {
-    this.debug('goToCharacterCreator');
     await routerService.goToRoute('personas/create', {
       pathParameters: undefined,
       queryParameters: undefined,

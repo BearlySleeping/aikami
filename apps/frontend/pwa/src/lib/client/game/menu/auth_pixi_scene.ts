@@ -195,7 +195,6 @@ class AuthPixiScene extends BaseGameClass<AuthPixiSceneOptions> implements AuthP
    * Destroys the PixiJS application and releases all resources.
    */
   async destroy(): Promise<void> {
-    this.debug('destroy');
     if (this._app) {
       this._app.destroy(true, { children: true });
       this._app = undefined;
@@ -207,9 +206,7 @@ class AuthPixiScene extends BaseGameClass<AuthPixiSceneOptions> implements AuthP
     this._cancelCallback = null;
   }
 
-  override async setup(): Promise<void> {
-    this.debug('setup');
-  }
+  override async setup(): Promise<void> {}
 }
 
 export const getAuthPixiScene = (options: AuthPixiSceneOptions): AuthPixiSceneInterface =>

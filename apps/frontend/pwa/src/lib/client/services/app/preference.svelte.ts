@@ -108,6 +108,6 @@ export class PreferenceService
   }
 }
 
-export const preferenceService: PreferenceServiceInterface = new PreferenceService({
+export const preferenceService: PreferenceServiceInterface = PreferenceService.create({
   className: 'PreferenceService',
 });

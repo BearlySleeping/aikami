@@ -138,8 +138,6 @@ class AuthGameViewModel
   }
 
   async initialize(): Promise<void> {
-    this.debug('initialize');
-
     const isOldGameParam =
       typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('game');
     if (!this.isGameAuth) {
@@ -155,7 +153,6 @@ class AuthGameViewModel
   }
 
   async handleGoogleSignIn(): Promise<void> {
-    this.debug('handleGoogleSignIn');
     this._authState = 'signing_in';
     this.errorMessage = undefined;
 
@@ -186,8 +183,6 @@ class AuthGameViewModel
   }
 
   async handleEmailSignIn(): Promise<void> {
-    this.debug('handleEmailSignIn');
-
     if (!this._email || !this._password) {
       this.errorMessage = 'Please enter email and password';
       return;
@@ -221,8 +216,6 @@ class AuthGameViewModel
   }
 
   async copyToken(): Promise<void> {
-    this.debug('copyToken');
-
     try {
       await navigator.clipboard.writeText(this._idToken);
       this._copied = true;
@@ -236,19 +229,15 @@ class AuthGameViewModel
   }
 
   closeWindow(): void {
-    this.debug('closeWindow');
     window.close();
   }
 
   resetToIdle(): void {
-    this.debug('resetToIdle');
     this._authState = 'idle';
     this.errorMessage = undefined;
   }
 
   private async _completeAuth(): Promise<void> {
-    this.debug('completeAuth');
-
     try {
       const token = await authService.getIdToken();
       const uid = authService.currentUser?.id;
@@ -284,8 +273,6 @@ class AuthGameViewModel
    * to mint a custom token and write it to Firestore.
    */
   private async _completeHandoff(code: string, uid: string): Promise<void> {
-    this.debug('completeHandoff', { code, uid });
-
     const formData = new FormData();
     formData.append('code', code);
     formData.append('uid', uid);

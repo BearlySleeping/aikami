@@ -596,9 +596,7 @@ class CharacterCreationController
     return el;
   }
 
-  override async setup(): Promise<void> {
-    this.debug('setup');
-  }
+  override async setup(): Promise<void> {}
 }
 
 export const getCharacterCreationController = (

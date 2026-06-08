@@ -100,8 +100,6 @@ export class AudioQueuePlayer
   // -- Public API ----------------------------------------------------------
 
   startStream(): void {
-    this.debug('startStream');
-
     this.stop();
 
     audioContextManager.unlock();
@@ -193,14 +191,11 @@ export class AudioQueuePlayer
   }
 
   endStream(): void {
-    this.debug('endStream');
     // The stream is just a signal that no more chunks arrive.
     // Playback naturally finishes when the last scheduled source ends.
   }
 
   stop(): void {
-    this.debug('stop');
-
     // Stop all active and scheduled source nodes
     for (const node of this._sourceNodes) {
       try {
