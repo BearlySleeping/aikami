@@ -30,6 +30,25 @@
       <h1 class="mb-2 text-2xl font-bold">Text Generation</h1>
       <p class="mb-6 text-base-content/60">Test and debug text generation pipelines.</p>
 
+      <!-- Provider selector -->
+      <div class="card bg-base-200 shadow mb-6">
+        <div class="card-body p-4">
+          <label class="form-control w-full">
+            <div class="label">
+              <span class="label-text font-semibold">Provider</span>
+            </div>
+            <select
+              class="select select-bordered w-full"
+              bind:value={viewModel.provider}
+              disabled={viewModel.isGenerating}
+            >
+              <option value="ollama">Local Ollama</option>
+              <option value="openrouter">OpenRouter (Free Model)</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
       <!-- Prompt input -->
       <div class="card bg-base-200 shadow mb-6">
         <div class="card-body p-6">

@@ -22,6 +22,7 @@ export * from './dice/dice_service.svelte.ts';
 export * from './game/game_state_service.svelte.ts';
 export * from './media/audio_context_manager';
 export * from './media/audio_queue_player';
+export * from './media/dev_text.svelte.ts';
 export * from './media/image_generation.svelte.ts';
 export * from './media/pixi_texture_injector';
 export * from './media/stream_orchestrator.svelte.ts';

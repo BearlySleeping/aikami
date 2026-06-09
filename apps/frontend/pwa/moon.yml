@@ -8,9 +8,6 @@ tags:
   - 'svelte'
   - 'application'
 
-toolchains:
-  javascript: false
-
 project:
   name: 'pwa'
   description: 'Main Progressive Web Application built with SvelteKit.'
@@ -25,6 +22,7 @@ dependsOn:
   - 'types'
   - 'constants'
   - 'logger'
+  - 'utils'
 
 fileGroups:
   sources:
