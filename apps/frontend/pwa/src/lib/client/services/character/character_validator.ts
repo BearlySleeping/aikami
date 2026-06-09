@@ -1,5 +1,5 @@
 // apps/frontend/pwa/src/lib/client/services/character/character-validator.ts
-import type { Character, CharacterCardV2 } from '$types';
+import type { Character, CharacterCardV2 } from '@aikami/types';
 
 /**
  * Validates if the given parsed JSON is a valid V2 Character Card.
