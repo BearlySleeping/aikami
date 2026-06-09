@@ -1,5 +1,5 @@
 // apps/frontend/pwa/src/routes/+layout.ts
 // Static SPA mode — all rendering happens client-side.
-// No SSR, no prerendering. Firebase Hosting serves index.html for all routes.
+// SSR disabled; prerender enabled for Tauri static export.
 export const ssr = false;
-export const prerender = false;
+export const prerender = true;
