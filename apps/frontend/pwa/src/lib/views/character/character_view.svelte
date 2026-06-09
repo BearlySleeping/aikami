@@ -1,5 +1,5 @@
 <script lang="ts">
-  // apps/frontend/pwa/src/lib/views/dev/character/character_view.svelte
+  // apps/frontend/pwa/src/lib/views/character/character_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import type { CharacterViewModelInterface } from './character_view_model.svelte.ts';
 
@@ -7,19 +7,13 @@
     viewModel: CharacterViewModelInterface;
   };
 
-  let { viewModel }: Props = $props();
+  const { viewModel }: Props = $props();
 
-  // ── Local state ───────────────────────────────────────────────────────
-
-  let chatInput = $state('');
   let messagesContainer = $state<HTMLDivElement>();
-
-  // ── Auto-scroll ───────────────────────────────────────────────────────
 
   $effect(() => {
     void viewModel.messages.length;
     if (messagesContainer) {
-      // Slight delay to allow DOM to update
       requestAnimationFrame(() => {
         if (messagesContainer) {
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -27,35 +21,6 @@
       });
     }
   });
-
-  // ── Helpers ───────────────────────────────────────────────────────────
-
-  const handleSend = async (): Promise<void> => {
-    const text = chatInput.trim();
-    if (!text || viewModel.isStreaming) {
-      return;
-    }
-    chatInput = '';
-    await viewModel.sendChatMessage(text);
-  };
-
-  const handleKeydown = (e: KeyboardEvent): void => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void handleSend();
-    }
-  };
-
-  const scoreLabels = [
-    { key: 'strength' as const, label: 'STR', desc: 'Strength' },
-    { key: 'dexterity' as const, label: 'DEX', desc: 'Dexterity' },
-    { key: 'constitution' as const, label: 'CON', desc: 'Constitution' },
-    { key: 'intelligence' as const, label: 'INT', desc: 'Intelligence' },
-    { key: 'wisdom' as const, label: 'WIS', desc: 'Wisdom' },
-    { key: 'charisma' as const, label: 'CHA', desc: 'Charisma' },
-  ];
-
-  let debugOpen = $state(false);
 </script>
 
 <svelte:head>
@@ -72,7 +37,7 @@
 
       <!-- Debug panel -->
       <div class="collapse collapse-arrow bg-base-300 mb-4">
-        <input type="checkbox" bind:checked={debugOpen}>
+        <input type="checkbox" bind:checked={viewModel.debugOpen}>
         <div class="collapse-title text-xs font-mono opacity-60">
           Debug: phase={viewModel.phase}
           | msgs={viewModel.messages.length}
@@ -89,7 +54,7 @@
             showLoadingView: viewModel.showLoadingView,
             hasAvatar: !!viewModel.avatarUrl,
             hasPersona: !!viewModel.persona,
-            errorMessage: (viewModel as { errorMessage?: string }).errorMessage ?? 'none',
+            errorMessage: viewModel.errorMessage ?? 'none',
           }, null, 2)}</pre>
         </div>
       </div>
@@ -147,15 +112,15 @@
               <textarea
                 class="textarea textarea-bordered flex-1 min-h-16"
                 placeholder="Describe your character..."
-                bind:value={chatInput}
+                bind:value={viewModel.chatInput}
                 disabled={viewModel.isStreaming}
-                onkeydown={handleKeydown}
+                onkeydown={(e) => viewModel.handleKeydown(e)}
                 rows="2"
               ></textarea>
               <button
                 class="btn btn-primary"
-                onclick={handleSend}
-                disabled={!chatInput.trim() || viewModel.isStreaming}
+                onclick={() => viewModel.handleSend()}
+                disabled={!viewModel.chatInput.trim() || viewModel.isStreaming}
               >
                 Send
               </button>
@@ -263,12 +228,7 @@
                   value={viewModel.persona.appearance?.physicalDescription ?? ''}
                   oninput={(e: Event) => {
                     const target = e.target as HTMLTextAreaElement;
-                    if (viewModel.persona) {
-                      if (!viewModel.persona.appearance) {
-                        viewModel.persona.appearance = {};
-                      }
-                      viewModel.persona.appearance.physicalDescription = target.value;
-                    }
+                    viewModel.updateAppearanceDescription(target.value);
                   }}
                   placeholder="Physical description for avatar generation"
                   rows="3"
@@ -284,7 +244,7 @@
 
               {#if viewModel.persona.abilityScores}
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {#each scoreLabels as stat}
+                  {#each viewModel.scoreLabels as stat}
                     <div class="form-control">
                       <div class="label">
                         <span class="label-text font-semibold">{stat.label}</span>
@@ -293,15 +253,7 @@
                       <div class="flex items-center gap-2">
                         <button
                           class="btn btn-sm btn-ghost btn-square"
-                          onclick={() => {
-                            const scores = viewModel.persona?.abilityScores;
-                            if (scores && scores[stat.key] !== undefined) {
-                              const current = scores[stat.key] as number;
-                              if (current > 1) {
-                                scores[stat.key] = current - 1;
-                              }
-                            }
-                          }}
+                          onclick={() => viewModel.decrementStat(stat.key)}
                         >
                           −
                         </button>
@@ -314,15 +266,7 @@
                         >
                         <button
                           class="btn btn-sm btn-ghost btn-square"
-                          onclick={() => {
-                            const scores = viewModel.persona?.abilityScores;
-                            if (scores && scores[stat.key] !== undefined) {
-                              const current = scores[stat.key] as number;
-                              if (current < 30) {
-                                scores[stat.key] = current + 1;
-                              }
-                            }
-                          }}
+                          onclick={() => viewModel.incrementStat(stat.key)}
                         >
                           +
                         </button>
