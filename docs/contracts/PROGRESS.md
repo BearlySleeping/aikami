@@ -25,6 +25,7 @@
 | C-026–C-028 | (no contract files) | — |
 | C-029 | Menu Auth Wiring & Vanilla PixiJS Character Creation | ✅ completed |
 | C-101 | Shared Package Enforce (Boundary Bleed) | ✅ completed |
+| C-102 | Tauri SPA Enforcement | ✅ completed |
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
@@ -2532,3 +2533,35 @@ Moved domain-model `Character`/`CharacterCardV2`/`CharacterCardV1` types from `a
 
 ### Deviations from contract
 - No Zod schemas to migrate — PWA types were plain TS `type` aliases, not Zod. Schemas already live in `packages/shared/schemas/`.
+
+---
+
+## C-102 — Tauri SPA Enforcement — ✅ completed
+
+### Summary
+Stripped all server-side code from the SvelteKit PWA to enforce static SPA compilation for Tauri v2 desktop builds. Deleted `+server.ts` and `+page.server.ts` files, locked `+layout.ts` to `ssr = false` + `prerender = true`, and commented out frontend fetch calls that hit the now-deleted routes with TODO markers for future C-107 microservice migration.
+
+### AC Status
+- [x] AC-1: `api/text/+server.ts` deleted
+- [x] AC-2: `(public)/auth/game/+page.server.ts` deleted
+- [x] AC-3: `+layout.ts` exports `ssr = false` and `prerender = true`
+- [x] AC-4: `svelte.config.js` uses `@sveltejs/adapter-static` with `fallback: 'index.html'`
+
+### Files deleted
+- `apps/frontend/pwa/src/routes/api/text/+server.ts` — SSE text generation endpoint (re-routed to C-107)
+- `apps/frontend/pwa/src/routes/(public)/auth/game/+page.server.ts` — Device-flow handoff server action (re-routed to C-107)
+
+### Files modified
+- `apps/frontend/pwa/src/routes/+layout.ts` — Changed `prerender` from `false` to `true`, updated comment
+- `apps/frontend/pwa/src/lib/client/services/media/ai_text_intelligence_service.svelte.ts` — Commented out `fetch('/api/text', ...)` + SSE stream reader with `TODO(C-107)` markers; suppressed `_readSSEStream_disabled` and unused constants
+- `apps/frontend/pwa/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — Commented out `fetch('?/completeHandoff', ...)` with `TODO(C-107)` marker; throws descriptive error when triggered
+
+### Validation
+- `pwa:fix` — clean (1 warning from biome-ignore on disabled method)
+- `pwa:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (known, unrelated to C-102)
+- `svelte.config.js` already configured with `adapter-static` + `fallback: 'index.html'` (no change needed)
+- `package.json` already includes `@sveltejs/adapter-static` as devDependency (no change needed)
+
+### Deviations from contract
+- `_readSSEStream` method renamed to `_readSSEStream_disabled` with `biome-ignore` suppression — private class member rules don't recognize underscore prefix convention. Will be restored in C-107.
+- `FETCH_TIMEOUT_MS`, `FIRST_CHUNK_TIMEOUT_MS`, `READ_TIMEOUT_MS` constants prefixed with underscore — unused due to commented-out code, will be restored in C-107.

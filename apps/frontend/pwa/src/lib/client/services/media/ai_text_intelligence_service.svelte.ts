@@ -88,13 +88,16 @@ export type AiTextIntelligenceServiceInterface = BaseFrontendClassInterface & {
 // ---------------------------------------------------------------------------
 
 /** Timeout for the entire fetch+stream operation (90 seconds). */
-const FETCH_TIMEOUT_MS = 90_000;
+// TODO(C-107): Re-enable when streamChat is wired to microservice
+const _FETCH_TIMEOUT_MS = 90_000;
 
 /** Timeout for individual SSE stream read operations (30 seconds). */
-const READ_TIMEOUT_MS = 30_000;
+// TODO(C-107): Re-enable when _readSSEStream is re-enabled
+const _READ_TIMEOUT_MS = 30_000;
 
 /** Maximum time to wait for the first SSE chunk (15 seconds). */
-const FIRST_CHUNK_TIMEOUT_MS = 15_000;
+// TODO(C-107): Re-enable when _readSSEStream is re-enabled
+const _FIRST_CHUNK_TIMEOUT_MS = 15_000;
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -181,7 +184,8 @@ class AiTextIntelligenceService
     signal?: AbortSignal;
     model?: string;
   }): Promise<void> {
-    const { messages, onChunk, signal, model: explicitModel } = options;
+    // TODO(C-107): Re-enable when streamChat is wired to microservice
+    const { messages, onChunk: _onChunk, signal, model: explicitModel } = options;
 
     const routing = this._resolveProvider({ explicitModel });
     this._exposeRouting(routing);
@@ -229,36 +233,42 @@ class AiTextIntelligenceService
         promptLength: prompt.length,
       });
 
-      // Fetch with timeout
-      const timeoutId = setTimeout(
-        () => abortController.abort(new Error('Fetch timed out')),
-        FETCH_TIMEOUT_MS,
-      );
+      // Fetch with timeout (commented pending C-107)
+      // const timeoutId = setTimeout(
+      //   () => abortController.abort(new Error('Fetch timed out')),
+      //   FETCH_TIMEOUT_MS,
+      // );
 
-      const response = await fetch('/api/text', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: abortController.signal,
-      });
+      // TODO(C-107): Wire to microservice/firebase — the /api/text +server.ts route
+      // was deleted for Tauri SPA enforcement (C-102). Stream chat must be re-routed
+      // to a Firebase Function or Python microservice.
+      //
+      // const response = await fetch('/api/text', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(body),
+      //   signal: abortController.signal,
+      // });
+      //
+      // clearTimeout(timeoutId);
+      //
+      // if (!response.ok) {
+      //   const errorText = await response.text().catch(() => 'Unknown error');
+      //   this.error('streamChat:fetch-failed', { status: response.status, errorText });
+      //   throw new Error(`HTTP ${response.status}: ${errorText}`);
+      // }
+      //
+      // if (!response.body) {
+      //   throw new Error('No response body');
+      // }
+      //
+      // await this._readSSEStream({
+      //   body: response.body,
+      //   signal: abortController.signal,
+      //   onChunk,
+      // });
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        this.error('streamChat:fetch-failed', { status: response.status, errorText });
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      if (!response.body) {
-        throw new Error('No response body');
-      }
-
-      await this._readSSEStream({
-        body: response.body,
-        signal: abortController.signal,
-        onChunk,
-      });
+      throw new Error('streamChat is temporarily disabled — pending C-107 microservice migration');
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
         this.debug('streamChat:aborted');
@@ -395,7 +405,8 @@ class AiTextIntelligenceService
 
   // ── Private: SSE stream reader ────────────────────────────────────────
 
-  private async _readSSEStream(options: {
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: TODO(C-107) will re-enable
+  private async _readSSEStream_disabled(options: {
     body: ReadableStream<Uint8Array>;
     signal: AbortSignal;
     onChunk: (text: string) => void;
@@ -414,7 +425,7 @@ class AiTextIntelligenceService
           return;
         }
 
-        const timeout = isFirstChunk ? FIRST_CHUNK_TIMEOUT_MS : READ_TIMEOUT_MS;
+        const timeout = isFirstChunk ? _FIRST_CHUNK_TIMEOUT_MS : _READ_TIMEOUT_MS;
         const result = await Promise.race([
           reader.read(),
           new Promise<never>((_, reject) =>
