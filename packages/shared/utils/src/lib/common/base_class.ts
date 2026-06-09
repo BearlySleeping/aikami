@@ -95,39 +95,61 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
   ): T {
     const instance = new this(options);
 
-    // Bypasses the Proxy entirely in production for zero performance overhead
+    // Bypass entirely in production
     if (!(options.enableAutoDebug ?? BaseClass.isDevelopmentMode())) {
       return instance;
     }
 
-    return new Proxy(instance, {
-      // Omit 'receiver' to ensure getters are evaluated against the raw instance.
-      // This prevents Svelte 5 / JS #private field strictness crashes.
-      get(target, propKey) {
-        const originalProperty = Reflect.get(target, propKey);
+    // THE FIX: Prototype Monkey-Patching instead of ES6 Proxies.
+    // Svelte 5's $state and native #private fields crash when wrapped in custom Proxies.
+    // Instead, we dynamically shadow the methods on the instance itself!
 
+    let currentProto = Object.getPrototypeOf(instance);
+
+    // Walk up the prototype chain (stops before the base JS Object)
+    while (currentProto && currentProto !== Object.prototype) {
+      const methodNames = Object.getOwnPropertyNames(currentProto);
+
+      for (const propKey of methodNames) {
+        const descriptor = Object.getOwnPropertyDescriptor(currentProto, propKey);
+
+        // Only target actual functions that are not excluded or private
         if (
-          typeof originalProperty === 'function' &&
+          descriptor &&
+          typeof descriptor.value === 'function' &&
           typeof propKey === 'string' &&
           !EXCLUDED_PROXY_METHODS.has(propKey) &&
-          !propKey.startsWith('_') // Ignore internal/private methods
+          !propKey.startsWith('_') &&
+          !Object.hasOwn(instance, propKey) // Prevent double-wrapping if overridden
         ) {
-          return function (this: T, ...args: unknown[]) {
-            // Auto-log the method execution
-            if (args.length > 0) {
-              target.debug(propKey, { args });
-            } else {
-              target.debug(propKey);
-            }
+          const originalMethod = descriptor.value;
 
-            // Apply to 'target' (raw instance) rather than 'this' (Proxy wrapper)
-            return originalProperty.apply(target, args);
-          };
+          // Shadow the method directly on the class instance
+          Object.defineProperty(instance, propKey, {
+            configurable: true,
+            enumerable: descriptor.enumerable,
+            writable: descriptor.writable,
+            value: function (this: T, ...args: unknown[]) {
+              // 1. Auto-log the method execution
+              if (args.length > 0) {
+                this.debug(propKey, ...args);
+              } else {
+                this.debug(propKey);
+              }
+
+              // 2. Execute the original method
+              return originalMethod.apply(this, args);
+            },
+          });
         }
+      }
 
-        return originalProperty;
-      },
-    });
+      // Move up to the parent class (e.g., to catch inherited methods)
+      currentProto = Object.getPrototypeOf(currentProto);
+    }
+
+    // Return the RAW, pristine instance! Svelte 5 will love this.
+    return instance;
   }
 
   // --- Constructor & Getters ---
