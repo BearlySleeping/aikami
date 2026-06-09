@@ -15,6 +15,7 @@ export * from './character/character.svelte.ts';
 export * from './character/character_service.svelte.ts';
 export * from './character/character_text_stream.svelte.ts';
 export * from './chat/chat.svelte.ts';
+export * from './config/config_service.svelte.ts';
 export * from './database/chat.svelte.ts';
 export * from './database/notification.svelte.ts';
 export * from './database/npc.svelte.ts';
