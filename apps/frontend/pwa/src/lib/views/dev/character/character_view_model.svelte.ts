@@ -5,8 +5,12 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
+import {
+  CHARACTER_EXTRACTION_SYSTEM_PROMPT,
+  CharacterExtractionSchema,
+} from '$lib/client/game/core/ai/prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/client/game/core/ai/prompts/dnd_creation';
-import { aiSettingsService, characterCreationService } from '$services';
+import { aiSettingsService, aiTextIntelligenceService, characterCreationService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,20 +110,34 @@ class CharacterViewModel
     const compiledHistory = this._compileChatHistory();
 
     try {
-      const persona = await characterCreationService.generatePersona({ history: compiledHistory });
-      if (persona) {
+      const extracted = await aiTextIntelligenceService.extractStructure({
+        schema: CharacterExtractionSchema as unknown as Record<string, unknown>,
+        schemaName: 'CharacterExtraction',
+        prompt: compiledHistory,
+        systemPrompt: CHARACTER_EXTRACTION_SYSTEM_PROMPT,
+      });
+
+      if (extracted) {
+        characterCreationService.persona = extracted as unknown as PersonaData;
+
+        const persona = characterCreationService.persona;
         const imagePrompt =
-          persona.appearance?.physicalDescription ?? persona.name ?? 'fantasy character';
+          persona?.appearance?.physicalDescription || persona?.name || 'fantasy character';
         characterCreationService.startAvatarGeneration({ prompt: imagePrompt });
         this.phase = 'TWEAK';
       } else {
         this.phase = 'CHAT';
         this.errorMessage = 'Failed to generate character. Please try again.';
       }
-    } catch (error) {
-      this.error('generateCharacter', error);
+    } catch (error: unknown) {
+      const err = error as Error & { name: string };
+      this.error('generateCharacter', err);
       this.phase = 'CHAT';
-      this.errorMessage = 'Failed to generate character. Please try again.';
+      if (err.name === 'AbortError') {
+        this.errorMessage = 'Character generation was cancelled.';
+      } else {
+        this.errorMessage = 'Failed to generate character. Please try again.';
+      }
     }
   }
 
