@@ -74,6 +74,7 @@
 | C-077 | Dev UI Text Sandbox Refactor & OpenRouter Toggle | ✅ completed |
 | C-078 | Dev Character Creation Sandbox | ✅ completed |
 | C-079 | Ultimate Configuration Dashboard | ✅ completed |
+| C-080 | Unified Text & Structural Intelligence Service | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2417,3 +2418,42 @@ Implemented the `/dev/config` dashboard — a centralized configuration interfac
 - 17/17 LocalServiceDetector tests passing
 - 25/25 ConfigViewModel tests passing
 - **72/72 total tests passing**
+
+---
+
+## C-080 — Unified Text & Structural Intelligence Service — ✅ completed
+
+### Summary
+Created `AiTextIntelligenceService` — a centralized, client-side unified intelligence service that abstracts all text-generation workflows behind a single reactive gateway. Eliminated raw `/api/text` fetch calls from `character_text_stream.svelte.ts` and `text_view_model.svelte.ts`. Provider routing, model selection, and API keys are resolved dynamically from `ConfigService`.
+
+### Architecture
+- **AiTextIntelligenceService** (`ai_text_intelligence_service.svelte.ts`): Singleton Svelte 5 service with three primary capabilities:
+  - `streamChat()`: SSE-based token streaming with `onChunk` callback, AbortSignal passthrough, read timeouts, and graceful abort handling.
+  - `extractStructure()`: TypeBox schema → strict JSON Schema (`additionalProperties: false` enforced recursively), LLM structural extraction, JSON response sanitization with markdown fence stripping and balanced brace extraction.
+  - `cancelAll()`: Graceful abort of all active stream connections with debug hook reset.
+- **Dynamic Provider Resolution** (`_resolveProvider()`): Reads `configService.state` to determine active provider (OpenRouter by default), model, and endpoint. Supports explicit model overrides and falls back to first model config entry.
+- **Debug Hooks**: Three `globalThis.__ai_service_*` hooks for E2E/unit test introspection: `resolved_routing`, `active_stream_count`, `compiled_schema_cache_size`.
+
+### AC Status
+- [x] AC-1: Dynamic Provider & Model Resolution — `_resolveProvider()` reads `configService.state.preferredModel` and `configService.state.models`. Routes through OpenRouter/OpenAI/Anthropic/DeepSeek. Exposes via `__ai_service_resolved_routing`.
+- [x] AC-2: Unified Token Streaming Chat — `streamChat()` handles fragmented SSE token accumulation, passes abort signals to `fetch()`, tracks active stream count via `__ai_service_active_stream_count`.
+- [x] AC-3: High-Performance TypeBox Structural Extraction — `extractStructure()` compiles TypeBox schemas to strict JSON Schema dictionaries with `additionalProperties: false`, handles markdown fence stripping, balanced JSON extraction, and schema caching via `__ai_service_compiled_schema_cache_size`.
+
+### Files created
+- `apps/frontend/pwa/src/lib/client/services/media/ai_text_intelligence_service.svelte.ts` — Service class with streamChat, extractStructure, cancelAll, debug hooks
+- `apps/frontend/pwa/src/lib/client/services/media/ai_text_intelligence_service.test.ts` — 19 unit tests covering all 3 ACs
+
+### Files modified
+- `apps/frontend/pwa/src/lib/client/services/index.ts` — Added barrel export for `ai_text_intelligence_service`
+- `apps/frontend/pwa/src/lib/client/services/character/character_text_stream.svelte.ts` — Removed raw fetch logic; delegates to `aiTextIntelligenceService.streamChat()`
+- `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts` — Removed `characterTextStreamService` dependency; uses `aiTextIntelligenceService.streamChat()` directly
+
+### Test results
+- 19/19 AiTextIntelligenceService tests passing
+- Character creation and text sandbox continue to work through refactored delegates
+
+### Deviations from contract
+- `globalThis` used instead of `window` for debug hooks — ensures compatibility with Bun test runner (which lacks `window`).
+- Schema compilation caches based on `schemaName` string key, not TypeBox structural hash — avoids circular reference issues with TypeBox's runtime type system while still achieving the dedup goal.
+- ConfigService accessed via direct import rather than through `$services` barrel in the test — test isolation requires mocking `config_service.svelte.ts` directly to avoid cross-test-file mock collision.
+- `character_text_stream.svelte.ts` keeps its own public API (`output`, `isGenerating`, `cancel()`) for backward compatibility with `characterCreationService`; internally delegates to `aiTextIntelligenceService`.
