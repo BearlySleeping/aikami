@@ -36,6 +36,14 @@ class MockBaseFrontendClass {
   constructor(options: { className: string }) {
     this._options = options;
   }
+  static create<O extends { className: string }, T extends MockBaseFrontendClass>(
+    this: new (
+      options: O,
+    ) => T,
+    options: O,
+  ): T {
+    return new this(options);
+  }
   protected debug(..._args: unknown[]): void {}
   protected info(..._args: unknown[]): void {}
   protected log(..._args: unknown[]): void {}

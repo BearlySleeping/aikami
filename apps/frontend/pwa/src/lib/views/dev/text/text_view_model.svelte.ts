@@ -6,7 +6,9 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { page } from '$app/state';
-import { logger } from '$logger';
+import { devTextService, type TextGenerationProvider } from '$services';
+
+export type { TextGenerationProvider };
 
 export type TextViewModelInterface = BaseViewModelInterface & {
   /** The user-editable prompt sent to the text generation endpoint. */
@@ -15,6 +17,10 @@ export type TextViewModelInterface = BaseViewModelInterface & {
   readonly output: string;
   /** Whether a generation is currently in progress. */
   readonly isGenerating: boolean;
+  /** The selected text generation provider. */
+  readonly provider: TextGenerationProvider;
+  /** The model identifier (used when provider is OpenRouter). */
+  readonly model: string;
   /** Sends the prompt and begins accumulating SSE chunks. */
   generate(): Promise<void>;
   /** Aborts the active fetch request and resets generation state. */
@@ -25,153 +31,70 @@ export type TextViewModelOptions = BaseViewModelOptions & {};
 
 class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextViewModelInterface {
   prompt = $state('');
-  output = $state('');
-  isGenerating = $state(false);
 
-  private _abortController: AbortController | undefined;
+  get output(): string {
+    return devTextService.output;
+  }
+
+  get isGenerating(): boolean {
+    return devTextService.isGenerating;
+  }
+
+  get provider(): TextGenerationProvider {
+    return devTextService.provider;
+  }
+
+  set provider(value: TextGenerationProvider) {
+    devTextService.provider = value;
+  }
+
+  get model(): string {
+    return devTextService.model;
+  }
+
+  set model(value: string) {
+    devTextService.model = value;
+  }
 
   // ── Public API ────────────────────────────────────────────────────────
 
   /**
-   * Initializes the view model. If the URL contains `?instant=true&text=...`,
-   * auto-populates the prompt and triggers generation immediately.
+   * Initializes the view model. Supports URL query parameters:
+   * - `?instant=true` (or `instant-start=true`) — auto-generate on load
+   * - `?text=...` — pre-fill the prompt
+   * - `?provider=ollama|openrouter` — set the provider before generating
    */
   override async initialize(): Promise<void> {
-    await super.initialize();
-
     const url = new URL(page.url);
-    const instantParam = url.searchParams.get('instant');
+    const instantParam = url.searchParams.get('instant') ?? url.searchParams.get('instant-start');
+
+    // Set provider from URL if specified
+    const providerParam = url.searchParams.get('provider');
+    if (providerParam === 'ollama' || providerParam === 'openrouter') {
+      devTextService.provider = providerParam;
+    }
+
     if (instantParam === 'true') {
       const textParam = url.searchParams.get('text');
       if (textParam) {
         this.prompt = decodeURIComponent(textParam);
-        this.debug('initialize:instant-auto', { promptLength: this.prompt.length });
+        this.debug('initialize:instant-auto', {
+          promptLength: this.prompt.length,
+          provider: devTextService.provider,
+        });
         void this.generate();
       }
     }
+
+    await super.initialize();
   }
 
   async generate(): Promise<void> {
-    if (!this.prompt.trim()) {
-      return;
-    }
-
-    // Cancel any in-progress generation
-    this.cancel();
-
-    const abortController = new AbortController();
-    this._abortController = abortController;
-    const { signal } = abortController;
-
-    this.isGenerating = true;
-    this.output = '';
-
-    try {
-      const response = await fetch('/api/text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-test-mode': 'true',
-        },
-        body: JSON.stringify({ prompt: this.prompt }),
-        signal,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        logger.error('generate:fetch-failed', { status: response.status, errorText });
-        this.output = `Error: ${response.status} — ${errorText}`;
-        return;
-      }
-
-      if (!response.body) {
-        this.output = 'Error: No response body';
-        return;
-      }
-
-      await this._readStream({ body: response.body, signal });
-    } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') {
-        // Silently handled — cancel() was called
-        return;
-      }
-      logger.error('generate:failed', error);
-      this.output = `Error: ${(error as Error).message ?? 'Unknown error'}`;
-    } finally {
-      this.isGenerating = false;
-      this._abortController = undefined;
-    }
+    await devTextService.generate({ prompt: this.prompt });
   }
 
   cancel(): void {
-    const controller = this._abortController;
-    if (controller) {
-      controller.abort();
-      this._abortController = undefined;
-    }
-
-    this.isGenerating = false;
-  }
-
-  // ── Private helpers ───────────────────────────────────────────────────
-
-  /**
-   * Reads the SSE response body and accumulates text chunks into {@link output}.
-   *
-   * Parses lines starting with `data: ` as JSON payloads. A `[DONE]` data
-   * value signals stream completion. Text chunks are extracted from the
-   * `text` property of the JSON payload.
-   */
-  private async _readStream(options: {
-    body: ReadableStream<Uint8Array>;
-    signal: AbortSignal;
-  }): Promise<void> {
-    const { body, signal } = options;
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        if (signal.aborted) {
-          return;
-        }
-
-        const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete lines
-        const lines = buffer.split('\n');
-        // The last element may be incomplete — keep it in the buffer
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) {
-            continue;
-          }
-
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') {
-            return;
-          }
-
-          try {
-            const chunk = JSON.parse(data) as { text?: string };
-            if (chunk.text) {
-              this.output += chunk.text;
-            }
-          } catch {
-            // Skip invalid JSON lines
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
+    devTextService.cancel();
   }
 }
 
