@@ -1,8 +1,8 @@
 // apps/frontend/pwa/src/lib/client/services/character/character.svelte.ts
 import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
+import type { Character } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { authService, storageService } from '$services';
-import type { Character } from '$types';
 import { downloadFromUrl } from './character_downloader.ts';
 import { importFromJson, importFromPng } from './character_importer.ts';
 

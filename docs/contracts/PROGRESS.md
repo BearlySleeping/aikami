@@ -24,6 +24,7 @@
 | C-025 | TTS Audio Streaming & Synchronization | ✅ completed |
 | C-026–C-028 | (no contract files) | — |
 | C-029 | Menu Auth Wiring & Vanilla PixiJS Character Creation | ✅ completed |
+| C-101 | Shared Package Enforce (Boundary Bleed) | ✅ completed |
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
@@ -2494,3 +2495,40 @@ Refactored the Dev Character Creation Sandbox (CharacterViewModel) to use `aiTex
 - Schema import uses `import Type from 'typebox'` (local alias) rather than `@sinclair/typebox` — matches PWA monorepo convention.
 - `PersonaData` assignment uses `as unknown as PersonaData` cast — extracted object lacks CoreSchema fields (id, createdAt, etc.) required by full PersonaSchema. Safe for TWEAK phase (only name, background, appearance, abilityScores used).
 - `clothing` field extracted but not mapped to PersonaData — AppearanceSchema has no `clothing` property. Preserved in extraction schema for future use by the DM prompt.
+
+---
+
+## C-101 — Shared Package Enforce (Boundary Bleed) — ✅ completed
+
+### Summary
+Moved domain-model `Character`/`CharacterCardV2`/`CharacterCardV1` types from `apps/frontend/pwa/src/lib/types/character.ts` into `packages/shared/types/src/lib/database/character_card.ts`. Updated 3 PWA import sites from `$types` to `@aikami/types`. PWA-only game types (`GameStateEvent`, `GameStateListener`, `ActiveContextEntry`, `GameStateOptions`) and route constants (`routes.ts`) correctly retained per Rule 1 (app-specific).
+
+### Audit findings
+- **PWA types/character.ts**: 3 domain types (`Character`, `CharacterCardV2`, `CharacterCardV1`) — boundary bleed, moved to shared.
+- **PWA types/game.ts**: Self-documented "PWA-only game types" — retained. Cross-project game types already live in `packages/shared/types/src/lib/api/game.ts`.
+- **PWA constants/routes.ts**: PWA-specific route definitions — retained.
+- **Stale export check**: `packages/shared/types/src/index.ts` — no stale export (earlier suspicion was a batch-output truncation artifact).
+- **Naming collision avoidance**: Used `character_card.ts` in shared types to avoid collision with `packages/shared/schemas/src/lib/database/character.ts` (D&D Character Sheet — different concept).
+
+### Files created
+- `packages/shared/types/src/lib/database/character_card.ts` — `Character`, `CharacterCardV2`, `CharacterCardV1` types with biome-ignore for snake_case external format
+
+### Files modified
+- `packages/shared/types/src/index.ts` — Added `export * from './lib/database/character_card.ts'`
+- `apps/frontend/pwa/src/lib/types/index.ts` — Removed character re-exports, kept game + PWAHookData
+- `apps/frontend/pwa/src/lib/client/services/character/character_validator.ts` — `$types` → `@aikami/types`
+- `apps/frontend/pwa/src/lib/client/services/character/character.svelte.ts` — `$types` → `@aikami/types`
+- `apps/frontend/pwa/src/lib/client/services/character/character_importer.ts` — `$types` → `@aikami/types`
+
+### Files deleted
+- `apps/frontend/pwa/src/lib/types/character.ts` — moved to shared package
+
+### Validation
+- `types:fix` — clean (0 errors after biome-ignore directive added)
+- `types:typecheck` — clean (cached pass)
+- `pwa:fix` — clean (71 files auto-fixed)
+- `pwa:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (unrelated to C-101)
+- All import resolution verified via grep — no remaining `$types` references to Character/CharacterCardV1/CharacterCardV2
+
+### Deviations from contract
+- No Zod schemas to migrate — PWA types were plain TS `type` aliases, not Zod. Schemas already live in `packages/shared/schemas/`.
