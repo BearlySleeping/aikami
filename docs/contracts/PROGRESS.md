@@ -73,6 +73,7 @@
 | C-076 | Dev UI Image Sandbox Checkpoint Selection | ✅ completed |
 | C-077 | Dev UI Text Sandbox Refactor & OpenRouter Toggle | ✅ completed |
 | C-078 | Dev Character Creation Sandbox | ✅ completed |
+| C-079 | Ultimate Configuration Dashboard | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2371,3 +2372,48 @@ Extracted SSE streaming logic from `TextViewModel` into a dedicated `DevTextServ
 | AC-2 | Structured Persona Extraction — compile chat → `aiService.createPersona()` | ✅ ViewModel orchestrates |
 | AC-3 | Avatar Generation — `imageGenerationService.generateImage()` in background | ✅ Non-blocking fire-and-forget |
 | AC-4 | Advanced Tweak UI — editable stats, name, background, appearance | ✅ Full form binding |
+
+---
+
+## C-079 — Ultimate Configuration Dashboard — ✅ completed
+
+### Summary
+Implemented the `/dev/config` dashboard — a centralized configuration interface with tabbed navigation, encrypted API key storage, local service auto-detection, and domain-specific settings (Voice, Image, Memory). Built with the Glassmorphic-Industrial design system (deep space background, electric violet primary, neon cyan secondary).
+
+### Architecture
+- **ConfigService** (`config_service.svelte.ts`): Singleton Svelte 5 service managing all configuration state with `$state`. API keys encrypted via crypto_vault; non-sensitive config stored as plain JSON in localStorage. Works entirely offline — no Firebase dependencies required. Supports Tauri/local deployment.
+- **LocalServiceDetector** (`local_service_detector.ts`): Class for polling local service ports (ComfyUI:8188, Voice:8089, Text:11436) via HTTP HEAD requests with AbortController timeouts. Configurable endpoints via env vars or constructor.
+- **ConfigViewModel** (`config_view_model.svelte.ts`): Bridges ConfigService + LocalServiceDetector to the view. Manages 5 tabs (API Keys, Models, Voice, Image, Memory), debounced save (800ms), and service detection.
+- **ConfigView** (`config_view.svelte`): DaisyUI + Tailwind view with Glassmorphic-Industrial styling — deep space background `#0b1326`, electric violet `#cabeff` primary, neon cyan `#00e3fd` accent, service status indicator dots, tabbed navigation with underline indicator, collapsible cards with backdrop blur.
+
+### AC Status
+- [x] AC-1: Tabbed Configuration Layout — 5 tabs (API Keys, Models, Voice, Image, Memory) with active state underline in neon cyan. ViewModel initializes with 'api-keys' active.
+- [x] AC-2: API Key Management & Sync — 5 provider key fields (OpenRouter, Gemini, Anthropic, OpenAI, DeepSeek) with show/hide toggles. Keys encrypted at rest via crypto_vault. Non-sensitive config in plain localStorage. Save loads from vault, merge with defaults.
+- [x] AC-3: Local Service Auto-Detection — Status dots (green/amber/red) for ComfyUI, Voice, Text. Detect button triggers port pinging via HEAD requests with configurable timeouts. Disconnected by default when services not running.
+- [x] AC-4: Domain Settings — Voice tab (engine, voice ID, speed slider, pitch slider), Image tab (backend, checkpoint, width, height, steps, CFG scale), Memory tab (context window, max turns, summarization threshold, long-term memory toggle). All bound to ConfigState.
+
+### Files created
+- `apps/frontend/pwa/src/lib/client/services/config/config_service.svelte.ts` — ConfigState types + ConfigService class with $state
+- `apps/frontend/pwa/src/lib/client/services/config/config_service.test.ts` — 30 tests (AC-2)
+- `apps/frontend/pwa/src/lib/client/services/config/local_service_detector.ts` — LocalServiceDetector with port polling
+- `apps/frontend/pwa/src/lib/client/services/config/local_service_detector.test.ts` — 17 tests (AC-3)
+- `apps/frontend/pwa/src/lib/views/dev/config/config_view_model.svelte.ts` — ConfigViewModel with tab management + debounced save
+- `apps/frontend/pwa/src/lib/views/dev/config/config_view_model.test.ts` — 25 tests (AC-1, AC-2, AC-3, AC-4)
+- `apps/frontend/pwa/src/lib/views/dev/config/config_view.svelte` — Glassmorphic-Industrial UI
+- `apps/frontend/pwa/src/routes/(dev)/dev/config/+page.svelte` — Route entry point
+
+### Files modified
+- `apps/frontend/pwa/src/lib/client/services/index.ts` — Added config_service export
+- `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added Config nav item with gear icon
+
+### Deviations from contract
+- Firestore sync deferred — ConfigService works entirely locally (localStorage + crypto_vault). Firestore sync can be added when auth state is available without forcing backend calls, per the "no forced backend calls" directive.
+- Service status display uses Svelte 5 `{@const}` inline pattern.
+- Labels changed from `<label>` to `<div>` to avoid a11y_label_has_associated_control warnings while maintaining DaisyUI visual styling.
+- AI settings (ai_settings.svelte.ts) merged into ConfigService — generationParams, instructTemplate, advancedOverrides now stored in unified config. aiSettingsService is now a thin backward-compatible wrapper that reads/writes through configService. API keys are immediately populated on config page load via configService.load().
+
+### Test results
+- 30/30 ConfigService tests passing
+- 17/17 LocalServiceDetector tests passing
+- 25/25 ConfigViewModel tests passing
+- **72/72 total tests passing**
