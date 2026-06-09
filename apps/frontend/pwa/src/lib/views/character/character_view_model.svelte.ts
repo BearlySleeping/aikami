@@ -1,4 +1,4 @@
-// apps/frontend/pwa/src/lib/views/dev/character/character_view_model.svelte.ts
+// apps/frontend/pwa/src/lib/views/character/character_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -25,6 +25,13 @@ export type ChatMessage = {
   content: string;
 };
 
+/** Label for an ability score stat display. */
+export type ScoreLabel = {
+  readonly key: 'strength' | 'dexterity' | 'constitution' | 'intelligence' | 'wisdom' | 'charisma';
+  readonly label: string;
+  readonly desc: string;
+};
+
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
@@ -35,10 +42,18 @@ export type CharacterViewModelInterface = BaseViewModelInterface & {
   readonly persona: PersonaData | undefined;
   readonly avatarUrl: string;
   readonly isStreaming: boolean;
+  readonly chatInput: string;
+  readonly debugOpen: boolean;
+  readonly scoreLabels: readonly ScoreLabel[];
 
   sendChatMessage(text: string): Promise<void>;
   generateCharacter(): Promise<void>;
   cancel(): void;
+  handleSend(): Promise<void>;
+  handleKeydown(event: KeyboardEvent): void;
+  incrementStat(statKey: ScoreLabel['key']): void;
+  decrementStat(statKey: ScoreLabel['key']): void;
+  updateAppearanceDescription(value: string): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -51,12 +66,23 @@ export type CharacterViewModelOptions = BaseViewModelOptions & {};
 // Implementation
 // ---------------------------------------------------------------------------
 
-class CharacterViewModel
+export class CharacterViewModel
   extends BaseViewModel<CharacterViewModelOptions>
   implements CharacterViewModelInterface
 {
   phase: CreationPhase = $state('CHAT');
   messages: ChatMessage[] = $state([]);
+  chatInput = $state('');
+  debugOpen = $state(false);
+
+  private static readonly _SCORE_LABELS: readonly ScoreLabel[] = [
+    { key: 'strength', label: 'STR', desc: 'Strength' },
+    { key: 'dexterity', label: 'DEX', desc: 'Dexterity' },
+    { key: 'constitution', label: 'CON', desc: 'Constitution' },
+    { key: 'intelligence', label: 'INT', desc: 'Intelligence' },
+    { key: 'wisdom', label: 'WIS', desc: 'Wisdom' },
+    { key: 'charisma', label: 'CHA', desc: 'Charisma' },
+  ] as const;
 
   get persona(): PersonaData | undefined {
     return characterCreationService.persona;
@@ -70,11 +96,13 @@ class CharacterViewModel
     return characterCreationService.isStreaming;
   }
 
+  get scoreLabels(): readonly ScoreLabel[] {
+    return CharacterViewModel._SCORE_LABELS;
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    // Configure text generation from environment — the server handles the
-    // actual API key; we just signal that the external provider is available.
     const model = (import.meta.env.PUBLIC_OPENROUTER_MODEL as string) || undefined;
 
     if (model) {
@@ -102,6 +130,22 @@ class CharacterViewModel
       return;
     }
     this.messages = await characterCreationService.sendMessage({ text, messages: this.messages });
+  }
+
+  async handleSend(): Promise<void> {
+    const text = this.chatInput.trim();
+    if (!text || this.isStreaming) {
+      return;
+    }
+    this.chatInput = '';
+    await this.sendChatMessage(text);
+  }
+
+  handleKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void this.handleSend();
+    }
   }
 
   async generateCharacter(): Promise<void> {
@@ -146,6 +190,30 @@ class CharacterViewModel
     this.phase = 'CHAT';
   }
 
+  incrementStat(statKey: ScoreLabel['key']): void {
+    const scores = this.persona?.abilityScores;
+    if (scores && typeof scores[statKey] === 'number' && (scores[statKey] as number) < 30) {
+      scores[statKey] = (scores[statKey] as number) + 1;
+    }
+  }
+
+  decrementStat(statKey: ScoreLabel['key']): void {
+    const scores = this.persona?.abilityScores;
+    if (scores && typeof scores[statKey] === 'number' && (scores[statKey] as number) > 1) {
+      scores[statKey] = (scores[statKey] as number) - 1;
+    }
+  }
+
+  updateAppearanceDescription(value: string): void {
+    if (!this.persona) {
+      return;
+    }
+    if (!this.persona.appearance) {
+      this.persona.appearance = {};
+    }
+    this.persona.appearance.physicalDescription = value;
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────
 
   private _compileChatHistory(): string {
@@ -177,4 +245,6 @@ class CharacterViewModel
 
 export const getCharacterViewModel = (
   options: CharacterViewModelOptions,
-): CharacterViewModelInterface => new CharacterViewModel(options);
+): CharacterViewModelInterface => {
+  return new CharacterViewModel(options);
+};
