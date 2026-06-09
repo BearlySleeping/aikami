@@ -74,7 +74,7 @@ const buildOpenRouterPayload = (request: TextGenerationRequest): Record<string, 
   messages.push({ role: 'user', content: request.prompt });
 
   return {
-    model: request.model ?? 'openai/gpt-4o',
+    model: request.model ?? 'liquid/lfm-2.5-1.2b-instruct:free',
     messages,
     stream: true,
   };
@@ -95,6 +95,8 @@ const streamProviderResponse = async (
   }
 
   const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let buffer = '';
 
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -109,20 +111,24 @@ const streamProviderResponse = async (
         return;
       }
 
-      const text = decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
 
       if (format === 'ollama') {
-        const lines = text.split('\n').filter(Boolean);
-
         for (const line of lines) {
+          if (!line) {
+            continue;
+          }
+
           try {
             const chunk = JSON.parse(line);
 
             if (chunk.done) {
-              controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             } else if (chunk.response) {
               controller.enqueue(
-                new TextEncoder().encode(`data: ${JSON.stringify({ text: chunk.response })}\n\n`),
+                encoder.encode(`data: ${JSON.stringify({ text: chunk.response })}\n\n`),
               );
             }
           } catch {
@@ -131,20 +137,22 @@ const streamProviderResponse = async (
         }
       } else {
         // OpenRouter format (SSE lines starting with "data: ")
-        const lines = text.split('\n').filter((line) => line.startsWith('data: '));
-
         for (const line of lines) {
+          if (!line.startsWith('data: ')) {
+            continue;
+          }
+
           const data = line.slice(6).trim();
 
           if (data === '[DONE]') {
-            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           } else {
             try {
               const chunk = JSON.parse(data);
               const content = chunk.choices?.[0]?.delta?.content;
               if (content) {
                 controller.enqueue(
-                  new TextEncoder().encode(`data: ${JSON.stringify({ text: content })}\n\n`),
+                  encoder.encode(`data: ${JSON.stringify({ text: content })}\n\n`),
                 );
               }
             } catch {
@@ -170,31 +178,8 @@ const getTextGenerationConfig = (): TextGenerationConfig => {
     provider: (process.env.PUBLIC_TEXT_GEN_PROVIDER as TextGenerationProvider) ?? 'ollama',
     openrouterBaseUrl: process.env.PUBLIC_OPENROUTER_BASE_URL || undefined,
     openrouterApiKey: process.env.OPENROUTER_API_KEY || undefined,
-    ollamaBaseUrl: process.env.PUBLIC_OLLAMA_BASE_URL || 'http://localhost:11434',
+    ollamaBaseUrl: process.env.PUBLIC_OLLAMA_BASE_URL || 'http://localhost:11436',
   };
-};
-
-// ---------------------------------------------------------------------------
-// Synthetic SSE mock (AC-4 — test mode)
-// ---------------------------------------------------------------------------
-
-const createMockStream = (): ReadableStream<Uint8Array> => {
-  const encoder = new TextEncoder();
-  const chunks = [
-    'data: {"text":"Mock "}\n\n',
-    'data: {"text":"SSE "}\n\n',
-    'data: {"text":"response"}\n\n',
-    'data: [DONE]\n\n',
-  ];
-
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(chunk));
-      }
-      controller.close();
-    },
-  });
 };
 
 // ---------------------------------------------------------------------------
@@ -203,19 +188,6 @@ const createMockStream = (): ReadableStream<Uint8Array> => {
 
 export const POST = async ({ request }: { request: Request }) => {
   logger.debug('POST /api/text');
-
-  // AC-4: test mode — synthetic mock
-  const isTestMode = request.headers.get('x-test-mode') === 'true';
-
-  if (isTestMode) {
-    return new Response(createMockStream(), {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      },
-    });
-  }
 
   // Parse request body
   let body: TextGenerationRequest;
@@ -251,6 +223,8 @@ export const POST = async ({ request }: { request: Request }) => {
         headers.Authorization = `Bearer ${config.openrouterApiKey}`;
       }
 
+      format = 'openrouter';
+
       try {
         response = await fetch(url, {
           method: 'POST',
@@ -258,21 +232,29 @@ export const POST = async ({ request }: { request: Request }) => {
           body: JSON.stringify(buildOpenRouterPayload(body)),
           signal: request.signal,
         });
-      } catch {
-        // Fallback to Ollama
-        const ollamaUrl = `${config.ollamaBaseUrl ?? 'http://localhost:11434'}/api/generate`;
-        response = await fetch(ollamaUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(buildOllamaPayload(body)),
-          signal: request.signal,
-        });
-        format = 'ollama';
-      }
+      } catch (openrouterError) {
+        logger.warn(
+          'POST /api/text: OpenRouter fetch failed, falling back to Ollama',
+          openrouterError,
+        );
 
-      format = 'openrouter';
+        // Fallback to Ollama
+        try {
+          const ollamaUrl = `${config.ollamaBaseUrl ?? 'http://localhost:11436'}/api/generate`;
+          response = await fetch(ollamaUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildOllamaPayload(body)),
+            signal: request.signal,
+          });
+          format = 'ollama';
+        } catch (ollamaError) {
+          logger.error('POST /api/text: Ollama fallback also failed', ollamaError);
+          return json({ error: 'All providers unavailable' }, { status: 502 });
+        }
+      }
     } else {
-      const ollamaUrl = `${config.ollamaBaseUrl ?? 'http://localhost:11434'}/api/generate`;
+      const ollamaUrl = `${config.ollamaBaseUrl ?? 'http://localhost:11436'}/api/generate`;
       response = await fetch(ollamaUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
