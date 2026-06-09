@@ -78,6 +78,8 @@
 | C-079 | Ultimate Configuration Dashboard | ✅ completed |
 | C-080 | Unified Text & Structural Intelligence Service | ✅ completed |
 | C-081 | Character Creation Structural Extraction Pipeline | ✅ completed |
+| C-100 | MVVM Sandbox Pattern (Character Dev) | ✅ completed |
+| C-104 | Sandbox Infrastructure (Dev Tools) | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2565,3 +2567,35 @@ Stripped all server-side code from the SvelteKit PWA to enforce static SPA compi
 ### Deviations from contract
 - `_readSSEStream` method renamed to `_readSSEStream_disabled` with `biome-ignore` suppression — private class member rules don't recognize underscore prefix convention. Will be restored in C-107.
 - `FETCH_TIMEOUT_MS`, `FIRST_CHUNK_TIMEOUT_MS`, `READ_TIMEOUT_MS` constants prefixed with underscore — unused due to commented-out code, will be restored in C-107.
+
+---
+
+## C-104 — Sandbox Infrastructure (Dev Tools) — ✅ completed
+
+### Summary
+Created a floating, collapsible `<DevToolsPanel />` component that accepts generic actions (buttons) and toggles (checkboxes) for dev sandbox routes. Wired `CharacterDevViewModel`'s `forceErrorState()` and `injectJunkData()` methods into the panel on the character creation dev page.
+
+### Architecture
+- **`dev_tools_panel.svelte`** — Fixed-position overlay (bottom-right, `z-[9999]`) with distinct dark neutral-themed styling. Collapsible via header button toggle (minimizes to a compact 56px-wide tab). Accepts `actions` (label + onClick callback) and `toggles` (label + onChange callback) arrays via `$props()`. Empty state shows italic placeholder text.
+- **`CharacterDevViewModel` integration** — Dev page imports `DevToolsPanel` and passes `forceErrorState` + `injectJunkData` as action objects in a `devActions` array. Panel is generic — knows nothing about ViewModels or sandbox internals.
+
+### AC Status
+- [x] AC-1: DevToolsPanel created at `apps/frontend/pwa/src/lib/components/dev/dev_tools_panel.svelte` — fixed floating overlay, bottom-right, `z-[9999]`, distinct dark styling with 🛠️ header
+- [x] AC-2: Props interface defined — `actions` (readonly DevAction[] with label + onClick) and `toggles` (readonly DevToggle[] with label + onChange)
+- [x] AC-3: Integrated into `routes/(dev)/dev/character/+page.svelte` — imports and renders `<DevToolsPanel />`
+- [x] AC-4: `forceErrorState()` and `injectJunkData()` wired as action buttons
+- [x] AC-5: Collapsible — single-click header toggle minimizes to compact tab
+
+### Files created
+- `apps/frontend/pwa/src/lib/components/dev/dev_tools_panel.svelte` — Generic collapsible dev tools floating panel
+
+### Files modified
+- `apps/frontend/pwa/src/routes/(dev)/dev/character/+page.svelte` — Imported DevToolsPanel, defined devActions, rendered panel below CharacterView
+
+### Validation
+- `pwa:fix` — clean (72 files auto-fixed)
+- `pwa:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (unrelated to C-104); no errors in C-104 files
+- Import resolution verified — component path `$lib/components/dev/dev_tools_panel.svelte` resolves correctly
+
+### Deviations from contract
+- None — all acceptance criteria met. Component placed bottom-right (contract says "bottom-right or top-right"). Tailwind daisyUI `btn` and `checkbox` classes used for styling consistency with existing dev UI.
