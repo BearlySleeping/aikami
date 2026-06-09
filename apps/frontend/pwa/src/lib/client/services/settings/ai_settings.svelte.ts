@@ -9,24 +9,14 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { clearVault, decrypt, encrypt } from '$lib/client/utils/crypto_vault';
+import {
+  type AdvancedOverrides,
+  configService,
+  type GenerationParams,
+  type InstructTemplate,
+} from '$lib/client/services/config/config_service.svelte';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** Supported instruct template formats. */
-export const INSTRUCT_TEMPLATES = [
-  'chatml',
-  'alpaca',
-  'vicuna',
-  'llama3',
-  'mistral',
-  'deepseek',
-  'custom',
-] as const;
-
-export type InstructTemplate = (typeof INSTRUCT_TEMPLATES)[number];
+// ── Types ──────────────────────────────────────────────────────────────
 
 /** Configuration for a single provider endpoint. */
 export type ProviderConfig = {
@@ -43,29 +33,7 @@ export const PROVIDER_TYPES = ['openai', 'openrouter', 'anthropic', 'elevenlabs'
 
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 
-/** Generation parameter overrides. */
-export type GenerationParams = {
-  /** Sampling temperature (0–2). */
-  temperature: number;
-  /** Nucleus sampling threshold (0–1). */
-  topP: number;
-  /** Repetition penalty (1–2). */
-  repetitionPenalty: number;
-  /** Maximum tokens to generate. */
-  maxTokens: number;
-  /** Maximum context window size in tokens. */
-  contextSize: number;
-};
-
-/** Advanced overrides for specific providers. */
-export type AdvancedOverrides = {
-  /** Thinking/reasoning level for DeepSeek/Claude models. */
-  thinkingLevel: number;
-};
-
-// ---------------------------------------------------------------------------
-// Service interface
-// ---------------------------------------------------------------------------
+// ── Service interface ──────────────────────────────────────────────────
 
 export type AISettingsOptions = BaseFrontendClassOptions;
 
@@ -115,20 +83,6 @@ const DEFAULT_PROVIDER: ProviderConfig = {
   model: '',
 };
 
-const DEFAULT_GENERATION_PARAMS: GenerationParams = {
-  contextSize: 4096,
-  maxTokens: 1024,
-  repetitionPenalty: 1.1,
-  temperature: 0.7,
-  topP: 0.9,
-};
-
-const DEFAULT_ADVANCED_OVERRIDES: AdvancedOverrides = {
-  thinkingLevel: 0,
-};
-
-const DEFAULT_TEMPLATE: InstructTemplate = 'chatml';
-
 // ---------------------------------------------------------------------------
 // Service implementation
 // ---------------------------------------------------------------------------
@@ -140,86 +94,81 @@ class AISettingsService
   textProvider = $state<ProviderConfig>({ ...DEFAULT_PROVIDER });
   ttsProvider = $state<ProviderConfig>({ ...DEFAULT_PROVIDER });
   imageProvider = $state<ProviderConfig>({ ...DEFAULT_PROVIDER });
-  generationParams = $state<GenerationParams>({ ...DEFAULT_GENERATION_PARAMS });
-  advancedOverrides = $state<AdvancedOverrides>({ ...DEFAULT_ADVANCED_OVERRIDES });
-  instructTemplate = $state<InstructTemplate>(DEFAULT_TEMPLATE);
-  isLoaded = $state(false);
 
-  async loadFromVault(pin?: string): Promise<void> {
-    const raw = await decrypt({ pin });
-    if (!raw) {
-      this.isLoaded = true;
-      return;
-    }
+  // ── Proxied state from ConfigService ─────────────────────────────────
 
-    try {
-      const data = JSON.parse(raw) as Record<string, unknown>;
-
-      if (data.textProvider && typeof data.textProvider === 'object') {
-        this.textProvider = {
-          ...DEFAULT_PROVIDER,
-          ...(data.textProvider as Partial<ProviderConfig>),
-        };
-      }
-      if (data.ttsProvider && typeof data.ttsProvider === 'object') {
-        this.ttsProvider = {
-          ...DEFAULT_PROVIDER,
-          ...(data.ttsProvider as Partial<ProviderConfig>),
-        };
-      }
-      if (data.imageProvider && typeof data.imageProvider === 'object') {
-        this.imageProvider = {
-          ...DEFAULT_PROVIDER,
-          ...(data.imageProvider as Partial<ProviderConfig>),
-        };
-      }
-      if (data.generationParams && typeof data.generationParams === 'object') {
-        this.generationParams = {
-          ...DEFAULT_GENERATION_PARAMS,
-          ...(data.generationParams as Partial<GenerationParams>),
-        };
-      }
-      if (data.advancedOverrides && typeof data.advancedOverrides === 'object') {
-        this.advancedOverrides = {
-          ...DEFAULT_ADVANCED_OVERRIDES,
-          ...(data.advancedOverrides as Partial<AdvancedOverrides>),
-        };
-      }
-      if (
-        typeof data.instructTemplate === 'string' &&
-        INSTRUCT_TEMPLATES.includes(data.instructTemplate as InstructTemplate)
-      ) {
-        this.instructTemplate = data.instructTemplate as InstructTemplate;
-      }
-    } catch (err) {
-      this.warn('loadFromVault: failed to parse vault JSON', err);
-    }
-
-    this.isLoaded = true;
+  get generationParams(): GenerationParams {
+    return configService.state.generationParams;
   }
 
-  async saveToVault(pin?: string): Promise<void> {
-    const payload = JSON.stringify({
-      advancedOverrides: this.advancedOverrides,
-      generationParams: this.generationParams,
-      imageProvider: this.imageProvider,
-      instructTemplate: this.instructTemplate,
-      textProvider: this.textProvider,
-      ttsProvider: this.ttsProvider,
-    });
+  get advancedOverrides(): AdvancedOverrides {
+    return configService.state.advancedOverrides;
+  }
 
-    await encrypt({ pin, text: payload });
+  get instructTemplate(): InstructTemplate {
+    return configService.state.instructTemplate;
+  }
+
+  get isLoaded(): boolean {
+    return configService.isLoaded;
+  }
+
+  // ── Persistence (delegated to ConfigService) ─────────────────────────
+
+  async loadFromVault(_pin?: string): Promise<void> {
+    await configService.load();
+
+    // Sync provider configs from the central config state
+    if (configService.state.apiKeys.openrouter) {
+      this.textProvider = {
+        ...this.textProvider,
+        apiKey: configService.state.apiKeys.openrouter,
+      };
+    }
+    if (configService.state.preferredModel) {
+      this.textProvider = {
+        ...this.textProvider,
+        model: configService.state.preferredModel,
+      };
+    }
+  }
+
+  async saveToVault(_pin?: string): Promise<void> {
+    // Sync provider API keys back to central config
+    if (this.textProvider.apiKey) {
+      configService.setApiKeys({ openrouter: this.textProvider.apiKey });
+    }
+    if (this.textProvider.model) {
+      configService.setPreferredModel(this.textProvider.model);
+    }
+    if (this.textProvider.endpoint) {
+      // Store as a model config entry if not already present
+      const existing = configService.state.models;
+      const found = existing.some(
+        (m) => m.model === this.textProvider.model && m.provider === 'openrouter',
+      );
+      if (!found && this.textProvider.model && this.textProvider.endpoint) {
+        configService.setModels([
+          ...existing,
+          {
+            endpoint: this.textProvider.endpoint,
+            model: this.textProvider.model,
+            provider: 'openrouter',
+          },
+        ]);
+      }
+    }
+    await configService.save();
   }
 
   async reset(): Promise<void> {
     this.textProvider = { ...DEFAULT_PROVIDER };
     this.ttsProvider = { ...DEFAULT_PROVIDER };
     this.imageProvider = { ...DEFAULT_PROVIDER };
-    this.generationParams = { ...DEFAULT_GENERATION_PARAMS };
-    this.advancedOverrides = { ...DEFAULT_ADVANCED_OVERRIDES };
-    this.instructTemplate = DEFAULT_TEMPLATE;
-    await clearVault();
+    await configService.reset();
   }
+
+  // ── Mutators ─────────────────────────────────────────────────────────
 
   setTextProvider(config: Partial<ProviderConfig>): void {
     this.textProvider = { ...this.textProvider, ...config };
@@ -234,15 +183,15 @@ class AISettingsService
   }
 
   setGenerationParams(params: Partial<GenerationParams>): void {
-    this.generationParams = { ...this.generationParams, ...params };
+    configService.setGenerationParams(params);
   }
 
   setAdvancedOverrides(overrides: Partial<AdvancedOverrides>): void {
-    this.advancedOverrides = { ...this.advancedOverrides, ...overrides };
+    configService.setAdvancedOverrides(overrides);
   }
 
   setInstructTemplate(template: InstructTemplate): void {
-    this.instructTemplate = template;
+    configService.setInstructTemplate(template);
   }
 }
 
