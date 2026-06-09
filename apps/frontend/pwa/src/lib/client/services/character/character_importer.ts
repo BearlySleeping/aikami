@@ -1,9 +1,9 @@
 /** biome-ignore-all lint/style/useNamingConvention: Character card format uses snake_case fields */
 // apps/frontend/pwa/src/lib/client/services/character/character-importer.ts
 
+import type { Character } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
-import type { Character } from '$types';
 import { isV1Card, isV2Card } from './character_validator.ts';
 import { extractTextChunks, isPng } from './png_utils.ts';
 
