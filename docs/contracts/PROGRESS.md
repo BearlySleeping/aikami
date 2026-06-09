@@ -72,6 +72,7 @@
 | C-075 | LPC Macro Clipping Bounds and Pixel Target Centering | ✅ completed |
 | C-076 | Dev UI Image Sandbox Checkpoint Selection | ✅ completed |
 | C-077 | Dev UI Text Sandbox Refactor & OpenRouter Toggle | ✅ completed |
+| C-078 | Dev Character Creation Sandbox | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2346,3 +2347,27 @@ Extracted SSE streaming logic from `TextViewModel` into a dedicated `DevTextServ
 ### Deviations from contract
 - **`generate()` takes `{ prompt }` parameter** instead of reading `this.prompt`. This matches the Voice/Image service patterns (`ttsService.speak({ text })`, `imageGenerationService.generateImage({ prompt })`) where input is passed to the method rather than stored as mutable service state. The ViewModel owns the prompt `$state` and passes it on each call.
 - **`openrouter/auto` as free model**: Contract suggested investigating specific free models. Used `openrouter/auto` which auto-routes to the lowest-cost available model — avoids hardcoding a model that may be rate-limited or deprecated.
+
+## C-078 — Dev Character Creation Sandbox — ✅ completed
+
+**Verified**: 2026-06-09  |  Contract: `docs/contracts/C-078-dev-character-creation.md`
+
+### Files created
+- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.test.ts` — 8 unit tests: interface contract validation (5), state machine logic (3). Runtime behavior (sendChatMessage, generateCharacter, service calls) tested via E2E/blackbox tests due to Bun mock.module not supporting SvelteKit `$services` path alias.
+
+### Files modified
+- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.svelte.ts` — Complete rewrite from stub to full ViewModel with state machine (`CHAT`, `GENERATING`, `TWEAK` phases), chat history array, `PersonaData` binding, and avatar URL. Added optional service injection (`aiServiceOverride`, `devTextServiceOverride`, `imageGenerationServiceOverride`) for testability while preserving singleton pattern for production. Imports DM system prompt from `dnd_creation.ts`.
+- `apps/frontend/pwa/src/lib/views/dev/character/character_view.svelte` — Complete rewrite from placeholder to full DaisyUI chat + tweak UI. CHAT phase: `chat-bubble` messages, textarea input with Enter-to-send, "Generate Character" button. GENERATING phase: loading spinner card. TWEAK phase: avatar display, editable name/background/appearance text inputs, stat increment/decrement controls (STR/DEX/CON/INT/WIS/CHA) bound to `$state` persona.
+
+### Deviations from contract
+- **Service injection for testability**: Added optional `aiServiceOverride`, `devTextServiceOverride`, `imageGenerationServiceOverride` to `CharacterViewModelOptions`. Production uses singletons (matches convention), tests can inject mocks directly. This is a pragmatic workaround for Bun's `mock.module` not supporting SvelteKit `$services` path aliases.
+- **`scores[stat.key] as number` cast in view**: The `PersonaData.abilityScores.*` fields are `Type.Optional(Type.Integer(...))` which makes them `number | undefined`. Used `as number` cast after undefined check instead of non-null assertion (`!`) to satisfy biome lint.
+- **Appearance textarea uses `value` + `oninput`**: Cannot `bind:value` to `viewModel.persona.appearance?.physicalDescription` because Svelte doesn't support bind on optional chains. Used manual `value`/`oninput` handler that initializes `appearance` object if absent.
+
+### Acceptance criteria coverage
+| AC | Description | Coverage |
+|----|------------|----------|
+| AC-1 | DM Chat Interface — send messages, append to history, stream DM response | ✅ ViewModel logic + View UI |
+| AC-2 | Structured Persona Extraction — compile chat → `aiService.createPersona()` | ✅ ViewModel orchestrates |
+| AC-3 | Avatar Generation — `imageGenerationService.generateImage()` in background | ✅ Non-blocking fire-and-forget |
+| AC-4 | Advanced Tweak UI — editable stats, name, background, appearance | ✅ Full form binding |
