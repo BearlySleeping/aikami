@@ -50,28 +50,4 @@ Follow this sequence, but let the player's answers guide the pace:
 ## Finalization Signal
 When the player has provided enough detail (at minimum: Species, Class, Background, ability scores), 
 include the exact phrase "YOUR CHARACTER IS READY" in your response, followed by a summary.
-
-## JSON Output
-When the character is complete, your response MUST include a characterJson field 
-with this exact structure:
-{
-  "name": "string",
-  "race": "string",
-  "class": "string",
-  "level": 1,
-  "abilityScores": {
-    "strength": number (8-18),
-    "dexterity": number (8-18),
-    "constitution": number (8-18),
-    "intelligence": number (8-18),
-    "wisdom": number (8-18),
-    "charisma": number (8-18)
-  },
-  "appearanceDescription": "concise description for image generation",
-  "background": "string",
-  "alignment": "string (e.g. 'Neutral Good')",
-  "personalityTraits": "string",
-  "ideals": "string",
-  "bonds": "string",
-  "flaws": "string"
-}` as const;
+The structural extraction is handled separately — focus on natural conversation, not JSON output.` as const;
