@@ -17,6 +17,16 @@ let cancels = 0;
 let mockPersona: object | undefined;
 let mockAvatarUrl = '';
 
+// C-081 extraction state
+let extractionCalls: Array<{
+  schema: Record<string, unknown>;
+  schemaName: string;
+  prompt: string;
+  systemPrompt?: string;
+}> = [];
+let extractionResult: object | undefined;
+let extractionError: Error | undefined;
+
 // ---------------------------------------------------------------------------
 // Mock the FULL services barrel
 // ---------------------------------------------------------------------------
@@ -98,6 +108,30 @@ const defaultBarrelMock = () => ({
     setTextProvider: mock(() => {}),
   },
   characterTextStreamService: {},
+  aiTextIntelligenceService: {
+    extractStructure: mock(
+      async (options: {
+        schema: Record<string, unknown>;
+        schemaName: string;
+        prompt: string;
+        systemPrompt?: string;
+        signal?: AbortSignal;
+        model?: string;
+      }) => {
+        extractionCalls.push({
+          schema: options.schema,
+          schemaName: options.schemaName,
+          prompt: options.prompt,
+          systemPrompt: options.systemPrompt,
+        });
+        if (extractionError) {
+          throw extractionError;
+        }
+        return extractionResult;
+      },
+    ),
+    cancelAll: mock(() => {}),
+  },
   __esModule: true,
 });
 
@@ -130,6 +164,9 @@ describe('CharacterViewModel — C-078', () => {
     cancels = 0;
     mockPersona = undefined;
     mockAvatarUrl = '';
+    extractionCalls = [];
+    extractionResult = undefined;
+    extractionError = undefined;
     mock.module(MOCK_SVC, defaultBarrelMock);
   });
 
@@ -220,7 +257,19 @@ describe('CharacterViewModel — C-078', () => {
       const vm = await loadVm();
       await vm.sendChatMessage('I am a goblin rogue');
 
-      personaResult = { id: 'p-1', name: 'Grik', level: 1 };
+      extractionResult = {
+        name: 'Grik',
+        background: 'A goblin rogue',
+        appearance: { physicalDescription: 'green goblin', clothing: 'leather' },
+        abilityScores: {
+          strength: 8,
+          dexterity: 16,
+          constitution: 12,
+          intelligence: 10,
+          wisdom: 13,
+          charisma: 10,
+        },
+      };
 
       const promise = vm.generateCharacter();
       expect(vm.phase).toBe('GENERATING');
@@ -229,32 +278,46 @@ describe('CharacterViewModel — C-078', () => {
       expect(vm.phase).toBe('TWEAK');
     });
 
-    test('should call generatePersona with compiled history', async () => {
+    test('should call extractStructure with compiled history', async () => {
       const vm = await loadVm();
       await vm.sendChatMessage('I am a goblin rogue');
 
-      personaResult = {
-        id: 'p-1',
+      extractionResult = {
         name: 'Grik',
-        abilityScores: { strength: 8, dexterity: 16 },
-        level: 1,
+        background: 'goblin rogue',
+        appearance: { physicalDescription: 'green', clothing: 'leather' },
+        abilityScores: {
+          strength: 8,
+          dexterity: 16,
+          constitution: 12,
+          intelligence: 10,
+          wisdom: 13,
+          charisma: 10,
+        },
       };
 
       await vm.generateCharacter();
 
-      expect(personaCalls.length).toBe(1);
-      expect(personaCalls[0].history).toInclude('goblin');
+      expect(extractionCalls.length).toBe(1);
+      expect(extractionCalls[0].prompt).toInclude('goblin');
     });
 
     test('should store returned persona', async () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Elf wizard');
 
-      personaResult = {
-        id: 'p-2',
+      extractionResult = {
         name: 'Elandra',
-        abilityScores: { strength: 8, intelligence: 18 },
-        level: 1,
+        background: 'elven wizard',
+        appearance: { physicalDescription: 'tall elf', clothing: 'robes' },
+        abilityScores: {
+          strength: 8,
+          dexterity: 12,
+          constitution: 10,
+          intelligence: 18,
+          wisdom: 14,
+          charisma: 10,
+        },
       };
 
       await vm.generateCharacter();
@@ -263,11 +326,11 @@ describe('CharacterViewModel — C-078', () => {
       expect(vm.persona?.abilityScores?.intelligence).toBe(18);
     });
 
-    test('should handle generatePersona returning undefined', async () => {
+    test('should handle extraction returning undefined', async () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Test');
 
-      personaResult = undefined;
+      extractionResult = undefined;
 
       await vm.generateCharacter();
 
@@ -275,30 +338,10 @@ describe('CharacterViewModel — C-078', () => {
       expect(vm.phase).toBe('CHAT');
     });
 
-    test('should handle generatePersona throwing', async () => {
-      personaResult = undefined;
+    test('should handle extractStructure throwing', async () => {
+      extractionError = new Error('AI unavailable');
 
-      mock.module(MOCK_SVC, () => ({
-        ...defaultBarrelMock(),
-        characterCreationService: {
-          get persona() {
-            return undefined;
-          },
-          get avatarUrl() {
-            return '';
-          },
-          get isStreaming() {
-            return false;
-          },
-          sendMessage: mock(async () => []),
-          generatePersona: mock(() => Promise.reject(new Error('AI unavailable'))),
-          startAvatarGeneration: mock(() => {}),
-          cancel: mock(() => {}),
-        },
-      }));
-
-      const mod = await import('./character_view_model.svelte.ts');
-      const vm = mod.getCharacterViewModel({ className: 'CharacterViewModel' });
+      const vm = await loadVm();
 
       await vm.generateCharacter();
 
@@ -316,11 +359,18 @@ describe('CharacterViewModel — C-078', () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Dwarf with a big red beard');
 
-      personaResult = {
-        id: 'p-4',
+      extractionResult = {
         name: 'Thorin',
-        appearance: { physicalDescription: 'stout dwarf with red beard' },
-        level: 1,
+        background: 'dwarf warrior',
+        appearance: { physicalDescription: 'stout dwarf with red beard', clothing: 'plate armor' },
+        abilityScores: {
+          strength: 16,
+          dexterity: 10,
+          constitution: 16,
+          intelligence: 10,
+          wisdom: 12,
+          charisma: 8,
+        },
       };
 
       await vm.generateCharacter();
@@ -333,11 +383,18 @@ describe('CharacterViewModel — C-078', () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Elf archer');
 
-      personaResult = {
-        id: 'p-5',
+      extractionResult = {
         name: 'Legolas',
-        appearance: { physicalDescription: 'tall elf with golden hair' },
-        level: 1,
+        background: 'elf archer',
+        appearance: { physicalDescription: 'tall elf with golden hair', clothing: 'green cloak' },
+        abilityScores: {
+          strength: 10,
+          dexterity: 18,
+          constitution: 12,
+          intelligence: 10,
+          wisdom: 14,
+          charisma: 10,
+        },
       };
       imageResult = { url: 'https://example.com/legolas.png', isDemo: true };
 
@@ -351,7 +408,19 @@ describe('CharacterViewModel — C-078', () => {
       const vm = await loadVm();
       await vm.sendChatMessage('mysterious figure');
 
-      personaResult = { id: 'p-6', name: 'Shadow', level: 1 };
+      extractionResult = {
+        name: 'Shadow',
+        background: 'mysterious figure',
+        appearance: { physicalDescription: '', clothing: 'cloak' },
+        abilityScores: {
+          strength: 10,
+          dexterity: 14,
+          constitution: 10,
+          intelligence: 13,
+          wisdom: 15,
+          charisma: 12,
+        },
+      };
 
       await vm.generateCharacter();
 
@@ -362,7 +431,19 @@ describe('CharacterViewModel — C-078', () => {
     test('should fallback to generic for image prompt', async () => {
       const vm = await loadVm();
 
-      personaResult = { id: 'p-7', level: 1 };
+      extractionResult = {
+        name: '',
+        background: '',
+        appearance: { physicalDescription: '', clothing: '' },
+        abilityScores: {
+          strength: 10,
+          dexterity: 10,
+          constitution: 10,
+          intelligence: 10,
+          wisdom: 10,
+          charisma: 10,
+        },
+      };
 
       await vm.generateCharacter();
 
@@ -380,11 +461,18 @@ describe('CharacterViewModel — C-078', () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Halfling bard');
 
-      personaResult = {
-        id: 'p-9',
+      extractionResult = {
         name: 'Pippin',
-        abilityScores: { charisma: 18 },
-        level: 1,
+        background: 'halfling bard',
+        appearance: { physicalDescription: 'small halfling', clothing: 'colorful tunic' },
+        abilityScores: {
+          strength: 8,
+          dexterity: 14,
+          constitution: 12,
+          intelligence: 10,
+          wisdom: 10,
+          charisma: 18,
+        },
       };
 
       await vm.generateCharacter();
@@ -396,11 +484,18 @@ describe('CharacterViewModel — C-078', () => {
     test('persona should be mutable via $state proxy', async () => {
       const vm = await loadVm();
 
-      personaResult = {
-        id: 'p-10',
+      extractionResult = {
         name: 'Original',
-        abilityScores: { strength: 10 },
-        level: 1,
+        background: 'test',
+        appearance: { physicalDescription: 'test', clothing: 'test' },
+        abilityScores: {
+          strength: 10,
+          dexterity: 10,
+          constitution: 10,
+          intelligence: 10,
+          wisdom: 10,
+          charisma: 10,
+        },
       };
 
       await vm.generateCharacter();
@@ -431,6 +526,268 @@ describe('CharacterViewModel — C-078', () => {
       vm.cancel();
 
       expect(cancels).toBe(1);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // C-081: Character Creation Structural Extraction Pipeline
+  // ═══════════════════════════════════════════════════════════════════════
+
+  describe('C-081: Schema Compilation', () => {
+    test('CharacterExtractionSchema should compile to valid JSON schema', async () => {
+      const mod = await import('$lib/client/game/core/ai/prompts/character_extraction_schema.ts');
+      const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
+
+      // TypeBox schemas are plain objects with a type property
+      expect(schema.type).toBe('object');
+      expect(schema.additionalProperties).toBe(false);
+
+      // Properties should include name, background, appearance, abilityScores
+      const properties = schema.properties as Record<string, unknown>;
+      expect(properties).toBeDefined();
+      expect(properties.name).toBeDefined();
+      expect(properties.background).toBeDefined();
+      expect(properties.appearance).toBeDefined();
+      expect(properties.abilityScores).toBeDefined();
+    });
+
+    test('appearance sub-schema should enforce additionalProperties: false', async () => {
+      const mod = await import('$lib/client/game/core/ai/prompts/character_extraction_schema.ts');
+      const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
+      const properties = schema.properties as Record<string, unknown>;
+      const appearance = properties.appearance as Record<string, unknown>;
+
+      expect(appearance.additionalProperties).toBe(false);
+      expect(appearance.type).toBe('object');
+
+      const appearanceProps = appearance.properties as Record<string, unknown>;
+      expect(appearanceProps.physicalDescription).toBeDefined();
+      expect(appearanceProps.clothing).toBeDefined();
+    });
+
+    test('abilityScores sub-schema should enforce additionalProperties: false', async () => {
+      const mod = await import('$lib/client/game/core/ai/prompts/character_extraction_schema.ts');
+      const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
+      const properties = schema.properties as Record<string, unknown>;
+      const scores = properties.abilityScores as Record<string, unknown>;
+
+      expect(scores.additionalProperties).toBe(false);
+      expect(scores.type).toBe('object');
+
+      const scoreProps = scores.properties as Record<string, unknown>;
+      const expectedStats = [
+        'strength',
+        'dexterity',
+        'constitution',
+        'intelligence',
+        'wisdom',
+        'charisma',
+      ];
+      for (const stat of expectedStats) {
+        const statSchema = scoreProps[stat] as Record<string, unknown>;
+        expect(statSchema).toBeDefined();
+        expect(statSchema.type).toBe('integer');
+        expect(statSchema.minimum).toBe(8);
+        expect(statSchema.maximum).toBe(18);
+      }
+    });
+  });
+
+  describe('C-081: extractStructure Integration', () => {
+    test('generateCharacter should transition CHAT → GENERATING → TWEAK via extractStructure', async () => {
+      const vm = await loadVm();
+      await vm.sendChatMessage('I am a goblin rogue');
+
+      extractionResult = {
+        name: 'Grik',
+        background: 'A cunning goblin from the shadows',
+        appearance: {
+          physicalDescription: 'small green goblin with sharp teeth',
+          clothing: 'dark leather armor',
+        },
+        abilityScores: {
+          strength: 8,
+          dexterity: 16,
+          constitution: 12,
+          intelligence: 10,
+          wisdom: 13,
+          charisma: 10,
+        },
+      };
+
+      const promise = vm.generateCharacter();
+      expect(vm.phase).toBe('GENERATING');
+
+      await promise;
+      expect(vm.phase).toBe('TWEAK');
+    });
+
+    test('should call extractStructure with correct schema and compiled history', async () => {
+      const vm = await loadVm();
+      await vm.sendChatMessage('Elf wizard with a love of fire magic');
+
+      extractionResult = {
+        name: 'Elandra',
+        background: 'Elf wizard',
+        appearance: { physicalDescription: 'tall elf', clothing: 'robes' },
+        abilityScores: {
+          strength: 8,
+          dexterity: 12,
+          constitution: 10,
+          intelligence: 18,
+          wisdom: 14,
+          charisma: 10,
+        },
+      };
+
+      await vm.generateCharacter();
+
+      expect(extractionCalls.length).toBe(1);
+      expect(extractionCalls[0].schemaName).toBe('CharacterExtraction');
+      expect(extractionCalls[0].schema).toBeDefined();
+      expect(extractionCalls[0].prompt).toInclude('wizard');
+      expect(extractionCalls[0].systemPrompt).toBeDefined();
+    });
+
+    test('should store extracted persona in characterCreationService', async () => {
+      const vm = await loadVm();
+      await vm.sendChatMessage('Dwarf warrior');
+
+      extractionResult = {
+        name: 'Thorin',
+        background: 'Mountain dwarf warrior',
+        appearance: { physicalDescription: 'stout dwarf with red beard', clothing: 'plate armor' },
+        abilityScores: {
+          strength: 16,
+          dexterity: 10,
+          constitution: 16,
+          intelligence: 10,
+          wisdom: 12,
+          charisma: 8,
+        },
+      };
+
+      await vm.generateCharacter();
+
+      expect(vm.persona?.name).toBe('Thorin');
+      expect(vm.persona?.background).toBe('Mountain dwarf warrior');
+      expect(vm.persona?.appearance?.physicalDescription).toBe('stout dwarf with red beard');
+      expect(vm.persona?.abilityScores?.strength).toBe(16);
+      expect(vm.persona?.abilityScores?.charisma).toBe(8);
+    });
+
+    test('should start avatar generation with physicalDescription', async () => {
+      const vm = await loadVm();
+      await vm.sendChatMessage('Halfling bard');
+
+      extractionResult = {
+        name: 'Pippin',
+        background: 'Cheerful halfling bard',
+        appearance: {
+          physicalDescription: 'small halfling with curly hair and a lute',
+          clothing: 'colorful tunic',
+        },
+        abilityScores: {
+          strength: 8,
+          dexterity: 14,
+          constitution: 12,
+          intelligence: 10,
+          wisdom: 10,
+          charisma: 18,
+        },
+      };
+
+      await vm.generateCharacter();
+
+      expect(imageCalls.length).toBe(1);
+      expect(imageCalls[0].prompt).toInclude('curly hair');
+    });
+
+    test('should fallback to name for avatar prompt when no physicalDescription', async () => {
+      const vm = await loadVm();
+      await vm.sendChatMessage('Mysterious figure');
+
+      extractionResult = {
+        name: 'Shadow',
+        background: 'A mysterious figure',
+        appearance: { physicalDescription: '', clothing: 'cloak' },
+        abilityScores: {
+          strength: 10,
+          dexterity: 14,
+          constitution: 10,
+          intelligence: 13,
+          wisdom: 15,
+          charisma: 12,
+        },
+      };
+
+      await vm.generateCharacter();
+
+      expect(imageCalls.length).toBe(1);
+      expect(imageCalls[0].prompt).toBe('Shadow');
+    });
+
+    test('should fallback to generic prompt when no name and no description', async () => {
+      const vm = await loadVm();
+
+      extractionResult = {
+        name: '',
+        background: '',
+        appearance: { physicalDescription: '', clothing: '' },
+        abilityScores: {
+          strength: 10,
+          dexterity: 10,
+          constitution: 10,
+          intelligence: 10,
+          wisdom: 10,
+          charisma: 10,
+        },
+      };
+
+      await vm.generateCharacter();
+
+      expect(imageCalls.length).toBe(1);
+      expect(imageCalls[0].prompt).toBe('fantasy character');
+    });
+  });
+
+  describe('C-081: Error Handling & Fallback', () => {
+    test('should fallback to CHAT when extractStructure throws', async () => {
+      extractionError = new Error('LLM failed to return valid JSON');
+
+      const vm = await loadVm();
+      await vm.sendChatMessage('Test character');
+
+      await vm.generateCharacter();
+
+      expect(vm.phase).toBe('CHAT');
+      expect(vm.errorMessage).toBe('Failed to generate character. Please try again.');
+    });
+
+    test('should fallback to CHAT when extractStructure returns falsy', async () => {
+      extractionResult = undefined;
+
+      const vm = await loadVm();
+      await vm.sendChatMessage('Test character');
+
+      await vm.generateCharacter();
+
+      expect(vm.phase).toBe('CHAT');
+      expect(vm.errorMessage).toBe('Failed to generate character. Please try again.');
+    });
+
+    test('should fallback to CHAT on abort error', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+      extractionError = abortError;
+
+      const vm = await loadVm();
+      await vm.sendChatMessage('Test character');
+
+      await vm.generateCharacter();
+
+      expect(vm.phase).toBe('CHAT');
+      expect(vm.errorMessage).toBe('Character generation was cancelled.');
     });
   });
 });

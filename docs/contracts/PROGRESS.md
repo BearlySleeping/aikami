@@ -75,6 +75,7 @@
 | C-078 | Dev Character Creation Sandbox | ✅ completed |
 | C-079 | Ultimate Configuration Dashboard | ✅ completed |
 | C-080 | Unified Text & Structural Intelligence Service | ✅ completed |
+| C-081 | Character Creation Structural Extraction Pipeline | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
@@ -2457,3 +2458,39 @@ Created `AiTextIntelligenceService` — a centralized, client-side unified intel
 - Schema compilation caches based on `schemaName` string key, not TypeBox structural hash — avoids circular reference issues with TypeBox's runtime type system while still achieving the dedup goal.
 - ConfigService accessed via direct import rather than through `$services` barrel in the test — test isolation requires mocking `config_service.svelte.ts` directly to avoid cross-test-file mock collision.
 - `character_text_stream.svelte.ts` keeps its own public API (`output`, `isGenerating`, `cancel()`) for backward compatibility with `characterCreationService`; internally delegates to `aiTextIntelligenceService`.
+
+---
+
+## C-081 — Character Creation Structural Extraction Pipeline — ✅ completed
+
+### Summary
+Refactored the Dev Character Creation Sandbox (CharacterViewModel) to use `aiTextIntelligenceService.extractStructure()` instead of the legacy `characterCreationService.generatePersona()` Firebase Functions call. Defined a strict TypeBox `CharacterExtractionSchema` with `additionalProperties: false` at every level, mapping the DM conversation output to a validated structural object.
+
+### Architecture
+- **CharacterExtractionSchema**: TypeBox schema with `additionalProperties: false` on all objects — `name`, `background`, `appearance` (`physicalDescription`, `clothing`), `abilityScores` (STR/DEX/CON/INT/WIS/CHA as integers 8-18).
+- **CHARACTER_EXTRACTION_SYSTEM_PROMPT**: DM persona for the extraction phase — instructs LLM to review chat history and output only the schema-compliant JSON.
+- **CharacterViewModel.generateCharacter()**: Now calls `aiTextIntelligenceService.extractStructure()` with the compiled chat history, extraction schema, and system prompt. Extracted object is stored in `characterCreationService.persona` for the TWEAK UI. Avatar generation triggered from `appearance.physicalDescription`.
+- **Error handling**: AbortError → "Character generation was cancelled."; all other errors → "Failed to generate character. Please try again.". Phase resets to `CHAT` on failure.
+- **DND_CREATION_SYSTEM_PROMPT**: Stripped old JSON output instructions — structural extraction is now a separate phase, not part of the chat prompt.
+
+### AC Status
+- [x] AC-1: Strict Schema Definition — `CharacterExtractionSchema` compiles to valid JSON schema with `additionalProperties: false` at top-level, appearance, and abilityScores. All 6 stats typed as integer with 8-18 range.
+- [x] AC-2: ViewModel Integration — `generateCharacter()` calls `extractStructure()` with schema name `CharacterExtraction`, compiled chat history, and extraction system prompt. Extracted persona stored in `characterCreationService.persona` and phases to `TWEAK`.
+- [x] AC-3: Fallback and Error Handling — Extraction failure drops to `CHAT` with user-friendly message. AbortError distinguished with "Character generation was cancelled." message.
+
+### Files created
+- `apps/frontend/pwa/src/lib/client/game/core/ai/prompts/character_extraction_schema.ts` — TypeBox schema + extraction system prompt
+
+### Files modified
+- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.svelte.ts` — Imported aiTextIntelligenceService, CharacterExtractionSchema, CHARACTER_EXTRACTION_SYSTEM_PROMPT. Refactored `generateCharacter()` to call `extractStructure()` with typed error handling for AbortError.
+- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.test.ts` — Updated all legacy AC-2/AC-3/AC-4 tests to use `extractionResult`/`extractionCalls`. Added 12 new C-081 tests (3 schema compilation, 6 extraction integration, 3 error handling). Total: 35 tests, 0 failures.
+- `apps/frontend/pwa/src/lib/client/game/core/ai/prompts/dnd_creation.ts` — Removed old JSON output instructions from DM system prompt.
+
+### Test results
+- 35/35 tests passing (25 legacy updated + 12 new C-081)
+- Typecheck: passes (pre-existing `app_loading.svelte` error unrelated)
+
+### Deviations from contract
+- Schema import uses `import Type from 'typebox'` (local alias) rather than `@sinclair/typebox` — matches PWA monorepo convention.
+- `PersonaData` assignment uses `as unknown as PersonaData` cast — extracted object lacks CoreSchema fields (id, createdAt, etc.) required by full PersonaSchema. Safe for TWEAK phase (only name, background, appearance, abilityScores used).
+- `clothing` field extracted but not mapped to PersonaData — AppearanceSchema has no `clothing` property. Preserved in extraction schema for future use by the DM prompt.
