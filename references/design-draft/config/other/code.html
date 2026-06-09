@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Aikami - Other Configuration</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-low": "#131b2e",
+                        "surface-container-lowest": "#060e20",
+                        "secondary-fixed-dim": "#00daf3",
+                        "surface-dim": "#0b1326",
+                        "surface-variant": "#2d3449",
+                        "on-tertiary-fixed-variant": "#8d004f",
+                        "on-primary": "#31009a",
+                        "primary": "#cabeff",
+                        "outline-variant": "#484555",
+                        "on-tertiary": "#640036",
+                        "on-secondary-container": "#00616d",
+                        "on-error-container": "#ffdad6",
+                        "on-primary-fixed": "#1c0062",
+                        "surface-bright": "#31394d",
+                        "secondary-fixed": "#9cf0ff",
+                        "primary-fixed": "#e6deff",
+                        "secondary": "#bdf4ff",
+                        "on-secondary-fixed-variant": "#004f58",
+                        "on-surface": "#dae2fd",
+                        "tertiary-fixed": "#ffd9e3",
+                        "inverse-on-surface": "#283044",
+                        "on-tertiary-fixed": "#3e001f",
+                        "surface": "#0b1326",
+                        "primary-container": "#937dff",
+                        "on-background": "#dae2fd",
+                        "tertiary-fixed-dim": "#ffb0cb",
+                        "background": "#0b1326",
+                        "outline": "#938ea1",
+                        "on-error": "#690005",
+                        "on-secondary": "#00363d",
+                        "error-container": "#93000a",
+                        "primary-fixed-dim": "#cabeff",
+                        "tertiary": "#ffb0cb",
+                        "on-secondary-fixed": "#001f24",
+                        "on-tertiary-container": "#58002f",
+                        "inverse-primary": "#603de2",
+                        "error": "#ffb4ab",
+                        "on-surface-variant": "#c9c4d8",
+                        "inverse-surface": "#dae2fd",
+                        "secondary-container": "#00e3fd",
+                        "on-primary-container": "#2a0088",
+                        "tertiary-container": "#ff479c",
+                        "surface-container": "#171f33",
+                        "surface-container-highest": "#2d3449",
+                        "surface-container-high": "#222a3d",
+                        "surface-tint": "#cabeff",
+                        "on-primary-fixed-variant": "#4717ca"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "base": "4px",
+                        "lg": "40px",
+                        "md": "24px",
+                        "sm": "16px",
+                        "xs": "8px",
+                        "gutter": "20px",
+                        "margin-desktop": "32px",
+                        "xl": "64px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-md": ["JetBrains Mono"],
+                        "code-sm": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "code-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #0b1326; color: #dae2fd; }
+        .glass-panel { background: rgba(255,255,255,0.02); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.05); }
+        .input-glass { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s ease; }
+        .input-glass:focus { border-color: #cabeff; outline: none; box-shadow: 0 0 0 4px rgba(202,190,255,0.1); }
+        .toggle-checkbox:checked { right: 0; border-color: #00daf3; }
+        .toggle-checkbox:checked + .toggle-label { background-color: rgba(0, 218, 243, 0.2); }
+        .toggle-checkbox:checked + .toggle-label:after { transform: translateX(100%); border-color: white; }
+    </style>
+</head>
+<body class="font-body-md text-body-md antialiased min-h-screen flex selection:bg-primary selection:text-on-primary">
+<!-- SideNavBar -->
+<nav class="bg-surface-dim/80 backdrop-blur-xl h-screen w-64 fixed left-0 top-0 border-r border-outline-variant/20 shadow-2xl flex flex-col h-full py-md z-50 hidden md:flex">
+<div class="px-md mb-xl">
+<div class="flex items-center gap-sm">
+<div class="w-10 h-10 rounded-lg bg-primary-container/20 flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary font-headline-md">terminal</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tighter">Aikami</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant/50">Config Suite</p>
+</div>
+</div>
+</div>
+<div class="flex-1 px-sm space-y-xs">
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg hover:bg-surface-variant/30 hover:text-on-surface transition-colors text-on-surface-variant/50 active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-body-md">Home</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg hover:bg-surface-variant/30 hover:text-on-surface transition-colors text-on-surface-variant/50 active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">smart_toy</span>
+<span class="font-body-md">NPCs</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg hover:bg-surface-variant/30 hover:text-on-surface transition-colors text-on-surface-variant/50 active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="font-body-md">Personas</span>
+</a>
+<a class="flex items-center gap-sm px-sm py-sm rounded-lg text-secondary-fixed-dim bg-secondary-container/10 border-r-2 border-secondary-fixed-dim hover:bg-surface-variant/30 hover:text-on-surface transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md font-medium">Settings</span>
+</a>
+</div>
+<div class="px-md mt-auto space-y-sm">
+<button class="w-full py-sm px-md bg-primary hover:bg-primary-fixed text-on-primary rounded-lg font-code-sm text-code-sm transition-all shadow-[0_0_15px_rgba(202,190,255,0.3)] hover:shadow-[0_0_25px_rgba(202,190,255,0.5)] active:scale-95">
+                Deploy Workspace
+            </button>
+<div class="pt-sm border-t border-outline-variant/20 flex justify-between">
+<a class="flex items-center gap-xs text-on-surface-variant/50 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">description</span>
+<span class="font-label-caps text-label-caps">Docs</span>
+</a>
+<a class="flex items-center gap-xs text-on-surface-variant/50 hover:text-error transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">logout</span>
+<span class="font-label-caps text-label-caps">Logout</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 ml-0 md:ml-64 flex flex-col min-h-screen">
+<!-- TopNavBar -->
+<header class="bg-surface-container/50 backdrop-blur-md sticky top-0 w-full z-40 border-b border-outline-variant/10 shadow-sm flex justify-between items-center px-lg h-16">
+<div class="flex items-center gap-lg">
+<h2 class="font-headline-sm text-headline-sm text-on-surface hidden lg:block">Settings</h2>
+<nav class="flex gap-md h-16 items-end">
+<a class="font-label-caps text-label-caps text-on-surface-variant/50 pb-xs hover:text-primary transition-all active:opacity-80" href="#">Text</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant/50 pb-xs hover:text-primary transition-all active:opacity-80" href="#">Voice</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant/50 pb-xs hover:text-primary transition-all active:opacity-80" href="#">Image</a>
+<a class="font-label-caps text-label-caps text-secondary-fixed-dim border-b-2 border-secondary-fixed-dim pb-xs hover:text-primary transition-all active:opacity-80" href="#">Other</a>
+</nav>
+</div>
+<div class="flex items-center gap-md">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 text-sm">search</span>
+<input class="input-glass font-code-sm text-code-sm rounded-full py-2 pl-10 pr-4 w-64 text-on-surface placeholder-on-surface-variant/50" placeholder="Search settings..." type="text"/>
+</div>
+<button class="text-on-surface-variant/50 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant/50 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant/30 overflow-hidden cursor-pointer hover:border-primary transition-colors ml-sm">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A futuristic, stylized avatar portrait of a user in a cyberpunk or high-tech setting. Neon blue and purple lighting. Intricate details, cinematic lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-jl-WMPsIMxOgki_KpceKzMjIMMpEKJUfq52y1t0LbQfaaatkLbZIlQjgfDO3OgbpfnL7UR6e0IhQOjTXfw19cqh6EynA_43VzJQp3fsfd5hxcb2Z-k6iodK3ojQR22YzusI5hfL7Z-4kQ7eQuoy4uYL25bC5CisUQ1ugseJLZq-fEYbyUeSzQoGq-rRrOH-vC-jnDUEgpMDZHiI5zxNE4crbtHQuul8JUSL74KeLKeHKIQVNnwQHZ_rA36NSGfprX4o2zhYUl9w"/>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="p-lg max-w-[1440px] w-full mx-auto space-y-lg pb-xl">
+<header class="mb-xl">
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-2">Other Configuration</h1>
+<p class="text-on-surface-variant font-body-lg">Miscellaneous settings, memory management, and system debugging.</p>
+</header>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-lg">
+<!-- Left Column (Main Settings) -->
+<div class="lg:col-span-2 space-y-md">
+<!-- Long Term Memory Card -->
+<div class="glass-panel rounded-xl p-md relative overflow-hidden group">
+<!-- Decorative glow -->
+<div class="absolute -top-10 -right-10 w-32 h-32 bg-secondary-container/10 rounded-full blur-3xl group-hover:bg-secondary-container/20 transition-all"></div>
+<div class="flex items-start justify-between mb-md relative z-10">
+<div>
+<div class="flex items-center gap-sm mb-xs">
+<span class="material-symbols-outlined text-secondary-fixed-dim">memory</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Long Term Memory (LTM)</h3>
+</div>
+<p class="text-on-surface-variant text-sm">Enable vector database semantic retrieval for continuous context.</p>
+</div>
+<!-- Toggle -->
+<div class="relative inline-block w-12 h-6 align-middle select-none transition duration-200 ease-in mt-1">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-surface-container-highest z-10 top-0 left-0 transition-transform duration-200" id="ltm-toggle" name="toggle" style="transform: translateX(100%); border-color: #00daf3;" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-surface-container-highest cursor-pointer" for="ltm-toggle" style="background-color: rgba(0, 218, 243, 0.2);"></label>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-sm relative z-10 mt-md pt-md border-t border-outline-variant/10">
+<div>
+<label class="font-label-caps text-label-caps text-on-surface-variant block mb-xs">Retrieval Threshold K</label>
+<input class="input-glass w-full rounded-lg py-2 px-sm font-code-sm text-code-sm text-on-surface" type="number" value="5"/>
+</div>
+<div>
+<label class="font-label-caps text-label-caps text-on-surface-variant block mb-xs">Similarity Cutoff</label>
+<input class="input-glass w-full rounded-lg py-2 px-sm font-code-sm text-code-sm text-on-surface" step="0.05" type="number" value="0.75"/>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column (Aux/Technical Settings) -->
+<div class="space-y-md">
+<!-- System & Debug Settings -->
+<div class="glass-panel rounded-xl p-md">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-error">bug_report</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">System &amp; Debug</h3>
+</div>
+<div class="space-y-sm mb-md">
+<label class="font-label-caps text-label-caps text-on-surface-variant block">Log Level</label>
+<div class="relative">
+<select class="input-glass w-full rounded-lg py-2 pl-sm pr-10 font-code-sm text-code-sm text-on-surface appearance-none cursor-pointer">
+<option value="info">INFO</option>
+<option value="debug">DEBUG</option>
+<option value="warn">WARN</option>
+<option value="error">ERROR</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50 pointer-events-none">expand_more</span>
+</div>
+</div>
+<div class="space-y-md mt-md pt-md border-t border-outline-variant/10">
+<div class="flex items-center gap-sm p-sm bg-surface-container-low rounded-lg border border-outline-variant/10">
+<input class="w-4 h-4 rounded border-outline-variant bg-surface-variant text-secondary-fixed-dim focus:ring-secondary-fixed-dim focus:ring-offset-surface-dim" id="advanced-overrides" type="checkbox"/>
+<label class="font-code-sm text-code-sm text-on-surface cursor-pointer select-none flex-1" for="advanced-overrides">Advanced Overrides</label>
+</div>
+<div class="flex items-center gap-sm p-sm bg-surface-container-low rounded-lg border border-outline-variant/10">
+<input checked="" class="w-4 h-4 rounded border-outline-variant bg-surface-variant text-secondary-fixed-dim focus:ring-secondary-fixed-dim focus:ring-offset-surface-dim" id="developer-logs" type="checkbox"/>
+<label class="font-code-sm text-code-sm text-on-surface cursor-pointer select-none flex-1" for="developer-logs">Developer Logs</label>
+</div>
+</div>
+</div>
+<!-- Action Area -->
+<div class="pt-sm flex justify-end gap-sm">
+<button class="px-md py-sm rounded-lg border border-primary text-primary font-code-sm text-code-sm hover:bg-primary/10 transition-colors">Discard</button>
+<button class="px-md py-sm rounded-lg bg-primary text-on-primary font-code-sm text-code-sm shadow-[0_0_15px_rgba(202,190,255,0.2)] hover:shadow-[0_0_20px_rgba(202,190,255,0.4)] transition-all">Save Changes</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>
