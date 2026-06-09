@@ -1,4 +1,10 @@
 // apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts
+//
+// ViewModel for the dev text sandbox. Delegates text generation to
+// the unified AiTextIntelligenceService.
+//
+// Refactored for C-080: removed characterTextStreamService dependency,
+// replaced with aiTextIntelligenceService.streamChat().
 
 import {
   BaseViewModel,
@@ -6,7 +12,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { page } from '$app/state';
-import { aiSettingsService, characterTextStreamService } from '$services';
+import { aiSettingsService, aiTextIntelligenceService } from '$services';
 
 export type TextViewModelInterface = BaseViewModelInterface & {
   readonly prompt: string;
@@ -23,14 +29,10 @@ export type TextViewModelOptions = BaseViewModelOptions & {};
 
 class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextViewModelInterface {
   prompt = $state('');
+  output = $state('');
+  isGenerating = $state(false);
 
-  get output(): string {
-    return characterTextStreamService.output;
-  }
-
-  get isGenerating(): boolean {
-    return characterTextStreamService.isGenerating;
-  }
+  private _abortController: AbortController | undefined;
 
   get endpoint(): string {
     return aiSettingsService.textProvider.endpoint;
@@ -76,11 +78,54 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   }
 
   async generate(): Promise<void> {
-    await characterTextStreamService.generate({ prompt: this.prompt });
+    const prompt = this.prompt;
+    if (!prompt.trim()) {
+      return;
+    }
+
+    // Cancel any previous stream
+    const prevController = this._abortController;
+    if (prevController) {
+      prevController.abort();
+      this._abortController = undefined;
+    }
+    this.isGenerating = false;
+
+    const abortController = new AbortController();
+    this._abortController = abortController;
+
+    this.isGenerating = true;
+    this.output = '';
+
+    try {
+      await aiTextIntelligenceService.streamChat({
+        messages: [{ role: 'user', content: prompt }],
+        signal: abortController.signal,
+        onChunk: (text: string) => {
+          this.output += text;
+        },
+      });
+    } catch (error: unknown) {
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
+      if (this.output.length > 0) {
+        return;
+      }
+      this.output = `Error: ${(error as Error).message ?? 'Unknown error'}`;
+    } finally {
+      this.isGenerating = false;
+      this._abortController = undefined;
+    }
   }
 
   cancel(): void {
-    characterTextStreamService.cancel();
+    const controller = this._abortController;
+    if (controller) {
+      controller.abort();
+      this._abortController = undefined;
+    }
+    this.isGenerating = false;
   }
 }
 
