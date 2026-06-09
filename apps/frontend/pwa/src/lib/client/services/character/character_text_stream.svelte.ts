@@ -1,35 +1,25 @@
-// apps/frontend/pwa/src/lib/client/services/media/dev_text.svelte.ts
+// apps/frontend/pwa/src/lib/client/services/character/character_text_stream.svelte.ts
+//
+// Singleton service for streaming text generation used by the character
+// creation wizard. Provider configuration is sourced from aiSettingsService
+// — never hardcoded. Supports SSE streaming with read/fetch timeouts.
 
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { logger } from '$logger';
+import { aiSettingsService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** Supported text generation providers for the dev sandbox. */
-export type TextGenerationProvider = 'ollama' | 'openrouter';
-
-/** Default free-tier model used when OpenRouter is selected. */
-const DEFAULT_OPENROUTER_MODEL = 'liquid/lfm-2.5-1.2b-instruct:free';
-
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
-
-export type DevTextServiceInterface = BaseFrontendClassInterface & {
+export type CharacterTextStreamInterface = BaseFrontendClassInterface & {
   /** The accumulated output text from the SSE stream. */
   readonly output: string;
   /** Whether a generation is currently in progress. */
   readonly isGenerating: boolean;
-  /** The selected text generation provider. */
-  provider: TextGenerationProvider;
-  /** The model identifier (used when provider is OpenRouter). */
-  model: string;
   /** Sends the prompt and begins accumulating SSE chunks. */
   generate(options: { prompt: string }): Promise<void>;
   /** Aborts the active fetch request and resets generation state. */
@@ -40,14 +30,21 @@ export type DevTextServiceInterface = BaseFrontendClassInterface & {
 // Implementation
 // ---------------------------------------------------------------------------
 
-export class DevTextService
+/** Timeout for the entire fetch+stream operation (90 seconds). */
+const FETCH_TIMEOUT_MS = 90_000;
+
+/** Timeout for individual SSE stream read operations (30 seconds). */
+const READ_TIMEOUT_MS = 30_000;
+
+/** Maximum time to wait for the first SSE chunk before giving up (15 seconds). */
+const FIRST_CHUNK_TIMEOUT_MS = 15_000;
+
+export class CharacterTextStreamService
   extends BaseFrontendClass<BaseFrontendClassOptions>
-  implements DevTextServiceInterface
+  implements CharacterTextStreamInterface
 {
   output = $state('');
   isGenerating = $state(false);
-  provider: TextGenerationProvider = $state('ollama');
-  model = $state(DEFAULT_OPENROUTER_MODEL);
 
   private _abortController: AbortController | undefined;
 
@@ -60,7 +57,6 @@ export class DevTextService
       return;
     }
 
-    // Cancel any in-progress generation (inline to avoid proxy auto-logging)
     const prevController = this._abortController;
     if (prevController) {
       prevController.abort();
@@ -76,41 +72,73 @@ export class DevTextService
     this.output = '';
 
     try {
+      const { apiKey, model, endpoint } = aiSettingsService.textProvider;
+
+      // Use the configured external provider when any setting is populated
       const body: Record<string, string> = { prompt };
 
-      if (this.provider === 'openrouter') {
+      if (apiKey || model || endpoint) {
         body.provider = 'openrouter';
-        body.model = this.model || DEFAULT_OPENROUTER_MODEL;
+        if (model) {
+          body.model = model;
+        }
       }
+
+      this.info('generate:fetching', {
+        endpoint: endpoint || '(default)',
+        model: model || '(default)',
+        promptLength: prompt.length,
+      });
+
+      const timeoutId = setTimeout(
+        () => abortController.abort(new Error('Fetch timed out')),
+        FETCH_TIMEOUT_MS,
+      );
 
       const response = await fetch('/api/text', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal,
       });
 
+      clearTimeout(timeoutId);
+
+      this.info('generate:fetch-done', {
+        status: response.status,
+        ok: response.ok,
+        hasBody: !!response.body,
+      });
+
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error');
-        logger.error('generate:fetch-failed', { status: response.status, errorText });
+        this.error('generate:fetch-failed', { status: response.status, errorText });
         this.output = `Error: ${response.status} — ${errorText}`;
         return;
       }
 
       if (!response.body) {
+        this.error('generate:no-response-body');
         this.output = 'Error: No response body';
         return;
       }
 
+      this.info('generate:reading-stream');
       await this._readStream({ body: response.body, signal });
+      this.info('generate:stream-done', { outputLength: this.output.length });
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
-        // Silently handled — cancel() was called
+        this.debug('generate:aborted');
         return;
       }
-      logger.error('generate:failed', error);
+      if (this.output.length > 0) {
+        this.warn('generate:stream-ended-prematurely', {
+          error: (error as Error).message,
+          outputLength: this.output.length,
+        });
+        return;
+      }
+      this.error('generate:failed', error);
       this.output = `Error: ${(error as Error).message ?? 'Unknown error'}`;
     } finally {
       this.isGenerating = false;
@@ -124,19 +152,11 @@ export class DevTextService
       controller.abort();
       this._abortController = undefined;
     }
-
     this.isGenerating = false;
   }
 
   // ── Private helpers ───────────────────────────────────────────────────
 
-  /**
-   * Reads the SSE response body and accumulates text chunks into {@link output}.
-   *
-   * Parses lines starting with `data: ` as JSON payloads. A `[DONE]` data
-   * value signals stream completion. Text chunks are extracted from the
-   * `text` property of the JSON payload.
-   */
   private async _readStream(options: {
     body: ReadableStream<Uint8Array>;
     signal: AbortSignal;
@@ -145,23 +165,35 @@ export class DevTextService
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let chunkCount = 0;
+
+    this.debug('_readStream:start');
+
+    let isFirstChunk = true;
 
     try {
       while (true) {
         if (signal.aborted) {
+          this.debug('_readStream:aborted');
           return;
         }
 
-        const { value, done } = await reader.read();
+        const timeout = isFirstChunk ? FIRST_CHUNK_TIMEOUT_MS : READ_TIMEOUT_MS;
+        const result = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Stream read timed out')), timeout),
+          ),
+        ]);
+        isFirstChunk = false;
+        const { value, done } = result;
         if (done) {
           break;
         }
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete lines
         const lines = buffer.split('\n');
-        // The last element may be incomplete — keep it in the buffer
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
@@ -171,6 +203,10 @@ export class DevTextService
 
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
+            this.debug('_readStream:received-DONE', {
+              chunkCount,
+              outputLength: this.output.length,
+            });
             return;
           }
 
@@ -178,6 +214,7 @@ export class DevTextService
             const chunk = JSON.parse(data) as { text?: string };
             if (chunk.text) {
               this.output += chunk.text;
+              chunkCount++;
             }
           } catch {
             // Skip invalid JSON lines
@@ -185,11 +222,13 @@ export class DevTextService
         }
       }
     } finally {
+      this.debug('_readStream:done', { chunkCount, outputLength: this.output.length });
       reader.releaseLock();
     }
   }
 }
 
-export const devTextService: DevTextServiceInterface = DevTextService.create({
-  className: 'DevTextService',
-});
+export const characterTextStreamService: CharacterTextStreamInterface =
+  CharacterTextStreamService.create({
+    className: 'CharacterTextStreamService',
+  });
