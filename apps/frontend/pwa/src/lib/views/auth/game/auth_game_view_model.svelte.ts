@@ -277,20 +277,29 @@ class AuthGameViewModel
     formData.append('code', code);
     formData.append('uid', uid);
 
-    const response = await fetch('?/completeHandoff', {
-      method: 'POST',
-      body: formData,
+    // TODO(C-107): Wire to microservice/firebase — the +page.server.ts action
+    // was deleted for Tauri SPA enforcement (C-102). The device-flow handoff
+    // must mint custom tokens via a Firebase Function instead.
+    //
+    // const response = await fetch('?/completeHandoff', {
+    //   method: 'POST',
+    //   body: formData,
+    // });
+    //
+    // if (!response.ok) {
+    //   const errorBody = await response.json().catch(() => ({}));
+    //   throw toAppError({
+    //     errorType: 'internal',
+    //     errorMessage: (errorBody as { message?: string }).message || 'Handoff failed',
+    //   });
+    // }
+    //
+    // this._authState = 'handoff_complete';
+
+    throw toAppError({
+      errorType: 'internal',
+      errorMessage: 'Device-flow handoff is temporarily disabled — pending C-107 migration',
     });
-
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      throw toAppError({
-        errorType: 'internal',
-        errorMessage: (errorBody as { message?: string }).message || 'Handoff failed',
-      });
-    }
-
-    this._authState = 'handoff_complete';
   }
 
   /**
