@@ -6,24 +6,16 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { page } from '$app/state';
-import { devTextService, type TextGenerationProvider } from '$services';
-
-export type { TextGenerationProvider };
+import { aiSettingsService, characterTextStreamService } from '$services';
 
 export type TextViewModelInterface = BaseViewModelInterface & {
-  /** The user-editable prompt sent to the text generation endpoint. */
   readonly prompt: string;
-  /** The accumulated output text from the SSE stream. */
   readonly output: string;
-  /** Whether a generation is currently in progress. */
   readonly isGenerating: boolean;
-  /** The selected text generation provider. */
-  readonly provider: TextGenerationProvider;
-  /** The model identifier (used when provider is OpenRouter). */
+  readonly endpoint: string;
   readonly model: string;
-  /** Sends the prompt and begins accumulating SSE chunks. */
+
   generate(): Promise<void>;
-  /** Aborts the active fetch request and resets generation state. */
   cancel(): void;
 };
 
@@ -33,55 +25,49 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   prompt = $state('');
 
   get output(): string {
-    return devTextService.output;
+    return characterTextStreamService.output;
   }
 
   get isGenerating(): boolean {
-    return devTextService.isGenerating;
+    return characterTextStreamService.isGenerating;
   }
 
-  get provider(): TextGenerationProvider {
-    return devTextService.provider;
+  get endpoint(): string {
+    return aiSettingsService.textProvider.endpoint;
   }
 
-  set provider(value: TextGenerationProvider) {
-    devTextService.provider = value;
+  set endpoint(value: string) {
+    aiSettingsService.setTextProvider({ endpoint: value });
   }
 
   get model(): string {
-    return devTextService.model;
+    return aiSettingsService.textProvider.model;
   }
 
   set model(value: string) {
-    devTextService.model = value;
+    aiSettingsService.setTextProvider({ model: value });
   }
 
   // ── Public API ────────────────────────────────────────────────────────
 
-  /**
-   * Initializes the view model. Supports URL query parameters:
-   * - `?instant=true` (or `instant-start=true`) — auto-generate on load
-   * - `?text=...` — pre-fill the prompt
-   * - `?provider=ollama|openrouter` — set the provider before generating
-   */
   override async initialize(): Promise<void> {
     const url = new URL(page.url);
     const instantParam = url.searchParams.get('instant') ?? url.searchParams.get('instant-start');
 
-    // Set provider from URL if specified
-    const providerParam = url.searchParams.get('provider');
-    if (providerParam === 'ollama' || providerParam === 'openrouter') {
-      devTextService.provider = providerParam;
+    const endpointParam = url.searchParams.get('endpoint');
+    if (endpointParam) {
+      aiSettingsService.setTextProvider({ endpoint: decodeURIComponent(endpointParam) });
+    }
+
+    const modelParam = url.searchParams.get('model');
+    if (modelParam) {
+      aiSettingsService.setTextProvider({ model: decodeURIComponent(modelParam) });
     }
 
     if (instantParam === 'true') {
       const textParam = url.searchParams.get('text');
       if (textParam) {
         this.prompt = decodeURIComponent(textParam);
-        this.debug('initialize:instant-auto', {
-          promptLength: this.prompt.length,
-          provider: devTextService.provider,
-        });
         void this.generate();
       }
     }
@@ -90,11 +76,11 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   }
 
   async generate(): Promise<void> {
-    await devTextService.generate({ prompt: this.prompt });
+    await characterTextStreamService.generate({ prompt: this.prompt });
   }
 
   cancel(): void {
-    devTextService.cancel();
+    characterTextStreamService.cancel();
   }
 }
 

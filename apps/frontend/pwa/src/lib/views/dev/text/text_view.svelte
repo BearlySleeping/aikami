@@ -30,21 +30,34 @@
       <h1 class="mb-2 text-2xl font-bold">Text Generation</h1>
       <p class="mb-6 text-base-content/60">Test and debug text generation pipelines.</p>
 
-      <!-- Provider selector -->
+      <!-- Configuration -->
       <div class="card bg-base-200 shadow mb-6">
         <div class="card-body p-4">
-          <label class="form-control w-full">
+          <label class="form-control w-full mb-3">
             <div class="label">
-              <span class="label-text font-semibold">Provider</span>
+              <span class="label-text font-semibold">Endpoint</span>
+              <span class="label-text-alt text-base-content/40">Leave empty for default</span>
             </div>
-            <select
-              class="select select-bordered w-full"
-              bind:value={viewModel.provider}
+            <input
+              type="text"
+              class="input input-bordered w-full font-mono text-sm"
+              placeholder="http://localhost:11434"
+              bind:value={viewModel.endpoint}
               disabled={viewModel.isGenerating}
             >
-              <option value="ollama">Local Ollama</option>
-              <option value="openrouter">OpenRouter (Free Model)</option>
-            </select>
+          </label>
+          <label class="form-control w-full">
+            <div class="label">
+              <span class="label-text font-semibold">Model</span>
+              <span class="label-text-alt text-base-content/40">Leave empty for default</span>
+            </div>
+            <input
+              type="text"
+              class="input input-bordered w-full font-mono text-sm"
+              placeholder="liquid/lfm-2.5-1.2b-instruct:free"
+              bind:value={viewModel.model}
+              disabled={viewModel.isGenerating}
+            >
           </label>
         </div>
       </div>

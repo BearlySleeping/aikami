@@ -61,9 +61,57 @@ class MockBaseViewModel extends MockBaseFrontendClass {
   async dispose(): Promise<void> {}
 }
 
-mock.module('@aikami/frontend/services', () => ({
+const frontendServicesMock = {
   BaseFrontendClass: MockBaseFrontendClass,
   BaseViewModel: MockBaseViewModel,
+  BaseFormModel: class {},
+  dialogService: {},
+  routerService: {},
+  firebaseFunctionsService: { call: mock(async () => ({})) },
+  firebaseAnalyticService: { logEvent: mock(async () => {}) },
+  firebaseAuthService: {
+    currentUser: null,
+    onAuthStateChanged: mock(() => () => {}),
+  },
+  firebaseCloudMessaging: {},
+  firebaseRemoteConfig: {},
+  firebaseStorageService: {},
+  routerUtils: {},
+  PreferenceService: class {},
+  CorePreferenceProviderService: class {},
+};
+
+mock.module('@aikami/frontend/services', () => frontendServicesMock);
+
+// The test tsconfig maps @aikami/frontend/services to the real package path.
+// Bun resolves via tsconfig paths before checking mock.module for bare
+// specifiers, so we also mock by the resolved absolute path.
+const _FRONTEND_SVC_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/packages/frontend/services/src/index.ts';
+
+mock.module(_FRONTEND_SVC_PATH, () => ({
+  ...frontendServicesMock,
+  __esModule: true,
+}));
+
+// ── Mock SvelteKit virtual modules required by transitive dependencies ──────
+
+mock.module('$app/navigation', () => ({
+  goto: mock(async () => {}),
+  afterNavigate: mock(() => {}),
+  beforeNavigate: mock(() => {}),
+  disableScrollHandling: mock(() => {}),
+}));
+
+mock.module('$app/state', () => ({
+  page: {
+    url: new URL('http://localhost/'),
+    params: {},
+    route: { id: '' },
+    status: 200,
+    error: null,
+    data: {},
+  },
 }));
 
 // ── Vite env vars required by @aikami/frontend/configs/environment.ts ─────
