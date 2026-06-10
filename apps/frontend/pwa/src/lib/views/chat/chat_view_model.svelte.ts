@@ -63,7 +63,10 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   clearChat(): void;
 };
 
-class ChatViewModel extends BaseViewModel<ChatViewModelOptions> implements ChatViewModelInterface {
+export class ChatViewModel
+  extends BaseViewModel<ChatViewModelOptions>
+  implements ChatViewModelInterface
+{
   npc: NpcData | undefined = $state();
   chat: ChatData | undefined = $state();
   errorMessage: string | undefined = $state();
