@@ -71,6 +71,11 @@ class DevViewModel extends BaseViewModel<DevViewModelOptions> implements DevView
       label: 'Combat',
       icon: 'M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z',
     },
+    {
+      route: '/dev/inventory',
+      label: 'Inventory',
+      icon: 'M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM12 3a3 3 0 013 3M9 3a3 3 0 013-3',
+    },
   ] as const;
 
   get navItems(): readonly DevNavItem[] {
