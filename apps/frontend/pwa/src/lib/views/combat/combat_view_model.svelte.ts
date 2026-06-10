@@ -36,6 +36,33 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    * Derived from activeEntities.length.
    */
   readonly aliveCount: number;
+
+  /** Current player hit points. */
+  readonly playerHp: number;
+
+  /** Maximum player hit points. */
+  readonly playerMaxHp: number;
+
+  /** Current enemy hit points. */
+  readonly enemyHp: number;
+
+  /** Maximum enemy hit points. */
+  readonly enemyMaxHp: number;
+
+  /** Ordered combat log entries — most recent first. */
+  readonly combatLog: readonly string[];
+
+  /**
+   * Battle outcome.
+   * `null` while combat is ongoing; `'victory'` or `'defeat'` when ended.
+   */
+  readonly combatResult: 'victory' | 'defeat' | null;
+
+  /** CSS class string for the battle result banner. */
+  readonly combatResultBannerClass: string;
+
+  /** Whether a combat encounter is currently in progress. */
+  readonly inCombat: boolean;
 };
 
 /**
@@ -60,9 +87,37 @@ export class CombatViewModel
   /** Cached total from COMBAT_STARTED, reset on COMBAT_ENDED. */
   totalParticipants = $state(0);
 
+  playerHp = $state(100);
+
+  playerMaxHp = $state(100);
+
+  enemyHp = $state(80);
+
+  enemyMaxHp = $state(80);
+
+  combatLog: string[] = $state([]);
+
+  combatResult: 'victory' | 'defeat' | null = $state(null);
+
   /** Derived count of alive entities. */
   get aliveCount(): number {
     return this.activeEntities.length;
+  }
+
+  /** Whether a combat encounter is currently in progress. */
+  get inCombat(): boolean {
+    return this.currentTurnEntity !== null;
+  }
+
+  /** CSS class string for the battle result banner. */
+  get combatResultBannerClass(): string {
+    if (this.combatResult === 'victory') {
+      return 'bg-success/20 text-success';
+    }
+    if (this.combatResult === 'defeat') {
+      return 'bg-error/20 text-error';
+    }
+    return '';
   }
 
   /** Cached bridge instance — created lazily on first use. */
@@ -110,6 +165,7 @@ export class CombatViewModel
       this.activeEntities = [];
       this.currentTurnEntity = null;
       this.totalParticipants = 0;
+      this.combatResult = null;
     });
 
     this._disposeListeners.push(removeTurnChanged, removeCombatStarted, removeCombatEnded);
@@ -127,6 +183,12 @@ export class CombatViewModel
     this.activeEntities = [];
     this.currentTurnEntity = null;
     this.totalParticipants = 0;
+    this.playerHp = 100;
+    this.playerMaxHp = 100;
+    this.enemyHp = 80;
+    this.enemyMaxHp = 80;
+    this.combatLog = [];
+    this.combatResult = null;
 
     await super.dispose();
   }
