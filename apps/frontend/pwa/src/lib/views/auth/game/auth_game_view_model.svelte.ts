@@ -269,37 +269,25 @@ class AuthGameViewModel
   }
 
   /**
-   * Completes the device flow handoff by calling the server action
-   * to mint a custom token and write it to Firestore.
+   * Completes the device flow handoff via the auth callable Cloud Function.
+   *
+   * The callable mints a custom Firebase token (requiring Admin SDK secrets)
+   * and writes it to Firestore at `device_handoffs/{code}` for the game
+   * client to retrieve.
+   *
+   * Contract: C-111 — re-routed from +page.server.ts form action to callable.
    */
   private async _completeHandoff(code: string, uid: string): Promise<void> {
-    const formData = new FormData();
-    formData.append('code', code);
-    formData.append('uid', uid);
-
-    // TODO(C-107): Wire to microservice/firebase — the +page.server.ts action
-    // was deleted for Tauri SPA enforcement (C-102). The device-flow handoff
-    // must mint custom tokens via a Firebase Function instead.
-    //
-    // const response = await fetch('?/completeHandoff', {
-    //   method: 'POST',
-    //   body: formData,
-    // });
-    //
-    // if (!response.ok) {
-    //   const errorBody = await response.json().catch(() => ({}));
-    //   throw toAppError({
-    //     errorType: 'internal',
-    //     errorMessage: (errorBody as { message?: string }).message || 'Handoff failed',
-    //   });
-    // }
-    //
-    // this._authState = 'handoff_complete';
-
-    throw toAppError({
-      errorType: 'internal',
-      errorMessage: 'Device-flow handoff is temporarily disabled — pending C-107 migration',
-    });
+    try {
+      await authService.completeDeviceHandoff({ code, uid });
+      this._authState = 'handoff_complete';
+    } catch (err) {
+      this.error('Device handoff failed', err);
+      throw toAppError({
+        errorType: 'internal',
+        errorMessage: toAppErrorFromUnknownError(err).message || 'Handoff failed',
+      });
+    }
   }
 
   /**

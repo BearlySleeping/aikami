@@ -1,13 +1,14 @@
 // apps/frontend/pwa/src/lib/services/ai/ai_text_intelligence_service.svelte.ts
 //
 // Unified text & structural intelligence service.
-// Centralises all LLM text-generation workflows — SSE token streaming,
-// history-aware chat, and TypeBox structural extraction — behind a
-// single reactive gateway. Provider routing, model selection, and API
-// keys are resolved dynamically from the central ConfigService.
+// Centralises all LLM text-generation workflows — NDJSON token streaming
+// via Ollama, history-aware chat, and TypeBox structural extraction —
+// behind a single reactive gateway. Provider routing, model selection,
+// and API keys are resolved dynamically from the central ConfigService.
 //
-// Contract: C-080
+// Contract: C-080, C-111
 
+import { EMULATOR_PORTS } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -88,16 +89,16 @@ export type AiTextIntelligenceServiceInterface = BaseFrontendClassInterface & {
 // ---------------------------------------------------------------------------
 
 /** Timeout for the entire fetch+stream operation (90 seconds). */
-// TODO(C-107): Re-enable when streamChat is wired to microservice
 const _FETCH_TIMEOUT_MS = 90_000;
 
-/** Timeout for individual SSE stream read operations (30 seconds). */
-// TODO(C-107): Re-enable when _readSSEStream is re-enabled
+/** Timeout for individual NDJSON stream read operations (30 seconds). */
 const _READ_TIMEOUT_MS = 30_000;
 
-/** Maximum time to wait for the first SSE chunk (15 seconds). */
-// TODO(C-107): Re-enable when _readSSEStream is re-enabled
+/** Maximum time to wait for the first NDJSON chunk (15 seconds). */
 const _FIRST_CHUNK_TIMEOUT_MS = 15_000;
+
+/** Ollama microservice base URL (local microservice, no secrets on client). */
+const _TEXT_MICROSERVICE_URL = `http://127.0.0.1:${EMULATOR_PORTS.text}`;
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -184,8 +185,7 @@ class AiTextIntelligenceService
     signal?: AbortSignal;
     model?: string;
   }): Promise<void> {
-    // TODO(C-107): Re-enable when streamChat is wired to microservice
-    const { messages, onChunk: _onChunk, signal, model: explicitModel } = options;
+    const { messages, onChunk, signal, model: explicitModel } = options;
 
     const routing = this._resolveProvider({ explicitModel });
     this._exposeRouting(routing);
@@ -205,70 +205,51 @@ class AiTextIntelligenceService
     this._incrementStreamCount();
 
     try {
-      // Build the request body
       const lastMsg = messages[messages.length - 1];
       const prompt = lastMsg?.role === 'user' ? lastMsg.content : '';
-      const systemMsg = messages.find((m) => m.role === 'system');
-
-      const body: Record<string, unknown> = {
-        prompt,
-        provider: routing.provider,
-        model: routing.model,
-        messages,
-      };
-
-      if (systemMsg) {
-        body.systemPrompt = systemMsg.content;
-      }
-
-      if (routing.endpoint) {
-        body.endpoint = routing.endpoint;
-      }
 
       this.info('streamChat:fetching', {
         provider: routing.provider,
         model: routing.model,
-        endpoint: routing.endpoint || '(default)',
         messageCount: messages.length,
         promptLength: prompt.length,
       });
 
-      // Fetch with timeout (commented pending C-107)
-      // const timeoutId = setTimeout(
-      //   () => abortController.abort(new Error('Fetch timed out')),
-      //   FETCH_TIMEOUT_MS,
-      // );
+      const timeoutId = setTimeout(
+        () => abortController.abort(new Error('Fetch timed out')),
+        _FETCH_TIMEOUT_MS,
+      );
 
-      // TODO(C-107): Wire to microservice/firebase — the /api/text +server.ts route
-      // was deleted for Tauri SPA enforcement (C-102). Stream chat must be re-routed
-      // to a Firebase Function or Python microservice.
-      //
-      // const response = await fetch('/api/text', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(body),
-      //   signal: abortController.signal,
-      // });
-      //
-      // clearTimeout(timeoutId);
-      //
-      // if (!response.ok) {
-      //   const errorText = await response.text().catch(() => 'Unknown error');
-      //   this.error('streamChat:fetch-failed', { status: response.status, errorText });
-      //   throw new Error(`HTTP ${response.status}: ${errorText}`);
-      // }
-      //
-      // if (!response.body) {
-      //   throw new Error('No response body');
-      // }
-      //
-      // await this._readSSEStream({
-      //   body: response.body,
-      //   signal: abortController.signal,
-      //   onChunk,
-      // });
+      // C-111: Direct call to local Ollama microservice — no SvelteKit middleman.
+      // The body format follows Ollama's /api/generate NDJSON contract.
+      const response = await fetch(`${_TEXT_MICROSERVICE_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: routing.model,
+          prompt,
+          stream: true,
+        }),
+        signal: abortController.signal,
+      });
 
-      throw new Error('streamChat is temporarily disabled — pending C-107 microservice migration');
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        this.error('streamChat:fetch-failed', { status: response.status, errorText });
+        throw new Error(`Ollama HTTP ${response.status}: ${errorText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('No response body from Ollama');
+      }
+
+      await this._readOllamaNDJSONStream({
+        body: response.body,
+        signal: abortController.signal,
+        onChunk,
+      });
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
         this.debug('streamChat:aborted');
@@ -403,10 +384,15 @@ class AiTextIntelligenceService
     (globalThis as Record<string, unknown>).__ai_service_active_stream_count = 0;
   }
 
-  // ── Private: SSE stream reader ────────────────────────────────────────
+  // ── Private: Ollama NDJSON stream reader ──────────────────────────────
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: TODO(C-107) will re-enable
-  private async _readSSEStream_disabled(options: {
+  /**
+   * Reads an Ollama /api/generate NDJSON response stream.
+   *
+   * Each line is a JSON object: `{"response": "token", "done": false}`.
+   * On done, `{"done": true}` is received and the stream ends.
+   */
+  private async _readOllamaNDJSONStream(options: {
     body: ReadableStream<Uint8Array>;
     signal: AbortSignal;
     onChunk: (text: string) => void;
@@ -444,23 +430,36 @@ class AiTextIntelligenceService
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) {
+          const trimmed = line.trim();
+          if (trimmed.length === 0) {
             continue;
           }
 
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') {
-            this.debug('_readSSEStream:received-DONE', { chunkCount });
-            return;
-          }
-
           try {
-            const chunk = JSON.parse(data) as { text?: string };
-            if (chunk.text) {
-              onChunk(chunk.text);
+            const chunk = JSON.parse(trimmed) as {
+              response?: string;
+              done: boolean;
+              error?: string;
+            };
+
+            if (chunk.error) {
+              this.error('_readOllamaNDJSONStream:ollama-error', { error: chunk.error });
+              throw new Error(chunk.error);
+            }
+
+            if (chunk.done) {
+              this.debug('_readOllamaNDJSONStream:done', { chunkCount });
+              return;
+            }
+
+            if (chunk.response) {
+              onChunk(chunk.response);
               chunkCount++;
             }
-          } catch {
+          } catch (parseError) {
+            if (!(parseError instanceof SyntaxError)) {
+              throw parseError;
+            }
             // Skip invalid JSON lines
           }
         }
