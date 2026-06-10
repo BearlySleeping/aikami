@@ -108,6 +108,18 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    * @param value The value to set.
    */
   setIsChangingAuthState(value: boolean): void;
+
+  /**
+   * Completes a device-flow authentication handoff for game clients.
+   * Creates a custom Firebase token and writes it to Firestore at
+   * `device_handoffs/{code}` so the game can retrieve it.
+   *
+   * @returns The custom Firebase sign-in token.
+   */
+  completeDeviceHandoff(options: {
+    code: string;
+    uid: string;
+  }): Promise<{ customFirebaseSignInToken: string }>;
 };
 
 export class AuthService
@@ -377,6 +389,16 @@ export class AuthService
     data: AuthMessageData<T>,
   ): Promise<AuthMessageResponse<T>> {
     return await firebaseFunctionsService.call('auth', data);
+  }
+
+  async completeDeviceHandoff(options: {
+    code: string;
+    uid: string;
+  }): Promise<{ customFirebaseSignInToken: string }> {
+    return await this.callAuthEndpoint({
+      type: 'completeDeviceHandoff',
+      payload: { code: options.code, uid: options.uid },
+    });
   }
 
   async syncAuthWithBackend(forceEmpty = false): Promise<boolean> {

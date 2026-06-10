@@ -42,6 +42,15 @@ export type AuthApiEvents = {
     },
     undefined,
   ];
+  completeDeviceHandoff: [
+    {
+      code: string;
+      uid: string;
+    },
+    {
+      customFirebaseSignInToken: string;
+    },
+  ];
   updateEmail: [
     {
       email: string;

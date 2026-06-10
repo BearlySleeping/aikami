@@ -9,6 +9,7 @@ import type {
 import { createApiHandler, toAppError } from '@aikami/utils';
 
 import { checkUniqueEmail } from './lib/check_unique_email.ts';
+import { completeDeviceHandoff } from './lib/complete_device_handoff.ts';
 import { confirmTermsAndService } from './lib/confirm_terms_and_service.ts';
 import { createCustomFirebaseSignInToken } from './lib/create_custom_firebase_token.ts';
 import { deleteAccount } from './lib/delete_account.ts';
@@ -47,6 +48,14 @@ const apiHandler = createApiHandler<AuthApiEvents, UserClaims | undefined>({
 
     return updateEmail({
       ...payload,
+      uid: user.id,
+    });
+  },
+  completeDeviceHandoff: (payload, user) => {
+    assertAuthUser(user);
+
+    return completeDeviceHandoff({
+      code: payload.code,
       uid: user.id,
     });
   },

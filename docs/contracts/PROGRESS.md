@@ -86,6 +86,7 @@
 | C-108 | Quest System MVVM & Dev Sandbox | ✅ completed |
 | C-109 | Service Layer Restructure & Client Flattening | ✅ completed |
 | C-110 | Sandbox E2E Testing | ✅ completed |
+| C-111 | Microservice Rewiring | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
