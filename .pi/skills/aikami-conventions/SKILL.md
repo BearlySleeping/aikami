@@ -6,8 +6,8 @@ description: >-
     path discipline, arrow functions, `as const` / `satisfies`, error handling,
     validation boundaries, project structure, private member naming, file naming,
     output style, and direnv environment.
-version: 3.0.0
-tags: ["aikami", "conventions", "typescript", "monorepo", "critical"]
+version: 4.0.0
+tags: ["aikami", "conventions", "typescript", "monorepo", "critical", "phase-2", "tauri", "spa", "monorepo-boundaries"]
 ---
 
 # Aikami Conventions
@@ -25,6 +25,96 @@ For framework-specific patterns, also load:
 | `pixijs-v8`            | PixiJS v8 + bitECS, game engine boundary, ECS patterns      |
 | `firebase-functions`   | Firebase Cloud Functions v2 best practices                  |
 | `firestore-collection` | Scaffolding Firestore collections                           |
+
+---
+
+## 🔴 PHASE 2 — ARCHITECTURE PILLARS
+
+These four pillars govern all code generation in the Aikami monorepo.
+Violating any of them produces code that will be rejected in review and
+blocked by CI. Pillars 1–2 are enforced here; Pillars 3–4 are enforced in
+`svelte-conventions`.
+
+### Pillar 1: Tauri SPA — No Server Routes
+
+Aikami's frontend is a **static Single-Page Application** wrapped in Tauri v2.
+There is no SvelteKit server running in production. All rendering and data
+fetching is client-side only. `adapter-static` is the only adapter.
+
+**🔴 PROHIBITED** — these files must **never** exist anywhere in
+`apps/frontend/pwa/src/routes/`:
+
+| Forbidden File Pattern | Why                                      |
+| ---------------------- | ---------------------------------------- |
+| `+server.ts`           | SvelteKit API routes — no server in SPA  |
+| `+page.server.ts`      | Server-side page data loading            |
+| `+layout.server.ts`    | Server-side layout data loading          |
+
+**✅ REQUIRED** data fetching patterns:
+
+```typescript
+// ✅ Client-side Firebase SDKs
+import { doc, getDoc, collection, query } from "firebase/firestore";
+import { getAuth, signInWithPopup } from "firebase/auth";
+
+// ✅ Standard fetch to external microservices (voice, image, text)
+const response = await fetch("http://localhost:3001/tts", {
+  method: "POST",
+  body: JSON.stringify({ text }),
+});
+
+// ✅ Browser APIs (localStorage, IndexedDB, Web Audio, etc.)
+localStorage.getItem("session-key");
+```
+
+**Enforcement**: CI rejects any PR containing `+server.ts`, `+page.server.ts`,
+or `+layout.server.ts` under `apps/frontend/pwa/src/routes/`.
+
+### Pillar 2: Monorepo Boundaries — Shared Packages Only
+
+Domain types, validation schemas, Zod definitions, and global constants
+**must never** be defined inside application packages (`apps/`). They belong
+in `packages/shared/` and are consumed via `@aikami/*` imports.
+
+| ❌ FORBIDDEN — defined in `apps/**`      | ✅ REQUIRED — import from shared package |
+| --------------------------------------- | ---------------------------------------- |
+| `type Agent = { id: string; ... }`      | `import type { Agent } from "@aikami/types"` |
+| `const agentSchema = z.object({...})`   | `import { agentSchema } from "@aikami/schemas"` |
+| `const MAX_RETRIES = 3`                 | `import { MAX_RETRIES } from "@aikami/constants"` |
+| TypeBox schema in `apps/backend/**`     | `import { Type } from "@sinclair/typebox"` in `packages/shared/schemas/` |
+| `apps/frontend/pwa/src/lib/types/`      | `packages/shared/types/src/lib/` |
+
+```typescript
+// ❌ WRONG — domain type defined in app-level code
+// apps/frontend/pwa/src/lib/types/agent.ts
+export type Agent = { id: string; name: string; role: string };
+
+// ❌ WRONG — schema defined in backend code
+// apps/backend/firebase/src/features/agent/schema.ts
+import { z } from "zod";
+export const agentSchema = z.object({ id: z.string(), name: z.string() });
+
+// ✅ CORRECT — import from shared package
+import type { Agent } from "@aikami/types";
+import { agentSchema } from "@aikami/schemas";
+import { MAX_RETRIES } from "@aikami/constants";
+```
+
+**If a type is missing**: Add it to `packages/shared/types/` first. If it
+crosses project boundaries (e.g., backend ↔ frontend), also add a TypeBox
+schema to `packages/shared/schemas/`. Never define it locally as a shortcut.
+
+### Pillars 3 & 4: Svelte MVVM + Dev Sandboxes
+
+Enforced by `svelte-conventions` — always loaded after this skill.
+
+| Pillar | Rule                                          | Skill Section          |
+| ------ | --------------------------------------------- | ---------------------- |
+| 3      | Views are completely logicless; state and     | `svelte-conventions`   |
+|        | business logic in `_view_model.svelte.ts`     | § Phase 2 Pillars      |
+| 4      | `routes/(dev)/` sandboxes use `DevViewModel`  | `svelte-conventions`   |
+|        | override pattern — extend production VM,      | § Phase 2 Pillars      |
+|        | override fetch methods with mock data         |                        |
 
 ---
 
@@ -77,7 +167,8 @@ barrel exports and can miss re-exports or renamed symbols.
 
 ### 3. Never Export Types or Schemas from Service Files
 
-Types and schemas are data shapes, not business logic:
+Types and schemas are data shapes, not business logic. This is a specific
+instance of **Pillar 2 (Monorepo Boundaries)** — see above for the full rule.
 
 ```typescript
 // ❌ WRONG — type/schema defined in a service file
@@ -352,7 +443,7 @@ import { Type, type Static } from "@sinclair/typebox";
 
 ## Type Definitions — Where Types and Schemas Live
 
-See CRITICAL VIOLATION #3 above. Additional details:
+See **Pillar 2 (Monorepo Boundaries)** above. Additional details:
 
 | Location                    | What goes there                                 |
 | --------------------------- | ----------------------------------------------- |

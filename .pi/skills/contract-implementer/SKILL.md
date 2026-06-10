@@ -39,13 +39,12 @@ After implementation:
 ### Phase 4: Log & Archive
 
 1. Update `docs/contracts/PROGRESS.md`:
-   - Mark contract as `completed`
-   - Log findings, gotchas encountered, files created/modified
-   - Note any deviations from the contract
-   - Record limitations or future work
-2. Add `<!-- completed: YYYY-MM-DD -->` comment at top of the contract file
-3. Update `docs/contracts/INDEX.md` status from `not_started` → `completed`
-4. Run `cd docs && bun run scripts/generate_llms_txt.ts` to update the index
+   - Mark contract as `completed` in the Status Summary table ONLY.
+   - **NEVER append granular execution logs to `PROGRESS.md`.** `PROGRESS.md` is strictly a dashboard table.
+2. Append your granular Execution Report (Summary, AC Status, Files created/modified, Deviations, Test Results) **to the BOTTOM of the individual contract markdown file itself** (e.g., `C-105-feature.md`). This keeps the contract self-contained.
+3. Add `<!-- completed: YYYY-MM-DD -->` comment at top of the contract file
+4. Update `docs/contracts/INDEX.md` status from `not_started` → `completed`
+5. Run `cd docs && bun run scripts/generate_llms_txt.ts` to update the index
 
 ### Phase 5: Continue
 
@@ -91,22 +90,19 @@ functions-* contracts → apps/backend/functions/src/
 
 ## PROGRESS.md Format
 
+`PROGRESS.md` is a **dashboard table only**. Flip the status in the Status Summary table when a contract is complete. Never append execution logs here.
+
+Granular execution reports live at the bottom of each individual contract file.
+
 ```markdown
 # Contract Implementation Progress
 
-## Current: {contract_name} — {phase} — {model}
-Started: YYYY-MM-DD HH:MM
-Last activity: YYYY-MM-DD HH:MM
+## Status Summary
 
-### Findings
-- {finding}
-
-### Files modified
-- {path} — {description}
-
-### AC Status
-- [ ] AC-1: {name}
-- [x] AC-2: {name}
+| Contract | Name | Status |
+|----------|------|--------|
+| C-001 | Feature Name | ✅ completed |
+| C-002 | Next Feature | ⏳ not_started |
 ```
 
 ## Contracts Location
