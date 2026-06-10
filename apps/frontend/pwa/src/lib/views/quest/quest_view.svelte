@@ -17,7 +17,7 @@
 
     <!-- Active Quests -->
     <section>
-      <h2 class="text-lg font-semibold text-primary mb-3">
+      <h2 data-testid="active-quests-header" class="text-lg font-semibold text-primary mb-3">
         Active ({viewModel.activeQuests.length})
       </h2>
       {#if viewModel.activeQuests.length === 0}
