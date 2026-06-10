@@ -18,18 +18,18 @@ import {
   type InstructTemplate,
   type MemoryConfig,
   type VoiceConfig,
-} from '$lib/client/services/config/config_service.svelte';
+} from '$lib/services/config/config_service.svelte';
 import {
   LocalServiceDetector,
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
-} from '$lib/client/services/config/local_service_detector';
+} from '$lib/services/config/local_service_detector';
 import {
   buildVerifyHeaders,
   buildVerifyUrl,
   PROVIDER_ENDPOINTS,
   type ProviderEndpoint,
-} from '$lib/client/services/config/provider_endpoints';
+} from '$lib/services/config/provider_endpoints';
 
 export type { ProviderEndpoint };
 export { PROVIDER_ENDPOINTS };

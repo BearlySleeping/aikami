@@ -8,8 +8,8 @@ import type { PersonaData } from '@aikami/types';
 import {
   CHARACTER_EXTRACTION_SYSTEM_PROMPT,
   CharacterExtractionSchema,
-} from '$lib/client/game/core/ai/prompts/character_extraction_schema';
-import { DND_CREATION_SYSTEM_PROMPT } from '$lib/client/game/core/ai/prompts/dnd_creation';
+} from '$lib/game/core/ai/prompts/character_extraction_schema';
+import { DND_CREATION_SYSTEM_PROMPT } from '$lib/game/core/ai/prompts/dnd_creation';
 import { aiSettingsService, aiTextIntelligenceService, characterCreationService } from '$services';
 
 // ---------------------------------------------------------------------------
