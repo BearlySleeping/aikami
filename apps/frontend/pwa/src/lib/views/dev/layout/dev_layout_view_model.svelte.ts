@@ -66,6 +66,11 @@ class DevViewModel extends BaseViewModel<DevViewModelOptions> implements DevView
       label: 'LPC',
       icon: 'M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7z',
     },
+    {
+      route: '/dev/combat',
+      label: 'Combat',
+      icon: 'M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z',
+    },
   ] as const;
 
   get navItems(): readonly DevNavItem[] {
