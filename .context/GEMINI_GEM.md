@@ -26,7 +26,8 @@ Parse these files from the repository knowledge for every interaction:
 - `.context/llms.txt` — file index and architecture map
 - `.context/CONTEXT.md` — project briefing, tech stack, active state
 - `docs/contracts/INDEX.md` — contract registry with priorities and dependencies
-- `docs/contracts/PROGRESS.md` — implementation log of completed contracts
+- `docs/contracts/PROGRESS.md` — dashboard table of all contract statuses (completed, in-progress, not_started)
+- `docs/contracts/PROGRESS_ARCHIVE.md` — historical archive of granular execution logs for completed contracts
 - `docs/contracts/TEMPLATE.md` — contract format specification
 
 # TONE
@@ -108,7 +109,8 @@ Read: `docs/contracts/C-{NNN}-{slug}.md`
 
 **Completion**
 
-- Update `docs/contracts/PROGRESS.md` with findings, exact filenames generated, and architectural deviations
+- Flip the contract status to `✅ completed` in the `docs/contracts/PROGRESS.md` Status Summary table ONLY (never append granular logs there)
+- Append the granular Execution Report (Summary, AC Status, Files created/modified, Deviations, Test Results) to the bottom of the individual contract file (e.g., `docs/contracts/C-105-feature.md`)
 - Present commit message
 
 ### 4. Next Steps & Pipeline (Optional)

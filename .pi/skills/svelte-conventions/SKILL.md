@@ -5,8 +5,8 @@ description: >-
   ViewModel pattern, singleton services with $state, import aliases.
   Use when writing SvelteKit pages, views, ViewModels, or services.
   Builds on `aikami-conventions` (foundational skill — loaded first).
-version: 2.0.0
-tags: ["svelte5", "sveltekit", "viewmodel", "frontend"]
+version: 3.0.0
+tags: ["svelte5", "sveltekit", "viewmodel", "frontend", "phase-2", "mvvm", "dev-sandbox"]
 ---
 
 # Svelte Conventions
@@ -15,6 +15,221 @@ Svelte 5 + SvelteKit patterns for the Aikami PWA.
 `aikami-conventions` is the foundational skill — it covers arrow functions,
 type rules, import paths, error handling, logging (`$logger`), and file
 naming.
+
+---
+
+## 🔴 PHASE 2 PILLARS — MVVM + DEV SANDBOXES
+
+These two pillars are non-negotiable for all Svelte 5 code in the PWA.
+They build on the ViewModel pattern described in §2 below — that section
+contains the full reference; this section is the **enforcement mandate**.
+
+### Pillar 3: Logicless Views + Service-Only ViewModels
+
+Two halves of the same rule, both absolute:
+
+**A) `.svelte` view files — ZERO logic, ZERO methods.** Views are pure DOM
+markup. They contain no `$state`, no `$derived`, no `$effect`, no `onMount`,
+no `onDestroy`, no local functions or methods, no inline conditionals or
+transforms. Every expression in the template is a direct property access or
+method call on the ViewModel — nothing else.
+
+```svelte
+<!-- ✅ CORRECT — completely dumb view, zero logic -->
+<script lang="ts">
+  // apps/frontend/pwa/src/lib/views/chat/chat_view.svelte
+  import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
+  type Props = { viewModel: ChatViewModelInterface };
+  const { viewModel }: Props = $props();
+</script>
+
+<BaseViewModelContainer {viewModel}>
+  <p>{viewModel.greeting}</p>
+  {#each viewModel.messages as message}
+    <p>{message.text}</p>
+  {/each}
+  <button onclick={() => viewModel.send()}>Send</button>
+</BaseViewModelContainer>
+
+<!-- ❌ WRONG — logic leaking into the view -->
+<script lang="ts">
+  const count = $state(0);              // ❌ no local state in views
+  const doubled = $derived(count * 2);  // ❌ no derived in views
+  $effect(() => {                       // ❌ no effects in views
+    document.title = `${count} messages`;
+  });
+
+  const formatDate = (ts: number) => {  // ❌ NO methods in views
+    return new Date(ts).toLocaleString();
+  };
+
+  import { messageService } from '$services'; // ❌ no imports from services
+</script>
+
+{#if messages.filter(m => m.unread).length > 0}  <!-- ❌ logic in template -->
+  <p>You have {messages.filter(m => m.unread).length} unread</p>
+{/if}
+```
+
+**Enforcement checklist — every `.svelte` view must pass ALL:**
+
+- [ ] No `$state` rune — only in `_view_model.svelte.ts` files
+- [ ] No `$derived` rune — use native getters on the ViewModel
+- [ ] No `$effect` rune — use ViewModel `initialize()` for side effects
+- [ ] No `onMount` / `onDestroy` — lifecycle belongs in ViewModel
+- [ ] No local functions or methods — everything is a ViewModel method call
+- [ ] No `{#if}` or `{#each}` with inline expressions — all data is
+      pre-computed by the ViewModel and exposed as ready-to-render values
+- [ ] No `import` of services, repositories, Firebase SDK, constants,
+      or data files — only import the ViewModel interface type
+- [ ] All `onclick` / `onchange` / `oninput` handlers delegate to ViewModel
+      methods without inline logic (e.g., `() => viewModel.send()`, not
+      `(e) => { e.preventDefault(); viewModel.send(); ... }`)
+
+**B) `_view_model.svelte.ts` files — services only, NO direct I/O or heavy
+logic.** ViewModels orchestrate services; they never call `fetch`, Firebase
+SDKs, database operations, `AudioContext`, `localStorage`, `IndexedDB`,
+or any browser API. They never contain heavy business logic, data
+normalization pipelines, or complex algorithms. That belongs in services
+(§3 below).
+
+```typescript
+// ❌ WRONG — ViewModel calling fetch directly
+class ChatViewModel extends BaseViewModel {
+  async loadMessages(): Promise<void> {
+    const response = await fetch('/api/messages');  // ❌ NO fetch in VM
+    this.messages = await response.json();
+  }
+}
+
+// ❌ WRONG — ViewModel importing Firebase SDK
+import { doc, getDoc } from 'firebase/firestore';
+class ChatViewModel extends BaseViewModel {
+  async loadUser(userId: string): Promise<void> {
+    const snap = await getDoc(doc(db, 'users', userId)); // ❌ NO Firebase in VM
+  }
+}
+
+// ✅ CORRECT — ViewModel delegates to service
+import { chatService } from '$services';
+class ChatViewModel extends BaseViewModel {
+  async loadMessages(): Promise<void> {
+    await chatService.loadMessages();  // ✅ service handles all I/O
+    this.messages = chatService.messages;
+  }
+}
+```
+
+**ViewModel enforcement checklist:**
+
+- [ ] No `fetch()` calls — delegate to services
+- [ ] No Firebase SDK imports (`firebase/firestore`, `firebase/auth`, etc.)
+- [ ] No browser API calls (`AudioContext`, `localStorage`, `URL.createObjectURL`,
+      `IndexedDB`, `navigator.*`, `Worker`, etc.)
+- [ ] No heavy business logic, complex algorithms, or data normalization —
+      extract to services
+- [ ] No direct repository or database imports — services own data access
+- [ ] Service singletons referenced directly (`chatService.send()`), never
+      stored as `this._service`
+
+### Pillar 4: Dev Sandbox Override Pattern
+
+Routes under `(dev)/` are isolated frontend sandboxes. They must **never**
+call real backends, Firebase, or external microservices. Use the
+`DevViewModel` override pattern to inject mock data.
+
+**File structure:**
+
+```
+apps/frontend/pwa/src/lib/views/
+├── chat/
+│   ├── chat_view_model.svelte.ts       ← Production ViewModel
+│   └── chat_view.svelte                ← Production view
+└── (dev)/
+    └── chat/
+        ├── chat_dev_view_model.svelte.ts  ← Dev override (extends production)
+        └── chat_dev_view.svelte           ← Dev view (or reuse production view)
+```
+
+**DevViewModel — extends production, overrides only I/O methods:**
+
+```typescript
+// apps/frontend/pwa/src/lib/views/(dev)/chat/chat_dev_view_model.svelte.ts
+import {
+  ChatViewModel,
+  type ChatViewModelInterface,
+  type ChatViewModelOptions,
+} from "$views/chat/chat_view_model.svelte.ts";
+import type { ChatMessage } from "@aikami/types";
+
+export class ChatDevViewModel
+  extends ChatViewModel
+  implements ChatViewModelInterface
+{
+  constructor(options: ChatViewModelOptions) {
+    super(options);
+  }
+
+  // 🔑 Override the API/fetch method — inject mock data
+  override async loadMessages(): Promise<void> {
+    this.debug("loadMessages:dev — injecting mock data");
+    await new Promise((r) => setTimeout(r, 300)); // simulate network delay
+    this._setMessages(MOCK_MESSAGES);
+  }
+
+  // 🔑 Override send to simulate locally
+  override async sendMessage(text: string): Promise<void> {
+    this.debug("sendMessage:dev", { text });
+    const mockMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      text,
+      timestamp: Date.now(),
+    };
+    this._prependMessage(mockMessage);
+  }
+
+  // Expose dev-only controls to the dev view
+  injectNetworkError(): void {
+    this._setError("Simulated network error — test error UI");
+  }
+
+  simulateSlowLoad(delayMs: number = 5000): void {
+    this.debug("simulateSlowLoad", { delayMs });
+    // triggers loading state for spinner/stale-while-load testing
+  }
+
+  resetToEmpty(): void {
+    this._reset();
+  }
+}
+
+const MOCK_MESSAGES: ChatMessage[] = [
+  { id: "m1", text: "Hello from mock data!", timestamp: Date.now() - 60000 },
+  { id: "m2", text: "This is a simulated response.", timestamp: Date.now() - 30000 },
+];
+
+export const getChatDevViewModel = (
+  options: ChatViewModelOptions,
+): ChatViewModelInterface => new ChatDevViewModel(options);
+```
+
+**Rules:**
+
+- Dev ViewModel class **must** `extends` the production ViewModel class
+- **Only override** methods that perform I/O: `fetch`, API calls, Firebase
+  reads/writes, microservice invocations
+- **Never override** pure logic, validation, or state management methods
+- Dev files live under `$views/(dev)/<feature>/` — mirroring the production
+  path structure
+- Dev views can reuse the production view component directly, or add a thin
+  wrapper if dev-only UI controls are needed (reset buttons, error injectors,
+  etc.)
+- Mock data must be representative of real API responses — same shape,
+  realistic values
+- Dev sandbox routes are excluded from production builds via `adapter-static`
+  config
+
+---
 
 ## 1. Svelte 5 Core
 
