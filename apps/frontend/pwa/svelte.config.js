@@ -30,14 +30,14 @@ const config = {
     }),
     alias: {
       '$components/*': toSrcPath('lib/components/*'),
-      $i18n: toSrcPath('lib/client/utils/i18n'),
+      $i18n: toSrcPath('lib/utils/i18n'),
       $lib: toPackagesPath('lib'),
       '$lib/*': toSrcPath('lib/*'),
       $router: toPackagesPath('frontend/services/src/lib/router/router_utils'),
       $routes: toSrcPath('lib/constants/routes'),
       $logger: toPackagesPath('shared/logger/src/lib/svelte_kit.ts'),
       $loggerServer: toPackagesPath('shared/logger/src/lib/svelte_kit_server.ts'),
-      $services: toSrcPath('lib/client/services'),
+      $services: toSrcPath('lib/services'),
       '$services/*': toSrcPath('lib/services/*'),
 
       $types: toSrcPath('lib/types'),
