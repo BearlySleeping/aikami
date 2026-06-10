@@ -33,7 +33,7 @@
         <div class="rounded-lg border border-success/30 bg-success/5 p-3">
           <div class="mb-1 flex items-center justify-between">
             <span class="text-xs font-semibold text-success">Player</span>
-            <span class="text-xs tabular-nums text-base-content/70">
+            <span data-testid="player-hp-text" class="text-xs tabular-nums text-base-content/70">
               {viewModel.playerHp}
               / {viewModel.playerMaxHp}
             </span>
@@ -49,7 +49,7 @@
         <div class="rounded-lg border border-error/30 bg-error/5 p-3">
           <div class="mb-1 flex items-center justify-between">
             <span class="text-xs font-semibold text-error">Enemy</span>
-            <span class="text-xs tabular-nums text-base-content/70">
+            <span data-testid="enemy-hp-text" class="text-xs tabular-nums text-base-content/70">
               {viewModel.enemyHp}
               / {viewModel.enemyMaxHp}
             </span>

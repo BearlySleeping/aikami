@@ -17,7 +17,10 @@
       <div class="flex items-center gap-2">
         <span class="text-lg">🪙</span>
         <span class="text-sm font-semibold text-warning">Gold</span>
-        <span class="ml-auto text-sm font-bold tabular-nums text-base-content">
+        <span
+          data-testid="gold-amount"
+          class="ml-auto text-sm font-bold tabular-nums text-base-content"
+        >
           {viewModel.gold.toLocaleString()}
         </span>
       </div>
@@ -60,7 +63,7 @@
             Items ({viewModel.items.length})
           </h2>
         </div>
-        <ul class="divide-y divide-base-300">
+        <ul data-testid="inventory-item-list" class="divide-y divide-base-300">
           {#each viewModel.items as item (item.id)}
             <li class="flex items-center gap-3 px-4 py-3">
               <div class="flex-1">
