@@ -83,6 +83,7 @@
 | C-105 | Chat System MVVM & Sandbox | ✅ completed |
 | C-106 | Combat System MVVM & Dev Sandbox | ✅ completed |
 | C-107 | Inventory System MVVM & Dev Sandbox | ✅ completed |
+| C-108 | Quest System MVVM & Dev Sandbox | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
