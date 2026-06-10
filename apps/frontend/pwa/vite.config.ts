@@ -15,7 +15,7 @@ const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
 
 export default defineConfig(({ mode }) => {
-  const port = Number(process.env.PORT || PORTS[mode as Mode].pwa);
+  const port = Number(process.env.PORT || PORTS[mode as Mode]?.pwa || 5274);
 
   const plugins: PluginOption[] = [
     tailwindcss(),
