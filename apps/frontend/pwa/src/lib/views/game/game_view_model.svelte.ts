@@ -8,7 +8,7 @@ import {
 } from '@aikami/frontend/services';
 import { authService, routerService } from '$services';
 import type { ActiveContextEntry } from '$types';
-import { GameStateService } from '../../client/services/game/game_state_service.svelte.ts';
+import { GameStateService } from '../../services/game/game_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // GameViewModel — Svelte 5 ViewModel for the game canvas

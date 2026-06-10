@@ -14,7 +14,7 @@ let saveCalls = 0;
 let resetCalls = 0;
 
 const CONFIG_SERVICE_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/pwa/src/lib/client/services/config/config_service.svelte.ts';
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/pwa/src/lib/services/config/config_service.svelte.ts';
 
 const getDefaultConfig = () => ({
   apiKeys: {},
@@ -89,7 +89,7 @@ let detectAllCalls = 0;
 let detectServiceCalls: string[] = [];
 
 const DETECTOR_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/pwa/src/lib/client/services/config/local_service_detector';
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/pwa/src/lib/services/config/local_service_detector';
 
 mock.module(DETECTOR_PATH, () => ({
   LocalServiceDetector: class {
