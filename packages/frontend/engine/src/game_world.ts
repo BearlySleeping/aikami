@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application, Container } from 'pixi.js';
-import { Graphics, Rectangle } from 'pixi.js';
+import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import {
   BUFFER_SIZE,
@@ -11,6 +11,7 @@ import {
 import type { EngineBridge } from './engine_bridge.ts';
 import type { PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 import { createPixiApp } from './pixi_app.ts';
+import { AnimationController } from './rendering/animation_controller.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
@@ -38,8 +39,15 @@ const DIRECTION_VELOCITY: Record<Direction, { x: number; y: number }> = {
 
 /** Per-entity rendering data stored on the main thread. */
 type RenderEntry = {
-  /** The PixiJS display object (Graphics or Sprite). */
+  /** The PixiJS display object (Sprite or Container). */
   displayObject: Container;
+  /**
+   * Per-entity animation controller for directional walk/idle.
+   *
+   * Computes spritesheet frame indices from positional deltas across
+   * frames without access to the worker's Velocity component.
+   */
+  animationController?: AnimationController;
   /** Tint color for the entity. */
   tint: number;
   /** When `true`, spatial culling is enabled for this entity. */
@@ -67,6 +75,12 @@ type NpcMetaEntry = {
  */
 const CELL_GEOMETRY_RECT = new Rectangle(0, 0, 48, 48);
 
+/** Frame width for the LPC walk spritesheet (64×64 per frame). */
+const LPC_FRAME_SIZE = 64;
+
+/** Number of animation frame columns in the walk spritesheet. */
+const LPC_WALK_COLUMNS = 9;
+
 /** Callback invoked when the player presses the interact key. */
 type InteractRequestCallback = (npc: NpcMetaEntry) => void;
 
@@ -88,6 +102,29 @@ export type GameWorldOptions = BaseEngineClassOptions & {
    * for correct bundling across workspace dependency boundaries.
    */
   workerFactory?: () => Worker;
+  /**
+   * URL to an LPC walk spritesheet for entity rendering.
+   *
+   * When provided, entities render as animated LPC character sprites
+   * instead of tinted white rectangles. The spritesheet must follow
+   * the standard LPC walk layout: N columns × 4 rows (Up/Left/Down/Right)
+   * with square frames.
+   *
+   * Loaded asynchronously — entities show white fallback until the
+   * texture resolves.
+   */
+  spritesheetUrl?: string;
+  /**
+   * URL to an LPC walk spritesheet for the player entity specifically.
+   *
+   * When provided alongside {@link spritesheetUrl}, the player entity
+   * (first entity created, green tint) uses this spritesheet while all
+   * other entities (NPCs, test sprites) use {@link spritesheetUrl}.
+   *
+   * When only {@link spritesheetUrl} is set, all entities share it.
+   * This field has no effect when {@link spritesheetUrl} is not set.
+   */
+  playerSpritesheetUrl?: string;
 };
 
 /**
@@ -110,6 +147,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Optional factory for creating the worker (Vite ?worker import). */
   private readonly _workerFactory?: () => Worker;
+
+  /** Optional URL to an LPC walk spritesheet for NPC entities. */
+  private readonly _spritesheetUrl?: string;
+
+  /** Optional URL to an LPC walk spritesheet for the player entity. */
+  private readonly _playerSpritesheetUrl?: string;
+
+  /** LPC walk spritesheet texture for NPCs, loaded asynchronously. */
+  private _spritesheetTexture: Texture | undefined;
+
+  /** LPC walk spritesheet texture for the player, loaded asynchronously. */
+  private _playerSpritesheetTexture: Texture | undefined;
 
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
@@ -170,6 +219,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._apiService = options.apiService;
     this._aiService = options.aiService;
     this._workerFactory = options.workerFactory;
+    this._spritesheetUrl = options.spritesheetUrl;
+    this._playerSpritesheetUrl = options.playerSpritesheetUrl;
   }
 
   /**
@@ -322,11 +373,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('spawnWorker:using-workerFactory');
       this._worker = this._workerFactory();
     } else {
-      const workerUrl = new URL('./worker/ecs_worker.ts', import.meta.url);
-      this.debug('spawnWorker:creating-url-worker', { url: workerUrl.href });
-      this._worker = new Worker(workerUrl, {
+      // Use the direct new Worker(new URL(...)) pattern so Vite's worker
+      // plugin detects the worker entry during build and emits a proper
+      // .js chunk instead of a .ts file (which gets served as video/mp2t
+      // by the preview server).
+      this._worker = new Worker(new URL('./worker/ecs_worker.ts', import.meta.url), {
         type: 'module',
       });
+      this.debug('spawnWorker:created');
     }
 
     // Send initialization message with buffers
@@ -385,6 +439,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           type: 'GAME_ERROR',
           message: message.message as string,
         });
+
+        // Terminate the worker immediately on fatal errors (detached
+        // ArrayBuffer cascades, infinite tick-loop failures, etc.).
+        // This stops the postMessage flood so the browser event loop
+        // can recover. The error surfaced via GAME_ERROR above so
+        // the ViewModel can show it to the user.
+        this.destroy();
         break;
       }
 
@@ -469,29 +530,40 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
     }
 
-    // Create a colored rectangle as the entity's visual representation.
-    // Using 48×48 so entities are clearly visible on the canvas.
-    const graphic = new Graphics();
-    graphic.rect(0, 0, 48, 48);
-    graphic.fill({ color: tint });
+    // Create an LPC-compatible sprite using Texture.WHITE as fallback.
+    // When TextureManager + LPC sheets are preloaded, the sprite texture
+    // will be swapped in via the animation controller's frame index.
+    const sprite = new Sprite(Texture.WHITE);
+    sprite.width = 48;
+    sprite.height = 48;
+    sprite.tint = tint;
 
     // Per-contract C-032: bypass layout hit-tests for character visuals
-    graphic.eventMode = 'none';
+    sprite.eventMode = 'none';
     // Pre-assign filter area to avoid per-frame bounds recalc overhead
-    graphic.filterArea = CELL_GEOMETRY_RECT;
+    sprite.filterArea = CELL_GEOMETRY_RECT;
 
-    this._app.stage.addChild(graphic);
+    this._app.stage.addChild(sprite);
     this.debug('entity-added-to-stage', {
       eid,
       tint: `0x${tint.toString(16)}`,
       stageChildren: this._app.stage.children.length,
     });
 
+    // Initialize per-entity animation controller for walk/idle state
+    const animationController = new AnimationController();
+
     this._renderEntries.set(eid, {
-      displayObject: graphic,
+      displayObject: sprite,
+      animationController,
       tint,
       cullable: true,
     });
+
+    // Trigger async spritesheet load on first entity creation.
+    // The sprite shows tinted white until the texture resolves, then
+    // frame slicing begins in _updateRenderFromBuffer.
+    this._loadSpritesheetIfNeeded();
   }
 
   /**
@@ -717,6 +789,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Reads entity positions (x, y) from the Float32Array buffer and applies
    * them to the display objects stored in {@link renderEntries}.
    *
+   * Also drives the per-entity {@link AnimationController} by computing
+   * positional deltas across frames. The controller derives facing
+   * direction (Up/Left/Down/Right) from the movement vector and
+   * transitions between Walk (non-zero delta) and Idle (zero delta)
+   * states, returning spritesheet frame indices for texture slicing.
+   *
    * Applies spatial culling: entities flagged as `cullable` that are
    * outside the visible stage bounds are hidden (`visible = false`).
    *
@@ -754,6 +832,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.x = x;
       entry.displayObject.y = y;
 
+      // Drive per-entity animation controller from positional deltas.
+      // The controller computes dx/dy across frames to derive facing
+      // direction and walk/idle transitions.
+      entry.animationController?.update({ x, y });
+
+      // Apply LPC frame slicing when at least one spritesheet is loaded.
+      // _applyLpcFrame selects the right sheet based on entity ID.
+      if (
+        (this._spritesheetTexture || this._playerSpritesheetTexture) &&
+        entry.animationController
+      ) {
+        this._applyLpcFrame(entry.displayObject as Sprite, entry.animationController, eid);
+      }
+
       // Spatial culling for cullable entities
       if (entry.cullable) {
         const isOffScreen =
@@ -777,6 +869,103 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         `${visibleCount}/${totalCount} visible, stage ${stageBounds.width}x${stageBounds.height}`,
       );
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Internal: LPC spritesheet loading + frame slicing
+  // -----------------------------------------------------------------------
+
+  /** Whether the spritesheet load has been initiated (prevents duplicate loads). */
+  private _spritesheetLoadStarted = false;
+
+  /**
+   * Initiates async loading of the LPC walk spritesheet.
+   *
+   * Idempotent — subsequent calls after the first are no-ops. The sprite
+   * shows its tinted white fallback until the texture resolves. Once
+   * loaded, {@link _applyLpcFrame} begins slicing frames in the render loop.
+   */
+  private _loadSpritesheetIfNeeded(): void {
+    if (this._spritesheetLoadStarted) {
+      return;
+    }
+
+    this._spritesheetLoadStarted = true;
+
+    // Load NPC spritesheet
+    if (this._spritesheetUrl) {
+      try {
+        this._spritesheetTexture = Texture.from(this._spritesheetUrl);
+        this.debug('lpc-spritesheet:npc-loading', { url: this._spritesheetUrl });
+      } catch (err) {
+        this.debug('lpc-spritesheet:npc-error', { error: String(err) });
+      }
+    }
+
+    // Load player spritesheet (separate from NPC)
+    if (this._playerSpritesheetUrl) {
+      try {
+        this._playerSpritesheetTexture = Texture.from(this._playerSpritesheetUrl);
+        this.debug('lpc-spritesheet:player-loading', { url: this._playerSpritesheetUrl });
+      } catch (err) {
+        this.debug('lpc-spritesheet:player-error', { error: String(err) });
+      }
+    }
+  }
+
+  /**
+   * Slices the current animation frame from the LPC walk spritesheet
+   * and applies it to the sprite's texture.
+   *
+   * Selects the player spritesheet when the entity ID matches
+   * {@link _playerEntityId}, otherwise uses the NPC spritesheet.
+   * Falls back silently (keeps white tint) when the selected sheet
+   * hasn't loaded yet.
+   *
+   * @param sprite - The PixiJS Sprite to update.
+   * @param controller - The entity's animation controller.
+   * @param eid - The entity ID, used to select player vs NPC sheet.
+   */
+  private _applyLpcFrame(sprite: Sprite, controller: AnimationController, eid: number): void {
+    const isPlayer = eid === this._playerEntityId;
+    const sheet = isPlayer
+      ? (this._playerSpritesheetTexture ?? this._spritesheetTexture)
+      : this._spritesheetTexture;
+
+    if (!sheet || sheet.width <= 1) {
+      return;
+    }
+
+    const direction = controller.direction;
+    const column = controller.getFrameColumn(LPC_WALK_COLUMNS);
+
+    // Map LpcDirection to spritesheet row
+    const row = direction as number; // Up=0, Left=1, Down=2, Right=3
+
+    const frameX = column * LPC_FRAME_SIZE;
+    const frameY = row * LPC_FRAME_SIZE;
+
+    // First frame: swap the sprite's texture from WHITE to a spritesheet slice.
+    // Subsequent frames: create a new Texture wrapper sharing the same source
+    // with an updated frame Rectangle (Texture.frame is readonly in PixiJS v8).
+    if (!sprite.texture || sprite.texture === Texture.WHITE) {
+      sprite.texture = new Texture({
+        source: sheet.source,
+        frame: new Rectangle(frameX, frameY, LPC_FRAME_SIZE, LPC_FRAME_SIZE),
+      });
+      return;
+    }
+
+    // Only update when the frame actually changes
+    const currentFrame = sprite.texture.frame;
+    if (currentFrame.x === frameX && currentFrame.y === frameY) {
+      return;
+    }
+
+    sprite.texture = new Texture({
+      source: sheet.source,
+      frame: new Rectangle(frameX, frameY, LPC_FRAME_SIZE, LPC_FRAME_SIZE),
+    });
   }
 }
 

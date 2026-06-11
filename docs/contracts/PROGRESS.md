@@ -94,6 +94,7 @@
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
 | MIG-004 | Frontend Configs Alignment | ✅ completed |
 | C-114 | Sandbox Engine Wiring | ✅ completed |
+| C-115 | Sandbox LPC Animation | ✅ completed |
 
 ### C-114: Sandbox Engine Wiring
 
@@ -112,6 +113,26 @@
 **Deviations**: None.
 
 **Known limitations**: The bouncing test sprite (eid 2) has no NPCDialog component, so interaction only works with the explicitly spawned Guide NPC. The view's `onMount` for canvas handoff is minimal (1-line delegation) and conforms to the spirit of the ViewModel pattern.
+
+### C-115: Sandbox LPC Animation
+
+**Files modified**:
+- `packages/frontend/engine/src/rendering/animation_controller.ts` — Added `AnimationController` class (124 lines): per-entity main-thread state machine computing positional deltas, deriving facing direction, transitioning Walk↔Idle, and returning spritesheet frame indices. Added `getFrameColumn(columns)`, `effectiveTickCount` getter.
+- `packages/frontend/engine/src/game_world.ts` — Extended `RenderEntry` with `animationController?: AnimationController`. Replaced `Graphics` → `Sprite(Texture.WHITE)` with tint. Added `spritesheetUrl` to `GameWorldOptions`. Added `_loadSpritesheetIfNeeded()` for async `Texture.from()` loading. Added `_applyLpcFrame()` for per-frame 64×64 frame slicing from the walk sheet. Animation controller updated each frame in `_updateRenderFromBuffer`. Exported `GameWorldOptions` type from index.
+- `packages/frontend/engine/src/index.ts` — Exported `AnimationController`, `GameWorldOptions`.
+- `apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts` — Passes `spritesheetUrl: '/lpc/body/male/walk.png'` to `GameWorld.create()`. Imported `GameWorldOptions`.
+- `apps/frontend/client/static/lpc/body/male/walk.png` — Copied LPC male body walk spritesheet (576×256, 9 cols × 4 rows, 64×64 frames).
+
+**Deviations**: None.
+
+**Design decisions**:
+1. **Position-based delta animation**: The shared buffer only carries position (x, y) — Velocity is not serialized. The `AnimationController` computes `dx = x - lastX`, `dy = y - lastY` each frame to derive movement. Matches contract Edge Cases guidance.
+2. **Standalone walk sheet (9×4)**: Used the 4-row walk spritesheet (Up/Left/Down/Right) instead of the full 13×21 LPC master sheet. `AnimationController.getFrameColumn(9)` maps direction to row and effective ticks to column. Simpler than full-sheet indexing for the sandbox MVP.
+3. **Texture.WHITE → spritesheet transition**: Entities start as tinted white sprites, then swap to LPC frames when the spritesheet async loads. Frame slicing creates new `Texture({ source: sheet.source, frame: rect })` per animation tick (shared GPU resource, new wrapper — readonly `frame` in PixiJS v8).
+4. **Idle = Walk frame 0**: Matches worker-side `animateEntitySystem` convention. `_applyLpcFrame` early-returns when frame rect hasn't changed, avoiding per-frame allocations at idle.
+5. **Tick divisor 8**: Matches `ANIMATION_TICK_DIVISOR` in `render_system.ts` — worker and main-thread frame indices stay synchronized.
+
+**Known limitations**: New `Texture` wrapper per animation frame tick (PixiJS v8 `frame` is readonly). For production, pre-slice all 36 frames (9×4) into a `Texture[]` array on load and swap references instead. The spritesheet is shared across all entities — each entity shows the same male body base. Per-entity customization requires `SpriteComposer` multi-layer pipeline integration.
 
 ---
 
