@@ -69,9 +69,15 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
    * across Vite (SvelteKit), Node.js (Firebase Functions), and Bun.
    */
   static isDevelopmentMode(): boolean {
-    // 1. Check SvelteKit / Vite environment
-    if (typeof import.meta !== 'undefined' && import.meta.env && 'DEV' in import.meta.env) {
-      return String(import.meta.env.DEV) === 'true';
+    // 1. Check SvelteKit / Vite environment (import.meta.env.DEV).
+    //    Use dynamic property access to avoid TS errors in non-Vite
+    //    projects (parser, frontend-utils) that don't have Vite's
+    //    ImportMeta augmentation.
+    if (typeof import.meta !== 'undefined') {
+      const metaEnv = (import.meta as unknown as Record<string, unknown>).env;
+      if (metaEnv && typeof metaEnv === 'object' && 'DEV' in metaEnv) {
+        return String((metaEnv as Record<string, unknown>).DEV) === 'true';
+      }
     }
 
     // 2. Check Node.js (Firebase) / Bun environment

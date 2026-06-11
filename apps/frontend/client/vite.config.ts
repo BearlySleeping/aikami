@@ -125,6 +125,13 @@ export default defineConfig(({ mode }) => {
     // can target a single port regardless of dev vs preview mode.
     preview: {
       port,
+      headers: {
+        // Required for SharedArrayBuffer (crossOriginIsolated).
+        // Without these, the worker falls back to N-buffer mode which
+        // has a transfer-cycle race condition under setInterval ticks.
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+      },
     },
   };
 });
