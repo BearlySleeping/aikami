@@ -13,11 +13,10 @@ bypass a convention. Re-read the 🔴 CRITICAL VIOLATIONS section in
 
 ### Skill Loading Order
 
-1. Load `aikami-conventions` (always first)
-2. If frontend code: also load `svelte-conventions`
-3. If backend code: also load `backend-conventions`
-4. If Cloud Functions: also load `firebase-functions`
-5. If game code: also load `pixijs-v8`
+1. Load `aikami-conventions` (always first — now includes Svelte + Backend patterns)
+2. If game code: also load `pixijs-v8`
+3. If Cloud Functions: also load `firestack`
+4. If Tauri desktop: also load `tauri-v2`
 
 ---
 
@@ -139,10 +138,13 @@ If user is already on the recommended mode, say nothing about it.
 
 ## Debugging Protocol (CRITICAL)
 
-### Anti-loop rule: 2 strikes → create a test
+### Anti-loop rule: 2 strikes → create a test (HARD STOP)
 
-When the same thing is attempted twice and fails, STOP trying.
-**Immediately pivot to gathering diagnostic data.**
+When ANY approach has been tried twice and failed:
+1. **STOP immediately.** Do NOT attempt the same thing a third time.
+2. **Audit what diagnostic data you have** — logs, status codes, error messages
+3. **Create a diagnostic script** — write a temp `.ts` file, run it, capture output
+4. **Present findings, not guesses** — cite specific log lines or error codes
 
 | Situation                          | Instead of...              | Do THIS                                                             |
 | ---------------------------------- | -------------------------- | ------------------------------------------------------------------- |
@@ -206,6 +208,29 @@ Before concluding what's wrong, exhaust these in order:
 - Don't guess "it might be X" without log confirmation
 - When logs are silent, write a script that increases logging verbosity first
 - Present findings as: "The logs show X at line Y" not "I think X is happening"
+
+### Tiered Diagnostic Escalation
+
+| Attempt | Action |
+|---------|--------|
+| 1st failure | Check `service_logs`, `firestore_query`, `firebase_emulator status` |
+| 2nd failure | Write diagnostic script, test locally, capture structured output |
+| 3rd+ | NEVER happens — the 2-strikes rule already kicked in |
+
+### Never Do This
+
+- ❌ "Try sending /start again"
+- ❌ "Restart the service and try again"
+- ❌ "It might be X" (without log evidence)
+- ❌ "Let me try one more time" after 2 failures
+- ❌ "I think the issue is..." (guessing without data)
+
+### Always Do This
+
+- ✅ After 2 failures: write and execute a diagnostic script
+- ✅ Cite specific log lines: "The log at 14:32:05 shows `error: timeout`"
+- ✅ Test locally before asking user to try anything
+- ✅ Say "I need more diagnostic data" when logs are silent
 
 ### Signal that you're stuck early
 

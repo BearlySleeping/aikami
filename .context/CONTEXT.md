@@ -21,15 +21,16 @@ Aikami is a monorepo application platform: SvelteKit PWA + Firebase backend + Bu
 
 **Bun × SvelteKit 2 × Firebase × Moon × Biome**
 
-| Layer              | Technology                                         |
-| ------------------ | -------------------------------------------------- |
-| Runtime            | Bun                                                |
-| Frontend (PWA)     | SvelteKit 2, Svelte 5 Runes                        |
-| Frontend (Landing) | Astro                                              |
-| Frontend (Docs)    | Astro                                              |
-| Backend            | Firebase Cloud Functions, Firestore, Firebase Auth |
-| Monorepo           | Moon task orchestrator                             |
-| Linting            | Biome                                              |
+| Layer              | Technology                                                    |
+| ------------------ | ------------------------------------------------------------- |
+| Runtime            | Bun                                                           |
+| Frontend (PWA)     | SvelteKit 2, Svelte 5 Runes (static SPA, Tauri v2)            |
+| Frontend (Landing) | Astro                                                         |
+| Frontend (Docs)    | Astro                                                         |
+| Backend            | Firebase Cloud Functions, Firestore, Firebase Auth            |
+| Game Engine        | PixiJS v8 + bitECS                                            |
+| Monorepo           | Moon task orchestrator                                        |
+| Linting            | Biome                                                         |
 
 ## Project Structure
 

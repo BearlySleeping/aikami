@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Aikami reference: `knowledge/contracts/TEMPLATE.md` |
+| **Source** | `{reference_description}` |
 | **Target** | `{path}` — {brief description} |
-| **Priority** | P{0|1|2} — {one-line justification} |
+| **Priority** | P{0\|1\|2} — {one-line justification} |
 | **Dependencies** | {list of contracts or packages this depends on} |
 | **Status** | not_started |
 | **Contract version** | 1.0.0 |
@@ -15,14 +15,15 @@
 
 ## Design Reference
 
-**Aikami pattern**: `{relevant aikami path or doc}`
+{Existing patterns in the repo to follow.}
 
-Key structural elements:
-- {bullet list of key patterns, files, or configs to replicate}
+## Architecture Directives
 
-## Changes Detail
+{Use domain-level names, let Pi decide exact file placement, but general implementation paths are allowed.}
 
-{Detailed description of what's changing — directories created/deleted/moved, files written, configs updated.}
+## State & Data Models
+
+{Describe the data shape conceptually. If code is needed, indent 4 spaces. NO backticks.}
 
 ## Acceptance Criteria
 
@@ -32,13 +33,12 @@ Key structural elements:
 **Then** {expected outcome — what should be true}
 
 **Test Hooks**:
-- Unit: {what to unit test — specific file existence, config value, etc.}
+- Unit: {what to unit test}
 - Integration: {what integration test to run}
 - CI: {what CI check should pass}
 
 **Watch Points**:
 - {edge case or gotcha specific to this AC}
-- {another edge case}
 
 ## Implementation Notes
 
@@ -46,7 +46,6 @@ Key structural elements:
 2. **Files to modify**: {list}
 3. **Files to delete**: {list}
 4. **Order of operations**: {sequence}
-5. **Verification**: {how to verify success}
 
 ## Edge Cases & Gotchas
 
