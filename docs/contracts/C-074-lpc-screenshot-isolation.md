@@ -15,8 +15,8 @@ The existing LPC visual smoke runner captures full-viewport layouts, inadvertent
 
 ## Design Reference
 
-- `apps/e2e/tests/pwa/lpc_visual.spec.ts`: The unified visual suite holding the parameterized canvas route loops.
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component-lite/+page.svelte`: Isolated, zero-chrome rendering route group using symmetrically centered anchors.
+- `apps/e2e/tests/client/lpc_visual.spec.ts`: The unified visual suite holding the parameterized canvas route loops.
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component-lite/+page.svelte`: Isolated, zero-chrome rendering route group using symmetrically centered anchors.
 
 ## Architecture Directives
 
@@ -59,7 +59,7 @@ No changes to our underlying repository schemas. The target interaction flow map
 
 ## Implementation Notes
 
-1. Open `apps/e2e/tests/pwa/lpc_visual.spec.ts` (or the core visual suite).
+1. Open `apps/e2e/tests/client/lpc_visual.spec.ts` (or the core visual suite).
 2. Locate the line performing `page.screenshot({ path: ... })`.
 3. Refactor this signature to locate the specific canvas wrapper reference:
 

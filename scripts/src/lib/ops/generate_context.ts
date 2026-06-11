@@ -20,7 +20,7 @@ async function main() {
   const projects = [
     {
       name: 'PWA',
-      path: 'apps/frontend/pwa',
+      path: 'apps/frontend/client',
       desc: 'Main Progressive Web App (SvelteKit 2, Svelte 5)',
     },
     { name: 'Landing', path: 'apps/frontend/landing_page', desc: 'Public landing page' },

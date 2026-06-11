@@ -14,13 +14,13 @@
 This contract wires the exact layout coordinates of the LPC community standard directly into the structural fallback layout of the `LpcCharacterRenderer` debugging view. It replaces static procedural shapes with an animated, directional coordinate frame system. This system responds to animation states, directions, frames, and asset variants, ensuring your controls function correctly even when running in canvas fallback mode.
 
 ## Design Reference
-- `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-component/+page.svelte`: Split debugger view layout.
+- `apps/frontend/client/src/routes/(authenticated)/dev/lpc-component/+page.svelte`: Split debugger view layout.
 - `packages/frontend/engine/src/rendering/animation_controller.ts`: Frame and row index lookups (`getLpcFrameIndex`).
 - LPC Layout Standard: 64x64 cell dimensions, 4 directional rows per action state layer block.
 
 ## Changes Detail
 
-### 1. Modify `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte`
+### 1. Modify `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte`
 Update the procedural rendering script block to integrate grid calculations:
 - Parse the current active combination of `animationState` and `facing` properties to calculate the correct structural vertical row index offset ($0 - 20$) based on the LPC layout rules.
 - Update the procedural asset layer rendering loops (`drawLayerShape`) to draw offset vectors using the active frame counter:

@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-07
-> Files: 99 across 10 categories
+> Generated: 2026-06-10
+> Files: 128 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -91,11 +91,40 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-062 — Dialogue Context & Memory Manager](contracts/C-062-dialogue-memory-manager.md)
 - [Contract: C-063 — Hybrid Expression Extraction & Caching](contracts/C-063-hybrid-expression-extraction.md)
 - [Contract: C-064 — Dev Console & View-Model Layout Integration](contracts/C-064-dev-console-layouts.md)
+- [Contract: C-065 — Dev UI Tailwind Refactor & Text Sandbox](contracts/C-065-dev-ui-refactor-text-sandbox.md)
+- [Contract: C-066 — Dev UI Voice & Image Sandboxes](contracts/C-066-dev-ui-voice-image-sandboxes.md)
+- [Contract: C-067 — Voice Microservice & Tmux Orchestration](contracts/C-067-voice-microservice-and-tmux.md)
+- [Contract: C-068 — Voice Microservice Containerization](contracts/C-068-voice-containerization.md)
+- [Contract: C-069 — Direct Kokoro Orchestration](contracts/C-069-direct-kokoro-orchestration.md)
+- [Contract: C-070 — Image Microservice & Tmux Orchestration](contracts/C-070-image-microservice-tmux.md)
+- [C 071 text microservice tmux](contracts/C-071-text-microservice-tmux.md)
+- [C 072 frontend text sandbox e2e](contracts/C-072-frontend-text-sandbox-e2e.md)
+- [Contract: C-073 — LPC Visual Smoke Harness and AI Evaluation Pipeline](contracts/C-073-lpc-visual-smoke-harness.md)
+- [Contract: C-074 — LPC Screenshot Isolation and Element Bounding Box Target](contracts/C-074-lpc-screenshot-isolation.md)
+- [C-076: Dev UI Image Sandbox Checkpoint Selection](contracts/C-076-image-sandbox-checkpoints.md)
+- [Contract: C-077 — Dev UI Text Sandbox Refactor & OpenRouter Toggle](contracts/C-077-dev-text-service-openrouter.md)
+- [Contract: C-078 — Dev Character Creation Sandbox](contracts/C-078-dev-character-creation.md)
+- [C 079 dev config dashboard](contracts/C-079-dev-config-dashboard.md)
+- [Contract C-080: Unified Text & Structural Intelligence Service](contracts/C-080-unified-text-intelligence-service.md)
+- [Contract C-081: Character Creation Structural Extraction Pipeline](contracts/C-081-character-creation-structural-extraction.md)
+- [Contract C-101: Shared Package Enforce (Boundary Bleed)](contracts/C-101-shared-package-enforce.md)
+- [Contract C-102: Tauri SPA Enforcement](contracts/C-102-tauri-spa-enforcement.md)
+- [Contract C-103: MVVM Dev Sandbox Pattern (Character)](contracts/C-103-mvvm-sandbox-pattern.md)
+- [Contract C-104: Dev Sandbox Infrastructure & Tools Panel](contracts/C-104-sandbox-infrastructure.md)
+- [Contract C-105: Chat System MVVM & Dev Sandbox](contracts/C-105-chat-mvvm-sandbox.md)
+- [Contract C-106: Combat System MVVM & Dev Sandbox](contracts/C-106-combat-mvvm-sandbox.md)
+- [Contract C-107: Inventory System MVVM & Dev Sandbox](contracts/C-107-inventory-mvvm-sandbox.md)
+- [Contract C-108: Quest System MVVM & Dev Sandbox](contracts/C-108-quest-mvvm-sandbox.md)
+- [Contract C-109: Service Layer Restructure & Client Flattening](contracts/C-109-service-layer-restructure.md)
+- [Contract C-110: Sandbox E2E Playwright Harness](contracts/C-110-sandbox-e2e-testing.md)
+- [Contract C-111: Microservice & Firebase Rewiring](contracts/C-111-microservice-rewiring.md)
+- [Contract C-112: App Rename & Build Fixes (Purist Approach)](contracts/C-112-client-rename-and-build-fixes.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [MIG 002 backend dataconnect](contracts/MIG-002-backend-dataconnect.md)
 - [MIG 003 scripting infra](contracts/MIG-003-scripting-infra.md)
 - [MIG 004 frontend configs](contracts/MIG-004-frontend-configs.md)
+- [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
 - [Contracts](contracts/README.md)
 - [TEMPLATE](contracts/TEMPLATE.md)

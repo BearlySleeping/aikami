@@ -11,7 +11,7 @@ Headless ComfyUI image generation microservice using the `yanwk/comfyui-boot:cu1
 ## Where It's Used
 
 - Image generation workflows in the PWA and backend functions
-- Managed by the tmux orchestrator alongside voice, emulators, and pwa
+- Managed by the tmux orchestrator alongside voice, emulators, and client
 
 ## Installation
 

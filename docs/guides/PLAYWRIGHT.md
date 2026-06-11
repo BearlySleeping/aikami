@@ -26,9 +26,9 @@ This command will run all the Playwright tests in the project.
 
 ## Test Structure
 
-The Playwright tests are located in the `apps/frontend/pwa/tests` directory. The tests are organized by feature, with each feature having its own test file.
+The Playwright tests are located in the `apps/frontend/client/tests` directory. The tests are organized by feature, with each feature having its own test file.
 
-For example, the tests for the authentication feature are located in the `apps/frontend/pwa/tests/auth.spec.ts` file.
+For example, the tests for the authentication feature are located in the `apps/frontend/client/tests/auth.spec.ts` file.
 
 ### Test File
 

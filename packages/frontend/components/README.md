@@ -11,7 +11,7 @@ This package provides reusable Svelte 5 components with Storybook documentation:
 
 ## Where It's Used
 
-Used by `apps/frontend/pwa` and any frontend app that needs shared components.
+Used by `apps/frontend/client` and any frontend app that needs shared components.
 
 ## Installation
 

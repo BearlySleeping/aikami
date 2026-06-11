@@ -49,7 +49,7 @@ Running bitECS systems (movement, context, dialog triggers) on the main thread c
 
 ### AC-8: Existing Tests Pass
 - All existing `engine:test` tests pass (they test systems directly, not through GameWorld).
-- TypeScript compilation passes for `engine`, `game`, and `pwa` projects.
+- TypeScript compilation passes for `engine`, `game`, and `client` projects.
 
 ### AC-9: GameWorld Public API Unchanged
 - External consumers (`apps/frontend/game/src/main.ts`) continue to use `new GameWorld(bridge)` + `gameWorld.initialize({ canvas, width, height })` with the same signature.
@@ -71,8 +71,8 @@ Running bitECS systems (movement, context, dialog triggers) on the main thread c
 |------|--------|
 | `packages/engine/src/game_world.ts` | Spawn worker, allocate buffers, listen for STATE_UPDATE |
 | `packages/engine/src/systems/render_system.ts` | Read from Float32Array buffer instead of bitECS query |
-| `apps/frontend/pwa/src-tauri/tauri.conf.json` | Add COOP/COEP headers + useHttpsScheme |
-| `apps/frontend/pwa/vite.config.ts` | Add server.headers for COOP/COEP |
+| `apps/frontend/client/src-tauri/tauri.conf.json` | Add COOP/COEP headers + useHttpsScheme |
+| `apps/frontend/client/vite.config.ts` | Add server.headers for COOP/COEP |
 | `apps/frontend/game/vite.config.ts` | Add server.headers for COOP/COEP |
 
 ### Worker Message Protocol

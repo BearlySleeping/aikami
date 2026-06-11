@@ -14,6 +14,7 @@ export * from './lib/backend/firestorage.ts';
 export * from './lib/backend/http.ts';
 
 export * from './lib/class.ts';
+export * from './lib/client/ai_service_interface.ts';
 export * from './lib/common/preferences.ts';
 export * from './lib/common.ts';
 export * from './lib/database/character_card.ts';
@@ -34,11 +35,9 @@ export * from './lib/endpoints/chat.ts';
 export * from './lib/endpoints/image.ts';
 export * from './lib/endpoints/pwa_endpoints.ts';
 export * from './lib/endpoints/request_functions.ts';
-
 export * from './lib/error.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/helpers.ts';
 export * from './lib/logger.ts';
 export * from './lib/project.ts';
-export * from './lib/pwa/ai_service_interface.ts';
 export * from './lib/repository/utils.ts';

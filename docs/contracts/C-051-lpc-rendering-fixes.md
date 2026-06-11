@@ -1,7 +1,7 @@
 | Metadata | Value |
 | --- | --- |
 | Source | User |
-| Target | apps/frontend/pwa |
+| Target | apps/frontend/client |
 | Priority | High |
 | Dependencies | C-050 |
 | Status | not_started |
@@ -11,8 +11,8 @@
 Fix the visual rendering bugs in the Universal LPC Spritesheet Character Generator component. The current implementation suffers from incorrect layer sorting (Z-indexing) and broken color tinting for customizable layers (like hair and skin). We will enforce a strict layer hierarchy in the bitECS rendering system, fix the PixiJS tint applications, and add a zoom control to the main dev component.
 
 # Design Reference
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte` for the PixiJS/bitECS rendering bridge.
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component/+page.svelte` for the dev UI.
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` for the PixiJS/bitECS rendering bridge.
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component/+page.svelte` for the dev UI.
 - Universal LPC layer ordering standards.
 
 # Architecture Directives

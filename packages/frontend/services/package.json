@@ -9,7 +9,7 @@
   },
   "imports": {
     "$router": "./src/lib/router/router-utils.ts",
-    "$routes": "../../apps/frontend/pwa/src/lib/constants/routes.ts"
+    "$routes": "../../apps/frontend/client/src/lib/constants/routes.ts"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

@@ -2,7 +2,7 @@
 | Field | Value |
 | --- | --- |
 | Source | shared |
-| Target | apps/e2e, apps/frontend/pwa, apps/frontend/game |
+| Target | apps/e2e, apps/frontend/client, apps/frontend/game |
 | Priority | P0 |
 | Dependencies | C-054 |
 | Status | not_started |
@@ -13,7 +13,7 @@ This contract resolves the technical debt incurred during the E2E Page Object Mo
 
 # Design Reference
 - Playwright Best Practices for Semantic Locators (`getByRole`, `getByText`, `getByTestId`).
-- The existing SvelteKit components in `apps/frontend/pwa/src/lib/components/` and `apps/frontend/pwa/src/lib/views/`.
+- The existing SvelteKit components in `apps/frontend/client/src/lib/components/` and `apps/frontend/client/src/lib/views/`.
 
 # Architecture Directives
 - **Locator Alignment**: Update the locators inside `apps/e2e/src/pom/*.ts`. Do not rewrite the test logic in the `.spec.ts` files unless absolutely necessary. The POM is the source of truth for DOM interaction.
@@ -53,7 +53,7 @@ No new data models are introduced.
 1. Run `moon run e2e:test` to generate a fresh failure report.
 2. Group the failures by domain (e.g., Auth, Chat, Game).
 3. For a failing test, identify the POM method throwing the timeout or mismatch.
-4. Inspect the corresponding `.svelte` file in `apps/frontend/pwa` or `apps/frontend/game` to find the correct class, text, or ARIA role.
+4. Inspect the corresponding `.svelte` file in `apps/frontend/client` or `apps/frontend/game` to find the correct class, text, or ARIA role.
 5. Update the POM method with the correct Playwright locator.
 6. Re-run the specific test file. Repeat until the entire suite is green.
 

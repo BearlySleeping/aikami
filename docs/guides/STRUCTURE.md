@@ -22,7 +22,7 @@ The `apps` directory contains the following applications:
 ```
 apps/
 ├── frontend/
-│   ├── pwa/                     # Main PWA (SvelteKit 2 + Svelte 5 Runes)
+│   ├── client/                  # Main client app (SvelteKit 2 + Svelte 5 Runes)
 │   │   └── src/
 │   │       └── lib/
 │   │           ├── game/        # 🎮 PixiJS v8 + bitECS engine (target, C-016)
@@ -37,11 +37,11 @@ apps/
 │   ├── landing_page/            # Landing page (Astro)
 │   ├── docs/                    # Documentation site (Astro)
 │   └── gamejs/                  # ⚠️ DEPRECATED — Legacy GodotJS client
-│                                #    Migration target: pwa/src/lib/game/
+│                                #    Migration target: client/src/lib/game/
 │                                #    Preserved for reference until C-016 is complete.
 ```
 
-> **⚠️ Legacy Code Notice:** `apps/frontend/gamejs/` is the deprecated GodotJS game client. All new game engine development happens in `apps/frontend/pwa/src/lib/game/` using PixiJS v8 + bitECS. The GodotJS codebase is preserved for reference only and will be archived once C-016 (Game Engine Boundary) is complete.
+> **⚠️ Legacy Code Notice:** `apps/frontend/gamejs/` is the deprecated GodotJS game client. All new game engine development happens in `apps/frontend/client/src/lib/game/` using PixiJS v8 + bitECS. The GodotJS codebase is preserved for reference only and will be archived once C-016 (Game Engine Boundary) is complete.
 
 ### Backend
 
@@ -103,9 +103,9 @@ These packages are documented in contracts but not yet created:
 
 | Alias | Target |
 |-------|--------|
-| `$lib` | `apps/frontend/pwa/src/lib/` |
-| `$game` | `apps/frontend/pwa/src/lib/game/` |
-| `$views` | `apps/frontend/pwa/src/lib/views/` |
+| `$lib` | `apps/frontend/client/src/lib/` |
+| `$game` | `apps/frontend/client/src/lib/game/` |
+| `$views` | `apps/frontend/client/src/lib/views/` |
 | `$types` | `packages/shared/types/src/index.ts` |
 | `$schemas` | `packages/shared/schemas/src/index.ts` |
 | `$logger` | `packages/shared/logger/src/index.ts` |

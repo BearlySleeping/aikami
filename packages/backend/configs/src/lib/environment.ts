@@ -5,7 +5,7 @@ import type { Mode } from '@aikami/types';
 import { isEmptyObject, toAppError, toMode } from '@aikami/utils';
 // We need dotenv for firebase functions
 import { config } from 'dotenv';
-// biome-ignore lint/suspicious/noTsIgnore: See explanation below, pwa gets wrong type error saying $env/static/private is not defined but it is not that deep
+// biome-ignore lint/suspicious/noTsIgnore: See explanation below, client gets wrong type error saying $env/static/private is not defined but it is not that deep
 // @ts-ignore We need to use this for local debugging of sveltekit apps since it only has access to process.env when you build the app
 import * as env from '$env/static/private';
 

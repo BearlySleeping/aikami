@@ -51,7 +51,7 @@ export default defineConfig({
   globalSetup: GLOBAL_SETUP,
   globalTeardown: GLOBAL_TEARDOWN,
 
-  // Test directory: app-specific test files live in tests/{pwa,game,ai-services}/
+  // Test directory: app-specific test files live in tests/{client,game,ai-services}/
   testDir: './tests',
 
   // Run all projects in parallel
@@ -102,10 +102,10 @@ export default defineConfig({
       testMatch: /auth\.setup\.ts/,
     },
 
-    // ── PWA Domain ─────────────────────────────────────────
+    // ── Client Domain ──────────────────────────────────────
     {
-      name: 'pwa',
-      testDir: './tests/pwa',
+      name: 'client',
+      testDir: './tests/client',
       use: {
         ...devices['Desktop Chrome'],
         baseURL: PWA_BASE_URL,
@@ -121,8 +121,8 @@ export default defineConfig({
     // Isolated from setup so visual smoke tests can run without
     // Firebase emulators. Uses guestUser fixture for clean contexts.
     {
-      name: 'pwa-visual',
-      testDir: './tests/pwa',
+      name: 'client-visual',
+      testDir: './tests/client',
       testMatch: /lpc_visual\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],

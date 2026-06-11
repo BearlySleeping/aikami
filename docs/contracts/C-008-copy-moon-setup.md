@@ -45,7 +45,7 @@ Copy from aikami. Defines file groups and tasks inherited by ALL projects:
 ### 2. `.moon/task-templates/` — Task Templates
 Copy all three templates from aikami:
 - **typescript-library.yml**: For packages/shared/*, packages/backend/*, packages/frontend/* — vitest, biome, tsc
-- **vite-application.yml**: For apps/frontend/pwa, apps/frontend/docs, apps/frontend/landing_page — vite build, preview, dev
+- **vite-application.yml**: For apps/frontend/client, apps/frontend/docs, apps/frontend/landing_page — vite build, preview, dev
 - **firebase-functions.yml**: For apps/backend/functions — firebase deploy, emulator
 
 ### 3. `.moon/hooks/` — Git Hooks
@@ -127,7 +127,7 @@ Add aikami features currently missing:
 2. **Copy task templates**: Copy all three, adjust comments (remove aikami-specific project references)
 3. **Hooks**: Copy post-merge and post-checkout. For pre-commit, start with just `git diff` passthrough (like aikami's current state), leave a comment about enabling `:fix --affected` later
 4. **workspace.yml merge**: Start with aikami's current workspace.yml, ADD the aikami features (vcs, pipeline, hasher, experiments), don't overwrite the project list
-5. **defaultProject**: Set to `pwa` (matches aikami's `"dev": "moon run pwa:dev"`)
+5. **defaultProject**: Set to `client` (matches aikami's `"dev": "moon run client:dev"`)
 6. **vcs.defaultBranch**: Set to `master` (matches aikami's current branch)
 
 ## Edge Cases & Gotchas

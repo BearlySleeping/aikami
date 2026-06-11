@@ -4,8 +4,8 @@
 Now that our `(dev)` routes use the Svelte 5 MVVM Override pattern (`FeatureDevViewModel extends FeatureViewModel`), we need a universal way to interact with these dev-only methods in the UI. We will create a floating "Dev Tools" panel that strictly lives in development. This panel will accept arbitrary actions and toggles from the active Sandbox, allowing us to force edge cases (errors, latency, mock injections) without modifying the production View components.
 
 ## Scope
-- `apps/frontend/pwa/src/lib/components/dev/dev_tools_panel.svelte` (New)
-- `apps/frontend/pwa/src/routes/(dev)/dev/character/+page.svelte` (Update)
+- `apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte` (New)
+- `apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte` (Update)
 
 ## Acceptance Criteria
 - [ ] **Create DevToolsPanel:** Create a `dev_tools_panel.svelte` component. It should be a fixed, floating overlay (e.g., bottom-right or top-right of the screen) with a distinct visual style (e.g., a "🛠️ DEV TOOLS" header) so it is never confused with game UI.

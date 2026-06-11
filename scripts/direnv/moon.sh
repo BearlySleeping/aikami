@@ -6,7 +6,7 @@
 # ensure they work regardless of shell PATH configuration.
 #
 # Shortcuts follow these conventions:
-#   m <target>          — moon run (e.g., m pwa:dev, m firebase:typecheck)
+#   m <target>          — moon run (e.g., m client:dev, m firebase:typecheck)
 #   md <project>        — run dev server (moon run <project>:dev)
 #   mt <project>        — run tests (moon run <project>:test)
 #   mb <project>        — build (moon run <project>:build)
@@ -28,7 +28,7 @@ alias nra='bunx moon run --affected'
 # ── m: moon run shorthand ────────────────────────────────────────────────
 #
 # Usage:
-#   m pwa:dev          — start PWA dev server
+#   m client:dev          — start client dev server
 #   m firebase:build   — build Firebase functions
 #   m                  — list available targets
 m() {
@@ -42,7 +42,7 @@ m() {
 # ── md: dev server shortcut ─────────────────────────────────────────────
 #
 # Usage:
-#   md pwa           — start PWA dev server
+#   md client           — start client dev server
 #   md docs          — start docs dev server
 #   md landing-page  — start landing page dev server
 #   md gamejs        — start GameJS dev server
@@ -51,7 +51,7 @@ md() {
   local proj="${1:-}"
   local mode="${2:-}"
   if [ -z "$proj" ]; then
-    echo "Usage: md <project> [--mode emulator]  (pwa, docs, landing-page, game, firebase)"
+    echo "Usage: md <project> [--mode emulator]  (client, docs, landing-page, game, firebase)"
     return 1
   fi
   case "$proj" in
@@ -75,7 +75,7 @@ md() {
 mt() {
   local proj="${1:-}"
   if [ -z "$proj" ]; then
-    echo "Usage: mt <project>  (pwa, docs, landing-page, gamejs, firebase, schemas, etc.)"
+    echo "Usage: mt <project>  (client, docs, landing-page, gamejs, firebase, schemas, etc.)"
     return 1
   fi
   bunx moon run "${proj}:test"
@@ -85,7 +85,7 @@ mt() {
 mb() {
   local proj="${1:-}"
   if [ -z "$proj" ]; then
-    echo "Usage: mb <project>  (pwa, docs, landing-page, gamejs)"
+    echo "Usage: mb <project>  (client, docs, landing-page, gamejs)"
     return 1
   fi
   bunx moon run "${proj}:build"
@@ -128,7 +128,7 @@ ma() {
 
 # ── Convenience: Aikami-specific workflows ──────────────────────────────
 
-# Start the full local dev environment in tmux (emulators + pwa + game)
+# Start the full local dev environment in tmux (emulators + client + game)
 aikami_dev() {
   echo "🎴 Starting Aikami local dev environment..."
   echo "   Mode: ${AIKAMI_MODE:-emulator}"
@@ -159,7 +159,7 @@ aikami_game_emulate() {
 aikami_tmux_start() {
   local service="${1:-}"
   if [ -z "$service" ]; then
-    echo "Usage: aikami_tmux_start <emulators|pwa|game|all> [--force]"
+    echo "Usage: aikami_tmux_start <emulators|client|game|all> [--force]"
     return 1
   fi
   bun run scripts/src/lib/tmux/start.ts "$@"
@@ -168,7 +168,7 @@ aikami_tmux_start() {
 aikami_tmux_join() {
   local service="${1:-}"
   if [ -z "$service" ]; then
-    echo "Usage: aikami_tmux_join <emulators|pwa|game|all>"
+    echo "Usage: aikami_tmux_join <emulators|client|game|all>"
     return 1
   fi
   bun run scripts/src/lib/tmux/join.ts "$@"
@@ -177,7 +177,7 @@ aikami_tmux_join() {
 aikami_tmux_stop() {
   local service="${1:-}"
   if [ -z "$service" ]; then
-    echo "Usage: aikami_tmux_stop <emulators|pwa|game|all>"
+    echo "Usage: aikami_tmux_stop <emulators|client|game|all>"
     echo "       aikami_tmux_stop_all  — stop all sessions"
     return 1
   fi
@@ -271,11 +271,11 @@ aikami_logs() {
     firebase|functions)
       echo "📋 Firebase functions logs — use firebase:logs moon task"
       bunx moon run firebase:logs "${@:2}" ;;
-    pwa)
+    client)
       echo "📋 PWA logs — use service_logs tool via pi coding agent" ;;
     *)
       echo "Usage: aikami_logs <app>"
-      echo "  Apps: firebase, pwa"
+      echo "  Apps: firebase, client"
       return 1 ;;
   esac
 }
@@ -316,8 +316,8 @@ aikami_help() {
   🎴 Aikami Shell Shortcuts
 
   CORE MOON TASKS
-    m <target>       Run any moon task (e.g., m pwa:dev, m firebase:build)
-    md <project>     Start dev server (pwa, docs, landing-page, game, firebase)
+    m <target>       Run any moon task (e.g., m client:dev, m firebase:build)
+    md <project>     Start dev server (client, docs, landing-page, game, firebase)
                      md game --mode emulator → game emulator mode
     mt <project>     Run tests
     mb <project>     Build
@@ -335,7 +335,7 @@ aikami_help() {
     aikami_graph            Open project dependency graph
 
   TMUX SESSIONS
-    aikami_tmux_start <svc> Start tmux session (emulators|pwa|game|all)
+    aikami_tmux_start <svc> Start tmux session (emulators|client|game|all)
     aikami_tmux_join <svc>  Attach to running tmux session
     aikami_tmux_stop <svc>  Stop tmux session
     aikami_tmux_stop_all    Stop all aikami tmux sessions
@@ -343,7 +343,7 @@ aikami_help() {
     atstart/atjoin/atstop   Short aliases for the above
 
   LOGS
-    aikami_logs <app>       View recent logs (firebase, pwa)
+    aikami_logs <app>       View recent logs (firebase, client)
 
   ENVIRONMENT
     aikami_switch <mode>     Switch environment mode

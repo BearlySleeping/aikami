@@ -11,7 +11,7 @@ This package provides centralized Firebase and environment configurations for th
 
 ## Where It's Used
 
-Used by all frontend apps (`apps/frontend/pwa`, `apps/frontend/docs`, `apps/frontend/landing_page`, `apps/frontend/game`) and frontend packages (`frontend-dataconnect`, `frontend-services`, etc.).
+Used by all frontend apps (`apps/frontend/client`, `apps/frontend/docs`, `apps/frontend/landing_page`, `apps/frontend/game`) and frontend packages (`frontend-dataconnect`, `frontend-services`, etc.).
 
 ## Installation
 

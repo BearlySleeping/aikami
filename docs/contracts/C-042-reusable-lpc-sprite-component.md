@@ -16,15 +16,15 @@
 This contract establishes a highly optimized, reusable Svelte 5 canvas component (`LpcCharacterRenderer.svelte`) that abstracts the low-level rendering mechanics verified in the developer demo. It bridges the Svelte 5 signal-based `$props` interface directly to the zero-allocation `LpcBatchManager` uniform buffer array. It translates positions, LPC animation states, direction enums, and equipment recipe arrays into the WebGL2 multi-layer shader context without incurring runtime heap allocations or DOM-bound layout shifts.
 
 ## Design Reference
-- `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-demo/+page.svelte`: Handles raw canvas lifecycle binding via `$effect` hooks and explicit uniform buffer initialization.
+- `apps/frontend/client/src/routes/(authenticated)/dev/lpc-demo/+page.svelte`: Handles raw canvas lifecycle binding via `$effect` hooks and explicit uniform buffer initialization.
 - `packages/frontend/engine/src/rendering/animation_controller.ts`: Defines `LpcAnimationState` and `LpcDirection` enums with corresponding dominant-axis stepping.
 - `packages/frontend/engine/src/systems/render_system.ts`: Manages `LpcBatchManager` entity registration, dirty structural hash tracking, and slot recycling.
 
 ## Changes Detail
 
-### 1. Create `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte`
+### 1. Create `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte`
 Develop the modular component satisfying Svelte 5 strict architectural patterns:
-- Line 1 File path comment requirement: `// apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte`.
+- Line 1 File path comment requirement: `// apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte`.
 - Consume incoming reactive props via the `$props()` rune, defaulting layout parameters to standard 64x64 LPC grid footprints.
 - Retrieve the active `pixi_app` instance and global `ubo_allocator` or system-specific `batchManager` references securely from parent contexts via Svelte's context layer (`getContext`) to protect against state leakage across Server-Side Rendering (SSR) limits.
 - On component mount (`onMount`), generate a unique local entity identifier (`eid`) via the `allocator.allocate()` pipeline, reserving a contiguous uniform buffer object slot.
