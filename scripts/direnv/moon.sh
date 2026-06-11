@@ -217,15 +217,19 @@ aikami_validate() {
   echo "🔍 Validating affected projects..."
   echo ""
 
+  # Prevent stdin from blocking if a child process holds the fd.
+  # CI=true tells test runners (Vitest, Playwright) to run headlessly.
+  export CI=true
+
   echo "── Fix ──"
-  bunx moon run :fix --affected || {
+  bunx moon run :fix --affected < /dev/null || {
     echo "❌ Fix failed"
     return 1
   }
 
   echo ""
   echo "── Typecheck ──"
-  bunx moon run :typecheck --affected || {
+  bunx moon run :typecheck --affected < /dev/null || {
     echo "❌ Typecheck failed"
     return 1
   }
@@ -233,14 +237,14 @@ aikami_validate() {
   if [ "$do_test" = "--test" ] || [ "$do_test" = "-t" ]; then
     echo ""
     echo "── Build ──"
-    bunx moon run :build --affected || {
+    bunx moon run :build --affected < /dev/null || {
       echo "❌ Build failed"
       return 1
     }
 
     echo ""
     echo "── Test ──"
-    bunx moon run :test --affected || {
+    bunx moon run :test --affected < /dev/null || {
       echo "❌ Tests failed"
       return 1
     }
