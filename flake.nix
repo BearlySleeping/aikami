@@ -81,7 +81,15 @@
 
           # Chromium wrapped with PixiJS DevTools extension support
           chromium-pixi-devtools
-        ];
+                  cargo
+          rustc
+          webkitgtk_4_1
+          gtk3
+          libsoup_3
+          openssl
+          glib-networking
+          libayatana-appindicator
+];
 
         # nix-direnv location — used by .envrc on subsequent loads to
         # source direnvrc without re-evaluating nixpkgs

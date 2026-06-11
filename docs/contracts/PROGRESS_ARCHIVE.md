@@ -2552,3 +2552,31 @@ Applied the Svelte 5 class-based MVVM sandbox pattern to the NPC Chat System. En
 
 ### Deviations from contract
 - None — all acceptance criteria met. Mock NPC includes full NpcData required fields for TypeBox schema compliance. `sendMessage()` bypasses real AI backend in dev sandbox (by design). Bot replies triggered manually via DevTools action rather than auto-fire.
+
+---
+
+## C-113: Tauri Desktop Sanity Check (2026-06-11)
+
+### Actions taken
+- Fixed `tauri.conf.json` `devUrl` port: 5173 → 5274 (Aikami emulator port)
+- Removed invalid `useHttpsScheme` from security section (Tauri v2 schema)
+- Changed `beforeBuildCommand` to `bun run build:emulator` for local testing
+- Generated RGBA placeholder icons (32x32, 128x128, 256x256, .ico, .icns)
+- Added `custom-protocol` feature to tauri dependency in Cargo.toml for standalone embedded frontend
+- Added `codegen` feature to tauri-build dependency
+- Added Rust toolchain + Tauri system libs to flake.nix (cargo, rustc, webkitgtk_4_1, gtk3, libsoup_3, openssl, glib-networking, libayatana-appindicator)
+- Created `routes/+page.svelte` — index page with button to `/dev`
+- Created `routes/(dev)/dev/+page.svelte` — dev landing page with nav grid + version badges
+- Added package.json scripts: `dev:tauri`, `build:tauri`, `preview:tauri`
+- Standalone binary (`./target/debug/aikami`) confirmed working with embedded frontend
+
+### Verification
+- `client:typecheck` — 0 errors, 0 warnings
+- `client:build` — passed
+- Tauri desktop app opens, shows index page with "Open Dev Console" button
+- Dev console landing page renders nav grid with all 11 sandbox links
+
+### Known issues
+- `bun tauri dev` / `bun tauri build` fail due to OS inotify watch limit exhaustion (monorepo + Nix store + 254 inotify instances)
+- Workaround: use `bun build:tauri` (cargo build directly, no Tauri CLI watcher)
+- GStreamer `appsink` warning on launch (non-fatal, media playback only)
