@@ -18,13 +18,13 @@ compile. Load this skill first, before touching any file.
 
 For framework-specific patterns, also load:
 
-| Skill                  | Covers                                                      |
-| ---------------------- | ----------------------------------------------------------- |
-| `svelte-conventions`   | Svelte 5 runes, ViewModel pattern, services, import aliases |
-| `backend-conventions`  | Firebase Functions, backend services, security rules        |
-| `pixijs-v8`            | PixiJS v8 + bitECS, game engine boundary, ECS patterns      |
-| `firebase-functions`   | Firebase Cloud Functions v2 best practices                  |
-| `firestore-collection` | Scaffolding Firestore collections                           |
+| Skill                  | Covers                                                    |
+| ---------------------- | --------------------------------------------------------- |
+| `pixijs-v8`            | PixiJS v8 + bitECS, game engine boundary, ECS patterns    |
+| `tauri-v2`             | Tauri v2 desktop patterns and constraints                 |
+| `firestore-collection` | Scaffolding Firestore collections                         |
+| `firestack`            | Firebase Functions deployment, emulators, security rules  |
+| `svelte-page`          | Scaffolding new SvelteKit pages                           |
 
 ---
 
@@ -659,3 +659,205 @@ import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 </script>
 ```
+
+---
+
+## Svelte 5 + SvelteKit Conventions
+
+### Svelte 5 Core: Runes ONLY
+
+No `$:` syntax. No stores (`writable`, `readable`).
+
+```typescript
+let count = $state(0);              // State
+let doubled = $derived(count * 2);  // Derived
+$effect(() => { console.log(count); }); // Side effects
+```
+
+Props:
+
+```svelte
+let { user, theme = 'dark' } = $props();
+let { value = $bindable() } = $props();
+```
+
+Event handlers use HTML `onclick`, not Svelte 4 `on:click`:
+
+```svelte
+<button onclick={handleClick}>Click</button>
+```
+
+Always use `<script lang="ts">`. All `.svelte.ts` files (ViewModels) are
+first-class TypeScript modules with Svelte 5 rune support.
+
+### ViewModel Pattern
+
+**Views have zero logic** — they are pure HTML/Svelte wrappers. No conditionals,
+no data transformation, no `onMount`. Every expression in the view template
+must be a direct property access on the ViewModel.
+
+**ViewModels are thin bridges to services** — orchestrate service calls, expose
+state to the view, but never contain heavy business logic, import repositories,
+or call API/firebase functions directly. That belongs in services.
+
+#### 🔴 CRITICAL: View Structural Constraints
+
+- ❌ **Zero script imports** from services, network clients, repositories
+- ❌ **No local `$state`** — all state belongs in the ViewModel
+- ❌ **No `$derived`** — computed values belong in the ViewModel as getters
+- ❌ **No `onMount`** — initialization goes in `ViewModel.initialize()`
+- ❌ **No inline event logic** — handlers delegate to ViewModel methods
+- ❌ **No destructuring** the `viewModel` prop
+
+#### ViewModel Template
+
+```typescript
+// apps/frontend/pwa/src/lib/views/feature/feature_view_model.svelte.ts
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from "$lib/components/BaseViewModel.svelte";
+import { myService } from "$services/my_service";
+
+export type FeatureViewModelInterface = BaseViewModelInterface & {
+  readonly items: string[];
+};
+
+export type FeatureViewModelOptions = BaseViewModelOptions & {};
+
+export class FeatureViewModel
+  extends BaseViewModel<FeatureViewModelOptions>
+  implements FeatureViewModelInterface
+{
+  items = $state<string[]>([]);
+
+  async initialize(): Promise<void> {
+    this.debug("initialize");
+    this.items = myService.getItems();
+  }
+}
+
+export const getFeatureViewModel = (
+  options: FeatureViewModelOptions,
+): FeatureViewModel => {
+  return new FeatureViewModel(options);
+};
+```
+
+#### ViewModel Rules
+
+- Export `type ...Interface` with **all properties `readonly`**
+- Export `type ...Options` alongside the class
+- Export a `getFeatureViewModel` factory function
+- Always extend `BaseViewModel` and `implements *Interface`
+- ViewModel files: `{name}_view_model.svelte.ts` (NOT `vm` shorthand)
+- Call `super.initialize()` **at the end** of `initialize()`
+- Use `registerEffectRoot()` for reactive side effects (NEVER raw `$effect` in views)
+- Views access data only through the ViewModel
+
+### Services Architecture
+
+Singleton classes with `$state` for external state management. Never use
+Svelte stores.
+
+```typescript
+// packages/frontend/services/src/lib/my_service.svelte.ts
+import { BaseClass, type BaseClassInterface } from "@aikami/utils";
+
+export type MyServiceInterface = BaseClassInterface & {
+  readonly items: string[];
+  loadItems: () => Promise<void>;
+};
+
+export class MyService extends BaseClass implements MyServiceInterface {
+  items = $state<string[]>([]);
+
+  async loadItems(): Promise<void> {
+    this.debug("loadItems");
+  }
+}
+
+export const myService: MyServiceInterface = new MyService({
+  className: "MyService",
+});
+```
+
+#### Native Getters Over `$derived`
+
+```typescript
+// ❌ WRONG — $derived on self-referential field
+isLoggedIn = $derived(!!this.currentUser);
+
+// ✅ CORRECT — native getter
+get isLoggedIn(): boolean { return !!this.currentUser; }
+```
+
+Exception: heavy computations (translation, mapping) stay in `$derived(...)`.
+
+### Import Aliases (client only)
+
+| Alias       | Resolves to                                                   |
+| ----------- | ------------------------------------------------------------- |
+| `$lib`      | `apps/frontend/pwa/src/lib`                                   |
+| `$types`    | `apps/frontend/pwa/src/lib/types` (app-local types)           |
+| `$services` | `apps/frontend/pwa/src/lib/client/services/index.ts` (barrel) |
+| `$logger`   | Environment-specific logger                                   |
+| `$views`    | `$lib/views`                                                  |
+
+`$services` is a barrel, never a directory — always import from root.
+
+---
+
+## Backend Architecture
+
+### Architecture Layers
+
+```
+Controller (thin) → Service (business logic) → Repository (data access) → BaseDatabaseService (abstraction)
+```
+
+### Repository Pattern
+
+Every repository accepts a `BaseDatabaseService` via constructor injection.
+
+```typescript
+export class UserRepository {
+  private readonly _collection = "users";
+
+  constructor(private readonly _db: BaseDatabaseService) {
+    if (!_db) throw new Error("UserRepository requires BaseDatabaseService");
+  }
+
+  async findById(id: string): Promise<UserDocument | undefined> {
+    if (!id) throw new Error("id is required");
+    return this._db.getDocument<UserDocument>(this._collection, id);
+  }
+}
+```
+
+#### Rules
+
+- Constructor injection: `constructor(private readonly _db: BaseDatabaseService)`
+- Guard clauses first
+- Never import Firestore SDK directly — go through `BaseDatabaseService`
+- Collection name as private field
+
+### Service Layer
+
+Services contain business logic, depend on repositories (never on database directly):
+
+- Options object for constructor
+- Depend on repositories, not database
+- Business logic only — no HTTP concerns, no Firestore SDK calls
+
+### Controller Structure
+
+Thin — parse input, call service, return response. One `export default` per file.
+Use firestack wrappers: `onCall`, `onRequest`, `onCreated`, etc.
+
+### Backend Testing
+
+- Tests in `tests/` at project root (not `src/__tests__/`)
+- Use `bun:test`
+- Mock `BaseDatabaseService`, never Firestore SDK directly

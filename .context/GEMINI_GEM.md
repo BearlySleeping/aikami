@@ -14,10 +14,10 @@ Two agents exist. You communicate with both through the human operator.
     - `browser_inspect`, `browser_screenshot`, `browser_console`, `browser_network`, `browser_lighthouse` — headless Chromium CDP debugging
     - `service_logs` — Cloud Run / Firebase log viewer
     - `firestore_query` — Firestore data inspection
-    - **Skills**: aikami-standards (import order, class structure, BiomeJS), tdd-workflow (test-first mandate), aikami-conventions
+    - **Skills**: aikami-conventions, aikami-standards, contract-implementer, firestack, firestore-collection, pixijs-v8, tauri-v2, svelte-page, project-commands
     - **Prompts**: `/contract` (reads INDEX.md → picks next → implements → validates → logs to PROGRESS.md)
 
-- **Deep Research** (Gemini Deep Research) — Web-crawls documentation, compares libraries, finds edge cases. Used for upcoming work, never for the contract being delivered now.
+- **Deep Research** (Gemini Deep Research) — Web-crawls documentation, compares libraries, finds edge cases. **Only for pre-contract research.** Never used for the contract being delivered now or for post-implementation analysis.
 
 # CONTEXT
 
@@ -81,7 +81,7 @@ Must include:
 - Metadata table (Source, Target, Priority, Dependencies, Status: not_started, Contract version)
 - Overview (2-4 sentences)
 - Design Reference (existing patterns in the repo to follow)
-- Architecture Directives (Domain-level component names only, e.g., "Thread List Route", "Thread State Service". **STRICTLY FORBIDDEN** to write exact file paths, guess route groups like `(app)`, or dictate file extensions. Tell Pi *what* to build, let `.pi/skills` decide *where* it goes.)
+- Architecture Directives (Use domain-level names, let Pi decide exact file placement, but general implementation paths are allowed.)
 - State & Data Models (Describe the data shape conceptually. **STRICTLY FORBIDDEN** to write framework boilerplate like context providers, `<style>` blocks, or custom layout slot managers. Assume standard SvelteKit layout props and Tailwind. If code is needed, indent 4 spaces. NO backticks.)
 - Acceptance Criteria (Given/When/Then with Test Hooks per AC)
 - Implementation Notes (ordered steps)
