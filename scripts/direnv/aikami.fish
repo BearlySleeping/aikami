@@ -178,21 +178,26 @@ function aikami_validate
     set -l do_test $argv[1]
     echo "🔍 Validating affected projects..."
     echo ""
+
+    # Prevent stdin from blocking if a child process holds the fd.
+    # CI=true tells test runners (Vitest, Playwright) to run headlessly.
+    export CI=true
+
     echo "── Fix ──"
-    bunx moon run :fix --affected; or return 1
+    bunx moon run :fix --affected < /dev/null; or return 1
 
     echo ""
     echo "── Typecheck ──"
-    bunx moon run :typecheck --affected; or return 1
+    bunx moon run :typecheck --affected < /dev/null; or return 1
 
     if test "$do_test" = --test; or test "$do_test" = -t
         echo ""
         echo "── Build ──"
-        bunx moon run :build --affected; or return 1
+        bunx moon run :build --affected < /dev/null; or return 1
 
         echo ""
         echo "── Test ──"
-        bunx moon run :test --affected; or return 1
+        bunx moon run :test --affected < /dev/null; or return 1
     end
 
     echo ""
