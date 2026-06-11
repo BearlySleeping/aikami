@@ -135,6 +135,7 @@ If user is already on the recommended mode, say nothing about it.
 - No asking about style mid-task
 - Summary after validate: what changed + results + suggested commit msg
 - Terse — 3-4 lines unless errors
+- **NEVER** execute long-lived server commands (e.g., `vite dev`, `vite preview`, `bun run dev`, `moon run dev`) in the main execution thread. These will freeze the agent loop. If you absolutely must start a server, use the `firebase_emulator` or `tmux_session` tool to run it in the background.
 
 ## Debugging Protocol (CRITICAL)
 
