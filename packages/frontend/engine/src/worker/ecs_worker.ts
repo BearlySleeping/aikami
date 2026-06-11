@@ -32,6 +32,10 @@ import type { Direction, GameCommand, GameEvent, NPCSpawnData } from '../types.t
 // Worker: owns the full bitECS world and system ticking
 // ---------------------------------------------------------------------------
 
+// Startup sentinel — confirms the worker module loaded and executed.
+// biome-ignore lint/suspicious/noConsole: worker startup diagnostic
+console.log('[ecs_worker] Module loaded, ready for INITIALIZE_ENGINE');
+
 /**
  * Direction-to-velocity lookup table, mirrored from input_system.ts.
  * The worker applies these directly when it receives a MOVE_PLAYER command.
@@ -283,8 +287,9 @@ const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
 
   // 4. Spawn entities
   playerEntityId = createPlayer(world);
+  let testSpriteId = 0;
   if (canvasWidth && canvasHeight) {
-    createTestSprite(world, canvasWidth, canvasHeight);
+    testSpriteId = createTestSprite(world, canvasWidth, canvasHeight);
   }
 
   // 5. Notify main thread about renderable entities
@@ -295,8 +300,16 @@ const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
     tint: 0x00ff88,
   });
 
-  // Test sprite has eid = playerEntityId + 1 (assuming sequential eid allocation)
-  // We send this after a microtask to ensure addEntity has been called
+  // Test sprite (pink tint) — must be sent so GameWorld creates a display object
+  // bitECS allocates sequential IDs, so testSpriteId = playerEntityId + 1
+  if (testSpriteId > 0) {
+    postMessage({
+      type: 'ENTITY_CREATED',
+      eid: testSpriteId,
+      tint: 0xff6688,
+    });
+  }
+
   queueMicrotask(() => {
     postMessage({
       type: 'ENGINE_READY',
@@ -476,6 +489,41 @@ const serializeEntityStates = (_w: World, view: Float32Array): void => {
 
 // -- Message handler --------------------------------------------------------
 
+// -- Error handling (worker-side) --------------------------------------------
+
+/**
+ * Worker-level error handler — catches unhandled exceptions inside the
+ * worker and posts them back to the main thread for debugging.
+ */
+self.onerror = (event: string | Event): void => {
+  const evt = event instanceof ErrorEvent ? event : undefined;
+  const detail = {
+    message: evt?.message || String(event),
+    filename: evt?.filename || '(unknown)',
+    lineno: evt?.lineno,
+    colno: evt?.colno,
+  };
+  // biome-ignore lint/suspicious/noConsole: worker error diagnostic
+  console.error('[ecs_worker] Unhandled error:', detail);
+  postMessage({
+    type: 'ENGINE_ERROR',
+    message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}`,
+  });
+};
+
+/**
+ * Catch unhandled promise rejections inside the worker.
+ */
+self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
+  const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
+  // biome-ignore lint/suspicious/noConsole: worker rejection diagnostic
+  console.error('[ecs_worker] Unhandled rejection:', message, event.reason);
+  postMessage({
+    type: 'ENGINE_ERROR',
+    message: `Worker rejection: ${message}`,
+  });
+};
+
 /**
  * Handles incoming messages from the main thread.
  *
@@ -487,46 +535,56 @@ const serializeEntityStates = (_w: World, view: Float32Array): void => {
 self.onmessage = (event: MessageEvent): void => {
   const message = event.data;
 
-  switch (message.type) {
-    case 'INITIALIZE_ENGINE': {
-      const { canvasWidth, canvasHeight, buffers } = message;
+  try {
+    switch (message.type) {
+      case 'INITIALIZE_ENGINE': {
+        const { canvasWidth, canvasHeight, buffers } = message;
 
-      // Determine whether we have shared memory
-      const firstBuffer = buffers[0] as ArrayBuffer;
-      useSharedMemory = firstBuffer instanceof SharedArrayBuffer;
+        // Determine whether we have shared memory
+        const firstBuffer = buffers[0] as ArrayBuffer;
+        useSharedMemory =
+          typeof SharedArrayBuffer !== 'undefined' && firstBuffer instanceof SharedArrayBuffer;
 
-      if (useSharedMemory) {
-        // Single SharedArrayBuffer — both threads read/write the same memory
-        activeWriteView = new Float32Array(firstBuffer);
-      } else {
-        // N-buffer pool for fallback
-        for (let i = 0; i < buffers.length; i++) {
-          bufferPool.push(buffers[i] as ArrayBuffer);
+        if (useSharedMemory) {
+          // Single SharedArrayBuffer — both threads read/write the same memory
+          activeWriteView = new Float32Array(firstBuffer);
+        } else {
+          // N-buffer pool for fallback
+          for (let i = 0; i < buffers.length; i++) {
+            bufferPool.push(buffers[i] as ArrayBuffer);
+          }
+          activeWriteView = new Float32Array(bufferPool[0]);
+          activeBufferIndex = 0;
         }
-        activeWriteView = new Float32Array(bufferPool[0]);
-        activeBufferIndex = 0;
+
+        initializeEngine(canvasWidth, canvasHeight);
+        break;
       }
 
-      initializeEngine(canvasWidth, canvasHeight);
-      break;
-    }
-
-    case 'RECYCLE_BUFFER': {
-      // Main thread has finished reading this buffer — add it back to the pool
-      const recycled = message.buffer as ArrayBuffer;
-      if (recycled) {
-        bufferPool.push(recycled);
+      case 'RECYCLE_BUFFER': {
+        // Main thread has finished reading this buffer — add it back to the pool
+        const recycled = message.buffer as ArrayBuffer;
+        if (recycled) {
+          bufferPool.push(recycled);
+        }
+        break;
       }
-      break;
-    }
 
-    case 'BRIDGE_COMMAND': {
-      handleBridgeCommand(message.command as GameCommand);
-      break;
-    }
+      case 'BRIDGE_COMMAND': {
+        handleBridgeCommand(message.command as GameCommand);
+        break;
+      }
 
-    default: {
-      break;
+      default: {
+        break;
+      }
     }
+  } catch (err) {
+    // biome-ignore lint/suspicious/noConsole: worker handler error diagnostic
+    console.error('[ecs_worker] Message handler error:', err);
+    postMessage({
+      type: 'ENGINE_ERROR',
+      message: `Worker handler error: ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
 };

@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application, Container } from 'pixi.js';
 import { Graphics, Rectangle } from 'pixi.js';
+import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import {
   BUFFER_SIZE,
   COMPONENT_STRIDE,
@@ -64,88 +65,111 @@ type NpcMetaEntry = {
  * Assigning a fixed `filterArea` to every character display object
  * avoids per-frame `getBounds()` recalculations inside PixiJS.
  */
-const CELL_GEOMETRY_RECT = new Rectangle(0, 0, 32, 32);
+const CELL_GEOMETRY_RECT = new Rectangle(0, 0, 48, 48);
 
 /** Callback invoked when the player presses the interact key. */
 type InteractRequestCallback = (npc: NpcMetaEntry) => void;
 
 /**
+ * Options for constructing a {@link GameWorld} via {@link GameWorld.create}.
+ */
+export type GameWorldOptions = BaseEngineClassOptions & {
+  /** The engine bridge for UI↔Game communication. */
+  bridge: EngineBridge;
+  /** Optional API service for backend communication. */
+  apiService?: GameApiService;
+  /** Optional AI service for AI-powered features. */
+  aiService?: GameAiService;
+  /**
+   * Factory for creating the simulation worker.
+   *
+   * When omitted, the default {@link new URL('./worker/ecs_worker.ts', import.meta.url)}
+   * pattern is used. Provide this when importing via Vite's `?worker` syntax
+   * for correct bundling across workspace dependency boundaries.
+   */
+  workerFactory?: () => Worker;
+};
+
+/**
  * Manages the complete game engine lifecycle: PixiJS Application, Web Worker
  * for bitECS simulation, shared memory buffers, and the per-frame render loop.
  *
- * This class is instantiated once per game route. It owns the PixiJS
- * Application and orchestrates the worker. The UI layer interacts with it
- * exclusively through the {@link EngineBridge}.
+ * Instantiate via {@link GameWorld.create}, never with `new`.
  *
  * Zero framework imports. Zero reactivity. Pure imperative TypeScript.
  */
-class GameWorld {
-  /** The PixiJS Application (owns the canvas, ticker, stage). */
-  private app: Application | undefined;
-
-  /** The Web Worker running the bitECS simulation. */
-  private worker: Worker | undefined;
-
+class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** The engine bridge for UI↔Game communication. */
-  private bridge: EngineBridge;
+  private readonly _bridge: EngineBridge;
 
   /** Optional game API service for backend communication. */
-  private apiService: GameApiService | undefined;
+  private _apiService: GameApiService | undefined;
 
   /** Optional game AI service for AI-powered features. */
-  private aiService: GameAiService | undefined;
+  private _aiService: GameAiService | undefined;
+
+  /** Optional factory for creating the worker (Vite ?worker import). */
+  private readonly _workerFactory?: () => Worker;
+
+  /** The PixiJS Application (owns the canvas, ticker, stage). */
+  private _app: Application | undefined;
+
+  /** The Web Worker running the bitECS simulation. */
+  private _worker: Worker | undefined;
 
   /** The entity ID of the player entity (set from worker ENTITY_CREATED). */
-  private playerEntityId = 0;
+  private _playerEntityId = 0;
 
   /** NPC metadata keyed by entity ID (populated from NPC spawn events). */
-  private npcMeta = new Map<number, NpcMetaEntry>();
+  private _npcMeta = new Map<number, NpcMetaEntry>();
 
   /** Global input lock — set true when dialogue/UI is active. */
-  private inputLocked = false;
+  private _inputLocked = false;
 
   /** Callback invoked when the interaction key is pressed near an NPC. */
-  private interactRequestCallback: InteractRequestCallback | undefined;
+  private _interactRequestCallback: InteractRequestCallback | undefined;
 
   /** Cleanup function for keyboard listeners. */
-  private inputTeardown: (() => void) | undefined;
+  private _inputTeardown: (() => void) | undefined;
 
   /** Whether the game loop is currently running. */
-  private running = false;
+  private _running = false;
 
   /** PixiJS ticker callback reference for teardown. */
-  private tickerCallback: (() => void) | undefined;
+  private _tickerCallback: (() => void) | undefined;
+
+  // -- Render debug throttle ---------------------------------------------
+
+  /** Timestamp of the last render frame log (ms). */
+  private _lastRenderLog = 0;
 
   // -- Buffer state --------------------------------------------------------
 
   /** Whether shared memory is in use (vs N-buffer fallback). */
-  private useSharedMemory = false;
+  private _useSharedMemory = false;
 
   /** Pool of ArrayBuffers for N-buffer fallback mode. */
-  private bufferPool: ArrayBuffer[] = [];
+  private _bufferPool: ArrayBuffer[] = [];
 
   /** The Float32Array view used for rendering the current frame. */
-  private activeRenderView: Float32Array | undefined;
+  private _activeRenderView: Float32Array | undefined;
 
   // -- Render state (main thread) ------------------------------------------
 
   /** Map of entity ID → render entry (display object + tint). */
-  private renderEntries = new Map<number, RenderEntry>();
+  private _renderEntries = new Map<number, RenderEntry>();
 
   /**
-   * Creates a new GameWorld (uninitialized).
+   * Do NOT use `new GameWorld()`. Use {@link GameWorld.create} instead.
    *
-   * Call {@link initialize} to start the engine. Call {@link destroy} to
-   * tear it down and release all resources.
-   *
-   * @param bridge - The engine bridge for UI↔Game communication.
-   * @param apiService - Optional API service for backend communication.
-   * @param aiService - Optional AI service for AI-powered features.
+   * The `.create()` factory wraps the instance with auto-debug proxy.
    */
-  constructor(bridge: EngineBridge, apiService?: GameApiService, aiService?: GameAiService) {
-    this.bridge = bridge;
-    this.apiService = apiService;
-    this.aiService = aiService;
+  constructor(options: GameWorldOptions) {
+    super(options);
+    this._bridge = options.bridge;
+    this._apiService = options.apiService;
+    this._aiService = options.aiService;
+    this._workerFactory = options.workerFactory;
   }
 
   /**
@@ -160,50 +184,50 @@ class GameWorld {
   async initialize(options: PixiAppOptions): Promise<void> {
     const { canvas, width, height } = options;
 
-    if (this.app) {
+    if (this._app) {
       return;
     }
 
     // ---- 1. Create PixiJS Application (main thread) -------------------
     const pixiInstance: PixiAppInstance = await createPixiApp({ canvas, width, height });
-    this.app = pixiInstance.app;
+    this._app = pixiInstance.app;
 
     // ---- 2. Allocate shared memory buffers ----------------------------
-    this.allocateBuffers();
+    this._allocateBuffers();
 
     // ---- 3. Spawn the simulation worker -------------------------------
-    await this.spawnWorker(canvas.width, canvas.height);
+    await this._spawnWorker(canvas.width, canvas.height);
 
     // ---- 4. Set up keyboard input (main thread) -----------------------
-    this.inputTeardown = this.setupKeyboardInput();
+    this._inputTeardown = this._setupKeyboardInput();
 
     // ---- 5. Start the render loop (main thread) -----------------------
-    const stage = this.app.stage;
+    const stage = this._app.stage;
 
-    this.tickerCallback = (): void => {
-      if (!this.running || !this.app || !this.activeRenderView) {
+    this._tickerCallback = (): void => {
+      if (!this._running || !this._app || !this._activeRenderView) {
         return;
       }
 
-      this.updateRenderFromBuffer(this.activeRenderView, stage);
+      this._updateRenderFromBuffer(this._activeRenderView, stage);
     };
 
-    this.app.ticker.add(this.tickerCallback);
-    this.running = true;
+    this._app.ticker.add(this._tickerCallback);
+    this._running = true;
   }
 
   /**
    * Pauses the game loop. Entities and systems remain loaded in the worker.
    */
   pause(): void {
-    this.running = false;
+    this._running = false;
   }
 
   /**
    * Resumes a paused game loop.
    */
   resume(): void {
-    this.running = true;
+    this._running = true;
   }
 
   /**
@@ -216,42 +240,42 @@ class GameWorld {
    */
   destroy(): void {
     // Stop the render loop
-    this.running = false;
+    this._running = false;
 
-    if (this.app && this.tickerCallback) {
-      this.app.ticker.remove(this.tickerCallback);
-      this.tickerCallback = undefined;
+    if (this._app && this._tickerCallback) {
+      this._app.ticker.remove(this._tickerCallback);
+      this._tickerCallback = undefined;
     }
 
     // Tear down keyboard listeners
-    if (this.inputTeardown) {
-      this.inputTeardown();
-      this.inputTeardown = undefined;
+    if (this._inputTeardown) {
+      this._inputTeardown();
+      this._inputTeardown = undefined;
     }
 
     // Terminate the worker
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = undefined;
+    if (this._worker) {
+      this._worker.terminate();
+      this._worker = undefined;
     }
 
     // Release buffer references
-    this.bufferPool = [];
-    this.activeRenderView = undefined;
+    this._bufferPool = [];
+    this._activeRenderView = undefined;
 
     // Clear render entries
-    this.renderEntries.clear();
+    this._renderEntries.clear();
 
     // Destroy services
-    this.apiService?.destroy();
-    this.aiService?.destroy();
-    this.apiService = undefined;
-    this.aiService = undefined;
+    this._apiService?.destroy();
+    this._aiService?.destroy();
+    this._apiService = undefined;
+    this._aiService = undefined;
 
     // Destroy PixiJS
-    if (this.app) {
-      this.app.destroy(true, { children: true });
-      this.app = undefined;
+    if (this._app) {
+      this._app.destroy(true, { children: true });
+      this._app = undefined;
     }
   }
 
@@ -265,18 +289,19 @@ class GameWorld {
    * When cross-origin isolated: allocates a single SharedArrayBuffer.
    * Fallback: allocates N ArrayBuffers for the transfer cycle.
    */
-  private allocateBuffers(): void {
+  private _allocateBuffers(): void {
     const firstBuffer = createEngineBuffer(BUFFER_SIZE);
-    this.useSharedMemory = firstBuffer instanceof SharedArrayBuffer;
+    this._useSharedMemory =
+      typeof SharedArrayBuffer !== 'undefined' && firstBuffer instanceof SharedArrayBuffer;
 
-    if (this.useSharedMemory) {
-      this.bufferPool = [firstBuffer as ArrayBuffer];
-      this.activeRenderView = new Float32Array(firstBuffer as ArrayBuffer);
+    if (this._useSharedMemory) {
+      this._bufferPool = [firstBuffer as ArrayBuffer];
+      this._activeRenderView = new Float32Array(firstBuffer as ArrayBuffer);
     } else {
       // Allocate N buffers for the fallback cycle
-      this.bufferPool = [firstBuffer as ArrayBuffer];
+      this._bufferPool = [firstBuffer as ArrayBuffer];
       for (let i = 1; i < FALLBACK_BUFFER_COUNT; i++) {
-        this.bufferPool.push(new ArrayBuffer(BUFFER_SIZE));
+        this._bufferPool.push(new ArrayBuffer(BUFFER_SIZE));
       }
       // No active render view yet — first STATE_UPDATE will provide one
     }
@@ -292,57 +317,71 @@ class GameWorld {
    * @param canvasWidth - Width of the canvas for entity spawn placement.
    * @param canvasHeight - Height of the canvas for entity spawn placement.
    */
-  private async spawnWorker(canvasWidth: number, canvasHeight: number): Promise<void> {
-    this.worker = new Worker(new URL('./worker/ecs_worker.ts', import.meta.url), {
-      type: 'module',
-    });
+  private async _spawnWorker(canvasWidth: number, canvasHeight: number): Promise<void> {
+    if (this._workerFactory) {
+      this.debug('spawnWorker:using-workerFactory');
+      this._worker = this._workerFactory();
+    } else {
+      const workerUrl = new URL('./worker/ecs_worker.ts', import.meta.url);
+      this.debug('spawnWorker:creating-url-worker', { url: workerUrl.href });
+      this._worker = new Worker(workerUrl, {
+        type: 'module',
+      });
+    }
 
     // Send initialization message with buffers
-    this.worker.postMessage({
+    this._worker.postMessage({
       type: 'INITIALIZE_ENGINE',
       canvasWidth,
       canvasHeight,
-      buffers: this.bufferPool,
+      buffers: this._bufferPool,
     });
 
     // Set up message listener for worker → main communication
-    this.worker.onmessage = (event: MessageEvent): void => {
-      this.handleWorkerMessage(event.data);
+    this._worker.onmessage = (event: MessageEvent): void => {
+      this._handleWorkerMessage(event.data);
     };
 
-    this.worker.onerror = (error: ErrorEvent): void => {
-      this.bridge.emit({
+    this._worker.onerror = (error: ErrorEvent): void => {
+      const detail = {
+        message: error.message || '(no message)',
+        filename: error.filename || '(unknown)',
+        lineno: error.lineno,
+        colno: error.colno,
+      };
+      this.error('Worker error', detail);
+      this._bridge.emit({
         type: 'GAME_ERROR',
-        message: `Worker error: ${error.message}`,
+        message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}:${detail.colno}`,
       });
     };
 
     // Forward bridge commands to the worker
-    this.setupCommandForwarding();
+    this._setupCommandForwarding();
   }
 
   /**
    * Handles messages received from the simulation worker.
    */
-  private handleWorkerMessage(message: { type: string } & Record<string, unknown>): void {
+  private _handleWorkerMessage(message: { type: string } & Record<string, unknown>): void {
     switch (message.type) {
       case 'STATE_UPDATE': {
-        this.handleStateUpdate(message);
+        this._handleStateUpdate(message);
         break;
       }
 
       case 'ENTITY_CREATED': {
-        this.handleEntityCreated(message);
+        this._handleEntityCreated(message);
         break;
       }
 
       case 'ENGINE_READY': {
-        this.bridge.emit({ type: 'GAME_READY' });
+        this._bridge.emit({ type: 'GAME_READY' });
         break;
       }
 
       case 'ENGINE_ERROR': {
-        this.bridge.emit({
+        this._bridge.emit({
           type: 'GAME_ERROR',
           message: message.message as string,
         });
@@ -360,8 +399,8 @@ class GameWorld {
    *
    * Swaps the active render view and re-emits bridged events.
    */
-  private handleStateUpdate(message: { type: string } & Record<string, unknown>): void {
-    if (this.useSharedMemory) {
+  private _handleStateUpdate(message: { type: string } & Record<string, unknown>): void {
+    if (this._useSharedMemory) {
       // SharedArrayBuffer — render view is already the same memory.
       // No swap needed; main thread reads the same bytes the worker writes.
     } else {
@@ -373,14 +412,14 @@ class GameWorld {
       }
 
       // Recycle the old render buffer back to the worker
-      const oldBuffer = this.bufferPool.shift();
-      if (oldBuffer && this.worker) {
-        this.worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: oldBuffer }, [oldBuffer]);
+      const oldBuffer = this._bufferPool.shift();
+      if (oldBuffer && this._worker) {
+        this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: oldBuffer }, [oldBuffer]);
       }
 
       // Add the new buffer to the pool and set as active render view
-      this.bufferPool.push(newBuffer);
-      this.activeRenderView = new Float32Array(newBuffer);
+      this._bufferPool.push(newBuffer);
+      this._activeRenderView = new Float32Array(newBuffer);
     }
 
     // Re-emit events through the bridge
@@ -391,7 +430,7 @@ class GameWorld {
         if (gameEvent.type === 'APPEARANCE_CHANGED') {
           dirtyCheckAppearance(gameEvent.eid, gameEvent.layerIds);
         }
-        this.bridge.emit(gameEvent);
+        this._bridge.emit(gameEvent);
       }
     }
   }
@@ -402,22 +441,24 @@ class GameWorld {
    * Creates a PixiJS display object for the entity and registers it
    * in the main-thread render map. For NPCs, also stores NPC metadata.
    */
-  private handleEntityCreated(message: { type: string } & Record<string, unknown>): void {
+  private _handleEntityCreated(message: { type: string } & Record<string, unknown>): void {
     const eid = message.eid as number;
     const tint = message.tint as number;
 
-    if (eid === undefined || !this.app) {
+    if (eid === undefined || !this._app) {
       return;
     }
 
+    this.debug('ENTITY_CREATED', { eid, tint: `0x${tint.toString(16)}` });
+
     // Track player entity ID (first entity created is the player)
-    if (this.playerEntityId === 0) {
-      this.playerEntityId = eid;
+    if (this._playerEntityId === 0) {
+      this._playerEntityId = eid;
     } else {
       // Non-player entities are NPCs — store metadata if provided
       const npcData = message.npcData as NpcMetaEntry | undefined;
       if (npcData) {
-        this.npcMeta.set(eid, {
+        this._npcMeta.set(eid, {
           eid,
           npcId: npcData.npcId || `npc_${eid}`,
           npcName: npcData.npcName || 'Unknown',
@@ -428,9 +469,10 @@ class GameWorld {
       }
     }
 
-    // Create a colored rectangle as the entity's visual representation
+    // Create a colored rectangle as the entity's visual representation.
+    // Using 48×48 so entities are clearly visible on the canvas.
     const graphic = new Graphics();
-    graphic.rect(0, 0, 32, 32);
+    graphic.rect(0, 0, 48, 48);
     graphic.fill({ color: tint });
 
     // Per-contract C-032: bypass layout hit-tests for character visuals
@@ -438,9 +480,14 @@ class GameWorld {
     // Pre-assign filter area to avoid per-frame bounds recalc overhead
     graphic.filterArea = CELL_GEOMETRY_RECT;
 
-    this.app.stage.addChild(graphic);
+    this._app.stage.addChild(graphic);
+    this.debug('entity-added-to-stage', {
+      eid,
+      tint: `0x${tint.toString(16)}`,
+      stageChildren: this._app.stage.children.length,
+    });
 
-    this.renderEntries.set(eid, {
+    this._renderEntries.set(eid, {
       displayObject: graphic,
       tint,
       cullable: true,
@@ -453,9 +500,9 @@ class GameWorld {
    * When the UI calls bridge.send(), the command is forwarded to the
    * worker via postMessage so the worker can apply it to the bitECS world.
    */
-  private setupCommandForwarding(): void {
+  private _setupCommandForwarding(): void {
     // Use the bridge's internal onCommand to intercept commands
-    const bridgeWithCommands = this.bridge as unknown as {
+    const bridgeWithCommands = this._bridge as unknown as {
       onCommand: (type: string, handler: (cmd: unknown) => void) => () => void;
     };
 
@@ -465,7 +512,7 @@ class GameWorld {
 
     // Forward MOVE_PLAYER commands
     bridgeWithCommands.onCommand('MOVE_PLAYER', (cmd: unknown) => {
-      this.postToWorker({
+      this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: { type: 'MOVE_PLAYER', direction: (cmd as { direction: Direction }).direction },
       });
@@ -473,7 +520,7 @@ class GameWorld {
 
     // Forward STOP_PLAYER commands
     bridgeWithCommands.onCommand('STOP_PLAYER', () => {
-      this.postToWorker({
+      this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: { type: 'STOP_PLAYER' },
       });
@@ -481,7 +528,7 @@ class GameWorld {
 
     // Forward SPAWN_NPC commands
     bridgeWithCommands.onCommand('SPAWN_NPC', (cmd: unknown) => {
-      this.postToWorker({
+      this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'SPAWN_NPC',
@@ -493,7 +540,7 @@ class GameWorld {
     // Forward TRIGGER_MACRO commands
     bridgeWithCommands.onCommand('TRIGGER_MACRO', (cmd: unknown) => {
       const macroCmd = cmd as { macro: string; args: string[]; entityId?: number };
-      this.postToWorker({
+      this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'TRIGGER_MACRO',
@@ -508,9 +555,9 @@ class GameWorld {
   /**
    * Posts a message to the worker, if it exists.
    */
-  private postToWorker(message: Record<string, unknown>): void {
-    if (this.worker) {
-      this.worker.postMessage(message);
+  private _postToWorker(message: Record<string, unknown>): void {
+    if (this._worker) {
+      this._worker.postMessage(message);
     }
   }
 
@@ -525,12 +572,12 @@ class GameWorld {
    * Interaction keys ('E', 'Enter') continue to work.
    */
   setInputLocked(locked: boolean): void {
-    this.inputLocked = locked;
+    this._inputLocked = locked;
   }
 
   /** Returns the current input lock state. */
   get isInputLocked(): boolean {
-    return this.inputLocked;
+    return this._inputLocked;
   }
 
   /**
@@ -540,7 +587,7 @@ class GameWorld {
    * interaction range of an NPC.
    */
   onInteractRequest(callback: InteractRequestCallback): void {
-    this.interactRequestCallback = callback;
+    this._interactRequestCallback = callback;
   }
 
   // -----------------------------------------------------------------------
@@ -556,17 +603,17 @@ class GameWorld {
    *
    * @returns A cleanup function that removes all listeners.
    */
-  private setupKeyboardInput(): () => void {
+  private _setupKeyboardInput(): () => void {
     const handleKeyDown = (event: KeyboardEvent): void => {
       // Interaction key — check for nearby NPCs regardless of lock state
       if (event.key === 'e' || event.key === 'E' || event.key === 'Enter') {
         event.preventDefault();
-        this.handleInteractKey();
+        this._handleInteractKey();
         return;
       }
 
       // Block movement keys when input is locked
-      if (this.inputLocked) {
+      if (this._inputLocked) {
         return;
       }
 
@@ -577,14 +624,14 @@ class GameWorld {
 
       event.preventDefault();
 
-      this.postToWorker({
+      this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: { type: 'MOVE_PLAYER', direction },
       });
     };
 
     const handleKeyUp = (event: KeyboardEvent): void => {
-      if (this.inputLocked) {
+      if (this._inputLocked) {
         return;
       }
 
@@ -602,7 +649,7 @@ class GameWorld {
       // We don't track current velocity on the main thread, so we always
       // send STOP_PLAYER and let the worker decide if stopping is correct.
       // For the MVP this is fine — the worker clears velocity to zero.
-      this.postToWorker({
+      this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: { type: 'STOP_PLAYER' },
       });
@@ -624,25 +671,25 @@ class GameWorld {
    * If the player is within interaction range of any NPC, fires the
    * {@link interactRequestCallback}.
    */
-  private handleInteractKey(): void {
-    if (this.inputLocked || !this.activeRenderView) {
+  private _handleInteractKey(): void {
+    if (this._inputLocked || !this._activeRenderView) {
       return;
     }
 
     // Read player position from the render buffer
-    const pOffset = this.playerEntityId * COMPONENT_STRIDE;
-    const playerX = this.activeRenderView[pOffset];
-    const playerY = this.activeRenderView[pOffset + 1];
+    const pOffset = this._playerEntityId * COMPONENT_STRIDE;
+    const playerX = this._activeRenderView[pOffset];
+    const playerY = this._activeRenderView[pOffset + 1];
 
     if (playerX === undefined || playerY === undefined) {
       return;
     }
 
     // Check distance to all NPCs
-    for (const [eid, npc] of this.npcMeta) {
+    for (const [eid, npc] of this._npcMeta) {
       const nOffset = eid * COMPONENT_STRIDE;
-      const npcX = this.activeRenderView[nOffset];
-      const npcY = this.activeRenderView[nOffset + 1];
+      const npcX = this._activeRenderView[nOffset];
+      const npcY = this._activeRenderView[nOffset + 1];
 
       if (npcX === undefined || npcY === undefined) {
         continue;
@@ -653,8 +700,8 @@ class GameWorld {
       const distSq = dx * dx + dy * dy;
       const radiusSq = npc.interactionRadius * npc.interactionRadius;
 
-      if (distSq <= radiusSq && this.interactRequestCallback) {
-        this.interactRequestCallback(npc);
+      if (distSq <= radiusSq && this._interactRequestCallback) {
+        this._interactRequestCallback(npc);
         return;
       }
     }
@@ -678,10 +725,24 @@ class GameWorld {
    * @param renderView - The Float32Array view into the active buffer.
    * @param stage - The PixiJS stage container.
    */
-  private updateRenderFromBuffer(renderView: Float32Array, stage: Container): void {
-    const stageBounds = stage.filterArea ?? stage.getBounds();
+  private _updateRenderFromBuffer(renderView: Float32Array, stage: Container): void {
+    // Use explicit canvas bounds as fallback when stage.getBounds() returns 0-sized
+    // (happens on the first few frames before entities are positioned).
+    const rawBounds = stage.filterArea ?? stage.getBounds();
+    const stageBounds =
+      rawBounds.width > 0 && rawBounds.height > 0
+        ? rawBounds
+        : {
+            x: 0,
+            y: 0,
+            width: this._app?.canvas.width ?? 800,
+            height: this._app?.canvas.height ?? 600,
+          };
+    let visibleCount = 0;
+    let totalCount = 0;
 
-    for (const [eid, entry] of this.renderEntries) {
+    for (const [eid, entry] of this._renderEntries) {
+      totalCount++;
       const offset = eid * COMPONENT_STRIDE;
       const x = renderView[offset];
       const y = renderView[offset + 1];
@@ -696,13 +757,25 @@ class GameWorld {
       // Spatial culling for cullable entities
       if (entry.cullable) {
         const isOffScreen =
-          x + 32 < stageBounds.x ||
+          x + 48 < stageBounds.x ||
           x > stageBounds.x + stageBounds.width ||
-          y + 32 < stageBounds.y ||
+          y + 48 < stageBounds.y ||
           y > stageBounds.y + stageBounds.height;
 
         entry.displayObject.visible = !isOffScreen;
       }
+
+      if (entry.displayObject.visible) {
+        visibleCount++;
+      }
+    }
+
+    // Throttled per-second render diagnostic (only when BaseEngineClass.setRenderDebug(true))
+    if (totalCount > 0 && performance.now() - this._lastRenderLog > 1000) {
+      this._lastRenderLog = performance.now();
+      this.render(
+        `${visibleCount}/${totalCount} visible, stage ${stageBounds.width}x${stageBounds.height}`,
+      );
     }
   }
 }

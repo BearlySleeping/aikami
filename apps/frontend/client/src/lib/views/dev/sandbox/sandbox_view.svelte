@@ -1,8 +1,7 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view.svelte
-  import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
-  import { onDestroy, onMount } from 'svelte';
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import { onMount } from 'svelte';
+  import BaseViewModelContainer from '$components/base_view_model_container.svelte';
   import type { SandboxViewModelInterface } from './sandbox_view_model.svelte.ts';
 
   type Props = {
@@ -12,111 +11,90 @@
   let { viewModel }: Props = $props();
 
   let canvasElement: HTMLCanvasElement | undefined = $state();
-  let app: Application | undefined;
-
-  const initApp = async (): Promise<void> => {
-    if (!canvasElement) {
-      return;
-    }
-
-    const canvas = canvasElement;
-
-    app = new Application();
-
-    await app.init({
-      canvas,
-      width: canvas.clientWidth,
-      height: canvas.clientHeight,
-      backgroundColor: 0x1a1a2e,
-      antialias: true,
-      resolution: window.devicePixelRatio || 1,
-      autoDensity: true,
-    });
-
-    const centerX = canvas.clientWidth / 2;
-    const centerY = canvas.clientHeight / 2;
-
-    // ── Test rectangles ──
-    const colors = [0xff6b6b, 0x48dbfb, 0xff9ff3, 0x54a0ff, 0x5f27cd];
-    colors.forEach((color, i) => {
-      const rect = new Graphics();
-      const size = 60;
-      const offset = (i - 2) * 80;
-      rect.roundRect(centerX - size / 2 + offset, centerY - size / 2 - 40, size, size, 8);
-      rect.fill({ color, alpha: 0.8 });
-      app?.stage.addChild(rect);
-    });
-
-    // ── Title ──
-    const titleStyle = new TextStyle({
-      fontFamily: 'monospace',
-      fontSize: 24,
-      fill: 0xffffff,
-      align: 'center',
-    });
-    const title = new Text({ text: 'PixiJS Sandbox', style: titleStyle });
-    title.anchor.set(0.5);
-    title.x = centerX;
-    title.y = centerY - 120;
-    app.stage.addChild(title);
-
-    // ── FPS counter ──
-    const fpsStyle = new TextStyle({
-      fontFamily: 'monospace',
-      fontSize: 14,
-      fill: 0x8899aa,
-      align: 'center',
-    });
-    const fpsText = new Text({ text: 'FPS: 0', style: fpsStyle });
-    fpsText.anchor.set(0.5);
-    fpsText.x = centerX;
-    fpsText.y = centerY + 80;
-    app.stage.addChild(fpsText);
-
-    app.ticker.add(() => {
-      fpsText.text = `FPS: ${Math.round(app?.ticker.FPS ?? 0)}`;
-    });
-  };
 
   /**
-   * Initializes the PixiJS sandbox on mount.
+   * Hands the bound canvas to the ViewModel for engine initialization.
    *
-   * Renders a test pattern (colored rectangles and text) to verify the
-   * PixiJS v8 + WebGL pipeline is functioning correctly inside SvelteKit.
+   * The ViewModel manages the full GameWorld lifecycle (Web Worker, PixiJS
+   * renderer, keyboard input). The view only provides the canvas reference.
    */
   onMount(() => {
-    void initApp();
-  });
-
-  /**
-   * Destroys the PixiJS application on unmount to release WebGL resources.
-   *
-   * Calls `.destroy(true)` with `children: true` to recursively destroy
-   * the scene graph and free all GPU textures, buffers, and shaders.
-   */
-  onDestroy(() => {
-    if (app) {
-      app.destroy(true, { children: true });
-      app = undefined;
+    if (canvasElement) {
+      void viewModel.initializeEngine(canvasElement);
     }
   });
 </script>
 
 <svelte:head>
-  <title>PixiJS Sandbox - Aikami</title>
+  <title>Game Engine Sandbox - Aikami</title>
 </svelte:head>
 
 <BaseViewModelContainer {viewModel}>
   <div class="absolute inset-0 flex flex-col bg-base-100">
-    <!-- PixiJS canvas — fills available space -->
-    <canvas bind:this={canvasElement} class="flex-1 w-full h-full"></canvas>
+    <!-- Game engine canvas — fills available space, disabled when dialog is open -->
+    <canvas
+      bind:this={canvasElement}
+      class="flex-1 w-full h-full"
+      class:pointer-events-none={viewModel.showDialog}
+    ></canvas>
 
     <!-- Toolbar overlay -->
     <div
       class="absolute top-3 left-3 z-10 rounded-lg bg-base-200/80 px-3 py-1.5 shadow backdrop-blur-sm"
     >
       <span class="text-xs font-medium text-base-content/70">Sandbox</span>
-      <span class="ml-1.5 text-sm font-semibold text-primary">PixiJS v8 + SvelteKit</span>
+      {#if viewModel.engineError}
+        <span class="ml-1.5 text-sm font-semibold text-error">Error</span>
+      {:else if viewModel.engineReady}
+        <span class="ml-1.5 text-sm font-semibold text-primary">Engine Running</span>
+      {:else}
+        <span class="ml-1.5 text-sm font-semibold text-warning">Engine Loading…</span>
+      {/if}
     </div>
+
+    <!-- Interaction hint — shown when player is near NPC, prompts to press E -->
+    {#if viewModel.interactionHint && !viewModel.showDialog}
+      <div
+        class="absolute bottom-8 left-1/2 z-10 -translate-x-1/2 rounded-xl bg-black/70 px-6 py-3 backdrop-blur-md"
+      >
+        <span class="text-base font-medium text-white">{viewModel.interactionHint}</span>
+      </div>
+    {/if}
+    {#if viewModel.engineError}
+      <div
+        class="absolute top-12 left-3 z-10 max-w-md rounded-lg bg-error/10 px-3 py-1.5 backdrop-blur-sm"
+      >
+        <span class="text-xs font-mono text-error">{viewModel.engineError}</span>
+      </div>
+    {/if}
+
+    <!-- NPC Dialog overlay — pauses game, blocks input -->
+    {#if viewModel.showDialog}
+      <div class="absolute inset-0 z-20 flex items-end justify-center pb-16">
+        <div
+          class="mx-4 w-full max-w-lg rounded-2xl border border-base-300 bg-base-200/95 p-6 shadow-2xl backdrop-blur-xl"
+        >
+          <!-- NPC name -->
+          <h3 class="mb-1 text-sm font-semibold tracking-wide text-accent uppercase">
+            {viewModel.dialogNpcName}
+          </h3>
+
+          <!-- Dialog text -->
+          <p class="mb-4 text-base leading-relaxed text-base-content">
+            {viewModel.dialogText}
+          </p>
+
+          <!-- Dismiss button -->
+          <div class="flex justify-end">
+            <button
+              class="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content transition hover:brightness-110"
+              onclick={() => viewModel.dismissDialog()}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 </BaseViewModelContainer>

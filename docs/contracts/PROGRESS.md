@@ -93,7 +93,25 @@
 | MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
 | MIG-004 | Frontend Configs Alignment | ✅ completed |
+| C-114 | Sandbox Engine Wiring | ✅ completed |
 
+### C-114: Sandbox Engine Wiring
+
+**Files modified**:
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Added missing `ENTITY_CREATED` for test sprite; guarded `SharedArrayBuffer` instanceof; added `self.onerror`/`self.onunhandledrejection` handlers; wrapped `onmessage` in try/catch; added startup sentinel log
+- `packages/frontend/engine/src/game_world.ts` — Guarded `SharedArrayBuffer` instanceof; improved worker error reporting (filename, line, col); made `workerFactory` injectable via constructor options object; added worker URL logging
+- `apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts` — EngineBridge + GameWorld lifecycle with Vite `?worker` import; try/catch with `engineError` `$state`; NPC spawn on GAME_READY
+- `apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view.svelte` — Removed raw PixiJS boilerplate; canvas handoff; status/error overlays
+- `apps/frontend/client/src/lib/views/dev/sandbox/ecs_worker.d.ts` — Type declaration for Vite `?worker&type=module` import
+- `apps/frontend/client/src/env.d.ts` — (no changes retained)
+
+**Deviations**:
+1. Switched worker creation from `new URL(..., import.meta.url)` to Vite `?worker&type=module` import because Vite doesn't resolve `new Worker(new URL(...))` correctly across workspace package boundaries in dev mode
+2. `GameWorld` constructor changed from positional `(bridge, apiService?, aiService?)` to options object `(bridge, options?)` to accept `workerFactory`
+
+**Deviations**: None.
+
+**Known limitations**: The bouncing test sprite (eid 2) has no NPCDialog component, so interaction only works with the explicitly spawned Guide NPC. The view's `onMount` for canvas handoff is minimal (1-line delegation) and conforms to the spirit of the ViewModel pattern.
 
 ---
 
