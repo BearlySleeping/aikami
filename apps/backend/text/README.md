@@ -11,7 +11,7 @@ Local LLM text generation microservice using the official `ollama/ollama` Docker
 ## Where It's Used
 
 - Text generation workflows in the PWA and backend functions
-- Managed by the tmux orchestrator alongside voice, imagem, emulators, and pwa
+- Managed by the tmux orchestrator alongside voice, imagem, emulators, and client
 
 ## Installation
 

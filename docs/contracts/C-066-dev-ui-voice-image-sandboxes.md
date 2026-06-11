@@ -13,8 +13,8 @@
 We are expanding the Developer Console by implementing functional sandboxes for Voice (TTS) and Image (ComfyUI) generation, replacing their placeholder files. These sandboxes will use Tailwind/DaisyUI for a clean interface. Concurrently, we must repair the 6 pre-existing failures in the `dev_layout_view_model.test.ts` test suite to ensure our CI/CD pipeline remains green.
 
 ## Design Reference
-- Review `apps/frontend/pwa/src/lib/views/dev/text/text_view.svelte` (built in C-065) for the DaisyUI layout structure.
-- Review `apps/frontend/pwa/src/lib/client/services/media/audio_queue_player.ts` and `pixi_texture_injector.ts` for how to handle incoming binary media streams.
+- Review `apps/frontend/client/src/lib/views/dev/text/text_view.svelte` (built in C-065) for the DaisyUI layout structure.
+- Review `apps/frontend/client/src/lib/client/services/media/audio_queue_player.ts` and `pixi_texture_injector.ts` for how to handle incoming binary media streams.
 
 ## Architecture Directives
 - **Test Suite Repair**: Resolve the `BaseViewModel` export resolution issue causing `dev_layout_view_model.test.ts` to fail under the Bun test runner.
@@ -54,7 +54,7 @@ For the `VoiceViewModel`:
   - Given the PWA test suite
   - When executing `bun test`
   - Then `dev_layout_view_model.test.ts` passes successfully, and the entire suite returns 0 failures.
-  - Test Hook: Run `bun test apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts`.
+  - Test Hook: Run `bun test apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts`.
 
 - **AC2: Voice Sandbox UI & Logic**
   - Given the `/dev/voice` route

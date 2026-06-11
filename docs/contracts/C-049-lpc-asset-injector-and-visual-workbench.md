@@ -14,15 +14,15 @@
 This contract resolves the missing artwork limitation by embedding a procedural, pixel-accurate canvas asset generator directly into the `TextureManager` local development fallback hooks. It configures authentic image layers for every distinct equipment category (Body variants, Hair cuts, Clothing layers, Weapons) and wires them into the dropdown menus of the `/dev/lpc-component` route, making the interface completely functional with interactive sprites, real-time colors, and looping animations.
 
 ## Design Reference
-- `apps/frontend/pwa/src/routes/(public)/dev/lpc-component/+page.svelte`: Core interactive laboratory framework.
+- `apps/frontend/client/src/routes/(public)/dev/lpc-component/+page.svelte`: Core interactive laboratory framework.
 - `packages/frontend/engine/src/rendering/texture_manager.ts`: Controls runtime texture extraction, cache mappings, and fallback handling.
 - `LPC Asset Conventions and Attribution`: Universal 21-row layout architecture mapping structural sheets to exact vertical coordinates.
 
 ## Changes Detail
 
-### 1. Update `apps/frontend/pwa/src/lib/data/lpc_asset_catalog.ts`
+### 1. Update `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts`
 Expand the structural asset registry to host explicit procedural texture factories:
-- Line 1 File path comment: `// apps/frontend/pwa/src/lib/data/lpc_asset_catalog.ts`.
+- Line 1 File path comment: `// apps/frontend/client/src/lib/data/lpc_asset_catalog.ts`.
 - Declare detailed configuration matrices for each layer category containing real identifier variants:
   * `body`: `male_light`, `male_dark`, `female_elf`, `skeleton`.
   * `hair`: `mohawk`, `long_braid`, `curly_afro`, `short_crop`.
@@ -38,8 +38,8 @@ Implement an automated fallback canvas generator that outputs true indexed textu
   * Render explicit visual features per variant (e.g., long spikes for bows, broad rectangles for armor layers) to make variations highly visible.
 - Export the compiled canvas data directly as a clean base64 data-URL string (`canvas.toDataURL()`) to feed directly into PixiJS's `Texture.from()` pipeline.
 
-### 3. Upgrade `apps/frontend/pwa/src/routes/(public)/dev/lpc-component/+page.svelte`
-- Line 1 File path comment: `// apps/frontend/pwa/src/routes/(public)/dev/lpc-component/+page.svelte`.
+### 3. Upgrade `apps/frontend/client/src/routes/(public)/dev/lpc-component/+page.svelte`
+- Line 1 File path comment: `// apps/frontend/client/src/routes/(public)/dev/lpc-component/+page.svelte`.
 - Refactor drop-down elements to iterate over the new extended `lpcAssetCatalog` collections.
 - Ensure that choosing an equipment variant forces the manager to instantly re-bind the texture source, slice the target 64x64 sub-rectangle, and execute a visible repaint on the canvas layer tree.
 

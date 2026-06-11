@@ -82,7 +82,7 @@ knowledge/
 ## Implementation Notes
 
 1. **Copy from aikami**: Copy `knowledge/contracts/TEMPLATE.md`, `knowledge/.gitignore` directly from aikami
-2. **Adapt CONTEXT.md**: Write fresh for aikami — reference apps/frontend/pwa, packages/shared/*, Firebase, SvelteKit 2
+2. **Adapt CONTEXT.md**: Write fresh for aikami — reference apps/frontend/client, packages/shared/*, Firebase, SvelteKit 2
 3. **Skip lovable/**: Aikami doesn't use Lovable — skip this subdirectory unless needed later
 4. **scripts/ subdir**: Copy `generate_llms_txt.ts` from aikami knowledge/scripts, adapt for aikami paths
 5. **Do NOT copy aikami-specific docs**: Only copy structural templates and meta-docs, not feature-specific content

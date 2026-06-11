@@ -67,10 +67,10 @@ $schema: "https://moonrepo.dev/schemas/project.json"
 language: "typescript"
 layer: "application"
 stack: "frontend" # or 'backend'
-tags: ["pwa", "frontend", "application"]
+tags: ["client", "frontend", "application"]
 
 project:
-    name: "pwa"
+    name: "client"
     description: "Aikami PWA."
     channel: "#frontend"
     owner: "Frontend Team"
@@ -126,7 +126,7 @@ template: "vite-application"
 | `frontend-utils`        | `packages/frontend/utils`        | frontend | library     | typescript-library |
 | `frontend-repositories` | `packages/frontend/repositories` | frontend | library     | typescript-library |
 | `frontend-components`   | `packages/frontend/components`   | frontend | library     | typescript-library |
-| `pwa`                   | `apps/frontend/pwa`              | frontend | application | vite-application   |
+| `client`                   | `apps/frontend/client`              | frontend | application | vite-application   |
 | `landing-page`          | `apps/frontend/landing_page`     | frontend | application | vite-application   |
 | `docs`                  | `apps/frontend/docs`             | frontend | application | vite-application   |
 | `gamejs`                | `apps/frontend/gamejs`           | frontend | application | vite-application   |

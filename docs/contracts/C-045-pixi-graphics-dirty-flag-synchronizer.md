@@ -14,15 +14,15 @@
 This contract resolves the static canvas rendering bug in the fallback pipeline of the `LpcCharacterRenderer` component. It enforces an explicit redrawing mechanic inside PixiJS by wiring runtime reactive props directly to a canvas clearing command loop. This setup forces the browser graphics engine to reinitialize, redraw, and visually repaint the canvas container whenever variant dropdowns, color selectors, directions, or frame counters update.
 
 ## Design Reference
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte`: Manages the local graphics array context variables.
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte`: Manages the local graphics array context variables.
 - `packages/frontend/engine/src/rendering/sprite_composer.ts`: Regulates standard layout coordinate conversions and compilation boundaries.
 - Svelte 5 Reactive Execution Limits: Effects compile on state evaluation passes and bundle multiple asset modifications.
 
 ## Changes Detail
 
-### 1. Modify `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte`
+### 1. Modify `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte`
 Overhaul the internal reactive loops to handle canvas cleaning commands:
-- Line 1 Path comment header: `// apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte`.
+- Line 1 Path comment header: `// apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte`.
 - Locate the main Svelte 5 dynamic updating `$effect` block that watches incoming character variables (`animationState`, `facing`, `frame`, `recipes`, `paletteIndex`).
 - Enforce an explicit clear command loop right before executing any geometric painting instructions:
   ```typescript

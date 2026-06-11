@@ -18,8 +18,8 @@ This contract refactors the recently consolidated `apps/e2e` package to utilize 
 
 # Architecture Directives
 - **Authentication Caching**: Implement an `auth.setup.ts` script executed by a dedicated Playwright setup project. This script must authenticate a test user against the local Firebase emulator once per test run, serialize the session state (cookies/IndexedDB), and save it to an `.auth/` directory. All downstream E2E projects must depend on this setup phase.
-- **Page Object Models (POM)**: Abstract all E2E UI locators and interaction logic out of the `.spec.ts` files into a dedicated `src/pom/` directory. Create logical E2E classes (e.g., `PwaAuthPage`, `GameCanvas`) that expose business-intent methods like `login()` or `verifyRender()`. E2E tests must only assert against these abstracted methods.
-- **Custom E2E Fixtures**: Implement a `src/fixtures.ts` file extending Playwright's base test object. This must automatically instantiate and inject the new E2E POMs (and the pre-authenticated context) into the E2E test blocks, completely eliminating `new PwaAuthPage(page)` boilerplate from the E2E suites.
+- **Page Object Models (POM)**: Abstract all E2E UI locators and interaction logic out of the `.spec.ts` files into a dedicated `src/pom/` directory. Create logical E2E classes (e.g., `ClientAuthPage`, `GameCanvas`) that expose business-intent methods like `login()` or `verifyRender()`. E2E tests must only assert against these abstracted methods.
+- **Custom E2E Fixtures**: Implement a `src/fixtures.ts` file extending Playwright's base test object. This must automatically instantiate and inject the new E2E POMs (and the pre-authenticated context) into the E2E test blocks, completely eliminating `new ClientAuthPage(page)` boilerplate from the E2E suites.
 - **Emulator Interaction Helpers**: Create a `src/emulator_helper.ts` utility to handle administrative interactions with the local backend (e.g., purging Firestore or Auth data via REST API).
 
 # State & Data Models
@@ -28,7 +28,7 @@ The E2E framework will rely on a strictly typed custom fixture payload:
     type E2EFixtures = {
         authUser: import('@playwright/test').Page; // Pre-hydrated E2E session
         guestUser: import('@playwright/test').Page; // Pristine E2E session
-        pwa: PwaPageModels; // E2E POM factory
+        client: ClientPageModels; // E2E POM factory
         game: GamePageModels; // E2E POM factory
     };
 

@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | **Source** | Active memory: Tauri v2 migration, PixiJS v8 + bitECS game engine, pi MCP/skills for AI context |
-| **Target** | `apps/frontend/pwa/` — Tauri initialization; `.pi/mcp.json` + `.pi/skills/` — AI tooling context |
+| **Target** | `apps/frontend/client/` — Tauri initialization; `.pi/mcp.json` + `.pi/skills/` — AI tooling context |
 | **Priority** | P1 — Foundation for desktop exports and game engine integration; enables AI-assisted Tauri/PixiJS development |
 | **Dependencies** | C-012 (knowledge docs must be current before adding new skills) |
 | **Status** | not_started |
@@ -34,7 +34,7 @@ Initialize Tauri v2 within the existing SvelteKit PWA app to enable cross-platfo
 
 ### 1. Tauri v2 Initialization in PWA
 
-Add Tauri v2 scaffolding to `apps/frontend/pwa/`:
+Add Tauri v2 scaffolding to `apps/frontend/client/`:
 - `src-tauri/` directory with `Cargo.toml`, `src/main.rs`, `tauri.conf.json`, `capabilities/`, `icons/`
 - `@tauri-apps/cli` as devDependency, `@tauri-apps/api` as dependency in PWA `package.json`
 - New `package.json` scripts: `"tauri": "tauri"`, `"tauri:dev": "tauri dev"`, `"tauri:build": "tauri build"`
@@ -61,7 +61,7 @@ The contract should evaluate both and implement the most reliable approach. Skil
 
 ### 4. Moon Task Configuration
 
-Update `apps/frontend/pwa/moon.yml`:
+Update `apps/frontend/client/moon.yml`:
 - Add `tauri:dev` task: `command: 'bun'`, `args: ['run', 'tauri:dev']`, `preset: 'server'`
 - Add `tauri:build` task: `command: 'bun'`, `args: ['run', 'tauri:build']`, with appropriate inputs/outputs
 - Add `src-tauri/**/*` to fileGroups for Rust source tracking
@@ -70,17 +70,17 @@ Update `apps/frontend/pwa/moon.yml`:
 ## Acceptance Criteria
 
 ### AC-1: Tauri v2 Scaffolding Created
-**Given** the PWA is a SvelteKit app at `apps/frontend/pwa/`
+**Given** the PWA is a SvelteKit app at `apps/frontend/client/`
 **When** Tauri v2 is initialized
-**Then** `apps/frontend/pwa/src-tauri/` exists with `Cargo.toml`, `src/main.rs`, `tauri.conf.json`, and `capabilities/default.json`
+**Then** `apps/frontend/client/src-tauri/` exists with `Cargo.toml`, `src/main.rs`, `tauri.conf.json`, and `capabilities/default.json`
 
 **Test Hooks**:
-- Unit: `test -f apps/frontend/pwa/src-tauri/Cargo.toml`
-- Unit: `test -f apps/frontend/pwa/src-tauri/tauri.conf.json`
-- Unit: `test -f apps/frontend/pwa/src-tauri/src/main.rs`
+- Unit: `test -f apps/frontend/client/src-tauri/Cargo.toml`
+- Unit: `test -f apps/frontend/client/src-tauri/tauri.conf.json`
+- Unit: `test -f apps/frontend/client/src-tauri/src/main.rs`
 
 **Watch Points**:
-- `src-tauri/` must NOT be inside `apps/frontend/pwa/src/` — it belongs at the app root level
+- `src-tauri/` must NOT be inside `apps/frontend/client/src/` — it belongs at the app root level
 - `tauri.conf.json` must reference the correct dev URL (Vite port 5173)
 
 ### AC-2: Tauri Package Scripts Added
@@ -90,8 +90,8 @@ Update `apps/frontend/pwa/moon.yml`:
 
 **Test Hooks**:
 - Unit: `bun run tauri:dev --help` exits successfully (Tauri CLI responds)
-- Unit: `grep '"tauri:dev"' apps/frontend/pwa/package.json`
-- Unit: `grep '@tauri-apps/cli' apps/frontend/pwa/package.json`
+- Unit: `grep '"tauri:dev"' apps/frontend/client/package.json`
+- Unit: `grep '@tauri-apps/cli' apps/frontend/client/package.json`
 
 **Watch Points**:
 - `@tauri-apps/cli` must be devDependency (build-time), `@tauri-apps/api` must be dependency (runtime)
@@ -103,10 +103,10 @@ Update `apps/frontend/pwa/moon.yml`:
 **Then** `pixi.js` (v8.x) and `bitecs` are in `package.json` dependencies and `node_modules/` contains them
 
 **Test Hooks**:
-- Unit: `grep '"pixi.js"' apps/frontend/pwa/package.json` shows v8 major version
-- Unit: `grep '"bitecs"' apps/frontend/pwa/package.json`
-- Unit: `test -d apps/frontend/pwa/node_modules/pixi.js`
-- Unit: `test -d apps/frontend/pwa/node_modules/bitecs`
+- Unit: `grep '"pixi.js"' apps/frontend/client/package.json` shows v8 major version
+- Unit: `grep '"bitecs"' apps/frontend/client/package.json`
+- Unit: `test -d apps/frontend/client/node_modules/pixi.js`
+- Unit: `test -d apps/frontend/client/node_modules/bitecs`
 
 **Watch Points**:
 - PixiJS v8 uses `pixi.js` (not `@pixi/...` scoped packages for the main entry)
@@ -131,13 +131,13 @@ Update `apps/frontend/pwa/moon.yml`:
 ### AC-5: Moon Tasks for Tauri
 **Given** the PWA moon.yml
 **When** Tauri tasks are added
-**Then** `moon run pwa:tauri-dev` starts Tauri dev mode and `moon run pwa:tauri-build` produces a desktop binary
+**Then** `moon run client:tauri-dev` starts Tauri dev mode and `moon run client:tauri-build` produces a desktop binary
 
 **Test Hooks**:
-- Unit: `grep 'tauri-dev' apps/frontend/pwa/moon.yml`
-- Unit: `grep 'tauri-build' apps/frontend/pwa/moon.yml`
-- Integration: `moon run pwa:tauri-dev` starts without errors (does not need to fully launch window — CLI start is sufficient)
-- Integration: `moon run pwa:tauri-build` compiles the Rust backend successfully
+- Unit: `grep 'tauri-dev' apps/frontend/client/moon.yml`
+- Unit: `grep 'tauri-build' apps/frontend/client/moon.yml`
+- Integration: `moon run client:tauri-dev` starts without errors (does not need to fully launch window — CLI start is sufficient)
+- Integration: `moon run client:tauri-build` compiles the Rust backend successfully
 
 **Watch Points**:
 - `tauri-dev` should be a persistent server task (preset: 'server')
@@ -148,17 +148,17 @@ Update `apps/frontend/pwa/moon.yml`:
 ## Implementation Notes
 
 1. **Files to create**:
-   - `apps/frontend/pwa/src-tauri/Cargo.toml` — Rust project manifest
-   - `apps/frontend/pwa/src-tauri/src/main.rs` — Tauri entry point
-   - `apps/frontend/pwa/src-tauri/tauri.conf.json` — Tauri configuration
-   - `apps/frontend/pwa/src-tauri/capabilities/default.json` — Tauri v2 capability permissions
-   - `apps/frontend/pwa/src-tauri/icons/` — app icons (placeholder or generated)
+   - `apps/frontend/client/src-tauri/Cargo.toml` — Rust project manifest
+   - `apps/frontend/client/src-tauri/src/main.rs` — Tauri entry point
+   - `apps/frontend/client/src-tauri/tauri.conf.json` — Tauri configuration
+   - `apps/frontend/client/src-tauri/capabilities/default.json` — Tauri v2 capability permissions
+   - `apps/frontend/client/src-tauri/icons/` — app icons (placeholder or generated)
    - `.pi/skills/tauri-v2/SKILL.md` — Tauri v2 AI context skill
    - `.pi/skills/pixijs-v8/SKILL.md` — PixiJS v8 AI context skill
 
 2. **Files to modify**:
-   - `apps/frontend/pwa/package.json` — add Tauri, PixiJS, bitECS deps + scripts
-   - `apps/frontend/pwa/moon.yml` — add tauri-dev, tauri-build tasks + fileGroups
+   - `apps/frontend/client/package.json` — add Tauri, PixiJS, bitECS deps + scripts
+   - `apps/frontend/client/moon.yml` — add tauri-dev, tauri-build tasks + fileGroups
    - `.pi/mcp.json` — optionally add Tauri/PixiJS doc MCP servers (if approach chosen)
 
 3. **Files to delete**: None
@@ -175,7 +175,7 @@ Update `apps/frontend/pwa/moon.yml`:
 5. **Verification**:
    - `bun run tauri:dev` opens Tauri window (manual verification)
    - `bun run tauri:build` compiles successfully
-   - `moon run pwa:tauri-dev` works through moon orchestrator
+   - `moon run client:tauri-dev` works through moon orchestrator
    - AI can reference `.pi/skills/tauri-v2/SKILL.md` and `.pi/skills/pixijs-v8/SKILL.md` for accurate API guidance
 
 ## Edge Cases & Gotchas

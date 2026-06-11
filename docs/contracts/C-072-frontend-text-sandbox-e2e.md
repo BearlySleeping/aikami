@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | **Source** | Aikami reference: `knowledge/contracts/TEMPLATE.md` |
-| **Target** | `apps/frontend/pwa` & `apps/e2e` — Client Voice Hooking & End-to-End Diagnostic Harness |
+| **Target** | `apps/frontend/client` & `apps/e2e` — Client Voice Hooking & End-to-End Diagnostic Harness |
 | **Priority** | P1 — Bridge local container layers directly to interactive frontend debug paths |
 | **Dependencies** | C-056, C-067, C-071 |
 | **Status** | completed |
@@ -15,7 +15,7 @@ Connect the client-side media and voice generation modules to use the localized 
 
 ## Design Reference
 
-**Aikami pattern**: `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts`
+**Aikami pattern**: `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts`
 Key structural elements:
 - Environment variable ingestion via central validation contracts.
 - Query parameter injection boundaries inside view controller initializers.
@@ -24,7 +24,7 @@ Key structural elements:
 
 ## Changes Detail
 
-1. Append `PUBLIC_VOICE_URL` to `apps/frontend/pwa/.env.emulator` mapping to `http://localhost:8089` (matching our active voice microservice allocation).
+1. Append `PUBLIC_VOICE_URL` to `apps/frontend/client/.env.emulator` mapping to `http://localhost:8089` (matching our active voice microservice allocation).
 2. Wire environment verification logic inside the PWA voice client handler to pull from the shared environment context safely.
 3. Add a streaming parameter check inside the dev text evaluation page view model: when an explicit search param like `?instant=true&text=hello` is passed, trigger an immediate background pipeline request on mounting.
 4. Draft a custom end-to-end spec suite inside `apps/e2e/tests/` to run through our centralized blackbox runner, testing container validation lifecycles and pipeline text deliveries.

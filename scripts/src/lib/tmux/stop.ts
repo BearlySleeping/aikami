@@ -3,7 +3,7 @@
 // Stop aikami services by killing their tmux windows or the whole session.
 //
 // Usage:
-//   bun tmux:stop pwa              # kill pwa tab only
+//   bun tmux:stop client              # kill client tab only
 //   bun tmux:stop emulator,voice   # kill two tabs
 //   bun tmux:stop all              # kill entire session
 

@@ -10,7 +10,7 @@ Macro & slash command parser for AI dialogue streams.
 
 ## Where It's Used
 
-- `apps/frontend/pwa` — Chat ViewModel intercepts slash commands and processes macros in AI responses
+- `apps/frontend/client` — Chat ViewModel intercepts slash commands and processes macros in AI responses
 - Future: any frontend or backend code that needs to parse `{{macro}}` or `/command` syntax
 
 ## Installation

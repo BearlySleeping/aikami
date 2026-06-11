@@ -8,7 +8,7 @@
 //
 //   Tab layout:
 //     emulators  → bun run emulate
-//     pwa        → bun run dev
+//     client     → bun run dev
 //     voice      → bun run dev
 //     image      → bun run dev
 //
@@ -19,10 +19,10 @@
 //
 // CLI:
 //   bun tmux:start emulator          # emulators tab
-//   bun tmux:start pwa               # add pwa tab
+//   bun tmux:start client            # add client tab
 //   bun tmux:start voice             # add voice tab
 //   bun tmux:start all --join        # all three + attach
-//   bun tmux:stop pwa                # kill pwa tab
+//   bun tmux:stop client             # kill client tab
 //   bun tmux:stop all                # kill entire session
 //   bun tmux:list                    # show sessions + tabs + ports
 
@@ -35,7 +35,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
-export type DevService = 'emulators' | 'pwa' | 'voice' | 'image' | 'text';
+export type DevService = 'emulators' | 'client' | 'voice' | 'image' | 'text';
 
 /** Accepted CLI values (includes singular aliases and 'all'). */
 export type ServiceInput = DevService | 'emulator' | 'all';
@@ -84,11 +84,11 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/firebase'),
     readyPort: EMULATOR_PORTS.auth,
   },
-  pwa: {
-    name: 'pwa',
+  client: {
+    name: 'client',
     command: 'bun run dev',
-    cwd: (root) => resolve(root, 'apps/frontend/pwa'),
-    readyPort: EMULATOR_PORTS.pwa,
+    cwd: (root) => resolve(root, 'apps/frontend/client'),
+    readyPort: EMULATOR_PORTS.client,
   },
   voice: {
     name: 'voice',
@@ -110,14 +110,14 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   },
 };
 
-const ALL_SERVICES: DevService[] = ['emulators', 'pwa', 'voice', 'image', 'text'];
+const ALL_SERVICES: DevService[] = ['emulators', 'client', 'voice', 'image', 'text'];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
   const alias: Record<string, DevService | 'all'> = {
     emulator: 'emulators',
     emulators: 'emulators',
-    pwa: 'pwa',
+    client: 'client',
     voice: 'voice',
     image: 'image',
     text: 'text',
@@ -126,7 +126,7 @@ export const normalizeService = (input: string): DevService | 'all' => {
   const result = alias[input];
   if (!result) {
     throw new Error(
-      `Unknown service: "${input}". Valid: emulator(s), pwa, voice, image, text, all`,
+      `Unknown service: "${input}". Valid: emulator(s), client, voice, image, text, all`,
     );
   }
   return result;
@@ -234,7 +234,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   const sessionName = buildSessionName(mode);
 
   if (services.length === 0) {
-    throw new Error('No services specified. Use: emulator(s), pwa, voice, all');
+    throw new Error('No services specified. Use: emulator(s), client, voice, all');
   }
 
   // ── Mode mismatch guard ──────────────────────────────

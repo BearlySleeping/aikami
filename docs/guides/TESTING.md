@@ -65,10 +65,10 @@ scripts/src/test_blackbox/
 └── suites/
     ├── schema_check.ts        # TypeScript compilation check
     ├── functions.api.ts       # Functions emulator health
-    └── pwa.e2e.ts             # Playwright browser tests
+    └── client.e2e.ts             # Playwright browser tests
 ```
 
-**PWA Playwright Tests** (`apps/frontend/pwa/tests/`):
+**PWA Playwright Tests** (`apps/frontend/client/tests/`):
 - `emulator-login.spec.ts` — auth flow with emulator
 - `basic.spec.ts` — core PWA functionality
 - `chat.spec.ts`, `chat-sending.spec.ts`, `chat-store.spec.ts` — chat features
@@ -80,7 +80,7 @@ scripts/src/test_blackbox/
 ```bash
 bun run test:blackbox                    # All suites
 bun run test:blackbox schema-check       # Just schemas
-bun run test:blackbox pwa                # Just PWA
+bun run test:blackbox client                # Just PWA
 bun run test:blackbox --no-cross-service # Skip cross-service
 ```
 
@@ -97,7 +97,7 @@ CI=true bun run test:blackbox
 | Unit (gamejs) | 5 test files | ⚠️ Deprecated — Legacy GodotJS client |
 | Unit (functions) | 1 test file | ⚠️ Minimal |
 | Unit (PWA) | None | ❌ Missing |
-| Unit (game engine) | None | ❌ Missing — Target: pwa/src/lib/game/ (C-016) |
+| Unit (game engine) | None | ❌ Missing — Target: client/src/lib/game/ (C-016) |
 | Integration (Firestore rules) | Configured | ✅ Active |
 | Blackbox (schema-check) | Working | ✅ Active |
 | Blackbox (functions) | Health probe | ⚠️ Basic |

@@ -28,7 +28,7 @@ bun run validate          # lint + format + typecheck
 ```bash
 bun run test              # Run all tests (unit + E2E via moon)
 bun run test:blackbox     # Full blackbox suite (schema → functions → PWA Playwright)
-bun run test:blackbox pwa # Just PWA tests
+bun run test:blackbox client # Just PWA tests
 bun run test:blackbox --no-emulator  # Skip emulator startup
 ```
 
@@ -65,7 +65,7 @@ Emulator ports:
 
 ### Code Pattern (PWA)
 ```typescript
-// apps/frontend/pwa/src/lib/views/my-feature/my-feature-view-model.svelte.ts
+// apps/frontend/client/src/lib/views/my-feature/my-feature-view-model.svelte.ts
 export interface MyFeatureViewModel { ... }
 export class MyFeatureViewModelImpl implements MyFeatureViewModel { ... }
 ```
@@ -82,10 +82,10 @@ packages/frontend/repositories/src/lib/my-collection.ts     # Client repo
 
 ### Common Aliases
 ```typescript
-$lib          → apps/frontend/pwa/src/lib/
+$lib          → apps/frontend/client/src/lib/
 $logger       → packages/shared/logger/src/
-$services     → apps/frontend/pwa/src/lib/client/services/
-$views        → apps/frontend/pwa/src/lib/views/
+$services     → apps/frontend/client/src/lib/client/services/
+$views        → apps/frontend/client/src/lib/views/
 @aikami/*     → packages/*/src/index.ts
 ```
 
@@ -108,7 +108,7 @@ bun run scripts -- validate_all     # Full CI validation
   // In vite.config.ts — chokidar negation pattern
   server: {
     watch: {
-      ignored: ['**', '!apps/frontend/pwa/src/**', '!packages/**/src/**'],
+      ignored: ['**', '!apps/frontend/client/src/**', '!packages/**/src/**'],
     },
   },
   ```

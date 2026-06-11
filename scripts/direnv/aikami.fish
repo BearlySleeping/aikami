@@ -32,7 +32,7 @@ function md
     set -l proj $argv[1]
     set -l mode $argv[2]
     if test -z "$proj"
-        echo "Usage: md <project> [--mode emulator]  (pwa, docs, landing-page, game, firebase)"
+        echo "Usage: md <project> [--mode emulator]  (client, docs, landing-page, game, firebase)"
         return 1
     end
     switch $proj
@@ -53,7 +53,7 @@ end
 function mt
     set -l proj $argv[1]
     if test -z "$proj"
-        echo "Usage: mt <project>  (pwa, docs, landing-page, gamejs, firebase, schemas, etc.)"
+        echo "Usage: mt <project>  (client, docs, landing-page, gamejs, firebase, schemas, etc.)"
         return 1
     end
     bunx moon run {$proj}:test
@@ -63,7 +63,7 @@ end
 function mb
     set -l proj $argv[1]
     if test -z "$proj"
-        echo "Usage: mb <project>  (pwa, docs, landing-page, gamejs)"
+        echo "Usage: mb <project>  (client, docs, landing-page, gamejs)"
         return 1
     end
     bunx moon run {$proj}:build
@@ -134,7 +134,7 @@ end
 function aikami_tmux_start
     set -l service $argv[1]
     if test -z "$service"
-        echo "Usage: aikami_tmux_start <emulators|pwa|game|all> [--force]"
+        echo "Usage: aikami_tmux_start <emulators|client|game|all> [--force]"
         return 1
     end
     bun run scripts/src/lib/tmux/start.ts $argv
@@ -143,7 +143,7 @@ end
 function aikami_tmux_join
     set -l service $argv[1]
     if test -z "$service"
-        echo "Usage: aikami_tmux_join <emulators|pwa|game|all>"
+        echo "Usage: aikami_tmux_join <emulators|client|game|all>"
         return 1
     end
     bun run scripts/src/lib/tmux/join.ts $argv
@@ -152,7 +152,7 @@ end
 function aikami_tmux_stop
     set -l service $argv[1]
     if test -z "$service"
-        echo "Usage: aikami_tmux_stop <emulators|pwa|game|all>"
+        echo "Usage: aikami_tmux_stop <emulators|client|game|all>"
         echo "       aikami_tmux_stop_all  — stop all sessions"
         return 1
     end
@@ -260,8 +260,8 @@ function aikami_help
     echo "  🎴 Aikami Shell Shortcuts"
     echo ""
     echo "  CORE MOON TASKS"
-    echo "    m <target>       Run any moon task (e.g., m pwa:dev, m firebase:build)"
-    echo "    md <project>     Start dev server (pwa, docs, landing-page, game, firebase)"
+    echo "    m <target>       Run any moon task (e.g., m client:dev, m firebase:build)"
+    echo "    md <project>     Start dev server (client, docs, landing-page, game, firebase)"
     echo "                     md game --mode emulator → game emulator mode"
     echo "    mt <project>     Run tests"
     echo "    mb <project>     Build"
@@ -279,7 +279,7 @@ function aikami_help
     echo "    aikami_graph            Open project dependency graph"
     echo ""
     echo "  TMUX SESSIONS"
-    echo "    aikami_tmux_start <svc> Start tmux session (emulators|pwa|game|all)"
+    echo "    aikami_tmux_start <svc> Start tmux session (emulators|client|game|all)"
     echo "    aikami_tmux_join <svc>  Attach to running tmux session"
     echo "    aikami_tmux_stop <svc>  Stop tmux session"
     echo "    aikami_tmux_stop_all    Stop all aikami tmux sessions"

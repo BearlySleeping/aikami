@@ -41,8 +41,8 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
-  test-pwa:
-    command: 'npx playwright test --project=pwa'
+  test-client:
+    command: 'npx playwright test --project=client'
     inputs:
       - '@group(tests)'
       - '@group(sources)'
@@ -52,7 +52,7 @@ tasks:
       - '@group(tests)'
       - '@group(sources)'
   test-visual:
-    command: 'bunx playwright test --project=pwa-visual'
+    command: 'bunx playwright test --project=client-visual'
     inputs:
       - '@group(tests)'
       - '@group(sources)'

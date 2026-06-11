@@ -4,9 +4,9 @@
 The Quest Log is a highly stateful piece of JRPG UI. It requires tracking multiple quests across different states (Active, Completed, Failed) and granular objectives (e.g., "Defeat 5 slimes"). We are applying the Svelte 5 MVVM Sandbox pattern so we can instantly inject complex quest states via the `DevToolsPanel` and rapidly build the UI without relying on the game engine's ECS or backend.
 
 ## Scope
-- `apps/frontend/pwa/src/lib/views/quest/quest_view_model.svelte.ts` (New)
-- `apps/frontend/pwa/src/lib/views/quest/quest_view.svelte` (New)
-- `apps/frontend/pwa/src/routes/(dev)/dev/quest/+page.svelte` (New sandbox route)
+- `apps/frontend/client/src/lib/views/quest/quest_view_model.svelte.ts` (New)
+- `apps/frontend/client/src/lib/views/quest/quest_view.svelte` (New)
+- `apps/frontend/client/src/routes/(dev)/dev/quest/+page.svelte` (New sandbox route)
 
 ## Acceptance Criteria
 - [ ] **ViewModel Creation:** Create `quest_view_model.svelte.ts` exporting a `QuestViewModel` class. It should use Svelte 5 `$state` to track arrays of quests (e.g., `activeQuests`, `completedQuests`). Define a lightweight mock `Quest` interface in the file if a shared one doesn't exist yet (e.g., `{ id, title, description, status, objectives: { label, current, max }[] }`).
@@ -35,19 +35,19 @@ The Quest Log is a highly stateful piece of JRPG UI. It requires tracking multip
 
 ### Files created
 
-1. `apps/frontend/pwa/src/lib/views/quest/quest_view_model.svelte.ts` — Production QuestViewModel extending BaseViewModel with `$state` activeQuests/completedQuests/failedQuests, `addQuest`, `completeQuest`, `failQuest`, `progressObjective` methods. Exports `Quest`, `QuestObjective`, `QuestStatus` types inline.
-2. `apps/frontend/pwa/src/lib/views/quest/quest_view.svelte` — Dumb view: zero logic, takes `viewModel: QuestViewModelInterface` prop, renders three sections (Active/Completed/Failed) with objective progress bars.
-3. `apps/frontend/pwa/src/lib/views/quest/quest_dev_view_model.svelte.ts` — Dev override extending QuestViewModel. Methods: `injectMockQuests()` (6 quests: 3 active, 2 completed, 1 failed), `progressObjective()` (scans active quests for first incomplete objective), `failRandomQuest()`. All handle empty-state edge cases safely.
-4. `apps/frontend/pwa/src/routes/(dev)/dev/quest/+page.svelte` — Sandbox route instantiating QuestDevViewModel, mounting QuestView + DevToolsPanel with 3 actions: Inject Mock Quests, Progress Objective, Fail Random Quest.
+1. `apps/frontend/client/src/lib/views/quest/quest_view_model.svelte.ts` — Production QuestViewModel extending BaseViewModel with `$state` activeQuests/completedQuests/failedQuests, `addQuest`, `completeQuest`, `failQuest`, `progressObjective` methods. Exports `Quest`, `QuestObjective`, `QuestStatus` types inline.
+2. `apps/frontend/client/src/lib/views/quest/quest_view.svelte` — Dumb view: zero logic, takes `viewModel: QuestViewModelInterface` prop, renders three sections (Active/Completed/Failed) with objective progress bars.
+3. `apps/frontend/client/src/lib/views/quest/quest_dev_view_model.svelte.ts` — Dev override extending QuestViewModel. Methods: `injectMockQuests()` (6 quests: 3 active, 2 completed, 1 failed), `progressObjective()` (scans active quests for first incomplete objective), `failRandomQuest()`. All handle empty-state edge cases safely.
+4. `apps/frontend/client/src/routes/(dev)/dev/quest/+page.svelte` — Sandbox route instantiating QuestDevViewModel, mounting QuestView + DevToolsPanel with 3 actions: Inject Mock Quests, Progress Objective, Fail Random Quest.
 
 ### Files modified
 
-5. `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added Quest nav item (route `/dev/quest`, clipboard-check icon) to `_NAV_ITEMS` (now 11 items).
-6. `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Updated test: 10→11 items, added `/dev/quest` route assertion.
+5. `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added Quest nav item (route `/dev/quest`, clipboard-check icon) to `_NAV_ITEMS` (now 11 items).
+6. `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Updated test: 10→11 items, added `/dev/quest` route assertion.
 
 ### Verification
 
-- `pwa:fix` — passed (3 non-null assertions caught and fixed)
-- `pwa:typecheck` — 0 errors, 0 warnings (svelte-check)
-- `pwa:test` — 258/291 pass; 33 pre-existing failures (AiTextIntelligenceService, ImageGenerationService) unrelated to this contract
+- `client:fix` — passed (3 non-null assertions caught and fixed)
+- `client:typecheck` — 0 errors, 0 warnings (svelte-check)
+- `client:test` — 258/291 pass; 33 pre-existing failures (AiTextIntelligenceService, ImageGenerationService) unrelated to this contract
 - DevViewModel unit tests: 6/6 pass including updated "all 11 dev console links"

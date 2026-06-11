@@ -8,7 +8,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 ### Svelte 5 Reactivity Boundary
 
-- **No `$state` in game code**: PixiJS runs at 60fps via `requestAnimationFrame`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame — catastrophic for performance. The `EngineBridge` pattern (C-016) enforces this separation. All game code lives in `apps/frontend/pwa/src/lib/game/` — a pure imperative TypeScript zone with zero Svelte imports.
+- **No `$state` in game code**: PixiJS runs at 60fps via `requestAnimationFrame`. Any `$state` variable touched in the game loop triggers a full DOM re-render every frame — catastrophic for performance. The `EngineBridge` pattern (C-016) enforces this separation. All game code lives in `apps/frontend/client/src/lib/game/` — a pure imperative TypeScript zone with zero Svelte imports.
 - **No `$derived` / `$effect` across the boundary**: Game state flows into Svelte only through bridge event handlers (`bridge.on('EVENT', handler)`). Svelte's reactivity primitives must never watch game-internal values.
 - **Svelte update threshold**: Svelte 5 runes batch updates, but the PixiJS tick loop runs outside Svelte's scheduler. High-frequency tick data must not mutate `$state` runes directly or the microtask queue overflows (`ERR_SVELTE_TOO_MANY_UPDATES`). Bridge events are emitted at UI-relevant intervals (dialogue triggers, health changes) — not per-frame.
 
@@ -64,7 +64,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| GodotJS Game Client (`apps/frontend/gamejs/`) | ⚠️ Deprecated | Preserved for reference. Migration target: `pwa/src/lib/game/` (PixiJS v8 + bitECS, C-016). Will be archived after C-016 is complete. |
+| GodotJS Game Client (`apps/frontend/gamejs/`) | ⚠️ Deprecated | Preserved for reference. Migration target: `client/src/lib/game/` (PixiJS v8 + bitECS, C-016). Will be archived after C-016 is complete. |
 | Genkit AI Framework | Replaced | Migrated to vendor-agnostic AiServiceInterface (C-015). Direct Genkit imports being refactored. |
 | Firestore NoSQL | Being migrated | Target: Firebase Data Connect (PostgreSQL) per C-014. Existing Firestore repositories remain operational during incremental migration. |
 

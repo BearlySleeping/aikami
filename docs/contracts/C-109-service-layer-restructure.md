@@ -4,7 +4,7 @@
 Since the PWA is strictly a Tauri SPA, the `src/lib/client/` directory is redundant. Furthermore, the `client/services/` folder has become a "junk drawer" organized by technology (`api/`, `database/`, `media/`) rather than by feature. We need to flatten the folder structure and reorganize the services into cohesive, feature-based modules.
 
 ## Scope
-- `apps/frontend/pwa/src/lib/client/*` -> `apps/frontend/pwa/src/lib/*`
+- `apps/frontend/client/src/lib/client/*` -> `apps/frontend/client/src/lib/*`
 
 ## Acceptance Criteria
 - [x] **Flatten Client:** Move the contents of `src/lib/client/game`, `src/lib/client/services`, and `src/lib/client/utils` up one level to `src/lib/game`, `src/lib/services`, and `src/lib/utils`. Delete the empty `client/` folder.
@@ -91,6 +91,6 @@ Updated `services/index.ts`: removed old `api/`, `database/`, `media/` paths; ad
 - Relative `/client/services/`, `/client/game/`, `/client/utils/` → `/services/`, `/game/`, `/utils/`
 
 ### Step 8: Validation
-- `pwa:typecheck` — 0 errors, 0 warnings ✅
-- `pwa:build` — passed ✅
-- `pwa:test` — passed ✅
+- `client:typecheck` — 0 errors, 0 warnings ✅
+- `client:build` — passed ✅
+- `client:test` — passed ✅

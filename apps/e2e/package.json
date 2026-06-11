@@ -5,9 +5,9 @@
   "scripts": {
     "test": "npx playwright test",
     "test:ui": "npx playwright test --ui",
-    "test:pwa": "npx playwright test --project=pwa",
+    "test:client": "npx playwright test --project=client",
     "test:game": "npx playwright test --project=game",
-    "test:visual": "bunx playwright test --project=pwa-visual",
+    "test:visual": "bunx playwright test --project=client-visual",
     "lpc:smoke": "bun run scripts/lpc_smoke.ts",
     "test:ai-services": "npx playwright test --project=ai-services",
     "lint": "biome lint tests",

@@ -10,7 +10,7 @@ This contract bridges the engine's high-performance `LpcBatchManager` mega-UBO s
 
 ## Design Reference
 - `packages/frontend/engine/src/systems/render_system.ts`: `LpcBatchManager` slot architecture.
-- `apps/frontend/pwa/src/lib/components/game/game_canvas.svelte`: Canvas layout node target.
+- `apps/frontend/client/src/lib/components/game/game_canvas.svelte`: Canvas layout node target.
 - `packages/frontend/engine/src/rendering/sprite_composer.ts`: Multi-layer shader context.
 
 ## Changes Detail
@@ -24,7 +24,7 @@ This contract bridges the engine's high-performance `LpcBatchManager` mega-UBO s
 - Introduce explicit pipeline initialization hook that sets up the backend-agnostic context.
 - Ensure that `LpcBatchManager` instances attach structural view dependencies exclusively inside the application target viewport container tree elements.
 
-#### `apps/frontend/pwa/src/lib/components/game/game_canvas.svelte`
+#### `apps/frontend/client/src/lib/components/game/game_canvas.svelte`
 - Bind the engine's initialization loops inside the Svelte 5 `$effect` lifecycle hooks.
 - Stream entity composition parameters safely from active database layers down into active component frames.
 
