@@ -6,7 +6,7 @@ projects:
   scripts: "scripts"
 
   # App IDs
-  pwa: "apps/frontend/pwa"
+  client: "apps/frontend/client"
   landing-page: "apps/frontend/landing_page"
   docs: "apps/frontend/docs"
   e2e: "apps/e2e"
@@ -43,7 +43,7 @@ projects:
   frontend-repositories: "packages/frontend/repositories"
   frontend-configs: "packages/frontend/configs"
 
-defaultProject: "pwa"
+defaultProject: "client"
 
 vcs:
   client: "git"

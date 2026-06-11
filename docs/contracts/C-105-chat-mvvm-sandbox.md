@@ -4,9 +4,9 @@
 We are applying our proven Svelte 5 MVVM and Sandbox architecture to the most complex UI in the game: the NPC Chat System. We need to isolate the chat UI from the heavy AI microservices so we can rapidly develop features like typing indicators, scrolling, and error states using simulated data.
 
 ## Scope
-- `apps/frontend/pwa/src/lib/views/chat/chat_view_model.svelte.ts` (Ensure it is a class)
-- `apps/frontend/pwa/src/lib/views/chat/chat_view.svelte` (Ensure it is dumb/prop-driven)
-- `apps/frontend/pwa/src/routes/(dev)/dev/chat/+page.svelte` (New sandbox route)
+- `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` (Ensure it is a class)
+- `apps/frontend/client/src/lib/views/chat/chat_view.svelte` (Ensure it is dumb/prop-driven)
+- `apps/frontend/client/src/routes/(dev)/dev/chat/+page.svelte` (New sandbox route)
 
 ## Acceptance Criteria
 - [ ] **ViewModel Refactor:** Ensure `chat_view_model.svelte.ts` exports a standard class (`ChatViewModel`) using Svelte 5 `$state` runes. All UI logic (sending messages, tracking typing state) must live here.

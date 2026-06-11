@@ -3,8 +3,8 @@
 ## Metadata
 | Field | Value |
 |-------|-------|
-| Source | `apps/frontend/pwa/src/lib/views/dev/character/` |
-| Target | `apps/frontend/pwa/src/lib/views/dev/character/` |
+| Source | `apps/frontend/client/src/lib/views/dev/character/` |
+| Target | `apps/frontend/client/src/lib/views/dev/character/` |
 | Priority | P2 |
 | Dependencies | C-076, C-077 |
 | Status | not_started |
@@ -15,7 +15,7 @@ This contract builds out the `/dev/character` sandbox into the foundational prod
 
 ## Design Reference
 - **Sandboxes**: Follow the DaisyUI + Tailwind aesthetic established in the Voice, Image, and Text dev sandboxes (C-064, C-065, C-066).
-- **Prompting**: Reference the D&D 2024 DM system prompt created in C-029 (`apps/frontend/pwa/src/lib/client/game/core/ai/prompts/dnd_creation.ts`).
+- **Prompting**: Reference the D&D 2024 DM system prompt created in C-029 (`apps/frontend/client/src/lib/client/game/core/ai/prompts/dnd_creation.ts`).
 - **Data Structure**: Use the `PersonaData` schema from `@aikami/types` and `@aikami/schemas`.
 - **Services**: Leverage `devTextService` for the chat loop, `aiService.createPersona` for the structured extraction, and `imageGenerationService` for the avatar.
 

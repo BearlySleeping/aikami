@@ -13,7 +13,7 @@ import { initCombat, resetTurnTracking } from '../systems/turn_manager_system.ts
 // These tests verify that the CombatViewModel correctly reacts to engine
 // bridge events and maintains reactive state ($state).
 //
-// The CombatViewModel lives in the PWA (apps/frontend/pwa/) and communicates
+// The CombatViewModel lives in the PWA (apps/frontend/client/) and communicates
 // with the game engine exclusively through the EngineBridge — it never
 // imports bitECS or PixiJS directly.
 // ---------------------------------------------------------------------------

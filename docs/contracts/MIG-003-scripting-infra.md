@@ -66,7 +66,7 @@ scripts/src/
       run.ts
       suites/
         functions.api.ts
-        pwa.e2e.ts
+        client.e2e.ts
         schema_check.ts
       test_runner.ts
       types.ts

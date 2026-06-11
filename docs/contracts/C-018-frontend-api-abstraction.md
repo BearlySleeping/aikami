@@ -32,7 +32,7 @@ The backend already has `AiServiceInterface` (`packages/backend/ai/`, C-015) for
 
 ## Design Reference
 
-**Existing abstraction precedent** — backend `AiServiceInterface` (`packages/shared/types/src/lib/pwa/ai-service-interface.ts`):
+**Existing abstraction precedent** — backend `AiServiceInterface` (`packages/shared/types/src/lib/client/ai-service-interface.ts`):
 
 ```typescript
 export interface AiServiceInterface {

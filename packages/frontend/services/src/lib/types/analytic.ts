@@ -3,7 +3,7 @@ export type AllAnalyticsEvents = {
   signUp: { method: string };
   login: { method: string };
   logout: undefined;
-  pwaAction: { action: string };
+  clientAction: { action: string };
 
   invalidUrl: {
     url: string;

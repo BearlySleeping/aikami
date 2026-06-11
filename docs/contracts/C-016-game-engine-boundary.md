@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | **Source** | Active memory: "PixiJS v8 and bitECS for the game engine." PWA uses Svelte 5 View-ViewModel pattern with `$state` runes. C-013 installs PixiJS/bitECS deps; this contract implements the engine boundary |
-| **Target** | `apps/frontend/pwa/src/lib/game/` — EngineBridge, GameWorld, PixiJS canvas; `packages/frontend/services/` — shared game service types |
+| **Target** | `apps/frontend/client/src/lib/game/` — EngineBridge, GameWorld, PixiJS canvas; `packages/frontend/services/` — shared game service types |
 | **Priority** | P1 — Core game engine boundary; enables UI↔Game communication without reactivity thrashing |
 | **Dependencies** | C-013 (PixiJS v8 + bitECS dependencies installed), C-015 (AI service abstraction for NPC dialogue integration) |
 | **Status** | not_started |
@@ -21,7 +21,7 @@ Without a boundary, every frame in PixiJS's 60fps game loop would trigger Svelte
 
 **Existing Svelte 5 ViewModel pattern** (from `ARCHITECTURE.md`):
 ```typescript
-// apps/frontend/pwa/src/lib/views/dashboard/dashboard-view-model.svelte.ts
+// apps/frontend/client/src/lib/views/dashboard/dashboard-view-model.svelte.ts
 class DashboardViewModel extends BaseViewModel<DashboardViewModelOptions> {
   // $state only for UI-relevant data — NO game-loop data here
 }
@@ -63,10 +63,10 @@ class DashboardViewModel extends BaseViewModel<DashboardViewModelOptions> {
 
 ### 1. Game Engine Directory Structure
 
-Create `apps/frontend/pwa/src/lib/game/` as the home for all game engine code. This directory sits alongside existing `views/`, `client/`, and `components/` dirs:
+Create `apps/frontend/client/src/lib/game/` as the home for all game engine code. This directory sits alongside existing `views/`, `client/`, and `components/` dirs:
 
 ```
-apps/frontend/pwa/src/lib/game/
+apps/frontend/client/src/lib/game/
 ├── index.ts                        # Public exports
 ├── engine-bridge.ts                # EngineBridge interface + implementation
 ├── game-world.ts                   # GameWorld: bitECS world + PixiJS app lifecycle
@@ -89,7 +89,7 @@ apps/frontend/pwa/src/lib/game/
 
 ### 2. EngineBridge Interface
 
-**File**: `apps/frontend/pwa/src/lib/game/engine-bridge.ts`
+**File**: `apps/frontend/client/src/lib/game/engine-bridge.ts`
 
 A typed, bidirectional message channel. On the Svelte side, the ViewModel calls `bridge.send(command)`. On the game side, systems call `bridge.emit(event)`. The bridge is the ONLY communication path — no direct imports between UI and game code.
 
@@ -156,7 +156,7 @@ The PixiJS game loop runs via `requestAnimationFrame` at 60fps, completely outsi
 
 ### 4. GameViewModel
 
-**File**: `apps/frontend/pwa/src/lib/views/game/game-view-model.svelte.ts`
+**File**: `apps/frontend/client/src/lib/views/game/game-view-model.svelte.ts`
 
 Follows the existing View-ViewModel pattern. Imports `EngineBridge` but never imports PixiJS or bitECS directly. Uses `$state` only for UI-relevant data flowing FROM the bridge:
 
@@ -193,7 +193,7 @@ class GameViewModel extends BaseViewModel {
 
 ### 5. GameWorld (bitECS + PixiJS Lifecycle)
 
-**File**: `apps/frontend/pwa/src/lib/game/game-world.ts`
+**File**: `apps/frontend/client/src/lib/game/game-world.ts`
 
 Manages the bitECS world, registers systems, and owns the PixiJS `Application` instance. Does NOT import Svelte. Lifecycle:
 
@@ -221,7 +221,7 @@ createGameWorld(canvas: HTMLCanvasElement, bridge: EngineBridge) → GameWorld
 
 ### 6. MVP: Single Sprite on Tauri Load
 
-**File**: `apps/frontend/pwa/src/lib/game/entities/create-test-sprite.ts`
+**File**: `apps/frontend/client/src/lib/game/entities/create-test-sprite.ts`
 
 The simplest possible game entity to prove the stack works:
 
@@ -231,7 +231,7 @@ The simplest possible game entity to prove the stack works:
 4. `MovementSystem` slowly rotates or bounces the sprite to show the game loop is running
 5. Result: when Tauri loads, the user sees a sprite moving on the canvas
 
-**File**: `apps/frontend/pwa/src/lib/views/game/game-view.svelte`
+**File**: `apps/frontend/client/src/lib/views/game/game-view.svelte`
 
 The Svelte view component renders a `<canvas>` element and initializes the game world. Uses `BaseViewModelContainer` pattern:
 
@@ -253,7 +253,7 @@ The ViewModel's `initialize()` grabs the canvas element and passes it to `create
 
 ### 7. Test Suite (TDD)
 
-**File**: `apps/frontend/pwa/src/lib/game/__tests__/engine-bridge.test.ts`
+**File**: `apps/frontend/client/src/lib/game/__tests__/engine-bridge.test.ts`
 
 Tests run in Node/Bun (headless — no browser needed) using a mock bridge implementation:
 
@@ -263,7 +263,7 @@ Tests run in Node/Bun (headless — no browser needed) using a mock bridge imple
 4. **Multiple listeners**: Two handlers on same event type → both receive the event
 5. **Unknown event type**: `bridge.on('NONEXISTENT' as any, ...)` → no crash, type-safe at compile time
 
-**File**: `apps/frontend/pwa/src/lib/game/__tests__/game-world.test.ts`
+**File**: `apps/frontend/client/src/lib/game/__tests__/game-world.test.ts`
 
 Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 
@@ -278,10 +278,10 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 ### AC-1: EngineBridge Interface Defined and Typed
 **Given** the need for UI↔Game communication
 **When** `EngineBridge` is created
-**Then** `apps/frontend/pwa/src/lib/game/engine-bridge.ts` exports a typed `EngineBridge` interface with `send()`, `on()`, `emit()`, and `isReady()` methods
+**Then** `apps/frontend/client/src/lib/game/engine-bridge.ts` exports a typed `EngineBridge` interface with `send()`, `on()`, `emit()`, and `isReady()` methods
 
 **Test Hooks**:
-- Unit: `test -f apps/frontend/pwa/src/lib/game/engine-bridge.ts`
+- Unit: `test -f apps/frontend/client/src/lib/game/engine-bridge.ts`
 - Unit: `EngineBridge` is an `interface` (not `type` — OOP contract)
 - Unit: `GameCommand` and `GameEvent` are discriminated unions (discriminant: `type`)
 - Unit: `bridge.on('NPC_DIALOG_START', ...)` — TypeScript narrows `event` parameter to `{ type: 'NPC_DIALOG_START'; npcId: string; ... }`
@@ -294,14 +294,14 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 ### AC-2: Game Engine Directory Created with Svelte-Free Code
 **Given** the PWA project structure
 **When** the game engine directory is created
-**Then** `apps/frontend/pwa/src/lib/game/` exists with `components/`, `systems/`, `entities/` subdirectories, and zero files in this tree import from `svelte`, `$state`, `$derived`, `$effect`, or `@aikami/frontend/services`
+**Then** `apps/frontend/client/src/lib/game/` exists with `components/`, `systems/`, `entities/` subdirectories, and zero files in this tree import from `svelte`, `$state`, `$derived`, `$effect`, or `@aikami/frontend/services`
 
 **Test Hooks**:
-- Unit: `find apps/frontend/pwa/src/lib/game -name '*.ts' | xargs grep -l "from 'svelte'"` returns empty
-- Unit: `find apps/frontend/pwa/src/lib/game -name '*.ts' | xargs grep -l '\$state\|\$derived\|\$effect'` returns empty
-- Unit: `test -d apps/frontend/pwa/src/lib/game/components`
-- Unit: `test -d apps/frontend/pwa/src/lib/game/systems`
-- Unit: `test -f apps/frontend/pwa/src/lib/game/pixi-app.ts`
+- Unit: `find apps/frontend/client/src/lib/game -name '*.ts' | xargs grep -l "from 'svelte'"` returns empty
+- Unit: `find apps/frontend/client/src/lib/game -name '*.ts' | xargs grep -l '\$state\|\$derived\|\$effect'` returns empty
+- Unit: `test -d apps/frontend/client/src/lib/game/components`
+- Unit: `test -d apps/frontend/client/src/lib/game/systems`
+- Unit: `test -f apps/frontend/client/src/lib/game/pixi-app.ts`
 
 **Watch Points**:
 - The `game/` directory may import from `pixi.js` and `bitecs` — those are OK
@@ -314,7 +314,7 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 **Then** it follows the ViewModel pattern BUT never imports PixiJS, bitECS, or any game-internal types
 
 **Test Hooks**:
-- Unit: `test -f apps/frontend/pwa/src/lib/views/game/game-view-model.svelte.ts`
+- Unit: `test -f apps/frontend/client/src/lib/views/game/game-view-model.svelte.ts`
 - Unit: `GameViewModel` extends `BaseViewModel` and implements a typed interface
 - Unit: File imports `EngineBridge` type only — no `pixi.js`, no `bitecs`, no game systems
 - Unit: All game state exposed via `$state` variables (e.g., `activeDialog`, `isGameReady`, `playerScene`)
@@ -331,8 +331,8 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 **Then** no `$state` variable is updated, no Svelte component re-renders, and no DOM diffing occurs anywhere except the `<canvas>` element (which PixiJS manages imperatively)
 
 **Test Hooks**:
-- Unit: Audit: no `$state` in `apps/frontend/pwa/src/lib/game/` (confirmed by AC-2 grep)
-- Unit: Audit: no `requestAnimationFrame` in `apps/frontend/pwa/src/lib/views/` (confirmed by grep)
+- Unit: Audit: no `$state` in `apps/frontend/client/src/lib/game/` (confirmed by AC-2 grep)
+- Unit: Audit: no `requestAnimationFrame` in `apps/frontend/client/src/lib/views/` (confirmed by grep)
 - Integration: Performance test — while game loop runs at 60fps, Svelte component `onupdate` / `$effect` tracking shows zero re-renders triggered by game loop ticks
 - Integration: Bridge events cause exactly one Svelte update per event, not per frame
 
@@ -347,7 +347,7 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 **Then** a PixiJS canvas displays a textured sprite that moves (bounces, rotates, or drifts)
 
 **Test Hooks**:
-- Unit: `test -f apps/frontend/pwa/src/lib/game/entities/create-test-sprite.ts`
+- Unit: `test -f apps/frontend/client/src/lib/game/entities/create-test-sprite.ts`
 - Unit: The test sprite entity has at least `Position` and `Sprite` bitECS components
 - Unit: `RenderSystem` creates a PixiJS `Sprite` display object for the entity and adds it to the stage
 - Unit: `MovementSystem` modifies the entity's `Position` each tick so the sprite visibly moves
@@ -365,9 +365,9 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 **Then** all bridge message types are tested, entity events propagate correctly, and the engine lifecycle is verified
 
 **Test Hooks**:
-- Unit: `test -f apps/frontend/pwa/src/lib/game/__tests__/engine-bridge.test.ts`
-- Unit: `test -f apps/frontend/pwa/src/lib/game/__tests__/game-world.test.ts`
-- Unit: `bun test apps/frontend/pwa/src/lib/game/` passes (headless bridge tests)
+- Unit: `test -f apps/frontend/client/src/lib/game/__tests__/engine-bridge.test.ts`
+- Unit: `test -f apps/frontend/client/src/lib/game/__tests__/game-world.test.ts`
+- Unit: `bun test apps/frontend/client/src/lib/game/` passes (headless bridge tests)
 - Unit: Bridge test: send command → on handler receives correct event with typed payload
 - Unit: Bridge test: on → unsubscribe → on again → second handler only fires (first is unsubscribed)
 - Unit: Bridge test: emit event with no registered handler → no crash, no error
@@ -395,34 +395,34 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 7. **No game internals in ViewModels** — ViewModels import `EngineBridge` (the interface), never `GameWorld`, `RenderSystem`, `pixi.js`, or `bitecs`.
 
 ### Files to create
-- `apps/frontend/pwa/src/lib/game/index.ts`
-- `apps/frontend/pwa/src/lib/game/engine-bridge.ts` — `EngineBridge` interface + default implementation
-- `apps/frontend/pwa/src/lib/game/game-world.ts` — `GameWorld` lifecycle manager
-- `apps/frontend/pwa/src/lib/game/pixi-app.ts` — PixiJS `Application` wrapper
-- `apps/frontend/pwa/src/lib/game/types.ts` — `GameCommand`, `GameEvent`, bridge internal types
-- `apps/frontend/pwa/src/lib/game/components/position.ts`
-- `apps/frontend/pwa/src/lib/game/components/sprite.ts`
-- `apps/frontend/pwa/src/lib/game/components/velocity.ts`
-- `apps/frontend/pwa/src/lib/game/components/npc-dialog.ts`
-- `apps/frontend/pwa/src/lib/game/systems/movement-system.ts`
-- `apps/frontend/pwa/src/lib/game/systems/render-system.ts`
-- `apps/frontend/pwa/src/lib/game/systems/input-system.ts`
-- `apps/frontend/pwa/src/lib/game/systems/dialog-trigger-system.ts`
-- `apps/frontend/pwa/src/lib/game/entities/create-test-sprite.ts`
-- `apps/frontend/pwa/src/lib/game/entities/create-player.ts`
-- `apps/frontend/pwa/src/lib/game/entities/create-npc.ts`
-- `apps/frontend/pwa/src/lib/game/__tests__/engine-bridge.test.ts`
-- `apps/frontend/pwa/src/lib/game/__tests__/game-world.test.ts`
-- `apps/frontend/pwa/src/lib/game/__tests__/mock-bridge.ts` — test helper
-- `apps/frontend/pwa/src/lib/views/game/game-view-model.svelte.ts`
-- `apps/frontend/pwa/src/lib/views/game/game-view.svelte`
-- `apps/frontend/pwa/src/routes/(authenticated)/game/+page.svelte` — game route
+- `apps/frontend/client/src/lib/game/index.ts`
+- `apps/frontend/client/src/lib/game/engine-bridge.ts` — `EngineBridge` interface + default implementation
+- `apps/frontend/client/src/lib/game/game-world.ts` — `GameWorld` lifecycle manager
+- `apps/frontend/client/src/lib/game/pixi-app.ts` — PixiJS `Application` wrapper
+- `apps/frontend/client/src/lib/game/types.ts` — `GameCommand`, `GameEvent`, bridge internal types
+- `apps/frontend/client/src/lib/game/components/position.ts`
+- `apps/frontend/client/src/lib/game/components/sprite.ts`
+- `apps/frontend/client/src/lib/game/components/velocity.ts`
+- `apps/frontend/client/src/lib/game/components/npc-dialog.ts`
+- `apps/frontend/client/src/lib/game/systems/movement-system.ts`
+- `apps/frontend/client/src/lib/game/systems/render-system.ts`
+- `apps/frontend/client/src/lib/game/systems/input-system.ts`
+- `apps/frontend/client/src/lib/game/systems/dialog-trigger-system.ts`
+- `apps/frontend/client/src/lib/game/entities/create-test-sprite.ts`
+- `apps/frontend/client/src/lib/game/entities/create-player.ts`
+- `apps/frontend/client/src/lib/game/entities/create-npc.ts`
+- `apps/frontend/client/src/lib/game/__tests__/engine-bridge.test.ts`
+- `apps/frontend/client/src/lib/game/__tests__/game-world.test.ts`
+- `apps/frontend/client/src/lib/game/__tests__/mock-bridge.ts` — test helper
+- `apps/frontend/client/src/lib/views/game/game-view-model.svelte.ts`
+- `apps/frontend/client/src/lib/views/game/game-view.svelte`
+- `apps/frontend/client/src/routes/(authenticated)/game/+page.svelte` — game route
 
 ### Files to modify
-- `apps/frontend/pwa/tsconfig.json` — add `$game` path alias pointing to `src/lib/game/`
-- `apps/frontend/pwa/vite.config.ts` — add `$game` alias resolution
-- `apps/frontend/pwa/svelte.config.js` — add `$game` alias (if needed for SSR awareness)
-- `apps/frontend/pwa/package.json` — add test script for game-specific tests (optional, `bun test` finds them automatically)
+- `apps/frontend/client/tsconfig.json` — add `$game` path alias pointing to `src/lib/game/`
+- `apps/frontend/client/vite.config.ts` — add `$game` alias resolution
+- `apps/frontend/client/svelte.config.js` — add `$game` alias (if needed for SSR awareness)
+- `apps/frontend/client/package.json` — add test script for game-specific tests (optional, `bun test` finds them automatically)
 
 ### Files to delete
 - None (existing Godot `apps/frontend/gamejs/` remains untouched — migration is incremental)
@@ -445,7 +445,7 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 15. Verify: devtools profiler shows no Svelte re-renders during game loop ticks
 
 ### Verification
-- `bun test apps/frontend/pwa/src/lib/game/` passes (headless + mocked canvas)
+- `bun test apps/frontend/client/src/lib/game/` passes (headless + mocked canvas)
 - `vite dev` → navigate to `/game` → canvas visible with moving sprite
 - Browser devtools Performance tab: record 5 seconds → no Svelte component re-render markers during game loop
 - Grep confirms zero `$state` imports in `lib/game/` and zero `requestAnimationFrame` in `lib/views/`

@@ -29,7 +29,7 @@ bun run test:blackbox # Full test suite
 
 | Directory                    | Purpose                                 |
 | ---------------------------- | --------------------------------------- |
-| `apps/frontend/pwa`          | Main PWA (SvelteKit 2, Svelte 5 runes)  |
+| `apps/frontend/client`          | Main PWA (SvelteKit 2, Svelte 5 runes)  |
 | `apps/frontend/game`         | PixiJS v8 + bitECS engine               |
 | `apps/frontend/landing_page` | Landing page (Astro)                    |
 | `apps/frontend/docs`         | Documentation site (Astro)              |

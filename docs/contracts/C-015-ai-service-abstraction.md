@@ -126,7 +126,7 @@ packages/backend/ai/
         └── types.ts                 # ChatOptions, CompletionOptions, EmbeddingOptions, etc.
 ```
 
-Shared types (`AIChatMessage`, `ChatResponse`, `ChatContext`, etc.) already exist in `packages/shared/types/src/lib/pwa/endpoint-ai.ts` — extend them there rather than duplicating.
+Shared types (`AIChatMessage`, `ChatResponse`, `ChatContext`, etc.) already exist in `packages/shared/types/src/lib/client/endpoint-ai.ts` — extend them there rather than duplicating.
 
 ## Acceptance Criteria
 
@@ -268,7 +268,7 @@ Shared types (`AIChatMessage`, `ChatResponse`, `ChatContext`, etc.) already exis
 - `packages/shared/mocks/src/lib/mock-ai-service.ts` — `MockAiService`
 
 ### Files to modify
-- `packages/shared/types/src/lib/pwa/endpoint-ai.ts` — extend with `ChatResponse`, `ClassificationResult`, `EmbeddingOptions`, etc.
+- `packages/shared/types/src/lib/client/endpoint-ai.ts` — extend with `ChatResponse`, `ClassificationResult`, `EmbeddingOptions`, etc.
 - `apps/backend/functions/src/controllers/api/prompt_ai.ts` — refactor to use `AiServiceInterface`
 - `apps/backend/functions/src/controllers/callable/generate_image.ts` — wire to abstraction (text-to-image prompt enhancement)
 - `apps/backend/functions/package.json` — add `@aikami/backend-ai` dependency

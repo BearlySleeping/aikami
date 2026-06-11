@@ -17,7 +17,7 @@ export const EMULATOR_PORTS = {
   storage: 9198,
   dataconnect: 9398,
   emulatorHub: 4401,
-  pwa: 5274,
+  client: 5274,
   voice: 8089,
 } as const;
 

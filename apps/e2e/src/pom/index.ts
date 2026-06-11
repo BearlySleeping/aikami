@@ -2,6 +2,6 @@
 // Barrel export for all Page Object Models.
 
 export { GameMenuPage } from './game_menu_page';
-export { PwaAuthPage } from './pwa_auth_page';
-export { PwaChatPage } from './pwa_chat_page';
-export { PwaNavigation } from './pwa_navigation';
+export { ClientAuthPage } from './client_auth_page';
+export { ClientChatPage } from './client_chat_page';
+export { ClientNavigation } from './client_navigation';

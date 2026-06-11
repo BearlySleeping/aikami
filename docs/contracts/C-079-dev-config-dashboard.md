@@ -4,7 +4,7 @@
 | Field                | Value                                                                            |
 | -------------------- | -------------------------------------------------------------------------------- |
 | **Source**           | Aikami reference: `knowledge/contracts/TEMPLATE.md`                              |
-| **Target**           | `apps/frontend/pwa/src/lib/views/dev/config/` — Ultimate Configuration Dashboard |
+| **Target**           | `apps/frontend/client/src/lib/views/dev/config/` — Ultimate Configuration Dashboard |
 | **Priority**         | P2 — Establishes the central hub for all developer and system configurations     |
 | **Dependencies**     | C-078                                                                            |
 | **Status**           | completed                                                                        |
@@ -102,14 +102,14 @@ Key structural elements:
 ## Implementation Notes
 
 1. **Files to create**:
-    - `apps/frontend/pwa/src/lib/views/dev/config/config_view.svelte`
-    - `apps/frontend/pwa/src/lib/views/dev/config/config_view_model.svelte.ts`
-    - `apps/frontend/pwa/src/lib/client/services/config/config_service.svelte.ts`
-    - `apps/frontend/pwa/src/lib/client/services/config/local_service_detector.ts`
-    - `apps/frontend/pwa/src/routes/(dev)/dev/config/+page.svelte`
-    - `apps/frontend/pwa/src/routes/(dev)/dev/config/+page.ts`
+    - `apps/frontend/client/src/lib/views/dev/config/config_view.svelte`
+    - `apps/frontend/client/src/lib/views/dev/config/config_view_model.svelte.ts`
+    - `apps/frontend/client/src/lib/client/services/config/config_service.svelte.ts`
+    - `apps/frontend/client/src/lib/client/services/config/local_service_detector.ts`
+    - `apps/frontend/client/src/routes/(dev)/dev/config/+page.svelte`
+    - `apps/frontend/client/src/routes/(dev)/dev/config/+page.ts`
 2. **Files to modify**:
-    - `apps/frontend/pwa/src/lib/views/dev/dev_view_model.svelte.ts` (Add to navigation)
+    - `apps/frontend/client/src/lib/views/dev/dev_view_model.svelte.ts` (Add to navigation)
 3. **Order of operations**:
     - Define ConfigState interfaces and ConfigService for local/remote sync.
     - Implement LocalServiceDetector.

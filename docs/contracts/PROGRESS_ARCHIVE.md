@@ -23,8 +23,8 @@ Resolved 36 failing E2E tests caused by POM locator mismatches with actual PWA/G
 - `apps/e2e/src/pom/pwa_navigation.ts` — `openDrawer()` uses `data-testid="drawer-toggle"` instead of `getByLabel`. Nav items use `getByRole('button')`.
 - `apps/e2e/src/pom/game_menu_page.ts` — Added `_suppressViteOverlay()` CSS injection. Removed deprecated `waitForSelector` comments.
 - `apps/e2e/src/pom/pwa_chat_page.ts` — Unchanged (hydration wait was fixed in C-054).
-- `apps/frontend/pwa/src/lib/views/app/bar/app_bar.svelte` — Added `data-testid="drawer-toggle"` to drawer toggle label.
-- All 12 `.spec.ts` files in `tests/pwa/` and `tests/game/` — Simplified assertions to match actual app DOM and current app state.
+- `apps/frontend/client/src/lib/views/app/bar/app_bar.svelte` — Added `data-testid="drawer-toggle"` to drawer toggle label.
+- All 12 `.spec.ts` files in `tests/client/` and `tests/game/` — Simplified assertions to match actual app DOM and current app state.
 
 ### Deviations from contract
 - Chat interaction tests simplified to page-load integrity — NPC data requires Firestore seeding which is deferred to a follow-up.
@@ -40,21 +40,21 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 
 ### Architecture
 - **auth.setup.ts**: Playwright setup project that creates a test user via Auth emulator REST API, signs in to get tokens, injects Firebase Auth session into IndexedDB via `page.context().addInitScript`, navigates to PWA to verify, and saves `storageState` to `.auth/user.json`. Downstream PWA tests declare `dependencies: ['setup']` and load `storageState: AUTH_STATE_FILE`.
-- **fixtures.ts**: Custom `test.extend<E2EFixtures>` providing `authUser` (pre-authenticated context with storageState + test-mode HTTP headers), `guestUser` (pristine context, no baseURL override), `pwa` (POM factory: PwaAuthPage, PwaChatPage, PwaNavigation), and `game` (POM factory: GameMenuPage).
-- **src/pom/**: Page Object Models with business-intent methods — `PwaAuthPage` (login, register, form assertions), `PwaChatPage` (chat input, messages, character cards, typing indicators), `PwaNavigation` (drawer, nav items, logout, app bar), `GameMenuPage` (menu, game screen, options panel, quit overlay).
+- **fixtures.ts**: Custom `test.extend<E2EFixtures>` providing `authUser` (pre-authenticated context with storageState + test-mode HTTP headers), `guestUser` (pristine context, no baseURL override), `client` (POM factory: ClientAuthPage, ClientChatPage, ClientNavigation), and `game` (POM factory: GameMenuPage).
+- **src/pom/**: Page Object Models with business-intent methods — `ClientAuthPage` (login, register, form assertions), `ClientChatPage` (chat input, messages, character cards, typing indicators), `ClientNavigation` (drawer, nav items, logout, app bar), `GameMenuPage` (menu, game screen, options panel, quit overlay).
 - **emulator_helper.ts**: Shared purging utilities (`clearFirestoreEmulatorData`, `clearAuthEmulatorData`, `clearAllEmulatorData`) consumed by global_setup.ts and global_teardown.ts.
 - **playwright.config.ts**: Updated with setup project, auth state caching, PWA project depends on setup, Game project standalone, Firebase Admin SDK environment binding.
 
 ### AC Status
 - [x] AC-1: Playwright E2E Setup Dependency — Setup project runs first, creates test user, injects IndexedDB auth state, writes `.auth/user.json`. Downstream PWA projects load pre-authenticated storageState. Verified: setup test passes (1/1).
-- [x] AC-2: Custom E2E Fixtures and POM Injection — All 12 spec files refactored to use custom fixtures (`authUser`/`guestUser`/`pwa`/`game`). Raw `page.locator()` calls replaced with POM methods. Game and PWA tests execute through fixture pipeline.
+- [x] AC-2: Custom E2E Fixtures and POM Injection — All 12 spec files refactored to use custom fixtures (`authUser`/`guestUser`/`client`/`game`). Raw `page.locator()` calls replaced with POM methods. Game and PWA tests execute through fixture pipeline.
 - [x] AC-3: Centralized E2E State Purging — `emulator_helper.ts` provides shared REST API purging. Global setup/teardown call `clearAllEmulatorData()`. Test results show successful Firestore + Auth purge in lifecycle logs.
 
 ### Files created
 - `apps/e2e/src/config.ts` — Hardcoded port constants (Playwright ESM/CJS interop)
 - `apps/e2e/src/auth.setup.ts` — Playwright setup project with IndexedDB auth injection
 - `apps/e2e/src/emulator_helper.ts` — Shared emulator data purging utilities
-- `apps/e2e/src/fixtures.ts` — Custom test.extend with authUser, guestUser, pwa, game
+- `apps/e2e/src/fixtures.ts` — Custom test.extend with authUser, guestUser, client, game
 - `apps/e2e/src/pom/pwa_auth_page.ts` — PWA auth POM (login, register, assertions)
 - `apps/e2e/src/pom/pwa_chat_page.ts` — PWA chat POM (messages, character cards, typing)
 - `apps/e2e/src/pom/pwa_navigation.ts` — PWA navigation POM (drawer, app bar)
@@ -67,7 +67,7 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 - `apps/e2e/src/global_setup.ts` — Refactored to use emulator_helper
 - `apps/e2e/src/global_teardown.ts` — Refactored to use emulator_helper
 - `.gitignore` — Added `.auth/` to ignored paths
-- All 12 `.spec.ts` files in `tests/pwa/` and `tests/game/` — Refactored to use POMs + fixtures
+- All 12 `.spec.ts` files in `tests/client/` and `tests/game/` — Refactored to use POMs + fixtures
 
 ### Deviations from contract
 - Playwright version downgraded from 1.60.0 to 1.59.1 — Nix-managed browsers provide chromium-1217 (Playwright 1.59.1), not chromium-1223 (Playwright 1.60.0). Required for browser launch in Nix environment.
@@ -95,14 +95,14 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 - [x] AC-4: AI Visual Evaluation — Gemini script complete with base64 image encoding, detailed LPC-specific prompt, JSON response parsing, consolidated report output. Typecheck passes. Awaiting Playwright screenshots for end-to-end verification.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/data/lpc_url_config.ts` — LPC URL state serialization (searchParamsToLpcState, lpcStateToSearchParams, createDefaultLpcUrlState)
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component-lite/+layout@.svelte` — Layout reset to strip parent chrome
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component-lite/+page.svelte` — Isolated character renderer with zoom support
-- `apps/frontend/pwa/tests/lpc_visual.spec.ts` — Playwright visual test suite (6 test cases)
+- `apps/frontend/client/src/lib/data/lpc_url_config.ts` — LPC URL state serialization (searchParamsToLpcState, lpcStateToSearchParams, createDefaultLpcUrlState)
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component-lite/+layout@.svelte` — Layout reset to strip parent chrome
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component-lite/+page.svelte` — Isolated character renderer with zoom support
+- `apps/frontend/client/tests/lpc_visual.spec.ts` — Playwright visual test suite (6 test cases)
 - `scripts/src/lib/ops/validate_lpc_visuals.ts` — AI-powered sprite quality grading via Gemini
 
 ### Files modified
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component/+page.svelte` — Added URL sync: `_applyUrlParamsToState`, `_pushStateToUrl`, `$effect` URL watcher, `goto` imports
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component/+page.svelte` — Added URL sync: `_applyUrlParamsToState`, `_pushStateToUrl`, `$effect` URL watcher, `goto` imports
 
 ### Deviations from contract
 - Playwright test execution blocked by environment constraints (ENOSPC on file watchers prevents Vite dev server; chromium-headless-shell not at expected Nix path). Test code is structurally complete and ready to run.
@@ -140,12 +140,12 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 - Asset path mapper: in-memory `_assetExistsCache` Map, module-level constants
 
 ### Files created
-- `apps/frontend/pwa/src/lib/data/lpc_asset_path_mapper.ts` — Asset path resolver, placeholder generator, existence checker
+- `apps/frontend/client/src/lib/data/lpc_asset_path_mapper.ts` — Asset path resolver, placeholder generator, existence checker
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte` — Stripped procedural graphics, added TextureManager grid pipeline, `showSprites` prop, stage container lifecycle
-- `apps/frontend/pwa/src/lib/components/game/lpc_context_keys.ts` — Added `LPC_STAGE_CONTAINER_KEY` for PixiJS Container context
-- `apps/frontend/pwa/src/routes/(public)/dev/lpc-component/+page.svelte` — Extended with animation ticker deck (Play/Pause/FPS/Step), diagnostic overlays (Grid/Isolate), test hooks
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` — Stripped procedural graphics, added TextureManager grid pipeline, `showSprites` prop, stage container lifecycle
+- `apps/frontend/client/src/lib/components/game/lpc_context_keys.ts` — Added `LPC_STAGE_CONTAINER_KEY` for PixiJS Container context
+- `apps/frontend/client/src/routes/(public)/dev/lpc-component/+page.svelte` — Extended with animation ticker deck (Play/Pause/FPS/Step), diagnostic overlays (Grid/Isolate), test hooks
 
 ### Deviations from contract
 - Texture-based sprite rendering uses placeholder textures (magenta blocks with slot names) when spritesheet files are missing — the `static/assets/spritesheets/` directory contains no actual spritesheet files yet. This fulfills the contract's defensive requirement to "automatically generate a high-visibility 64×64 placeholder block containing the slot name".
@@ -183,7 +183,7 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 - Crosshair grid: reference-only constants, drawn once per effect run
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte` — Added fallback canvas rendering: import `getLpcStateRow`, 4 new props (`showFallback`, `paletteIndex`, `fallbackWidth`, `fallbackHeight`), canvas ref, 4 new functions (`_getPaletteColor`, `_drawCrosshairGrid`, `drawLayerShape`, fallback `$effect`), canvas template element
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` — Added fallback canvas rendering: import `getLpcStateRow`, 4 new props (`showFallback`, `paletteIndex`, `fallbackWidth`, `fallbackHeight`), canvas ref, 4 new functions (`_getPaletteColor`, `_drawCrosshairGrid`, `drawLayerShape`, fallback `$effect`), canvas template element
 
 ### Deviations from contract
 - `drawLayerShape` uses native Canvas2D API (`CanvasRenderingContext2D`) instead of PixiJS `Graphics` — ensures fallback works without PixiJS initialization. PixiJS Graphics would require an Application context unavailable in the component scope.
@@ -214,10 +214,10 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 - Asset catalog: module-level `as const` arrays — zero runtime allocation
 
 ### Files created
-- `apps/frontend/pwa/src/lib/data/lpc_asset_catalog.ts` — LPC slot catalog (6 slot groups, 60+ variants), default palette, buildPaletteBuffer utility
+- `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts` — LPC slot catalog (6 slot groups, 60+ variants), default palette, buildPaletteBuffer utility
 
 ### Files modified
-- `apps/frontend/pwa/src/routes/(public)/dev/lpc-component/+page.svelte` — Complete rewrite: 3-column debugger, Graphics-based layer compositing, palette editor, animation controls, telemetry, defensive fallback
+- `apps/frontend/client/src/routes/(public)/dev/lpc-component/+page.svelte` — Complete rewrite: 3-column debugger, Graphics-based layer compositing, palette editor, animation controls, telemetry, defensive fallback
 - `packages/frontend/engine/src/systems/render_system.ts` — Added `checkAppearanceChange()` tri-state detection, `recipePaletteFingerprint()`, `uboPaletteSnapshots` Map; updated `writeEntityUbo()` for palette-only repack path; updated `registerEntity()` and `deregisterEntity()` for dual snapshot lifecycle
 
 ### Deviations from contract
@@ -249,9 +249,9 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 - Context resolution: O(1) Symbol-based lookup via Svelte's context map
 
 ### Files created
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte` — Reusable Svelte 5 LPC character UBO management component
-- `apps/frontend/pwa/src/lib/components/game/lpc_context_keys.ts` — Shared Svelte context key for LpcBatchManager injection
-- `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-component/+page.svelte` — Verification route with full lifecycle controls and telemetry
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` — Reusable Svelte 5 LPC character UBO management component
+- `apps/frontend/client/src/lib/components/game/lpc_context_keys.ts` — Shared Svelte context key for LpcBatchManager injection
+- `apps/frontend/client/src/routes/(authenticated)/dev/lpc-component/+page.svelte` — Verification route with full lifecycle controls and telemetry
 
 ### Files modified
 - (none — engine barrel already complete from C-034/C-036/C-039)
@@ -464,12 +464,12 @@ Not yet started — `sprite_composer.ts` has the foundational SpriteComposer cla
 - [x] AC-4: UI highlights spoken words — `message_bubble.svelte` + `chat_message.svelte` with per-word spans and `text-primary-500` class.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/services/media/audio_context_manager.ts` — Singleton AudioContext with autoplay policy unlock
+- `apps/frontend/client/src/lib/client/services/media/audio_context_manager.ts` — Singleton AudioContext with autoplay policy unlock
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/client/services/media/tts.svelte.ts` — Full refactor: added `$state` runes, `enqueueChunk()`, `startStream()`, `endStream()`, rAF word tracking
-- `apps/frontend/pwa/src/lib/components/chat/message_bubble.svelte` — Per-word TTS highlighting with `text-primary-500`
-- `apps/frontend/pwa/src/lib/components/chat/chat_message.svelte` — Per-word TTS highlighting with `text-primary-500`
+- `apps/frontend/client/src/lib/client/services/media/tts.svelte.ts` — Full refactor: added `$state` runes, `enqueueChunk()`, `startStream()`, `endStream()`, rAF word tracking
+- `apps/frontend/client/src/lib/components/chat/message_bubble.svelte` — Per-word TTS highlighting with `text-primary-500`
+- `apps/frontend/client/src/lib/components/chat/chat_message.svelte` — Per-word TTS highlighting with `text-primary-500`
 
 ---
 
@@ -527,7 +527,7 @@ Not yet started — `sprite_composer.ts` has the foundational SpriteComposer cla
 - architecture.md: Full rewrite — removed Godot/Genkit/Firestore as current, added PixiJS v8 + bitECS engine boundary diagram, Data Connect PostgreSQL, Valibot, TanStack DB + PowerSync, AiServiceInterface, BaseDatabaseService. Added migration status table.
 - limitations.md: Added 3 new sections — Svelte 5 Reactivity Boundary, Bridge Serialization Constraints, Deprecated Components table. Moved GodotJS to deprecated.
 - STACK.md: Replaced technology table with 19-row comprehensive table. Added architecture layer diagram, migration notes section. Godot/Genkit only in "Replaced by" context.
-- STRUCTURE.md: Marked apps/frontend/gamejs/ as ⚠️ DEPRECATED with migration target. Added pwa/src/lib/game/ tree. Listed planned packages (valibot-schemas, tanstack-db). Added path aliases table.
+- STRUCTURE.md: Marked apps/frontend/gamejs/ as ⚠️ DEPRECATED with migration target. Added client/src/lib/game/ tree. Listed planned packages (valibot-schemas, tanstack-db). Added path aliases table.
 - CODING_STANDARDS.md: Appended "Strict AI Coding Rules" section with 4 sub-sections, each with ✅/❌ code examples: type>interface, arrow const>function, explicit braces, early escapes.
 - index.md: Updated project description with new stack. Zero Godot/Genkit references.
 - CONTEXT.md: Updated tech stack table and one-liner, project tree with deprecated marker and new engine path, engine boundary section, strict AI coding rules summary.
@@ -637,7 +637,7 @@ Updated all knowledge files with current project state after full audit:
 - Emulator manager: auto-starts firestack emulate, kills stale processes, port probes
 - Dev server manager: starts PWA dev server, port polling, graceful shutdown
 - Reporter: terminal summary + JSON report output to test-results/
-- 3 suite files: schema-check (typecheck), functions (API health), pwa (Playwright E2E)
+- 3 suite files: schema-check (typecheck), functions (API health), client (Playwright E2E)
 - CLI flags: --no-emulator, --no-cross-service, --help, suite name filtering
 - Root package.json: `"test:blackbox": "bun run scripts/src/test_blackbox/run.ts"`
 - Scripts index: aliases test_blackbox, test_bb, bb
@@ -654,7 +654,7 @@ Updated all knowledge files with current project state after full audit:
 - scripts/src/test_blackbox/run.ts
 - scripts/src/test_blackbox/suites/schema_check.ts
 - scripts/src/test_blackbox/suites/functions.api.ts
-- scripts/src/test_blackbox/suites/pwa.e2e.ts
+- scripts/src/test_blackbox/suites/client.e2e.ts
 
 ### Files modified
 - package.json — added test:blackbox command
@@ -695,7 +695,7 @@ Updated all knowledge files with current project state after full audit:
 - Created .moon/task-templates/ — typescript-library, vite-application, firebase-functions
   - All use "bun run <name>" to delegate to package.json scripts
 - Created .moon/hooks/ — post-merge (moon sync), post-checkout (moon sync), pre-commit (fix + typecheck --affected)
-- Enhanced workspace.yml — added defaultProject:pwa, vcs (hooks config), pipeline (cache, sync), hasher (VCS walk), experiments (async)
+- Enhanced workspace.yml — added defaultProject:client, vcs (hooks config), pipeline (cache, sync), hasher (VCS walk), experiments (async)
 - template: field removed (not supported in moon 2.2.3)
 
 ### C-009: Standardize moon.yml
@@ -788,7 +788,7 @@ Updated all knowledge files with current project state after full audit:
 - Removed packages/backend/ai (AI vendor integration package) + all references
 - Cleaned up: svelte.config.js, tsconfig.test.json, functions/tsconfig.json, tsconfig.backend.json, tsconfig.frontend.json, tsconfig.svelte-kit.json, tsconfig.paths.shared.json
 - gamejs/logger.ts: updated relative imports
-- Removed PWA AI endpoint (apps/frontend/pwa/src/routes/api/ai/+server.ts)
+- Removed PWA AI endpoint (apps/frontend/client/src/routes/api/ai/+server.ts)
 - Cleared .moon/cache/states/backend-ai
 - moon sync passes: 20 projects synced successfully
 
@@ -798,15 +798,15 @@ Updated all knowledge files with current project state after full audit:
 - package.json — workspaces updated
 - tsconfig.options.json — @aikami/* path updated
 - config/tsconfig/*.json — 4 files, paths updated
-- apps/frontend/pwa/svelte.config.js — paths + ai refs removed
-- apps/frontend/pwa/tsconfig.test.json — paths + ai refs removed
+- apps/frontend/client/svelte.config.js — paths + ai refs removed
+- apps/frontend/client/tsconfig.test.json — paths + ai refs removed
 - apps/backend/functions/tsconfig.json — paths + ai refs removed
 - apps/frontend/gamejs/tsconfig.json — paths updated
 - apps/frontend/gamejs/src/utils/logger.ts — relative imports updated
 
 ### Files deleted
 - packages/backend/ai/ — entire directory removed
-- apps/frontend/pwa/src/routes/api/ai/+server.ts — removed
+- apps/frontend/client/src/routes/api/ai/+server.ts — removed
 
 ---
 
@@ -939,16 +939,16 @@ Updated all knowledge files with current project state after full audit:
 - `packages/frontend/engine/src/rendering/index.ts` — Exported `initLpcShaders`
 - `packages/frontend/engine/src/pixi_app.ts` — Added pipeline init hook calling `initLpcShaders()` after `app.init()`
 - `packages/frontend/engine/src/index.ts` — Exported `initLpcShaders` from public API
-- `apps/frontend/pwa/src/lib/components/game/game_canvas.svelte` — `onMount` → `$effect`, removed unused imports
+- `apps/frontend/client/src/lib/components/game/game_canvas.svelte` — `onMount` → `$effect`, removed unused imports
 
 ### Pre-existing failures fixed during C-035 validation
 - `packages/frontend/repositories/src/lib/base_frontend_repository.ts:555` — Added `biome-ignore` for `Timestamp` Firebase naming convention
-- `apps/frontend/pwa/tsconfig.json` — Excluded `src/**/*.test.ts` from svelte-check (bun:test types unavailable in SvelteKit tsconfig)
-- `apps/frontend/pwa/src/lib/client/services/dice/dice_service.test.ts` — `DiceService` → `DiceServiceInterface` type import fix
-- `apps/frontend/pwa/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — Declared missing `_authUid` private property
-- `apps/frontend/pwa/src/lib/views/npc/list/npc_list_view_model.svelte.ts` — `NpcChatData` → `ChatData` import fix
-- `apps/frontend/pwa/src/lib/client/services/database/chat.svelte.ts` — `stats: Record<string, unknown>` → `stats?: Record<string, unknown>` (optional, matches schema)
-- `apps/frontend/pwa/src/lib/client/services/database/npc.svelte.ts` — Fixed chat deletion to query by npcId+uid then delete by chatId; chatRepository type error resolved
+- `apps/frontend/client/tsconfig.json` — Excluded `src/**/*.test.ts` from svelte-check (bun:test types unavailable in SvelteKit tsconfig)
+- `apps/frontend/client/src/lib/client/services/dice/dice_service.test.ts` — `DiceService` → `DiceServiceInterface` type import fix
+- `apps/frontend/client/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — Declared missing `_authUid` private property
+- `apps/frontend/client/src/lib/views/npc/list/npc_list_view_model.svelte.ts` — `NpcChatData` → `ChatData` import fix
+- `apps/frontend/client/src/lib/client/services/database/chat.svelte.ts` — `stats: Record<string, unknown>` → `stats?: Record<string, unknown>` (optional, matches schema)
+- `apps/frontend/client/src/lib/client/services/database/npc.svelte.ts` — Fixed chat deletion to query by npcId+uid then delete by chatId; chatRepository type error resolved
 - `packages/frontend/repositories/src/lib/npc.ts` — Changed `never` to `typeof NpcCreateSchema`/`typeof NpcUpdateSchema`, wired actual schemas
 
 ---
@@ -1019,8 +1019,8 @@ Updated all knowledge files with current project state after full audit:
 - `packages/frontend/engine/src/systems/turn_manager_system.ts` — Turn-based combat sequencing system
 - `packages/frontend/engine/src/__tests__/turn_manager.test.ts` — 17 ECS-level unit tests
 - `packages/frontend/engine/src/__tests__/combat_sync.test.ts` — 10 ViewModel behavior tests (AC-1, AC-2, AC-3)
-- `apps/frontend/pwa/src/lib/views/combat/combat_view_model.svelte.ts` — Svelte 5 Combat ViewModel
-- `apps/frontend/pwa/src/lib/views/combat/combat_view.svelte` — Combat UI view template
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Svelte 5 Combat ViewModel
+- `apps/frontend/client/src/lib/views/combat/combat_view.svelte` — Combat UI view template
 
 ### Files modified
 - `packages/frontend/engine/src/types.ts` — Added TURN_CHANGED, COMBAT_STARTED, COMBAT_ENDED to GameEvent union
@@ -1050,7 +1050,7 @@ Updated all knowledge files with current project state after full audit:
 ### Files modified
 - `packages/frontend/engine/src/rendering/sprite_composer.ts` — Added `initLpcShaders()` gate
 - `packages/frontend/engine/src/pixi_app.ts` — Added pipeline init hook
-- `apps/frontend/pwa/src/lib/components/game/game_canvas.svelte` — `onMount` → `$effect`
+- `apps/frontend/client/src/lib/components/game/game_canvas.svelte` — `onMount` → `$effect`
 
 ---
 
@@ -1106,10 +1106,10 @@ Updated all knowledge files with current project state after full audit:
 - [x] AC-3: Multi-Layer Palette Channel Shifting — Palette color pickers + swatch strips retained from C-048. Color changes flow through `$derived.by` recipe derivation → hexPalette Uint8Array rebuild. Texture compositing uses grayscale base with palette tinting via UBO pipeline.
 
 ### Files Modified
-- `apps/frontend/pwa/src/lib/data/lpc_asset_catalog.ts` — Added `LpcMockShapeType`, `shapeType` field, restructured all variant names/labels
-- `apps/frontend/pwa/src/lib/data/lpc_asset_path_mapper.ts` — Added `generateMockLpcSheet`, `generateMockLpcSheetDataUrl`, `createMockSheetTexture`, LPC grid constants, 5 drawing engines + color utilities, `LPC_MOCK_LAYOUT`
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component/+page.svelte` — Replaced Graphics rendering with Sprite + TextureManager compositing, added 3-layer cache, `__lpc_workbench_active_layers` hook
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte` — Updated fallback chain: file → mock sheet → placeholder
+- `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts` — Added `LpcMockShapeType`, `shapeType` field, restructured all variant names/labels
+- `apps/frontend/client/src/lib/data/lpc_asset_path_mapper.ts` — Added `generateMockLpcSheet`, `generateMockLpcSheetDataUrl`, `createMockSheetTexture`, LPC grid constants, 5 drawing engines + color utilities, `LPC_MOCK_LAYOUT`
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component/+page.svelte` — Replaced Graphics rendering with Sprite + TextureManager compositing, added 3-layer cache, `__lpc_workbench_active_layers` hook
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` — Updated fallback chain: file → mock sheet → placeholder
 
 ---
 
@@ -1145,10 +1145,10 @@ Updated all knowledge files with current project state after full audit:
 - [x] AC-4: Passing AI Validation — Visual rendering pipeline validated through `validate({ test: true })` — all 4 tasks (fix + typecheck + build + test) pass. Playwright visual test screenshots blocked by Nix browser version mismatch (infrastructure, not code). Manual browser verification confirms correct rendering.
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/data/lpc_asset_catalog.ts` — Added `LPC_LAYER_Z_INDEX`, `LPC_SLOT_PALETTE_INDEX`, `hexToPixiTint()`
-- `apps/frontend/pwa/src/lib/components/game/lpc_character_renderer.svelte` — Added zIndex + tint to sprite creation, `sortableChildren = true`, new imports
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component/+page.svelte` — Added zoom state + slider UI, zIndex + tint in visual composition, zoom scaling
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component-lite/+page.svelte` — Added zIndex + tint to sprites, `sortableChildren = true`, removed unused import
+- `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts` — Added `LPC_LAYER_Z_INDEX`, `LPC_SLOT_PALETTE_INDEX`, `hexToPixiTint()`
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` — Added zIndex + tint to sprite creation, `sortableChildren = true`, new imports
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component/+page.svelte` — Added zoom state + slider UI, zIndex + tint in visual composition, zoom scaling
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component-lite/+page.svelte` — Added zIndex + tint to sprites, `sortableChildren = true`, removed unused import
 
 ### Deviations from contract
 - Contract spec lists additional slots (eyes, hands, headwear, shield, effects) not present in current asset catalog. Z-index map includes only the 7 slots currently defined in `ALL_LPC_SLOTS` — contract values for absent slots are omitted (no runtime overhead for unused keys). Can extend when those asset types are added.
@@ -1163,31 +1163,31 @@ Updated all knowledge files with current project state after full audit:
 ## C-052 — Unified Blackbox & Docker Runner — ✅ completed
 
 ### Findings
-- Scaffolded `apps/e2e` as a standalone package with its own `package.json`, `moon.yml`, `tsconfig.json`, and a unified `playwright.config.ts` with distinct projects (`pwa`, `game`, `ai-services`). Migrated all 10 PWA test specs and 2 Game test specs from `apps/frontend/pwa/tests/` and `apps/frontend/game/tests/` into `apps/e2e/tests/pwa/` and `apps/e2e/tests/game/`.
+- Scaffolded `apps/e2e` as a standalone package with its own `package.json`, `moon.yml`, `tsconfig.json`, and a unified `playwright.config.ts` with distinct projects (`client`, `game`, `ai-services`). Migrated all 10 PWA test specs and 2 Game test specs from `apps/frontend/client/tests/` and `apps/frontend/game/tests/` into `apps/e2e/tests/client/` and `apps/e2e/tests/game/`.
 - Removed Playwright devDependencies and test configs from PWA and Game packages. Updated moon.yml tasks to run only unit tests (e2e tests now run exclusively from `apps/e2e`).
 - Implemented `global_setup.ts` and `global_teardown.ts` hitting Firebase Emulator REST APIs (`DELETE /emulator/v1/projects/{id}/databases/(default)/documents` and `DELETE /emulator/v1/projects/{id}/accounts`) to guarantee zero state bleed between suites.
 - Built `DockerManager` in `scripts/src/lib/test_blackbox/docker_manager.ts` with full lifecycle: `build` (docker build), `run` (docker run with `--add-host=host.docker.internal:host-gateway`), `poll` (HTTP health check polling), `kill` (docker stop/rm). Injects `FIREBASE_AUTH_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, and other emulator env vars into containers via `host.docker.internal` for cross-platform network bridging.
 - Updated `run.ts` to orchestrate `DockerManager` alongside `TmuxManager`. Added `--with-docker` flag. Docker services start before emulators, teardown runs in reverse order.
-- Updated `pwa.e2e.ts` and `game_e2e.ts` suite runners to invoke Playwright from the unified `apps/e2e` package using `npx playwright test --project=pwa` / `--project=game`.
+- Updated `client.e2e.ts` and `game_e2e.ts` suite runners to invoke Playwright from the unified `apps/e2e` package using `npx playwright test --project=client` / `--project=game`.
 - Verified DockerManager end-to-end: built nginx:alpine container, mapped port 9999, health-checked via HTTP, cleanly stopped. Full cycle: build → run → poll → kill.
 - Fixed pre-existing workspace dependency bug: `@aikami/frontend/configs` → `@aikami/frontend-configs` in `packages/frontend/engine/package.json`.
 - Registered `e2e` project in `.moon/workspace.yml` and root `package.json` workspaces array.
-- All affected projects (e2e, game, pwa, scripts, frontend-engine) pass fix + typecheck.
+- All affected projects (e2e, game, client, scripts, frontend-engine) pass fix + typecheck.
 
 ### AC Status
-- [x] AC-1: E2E Package Consolidation — `apps/e2e` serves as sole entry point with unified `playwright.config.ts` containing three projects (`pwa`, `game`, `ai-services`). All 12 test specs migrated. PWA + Game no longer contain Playwright configs or e2e tests.
+- [x] AC-1: E2E Package Consolidation — `apps/e2e` serves as sole entry point with unified `playwright.config.ts` containing three projects (`client`, `game`, `ai-services`). All 12 test specs migrated. PWA + Game no longer contain Playwright configs or e2e tests.
 - [x] AC-2: DockerManager Implementation — `DockerManager` class built with `startService`, `startServices`, `stopService`, `stopAllServices`, `isDockerAvailable`. Verified: nginx container built, run, health-polled, and cleanly torn down.
 - [x] AC-3: Emulator Network Bridging — `--add-host=host.docker.internal:host-gateway` injected into `docker run`. `_buildEmulatorEnv()` sets `FIREBASE_AUTH_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, `FIREBASE_FUNCTIONS_EMULATOR_HOST`, `FIREBASE_STORAGE_EMULATOR_HOST` to `host.docker.internal:{port}`.
 - [x] AC-4: Deterministic Database Purging — `global_setup.ts` and `global_teardown.ts` call Firebase Emulator REST DELETE endpoints for Firestore and Auth. Wired into `playwright.config.ts` via `globalSetup` and `globalTeardown` properties.
 
 ### Files created
 - `apps/e2e/package.json` — Package manifest with @playwright/test, @aikami/constants, @aikami/types deps
-- `apps/e2e/moon.yml` — Moon project config with test, test-pwa, test-game tasks
+- `apps/e2e/moon.yml` — Moon project config with test, test-client, test-game tasks
 - `apps/e2e/tsconfig.json` — TypeScript config extending config/tsconfig/tsconfig.base.json
-- `apps/e2e/playwright.config.ts` — Unified Playwright config with pwa/game/ai-services projects
+- `apps/e2e/playwright.config.ts` — Unified Playwright config with client/game/ai-services projects
 - `apps/e2e/src/global_setup.ts` — Pre-test emulator purge (Firestore + Auth)
 - `apps/e2e/src/global_teardown.ts` — Post-test emulator purge (Firestore + Auth)
-- `apps/e2e/tests/pwa/*.spec.ts` — 10 migrated PWA Playwright test specs
+- `apps/e2e/tests/client/*.spec.ts` — 10 migrated PWA Playwright test specs
 - `apps/e2e/tests/game/*.spec.ts` — 2 migrated Game Playwright test specs
 - `apps/e2e/tests/utils/auth.ts` — Test auth helpers (migrated)
 - `apps/e2e/tests/utils/playwright_auth.ts` — Test auth Playwright helpers (migrated)
@@ -1197,12 +1197,12 @@ Updated all knowledge files with current project state after full audit:
 ### Files modified
 - `.moon/workspace.yml` — Added `e2e: "apps/e2e"` project entry
 - `package.json` — Added `"apps/e2e"` to workspaces array
-- `apps/frontend/pwa/package.json` — Removed @playwright/test + playwright devDeps, removed test/test:ui scripts
-- `apps/frontend/pwa/moon.yml` — Removed playwright tag, tests fileGroup, e2e test tasks
+- `apps/frontend/client/package.json` — Removed @playwright/test + playwright devDeps, removed test/test:ui scripts
+- `apps/frontend/client/moon.yml` — Removed playwright tag, tests fileGroup, e2e test tasks
 - `apps/frontend/game/package.json` — Removed @playwright/test + playwright devDeps, removed test/test:ui scripts
 - `apps/frontend/game/moon.yml` — Removed playwright tag, tests fileGroup, e2e test tasks
 - `scripts/src/lib/test_blackbox/run.ts` — Added DockerManager import, DOCKER_SERVICES config, --with-docker flag, docker startup/teardown, PROJECT_ROOT constant
-- `scripts/src/lib/test_blackbox/suites/pwa.e2e.ts` — Updated to run Playwright from apps/e2e (npx playwright test --project=pwa)
+- `scripts/src/lib/test_blackbox/suites/client.e2e.ts` — Updated to run Playwright from apps/e2e (npx playwright test --project=client)
 - `scripts/src/lib/test_blackbox/suites/game_e2e.ts` — Updated to run Playwright from apps/e2e (npx playwright test --project=game)
 - `packages/frontend/engine/package.json` — Fixed workspace dep: @aikami/frontend/configs → @aikami/frontend-configs
 - `apps/e2e/tests/game/firebase_integration.spec.ts` — Added biome-ignore for Authorization HTTP header naming
@@ -1244,13 +1244,13 @@ Built the foundational Text Generation Gateway for NPC orchestration. Integrated
 - `packages/backend/ai/tests/ollama_adapter.test.ts` — 17 tests (AC-2)
 - `packages/backend/ai/tests/openrouter_adapter.test.ts` — 16 tests
 - `packages/backend/ai/tests/text_generation_router.test.ts` — 7 tests (AC-1)
-- `apps/frontend/pwa/src/routes/api/text/+server.ts` — SvelteKit SSE endpoint (AC-3)
+- `apps/frontend/client/src/routes/api/text/+server.ts` — SvelteKit SSE endpoint (AC-3)
 
 ### Files modified
 - `packages/backend/ai/src/index.ts` — Barrel exports for new modules
-- `apps/frontend/pwa/svelte.config.js` — Added `@aikami/backend/ai` alias (removed after build fix)
-- `apps/frontend/pwa/vite.config.ts` — Added SSR externalization config (rolled back for static adapter compatibility)
-- `apps/frontend/pwa/.env.emulator` — Added `PUBLIC_TEXT_GEN_PROVIDER`, `PUBLIC_OLLAMA_BASE_URL`
+- `apps/frontend/client/svelte.config.js` — Added `@aikami/backend/ai` alias (removed after build fix)
+- `apps/frontend/client/vite.config.ts` — Added SSR externalization config (rolled back for static adapter compatibility)
+- `apps/frontend/client/.env.emulator` — Added `PUBLIC_TEXT_GEN_PROVIDER`, `PUBLIC_OLLAMA_BASE_URL`
 
 ### Deviations from contract
 - **Static adapter limitation**: The PWA uses `@sveltejs/adapter-static` for production builds. A `+server.ts` API endpoint cannot function in a fully static deployment (no server process). The endpoint is operational in dev mode (Vite dev server). Production deployment of the SSE endpoint requires `adapter-node`, Cloud Run, or a separate Cloud Function.
@@ -1424,7 +1424,7 @@ Built the client-side orchestration layer that consumes three AI generation stre
 
 ### Architecture
 ```
-apps/frontend/pwa/src/lib/client/services/media/
+apps/frontend/client/src/lib/client/services/media/
 ├── stream_orchestrator.svelte.ts    # Master controller + Dialogue State Store
 ├── audio_queue_player.ts            # Sequential Web Audio chunk scheduler
 ├── pixi_texture_injector.ts         # Binary buffer → PixiJS Texture injection
@@ -1440,18 +1440,18 @@ apps/frontend/pwa/src/lib/client/services/media/
 - [x] **AC-4: PixiJS Dynamic Texture Injection** — `PixiTextureInjector` converts binary image buffers (ArrayBuffer → Blob → createImageBitmap → PixiJS Texture) and applies them to a target Sprite/Mesh. The old texture is **explicitly destroyed** via `texture.destroy(true)` before assignment to prevent WebGPU VRAM leaks. `Texture.WHITE` (global singleton) is never destroyed. `onViewUpdate()` is called after swap for PixiJS v8 UV recalculation. ImageBitmap is closed after GPU upload to free CPU-side pixel data. 11/11 tests pass.
 
 ### Files Created
-- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Master controller with unified AbortController, $state-based Dialogue State Store, network connection interfaces
-- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.test.ts` — 10 tests (AC1: 7, AC2: 3)
-- `apps/frontend/pwa/src/lib/client/services/media/audio_queue_player.ts` — Sequential Web Audio chunk scheduler with gapless playback
-- `apps/frontend/pwa/src/lib/client/services/media/audio_queue_player.test.ts` — 10 tests (AC3)
-- `apps/frontend/pwa/src/lib/client/services/media/pixi_texture_injector.ts` — Binary image buffer → PixiJS Texture injector with old-texture destruction
-- `apps/frontend/pwa/src/lib/client/services/media/pixi_texture_injector.test.ts` — 11 tests (AC4)
+- `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Master controller with unified AbortController, $state-based Dialogue State Store, network connection interfaces
+- `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.test.ts` — 10 tests (AC1: 7, AC2: 3)
+- `apps/frontend/client/src/lib/client/services/media/audio_queue_player.ts` — Sequential Web Audio chunk scheduler with gapless playback
+- `apps/frontend/client/src/lib/client/services/media/audio_queue_player.test.ts` — 10 tests (AC3)
+- `apps/frontend/client/src/lib/client/services/media/pixi_texture_injector.ts` — Binary image buffer → PixiJS Texture injector with old-texture destruction
+- `apps/frontend/client/src/lib/client/services/media/pixi_texture_injector.test.ts` — 11 tests (AC4)
 
 ### Files Modified
-- `apps/frontend/pwa/src/lib/client/services/index.ts` — Added exports for all new media services (audio_context_manager, audio_queue_player, pixi_texture_injector, stream_orchestrator)
+- `apps/frontend/client/src/lib/client/services/index.ts` — Added exports for all new media services (audio_context_manager, audio_queue_player, pixi_texture_injector, stream_orchestrator)
 
 ### Deviations from Contract
-- Stream Orchestrator placed in `apps/frontend/pwa/src/lib/client/services/media/` instead of `apps/frontend/game/src/lib/core/` — the orchestrator manages services (TTS, image generation) that live in the PWA services layer, and the game package has no `@aikami/frontend/services` import chain.
+- Stream Orchestrator placed in `apps/frontend/client/src/lib/client/services/media/` instead of `apps/frontend/game/src/lib/core/` — the orchestrator manages services (TTS, image generation) that live in the PWA services layer, and the game package has no `@aikami/frontend/services` import chain.
 - `$state` runes not usable in bun test environment (no Svelte compiler) — replaced with regular class properties in the source file. The `.svelte.ts` extension is retained for SvelteKit reactivity when consumed in the actual PWA.
 - `requestAnimationFrame` not available in bun test — implemented runtime fallback to `setTimeout(fn, 16)` when `rAF` is not on `globalThis`.
 - Stream Orchestrator extends `BaseClass` from `@aikami/utils` instead of `BaseFrontendClass` — avoids the broken `$state` import chain through `dialog.svelte.ts` in `packages/frontend/services/`. The orchestrator doesn't need analytics/dialog UI features.
@@ -1482,7 +1482,7 @@ Connected the Client-Side Stream Sync orchestration layer (C-059) to the game's 
 - `apps/frontend/game/src/lib/ui/dialogue_controller_streaming.test.ts` — 5 tests (AC3: generateDialogue call, streaming mode enter, cancel on end, progressive text polling, teardown)
 
 ### Files Modified
-- `apps/frontend/pwa/src/lib/client/services/game/game_state_service.test.ts` — Added `$state`/`$derived` polyfills, `mock.module('@aikami/frontend/services')`, switched to dynamic import pattern
+- `apps/frontend/client/src/lib/client/services/game/game_state_service.test.ts` — Added `$state`/`$derived` polyfills, `mock.module('@aikami/frontend/services')`, switched to dynamic import pattern
 - `apps/frontend/game/src/lib/ui/dialogue_controller.ts` — Added optional `DialogueGeneratorInterface` support, streaming mode with progressive text polling, Skip button, `_startStreamingGeneration`, `_finalizeStreamingMessage`, `isStreaming` getter
 
 ### Architecture
@@ -1517,34 +1517,34 @@ InteractionBridge.handleInteractEnd()
 ### Test Results
 - **Unit**: 23/23 pass (4 test files: 8 game_state + 5 interaction_bridge + 5 dialogue_controller_streaming + 5 target_resolver)
 - **Biome**: 0 errors, 0 warnings (pre-existing `tests/` directory not found is unrelated)
-- **Validate**: 4/4 tasks pass (fix, typecheck on game + pwa + firebase, test on all affected projects)
+- **Validate**: 4/4 tasks pass (fix, typecheck on game + client + firebase, test on all affected projects)
 
 ---
 
 ## C-061 — Frontend App Consolidation — ✅ completed
 
 ### Summary
-Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit PWA. All game source code now lives at `apps/frontend/pwa/src/lib/client/game/`. Created dedicated SvelteKit routes for `/game` and `/dev/sandbox` with proper `ssr = false` enforcement and PixiJS lifecycle hooks (`onMount`/`onDestroy`). Removed the game project from the moon workspace and cleaned up all infrastructure references.
+Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit PWA. All game source code now lives at `apps/frontend/client/src/lib/client/game/`. Created dedicated SvelteKit routes for `/game` and `/dev/sandbox` with proper `ssr = false` enforcement and PixiJS lifecycle hooks (`onMount`/`onDestroy`). Removed the game project from the moon workspace and cleaned up all infrastructure references.
 
 ### AC Status
-- [x] **AC-1: Code Relocation & Import Fixing** — 26 source files moved from `apps/frontend/game/src/lib/` to `apps/frontend/pwa/src/lib/client/game/`. All `$lib/...` imports updated to `$lib/client/game/...`. File path comments updated. `svelte-check` passes with 0 errors.
+- [x] **AC-1: Code Relocation & Import Fixing** — 26 source files moved from `apps/frontend/game/src/lib/` to `apps/frontend/client/src/lib/client/game/`. All `$lib/...` imports updated to `$lib/client/game/...`. File path comments updated. `svelte-check` passes with 0 errors.
 - [x] **AC-2: SvelteKit SSR Enforcement** — `+page.ts` files created for both `(authenticated)/game/` and `(dev)/dev/sandbox/` with `export const ssr = false; export const prerender = false;`. Game engine only instantiates on the client.
 - [x] **AC-3: PixiJS Lifecycle Hooking** — `(authenticated)/game/+page.svelte` uses `onMount(() => { viewModel.initialize(); return () => viewModel.dispose(); })` and `onDestroy(() => viewModel.dispose())` for failsafe WebGL cleanup. `(dev)/dev/sandbox/+page.svelte` uses `onMount()` to init PixiJS app and `onDestroy()` to call `app.destroy(true, { children: true })`. BaseViewModelContainer already handles `initialize()` → `dispose()` lifecycle via onMount return.
 - [x] **AC-4: Workspace Deprecation** — `apps/frontend/game/` directory deleted. Removed from `.moon/workspace.yml`. Cleaned up references in `biome.json`, `deployment_config.ts`, `dev_server_manager.ts`, `tmux/session.ts`, `tmux-orchestrator.ts`, `generate_context.ts`, `constants/project.ts`, `schemas/project.ts`, and `environment.ts`.
 
 ### Files Created
-- `apps/frontend/pwa/src/routes/(authenticated)/game/+page.ts` — SSR disabled, prerender disabled
-- `apps/frontend/pwa/src/routes/(authenticated)/game/+page.svelte` — Game route with onMount/onDestroy lifecycle
-- `apps/frontend/pwa/src/routes/(dev)/dev/sandbox/+page.ts` — SSR disabled, prerender disabled
-- `apps/frontend/pwa/src/routes/(dev)/dev/sandbox/+page.svelte` — PixiJS sandbox with test pattern and FPS counter
+- `apps/frontend/client/src/routes/(authenticated)/game/+page.ts` — SSR disabled, prerender disabled
+- `apps/frontend/client/src/routes/(authenticated)/game/+page.svelte` — Game route with onMount/onDestroy lifecycle
+- `apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.ts` — SSR disabled, prerender disabled
+- `apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.svelte` — PixiJS sandbox with test pattern and FPS counter
 
 ### Files Migrated
-- 26 source files from `apps/frontend/game/src/lib/` → `apps/frontend/pwa/src/lib/client/game/`
+- 26 source files from `apps/frontend/game/src/lib/` → `apps/frontend/client/src/lib/client/game/`
 - 3 test files (`interaction_bridge.test.ts`, `target_resolver.test.ts`, `dialogue_controller_streaming.test.ts`) migrated and passing under PWA test runner
 
 ### Files Deleted
 - `apps/frontend/game/` directory (entire project)
-- `apps/frontend/pwa/src/routes/(authenticated)/game/+page@.svelte` (replaced with regular `+page.svelte`)
+- `apps/frontend/client/src/routes/(authenticated)/game/+page@.svelte` (replaced with regular `+page.svelte`)
 
 ### Files Modified
 - `.moon/workspace.yml` — removed `game` project entry
@@ -1563,7 +1563,7 @@ Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit PWA
 - **Build**: SvelteKit build succeeds (SSR + client)
 - **Unit**: 58/58 pass (8 test files including 3 migrated game tests: 15 game tests all pass)
 - **Biome**: fix passes cleanly
-- **Moon**: workspace graph valid, `moon project pwa` resolves correctly
+- **Moon**: workspace graph valid, `moon project client` resolves correctly
 
 ---
 
@@ -1590,13 +1590,13 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
   - `TextStreamConnection.start()` updated to accept `messages` in its options (AC4)
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/services/media/context_builder.ts` — Sliding window context builder utility
-- `apps/frontend/pwa/src/lib/client/services/media/context_builder.test.ts` — 9 unit tests for sliding window logic
-- `apps/frontend/pwa/src/lib/client/services/media/conversation_repository.svelte.ts` — Repository adapter interface
+- `apps/frontend/client/src/lib/client/services/media/context_builder.ts` — Sliding window context builder utility
+- `apps/frontend/client/src/lib/client/services/media/context_builder.test.ts` — 9 unit tests for sliding window logic
+- `apps/frontend/client/src/lib/client/services/media/conversation_repository.svelte.ts` — Repository adapter interface
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Added repository adapter, memory hook (AC2), abort exclusion (AC3), messages array in TextStreamConnection.start (AC4)
-- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.test.ts` — Added 11 new tests (4 AC2, 4 AC3, 3 AC4), updated mock helpers for new start() signature
+- `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Added repository adapter, memory hook (AC2), abort exclusion (AC3), messages array in TextStreamConnection.start (AC4)
+- `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.test.ts` — Added 11 new tests (4 AC2, 4 AC3, 3 AC4), updated mock helpers for new start() signature
 
 ### Deviations from contract
 - Conversation Repository Adapter defined as an interface (not a concrete Firestore repository). The contract said to "add to packages/frontend/repositories" — the interface lives in PWA services because it's a client-side orchestration contract. The concrete Firestore implementation (reading/writing the Chat document's embedded `messages` array) will be wired when the interaction system is connected to the PWA's DI container.
@@ -1606,8 +1606,8 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 ### Test Results
 - **Unit (context_builder)**: 9/9 pass
 - **Unit (orchestrator)**: 21/21 pass (10 original + 11 new C-062)
-- **Validate (pwa)**: fix → typecheck → build → test — 4/4 pass
-- **Typecheck (pwa)**: 0 errors, 0 warnings (svelte-check)
+- **Validate (client)**: fix → typecheck → build → test — 4/4 pass
+- **Typecheck (client)**: 0 errors, 0 warnings (svelte-check)
 
 ## C-063 — Hybrid Expression Extraction & Caching — ✅ completed
 
@@ -1624,15 +1624,15 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 
 ### Files Created
 
-- `apps/frontend/pwa/src/lib/client/services/media/expression_asset_resolver.ts` — ExpressionAssetResolver class (AC3)
-- `apps/frontend/pwa/src/lib/client/services/media/expression_asset_resolver.test.ts` — 12 tests (AC3)
-- `apps/frontend/pwa/src/lib/client/utils/ai_prompt.test.ts` — 9 tests (AC2)
+- `apps/frontend/client/src/lib/client/services/media/expression_asset_resolver.ts` — ExpressionAssetResolver class (AC3)
+- `apps/frontend/client/src/lib/client/services/media/expression_asset_resolver.test.ts` — 12 tests (AC3)
+- `apps/frontend/client/src/lib/client/utils/ai_prompt.test.ts` — 9 tests (AC2)
 
 ### Files Modified
 
-- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Tag buffer (AC1), hybrid trigger pipeline (AC3, AC4), expression generator & resolver wiring
-- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.test.ts` — +19 AC1 tests, +10 AC3/AC4 tests (51 total)
-- `apps/frontend/pwa/src/lib/client/utils/ai_prompt.ts` — `buildEmotionTagInstruction` + injection into `createAIContext` (AC2)
+- `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` — Tag buffer (AC1), hybrid trigger pipeline (AC3, AC4), expression generator & resolver wiring
+- `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.test.ts` — +19 AC1 tests, +10 AC3/AC4 tests (51 total)
+- `apps/frontend/client/src/lib/client/utils/ai_prompt.ts` — `buildEmotionTagInstruction` + injection into `createAIContext` (AC2)
 
 ### AC Status
 
@@ -1653,8 +1653,8 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - **Unit (expression_asset_resolver)**: 12/12 pass
 - **Unit (ai_prompt)**: 9/9 pass
 - **Total**: 72/72 pass across 3 test files
-- **Validate (pwa)**: fix → typecheck → build → test — 4/4 pass
-- **Typecheck (pwa)**: 0 errors, 0 warnings (svelte-check)
+- **Validate (client)**: fix → typecheck → build → test — 4/4 pass
+- **Typecheck (client)**: 0 errors, 0 warnings (svelte-check)
 
 ---
 
@@ -1665,26 +1665,26 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 
 ### Files Created
 
-- `apps/frontend/pwa/src/lib/views/dev/dev_view_model.svelte.ts` — DevViewModel with drawer state, nav items, and active route tracking
-- `apps/frontend/pwa/src/lib/views/dev/dev_view.svelte` — DevView with DaisyUI drawer layout (drawer-side + drawer-content)
-- `apps/frontend/pwa/src/routes/(dev)/+layout.svelte` — (dev) group layout wrapping children in DevView
-- `apps/frontend/pwa/src/routes/(dev)/dev/text/+page.svelte` — Text generation test endpoint
-- `apps/frontend/pwa/src/routes/(dev)/dev/voice/+page.svelte` — Voice generation test endpoint
-- `apps/frontend/pwa/src/routes/(dev)/dev/image/+page.svelte` — Image generation test endpoint
-- `apps/frontend/pwa/src/routes/(dev)/dev/character/+page.svelte` — Character creation test endpoint
+- `apps/frontend/client/src/lib/views/dev/dev_view_model.svelte.ts` — DevViewModel with drawer state, nav items, and active route tracking
+- `apps/frontend/client/src/lib/views/dev/dev_view.svelte` — DevView with DaisyUI drawer layout (drawer-side + drawer-content)
+- `apps/frontend/client/src/routes/(dev)/+layout.svelte` — (dev) group layout wrapping children in DevView
+- `apps/frontend/client/src/routes/(dev)/dev/text/+page.svelte` — Text generation test endpoint
+- `apps/frontend/client/src/routes/(dev)/dev/voice/+page.svelte` — Voice generation test endpoint
+- `apps/frontend/client/src/routes/(dev)/dev/image/+page.svelte` — Image generation test endpoint
+- `apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte` — Character creation test endpoint
 
 ### Files Deleted
 
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/` — Entire legacy lpc route directory (component, component-lite, demo)
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/` — Entire legacy lpc route directory (component, component-lite, demo)
 
 ### Files Verified (Already Compliant)
 
-- `apps/frontend/pwa/src/routes/+layout.svelte` — Already renders only `{@render children()}` — no changes needed
-- `apps/frontend/pwa/src/routes/(authenticated)/+layout.svelte` — Already initializes `getAppViewModel` and wraps in `<AppView>` — no changes needed
+- `apps/frontend/client/src/routes/+layout.svelte` — Already renders only `{@render children()}` — no changes needed
+- `apps/frontend/client/src/routes/(authenticated)/+layout.svelte` — Already initializes `getAppViewModel` and wraps in `<AppView>` — no changes needed
 
 ### Unit Tests
 
-- `apps/frontend/pwa/src/lib/views/dev/dev_view_model.test.ts` — 6 tests covering instantiation, navItems structure, activeRoute tracking, drawer toggle (6/6 pass)
+- `apps/frontend/client/src/lib/views/dev/dev_view_model.test.ts` — 6 tests covering instantiation, navItems structure, activeRoute tracking, drawer toggle (6/6 pass)
 
 ### AC Status
 
@@ -1728,7 +1728,7 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - Status banner uses `@const` + conditional class string (Svelte 5 `class:` directive doesn't support Tailwind opacity syntax like `bg-info/10`)
 
 **Text ViewModel Implementation (AC2, AC3):**
-- File: `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts`
+- File: `apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts`
 - State: `prompt` ($state), `output` ($state), `isGenerating` ($state)
 - `generate()`: POSTs to `/api/text` with `x-test-mode: true`, reads SSE response stream via `ReadableStream` reader, parses `data: {...}` lines, accumulates `text` fields into `output`
 - `cancel()`: aborts `AbortController`, resets `isGenerating`
@@ -1737,7 +1737,7 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - Follows conventions: arrow functions (standalone), private `_` prefix, JSDoc, debug logging
 
 **Text View UI (AC4):**
-- File: `apps/frontend/pwa/src/lib/views/dev/text/text_view.svelte`
+- File: `apps/frontend/client/src/lib/views/dev/text/text_view.svelte`
 - DaisyUI card layout with form-control, textarea, primary Generate button, ghost Cancel button
 - `<pre>` output terminal with `overflow-y-auto max-h-96`, monospace font, word wrap
 - Auto-scroll to bottom via `$effect` on `viewModel.output`
@@ -1748,9 +1748,9 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 
 ### Files Modified
 
-- `apps/frontend/pwa/src/lib/views/dev/lpc/lpc_view.svelte` — Full Tailwind/DaisyUI refactor (style block removed)
-- `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts` — Full SSE streaming implementation
-- `apps/frontend/pwa/src/lib/views/dev/text/text_view.svelte` — Full DaisyUI sandbox UI
+- `apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte` — Full Tailwind/DaisyUI refactor (style block removed)
+- `apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts` — Full SSE streaming implementation
+- `apps/frontend/client/src/lib/views/dev/text/text_view.svelte` — Full DaisyUI sandbox UI
 - `docs/contracts/PROGRESS.md` — Status entry for C-065
 
 ### AC Status
@@ -1774,23 +1774,23 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 ### Changes Made
 
 **Test Suite Repair (AC1):**
-- Created `apps/frontend/pwa/src/lib/test_preload.ts` — shared preload for Bun test runner
+- Created `apps/frontend/client/src/lib/test_preload.ts` — shared preload for Bun test runner
   - Polyfills Svelte 5 runes (`$state`, `$derived`, `$effect`) globally so `.svelte.ts` files parse without the Svelte compiler
   - Provides a consistent `mock.module('@aikami/frontend/services', ...)` with both `BaseFrontendClass` and `BaseViewModel`, resolving the first-writer-wins mock conflict across different test files
   - Sets required Vite env vars (`PUBLIC_APP_ID`, `PUBLIC_MODE`, Firebase keys) for `@aikami/frontend/configs/environment.ts` validation
-- Updated `apps/frontend/pwa/package.json` test script to include `--preload ./src/lib/test_preload.ts`
+- Updated `apps/frontend/client/package.json` test script to include `--preload ./src/lib/test_preload.ts`
 - Removed redundant inline `$state`/`$derived` polyfills and `mock.module` calls from:
-  - `apps/frontend/pwa/src/lib/client/services/dice/dice_service.test.ts`
-  - `apps/frontend/pwa/src/lib/client/services/game/game_state_service.test.ts`
-  - `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts`
+  - `apps/frontend/client/src/lib/client/services/dice/dice_service.test.ts`
+  - `apps/frontend/client/src/lib/client/services/game/game_state_service.test.ts`
+  - `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts`
 - Added `src/lib/test_preload.ts` to tsconfig.json exclude list for svelte-check
 
 **Voice Sandbox (AC2):**
-- Service: `apps/frontend/pwa/src/lib/client/services/dev/dev_voice_service.svelte.ts`
+- Service: `apps/frontend/client/src/lib/client/services/dev/dev_voice_service.svelte.ts`
   - Extends `BaseFrontendClass`, singleton `devVoiceService` exported from `$services`
   - Owns all fetch, AudioContext, audio chunk decoding, gapless playback, and `AbortController` logic
   - Reactive state via `$state`: `text`, `isPlaying`, `queueSize`
-- ViewModel: `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts`
+- ViewModel: `apps/frontend/client/src/lib/views/dev/voice/voice_view_model.svelte.ts`
   - Thin bridge — owns only `text` `$state` (bound to textarea), proxies `isPlaying`/`queueSize` via native getters
   - `generateAndPlay()` calls `devVoiceService.setText()` then `devVoiceService.generateAndPlay()`
   - `cancel()` delegates to `devVoiceService.cancel()`
@@ -1798,11 +1798,11 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - Ctrl+Enter keyboard shortcut
 
 **Image Sandbox (AC3):**
-- Service: `apps/frontend/pwa/src/lib/client/services/dev/dev_image_service.svelte.ts`
+- Service: `apps/frontend/client/src/lib/client/services/dev/dev_image_service.svelte.ts`
   - Extends `BaseFrontendClass`, singleton `devImageService` exported from `$services`
   - Owns all fetch, blob → Object URL, `URL.revokeObjectURL()` memory management, and `AbortController` logic
   - Reactive state via `$state`: `prompt`, `imageUrl`, `isGenerating`
-- ViewModel: `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts`
+- ViewModel: `apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts`
   - Thin bridge — owns only `prompt` `$state` (bound to textarea), proxies `imageUrl`/`isGenerating` via native getters
   - `generate()` calls `devImageService.setPrompt()` then `devImageService.generate()`
   - `cancel()` delegates to `devImageService.cancel()`
@@ -1816,19 +1816,19 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 
 ### Files Modified
 
-- `apps/frontend/pwa/src/lib/test_preload.ts` — New shared preload for Bun test runner
-- `apps/frontend/pwa/package.json` — Added `--preload` to test script
-- `apps/frontend/pwa/tsconfig.json` — Excluded test_preload.ts from svelte-check
-- `apps/frontend/pwa/src/lib/client/services/dice/dice_service.test.ts` — Removed redundant polyfills/mocks
-- `apps/frontend/pwa/src/lib/client/services/game/game_state_service.test.ts` — Removed redundant polyfills/mocks
-- `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Removed redundant polyfills and `@aikami/frontend/services` mock
-- `apps/frontend/pwa/src/lib/client/services/dev/dev_voice_service.svelte.ts` — New DevVoiceService (fetch, AudioContext, chunk decoding, abort)
-- `apps/frontend/pwa/src/lib/client/services/dev/dev_image_service.svelte.ts` — New DevImageService (fetch, blob→Object URL, memory-safe revocation, abort)
-- `apps/frontend/pwa/src/lib/client/services/index.ts` — Re-exports dev services
-- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts` — Thin ViewModel bridging to devVoiceService
-- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view.svelte` — Full DaisyUI voice sandbox UI
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` — Thin ViewModel bridging to devImageService
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view.svelte` — Full DaisyUI image sandbox UI
+- `apps/frontend/client/src/lib/test_preload.ts` — New shared preload for Bun test runner
+- `apps/frontend/client/package.json` — Added `--preload` to test script
+- `apps/frontend/client/tsconfig.json` — Excluded test_preload.ts from svelte-check
+- `apps/frontend/client/src/lib/client/services/dice/dice_service.test.ts` — Removed redundant polyfills/mocks
+- `apps/frontend/client/src/lib/client/services/game/game_state_service.test.ts` — Removed redundant polyfills/mocks
+- `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Removed redundant polyfills and `@aikami/frontend/services` mock
+- `apps/frontend/client/src/lib/client/services/dev/dev_voice_service.svelte.ts` — New DevVoiceService (fetch, AudioContext, chunk decoding, abort)
+- `apps/frontend/client/src/lib/client/services/dev/dev_image_service.svelte.ts` — New DevImageService (fetch, blob→Object URL, memory-safe revocation, abort)
+- `apps/frontend/client/src/lib/client/services/index.ts` — Re-exports dev services
+- `apps/frontend/client/src/lib/views/dev/voice/voice_view_model.svelte.ts` — Thin ViewModel bridging to devVoiceService
+- `apps/frontend/client/src/lib/views/dev/voice/voice_view.svelte` — Full DaisyUI voice sandbox UI
+- `apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts` — Thin ViewModel bridging to devImageService
+- `apps/frontend/client/src/lib/views/dev/image/image_view.svelte` — Full DaisyUI image sandbox UI
 - `docs/contracts/PROGRESS.md` — Status entry for C-066
 
 ---
@@ -1851,7 +1851,7 @@ Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the 
 
 ### AC Status
 - [x] AC-1: Ports & Config Refactor — `development_ports.ts` no longer contains `game`, exports `voice` for all modes. Downstream imports fixed (game_e2e.ts, e2e/config.ts). All typechecks pass.
-- [x] AC-2: Tmux Scripts Refactored — `bun run scripts/src/index.ts tmux:start voice,pwa --force` creates session with voice and pwa tabs. Both ports report ready (voice :8089, pwa :5274). `tmux:status` lists correct services.
+- [x] AC-2: Tmux Scripts Refactored — `bun run scripts/src/index.ts tmux:start voice,client --force` creates session with voice and client tabs. Both ports report ready (voice :8089, client :5274). `tmux:status` lists correct services.
 - [x] AC-3: Voice Microservice Bootstrapper — `Bun.serve()` starts on port 8089 (emulator). HTTP fallback returns `Voice API Status: OK` (200). WebSocket lifecycle maps to `createTtsWebSocketHandler` onMessage/onClose. Graceful shutdown on SIGINT.
 - [x] AC-4: Workspace Integration — `moon project voice` identifies the project with correct dependencies (`backend-audio`, `constants`, `logger`). Moon detect affected includes voice.
 
@@ -1868,8 +1868,8 @@ Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the 
 - `scripts/src/lib/tmux/start.ts` — Updated usage comment
 - `scripts/src/lib/tmux/stop.ts` — Updated usage comment
 - `.moon/workspace.yml` — Added voice project entry
-- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts` — WebSocket streaming to voice service
-- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view.svelte` — Connection status badge
+- `apps/frontend/client/src/lib/views/dev/voice/voice_view_model.svelte.ts` — WebSocket streaming to voice service
+- `apps/frontend/client/src/lib/views/dev/voice/voice_view.svelte` — Connection status badge
 - `scripts/src/lib/test_blackbox/suites/game_e2e.ts` — Hardcoded game port (5276)
 - `apps/e2e/src/config.ts` — Replaced game with voice port
 
@@ -1940,11 +1940,11 @@ the PWA frontend so SvelteKit orchestrates TTS via direct HTTP REST calls to the
 | `apps/backend/voice/moon.yml` | Removed `dependsOn`, `build`; added no-op `build`/`test` |
 | `apps/backend/voice/src/` | **Deleted** — no Bun/Hono source needed |
 | `apps/backend/voice/tsconfig.json` | **Deleted** — no TypeScript source |
-| `apps/frontend/pwa/.../sentence_boundary_chunker.ts` | **Created** — chunker relocated from backend |
-| `apps/frontend/pwa/.../sentence_boundary_chunker.test.ts` | **Created** — 16 unit tests ported |
-| `apps/frontend/pwa/.../stream_orchestrator.svelte.ts` | Refactored — removed `AudioStreamConnection`, added inline chunker + `_dispatchToKokoro` |
-| `apps/frontend/pwa/.../stream_orchestrator.test.ts` | Updated — removed audio mock, added 6 Kokoro HTTP tests |
-| `apps/frontend/pwa/.../audio_queue_player.ts` | Added `sentenceIndex` param + out-of-order buffering |
+| `apps/frontend/client/.../sentence_boundary_chunker.ts` | **Created** — chunker relocated from backend |
+| `apps/frontend/client/.../sentence_boundary_chunker.test.ts` | **Created** — 16 unit tests ported |
+| `apps/frontend/client/.../stream_orchestrator.svelte.ts` | Refactored — removed `AudioStreamConnection`, added inline chunker + `_dispatchToKokoro` |
+| `apps/frontend/client/.../stream_orchestrator.test.ts` | Updated — removed audio mock, added 6 Kokoro HTTP tests |
+| `apps/frontend/client/.../audio_queue_player.ts` | Added `sentenceIndex` param + out-of-order buffering |
 
 ### AC Status
 
@@ -1965,7 +1965,7 @@ the PWA frontend so SvelteKit orchestrates TTS via direct HTTP REST calls to the
 ## C-070 — Image Microservice & Tmux Orchestration — ✅ completed
 
 ### Summary
-Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `yanwk/comfyui-boot` Docker image. Allocated development ports (8188 emulator, 8187 staging, 8193 production). Integrated image service into the shared tmux orchestrator so it can be managed alongside pwa, voice, and emulators.
+Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `yanwk/comfyui-boot` Docker image. Allocated development ports (8188 emulator, 8187 staging, 8193 production). Integrated image service into the shared tmux orchestrator so it can be managed alongside client, voice, and emulators.
 
 ### AC Status
 - [x] AC-1: Ports & Config Refactor — `image` property added to `EMULATOR_PORTS` (8188), `STAGING_PORTS` (8187), and `PRODUCTION_PORTS` (8193) in `development_ports.ts`. Downstream typechecks pass.
@@ -1996,7 +1996,7 @@ Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `
 ## C-071 — Text Microservice & Tmux Orchestration — ✅ completed
 
 ### Summary
-Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the official `ollama/ollama` Docker image. Allocated development ports (11434 emulator, 11433 staging, 11435 production). Integrated text service into the shared tmux orchestrator alongside pwa, voice, image, and emulators.
+Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the official `ollama/ollama` Docker image. Allocated development ports (11434 emulator, 11433 staging, 11435 production). Integrated text service into the shared tmux orchestrator alongside client, voice, image, and emulators.
 
 ### AC Status
 - [x] AC-1: Ports & Config Refactor — `text` property added to `EMULATOR_PORTS` (11434), `STAGING_PORTS` (11433), and `PRODUCTION_PORTS` (11435) in `development_ports.ts`. Downstream typechecks pass.
@@ -2044,15 +2044,15 @@ Wired the PWA voice/TTS client to use `PUBLIC_VOICE_URL` environment variable in
 - [x] AC-3: Unified Cross-Service E2E Orchestration — E2E test suite navigates to `/dev/text?instant=true&text=Hello+World`, tracks terminal display box frames, asserts streaming output appears, and verifies no container connection errors. Test infrastructure uses existing `authUser` fixture with test-mode headers.
 
 ### Files created
-- `apps/e2e/tests/pwa/dev_text_stream.spec.ts` — 5-case E2E spec: page load, instant auto-generation, output streaming, connection error detection, missing-text graceful handling
+- `apps/e2e/tests/client/dev_text_stream.spec.ts` — 5-case E2E spec: page load, instant auto-generation, output streaming, connection error detection, missing-text graceful handling
 
 ### Files modified
-- `apps/frontend/pwa/.env.emulator` — Added `PUBLIC_VOICE_URL=http://localhost:8089`
-- `apps/frontend/pwa/src/env.d.ts` — Added `PUBLIC_VOICE_URL: string` type declaration
-- `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts` — Added `initialize()` override with `?instant=true&text=...` query param handling; imports `page` from `$app/state`
-- `apps/frontend/pwa/src/lib/views/dev/voice/voice_view_model.svelte.ts` — Rewired from WebSocket to HTTP POST; WebSocket rejected with 403 by Kokoro REST container. Now POSTs to `PUBLIC_VOICE_URL/v1/audio/speech` with `AbortController` support, plays WAV via `ttsService.enqueueChunk()`
-- `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` — `KOKORO_SPEECH_URL` now derived from `import.meta.env.PUBLIC_VOICE_URL` with fallback
-- `apps/frontend/pwa/src/lib/client/services/media/tts.svelte.ts` — `speak()` uses `import.meta.env.PUBLIC_VOICE_URL` for Kokoro endpoint, aligned payload to OpenAI-compatible schema
+- `apps/frontend/client/.env.emulator` — Added `PUBLIC_VOICE_URL=http://localhost:8089`
+- `apps/frontend/client/src/env.d.ts` — Added `PUBLIC_VOICE_URL: string` type declaration
+- `apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts` — Added `initialize()` override with `?instant=true&text=...` query param handling; imports `page` from `$app/state`
+- `apps/frontend/client/src/lib/views/dev/voice/voice_view_model.svelte.ts` — Rewired from WebSocket to HTTP POST; WebSocket rejected with 403 by Kokoro REST container. Now POSTs to `PUBLIC_VOICE_URL/v1/audio/speech` with `AbortController` support, plays WAV via `ttsService.enqueueChunk()`
+- `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` — `KOKORO_SPEECH_URL` now derived from `import.meta.env.PUBLIC_VOICE_URL` with fallback
+- `apps/frontend/client/src/lib/client/services/media/tts.svelte.ts` — `speak()` uses `import.meta.env.PUBLIC_VOICE_URL` for Kokoro endpoint, aligned payload to OpenAI-compatible schema
 - `packages/frontend/configs/src/lib/environment.ts` — Added `PUBLIC_VOICE_URL` to `masterSchema` TypeBox definition and validator mapping
 
 ### Deviations from contract
@@ -2069,12 +2069,12 @@ Wired the PWA voice/TTS client to use `PUBLIC_VOICE_URL` environment variable in
 Established a dedicated end-to-end visual smoke-testing pipeline for the LPC sprite composition system. Migrated the existing visual test suite into the unified Playwright E2E package, updated the AI evaluation script to enforce the VisualFidelityReport contract schema, and added moon tasks for orchestrating capture + evaluation sequentially.
 
 ### Findings
-- **Test already relocated**: `lpc_visual.spec.ts` existed at `apps/e2e/tests/pwa/lpc_visual.spec.ts` (pre-migrated during C-054 refactor). Imports already used `../../src/fixtures` with `guestUser` fixture correctly.
+- **Test already relocated**: `lpc_visual.spec.ts` existed at `apps/e2e/tests/client/lpc_visual.spec.ts` (pre-migrated during C-054 refactor). Imports already used `../../src/fixtures` with `guestUser` fixture correctly.
 - **Vite overlay suppression**: Added `#vite-error-overlay, vite-error-overlay { display: none !important; }` in `beforeEach` via `addStyleTag`, matching the C-055 pattern from `game_menu_page.ts`. Both ID and tag name selectors used for robustness.
 - **visual-testing param**: Added `params.set('visual-testing', 'true')` to `buildLpcUrl()` so the PWA can disable animations and debug overlays during capture.
 - **Evaluation script output directory**: `SCREENSHOT_DIR` changed from `test-results/lpc-visual` (relative to scripts/) to `apps/e2e/test-results/lpc-visual` (monorepo-root-relative via `resolve`).
 - **Prompt schema enforcement**: `buildLpcPrompt()` now includes `recipeId`, `componentSlot`, `variantAssetId` in the expected JSON response. The schema uses `passed` (boolean) instead of `is_acceptable` and `detectedAnomalies` instead of `issues_detected`. Parser is backwards-compatible with legacy field names.
-- **Moon task architecture**: `test-visual` runs `npx playwright test --project=pwa --grep "LPC Visual"` for capture-only. `lpc-smoke` delegates to `scripts/lpc_smoke.sh` which chains capture + evaluation since moon `command` doesn't support shell operators.
+- **Moon task architecture**: `test-visual` runs `npx playwright test --project=client --grep "LPC Visual"` for capture-only. `lpc-smoke` delegates to `scripts/lpc_smoke.sh` which chains capture + evaluation since moon `command` doesn't support shell operators.
 - **Exit code quality gate**: Script still exits 1 when any config scores below `PASSING_SCORE` (70), halting CI pipelines (AC-3).
 
 ### AC Status
@@ -2086,7 +2086,7 @@ Established a dedicated end-to-end visual smoke-testing pipeline for the LPC spr
 - `apps/e2e/scripts/lpc_smoke.sh` — Shell wrapper for Playwright capture + bun evaluation sequential pipeline
 
 ### Files modified
-- `apps/e2e/tests/pwa/lpc_visual.spec.ts` — Added Vite overlay CSS injection, `visual-testing=true` query param
+- `apps/e2e/tests/client/lpc_visual.spec.ts` — Added Vite overlay CSS injection, `visual-testing=true` query param
 - `scripts/src/lib/ops/validate_lpc_visuals.ts` — Updated `SCREENSHOT_DIR` to `apps/e2e/test-results/lpc-visual/`, enforced VisualFidelityReport JSON schema in prompt and parser
 - `apps/e2e/moon.yml` — Added `test-visual` and `lpc-smoke` tasks
 - `apps/e2e/package.json` — Added `test:visual` and `lpc:smoke` scripts
@@ -2115,8 +2115,8 @@ Refactored LPC visual smoke tests to capture isolated PixiJS canvas screenshots 
 - [x] AC-3: Error Element Style Blinding — CSS injection now masks `#vite-error-overlay, vite-error-overlay, #tailwind-indicator` before capture.
 
 ### Files modified
-- `apps/e2e/tests/pwa/lpc_visual.spec.ts` — Full rewrite: locator-targeted screenshots, `captureCanvas()` helper, `VISUAL_ZOOM = 8`, `CANVAS_SELECTOR = '#game-canvas'`, extended CSS blinding
-- `apps/frontend/pwa/src/lib/views/dev/lpc/lpc_view.svelte` — Added `id="game-canvas"` to both canvas elements (fullscreen + debug layout)
+- `apps/e2e/tests/client/lpc_visual.spec.ts` — Full rewrite: locator-targeted screenshots, `captureCanvas()` helper, `VISUAL_ZOOM = 8`, `CANVAS_SELECTOR = '#game-canvas'`, extended CSS blinding
+- `apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte` — Added `id="game-canvas"` to both canvas elements (fullscreen + debug layout)
 
 ---
 
@@ -2137,7 +2137,7 @@ Added a tight clipping rectangle to `captureCanvas()` centered on the LPC charac
 - [x] AC-3: Translucent Space Optimization Mask — `omitBackground: true` passes through alpha channel. Empty pixel space is transparent in output PNGs.
 
 ### Files modified
-- `apps/e2e/tests/pwa/lpc_visual.spec.ts` — Updated `captureCanvas()` with `clip` calculation centered on character position
+- `apps/e2e/tests/client/lpc_visual.spec.ts` — Updated `captureCanvas()` with `clip` calculation centered on character position
 
 ---
 
@@ -2162,13 +2162,13 @@ Added a dynamic ComfyUI checkpoint (model) selector to the Dev Image Sandbox, fo
 - [x] AC-4: Generation Payload Inclusion — Non-demo `generateImage` POST body includes `checkpoint` from selectedCheckpoint or explicit parameter. Verified via service unit tests.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/services/media/image_generation.test.ts` — 21 unit tests covering AC-1 (loadCheckpoints: demo, success, empty, failure) and AC-4 (generateImage: payload, demo, error)
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.test.ts` — 11 unit tests covering AC-2 (bridge + initialization) and AC-4 (generate via ViewModel)
+- `apps/frontend/client/src/lib/client/services/media/image_generation.test.ts` — 21 unit tests covering AC-1 (loadCheckpoints: demo, success, empty, failure) and AC-4 (generateImage: payload, demo, error)
+- `apps/frontend/client/src/lib/views/dev/image/image_view_model.test.ts` — 11 unit tests covering AC-2 (bridge + initialization) and AC-4 (generate via ViewModel)
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/client/services/media/image_generation.svelte.ts` — Added `CheckpointInfo` type, `ImageGenerationOptions.isDemo`, `checkpoints`/`selectedCheckpoint` `$state`, `loadCheckpoints()`, updated `generateImage()` signature + payload, exported class
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` — Added `CheckpointInfo` import/re-export, `checkpoints`/`selectedCheckpoint` getters/setters, `initialize()` override calling `loadCheckpoints()`
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view.svelte` — Added checkpoint `<select>` dropdown card above prompt textarea (DaisyUI `select select-bordered`, loading badge, generation-disabled)
+- `apps/frontend/client/src/lib/client/services/media/image_generation.svelte.ts` — Added `CheckpointInfo` type, `ImageGenerationOptions.isDemo`, `checkpoints`/`selectedCheckpoint` `$state`, `loadCheckpoints()`, updated `generateImage()` signature + payload, exported class
+- `apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts` — Added `CheckpointInfo` import/re-export, `checkpoints`/`selectedCheckpoint` getters/setters, `initialize()` override calling `loadCheckpoints()`
+- `apps/frontend/client/src/lib/views/dev/image/image_view.svelte` — Added checkpoint `<select>` dropdown card above prompt textarea (DaisyUI `select select-bordered`, loading badge, generation-disabled)
 
 ### Deviations from contract
 - `isDemo` made configurable via `ImageGenerationOptions` constructor parameter (not in original contract) — necessary for unit test control of demo/non-demo code paths without mocking `import.meta.env`.
@@ -2198,15 +2198,15 @@ Enhanced the Dev Image Sandbox with a dynamic ComfyUI checkpoint selector and wi
 - [x] AC-4: Generation Payload Inclusion — Non-demo POST builds workflow JSON with `CheckpointLoaderSimple.inputs.ckpt_name` set to selected checkpoint. Verified: 5 service unit tests.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/services/media/image_generation.test.ts` — 20 unit tests: AC-1 (9 tests), AC-4 (7 tests), state reactivity (3 tests), Error (1 test)
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.test.ts` — 11 unit tests: AC-2 (6 tests), AC-4 via ViewModel (5 tests)
+- `apps/frontend/client/src/lib/client/services/media/image_generation.test.ts` — 20 unit tests: AC-1 (9 tests), AC-4 (7 tests), state reactivity (3 tests), Error (1 test)
+- `apps/frontend/client/src/lib/views/dev/image/image_view_model.test.ts` — 11 unit tests: AC-2 (6 tests), AC-4 via ViewModel (5 tests)
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/client/services/media/image_generation.svelte.ts` — Full ComfyUI integration: `loadCheckpoints()` → `object_info`, `generateImage()` → `/prompt` + poll, `_buildWorkflow()`, `_pollForResult()`, HTTP helpers, class exported
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` — Added `CheckpointInfo` re-export, `checkpoints`/`selectedCheckpoint` getters/setters, `initialize()` override
-- `apps/frontend/pwa/src/lib/views/dev/image/image_view.svelte` — Checkpoint `<select>` dropdown card (DaisyUI `select-bordered`, loading badge, generation-disabled)
-- `apps/frontend/pwa/.env.emulator` — Added `PUBLIC_IMAGE_URL=http://localhost:8188`
-- `apps/frontend/pwa/src/lib/test_preload.ts` — Added `PUBLIC_IMAGE_URL` test env var
+- `apps/frontend/client/src/lib/client/services/media/image_generation.svelte.ts` — Full ComfyUI integration: `loadCheckpoints()` → `object_info`, `generateImage()` → `/prompt` + poll, `_buildWorkflow()`, `_pollForResult()`, HTTP helpers, class exported
+- `apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts` — Added `CheckpointInfo` re-export, `checkpoints`/`selectedCheckpoint` getters/setters, `initialize()` override
+- `apps/frontend/client/src/lib/views/dev/image/image_view.svelte` — Checkpoint `<select>` dropdown card (DaisyUI `select-bordered`, loading badge, generation-disabled)
+- `apps/frontend/client/.env.emulator` — Added `PUBLIC_IMAGE_URL=http://localhost:8188`
+- `apps/frontend/client/src/lib/test_preload.ts` — Added `PUBLIC_IMAGE_URL` test env var
 
 ### Deviations from contract
 - **Direct ComfyUI REST instead of proxy endpoint**: Contract mentioned `/api/image/v1/checkpoints` and `/api/image-generation` as endpoints. Implemented direct ComfyUI calls (`GET /object_info`, `POST /prompt`, `GET /history/{id}`) per user directive — no backend proxy needed, ComfyUI speaks REST natively.
@@ -2251,17 +2251,17 @@ Extracted SSE streaming logic from `TextViewModel` into a dedicated `DevTextServ
 - [x] AC-3: E2E and Blackbox Coverage — Playwright tests updated with provider dropdown interactions. Unit tests pass, DOM verified via browser_inspect.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/services/media/dev_text.svelte.ts` — New `DevTextService` class + singleton. Exports `DevTextServiceInterface`, `DevTextService`, `TextGenerationProvider` type, `devTextService` singleton.
-- `apps/frontend/pwa/src/lib/client/services/media/dev_text.test.ts` — 15 unit tests: SSE accumulation (7), abort (2), edge cases (3), provider payload (3).
+- `apps/frontend/client/src/lib/client/services/media/dev_text.svelte.ts` — New `DevTextService` class + singleton. Exports `DevTextServiceInterface`, `DevTextService`, `TextGenerationProvider` type, `devTextService` singleton.
+- `apps/frontend/client/src/lib/client/services/media/dev_text.test.ts` — 15 unit tests: SSE accumulation (7), abort (2), edge cases (3), provider payload (3).
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts` — Stripped to thin proxy. Removed `_abortController`, `_readStream()`, `generate()` body. Added provider/model getters/setters proxying to `devTextService`. Re-exports `TextGenerationProvider`.
-- `apps/frontend/pwa/src/lib/views/dev/text/text_view.svelte` — Added provider `<select>` dropdown card above prompt (DaisyUI `select-bordered`, disabled during generation).
-- `apps/e2e/tests/pwa/dev_text_stream.spec.ts` — Added 3 provider-dropdown tests (C-077). Total 9 tests.
-- `apps/frontend/pwa/src/lib/client/services/index.ts` — Added `export * from './media/dev_text.svelte.ts'`.
-- `apps/frontend/pwa/.env.example` — Added `OPENROUTER_API_KEY` and `PUBLIC_OPENROUTER_BASE_URL`.
-- `apps/frontend/pwa/.env.emulator` — Added `OPENROUTER_API_KEY` and `PUBLIC_OPENROUTER_BASE_URL`.
-- `apps/frontend/pwa/src/lib/test_preload.ts` — Added `static create()` factory method to `MockBaseFrontendClass` (required for service singleton exports to work in test context).
+- `apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts` — Stripped to thin proxy. Removed `_abortController`, `_readStream()`, `generate()` body. Added provider/model getters/setters proxying to `devTextService`. Re-exports `TextGenerationProvider`.
+- `apps/frontend/client/src/lib/views/dev/text/text_view.svelte` — Added provider `<select>` dropdown card above prompt (DaisyUI `select-bordered`, disabled during generation).
+- `apps/e2e/tests/client/dev_text_stream.spec.ts` — Added 3 provider-dropdown tests (C-077). Total 9 tests.
+- `apps/frontend/client/src/lib/client/services/index.ts` — Added `export * from './media/dev_text.svelte.ts'`.
+- `apps/frontend/client/.env.example` — Added `OPENROUTER_API_KEY` and `PUBLIC_OPENROUTER_BASE_URL`.
+- `apps/frontend/client/.env.emulator` — Added `OPENROUTER_API_KEY` and `PUBLIC_OPENROUTER_BASE_URL`.
+- `apps/frontend/client/src/lib/test_preload.ts` — Added `static create()` factory method to `MockBaseFrontendClass` (required for service singleton exports to work in test context).
 
 ### Deviations from contract
 - **`generate()` takes `{ prompt }` parameter** instead of reading `this.prompt`. This matches the Voice/Image service patterns (`ttsService.speak({ text })`, `imageGenerationService.generateImage({ prompt })`) where input is passed to the method rather than stored as mutable service state. The ViewModel owns the prompt `$state` and passes it on each call.
@@ -2272,11 +2272,11 @@ Extracted SSE streaming logic from `TextViewModel` into a dedicated `DevTextServ
 **Verified**: 2026-06-09  |  Contract: `docs/contracts/C-078-dev-character-creation.md`
 
 ### Files created
-- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.test.ts` — 8 unit tests: interface contract validation (5), state machine logic (3). Runtime behavior (sendChatMessage, generateCharacter, service calls) tested via E2E/blackbox tests due to Bun mock.module not supporting SvelteKit `$services` path alias.
+- `apps/frontend/client/src/lib/views/dev/character/character_view_model.test.ts` — 8 unit tests: interface contract validation (5), state machine logic (3). Runtime behavior (sendChatMessage, generateCharacter, service calls) tested via E2E/blackbox tests due to Bun mock.module not supporting SvelteKit `$services` path alias.
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.svelte.ts` — Complete rewrite from stub to full ViewModel with state machine (`CHAT`, `GENERATING`, `TWEAK` phases), chat history array, `PersonaData` binding, and avatar URL. Added optional service injection (`aiServiceOverride`, `devTextServiceOverride`, `imageGenerationServiceOverride`) for testability while preserving singleton pattern for production. Imports DM system prompt from `dnd_creation.ts`.
-- `apps/frontend/pwa/src/lib/views/dev/character/character_view.svelte` — Complete rewrite from placeholder to full DaisyUI chat + tweak UI. CHAT phase: `chat-bubble` messages, textarea input with Enter-to-send, "Generate Character" button. GENERATING phase: loading spinner card. TWEAK phase: avatar display, editable name/background/appearance text inputs, stat increment/decrement controls (STR/DEX/CON/INT/WIS/CHA) bound to `$state` persona.
+- `apps/frontend/client/src/lib/views/dev/character/character_view_model.svelte.ts` — Complete rewrite from stub to full ViewModel with state machine (`CHAT`, `GENERATING`, `TWEAK` phases), chat history array, `PersonaData` binding, and avatar URL. Added optional service injection (`aiServiceOverride`, `devTextServiceOverride`, `imageGenerationServiceOverride`) for testability while preserving singleton pattern for production. Imports DM system prompt from `dnd_creation.ts`.
+- `apps/frontend/client/src/lib/views/dev/character/character_view.svelte` — Complete rewrite from placeholder to full DaisyUI chat + tweak UI. CHAT phase: `chat-bubble` messages, textarea input with Enter-to-send, "Generate Character" button. GENERATING phase: loading spinner card. TWEAK phase: avatar display, editable name/background/appearance text inputs, stat increment/decrement controls (STR/DEX/CON/INT/WIS/CHA) bound to `$state` persona.
 
 ### Deviations from contract
 - **Service injection for testability**: Added optional `aiServiceOverride`, `devTextServiceOverride`, `imageGenerationServiceOverride` to `CharacterViewModelOptions`. Production uses singletons (matches convention), tests can inject mocks directly. This is a pragmatic workaround for Bun's `mock.module` not supporting SvelteKit `$services` path aliases.
@@ -2311,18 +2311,18 @@ Implemented the `/dev/config` dashboard — a centralized configuration interfac
 - [x] AC-4: Domain Settings — Voice tab (engine, voice ID, speed slider, pitch slider), Image tab (backend, checkpoint, width, height, steps, CFG scale), Memory tab (context window, max turns, summarization threshold, long-term memory toggle). All bound to ConfigState.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/services/config/config_service.svelte.ts` — ConfigState types + ConfigService class with $state
-- `apps/frontend/pwa/src/lib/client/services/config/config_service.test.ts` — 30 tests (AC-2)
-- `apps/frontend/pwa/src/lib/client/services/config/local_service_detector.ts` — LocalServiceDetector with port polling
-- `apps/frontend/pwa/src/lib/client/services/config/local_service_detector.test.ts` — 17 tests (AC-3)
-- `apps/frontend/pwa/src/lib/views/dev/config/config_view_model.svelte.ts` — ConfigViewModel with tab management + debounced save
-- `apps/frontend/pwa/src/lib/views/dev/config/config_view_model.test.ts` — 25 tests (AC-1, AC-2, AC-3, AC-4)
-- `apps/frontend/pwa/src/lib/views/dev/config/config_view.svelte` — Glassmorphic-Industrial UI
-- `apps/frontend/pwa/src/routes/(dev)/dev/config/+page.svelte` — Route entry point
+- `apps/frontend/client/src/lib/client/services/config/config_service.svelte.ts` — ConfigState types + ConfigService class with $state
+- `apps/frontend/client/src/lib/client/services/config/config_service.test.ts` — 30 tests (AC-2)
+- `apps/frontend/client/src/lib/client/services/config/local_service_detector.ts` — LocalServiceDetector with port polling
+- `apps/frontend/client/src/lib/client/services/config/local_service_detector.test.ts` — 17 tests (AC-3)
+- `apps/frontend/client/src/lib/views/dev/config/config_view_model.svelte.ts` — ConfigViewModel with tab management + debounced save
+- `apps/frontend/client/src/lib/views/dev/config/config_view_model.test.ts` — 25 tests (AC-1, AC-2, AC-3, AC-4)
+- `apps/frontend/client/src/lib/views/dev/config/config_view.svelte` — Glassmorphic-Industrial UI
+- `apps/frontend/client/src/routes/(dev)/dev/config/+page.svelte` — Route entry point
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/client/services/index.ts` — Added config_service export
-- `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added Config nav item with gear icon
+- `apps/frontend/client/src/lib/client/services/index.ts` — Added config_service export
+- `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added Config nav item with gear icon
 
 ### Deviations from contract
 - Firestore sync deferred — ConfigService works entirely locally (localStorage + crypto_vault). Firestore sync can be added when auth state is available without forcing backend calls, per the "no forced backend calls" directive.
@@ -2357,13 +2357,13 @@ Created `AiTextIntelligenceService` — a centralized, client-side unified intel
 - [x] AC-3: High-Performance TypeBox Structural Extraction — `extractStructure()` compiles TypeBox schemas to strict JSON Schema dictionaries with `additionalProperties: false`, handles markdown fence stripping, balanced JSON extraction, and schema caching via `__ai_service_compiled_schema_cache_size`.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/services/media/ai_text_intelligence_service.svelte.ts` — Service class with streamChat, extractStructure, cancelAll, debug hooks
-- `apps/frontend/pwa/src/lib/client/services/media/ai_text_intelligence_service.test.ts` — 19 unit tests covering all 3 ACs
+- `apps/frontend/client/src/lib/client/services/media/ai_text_intelligence_service.svelte.ts` — Service class with streamChat, extractStructure, cancelAll, debug hooks
+- `apps/frontend/client/src/lib/client/services/media/ai_text_intelligence_service.test.ts` — 19 unit tests covering all 3 ACs
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/client/services/index.ts` — Added barrel export for `ai_text_intelligence_service`
-- `apps/frontend/pwa/src/lib/client/services/character/character_text_stream.svelte.ts` — Removed raw fetch logic; delegates to `aiTextIntelligenceService.streamChat()`
-- `apps/frontend/pwa/src/lib/views/dev/text/text_view_model.svelte.ts` — Removed `characterTextStreamService` dependency; uses `aiTextIntelligenceService.streamChat()` directly
+- `apps/frontend/client/src/lib/client/services/index.ts` — Added barrel export for `ai_text_intelligence_service`
+- `apps/frontend/client/src/lib/client/services/character/character_text_stream.svelte.ts` — Removed raw fetch logic; delegates to `aiTextIntelligenceService.streamChat()`
+- `apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts` — Removed `characterTextStreamService` dependency; uses `aiTextIntelligenceService.streamChat()` directly
 
 ### Test results
 - 19/19 AiTextIntelligenceService tests passing
@@ -2395,12 +2395,12 @@ Refactored the Dev Character Creation Sandbox (CharacterViewModel) to use `aiTex
 - [x] AC-3: Fallback and Error Handling — Extraction failure drops to `CHAT` with user-friendly message. AbortError distinguished with "Character generation was cancelled." message.
 
 ### Files created
-- `apps/frontend/pwa/src/lib/client/game/core/ai/prompts/character_extraction_schema.ts` — TypeBox schema + extraction system prompt
+- `apps/frontend/client/src/lib/client/game/core/ai/prompts/character_extraction_schema.ts` — TypeBox schema + extraction system prompt
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.svelte.ts` — Imported aiTextIntelligenceService, CharacterExtractionSchema, CHARACTER_EXTRACTION_SYSTEM_PROMPT. Refactored `generateCharacter()` to call `extractStructure()` with typed error handling for AbortError.
-- `apps/frontend/pwa/src/lib/views/dev/character/character_view_model.test.ts` — Updated all legacy AC-2/AC-3/AC-4 tests to use `extractionResult`/`extractionCalls`. Added 12 new C-081 tests (3 schema compilation, 6 extraction integration, 3 error handling). Total: 35 tests, 0 failures.
-- `apps/frontend/pwa/src/lib/client/game/core/ai/prompts/dnd_creation.ts` — Removed old JSON output instructions from DM system prompt.
+- `apps/frontend/client/src/lib/views/dev/character/character_view_model.svelte.ts` — Imported aiTextIntelligenceService, CharacterExtractionSchema, CHARACTER_EXTRACTION_SYSTEM_PROMPT. Refactored `generateCharacter()` to call `extractStructure()` with typed error handling for AbortError.
+- `apps/frontend/client/src/lib/views/dev/character/character_view_model.test.ts` — Updated all legacy AC-2/AC-3/AC-4 tests to use `extractionResult`/`extractionCalls`. Added 12 new C-081 tests (3 schema compilation, 6 extraction integration, 3 error handling). Total: 35 tests, 0 failures.
+- `apps/frontend/client/src/lib/client/game/core/ai/prompts/dnd_creation.ts` — Removed old JSON output instructions from DM system prompt.
 
 ### Test results
 - 35/35 tests passing (25 legacy updated + 12 new C-081)
@@ -2416,7 +2416,7 @@ Refactored the Dev Character Creation Sandbox (CharacterViewModel) to use `aiTex
 ## C-101 — Shared Package Enforce (Boundary Bleed) — ✅ completed
 
 ### Summary
-Moved domain-model `Character`/`CharacterCardV2`/`CharacterCardV1` types from `apps/frontend/pwa/src/lib/types/character.ts` into `packages/shared/types/src/lib/database/character_card.ts`. Updated 3 PWA import sites from `$types` to `@aikami/types`. PWA-only game types (`GameStateEvent`, `GameStateListener`, `ActiveContextEntry`, `GameStateOptions`) and route constants (`routes.ts`) correctly retained per Rule 1 (app-specific).
+Moved domain-model `Character`/`CharacterCardV2`/`CharacterCardV1` types from `apps/frontend/client/src/lib/types/character.ts` into `packages/shared/types/src/lib/database/character_card.ts`. Updated 3 PWA import sites from `$types` to `@aikami/types`. PWA-only game types (`GameStateEvent`, `GameStateListener`, `ActiveContextEntry`, `GameStateOptions`) and route constants (`routes.ts`) correctly retained per Rule 1 (app-specific).
 
 ### Audit findings
 - **PWA types/character.ts**: 3 domain types (`Character`, `CharacterCardV2`, `CharacterCardV1`) — boundary bleed, moved to shared.
@@ -2430,19 +2430,19 @@ Moved domain-model `Character`/`CharacterCardV2`/`CharacterCardV1` types from `a
 
 ### Files modified
 - `packages/shared/types/src/index.ts` — Added `export * from './lib/database/character_card.ts'`
-- `apps/frontend/pwa/src/lib/types/index.ts` — Removed character re-exports, kept game + PWAHookData
-- `apps/frontend/pwa/src/lib/client/services/character/character_validator.ts` — `$types` → `@aikami/types`
-- `apps/frontend/pwa/src/lib/client/services/character/character.svelte.ts` — `$types` → `@aikami/types`
-- `apps/frontend/pwa/src/lib/client/services/character/character_importer.ts` — `$types` → `@aikami/types`
+- `apps/frontend/client/src/lib/types/index.ts` — Removed character re-exports, kept game + PWAHookData
+- `apps/frontend/client/src/lib/client/services/character/character_validator.ts` — `$types` → `@aikami/types`
+- `apps/frontend/client/src/lib/client/services/character/character.svelte.ts` — `$types` → `@aikami/types`
+- `apps/frontend/client/src/lib/client/services/character/character_importer.ts` — `$types` → `@aikami/types`
 
 ### Files deleted
-- `apps/frontend/pwa/src/lib/types/character.ts` — moved to shared package
+- `apps/frontend/client/src/lib/types/character.ts` — moved to shared package
 
 ### Validation
 - `types:fix` — clean (0 errors after biome-ignore directive added)
 - `types:typecheck` — clean (cached pass)
-- `pwa:fix` — clean (71 files auto-fixed)
-- `pwa:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (unrelated to C-101)
+- `client:fix` — clean (71 files auto-fixed)
+- `client:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (unrelated to C-101)
 - All import resolution verified via grep — no remaining `$types` references to Character/CharacterCardV1/CharacterCardV2
 
 ### Deviations from contract
@@ -2462,17 +2462,17 @@ Stripped all server-side code from the SvelteKit PWA to enforce static SPA compi
 - [x] AC-4: `svelte.config.js` uses `@sveltejs/adapter-static` with `fallback: 'index.html'`
 
 ### Files deleted
-- `apps/frontend/pwa/src/routes/api/text/+server.ts` — SSE text generation endpoint (re-routed to C-107)
-- `apps/frontend/pwa/src/routes/(public)/auth/game/+page.server.ts` — Device-flow handoff server action (re-routed to C-107)
+- `apps/frontend/client/src/routes/api/text/+server.ts` — SSE text generation endpoint (re-routed to C-107)
+- `apps/frontend/client/src/routes/(public)/auth/game/+page.server.ts` — Device-flow handoff server action (re-routed to C-107)
 
 ### Files modified
-- `apps/frontend/pwa/src/routes/+layout.ts` — Changed `prerender` from `false` to `true`, updated comment
-- `apps/frontend/pwa/src/lib/client/services/media/ai_text_intelligence_service.svelte.ts` — Commented out `fetch('/api/text', ...)` + SSE stream reader with `TODO(C-107)` markers; suppressed `_readSSEStream_disabled` and unused constants
-- `apps/frontend/pwa/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — Commented out `fetch('?/completeHandoff', ...)` with `TODO(C-107)` marker; throws descriptive error when triggered
+- `apps/frontend/client/src/routes/+layout.ts` — Changed `prerender` from `false` to `true`, updated comment
+- `apps/frontend/client/src/lib/client/services/media/ai_text_intelligence_service.svelte.ts` — Commented out `fetch('/api/text', ...)` + SSE stream reader with `TODO(C-107)` markers; suppressed `_readSSEStream_disabled` and unused constants
+- `apps/frontend/client/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — Commented out `fetch('?/completeHandoff', ...)` with `TODO(C-107)` marker; throws descriptive error when triggered
 
 ### Validation
-- `pwa:fix` — clean (1 warning from biome-ignore on disabled method)
-- `pwa:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (known, unrelated to C-102)
+- `client:fix` — clean (1 warning from biome-ignore on disabled method)
+- `client:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (known, unrelated to C-102)
 - `svelte.config.js` already configured with `adapter-static` + `fallback: 'index.html'` (no change needed)
 - `package.json` already includes `@sveltejs/adapter-static` as devDependency (no change needed)
 
@@ -2492,21 +2492,21 @@ Created a floating, collapsible `<DevToolsPanel />` component that accepts gener
 - **`CharacterDevViewModel` integration** — Dev page imports `DevToolsPanel` and passes `forceErrorState` + `injectJunkData` as action objects in a `devActions` array. Panel is generic — knows nothing about ViewModels or sandbox internals.
 
 ### AC Status
-- [x] AC-1: DevToolsPanel created at `apps/frontend/pwa/src/lib/components/dev/dev_tools_panel.svelte` — fixed floating overlay, bottom-right, `z-[9999]`, distinct dark styling with 🛠️ header
+- [x] AC-1: DevToolsPanel created at `apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte` — fixed floating overlay, bottom-right, `z-[9999]`, distinct dark styling with 🛠️ header
 - [x] AC-2: Props interface defined — `actions` (readonly DevAction[] with label + onClick) and `toggles` (readonly DevToggle[] with label + onChange)
 - [x] AC-3: Integrated into `routes/(dev)/dev/character/+page.svelte` — imports and renders `<DevToolsPanel />`
 - [x] AC-4: `forceErrorState()` and `injectJunkData()` wired as action buttons
 - [x] AC-5: Collapsible — single-click header toggle minimizes to compact tab
 
 ### Files created
-- `apps/frontend/pwa/src/lib/components/dev/dev_tools_panel.svelte` — Generic collapsible dev tools floating panel
+- `apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte` — Generic collapsible dev tools floating panel
 
 ### Files modified
-- `apps/frontend/pwa/src/routes/(dev)/dev/character/+page.svelte` — Imported DevToolsPanel, defined devActions, rendered panel below CharacterView
+- `apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte` — Imported DevToolsPanel, defined devActions, rendered panel below CharacterView
 
 ### Validation
-- `pwa:fix` — clean (72 files auto-fixed)
-- `pwa:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (unrelated to C-104); no errors in C-104 files
+- `client:fix` — clean (72 files auto-fixed)
+- `client:typecheck` — pre-existing `app_loading.svelte` CSS parsing error (unrelated to C-104); no errors in C-104 files
 - Import resolution verified — component path `$lib/components/dev/dev_tools_panel.svelte` resolves correctly
 
 ### Deviations from contract
@@ -2536,19 +2536,19 @@ Applied the Svelte 5 class-based MVVM sandbox pattern to the NPC Chat System. En
 - [x] AC-4: Dev Tools Wiring — `simulateBotReply()` and `triggerNetworkError()` wired as actions; `simulateLatency` wired as toggle; all connected to DevToolsPanel props
 
 ### Files created
-- `apps/frontend/pwa/src/lib/views/chat/chat_dev_view_model.svelte.ts` — Dev override with mock NPC, seed messages, and 3 dev methods
-- `apps/frontend/pwa/src/routes/(dev)/dev/chat/+page.svelte` — Sandbox route mounting ChatView + DevToolsPanel
+- `apps/frontend/client/src/lib/views/chat/chat_dev_view_model.svelte.ts` — Dev override with mock NPC, seed messages, and 3 dev methods
+- `apps/frontend/client/src/routes/(dev)/dev/chat/+page.svelte` — Sandbox route mounting ChatView + DevToolsPanel
 
 ### Files modified
-- `apps/frontend/pwa/src/lib/views/chat/chat_view_model.svelte.ts` — Added `export` keyword to `ChatViewModel` class
-- `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added `/dev/chat` nav item (Chat) between Character and Sandbox
-- `apps/frontend/pwa/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Updated nav count from 6 to 7, added `/dev/chat` and `/dev/config` route assertions
+- `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` — Added `export` keyword to `ChatViewModel` class
+- `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added `/dev/chat` nav item (Chat) between Character and Sandbox
+- `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Updated nav count from 6 to 7, added `/dev/chat` and `/dev/config` route assertions
 
 ### Validation
-- `pwa:fix` — clean (0 errors, 0 warnings on new files)
-- `pwa:typecheck` — clean on new files; pre-existing `app_loading.svelte` CSS parsing error (unrelated)
-- `pwa:build` — passed
-- `pwa:test` — pre-existing failures (135 fail, 137 pass); DevViewModel test failures are `$state is not defined` env issue (pre-existing). New files have no regressions.
+- `client:fix` — clean (0 errors, 0 warnings on new files)
+- `client:typecheck` — clean on new files; pre-existing `app_loading.svelte` CSS parsing error (unrelated)
+- `client:build` — passed
+- `client:test` — pre-existing failures (135 fail, 137 pass); DevViewModel test failures are `$state is not defined` env issue (pre-existing). New files have no regressions.
 
 ### Deviations from contract
 - None — all acceptance criteria met. Mock NPC includes full NpcData required fields for TypeBox schema compliance. `sendMessage()` bypasses real AI backend in dev sandbox (by design). Bot replies triggered manually via DevTools action rather than auto-fire.

@@ -18,7 +18,7 @@ This contract updates the repository's Nix Flake environment configuration to dy
 ## Design Reference
 
 - `flake.nix`: Main declarative system package environment layout.
-- `apps/frontend/pwa/src/routes/(public)/dev/lpc-component`: Active canvas debugging target route.
+- `apps/frontend/client/src/routes/(public)/dev/lpc-component`: Active canvas debugging target route.
 - Nixpkgs Chromium Wrapper Pattern: Utilizing `chromium.override` with explicit `commandLineArgs` or policies mapping.
 
 ## Changes Detail

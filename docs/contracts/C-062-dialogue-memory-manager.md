@@ -15,7 +15,7 @@ Our NPCs currently treat every interaction as their first. We need to build a Di
 
 ## Design Reference
 - Review `packages/frontend/repositories/src/lib/chat.ts` or `message.ts` for existing database schemas and persistence patterns.
-- Review `packages/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` (built in C-059) for lifecycle hooks where the final text is realized.
+- Review `packages/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` (built in C-059) for lifecycle hooks where the final text is realized.
 
 ## Architecture Directives
 - **Conversation Repository Adapter**: Handles saving the player's input and the NPC's generated response to the local/remote database under a specific `interactionId` or `chatId`.

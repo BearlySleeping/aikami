@@ -46,7 +46,7 @@ async function main() {
 
   // Start all three services in the mode session
   await startServices({
-    services: ['emulators', 'pwa'],
+    services: ['emulators', 'client'],
     mode,
     force: false,
     join: !detach,

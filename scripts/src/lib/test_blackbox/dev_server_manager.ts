@@ -7,7 +7,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 const DEV_SERVER_CONFIG = {
-  pwa: { cwd: 'apps/frontend/pwa', port: EMULATOR_PORTS.pwa },
+  client: { cwd: 'apps/frontend/client', port: EMULATOR_PORTS.client },
 } as const;
 
 type AppName = keyof typeof DEV_SERVER_CONFIG;

@@ -10,11 +10,11 @@
 
 import { EMULATOR_PORTS } from './config';
 import { test as base, type Page } from '@playwright/test';
-import { GameMenuPage, PwaAuthPage, PwaChatPage, PwaNavigation } from './pom/index';
+import { GameMenuPage, ClientAuthPage, ClientChatPage, ClientNavigation } from './pom/index';
 
 // ── Configuration ───────────────────────────────────────────
 
-const PWA_BASE_URL = `http://localhost:${EMULATOR_PORTS.pwa}`;
+const PWA_BASE_URL = `http://localhost:${EMULATOR_PORTS.client}`;
 const AUTH_STATE_FILE = './.auth/user.json';
 
 // ── POM Factory Types ───────────────────────────────────────
@@ -22,10 +22,10 @@ const AUTH_STATE_FILE = './.auth/user.json';
 /**
  * Creates PWA Page Object Models bound to a specific Playwright Page.
  */
-export type PwaPomFactory = (page: Page) => {
-  auth: PwaAuthPage;
-  chat: PwaChatPage;
-  nav: PwaNavigation;
+export type ClientPomFactory = (page: Page) => {
+  auth: ClientAuthPage;
+  chat: ClientChatPage;
+  nav: ClientNavigation;
 };
 
 /**
@@ -42,7 +42,7 @@ export type GamePomFactory = (page: Page) => {
  *
  * - authUser: Pre-authenticated browser page (loads .auth/user.json)
  * - guestUser: Pristine, unauthenticated browser page
- * - pwa: Factory — call `pwa(page)` to get POMs bound to that page
+ * - client: Factory — call `client(page)` to get POMs bound to that page
  * - game: Factory — call `game(page)` to get POMs bound to that page
  */
 export type E2EFixtures = {
@@ -52,8 +52,8 @@ export type E2EFixtures = {
   /** Pristine, unauthenticated browser page targeting the PWA domain. */
   guestUser: Page;
 
-  /** PWA POM factory — call `pwa(page)` to get POM instances. */
-  pwa: PwaPomFactory;
+  /** client POM factory — call `client(page)` to get POM instances. */
+  client: ClientPomFactory;
 
   /** Game POM factory — call `game(page)` to get POM instances. */
   game: GamePomFactory;
@@ -96,12 +96,12 @@ export const test = base.extend<E2EFixtures>({
   },
 
   // ── PWA POM Factory ─────────────────────────────────────
-  pwa: async ({ page: _page }, use) => {
+  client: async ({ page: _page }, use) => {
     void _page;
-    const factory: PwaPomFactory = (page: Page) => ({
-      auth: new PwaAuthPage(page),
-      chat: new PwaChatPage(page),
-      nav: new PwaNavigation(page),
+    const factory: ClientPomFactory = (page: Page) => ({
+      auth: new ClientAuthPage(page),
+      chat: new ClientChatPage(page),
+      nav: new ClientNavigation(page),
     });
     await use(factory);
   },

@@ -4,7 +4,7 @@
 - SillyTavern AST Macro Parser 
 - RisuAI ChatML Parser
 - Aikami Core: `apps/frontend/game/src/engine/engine_bridge.ts`
-- Aikami UI: `apps/frontend/pwa/src/lib/client/services/chat/chat.svelte.ts`
+- Aikami UI: `apps/frontend/client/src/lib/client/services/chat/chat.svelte.ts`
 
 ## Detailed Changes
 1. **Package Creation**: Establish a new utility library at `packages/shared/parser` utilizing the `typescript-library.yml` Moon template.

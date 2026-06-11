@@ -1,7 +1,7 @@
 | Metadata | Value |
 | --- | --- |
 | Source | User |
-| Target | apps/frontend/pwa |
+| Target | apps/frontend/client |
 | Priority | High |
 | Dependencies | C-034, C-042 |
 | Status | not_started |
@@ -12,7 +12,7 @@ Establish a visual testing harness for the Universal LPC Spritesheet Character G
 
 # Design Reference
 - `references/visual-testing/scripts/ai_visual_validation.ts` for the LLM evaluation pattern.
-- `apps/frontend/pwa/src/routes/(dev)/dev/lpc/component/+page.svelte` for the existing (buggy) implementation.
+- `apps/frontend/client/src/routes/(dev)/dev/lpc/component/+page.svelte` for the existing (buggy) implementation.
 - Universal LPC Spritesheet Character Generator URL parameter patterns (e.g., `?body=Body_Color_light&head=Human_Male_light`).
 
 # Architecture Directives

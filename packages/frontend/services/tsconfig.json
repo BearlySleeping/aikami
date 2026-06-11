@@ -30,8 +30,8 @@
       "$logger/*": ["../../shared/logger/src/*"],
       "$router": ["./src/index.ts"],
       "$router/*": ["./src/*"],
-      "$routes": ["../../../apps/frontend/pwa/src/lib/constants/routes"],
-      "$routes/*": ["../../../apps/frontend/pwa/src/lib/constants/routes"]
+      "$routes": ["../../../apps/frontend/client/src/lib/constants/routes"],
+      "$routes/*": ["../../../apps/frontend/client/src/lib/constants/routes"]
     }
   },
   "include": ["src/**/*"],

@@ -7,8 +7,8 @@
 //   4401        Aikami     Firebase emulator hub
 //   5000-5001   Nordclaw   Firebase emulator (hosting, functions)
 //   5002-5003   Aikami     Firebase emulator (hosting, functions)
-//   5170-5189   Nordclaw   Frontend app dev servers (admin=5172, pwa=5174, landing=5176, extension=5179)
-//   5270-5289   Aikami     Frontend app dev servers (pwa=5274)
+//   5170-5189   Nordclaw   Frontend app dev servers (admin=5172, client=5174, landing=5176, extension=5179)
+//   5270-5289   Aikami     Frontend app dev servers (client=5274)
 //   8080        Nordclaw   Firebase emulator (firestore)
 //   8081        Aikami     Firebase emulator (firestore)
 //   8085        Nordclaw   Firebase emulator (pubsub)
@@ -24,7 +24,7 @@
 //   Within each project range, even ports = emulator mode, odd = staging,
 //   offset +4 = production.
 //
-//   Aikami apps:  pwa=5274  voice=8089
+//   Aikami apps:  client=5274  voice=8089
 
 // ── Firebase Emulator (unique for Aikami) ────────────────────────────────
 
@@ -45,21 +45,21 @@ export const EMULATOR_PORTS = {
   ...FB_EMULATOR_PORTS,
 
   // Aikami app dev servers (emulator):
-  pwa: 5274,
+  client: 5274,
   voice: 8089,
   image: 8188,
   text: 11436,
 } as const;
 
 export const STAGING_PORTS = {
-  pwa: 5273,
+  client: 5273,
   voice: 8088,
   image: 8187,
   text: 11433,
 } as const;
 
 export const PRODUCTION_PORTS = {
-  pwa: 5277,
+  client: 5277,
   voice: 8092,
   image: 8193,
   text: 11435,

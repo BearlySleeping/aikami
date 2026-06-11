@@ -18,7 +18,7 @@ function findCurrentPlaywrightVersion(): string {
   // 1. Try reading the installed npm package version
   const pwaPkgPath = resolve(
     MONOREPO_ROOT,
-    'apps/frontend/pwa/node_modules/@playwright/test/package.json',
+    'apps/frontend/client/node_modules/@playwright/test/package.json',
   );
   if (existsSync(pwaPkgPath)) {
     try {
@@ -47,7 +47,7 @@ function findCurrentPlaywrightVersion(): string {
 // ── Main ────────────────────────────────────────────────────────
 
 const currentVersion = findCurrentPlaywrightVersion();
-const pwaDir = resolve(MONOREPO_ROOT, 'apps/frontend/pwa');
+const pwaDir = resolve(MONOREPO_ROOT, 'apps/frontend/client');
 
 console.log(`🔒 Pinning @playwright/test to ${currentVersion}`);
 

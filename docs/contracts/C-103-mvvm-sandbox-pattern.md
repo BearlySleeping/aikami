@@ -7,8 +7,8 @@ We are establishing a strict Svelte 5 MVVM (Model-View-ViewModel) architecture. 
 ## Scope
 
 - The Character Profile/Card feature.
-- **Source:** `apps/frontend/pwa/src/lib/views/dev/character/`
-- **Destination:** `apps/frontend/pwa/src/lib/views/character/` (Production) and `apps/frontend/pwa/src/routes/(dev)/dev/character/` (Sandbox integration).
+- **Source:** `apps/frontend/client/src/lib/views/dev/character/`
+- **Destination:** `apps/frontend/client/src/lib/views/character/` (Production) and `apps/frontend/client/src/routes/(dev)/dev/character/` (Sandbox integration).
 
 ## Acceptance Criteria
 
@@ -16,11 +16,11 @@ We are establishing a strict Svelte 5 MVVM (Model-View-ViewModel) architecture. 
 - [ ] Ensure `character_view_model.svelte.ts` exports a standard class (e.g., `CharacterViewModel`) using Svelte 5 `$state` runes for reactive properties. It should have a standard data-loading method (even if it's currently a stub).
 - [ ] Create `character_dev_view_model.svelte.ts` (can live alongside it or in the dev route). This class MUST `extend CharacterViewModel`.
 - [ ] In `CharacterDevViewModel`, override the data-loading method to inject mock data compliant with `@aikami/shared-types`. Add at least one dev-only method (e.g., `forceErrorState()` or `injectJunkData()`).
-- [ ] Update `apps/frontend/pwa/src/routes/(dev)/dev/character/+page.svelte` to instantiate `CharacterDevViewModel` and pass it into the standard `<CharacterView />` component.
+- [ ] Update `apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte` to instantiate `CharacterDevViewModel` and pass it into the standard `<CharacterView />` component.
 
 ## Implementation Notes
 
-1. **Move Files:** Move `apps/frontend/pwa/src/lib/views/dev/character` -> `apps/frontend/pwa/src/lib/views/character`.
+1. **Move Files:** Move `apps/frontend/client/src/lib/views/dev/character` -> `apps/frontend/client/src/lib/views/character`.
 2. **Fix Imports:** Do a workspace search to fix any imports pointing to the old `views/dev/character` path.
 3. **The Svelte 5 Pattern:** ```typescript
    // Production

@@ -17,21 +17,21 @@ This contract introduces an interactive visual debugger (`/dev/lpc-component`) m
 
 ## Design Reference
 
-- `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-component/+page.svelte`: Sandboxed runtime evaluation tab.
+- `apps/frontend/client/src/routes/(authenticated)/dev/lpc-component/+page.svelte`: Sandboxed runtime evaluation tab.
 - `LPC Spritesheet Pipeline Tool Comparison`: Standard hierarchical sheet categories (Body, Head, Hair, Torso, Legs, Feet) and palette ramp shifts.
 - `Svelte, PixiJS, WebGL2 Shader Integration`: Explicit microtask batch boundaries via `$effect` hooks and isolated SSR contexts.
 
 ## Changes Detail
 
-### 1. Create `apps/frontend/pwa/src/lib/data/lpc_asset_catalog.ts`
+### 1. Create `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts`
 
 Scaffold a comprehensive metadata schema that maps asset files to memory slots:
 
-- Line 1 File path comment: `// apps/frontend/pwa/src/lib/data/lpc_asset_catalog.ts`.
+- Line 1 File path comment: `// apps/frontend/client/src/lib/data/lpc_asset_catalog.ts`.
 - Export a immutable lookup definition structure grouping available standard LPC variants (e.g., `Body`: `light`, `dark`, `skeleton`; `Hair`: `short_brown`, `long_blonde`).
 - Provide an automatic 256-color gradient builder (`buildDefaultPaletteRamp()`) mapping baseline color arrays (Skin, Hair, Cloth, Metal) to raw color coordinates matching standard WebGL-accelerated generators.
 
-### 2. Update `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-component/+page.svelte`
+### 2. Update `apps/frontend/client/src/routes/(authenticated)/dev/lpc-component/+page.svelte`
 
 Overhaul the verification tab into a 3-column debugger workspace:
 

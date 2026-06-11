@@ -2,11 +2,11 @@
 # Contract C-028: Game Firebase REST Integration & PWA Auth Handoff
 
 ## Core Objective
-Establish a lightweight, REST-driven Firebase client within the PixiJS + bitECS game frontend (`apps/frontend/game`), bypassing the heavyweight Firebase JS SDK. Implement a "Device Flow" style authentication handoff to the PWA (`apps/frontend/pwa`), and scaffold an automated blackbox testing pipeline via `tmux` and Playwright.
+Establish a lightweight, REST-driven Firebase client within the PixiJS + bitECS game frontend (`apps/frontend/game`), bypassing the heavyweight Firebase JS SDK. Implement a "Device Flow" style authentication handoff to the PWA (`apps/frontend/client`), and scaffold an automated blackbox testing pipeline via `tmux` and Playwright.
 
 ## Design References
 - **Target App**: `apps/frontend/game/`
-- **PWA Auth Endpoint**: `apps/frontend/pwa/src/routes/(public)/auth/game/+page.svelte`
+- **PWA Auth Endpoint**: `apps/frontend/client/src/routes/(public)/auth/game/+page.svelte`
 - **Lightweight Firebase Ref**: `examples/aikami-v2-godotjs/src/core/firebase/`
 - **Testing Infrastructure**: `scripts/src/lib/test_blackbox/`
 
