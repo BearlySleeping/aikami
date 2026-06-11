@@ -45,12 +45,12 @@ export type AppConfig = {
 };
 
 export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
-  pwa: {
+  client: {
     serviceType: 'cloud-run-sveltekit',
-    path: 'apps/frontend/pwa',
-    shortName: 'pwa',
-    prefix: 'PWA',
-    cloudRunServiceId: 'pwa',
+    path: 'apps/frontend/client',
+    shortName: 'client',
+    prefix: 'CLIENT',
+    cloudRunServiceId: 'client',
   },
   landing_page: {
     serviceType: 'firebase-hosting',

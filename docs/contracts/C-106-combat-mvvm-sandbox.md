@@ -4,9 +4,9 @@
 We are extending our Svelte 5 MVVM and Sandbox architecture to the Combat/Battle System. Testing turn-based combat UI normally requires playing the game until an encounter triggers. By creating a `CombatDevViewModel` and a dedicated `(dev)/dev/combat` sandbox, we can instantly force specific combat states (low HP, enemy turns, critical hits) via the DevToolsPanel to rapidly iterate on the UI.
 
 ## Scope
-- `apps/frontend/pwa/src/lib/views/combat/combat_view_model.svelte.ts` (Ensure it is a class)
-- `apps/frontend/pwa/src/lib/views/combat/combat_view.svelte` (Ensure it is dumb/prop-driven)
-- `apps/frontend/pwa/src/routes/(dev)/dev/combat/+page.svelte` (New sandbox route)
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` (Ensure it is a class)
+- `apps/frontend/client/src/lib/views/combat/combat_view.svelte` (Ensure it is dumb/prop-driven)
+- `apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte` (New sandbox route)
 
 ## Acceptance Criteria
 - [ ] **ViewModel Refactor:** Ensure `combat_view_model.svelte.ts` exports a standard class (`CombatViewModel`) using Svelte 5 `$state`. All combat state (player HP, enemy HP, current turn, combat log) must live here.

@@ -12,7 +12,7 @@ import { spawnSync } from 'child_process';
 const DRY_RUN = process.argv.includes('--dry-run');
 
 const TARGET_DIRS = [
-  'apps/frontend/pwa',
+  'apps/frontend/client',
   'apps/frontend/landing_page',
   'apps/frontend/docs',
   'apps/frontend/gamejs/src',
@@ -200,7 +200,7 @@ async function main() {
   console.log('\n🌙 Updating moon.yml files...\n');
   const moonFiles: string[] = [];
   const moonDirs = [
-    'apps/frontend/pwa',
+    'apps/frontend/client',
     'apps/frontend/landing_page',
     'apps/frontend/docs',
     'apps/frontend/gamejs',

@@ -35,7 +35,7 @@ tests/
 │   │   └── api.fixture.ts      # API route test helpers
 │   ├── specs/
 │   │   ├── auth/               # Auth flow tests
-│   │   ├── pwa/                # PWA-specific tests
+│   │   ├── client/                # PWA-specific tests
 │   │   └── api/                # API route tests
 │   ├── helpers/
 │   │   ├── emulator.ts         # Firebase emulator management

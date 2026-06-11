@@ -52,7 +52,7 @@ The `Bun.serve` implementation in the Voice microservice should conceptually loo
 
 - **AC2: Tmux Scripts Refactored**
   - Given the tmux CLI commands
-  - When executing `bun run scripts/src/index.ts tmux:start voice,pwa`
+  - When executing `bun run scripts/src/index.ts tmux:start voice,client`
   - Then the orchestrator successfully creates the tmux session, splits the windows, and boots both the PWA and the new Voice microservice.
   - Test Hook: Review `start.ts` and `session.ts` to verify `game` is removed and the startup command for `voice` is mapped to `moon run voice:dev`.
 
@@ -69,7 +69,7 @@ The `Bun.serve` implementation in the Voice microservice should conceptually loo
 
 ## Implementation Notes
 1. Start by updating the ports in `@aikami/constants`. Run a workspace typecheck to catch and fix any downstream breakages caused by removing `PORTS.game`.
-2. Refactor the tmux scripts in `scripts/src/lib/tmux/`. The available services should now conceptually be `emulator`, `pwa`, `voice`, `all`.
+2. Refactor the tmux scripts in `scripts/src/lib/tmux/`. The available services should now conceptually be `emulator`, `client`, `voice`, `all`.
 3. Scaffold `apps/backend/voice`. Use a standard `package.json`, `tsconfig.json`, and `moon.yml` mimicking our existing backend patterns. 
 4. In `apps/backend/voice/src/main.ts`, instantiate the TTS handler and boot the Bun server.
 5. In your PWA's Voice Sandbox (`VoiceViewModel`), ensure the WebSocket URL is actually pointing to the new Voice service port (e.g., `ws://127.0.0.1:8081/ws`).

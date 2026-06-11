@@ -4,8 +4,8 @@
 In Contract C-102 (Tauri SPA Enforcement), we deleted our SvelteKit server routes (`+server.ts` and `+page.server.ts`) to ensure Tauri compilation. We commented out the `fetch()` calls in our frontend services that relied on those routes. We now need to rewire these client-side services to point directly to our local AI microservices (e.g., `apps/backend/text`) and Firebase Cloud Functions.
 
 ## Scope
-- `apps/frontend/pwa/src/lib/services/ai/ai_text_intelligence_service.svelte.ts` (or wherever the `TODO` was left for text generation).
-- `apps/frontend/pwa/src/lib/views/auth/game/auth_game_view_model.svelte.ts` (or wherever the `TODO` was left for auth handoff).
+- `apps/frontend/client/src/lib/services/ai/ai_text_intelligence_service.svelte.ts` (or wherever the `TODO` was left for text generation).
+- `apps/frontend/client/src/lib/views/auth/game/auth_game_view_model.svelte.ts` (or wherever the `TODO` was left for auth handoff).
 - `packages/shared/constants/src/lib/development_ports.ts` (or equivalent constants file).
 
 ## Acceptance Criteria
@@ -28,8 +28,8 @@ In Contract C-102 (Tauri SPA Enforcement), we deleted our SvelteKit server route
 
 ### Step 1: Search for TODO comments
 Found two files with `TODO(C-102)` / `TODO(C-107)`:
-- `apps/frontend/pwa/src/lib/services/ai/ai_text_intelligence_service.svelte.ts` — streamChat disabled, SSE reader renamed to `_readSSEStream_disabled`
-- `apps/frontend/pwa/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — `_completeHandoff()` throwing "temporarily disabled"
+- `apps/frontend/client/src/lib/services/ai/ai_text_intelligence_service.svelte.ts` — streamChat disabled, SSE reader renamed to `_readSSEStream_disabled`
+- `apps/frontend/client/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — `_completeHandoff()` throwing "temporarily disabled"
 
 ### Step 2: Wire AI Text Service → Ollama microservice
 - Replaced `fetch('/api/text')` with `fetch('http://127.0.0.1:11436/api/generate')` using `EMULATOR_PORTS.text` from `@aikami/constants`
@@ -50,8 +50,8 @@ Found two files with `TODO(C-102)` / `TODO(C-107)`:
 
 ### Verification
 - `types:typecheck` ✅ 0 errors
-- `pwa:typecheck` ✅ 0 errors, 0 warnings
-- `pwa:fix` ✅ no new issues
+- `client:typecheck` ✅ 0 errors, 0 warnings
+- `client:fix` ✅ no new issues
 - `backend-auth:fix` ✅ no issues (typecheck has pre-existing shared logger/utils ImportMeta errors — not from C-111)
 - `backend-auth:typecheck` — only pre-existing `ImportMeta` issues in shared logger/utils; no C-111 errors
 
@@ -59,7 +59,7 @@ Found two files with `TODO(C-102)` / `TODO(C-107)`:
 1. `packages/shared/types/src/lib/endpoints/auth.ts` — added `completeDeviceHandoff` event
 2. `packages/backend/auth/src/lib/complete_device_handoff.ts` — new file, handoff handler
 3. `packages/backend/auth/src/index.ts` — registered `completeDeviceHandoff` in api_handler
-4. `apps/frontend/pwa/src/lib/services/auth/auth_service.svelte.ts` — added `completeDeviceHandoff()` to interface + class
-5. `apps/frontend/pwa/src/lib/services/ai/ai_text_intelligence_service.svelte.ts` — rewired to Ollama microservice, new NDJSON reader
-6. `apps/frontend/pwa/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — rewired `_completeHandoff()` to callable
+4. `apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts` — added `completeDeviceHandoff()` to interface + class
+5. `apps/frontend/client/src/lib/services/ai/ai_text_intelligence_service.svelte.ts` — rewired to Ollama microservice, new NDJSON reader
+6. `apps/frontend/client/src/lib/views/auth/game/auth_game_view_model.svelte.ts` — rewired `_completeHandoff()` to callable
 7. `docs/contracts/PROGRESS.md` — marked C-111 completed

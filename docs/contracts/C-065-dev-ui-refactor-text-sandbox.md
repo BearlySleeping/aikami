@@ -14,7 +14,7 @@ We need to remove technical debt by converting the legacy CSS in our Developer C
 
 ## Design Reference
 - Review [DaisyUI Components](https://daisyui.com/components/) for `btn`, `select`, `range`, `card`, and `badge`.
-- Review `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` for how to consume the text stream.
+- Review `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` for how to consume the text stream.
 
 ## Architecture Directives
 - **LPC View Refactor**: Strip the `<style>` block from `lpc_view.svelte`. Replace custom classes (e.g., `.debug-workbench`, `.btn-primary`, `.status-banner`) with standard Tailwind layouts (`grid`, `flex`, `h-screen`) and DaisyUI components.

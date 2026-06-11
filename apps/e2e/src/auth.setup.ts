@@ -15,7 +15,7 @@ import { test as setup } from '@playwright/test';
 // ── Configuration ───────────────────────────────────────────
 
 /** PWA dev server base URL. */
-const PWA_BASE_URL = `http://localhost:${EMULATOR_PORTS.pwa}`;
+const CLIENT_BASE_URL = `http://localhost:${EMULATOR_PORTS.client}`;
 
 /** Auth emulator REST base URL. */
 const AUTH_EMULATOR_URL = `http://127.0.0.1:${EMULATOR_PORTS.auth}`;
@@ -111,7 +111,7 @@ setup('authenticate test user', async ({ page }) => {
   // biome-ignore lint/suspicious/noConsole: setup lifecycle logging
   console.log(`[auth.setup] Auth emulator: ${AUTH_EMULATOR_URL}`);
   // biome-ignore lint/suspicious/noConsole: setup lifecycle logging
-  console.log(`[auth.setup] PWA target: ${PWA_BASE_URL}`);
+  console.log(`[auth.setup] PWA target: ${CLIENT_BASE_URL}`);
 
   // Step 1 — Ensure the test user exists in the Auth emulator.
   const { localId } = await _createEmulatorUser({
@@ -216,7 +216,7 @@ setup('authenticate test user', async ({ page }) => {
 
   // Step 4 — Navigate to the PWA. The addInitScript runs before any page
   // scripts, so Firebase Auth SDK finds the injected state.
-  await page.goto(PWA_BASE_URL, { waitUntil: 'domcontentloaded' });
+  await page.goto(CLIENT_BASE_URL, { waitUntil: 'domcontentloaded' });
   // biome-ignore lint/suspicious/noConsole: setup lifecycle logging
   console.log('[auth.setup] PWA loaded with pre-injected auth state');
 

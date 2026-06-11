@@ -114,7 +114,7 @@ Client-side perimeter validation uses Valibot instead of Zod:
 - Exported to desktop via Tauri v2 as a native app (<5MB bundle)
 
 **Game Engine (PixiJS v8 + bitECS)**
-- Pure TypeScript, code-first game engine inside `apps/frontend/pwa/src/lib/game/`
+- Pure TypeScript, code-first game engine inside `apps/frontend/client/src/lib/game/`
 - PixiJS v8 renders via WebGPU — ~2ms GPU time for 100,000 sprites, keeping the main thread clear
 - bitECS 0.4.0 provides data-oriented entity component system — components stored in typed arrays (SoA layout), systems query via bitECS's archetype-based iteration
 - Communicates with Svelte UI exclusively through the EngineBridge — see Engine Boundary Pattern above

@@ -9,13 +9,13 @@
 This contract implements an interactive sandbox route (`/dev/lpc-demo`) inside the SvelteKit frontend client workspace to validate the performance metrics of the unified `LpcBatchManager` mega-UBO pipeline. The demo provisions real-time configuration arrays to spawn up to 64 active concurrent bitECS entities with live apparel layer randomization controls, tracking structural fingerprints and update metrics directly on screen.
 
 ## Design Reference
-- `apps/frontend/pwa/src/lib/components/game/game_canvas.svelte`: Core canvas lifecycle node template.
+- `apps/frontend/client/src/lib/components/game/game_canvas.svelte`: Core canvas lifecycle node template.
 - `packages/frontend/engine/src/systems/render_system.ts`: `LpcBatchManager` and sync loop hooks.
 
 ## Changes Detail
 ### New Files
 
-#### `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-demo/+page.svelte`
+#### `apps/frontend/client/src/routes/(authenticated)/dev/lpc-demo/+page.svelte`
 - Implement an explicit development sandbox viewport container using Svelte 5 structure properties.
 - Mount an instance of `pixi_app.ts`, ensuring it invokes `initLpcShaders()` inside its initialization lifecycle hooks.
 - Provide interactive controls (sliders, input matrices) to:
@@ -42,6 +42,6 @@ This contract implements an interactive sandbox route (`/dev/lpc-demo`) inside t
 - *Test Hook*: Evaluate performance counters via `browser_inspect` console evaluations.
 
 ## Implementation Notes
-1. Create `apps/frontend/pwa/src/routes/(authenticated)/dev/lpc-demo/+page.svelte`.
+1. Create `apps/frontend/client/src/routes/(authenticated)/dev/lpc-demo/+page.svelte`.
 2. Connect input state bindings directly to engine manipulation methods using standard Svelte 5 reactive arrays.
 3. Verify formatting, lint compliance, and strict code ordering layout by invoking the integrated validation wrapper commands.

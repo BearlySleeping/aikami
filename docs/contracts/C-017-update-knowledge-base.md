@@ -39,7 +39,7 @@ Formal refactoring of the `knowledge/` documentation folder to align with the Ma
 - `apps/frontend/gamejs/` as active game client
 
 **Add:**
-- **New game engine section**: PixiJS v8 rendering + bitECS 0.4.0 ECS, running inside `apps/frontend/pwa/src/lib/game/` (per C-016).
+- **New game engine section**: PixiJS v8 rendering + bitECS 0.4.0 ECS, running inside `apps/frontend/client/src/lib/game/` (per C-016).
 - **Tauri v2 desktop export**: SvelteKit PWA wrapped as native app via Tauri v2.
 - **Engine boundary architecture diagram** showing:
   - **SvelteKit UI Layer** (ChatView, HUDView, GameViewModel — `$state()` runes)
@@ -158,7 +158,7 @@ Add a second diagram showing the **Engine Boundary Pattern** (from C-016):
 ```
 apps/
 ├── frontend/
-│   ├── pwa/                     # Main PWA (SvelteKit 2)
+│   ├── client/                  # Main client app (SvelteKit 2)
 │   │   └── src/
 │   │       └── lib/
 │   │           ├── game/        # PixiJS v8 + bitECS engine (C-016)
@@ -173,7 +173,7 @@ apps/
 │   ├── landing_page/            # Landing page (Astro)
 │   ├── docs/                    # Documentation site (Astro)
 │   └── gamejs/                  # ⚠️ DEPRECATED — Legacy GodotJS client
-│                                #    Migration target: pwa/src/lib/game/
+│                                #    Migration target: client/src/lib/game/
 │                                #    Keep for reference until C-016 complete.
 └── backend/
     └── functions/               # Firebase Cloud Functions
@@ -194,7 +194,7 @@ packages/
 ```
 
 **Add a migration note block:**
-> **⚠️ Legacy Code Notice:** `apps/frontend/gamejs/` is the deprecated GodotJS game client. All new game engine development happens in `apps/frontend/pwa/src/lib/game/` using PixiJS v8 + bitECS. The GodotJS codebase is preserved for reference only and will be archived once C-016 is complete.
+> **⚠️ Legacy Code Notice:** `apps/frontend/gamejs/` is the deprecated GodotJS game client. All new game engine development happens in `apps/frontend/client/src/lib/game/` using PixiJS v8 + bitECS. The GodotJS codebase is preserved for reference only and will be archived once C-016 is complete.
 
 ### 5. Update `knowledge/guides/CODING_STANDARDS.md`
 
@@ -283,12 +283,12 @@ Bun × SvelteKit 2 × PixiJS v8 × bitECS × Firebase Data Connect × Tauri v2 �
 
 **Update the project structure tree** to match the new STRUCTURE.md:
 - Mark `apps/frontend/gamejs/` as "⚠️ DEPRECATED — Legacy GodotJS"
-- Add `apps/frontend/pwa/src/lib/game/` — PixiJS v8 + bitECS engine
+- Add `apps/frontend/client/src/lib/game/` — PixiJS v8 + bitECS engine
 - Add `packages/backend/ai/` — AI service abstraction
 - Add `packages/frontend/tanstack-db/` — PowerSync client
 
 **Add a section about the Engine Boundary pattern:**
-> **Engine Boundary (C-016):** All game code lives in `pwa/src/lib/game/` and runs
+> **Engine Boundary (C-016):** All game code lives in `client/src/lib/game/` and runs
 > imperatively via PixiJS's `requestAnimationFrame` ticker. Svelte 5 `$state` runes
 > are banned in the game directory. Communication between Svelte UI and PixiJS/bitECS
 > happens exclusively through the typed `EngineBridge` (GameCommand →, GameEvent ←).
@@ -350,18 +350,18 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 ### AC-4: STRUCTURE.md Shows New Layout + Deprecation
 **Given** the restructured game engine location and new packages
 **When** `knowledge/guides/STRUCTURE.md` is updated
-**Then** `apps/frontend/gamejs/` is marked ⚠️ DEPRECATED with migration target noted; `apps/frontend/pwa/src/lib/game/` is documented as the new game engine home; new packages (`backend/ai/`, `frontend/tanstack-db/`, `shared/valibot-schemas/`) are listed.
+**Then** `apps/frontend/gamejs/` is marked ⚠️ DEPRECATED with migration target noted; `apps/frontend/client/src/lib/game/` is documented as the new game engine home; new packages (`backend/ai/`, `frontend/tanstack-db/`, `shared/valibot-schemas/`) are listed.
 
 **Test Hooks:**
 - Unit: `grep "DEPRECATED\|⚠️\|Legacy" knowledge/guides/STRUCTURE.md` returns lines about `gamejs/`
-- Unit: `grep "pwa/src/lib/game" knowledge/guides/STRUCTURE.md` returns non-empty (new engine location)
+- Unit: `grep "client/src/lib/game" knowledge/guides/STRUCTURE.md` returns non-empty (new engine location)
 - Unit: `grep "backend/ai\|AiServiceInterface" knowledge/guides/STRUCTURE.md` returns non-empty
 - Unit: `grep "tanstack-db\|PowerSync" knowledge/guides/STRUCTURE.md` returns non-empty
 - Unit: `grep "valibot-schemas" knowledge/guides/STRUCTURE.md` returns non-empty
 
 **Watch Points:**
 - The deprecation marker must be visible — use ⚠️ or **DEPRECATED** in bold
-- The migration note must clearly state: "Migration target: `pwa/src/lib/game/`"
+- The migration note must clearly state: "Migration target: `client/src/lib/game/`"
 
 ### AC-5: CODING_STANDARDS.md Includes Strict AI Rules
 **Given** the rules discovered during C-014/C-015/C-016
@@ -408,7 +408,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 **Test Hooks:**
 - Integration: `bun run typecheck` exits with code 0
 - Integration: Grep stderr for "error TS" — must be zero NEW errors (pre-existing errors documented in limitations.md are acceptable)
-- Integration: `moon_run_task({ target: "pwa:typecheck" })` passes — PWA remains clean
+- Integration: `moon_run_task({ target: "client:typecheck" })` passes — PWA remains clean
 - Integration: `moon_run_task({ target: "functions:typecheck" })` passes — Functions remain clean
 
 **Watch Points:**
@@ -446,7 +446,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 7. Update `CONTEXT.md` — comprehensive AI briefing refresh (depends on all above)
 8. Regenerate `llms.txt` — final step
 9. Run `bun run typecheck` — verify no regressions
-10. Run `moon_run_task({ target: "pwa:typecheck" })` — spot-check PWA
+10. Run `moon_run_task({ target: "client:typecheck" })` — spot-check PWA
 
 ### Verification
 - `bun run typecheck` — zero new errors

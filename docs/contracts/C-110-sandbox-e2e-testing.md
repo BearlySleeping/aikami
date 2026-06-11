@@ -4,7 +4,7 @@
 During the Phase 2 overhaul, we built isolated MVVM dev sandboxes for Character, Chat, Combat, Inventory, and Quests. Because these sandboxes use Mock ViewModels (`DevViewModel`) and a floating `<DevToolsPanel>`, they are completely deterministic and require zero backend services. We need to lock in this architecture by writing Playwright E2E tests that navigate to these sandboxes, interact with the dev tools, and assert that the UI updates correctly.
 
 ## Scope
-- `apps/e2e/tests/pwa/sandboxes.spec.ts` (New test file)
+- `apps/e2e/tests/client/sandboxes.spec.ts` (New test file)
 
 ## Acceptance Criteria
 - [ ] **Test Setup:** Create a new Playwright test file specifically for the dev sandboxes.
@@ -15,7 +15,7 @@ During the Phase 2 overhaul, we built isolated MVVM dev sandboxes for Character,
 - [ ] **Quest Sandbox:** Write a test that navigates to `/dev/quest`, injects mock quests, and verifies they render in the DOM.
 
 ## Implementation Notes
-1. Place the new test file in your existing `apps/e2e/tests/pwa/` directory.
+1. Place the new test file in your existing `apps/e2e/tests/client/` directory.
 2. The tests should be fast. You do not need to test every single edge case, just verify that the Dev Tools panel successfully manipulates the ViewModel and the View reacts.
 3. If necessary, update the underlying Svelte components in the PWA to include `data-testid` attributes to make Playwright targeting more reliable.
 
@@ -28,20 +28,20 @@ During the Phase 2 overhaul, we built isolated MVVM dev sandboxes for Character,
 
 ### Changes Made
 
-1. **DevToolsPanel** (`apps/frontend/pwa/src/lib/components/dev/dev_tools_panel.svelte`):
+1. **DevToolsPanel** (`apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte`):
    - Added `data-testid` attribute to action buttons: `dev-action-{slug}` where slug is the label lowercased with non-alphanumeric chars replaced by `-`.
 
-2. **Combat View** (`apps/frontend/pwa/src/lib/views/combat/combat_view.svelte`):
+2. **Combat View** (`apps/frontend/client/src/lib/views/combat/combat_view.svelte`):
    - Added `data-testid="player-hp-text"` and `data-testid="enemy-hp-text"` to HP display spans.
 
-3. **Inventory View** (`apps/frontend/pwa/src/lib/views/inventory/inventory_view.svelte`):
+3. **Inventory View** (`apps/frontend/client/src/lib/views/inventory/inventory_view.svelte`):
    - Added `data-testid="gold-amount"` to gold display span.
    - Added `data-testid="inventory-item-list"` to items `<ul>`.
 
-4. **Quest View** (`apps/frontend/pwa/src/lib/views/quest/quest_view.svelte`):
+4. **Quest View** (`apps/frontend/client/src/lib/views/quest/quest_view.svelte`):
    - Added `data-testid="active-quests-header"` to the Active quests `<h2>`.
 
-5. **Test File** (`apps/e2e/tests/pwa/sandboxes.spec.ts`):
+5. **Test File** (`apps/e2e/tests/client/sandboxes.spec.ts`):
    - Created with 11 test blocks across 5 describe suites:
      - **Character Sandbox** (2 tests): Load verification + Force Error State action.
      - **Chat Sandbox** (2 tests): Load verification + Simulate Bot Reply action.

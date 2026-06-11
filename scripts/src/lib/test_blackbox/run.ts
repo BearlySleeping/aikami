@@ -43,7 +43,7 @@ Options:
 Suites:
   schema-check      Validate Zod schemas + TypeScript types
   functions         Firebase Functions tests (requires emulators)
-  pwa               PWA browser tests (requires PWA dev server)
+  client            Client browser tests (requires PWA dev server)
   game-e2e          Game Firebase REST integration (requires emulators + game dev server)
   cross-service     Multi-service flow tests
 
@@ -51,7 +51,7 @@ Examples:
   bun run test:blackbox                         # All suites
   bun run test:blackbox game-e2e                # Game only
   bun run test:blackbox schema-check            # Schema only
-  bun run test:blackbox pwa functions           # PWA + Functions
+  bun run test:blackbox client functions           # PWA + Functions
   bun run test:blackbox --no-cross-service      # Skip cross-service
   `);
   process.exit(0);
@@ -72,7 +72,7 @@ async function main() {
   const suiteRefs: SuiteRef[] = [
     { name: 'schema-check', path: './suites/schema_check.ts', key: 'schemaCheckSuite' },
     { name: 'functions', path: './suites/functions.api.ts', key: 'functionsSuite' },
-    { name: 'pwa', path: './suites/pwa.e2e.ts', key: 'pwaSuite' },
+    { name: 'client', path: './suites/client.e2e.ts', key: 'clientSuite' },
     { name: 'game-e2e', path: './suites/game_e2e.ts', key: 'gameE2eSuite' },
     { name: 'comfyui', path: './suites/comfyui.ts', key: 'comfyuiSuite' },
   ];
@@ -106,7 +106,7 @@ async function main() {
   const needsEmulator = suites.some(
     (s) => s.category === 'service' || s.category === 'cross-service',
   );
-  const needsPwa = suites.some((s) => s.name === 'pwa');
+  const needsClient = suites.some((s) => s.name === 'client');
   const needsGame = suites.some((s) => s.name === 'game-e2e');
   const needsAiServices = suites.some((s) => s.name === 'ai-services');
 
@@ -136,8 +136,8 @@ async function main() {
       if (needsGame) {
         only.push('game');
       }
-      if (needsPwa) {
-        only.push('pwa');
+      if (needsClient) {
+        only.push('client');
       }
 
       if (only.length > 0) {
@@ -163,9 +163,9 @@ async function main() {
         );
       }
 
-      if (needsPwa) {
+      if (needsClient) {
         services.push(
-          startDevServer('pwa').catch((e) => {
+          startDevServer('client').catch((e) => {
             console.error('  ⚠ PWA dev server failed:', e instanceof Error ? e.message : e);
           }),
         );

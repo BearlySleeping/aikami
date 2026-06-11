@@ -59,13 +59,13 @@ if (!evalOnly) {
     if (!(await checkPwaRunning())) {
       console.error(`❌ PWA dev server not reachable at http://localhost:${PWA_PORT}/`);
       console.error('   Start it first:');
-      console.error('     bun moon run pwa:dev');
+      console.error('     bun moon run client:dev');
       console.error('   Or run the full lifecycle script:');
       console.error('     bun run apps/e2e/scripts/run_lpc_smoke_full.ts');
       process.exit(1);
     }
 
-    const result = await $`bunx playwright test --project=pwa-visual`.cwd(E2E_DIR).nothrow();
+    const result = await $`bunx playwright test --project=client-visual`.cwd(E2E_DIR).nothrow();
 
     if (result.exitCode !== 0) {
       console.log('⚠️  Playwright capture had failures.');

@@ -89,7 +89,7 @@ Migrate all aikami-specific skills from `.agents/skills/` to `.pi/skills/`, and 
 1. **Move, don't copy**: `mv .agents/skills/* .pi/skills/` — these are aikami-specific and should only exist once
 2. **Then copy from aikami**: `cp -r aikami/.pi/skills/{project-commands,firestack,firebase-functions,firestore-collection,contract-implementer,knowledge-clerk,svelte-page} aikami/.pi/skills/`
 3. **Adaptation needed**:
-   - `project-commands`: Update moon project names (pwa, functions, etc.)
+   - `project-commands`: Update moon project names (client, functions, etc.)
    - `firebase-functions`: Update paths and function names
    - `contract-implementer`: Update to reference `@aikami/` packages
    - `knowledge-clerk`: Update knowledge directory paths

@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | Source | architecture |
-| Target | apps/frontend/pwa |
+| Target | apps/frontend/client |
 | Priority | P2 |
 | Dependencies | C-066 |
 | Status | not_started |
@@ -15,7 +15,7 @@ Enhance the existing Dev Image Sandbox with a dynamic ComfyUI checkpoint (model)
 
 ## Design Reference
 
-- Voice Sandbox Pattern: `apps/frontend/pwa/src/lib/views/dev/voice/` and `apps/frontend/pwa/src/lib/client/services/media/tts.svelte.ts`.
+- Voice Sandbox Pattern: `apps/frontend/client/src/lib/views/dev/voice/` and `apps/frontend/client/src/lib/client/services/media/tts.svelte.ts`.
 - Thin ViewModel Pattern: ViewModels own minimal local state (like text input) and proxy complex business logic and arrays (like available voices/checkpoints) via native getters to the underlying `$state`-equipped service.
 
 ## Architecture Directives
@@ -72,9 +72,9 @@ Enhance the existing Dev Image Sandbox with a dynamic ComfyUI checkpoint (model)
 
 ## Implementation Notes
 
-1.  Update `ImageGenerationServiceInterface` and `ImageGenerationService` in `apps/frontend/pwa/src/lib/client/services/media/image_generation.svelte.ts`. Add the `CheckpointInfo` type, `loadCheckpoints()`, and update `generateImage()`.
+1.  Update `ImageGenerationServiceInterface` and `ImageGenerationService` in `apps/frontend/client/src/lib/client/services/media/image_generation.svelte.ts`. Add the `CheckpointInfo` type, `loadCheckpoints()`, and update `generateImage()`.
 2.  Create/update the corresponding unit tests for the service. Use the `test_preload.ts` setup if `$state` runes need polyfilling in the test environment.
-3.  Update `ImageViewModelInterface` and `ImageViewModel` in `apps/frontend/pwa/src/lib/views/dev/image/image_view_model.svelte.ts` to bridge the new state and call `loadCheckpoints()` during `initialize()`.
+3.  Update `ImageViewModelInterface` and `ImageViewModel` in `apps/frontend/client/src/lib/views/dev/image/image_view_model.svelte.ts` to bridge the new state and call `loadCheckpoints()` during `initialize()`.
 4.  Update `image_view.svelte` to include the DaisyUI card/form-control for the checkpoint selector, mimicking the voice selector layout.
 
 ## Edge Cases & Gotchas

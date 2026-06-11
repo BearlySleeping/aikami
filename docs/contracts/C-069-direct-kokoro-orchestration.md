@@ -14,7 +14,7 @@ We are removing the Bun/Hono proxy layer from the Voice microservice to reduce a
 
 ## Design Reference
 - Review `packages/backend/audio/src/lib/sentence_boundary_chunker.ts` (to be relocated to the frontend).
-- Review `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` for where the chunking and HTTP calls will now occur.
+- Review `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` for where the chunking and HTTP calls will now occur.
 
 ## Architecture Directives
 - **Headless Kokoro Container**: Strip `apps/backend/voice/src/main.ts` and the Hono setup. Replace the `Dockerfile` with a simple implementation extending `hwdsl2/kokoro-server:latest`. Update `package.json` to handle building and running this container via Podman/Docker on the assigned voice port (8089).
@@ -61,7 +61,7 @@ Kokoro expects an OpenAI-compatible completion payload. The Direct TTS HTTP Clie
 
 ## Implementation Notes
 1. Start with the cleanup (AC4 and AC1). Delete `packages/backend/audio`, strip `apps/backend/voice/src/`, rewrite the `Dockerfile`, and update `apps/backend/voice/package.json` scripts. (Note: Kokoro internally runs on 8880, so map `-p 8089:8880`).
-2. Move the `SentenceBoundaryChunker` into `apps/frontend/pwa/src/lib/client/services/media/` and get its tests passing in the PWA (AC2).
+2. Move the `SentenceBoundaryChunker` into `apps/frontend/client/src/lib/client/services/media/` and get its tests passing in the PWA (AC2).
 3. Build the HTTP client logic for Kokoro in the PWA.
 4. Refactor `StreamOrchestrator` to use the inline chunker and HTTP client instead of the old WebSocket setup (AC3). Ensure `AbortController` handles canceling active `fetch` calls to Kokoro if the user skips dialogue.
 

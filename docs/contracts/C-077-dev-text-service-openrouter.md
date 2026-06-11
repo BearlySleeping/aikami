@@ -55,7 +55,7 @@ The `DevTextService` should conceptually hold:
   - Given the automated Playwright suite
   - When the Dev Text Stream tests run
   - Then the tests successfully select the provider dropdown, submit a prompt, and assert the output container receives streamed text.
-  - Test Hook: Run `bun run test:blackbox pwa` to ensure the E2E flow passes without hanging or failing to find locators.
+  - Test Hook: Run `bun run test:blackbox client` to ensure the E2E flow passes without hanging or failing to find locators.
 
 ## Implementation Notes
 1. Create `DevTextService` and move the `_readStream` and `generate` methods from the current `TextViewModel` into it.

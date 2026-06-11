@@ -13,7 +13,7 @@
 The Text LLM will drive NPC visual expressions by outputting tags like `<emotion:joy>`. To maintain real-time conversation pacing, we are implementing a hybrid asset resolution strategy. The orchestrator will parse these tags invisibly from the SSE stream. It will first attempt to load a pre-generated static asset for that NPC and emotion (fast-path). If the asset does not exist, it will fallback to generating the expression on-the-fly using the ComfyUI Orchestrator.
 
 ## Design Reference
-- Review `apps/frontend/pwa/src/lib/client/services/media/stream_orchestrator.svelte.ts` for where the SSE stream is consumed.
+- Review `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.svelte.ts` for where the SSE stream is consumed.
 - Review existing static assets in `static/` or the asset catalog to see how pre-generated character portraits are structured.
 
 ## Architecture Directives

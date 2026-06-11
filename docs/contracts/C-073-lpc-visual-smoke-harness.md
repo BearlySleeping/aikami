@@ -65,7 +65,7 @@ The payload exchange between the local test harness and the Vision Evaluation Ga
 - Test Hook: Verification that a forced malformed mock generation drops the score below 90 and triggers a task failure.
 
 ## Implementation Notes
-1. Move the legacy `apps/frontend/pwa/tests/lpc_visual.spec.ts` into `apps/e2e/tests/pwa/` to align with the C-052 unified test runner pattern.
+1. Move the legacy `apps/frontend/client/tests/lpc_visual.spec.ts` into `apps/e2e/tests/client/` to align with the C-052 unified test runner pattern.
 2. Update the `validate_lpc_visuals.ts` script to target the new `apps/e2e/test-results/lpc-visual/` directory.
 3. Verify the prompt inside the validation script instructs the AI to return the specific JSON schema (score, passed, visualDiscrepancies).
 4. Add a `test:visual` or `lpc:smoke` command to `apps/e2e/package.json` and its `moon.yml` to orchestrate this flow.

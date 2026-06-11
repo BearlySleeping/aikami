@@ -7,7 +7,7 @@
 //   bun tmux:join              [--mode <mode>]
 //   bun tmux:list              [--mode <mode>]
 //
-//   <services> = comma-separated: emulator,pwa,voice  or  all
+//   <services> = comma-separated: emulator,client,voice  or  all
 //   Aliases: emulator → emulators
 //
 // Mode defaults to AIKAMI_MODE env var, required if not set.
@@ -41,7 +41,7 @@ export const parseServices = (raw: string): DevService[] => {
 
   if (inputs.length === 0) {
     throw new Error(
-      'No services specified. Use: emulator(s), pwa, voice, image, text, all (comma-separated)',
+      'No services specified. Use: emulator(s), client, voice, image, text, all (comma-separated)',
     );
   }
 
@@ -80,7 +80,7 @@ export const parseServiceArgs = (args: string[]): ServiceArgs => {
   if (!serviceArg) {
     console.error(
       'Usage: bun tmux:start <services> [--mode <mode>] [--join] [--force]\n' +
-        '  services: emulator(s), pwa, voice, image, text, all (comma-separated)\n' +
+        '  services: emulator(s), client, voice, image, text, all (comma-separated)\n' +
         '  mode:     emulator | staging | production (default: $AIKAMI_MODE)\n' +
         '  --join:   attach to session after starting\n' +
         '  --force:  kill and recreate if session already exists\n',
