@@ -399,15 +399,42 @@ const tickLoop = (): void => {
       events,
     });
   } else {
-    // ArrayBuffer fallback — transfer ownership so main thread can read
+    // ArrayBuffer fallback — transfer ownership so main thread can read.
+    // IMPORTANT: after transfer the worker's reference to `buffer` is
+    // detached.  The next buffer in the pool may also be detached if the
+    // main thread hasn't recycled it yet — guard with byteLength > 0.
     const buffer = bufferPool[activeBufferIndex];
-    if (!buffer) {
+    if (!buffer || buffer.byteLength === 0) {
+      return; // No writable buffer available — skip this frame
+    }
+
+    // Advance to the next writable buffer in the pool, skipping
+    // any null entries (transferred but not yet recycled).
+    const oldIndex = activeBufferIndex;
+
+    // Mark the buffer we're about to transfer as consumed
+    bufferPool[oldIndex] = null as unknown as ArrayBuffer;
+
+    // Find the next writable buffer
+    let nextWritableIndex = -1;
+    for (let attempt = 0; attempt < FALLBACK_BUFFER_COUNT; attempt++) {
+      const candidate = (oldIndex + 1 + attempt) % FALLBACK_BUFFER_COUNT;
+      const buf = bufferPool[candidate] as ArrayBuffer | null;
+      if (buf && buf.byteLength > 0) {
+        nextWritableIndex = candidate;
+        break;
+      }
+    }
+
+    if (nextWritableIndex === -1) {
+      // All buffers are transferred — pause the tick loop until
+      // the main thread recycles one back via RECYCLE_BUFFER.
+      activeWriteView = undefined;
       return;
     }
 
-    // Advance to the next buffer in the pool
-    activeBufferIndex = (activeBufferIndex + 1) % FALLBACK_BUFFER_COUNT;
-    activeWriteView = new Float32Array(bufferPool[activeBufferIndex]);
+    activeBufferIndex = nextWritableIndex;
+    activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
 
     postMessage(
       {
@@ -562,10 +589,37 @@ self.onmessage = (event: MessageEvent): void => {
       }
 
       case 'RECYCLE_BUFFER': {
-        // Main thread has finished reading this buffer — add it back to the pool
+        // Main thread has finished reading this buffer — place it back
+        // into the first null slot in the fixed-size pool.
+        // If the tick loop paused (activeWriteView is undefined), restore
+        // the write view so the loop resumes on the next interval.
         const recycled = message.buffer as ArrayBuffer;
-        if (recycled) {
-          bufferPool.push(recycled);
+        if (recycled && recycled.byteLength > 0) {
+          // Find the first null slot and fill it
+          let slotFound = false;
+          for (let i = 0; i < FALLBACK_BUFFER_COUNT; i++) {
+            if (!bufferPool[i]) {
+              bufferPool[i] = recycled;
+              slotFound = true;
+              break;
+            }
+          }
+          // Fallback: push if all slots are somehow full (shouldn't happen)
+          if (!slotFound) {
+            bufferPool.push(recycled);
+          }
+
+          // Resume paused tick loop
+          if (!activeWriteView) {
+            activeWriteView = new Float32Array(recycled);
+            // Find which index we just filled
+            for (let i = 0; i < FALLBACK_BUFFER_COUNT; i++) {
+              if (bufferPool[i] === recycled) {
+                activeBufferIndex = i;
+                break;
+              }
+            }
+          }
         }
         break;
       }

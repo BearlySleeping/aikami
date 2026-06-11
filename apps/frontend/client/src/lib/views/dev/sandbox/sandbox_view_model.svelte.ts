@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts
 
-import type { EngineBridge } from '@aikami/frontend/engine';
+import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
 import { BaseEngineClass, createEngineBridge, GameWorld } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -112,7 +112,13 @@ class SandboxViewModel
         this.engineError = event.message;
       });
 
-      this._gameWorld = GameWorld.create({ className: 'GameWorld', bridge: this._engineBridge });
+      const worldOptions: GameWorldOptions = {
+        className: 'GameWorld',
+        bridge: this._engineBridge,
+        spritesheetUrl: '/lpc/body/male/walk.png',
+        playerSpritesheetUrl: '/lpc/body/muscular/walk.png',
+      };
+      this._gameWorld = GameWorld.create(worldOptions);
 
       // Key press (E): open full dialog, pause game, stop player movement
       this._gameWorld.onInteractRequest((npc) => {

@@ -38,8 +38,11 @@ export abstract class BaseLoggerService implements LoggerInterface {
   }
 
   protected _flushSinks(entry: LogEntry, ...data: unknown[]): void {
-    // Check for loops BEFORE we write to sinks so we don't spam the console/network
-    this._detectInfiniteLoop(entry, data);
+    // Check for loops BEFORE we write to sinks so we don't spam the console/network.
+    // Returns true when the log should be dropped (rate-limited).
+    if (this._detectInfiniteLoop(entry, data)) {
+      return;
+    }
 
     for (const sink of this._sinks) {
       try {
@@ -131,42 +134,59 @@ export abstract class BaseLoggerService implements LoggerInterface {
   }
 
   /**
-   * Super lite circuit breaker to detect infinite reactivity loops.
-   * Only runs in development.
+   * Rate-limits repeated log signatures to prevent console / network
+   * floods during infinite-loop or detached-buffer cascades.
+   *
+   * Returns `true` when the log should be dropped (rate-limited).
+   * Never throws — throwing only kills the current microtask, which
+   * is useless against async event floods (WebSocket, postMessage).
+   *
+   * Only active in dev; always returns `false` in production.
    */
-  private _detectInfiniteLoop(entry: LogEntry, data: unknown[]): void {
-    // 1. MUST NOT RUN IN PRODUCTION!
-    // Assuming you have a way to check env here, e.g., import.meta.env.DEV
-    if (typeof import.meta !== 'undefined' && !import.meta.env?.DEV) {
-      return;
+  private _detectInfiniteLoop(entry: LogEntry, data: unknown[]): boolean {
+    // Rate-limiting is dev-only.  In production, logs pass through
+    // unthrottled (they won't flood at prod volumes).
+    //
+    // Detection order: Bun/Node process.env, then Vite import.meta.env.
+    const isProduction =
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') ||
+      (typeof import.meta !== 'undefined' &&
+        (import.meta as unknown as Record<string, unknown>).env !== undefined &&
+        !(import.meta as unknown as Record<string, unknown>).DEV);
+
+    if (isProduction) {
+      return false;
     }
 
-    // 2. Create a fast, lightweight signature (don't deep stringify the whole object!)
-    // We just use the log level, message, or the first string argument.
     const signature = entry.message || (typeof data[0] === 'string' ? data[0] : 'obj_log');
-
     const now = Date.now();
 
-    // 3. Check if it's the exact same log happening very quickly (e.g., under 50ms apart)
     if (this._lastLogSignature === signature && now - this._lastLogTimestamp < 50) {
       this._logRepeatCount++;
 
-      // 4. If we hit 150 identical, rapid-fire logs, KILL IT.
-      if (this._logRepeatCount > 150) {
-        this._logRepeatCount = 0; // Reset so we don't trap the error handler itself
+      if (this._logRepeatCount > 100) {
+        if (this._logRepeatCount === 101) {
+          // biome-ignore lint/suspicious/noConsole: one-shot rate-limit warning
+          console.warn(
+            `%c🚨 Rate-limiting log: "%c${signature}%c" is firing too rapidly (%c${this._logRepeatCount}+%c times). Dropping repeats silently.`,
+            'font-weight:bold;color:#f59e0b',
+            'font-weight:bold;color:#ef4444',
+            'font-weight:bold;color:#f59e0b',
+            'font-weight:bold',
+            'font-weight:bold;color:#f59e0b',
+          );
+        }
 
-        // Throwing a hard error breaks the JS execution thread, stopping the infinite loop!
-        throw new Error(
-          `🚨 EMERGENCY HALT: Infinite loop detected! The log "${signature}" fired 150+ times in a few milliseconds.`,
-        );
+        this._lastLogTimestamp = now;
+        return true; // Drop silently — let the app crash naturally, don't throw
       }
     } else {
-      // Reset the tracker if it's a new log or enough time has passed
       this._lastLogSignature = signature;
       this._logRepeatCount = 1;
     }
 
     this._lastLogTimestamp = now;
+    return false;
   }
 
   private _limitObjectOrArray<T extends unknown[] | object | null | unknown>(object: T): T {
