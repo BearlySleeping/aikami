@@ -31,25 +31,48 @@ interface ServiceDef {
 
 function makeServices(): Record<string, ServiceDef> {
   return {
-    emulator: {
-      name: "emulators",
-      key: "emulator",
+    firebase: {
+      name: "firebase",
+      key: "firebase",
       command: "bun run emulate",
       cwd: "apps/backend/firebase",
       getReadyPort: () => EMULATOR_PORTS.auth,
     },
-    pwa: {
-      name: "pwa",
-      key: "pwa",
+    client: {
+      name: "client",
+      key: "client",
       command: "bun run dev",
-      cwd: "apps/frontend/pwa",
+      cwd: "apps/frontend/client",
       getReadyPort: (mode: AikamiMode) => {
         const { PORTS } = require("../../packages/shared/constants/src/lib/development_ports") as any
-        return (PORTS as any)[mode]?.pwa ?? EMULATOR_PORTS.pwa
+        return (PORTS as any)[mode]?.client ?? EMULATOR_PORTS.client
       },
       readyPath: "/",
     },
-    // game service consolidated into PWA (C-061)
+    image: {
+      name: "image",
+      key: "image",
+      command: "bun run dev:docker",
+      cwd: "apps/backend/image",
+      getReadyPort: () => EMULATOR_PORTS.image,
+      readyPath: "/",
+    },
+    text: {
+      name: "text",
+      key: "text",
+      command: "bun run dev:docker",
+      cwd: "apps/backend/text",
+      getReadyPort: () => EMULATOR_PORTS.text,
+      readyPath: "/",
+    },
+    voice: {
+      name: "voice",
+      key: "voice",
+      command: "bun run dev:docker",
+      cwd: "apps/backend/voice",
+      getReadyPort: () => EMULATOR_PORTS.voice,
+      readyPath: "/",
+    },
   }
 }
 
@@ -110,7 +133,7 @@ export default function (pi: ExtensionAPI) {
     name: "tmux_session",
     label: "Tmux: Manage Dev Sessions",
     description:
-      "Manage Aikami development services (emulator, pwa, game) in persistent tmux sessions. "
+      "Manage Aikami development services (firebase, client, image, text, voice) in persistent tmux sessions. "
       + "Services survive pi restarts and can be inspected via `read` action. "
       + "Sessions use naming convention: aikami-{mode}. "
       + "Each service is a tmux window (tab) in the shared session, matched by name. "
@@ -118,7 +141,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet:
       "Use tmux_session to start/stop/inspect Aikami dev services running in tmux.",
     promptGuidelines: [
-      "Use tmux_session start <service> to start emulator, pwa, or game.",
+      "Use tmux_session start <service> to start firebase, client, image, text, or voice.",
       "Use tmux_session read <service> to capture log output from a running service.",
       "Use tmux_session list to see all managed services and their status.",
       "Use tmux_session stop <service> to cleanly stop a service.",

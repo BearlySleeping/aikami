@@ -18,18 +18,18 @@ These rules govern how AI agents spawn commands for this project.
 ### 1. Long-Running Processes → Tmux
 
 **Always prefer `bun run tmux:start <service>` for processes that stay alive**
-(dev servers, emulators, watchers). Never use `moon_run_task pwa:dev` or
-`moon_run_task game:dev` — these start foreground processes that block the
+(dev servers, emulators, watchers). Never use `moon_run_task client:dev` or
+`moon_run_task image:dev` — these start foreground processes that block the
 agent indefinitely.
 
 ```bash
 # ✅ CORRECT — background tmux session
-bun run tmux:start pwa          # PWA dev server in tmux
-bun run tmux:start all          # Full stack
-bun run tmux:start emulators    # Firebase emulators
+bun run tmux:start client          # Client dev server in tmux
+bun run tmux:start all             # Full stack
+bun run tmux:start firebase        # Firebase emulators
 
 # ❌ WRONG — foreground dev server blocks agent
-bun moon run pwa:dev
+bun moon run client:dev
 ```
 
 After starting a tmux session, wait 3-5 seconds then use `browser_inspect` to
@@ -65,14 +65,14 @@ bash("npm test 2>&1")
 bun run tmux:status
 
 # Start (only if not already running)
-bun run tmux:start pwa
+bun run tmux:start client
 bun run tmux:start all --force     # Kill + recreate
 
 # Join to inspect
-bun run tmux:join emulators
+bun run tmux:join firebase
 
 # Cleanup when done
-bun run tmux:stop pwa
+bun run tmux:stop client
 ```
 
 ---
@@ -256,7 +256,7 @@ The root `package.json` provides shortcuts for common operations:
 
 | Tmux Script     | Command                                    | Purpose                                       |
 | --------------- | ------------------------------------------ | --------------------------------------------- |
-| `tmux:start`    | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (emulators/pwa/game/all) |
+| `tmux:start`    | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (firebase/client/image/text/voice/all) |
 | `tmux:join`     | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session              |
 | `tmux:stop`     | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                           |
 | `tmux:stop-all` | `bun run scripts/src/lib/tmux/stop_all.ts` | Stop all aikami tmux sessions                 |
@@ -428,13 +428,13 @@ in tokens and time.
 #### Common Patterns
 
 ```bash
-# Pattern: "Something is broken in the PWA"
+# Pattern: "Something is broken in the client"
 # Step 1: Check what's actually running
 bash: ss -tlnp | grep <port>
 # Step 2: Read the server logs
-tmux_session read pwa
+tmux_session read client
 # Step 3: Check the DOM once
-browser_inspect app=pwa selector="body"
+browser_inspect app=client selector="body"
 # Step 4: Read relevant source files based on findings
 
 # Pattern: "API call is failing"
@@ -485,7 +485,7 @@ All tmux sessions use a unified naming convention: `aikami-{mode}-{service}`.
 | Variable  | Values                              |
 | --------- | ----------------------------------- |
 | `mode`    | `emulator`, `staging`, `production` |
-| `service` | `emulators`, `pwa`, `game`, `all`   |
+| `service` | `firebase`, `client`, `image`, `text`, `voice`, `all` |
 
 ### Root package.json scripts
 
@@ -504,10 +504,12 @@ Use `--force` with `tmux:start` to kill and recreate an existing session.
 
 ```bash
 # Start services (mode from $AIKAMI_MODE, defaults to emulator)
-bun run tmux:start emulators        # Firebase emulators only
-bun run tmux:start pwa               # PWA dev server
-bun run tmux:start game              # Game dev server
-bun run tmux:start all               # Full stack (emulators + pwa + game)
+bun run tmux:start firebase          # Firebase emulators only
+bun run tmux:start client            # Client dev server
+bun run tmux:start image             # Image generation (ComfyUI Docker)
+bun run tmux:start text              # Text generation (Ollama Docker)
+bun run tmux:start voice             # Voice synthesis (Kokoro TTS Docker)
+bun run tmux:start all               # Full stack (firebase + client + image + text + voice)
 
 # Override mode
 bun run tmux:start emulators --mode staging

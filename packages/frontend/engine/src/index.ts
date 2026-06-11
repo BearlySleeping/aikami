@@ -4,6 +4,13 @@
 // Public game engine exports
 // ---------------------------------------------------------------------------
 
+// Base engine class (extend for engine-layer classes)
+export {
+  BaseEngineClass,
+  type BaseEngineClassInterface,
+  type BaseEngineClassOptions,
+} from './base_engine_class.ts';
+
 export {
   addItemStack,
   deductItem,

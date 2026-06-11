@@ -229,7 +229,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     try {
       const { GameWorld } = await import('@aikami/frontend/engine');
 
-      this.gameWorld = new GameWorld(bridge);
+      this.gameWorld = GameWorld.create({ className: 'GameWorld', bridge });
       await this.gameWorld.initialize({
         canvas,
         width: canvas.clientWidth,
