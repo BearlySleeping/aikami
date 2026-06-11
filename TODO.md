@@ -45,3 +45,20 @@ To achieve a fully dynamic 2D JRPG driven by LLMs and D&D 2024 rules, we must co
 - **Inventory ECS**: Abstract `Inventory` component handling items with Valibot/Zod schemas for rarity, value, and effects.
 - **Bartering UI**: A dual-pane Svelte 5 trading interface. Prices scale dynamically based on the NPC's `Affection` component and the player's Charisma modifier.
 - **Quest Graph**: A Firebase Dataconnect schema mapping quest nodes, objectives, and rewards, injected into the LLM context when relevant.
+
+## Potential next contracts:
+
+Engine-UI Synchronization (The Bridge)
+Establish a one-way reactive data flow from the bitECS game engine to your Svelte 5 ViewModels. When an entity moves or takes damage in the engine, the UI instantly reacts.
+
+Multimedia AI Integration (Voice & Image)
+Expand on the Ollama rewiring by fully integrating your ComfyUI image generator (for dynamic avatars/sprites) and your TTS microservice (Kokoro/Piper) into the active Chat ViewModel.
+
+State Persistence & Cloud Saves
+Wire your pristine ViewModels and Engine state up to Firebase Firestore/Data Connect. This will enable saving, loading, and persisting player progression across the web and desktop.
+
+Asset Pipeline & Animation Polish
+Finalize the LPC (Liberated Pixel Cup) spritesheet injection into your PixiJS renderer, ensuring characters dynamically load and animate correctly when walking, attacking, or casting.
+
+The Vertical Slice (Core Game Loop)
+Stop building systems in isolation and combine movement, interaction, chat, questing, and combat into a single, unbroken 5-minute playable prototype.
