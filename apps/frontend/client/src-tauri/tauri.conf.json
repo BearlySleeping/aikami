@@ -5,8 +5,8 @@
   "identifier": "com.aikami.app",
   "build": {
     "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "bun run build",
+    "devUrl": "http://localhost:5274",
+    "beforeBuildCommand": "bun run build:emulator",
     "frontendDist": "../build"
   },
   "app": {
@@ -22,7 +22,6 @@
     ],
     "security": {
       "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app; img-src 'self' data: blob:",
-      "useHttpsScheme": true,
       "headers": {
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Embedder-Policy": "require-corp"
