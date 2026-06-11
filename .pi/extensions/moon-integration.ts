@@ -61,23 +61,91 @@ export default function (pi: ExtensionAPI) {
   })
 
   // ── Run Moon Task ──────────────────────────────────────────────────────
+  // 🔴 :dev and :preview tasks are LONG-RUNNING SERVERS that never exit.
+  // They MUST be started via tmux_session, never through this tool.
+  // Calling moon_run_task on a :dev target will hang pi indefinitely.
+  const BLOCKED_TASK_SUFFIXES = [":dev", ":preview"]
+
+  /**
+   * Maps moon project names to tmux service keys.
+   * Derived from the canonical service definitions in tmux-orchestrator.ts.
+   */
+  const MOON_TO_TMUX: Record<string, string> = {
+    client: "client",
+    image: "image",
+    text: "text",
+    voice: "voice",
+  }
+
+  /** All registered tmux services (for the "try one of" list). */
+  const TMUX_SERVICE_LIST = ["firebase", "client", "image", "text", "voice"]
+
   pi.registerTool({
     name: "moon_run_task",
     label: "Moon: Run Task",
     description:
-      "Run a single moon task: fix, typecheck, build, test, dev, deploy, logs, etc. Format: <project>:<task> (e.g. pwa:fix, functions:typecheck).",
+      "Run a single moon task: fix, typecheck, build, test, deploy, logs, etc. "
+      + "🔴 NEVER use for :dev or :preview — these are long-running servers that hang forever. "
+      + "Use tmux_session to start dev servers instead. "
+      + "Format: <project>:<task> (e.g. client:fix, functions:typecheck).",
     promptSnippet:
-      "Use moon_run_task to execute moon tasks like build, test, lint, or dev servers.",
+      "Use moon_run_task to execute moon tasks like build, test, lint. NEVER use for :dev/:preview — use tmux_session instead.",
     promptGuidelines: [
       "Use moon_run_task to run monorepo tasks through the moon orchestrator instead of calling bun directly.",
+      "🔴 NEVER call moon_run_task for a :dev or :preview target — these are long-running servers that will hang pi forever.",
+      "To start a dev server, use tmux_session start <service> instead. tmux handles long-running processes correctly.",
     ],
     parameters: Type.Object({
       target: Type.String({
         description:
-          "Moon task target, e.g. 'pwa:dev', 'functions:typecheck', 'schemas:build'",
+          "Moon task target, e.g. 'client:typecheck', 'schemas:build'. "
+          + "🔴 Do NOT use ':dev' or ':preview' — these hang forever. Use tmux_session for dev servers.",
       }),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
+      const target = params.target as string
+
+      // ── Block long-running server tasks ──────────────────────
+      for (const suffix of BLOCKED_TASK_SUFFIXES) {
+        if (target.endsWith(suffix)) {
+          const moonProject = target.replace(suffix, "")
+          const tmuxService = MOON_TO_TMUX[moonProject]
+
+          if (tmuxService) {
+            return {
+              content: [{
+                type: "text",
+                text: `🔴 BLOCKED: "${target}" is a long-running dev server — it would hang pi forever.\n\n`
+                  + `Use tmux_session instead:\n`
+                  + `  tmux_session start ${tmuxService}\n\n`
+                  + `Other registered tmux services: ${TMUX_SERVICE_LIST.join(", ")}\n`
+                  + `tmux runs dev servers in persistent background sessions that survive pi restarts.`,
+              }],
+              isError: true,
+              details: { blocked: true, suggestion: `tmux_session start ${tmuxService}` },
+            }
+          }
+
+          // Unknown project — no tmux mapping exists
+          return {
+            content: [{
+              type: "text",
+              text: `🔴 BLOCKED: "${target}" is a long-running dev server — it would hang pi forever.\n\n`
+                + `"${moonProject}" is not registered as a tmux service.\n`
+                + `Registered tmux services: ${TMUX_SERVICE_LIST.join(", ")}\n\n`
+                + `Options:\n`
+                + `  1. Start it manually in a terminal:  bun moon run ${target}\n`
+                + `  2. If this should be a permanent tmux service, add it to:\n`
+                + `     • .pi/extensions/tmux-orchestrator.ts\n`
+                + `     • scripts/src/lib/tmux/session.ts\n\n`
+                + `tmux runs dev servers in persistent background sessions that survive pi restarts.`,
+            }],
+            isError: true,
+            details: { blocked: true, unknownProject: moonProject },
+          }
+        }
+      }
+
       const result = await pi.exec("bun", [
         "moon",
         "run",
@@ -286,8 +354,9 @@ export default function (pi: ExtensionAPI) {
     const modeInfo = process.env.AIKAMI_MODE
       ? `\nDirenv: AIKAMI_MODE=${process.env.AIKAMI_MODE}  project=${process.env.AIKAMI_PROJECT_ID || "?"}`
       : ""
+    const devServerRule = "\n🔴 NEVER call moon_run_task for :dev or :preview targets — these are long-running servers that hang forever. Use tmux_session start <service> instead. Registered tmux services: firebase, client, image, text, voice."
     return {
-      systemPrompt: `${event.systemPrompt}\n\n${workspaceSummary}${modeInfo}`,
+      systemPrompt: `${event.systemPrompt}\n\n${workspaceSummary}${modeInfo}${devServerRule}`,
     }
   })
 }
