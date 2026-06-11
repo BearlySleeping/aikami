@@ -103,7 +103,14 @@ const validateEnv = (): MasterEnv => {
   };
 
   const appId = env.PUBLIC_APP_ID as AppID;
-  const missing = APP_REQUIREMENTS[appId].filter((key) => !rawEnv[key]);
+  const requirements = APP_REQUIREMENTS[appId];
+  if (!requirements) {
+    throw toAppError({
+      errorType: 'internal',
+      errorMessage: `Unknown app ID "${appId}". Valid values: ${Object.keys(APP_REQUIREMENTS).join(', ')}.`,
+    });
+  }
+  const missing = requirements.filter((key) => !rawEnv[key]);
 
   if (missing.length > 0) {
     throw toAppError({
