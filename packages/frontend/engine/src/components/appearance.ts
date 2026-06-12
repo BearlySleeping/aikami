@@ -96,7 +96,11 @@ export const getAppearanceLayers = (eid: number): readonly number[] => [
  * an object of arrays, we can just assign directly or use a helper.
  * Actually, to trigger observers, we should return an object that can be passed to bitECS `set()`.
  */
-export const setAppearanceLayers = (world: World, eid: number, layers: readonly number[]): void => {
+export const setAppearanceLayers = (
+  _world: World,
+  eid: number,
+  layers: readonly number[],
+): void => {
   Appearance.layer0[eid] = layers[0] ?? 0;
   Appearance.layer1[eid] = layers[1] ?? 0;
   Appearance.layer2[eid] = layers[2] ?? 0;

@@ -1,15 +1,15 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/chat/ChatView.svelte
-    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-    import CharacterCard from '$lib/components/chat/character_card.svelte';
-    import ChatContainer from '$lib/components/chat/chat_container.svelte';
-    import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
+  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import CharacterCard from '$lib/components/chat/character_card.svelte';
+  import ChatContainer from '$lib/components/chat/chat_container.svelte';
+  import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
 
-    type Props = {
-      viewModel: ChatViewModelInterface;
-    };
+  type Props = {
+    viewModel: ChatViewModelInterface;
+  };
 
-    const { viewModel }: Props = $props();
+  const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
