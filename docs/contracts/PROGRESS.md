@@ -90,7 +90,7 @@
 | C-112 | Client Rename & Build Fixes | ✅ completed |
 | C-113 | Tauri Desktop Sanity Check | ✅ completed |
 | MIG-001 | Knowledge Splitting (.context/ + docs/) | ✅ completed |
-| MIG-002 | Backend DataConnect Restructure | ⏳ not_started |
+| MIG-002 | Backend DataConnect Restructure | ✅ completed |
 | MIG-003 | Scripting Infrastructure Reorganization | ✅ completed |
 | MIG-004 | Frontend Configs Alignment | ✅ completed |
 | C-114 | Sandbox Engine Wiring | ✅ completed |
@@ -157,6 +157,38 @@
 4. **New EID mapping**: Entities are recreated sequentially; the returned `Map` preserves the old→new EID relationship for relational data reconciliation (MVP: global reset on load).
 
 **Known limitations**: Component arrays are singleton globals — the serializer cannot distinguish which world a value came from. In production, the worker owns a single world, so this is not a practical issue. For tests, explicit array cleanup is required between test cases.
+
+---
+
+### MIG-002: Backend DataConnect Restructure
+
+**Files modified**:
+- `apps/backend/firebase/dataconnect/schema/schema.gql` — Added `SaveSlot` @table type (slotNumber, lastLocationName, playedTimeSeconds, storageRef)
+- `apps/backend/firebase/dataconnect/connector/queries.gql` — Added `ListSaveSlots` query and `UpsertSaveSlot` mutation with @auth(level: USER)
+- `apps/backend/firebase/src/rules/storage.rules` — Added `saves/{uid}/{allPaths=**}` rule: owner-only read/write
+- `packages/frontend/dataconnect/src/lib/generated/index.d.ts` — Added SaveSlot, ListSaveSlotsData/Variables, UpsertSaveSlotData/Variables types
+- `packages/frontend/dataconnect/src/lib/generated/esm/index.esm.js` — Added `listSaveSlots(dc, vars)` and `upsertSaveSlot(dc, vars)` functions
+- `packages/frontend/dataconnect/src/lib/generated/index.cjs.js` — Added CJS variants
+- `packages/frontend/dataconnect/src/index.ts` — Re-exported `listSaveSlots`, `upsertSaveSlot`
+- `packages/frontend/services/src/lib/firebase/firebase_storage.ts` — Added `uploadString`, `downloadString`, `deleteObject` methods + interface declarations
+- `packages/frontend/services/src/lib/services/game_state_sync.svelte.ts` — **Created** `GameStateSyncService`: orchestrates `saveGame` (upload blob + upsert row), `loadGame` (download blob), `listSlots` (Data Connect query), `deleteSlot` (delete blob). Exports singleton, interface, options, metadata/entry types.
+- `packages/frontend/services/src/lib/index.ts` — Exported `game_state_sync.svelte.ts`
+- `packages/frontend/services/moon.yml` — Added `frontend-dataconnect` to `dependsOn`
+- `packages/frontend/services/package.json` — Added `@aikami/frontend-dataconnect` dependency
+- `packages/frontend/services/tsconfig.json` — Added `@aikami/frontend/dataconnect` path mapping
+
+**Deviations**:
+1. **Manual SDK generation**: Firebase CLI `dataconnect:sdk:generate` could not run (SDK output not configured for this project). Generated types and query/mutation ref functions manually in `packages/frontend/dataconnect/src/lib/generated/`. The functions (`listSaveSlots`, `upsertSaveSlot`) wrap `queryRef`/`mutationRef` from `firebase/data-connect` and accept variables per the v0.7.1 API.
+2. **Variables in ref constructors**: Firebase Data Connect v0.7.1 passes variables to `queryRef`/`mutationRef` (not `executeQuery`/`executeMutation`). `executeQuery` takes only `(ref, options?)`. The generated functions accept variables as a second argument.
+
+**Design decisions**:
+1. **`GameStateSyncService` doesn't import engine**: The service accepts a pre-serialized `payload: string` (caller runs `serializeWorld()`). This avoids pulling PixiJS/bitECS into the services package.
+2. **Forward-slash imports**: Biome linter enforces `@aikami/frontend/dataconnect` (not hyphenated).
+3. **`uploadString` wraps `upload`**: Uses `new Blob([data], { type: 'application/json' })` — no new Firebase Storage API surface.
+4. **`downloadString` uses fetch**: Calls `getDownloadURL` then `fetch(url).text()` — works in browser and with emulator.
+5. **`deleteSlot` only deletes Storage blob**: Data Connect delete mutation not yet implemented (requires schema change). Documented as TODO.
+
+**Known limitations**: `SaveSlot` upsert uses a composite key `uid_slotNumber`. Data Connect upsert semantics require the key to be declared in the schema, which may not be fully supported in all emulator versions. The `deleteSlot` method only removes the Storage blob — the Data Connect row remains until a `DeleteSaveSlot` mutation is added.
 
 ---
 
