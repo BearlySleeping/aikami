@@ -70,3 +70,8 @@ tasks:
     options:
       cache: false
       runInCI: false
+  generate:
+    command: 'bun run generate'
+    options:
+      cache: false
+      runInCI: true

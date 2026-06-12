@@ -27,12 +27,38 @@ export type FirebaseStorageServiceInterface = BaseClassInterface & {
   ): Promise<UploadResult>;
 
   /**
+   * Uploads a string as a UTF-8 JSON blob to Firebase Storage.
+   *
+   * @param path The full path in your bucket.
+   * @param data The string content to upload.
+   * @returns A promise that resolves with the upload result.
+   */
+  uploadString(path: string, data: string): Promise<UploadResult>;
+
+  /**
+   * Downloads a file from Firebase Storage and returns its contents as a
+   * string (UTF-8).
+   *
+   * @param path The full path to the file in your bucket.
+   * @returns A promise that resolves with the file contents as a string.
+   */
+  downloadString(path: string): Promise<string>;
+
+  /**
    * Gets the download URL for a file in Firebase Storage.
    *
    * @param path The full path to the file in your bucket.
    * @returns A promise that resolves with the download URL string.
    */
   getDownloadURL(ref: string | StorageReference): Promise<string>;
+
+  /**
+   * Deletes a file from Firebase Storage.
+   *
+   * @param path The full path to the file in your bucket.
+   * @returns A promise that resolves when the deletion completes.
+   */
+  deleteObject(path: string): Promise<void>;
 };
 
 // This type represents the module we are dynamically importing ('./storage')
@@ -68,6 +94,26 @@ class FirebaseStorageService extends BaseClass implements FirebaseStorageService
 
     this.log(`Uploading to: ${storageRef.fullPath}`);
     return uploadBytes(storageRef, data, metadata);
+  }
+
+  public async uploadString(path: string, data: string): Promise<UploadResult> {
+    const blob = new Blob([data], { type: 'application/json' });
+    return this.upload(path, blob);
+  }
+
+  public async downloadString(path: string): Promise<string> {
+    const url = await this.getDownloadURL(path);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`${this._className}: failed to download "${path}" — HTTP ${response.status}`);
+    }
+    return response.text();
+  }
+
+  public async deleteObject(path: string): Promise<void> {
+    const { deleteObject } = await this._getStorageModule();
+    const storageRef = await this.getRef(path);
+    return deleteObject(storageRef);
   }
 
   /**

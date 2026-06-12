@@ -1,1 +1,6 @@
 connectorId: aikami-connector
+generate:
+  javascriptSdk:
+    - outputDir: ../../../../../packages/frontend/dataconnect/src/lib/generated
+      package: "@aikami/frontend-dataconnect"
+      packageJsonDir: ../../../../../packages/frontend/dataconnect
