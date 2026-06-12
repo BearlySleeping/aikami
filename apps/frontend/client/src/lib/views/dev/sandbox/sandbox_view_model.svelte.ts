@@ -1,12 +1,18 @@
 // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts
 
 import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
-import { BaseEngineClass, createEngineBridge, GameWorld } from '@aikami/frontend/engine';
+import {
+  BaseEngineClass,
+  createEngineBridge,
+  GameWorld,
+  TextureManager,
+} from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_path_mapper.ts';
 import { aiTextIntelligenceService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
@@ -132,11 +138,33 @@ class SandboxViewModel
       // Resolve ECS worker (SSR-safe dynamic import).
       const EcsWorker = await _resolveEcsWorker();
 
+      const tm = new TextureManager();
+
+      const paletteBytes = new Uint8Array(1024);
+
+      const SANDBOX_RECIPES: Record<number, import('@aikami/frontend/engine').LpcLayerRecipe> = {
+        // Player
+        1: { slot: 'body', assetId: 'muscular', hexPalette: paletteBytes },
+        2: { slot: 'hair', assetId: 'plain/male', hexPalette: paletteBytes },
+        3: { slot: 'legs', assetId: 'pants/male', hexPalette: paletteBytes },
+        4: { slot: 'head', assetId: 'human/male', hexPalette: paletteBytes },
+        // NPC
+        10: { slot: 'body', assetId: 'human/male', hexPalette: paletteBytes },
+        11: { slot: 'hair', assetId: 'plain/male', hexPalette: paletteBytes },
+        12: { slot: 'legs', assetId: 'pants/male', hexPalette: paletteBytes },
+        13: { slot: 'head', assetId: 'human/male', hexPalette: paletteBytes },
+      };
+
       const worldOptions: GameWorldOptions = {
         className: 'GameWorld',
         bridge: this._engineBridge,
-        spritesheetUrl: '/lpc/body/male/walk.png',
-        playerSpritesheetUrl: '/lpc/body/muscular/walk.png',
+        textureManager: tm,
+        recipeResolver: (layerIds) =>
+          layerIds
+            .map((id) => SANDBOX_RECIPES[id])
+            .filter(Boolean) as import('@aikami/frontend/engine').LpcLayerRecipe[],
+        assetUrlResolver: (slot, assetId, state) =>
+          getLpcAssetPath(slot, assetId, state as import('$lib/data/lpc_models').LpcAnimationState),
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);
@@ -152,6 +180,7 @@ class SandboxViewModel
         canvas,
         width: canvas.clientWidth,
         height: canvas.clientHeight,
+        resizeTo: canvas.parentElement ?? undefined,
       });
 
       this.debug('sandbox:initializeEngine:complete');

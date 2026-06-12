@@ -1,28 +1,28 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/settings/tabs/instruct_templates_tab.svelte
-  import { aiSettingsService, INSTRUCT_TEMPLATES, type InstructTemplate } from '$services';
+    import { aiSettingsService, INSTRUCT_TEMPLATES, type InstructTemplate } from '$services';
 
-  /** Human-readable labels for each template. */
-  const templateLabels: Record<InstructTemplate, string> = {
-    alpaca: 'Alpaca',
-    chatml: 'ChatML',
-    custom: 'Custom',
-    deepseek: 'DeepSeek',
-    llama3: 'Llama 3',
-    mistral: 'Mistral',
-    vicuna: 'Vicuna',
-  };
+    /** Human-readable labels for each template. */
+    const templateLabels: Record<InstructTemplate, string> = {
+      alpaca: 'Alpaca',
+      chatml: 'ChatML',
+      custom: 'Custom',
+      deepseek: 'DeepSeek',
+      llama3: 'Llama 3',
+      mistral: 'Mistral',
+      vicuna: 'Vicuna',
+    };
 
-  /** Template descriptions for the dropdown help text. */
-  const templateDescriptions: Record<InstructTemplate, string> = {
-    alpaca: '### Instruction: / ### Response: format, used by older OSS models.',
-    chatml: '<|im_start|> / <|im_end|> tokens, used by OpenAI-compatible APIs.',
-    custom: 'Define a custom instruct format with placeholders.',
-    deepseek: '### System: / ### User: / ### Assistant: markers.',
-    llama3: 'Llama 3 header tags with <|eot_id|> end-of-turn tokens.',
-    mistral: '[INST] / [/INST] blocks for instruction-following models.',
-    vicuna: 'USER: / ASSISTANT: prefix format for Vicuna-based models.',
-  };
+    /** Template descriptions for the dropdown help text. */
+    const templateDescriptions: Record<InstructTemplate, string> = {
+      alpaca: '### Instruction: / ### Response: format, used by older OSS models.',
+      chatml: '<|im_start|> / <|im_end|> tokens, used by OpenAI-compatible APIs.',
+      custom: 'Define a custom instruct format with placeholders.',
+      deepseek: '### System: / ### User: / ### Assistant: markers.',
+      llama3: 'Llama 3 header tags with <|eot_id|> end-of-turn tokens.',
+      mistral: '[INST] / [/INST] blocks for instruction-following models.',
+      vicuna: 'USER: / ASSISTANT: prefix format for Vicuna-based models.',
+    };
 </script>
 
 <div class="space-y-6">

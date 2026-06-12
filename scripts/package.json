@@ -5,10 +5,10 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "bun run src/index.ts",
-    "typecheck": "bunx tsc --noEmit",
-    "lint": "bunx biome check .",
-    "format": "bunx biome format .",
-    "fix": "bunx biome check --write . --error-on-warnings"
+    "typecheck": "tsgo --noEmit",
+    "lint": "biome check .",
+    "format": "biome format .",
+    "fix": "biome check --write . --error-on-warnings"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
