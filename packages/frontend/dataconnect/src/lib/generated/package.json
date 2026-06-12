@@ -2,7 +2,7 @@
   "name": "@aikami/frontend-dataconnect",
   "version": "1.0.0",
   "author": "Firebase <firebase-support@google.com> (https://firebase.google.com/)",
-  "description": "Generated SDK for aikami-db",
+  "description": "Generated SDK For aikami-connector",
   "license": "Apache-2.0",
   "engines": {
     "node": " >=18.0"

@@ -20,4 +20,5 @@ dependsOn:
   - 'types'
   - 'logger'
   - 'frontend-utils'
+  - 'frontend-dataconnect'
 

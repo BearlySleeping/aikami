@@ -204,6 +204,31 @@ type Notification @table {
 }
 
 # ---------------------------------------------------------------------------
+# Save Slots — game save metadata (Data Connect relational layer)
+# ---------------------------------------------------------------------------
+# Queryable metadata for each save slot. The dense ECS snapshot blob is stored
+# in Firebase Cloud Storage at `saves/{uid}/slot_{slotNumber}.json`.
+
+type SaveSlot @table {
+  id: String! @col(name: "id")
+  uid: String! @col(name: "uid")
+  createdAt: Date @col(name: "created_at")
+  updatedAt: Date @col(name: "updated_at")
+
+  # Slot number (1-based, e.g. 1, 2, 3).
+  slotNumber: Int! @col(name: "slot_number")
+
+  # Human-readable location name for the save thumbnail.
+  lastLocationName: String @col(name: "last_location_name")
+
+  # Accumulated play time in seconds.
+  playedTimeSeconds: Int @col(name: "played_time_seconds")
+
+  # Firebase Cloud Storage path to the ECS snapshot blob.
+  storageRef: String! @col(name: "storage_ref")
+}
+
+# ---------------------------------------------------------------------------
 # Configs (key-value app configuration)
 # ---------------------------------------------------------------------------
 

@@ -16,6 +16,8 @@
     "delete": "firestack delete",
     "delete:local": "node ../../../../firestack/dist/main.js delete",
     "logs": "firestack logs",
+    "generate": "firestack generate",
+    "generate:local": "node ../../../../firestack/dist/main.js generate",
     "scripts": "firestack scripts",
     "scripts:local": "node ../../../../firestack/dist/main.js scripts",
     "test": "bun test tests/controllers.test.ts",
