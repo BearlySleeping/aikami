@@ -13,6 +13,7 @@ import {
   velocityToDirection,
 } from '../rendering/animation_controller.ts';
 import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
+import type { GameEvent } from '../types.ts';
 
 /** Stand-in for PixiJS Buffer — worker has no GPU. */
 type _GpuBuffer = {
@@ -204,6 +205,8 @@ const checkAppearanceChange = (
  */
 const _trackedAppearanceEntities = new Map<World, Set<number>>();
 
+const _lastKnownAppearanceLayers = new Map<number, string>();
+
 /**
  * Synchronizes bitECS Appearance component state into the
  * {@link LpcBatchManager} shared UBO pool.
@@ -230,13 +233,15 @@ const _trackedAppearanceEntities = new Map<World, Set<number>>();
  * @param options.batchManager - The LPC batch manager instance.
  * @param options.recipeResolver - Converts entity layer IDs to
  *   {@link LpcLayerRecipe} arrays for UBO packing.
+ * @param options.bridge - Optional EngineBridge to emit APPEARANCE_CHANGED events.
  */
 const syncAppearanceSystem = (options: {
   world: World;
   batchManager: LpcBatchManager;
   recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
+  bridge?: { emit: (event: GameEvent) => void };
 }): void => {
-  const { world, batchManager, recipeResolver } = options;
+  const { world, batchManager, recipeResolver, bridge } = options;
 
   // Query all entities currently carrying the Appearance component
   const entities = query(world, [Appearance]);
@@ -255,18 +260,41 @@ const syncAppearanceSystem = (options: {
   for (const eid of tracked) {
     if (!currentSet.has(eid)) {
       batchManager.deregisterEntity(eid);
+      _lastKnownAppearanceLayers.delete(eid);
     }
   }
 
   // Detect enters + process existing entities
   for (const eid of entities) {
     const layerIds = getAppearanceLayers(eid);
+    const layerKey = layerIds.join(',');
     const recipes = recipeResolver(layerIds);
 
     if (!tracked.has(eid)) {
       // Enter: new entity — register in batch pool
       batchManager.registerEntity(eid, recipes);
+      _lastKnownAppearanceLayers.set(eid, layerKey);
+      if (bridge) {
+        bridge.emit({
+          type: 'APPEARANCE_CHANGED',
+          eid,
+          layerIds: [...layerIds],
+        });
+      }
+    } else {
+      const prevKey = _lastKnownAppearanceLayers.get(eid);
+      if (prevKey !== layerKey) {
+        _lastKnownAppearanceLayers.set(eid, layerKey);
+        if (bridge) {
+          bridge.emit({
+            type: 'APPEARANCE_CHANGED',
+            eid,
+            layerIds: [...layerIds],
+          });
+        }
+      }
     }
+
     // Write UBO data (only triggers upload when fingerprint has changed).
     // Called for all active entities — the manager's own fingerprint check
     // skips redundant re-packs.

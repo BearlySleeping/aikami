@@ -30,7 +30,9 @@
 </svelte:head>
 
 <BaseViewModelContainer {viewModel}>
-  <div class="absolute inset-0 flex flex-col bg-base-100">
+  <div
+    class="relative flex min-h-[calc(100vh-6rem)] w-full flex-col overflow-hidden rounded-xl border border-base-300 bg-base-100 shadow-sm"
+  >
     <!-- Game engine canvas — fills available space, disabled when dialog is open -->
     <canvas
       bind:this={canvasElement}

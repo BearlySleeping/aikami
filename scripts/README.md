@@ -5,6 +5,7 @@ Monorepo scripts for CI, setup, developer onboarding, and operations.
 ## Use Case
 
 This package provides CLI scripts shared across the Aikami monorepo:
+
 - **Ops** — Dev server orchestration, environment setup, cleanup
 - **Deploy** — Deployment pipelines and configuration
 - **Setup** — Developer workspace initialization
@@ -27,13 +28,13 @@ bun install
 
 ## Tasks
 
-| Task | Command | Description |
-|------|---------|-------------|
-| `typecheck` | `tsc --noEmit` | Run TypeScript type checking |
-| `lint` | `biome lint .` | Lint code with Biome |
-| `format` | `biome format .` | Format code with Biome |
-| `fix` | `biome check --write .` | Auto-fix lint & format issues |
-| `run` | `bun run start` | Run the script runner interactively |
+| Task        | Command                 | Description                         |
+| ----------- | ----------------------- | ----------------------------------- |
+| `typecheck` | `tsgo --noEmit`         | Run TypeScript type checking        |
+| `lint`      | `biome lint .`          | Lint code with Biome                |
+| `format`    | `biome format .`        | Format code with Biome              |
+| `fix`       | `biome check --write .` | Auto-fix lint & format issues       |
+| `run`       | `bun run start`         | Run the script runner interactively |
 
 ## Usage
 
@@ -52,13 +53,13 @@ bun run scripts -- generate_llms
 
 ### Ops (`src/lib/ops/`)
 
-| Name | Description |
-|------|-------------|
-| `dev_all` | Start all dev servers (PWA, game, docs, emulators) |
-| `validate_all` | Run full monorepo validation (lint + typecheck + test) |
-| `generate_llms` | Generate llms.txt context file |
-| `generate_context` | Generate AI context from project knowledge |
-| `cleanup_vendor_dirs` | Clean up vendor directories |
+| Name                  | Description                                            |
+| --------------------- | ------------------------------------------------------ |
+| `dev_all`             | Start all dev servers (PWA, game, docs, emulators)     |
+| `validate_all`        | Run full monorepo validation (lint + typecheck + test) |
+| `generate_llms`       | Generate llms.txt context file                         |
+| `generate_context`    | Generate AI context from project knowledge             |
+| `cleanup_vendor_dirs` | Clean up vendor directories                            |
 
 ### Deploy (`src/lib/deploy/`)
 

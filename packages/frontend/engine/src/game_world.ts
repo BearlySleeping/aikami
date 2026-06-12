@@ -1,7 +1,8 @@
 // packages/frontend/engine/src/game_world.ts
-import type { Application, Container } from 'pixi.js';
-import { Rectangle, Sprite, Texture } from 'pixi.js';
+import type { Application } from 'pixi.js';
+import { Container, Rectangle, Sprite, Texture } from 'pixi.js';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
+import type { LpcLayerRecipe } from './components/appearance.ts';
 import {
   BUFFER_SIZE,
   COMPONENT_STRIDE,
@@ -12,6 +13,7 @@ import type { EngineBridge } from './engine_bridge.ts';
 import type { PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 import { createPixiApp } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
+import type { TextureManager } from './rendering/texture_manager.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
@@ -52,6 +54,10 @@ type RenderEntry = {
   tint: number;
   /** When `true`, spatial culling is enabled for this entity. */
   cullable: boolean;
+  /** Layer recipes for multi-layer rendering. */
+  recipes?: LpcLayerRecipe[];
+  /** Array of active layer sprites and their loaded base textures. */
+  layerSprites?: { sprite: Sprite; recipe: LpcLayerRecipe; texture?: Texture }[];
 };
 
 /**
@@ -75,8 +81,8 @@ type NpcMetaEntry = {
  */
 const CELL_GEOMETRY_RECT = new Rectangle(0, 0, 48, 48);
 
-/** Frame width for the LPC walk spritesheet (64×64 per frame). */
-const LPC_FRAME_SIZE = 64;
+/** Frame width for the LPC walk spritesheet (64x64 per frame). */
+// const LPC_FRAME_SIZE = 64;
 
 /** Number of animation frame columns in the walk spritesheet. */
 const LPC_WALK_COLUMNS = 9;
@@ -103,28 +109,18 @@ export type GameWorldOptions = BaseEngineClassOptions & {
    */
   workerFactory?: () => Worker;
   /**
-   * URL to an LPC walk spritesheet for entity rendering.
-   *
-   * When provided, entities render as animated LPC character sprites
-   * instead of tinted white rectangles. The spritesheet must follow
-   * the standard LPC walk layout: N columns × 4 rows (Up/Left/Down/Right)
-   * with square frames.
-   *
-   * Loaded asynchronously — entities show white fallback until the
-   * texture resolves.
+   * Resolves an array of layer IDs to an array of LPC layer recipes.
+   * Required for multi-layer dynamic sprite rendering.
    */
-  spritesheetUrl?: string;
+  recipeResolver?: (layerIds: readonly number[]) => LpcLayerRecipe[];
   /**
-   * URL to an LPC walk spritesheet for the player entity specifically.
-   *
-   * When provided alongside {@link spritesheetUrl}, the player entity
-   * (first entity created, green tint) uses this spritesheet while all
-   * other entities (NPCs, test sprites) use {@link spritesheetUrl}.
-   *
-   * When only {@link spritesheetUrl} is set, all entities share it.
-   * This field has no effect when {@link spritesheetUrl} is not set.
+   * Resolves a slot, asset ID, and animation state to a texture URL.
    */
-  playerSpritesheetUrl?: string;
+  assetUrlResolver?: (slot: string, assetId: string, state: string) => string;
+  /**
+   * Texture manager instance for LRU caching and frame slicing.
+   */
+  textureManager?: TextureManager;
 };
 
 /**
@@ -139,7 +135,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** The engine bridge for UI↔Game communication. */
   private readonly _bridge: EngineBridge;
 
-  /** Optional game API service for backend communication. */
+  /** Optional API service for backend communication. */
   private _apiService: GameApiService | undefined;
 
   /** Optional game AI service for AI-powered features. */
@@ -148,17 +144,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Optional factory for creating the worker (Vite ?worker import). */
   private readonly _workerFactory?: () => Worker;
 
-  /** Optional URL to an LPC walk spritesheet for NPC entities. */
-  private readonly _spritesheetUrl?: string;
+  /** Resolves layer IDs to LPC layer recipes. */
+  private readonly _recipeResolver?: (layerIds: readonly number[]) => LpcLayerRecipe[];
 
-  /** Optional URL to an LPC walk spritesheet for the player entity. */
-  private readonly _playerSpritesheetUrl?: string;
+  /** Resolves asset URLs. */
+  private readonly _assetUrlResolver?: (slot: string, assetId: string, state: string) => string;
 
-  /** LPC walk spritesheet texture for NPCs, loaded asynchronously. */
-  private _spritesheetTexture: Texture | undefined;
-
-  /** LPC walk spritesheet texture for the player, loaded asynchronously. */
-  private _playerSpritesheetTexture: Texture | undefined;
+  /** Texture manager instance. */
+  private readonly _textureManager?: TextureManager;
 
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
@@ -219,8 +212,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._apiService = options.apiService;
     this._aiService = options.aiService;
     this._workerFactory = options.workerFactory;
-    this._spritesheetUrl = options.spritesheetUrl;
-    this._playerSpritesheetUrl = options.playerSpritesheetUrl;
+    this._recipeResolver = options.recipeResolver;
+    this._assetUrlResolver = options.assetUrlResolver;
+    this._textureManager = options.textureManager;
   }
 
   /**
@@ -240,7 +234,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // ---- 1. Create PixiJS Application (main thread) -------------------
-    const pixiInstance: PixiAppInstance = await createPixiApp({ canvas, width, height });
+    const pixiInstance: PixiAppInstance = await createPixiApp(options);
     this._app = pixiInstance.app;
 
     // ---- 2. Allocate shared memory buffers ----------------------------
@@ -489,6 +483,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       for (const gameEvent of events) {
         // Intercept APPEARANCE_CHANGED for composited sprite invalidation
         if (gameEvent.type === 'APPEARANCE_CHANGED') {
+          const entry = this._renderEntries.get(gameEvent.eid);
+          if (entry && this._recipeResolver) {
+            entry.recipes = this._recipeResolver(gameEvent.layerIds);
+            // Fire async load, ignoring promise result.
+            void this._loadEntityRecipes(gameEvent.eid, entry.recipes);
+          }
           dirtyCheckAppearance(gameEvent.eid, gameEvent.layerIds);
         }
         this._bridge.emit(gameEvent);
@@ -530,23 +530,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
     }
 
-    // Create an LPC-compatible sprite using Texture.WHITE as fallback.
-    // When TextureManager + LPC sheets are preloaded, the sprite texture
-    // will be swapped in via the animation controller's frame index.
-    const sprite = new Sprite(Texture.WHITE);
-    sprite.width = 48;
-    sprite.height = 48;
-    sprite.tint = tint;
+    // Create an LPC-compatible container.
+    // When the first APPEARANCE_CHANGED event arrives, the container will
+    // be populated with layer sprites.
+    const container = new Container();
+    container.width = 48;
+    container.height = 48;
 
     // Per-contract C-032: bypass layout hit-tests for character visuals
-    sprite.eventMode = 'none';
-    // Pre-assign filter area to avoid per-frame bounds recalc overhead
-    sprite.filterArea = CELL_GEOMETRY_RECT;
+    container.eventMode = 'none';
 
-    this._app.stage.addChild(sprite);
+    this._app.stage.addChild(container);
     this.debug('entity-added-to-stage', {
       eid,
-      tint: `0x${tint.toString(16)}`,
       stageChildren: this._app.stage.children.length,
     });
 
@@ -554,16 +550,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const animationController = new AnimationController();
 
     this._renderEntries.set(eid, {
-      displayObject: sprite,
+      displayObject: container,
       animationController,
       tint,
       cullable: true,
+      recipes: [],
     });
 
-    // Trigger async spritesheet load on first entity creation.
-    // The sprite shows tinted white until the texture resolves, then
-    // frame slicing begins in _updateRenderFromBuffer.
-    this._loadSpritesheetIfNeeded();
+    // Recipes will be loaded when the first APPEARANCE_CHANGED event arrives.
   }
 
   /**
@@ -582,19 +576,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       return;
     }
 
-    // Forward MOVE_PLAYER commands
-    bridgeWithCommands.onCommand('MOVE_PLAYER', (cmd: unknown) => {
+    // Forward SET_PLAYER_VELOCITY commands
+    bridgeWithCommands.onCommand('SET_PLAYER_VELOCITY', (cmd: unknown) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
-        command: { type: 'MOVE_PLAYER', direction: (cmd as { direction: Direction }).direction },
-      });
-    });
-
-    // Forward STOP_PLAYER commands
-    bridgeWithCommands.onCommand('STOP_PLAYER', () => {
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'STOP_PLAYER' },
+        command: {
+          type: 'SET_PLAYER_VELOCITY',
+          velocity: (cmd as { velocity: { x: number; y: number } }).velocity,
+        },
       });
     });
 
@@ -645,6 +634,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   setInputLocked(locked: boolean): void {
     this._inputLocked = locked;
+    if (locked) {
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: 0 } },
+      });
+    }
   }
 
   /** Returns the current input lock state. */
@@ -676,9 +671,38 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @returns A cleanup function that removes all listeners.
    */
   private _setupKeyboardInput(): () => void {
+    const activeKeys = new Set<string>();
+
+    const updateVelocity = () => {
+      let vx = 0;
+      let vy = 0;
+
+      if (activeKeys.has('w') || activeKeys.has('arrowup')) vy -= 1;
+      if (activeKeys.has('s') || activeKeys.has('arrowdown')) vy += 1;
+      if (activeKeys.has('a') || activeKeys.has('arrowleft')) vx -= 1;
+      if (activeKeys.has('d') || activeKeys.has('arrowright')) vx += 1;
+
+      // Normalize diagonal movement to same speed as orthogonal
+      if (vx !== 0 && vy !== 0) {
+        const length = Math.sqrt(vx * vx + vy * vy);
+        vx /= length;
+        vy /= length;
+      }
+
+      // Base speed is 150 pixels per second
+      vx *= 150;
+      vy *= 150;
+
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: { type: 'SET_PLAYER_VELOCITY', velocity: { x: vx, y: vy } },
+      });
+    };
+
     const handleKeyDown = (event: KeyboardEvent): void => {
+      const key = event.key.toLowerCase();
       // Interaction key — check for nearby NPCs regardless of lock state
-      if (event.key === 'e' || event.key === 'E' || event.key === 'Enter') {
+      if (key === 'e' || key === 'enter') {
         event.preventDefault();
         this._handleInteractKey();
         return;
@@ -686,45 +710,30 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       // Block movement keys when input is locked
       if (this._inputLocked) {
+        activeKeys.clear();
         return;
       }
 
-      const direction = keyToDirection(event.key);
-      if (!direction) {
-        return;
+      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        event.preventDefault();
+        if (!activeKeys.has(key)) {
+          activeKeys.add(key);
+          updateVelocity();
+        }
       }
-
-      event.preventDefault();
-
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'MOVE_PLAYER', direction },
-      });
     };
 
     const handleKeyUp = (event: KeyboardEvent): void => {
-      if (this._inputLocked) {
-        return;
-      }
+      const key = event.key.toLowerCase();
 
-      const direction = keyToDirection(event.key);
-      if (!direction) {
-        return;
+      if (activeKeys.has(key)) {
+        event.preventDefault();
+        activeKeys.delete(key);
+        // Only update if not locked, otherwise we already sent {0,0}
+        if (!this._inputLocked) {
+          updateVelocity();
+        }
       }
-
-      // Only stop if the released key matches the current direction
-      const releasedVel = DIRECTION_VELOCITY[direction];
-      if (!releasedVel) {
-        return;
-      }
-
-      // We don't track current velocity on the main thread, so we always
-      // send STOP_PLAYER and let the worker decide if stopping is correct.
-      // For the MVP this is fine — the worker clears velocity to zero.
-      this._postToWorker({
-        type: 'BRIDGE_COMMAND',
-        command: { type: 'STOP_PLAYER' },
-      });
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -804,18 +813,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param stage - The PixiJS stage container.
    */
   private _updateRenderFromBuffer(renderView: Float32Array, stage: Container): void {
-    // Use explicit canvas bounds as fallback when stage.getBounds() returns 0-sized
-    // (happens on the first few frames before entities are positioned).
-    const rawBounds = stage.filterArea ?? stage.getBounds();
-    const stageBounds =
-      rawBounds.width > 0 && rawBounds.height > 0
-        ? rawBounds
-        : {
-            x: 0,
-            y: 0,
-            width: this._app?.canvas.width ?? 800,
-            height: this._app?.canvas.height ?? 600,
-          };
+    // Use the actual screen bounds (canvas dimensions) for spatial culling,
+    // rather than the stage's bounding box of children.
+    const stageBounds = this._app?.screen ?? {
+      x: 0,
+      y: 0,
+      width: this._app?.canvas.width ?? 800,
+      height: this._app?.canvas.height ?? 600,
+    };
     let visibleCount = 0;
     let totalCount = 0;
 
@@ -837,13 +842,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // direction and walk/idle transitions.
       entry.animationController?.update({ x, y });
 
-      // Apply LPC frame slicing when at least one spritesheet is loaded.
-      // _applyLpcFrame selects the right sheet based on entity ID.
-      if (
-        (this._spritesheetTexture || this._playerSpritesheetTexture) &&
-        entry.animationController
-      ) {
-        this._applyLpcFrame(entry.displayObject as Sprite, entry.animationController, eid);
+      // Apply LPC frame slicing when layer sprites are loaded.
+      if (entry.animationController) {
+        this._applyLpcFrame(entry, entry.animationController);
       }
 
       // Spatial culling for cullable entities
@@ -875,97 +876,121 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   // Internal: LPC spritesheet loading + frame slicing
   // -----------------------------------------------------------------------
 
-  /** Whether the spritesheet load has been initiated (prevents duplicate loads). */
-  private _spritesheetLoadStarted = false;
-
   /**
-   * Initiates async loading of the LPC walk spritesheet.
-   *
-   * Idempotent — subsequent calls after the first are no-ops. The sprite
-   * shows its tinted white fallback until the texture resolves. Once
-   * loaded, {@link _applyLpcFrame} begins slicing frames in the render loop.
+   * Initiates async loading of LPC textures for a given entity's recipes.
+   * Creates layer sprites on the container once loaded.
    */
-  private _loadSpritesheetIfNeeded(): void {
-    if (this._spritesheetLoadStarted) {
+  private async _loadEntityRecipes(eid: number, recipes: LpcLayerRecipe[]): Promise<void> {
+    const entry = this._renderEntries.get(eid);
+    if (!entry || !this._assetUrlResolver) {
       return;
     }
 
-    this._spritesheetLoadStarted = true;
+    // We assume container since it's now a Container.
+    const container = entry.displayObject as Container;
 
-    // Load NPC spritesheet
-    if (this._spritesheetUrl) {
-      try {
-        this._spritesheetTexture = Texture.from(this._spritesheetUrl);
-        this.debug('lpc-spritesheet:npc-loading', { url: this._spritesheetUrl });
-      } catch (err) {
-        this.debug('lpc-spritesheet:npc-error', { error: String(err) });
+    // Clear existing sprites.
+    if (entry.layerSprites) {
+      for (const { sprite } of entry.layerSprites) {
+        container.removeChild(sprite);
+        sprite.destroy();
       }
     }
+    entry.layerSprites = [];
 
-    // Load player spritesheet (separate from NPC)
-    if (this._playerSpritesheetUrl) {
-      try {
-        this._playerSpritesheetTexture = Texture.from(this._playerSpritesheetUrl);
-        this.debug('lpc-spritesheet:player-loading', { url: this._playerSpritesheetUrl });
-      } catch (err) {
-        this.debug('lpc-spritesheet:player-error', { error: String(err) });
+    // Dynamically import Assets to avoid tying the engine to PixiJS asset loader in simple setups
+    const { Assets } = await import('pixi.js');
+    const stateStr = 'walk'; // default state for engine
+
+    const layerSprites: NonNullable<RenderEntry['layerSprites']> = [];
+
+    // Map recipes to promises. We await them all below.
+    const loadPromises = recipes.map(async (recipe) => {
+      if (!recipe.assetId) {
+        return;
       }
+
+      const url = this._assetUrlResolver?.(recipe.slot ?? 'body', recipe.assetId, stateStr);
+      if (!url) {
+        return;
+      }
+      try {
+        const texture = await Assets.load(url);
+        texture.source.scaleMode = 'nearest';
+
+        const sprite = new Sprite(Texture.WHITE);
+        sprite.eventMode = 'none';
+
+        // Apply tint if provided (for placeholder or fallback tinting)
+        // Note: For LPC full-color assets we often don't tint, but for fallback we might.
+        // We'll skip tinting for now to avoid muddy colors, similar to LpcCharacterRenderer.
+
+        container.addChild(sprite);
+        layerSprites.push({ sprite, recipe, texture });
+      } catch (err) {
+        this.debug('lpc-load-error', { url, error: String(err) });
+      }
+    });
+
+    await Promise.all(loadPromises);
+
+    // After all loaded, sort by slot standard z-index?
+    // Wait, the client handles z-index, but we don't have LPC_LAYER_Z_INDEX here.
+    // Assuming the recipes are provided in sorted order by the resolver!
+    // We can just rely on the array order. The array order might be scrambled by Promise.all,
+    // so let's sort them back to match recipe order.
+    layerSprites.sort((a, b) => recipes.indexOf(a.recipe) - recipes.indexOf(b.recipe));
+
+    // Re-add in correct order
+    for (const { sprite } of layerSprites) {
+      container.addChild(sprite); // Re-adds and bumps to top, effectively sorting them.
+    }
+
+    if (this._renderEntries.get(eid) === entry) {
+      entry.layerSprites = layerSprites;
     }
   }
 
   /**
-   * Slices the current animation frame from the LPC walk spritesheet
-   * and applies it to the sprite's texture.
-   *
-   * Selects the player spritesheet when the entity ID matches
-   * {@link _playerEntityId}, otherwise uses the NPC spritesheet.
-   * Falls back silently (keeps white tint) when the selected sheet
-   * hasn't loaded yet.
-   *
-   * @param sprite - The PixiJS Sprite to update.
-   * @param controller - The entity's animation controller.
-   * @param eid - The entity ID, used to select player vs NPC sheet.
+   * Slices the current animation frame from the loaded LPC walk spritesheets
+   * and applies them to the layer sprites.
    */
-  private _applyLpcFrame(sprite: Sprite, controller: AnimationController, eid: number): void {
-    const isPlayer = eid === this._playerEntityId;
-    const sheet = isPlayer
-      ? (this._playerSpritesheetTexture ?? this._spritesheetTexture)
-      : this._spritesheetTexture;
-
-    if (!sheet || sheet.width <= 1) {
+  private _applyLpcFrame(entry: RenderEntry, controller: AnimationController): void {
+    if (!entry.layerSprites || entry.layerSprites.length === 0 || !this._textureManager) {
       return;
     }
 
     const direction = controller.direction;
     const column = controller.getFrameColumn(LPC_WALK_COLUMNS);
-
-    // Map LpcDirection to spritesheet row
     const row = direction as number; // Up=0, Left=1, Down=2, Right=3
 
-    const frameX = column * LPC_FRAME_SIZE;
-    const frameY = row * LPC_FRAME_SIZE;
+    for (const layer of entry.layerSprites) {
+      if (!layer.texture) {
+        continue;
+      }
 
-    // First frame: swap the sprite's texture from WHITE to a spritesheet slice.
-    // Subsequent frames: create a new Texture wrapper sharing the same source
-    // with an updated frame Rectangle (Texture.frame is readonly in PixiJS v8).
-    if (!sprite.texture || sprite.texture === Texture.WHITE) {
-      sprite.texture = new Texture({
-        source: sheet.source,
-        frame: new Rectangle(frameX, frameY, LPC_FRAME_SIZE, LPC_FRAME_SIZE),
+      const sheet = layer.texture;
+      const columns = Math.floor(sheet.width / 64);
+      const rows = Math.floor(sheet.height / 64);
+
+      let effectiveRow = row;
+      if (rows === 1) {
+        effectiveRow = 0;
+      }
+
+      const frameCol = column % columns;
+      const dynamicFrameIndex = effectiveRow * columns + frameCol;
+
+      const frameTexture = this._textureManager.getFrameAt({
+        texture: sheet,
+        layout: { frameWidth: 64, frameHeight: 64, columns, rows },
+        frameIndex: dynamicFrameIndex,
       });
-      return;
-    }
 
-    // Only update when the frame actually changes
-    const currentFrame = sprite.texture.frame;
-    if (currentFrame.x === frameX && currentFrame.y === frameY) {
-      return;
+      if (frameTexture) {
+        layer.sprite.texture = frameTexture;
+      }
     }
-
-    sprite.texture = new Texture({
-      source: sheet.source,
-      frame: new Rectangle(frameX, frameY, LPC_FRAME_SIZE, LPC_FRAME_SIZE),
-    });
   }
 }
 
@@ -973,33 +998,5 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Maps a KeyboardEvent key to a movement direction.
- *
- * @param key - The `event.key` value.
- * @returns The corresponding direction, or `undefined` if not a movement key.
- */
-const keyToDirection = (key: string): Direction | undefined => {
-  switch (key) {
-    case 'w':
-    case 'W':
-    case 'ArrowUp':
-      return 'up';
-    case 's':
-    case 'S':
-    case 'ArrowDown':
-      return 'down';
-    case 'a':
-    case 'A':
-    case 'ArrowLeft':
-      return 'left';
-    case 'd':
-    case 'D':
-    case 'ArrowRight':
-      return 'right';
-    default:
-      return undefined;
-  }
-};
 
 export { GameWorld };

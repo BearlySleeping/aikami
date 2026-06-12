@@ -36,19 +36,6 @@ import type { Direction, GameCommand, GameEvent, NPCSpawnData } from '../types.t
 // biome-ignore lint/suspicious/noConsole: worker startup diagnostic
 console.log('[ecs_worker] Module loaded, ready for INITIALIZE_ENGINE');
 
-/**
- * Direction-to-velocity lookup table, mirrored from input_system.ts.
- * The worker applies these directly when it receives a MOVE_PLAYER command.
- */
-const PLAYER_SPEED = 150;
-
-const DIRECTION_VELOCITY: Record<Direction, VelocityData> = {
-  up: { x: 0, y: -PLAYER_SPEED },
-  down: { x: 0, y: PLAYER_SPEED },
-  left: { x: -PLAYER_SPEED, y: 0 },
-  right: { x: PLAYER_SPEED, y: 0 },
-};
-
 // -- Worker-global state ----------------------------------------------------
 
 /** The bitECS world — created once per INITIALIZE_ENGINE. */
@@ -138,30 +125,14 @@ const workerBridge: EngineBridge = {
 // -- Command handling -------------------------------------------------------
 
 /**
- * Applies a MOVE_PLAYER command to the player entity's velocity.
+ * Applies a SET_PLAYER_VELOCITY command to the player entity's velocity.
  */
-const handleMovePlayer = (direction: Direction): void => {
+const handleSetPlayerVelocity = (velocity: { x: number; y: number }): void => {
   if (!world) {
     return;
   }
 
-  const vel = DIRECTION_VELOCITY[direction];
-  if (!vel) {
-    return;
-  }
-
-  addComponent(world, playerEntityId, set(Velocity, vel));
-};
-
-/**
- * Applies a STOP_PLAYER command to zero out the player entity's velocity.
- */
-const handleStopPlayer = (): void => {
-  if (!world) {
-    return;
-  }
-
-  addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
+  addComponent(world, playerEntityId, set(Velocity, velocity));
 };
 
 /**
@@ -194,12 +165,8 @@ const handleSpawnNPC = (npcData: NPCSpawnData): void => {
  */
 const handleBridgeCommand = (command: GameCommand): void => {
   switch (command.type) {
-    case 'MOVE_PLAYER': {
-      handleMovePlayer(command.direction);
-      break;
-    }
-    case 'STOP_PLAYER': {
-      handleStopPlayer();
+    case 'SET_PLAYER_VELOCITY': {
+      handleSetPlayerVelocity(command.velocity);
       break;
     }
     case 'SPAWN_NPC': {
@@ -382,6 +349,7 @@ const tickLoop = (): void => {
       world,
       batchManager: lpcBatchManager,
       recipeResolver: workerRecipeResolver,
+      bridge: workerBridge,
     });
   }
 

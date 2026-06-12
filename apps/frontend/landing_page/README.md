@@ -29,7 +29,7 @@ bun install
 | `dev` | `bun run dev` | Start development server |
 | `build` | `bun run build` | Build for production |
 | `preview` | `bun run preview` | Preview production build |
-| `typecheck` | `tsc --noEmit` | Run TypeScript type checking |
+| `typecheck` | `tsgo --noEmit` | Run TypeScript type checking |
 | `lint` | `biome lint .` | Lint code with Biome |
 | `format` | `biome format .` | Format code with Biome |
 | `fix` | `biome check --write .` | Auto-fix lint & format issues |

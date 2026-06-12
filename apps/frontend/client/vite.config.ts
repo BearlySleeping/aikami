@@ -24,6 +24,23 @@ export default defineConfig(({ mode }) => {
       project: './project.inlang',
       outdir: './src/lib/paraglide',
     }) as PluginOption,
+    {
+      name: 'cross-origin-isolation',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+          res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+          next();
+        });
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+          res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+          next();
+        });
+      },
+    } as PluginOption,
   ];
 
   if (mode === 'staging' && process.env.DEBUG === '1') {
@@ -46,6 +63,7 @@ export default defineConfig(({ mode }) => {
     envPrefix: ['PUBLIC_'],
 
     build: {
+      emptyOutDir: true,
       rollupOptions: {
         // Mute unavoidable warnings from third-party dependencies
         onwarn(warning, warn) {
@@ -62,6 +80,10 @@ export default defineConfig(({ mode }) => {
           warn(warning);
         },
       },
+    },
+
+    worker: {
+      format: 'es',
     },
 
     server: {

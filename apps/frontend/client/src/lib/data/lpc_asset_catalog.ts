@@ -77,28 +77,21 @@ export const LPC_BODY_SLOTS: readonly LpcSlotDefinition[] = [
     slot: 'body',
     label: 'Body',
     variants: [
-      { assetId: '101', label: 'Male (Light)', shapeType: 'humanoid' },
-      { assetId: '102', label: 'Male (Dark)', shapeType: 'humanoid' },
-      { assetId: '103', label: 'Female (Light)', shapeType: 'humanoid' },
-      { assetId: '104', label: 'Female (Dark)', shapeType: 'humanoid' },
-      { assetId: '105', label: 'Elf Male', shapeType: 'elf' },
-      { assetId: '106', label: 'Elf Female', shapeType: 'elf' },
-      { assetId: '107', label: 'Skeleton', shapeType: 'skeleton' },
+      { assetId: 'human/male', label: 'Male (Light)', shapeType: 'humanoid' },
+      { assetId: 'human/female', label: 'Female (Light)', shapeType: 'humanoid' },
+      { assetId: 'muscular', label: 'Male (Muscular)', shapeType: 'humanoid' },
+      { assetId: 'zombie', label: 'Zombie', shapeType: 'humanoid' },
+      { assetId: 'skeleton', label: 'Skeleton', shapeType: 'skeleton' },
     ],
   },
   {
     slot: 'head',
     label: 'Head',
     variants: [
-      { assetId: '201', label: 'Human Male Light', shapeType: 'humanoid' },
-      { assetId: '202', label: 'Human Male Dark', shapeType: 'humanoid' },
-      { assetId: '203', label: 'Human Female Light', shapeType: 'humanoid' },
-      { assetId: '204', label: 'Human Female Dark', shapeType: 'humanoid' },
-      { assetId: '205', label: 'Elf Male Light', shapeType: 'elf' },
-      { assetId: '206', label: 'Elf Male Dark', shapeType: 'elf' },
-      { assetId: '207', label: 'Elf Female Light', shapeType: 'elf' },
-      { assetId: '208', label: 'Elf Female Dark', shapeType: 'elf' },
-      { assetId: '209', label: 'Skeleton', shapeType: 'skeleton' },
+      { assetId: 'human/male', label: 'Human Male Light', shapeType: 'humanoid' },
+      { assetId: 'human/female', label: 'Human Female Light', shapeType: 'humanoid' },
+      { assetId: 'zombie', label: 'Zombie', shapeType: 'humanoid' },
+      { assetId: 'skeleton', label: 'Skeleton', shapeType: 'skeleton' },
     ],
   },
 ];
@@ -114,12 +107,8 @@ export const LPC_HAIR_SLOTS: readonly LpcSlotDefinition[] = [
     slot: 'hair',
     label: 'Hair',
     variants: [
-      { assetId: '301', label: 'Mohawk', shapeType: 'mohawk' },
-      { assetId: '302', label: 'Long Braid', shapeType: 'long_braid' },
-      { assetId: '303', label: 'Curly Afro', shapeType: 'curly_afro' },
-      { assetId: '304', label: 'Short Crop', shapeType: 'short_crop' },
-      { assetId: '305', label: 'Bald', shapeType: 'default' },
-      { assetId: '306', label: 'Ponytail', shapeType: 'default' },
+      { assetId: 'plain/male', label: 'Plain (Male)', shapeType: 'short_crop' },
+      { assetId: 'plain/female', label: 'Plain (Female)', shapeType: 'long_braid' },
     ],
   },
 ];
@@ -134,14 +123,7 @@ export const LPC_TORSO_SLOTS: readonly LpcSlotDefinition[] = [
   {
     slot: 'torso',
     label: 'Torso',
-    variants: [
-      { assetId: '401', label: 'Chainmail', shapeType: 'chainmail' },
-      { assetId: '402', label: 'Leather Vest', shapeType: 'leather_vest' },
-      { assetId: '403', label: 'Robe', shapeType: 'robe' },
-      { assetId: '404', label: 'Plate Armor', shapeType: 'plate_armor' },
-      { assetId: '405', label: 'Cloth Tunic', shapeType: 'default' },
-      { assetId: '406', label: 'Bare Chest', shapeType: 'default' },
-    ],
+    variants: [{ assetId: 'clothes/shirt/male', label: 'Shirt', shapeType: 'leather_vest' }],
   },
 ];
 
@@ -155,13 +137,7 @@ export const LPC_LEGS_SLOTS: readonly LpcSlotDefinition[] = [
   {
     slot: 'legs',
     label: 'Legs',
-    variants: [
-      { assetId: '501', label: 'Plate Greaves', shapeType: 'plate_greaves' },
-      { assetId: '502', label: 'Cloth Skirt', shapeType: 'cloth_skirt' },
-      { assetId: '503', label: 'Tattered Pants', shapeType: 'tattered_pants' },
-      { assetId: '504', label: 'Leather Pants', shapeType: 'default' },
-      { assetId: '505', label: 'Bare Legs', shapeType: 'default' },
-    ],
+    variants: [{ assetId: 'pants/male', label: 'Pants', shapeType: 'cloth_skirt' }],
   },
 ];
 
@@ -172,13 +148,7 @@ export const LPC_FEET_SLOTS: readonly LpcSlotDefinition[] = [
   {
     slot: 'feet',
     label: 'Feet',
-    variants: [
-      { assetId: '601', label: 'Leather Boots', shapeType: 'default' },
-      { assetId: '602', label: 'Plate Boots', shapeType: 'default' },
-      { assetId: '603', label: 'Cloth Shoes', shapeType: 'default' },
-      { assetId: '604', label: 'Sandals', shapeType: 'default' },
-      { assetId: '605', label: 'Bare Feet', shapeType: 'default' },
-    ],
+    variants: [{ assetId: 'shoes/male', label: 'Shoes', shapeType: 'cloth_skirt' }],
   },
 ];
 
@@ -193,14 +163,14 @@ export const LPC_WEAPON_SLOTS: readonly LpcSlotDefinition[] = [
     slot: 'weapon',
     label: 'Weapon',
     variants: [
-      { assetId: '701', label: 'Broadsword', shapeType: 'broadsword' },
-      { assetId: '702', label: 'Spear', shapeType: 'spear' },
-      { assetId: '703', label: 'Wood Bow', shapeType: 'wood_bow' },
-      { assetId: '704', label: 'Shield', shapeType: 'shield' },
-      { assetId: '705', label: 'Dagger', shapeType: 'default' },
-      { assetId: '706', label: 'Staff', shapeType: 'default' },
-      { assetId: '707', label: 'Mace', shapeType: 'default' },
-      { assetId: '708', label: 'Wand', shapeType: 'default' },
+      { assetId: 'sword/longsword/male', label: 'Broadsword', shapeType: 'broadsword' },
+      { assetId: 'polearm/spear/male', label: 'Spear', shapeType: 'spear' },
+      { assetId: 'ranged/bow/male', label: 'Wood Bow', shapeType: 'wood_bow' },
+      { assetId: 'shield/buckler/male', label: 'Shield', shapeType: 'shield' },
+      { assetId: 'sword/dagger/male', label: 'Dagger', shapeType: 'default' },
+      { assetId: 'magic/staff/male', label: 'Staff', shapeType: 'default' },
+      { assetId: 'blunt/mace/male', label: 'Mace', shapeType: 'default' },
+      { assetId: 'magic/wand/male', label: 'Wand', shapeType: 'default' },
     ],
   },
 ];
