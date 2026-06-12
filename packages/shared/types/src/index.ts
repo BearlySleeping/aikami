@@ -8,7 +8,6 @@ export * from './lib/api/oauth2.ts';
 
 export * from './lib/auth.ts';
 export * from './lib/backend/auth.ts';
-export * from './lib/backend/fcm.ts';
 export * from './lib/backend/firebase.ts';
 export * from './lib/backend/firestorage.ts';
 export * from './lib/backend/http.ts';

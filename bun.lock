@@ -38,7 +38,7 @@
         "axios": "1.17.0",
         "firebase-admin": "14.0.0",
         "firebase-functions": "7.2.5",
-        "genkit": "1.36.0",
+        "genkit": "1.37.0",
       },
       "devDependencies": {
         "@firebase/rules-unit-testing": "5.0.1",
@@ -766,9 +766,9 @@
 
     "@firebase/webchannel-wrapper": ["@firebase/webchannel-wrapper@1.0.6", "", {}, "sha512-Vr/Mqu79dMwGRAyGbJ4uN4+BtXB3/mRTdzetD1daWNeG8QaWuzhhbG77GltO5c0yYmYls8i250iX73624GJd7Q=="],
 
-    "@genkit-ai/ai": ["@genkit-ai/ai@1.36.0", "", { "dependencies": { "@genkit-ai/core": "1.36.0", "@opentelemetry/api": "^1.9.0", "@types/node": "^20.11.19", "colorette": "^2.0.20", "dotprompt": "^1.1.1", "handlebars": "^4.7.8", "json5": "^2.2.3", "node-fetch": "^3.3.2", "partial-json": "^0.1.7", "uri-templates": "^0.2.0", "uuid": "^10.0.0" } }, "sha512-xMDfclS4sMLEl4YQP92XlxnPxuehz+90iuysg2gRGfHXXz6iRSGjWVq7QycBWqMmZ7OYHfgTgYz4CgL63Ezl0A=="],
+    "@genkit-ai/ai": ["@genkit-ai/ai@1.37.0", "", { "dependencies": { "@genkit-ai/core": "1.37.0", "@opentelemetry/api": "^1.9.0", "@types/node": "^20.11.19", "colorette": "^2.0.20", "dotprompt": "^1.1.1", "handlebars": "^4.7.8", "json5": "^2.2.3", "node-fetch": "^3.3.2", "partial-json": "^0.1.7", "uri-templates": "^0.2.0", "uuid": "^10.0.0" } }, "sha512-SQnis1/NJeaGOiFnstmCJ7iGxVj/lwsQpwCXgG+JQrspAvGEIpSHCVBkreUpw6Dy7r0mVCHKup7L1NqBJbvCZg=="],
 
-    "@genkit-ai/core": ["@genkit-ai/core@1.36.0", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/api-logs": "^0.52.0", "@opentelemetry/context-async-hooks": "~1.25.0", "@opentelemetry/core": "~1.25.0", "@opentelemetry/sdk-logs": "^0.52.0", "@opentelemetry/sdk-metrics": "~1.25.0", "@opentelemetry/sdk-node": "^0.52.0", "@opentelemetry/sdk-trace-base": "~1.25.0", "@types/json-schema": "^7.0.15", "ajv": "^8.12.0", "ajv-formats": "^3.0.1", "async-mutex": "^0.5.0", "cors": "^2.8.5", "dotprompt": "^1.1.1", "express": "^4.21.0", "get-port": "^5.1.0", "json-schema": "^0.4.0", "ws": "^8.18.0", "zod": "^3.23.8", "zod-to-json-schema": "^3.22.4" }, "optionalDependencies": { "@cfworker/json-schema": "^4.1.1", "@genkit-ai/firebase": "^1.16.1" } }, "sha512-kkWzROCNPz8Ol2OtBDjsNk2zaS32axIomuR3wm0iHjkR8NdFYPk9Ab4J80EKiUEGdhXiIwvO+4RhqOgy7zYm1A=="],
+    "@genkit-ai/core": ["@genkit-ai/core@1.37.0", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/api-logs": "^0.52.0", "@opentelemetry/context-async-hooks": "~1.25.0", "@opentelemetry/core": "~1.25.0", "@opentelemetry/sdk-logs": "^0.52.0", "@opentelemetry/sdk-metrics": "~1.25.0", "@opentelemetry/sdk-node": "^0.52.0", "@opentelemetry/sdk-trace-base": "~1.25.0", "@types/json-schema": "^7.0.15", "ajv": "^8.12.0", "ajv-formats": "^3.0.1", "async-mutex": "^0.5.0", "cors": "^2.8.5", "dotprompt": "^1.1.1", "express": "^4.21.0", "get-port": "^5.1.0", "json-schema": "^0.4.0", "ws": "^8.18.0", "zod": "^3.23.8", "zod-to-json-schema": "^3.22.4" }, "optionalDependencies": { "@cfworker/json-schema": "^4.1.1", "@genkit-ai/firebase": "^1.16.1" } }, "sha512-Bq/HTwRhFoWjn4bbN0gnegsO/0dSYRUtbkWj/xwYfTycSCzVTqQJt3eNJXL6Dd5qSlGa3sWjYTsksiLqfroDzg=="],
 
     "@genkit-ai/firebase": ["@genkit-ai/firebase@1.36.0", "", { "dependencies": { "@genkit-ai/google-cloud": "^1.36.0" }, "peerDependencies": { "@google-cloud/firestore": "^7.11.0", "firebase": ">=11.5.0", "firebase-admin": ">=12.2", "genkit": "^1.36.0" }, "optionalPeers": ["firebase"] }, "sha512-gHAWstRUtoocPWmC6Y8m3mgv20iOeecBduRLgIVwj7H8lt7wJrqzhJ6WLi2CeA3hAkBsVcQAad3K/Yov6GczBw=="],
 
@@ -2436,7 +2436,7 @@
 
     "gcp-metadata": ["gcp-metadata@8.1.2", "", { "dependencies": { "gaxios": "^7.0.0", "google-logging-utils": "^1.0.0", "json-bigint": "^1.0.0" } }, "sha512-zV/5HKTfCeKWnxG0Dmrw51hEWFGfcF2xiXqcA3+J90WDuP0SvoiSO5ORvcBsifmx/FoIjgQN3oNOGaQ5PhLFkg=="],
 
-    "genkit": ["genkit@1.36.0", "", { "dependencies": { "@genkit-ai/ai": "1.36.0", "@genkit-ai/core": "1.36.0", "uuid": "^10.0.0" } }, "sha512-5kwpWAOiIusWKOrYlUpuU60SSjxuyzcAqJTwM8c89NHWj0AsUqJKcgHAmm2JTbfJRAMXlPfgOLxNi1qGyqI+yQ=="],
+    "genkit": ["genkit@1.37.0", "", { "dependencies": { "@genkit-ai/ai": "1.37.0", "@genkit-ai/core": "1.37.0", "uuid": "^10.0.0" } }, "sha512-CkQc8Pf9XYbg13O8RCY6bXxxGypTUNL+A/nm5iLfB/IDni1P5lS8cATFdtvgs0OeCgIr9mD69O5J5EK6Ndiziw=="],
 
     "gensync": ["gensync@1.0.0-beta.2", "", {}, "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg=="],
 

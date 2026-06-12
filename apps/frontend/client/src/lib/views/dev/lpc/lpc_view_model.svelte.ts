@@ -16,7 +16,6 @@ import {
   LPC_BATCH_MANAGER_KEY,
   LPC_STAGE_CONTAINER_KEY,
 } from '$lib/components/game/lpc_context_keys';
-import type { LpcMockShapeType } from '$lib/data/lpc_asset_catalog';
 import {
   ALL_LPC_SLOTS,
   ANIMATION_STATE_OPTIONS,
@@ -25,11 +24,10 @@ import {
   hexToPixiTint,
   LPC_DEFAULT_PALETTE,
   LPC_LAYER_Z_INDEX,
-  LPC_SLOT_PALETTE_INDEX,
 } from '$lib/data/lpc_asset_catalog';
 import { getAvailableLpcAssets } from '$lib/data/lpc_asset_checker';
 import { createPlaceholderTexture, getLpcAssetPath } from '$lib/data/lpc_asset_path_mapper';
-import { getLpcStateRow, LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 import {
   type LpcUrlState,
   lpcStateToSearchParams,
@@ -449,11 +447,13 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   // ── Texture / sheet helpers ─────────────────────────────────────────
 
   private async _loadSheetTexture(path: string, slot: string, assetId: string): Promise<Texture> {
-    if (this._sheetTextureCache.has(path)) {
-      return this._sheetTextureCache.get(path)!;
+    const cachedTexture = this._sheetTextureCache.get(path);
+    if (cachedTexture) {
+      return cachedTexture;
     }
-    if (this._sheetTexturePromises.has(path)) {
-      return this._sheetTexturePromises.get(path)!;
+    const cachedPromise = this._sheetTexturePromises.get(path);
+    if (cachedPromise) {
+      return cachedPromise;
     }
 
     const promise = (async () => {
@@ -541,12 +541,16 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         const path = getLpcAssetPath(slotDef.slot, variant.assetId, currentState);
         const sheet = await this._loadSheetTexture(path, slotDef.slot, variant.assetId);
 
-        if (sheet === Texture.EMPTY) return;
+        if (sheet === Texture.EMPTY) {
+          return;
+        }
 
         let effectiveRow = currentDirection;
         const columns = Math.floor(sheet.width / 64);
         const rows = Math.floor(sheet.height / 64);
-        if (rows === 1) effectiveRow = 0;
+        if (rows === 1) {
+          effectiveRow = 0;
+        }
 
         const frameCol = currentFrame % columns;
         const frameIndex = effectiveRow * columns + frameCol;
@@ -559,7 +563,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           sheet,
         );
 
-        if (frameTexture === Texture.EMPTY) return;
+        if (frameTexture === Texture.EMPTY) {
+          return;
+        }
 
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';

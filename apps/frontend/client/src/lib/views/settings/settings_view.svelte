@@ -1,24 +1,24 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/settings/settings_view.svelte
-    import t from '$i18n';
-    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-    import type { SettingsViewModelInterface } from './settings_view_model.svelte.ts';
-    import AiProvidersTab from './tabs/ai_providers_tab.svelte';
-    import InstructTemplatesTab from './tabs/instruct_templates_tab.svelte';
+  import t from '$i18n';
+  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import type { SettingsViewModelInterface } from './settings_view_model.svelte.ts';
+  import AiProvidersTab from './tabs/ai_providers_tab.svelte';
+  import InstructTemplatesTab from './tabs/instruct_templates_tab.svelte';
 
-    type Props = {
-      viewModel: SettingsViewModelInterface;
-    };
-    const { viewModel }: Props = $props();
+  type Props = {
+    viewModel: SettingsViewModelInterface;
+  };
+  const { viewModel }: Props = $props();
 
-    type SettingsTab = 'profile' | 'providers' | 'instruct';
-    let activeTab = $state<SettingsTab>('profile');
+  type SettingsTab = 'profile' | 'providers' | 'instruct';
+  let activeTab = $state<SettingsTab>('profile');
 
-    const tabEntries: Array<{ id: SettingsTab; label: string }> = [
-      { id: 'profile', label: t.settings() },
-      { id: 'providers', label: 'AI Providers' },
-      { id: 'instruct', label: 'Instruct' },
-    ];
+  const tabEntries: Array<{ id: SettingsTab; label: string }> = [
+    { id: 'profile', label: t.settings() },
+    { id: 'providers', label: 'AI Providers' },
+    { id: 'instruct', label: 'Instruct' },
+  ];
 </script>
 
 <BaseViewModelContainer {viewModel} class="container mx-auto p-6 max-w-4xl">
