@@ -37,6 +37,9 @@ export type NPCSpawnData = {
  */
 export type GameCommand =
   | {
+      type: 'STOP_PLAYER';
+    }
+  | {
       type: 'SET_PLAYER_VELOCITY';
       velocity: { x: number; y: number };
     }

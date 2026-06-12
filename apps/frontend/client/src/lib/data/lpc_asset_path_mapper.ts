@@ -1,5 +1,4 @@
 import { LpcAnimationState } from '$lib/data/lpc_models';
-import { logger } from '$logger';
 
 // ---------------------------------------------------------------------------
 // LPC Asset Path Mapper
@@ -46,7 +45,7 @@ export const getLpcAssetPath = (
  * @param assetId - Asset ID string.
  * @returns A promise resolving to a PixiJS Texture.
  */
-export const createPlaceholderTexture = async (slot: string, assetId: string) => {
+export const createPlaceholderTexture = async (_slot: string, _assetId: string) => {
   const { Texture } = await import('pixi.js');
   return Texture.EMPTY;
 };

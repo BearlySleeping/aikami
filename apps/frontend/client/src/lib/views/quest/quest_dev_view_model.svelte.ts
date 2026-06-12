@@ -85,10 +85,6 @@ const MOCK_QUESTS: Quest[] = [
 // ── Implementation ─────────────────────────────────────────────────────
 
 export class QuestDevViewModel extends QuestViewModel implements QuestViewModelInterface {
-  constructor(options: QuestViewModelOptions) {
-    super(options);
-  }
-
   override async initialize(): Promise<void> {
     this.injectMockQuests();
     return super.initialize();

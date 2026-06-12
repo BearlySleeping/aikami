@@ -344,7 +344,7 @@
     }
 
     // Compute the absolute row-major frame index for TextureManager.getFrameAt()
-    const frameIndex = _computeFrameIndex(currentFrame, row);
+    const _frameIndex = _computeFrameIndex(currentFrame, row);
 
     // Load textures for each layer recipe and extract frame sub-textures
     const loadAndSlice = async (): Promise<void> => {
