@@ -8,6 +8,8 @@
     "paths": {
       "@aikami/frontend/configs": ["../configs/src/index.ts"],
       "@aikami/frontend/configs/*": ["../configs/src/lib/*"],
+      "@aikami/frontend/dataconnect": ["../dataconnect/src/index.ts"],
+      "@aikami/frontend/dataconnect/*": ["../dataconnect/src/lib/*"],
       "@aikami/frontend/components": ["../components/src/index.ts"],
       "@aikami/frontend/components/*": ["../components/src/lib/*"],
       "@aikami/frontend/repositories": ["../repositories/src/index.ts"],

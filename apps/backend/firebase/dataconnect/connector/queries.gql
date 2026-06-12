@@ -1,8 +1,49 @@
-# Minimal stub — required by Data Connect emulator.
-# Replace with actual queries when Data Connect is wired up.
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
 query ListUsers @auth(level: PUBLIC) {
   users {
     id
     email
   }
+}
+
+# ---------------------------------------------------------------------------
+# Save Slots
+# ---------------------------------------------------------------------------
+
+# List all save slots for the authenticated user, ordered by slot number.
+query ListSaveSlots($uid: String!) @auth(level: USER) {
+  saveSlots(where: { uid: { eq: $uid } }, orderBy: { slotNumber: ASC }) {
+    id
+    slotNumber
+    lastLocationName
+    playedTimeSeconds
+    storageRef
+    createdAt
+    updatedAt
+  }
+}
+
+# Upsert a save slot — creates or updates the row identified by id.
+# The caller MUST construct id as "{uid}_{slotNumber}".
+mutation UpsertSaveSlot(
+  $id: String!
+  $uid: String!
+  $slotNumber: Int!
+  $lastLocationName: String
+  $playedTimeSeconds: Int
+  $storageRef: String!
+) @auth(level: USER) {
+  saveSlot_upsert(
+    data: {
+      id: $id
+      uid: $uid
+      slotNumber: $slotNumber
+      lastLocationName: $lastLocationName
+      playedTimeSeconds: $playedTimeSeconds
+      storageRef: $storageRef
+    }
+  )
 }

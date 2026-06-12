@@ -1,21 +1,13 @@
-# apps/backend/firebase/dataconnect/dataconnect.yaml
-# Firebase Data Connect service configuration for the Aikami backend.
-
 specVersion: "v1"
-
-# Unique service id within the Firebase project.
-serviceId: aikami-db
-
-# Path to the directory containing the source schema (GraphQL SDL).
-location: .
-
-schema:
-  source: "./schema"
-  datasource:
-    postgresql:
-      database: aikami
-      cloudSql:
-        instanceId: aikami-dev
-
-connectorDirs:
-  - "./connector"
+serviceId: "firebase"
+location: "us-east4"
+schemas:
+  - source: "./schema"
+    datasource:
+      postgresql:
+        database: "fdcdb"
+        cloudSql:
+          instanceId: "firebase-fdc"
+          # schemaValidation: "STRICT"     # STRICT mode makes Postgres schema match Data Connect exactly.
+          # schemaValidation: "COMPATIBLE" # COMPATIBLE mode makes Postgres schema compatible with Data Connect.
+connectorDirs: ["./connector"]

@@ -43,6 +43,13 @@ service firebase.storage {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // Game saves — owner-only, no file-type restrictions (JSON blobs)
+    // ═══════════════════════════════════════════════════════════════
+    match /saves/{uid}/{allPaths=**} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // Public assets — public read, authenticated write
     // ═══════════════════════════════════════════════════════════════
     match /public/{allPaths=**} {
