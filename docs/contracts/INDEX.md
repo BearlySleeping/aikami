@@ -48,6 +48,7 @@ P2 (Polish — after P1):
 | C-015 | [AI Service Abstraction](C-015-ai-service-abstraction.md) | AiServiceInterface, BaseAiService (rate-limit/circuit-breaker/Zod), OpenAiService + GeminiService, MockAiService, refactor prompt_ai | C-005 |
 | C-016 | [Game Engine Boundary](C-016-game-engine-boundary.md) | PixiJS v8 + bitECS in SvelteKit without reactivity loops, EngineBridge interface, TDD entity↔UI events, MVP sprite on Tauri load | C-013 |
 | C-017 | [Update Knowledge Base](C-017-update-knowledge-base.md) ✅ | Refactor knowledge/ docs: remove Godot, add PixiJS/bitECS/Tauri/Data Connect/Valibot/PowerSync, add strict AI coding rules | C-013, C-014, C-015, C-016 |
+| C-117 | [ECS Snapshot Serializer](C-117-ecs-snapshot-serializer.md) ✅ | bitECS world serialization pipeline — snapshot persistent components to JSON, hydrate from payload | C-114, C-115 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 

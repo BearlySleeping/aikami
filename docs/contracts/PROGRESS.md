@@ -95,6 +95,7 @@
 | MIG-004 | Frontend Configs Alignment | ✅ completed |
 | C-114 | Sandbox Engine Wiring | ✅ completed |
 | C-115 | Sandbox LPC Animation | ✅ completed |
+| C-117 | ECS Snapshot Serializer | ✅ completed |
 
 ### C-114: Sandbox Engine Wiring
 
@@ -133,6 +134,29 @@
 5. **Tick divisor 8**: Matches `ANIMATION_TICK_DIVISOR` in `render_system.ts` — worker and main-thread frame indices stay synchronized.
 
 **Known limitations**: New `Texture` wrapper per animation frame tick (PixiJS v8 `frame` is readonly). For production, pre-slice all 36 frames (9×4) into a `Texture[]` array on load and swap references instead. The spritesheet is shared across all entities — each entity shows the same male body base. Per-entity customization requires `SpriteComposer` multi-layer pipeline integration.
+
+---
+
+### C-117: ECS Snapshot Serializer
+
+**Files created**:
+- `packages/frontend/engine/src/serialization/ecs_serializer.ts` — `serializeWorld(world): string` + `deserializeWorld(world, payload): Map<number, number>`. Extracts Position/Appearance/CombatStats from active entities via `getAllEntities`, packs into JSON `EcsSnapshot` (`version`, `timestamp`, `entities`, `components`), and hydrates back. Ephemeral components (Velocity, Sprite, etc.) are excluded from the whitelist.
+- `packages/frontend/engine/src/__tests__/serializer.test.ts` — 22 test cases covering AC-1 (payload generation), AC-2 (hydration accuracy), round-trip integrity, edge cases (empty world, invalid payloads, version mismatch, partial components), and ephemeral component exclusion.
+
+**Files modified**:
+- `packages/frontend/engine/src/index.ts` — Exported `serializeWorld` and `deserializeWorld`.
+
+**Deviations**:
+1. `deserializeWorld` returns `Map<number, number>` instead of `void` — bitECS `addEntity` assigns sequential IDs that differ from the original EIDs. The map allows callers to reconcile relational data.
+2. Component arrays are module-level globals shared across all bitECS worlds — tests use `_resetComponentArrays()` to prevent cross-test data leaks.
+
+**Design decisions**:
+1. **Explicit whitelist**: Only `Position`, `Appearance`, `CombatStats` are serialized. Adding a new persistent component requires a single line in `PERSISTENT_COMPONENTS`.
+2. **Direct SoA reads**: Values are read directly from array indices (never through bitECS observers) to avoid triggering side effects or holding buffer references.
+3. **Primitive-only serialization**: Only `number`, `string`, `boolean` values enter the snapshot. Complex objects (PixiJS display objects, etc.) are silently excluded.
+4. **New EID mapping**: Entities are recreated sequentially; the returned `Map` preserves the old→new EID relationship for relational data reconciliation (MVP: global reset on load).
+
+**Known limitations**: Component arrays are singleton globals — the serializer cannot distinguish which world a value came from. In production, the worker owns a single world, so this is not a practical issue. For tests, explicit array cleanup is required between test cases.
 
 ---
 
