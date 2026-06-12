@@ -1,5 +1,10 @@
 import type { LogLevel, Mode } from '@nordclaw/types';
 
+declare module '*?worker&type=module' {
+  const WorkerConstructor: new () => Worker;
+  export default WorkerConstructor;
+}
+
 declare module '$env/static/private' {
   export const GEMINI_API_KEY: string;
   export const FIREBASE_SERVICE_ACCOUNT: string;
