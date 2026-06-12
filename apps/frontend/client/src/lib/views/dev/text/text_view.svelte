@@ -1,23 +1,23 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/dev/text/text_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { TextViewModelInterface } from './text_view_model.svelte.ts';
+    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+    import type { TextViewModelInterface } from './text_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: TextViewModelInterface;
-  };
+    type Props = {
+      viewModel: TextViewModelInterface;
+    };
 
-  let { viewModel }: Props = $props();
+    let { viewModel }: Props = $props();
 
-  let outputContainer = $state<HTMLPreElement>();
+    let outputContainer = $state<HTMLPreElement>();
 
-  $effect(() => {
-    // Auto-scroll to bottom whenever output changes
-    void viewModel.output;
-    if (outputContainer) {
-      outputContainer.scrollTop = outputContainer.scrollHeight;
-    }
-  });
+    $effect(() => {
+      // Auto-scroll to bottom whenever output changes
+      void viewModel.output;
+      if (outputContainer) {
+        outputContainer.scrollTop = outputContainer.scrollHeight;
+      }
+    });
 </script>
 
 <svelte:head>

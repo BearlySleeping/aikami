@@ -13,58 +13,64 @@
 </script>
 
 <BaseViewModelContainer {viewModel} class="drawer lg:drawer-open">
-  <input
-    id="dev-drawer"
-    type="checkbox"
-    class="drawer-toggle"
-    checked={viewModel.isDrawerOpen}
-    onchange={() => viewModel.toggleDrawer()}
-  >
-
-  <div class="drawer-content flex flex-col min-h-screen">
-    <!-- Top bar with drawer toggle -->
-    <header class="flex items-center gap-2 bg-base-200 px-4 py-2 shadow-sm">
-      <label for="dev-drawer" class="btn btn-ghost drawer-button lg:hidden">
+  <input id="my-drawer-4" type="checkbox" class="drawer-toggle">
+  <div class="drawer-content">
+    <!-- Navbar -->
+    <nav class="navbar w-full bg-base-300">
+      <label for="my-drawer-4" aria-label="open sidebar" class="btn btn-square btn-ghost">
+        <!-- Sidebar toggle icon -->
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5"
-          fill="none"
           viewBox="0 0 24 24"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+          stroke-width="2"
+          fill="none"
           stroke="currentColor"
+          class="my-1.5 inline-block size-4"
         >
           <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 6h16M4 12h16M4 18h16"
-          />
+            d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"
+          ></path>
+          <path d="M9 4v16"></path>
+          <path d="M14 10l2 2l-2 2"></path>
         </svg>
       </label>
-      <span class="text-sm font-semibold text-base-content/70">Dev Console</span>
-    </header>
+      <a href="/dev" class="px-4">Dev Console</a>
+    </nav>
 
-    <!-- Page content -->
-    <main class="flex-1 overflow-y-auto">
-      {@render children()}
-    </main>
+    <div class="p-4">
+      <main class="flex-1 overflow-y-auto">
+        {@render children()}
+      </main>
+    </div>
   </div>
 
-  <!-- Navigation drawer -->
-  <div class="drawer-side">
-    <label for="dev-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-    <aside class="bg-base-200 text-base-content min-h-full w-56 p-4">
-      <h2 class="mb-4 text-lg font-bold">Dev Console</h2>
-
-      <ul class="menu gap-1">
+  <div class="drawer-side is-drawer-close:overflow-visible">
+    <label for="my-drawer-4" aria-label="close sidebar" class="drawer-overlay"></label>
+    <div
+      class="flex min-h-full flex-col items-start bg-base-200 is-drawer-close:w-14 is-drawer-open:w-64"
+    >
+      <!-- Sidebar content here -->
+      <ul class="menu w-full grow">
         {#each viewModel.navItems as item}
           <li>
-            <a href={item.route} class:active={viewModel.activeRoute === item.route}>
+            <a
+              href={item.route}
+              class:active={viewModel.activeRoute === item.route}
+              class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+              data-tip={item.label}
+            >
+              <!-- Home icon -->
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-5 w-5"
-                fill="none"
                 viewBox="0 0 24 24"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+                stroke-width="2"
+                fill="none"
                 stroke="currentColor"
+                class="my-1.5 inline-block size-4"
               >
                 <path
                   stroke-linecap="round"
@@ -73,11 +79,11 @@
                   d={item.icon}
                 />
               </svg>
-              {item.label}
+              <span class="is-drawer-close:hidden"> {item.label}</span>
             </a>
           </li>
         {/each}
       </ul>
-    </aside>
+    </div>
   </div>
 </BaseViewModelContainer>

@@ -73,3 +73,10 @@ export class EngineBridge { ... }
 ## 5. Single Source of Truth
 - Do not duplicate constants. If a constant is used in both frontend and backend, it belongs in `packages/shared/constants`.
 - Do not duplicate schemas. Types and schemas go in `packages/shared/schemas` and `packages/shared/types`.
+
+## 6. Cross-Origin Isolation & Web Workers
+When using `SharedArrayBuffer` for Web Workers, the document MUST be cross-origin isolated by returning `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. 
+**CRITICAL LIMITATION**: SvelteKit's `adapter-static` combined with `vite preview` or production servers often bypass Vite's standard `preview.headers` configuration for static JS chunks.
+- If a Web Worker script chunk lacks the `COEP` header, the browser will silently abort the worker execution (resulting in an empty `ErrorEvent` with no message) under `ERR_BLOCKED_BY_RESPONSE`.
+- **Solution**: Always use a global middleware plugin in `vite.config.ts` (using `configureServer` and `configurePreviewServer`) to explicitly force the COOP/COEP headers on *all* responses.
+- When dynamically importing a worker via `?worker`, ensure you set `worker: { format: 'es' }` in `vite.config.ts` so that it bundles cleanly as an ES Module instead of falling back to an IIFE that might violate strict isolation contexts.

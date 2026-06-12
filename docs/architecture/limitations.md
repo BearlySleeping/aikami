@@ -22,7 +22,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 1. **No CI/CD pipeline** — No GitHub Actions workflow. All testing and deployment is local.
 2. **No separate staging environment** — The development project (`aikami-dev`) serves as both local dev target and deployed staging. Production is `aikami-prod`.
-3. **Pre-existing TS errors in schema tests** — `packages/shared/schemas` test files have 7 TypeScript errors (unused vars, strict null checks). Tests pass at runtime but `tsc --noEmit` fails.
+3. **Pre-existing TS errors in schema tests** — `packages/shared/schemas` test files have 7 TypeScript errors (unused vars, strict null checks). Tests pass at runtime but `tsgo --noEmit` fails.
 4. **PWA accessibility warnings** — svelte-check reports 7 errors + 9 warnings, mostly a11y violations in chat components.
 5. **Firebase config hardcoded** — `.env` template uses placeholder values; no automated Firebase project creation.
 6. **No automated dependency updates** — Dependabot/Renovate not configured.
@@ -33,40 +33,40 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 ### Planned but Not Implemented
 
-| Feature | Spec | Status |
-|---------|------|--------|
-| Game Engine (PixiJS + bitECS) | C-016 contract | Not started |
-| EngineBridge typed message channel | C-016 contract | Not started |
-| Tauri v2 Desktop Export | C-013 tooling setup | Not started |
-| Database Abstraction (Data Connect) | C-014 contract | Not started |
-| AI Service Abstraction | C-015 contract | Not started |
-| TanStack DB + PowerSync client sync | Planned | Not started |
-| Valibot client validation | Planned | Not started |
-| Group Chats | Multiple NPCs in one conversation | Zod schema exists, no UI |
-| Character Relationships | Dynamic relationship tracking | Schema exists, no logic |
-| Knowledge Graphs | Connected world knowledge | Schema stubbed |
-| Lorebook Integration | World lore in chat context | Schema exists, not wired |
-| Voice Synthesis (TTS) | ElevenLabs integration | gamejs tests exist, no PWA integration |
-| Image Generation | AI avatar creation | Callable function exists, no UI flow |
-| NPC Forking | Copy/remix public NPCs | Schema field exists, no UI |
-| NPC Expressions | Multiple avatar images per NPC | Schema field exists, no UI |
+| Feature                             | Spec                              | Status                                 |
+| ----------------------------------- | --------------------------------- | -------------------------------------- |
+| Game Engine (PixiJS + bitECS)       | C-016 contract                    | Not started                            |
+| EngineBridge typed message channel  | C-016 contract                    | Not started                            |
+| Tauri v2 Desktop Export             | C-013 tooling setup               | Not started                            |
+| Database Abstraction (Data Connect) | C-014 contract                    | Not started                            |
+| AI Service Abstraction              | C-015 contract                    | Not started                            |
+| TanStack DB + PowerSync client sync | Planned                           | Not started                            |
+| Valibot client validation           | Planned                           | Not started                            |
+| Group Chats                         | Multiple NPCs in one conversation | Zod schema exists, no UI               |
+| Character Relationships             | Dynamic relationship tracking     | Schema exists, no logic                |
+| Knowledge Graphs                    | Connected world knowledge         | Schema stubbed                         |
+| Lorebook Integration                | World lore in chat context        | Schema exists, not wired               |
+| Voice Synthesis (TTS)               | ElevenLabs integration            | gamejs tests exist, no PWA integration |
+| Image Generation                    | AI avatar creation                | Callable function exists, no UI flow   |
+| NPC Forking                         | Copy/remix public NPCs            | Schema field exists, no UI             |
+| NPC Expressions                     | Multiple avatar images per NPC    | Schema field exists, no UI             |
 
 ### Partially Implemented
 
-| Feature | What's done | What's missing |
-|---------|------------|----------------|
-| Chat | Basic 1-on-1 chat | Streaming, message history, branching |
-| Personas | CRUD + switching | Import/export, persona sharing |
-| NPCs | CRUD + visibility | Public marketplace, forking, expressions |
-| World Building | World schema | World creation UI, world-settings |
+| Feature        | What's done       | What's missing                           |
+| -------------- | ----------------- | ---------------------------------------- |
+| Chat           | Basic 1-on-1 chat | Streaming, message history, branching    |
+| Personas       | CRUD + switching  | Import/export, persona sharing           |
+| NPCs           | CRUD + visibility | Public marketplace, forking, expressions |
+| World Building | World schema      | World creation UI, world-settings        |
 
 ### Deprecated
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| GodotJS Game Client (`apps/frontend/gamejs/`) | ⚠️ Deprecated | Preserved for reference. Migration target: `client/src/lib/game/` (PixiJS v8 + bitECS, C-016). Will be archived after C-016 is complete. |
-| Genkit AI Framework | Replaced | Migrated to vendor-agnostic AiServiceInterface (C-015). Direct Genkit imports being refactored. |
-| Firestore NoSQL | Being migrated | Target: Firebase Data Connect (PostgreSQL) per C-014. Existing Firestore repositories remain operational during incremental migration. |
+| Component                                     | Status         | Notes                                                                                                                                    |
+| --------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| GodotJS Game Client (`apps/frontend/gamejs/`) | ⚠️ Deprecated  | Preserved for reference. Migration target: `client/src/lib/game/` (PixiJS v8 + bitECS, C-016). Will be archived after C-016 is complete. |
+| Genkit AI Framework                           | Replaced       | Migrated to vendor-agnostic AiServiceInterface (C-015). Direct Genkit imports being refactored.                                          |
+| Firestore NoSQL                               | Being migrated | Target: Firebase Data Connect (PostgreSQL) per C-014. Existing Firestore repositories remain operational during incremental migration.   |
 
 ## Test Coverage Gaps
 

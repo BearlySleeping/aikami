@@ -78,3 +78,19 @@ Extend the `RenderEntry` in `GameWorld`:
 
 - **SharedArrayBuffer Stride**: Make sure Svelte S5/bitECS `COMPONENT_STRIDE` aligns with where Svelte reads the `Velocity` (if `Velocity` is shared). If `Velocity` isn't shared in the buffer yet, calculate the delta using `x - lastX` and `y - lastY` directly in the main thread render loop.
 - **Texture Loading Async Issues**: PixiJS v8 handles assets asynchronously. Ensure textures are fully loaded/awaited before `ENTITY_CREATED` tries to construct an `AnimationController`, otherwise Svelte might throw a texture missing error.
+
+## Post-Implementation Notes & Limitations
+
+During the implementation of this contract, a few issues were discovered and resolved:
+
+### 1. Spatial Culling Fix
+The entities were disappearing after moving a short distance. This was because `stage.getBounds()` was used to compute the visible bounds for culling, which tightly encapsulates the children rather than reflecting the actual screen size.
+- **Resolution**: Replaced `stage.getBounds()` with `this._app.screen` and passed `resizeTo: canvas.parentElement` to `createPixiApp` so that the WebGL viewport bounds correctly match the UI container dimensions.
+
+### 2. Diagonal Movement and Input "Fighting"
+The previous `MOVE_PLAYER` and `STOP_PLAYER` GameCommand implementation caused the player to abruptly stop or "fight back" when multiple keys were pressed and released. It also did not natively support diagonal movement.
+- **Resolution**: Replaced discrete `MOVE_PLAYER`/`STOP_PLAYER` commands with a single `SET_PLAYER_VELOCITY` command. The main thread now tracks an `activeKeys` set (W, A, S, D, Arrows), computes a 2D velocity vector, normalizes it for diagonal movement, and applies the base player speed (150px/sec).
+
+### Limitations
+- **LPC Assets Constraints**: The Sandbox relies on the limited LPC assets currently available in `/static/lpc`. If non-existent assets are requested by the recipe resolver, the engine will fail to render the `Sprite` for that layer.
+- **Hardcoded Player Speed**: The `PLAYER_SPEED` constant (150px/sec) is currently hardcoded in the `GameWorld` bridge logic rather than being read dynamically from the ECS state.

@@ -34,6 +34,8 @@ export type PixiAppOptions = {
   antialias?: boolean;
   /** Background alpha (0 = fully transparent, 1 = fully opaque). Defaults to `1`. */
   backgroundAlpha?: number;
+  /** Element to automatically resize the canvas to. */
+  resizeTo?: HTMLElement | Window;
 };
 
 /**
@@ -119,6 +121,7 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
     backgroundColor,
     antialias,
     backgroundAlpha,
+    resizeTo: options.resizeTo,
     // PixiJS v8 auto-detects WebGPU first, falls back to WebGL
     preference: 'webgpu',
   });

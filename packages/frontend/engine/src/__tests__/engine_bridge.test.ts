@@ -28,11 +28,11 @@ describe('EngineBridge — message passthrough', () => {
     const bridge = new MockEngineBridge();
 
     const received: GameCommand[] = [];
-    bridge.onCommand('MOVE_PLAYER', (cmd) => {
+    bridge.onCommand('SET_PLAYER_VELOCITY', (cmd) => {
       received.push(cmd);
     });
 
-    const command: GameCommand = { type: 'MOVE_PLAYER', direction: 'up' };
+    const command: GameCommand = { type: 'SET_PLAYER_VELOCITY', velocity: { x: 0, y: -2 } };
     bridge.send(command);
 
     expect(received).toHaveLength(1);
@@ -42,7 +42,7 @@ describe('EngineBridge — message passthrough', () => {
   it('send(command) with no registered handler does not throw', () => {
     const bridge = new MockEngineBridge();
 
-    const command: GameCommand = { type: 'MOVE_PLAYER', direction: 'left' };
+    const command: GameCommand = { type: 'SET_PLAYER_VELOCITY', velocity: { x: -2, y: 0 } };
     expect(() => {
       bridge.send(command);
     }).not.toThrow();

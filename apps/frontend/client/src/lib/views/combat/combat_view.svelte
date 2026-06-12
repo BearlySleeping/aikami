@@ -1,13 +1,13 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/combat/combat_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
+    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+    import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: CombatViewModelInterface;
-  };
+    type Props = {
+      viewModel: CombatViewModelInterface;
+    };
 
-  const { viewModel }: Props = $props();
+    const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="relative">

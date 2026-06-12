@@ -85,7 +85,7 @@ The monorepo has **inherited default tasks** in `.moon/tasks/all.yml` that every
 | -------------- | ------------------------------------- | --------------------------------------------------------- |
 | `lint`         | `bun run lint`                        | Never — already maps to `biome lint .`                    |
 | `format`       | `bun run format`                      | Never — already maps to `biome format .`                  |
-| `typecheck`    | `bun run typecheck`                   | Never — already maps to `tsc --noEmit`                    |
+| `typecheck`    | `bun run typecheck`                   | Never — already maps to `tsgo --noEmit`                   |
 | `fix`          | `bun run fix`                         | Never — already maps to `biome check --write .`           |
 | `validate`     | `~:lint` + `~:format` + `~:typecheck` | Never — internal meta-task, do NOT define in package.json |
 
@@ -254,13 +254,13 @@ The root `package.json` provides shortcuts for common operations:
 | `dev`     | `moon run $APP:dev`                      | Start dev server for $APP (defaults to emulator for PWA) |
 | `dev:all` | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in tmux (mode from $AIKAMI_MODE)        |
 
-| Tmux Script     | Command                                    | Purpose                                       |
-| --------------- | ------------------------------------------ | --------------------------------------------- |
+| Tmux Script     | Command                                    | Purpose                                                     |
+| --------------- | ------------------------------------------ | ----------------------------------------------------------- |
 | `tmux:start`    | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (firebase/client/image/text/voice/all) |
-| `tmux:join`     | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session              |
-| `tmux:stop`     | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                           |
-| `tmux:stop-all` | `bun run scripts/src/lib/tmux/stop_all.ts` | Stop all aikami tmux sessions                 |
-| `tmux:status`   | `bun run scripts/src/lib/tmux/status.ts`   | List running aikami tmux sessions             |
+| `tmux:join`     | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session                            |
+| `tmux:stop`     | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                                         |
+| `tmux:stop-all` | `bun run scripts/src/lib/tmux/stop_all.ts` | Stop all aikami tmux sessions                               |
+| `tmux:status`   | `bun run scripts/src/lib/tmux/status.ts`   | List running aikami tmux sessions                           |
 
 ### Validation (Run Separately)
 
@@ -395,15 +395,15 @@ in tokens and time.
 
 #### Debugging Priority (use in order)
 
-| Priority | Tool                         | When to use                                      |
-| -------- | ---------------------------- | ------------------------------------------------ |
-| 1        | `read` source files          | Always — understand the code FIRST               |
-| 2        | `tmux_session read`          | Check live server logs for errors                |
-| 3        | `firestore_query`            | Verify data state in the emulator                |
-| 4        | `browser_inspect`            | UI rendering bug, 404, blank page, env var check |
-| 5        | `browser_console`            | Evidence of a JS runtime error in the browser    |
-| 6        | `browser_network`            | Specific hypothesis about a failing API call     |
-| 7        | `browser_screenshot`         | User asks to see the page, or final verification |
+| Priority | Tool                 | When to use                                      |
+| -------- | -------------------- | ------------------------------------------------ |
+| 1        | `read` source files  | Always — understand the code FIRST               |
+| 2        | `tmux_session read`  | Check live server logs for errors                |
+| 3        | `firestore_query`    | Verify data state in the emulator                |
+| 4        | `browser_inspect`    | UI rendering bug, 404, blank page, env var check |
+| 5        | `browser_console`    | Evidence of a JS runtime error in the browser    |
+| 6        | `browser_network`    | Specific hypothesis about a failing API call     |
+| 7        | `browser_screenshot` | User asks to see the page, or final verification |
 
 #### Browser Tool Rules
 
@@ -413,7 +413,7 @@ in tokens and time.
 
 2. **`browser_console`** — Only after browser_inspect, and only when you have reason to
    believe JS errors are happening (blank page, broken UI). The output is a buffer of
-   intercepted console.* calls; one call is enough.
+   intercepted console.\* calls; one call is enough.
 
 3. **`browser_network`** — Only when you have a SPECIFIC hypothesis about a failing API
    call. Does NOT capture Firestore gRPC traffic — only XHR/fetch/WebSocket.
@@ -482,9 +482,9 @@ The AI enforces: 2 failed attempts → diagnostic script. Never ask user to "try
 
 All tmux sessions use a unified naming convention: `aikami-{mode}-{service}`.
 
-| Variable  | Values                              |
-| --------- | ----------------------------------- |
-| `mode`    | `emulator`, `staging`, `production` |
+| Variable  | Values                                                |
+| --------- | ----------------------------------------------------- |
+| `mode`    | `emulator`, `staging`, `production`                   |
 | `service` | `firebase`, `client`, `image`, `text`, `voice`, `all` |
 
 ### Root package.json scripts

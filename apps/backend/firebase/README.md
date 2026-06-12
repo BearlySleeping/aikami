@@ -30,7 +30,7 @@ bun install
 |------|---------|-------------|
 | `build` | `bun run build` | Compile TypeScript for deployment |
 | `deploy` | `bun run deploy` | Deploy functions to Firebase |
-| `typecheck` | `tsc --noEmit --skipLibCheck` | Run TypeScript type checking |
+| `typecheck` | `tsgo --noEmit --skipLibCheck` | Run TypeScript type checking |
 | `lint` | `biome lint .` | Lint code with Biome |
 | `format` | `biome format .` | Format code with Biome |
 | `fix` | `biome check --write .` | Auto-fix lint & format issues |

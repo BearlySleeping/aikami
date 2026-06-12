@@ -16,7 +16,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
-    "@playwright/test": "1.60.0",
+    "@playwright/test": "1.59.1",
     "playwright": "1.60.0",
     "typescript": "6.0.3"
   },

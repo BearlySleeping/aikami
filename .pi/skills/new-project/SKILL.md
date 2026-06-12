@@ -15,7 +15,7 @@ The monorepo has these **inherited defaults** in `.moon/tasks/all.yml`:
 | -------------- | ------------------------------------------------------------------------------------------------ |
 | `lint`         | `bun run lint` — biome lint check                                                                |
 | `format`       | `bun run format` — biome format check                                                            |
-| `typecheck`    | `bun run typecheck` — `tsc --noEmit`                                                             |
+| `typecheck`    | `bun run typecheck` — `tsgo --noEmit`                                                            |
 | `fix`          | `bun run fix` — `biome check --write .`                                                          |
 | `validate`     | Internal meta-task (deps: lint + format + typecheck) — do NOT define in moon.yml or package.json |
 
@@ -306,7 +306,7 @@ Add `"test": "bun test"` if the package has unit tests.
 
 **Required scripts** (mapped by inherited moon tasks):
 
-- `typecheck` — `tsc --noEmit`
+- `typecheck` — `tsgo --noEmit`
 - `lint` — `biome lint .`
 - `format` — `biome format .`
 - `fix` — `biome check --write .`
@@ -626,7 +626,7 @@ bun install
 
 | Task        | Command                 | Description                   |
 | ----------- | ----------------------- | ----------------------------- |
-| `typecheck` | `tsc --noEmit`          | Run TypeScript type checking  |
+| `typecheck` | `tsgo --noEmit`         | Run TypeScript type checking  |
 | `format`    | `biome format .`        | Format code with Biome        |
 | `lint`      | `biome lint .`          | Lint code with Biome          |
 | `fix`       | `biome check --write .` | Auto-fix lint & format issues |
@@ -655,7 +655,7 @@ Brief description of internal architecture (for complex packages/apps).
 ```
 
 **Rules:**
-- The task table always lists the actual command (e.g. `tsc --noEmit`), not the npm script name
+- The task table always lists the actual command (e.g. `tsgo --noEmit`), not the npm script name
 - Include `fix` row (inherited from .moon/tasks/all.yml)
 - Include `test` row only if the package has a test task
 - For apps, also include `dev`, `build`, `preview` rows
