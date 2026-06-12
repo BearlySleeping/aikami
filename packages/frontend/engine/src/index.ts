@@ -80,6 +80,10 @@ export type { ActionResult, GameState, NpcData, PlayerAction } from './services/
 // Services
 export { GameApiService } from './services/api_service.ts';
 
+// Serialization
+
+export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer.ts';
+
 // Rendering
 
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
