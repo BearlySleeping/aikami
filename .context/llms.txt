@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-11
-> Files: 128 across 10 categories
+> Generated: 2026-06-12
+> Files: 132 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -119,6 +119,10 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract C-110: Sandbox E2E Playwright Harness](contracts/C-110-sandbox-e2e-testing.md)
 - [Contract C-111: Microservice & Firebase Rewiring](contracts/C-111-microservice-rewiring.md)
 - [Contract C-112: App Rename & Build Fixes (Purist Approach)](contracts/C-112-client-rename-and-build-fixes.md)
+- [Contract C-113: Tauri Desktop Sanity Check](contracts/C-113-tauri-sanity-check.md)
+- [C 114 sandbox engine wiring](contracts/C-114-sandbox-engine-wiring.md)
+- [C 115 sandbox lpc animation](contracts/C-115-sandbox-lpc-animation.md)
+- [C 116 sandbox ai dialogue](contracts/C-116-sandbox-ai-dialogue.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [MIG 002 backend dataconnect](contracts/MIG-002-backend-dataconnect.md)

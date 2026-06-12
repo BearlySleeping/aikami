@@ -7,14 +7,29 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { aiTextIntelligenceService } from '$services';
+
+/** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
+let _ecsWorkerCtor: (new () => Worker) | undefined;
+
+const _resolveEcsWorker = async (): Promise<new () => Worker> => {
+  if (_ecsWorkerCtor) {
+    return _ecsWorkerCtor;
+  }
+  const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
+  _ecsWorkerCtor = mod.default as unknown as new () => Worker;
+  return _ecsWorkerCtor;
+};
 
 export type SandboxViewModelInterface = BaseViewModelInterface & {
   /** Whether the NPC dialog overlay is shown (pauses the game). */
   readonly showDialog: boolean;
   /** Display name of the NPC being interacted with. */
   readonly dialogNpcName: string;
-  /** Dialog text from the NPC. */
+  /** Dialog text from the NPC — built token-by-token during streaming. */
   readonly dialogText: string;
+  /** Whether the AI text stream is actively generating tokens. */
+  readonly isStreaming: boolean;
   /** Shown when player is near an NPC — prompts to press E. */
   readonly interactionHint: string | undefined;
   /** Whether the game engine is initialized and running. */
@@ -38,6 +53,7 @@ class SandboxViewModel
   showDialog = $state<boolean>(false);
   dialogNpcName = $state<string>('');
   dialogText = $state<string>('');
+  isStreaming = $state<boolean>(false);
   interactionHint = $state<string | undefined>(undefined);
   engineReady = $state<boolean>(false);
   engineError = $state<string | undefined>(undefined);
@@ -46,6 +62,7 @@ class SandboxViewModel
   private _gameWorld: GameWorld | undefined;
   private _dialogEndCleanup: (() => void) | undefined;
   private _readyCleanup: (() => void) | undefined;
+  private _activeStreamAbortController: AbortController | undefined;
 
   /**
    * Initializes the game engine, creating the Web Worker simulation and
@@ -112,21 +129,22 @@ class SandboxViewModel
         this.engineError = event.message;
       });
 
+      // Resolve ECS worker (SSR-safe dynamic import).
+      const EcsWorker = await _resolveEcsWorker();
+
       const worldOptions: GameWorldOptions = {
         className: 'GameWorld',
         bridge: this._engineBridge,
         spritesheetUrl: '/lpc/body/male/walk.png',
         playerSpritesheetUrl: '/lpc/body/muscular/walk.png',
+        workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);
 
-      // Key press (E): open full dialog, pause game, stop player movement
+      // Key press (E): open full dialog, pause game, stream AI response
       this._gameWorld.onInteractRequest((npc) => {
         this.debug('sandbox:interact-request', { npcName: npc.npcName });
-        this._openDialog(
-          npc.npcName,
-          `Hello! I'm ${npc.npcName}. This is the sandbox interaction test.`,
-        );
+        void this._startAiStream(npc);
       });
 
       this.debug('sandbox:initializeEngine:creating-app');
@@ -178,46 +196,102 @@ class SandboxViewModel
   }
 
   // -----------------------------------------------------------------------
-  // Dialog management
+  // Dialog management — AI streaming
   // -----------------------------------------------------------------------
 
   /**
-   * Opens the dialog overlay, stops the player, pauses game rendering.
+   * Opens the dialog overlay, stops the player, locks input, and streams
+   * an AI-generated greeting from the NPC.
    *
-   * Called on E key press near an NPC. The dialog stays open until the
-   * player clicks Continue or presses E again — it does NOT auto-close
-   * when the player moves out of range.
+   * Falls back to a mock stream if the AI service is unavailable.
    */
-  private _openDialog(npcName: string, text: string): void {
+  private async _startAiStream(npc: {
+    npcName: string;
+    npcId: string;
+    personaId: string;
+  }): Promise<void> {
     if (this.showDialog) {
       return;
     }
 
-    this.dialogNpcName = npcName;
-    this.dialogText = text;
+    this.dialogNpcName = npc.npcName;
+    this.dialogText = '';
     this.showDialog = true;
+    this.isStreaming = true;
     this.interactionHint = undefined;
 
-    // Stop player movement so they don't drift out of range
     this._engineBridge?.send({ type: 'STOP_PLAYER' });
-
-    // Lock movement input only — keep rendering so world stays visible behind dialog
     this._gameWorld?.setInputLocked(true);
 
-    this.debug('dialog:open', { npcName });
+    this._activeStreamAbortController = new AbortController();
+    const { signal } = this._activeStreamAbortController;
+
+    const systemPrompt = [
+      `You are ${npc.npcName}, an NPC in a 2D RPG.`,
+      'The player has just walked up to you.',
+      'Greet them in 1-2 short sentences.',
+      'Speak in-character — respond as the NPC would.',
+    ].join(' ');
+
+    this.debug('dialog:stream-start', { npcName: npc.npcName });
+
+    try {
+      await aiTextIntelligenceService.streamChat({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Hello!' },
+        ],
+        signal,
+        onChunk: (text: string) => {
+          this.dialogText += text;
+        },
+      });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        this.debug('dialog:stream-aborted');
+        return;
+      }
+
+      this.debug('dialog:stream-failed', { error: String(err) });
+      await this._generateMockStream(npc.npcName);
+    } finally {
+      this.isStreaming = false;
+      this._activeStreamAbortController = undefined;
+      this.debug('dialog:stream-end', { npcName: npc.npcName });
+    }
   }
 
   /**
-   * Closes the dialog overlay, resumes game rendering and input.
+   * Generates a mock NPC greeting when the AI service is unreachable.
+   */
+  private async _generateMockStream(npcName: string): Promise<void> {
+    const mockText = `Hello there! I'm ${npcName}. Welcome to the sandbox — feel free to explore!`;
+    this.debug('dialog:mock-fallback', { npcName, length: mockText.length });
+
+    for (const char of mockText) {
+      this.dialogText += char;
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    }
+  }
+
+  /**
+   * Closes the dialog overlay, aborts any active AI stream, and resumes
+   * game rendering and input.
    */
   private _closeDialog(): void {
     if (!this.showDialog) {
       return;
     }
 
+    if (this._activeStreamAbortController) {
+      this._activeStreamAbortController.abort();
+      this._activeStreamAbortController = undefined;
+    }
+
     this.showDialog = false;
     this.dialogNpcName = '';
     this.dialogText = '';
+    this.isStreaming = false;
 
     this._gameWorld?.setInputLocked(false);
 

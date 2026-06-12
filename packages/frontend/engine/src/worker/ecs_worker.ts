@@ -25,7 +25,7 @@ import {
   animateEntitySystem,
   LpcBatchManager,
   syncAppearanceSystem,
-} from '../systems/render_system.ts';
+} from '../systems/render_worker.ts';
 import type { Direction, GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
 // ---------------------------------------------------------------------------

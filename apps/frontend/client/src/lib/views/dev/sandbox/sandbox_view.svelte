@@ -79,10 +79,38 @@
             {viewModel.dialogNpcName}
           </h3>
 
-          <!-- Dialog text -->
-          <p class="mb-4 text-base leading-relaxed text-base-content">
-            {viewModel.dialogText}
-          </p>
+          <!-- Dialog text with streaming indicator -->
+          <div class="mb-4 min-h-[3rem]">
+            {#if viewModel.dialogText}
+              <p class="text-base leading-relaxed text-base-content">
+                {viewModel.dialogText}
+                {#if viewModel.isStreaming}
+                  <span
+                    class="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-accent align-middle"
+                    aria-label="AI is typing"
+                  ></span>
+                {/if}
+              </p>
+            {:else if viewModel.isStreaming}
+              <div class="flex items-center gap-1.5 text-sm text-base-content/60">
+                <span>Thinking</span>
+                <span class="flex gap-1">
+                  <span
+                    class="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-accent"
+                    style="animation-delay: 0ms"
+                  ></span>
+                  <span
+                    class="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-accent"
+                    style="animation-delay: 150ms"
+                  ></span>
+                  <span
+                    class="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-accent"
+                    style="animation-delay: 300ms"
+                  ></span>
+                </span>
+              </div>
+            {/if}
+          </div>
 
           <!-- Dismiss button -->
           <div class="flex justify-end">
@@ -90,7 +118,7 @@
               class="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content transition hover:brightness-110"
               onclick={() => viewModel.dismissDialog()}
             >
-              Continue
+              {viewModel.isStreaming ? 'Skip' : 'Continue'}
             </button>
           </div>
         </div>
