@@ -2,6 +2,7 @@
 
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
+import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
 import { Velocity } from '../components/velocity.ts';
@@ -39,6 +40,18 @@ const createPlayer = (world: World): number => {
       displayObject: undefined,
     }),
   );
+
+  // Set default Appearance (Male Muscular, Short Hair, Shirt, Pants, Shoes)
+  // Layer IDs map to asset catalog indices. We'll use placeholder IDs for now,
+  // the recipeResolver on the main thread will map them back.
+  // We'll use specific IDs to be mapped by the client:
+  // 1 = muscular body
+  // 2 = short hair
+  // 3 = long sleeve shirt
+  // 4 = pants
+  // 5 = shoes
+  addComponent(world, entityId, Appearance);
+  setAppearanceLayers(world, entityId, [1, 2, 3, 4, 5]);
 
   return entityId;
 };

@@ -12,12 +12,12 @@
     "fix": "biome check --write src --error-on-warnings"
   },
   "devDependencies": {
-    "astro": "6.4.4"
+    "astro": "6.4.6"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "@astrojs/starlight": "0.39.3"
+    "@astrojs/starlight": "0.40.0"
   }
 }

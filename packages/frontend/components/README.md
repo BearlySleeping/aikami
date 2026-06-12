@@ -32,7 +32,7 @@ bun install
 | `dev` | `storybook dev --port 6006` | Start Storybook dev server |
 | `build` | `storybook build` | Build Storybook static site |
 | `test` | `test-storybook` | Run Storybook interaction tests |
-| `typecheck` | `tsc --noEmit` | Run TypeScript type checking |
+| `typecheck` | `tsgo --noEmit` | Run TypeScript type checking |
 | `format` | `biome format .` | Format code with Biome |
 | `lint` | `biome lint .` | Lint code with Biome |
 | `fix` | `biome check --write .` | Auto-fix lint & format issues |

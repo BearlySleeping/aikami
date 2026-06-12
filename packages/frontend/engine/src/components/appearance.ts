@@ -91,6 +91,20 @@ export const getAppearanceLayers = (eid: number): readonly number[] => [
 ];
 
 /**
+ * Helper to update the Appearance layers for an entity.
+ * Uses bitECS `set` under the hood if it was standard, but since Appearance is
+ * an object of arrays, we can just assign directly or use a helper.
+ * Actually, to trigger observers, we should return an object that can be passed to bitECS `set()`.
+ */
+export const setAppearanceLayers = (world: World, eid: number, layers: readonly number[]): void => {
+  Appearance.layer0[eid] = layers[0] ?? 0;
+  Appearance.layer1[eid] = layers[1] ?? 0;
+  Appearance.layer2[eid] = layers[2] ?? 0;
+  Appearance.layer3[eid] = layers[3] ?? 0;
+  Appearance.layer4[eid] = layers[4] ?? 0;
+};
+
+/**
  * Registers onSet and onGet observers for the Appearance component.
  *
  * @param world - The bitECS world to register observers on.

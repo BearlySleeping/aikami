@@ -8,7 +8,7 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "devDependencies": {
-    "@types/node": "25.9.2",
+    "@types/node": "25.9.3",
     "vite": "^8.0.16"
   },
   "dependencies": {

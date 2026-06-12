@@ -2,6 +2,7 @@
 
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
+import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
@@ -37,6 +38,16 @@ const createNPC = (world: World, data: NPCSpawnData): number => {
       displayObject: undefined,
     }),
   );
+
+  // Set default Appearance for NPCs (Guide)
+  // We'll use specific IDs to be mapped by the client:
+  // 10 = standard body
+  // 11 = guide hair
+  // 12 = robe
+  // 13 = pants
+  // 14 = shoes
+  addComponent(world, entityId, Appearance);
+  setAppearanceLayers(world, entityId, [10, 11, 12, 13, 14]);
 
   addComponent(world, entityId, NPCDialog);
   addComponent(

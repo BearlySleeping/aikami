@@ -27,14 +27,26 @@ import {
   LPC_LAYER_Z_INDEX,
   LPC_SLOT_PALETTE_INDEX,
 } from '$lib/data/lpc_asset_catalog';
-import { generateMockLpcSheet, LPC_MOCK_LAYOUT } from '$lib/data/lpc_asset_path_mapper';
+import { getAvailableLpcAssets } from '$lib/data/lpc_asset_checker';
+import { createPlaceholderTexture, getLpcAssetPath } from '$lib/data/lpc_asset_path_mapper';
 import { getLpcStateRow, LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 import {
   type LpcUrlState,
   lpcStateToSearchParams,
   searchParamsToLpcState,
 } from '$lib/data/lpc_url_config';
-import { logger } from '$logger';
+
+// Compute the available slots at initialization based on static folder contents.
+// We do this eagerly but outside of component state to avoid constant re-evaluation.
+const AVAILABLE_ASSET_IDS = getAvailableLpcAssets();
+
+// Create a dynamically filtered slot list so that variants without files are hidden.
+const FILTERED_LPC_SLOTS: typeof ALL_LPC_SLOTS = ALL_LPC_SLOTS.map((slot) => {
+  return {
+    ...slot,
+    variants: slot.variants.filter((variant) => AVAILABLE_ASSET_IDS.has(variant.assetId)),
+  };
+}).filter((slot) => slot.variants.length > 0);
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -133,7 +145,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   readonly ENTITY_X = ENTITY_X;
   readonly ENTITY_Y = ENTITY_Y;
   readonly PALETTE_DISPLAY_COUNT = PALETTE_DISPLAY_COUNT;
-  readonly allSlots = ALL_LPC_SLOTS as typeof ALL_LPC_SLOTS;
+  readonly allSlots = FILTERED_LPC_SLOTS as typeof ALL_LPC_SLOTS;
   readonly animationStateOptions = ANIMATION_STATE_OPTIONS as typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS as typeof DIRECTION_OPTIONS;
 
@@ -191,9 +203,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     loadTexture: async (): Promise<Texture> => Texture.WHITE,
   });
 
-  private _mockSheetCanvasCache = new Map<string, HTMLCanvasElement>();
-  private _mockSheetTextureCache = new Map<string, Texture>();
   private _frameTextureCache = new Map<string, Texture>();
+  private _sheetTextureCache = new Map<string, Texture>();
+  private _sheetTexturePromises = new Map<string, Promise<Texture>>();
 
   private _characterContainer: Container | undefined;
   private _layerSprites: Sprite[] = [];
@@ -217,7 +229,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         continue;
       }
 
-      const slotDef = ALL_LPC_SLOTS[layer.slotDefIndex];
+      const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
       if (!slotDef) {
         continue;
       }
@@ -311,14 +323,14 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     const usedSlotKeys = new Set(
       this.activeLayers.map((l) => {
-        const def = ALL_LPC_SLOTS[l.slotDefIndex];
+        const def = FILTERED_LPC_SLOTS[l.slotDefIndex];
         return def?.slot;
       }),
     );
 
-    const unusedIndex = ALL_LPC_SLOTS.findIndex((s) => !usedSlotKeys.has(s.slot));
+    const unusedIndex = FILTERED_LPC_SLOTS.findIndex((s) => !usedSlotKeys.has(s.slot));
     const slotDefIndex =
-      unusedIndex >= 0 ? unusedIndex : this.activeLayers.length % ALL_LPC_SLOTS.length;
+      unusedIndex >= 0 ? unusedIndex : this.activeLayers.length % FILTERED_LPC_SLOTS.length;
 
     this.activeLayers = [
       ...this.activeLayers,
@@ -436,48 +448,57 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   // ── Texture / sheet helpers ─────────────────────────────────────────
 
-  private _getMockSheetTexture(slot: string, shapeType: LpcMockShapeType): Texture {
-    const cacheKey = `${slot}:${shapeType}`;
-
-    const cachedTexture = this._mockSheetTextureCache.get(cacheKey);
-    if (cachedTexture) {
-      return cachedTexture;
+  private async _loadSheetTexture(path: string, slot: string, assetId: string): Promise<Texture> {
+    if (this._sheetTextureCache.has(path)) {
+      return this._sheetTextureCache.get(path)!;
+    }
+    if (this._sheetTexturePromises.has(path)) {
+      return this._sheetTexturePromises.get(path)!;
     }
 
-    const canvas = generateMockLpcSheet(slot, shapeType);
-    if (!canvas) {
-      return Texture.EMPTY;
-    }
+    const promise = (async () => {
+      const { Assets } = await import('pixi.js');
+      try {
+        const sheet = await Assets.load(path);
+        sheet.source.scaleMode = 'nearest';
+        this._sheetTextureCache.set(path, sheet);
+        return sheet;
+      } catch {
+        const fallback = await createPlaceholderTexture(slot, assetId);
+        this._sheetTextureCache.set(path, fallback);
+        return fallback;
+      }
+    })();
 
-    this._mockSheetCanvasCache.set(cacheKey, canvas);
-
-    const texture = Texture.from(canvas);
-    texture.source.scaleMode = 'nearest';
-    this._mockSheetTextureCache.set(cacheKey, texture);
-
-    return texture;
+    this._sheetTexturePromises.set(path, promise);
+    return promise;
   }
 
-  private _getMockFrameTexture(
+  private async _getRealFrameTexture(
     slot: string,
-    shapeType: LpcMockShapeType,
+    assetId: string,
+    state: LpcAnimationState,
     frameIndex: number,
-  ): Texture {
-    const frameKey = `${slot}:${shapeType}:${frameIndex}`;
+    sheet: Texture,
+  ): Promise<Texture> {
+    const frameKey = `${slot}:${assetId}:${state}:${frameIndex}`;
 
     const cached = this._frameTextureCache.get(frameKey);
     if (cached) {
       return cached;
     }
 
-    const sheet = this._getMockSheetTexture(slot, shapeType);
     if (sheet === Texture.EMPTY) {
       return Texture.EMPTY;
     }
 
+    // Determine layout dynamically based on texture size
+    const columns = Math.floor(sheet.width / 64);
+    const rows = Math.floor(sheet.height / 64);
+
     const frame = this._textureManager.getFrameAt({
       texture: sheet,
-      layout: LPC_MOCK_LAYOUT,
+      layout: { frameWidth: 64, frameHeight: 64, columns, rows },
       frameIndex,
     });
 
@@ -491,60 +512,88 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   // ── Rendering ───────────────────────────────────────────────────────
 
-  private _renderCharacter(): void {
+  private async _renderCharacter(): Promise<void> {
     const currentRecipes = this.recipes;
     const currentFrame = this.animationFrame;
     const currentZoom = this.zoom;
+    const currentState = this.animationState;
+    const currentDirection = this.facingDirection;
 
     if (!this.pixiApp || currentRecipes.length === 0) {
       return;
     }
 
-    this._destroyAllSprites();
-
     try {
-      const container = new Container();
-      container.eventMode = 'none';
-      container.sortableChildren = true;
+      const newSprites: Sprite[] = [];
 
-      for (let i = 0; i < currentRecipes.length; i++) {
-        const recipe = currentRecipes[i];
+      const layerPromises = currentRecipes.map(async (recipe, i) => {
         const layer = this.activeLayers[i];
         if (!recipe || !layer) {
-          continue;
+          return;
         }
 
-        const slotDef = ALL_LPC_SLOTS[layer.slotDefIndex];
+        const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
         const variant = slotDef?.variants[layer.variantIndex];
         if (!variant) {
-          continue;
+          return;
         }
 
-        const row = getLpcStateRow(this.animationState, this.facingDirection);
-        const frameIndex = row * 13 + currentFrame;
+        const path = getLpcAssetPath(slotDef.slot, variant.assetId, currentState);
+        const sheet = await this._loadSheetTexture(path, slotDef.slot, variant.assetId);
 
-        const frameTexture = this._getMockFrameTexture(slotDef.slot, variant.shapeType, frameIndex);
-        if (frameTexture === Texture.EMPTY) {
-          continue;
-        }
+        if (sheet === Texture.EMPTY) return;
+
+        let effectiveRow = currentDirection;
+        const columns = Math.floor(sheet.width / 64);
+        const rows = Math.floor(sheet.height / 64);
+        if (rows === 1) effectiveRow = 0;
+
+        const frameCol = currentFrame % columns;
+        const frameIndex = effectiveRow * columns + frameCol;
+
+        const frameTexture = await this._getRealFrameTexture(
+          slotDef.slot,
+          variant.assetId,
+          currentState,
+          frameIndex,
+          sheet,
+        );
+
+        if (frameTexture === Texture.EMPTY) return;
 
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
         sprite.x = -32;
         sprite.y = -32;
-        sprite.alpha = slotDef.slot === 'body' ? 1.0 : 0.85;
+        sprite.alpha = 1.0;
+
+        // Apply the active palette color to the layer.
+        // We skip 000000 (default transparent black) so we don't accidentally turn assets invisible/black
+        const hexColor = layer.palette[layer.selectedPaletteIndex];
+        if (hexColor && hexColor !== '000000') {
+          sprite.tint = hexToPixiTint(hexColor);
+        }
 
         const zIndex = LPC_LAYER_Z_INDEX[slotDef.slot];
         if (zIndex !== undefined) {
           sprite.zIndex = zIndex;
         }
 
-        const paletteIndex = LPC_SLOT_PALETTE_INDEX[slotDef.slot] ?? 0;
-        const hexColor = layer.palette[paletteIndex];
-        sprite.tint = hexToPixiTint(hexColor);
+        newSprites.push(sprite);
+      });
 
-        container.addChild(sprite);
-        this._layerSprites.push(sprite);
+      await Promise.all(layerPromises);
+
+      this._destroyAllSprites();
+
+      const container = new Container();
+      container.eventMode = 'none';
+      container.sortableChildren = true;
+
+      newSprites.sort((a, b) => a.zIndex - b.zIndex);
+      for (const s of newSprites) {
+        container.addChild(s);
+        this._layerSprites.push(s);
       }
 
       container.scale.set(currentZoom, currentZoom);
@@ -556,7 +605,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       this.compositionFailed = false;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('lpcDebugger.composeFailed', { error: message });
+      this.error('lpcDebugger.composeFailed', { error: message });
 
       const fallbackGfx = new Graphics();
       fallbackGfx.rect(0, 0, 64, 64);
@@ -664,8 +713,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   }
 
   private _createDefaultLayers(): ActiveLayerConfig[] {
-    const bodySlotIdx = ALL_LPC_SLOTS.findIndex((s) => s.slot === 'body');
-    const hairSlotIdx = ALL_LPC_SLOTS.findIndex((s) => s.slot === 'hair');
+    const bodySlotIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'body');
+    const hairSlotIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'hair');
 
     return [
       {
@@ -754,7 +803,10 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       const params = lpcStateToSearchParams(urlState);
       const newUrl = `${page.url.pathname}?${params.toString()}`;
 
-      void goto(newUrl, { replaceState: true, keepFocus: true, noScroll: true });
+      this._isApplyingUrlState = true;
+      void goto(newUrl, { replaceState: true, keepFocus: true, noScroll: true }).finally(() => {
+        this._isApplyingUrlState = false;
+      });
     }, 100);
   }
 
@@ -762,7 +814,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     if (typeof window !== 'undefined') {
       (window as unknown as Record<string, unknown>).__lpc_debug_active_recipes =
         this.activeLayers.map((layer, i) => {
-          const slotDef = ALL_LPC_SLOTS[layer.slotDefIndex];
+          const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
           const variant = slotDef?.variants[layer.variantIndex];
           return {
             index: i,
@@ -781,13 +833,13 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       (window as unknown as Record<string, unknown>).__lpc_lab_current_frame = this.animationFrame;
       (window as unknown as Record<string, unknown>).__lpc_lab_active_slots = this.activeLayers.map(
         (l) => {
-          const def = ALL_LPC_SLOTS[l.slotDefIndex];
+          const def = FILTERED_LPC_SLOTS[l.slotDefIndex];
           return def?.slot ?? 'unknown';
         },
       );
       (window as unknown as Record<string, unknown>).__lpc_workbench_active_layers =
         this.activeLayers.map((layer) => {
-          const slotDef = ALL_LPC_SLOTS[layer.slotDefIndex];
+          const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
           const variant = slotDef?.variants[layer.variantIndex];
           return {
             slot: slotDef?.slot ?? 'unknown',
@@ -797,8 +849,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
             paletteSize: layer.palette.length,
           };
         });
-      (window as unknown as Record<string, unknown>).__lpc_workbench_mock_cache_size =
-        this._mockSheetCanvasCache.size;
+      (window as unknown as Record<string, unknown>).__lpc_workbench_mock_cache_size = 0;
     }
   }
 
@@ -819,14 +870,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     // Register $effect blocks via registerEffectRoot.
     // PixiJS init is deferred to a reactive $effect that fires when
     // canvasElement becomes available (after bind:this propagates).
-    this.registerEffectRoot(() => {
-      $effect(() => {
-        void page.url.searchParams;
-        if (!this._isApplyingUrlState) {
-          this._applyUrlParamsToState();
-        }
-      });
-    });
+    // We do NOT react to page.url.searchParams anymore to prevent infinite
+    // loops where the URL state fights the local ticker state.
+    // Instead, we only push our state to the URL.
 
     this.registerEffectRoot(() => {
       $effect(() => {
@@ -908,10 +954,10 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
       const canvas = this.pixiApp.renderer.canvas as HTMLCanvasElement;
       canvas.addEventListener('webglcontextlost', (event: Event) => {
-        logger.error('lpcViewModel.webglContextLost', { event: String(event) });
+        this.error('lpcViewModel.webglContextLost', { event: String(event) });
       });
       canvas.addEventListener('webglcontextrestored', () => {
-        logger.warn('lpcViewModel.webglContextRestored');
+        this.warn('lpcViewModel.webglContextRestored');
       });
 
       const app = result.app;
@@ -945,7 +991,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error('lpcViewModel.initFailed', { error: message });
+      this.error('lpcViewModel.initFailed', { error: message });
       this._setStatus(`Initialization failed: ${message}`, 'error');
     }
   }
@@ -953,8 +999,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   override async dispose(): Promise<void> {
     this._destroyAllSprites();
 
-    this._mockSheetCanvasCache.clear();
-    this._mockSheetTextureCache.clear();
+    this._sheetTextureCache.clear();
+    this._sheetTexturePromises.clear();
     this._frameTextureCache.clear();
 
     if (this.stageContainer.parent) {

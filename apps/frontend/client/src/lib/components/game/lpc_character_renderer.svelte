@@ -4,11 +4,7 @@
   import { Container, Sprite, Texture } from 'pixi.js';
   import { getContext, onMount } from 'svelte';
   import { LPC_LAYER_Z_INDEX, LPC_SLOT_PALETTE_INDEX } from '$lib/data/lpc_asset_catalog.ts';
-  import {
-    createMockSheetTexture,
-    createPlaceholderTexture,
-    getLpcAssetPath,
-  } from '$lib/data/lpc_asset_path_mapper.ts';
+  import { createPlaceholderTexture, getLpcAssetPath } from '$lib/data/lpc_asset_path_mapper';
   import { getLpcStateRow, LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
   import { logger } from '$logger';
   import { LPC_BATCH_MANAGER_KEY, LPC_STAGE_CONTAINER_KEY } from './lpc_context_keys.ts';
@@ -117,8 +113,12 @@
    * @param assetId - Numeric asset ID string.
    * @returns A PixiJS Texture (real, mock, or placeholder).
    */
-  const _loadGrayscaleTexture = async (slot: string, assetId: string): Promise<Texture> => {
-    const path = getLpcAssetPath(slot, assetId);
+  const _loadGrayscaleTexture = async (
+    slot: string,
+    assetId: string,
+    state: LpcAnimationState,
+  ): Promise<Texture> => {
+    const path = getLpcAssetPath(slot, assetId, state);
 
     try {
       const { Assets } = await import('pixi.js');
@@ -126,18 +126,6 @@
       texture.source.scaleMode = 'nearest';
       return texture;
     } catch {
-      logger.debug('lpcRenderer.tryMockSheet', { slot, assetId, path });
-
-      // Try procedural mock sheet — distinct geometric shapes per variant
-      try {
-        const mockTexture = await createMockSheetTexture(slot, 'default');
-        if (mockTexture !== Texture.EMPTY) {
-          return mockTexture;
-        }
-      } catch {
-        // Fall through to placeholder
-      }
-
       return createPlaceholderTexture(slot, assetId);
     }
   };
@@ -282,14 +270,8 @@
           sprite.zIndex = zIndex;
         }
 
-        // Apply palette-based tint from hexPalette buffer
-        const paletteIndex = LPC_SLOT_PALETTE_INDEX[recipe.slot] ?? 0;
-        const offset = paletteIndex * 4;
-        const r = recipe.hexPalette[offset] ?? 0xff;
-        const g = recipe.hexPalette[offset + 1] ?? 0xff;
-        const b = recipe.hexPalette[offset + 2] ?? 0xff;
-        // Pack RGB into a 24-bit numeric tint; force unsigned via >>> 0
-        sprite.tint = ((r << 16) | (g << 8) | b) >>> 0;
+        // Do not apply tint for full-color assets as it will turn them muddy.
+        // sprite.tint = ((r << 16) | (g << 8) | b) >>> 0;
       }
 
       layerContainer.addChild(sprite);
@@ -375,15 +357,35 @@
         }
 
         try {
-          // Load the full grayscale spritesheet
-          const sheet = await _loadGrayscaleTexture(recipe.slot ?? 'body', recipe.assetId);
+          // Load the full state-specific spritesheet
+          const sheet = await _loadGrayscaleTexture(
+            recipe.slot ?? 'body',
+            recipe.assetId,
+            animationState,
+          );
+
+          if (sheet === Texture.EMPTY) {
+            textures.push(Texture.EMPTY);
+            continue;
+          }
+
+          const columns = Math.floor(sheet.width / 64);
+          const rows = Math.floor(sheet.height / 64);
+
+          let effectiveRow = facing;
+          if (rows === 1) {
+            effectiveRow = 0;
+          }
+
+          let frameCol = currentFrame % columns;
+          const dynamicFrameIndex = effectiveRow * columns + frameCol;
 
           // Extract the 64×64 sub-texture at the computed frame index
           const tm = await _getTextureManager();
           const frameTexture = tm.getFrameAt({
             texture: sheet,
-            layout: LPC_LAYOUT,
-            frameIndex,
+            layout: { frameWidth: 64, frameHeight: 64, columns, rows },
+            frameIndex: dynamicFrameIndex,
           });
 
           textures.push(frameTexture ?? Texture.EMPTY);
