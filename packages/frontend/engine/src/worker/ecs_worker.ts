@@ -9,7 +9,6 @@ import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerSpriteObservers } from '../components/sprite.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
-import type { VelocityData } from '../components/velocity.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -26,7 +25,7 @@ import {
   LpcBatchManager,
   syncAppearanceSystem,
 } from '../systems/render_worker.ts';
-import type { Direction, GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
+import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
 // ---------------------------------------------------------------------------
 // Worker: owns the full bitECS world and system ticking

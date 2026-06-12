@@ -1,15 +1,15 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte
-    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-    import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
-    import type { LpcViewModelInterface } from './lpc_view_model.svelte.ts';
+  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
+  import type { LpcViewModelInterface } from './lpc_view_model.svelte.ts';
 
-    type Props = {
-      viewModel: LpcViewModelInterface;
-    };
+  type Props = {
+    viewModel: LpcViewModelInterface;
+  };
 
-    let { viewModel }: Props = $props();
-    let showControls = $state(true);
+  let { viewModel }: Props = $props();
+  let showControls = $state(true);
 </script>
 
 <svelte:head>
@@ -68,8 +68,8 @@
             <button
               class="btn btn-sm btn-ghost bg-base-100/50 hover:bg-base-100"
               onclick={() => {
-              if (document.fullscreenElement) document.exitFullscreen();
-              else document.documentElement.requestFullscreen();
+              if (document.fullscreenElement) { document.exitFullscreen(); }
+              else { document.documentElement.requestFullscreen(); }
             }}
             >
               Fullscreen

@@ -164,7 +164,11 @@ class SandboxViewModel
             .map((id) => SANDBOX_RECIPES[id])
             .filter(Boolean) as import('@aikami/frontend/engine').LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as import('$lib/data/lpc_models').LpcAnimationState),
+          getLpcAssetPath(
+            slot,
+            assetId,
+            state as unknown as import('$lib/data/lpc_models').LpcAnimationState,
+          ),
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);

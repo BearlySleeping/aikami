@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application } from 'pixi.js';
-import { Container, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Container, Sprite, Texture } from 'pixi.js';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import {
@@ -17,7 +17,7 @@ import type { TextureManager } from './rendering/texture_manager.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
-import type { Direction, GameEvent } from './types.ts';
+import type { GameEvent } from './types.ts';
 
 // ---------------------------------------------------------------------------
 // GameWorld — worker-based bitECS + PixiJS lifecycle manager
@@ -29,15 +29,19 @@ import type { Direction, GameEvent } from './types.ts';
 // ---------------------------------------------------------------------------
 
 /** Base movement speed in pixels per second — copied from input_system. */
-const PLAYER_SPEED = 150;
+// TODO: re-enable when keyboard movement is wired up.
+// const PLAYER_SPEED = 150;
 
-/** Direction-to-velocity lookup table for keyboard input forwarding. */
-const DIRECTION_VELOCITY: Record<Direction, { x: number; y: number }> = {
-  up: { x: 0, y: -PLAYER_SPEED },
-  down: { x: 0, y: PLAYER_SPEED },
-  left: { x: -PLAYER_SPEED, y: 0 },
-  right: { x: PLAYER_SPEED, y: 0 },
-};
+/**
+ * Direction-to-velocity lookup table for keyboard input forwarding.
+ * TODO: re-enable when keyboard movement is wired up.
+ */
+// const _DIRECTION_VELOCITY: Record<Direction, { x: number; y: number }> = {
+//   up: { x: 0, y: -PLAYER_SPEED },
+//   down: { x: 0, y: PLAYER_SPEED },
+//   left: { x: -PLAYER_SPEED, y: 0 },
+//   right: { x: PLAYER_SPEED, y: 0 },
+// };
 
 /** Per-entity rendering data stored on the main thread. */
 type RenderEntry = {
@@ -78,8 +82,9 @@ type NpcMetaEntry = {
  *
  * Assigning a fixed `filterArea` to every character display object
  * avoids per-frame `getBounds()` recalculations inside PixiJS.
+ * TODO: re-enable when character display filterArea is wired up.
  */
-const CELL_GEOMETRY_RECT = new Rectangle(0, 0, 48, 48);
+// const _CELL_GEOMETRY_RECT = new Rectangle(0, 0, 48, 48);
 
 /** Frame width for the LPC walk spritesheet (64x64 per frame). */
 // const LPC_FRAME_SIZE = 64;
@@ -227,7 +232,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param options - PixiJS application options (must include a canvas).
    */
   async initialize(options: PixiAppOptions): Promise<void> {
-    const { canvas, width, height } = options;
+    const { canvas } = options;
 
     if (this._app) {
       return;
@@ -677,10 +682,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       let vx = 0;
       let vy = 0;
 
-      if (activeKeys.has('w') || activeKeys.has('arrowup')) vy -= 1;
-      if (activeKeys.has('s') || activeKeys.has('arrowdown')) vy += 1;
-      if (activeKeys.has('a') || activeKeys.has('arrowleft')) vx -= 1;
-      if (activeKeys.has('d') || activeKeys.has('arrowright')) vx += 1;
+      if (activeKeys.has('w') || activeKeys.has('arrowup')) {
+        vy -= 1;
+      }
+      if (activeKeys.has('s') || activeKeys.has('arrowdown')) {
+        vy += 1;
+      }
+      if (activeKeys.has('a') || activeKeys.has('arrowleft')) {
+        vx -= 1;
+      }
+      if (activeKeys.has('d') || activeKeys.has('arrowright')) {
+        vx += 1;
+      }
 
       // Normalize diagonal movement to same speed as orthogonal
       if (vx !== 0 && vy !== 0) {
@@ -812,7 +825,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param renderView - The Float32Array view into the active buffer.
    * @param stage - The PixiJS stage container.
    */
-  private _updateRenderFromBuffer(renderView: Float32Array, stage: Container): void {
+  private _updateRenderFromBuffer(renderView: Float32Array, _stage: Container): void {
     // Use the actual screen bounds (canvas dimensions) for spatial culling,
     // rather than the stage's bounding box of children.
     const stageBounds = this._app?.screen ?? {
@@ -997,6 +1010,5 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 
 export { GameWorld };
