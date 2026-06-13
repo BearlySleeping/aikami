@@ -6,7 +6,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { authService, routerService } from '$services';
+import {
+  authService,
+  consumePendingGameLoad,
+  gameStateSyncService,
+  routerService,
+} from '$services';
 import type { ActiveContextEntry } from '$types';
 import { GameStateService } from '../../services/game/game_state_service.svelte.ts';
 
@@ -44,6 +49,18 @@ export type GameViewModelInterface = BaseViewModelInterface & {
   /** Whether the options overlay is visible. */
   readonly showOptions: boolean;
 
+  /** Whether a save operation is currently in progress. */
+  readonly isSaving: boolean;
+
+  /**
+   * User feedback message for save operations.
+   * Set to a success/error string after saveGame completes, cleared on next save.
+   */
+  readonly saveMessage: string | undefined;
+
+  /** The currently selected save slot number (1-indexed). */
+  readonly saveSlotNumber: number;
+
   /** The logged-in player's display name, or 'Unknown' if not available. */
   readonly playerDisplayName: string;
 
@@ -67,6 +84,18 @@ export type GameViewModelInterface = BaseViewModelInterface & {
 
   /** Navigates back to the PWA dashboard. */
   goToDashboard(): Promise<void>;
+
+  /**
+   * Saves the current game state to the cloud.
+   * Serializes the ECS world, uploads to Firebase Storage,
+   * and upserts the SaveSlot metadata row.
+   *
+   * @param slotNumber - The save slot number (1-indexed).
+   */
+  saveGame(slotNumber: number): Promise<void>;
+
+  /** Sets the selected save slot number. Called by the View on slot change. */
+  setSaveSlotNumber(slotNumber: number): void;
 };
 
 /**
@@ -91,6 +120,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   activeContexts: ActiveContextEntry[] = $state([]);
 
   showOptions = $state<boolean>(false);
+
+  isSaving = $state<boolean>(false);
+
+  saveMessage = $state<string | undefined>(undefined);
+
+  saveSlotNumber = $state<number>(1);
 
   /**
    * The logged-in player's display name.
@@ -229,11 +264,14 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     try {
       const { GameWorld } = await import('@aikami/frontend/engine');
 
+      const initialPayload = consumePendingGameLoad();
+
       this.gameWorld = GameWorld.create({ className: 'GameWorld', bridge });
       await this.gameWorld.initialize({
         canvas,
         width: canvas.clientWidth,
         height: canvas.clientHeight,
+        initialPayload,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -262,6 +300,48 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     this.showOptions = !this.showOptions;
     if (this.gameWorld) {
       this.gameWorld.setInputLocked(this.showOptions);
+    }
+  }
+
+  /** @inheritdoc */
+  setSaveSlotNumber(slotNumber: number): void {
+    this.saveSlotNumber = slotNumber;
+  }
+
+  /** @inheritdoc */
+  async saveGame(slotNumber: number): Promise<void> {
+    if (!this.gameWorld || this.isSaving) {
+      return;
+    }
+
+    const uid = authService.uid;
+    if (!uid) {
+      this.saveMessage = 'You must be signed in to save.';
+      return;
+    }
+
+    this.isSaving = true;
+    this.saveMessage = undefined;
+
+    try {
+      const payload = await this.gameWorld.snapshotWorld();
+
+      await gameStateSyncService.saveGame({
+        uid,
+        slot: slotNumber,
+        payload,
+        metadata: {
+          lastLocationName: this.playerScene,
+        },
+      });
+
+      this.saveMessage = `Game saved to slot ${slotNumber}.`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.saveMessage = `Save failed: ${message}`;
+      this.debug('saveGame:error', { slotNumber, error: message });
+    } finally {
+      this.isSaving = false;
     }
   }
 

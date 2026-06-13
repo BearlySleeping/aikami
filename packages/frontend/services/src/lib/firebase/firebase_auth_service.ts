@@ -72,6 +72,8 @@ export type FirebaseAuthServiceInterface = BaseClassInterface & {
 
   signInWithCustomToken(customToken: string): Promise<User | undefined>;
 
+  signInAnonymously(): Promise<User>;
+
   signOut(): Promise<void>;
 
   getIdToken(user: User, forceRefresh?: boolean): Promise<string>;
@@ -153,6 +155,21 @@ class FirebaseAuthService extends BaseClass implements FirebaseAuthServiceInterf
     await signInWithCustomToken(auth, customToken);
 
     return auth.currentUser ?? undefined;
+  }
+
+  async signInAnonymously(): Promise<User> {
+    const { auth, signInAnonymously } = await this._getAuth();
+
+    const userCredential = await signInAnonymously(auth);
+    const user = userCredential.user;
+    if (!user) {
+      throw toAppError({
+        errorType: 'unauthorized',
+        errorMessage: 'Anonymous sign-in failed',
+      });
+    }
+
+    return user;
   }
 
   async signInWithEmailAndPassword(options: { email: string; password: string }): Promise<User> {

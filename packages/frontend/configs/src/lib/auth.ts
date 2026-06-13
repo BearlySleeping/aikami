@@ -13,6 +13,7 @@ export {
   OAuthProvider,
   onIdTokenChanged,
   sendPasswordResetEmail,
+  signInAnonymously,
   signInWithCustomToken,
   signInWithEmailAndPassword,
   signInWithPopup,

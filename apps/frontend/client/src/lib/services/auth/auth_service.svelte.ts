@@ -71,6 +71,12 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
   signInWithEmailAndPassword(options: { email: string; password: string }): Promise<AppResult>;
 
   /**
+   * Signs in a user anonymously.
+   * @returns A promise that resolves with true if the sign-in was successful, false otherwise.
+   */
+  signInAnonymously(): Promise<boolean>;
+
+  /**
    * Signs out the current user.
    * @returns A promise that resolves with true if the sign-out was successful, false otherwise.
    */
@@ -228,6 +234,19 @@ export class AuthService
       return true;
     } catch (error) {
       this.error('signOut', error);
+      return false;
+    }
+  }
+
+  async signInAnonymously(): Promise<boolean> {
+    try {
+      this.log('signInAnonymously');
+      const user = await this._auth.signInAnonymously();
+      await this.setAuthUser(user);
+
+      return true;
+    } catch (error) {
+      this.error('signInAnonymously', error);
       return false;
     }
   }

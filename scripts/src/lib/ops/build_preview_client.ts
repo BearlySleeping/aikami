@@ -1,8 +1,12 @@
 // scripts/src/lib/ops/build_preview_client.ts
 //
 // Builds the client PWA for emulator-mode preview, clearing stale
-// build artifacts first.  Pass --open to launch the browser after
-// the preview server starts.
+// build artifacts first.  Starts the Firebase emulator in a tmux
+// session if it's not already running, then waits for it to be
+// ready before building (the client build may need emulator ports
+// for Data Connect SDK generation).
+//
+// Pass --open to launch the browser after the preview server starts.
 //
 // Usage:
 //   bun run scripts/src/lib/ops/build_preview_client.ts
@@ -10,6 +14,7 @@
 
 import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { buildSessionName, sessionExists, startServices, waitForReady } from '../tmux/session.ts';
 
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
@@ -89,7 +94,21 @@ console.log(`\n${BOLD}Aikami Client Preview Build${RESET}\n`);
 cleanDir(BUILD_DIR, 'build/');
 cleanDir(SVELTE_KIT_DIR, '.svelte-kit/');
 
-// 2. Build the client in emulator mode
+// 2. Start Firebase emulator in tmux (if not already running)
+const mode: 'emulator' = 'emulator';
+const sessionName = buildSessionName(mode);
+
+if (!(await sessionExists(sessionName))) {
+  info('Starting Firebase emulator in tmux…');
+  await startServices({ mode, services: ['emulators'] });
+  await waitForReady({ services: ['emulators'], mode }, 60_000);
+} else {
+  // Ensure the emulator window is running
+  await startServices({ mode, services: ['emulators'] });
+  await waitForReady({ services: ['emulators'], mode }, 30_000);
+}
+
+// 3. Build the client in emulator mode
 const buildCode = await spawn(
   [
     'bun',
@@ -110,7 +129,7 @@ if (buildCode !== 0) {
   process.exit(buildCode);
 }
 
-// 3. Start preview server (background, keep alive)
+// 4. Start preview server (background, keep alive)
 info(`Starting preview server on port ${PREVIEW_PORT}…`);
 
 const previewProc = Bun.spawn({

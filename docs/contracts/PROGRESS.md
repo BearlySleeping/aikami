@@ -97,6 +97,34 @@
 | C-115 | Sandbox LPC Animation | ✅ completed |
 | C-117 | ECS Snapshot Serializer | ✅ completed |
 
+### C-118: Save/Load UI & Engine Boundary
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/services/game/game_load_state.svelte.ts` — Cross-route payload handoff module (`setPendingGameLoad` / `consumePendingGameLoad`).
+
+**Files modified**:
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Added `REQUEST_SNAPSHOT` handler (serializes world → `SNAPSHOT_RESPONSE`); extended `INITIALIZE_ENGINE` with optional `loadPayload` to skip default entities and hydrate from saved snapshot; reordered initialization so tick loop + spatial grid start before entity creation.
+- `packages/frontend/engine/src/game_world.ts` — Added `snapshotWorld(): Promise<string>` method (posts `REQUEST_SNAPSHOT` to worker, resolves with payload); `initialize()` now accepts optional `initialPayload` passed to worker via `INITIALIZE_ENGINE`.
+- `packages/frontend/services/src/index.ts` — Added `export * from './lib/services/game_state_sync.svelte.ts'` (was missing from root barrel — `GameStateSyncServiceInterface`, `SaveSlotEntry`, `SaveSlotMetadata`, `gameStateSyncService` now reachable via `@aikami/frontend/services`).
+- `apps/frontend/client/src/lib/services/index.ts` — Added `GameStateSyncServiceInterface`, `SaveSlotEntry`, `SaveSlotMetadata`, `gameStateSyncService` to `@aikami/frontend/services` barrel import; added `export * from './game/game_load_state.svelte.ts'`.
+- `apps/frontend/client/src/lib/views/game/game_view_model.svelte.ts` — Added `isSaving`, `saveMessage`, `saveSlotNumber` state; `saveGame(slotNumber)` method serialize→upload→feedback; `setSaveSlotNumber()`; `attachCanvasNow` checks `consumePendingGameLoad()` and passes `initialPayload` to `GameWorld.initialize`.
+- `apps/frontend/client/src/lib/views/game/game_view.svelte` — Added save section in options overlay: slot selector (slots 1-3), save button with spinner, success/error message.
+- `apps/frontend/client/src/lib/views/dashboard/dashboard_view_model.svelte.ts` — Complete rewrite: added `saveSlots`, `isLoadingSlots` state; `loadSlots()` on initialize; `resumeGame(slot)` downloads blob → stores via `setPendingGameLoad` → navigates to `/game`.
+- `apps/frontend/client/src/lib/views/dashboard/dashboard_view.svelte` — Added saved games section: loading spinner, empty state, slot cards with location/date + Resume button.
+
+**Deviations**:
+1. **Snapshot via worker message** (not direct `serializeWorld` call): The ECS world lives in the Web Worker, which the ViewModel cannot access directly. Added `GameWorld.snapshotWorld()` that posts `REQUEST_SNAPSHOT` to the worker and awaits `SNAPSHOT_RESPONSE`. The worker calls `serializeWorld(world)` internally (matches C-117 contract).
+2. **Load via `INITIALIZE_ENGINE` payload** (not post-initialization `LOAD_GAME` message): The worker creates its world and registers observers during initialization. Passing `loadPayload` in the `INITIALIZE_ENGINE` message lets the worker skip default entity creation and hydrate directly from the snapshot — simpler than a two-phase init+load approach.
+3. **Cross-route payload via module-level variable** (not service class): Created `game_load_state.svelte.ts` with `setPendingGameLoad()` / `consumePendingGameLoad()` for dashboard→game route payload handoff. Lightweight and sufficient for SPA navigation (no serialization needed — same JS context).
+
+**Known limitations**:
+- Save slots are hardcoded to 1-3 in the UI. No Data Connect `DeleteSaveSlot` mutation (MIG-002 TODO).
+- No played-time tracking — metadata only includes `lastLocationName` (current scene).
+- Loading a game replaces ALL entities (global reset) — no merge/append model. Matches C-117's "global reset on load" known limitation.
+- Save button is only in the Escape menu, not bound to a hotkey.
+
 ### C-114: Sandbox Engine Wiring
 
 **Files modified**:

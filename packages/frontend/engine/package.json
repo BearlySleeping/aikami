@@ -18,6 +18,7 @@
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
     "bitecs": "^0.4.0",
-    "pixi.js": "8.19.0"
+    "pixi.js": "8.19.0",
+    "typebox": "1.2.8"
   }
 }

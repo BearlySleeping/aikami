@@ -231,8 +231,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * @param options - PixiJS application options (must include a canvas).
    */
-  async initialize(options: PixiAppOptions): Promise<void> {
-    const { canvas } = options;
+  async initialize(options: PixiAppOptions & { initialPayload?: string }): Promise<void> {
+    const { canvas, initialPayload } = options;
 
     if (this._app) {
       return;
@@ -246,7 +246,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._allocateBuffers();
 
     // ---- 3. Spawn the simulation worker -------------------------------
-    await this._spawnWorker(canvas.width, canvas.height);
+    await this._spawnWorker(canvas.width, canvas.height, initialPayload);
 
     // ---- 4. Set up keyboard input (main thread) -----------------------
     this._inputTeardown = this._setupKeyboardInput();
@@ -366,8 +366,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * @param canvasWidth - Width of the canvas for entity spawn placement.
    * @param canvasHeight - Height of the canvas for entity spawn placement.
+   * @param loadPayload - Optional ECS snapshot to load (bypasses default entities).
    */
-  private async _spawnWorker(canvasWidth: number, canvasHeight: number): Promise<void> {
+  private async _spawnWorker(
+    canvasWidth: number,
+    canvasHeight: number,
+    loadPayload?: string,
+  ): Promise<void> {
     if (this._workerFactory) {
       this.debug('spawnWorker:using-workerFactory');
       this._worker = this._workerFactory();
@@ -388,6 +393,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       canvasWidth,
       canvasHeight,
       buffers: this._bufferPool,
+      loadPayload,
     });
 
     // Set up message listener for worker → main communication
@@ -799,6 +805,43 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         return;
       }
     }
+  }
+
+  /**
+   * Requests a serialized ECS snapshot from the worker.
+   *
+   * Posts a REQUEST_SNAPSHOT message to the worker and returns a promise
+   * that resolves with the JSON payload string. Rejects if the worker
+   * is not running or the snapshot fails.
+   *
+   * @returns The serialized ECS world state as a JSON string.
+   */
+  snapshotWorld(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (!this._worker) {
+        reject(new Error('Worker not running — cannot snapshot'));
+        return;
+      }
+
+      const handler = (event: MessageEvent): void => {
+        const message = event.data;
+        if (message.type !== 'SNAPSHOT_RESPONSE') {
+          return;
+        }
+
+        this._worker?.removeEventListener('message', handler);
+
+        if (message.error) {
+          reject(new Error(message.error as string));
+          return;
+        }
+
+        resolve(message.payload as string);
+      };
+
+      this._worker.addEventListener('message', handler);
+      this._worker.postMessage({ type: 'REQUEST_SNAPSHOT' });
+    });
   }
 
   // -----------------------------------------------------------------------

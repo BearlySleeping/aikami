@@ -6,6 +6,7 @@ import {
   type UpsertSaveSlotVariables,
   upsertSaveSlot,
 } from '@aikami/frontend/dataconnect';
+import { validateEcsSnapshot } from '@aikami/schemas';
 import { BaseClass, type BaseClassInterface } from '@aikami/utils';
 import { firebaseStorageService } from '../firebase/firebase_storage.ts';
 
@@ -87,6 +88,13 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
     metadata?: SaveSlotMetadata;
   }): Promise<string> {
     const { uid, slot, payload, metadata } = options;
+
+    // Validate payload shape and version before uploading.
+    const validationError = validateEcsSnapshot(payload);
+    if (validationError) {
+      throw new Error(`saveGame: ${validationError}`);
+    }
+
     const storageRef = `saves/${uid}/slot_${slot}.json`;
 
     // 1. Upload ECS snapshot blob to Firebase Cloud Storage
