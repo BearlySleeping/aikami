@@ -5,6 +5,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { page } from '$app/state';
+import { authService } from '$services';
 
 export const NAV_ITEMS = [
   {
@@ -62,6 +63,11 @@ export const NAV_ITEMS = [
     label: 'Quest',
     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
   },
+  {
+    route: '/dev/save_load',
+    label: 'Save/Load',
+    icon: 'M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4',
+  },
 ] as const;
 
 /** Navigation item for the dev console drawer. */
@@ -93,6 +99,16 @@ class DevViewModel extends BaseViewModel<DevViewModelOptions> implements DevView
 
   toggleDrawer(): void {
     this.isDrawerOpen = !this.isDrawerOpen;
+  }
+
+  /** @inheritdoc */
+  override async initialize(): Promise<void> {
+    // Ensure auth is initialized so Firebase SDK restores
+    // sessions from IndexedDB on page refresh (onIdTokenChanged).
+    // Safe to call repeatedly — AuthService guards with _initialized flag.
+    await authService.initialize();
+
+    await super.initialize();
   }
 }
 

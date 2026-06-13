@@ -1,4 +1,7 @@
 // packages/frontend/engine/src/serialization/ecs_serializer.ts
+
+import { validateEcsSnapshot } from '@aikami/schemas';
+import type { EcsSnapshot } from '@aikami/types';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, getAllEntities } from 'bitecs';
 import { Appearance } from '../components/appearance.ts';
@@ -31,31 +34,11 @@ const PERSISTENT_COMPONENTS: Array<[string, Record<string, Array<unknown>>]> = [
 ];
 
 /**
- * Shape of a single serialized component slice inside {@link EcsSnapshot}.
- *
- * Each field is a flat array where index `i` holds the value for the
- * `i`-th active entity in the snapshot.  Missing values are `undefined`
- * (JSON omits them).
+ * Internal component slice type used by helpers.
+ * Allows `undefined` because SoA arrays may have gaps.
+ * Not exposed — the wire format uses EcsSnapshot from @aikami/types.
  */
 type ComponentSlice = Record<string, Array<number | string | boolean | undefined>>;
-
-/**
- * Serialised representation of a bitECS world at a point in time.
- *
- * Contains only persistent component data for only the active entities.
- */
-type EcsSnapshot = {
-  /** Schema version — increment when the shape changes. */
-  version: string;
-  /** Unix-epoch milliseconds of the snapshot. */
-  timestamp: number;
-  /** Ordered list of active entity IDs at serialization time.
-   * These are historical IDs — deserialization produces new sequential
-   * IDs and returns a mapping for relational data reconciliation. */
-  entities: number[];
-  /** Per-component flat arrays keyed by field name. */
-  components: Record<string, ComponentSlice>;
-};
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -175,7 +158,9 @@ export const serializeWorld = (world: World): string => {
   for (const [name, component] of PERSISTENT_COMPONENTS) {
     const slice = _extractComponentSlice(component, allEids);
     if (Object.keys(slice).length > 0) {
-      components[name] = slice;
+      // Cast: helper filters undefined, but return type includes it for
+      // internal convenience when working with raw SoA arrays.
+      components[name] = slice as Record<string, Array<number | string | boolean>>;
     }
   }
 
@@ -183,7 +168,7 @@ export const serializeWorld = (world: World): string => {
     version: '1.0.0',
     timestamp: Date.now(),
     entities: allEids,
-    components,
+    components: components as EcsSnapshot['components'],
   };
 
   return JSON.stringify(snapshot);
@@ -208,21 +193,13 @@ export const serializeWorld = (world: World): string => {
  * @throws If the payload is not valid JSON or the version is unrecognized.
  */
 export const deserializeWorld = (world: World, payload: string): Map<number, number> => {
-  let snapshot: EcsSnapshot;
-
-  try {
-    snapshot = JSON.parse(payload) as EcsSnapshot;
-  } catch (error) {
-    throw new Error(`EcsSerializer: invalid payload — ${String(error)}`);
+  // Validate shape and version before parsing.
+  const validationError = validateEcsSnapshot(payload);
+  if (validationError) {
+    throw new Error(`EcsSerializer: ${validationError}`);
   }
 
-  if (!snapshot.version || !snapshot.entities) {
-    throw new Error('EcsSerializer: payload missing required fields');
-  }
-
-  if (snapshot.version !== '1.0.0') {
-    throw new Error(`EcsSerializer: unsupported version "${snapshot.version}" — expected "1.0.0"`);
-  }
+  const snapshot = JSON.parse(payload) as EcsSnapshot;
 
   const eidMap = new Map<number, number>();
 
