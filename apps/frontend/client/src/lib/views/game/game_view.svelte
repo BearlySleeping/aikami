@@ -64,6 +64,48 @@
           </button>
         </div>
 
+        <!-- Save Game Section -->
+        <div class="mt-4 border-t border-base-300 pt-3">
+          <h3 class="text-sm font-semibold text-base-content/70">Save Game</h3>
+
+          <div class="mt-2">
+            <label for="save-slot-select" class="text-xs text-base-content/50">Slot</label>
+            <select
+              id="save-slot-select"
+              class="select select-bordered select-sm mt-1 w-full"
+              value={viewModel.saveSlotNumber}
+              onchange={(e) => viewModel.setSaveSlotNumber(Number(e.currentTarget.value))}
+            >
+              {#each [1, 2, 3] as slot}
+                <option value={slot}>Slot {slot}</option>
+              {/each}
+            </select>
+          </div>
+
+          <button
+            class="btn btn-accent btn-sm mt-2 w-full"
+            disabled={viewModel.isSaving}
+            onclick={() => viewModel.saveGame(viewModel.saveSlotNumber)}
+          >
+            {#if viewModel.isSaving}
+              <span class="loading loading-spinner loading-xs"></span>
+              Saving...
+            {:else}
+              Save to Slot {viewModel.saveSlotNumber}
+            {/if}
+          </button>
+
+          {#if viewModel.saveMessage}
+            <p
+              class="mt-2 text-center text-xs"
+              class:text-success={viewModel.saveMessage.startsWith('Game saved')}
+              class:text-error={viewModel.saveMessage.startsWith('Save failed') || viewModel.saveMessage.startsWith('You must')}
+            >
+              {viewModel.saveMessage}
+            </p>
+          {/if}
+        </div>
+
         <p class="mt-4 text-center text-xs text-base-content/50">Press Escape to close</p>
       </div>
     </div>

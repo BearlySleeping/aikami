@@ -27,6 +27,7 @@ export * from './lib/database/skills.ts';
 export * from './lib/database/user.ts';
 export * from './lib/database/voice.ts';
 export * from './lib/database/world.ts';
+export * from './lib/ecs_snapshot.ts';
 export * from './lib/fields.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/image_generation.ts';

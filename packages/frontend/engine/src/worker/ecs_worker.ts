@@ -16,6 +16,7 @@ import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer } from '../entities/create_player.ts';
 import { createTestSprite } from '../entities/create_test_sprite.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
+import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
@@ -233,8 +234,16 @@ const workerRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => 
  * Initializes the bitECS world and all its contents inside the worker.
  *
  * Called once when the main thread posts INITIALIZE_ENGINE.
+ *
+ * @param canvasWidth - Canvas width (unused when loadPayload is provided).
+ * @param canvasHeight - Canvas height (unused when loadPayload is provided).
+ * @param loadPayload - Optional ECS snapshot payload to hydrate (skips default entities).
  */
-const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
+const initializeEngine = (
+  canvasWidth: number,
+  canvasHeight: number,
+  loadPayload?: string,
+): void => {
   // 1. Create the bitECS world
   world = createWorld();
 
@@ -251,41 +260,10 @@ const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
   //    No createBuffer factory → operates without GPU Buffers in the worker.
   lpcBatchManager = new LpcBatchManager({ maxInstances: 64 });
 
-  // 4. Spawn entities
-  playerEntityId = createPlayer(world);
-  let testSpriteId = 0;
-  if (canvasWidth && canvasHeight) {
-    testSpriteId = createTestSprite(world, canvasWidth, canvasHeight);
-  }
-
-  // 5. Notify main thread about renderable entities
-  // Player (green tint)
-  postMessage({
-    type: 'ENTITY_CREATED',
-    eid: playerEntityId,
-    tint: 0x00ff88,
-  });
-
-  // Test sprite (pink tint) — must be sent so GameWorld creates a display object
-  // bitECS allocates sequential IDs, so testSpriteId = playerEntityId + 1
-  if (testSpriteId > 0) {
-    postMessage({
-      type: 'ENTITY_CREATED',
-      eid: testSpriteId,
-      tint: 0xff6688,
-    });
-  }
-
-  queueMicrotask(() => {
-    postMessage({
-      type: 'ENGINE_READY',
-    });
-  });
-
-  // 6. Start the tick loop (~60fps = 16ms interval)
+  // 4. Start the tick loop (~60fps = 16ms interval)
   running = true;
 
-  // 7. Initialize spatial hash grid (cellSize 50, capacity = MAX_ENTITIES * 2)
+  // 5. Initialize spatial hash grid (cellSize 50, capacity = MAX_ENTITIES * 2)
   spatialGrid = new SpatialHashGrid({
     cellSize: 50,
     capacity: MAX_ENTITIES * 2,
@@ -293,6 +271,50 @@ const initializeEngine = (canvasWidth: number, canvasHeight: number): void => {
   positionBuffer = new Float32Array(MAX_ENTITIES * 2);
 
   setInterval(tickLoop, 16);
+
+  // 6. Spawn entities — from saved payload or defaults
+  if (loadPayload) {
+    const eidMap = deserializeWorld(world, loadPayload);
+
+    // Notify main thread about all hydrated entities
+    for (const [oldEid, newEid] of eidMap) {
+      const tint = oldEid === 1 ? 0x00ff88 : 0xffcc00;
+      // bitECS allocates sequential IDs — first entity is always the player
+      if (playerEntityId === 0) {
+        playerEntityId = newEid;
+      }
+      postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
+    }
+  } else {
+    playerEntityId = createPlayer(world);
+    let testSpriteId = 0;
+    if (canvasWidth && canvasHeight) {
+      testSpriteId = createTestSprite(world, canvasWidth, canvasHeight);
+    }
+
+    // Player (green tint)
+    postMessage({
+      type: 'ENTITY_CREATED',
+      eid: playerEntityId,
+      tint: 0x00ff88,
+    });
+
+    // Test sprite (pink tint) — must be sent so GameWorld creates a display object
+    // bitECS allocates sequential IDs, so testSpriteId = playerEntityId + 1
+    if (testSpriteId > 0) {
+      postMessage({
+        type: 'ENTITY_CREATED',
+        eid: testSpriteId,
+        tint: 0xff6688,
+      });
+    }
+  }
+
+  queueMicrotask(() => {
+    postMessage({
+      type: 'ENGINE_READY',
+    });
+  });
 };
 
 // -- Tick loop --------------------------------------------------------------
@@ -532,7 +554,7 @@ self.onmessage = (event: MessageEvent): void => {
   try {
     switch (message.type) {
       case 'INITIALIZE_ENGINE': {
-        const { canvasWidth, canvasHeight, buffers } = message;
+        const { canvasWidth, canvasHeight, buffers, loadPayload } = message;
 
         // Determine whether we have shared memory
         const firstBuffer = buffers[0] as ArrayBuffer;
@@ -551,7 +573,7 @@ self.onmessage = (event: MessageEvent): void => {
           activeBufferIndex = 0;
         }
 
-        initializeEngine(canvasWidth, canvasHeight);
+        initializeEngine(canvasWidth, canvasHeight, loadPayload as string | undefined);
         break;
       }
 
@@ -593,6 +615,28 @@ self.onmessage = (event: MessageEvent): void => {
 
       case 'BRIDGE_COMMAND': {
         handleBridgeCommand(message.command as GameCommand);
+        break;
+      }
+
+      case 'REQUEST_SNAPSHOT': {
+        if (!world) {
+          postMessage({
+            type: 'SNAPSHOT_RESPONSE',
+            payload: undefined,
+            error: 'World not initialized',
+          });
+          break;
+        }
+        try {
+          const payload = serializeWorld(world);
+          postMessage({ type: 'SNAPSHOT_RESPONSE', payload });
+        } catch (err) {
+          postMessage({
+            type: 'SNAPSHOT_RESPONSE',
+            payload: undefined,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
         break;
       }
 

@@ -14,5 +14,6 @@ export * from './lib/firebase/firebase_remote_config.ts';
 export * from './lib/firebase/firebase_storage.ts';
 export * from './lib/router/router_utils.ts';
 export * from './lib/services/dialog.svelte.ts';
+export * from './lib/services/game_state_sync.svelte.ts';
 export * from './lib/services/router.svelte.ts';
 export * from './lib/types/index.ts';
