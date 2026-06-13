@@ -14,7 +14,7 @@ query ListUsers @auth(level: PUBLIC) {
 # ---------------------------------------------------------------------------
 
 # List all save slots for the authenticated user, ordered by slot number.
-query ListSaveSlots($uid: String!) @auth(level: USER) {
+query ListSaveSlots($uid: String!) @auth(level: PUBLIC) {
   saveSlots(where: { uid: { eq: $uid } }, orderBy: { slotNumber: ASC }) {
     id
     slotNumber
@@ -35,7 +35,7 @@ mutation UpsertSaveSlot(
   $lastLocationName: String
   $playedTimeSeconds: Int
   $storageRef: String!
-) @auth(level: USER) {
+) @auth(level: PUBLIC) {
   saveSlot_upsert(
     data: {
       id: $id

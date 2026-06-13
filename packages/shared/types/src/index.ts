@@ -27,6 +27,7 @@ export * from './lib/database/oauth2.ts';
 export * from './lib/database/persona.ts';
 export * from './lib/database/user.ts';
 export * from './lib/device.ts';
+export * from './lib/ecs_snapshot.ts';
 export * from './lib/endpoints/ai.ts';
 export * from './lib/endpoints/auth.ts';
 export * from './lib/endpoints/callable_functions.ts';
