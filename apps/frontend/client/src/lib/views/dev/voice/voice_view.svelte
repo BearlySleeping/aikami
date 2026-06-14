@@ -104,10 +104,8 @@
                   class="toggle toggle-sm toggle-primary"
                   bind:checked={viewModel.streamEnabled}
                   disabled={viewModel.isPlaying || viewModel.isConnected}
-                />
-                <span class="ml-2 text-xs text-base-content/50">
-                  Chunked (progressive)
-                </span>
+                >
+                <span class="ml-2 text-xs text-base-content/50"> Chunked (progressive) </span>
               </div>
             </label>
 
@@ -126,7 +124,7 @@
                 class="range range-xs range-primary"
                 bind:value={viewModel.speed}
                 disabled={viewModel.isPlaying || viewModel.isConnected}
-              />
+              >
             </label>
 
             <!-- Volume -->
@@ -144,7 +142,7 @@
                 class="range range-xs range-secondary"
                 bind:value={viewModel.volumeMultiplier}
                 disabled={viewModel.isPlaying || viewModel.isConnected}
-              />
+              >
             </label>
           </div>
         </div>
@@ -179,9 +177,7 @@
 
           <div class="flex gap-3 mt-2">
             {#if viewModel.isPlaying || viewModel.isConnected}
-              <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>
-                ⏹ Cancel
-              </button>
+              <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
             {:else}
               <button
                 class="btn btn-primary"
@@ -199,9 +195,7 @@
       <div class="card bg-base-300 shadow">
         <div class="card-body p-6">
           <div class="flex items-center justify-between mb-4">
-            <span
-              class="text-xs font-semibold text-base-content/60 uppercase tracking-wider"
-            >
+            <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">
               Audio Queue
             </span>
 

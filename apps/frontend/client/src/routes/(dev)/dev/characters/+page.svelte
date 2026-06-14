@@ -1,7 +1,7 @@
 <script lang="ts">
+  import type { PersonaData } from '@aikami/types';
   // apps/frontend/client/src/routes/(dev)/dev/characters/+page.svelte
   import { browser } from '$app/environment';
-  import type { PersonaData } from '@aikami/types';
 
   type SavedCharacter = {
     persona: PersonaData;
@@ -65,11 +65,9 @@
                       src={char.avatarUrl}
                       alt={char.persona.name ?? 'Character'}
                       class="w-full h-full object-cover"
-                    />
+                    >
                   {:else}
-                    <div class="w-full h-full flex items-center justify-center text-3xl">
-                      🐉
-                    </div>
+                    <div class="w-full h-full flex items-center justify-center text-3xl">🐉</div>
                   {/if}
                 </div>
 
@@ -83,7 +81,9 @@
                       <span class="badge badge-sm badge-outline">{char.persona.race}</span>
                     {/if}
                     {#if (char.persona as { class?: string }).class}
-                      <span class="badge badge-sm badge-outline">{(char.persona as { class?: string }).class}</span>
+                      <span class="badge badge-sm badge-outline"
+                        >{(char.persona as { class?: string }).class}</span
+                      >
                     {/if}
                     {#if char.persona.level}
                       <span class="badge badge-sm badge-outline">Lvl {char.persona.level}</span>

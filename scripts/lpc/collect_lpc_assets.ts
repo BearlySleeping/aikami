@@ -24,26 +24,76 @@ import { basename, dirname, join, relative } from 'node:path';
 
 // ── Config ────────────────────────────────────────────────────────────────
 
-const LPC_REPO = join(import.meta.dirname, '..', '..', 'examples', 'Universal-LPC-Spritesheet-Character-Generator');
+const LPC_REPO = join(
+  import.meta.dirname,
+  '..',
+  '..',
+  'examples',
+  'Universal-LPC-Spritesheet-Character-Generator',
+);
 const SPRITESHEETS_DIR = join(LPC_REPO, 'spritesheets');
-const OUTPUT_ASSETS_DIR = join(import.meta.dirname, '..', '..', 'apps', 'frontend', 'client', 'src', 'lib', 'assets', 'lpc');
-const OUTPUT_CATALOG = join(import.meta.dirname, '..', '..', 'apps', 'frontend', 'client', 'src', 'lib', 'data', 'lpc_asset_catalog_generated.ts');
+const OUTPUT_ASSETS_DIR = join(
+  import.meta.dirname,
+  '..',
+  '..',
+  'apps',
+  'frontend',
+  'client',
+  'src',
+  'lib',
+  'assets',
+  'lpc',
+);
+const OUTPUT_CATALOG = join(
+  import.meta.dirname,
+  '..',
+  '..',
+  'apps',
+  'frontend',
+  'client',
+  'src',
+  'lib',
+  'data',
+  'lpc_asset_catalog_generated.ts',
+);
 const MANIFEST_FILE = join(import.meta.dirname, '.lpc_manifest.json');
 
 const CONVERT = process.argv.includes('--convert');
 
 const SLOT_MAP: Record<string, string> = {
-  body: 'body', head: 'head', hair: 'hair', torso: 'torso', legs: 'legs', feet: 'feet',
-  hat: 'hat', shoulders: 'shoulders', shield: 'shield', weapon: 'weapon',
-  cape: 'cape', eyes: 'eyes', facial: 'facial', neck: 'neck',
-  beards: 'beard', dress: 'dress',
+  body: 'body',
+  head: 'head',
+  hair: 'hair',
+  torso: 'torso',
+  legs: 'legs',
+  feet: 'feet',
+  hat: 'hat',
+  shoulders: 'shoulders',
+  shield: 'shield',
+  weapon: 'weapon',
+  cape: 'cape',
+  eyes: 'eyes',
+  facial: 'facial',
+  neck: 'neck',
+  beards: 'beard',
+  dress: 'dress',
 };
 
 const SOURCE_EXT = '.png';
 const WEBP_QUALITY = 80;
 
 const PREFERRED_ANIMS = ['walk', 'idle', 'combat_idle', 'thrust', 'slash', 'spellcast'];
-const PREFERRED_COLORS = ['brown', 'black', 'white', 'gray', 'dark', 'leather', 'steel', 'silver', 'bronze'];
+const PREFERRED_COLORS = [
+  'brown',
+  'black',
+  'white',
+  'gray',
+  'dark',
+  'leather',
+  'steel',
+  'silver',
+  'bronze',
+];
 const BODY_TYPES = ['male', 'female', 'adult', 'child', 'teen', 'thin', 'muscular', 'pregnant'];
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -61,16 +111,46 @@ type AssetEntry = {
 // ── Parsing ───────────────────────────────────────────────────────────────
 
 const BODY_CANDIDATES = new Set([
-  'male','female','adult','child','teen','thin','muscular','pregnant',
-  'bg','fg','foreground','background','universal','mask',
+  'male',
+  'female',
+  'adult',
+  'child',
+  'teen',
+  'thin',
+  'muscular',
+  'pregnant',
+  'bg',
+  'fg',
+  'foreground',
+  'background',
+  'universal',
+  'mask',
 ]);
 const ANIM_CANDIDATES = new Set([
-  'walk','idle','combat_idle','run','jump','sit','climb','emote',
-  'thrust','slash','halfslash','backslash','shoot','hurt','spellcast','die',
+  'walk',
+  'idle',
+  'combat_idle',
+  'run',
+  'jump',
+  'sit',
+  'climb',
+  'emote',
+  'thrust',
+  'slash',
+  'halfslash',
+  'backslash',
+  'shoot',
+  'hurt',
+  'spellcast',
+  'die',
 ]);
 
 function parsePath(fullPath: string): {
-  slot: string; type: string; bodyType: string; anim: string; color: string;
+  slot: string;
+  type: string;
+  bodyType: string;
+  anim: string;
+  color: string;
 } | null {
   const rel = relative(SPRITESHEETS_DIR, fullPath);
   const parts = rel.split('/');
@@ -82,12 +162,18 @@ function parsePath(fullPath: string): {
   // Find body type boundary
   let bodyIdx = -1;
   for (let i = 1; i < parts.length - 1; i++) {
-    if (BODY_CANDIDATES.has(parts[i])) { bodyIdx = i; break; }
+    if (BODY_CANDIDATES.has(parts[i])) {
+      bodyIdx = i;
+      break;
+    }
   }
 
   let animIdx = -1;
   for (let i = 1; i < parts.length - 1; i++) {
-    if (ANIM_CANDIDATES.has(parts[i])) { animIdx = i; break; }
+    if (ANIM_CANDIDATES.has(parts[i])) {
+      animIdx = i;
+      break;
+    }
   }
 
   const fileBase = basename(parts[parts.length - 1], SOURCE_EXT);
@@ -108,7 +194,13 @@ function parsePath(fullPath: string): {
         typeParts.pop();
       }
     }
-    return { slot: SLOT_MAP[slot], type: typeParts.join('/'), bodyType, anim: fileBase, color: 'default' };
+    return {
+      slot: SLOT_MAP[slot],
+      type: typeParts.join('/'),
+      bodyType,
+      anim: fileBase,
+      color: 'default',
+    };
   }
 
   if (bodyIdx > 0) {
@@ -129,16 +221,22 @@ function parsePath(fullPath: string): {
 
   const typeParts = parts.slice(1, -1);
   const color = fileBase;
-  return { slot: SLOT_MAP[slot], type: typeParts.join('/'), bodyType: 'default', anim: 'idle', color };
+  return {
+    slot: SLOT_MAP[slot],
+    type: typeParts.join('/'),
+    bodyType: 'default',
+    anim: 'idle',
+    color,
+  };
 }
 
 function scoreEntry(p: { bodyType: string; anim: string; color: string }): number {
   const bi = BODY_TYPES.indexOf(p.bodyType);
   const ai = PREFERRED_ANIMS.indexOf(p.anim);
   const ci = PREFERRED_COLORS.indexOf(p.color);
-  return (bi >= 0 ? 100 - bi * 10 : 50)
-    + (ai >= 0 ? 100 - ai * 10 : 30)
-    + (ci >= 0 ? 50 - ci * 5 : 20);
+  return (
+    (bi >= 0 ? 100 - bi * 10 : 50) + (ai >= 0 ? 100 - ai * 10 : 30) + (ci >= 0 ? 50 - ci * 5 : 20)
+  );
 }
 
 // ── Collect ────────────────────────────────────────────────────────────────
@@ -147,7 +245,7 @@ function walkFiles(dir: string, ext: string): string[] {
   const results: string[] = [];
   const stack = [dir];
   while (stack.length) {
-    const c = stack.pop()!;
+    const c = stack.pop(); if (!c) continue;
     if (!existsSync(c)) continue;
     for (const e of readdirSync(c)) {
       const p = join(c, e);
@@ -159,7 +257,10 @@ function walkFiles(dir: string, ext: string): string[] {
 }
 
 function humanize(type: string): string {
-  return type.split('/').map(p => p.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())).join(' — ');
+  return type
+    .split('/')
+    .map((p) => p.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()))
+    .join(' — ');
 }
 
 console.log('🔍 Walking spritesheets directory...');
@@ -191,8 +292,8 @@ for (const [key, entry] of bestPerState) {
   const assetKey = `${slot}/${type}${btSuffix}`;
 
   // Track available states
-  if (!assetStates.has(assetKey)) assetStates.set(assetKey, new Set());
-  assetStates.get(assetKey)!.add(anim);
+  if (!assetStates.has(assetKey)) { assetStates.set(assetKey, new Set()); }
+  assetStates.get(assetKey)?.add(anim);
 
   // Only create one catalog entry per base asset key
   const existing = assets.find((a) => a.key === assetKey);
@@ -200,7 +301,9 @@ for (const [key, entry] of bestPerState) {
 
   assets.push({
     key: assetKey,
-    slot, type, bodyType,
+    slot,
+    type,
+    bodyType,
     sourcePath: entry.path,
     outputRel: `${slot}/${type.split('/').join('/')}${btSuffix}.${anim}.webp`,
     label: `${humanize(type)}${bodyType !== 'default' ? ` (${bodyType})` : ''}`,
@@ -209,19 +312,37 @@ for (const [key, entry] of bestPerState) {
 
 assets.sort((a, b) => a.key.localeCompare(b.key));
 
-const slots = new Set(assets.map(a => a.slot));
+const slots = new Set(assets.map((a) => a.slot));
 console.log(`✅ Found ${assets.length} unique asset types across ${slots.size} slots.`);
 
 // ── Catalog generation ────────────────────────────────────────────────────
 
-const slotOrder = ['head','body','hair','beard','eyes','facial','torso','legs','feet','dress','hat','cape','shoulders','neck','shield','weapon'];
+const slotOrder = [
+  'head',
+  'body',
+  'hair',
+  'beard',
+  'eyes',
+  'facial',
+  'torso',
+  'legs',
+  'feet',
+  'dress',
+  'hat',
+  'cape',
+  'shoulders',
+  'neck',
+  'shield',
+  'weapon',
+];
 const slotEntries = new Map<string, AssetEntry[]>();
 for (const a of assets) {
   if (!slotEntries.has(a.slot)) slotEntries.set(a.slot, []);
   slotEntries.get(a.slot)!.push(a);
 }
 const sortedSlots = [...slotEntries.entries()].sort((a, b) => {
-  const ai = slotOrder.indexOf(a[0]), bi = slotOrder.indexOf(b[0]);
+  const ai = slotOrder.indexOf(a[0]),
+    bi = slotOrder.indexOf(b[0]);
   if (ai >= 0 && bi >= 0) return ai - bi;
   if (ai >= 0) return -1;
   if (bi >= 0) return 1;
@@ -240,7 +361,9 @@ for (const [slot, entries] of sortedSlots) {
   const label = slot.charAt(0).toUpperCase() + slot.slice(1);
   lines.push(`  { slot: ${JSON.stringify(slot)}, label: ${JSON.stringify(label)}, variants: [`);
   for (const e of entries) {
-    lines.push(`    { assetId: ${JSON.stringify(e.key)}, label: ${JSON.stringify(e.label)}, shapeType: 'default' as const },`);
+    lines.push(
+      `    { assetId: ${JSON.stringify(e.key)}, label: ${JSON.stringify(e.label)}, shapeType: 'default' as const },`,
+    );
   }
   lines.push('  ] },');
 }
@@ -250,26 +373,28 @@ lines.push('');
 // Flat ID list per slot
 lines.push('export const LPC_ASSET_IDS_BY_SLOT: Record<string, string[]> = {');
 for (const [slot, entries] of sortedSlots) {
-  const ids = entries.map(e => e.key);
+  const ids = entries.map((e) => e.key);
   lines.push(`  ${JSON.stringify(slot)}: ${JSON.stringify(ids)},`);
 }
 lines.push('};');
 lines.push('');
 
 // Flat set of ALL generated asset IDs — no glob needed at runtime
-const allIds = assets.map(e => e.key);
+const allIds = assets.map((e) => e.key);
 lines.push('/** All generated asset IDs as a flat string array — verified at generation. */');
 lines.push(`export const ALL_GENERATED_ASSET_IDS: readonly string[] = ${JSON.stringify(allIds)};`);
 lines.push('');
 
 // AI prompt helper
 lines.push('export function getLpcCatalogPrompt(): string {');
-lines.push('  const parts: string[] = [\'Available LPC sprite components (asset IDs by slot):\'];');
+lines.push("  const parts: string[] = ['Available LPC sprite components (asset IDs by slot):'];");
 lines.push('  for (const [slot, ids] of Object.entries(LPC_ASSET_IDS_BY_SLOT)) {');
 lines.push("    parts.push(`  ${slot}: ${ids.join(', ')}`);");
 lines.push('  }');
-lines.push("  parts.push('\\\\nWhen generating a character appearance, return a JSON object: {\"lpcRecipe\": {\"head\": \"head/heads/human_male\", ...}}');");
-lines.push('  return parts.join(\"\\\\n\");');
+lines.push(
+  '  parts.push(\'\\\\nWhen generating a character appearance, return a JSON object: {"lpcRecipe": {"head": "head/heads/human_male", ...}}\');',
+);
+lines.push('  return parts.join("\\\\n");');
 lines.push('}');
 
 writeFileSync(OUTPUT_CATALOG, lines.join('\n'));
@@ -317,8 +442,13 @@ if (CONVERT) {
       const dir = dirname(m.dst);
       try {
         mkdirSync(dir, { recursive: true });
-        execSync(`convert "${m.src}" -quality ${WEBP_QUALITY} -define webp:lossless=false "${m.dst}"`, { stdio: 'pipe', timeout: 5000 });
-      } catch { /* skip failures */ }
+        execSync(
+          `convert "${m.src}" -quality ${WEBP_QUALITY} -define webp:lossless=false "${m.dst}"`,
+          { stdio: 'pipe', timeout: 5000 },
+        );
+      } catch {
+        /* skip failures */
+      }
     }
 
     done += chunk.length;
@@ -328,8 +458,12 @@ if (CONVERT) {
   console.log(`\n   Done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 
   // Summary
-  const totalKb = execSync(`du -sc "${OUTPUT_ASSETS_DIR}" 2>/dev/null`, { encoding: 'utf8' })
-    .split('\n').find(l => l.includes('total'))?.split('\t')[0]?.trim() || '?';
+  const totalKb =
+    execSync(`du -sc "${OUTPUT_ASSETS_DIR}" 2>/dev/null`, { encoding: 'utf8' })
+      .split('\n')
+      .find((l) => l.includes('total'))
+      ?.split('\t')[0]
+      ?.trim() || '?';
   console.log(`📦 Output: ${OUTPUT_ASSETS_DIR} (${totalKb} KB total)`);
 } else {
   console.log('💡 Run with --convert to convert all PNGs to WebP in parallel.');

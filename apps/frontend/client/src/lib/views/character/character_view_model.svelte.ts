@@ -5,13 +5,19 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
+import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import {
   CHARACTER_EXTRACTION_SYSTEM_PROMPT,
   CharacterExtractionSchema,
 } from '$lib/game/core/ai/prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/game/core/ai/prompts/dnd_creation';
-import { aiSettingsService, authService, characterCreationService, imageGenerationService, textGenerationService } from '$services';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
+import {
+  aiSettingsService,
+  authService,
+  characterCreationService,
+  imageGenerationService,
+  textGenerationService,
+} from '$services';
 
 // LPC Slot → index lookup (built at module init)
 const _LPC_SLOT_INDEX = new Map<string, number>();
@@ -19,7 +25,10 @@ const _LPC_VARIANT_MAP = new Map<string, string[]>();
 for (let i = 0; i < GENERATED_LPC_SLOTS.length; i++) {
   const slot = GENERATED_LPC_SLOTS[i];
   _LPC_SLOT_INDEX.set(slot.slot, i);
-  _LPC_VARIANT_MAP.set(slot.slot, slot.variants.map((v) => v.assetId));
+  _LPC_VARIANT_MAP.set(
+    slot.slot,
+    slot.variants.map((v) => v.assetId),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,10 +227,7 @@ export class CharacterViewModel
     if (!text.trim()) return;
 
     // Optimistically add user message to chat IMMEDIATELY
-    this.messages = [
-      ...this.messages,
-      { role: 'user' as const, content: text },
-    ];
+    this.messages = [...this.messages, { role: 'user' as const, content: text }];
 
     // Then get the AI response
     try {
@@ -453,9 +459,7 @@ export class CharacterViewModel
         }
 
         // Save to Firestore via personaService
-        const { personaService } = await import(
-          '$lib/services/persona/persona_repository.svelte'
-        );
+        const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
         try {
           // Try update first (if exists), fallback is OK — updatePersona throws on missing doc
           await personaService.updatePersona(persona.id, {
@@ -507,12 +511,35 @@ export class CharacterViewModel
     const ckptName = `${checkpoint}.safetensors`;
 
     const workflow = {
-      '3': { class_type: 'KSampler', inputs: { seed: Math.floor(Math.random() * 2 ** 32), steps: 25, cfg: 7.0, sampler_name: 'euler', scheduler: 'normal', denoise: 0.5, model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['11', 0] } },
+      '3': {
+        class_type: 'KSampler',
+        inputs: {
+          seed: Math.floor(Math.random() * 2 ** 32),
+          steps: 25,
+          cfg: 7.0,
+          sampler_name: 'euler',
+          scheduler: 'normal',
+          denoise: 0.5,
+          model: ['4', 0],
+          positive: ['6', 0],
+          negative: ['7', 0],
+          latent_image: ['11', 0],
+        },
+      },
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
-      '6': { class_type: 'CLIPTextEncode', inputs: { text: `${instruction}, same person, same face, high quality`, clip: ['4', 1] } },
-      '7': { class_type: 'CLIPTextEncode', inputs: { text: 'deformed, different person, blurry, low quality', clip: ['4', 1] } },
+      '6': {
+        class_type: 'CLIPTextEncode',
+        inputs: { text: `${instruction}, same person, same face, high quality`, clip: ['4', 1] },
+      },
+      '7': {
+        class_type: 'CLIPTextEncode',
+        inputs: { text: 'deformed, different person, blurry, low quality', clip: ['4', 1] },
+      },
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
-      '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'aikami-edit', images: ['8', 0] } },
+      '9': {
+        class_type: 'SaveImage',
+        inputs: { filename_prefix: 'aikami-edit', images: ['8', 0] },
+      },
       '10': { class_type: 'LoadImage', inputs: { image: imageName } },
       '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
     };
@@ -534,10 +561,12 @@ export class CharacterViewModel
       const historyResponse = await fetch(`/api/image/history/${promptId}`);
       if (!historyResponse.ok) continue;
 
-      const history = await historyResponse.json() as Record<string, unknown>;
+      const history = (await historyResponse.json()) as Record<string, unknown>;
       const entry = history[promptId] as Record<string, unknown> | undefined;
       const outputs = entry?.outputs as Record<string, unknown> | undefined;
-      const node9 = outputs?.['9'] as { images?: Array<{ filename: string; subfolder?: string }> } | undefined;
+      const node9 = outputs?.['9'] as
+        | { images?: Array<{ filename: string; subfolder?: string }> }
+        | undefined;
       const images = node9?.images;
 
       if (images && images.length > 0) {
@@ -612,8 +641,7 @@ export class CharacterViewModel
         persona.proficiencies = extractedObj.proficiencies as string[];
       if (extractedObj.languages)
         persona.languages = [...persona.languages, ...(extractedObj.languages as string[])];
-      if (extractedObj.equipment)
-        persona.equipment = extractedObj.equipment as string[];
+      if (extractedObj.equipment) persona.equipment = extractedObj.equipment as string[];
       if (extractedObj.lpcRecipe) {
         this.lpcRecipe = extractedObj.lpcRecipe as Record<string, string>;
       }

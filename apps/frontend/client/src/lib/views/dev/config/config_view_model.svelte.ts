@@ -19,9 +19,9 @@ import {
   type InstructTemplate,
   KOKORO_VOICES,
   type MemoryConfig,
+  VOICE_ENGINES,
   type VoiceArchetype,
   type VoiceConfig,
-  VOICE_ENGINES,
   type VoiceOption,
 } from '$lib/services/config/config_service.svelte';
 import {
@@ -35,16 +35,14 @@ import {
   PROVIDER_ENDPOINTS,
   type ProviderEndpoint,
 } from '$lib/services/config/provider_endpoints';
-import {
-  type CheckpointInfo,
-  imageGenerationService,
-} from '$services';
+import { type CheckpointInfo, imageGenerationService } from '$services';
 
 export type { ProviderEndpoint };
 export { PROVIDER_ENDPOINTS };
 
 // Re-export for the view
 import type { CheckpointInfo as _CheckpointInfo } from '$services';
+
 export type { CheckpointInfo };
 
 // ---------------------------------------------------------------------------
@@ -479,18 +477,14 @@ class ConfigViewModel
 
   setArchetypeVoice(archetypeId: string, voiceId: string): void {
     const archetypes = this.config.voice.voiceArchetypes ?? [];
-    const updated = archetypes.map((a) =>
-      a.id === archetypeId ? { ...a, voiceId } : a,
-    );
+    const updated = archetypes.map((a) => (a.id === archetypeId ? { ...a, voiceId } : a));
     configService.setVoiceConfig({ voiceArchetypes: updated });
     this.scheduleSave();
   }
 
   setArchetypeLabel(archetypeId: string, label: string): void {
     const archetypes = this.config.voice.voiceArchetypes ?? [];
-    const updated = archetypes.map((a) =>
-      a.id === archetypeId ? { ...a, label } : a,
-    );
+    const updated = archetypes.map((a) => (a.id === archetypeId ? { ...a, label } : a));
     configService.setVoiceConfig({ voiceArchetypes: updated });
     this.scheduleSave();
   }
