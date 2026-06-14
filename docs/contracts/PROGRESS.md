@@ -99,6 +99,7 @@
 | C-120 | View Folder Restructure & ViewModel Inheritance | ✅ completed |
 | C-121 | Start Menu & Optional Authentication | ✅ completed |
 | C-122 | Onboarding & Provider Gate | ✅ completed |
+| C-123 | Character Creation Flow | ✅ completed |
 
 ### C-119: Routing and Layout Simplification
 
@@ -329,5 +330,28 @@
 - Dialog doesn't persist state across page navigations — closing and reopening the Start Menu resets `showMissingProvidersDialog` to false.
 
 ---
+
+### C-123: Character Creation Flow
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/routes/setup/+page.svelte` — Replaced placeholder `<h1>` with `CharacterView` + `getCharacterViewModel()` instantiation
+- `apps/frontend/client/src/lib/views/character/create/character_view_model.svelte.ts` — Added `routerService` import; added `enterWorld()` to interface + implementation (saves character, sets as active persona, navigates to `/game`); extracted `_persistCharacter()` private method from `saveCharacter()` for reuse
+- `apps/frontend/client/src/lib/views/character/create/character_view.svelte` — Added "Enter World" button in TWEAK phase actions (alongside "Save Character"; changed Save Character button to `btn-outline`)
+
+**Deviations**:
+1. **Shared view between setup and dev routes**: The same `CharacterView` component is used by both `/setup` (production) and `/dev/character` (sandbox). The "Enter World" button appears in both — in the dev sandbox it navigates to `/game` which is acceptable.
+2. **setActivePersona in enterWorld**: The method calls `personaService.setActivePersona()` before navigating to `/game`. If the user is not logged in, this step is skipped (localStorage still has the character).
+
+**Design decisions**:
+1. **`_persistCharacter()` extracted**: The save-local + save-firestore logic was factored into a private method so both `saveCharacter()` (dev sandbox → character list) and `enterWorld()` (setup flow → game) reuse it.
+2. **SvelteKit client-side navigation**: Uses `routerService.goToRoute('game', ...)` for SPA navigation instead of `window.location.href` — preserves app state across the transition.
+3. **Non-blocking active persona set**: If `setActivePersona` fails (e.g., user not in Firestore yet), `enterWorld()` still navigates to `/game` with a warning — the character is at least in localStorage.
+
+**Known limitations**:
+- Dev sandbox also shows "Enter World" button (same shared view). Acceptable — it's a dev tool.
+- No loading/disabled state on "Enter World" button during save. Fast enough that it's not noticeable.
+- If Firestore save fails and user logs in later, the persona won't exist remotely. A future sync-on-login contract could address this.
 
 > *For granular execution logs of completed contracts, see [PROGRESS_ARCHIVE.md](./PROGRESS_ARCHIVE.md)*
