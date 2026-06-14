@@ -1,0 +1,102 @@
+<script lang="ts">
+  // apps/frontend/client/src/lib/views/start/start_view.svelte
+  import type { StartViewModelInterface } from './start_view_model.svelte';
+
+  let { viewModel }: { viewModel: StartViewModelInterface } = $props();
+</script>
+
+<div class="hero min-h-screen bg-base-200">
+  <div class="hero-content text-center">
+    <div class="max-w-md">
+      <!-- Title -->
+      <h1 class="text-5xl font-bold mb-2">Aikami</h1>
+      <p class="text-base-content/60 mb-8">A living world, powered by AI</p>
+
+      <!-- Menu Buttons -->
+      <div class="flex flex-col gap-3 w-64 mx-auto">
+        <!-- Start Game -->
+        <button class="btn btn-primary btn-lg" onclick={() => viewModel.startGame()}>
+          Start Game
+        </button>
+
+        <!-- Sign In / Sign Out -->
+        {#if viewModel.isSigningIn}
+          <button class="btn btn-outline btn-lg" disabled>
+            <span class="loading loading-spinner"></span>
+            {viewModel.isLoggedIn ? 'Signing out...' : 'Signing in...'}
+          </button>
+        {:else if viewModel.isLoggedIn}
+          <button class="btn btn-outline btn-lg" onclick={() => viewModel.signOut()}>
+            Sign Out ({viewModel.playerDisplayName})
+          </button>
+        {:else}
+          <button class="btn btn-outline btn-lg" onclick={() => viewModel.loginWithGoogle()}>
+            Sign In with Google
+          </button>
+        {/if}
+
+        <!-- Options -->
+        <button class="btn btn-ghost" onclick={() => viewModel.goToOptions()}>Options</button>
+
+        <!-- Credits -->
+        <button class="btn btn-ghost" onclick={() => viewModel.showCreditsModal()}>Credits</button>
+
+        <!-- Quit (Tauri only) -->
+        {#if viewModel.isTauri}
+          <button class="btn btn-ghost btn-sm mt-4" onclick={() => viewModel.quitApp()}>
+            Quit
+          </button>
+        {/if}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Credits Modal -->
+{#if viewModel.showCredits}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="modal modal-open"
+    role="button"
+    tabindex="0"
+    onclick={() => viewModel.hideCreditsModal()}
+    onkeydown={(e) => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        viewModel.hideCreditsModal();
+      }
+    }}
+  >
+    <div class="modal-box max-w-lg" role="dialog" aria-modal="true" aria-label="Credits">
+      <h3 class="text-lg font-bold mb-4">Credits</h3>
+
+      {#each viewModel.creditGroups as group}
+        <div class="mb-4">
+          <h4 class="font-semibold text-sm text-base-content/70 mb-2">
+            {group.heading}
+          </h4>
+          <ul class="space-y-2">
+            {#each group.items as item}
+              <li>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="link link-hover font-medium"
+                >
+                  {item.name}
+                </a>
+                <p class="text-xs text-base-content/50">
+                  {item.description}
+                </p>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/each}
+
+      <div class="modal-action">
+        <button class="btn btn-sm" onclick={() => viewModel.hideCreditsModal()}>Close</button>
+      </div>
+    </div>
+  </div>
+{/if}

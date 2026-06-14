@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Audit: 2026-06-08)
+## Status Summary (Audit: 2026-06-15)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -97,6 +97,7 @@
 | C-115 | Sandbox LPC Animation | ✅ completed |
 | C-117 | ECS Snapshot Serializer | ✅ completed |
 | C-120 | View Folder Restructure & ViewModel Inheritance | ✅ completed |
+| C-121 | Start Menu & Optional Authentication | ✅ completed |
 
 ### C-119: Routing and Layout Simplification
 
@@ -279,6 +280,27 @@
 1. **ProvidersViewModel exported as class**: Unlike the original `ConfigViewModel` (non-exported), `ProvidersViewModel` is `export class` to enable the `DevProvidersViewModel` override pattern.
 2. **DevProvidersViewModel overrides verifyApiKey + detectServices**: Mock mode toggles patch-panel behavior — when `useMockResponses` is true, network calls return simulated results. Other methods inherit production behavior via `super`.
 3. **Game canvas kept as `game_view.*` (not renamed)**: Filenames preserved — only directory isolation changed. `game/canvas/` accurately describes the fullscreen PixiJS game canvas view.
+
+---
+
+### C-121: Start Menu & Optional Authentication
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` — StartViewModel: extends BaseViewModel, exposes isLoggedIn/isTauri/isSigningIn/playerDisplayName/showCredits state, handles startGame/loginWithGoogle/signOut/goToOptions/quitApp actions, renders credit groups for modal
+- `apps/frontend/client/src/lib/views/start/start_view.svelte` — StartView: daisyUI hero layout with centered menu, Google Sign-In/Sign-Out button, Options/Credits navigation, Quit button (Tauri only), credits modal overlay
+
+**Files modified**:
+- `apps/frontend/client/src/routes/+page.svelte` — Replaced placeholder `<h1>Start Menu</h1>` with StartView + getStartViewModel() factory instantiation
+
+**Deviations**:
+1. **Credits displayed as modal, not separate route**: Contract says "routes to a credits page or opens a modal". Implemented as daisyUI modal within StartView — no new `/credits` route needed. Credit data reused from game/credits ViewModel.
+2. **Quit via `getCurrentWindow().close()` not `exit(0)`**: Contract mentions `@tauri-apps/plugin-process` / `exit(0)`, but existing codebase pattern (menu_view_model.svelte.ts) uses `getCurrentWindow().close()` from `@tauri-apps/api/window`. Followed existing convention for consistency.
+
+**Known limitations**:
+- No tests written for StartViewModel (contract didn't specify test hooks).
+- `goToRoute` requires explicit `{ queryParameters: undefined, pathParameters: undefined }` even for parameterless routes — a broader router type improvement would allow `{}`.
 
 ---
 
