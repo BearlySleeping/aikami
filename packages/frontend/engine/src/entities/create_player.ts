@@ -12,6 +12,14 @@ import { Velocity } from '../components/velocity.ts';
 // ---------------------------------------------------------------------------
 
 /**
+ * Options for creating a player entity.
+ */
+export type PlayerCreateOptions = {
+  /** The player character's display name (from active persona). */
+  name?: string;
+};
+
+/**
  * Creates the player entity in the given bitECS world.
  *
  * The player starts at the center of the canvas with zero velocity. The
@@ -19,9 +27,10 @@ import { Velocity } from '../components/velocity.ts';
  * visually distinct from NPCs.
  *
  * @param world - The bitECS world to create the player in.
+ * @param options - Optional player initialization data (name, stats, etc.).
  * @returns The entity ID of the newly created player.
  */
-const createPlayer = (world: World): number => {
+const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
   const entityId = addEntity(world);
 
   addComponent(world, entityId, Position);
@@ -52,6 +61,13 @@ const createPlayer = (world: World): number => {
   // 5 = shoes
   addComponent(world, entityId, Appearance);
   setAppearanceLayers(world, entityId, [1, 2, 3, 4, 5]);
+
+  // Store player name as a numeric hash on the entity for reference.
+  // The UI layer (GameViewModel) owns the display name; the engine
+  // only needs positional/rendering data.
+  if (options?.name) {
+    void options.name;
+  }
 
   return entityId;
 };

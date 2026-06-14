@@ -1,13 +1,7 @@
 // packages/shared/schemas/src/lib/database/character.ts
 import Type from 'typebox';
 import { AppearanceSchema } from './appearance.ts';
-import {
-  type AbilityType,
-  DEFAULT_SAVING_THROWS,
-  DEFAULT_SKILLS,
-  SavingThrowSchema,
-  SkillSchema,
-} from './skills.ts';
+import { DEFAULT_SAVING_THROWS, DEFAULT_SKILLS, SavingThrowSchema, SkillSchema } from './skills.ts';
 
 // ── Ability Scores ──────────────────────────────────────────────────────
 
