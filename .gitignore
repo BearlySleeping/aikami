@@ -275,3 +275,4 @@ game/assets/audio/
 .direnv/
 apps/frontend/client/src-tauri/target/
 examples/Universal-LPC-Spritesheet-Character-Generator/
+scripts/lpc/.lpc_manifest.json
