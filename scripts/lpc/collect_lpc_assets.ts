@@ -245,7 +245,8 @@ function walkFiles(dir: string, ext: string): string[] {
   const results: string[] = [];
   const stack = [dir];
   while (stack.length) {
-    const c = stack.pop(); if (!c) continue;
+    const c = stack.pop();
+    if (!c) continue;
     if (!existsSync(c)) continue;
     for (const e of readdirSync(c)) {
       const p = join(c, e);
@@ -292,7 +293,9 @@ for (const [key, entry] of bestPerState) {
   const assetKey = `${slot}/${type}${btSuffix}`;
 
   // Track available states
-  if (!assetStates.has(assetKey)) { assetStates.set(assetKey, new Set()); }
+  if (!assetStates.has(assetKey)) {
+    assetStates.set(assetKey, new Set());
+  }
   assetStates.get(assetKey)?.add(anim);
 
   // Only create one catalog entry per base asset key

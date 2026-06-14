@@ -1,6 +1,9 @@
 // apps/frontend/client/src/lib/data/lpc_renderer.ts
 // Single source of truth for LPC texture loading and frame extraction.
 // Used by: LPC dev page, sandbox, game engine, character creation preview.
+//
+// Assets are sourced from Firebase Storage. Set PUBLIC_LPC_USE_LOCAL=true
+// to fall back to local files under /src/lib/assets/lpc/ for development.
 
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { LpcAnimationState, type LpcDirection } from '$lib/data/lpc_models';
@@ -22,6 +25,43 @@ const _sheetCache = new Map<string, Texture>();
 const _sheetPromises = new Map<string, Promise<Texture>>();
 const _frameCache = new Map<string, Texture>();
 
+// ── Asset URL resolution ───────────────────────────────────────────────────
+
+/**
+ * Build the Firebase Storage base URL for LPC assets.
+ *
+ * In emulator mode, points to the local storage emulator on port 9198.
+ * In live modes, uses firebasestorage.googleapis.com with the project bucket.
+ */
+const getStorageBaseUrl = (): string => {
+  const mode = import.meta.env.PUBLIC_MODE ?? 'emulator';
+  const bucket =
+    import.meta.env.PUBLIC_FIREBASE_STORAGE_BUCKET ?? 'demo-aikami-emulator.appspot.com';
+
+  if (mode === 'emulator') {
+    return `http://localhost:9198/v0/b/${bucket}/o`;
+  }
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o`;
+};
+
+/**
+ * Build the full URL for an LPC asset file.
+ *
+ * When PUBLIC_LPC_USE_LOCAL is set, loads from the local filesystem
+ * (Vite dev server or static build). Otherwise loads from Firebase Storage.
+ */
+const buildLpcAssetUrl = (key: string): string => {
+  const useLocal = import.meta.env.PUBLIC_LPC_USE_LOCAL === 'true';
+
+  if (useLocal) {
+    return `/src/lib/assets/lpc/${key}.webp`;
+  }
+
+  const base = getStorageBaseUrl();
+  const encoded = encodeURIComponent(`lpc/${key}.webp`);
+  return `${base}/${encoded}?alt=media`;
+};
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
@@ -33,15 +73,19 @@ export async function loadLpcSheet(assetId: string, state: LpcAnimationState): P
   const key = `${assetId}.${stateSuffix}`;
 
   const cached = _sheetCache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const pending = _sheetPromises.get(key);
-  if (pending) return pending;
+  if (pending) {
+    return pending;
+  }
 
   const promise = (async () => {
     try {
       const { Assets } = await import('pixi.js');
-      const url = `/src/lib/assets/lpc/${key}.webp`;
+      const url = buildLpcAssetUrl(key);
       const texture = await Assets.load(url);
       texture.source.scaleMode = 'nearest';
       _sheetCache.set(key, texture);
@@ -72,7 +116,9 @@ export function extractLpcFrame(
   frameW = 64,
   frameH = 64,
 ): Texture | null {
-  if (sheet === Texture.EMPTY) return null;
+  if (sheet === Texture.EMPTY) {
+    return null;
+  }
 
   const columns = Math.max(1, Math.floor(sheet.width / frameW));
   const rows = Math.max(1, Math.floor(sheet.height / frameH));
@@ -82,11 +128,15 @@ export function extractLpcFrame(
   const x = col * frameW;
   const y = row * frameH;
 
-  if (x + frameW > sheet.width || y + frameH > sheet.height) return null;
+  if (x + frameW > sheet.width || y + frameH > sheet.height) {
+    return null;
+  }
 
   const cacheKey = `${sheet.uid}:${col}:${row}`;
   const cached = _frameCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const result = new Texture({
     source: sheet.source,
@@ -110,10 +160,14 @@ export async function getLpcFrameTexture(
   const frameKey = `${assetId}.${stateSuffix}:${frame}:${direction}`;
 
   const cached = _frameCache.get(frameKey);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const sheet = await loadLpcSheet(assetId, state);
-  if (!sheet || sheet === Texture.EMPTY) return null;
+  if (!sheet || sheet === Texture.EMPTY) {
+    return null;
+  }
 
   const result = extractLpcFrame(sheet, frame, direction);
   if (result) {
@@ -134,7 +188,9 @@ export async function createLpcSprite(
   zIndex: number,
 ): Promise<Sprite | null> {
   const texture = await getLpcFrameTexture(assetId, state, frame, direction);
-  if (!texture) return null;
+  if (!texture) {
+    return null;
+  }
 
   const sprite = new Sprite(texture);
   sprite.eventMode = 'none';
@@ -146,11 +202,14 @@ export async function createLpcSprite(
 }
 
 /**
- * Converts an asset ID + state to a file path (for engine/worker use).
+ * Converts an asset ID + state to a file path or storage URL.
+ *
+ * Respects PUBLIC_LPC_USE_LOCAL for local vs Firebase Storage loading.
  */
 export function getLpcAssetPath(assetId: string, state: LpcAnimationState): string {
   const stateSuffix = STATE_SUFFIX[state] ?? 'walk';
-  return `/src/lib/assets/lpc/${assetId}.${stateSuffix}.webp`;
+  const key = `${assetId}.${stateSuffix}`;
+  return buildLpcAssetUrl(key);
 }
 
 /** Clears all caches (useful for testing or memory pressure). */

@@ -276,3 +276,6 @@ game/assets/audio/
 apps/frontend/client/src-tauri/target/
 examples/Universal-LPC-Spritesheet-Character-Generator/
 scripts/lpc/.lpc_manifest.json
+
+# LPC assets — canonical source is Firebase Storage
+apps/frontend/client/src/lib/assets/lpc/

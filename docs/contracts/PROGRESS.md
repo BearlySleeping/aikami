@@ -97,6 +97,32 @@
 | C-115 | Sandbox LPC Animation | ✅ completed |
 | C-117 | ECS Snapshot Serializer | ✅ completed |
 
+### C-119: Routing and Layout Simplification
+
+**Status**: ✅ completed
+
+**Files deleted**:
+- `apps/frontend/client/src/routes/(authenticated)/` — entire directory (dashboard, game, settings, chat, npcs, personas)
+- `apps/frontend/client/src/routes/(unauthenticated)/` — entire directory (login, register)
+- `apps/frontend/client/src/routes/(public)/` — entire directory (about, auth/game)
+
+**Files created**:
+- `apps/frontend/client/src/routes/+page.svelte` — Root "Start Menu" placeholder
+- `apps/frontend/client/src/routes/game/+page.svelte` — "Fullscreen Game Canvas" placeholder (no inherited layout padding)
+- `apps/frontend/client/src/routes/settings/+page.svelte` — "Settings" placeholder
+- `apps/frontend/client/src/routes/setup/+page.svelte` — "Character & World Creation" placeholder
+
+**Files modified**:
+- `apps/frontend/client/src/lib/constants/routes.ts` — Updated settings routeId `/settings`, game routeId `/game` (flat routes); added `setup` route entry; retained legacy route entries (login, register, dashboard, chat, personas, npcs) for view compatibility until C-120
+
+**Deviations**:
+1. **Legacy route entries retained in routes.ts**: Contract Task 4 says to remove references to deleted routes. However, `src/lib/views/` files still reference `login`, `register`, `dashboard`, `chat`, `personas/create`, `personas`, `npcs` route names. Removing them would break typecheck. C-120 (view refactoring) will make these safe to remove. Only `about` was fully removed (no view references).
+
+**Known limitations**:
+- The `(authenticated)/+layout.svelte` (AppView/AppViewModel wrapper) was deleted with the route group. Views that previously inherited this layout (dashboard, game) no longer have the app shell chrome. C-120 will re-establish the shell in the root layout or per-route.
+- Placeholder pages are raw HTML — no Tailwind/DaisyUI styling, no ViewModel pattern. C-120 will add proper views.
+- `hooks.client.ts`, `hooks.server.ts`, `hooks.ts` unchanged (no auth guards to remove — the app didn't use SvelteKit auth redirects).
+
 ### C-118: Save/Load UI & Engine Boundary
 
 **Status**: ✅ completed

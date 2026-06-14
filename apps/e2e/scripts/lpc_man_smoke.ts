@@ -6,7 +6,9 @@ const E2E_DIR = resolve(import.meta.dirname, '..');
 
 console.log('📸 Capturing single LPC character screenshot...\n');
 
-const result = await $`bun x playwright test tests/client/lpc_man.spec.ts --project=client`.cwd(E2E_DIR).nothrow();
+const result = await $`bun x playwright test tests/client/lpc_man.spec.ts --project=client`
+  .cwd(E2E_DIR)
+  .nothrow();
 
 if (result.exitCode !== 0) {
   console.error('❌ Test failed');
