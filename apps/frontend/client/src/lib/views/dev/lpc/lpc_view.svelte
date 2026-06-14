@@ -97,6 +97,9 @@
               frame={viewModel.animationFrame}
               recipes={viewModel.recipes}
               showSprites={false}
+              showGrid={viewModel.showGridOverlay}
+              zoom={viewModel.zoom}
+              compositionFailed={viewModel.compositionFailed}
             />
           </div>
 
@@ -411,7 +414,6 @@
             {#each viewModel.activeLayers as layer, i (i)}
               {@const slotDef = viewModel.allSlots[layer.slotDefIndex]}
               {@const variant = slotDef?.variants[layer.variantIndex]}
-              {@const paletteHex = viewModel.getPaletteHex(i)}
               {@const isIsolated = viewModel.isolateLayerIndex >= 0 && i !== viewModel.isolateLayerIndex}
 
               <div
@@ -469,55 +471,6 @@
                     </select>
                   </label>
                 {/if}
-
-                <!-- Palette colour picker -->
-                <div class="border-t border-base-300 pt-2 flex flex-col gap-1.5">
-                  <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
-                    Palette Index: {layer.selectedPaletteIndex}
-                    <input
-                      type="range"
-                      class="range range-sm range-primary w-full mt-1"
-                      min="0"
-                      max={viewModel.PALETTE_DISPLAY_COUNT - 1}
-                      value={layer.selectedPaletteIndex}
-                      oninput={(e: Event) => {
-                      const target = e.target as HTMLInputElement;
-                      viewModel.setSelectedPaletteIndex(i, Number.parseInt(target.value, 10));
-                    }}
-                    >
-                  </label>
-
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="color"
-                      class="w-8 h-6 border border-base-300 rounded p-0 cursor-pointer bg-transparent"
-                      value="#{paletteHex}"
-                      oninput={(e: Event) => {
-                      const target = e.target as HTMLInputElement;
-                      viewModel.setPaletteColor(i, layer.selectedPaletteIndex, target.value.replace('#', ''));
-                    }}
-                    >
-                    <code
-                      class="text-xs font-mono text-base-content/70 bg-base-200 px-1.5 py-0.5 rounded"
-                      >#{paletteHex}</code
-                    >
-                  </div>
-
-                  <!-- Palette swatch strip (first 16 entries) -->
-                  <div class="flex gap-px flex-wrap">
-                    {#each layer.palette.slice(0, viewModel.PALETTE_DISPLAY_COUNT) as color, pIdx}
-                      <button
-                        class="w-[18px] h-[18px] border border-base-300 rounded-sm p-0 cursor-pointer hover:border-primary transition-transform hover:scale-115"
-                        class:border-white={pIdx === layer.selectedPaletteIndex}
-                        class:shadow-[0_0_4px_rgba(136,136,204,0.6)]={pIdx === layer.selectedPaletteIndex}
-                        style="background-color: #{color}"
-                        onclick={() => viewModel.setSelectedPaletteIndex(i, pIdx)}
-                        title="Index {pIdx}: #{color}"
-                        aria-label="Select palette index {pIdx}"
-                      ></button>
-                    {/each}
-                  </div>
-                </div>
               </div>
             {/each}
           </div>

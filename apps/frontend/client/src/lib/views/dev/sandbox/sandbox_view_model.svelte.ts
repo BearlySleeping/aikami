@@ -12,8 +12,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_path_mapper.ts';
-import { aiTextIntelligenceService } from '$services';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { textGenerationService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -144,15 +144,15 @@ class SandboxViewModel
 
       const SANDBOX_RECIPES: Record<number, import('@aikami/frontend/engine').LpcLayerRecipe> = {
         // Player
-        1: { slot: 'body', assetId: 'muscular', hexPalette: paletteBytes },
-        2: { slot: 'hair', assetId: 'plain/male', hexPalette: paletteBytes },
-        3: { slot: 'legs', assetId: 'pants/male', hexPalette: paletteBytes },
-        4: { slot: 'head', assetId: 'human/male', hexPalette: paletteBytes },
+        1: { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
+        2: { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
+        3: { slot: 'legs', assetId: 'legs/pants_male', hexPalette: paletteBytes },
+        4: { slot: 'head', assetId: 'head/heads/human_male', hexPalette: paletteBytes },
         // NPC
-        10: { slot: 'body', assetId: 'human/male', hexPalette: paletteBytes },
-        11: { slot: 'hair', assetId: 'plain/male', hexPalette: paletteBytes },
-        12: { slot: 'legs', assetId: 'pants/male', hexPalette: paletteBytes },
-        13: { slot: 'head', assetId: 'human/male', hexPalette: paletteBytes },
+        10: { slot: 'body', assetId: 'body/bodies_female', hexPalette: paletteBytes },
+        11: { slot: 'hair', assetId: 'hair/long_adult', hexPalette: paletteBytes },
+        12: { slot: 'legs', assetId: 'legs/pants_female', hexPalette: paletteBytes },
+        13: { slot: 'head', assetId: 'head/heads/human_female', hexPalette: paletteBytes },
       };
 
       const worldOptions: GameWorldOptions = {
@@ -269,7 +269,7 @@ class SandboxViewModel
     this.debug('dialog:stream-start', { npcName: npc.npcName });
 
     try {
-      await aiTextIntelligenceService.streamChat({
+      await textGenerationService.streamChat({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: 'Hello!' },

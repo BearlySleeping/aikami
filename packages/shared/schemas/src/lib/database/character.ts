@@ -1,58 +1,207 @@
 // packages/shared/schemas/src/lib/database/character.ts
 import Type from 'typebox';
 import { AppearanceSchema } from './appearance.ts';
-import { DEFAULT_SAVING_THROWS, DEFAULT_SKILLS, SavingThrowSchema, SkillSchema } from './skills.ts';
+import {
+  DEFAULT_SAVING_THROWS,
+  DEFAULT_SKILLS,
+  SavingThrowSchema,
+  SkillSchema,
+  type AbilityType,
+} from './skills.ts';
+
+// ── Ability Scores ──────────────────────────────────────────────────────
+
+export const AbilityScoresSchema = Type.Object(
+  {
+    strength: Type.Optional(
+      Type.Integer({ description: 'Strength Score (integer between 8 and 18)' }),
+    ),
+    dexterity: Type.Optional(
+      Type.Integer({ description: 'Dexterity Score (integer between 8 and 18)' }),
+    ),
+    constitution: Type.Optional(
+      Type.Integer({ description: 'Constitution Score (integer between 8 and 18)' }),
+    ),
+    intelligence: Type.Optional(
+      Type.Integer({ description: 'Intelligence Score (integer between 8 and 18)' }),
+    ),
+    wisdom: Type.Optional(
+      Type.Integer({ description: 'Wisdom Score (integer between 8 and 18)' }),
+    ),
+    charisma: Type.Optional(
+      Type.Integer({ description: 'Charisma Score (integer between 8 and 18)' }),
+    ),
+  },
+  { description: 'Ability Scores' },
+);
+
+export type AbilityScoresData = Type.Static<typeof AbilityScoresSchema>;
+
+// ── Alignment ──────────────────────────────────────────────────────────
+
+export const ALIGNMENTS = [
+  'Lawful Good',
+  'Neutral Good',
+  'Chaotic Good',
+  'Lawful Neutral',
+  'True Neutral',
+  'Chaotic Neutral',
+  'Lawful Evil',
+  'Neutral Evil',
+  'Chaotic Evil',
+] as const;
+
+export const AlignmentSchema = Type.Optional(
+  Type.String({
+    description:
+      'Alignment (one of: Lawful Good, Neutral Good, Chaotic Good, Lawful Neutral, True Neutral, Chaotic Neutral, Lawful Evil, Neutral Evil, Chaotic Evil)',
+  }),
+);
+
+export type Alignment = Type.Static<typeof AlignmentSchema>;
+
+// ── Race ────────────────────────────────────────────────────────────────
+
+export const RaceSchema = Type.Optional(
+  Type.String({ description: 'Character race/species (e.g., Elf, Dwarf, Tiefling)' }),
+);
+
+// ── Class ───────────────────────────────────────────────────────────────
+
+export const ClassSchema = Type.Optional(
+  Type.String({ description: 'Character class (e.g., Wizard, Rogue, Fighter)' }),
+);
+
+// ── Subclass ────────────────────────────────────────────────────────────
+
+export const SubclassSchema = Type.Optional(
+  Type.String({ description: 'Character subclass / specialization' }),
+);
+
+// ── Level ───────────────────────────────────────────────────────────────
+
+export const LevelSchema = Type.Optional(
+  Type.Integer({ description: 'Character Level (integer between 1 and 20)', minimum: 1, maximum: 20 }),
+);
+
+// ── Experience Points ───────────────────────────────────────────────────
+
+export const ExperiencePointsSchema = Type.Number({
+  description: 'Experience Points (non-negative integer)',
+  default: 0,
+});
+
+// ── Hit Points ──────────────────────────────────────────────────────────
+
+export const HitPointsSchema = Type.Integer({ description: 'Current Hit Points', default: 10 });
+
+export const HitPointsMaxSchema = Type.Optional(
+  Type.Integer({ description: 'Maximum Hit Points' }),
+);
+
+export const TemporaryHitPointsSchema = Type.Integer({
+  description: 'Temporary Hit Points',
+  default: 0,
+});
+
+// ── Armor Class / Speed / Initiative ────────────────────────────────────
+
+export const ArmorClassSchema = Type.Integer({ description: 'Armor Class', default: 10 });
+
+export const SpeedSchema = Type.Integer({ description: 'Speed (ft)', default: 30 });
+
+export const InitiativeSchema = Type.Optional(
+  Type.Integer({ description: 'Initiative modifier' }),
+);
+
+// ── Proficiency Bonus ───────────────────────────────────────────────────
+
+export const ProficiencyBonusSchema = Type.Optional(
+  Type.Integer({ description: 'Proficiency bonus (derived from level)' }),
+);
+
+// ── Saving Throws ───────────────────────────────────────────────────────
+
+export { SavingThrowSchema, DEFAULT_SAVING_THROWS } from './skills.ts';
+export type { SavingThrowData } from './skills.ts';
+
+// ── Skills ──────────────────────────────────────────────────────────────
+
+export { SkillSchema, DEFAULT_SKILLS } from './skills.ts';
+export type { SkillData } from './skills.ts';
+
+// ── Proficiencies ───────────────────────────────────────────────────────
+
+export const ProficienciesSchema = Type.Array(Type.String(), {
+  description: 'Proficiencies (weapons, armor, tools, etc.)',
+  default: [],
+});
+
+// ── Languages ───────────────────────────────────────────────────────────
+
+export const LanguagesSchema = Type.Array(Type.String(), {
+  description: 'Languages known',
+  default: ['Common'],
+});
+
+// ── Equipment / Inventory ───────────────────────────────────────────────
+
+export const EquipmentSchema = Type.Array(Type.String(), {
+  description: 'Equipment',
+  default: [],
+});
+
+export const InventorySchema = Type.Array(Type.String(), {
+  description: 'Inventory / carried items',
+  default: [],
+});
+
+// ── Personality / Ideals / Bonds / Flaws ────────────────────────────────
+
+export const PersonalityTraitsSchema = Type.Optional(
+  Type.String({ description: 'Personality Traits' }),
+);
+
+export const IdealsSchema = Type.Optional(Type.String({ description: 'Ideals' }));
+
+export const BondsSchema = Type.Optional(Type.String({ description: 'Bonds' }));
+
+export const FlawsSchema = Type.Optional(Type.String({ description: 'Flaws' }));
+
+// ── Background ──────────────────────────────────────────────────────────
+
+export const BackgroundSchema = Type.Optional(
+  Type.String({ description: 'Character background story / origin' }),
+);
+
+// ── Notes ───────────────────────────────────────────────────────────────
+
+export const NotesSchema = Type.Optional(
+  Type.String({ description: 'Additional Notes' }),
+);
+
+// ── Full Character Sheet (composed from sub-schemas) ───────────────────
 
 export const BaseCharacterSheetSchema = Type.Object(
   {
     name: Type.String({ description: 'Character Name (Required, max 100 characters)' }),
-    race: Type.Optional(Type.String({ description: 'Character Race' })),
-    class: Type.Optional(Type.String({ description: 'Character Class' })),
-    subclass: Type.Optional(Type.String({ description: 'Character Subclass (Optional)' })),
-    level: Type.Optional(
-      Type.Integer({ description: 'Character Level (integer between 1 and 20)' }),
-    ),
-    experiencePoints: Type.Number({
-      description: 'Experience Points (non-negative integer)',
-      default: 0,
-    }),
 
-    abilityScores: Type.Optional(
-      Type.Object(
-        {
-          strength: Type.Optional(
-            Type.Integer({ description: 'Strength Score (integer between 1 and 30)' }),
-          ),
-          dexterity: Type.Optional(
-            Type.Integer({ description: 'Dexterity Score (integer between 1 and 30)' }),
-          ),
-          constitution: Type.Optional(
-            Type.Integer({ description: 'Constitution Score (integer between 1 and 30)' }),
-          ),
-          intelligence: Type.Optional(
-            Type.Integer({ description: 'Intelligence Score (integer between 1 and 30)' }),
-          ),
-          wisdom: Type.Optional(
-            Type.Integer({ description: 'Wisdom Score (integer between 1 and 30)' }),
-          ),
-          charisma: Type.Optional(
-            Type.Integer({ description: 'Charisma Score (integer between 1 and 30)' }),
-          ),
-        },
-        { description: 'Ability Scores' },
-      ),
-    ),
+    race: RaceSchema,
+    class: ClassSchema,
+    subclass: SubclassSchema,
+    level: LevelSchema,
+    experiencePoints: ExperiencePointsSchema,
 
-    hitPoints: Type.Integer({ description: 'Hit Points', default: 10 }),
-    hitPointsMax: Type.Optional(Type.Integer({ description: 'Maximum Hit Points' })),
-    temporaryHitPoints: Type.Integer({ description: 'Temporary Hit Points', default: 0 }),
-    armorClass: Type.Integer({ description: 'Armor Class', default: 10 }),
-    speed: Type.Integer({ description: 'Speed', default: 30 }),
-    initiative: Type.Optional(Type.Integer({ description: 'Initiative modifier' })),
+    abilityScores: Type.Optional(AbilityScoresSchema),
 
-    proficiencyBonus: Type.Optional(
-      Type.Integer({ description: 'Proficiency bonus (derived from level)' }),
-    ),
+    hitPoints: HitPointsSchema,
+    hitPointsMax: HitPointsMaxSchema,
+    temporaryHitPoints: TemporaryHitPointsSchema,
+    armorClass: ArmorClassSchema,
+    speed: SpeedSchema,
+    initiative: InitiativeSchema,
+
+    proficiencyBonus: ProficiencyBonusSchema,
 
     savingThrows: Type.Array(SavingThrowSchema, {
       description: 'Saving throw proficiencies',
@@ -64,44 +213,22 @@ export const BaseCharacterSheetSchema = Type.Object(
       default: DEFAULT_SKILLS,
     }),
 
-    alignment: Type.Optional(
-      Type.String({
-        description:
-          'Alignment (one of: Lawful Good, Neutral Good, Chaotic Good, Lawful Neutral, Neutral, Chaotic Neutral, Lawful Evil, Neutral Evil, Chaotic Evil)',
-      }),
-    ),
-    background: Type.Optional(Type.String({ description: 'Background' })),
+    alignment: AlignmentSchema,
+    background: BackgroundSchema,
 
-    proficiencies: Type.Array(Type.String(), {
-      description: 'Proficiencies (Array of strings)',
-      default: [],
-    }),
-    languages: Type.Array(Type.String(), {
-      description: 'Languages (Array of strings)',
-      default: ['Common'],
-    }),
+    proficiencies: ProficienciesSchema,
+    languages: LanguagesSchema,
 
-    equipment: Type.Array(Type.String(), {
-      description: 'Equipment (Array of strings)',
-      default: [],
-    }),
-    inventory: Type.Array(Type.String(), {
-      description: 'Inventory (Array of strings)',
-      default: [],
-    }),
+    equipment: EquipmentSchema,
+    inventory: InventorySchema,
 
-    personalityTraits: Type.Optional(
-      Type.String({ description: 'Personality Traits (Optional, max 500 characters)' }),
-    ),
-    ideals: Type.Optional(Type.String({ description: 'Ideals (Optional, max 500 characters)' })),
-    bonds: Type.Optional(Type.String({ description: 'Bonds (Optional, max 500 characters)' })),
-    flaws: Type.Optional(Type.String({ description: 'Flaws (Optional, max 500 characters)' })),
+    personalityTraits: PersonalityTraitsSchema,
+    ideals: IdealsSchema,
+    bonds: BondsSchema,
+    flaws: FlawsSchema,
 
     appearance: Type.Optional(AppearanceSchema),
-
-    notes: Type.Optional(
-      Type.String({ description: 'Additional Notes (Optional, max 1000 characters)' }),
-    ),
+    notes: NotesSchema,
   },
   { description: 'D&D Character Sheet' },
 );

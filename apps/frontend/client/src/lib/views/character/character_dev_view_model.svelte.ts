@@ -113,18 +113,21 @@ export class CharacterDevViewModel extends CharacterViewModel {
     await super.initialize();
   }
 
-  override async generateCharacter(): Promise<void> {
+  // ── Dev: real AI-powered generation ─────────────────────────────────
+
+  /** Triggers real AI-powered character generation (delegates to parent). */
+  async dev(): Promise<void> {
+    await super.generateCharacter();
+  }
+
+  /** Triggers mock character generation — bypasses AI entirely. */
+  async mockGenerateCharacter(): Promise<void> {
     this.phase = 'GENERATING';
 
-    // Simulate a brief generation delay
     await new Promise((resolve) => setTimeout(resolve, 800));
 
-    // Inject mock persona directly — bypasses AI extraction
     characterCreationService.persona = { ...MOCK_CHARACTER };
-
-    // Inject mock avatar
     characterCreationService.avatarUrl = MOCK_AVATAR_URL;
-
     this.phase = 'TWEAK';
   }
 
