@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/character/character_view_model.test.ts
+// apps/frontend/client/src/lib/views/character/create/character_view_model.test.ts
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts

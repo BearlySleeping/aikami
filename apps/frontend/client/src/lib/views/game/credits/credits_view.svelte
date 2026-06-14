@@ -1,5 +1,5 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/credits_view.svelte
+  // apps/frontend/client/src/lib/views/game/credits/credits_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import type { CreditsViewModelInterface } from './credits_view_model.svelte.ts';
 

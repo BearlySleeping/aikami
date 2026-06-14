@@ -96,6 +96,7 @@
 | C-114 | Sandbox Engine Wiring | ✅ completed |
 | C-115 | Sandbox LPC Animation | ✅ completed |
 | C-117 | ECS Snapshot Serializer | ✅ completed |
+| C-120 | View Folder Restructure & ViewModel Inheritance | ✅ completed |
 
 ### C-119: Routing and Layout Simplification
 
@@ -243,6 +244,41 @@
 5. **`deleteSlot` only deletes Storage blob**: Data Connect delete mutation not yet implemented (requires schema change). Documented as TODO.
 
 **Known limitations**: `SaveSlot` upsert uses a composite key `uid_slotNumber`. Data Connect upsert semantics require the key to be declared in the schema, which may not be fully supported in all emulator versions. The `deleteSlot` method only removes the Storage blob — the Data Connect row remains until a `DeleteSaveSlot` mutation is added.
+
+### C-120: View Folder Restructure & ViewModel Inheritance
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte` — Production provider configuration view (moved from dev/config)
+- `apps/frontend/client/src/lib/views/settings/providers/providers_view_model.svelte.ts` — Production ProvidersViewModel (renamed from ConfigViewModel)
+- `apps/frontend/client/src/lib/views/settings/providers/providers_view_model.test.ts` — Tests for ProvidersViewModel (moved)
+- `apps/frontend/client/src/lib/views/dev/config/dev_providers_view_model.svelte.ts` — Dev sandbox override extending ProvidersViewModel
+
+**Files moved (restructured into subfolders)**:
+- `src/lib/views/game/game_view.*` → `src/lib/views/game/canvas/game_view.*`
+- `src/lib/views/game/menu_view.*` → `src/lib/views/game/menu/menu_view.*`
+- `src/lib/views/game/credits_view.*` → `src/lib/views/game/credits/credits_view.*`
+- `src/lib/views/game/options_view.*` → `src/lib/views/game/options/options_view.*`
+- `src/lib/views/character/character_*.*` → `src/lib/views/character/create/character_*.*`
+
+**Files deleted**:
+- `src/lib/views/dev/config/config_view.svelte` (moved to settings/providers)
+- `src/lib/views/dev/config/config_view_model.svelte.ts` (moved to settings/providers)
+- `src/lib/views/dev/config/config_view_model.test.ts` (moved to settings/providers)
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Updated relative import for `game_state_service` (one level deeper)
+- `apps/frontend/client/src/routes/(dev)/dev/config/+page.svelte` — Updated imports to new ProvidersView + DevProvidersViewModel
+- `apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte` — Updated imports to character/create/ paths
+
+**Deviations**:
+1. **Legacy route constants NOT removed from routes.ts**: Contract Task 3 says to clean up dead legacy routes. However, views still actively call `goToRoute()` with `login`, `register`, `dashboard`, `chat`, `personas/create`, `personas`, `npcs` route names. Removing them would break typecheck. The route page files were deleted in C-119 but the views were never updated to stop referencing them. This is a broader view-refactoring task beyond C-120 scope.
+
+**Design decisions**:
+1. **ProvidersViewModel exported as class**: Unlike the original `ConfigViewModel` (non-exported), `ProvidersViewModel` is `export class` to enable the `DevProvidersViewModel` override pattern.
+2. **DevProvidersViewModel overrides verifyApiKey + detectServices**: Mock mode toggles patch-panel behavior — when `useMockResponses` is true, network calls return simulated results. Other methods inherit production behavior via `super`.
+3. **Game canvas kept as `game_view.*` (not renamed)**: Filenames preserved — only directory isolation changed. `game/canvas/` accurately describes the fullscreen PixiJS game canvas view.
 
 ---
 
