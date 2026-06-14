@@ -13,26 +13,39 @@ import {
   type AdvancedOverrides,
   type ConfigState,
   configService,
+  DEFAULT_VOICE_ARCHETYPES,
   type GenerationParams,
   type ImageConfig,
   type InstructTemplate,
+  KOKORO_VOICES,
   type MemoryConfig,
+  type VoiceArchetype,
   type VoiceConfig,
+  VOICE_ENGINES,
+  type VoiceOption,
 } from '$lib/services/config/config_service.svelte';
 import {
   LocalServiceDetector,
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
-} from '$lib/services/config/local_service_detector';
+} from '$lib/services/config/local_service_detector.svelte';
 import {
   buildVerifyHeaders,
   buildVerifyUrl,
   PROVIDER_ENDPOINTS,
   type ProviderEndpoint,
 } from '$lib/services/config/provider_endpoints';
+import {
+  type CheckpointInfo,
+  imageGenerationService,
+} from '$services';
 
 export type { ProviderEndpoint };
 export { PROVIDER_ENDPOINTS };
+
+// Re-export for the view
+import type { CheckpointInfo as _CheckpointInfo } from '$services';
+export type { CheckpointInfo };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,6 +91,24 @@ export type ConfigViewModelInterface = BaseViewModelInterface & {
   readonly lastSaved: string;
   /** Verification status per provider ('idle' | 'checking' | 'valid' | 'invalid'). */
   readonly verificationStatus: Record<string, 'idle' | 'checking' | 'valid' | 'invalid'>;
+  /** Available ComfyUI checkpoints (loaded from the image service). */
+  readonly checkpoints: readonly CheckpointInfo[];
+  /** Currently selected ComfyUI checkpoint. */
+  readonly selectedCheckpoint: string;
+  /** Whether ComfyUI is detected and ready. */
+  readonly isImageGenReady: boolean;
+  /** Whether checkpoints are being loaded. */
+  readonly isDetectingCheckpoints: boolean;
+  /** Available TTS engines for the dropdown. */
+  readonly voiceEngines: ReadonlyArray<{ id: string; label: string }>;
+  /** Voice options for the currently selected engine. */
+  readonly availableVoices: readonly VoiceOption[];
+  /** Whether a test voice request is in progress. */
+  readonly isTestingVoice: boolean;
+  /** User-editable voice archetype → Kokoro ID mappings. */
+  readonly voiceArchetypes: readonly VoiceArchetype[];
+  /** Default voice archetypes (for reset reference). */
+  readonly defaultVoiceArchetypes: readonly VoiceArchetype[];
 
   /** Switches the active tab. */
   setActiveTab(tab: ConfigTab): void;
@@ -107,6 +138,20 @@ export type ConfigViewModelInterface = BaseViewModelInterface & {
   setModelField(index: number, field: string, value: string): void;
   /** Verifies a provider API key by fetching its models endpoint. */
   verifyApiKey(provider: string): Promise<void>;
+  /** Loads available ComfyUI checkpoints. */
+  detectCheckpoints(): Promise<void>;
+  /** Selects a ComfyUI checkpoint by ID. */
+  setCheckpoint(id: string): void;
+  /** Sends a test TTS request to hear the selected voice. */
+  testVoice(): Promise<void>;
+  /** Updates the Kokoro voice ID for a given archetype. */
+  setArchetypeVoice(archetypeId: string, voiceId: string): void;
+  /** Updates the label for a given archetype. */
+  setArchetypeLabel(archetypeId: string, label: string): void;
+  /** Adds a new voice archetype mapping. */
+  addArchetype(): void;
+  /** Removes a voice archetype mapping by ID. */
+  removeArchetype(archetypeId: string): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -142,6 +187,8 @@ class ConfigViewModel
   isDetecting = $state(false);
   isSaving = $state(false);
   lastSaved = $state('');
+  isDetectingCheckpoints = $state(false);
+  isTestingVoice = $state(false);
   verificationStatus: Record<string, 'idle' | 'checking' | 'valid' | 'invalid'> = $state({});
 
   private readonly _detector: LocalServiceDetectorInterface;
@@ -182,11 +229,52 @@ class ConfigViewModel
     return this._detector.status;
   }
 
+  get checkpoints(): readonly CheckpointInfo[] {
+    return imageGenerationService.checkpoints;
+  }
+
+  get selectedCheckpoint(): string {
+    return imageGenerationService.selectedCheckpoint;
+  }
+
+  get isImageGenReady(): boolean {
+    return imageGenerationService.isReady;
+  }
+
+  get voiceEngines(): ReadonlyArray<{ id: string; label: string }> {
+    return VOICE_ENGINES;
+  }
+
+  get voiceArchetypes(): readonly VoiceArchetype[] {
+    return this.config.voice.voiceArchetypes ?? [];
+  }
+
+  get defaultVoiceArchetypes(): readonly VoiceArchetype[] {
+    return DEFAULT_VOICE_ARCHETYPES;
+  }
+
+  get availableVoices(): readonly VoiceOption[] {
+    const engine = this.config.voice.engine;
+    if (engine === 'kokoro') {
+      return KOKORO_VOICES;
+    }
+    // For other engines, return an empty list — voices must be configured
+    // via the provider's dashboard or fetched dynamically.
+    return [];
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
     this.debug('initialize');
     await configService.load();
+
+    // Restore persisted checkpoint selection
+    const savedCheckpoint = configService.state.image.checkpoint;
+    if (savedCheckpoint) {
+      imageGenerationService.selectedCheckpoint = savedCheckpoint;
+    }
+
     this._detectServicesInBackground();
     await super.initialize();
   }
@@ -319,6 +407,107 @@ class ConfigViewModel
     } catch {
       this.verificationStatus = { ...this.verificationStatus, [provider]: 'invalid' };
     }
+  }
+
+  // ── Checkpoint detection ──────────────────────────────────────────────
+
+  async detectCheckpoints(): Promise<void> {
+    this.debug('detectCheckpoints');
+    this.isDetectingCheckpoints = true;
+
+    try {
+      await imageGenerationService.loadCheckpoints();
+    } finally {
+      this.isDetectingCheckpoints = false;
+    }
+  }
+
+  setCheckpoint(id: string): void {
+    imageGenerationService.selectedCheckpoint = id;
+    // Persist to ConfigService so it survives refresh
+    configService.setImageConfig({ checkpoint: id });
+    this.scheduleSave();
+  }
+
+  // ── Test voice ───────────────────────────────────────────────────────
+
+  async testVoice(): Promise<void> {
+    this.debug('testVoice');
+    this.isTestingVoice = true;
+
+    try {
+      const { engine, voiceId, speed } = this.config.voice;
+      const testText = 'Hello! This is a test of the selected voice.';
+
+      if (engine === 'kokoro') {
+        const response = await fetch('/api/voice/v1/audio/speech', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: testText,
+            model: 'tts-1',
+            response_format: 'mp3',
+            speed,
+            voice: voiceId,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          throw new Error(`TTS request failed (${response.status}): ${errorText}`);
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        await audio.play();
+        // Clean up the object URL after playback
+        audio.addEventListener('ended', () => URL.revokeObjectURL(audioUrl), { once: true });
+      } else {
+        // For other engines (elevenlabs, openai), playback is handled
+        // by the TTS service via the configured API key.
+        this.warn('testVoice: engine not yet supported for testing', { engine });
+      }
+    } catch (error) {
+      this.error('testVoice: failed', error);
+    } finally {
+      this.isTestingVoice = false;
+    }
+  }
+
+  // ── Voice archetype management ───────────────────────────────────────
+
+  setArchetypeVoice(archetypeId: string, voiceId: string): void {
+    const archetypes = this.config.voice.voiceArchetypes ?? [];
+    const updated = archetypes.map((a) =>
+      a.id === archetypeId ? { ...a, voiceId } : a,
+    );
+    configService.setVoiceConfig({ voiceArchetypes: updated });
+    this.scheduleSave();
+  }
+
+  setArchetypeLabel(archetypeId: string, label: string): void {
+    const archetypes = this.config.voice.voiceArchetypes ?? [];
+    const updated = archetypes.map((a) =>
+      a.id === archetypeId ? { ...a, label } : a,
+    );
+    configService.setVoiceConfig({ voiceArchetypes: updated });
+    this.scheduleSave();
+  }
+
+  addArchetype(): void {
+    const archetypes = this.config.voice.voiceArchetypes ?? [];
+    const id = `custom-${Date.now()}`;
+    const updated = [...archetypes, { id, label: 'Custom Voice', voiceId: 'af_heart' }];
+    configService.setVoiceConfig({ voiceArchetypes: updated });
+    this.scheduleSave();
+  }
+
+  removeArchetype(archetypeId: string): void {
+    const archetypes = this.config.voice.voiceArchetypes ?? [];
+    const updated = archetypes.filter((a) => a.id !== archetypeId);
+    configService.setVoiceConfig({ voiceArchetypes: updated });
+    this.scheduleSave();
   }
 
   // ── Private helpers ───────────────────────────────────────────────────

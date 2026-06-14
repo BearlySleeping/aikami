@@ -108,7 +108,11 @@ const defaultBarrelMock = () => ({
     setTextProvider: mock(() => {}),
   },
   characterTextStreamService: {},
-  aiTextIntelligenceService: {
+  imageGenerationService: {
+    isReady: true,
+    isDemoMode: () => false,
+  },
+  textGenerationService: {
     extractStructure: mock(
       async (options: {
         schema: Record<string, unknown>;

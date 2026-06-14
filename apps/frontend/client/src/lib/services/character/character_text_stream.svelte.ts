@@ -2,17 +2,17 @@
 //
 // Singleton service for streaming text generation used by the character
 // creation wizard. Delegates all SSE streaming and provider resolution to
-// the unified AiTextIntelligenceService.
+// the unified TextGenerationService.
 //
 // Refactored for C-080: removed raw fetch logic, replaced with
-// aiTextIntelligenceService.streamChat().
+// textGenerationService.streamChat().
 
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { aiTextIntelligenceService } from '../ai/ai_text_intelligence_service.svelte.ts';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,11 +67,11 @@ export class CharacterTextStreamService
     this.output = '';
 
     try {
-      this.info('generate:delegating-to-aiTextIntelligenceService', {
+      this.info('generate:delegating-to-textGenerationService', {
         promptLength: prompt.length,
       });
 
-      await aiTextIntelligenceService.streamChat({
+      await textGenerationService.streamChat({
         messages: [{ role: 'user', content: prompt }],
         signal,
         onChunk: (text: string) => {

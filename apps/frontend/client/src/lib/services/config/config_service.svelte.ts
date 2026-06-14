@@ -43,6 +43,62 @@ export type MemoryConfig = {
   longTermMemory: boolean;
 };
 
+// ---------------------------------------------------------------------------
+// Voice engine selection
+// ---------------------------------------------------------------------------
+
+/** Available TTS engines. */
+export const VOICE_ENGINES = [
+  { id: 'kokoro', label: 'Kokoro (local)', description: 'Local Kokoro TTS via Docker' },
+  { id: 'elevenlabs', label: 'ElevenLabs', description: 'Cloud-based TTS' },
+  { id: 'openai', label: 'OpenAI TTS', description: 'OpenAI cloud TTS' },
+] as const;
+
+/** TTS engine identifier. */
+export type VoiceEngine = (typeof VOICE_ENGINES)[number]['id'];
+
+/** A voice option displayed in the dropdown. */
+export type VoiceOption = {
+  /** Voice identifier (e.g. 'af_heart'). */
+  id: string;
+  /** Human-readable label. */
+  label: string;
+};
+
+/** All known Kokoro voices (mirrors the /v1/voices endpoint). */
+export const KOKORO_VOICES: readonly VoiceOption[] = [
+  // American English — Female
+  { id: 'af_heart', label: 'af_heart — Warm, natural (default)' },
+  { id: 'af_bella', label: 'af_bella — Expressive' },
+  { id: 'af_nova', label: 'af_nova — Clear' },
+  { id: 'af_sky', label: 'af_sky — Neutral, versatile' },
+  { id: 'af_sarah', label: 'af_sarah — Conversational' },
+  { id: 'af_nicole', label: 'af_nicole — Friendly' },
+  { id: 'af_alloy', label: 'af_alloy — Balanced' },
+  { id: 'af_jessica', label: 'af_jessica — Energetic' },
+  { id: 'af_river', label: 'af_river — Calm' },
+  // American English — Male
+  { id: 'am_adam', label: 'am_adam — Deep' },
+  { id: 'am_michael', label: 'am_michael — Clear' },
+  { id: 'am_echo', label: 'am_echo — Neutral' },
+  { id: 'am_eric', label: 'am_eric — Authoritative' },
+  { id: 'am_fenrir', label: 'am_fenrir — Distinctive' },
+  { id: 'am_liam', label: 'am_liam — Conversational' },
+  { id: 'am_onyx', label: 'am_onyx — Rich' },
+  { id: 'am_puck', label: 'am_puck — Expressive' },
+  { id: 'am_santa', label: 'am_santa — Warm' },
+  // British English — Female
+  { id: 'bf_emma', label: 'bf_emma — Clear, professional' },
+  { id: 'bf_isabella', label: 'bf_isabella — Warm' },
+  { id: 'bf_alice', label: 'bf_alice — Crisp' },
+  { id: 'bf_lily', label: 'bf_lily — Soft' },
+  // British English — Male
+  { id: 'bm_george', label: 'bm_george — Authoritative' },
+  { id: 'bm_lewis', label: 'bm_lewis — Smooth' },
+  { id: 'bm_daniel', label: 'bm_daniel — Calm' },
+  { id: 'bm_fable', label: 'bm_fable — Expressive' },
+] as const;
+
 /** Voice / TTS subsystem configuration. */
 export type VoiceConfig = {
   /** Selected TTS engine (e.g. 'kokoro', 'elevenlabs'). */
@@ -53,7 +109,42 @@ export type VoiceConfig = {
   speed: number;
   /** Pitch adjustment (-20–20). */
   pitch: number;
+  /** User-editable voice archetype → Kokoro ID mappings. */
+  voiceArchetypes: VoiceArchetype[];
 };
+
+// ---------------------------------------------------------------------------
+// Voice archetypes — human-friendly labels mapped to engine voice IDs
+// ---------------------------------------------------------------------------
+
+/** A named voice archetype mapped to a provider-specific voice ID. */
+export type VoiceArchetype = {
+  /** Unique archetype key (e.g. 'female-warm', 'male-deep'). */
+  id: string;
+  /** Human-readable label (e.g. 'Female — Warm'). */
+  label: string;
+  /** Provider-specific voice ID (e.g. 'af_heart' for Kokoro). */
+  voiceId: string;
+};
+
+/** Curated default voice archetypes mapped to Kokoro IDs. */
+export const DEFAULT_VOICE_ARCHETYPES: readonly VoiceArchetype[] = [
+  // ── Female ─────────────────────────────────────────────────────────
+  { id: 'female-warm', label: 'Female — Warm', voiceId: 'af_heart' },
+  { id: 'female-clear', label: 'Female — Clear', voiceId: 'af_nova' },
+  { id: 'female-expressive', label: 'Female — Expressive', voiceId: 'af_bella' },
+  { id: 'female-calm', label: 'Female — Calm', voiceId: 'af_river' },
+  { id: 'female-friendly', label: 'Female — Friendly', voiceId: 'af_nicole' },
+  { id: 'female-professional', label: 'Female — Professional (UK)', voiceId: 'bf_emma' },
+  // ── Male ───────────────────────────────────────────────────────────
+  { id: 'male-warm', label: 'Male — Warm', voiceId: 'am_santa' },
+  { id: 'male-clear', label: 'Male — Clear', voiceId: 'am_michael' },
+  { id: 'male-authoritative', label: 'Male — Authoritative', voiceId: 'bm_george' },
+  { id: 'male-deep', label: 'Male — Deep', voiceId: 'am_adam' },
+  { id: 'male-expressive', label: 'Male — Expressive', voiceId: 'am_puck' },
+  { id: 'male-conversational', label: 'Male — Conversational', voiceId: 'am_liam' },
+  { id: 'male-calm', label: 'Male — Calm (UK)', voiceId: 'bm_daniel' },
+] as const;
 
 /** Image generation subsystem configuration. */
 export type ImageConfig = {
@@ -114,6 +205,18 @@ export type GenerationParams = {
 export type AdvancedOverrides = {
   /** Thinking/reasoning level for DeepSeek/Claude models. */
   thinkingLevel: number;
+};
+
+/** Resolved text generation provider ready for API calls. */
+export type ResolvedTextProvider = {
+  /** Model identifier (e.g. 'openrouter/owl-alpha'). */
+  model: string;
+  /** Provider name (e.g. 'openrouter'). */
+  provider: string;
+  /** Base URL for the provider's API endpoint. */
+  endpoint: string;
+  /** API key for the resolved provider, or undefined if not configured. */
+  apiKey: string | undefined;
 };
 
 /** Top-level configuration state. */
@@ -177,6 +280,15 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   setInstructTemplate(template: InstructTemplate): void;
   /** Updates advanced overrides (partial merge). */
   setAdvancedOverrides(overrides: Partial<AdvancedOverrides>): void;
+
+  /**
+   * Resolves the active text generation provider from the current
+   * configuration state.
+   *
+   * Throws if no model is configured (neither preferredModel nor models
+   * array has an entry).
+   */
+  getActiveTextProvider(): ResolvedTextProvider;
 };
 
 // ---------------------------------------------------------------------------
@@ -198,6 +310,7 @@ const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   engine: 'kokoro',
   pitch: 0,
   speed: 1.0,
+  voiceArchetypes: [...DEFAULT_VOICE_ARCHETYPES],
   voiceId: 'af_heart',
 };
 
@@ -252,6 +365,8 @@ class ConfigService
 {
   state = $state<ConfigState>({ ...DEFAULT_STATE });
   isLoaded = $state(false);
+
+  private _envDefaultsInjected = false;
 
   // ── Persistence ───────────────────────────────────────────────────────
 
@@ -313,6 +428,9 @@ class ConfigService
         this.warn('load: failed to parse plain config');
       }
     }
+
+    // 3. Inject env defaults when no user config is present
+    this._injectEnvDefaults();
 
     this.isLoaded = true;
   }
@@ -388,6 +506,86 @@ class ConfigService
 
   setAdvancedOverrides(overrides: Partial<AdvancedOverrides>): void {
     this.state.advancedOverrides = { ...this.state.advancedOverrides, ...overrides };
+  }
+
+  // ── Text provider resolution ─────────────────────────────────────────
+
+  getActiveTextProvider(): ResolvedTextProvider {
+    // Lazy env injection — ensures defaults are available even if load()
+    // hasn't been called yet (e.g. first render before Config dashboard opens).
+    if (!this._envDefaultsInjected) {
+      this._envDefaultsInjected = true;
+      this._injectEnvDefaults();
+    }
+
+    const { preferredModel, models } = this.state;
+
+    let model = preferredModel;
+    let provider = 'openrouter';
+    let endpoint = '';
+
+    if (model && models.length > 0) {
+      const match = models.find((m) => m.model === model);
+      if (match) {
+        provider = match.provider || 'openrouter';
+        endpoint = match.endpoint || '';
+      }
+    } else if (models.length > 0) {
+      model = models[0].model;
+      provider = models[0].provider || 'openrouter';
+      endpoint = models[0].endpoint || '';
+    }
+
+    if (!model) {
+      throw new Error(
+        'No text generation provider configured. ' +
+          'Open the Config dashboard or set PUBLIC_OPENROUTER_MODEL in your .env file.',
+      );
+    }
+
+    return {
+      model,
+      provider,
+      endpoint,
+      apiKey: this.state.apiKeys[provider as ApiKeyProvider],
+    };
+  }
+
+  // ── Private: env helpers ─────────────────────────────────────────────
+
+  /**
+   * Injects defaults from environment variables when no user configuration
+   * has been persisted. User config from localStorage always wins.
+   */
+  private _injectEnvDefaults(): void {
+    if (this.state.preferredModel || this.state.models.length > 0) {
+      return;
+    }
+
+    const envModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
+    if (!envModel) {
+      return;
+    }
+
+    this.state.preferredModel = envModel;
+
+    const envKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
+    if (envKey) {
+      this.state.apiKeys = { ...this.state.apiKeys, openrouter: envKey };
+    }
+  }
+
+  /** Safely reads a Vite PUBLIC_* env var. Returns undefined in tests. */
+  private _readEnv(name: string): string | undefined {
+    try {
+      const env = (import.meta as unknown as Record<string, unknown>).env as
+        | Record<string, string>
+        | undefined;
+      const value = env?.[name];
+      return value && value.length > 0 ? value : undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 

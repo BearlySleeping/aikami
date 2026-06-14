@@ -293,6 +293,7 @@
         "@aikami/utils": "workspace:*",
         "bitecs": "^0.4.0",
         "pixi.js": "8.19.0",
+        "typebox": "1.2.8",
       },
     },
     "packages/frontend/repositories": {
@@ -310,6 +311,7 @@
       "name": "@aikami/frontend-services",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/frontend-dataconnect": "workspace:*",
         "@aikami/frontend-utils": "workspace:*",
         "@aikami/logger": "workspace:*",
         "@aikami/schemas": "workspace:*",
