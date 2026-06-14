@@ -1,5 +1,5 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/character/character_view.svelte
+  // apps/frontend/client/src/lib/views/character/create/character_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import type { CharacterViewModelInterface } from './character_view_model.svelte.ts';
 

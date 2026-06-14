@@ -1,13 +1,13 @@
 <script lang="ts">
+  import { getDevProvidersViewModel } from '$views/dev/config/dev_providers_view_model.svelte';
   // apps/frontend/client/src/routes/(dev)/dev/config/+page.svelte
-  import ConfigView from '$views/dev/config/config_view.svelte';
-  import { getConfigViewModel } from '$views/dev/config/config_view_model.svelte';
+  import ProvidersView from '$views/settings/providers/providers_view.svelte';
 
-  const viewModel = getConfigViewModel({
-    className: 'ConfigViewModel',
+  const viewModel = getDevProvidersViewModel({
+    className: 'DevProvidersViewModel',
   });
 
   viewModel.initialize();
 </script>
 
-<ConfigView {viewModel} />
+<ProvidersView {viewModel} />

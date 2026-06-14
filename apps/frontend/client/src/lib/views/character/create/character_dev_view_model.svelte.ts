@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/character/character_dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/character/create/character_dev_view_model.svelte.ts
 //
 // Dev sandbox override — injects mock data without hitting the AI backend.
 // NEVER import this file from production code or non-(dev) routes.
