@@ -100,6 +100,7 @@
 | C-121 | Start Menu & Optional Authentication | ✅ completed |
 | C-122 | Onboarding & Provider Gate | ✅ completed |
 | C-123 | Character Creation Flow | ✅ completed |
+| C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
 
 ### C-119: Routing and Layout Simplification
 
@@ -353,5 +354,38 @@
 - Dev sandbox also shows "Enter World" button (same shared view). Acceptable — it's a dev tool.
 - No loading/disabled state on "Enter World" button during save. Fast enough that it's not noticeable.
 - If Firestore save fails and user logs in later, the persona won't exist remotely. A future sync-on-login contract could address this.
+
+---
+
+### C-124: Game Engine Initialization & Overlay Base
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/routes/game/+page.svelte` — Replaced placeholder `<h1>Fullscreen Game Canvas</h1>` with `GameView` + `GameViewModel` instantiation
+- `apps/frontend/client/src/lib/views/game/canvas/game_view.svelte` — Refactored DOM to two-layer structure: `#game-canvas-container` (z-0, PixiJS canvas) and `#game-ui-layer` (z-10, `pointer-events-none`); all interactive UI elements (`pointer-events-auto`) live inside the UI layer
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Added `_loadActivePersona()` (Firestore → localStorage fallback); added `_personaPlayerName` `$state` for persona-backed display name; passes `playerData` to `GameWorld.initialize`; registers window `resize` handler → `GameWorld.resize()`; cleans up resize listener in `dispose()`
+- `packages/frontend/engine/src/game_world.ts` — Added `PlayerInitData`, `GameWorldInitializeOptions` types; `initialize()` accepts `playerData` and forwards to worker; added `resize(width, height)` method; `_spawnWorker` passes `playerData` through `INITIALIZE_ENGINE` message
+- `packages/frontend/engine/src/entities/create_player.ts` — Added `PlayerCreateOptions` type (optional `name`); `createPlayer()` accepts optional options object
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — `initializeEngine()` accepts optional `playerData: PlayerCreateOptions`; passes `playerData` to `createPlayer(world, playerData)`; `INITIALIZE_ENGINE` handler extracts `playerData` from message
+- `packages/frontend/engine/src/index.ts` — Exported `GameWorldInitializeOptions`, `PlayerInitData` types
+- `packages/shared/schemas/src/lib/database/character.ts` — Removed unused `AbilityType` import (pre-existing typecheck blocker)
+
+**Deviations**:
+1. **Persona fetching with localStorage fallback**: Contract says "fetch the active character from PersonaRepository." Implemented via `personaService.getActivePersona()` (Firestore) with localStorage fallback for non-logged-in users. Matches the MVP flow where auth is optional (C-121).
+2. **Player initialization via `INITIALIZE_ENGINE` message** (not post-init command): The contract says "Dispatch an event/command to the ECS to spawn the player." Instead of a new `SPAWN_PLAYER` command, player data is passed during engine initialization. The worker already creates the player entity — we inject the persona name at creation time rather than a two-phase create-then-update. Cleaner and avoids adding a new command type.
+3. **Resize handled in GameWorld, not view**: The contract says "Ensure the Svelte component handles resize." Implemented in the ViewModel (registers `window.resize` → `GameWorld.resize()`), not the view. The view is logicless per ViewModel pattern.
+4. **`BaseViewModelContainer` retained for lifecycle**: Contract diagram shows raw `<div>` wrappers without a container component. `BaseViewModelContainer` provides SSR-safe client-side initialization and automatic `dispose()` on unmount — kept for correctness.
+
+**Design decisions**:
+1. **`PlayerInitData` is a focused type**: Only carries `name` for MVP. Stats and appearance can be added to the type in future contracts (LPC rendering, combat stats injection).
+2. **`pointer-events-none` on UI layer, `pointer-events-auto` on children**: The `#game-ui-layer` div has `pointer-events-none` so clicks pass through to the canvas. Each interactive overlay (HUD, options dialog, NPC dialog, error, loading) explicitly sets `pointer-events-auto` — clicks on buttons work, clicks on empty space pass through to the game.
+3. **Window resize delegates to `GameWorld.resize()`**: Sets `app.renderer.resize(width, height)` — PixiJS handles canvas scaling internally. No manual CSS needed.
+4. **`_personaPlayerName` is a `$state` field**: Reactively updates the `playerDisplayName` getter when persona loads. Falls back to `authService.currentUser?.displayName` for logged-in users without a persona.
+
+**Known limitations**:
+- No test file for GameViewModel (existing test gap — the ViewModel had no tests before this contract).
+- Player sprite always uses default appearance (LPC body male, short hair, shirt, pants, shoes). Persona `lpcRecipe` is not yet applied to the player entity — requires future LPC pipeline contract.
+- `_activePersona` data is stored but only `name` is used. `abilityScores`, `appearance`, and other persona fields are available for future injection into combat stats or sprite rendering.
 
 > *For granular execution logs of completed contracts, see [PROGRESS_ARCHIVE.md](./PROGRESS_ARCHIVE.md)*
