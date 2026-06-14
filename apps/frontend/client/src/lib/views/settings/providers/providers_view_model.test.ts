@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/dev/config/config_view_model.test.ts
+// apps/frontend/client/src/lib/views/settings/providers/providers_view_model.test.ts
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
@@ -111,18 +111,18 @@ mock.module(DETECTOR_PATH, () => ({
 // Test setup
 // ---------------------------------------------------------------------------
 
-import type { ConfigTab, ConfigViewModelInterface } from './config_view_model.svelte.ts';
+import type { ConfigTab, ProvidersViewModelInterface } from './providers_view_model.svelte.ts';
 
-const getViewModel = async (): Promise<ConfigViewModelInterface> => {
-  const mod = await import('./config_view_model.svelte.ts');
-  return mod.getConfigViewModel({ className: 'ConfigViewModel' });
+const getViewModel = async (): Promise<ProvidersViewModelInterface> => {
+  const mod = await import('./providers_view_model.svelte.ts');
+  return mod.getProvidersViewModel({ className: 'ProvidersViewModel' });
 };
 
 // ---------------------------------------------------------------------------
 // Tests: C-079 — ConfigViewModel
 // ---------------------------------------------------------------------------
 
-describe('ConfigViewModel — C-079', () => {
+describe('ProvidersViewModel — C-079', () => {
   beforeEach(() => {
     mockConfigState = getDefaultConfig();
     mockIsLoaded = false;

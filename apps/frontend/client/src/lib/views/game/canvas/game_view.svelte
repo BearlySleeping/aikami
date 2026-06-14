@@ -1,5 +1,5 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/game_view.svelte
+  // apps/frontend/client/src/lib/views/game/canvas/game_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import type { GameViewModelInterface } from './game_view_model.svelte.ts';
 
