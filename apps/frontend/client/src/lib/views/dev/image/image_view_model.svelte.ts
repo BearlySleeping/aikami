@@ -28,13 +28,32 @@ const TAB_META: readonly ImageTabMeta[] = [
 // ---------------------------------------------------------------------------
 
 export const SAMPLERS = [
-  'euler', 'euler_ancestral', 'heun', 'heunpp2', 'dpm_2', 'dpm_2_ancestral',
-  'lms', 'dpmpp_2s_ancestral', 'dpmpp_2m', 'dpmpp_2m_sde', 'dpmpp_3m_sde',
-  'dpm_fast', 'dpm_adaptive', 'ddim', 'uni_pc', 'uni_pc_bh2',
+  'euler',
+  'euler_ancestral',
+  'heun',
+  'heunpp2',
+  'dpm_2',
+  'dpm_2_ancestral',
+  'lms',
+  'dpmpp_2s_ancestral',
+  'dpmpp_2m',
+  'dpmpp_2m_sde',
+  'dpmpp_3m_sde',
+  'dpm_fast',
+  'dpm_adaptive',
+  'ddim',
+  'uni_pc',
+  'uni_pc_bh2',
 ] as const;
 
 export const SCHEDULERS = [
-  'normal', 'karras', 'exponential', 'sgm_uniform', 'simple', 'ddim_uniform', 'beta',
+  'normal',
+  'karras',
+  'exponential',
+  'sgm_uniform',
+  'simple',
+  'ddim_uniform',
+  'beta',
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -54,7 +73,11 @@ export const EXPRESSIONS: readonly ExpressionDef[] = [
   { id: 'angry', label: 'Angry', prompt: 'angry expression, furious, rage, scowling' },
   { id: 'surprised', label: 'Surprised', prompt: 'surprised expression, shocked, wide eyes' },
   { id: 'laughing', label: 'Laughing', prompt: 'laughing expression, joyful, hearty laugh' },
-  { id: 'thoughtful', label: 'Thoughtful', prompt: 'thoughtful expression, pensive, contemplative' },
+  {
+    id: 'thoughtful',
+    label: 'Thoughtful',
+    prompt: 'thoughtful expression, pensive, contemplative',
+  },
   { id: 'flirty', label: 'Flirty', prompt: 'flirty expression, wink, playful smirk' },
 ] as const;
 
@@ -364,10 +387,7 @@ class ImageViewModel
 
   // ── Private: image upload ─────────────────────────────────────────────
 
-  private async _uploadImage(
-    dataUrl: string,
-    signal: AbortSignal,
-  ): Promise<string | null> {
+  private async _uploadImage(dataUrl: string, signal: AbortSignal): Promise<string | null> {
     this.generationStatus = 'Uploading image...';
     this.generationProgress = 2;
 
@@ -430,7 +450,7 @@ class ImageViewModel
       const historyResponse = await fetch(`/api/image/history/${promptId}`, { signal });
 
       if (historyResponse.ok) {
-        const history = await historyResponse.json() as Record<string, unknown>;
+        const history = (await historyResponse.json()) as Record<string, unknown>;
         const entry = history[promptId];
 
         if (entry) {
@@ -484,7 +504,21 @@ class ImageViewModel
     const ckptName = checkpoint ? `${checkpoint}.safetensors` : 'sd_xl_base_1.0.safetensors';
 
     return {
-      '3': { class_type: 'KSampler', inputs: { seed, steps, cfg, sampler_name: sampler, scheduler, denoise: 1, model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
+      '3': {
+        class_type: 'KSampler',
+        inputs: {
+          seed,
+          steps,
+          cfg,
+          sampler_name: sampler,
+          scheduler,
+          denoise: 1,
+          model: ['4', 0],
+          positive: ['6', 0],
+          negative: ['7', 0],
+          latent_image: ['5', 0],
+        },
+      },
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
       '5': { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
       '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
@@ -506,12 +540,36 @@ class ImageViewModel
     seed: number;
     denoise: number;
   }): Record<string, unknown> {
-    const { checkpoint, imageName, prompt, negative, steps, cfg, sampler, scheduler, seed, denoise } =
-      options;
+    const {
+      checkpoint,
+      imageName,
+      prompt,
+      negative,
+      steps,
+      cfg,
+      sampler,
+      scheduler,
+      seed,
+      denoise,
+    } = options;
     const ckptName = checkpoint ? `${checkpoint}.safetensors` : 'sd_xl_base_1.0.safetensors';
 
     return {
-      '3': { class_type: 'KSampler', inputs: { seed, steps, cfg, sampler_name: sampler, scheduler, denoise, model: ['4', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['11', 0] } },
+      '3': {
+        class_type: 'KSampler',
+        inputs: {
+          seed,
+          steps,
+          cfg,
+          sampler_name: sampler,
+          scheduler,
+          denoise,
+          model: ['4', 0],
+          positive: ['6', 0],
+          negative: ['7', 0],
+          latent_image: ['11', 0],
+        },
+      },
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
       '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
       '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },

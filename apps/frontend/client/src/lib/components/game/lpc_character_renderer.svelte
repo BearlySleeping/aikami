@@ -3,10 +3,9 @@
   // Stub — the LPC dev page does its own rendering via the view model.
   // This component was a parallel PixiJS renderer that used the legacy
   // static PNG pipeline. Now unused — kept as an empty container.
-  import type { LpcBatchManager } from '@aikami/frontend/engine';
-  import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
-  import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+  import type { LpcBatchManager, LpcLayerRecipe } from '@aikami/frontend/engine';
   import { getContext } from 'svelte';
+  import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
   import { LPC_BATCH_MANAGER_KEY, LPC_STAGE_CONTAINER_KEY } from './lpc_context_keys.ts';
 
   type Props = {

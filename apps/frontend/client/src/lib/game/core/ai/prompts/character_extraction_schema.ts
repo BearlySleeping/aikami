@@ -7,7 +7,6 @@
 //
 // Contract: C-081
 
-import Type from 'typebox';
 import {
   AbilityScoresSchema,
   AlignmentSchema,
@@ -15,6 +14,7 @@ import {
   ClassSchema,
   RaceSchema,
 } from '@aikami/schemas';
+import Type from 'typebox';
 import { getLpcCatalogPrompt } from '$lib/data/lpc_asset_catalog_generated';
 
 // ---------------------------------------------------------------------------
@@ -66,9 +66,7 @@ export const CharacterExtractionSchema = Type.Object(
     languages: Type.Optional(
       Type.Array(Type.String(), { description: 'Additional languages beyond Common' }),
     ),
-    equipment: Type.Optional(
-      Type.Array(Type.String(), { description: 'Starting equipment' }),
-    ),
+    equipment: Type.Optional(Type.Array(Type.String(), { description: 'Starting equipment' })),
     lpcRecipe: Type.Optional(
       Type.Record(Type.String(), Type.String(), {
         description:

@@ -65,16 +65,19 @@ export type GameViewModelInterface = BaseViewModelInterface & {
   readonly playerDisplayName: string;
 
   /**
+   * The canvas element that PixiJS renders into.
+   * Set by the View via bind:this — the ViewModel reacts via $effect.
+   */
+  canvasElement: HTMLCanvasElement | undefined;
+
+  /**
    * Sends a command to the game engine across the EngineBridge boundary.
    * All UI→Game communication flows through this method.
    */
   sendCommand(command: GameCommand): void;
 
-  /**
-   * Attaches the GameWorld to a canvas element and starts the engine.
-   * Called by the View after the canvas element is mounted.
-   */
-  attachCanvas(canvas: HTMLCanvasElement): Promise<void>;
+  /** Handles global keydown events — delegates Escape to toggleOptions. */
+  handleKeyDown(event: KeyboardEvent): void;
 
   /** Closes the options overlay and resumes the game. */
   closeOptions(): void;
@@ -128,6 +131,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   saveSlotNumber = $state<number>(1);
 
   /**
+   * Canvas element that PixiJS renders into — set by the View via bind:this.
+   * A registered $effect watches this and initializes the game world when set.
+   */
+  canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+
+  /**
    * The logged-in player's display name.
    * Derived from authService — updates reactively when auth state changes.
    */
@@ -136,16 +145,10 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   /** Cached bridge instance — created lazily on first use. */
-  private bridge: EngineBridge | undefined;
+  private _bridge: EngineBridge | undefined;
 
   /** Cached GameWorld instance — created lazily after bridge init. */
-  private gameWorld: GameWorld | undefined;
-
-  /**
-   * Canvas element passed in before the bridge finished initializing.
-   * When the bridge becomes ready, auto-attach to this canvas.
-   */
-  private pendingCanvas: HTMLCanvasElement | undefined;
+  private _gameWorld: GameWorld | undefined;
 
   /** Singleton game state service for persisting context data. */
   private readonly gameStateService = GameStateService.create({
@@ -160,38 +163,38 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       // `BaseViewModelContainer` ensures `initialize()` runs only client-side.
       const { createEngineBridge } = await import('@aikami/frontend/engine');
 
-      this.bridge = createEngineBridge();
+      this._bridge = createEngineBridge();
 
       // Register bridge event listeners
-      this.bridge.on('NPC_DIALOG_START', (event) => {
+      this._bridge.on('NPC_DIALOG_START', (event) => {
         this.activeDialog = {
           npcName: event.npcName,
           dialog: event.dialog,
         };
       });
 
-      this.bridge.on('NPC_DIALOG_END', () => {
+      this._bridge.on('NPC_DIALOG_END', () => {
         this.activeDialog = undefined;
       });
 
-      this.bridge.on('GAME_READY', () => {
+      this._bridge.on('GAME_READY', () => {
         this.isGameReady = true;
       });
 
-      this.bridge.on('GAME_ERROR', (event) => {
+      this._bridge.on('GAME_ERROR', (event) => {
         this.gameError = event.message;
       });
 
-      this.bridge.on('PLAYER_POSITION_CHANGED', (event) => {
+      this._bridge.on('PLAYER_POSITION_CHANGED', (event) => {
         this.playerScene = event.scene;
       });
 
-      this.bridge.on('SCENE_LOADED', (event) => {
+      this._bridge.on('SCENE_LOADED', (event) => {
         this.playerScene = event.sceneId;
       });
 
       // ── Spatial context events ──
-      this.bridge.on('CONTEXT_ENTERED', (event) => {
+      this._bridge.on('CONTEXT_ENTERED', (event) => {
         const entry: ActiveContextEntry = {
           entityId: event.entityId,
           npcId: event.contextPayload.npcId,
@@ -205,19 +208,26 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
         this.gameStateService.addActiveContext(entry);
       });
 
-      this.bridge.on('CONTEXT_EXITED', (event) => {
+      this._bridge.on('CONTEXT_EXITED', (event) => {
         // Update ViewModel's reactive state
         this.activeContexts = this.activeContexts.filter((ctx) => ctx.entityId !== event.entityId);
         // Persist in game state service
         this.gameStateService.removeActiveContext(event.entityId);
       });
 
-      // ── Auto-attach if canvas arrived before bridge was ready ──
-      if (this.pendingCanvas) {
-        const canvas = this.pendingCanvas;
-        this.pendingCanvas = undefined;
-        await this.attachCanvasNow(canvas);
-      }
+      // ── Reactive canvas attachment via $effect ──
+      // This replaces the old pendingCanvas pattern. When the View binds
+      // the canvas element, this $effect fires and initializes the game world.
+      this.registerEffectRoot(() => {
+        $effect(() => {
+          const canvas = this.canvasElement;
+          if (canvas && this._bridge) {
+            void this._attachCanvasNow(canvas);
+          }
+        });
+      });
+
+      await super.initialize();
     } catch (error) {
       this.debug('Failed to initialize game bridge', error);
     }
@@ -225,38 +235,27 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   /** @inheritdoc */
   sendCommand(command: GameCommand): void {
-    if (!this.bridge) {
+    if (!this._bridge) {
       return;
     }
 
-    this.bridge.send(command);
+    this._bridge.send(command);
   }
 
-  /**
-   * Attaches the GameWorld to a canvas element and starts the engine.
-   *
-   * Called by the View after the canvas element is mounted in the DOM.
-   * This method is NOT part of the public interface — it is called
-   * exclusively by the GameView.svelte via the internal reference.
-   *
-   * @param canvas - The HTML canvas element for PixiJS to render into.
-   */
-  async attachCanvas(canvas: HTMLCanvasElement): Promise<void> {
-    // Bridge not ready yet — store canvas and attach when initialize completes
-    if (!this.bridge) {
-      this.pendingCanvas = canvas;
-      return;
+  /** @inheritdoc */
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.toggleOptions();
     }
-
-    await this.attachCanvasNow(canvas);
   }
 
   /**
    * Internal: creates the GameWorld and attaches to the canvas.
-   * Assumes this.bridge is already initialized.
+   * Assumes this._bridge is already initialized.
    */
-  private async attachCanvasNow(canvas: HTMLCanvasElement): Promise<void> {
-    const bridge = this.bridge;
+  private async _attachCanvasNow(canvas: HTMLCanvasElement): Promise<void> {
+    const bridge = this._bridge;
     if (!bridge) {
       return;
     }
@@ -266,8 +265,8 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
       const initialPayload = consumePendingGameLoad();
 
-      this.gameWorld = GameWorld.create({ className: 'GameWorld', bridge });
-      await this.gameWorld.initialize({
+      this._gameWorld = GameWorld.create({ className: 'GameWorld', bridge });
+      await this._gameWorld.initialize({
         canvas,
         width: canvas.clientWidth,
         height: canvas.clientHeight,
@@ -282,8 +281,8 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   /** @inheritdoc */
   closeOptions(): void {
     this.showOptions = false;
-    if (this.gameWorld) {
-      this.gameWorld.setInputLocked(false);
+    if (this._gameWorld) {
+      this._gameWorld.setInputLocked(false);
     }
   }
 
@@ -298,8 +297,8 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
    */
   toggleOptions(): void {
     this.showOptions = !this.showOptions;
-    if (this.gameWorld) {
-      this.gameWorld.setInputLocked(this.showOptions);
+    if (this._gameWorld) {
+      this._gameWorld.setInputLocked(this.showOptions);
     }
   }
 
@@ -310,7 +309,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   /** @inheritdoc */
   async saveGame(slotNumber: number): Promise<void> {
-    if (!this.gameWorld || this.isSaving) {
+    if (!this._gameWorld || this.isSaving) {
       return;
     }
 
@@ -324,7 +323,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     this.saveMessage = undefined;
 
     try {
-      const payload = await this.gameWorld.snapshotWorld();
+      const payload = await this._gameWorld.snapshotWorld();
 
       await gameStateSyncService.saveGame({
         uid,
@@ -347,13 +346,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   /** @inheritdoc */
   override async dispose(): Promise<void> {
-    if (this.gameWorld) {
-      this.gameWorld.destroy();
-      this.gameWorld = undefined;
+    if (this._gameWorld) {
+      this._gameWorld.destroy();
+      this._gameWorld = undefined;
     }
 
-    this.bridge = undefined;
-    this.pendingCanvas = undefined;
+    this._bridge = undefined;
     this.isGameReady = false;
 
     await super.dispose();
