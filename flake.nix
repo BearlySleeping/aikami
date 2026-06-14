@@ -89,7 +89,7 @@
           openssl
           glib-networking
           libayatana-appindicator
-          nodePackages.sharp
+          google-cloud-sdk
 ];
 
         # nix-direnv location — used by .envrc on subsequent loads to
