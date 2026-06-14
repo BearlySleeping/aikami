@@ -16,10 +16,7 @@ import {
   LPC_BATCH_MANAGER_KEY,
   LPC_STAGE_CONTAINER_KEY,
 } from '$lib/components/game/lpc_context_keys';
-import {
-  ANIMATION_STATE_OPTIONS,
-  DIRECTION_OPTIONS,
-} from '$lib/data/lpc_asset_catalog';
+import { ANIMATION_STATE_OPTIONS, DIRECTION_OPTIONS } from '$lib/data/lpc_asset_catalog';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 import {
@@ -315,7 +312,11 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       const variant = slotDef.variants[layer.variantIndex];
       if (!variant) continue;
 
-      result.push({ slot: slotDef.slot, assetId: variant.assetId, hexPalette: new Uint8Array(1024) });
+      result.push({
+        slot: slotDef.slot,
+        assetId: variant.assetId,
+        hexPalette: new Uint8Array(1024),
+      });
     }
 
     return result;
@@ -431,7 +432,11 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           [LpcAnimationState.Die]: 'hurt',
         };
         const stateSuffix = stateMap[currentState] ?? 'walk';
-        const texture = await this._loadSheetTexture('', slotDef.slot, `${variant.assetId}.${stateSuffix}`);
+        const texture = await this._loadSheetTexture(
+          '',
+          slotDef.slot,
+          `${variant.assetId}.${stateSuffix}`,
+        );
         if (!texture || texture === Texture.EMPTY) return;
 
         // Extract frame from spritesheet
@@ -439,7 +444,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         const rows = Math.max(1, Math.floor(texture.height / 64));
 
         const col = currentFrame % columns;
-        const row = rows > 1 ? (currentDirection % rows) : 0;
+        const row = rows > 1 ? currentDirection % rows : 0;
         const x = col * 64;
         const y = row * 64;
 
@@ -699,9 +704,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         this._updateGridOverlay();
       });
       $effect(() => {
-        void this.activeLayers
-          .map((l) => `${l.slotDefIndex}:${l.variantIndex}`)
-          .join(',');
+        void this.activeLayers.map((l) => `${l.slotDefIndex}:${l.variantIndex}`).join(',');
         void this.animationState;
         void this.facingDirection;
         void this.animationFrame;

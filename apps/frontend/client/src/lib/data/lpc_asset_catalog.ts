@@ -9,11 +9,24 @@ import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 
 /** Shape type for procedural mock sheet generation. */
 export type LpcMockShapeType =
-  | 'humanoid' | 'elf' | 'skeleton'
-  | 'mohawk' | 'long_braid' | 'curly_afro' | 'short_crop'
-  | 'chainmail' | 'leather_vest' | 'robe' | 'plate_armor'
-  | 'plate_greaves' | 'cloth_skirt' | 'tattered_pants'
-  | 'broadsword' | 'spear' | 'wood_bow' | 'shield'
+  | 'humanoid'
+  | 'elf'
+  | 'skeleton'
+  | 'mohawk'
+  | 'long_braid'
+  | 'curly_afro'
+  | 'short_crop'
+  | 'chainmail'
+  | 'leather_vest'
+  | 'robe'
+  | 'plate_armor'
+  | 'plate_greaves'
+  | 'cloth_skirt'
+  | 'tattered_pants'
+  | 'broadsword'
+  | 'spear'
+  | 'wood_bow'
+  | 'shield'
   | 'default';
 
 /** A single variant within an LPC equipment/body slot. */
@@ -54,8 +67,5 @@ import { getLpcAssetPath as _getLpcAssetPath } from '$lib/data/lpc_renderer';
  * Asset path resolver for the sandbox/game engine.
  * Delegates to the shared LPC renderer.
  */
-export const getLpcAssetPath = (
-  _slot: string,
-  assetId: string,
-  state: LpcAnimationState,
-): string => _getLpcAssetPath(assetId, state);
+export const getLpcAssetPath = (_slot: string, assetId: string, state: LpcAnimationState): string =>
+  _getLpcAssetPath(assetId, state);

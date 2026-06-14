@@ -3,7 +3,7 @@
 // Used by: LPC dev page, sandbox, game engine, character creation preview.
 
 import { Rectangle, Sprite, Texture } from 'pixi.js';
-import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { LpcAnimationState, type LpcDirection } from '$lib/data/lpc_models';
 
 // ── State mapping ──────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ export function extractLpcFrame(
   const rows = Math.max(1, Math.floor(sheet.height / frameH));
 
   const col = frame % columns;
-  const row = rows > 1 ? (direction % rows) : 0;
+  const row = rows > 1 ? direction % rows : 0;
   const x = col * frameW;
   const y = row * frameH;
 

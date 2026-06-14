@@ -422,7 +422,9 @@
                       <option value={v.id}>{v.label}</option>
                     {/each}
                   {:else}
-                    <option value={viewModel.config.voice.voiceId}>{viewModel.config.voice.voiceId}</option>
+                    <option value={viewModel.config.voice.voiceId}>
+                      {viewModel.config.voice.voiceId}
+                    </option>
                   {/if}
                 </select>
               </div>
@@ -489,16 +491,22 @@
                 </button>
               </div>
               <p class="text-xs text-[#938ea1] mb-3">
-                Map human-friendly voice labels to provider-specific IDs. These appear in
-                voice selectors throughout the app.
+                Map human-friendly voice labels to provider-specific IDs. These appear in voice
+                selectors throughout the app.
               </p>
 
               <div class="overflow-x-auto">
                 <table class="table table-xs w-full">
                   <thead>
                     <tr class="text-[#938ea1]">
-                      <th class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider w-1/3">Archetype</th>
-                      <th class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider">Kokoro Voice ID</th>
+                      <th
+                        class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider w-1/3"
+                      >
+                        Archetype
+                      </th>
+                      <th class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider">
+                        Kokoro Voice ID
+                      </th>
                       <th class="w-10"></th>
                     </tr>
                   </thead>
@@ -516,7 +524,7 @@
                                 viewModel.setArchetypeLabel(arch.id, newLabel);
                               }
                             }}
-                          />
+                          >
                         </td>
                         <td>
                           <select
@@ -550,8 +558,8 @@
 
               {#if viewModel.voiceArchetypes.length === 0}
                 <p class="text-xs text-[#938ea1] italic mt-2">
-                  No archetypes defined. Click <span class="text-[#cabeff]">+ Add</span> to
-                  create one.
+                  No archetypes defined. Click <span class="text-[#cabeff]">+ Add</span> to create
+                  one.
                 </p>
               {/if}
             </div>
@@ -563,9 +571,7 @@
           <!-- Checkpoint Detection -->
           <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
             <div class="flex items-center justify-between mb-4">
-              <h2
-                class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff]"
-              >
+              <h2 class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff]">
                 ComfyUI Checkpoints
               </h2>
               <div class="flex items-center gap-3">
@@ -609,8 +615,7 @@
                     <div class="flex items-center justify-between">
                       <span>{ckpt.description}</span>
                       {#if ckpt.id === viewModel.selectedCheckpoint}
-                        <span
-                          class="font-['JetBrains_Mono'] text-[10px] text-[#00e3fd]"
+                        <span class="font-['JetBrains_Mono'] text-[10px] text-[#00e3fd]"
                           >✓ Selected</span
                         >
                       {/if}
