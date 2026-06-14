@@ -101,6 +101,7 @@
 | C-122 | Onboarding & Provider Gate | ✅ completed |
 | C-123 | Character Creation Flow | ✅ completed |
 | C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
+| C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
 
 ### C-119: Routing and Layout Simplification
 
@@ -389,3 +390,36 @@
 - `_activePersona` data is stored but only `name` is used. `abilityScores`, `appearance`, and other persona fields are available for future injection into combat stats or sprite rendering.
 
 > *For granular execution logs of completed contracts, see [PROGRESS_ARCHIVE.md](./PROGRESS_ARCHIVE.md)*
+
+### C-125: Game UI Overlay Architecture & State Sync
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — `GameUIViewModel`: manages `activeOverlay: 'NONE' | 'PAUSE_MENU' | 'DIALOGUE' | 'COMBAT'` reactive state; `handleKeyDown` captures Escape to toggle pause menu; `resumeGame()`/`quitToMainMenu()`/`goToSettings()` methods; receives `gameViewModel: GameViewModelInterface` for engine control (pauseEngine/resumeEngine)
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Overlay router inside `#game-ui-layer`: `<svelte:window onkeydown>` delegates to ViewModel; `{#if}` renders `PauseMenuOverlay` when `activeOverlay === 'PAUSE_MENU'`; DIALOGUE and COMBAT stubs out of scope
+- `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu_overlay.svelte` — Pause menu component: semi-transparent `bg-base-300/80 backdrop-blur` overlay with centered card; "Resume Game" (primary), "Settings" (outline, navigates to /settings), "Quit to Main Menu" (ghost/error, navigates to /)
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Removed inline overlay state (`showOptions`, `isSaving`, `saveMessage`, `saveSlotNumber`) and methods (`handleKeyDown`, `closeOptions`, `toggleOptions`, `goToDashboard`, `setSaveSlotNumber`, `saveGame`); removed `gameStateService` field and import; removed `gameStateSyncService`/`routerService` imports; added `pauseEngine()`/`resumeEngine()` to interface and implementation (delegates to `GameWorld.pause()`/`resume()` + `setInputLocked`)
+- `apps/frontend/client/src/lib/views/game/canvas/game_view.svelte` — Removed inline options overlay (Resume/Back to PWA/Save section); removed `<svelte:window onkeydown>`; added `GameUIView` component inside `#game-ui-layer` with `gameUIViewModel` prop; kept HUD, NPC Dialog, Error, Loading state as persistent UI
+- `apps/frontend/client/src/routes/game/+page.svelte` — Instantiated `GameUIViewModel` with `gameViewModel` reference; passed `gameUIViewModel` prop to `GameView`
+
+**Deviations**:
+1. **Escape key handling moved from GameViewModel to GameUIViewModel**: Contract says "GameUIViewModel captures the Escape key". Previously handled in `GameViewModel.handleKeyDown` → `toggleOptions`. Now `<svelte:window onkeydown>` lives in `GameUIView`, which delegates to `GameUIViewModel.handleKeyDown` → `_togglePauseMenu`. This aligns with the architecture: GameViewModel manages engine lifecycle, GameUIViewModel manages overlay routing.
+2. **Engine pause/resume added to GameViewModel interface**: Contract says "If captured in Svelte, it must tell the ECS to pause the physics/entities." Added `pauseEngine()`/`resumeEngine()` to `GameViewModelInterface` which call `GameWorld.pause()`/`resume()` + `setInputLocked`. Previously only `setInputLocked` was called without actually pausing the tick loop.
+3. **Save functionality removed from UI**: Contract specifies pause menu has Resume, Settings, Quit to Main Menu — no save. Removed save UI (slot selector, save button, save message) and save state from `GameViewModelInterface`. Save infrastructure (ECS serializer, GameStateSyncService, Firebase Storage) remains intact in packages — only the ViewModel bridge was removed. A future contract can re-expose save in the pause menu.
+4. **Settings navigates to `/settings`**: Contract says "can just be a placeholder button". Implemented as navigation to the existing settings route — more useful than a no-op.
+
+**Design decisions**:
+1. **GameUIViewModel receives GameViewModel via constructor**: Follows the ViewModel pattern — `GameUIViewModelOptions` has `gameViewModel: GameViewModelInterface`. The ViewModel calls `pauseEngine()`/`resumeEngine()` on the game ViewModel, which delegates to `GameWorld`. No direct GameWorld access from GameUIViewModel.
+2. **GameUIView is a pure Svelte component, no BaseViewModelContainer**: `GameUIView` lives inside `game_view.svelte`'s existing `BaseViewModelContainer` — it doesn't need its own lifecycle management. Keyboard handling is via `<svelte:window onkeydown>`.
+3. **PauseMenuOverlay uses callback props, not a ViewModel**: Simple presentational component — `onResume`, `onSettings`, `onQuit` callbacks delegate to GameUIViewModel methods. No state of its own.
+4. **`{#if}` over `{#switch}`**: Contract allows either. Used `{#if}` because only PAUSE_MENU is implemented — DIALOGUE and COMBAT are out of scope. Switch would require explicit stub rendering.
+5. **DIALOGUE and COMBAT overlay types defined but not rendered**: `GameOverlayType` union includes all four states for future use. GameUIView only renders PAUSE_MENU — the other states are type-safe future hook points.
+
+**Known limitations**:
+- No tests written for `GameUIViewModel` — contract didn't specify test hooks and ViewModel tests are light in this area.
+- Save functionality is not accessible from the pause menu — must be re-added via a future contract.
+- Settings button navigates away from the game (to `/settings`) — no in-game settings overlay yet.
+- No animation/transition on overlay mount/unmount — instant show/hide.

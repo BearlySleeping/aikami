@@ -7,14 +7,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import {
-  authService,
-  consumePendingGameLoad,
-  gameStateSyncService,
-  routerService,
-} from '$services';
+import { authService, consumePendingGameLoad } from '$services';
 import type { ActiveContextEntry } from '$types';
-import { GameStateService } from '../../../services/game/game_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // GameViewModel — Svelte 5 ViewModel for the game canvas
@@ -53,21 +47,6 @@ export type GameViewModelInterface = BaseViewModelInterface & {
    */
   readonly activeContexts: ActiveContextEntry[];
 
-  /** Whether the options overlay is visible. */
-  readonly showOptions: boolean;
-
-  /** Whether a save operation is currently in progress. */
-  readonly isSaving: boolean;
-
-  /**
-   * User feedback message for save operations.
-   * Set to a success/error string after saveGame completes, cleared on next save.
-   */
-  readonly saveMessage: string | undefined;
-
-  /** The currently selected save slot number (1-indexed). */
-  readonly saveSlotNumber: number;
-
   /** The logged-in player's display name, or 'Unknown' if not available. */
   readonly playerDisplayName: string;
 
@@ -83,29 +62,11 @@ export type GameViewModelInterface = BaseViewModelInterface & {
    */
   sendCommand(command: GameCommand): void;
 
-  /** Handles global keydown events — delegates Escape to toggleOptions. */
-  handleKeyDown(event: KeyboardEvent): void;
+  /** Pauses the game engine (stops the tick loop). Called when an overlay opens. */
+  pauseEngine(): void;
 
-  /** Closes the options overlay and resumes the game. */
-  closeOptions(): void;
-
-  /** Toggles the options overlay and locks/unlocks game input. */
-  toggleOptions(): void;
-
-  /** Navigates back to the PWA dashboard. */
-  goToDashboard(): Promise<void>;
-
-  /**
-   * Saves the current game state to the cloud.
-   * Serializes the ECS world, uploads to Firebase Storage,
-   * and upserts the SaveSlot metadata row.
-   *
-   * @param slotNumber - The save slot number (1-indexed).
-   */
-  saveGame(slotNumber: number): Promise<void>;
-
-  /** Sets the selected save slot number. Called by the View on slot change. */
-  setSaveSlotNumber(slotNumber: number): void;
+  /** Resumes the game engine (restarts the tick loop). Called when an overlay closes. */
+  resumeEngine(): void;
 };
 
 /**
@@ -128,14 +89,6 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   gameError = $state<string | undefined>(undefined);
 
   activeContexts: ActiveContextEntry[] = $state([]);
-
-  showOptions = $state<boolean>(false);
-
-  isSaving = $state<boolean>(false);
-
-  saveMessage = $state<string | undefined>(undefined);
-
-  saveSlotNumber = $state<number>(1);
 
   /**
    * Canvas element that PixiJS renders into — set by the View via bind:this.
@@ -168,12 +121,6 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   /** Window resize handler cleanup function. */
   private _resizeCleanup: (() => void) | undefined;
-
-  /** Singleton game state service for persisting context data. */
-  private readonly gameStateService = GameStateService.create({
-    uid: 'game-viewmodel',
-    className: 'GameStateService',
-  });
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
@@ -223,15 +170,11 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
         };
         // Update ViewModel's reactive state
         this.activeContexts = [...this.activeContexts, entry];
-        // Persist in game state service
-        this.gameStateService.addActiveContext(entry);
       });
 
       this._bridge.on('CONTEXT_EXITED', (event) => {
         // Update ViewModel's reactive state
         this.activeContexts = this.activeContexts.filter((ctx) => ctx.entityId !== event.entityId);
-        // Persist in game state service
-        this.gameStateService.removeActiveContext(event.entityId);
       });
 
       // ── Load active persona for player name + data ──
@@ -262,14 +205,6 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     }
 
     this._bridge.send(command);
-  }
-
-  /** @inheritdoc */
-  handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      this.toggleOptions();
-    }
   }
 
   /**
@@ -358,68 +293,18 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   /** @inheritdoc */
-  closeOptions(): void {
-    this.showOptions = false;
+  pauseEngine(): void {
+    if (this._gameWorld) {
+      this._gameWorld.pause();
+      this._gameWorld.setInputLocked(true);
+    }
+  }
+
+  /** @inheritdoc */
+  resumeEngine(): void {
     if (this._gameWorld) {
       this._gameWorld.setInputLocked(false);
-    }
-  }
-
-  /** @inheritdoc */
-  async goToDashboard(): Promise<void> {
-    await routerService.navigateToApp();
-  }
-
-  /**
-   * Toggles the options overlay and locks/unlocks game input.
-   * Called when the user presses Escape.
-   */
-  toggleOptions(): void {
-    this.showOptions = !this.showOptions;
-    if (this._gameWorld) {
-      this._gameWorld.setInputLocked(this.showOptions);
-    }
-  }
-
-  /** @inheritdoc */
-  setSaveSlotNumber(slotNumber: number): void {
-    this.saveSlotNumber = slotNumber;
-  }
-
-  /** @inheritdoc */
-  async saveGame(slotNumber: number): Promise<void> {
-    if (!this._gameWorld || this.isSaving) {
-      return;
-    }
-
-    const uid = authService.uid;
-    if (!uid) {
-      this.saveMessage = 'You must be signed in to save.';
-      return;
-    }
-
-    this.isSaving = true;
-    this.saveMessage = undefined;
-
-    try {
-      const payload = await this._gameWorld.snapshotWorld();
-
-      await gameStateSyncService.saveGame({
-        uid,
-        slot: slotNumber,
-        payload,
-        metadata: {
-          lastLocationName: this.playerScene,
-        },
-      });
-
-      this.saveMessage = `Game saved to slot ${slotNumber}.`;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.saveMessage = `Save failed: ${message}`;
-      this.debug('saveGame:error', { slotNumber, error: message });
-    } finally {
-      this.isSaving = false;
+      this._gameWorld.resume();
     }
   }
 
