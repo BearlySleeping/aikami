@@ -89,7 +89,7 @@ let detectAllCalls = 0;
 let detectServiceCalls: string[] = [];
 
 const DETECTOR_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/local_service_detector';
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/local_service_detector.svelte';
 
 mock.module(DETECTOR_PATH, () => ({
   LocalServiceDetector: class {

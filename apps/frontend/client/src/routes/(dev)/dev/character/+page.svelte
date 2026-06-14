@@ -11,6 +11,14 @@
   /** Dev tools actions wired to CharacterDevViewModel sandbox methods. */
   const devActions = [
     {
+      label: 'Dev Generate (AI)',
+      onClick: () => viewModel.dev(),
+    },
+    {
+      label: 'Mock Generate',
+      onClick: () => viewModel.mockGenerateCharacter(),
+    },
+    {
       label: 'Force Error State',
       onClick: () => viewModel.forceErrorState(),
     },

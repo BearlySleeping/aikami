@@ -1,6 +1,7 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/dev/config/config_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import { KOKORO_VOICES } from '$lib/services/config/config_service.svelte';
   import type { ConfigTab, ConfigViewModelInterface } from './config_view_model.svelte.ts';
 
   type Props = {
@@ -385,6 +386,7 @@
             </h2>
 
             <div class="grid grid-cols-2 gap-4">
+              <!-- Engine dropdown -->
               <div class="form-control">
                 <div class="label py-1">
                   <span
@@ -392,13 +394,17 @@
                     >Engine</span
                   >
                 </div>
-                <input
-                  type="text"
-                  class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+                <select
+                  class="select select-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
                   value={viewModel.config.voice.engine}
-                  oninput={(e: Event) => viewModel.setField('voice', 'engine', (e.target as HTMLInputElement).value)}
+                  onchange={(e: Event) => viewModel.setField('voice', 'engine', (e.target as HTMLSelectElement).value)}
                 >
+                  {#each viewModel.voiceEngines as eng}
+                    <option value={eng.id}>{eng.label}</option>
+                  {/each}
+                </select>
               </div>
+              <!-- Voice ID dropdown -->
               <div class="form-control">
                 <div class="label py-1">
                   <span
@@ -406,12 +412,19 @@
                     >Voice ID</span
                   >
                 </div>
-                <input
-                  type="text"
-                  class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+                <select
+                  class="select select-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
                   value={viewModel.config.voice.voiceId}
-                  oninput={(e: Event) => viewModel.setField('voice', 'voiceId', (e.target as HTMLInputElement).value)}
+                  onchange={(e: Event) => viewModel.setField('voice', 'voiceId', (e.target as HTMLSelectElement).value)}
                 >
+                  {#if viewModel.availableVoices.length > 0}
+                    {#each viewModel.availableVoices as v}
+                      <option value={v.id}>{v.label}</option>
+                    {/each}
+                  {:else}
+                    <option value={viewModel.config.voice.voiceId}>{viewModel.config.voice.voiceId}</option>
+                  {/if}
+                </select>
               </div>
               <div class="form-control">
                 <div class="label py-1">
@@ -448,11 +461,177 @@
                 >
               </div>
             </div>
+
+            <!-- Test Voice button -->
+            <div class="mt-4">
+              <button
+                class="btn btn-sm btn-outline border-[#cabeff]/30 text-[#cabeff] hover:bg-[#cabeff]/10 font-['JetBrains_Mono'] text-xs uppercase tracking-wider"
+                onclick={() => viewModel.testVoice()}
+                disabled={viewModel.isTestingVoice}
+              >
+                {viewModel.isTestingVoice ? 'Playing...' : '🔊 Test Voice'}
+              </button>
+            </div>
+
+            <!-- Voice Archetype Mappings -->
+            <div class="mt-6">
+              <div class="flex items-center justify-between mb-3">
+                <h2
+                  class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff]"
+                >
+                  Voice Archetypes
+                </h2>
+                <button
+                  class="btn btn-xs btn-ghost text-[#938ea1] hover:text-[#cabeff] font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider"
+                  onclick={() => viewModel.addArchetype()}
+                >
+                  + Add
+                </button>
+              </div>
+              <p class="text-xs text-[#938ea1] mb-3">
+                Map human-friendly voice labels to provider-specific IDs. These appear in
+                voice selectors throughout the app.
+              </p>
+
+              <div class="overflow-x-auto">
+                <table class="table table-xs w-full">
+                  <thead>
+                    <tr class="text-[#938ea1]">
+                      <th class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider w-1/3">Archetype</th>
+                      <th class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider">Kokoro Voice ID</th>
+                      <th class="w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each viewModel.voiceArchetypes as arch (arch.id)}
+                      <tr class="hover:bg-white/[0.03]">
+                        <td>
+                          <input
+                            type="text"
+                            class="input input-xs input-ghost w-full font-['JetBrains_Mono'] text-xs bg-transparent focus:bg-white/[0.06]"
+                            value={arch.label}
+                            oninput={(e: Event) => {
+                              const newLabel = (e.target as HTMLInputElement).value.trim();
+                              if (newLabel) {
+                                viewModel.setArchetypeLabel(arch.id, newLabel);
+                              }
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <select
+                            class="select select-xs select-ghost w-full font-['JetBrains_Mono'] text-xs bg-transparent focus:bg-white/[0.06]"
+                            value={arch.voiceId}
+                            onchange={(e: Event) =>
+                              viewModel.setArchetypeVoice(
+                                arch.id,
+                                (e.target as HTMLSelectElement).value,
+                              )}
+                          >
+                            {#each KOKORO_VOICES as v}
+                              <option value={v.id}>{v.label}</option>
+                            {/each}
+                          </select>
+                        </td>
+                        <td>
+                          <button
+                            class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
+                            onclick={() => viewModel.removeArchetype(arch.id)}
+                            title="Remove"
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+
+              {#if viewModel.voiceArchetypes.length === 0}
+                <p class="text-xs text-[#938ea1] italic mt-2">
+                  No archetypes defined. Click <span class="text-[#cabeff]">+ Add</span> to
+                  create one.
+                </p>
+              {/if}
+            </div>
           </div>
         </div>
       <!-- ── Image Tab ────────────────────────────────────────────────── -->
       {:else if viewModel.activeTab === 'image'}
         <div class="grid gap-6">
+          <!-- Checkpoint Detection -->
+          <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h2
+                class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff]"
+              >
+                ComfyUI Checkpoints
+              </h2>
+              <div class="flex items-center gap-3">
+                <!-- Status indicator -->
+                <span
+                  class="inline-block w-2 h-2 rounded-full {viewModel.isImageGenReady
+                    ? 'bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]'
+                    : 'bg-red-500/40'}"
+                ></span>
+                <span
+                  class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest {viewModel.isImageGenReady
+                    ? 'text-green-400'
+                    : 'text-[#938ea1]'}"
+                >
+                  {viewModel.isImageGenReady ? 'Ready' : 'Not Detected'}
+                </span>
+                <button
+                  class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs gap-1.5"
+                  onclick={() => viewModel.detectCheckpoints()}
+                  disabled={viewModel.isDetectingCheckpoints}
+                >
+                  {#if viewModel.isDetectingCheckpoints}
+                    <span class="loading loading-spinner loading-xs"></span>
+                    Detecting...
+                  {:else}
+                    Detect Checkpoints
+                  {/if}
+                </button>
+              </div>
+            </div>
+
+            {#if viewModel.checkpoints.length > 0}
+              <div class="grid gap-2 max-h-64 overflow-y-auto">
+                {#each viewModel.checkpoints as ckpt}
+                  <button
+                    class="w-full text-left px-4 py-3 rounded-lg border transition-all font-['JetBrains_Mono'] text-sm {ckpt.id === viewModel.selectedCheckpoint
+                      ? 'border-[#00e3fd] bg-[#00e3fd]/10 text-[#00e3fd] shadow-[0_0_10px_rgba(0,227,253,0.15)]'
+                      : 'border-white/[0.06] bg-white/[0.02] text-[#c9c4d8] hover:border-white/[0.12]'}"
+                    onclick={() => viewModel.setCheckpoint(ckpt.id)}
+                  >
+                    <div class="flex items-center justify-between">
+                      <span>{ckpt.description}</span>
+                      {#if ckpt.id === viewModel.selectedCheckpoint}
+                        <span
+                          class="font-['JetBrains_Mono'] text-[10px] text-[#00e3fd]"
+                          >✓ Selected</span
+                        >
+                      {/if}
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            {:else}
+              <div
+                class="text-center py-8 text-[#938ea1] font-['JetBrains_Mono'] text-sm border border-dashed border-white/[0.06] rounded-lg"
+              >
+                {#if viewModel.isDetectingCheckpoints}
+                  Scanning ComfyUI for checkpoints...
+                {:else}
+                  No checkpoints detected. Click "Detect Checkpoints" to scan.
+                {/if}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Image generation settings -->
           <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
             <h2
               class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4"
@@ -485,8 +664,8 @@
                 <input
                   type="text"
                   class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
-                  value={viewModel.config.image.checkpoint}
-                  oninput={(e: Event) => viewModel.setField('image', 'checkpoint', (e.target as HTMLInputElement).value)}
+                  value={viewModel.selectedCheckpoint || viewModel.config.image.checkpoint}
+                  readonly
                 >
               </div>
               <div class="form-control">

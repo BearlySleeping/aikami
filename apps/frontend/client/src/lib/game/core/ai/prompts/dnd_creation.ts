@@ -48,6 +48,7 @@ Follow this sequence, but let the player's answers guide the pace:
 - Do NOT force all information at once. Have a natural conversation.
 
 ## Finalization Signal
-When the player has provided enough detail (at minimum: Species, Class, Background, ability scores), 
-include the exact phrase "YOUR CHARACTER IS READY" in your response, followed by a summary.
-The structural extraction is handled separately — focus on natural conversation, not JSON output.` as const;
+When the player has provided enough detail (at minimum: Species, Class, Background, ability scores),
+include the exact phrase "YOUR CHARACTER IS READY" in a BRIEF 1-2 sentence response.
+Do NOT repeat the full character summary — just confirm and say you're creating it.
+Example: "YOUR CHARACTER IS READY! Creating your character sheet now."` as const;

@@ -4,6 +4,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { configService } from '$lib/services/config/config_service.svelte.ts';
 
 /** Base URL of the local ComfyUI instance. */
 const COMFY_BASE_URL = (import.meta.env.PUBLIC_IMAGE_URL ?? 'http://localhost:8188').replace(
@@ -33,6 +34,12 @@ export type ImageGenerationServiceInterface = BaseFrontendClassInterface & {
 
   /** The currently selected checkpoint ID. */
   selectedCheckpoint: string;
+
+  /**
+   * Whether image generation is ready — checkpoints have been loaded
+   * from a running ComfyUI instance and at least one is available.
+   */
+  get isReady(): boolean;
 
   /** Fetches the list of available checkpoints from the ComfyUI object_info API. */
   loadCheckpoints(): Promise<void>;
@@ -88,6 +95,22 @@ export class ImageGenerationService
   checkpoints: CheckpointInfo[] = $state([]);
   selectedCheckpoint = $state('');
 
+  /** Whether image generation is ready to use. */
+  get isReady(): boolean {
+    // checkpoints loaded and selected → ready
+    if (this.checkpoints.length > 0 && this.selectedCheckpoint.length > 0) {
+      return true;
+    }
+    // Fallback: if a checkpoint was persisted in config, it was verified
+    const persisted = this._readPersistedCheckpoint();
+    return persisted.length > 0;
+  }
+
+  /** Reads the persisted checkpoint from ConfigService if available. */
+  private _readPersistedCheckpoint(): string {
+    return configService.state.image.checkpoint || '';
+  }
+
   isDemoMode(): boolean {
     return this.isDemo;
   }
@@ -125,7 +148,13 @@ export class ImageGenerationService
       });
 
       if (!this.selectedCheckpoint && this.checkpoints.length > 0) {
-        this.selectedCheckpoint = this.checkpoints[0].id;
+        // Restore persisted checkpoint if it matches an available one
+        const persisted = configService.state.image.checkpoint;
+        if (persisted && this.checkpoints.some((c) => c.id === persisted)) {
+          this.selectedCheckpoint = persisted;
+        } else {
+          this.selectedCheckpoint = this.checkpoints[0].id;
+        }
       }
 
       this.debug('loadCheckpoints', { count: this.checkpoints.length });
@@ -139,7 +168,6 @@ export class ImageGenerationService
     checkpoint?: string;
   }): Promise<ImageGenerationResult> {
     const { prompt, checkpoint } = options;
-    const effectiveCheckpoint = checkpoint ?? this.selectedCheckpoint;
 
     if (this.isDemo) {
       this.debug('generateImage: demo mode - returning mock image');
@@ -149,13 +177,19 @@ export class ImageGenerationService
       };
     }
 
-    const ckptFile = effectiveCheckpoint ? `${effectiveCheckpoint}.safetensors` : undefined;
+    // Lazy-load checkpoints if not already fetched
+    if (this.checkpoints.length === 0) {
+      await this.loadCheckpoints();
+    }
+
+    // Compute effective checkpoint AFTER loadCheckpoints may have set selectedCheckpoint
+    const effectiveCheckpoint = checkpoint ?? this.selectedCheckpoint;
 
     try {
       // Step 1 — queue the prompt
       const queueResponse = await this._post<ComfyUiQueueResponse>('/prompt', {
         client_id: `aikami-dev-${Date.now()}`,
-        prompt: this._buildWorkflow({ prompt, checkpoint: ckptFile }),
+        prompt: this._buildWorkflow({ prompt, checkpoint: effectiveCheckpoint }),
       });
 
       const promptId = queueResponse.prompt_id;
@@ -191,7 +225,14 @@ export class ImageGenerationService
     checkpoint?: string;
   }): Record<string, unknown> {
     const { prompt, checkpoint } = options;
-    const ckptName = checkpoint ?? 'sd_xl_base_1.0.safetensors';
+    const checkpointId = (checkpoint && checkpoint.length > 0 ? checkpoint : undefined) ?? this.selectedCheckpoint;
+    const ckptName = checkpointId ? `${checkpointId}.safetensors` : undefined;
+
+    if (!ckptName) {
+      throw new Error(
+        'No checkpoint selected. Call loadCheckpoints() first or select a checkpoint.',
+      );
+    }
 
     return {
       '3': {

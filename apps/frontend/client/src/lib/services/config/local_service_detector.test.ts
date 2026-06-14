@@ -28,7 +28,7 @@ import {
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
   type ServiceEndpoint,
-} from './local_service_detector.ts';
+} from './local_service_detector.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -101,6 +101,16 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/voice/, ''),
         },
+        '/api/text': {
+          target: `http://localhost:${PORTS.emulator.text}`,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/text/, ''),
+        },
+        '/api/image': {
+          target: `http://localhost:${PORTS.emulator.image}`,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/image/, ''),
+        },
       },
       watch: {
         ignored: [
@@ -113,6 +123,7 @@ export default defineConfig(({ mode }) => {
           '**/pi-offloads/**',
           '**/tmp/**',
           '**/.screenshots/**',
+          '**/static/**',
 
           // 2. Build Outputs
           '**/.svelte-kit/**',

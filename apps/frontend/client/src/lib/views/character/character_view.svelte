@@ -140,7 +140,7 @@
             onclick={() => viewModel.generateCharacter()}
             disabled={viewModel.isStreaming}
           >
-            ✨ Generate Character
+            {viewModel.generateButtonLabel}
           </button>
         </div>
       {/if}
@@ -166,23 +166,61 @@
           <div class="card bg-base-200 shadow">
             <div class="card-body items-center gap-4">
               <h2 class="card-title text-lg">Character Avatar</h2>
-              <div class="avatar">
-                <div
-                  class="w-48 h-48 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden"
-                >
-                  {#if viewModel.avatarUrl}
-                    <img
-                      src={viewModel.avatarUrl}
-                      alt="Character avatar"
-                      class="object-cover w-full h-full"
+              <div
+                class="w-48 h-48 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden"
+              >
+                {#if viewModel.avatarUrl}
+                  <img
+                    src={viewModel.avatarUrl}
+                    alt="Character avatar"
+                    class="object-cover w-full h-full"
+                  >
+                {:else if viewModel.isImageGenReady}
+                  <span class="loading loading-spinner loading-md text-primary"></span>
+                {:else}
+                  <div class="text-center px-4">
+                    <p class="text-3xl mb-2">🖼️</p>
+                    <p class="text-xs text-base-content/40">No image generation</p>
+                    <button
+                      class="btn btn-xs btn-ghost mt-2"
+                      onclick={() => viewModel.configureImageGen()}
                     >
-                  {:else}
-                    <span class="loading loading-spinner loading-md text-primary"></span>
-                  {/if}
-                </div>
+                      Configure
+                    </button>
+                  </div>
+                {/if}
               </div>
-              {#if !viewModel.avatarUrl}
+              {#if !viewModel.avatarUrl && viewModel.isImageGenReady}
                 <p class="text-xs text-base-content/40">Generating avatar...</p>
+              {:else if !viewModel.isImageGenReady}
+                <p class="text-xs text-warning">
+                  ComfyUI not detected. Set up image generation in Config.
+                </p>
+              {/if}
+
+              <!-- Regenerate button -->
+              {#if viewModel.avatarUrl && viewModel.isImageGenReady}
+                <button
+                  class="btn btn-xs btn-ghost text-[#cabeff] mt-1"
+                  onclick={() => viewModel.toggleRegenerationPanel()}
+                  disabled={viewModel.isRegenerating}
+                >
+                  {viewModel.isRegenerating ? 'Generating...' : '🔄 Regenerate'}
+                </button>
+              {/if}
+
+              <!-- LPC Sprite Preview -->
+              {#if viewModel.lpcPreviewUrl}
+                <div class="divider text-xs text-base-content/40 my-0">LPC Sprite</div>
+                <a
+                  href={viewModel.lpcPreviewUrl}
+                  target="_blank"
+                  rel="noopener"
+                  class="btn btn-xs btn-outline btn-accent"
+                >
+                  🎮 View LPC Sprite
+                </a>
+                <p class="text-[10px] text-base-content/40">Opens in LPC debugger</p>
               {/if}
             </div>
           </div>
@@ -194,46 +232,105 @@
 
               <!-- Name -->
               <label class="form-control w-full">
-                <div class="label">
+                <div class="label py-0.5">
                   <span class="label-text font-semibold">Name</span>
                 </div>
-                <input
-                  type="text"
-                  class="input input-bordered w-full"
-                  bind:value={viewModel.persona.name}
-                  placeholder="Character name"
-                >
+                <input type="text" class="input input-bordered w-full" bind:value={viewModel.persona.name} placeholder="Character name" />
               </label>
+
+              <!-- Race + Class -->
+              <div class="grid grid-cols-2 gap-3">
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Race</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.race} placeholder="Elf, Tiefling..." />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Class</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.class} placeholder="Wizard, Rogue..." />
+                </label>
+              </div>
+
+              <!-- Subclass + Level + Alignment -->
+              <div class="grid grid-cols-3 gap-3">
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Subclass</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.subclass} placeholder="Optional" />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Level</span></div>
+                  <input type="number" class="input input-bordered input-sm w-full text-center" bind:value={viewModel.persona.level} min="1" max="20" />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Alignment</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.alignment} placeholder="Chaotic Good" />
+                </label>
+              </div>
 
               <!-- Background -->
               <label class="form-control w-full">
-                <div class="label">
-                  <span class="label-text font-semibold">Background</span>
-                </div>
-                <input
-                  type="text"
-                  class="input input-bordered w-full"
-                  bind:value={viewModel.persona.background}
-                  placeholder="Background"
-                >
+                <div class="label py-0.5"><span class="label-text font-semibold">Background</span></div>
+                <textarea class="textarea textarea-bordered w-full min-h-16 text-sm" bind:value={viewModel.persona.background} placeholder="Character background story..." rows="3"></textarea>
               </label>
+
+              <!-- Combat stats -->
+              <div class="grid grid-cols-3 gap-3">
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">HP</span></div>
+                  <input type="number" class="input input-bordered input-sm w-full text-center" bind:value={viewModel.persona.hitPoints} min="1" />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">AC</span></div>
+                  <input type="number" class="input input-bordered input-sm w-full text-center" bind:value={viewModel.persona.armorClass} min="1" />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Speed</span></div>
+                  <input type="number" class="input input-bordered input-sm w-full text-center" bind:value={viewModel.persona.speed} min="1" />
+                </label>
+              </div>
 
               <!-- Appearance -->
               <label class="form-control w-full">
-                <div class="label">
-                  <span class="label-text font-semibold">Appearance</span>
-                </div>
-                <textarea
-                  class="textarea textarea-bordered w-full min-h-24"
-                  value={viewModel.persona.appearance?.physicalDescription ?? ''}
-                  oninput={(e: Event) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    viewModel.updateAppearanceDescription(target.value);
-                  }}
-                  placeholder="Physical description for avatar generation"
-                  rows="3"
-                ></textarea>
+                <div class="label py-0.5"><span class="label-text font-semibold">Appearance</span></div>
+                <textarea class="textarea textarea-bordered w-full min-h-20 text-sm" value={viewModel.persona.appearance?.physicalDescription ?? ''} oninput={(e: Event) => viewModel.updateAppearanceDescription((e.target as HTMLTextAreaElement).value)} placeholder="Physical description for avatar generation" rows="3"></textarea>
               </label>
+
+              <!-- Languages -->
+              <label class="form-control w-full">
+                <div class="label py-0.5"><span class="label-text font-semibold">Languages</span><span class="label-text-alt text-base-content/40">comma-separated</span></div>
+                <input type="text" class="input input-bordered w-full text-sm" value={viewModel.persona.languages?.join(', ') ?? ''} oninput={(e: Event) => { if (viewModel.persona) viewModel.persona.languages = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); }} placeholder="Common, Elvish, Dwarvish..." />
+              </label>
+
+              <!-- Proficiencies -->
+              <label class="form-control w-full">
+                <div class="label py-0.5"><span class="label-text font-semibold">Proficiencies</span><span class="label-text-alt text-base-content/40">comma-separated</span></div>
+                <input type="text" class="input input-bordered w-full text-sm" value={viewModel.persona.proficiencies?.join(', ') ?? ''} oninput={(e: Event) => { if (viewModel.persona) viewModel.persona.proficiencies = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); }} placeholder="Arcana, Stealth, Persuasion..." />
+              </label>
+
+              <!-- Equipment -->
+              <label class="form-control w-full">
+                <div class="label py-0.5"><span class="label-text font-semibold">Equipment</span><span class="label-text-alt text-base-content/40">comma-separated</span></div>
+                <input type="text" class="input input-bordered w-full text-sm" value={viewModel.persona.equipment?.join(', ') ?? ''} oninput={(e: Event) => { if (viewModel.persona) viewModel.persona.equipment = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); }} placeholder="Longsword, Shield, Explorer's Pack..." />
+              </label>
+
+              <!-- Personality -->
+              <div class="grid grid-cols-2 gap-3">
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Personality Traits</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.personalityTraits} placeholder="Traits..." />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Ideals</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.ideals} placeholder="Ideals..." />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Bonds</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.bonds} placeholder="Bonds..." />
+                </label>
+                <label class="form-control">
+                  <div class="label py-0.5"><span class="label-text font-semibold text-xs">Flaws</span></div>
+                  <input type="text" class="input input-bordered input-sm w-full" bind:value={viewModel.persona.flaws} placeholder="Flaws..." />
+                </label>
+              </div>
             </div>
           </div>
 
@@ -260,8 +357,8 @@
                         <input
                           type="number"
                           class="input input-bordered w-20 text-center"
-                          min="1"
-                          max="30"
+                          min="8"
+                          max="15"
                           bind:value={viewModel.persona.abilityScores[stat.key]}
                         >
                         <button
@@ -285,10 +382,107 @@
           <!-- Actions -->
           <div class="flex justify-center gap-4 lg:col-span-2">
             <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>← Back to Chat</button>
-            <button class="btn btn-primary">💾 Save Character</button>
+            <button class="btn btn-primary" onclick={() => viewModel.saveCharacter()}>💾 Save Character</button>
           </div>
         </div>
       {/if}
     </div>
   </div>
+
+  <!-- Regenerate Avatar Modal -->
+  {#if viewModel.showRegenerationPanel && viewModel.isImageGenReady}
+    <dialog class="modal modal-open" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) viewModel.toggleRegenerationPanel(); }} onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') viewModel.toggleRegenerationPanel(); }}>
+      <div class="modal-box max-w-lg">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold">Regenerate Avatar</h3>
+          <button
+            class="btn btn-sm btn-ghost btn-square"
+            onclick={() => viewModel.toggleRegenerationPanel()}
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Mode selector -->
+        <div class="tabs tabs-bordered mb-4">
+          <button
+            class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'appearance'
+              ? 'tab-active border-[#cabeff] text-[#cabeff]'
+              : 'text-[#938ea1]'}"
+            onclick={() => viewModel.setRegenerationMode('appearance')}
+          >
+            Appearance
+          </button>
+          <button
+            class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'direct'
+              ? 'tab-active border-[#cabeff] text-[#cabeff]'
+              : 'text-[#938ea1]'}"
+            onclick={() => viewModel.setRegenerationMode('direct')}
+          >
+            Direct
+          </button>
+          <button
+            class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'edit'
+              ? 'tab-active border-[#cabeff] text-[#cabeff]'
+              : 'text-[#938ea1]'}"
+            onclick={() => viewModel.setRegenerationMode('edit')}
+          >
+            Edit
+          </button>
+        </div>
+
+        <!-- Mode content -->
+        {#if viewModel.regenerationMode === 'appearance'}
+          <p class="text-sm text-base-content/60 mb-4">
+            Regenerate using the Appearance description. The text will be enhanced for
+            better image quality.
+          </p>
+        {:else if viewModel.regenerationMode === 'direct'}
+          <label class="form-control w-full mb-4">
+            <div class="label py-0.5">
+              <span class="label-text text-xs font-semibold">Direct Prompt</span>
+            </div>
+            <textarea
+              class="textarea textarea-bordered w-full min-h-24 font-mono text-xs"
+              bind:value={viewModel.directPrompt}
+              placeholder="Describe the image directly..."
+              disabled={viewModel.isRegenerating}
+            ></textarea>
+          </label>
+        {:else if viewModel.regenerationMode === 'edit'}
+          <label class="form-control w-full mb-4">
+            <div class="label py-0.5">
+              <span class="label-text text-xs font-semibold">Edit Instruction</span>
+              <span class="label-text-alt text-base-content/40"
+                >e.g. "make the hair green"</span
+              >
+            </div>
+            <input
+              type="text"
+              class="input input-bordered w-full font-mono text-sm"
+              bind:value={viewModel.editInstruction}
+              placeholder="make the hair green, add a crown..."
+              disabled={viewModel.isRegenerating}
+            />
+          </label>
+        {/if}
+
+        <div class="modal-action">
+          <button
+            class="btn btn-ghost btn-sm"
+            onclick={() => viewModel.toggleRegenerationPanel()}
+          >
+            Cancel
+          </button>
+          <button
+            class="btn btn-primary btn-sm"
+            onclick={() => viewModel.regenerateAvatar()}
+            disabled={viewModel.isRegenerating}
+          >
+            {viewModel.isRegenerating ? 'Generating...' : '🔄 Generate'}
+          </button>
+        </div>
+      </div>
+    </dialog>
+  {/if}
 </BaseViewModelContainer>
