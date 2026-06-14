@@ -52,6 +52,7 @@ P2 (Polish — after P1):
 | C-118 | [Save/Load UI & Engine Boundary](C-118-save-load-ui-wiring.md) ✅ | Wire GameStateSyncService + EcsSerializer into GameViewModel and DashboardViewModel for cloud save/load | MIG-002, C-117 |
 | C-119 | [Routing & Layout Simplification](C-119-routing-and-layout-simplification.md) ✅ | Delete legacy route groups, establish SPA root layout, create MVP placeholder routes | — |
 | C-120 | [View Folder Restructure & ViewModel Inheritance](C-120-view-folder-restructure.md) ✅ | Enforce structural isolation in views/, promote config to production, implement Dev-overrides-Prod extension model | C-119 |
+| C-121 | [Start Menu & Optional Authentication](C-121-start-menu-and-auth.md) ✅ | Start Menu view/viewmodel, optional Google Sign-In, Tauri quit, credits modal | C-120 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 
