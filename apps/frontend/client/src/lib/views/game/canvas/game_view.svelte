@@ -1,16 +1,17 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/canvas/game_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { GameViewModelInterface } from './game_view_model.svelte.ts';
+  import GameUIView from '../ui/game_ui_view.svelte';
+  import type { GameUIViewModelInterface } from '../ui/game_ui_view_model.svelte';
+  import type { GameViewModelInterface } from './game_view_model.svelte';
 
   type Props = {
     viewModel: GameViewModelInterface;
+    gameUIViewModel: GameUIViewModelInterface;
   };
 
-  const { viewModel }: Props = $props();
+  const { viewModel, gameUIViewModel }: Props = $props();
 </script>
-
-<svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <div class="relative w-screen h-screen overflow-hidden">
@@ -40,73 +41,12 @@
         </div>
       {/if}
 
-      <!-- Options overlay (Escape key) -->
-      {#if viewModel.showOptions}
-        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-        <div
-          class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-base-100/90 backdrop-blur-sm"
-          role="dialog"
-          aria-label="Game options"
-        >
-          <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
-            <h2 class="text-center text-lg font-bold text-base-content">Options</h2>
-
-            <div class="mt-4 space-y-2">
-              <button class="btn btn-primary btn-block" onclick={() => viewModel.closeOptions()}>
-                Resume
-              </button>
-
-              <button class="btn btn-outline btn-block" onclick={() => viewModel.goToDashboard()}>
-                Back to PWA
-              </button>
-            </div>
-
-            <!-- Save Game Section -->
-            <div class="mt-4 border-t border-base-300 pt-3">
-              <h3 class="text-sm font-semibold text-base-content/70">Save Game</h3>
-
-              <div class="mt-2">
-                <label for="save-slot-select" class="text-xs text-base-content/50">Slot</label>
-                <select
-                  id="save-slot-select"
-                  class="select select-bordered select-sm mt-1 w-full"
-                  value={viewModel.saveSlotNumber}
-                  onchange={(e) => viewModel.setSaveSlotNumber(Number(e.currentTarget.value))}
-                >
-                  {#each [1, 2, 3] as slot}
-                    <option value={slot}>Slot {slot}</option>
-                  {/each}
-                </select>
-              </div>
-
-              <button
-                class="btn btn-accent btn-sm mt-2 w-full"
-                disabled={viewModel.isSaving}
-                onclick={() => viewModel.saveGame(viewModel.saveSlotNumber)}
-              >
-                {#if viewModel.isSaving}
-                  <span class="loading loading-spinner loading-xs"></span>
-                  Saving...
-                {:else}
-                  Save to Slot {viewModel.saveSlotNumber}
-                {/if}
-              </button>
-
-              {#if viewModel.saveMessage}
-                <p
-                  class="mt-2 text-center text-xs"
-                  class:text-success={viewModel.saveMessage.startsWith('Game saved')}
-                  class:text-error={viewModel.saveMessage.startsWith('Save failed') || viewModel.saveMessage.startsWith('You must')}
-                >
-                  {viewModel.saveMessage}
-                </p>
-              {/if}
-            </div>
-
-            <p class="mt-4 text-center text-xs text-base-content/50">Press Escape to close</p>
-          </div>
-        </div>
-      {/if}
+      <!--
+        Game UI Overlay Router (C-125).
+        Switches between overlays (PAUSE_MENU, DIALOGUE, COMBAT) based on
+        GameUIViewModel.activeOverlay. The Escape key is handled inside.
+      -->
+      <GameUIView viewModel={gameUIViewModel} />
 
       <!-- Active NPC Dialog — bottom overlay -->
       {#if viewModel.activeDialog}
