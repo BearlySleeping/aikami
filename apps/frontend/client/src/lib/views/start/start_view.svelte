@@ -1,5 +1,6 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/start/start_view.svelte
+  import MissingProvidersDialog from './components/missing_providers_dialog.svelte';
   import type { StartViewModelInterface } from './start_view_model.svelte';
 
   let { viewModel }: { viewModel: StartViewModelInterface } = $props();
@@ -51,6 +52,14 @@
     </div>
   </div>
 </div>
+
+<!-- Missing Providers Dialog -->
+{#if viewModel.showMissingProvidersDialog}
+  <MissingProvidersDialog
+    onGoToSettings={() => viewModel.goToSettingsForProviderSetup()}
+    onClose={() => viewModel.closeMissingProvidersDialog()}
+  />
+{/if}
 
 <!-- Credits Modal -->
 {#if viewModel.showCredits}
