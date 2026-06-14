@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/game/menu_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/game/menu/menu_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,

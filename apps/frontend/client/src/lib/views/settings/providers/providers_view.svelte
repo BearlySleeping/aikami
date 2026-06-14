@@ -1,11 +1,11 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/config/config_view.svelte
+  // apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import { KOKORO_VOICES } from '$lib/services/config/config_service.svelte';
-  import type { ConfigTab, ConfigViewModelInterface } from './config_view_model.svelte.ts';
+  import type { ConfigTab, ProvidersViewModelInterface } from './providers_view_model.svelte';
 
   type Props = {
-    viewModel: ConfigViewModelInterface;
+    viewModel: ProvidersViewModelInterface;
   };
 
   let { viewModel }: Props = $props();

@@ -1,6 +1,6 @@
-// apps/frontend/client/src/lib/views/dev/config/config_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/settings/providers/providers_view_model.svelte.ts
 //
-// ViewModel for the /dev/config dashboard. Bridges ConfigService (local
+// ViewModel for the provider configuration dashboard. Bridges ConfigService (local
 // persistence) and LocalServiceDetector (port polling) to the view layer.
 // Manages tab navigation, debounced saves, and service detection.
 
@@ -37,13 +37,8 @@ import {
 } from '$lib/services/config/provider_endpoints';
 import { type CheckpointInfo, imageGenerationService } from '$services';
 
-export type { ProviderEndpoint };
+export type { CheckpointInfo, ProviderEndpoint };
 export { PROVIDER_ENDPOINTS };
-
-// Re-export for the view
-import type { CheckpointInfo as _CheckpointInfo } from '$services';
-
-export type { CheckpointInfo };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,7 +59,7 @@ export type ConfigTabMeta = {
 // Interface
 // ---------------------------------------------------------------------------
 
-export type ConfigViewModelInterface = BaseViewModelInterface & {
+export type ProvidersViewModelInterface = BaseViewModelInterface & {
   /** All available tabs with metadata. */
   readonly tabs: readonly ConfigTabMeta[];
   /** Currently active tab. */
@@ -156,7 +151,7 @@ export type ConfigViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type ConfigViewModelOptions = BaseViewModelOptions & {};
+export type ProvidersViewModelOptions = BaseViewModelOptions & {};
 
 // ---------------------------------------------------------------------------
 // Tab metadata
@@ -177,9 +172,9 @@ const SAVE_DEBOUNCE_MS = 800;
 // Implementation
 // ---------------------------------------------------------------------------
 
-class ConfigViewModel
-  extends BaseViewModel<ConfigViewModelOptions>
-  implements ConfigViewModelInterface
+export class ProvidersViewModel
+  extends BaseViewModel<ProvidersViewModelOptions>
+  implements ProvidersViewModelInterface
 {
   activeTab: ConfigTab = $state('api-keys');
   isDetecting = $state(false);
@@ -192,7 +187,7 @@ class ConfigViewModel
   private readonly _detector: LocalServiceDetectorInterface;
   private _saveTimer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(options: ConfigViewModelOptions) {
+  constructor(options: ProvidersViewModelOptions) {
     super(options);
     this._detector = new LocalServiceDetector();
   }
@@ -511,5 +506,6 @@ class ConfigViewModel
   }
 }
 
-export const getConfigViewModel = (options: ConfigViewModelOptions): ConfigViewModelInterface =>
-  new ConfigViewModel(options);
+export const getProvidersViewModel = (
+  options: ProvidersViewModelOptions,
+): ProvidersViewModelInterface => new ProvidersViewModel(options);

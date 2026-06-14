@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/game/game_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts
 
 import type { EngineBridge, GameCommand, GameWorld } from '@aikami/frontend/engine';
 import {
@@ -13,7 +13,7 @@ import {
   routerService,
 } from '$services';
 import type { ActiveContextEntry } from '$types';
-import { GameStateService } from '../../services/game/game_state_service.svelte.ts';
+import { GameStateService } from '../../../services/game/game_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // GameViewModel — Svelte 5 ViewModel for the game canvas

@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/character/character_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/character/create/character_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
