@@ -16,6 +16,7 @@ import {
   authService,
   characterCreationService,
   imageGenerationService,
+  routerService,
   textGenerationService,
 } from '$services';
 
@@ -94,6 +95,8 @@ export type CharacterViewModelInterface = BaseViewModelInterface & {
   regenerateAvatar(): Promise<void>;
   /** Saves the character locally and optionally to Firebase. */
   saveCharacter(): Promise<void>;
+  /** Saves the character and navigates to /game to start playing. */
+  enterWorld(): Promise<void>;
 
   sendChatMessage(text: string): Promise<void>;
   generateCharacter(): Promise<void>;
@@ -385,6 +388,36 @@ export class CharacterViewModel
   // ── Save Character ──────────────────────────────────────────────────
 
   async saveCharacter(): Promise<void> {
+    await this._persistCharacter();
+    // Redirect to character list (dev sandbox path)
+    window.location.href = '/dev/characters';
+  }
+
+  async enterWorld(): Promise<void> {
+    await this._persistCharacter();
+
+    // Set persona as active if user is logged in
+    const uid = (authService as { uid?: string }).uid;
+    if (uid && this.persona?.id) {
+      try {
+        const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
+        await personaService.setActivePersona(this.persona.id);
+        this.info('enterWorld:active-set', { personaId: this.persona.id });
+      } catch (error) {
+        this.warn('enterWorld:active-set-failed (continuing anyway)', error);
+      }
+    }
+
+    // Navigate to game
+    await routerService.goToRoute('game', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
+  }
+
+  // ── Private: persistence ─────────────────────────────────────────────
+
+  private async _persistCharacter(): Promise<void> {
     const persona = this.persona;
     if (!persona) return;
 
@@ -479,9 +512,6 @@ export class CharacterViewModel
         this.error('saveCharacter:firestore-failed', error);
       }
     }
-
-    // Redirect to character list
-    window.location.href = '/dev/characters';
   }
 
   // ── Private: avatar editing (img2img) ────────────────────────────────

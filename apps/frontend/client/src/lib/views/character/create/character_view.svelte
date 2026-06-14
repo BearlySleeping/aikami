@@ -514,8 +514,11 @@
           <!-- Actions -->
           <div class="flex justify-center gap-4 lg:col-span-2">
             <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>← Back to Chat</button>
-            <button class="btn btn-primary" onclick={() => viewModel.saveCharacter()}>
+            <button class="btn btn-outline" onclick={() => viewModel.saveCharacter()}>
               💾 Save Character
+            </button>
+            <button class="btn btn-primary" onclick={() => viewModel.enterWorld()}>
+              ⚔️ Enter World
             </button>
           </div>
         </div>
