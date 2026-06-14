@@ -22,21 +22,23 @@ Return ONLY a JSON object: {"score": number, "notes": string}`;
 const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
   method: 'POST',
   headers: {
-    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
     model: 'google/gemini-2.5-flash',
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'text', text: prompt },
-        { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}` } }
-      ]
-    }]
-  })
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}` } },
+        ],
+      },
+    ],
+  }),
 });
 
-const data = await res.json() as any;
+const data = (await res.json()) as any;
 const content = data.choices?.[0]?.message?.content || '';
 console.log(content);

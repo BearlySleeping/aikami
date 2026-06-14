@@ -38,13 +38,7 @@ export const routes = {
   settings: {
     getPath: () => '/settings',
     queryParameters: undefined,
-    routeId: '/(authenticated)/settings',
-    type: 'authenticated',
-  },
-  about: {
-    getPath: () => '/about',
-    queryParameters: undefined,
-    routeId: '/(public)/about',
+    routeId: '/settings',
     type: 'public',
   },
   chat: {
@@ -76,8 +70,14 @@ export const routes = {
   game: {
     getPath: () => '/game',
     queryParameters: undefined,
-    routeId: '/(authenticated)/game',
-    type: 'authenticated',
+    routeId: '/game',
+    type: 'public',
+  },
+  setup: {
+    getPath: () => '/setup',
+    queryParameters: undefined,
+    routeId: '/setup',
+    type: 'public',
   },
 } as const satisfies Routes;
 

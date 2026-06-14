@@ -2,11 +2,11 @@
 import Type from 'typebox';
 import { AppearanceSchema } from './appearance.ts';
 import {
+  type AbilityType,
   DEFAULT_SAVING_THROWS,
   DEFAULT_SKILLS,
   SavingThrowSchema,
   SkillSchema,
-  type AbilityType,
 } from './skills.ts';
 
 // ── Ability Scores ──────────────────────────────────────────────────────
@@ -25,9 +25,7 @@ export const AbilityScoresSchema = Type.Object(
     intelligence: Type.Optional(
       Type.Integer({ description: 'Intelligence Score (integer between 8 and 18)' }),
     ),
-    wisdom: Type.Optional(
-      Type.Integer({ description: 'Wisdom Score (integer between 8 and 18)' }),
-    ),
+    wisdom: Type.Optional(Type.Integer({ description: 'Wisdom Score (integer between 8 and 18)' })),
     charisma: Type.Optional(
       Type.Integer({ description: 'Charisma Score (integer between 8 and 18)' }),
     ),
@@ -81,7 +79,11 @@ export const SubclassSchema = Type.Optional(
 // ── Level ───────────────────────────────────────────────────────────────
 
 export const LevelSchema = Type.Optional(
-  Type.Integer({ description: 'Character Level (integer between 1 and 20)', minimum: 1, maximum: 20 }),
+  Type.Integer({
+    description: 'Character Level (integer between 1 and 20)',
+    minimum: 1,
+    maximum: 20,
+  }),
 );
 
 // ── Experience Points ───────────────────────────────────────────────────
@@ -110,9 +112,7 @@ export const ArmorClassSchema = Type.Integer({ description: 'Armor Class', defau
 
 export const SpeedSchema = Type.Integer({ description: 'Speed (ft)', default: 30 });
 
-export const InitiativeSchema = Type.Optional(
-  Type.Integer({ description: 'Initiative modifier' }),
-);
+export const InitiativeSchema = Type.Optional(Type.Integer({ description: 'Initiative modifier' }));
 
 // ── Proficiency Bonus ───────────────────────────────────────────────────
 
@@ -122,13 +122,13 @@ export const ProficiencyBonusSchema = Type.Optional(
 
 // ── Saving Throws ───────────────────────────────────────────────────────
 
-export { SavingThrowSchema, DEFAULT_SAVING_THROWS } from './skills.ts';
 export type { SavingThrowData } from './skills.ts';
+export { DEFAULT_SAVING_THROWS, SavingThrowSchema } from './skills.ts';
 
 // ── Skills ──────────────────────────────────────────────────────────────
 
-export { SkillSchema, DEFAULT_SKILLS } from './skills.ts';
 export type { SkillData } from './skills.ts';
+export { DEFAULT_SKILLS, SkillSchema } from './skills.ts';
 
 // ── Proficiencies ───────────────────────────────────────────────────────
 
@@ -176,9 +176,7 @@ export const BackgroundSchema = Type.Optional(
 
 // ── Notes ───────────────────────────────────────────────────────────────
 
-export const NotesSchema = Type.Optional(
-  Type.String({ description: 'Additional Notes' }),
-);
+export const NotesSchema = Type.Optional(Type.String({ description: 'Additional Notes' }));
 
 // ── Full Character Sheet (composed from sub-schemas) ───────────────────
 
