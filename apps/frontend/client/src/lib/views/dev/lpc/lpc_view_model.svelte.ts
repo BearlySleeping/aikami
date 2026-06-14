@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
-import { createPixiApp, LpcBatchManager, TextureManager } from '@aikami/frontend/engine';
+import { createPixiApp, LpcBatchManager } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -17,16 +17,10 @@ import {
   LPC_STAGE_CONTAINER_KEY,
 } from '$lib/components/game/lpc_context_keys';
 import {
-  ALL_LPC_SLOTS,
   ANIMATION_STATE_OPTIONS,
-  buildPaletteBuffer,
   DIRECTION_OPTIONS,
-  hexToPixiTint,
-  LPC_DEFAULT_PALETTE,
-  LPC_LAYER_Z_INDEX,
 } from '$lib/data/lpc_asset_catalog';
-import { getAvailableLpcAssets } from '$lib/data/lpc_asset_checker';
-import { createPlaceholderTexture, getLpcAssetPath } from '$lib/data/lpc_asset_path_mapper';
+import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 import {
   type LpcUrlState,
@@ -34,17 +28,8 @@ import {
   searchParamsToLpcState,
 } from '$lib/data/lpc_url_config';
 
-// Compute the available slots at initialization based on static folder contents.
-// We do this eagerly but outside of component state to avoid constant re-evaluation.
-const AVAILABLE_ASSET_IDS = getAvailableLpcAssets();
-
-// Create a dynamically filtered slot list so that variants without files are hidden.
-const FILTERED_LPC_SLOTS: typeof ALL_LPC_SLOTS = ALL_LPC_SLOTS.map((slot) => {
-  return {
-    ...slot,
-    variants: slot.variants.filter((variant) => AVAILABLE_ASSET_IDS.has(variant.assetId)),
-  };
-}).filter((slot) => slot.variants.length > 0);
+// Use the generated catalog directly — all slots with verified webp assets.
+const FILTERED_LPC_SLOTS = GENERATED_LPC_SLOTS;
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -53,17 +38,13 @@ const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
 const ENTITY_X = CANVAS_WIDTH / 2;
 const ENTITY_Y = CANVAS_HEIGHT / 2 - 32;
-const PALETTE_DISPLAY_COUNT = 16;
-const FALLBACK_COLOR = 0xff00ff;
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-/** Active layer configuration with palette state. */
+/** Active layer configuration. */
 export type ActiveLayerConfig = {
   slotDefIndex: number;
   variantIndex: number;
-  palette: string[];
-  selectedPaletteIndex: number;
 };
 
 export type LpcViewModelInterface = BaseViewModelInterface & {
@@ -107,8 +88,7 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   readonly CANVAS_HEIGHT: number;
   readonly ENTITY_X: number;
   readonly ENTITY_Y: number;
-  readonly PALETTE_DISPLAY_COUNT: number;
-  readonly allSlots: typeof ALL_LPC_SLOTS;
+  readonly allSlots: typeof FILTERED_LPC_SLOTS;
   readonly animationStateOptions: typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions: typeof DIRECTION_OPTIONS;
 
@@ -120,9 +100,6 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   removeLayer(index: number): void;
   setSlotDef(layerIndex: number, slotDefIndex: number): void;
   setVariant(layerIndex: number, variantIndex: number): void;
-  setPaletteColor(layerIndex: number, paletteIndex: number, hexColor: string): void;
-  setSelectedPaletteIndex(layerIndex: number, paletteIndex: number): void;
-  getPaletteHex(layerIndex: number): string;
   setAnimationState(state: LpcAnimationState): void;
   setFacingDirection(direction: LpcDirection): void;
   setAnimationFrame(frame: number): void;
@@ -142,8 +119,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   readonly CANVAS_HEIGHT = CANVAS_HEIGHT;
   readonly ENTITY_X = ENTITY_X;
   readonly ENTITY_Y = ENTITY_Y;
-  readonly PALETTE_DISPLAY_COUNT = PALETTE_DISPLAY_COUNT;
-  readonly allSlots = FILTERED_LPC_SLOTS as typeof ALL_LPC_SLOTS;
+  readonly allSlots = FILTERED_LPC_SLOTS;
   readonly animationStateOptions = ANIMATION_STATE_OPTIONS as typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS as typeof DIRECTION_OPTIONS;
 
@@ -197,11 +173,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   // ── Private internals ───────────────────────────────────────────────
 
-  private _textureManager = new TextureManager({
-    loadTexture: async (): Promise<Texture> => Texture.WHITE,
-  });
-
-  private _frameTextureCache = new Map<string, Texture>();
   private _sheetTextureCache = new Map<string, Texture>();
   private _sheetTexturePromises = new Map<string, Promise<Texture>>();
 
@@ -213,38 +184,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   private _pushUrlTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ── Derived ─────────────────────────────────────────────────────────
-
-  get recipes(): readonly LpcLayerRecipe[] {
-    const result: LpcLayerRecipe[] = [];
-
-    for (let i = 0; i < this.activeLayers.length; i++) {
-      const layer = this.activeLayers[i];
-      if (!layer) {
-        continue;
-      }
-
-      if (this.isolateLayerIndex >= 0 && i !== this.isolateLayerIndex) {
-        continue;
-      }
-
-      const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
-      if (!slotDef) {
-        continue;
-      }
-      const variant = slotDef.variants[layer.variantIndex];
-      if (!variant) {
-        continue;
-      }
-
-      result.push({
-        slot: slotDef.slot,
-        assetId: variant.assetId,
-        hexPalette: buildPaletteBuffer(layer.palette),
-      });
-    }
-
-    return result;
-  }
 
   get frameBudgetPercent(): string {
     return this.frameDurationMs > 0 ? ((this.frameDurationMs / 16.6) * 100).toFixed(1) : '0.0';
@@ -330,15 +269,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     const slotDefIndex =
       unusedIndex >= 0 ? unusedIndex : this.activeLayers.length % FILTERED_LPC_SLOTS.length;
 
-    this.activeLayers = [
-      ...this.activeLayers,
-      {
-        slotDefIndex,
-        variantIndex: 0,
-        palette: [...LPC_DEFAULT_PALETTE],
-        selectedPaletteIndex: 0,
-      },
-    ];
+    this.activeLayers = [...this.activeLayers, { slotDefIndex, variantIndex: 0 }];
   }
 
   removeLayer(index: number): void {
@@ -368,33 +299,27 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     });
   }
 
-  // ── Palette ─────────────────────────────────────────────────────────
+  // ── Recipes (derived) ───────────────────────────────────────────────
 
-  setPaletteColor(layerIndex: number, paletteIndex: number, hexColor: string): void {
-    this.activeLayers = this.activeLayers.map((layer, i) => {
-      if (i !== layerIndex) {
-        return layer;
-      }
-      const newPalette = [...layer.palette];
-      newPalette[paletteIndex] = hexColor;
-      return { ...layer, palette: newPalette, selectedPaletteIndex: paletteIndex };
-    });
-  }
+  get recipes(): readonly LpcLayerRecipe[] {
+    const result: LpcLayerRecipe[] = [];
 
-  setSelectedPaletteIndex(layerIndex: number, paletteIndex: number): void {
-    this.activeLayers = this.activeLayers.map((l, li) =>
-      li === layerIndex ? { ...l, selectedPaletteIndex: paletteIndex } : l,
-    );
-  }
+    for (let i = 0; i < this.activeLayers.length; i++) {
+      const layer = this.activeLayers[i];
+      if (!layer) continue;
 
-  getPaletteHex(layerIndex: number): string {
-    const layer = this.activeLayers[layerIndex];
-    if (!layer) {
-      return '000000';
+      if (this.isolateLayerIndex >= 0 && i !== this.isolateLayerIndex) continue;
+
+      const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
+      if (!slotDef) continue;
+      const variant = slotDef.variants[layer.variantIndex];
+      if (!variant) continue;
+
+      result.push({ slot: slotDef.slot, assetId: variant.assetId, hexPalette: new Uint8Array(1024) });
     }
-    return layer.palette[layer.selectedPaletteIndex] ?? '000000';
-  }
 
+    return result;
+  }
   // ── Animation setters ───────────────────────────────────────────────
 
   setAnimationState(state: LpcAnimationState): void {
@@ -446,68 +371,32 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   // ── Texture / sheet helpers ─────────────────────────────────────────
 
-  private async _loadSheetTexture(path: string, slot: string, assetId: string): Promise<Texture> {
-    const cachedTexture = this._sheetTextureCache.get(path);
-    if (cachedTexture) {
-      return cachedTexture;
-    }
-    const cachedPromise = this._sheetTexturePromises.get(path);
-    if (cachedPromise) {
-      return cachedPromise;
-    }
+  private async _loadSheetTexture(_path: string, _slot: string, assetId: string): Promise<Texture> {
+    const cacheKey = `__lpc__${assetId}`;
+
+    const cached = this._sheetTextureCache.get(cacheKey);
+    if (cached) return cached;
+    const cachedPromise = this._sheetTexturePromises.get(cacheKey);
+    if (cachedPromise) return cachedPromise;
 
     const promise = (async () => {
       const { Assets } = await import('pixi.js');
       try {
-        const sheet = await Assets.load(path);
-        sheet.source.scaleMode = 'nearest';
-        this._sheetTextureCache.set(path, sheet);
-        return sheet;
+        const mod = await import(/* @vite-ignore */ `/src/lib/assets/lpc/${assetId}.webp?url`);
+        const url = (mod as { default: string }).default;
+        const texture = await Assets.load(url);
+        texture.source.scaleMode = 'nearest';
+        this._sheetTextureCache.set(cacheKey, texture);
+        return texture;
       } catch {
-        const fallback = await createPlaceholderTexture(slot, assetId);
-        this._sheetTextureCache.set(path, fallback);
-        return fallback;
+        const { Texture: T } = await import('pixi.js');
+        this._sheetTextureCache.set(cacheKey, T.EMPTY);
+        return T.EMPTY;
       }
     })();
 
-    this._sheetTexturePromises.set(path, promise);
+    this._sheetTexturePromises.set(cacheKey, promise);
     return promise;
-  }
-
-  private async _getRealFrameTexture(
-    slot: string,
-    assetId: string,
-    state: LpcAnimationState,
-    frameIndex: number,
-    sheet: Texture,
-  ): Promise<Texture> {
-    const frameKey = `${slot}:${assetId}:${state}:${frameIndex}`;
-
-    const cached = this._frameTextureCache.get(frameKey);
-    if (cached) {
-      return cached;
-    }
-
-    if (sheet === Texture.EMPTY) {
-      return Texture.EMPTY;
-    }
-
-    // Determine layout dynamically based on texture size
-    const columns = Math.floor(sheet.width / 64);
-    const rows = Math.floor(sheet.height / 64);
-
-    const frame = this._textureManager.getFrameAt({
-      texture: sheet,
-      layout: { frameWidth: 64, frameHeight: 64, columns, rows },
-      frameIndex,
-    });
-
-    if (frame) {
-      this._frameTextureCache.set(frameKey, frame);
-      return frame;
-    }
-
-    return Texture.EMPTY;
   }
 
   // ── Rendering ───────────────────────────────────────────────────────
@@ -519,71 +408,55 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     const currentState = this.animationState;
     const currentDirection = this.facingDirection;
 
-    if (!this.pixiApp || currentRecipes.length === 0) {
-      return;
-    }
+    if (!this.pixiApp || currentRecipes.length === 0) return;
 
     try {
       const newSprites: Sprite[] = [];
 
       const layerPromises = currentRecipes.map(async (recipe, i) => {
         const layer = this.activeLayers[i];
-        if (!recipe || !layer) {
-          return;
-        }
+        if (!recipe || !layer) return;
 
         const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
         const variant = slotDef?.variants[layer.variantIndex];
-        if (!variant) {
-          return;
-        }
+        if (!variant) return;
 
-        const path = getLpcAssetPath(slotDef.slot, variant.assetId, currentState);
-        const sheet = await this._loadSheetTexture(path, slotDef.slot, variant.assetId);
+        // Load webp spritesheet for the current animation state
+        const stateMap: Record<number, string> = {
+          [LpcAnimationState.Walk]: 'walk',
+          [LpcAnimationState.Spellcast]: 'spellcast',
+          [LpcAnimationState.Thrust]: 'thrust',
+          [LpcAnimationState.Slash]: 'slash',
+          [LpcAnimationState.Shoot]: 'shoot',
+          [LpcAnimationState.Die]: 'hurt',
+        };
+        const stateSuffix = stateMap[currentState] ?? 'walk';
+        const texture = await this._loadSheetTexture('', slotDef.slot, `${variant.assetId}.${stateSuffix}`);
+        if (!texture || texture === Texture.EMPTY) return;
 
-        if (sheet === Texture.EMPTY) {
-          return;
-        }
+        // Extract frame from spritesheet
+        const columns = Math.max(1, Math.floor(texture.width / 64));
+        const rows = Math.max(1, Math.floor(texture.height / 64));
 
-        let effectiveRow = currentDirection;
-        const columns = Math.floor(sheet.width / 64);
-        const rows = Math.floor(sheet.height / 64);
-        if (rows === 1) {
-          effectiveRow = 0;
-        }
+        const col = currentFrame % columns;
+        const row = rows > 1 ? (currentDirection % rows) : 0;
+        const x = col * 64;
+        const y = row * 64;
 
-        const frameCol = currentFrame % columns;
-        const frameIndex = effectiveRow * columns + frameCol;
+        if (x + 64 > texture.width || y + 64 > texture.height) return;
 
-        const frameTexture = await this._getRealFrameTexture(
-          slotDef.slot,
-          variant.assetId,
-          currentState,
-          frameIndex,
-          sheet,
-        );
-
-        if (frameTexture === Texture.EMPTY) {
-          return;
-        }
+        const { Rectangle } = await import('pixi.js');
+        const frameTexture = new Texture({
+          source: texture.source,
+          frame: new Rectangle(x, y, 64, 64),
+        });
 
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
         sprite.x = -32;
         sprite.y = -32;
         sprite.alpha = 1.0;
-
-        // Apply the active palette color to the layer.
-        // We skip 000000 (default transparent black) so we don't accidentally turn assets invisible/black
-        const hexColor = layer.palette[layer.selectedPaletteIndex];
-        if (hexColor && hexColor !== '000000') {
-          sprite.tint = hexToPixiTint(hexColor);
-        }
-
-        const zIndex = LPC_LAYER_Z_INDEX[slotDef.slot];
-        if (zIndex !== undefined) {
-          sprite.zIndex = zIndex;
-        }
+        sprite.zIndex = i * 10;
 
         newSprites.push(sprite);
       });
@@ -596,7 +469,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       container.eventMode = 'none';
       container.sortableChildren = true;
 
-      newSprites.sort((a, b) => a.zIndex - b.zIndex);
       for (const s of newSprites) {
         container.addChild(s);
         this._layerSprites.push(s);
@@ -615,7 +487,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
       const fallbackGfx = new Graphics();
       fallbackGfx.rect(0, 0, 64, 64);
-      fallbackGfx.fill({ color: FALLBACK_COLOR, alpha: 0.9 });
+      fallbackGfx.fill({ color: 0xff00ff, alpha: 0.9 });
       fallbackGfx.rect(0, 0, 64, 64);
       fallbackGfx.stroke({ color: 0xff0000, width: 2 });
       fallbackGfx.x = CANVAS_WIDTH / 2 - 32;
@@ -627,7 +499,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       this._layerSprites = [];
       this.compositionFailed = true;
 
-      this._setStatus(`Composition failed: ${message} — fallback block shown.`, 'error');
+      this._setStatus(`Composition failed: ${message}`, 'error');
     }
   }
 
@@ -691,51 +563,19 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   // ── URL sync (state ↔ URL) ──────────────────────────────────────────
 
   private _urlStateToActiveLayers(urlState: LpcUrlState): ActiveLayerConfig[] {
-    return urlState.layers.map((entry, layerIndex) => {
-      const palette = [...LPC_DEFAULT_PALETTE];
-
-      for (const [key, hex] of urlState.paletteOverrides) {
-        const colonIdx = key.indexOf(':');
-        if (colonIdx === -1) {
-          continue;
-        }
-        const overrideLayerIdx = Number.parseInt(key.slice(0, colonIdx), 10);
-        if (overrideLayerIdx !== layerIndex) {
-          continue;
-        }
-        const paletteIdx = Number.parseInt(key.slice(colonIdx + 1), 10);
-        if (!Number.isNaN(paletteIdx) && paletteIdx >= 0 && paletteIdx < 256) {
-          palette[paletteIdx] = hex;
-        }
-      }
-
-      return {
-        slotDefIndex: entry.slotDefIndex,
-        variantIndex: entry.variantIndex,
-        palette,
-        selectedPaletteIndex: 0,
-      };
-    });
+    return urlState.layers.map((entry) => ({
+      slotDefIndex: entry.slotDefIndex,
+      variantIndex: entry.variantIndex,
+    }));
   }
 
   private _createDefaultLayers(): ActiveLayerConfig[] {
-    const bodySlotIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'body');
-    const hairSlotIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'hair');
-
-    return [
-      {
-        slotDefIndex: bodySlotIdx >= 0 ? bodySlotIdx : 0,
-        variantIndex: 0,
-        palette: [...LPC_DEFAULT_PALETTE],
-        selectedPaletteIndex: 0,
-      },
-      {
-        slotDefIndex: hairSlotIdx >= 0 ? hairSlotIdx : 0,
-        variantIndex: 0,
-        palette: [...LPC_DEFAULT_PALETTE],
-        selectedPaletteIndex: 64,
-      },
-    ];
+    const bodyIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'body');
+    const headIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'head');
+    const layers: ActiveLayerConfig[] = [];
+    if (bodyIdx >= 0) layers.push({ slotDefIndex: bodyIdx, variantIndex: 0 });
+    if (headIdx >= 0) layers.push({ slotDefIndex: headIdx, variantIndex: 0 });
+    return layers.length > 0 ? layers : [{ slotDefIndex: 0, variantIndex: 0 }];
   }
 
   private _applyUrlParamsToState(): void {
@@ -760,31 +600,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     this._isApplyingUrlState = false;
   }
 
-  private _collectPaletteOverrides(): Map<string, string> {
-    const overrides = new Map<string, string>();
-
-    for (let i = 0; i < this.activeLayers.length; i++) {
-      const layer = this.activeLayers[i];
-      if (!layer) {
-        continue;
-      }
-
-      for (let p = 0; p < layer.palette.length; p++) {
-        const current = layer.palette[p];
-        const default_ = LPC_DEFAULT_PALETTE[p];
-        if (current !== default_ && current !== '000000') {
-          overrides.set(`${i}:${p}`, current ?? '000000');
-        }
-      }
-    }
-
-    return overrides;
-  }
-
   private _pushStateToUrl(): void {
-    if (this._isApplyingUrlState) {
-      return;
-    }
+    if (this._isApplyingUrlState) return;
 
     if (this._pushUrlTimer !== undefined) {
       clearTimeout(this._pushUrlTimer);
@@ -798,7 +615,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           slotDefIndex: layer.slotDefIndex,
           variantIndex: layer.variantIndex,
         })),
-        paletteOverrides: this._collectPaletteOverrides(),
+        paletteOverrides: new Map(),
         state: this.animationState,
         direction: this.facingDirection,
         frame: this.animationFrame,
@@ -827,8 +644,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
             slot: slotDef?.slot ?? 'unknown',
             assetId: variant?.assetId ?? '',
             variantLabel: variant?.label ?? '',
-            shapeType: variant?.shapeType ?? 'default',
-            paletteIndex0: layer.palette[0],
           };
         });
       (window as unknown as Record<string, unknown>).__lpc_active_instances =
@@ -850,9 +665,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           return {
             slot: slotDef?.slot ?? 'unknown',
             variant: variant?.label ?? '',
-            shapeType: variant?.shapeType ?? 'default',
             assetId: variant?.assetId ?? '',
-            paletteSize: layer.palette.length,
           };
         });
       (window as unknown as Record<string, unknown>).__lpc_workbench_mock_cache_size = 0;
@@ -885,12 +698,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         void this.showGridOverlay;
         this._updateGridOverlay();
       });
-    });
-
-    this.registerEffectRoot(() => {
       $effect(() => {
         void this.activeLayers
-          .map((l) => `${l.slotDefIndex}:${l.variantIndex}:${l.palette[l.selectedPaletteIndex]}`)
+          .map((l) => `${l.slotDefIndex}:${l.variantIndex}`)
           .join(',');
         void this.animationState;
         void this.facingDirection;
@@ -902,9 +712,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           this._pushStateToUrl();
         }
       });
-    });
-
-    this.registerEffectRoot(() => {
       $effect(() => {
         void this.recipes;
         void this.animationFrame;
@@ -914,17 +721,12 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
         this._renderCharacter();
       });
-    });
-
-    this.registerEffectRoot(() => {
       $effect(() => {
         this._exposeTestHooks();
       });
-    });
 
-    // PixiJS init — fires reactively when canvasElement becomes available.
-    // This avoids the timing race between bind:this propagation and onMount.
-    this.registerEffectRoot(() => {
+      // PixiJS init — fires reactively when canvasElement becomes available.
+      // This avoids the timing race between bind:this propagation and onMount.
       $effect(() => {
         if (this.canvasElement && !this.pixiApp) {
           void this._initPixiApp();
@@ -1007,7 +809,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     this._sheetTextureCache.clear();
     this._sheetTexturePromises.clear();
-    this._frameTextureCache.clear();
 
     if (this.stageContainer.parent) {
       this.stageContainer.parent.removeChild(this.stageContainer);
