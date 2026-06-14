@@ -98,6 +98,7 @@
 | C-117 | ECS Snapshot Serializer | ✅ completed |
 | C-120 | View Folder Restructure & ViewModel Inheritance | ✅ completed |
 | C-121 | Start Menu & Optional Authentication | ✅ completed |
+| C-122 | Onboarding & Provider Gate | ✅ completed |
 
 ### C-119: Routing and Layout Simplification
 
@@ -301,6 +302,31 @@
 **Known limitations**:
 - No tests written for StartViewModel (contract didn't specify test hooks).
 - `goToRoute` requires explicit `{ queryParameters: undefined, pathParameters: undefined }` even for parameterless routes — a broader router type improvement would allow `{}`.
+
+### C-122: Onboarding & Provider Gate
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/start/components/missing_providers_dialog.svelte` — Warning modal: daisyUI `modal-open` overlay with warning icon, message about text AI provider requirement, "Cancel" (closes dialog) and "Go to Settings" (navigates to `/settings`) buttons. Keyboard-accessible (Escape closes).
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` — Added `showMissingProvidersDialog` state; `startGame()` now checks `_hasTextProvider()` before routing; gate fails → dialog, gate passes → `/setup`. Added `_hasTextProvider()` private method (checks `textProvider.apiKey` or `localhost` endpoint with model). Added `openMissingProvidersDialog()`, `closeMissingProvidersDialog()`, `goToSettingsForProviderSetup()` methods.
+- `apps/frontend/client/src/lib/views/start/start_view.svelte` — Imports and renders `MissingProvidersDialog` when `showMissingProvidersDialog` is true.
+
+**Deviations**:
+1. **Route changed from `/game` to `/setup`**: Contract says "route the user to `/setup` (the Character Creation placeholder)". Updated `startGame()` to navigate to `setup` route instead of `game`. Matches contract spec for new-game flow.
+2. **Local text service detection via endpoint heuristic**: Contract says "OR if a local AI text service is flagged as active". Implemented as checking if `textProvider.endpoint` contains `'localhost'` AND `textProvider.model` is non-empty — no network round-trip needed. Simpler than instantiating `LocalServiceDetector` in the StartViewModel.
+
+**Design decisions**:
+1. **`_hasTextProvider()` is a private method**: Internal gate logic, not exposed on the interface. Only `startGame()` uses it.
+2. **Dialog is a pure Svelte component**: No ViewModel — uses callback props (`onGoToSettings`, `onClose`). View delegates directly to ViewModel methods. Matches the view-ViewModel separation.
+3. **Provider check is read-only**: Does not mutate `aiSettingsService` state. Checks `.apiKey`, `.endpoint`, `.model` reactively via `$state` proxy.
+
+**Known limitations**:
+- Local text service check is heuristic (`endpoint.includes('localhost')`) — doesn't verify the service is actually running. Contract explicitly says API key validation is out of scope.
+- No tests written for the gate logic — contract didn't specify test hooks and existing StartViewModel has no test file.
+- Dialog doesn't persist state across page navigations — closing and reopening the Start Menu resets `showMissingProvidersDialog` to false.
 
 ---
 
