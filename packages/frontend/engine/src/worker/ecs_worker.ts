@@ -13,7 +13,7 @@ import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
-import { createPlayer } from '../entities/create_player.ts';
+import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
 import { createTestSprite } from '../entities/create_test_sprite.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
@@ -243,6 +243,7 @@ const initializeEngine = (
   canvasWidth: number,
   canvasHeight: number,
   loadPayload?: string,
+  playerData?: PlayerCreateOptions,
 ): void => {
   // 1. Create the bitECS world
   world = createWorld();
@@ -286,7 +287,7 @@ const initializeEngine = (
       postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
     }
   } else {
-    playerEntityId = createPlayer(world);
+    playerEntityId = createPlayer(world, playerData);
     let testSpriteId = 0;
     if (canvasWidth && canvasHeight) {
       testSpriteId = createTestSprite(world, canvasWidth, canvasHeight);
@@ -554,7 +555,7 @@ self.onmessage = (event: MessageEvent): void => {
   try {
     switch (message.type) {
       case 'INITIALIZE_ENGINE': {
-        const { canvasWidth, canvasHeight, buffers, loadPayload } = message;
+        const { canvasWidth, canvasHeight, buffers, loadPayload, playerData } = message;
 
         // Determine whether we have shared memory
         const firstBuffer = buffers[0] as ArrayBuffer;
@@ -573,7 +574,12 @@ self.onmessage = (event: MessageEvent): void => {
           activeBufferIndex = 0;
         }
 
-        initializeEngine(canvasWidth, canvasHeight, loadPayload as string | undefined);
+        initializeEngine(
+          canvasWidth as number,
+          canvasHeight as number,
+          loadPayload as string | undefined,
+          playerData as PlayerCreateOptions | undefined,
+        );
         break;
       }
 

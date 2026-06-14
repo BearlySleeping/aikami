@@ -55,6 +55,7 @@ P2 (Polish — after P1):
 | C-121 | [Start Menu & Optional Authentication](C-121-start-menu-and-auth.md) ✅ | Start Menu view/viewmodel, optional Google Sign-In, Tauri quit, credits modal | C-120 |
 | C-122 | [Onboarding & Provider Gate](C-122-onboarding-provider-gate.md) ✅ | Gate "Start Game" behind configured text AI provider, Missing Providers dialog, route to /setup | C-121 |
 | C-123 | [Character Creation Flow](C-123-character-creation-flow.md) ✅ | Wire setup route to CharacterCreateView, enterWorld action saves + navigates to /game | C-122 |
+| C-124 | [Game Engine Initialization & Overlay Base](C-124-game-engine-initialization.md) ✅ | Wire /game route to GameView, two-layer DOM overlay (canvas + UI), load active persona into engine, window resize + lifecycle cleanup | C-123 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 

@@ -129,6 +129,27 @@ export type GameWorldOptions = BaseEngineClassOptions & {
 };
 
 /**
+ * Player initialization data passed from the UI layer to the engine.
+ *
+ * Carries the active persona's name so the worker can display it
+ * and apply character-specific properties to the player entity.
+ */
+export type PlayerInitData = {
+  /** The player character's display name. */
+  name: string;
+};
+
+/**
+ * Initialize options for {@link GameWorld.initialize}.
+ */
+export type GameWorldInitializeOptions = PixiAppOptions & {
+  /** Optional ECS snapshot payload to load (resume saved game). */
+  initialPayload?: string;
+  /** Optional player data for new-game character initialization. */
+  playerData?: PlayerInitData;
+};
+
+/**
  * Manages the complete game engine lifecycle: PixiJS Application, Web Worker
  * for bitECS simulation, shared memory buffers, and the per-frame render loop.
  *
@@ -229,10 +250,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * Must be called once after construction.
    *
-   * @param options - PixiJS application options (must include a canvas).
+   * @param options - PixiJS application options + optional engine init params.
    */
-  async initialize(options: PixiAppOptions & { initialPayload?: string }): Promise<void> {
-    const { canvas, initialPayload } = options;
+  async initialize(options: GameWorldInitializeOptions): Promise<void> {
+    const { canvas, initialPayload, playerData } = options;
 
     if (this._app) {
       return;
@@ -246,7 +267,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._allocateBuffers();
 
     // ---- 3. Spawn the simulation worker -------------------------------
-    await this._spawnWorker(canvas.width, canvas.height, initialPayload);
+    await this._spawnWorker(canvas.width, canvas.height, initialPayload, playerData);
 
     // ---- 4. Set up keyboard input (main thread) -----------------------
     this._inputTeardown = this._setupKeyboardInput();
@@ -264,6 +285,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     this._app.ticker.add(this._tickerCallback);
     this._running = true;
+  }
+
+  /**
+   * Resizes the PixiJS renderer to fill the given dimensions.
+   *
+   * Called by the ViewModel in response to `window.resize` events
+   * so the game canvas always fills the viewport.
+   */
+  resize(width: number, height: number): void {
+    if (this._app) {
+      this._app.renderer.resize(width, height);
+    }
   }
 
   /**
@@ -367,11 +400,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param canvasWidth - Width of the canvas for entity spawn placement.
    * @param canvasHeight - Height of the canvas for entity spawn placement.
    * @param loadPayload - Optional ECS snapshot to load (bypasses default entities).
+   * @param playerData - Optional player data for new-game character initialization.
    */
   private async _spawnWorker(
     canvasWidth: number,
     canvasHeight: number,
     loadPayload?: string,
+    playerData?: PlayerInitData,
   ): Promise<void> {
     if (this._workerFactory) {
       this.debug('spawnWorker:using-workerFactory');
@@ -394,6 +429,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       canvasHeight,
       buffers: this._bufferPool,
       loadPayload,
+      playerData,
     });
 
     // Set up message listener for worker → main communication

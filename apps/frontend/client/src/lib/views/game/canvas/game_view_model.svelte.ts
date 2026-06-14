@@ -6,6 +6,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { PersonaData } from '@aikami/types';
 import {
   authService,
   consumePendingGameLoad,
@@ -23,6 +24,12 @@ import { GameStateService } from '../../../services/game/game_state_service.svel
 type ActiveDialog = {
   npcName: string;
   dialog: string;
+};
+
+/** Data passed to the engine for player entity initialization. */
+type PlayerInitData = {
+  /** The player character's name (from persona). */
+  name: string;
 };
 
 export type GameViewModelOptions = BaseViewModelOptions;
@@ -137,18 +144,30 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
 
   /**
-   * The logged-in player's display name.
-   * Derived from authService — updates reactively when auth state changes.
+   * The player character's name.
+   * Uses the active persona name if loaded, otherwise falls back to auth display name.
    */
   get playerDisplayName() {
+    if (this._personaPlayerName) {
+      return this._personaPlayerName;
+    }
     return authService.currentUser?.displayName || authService.currentUser?.email || 'Unknown';
   }
+
+  /** Player character name loaded from the active persona. */
+  private _personaPlayerName = $state<string>('');
+
+  /** Active persona data loaded during initialization. */
+  private _activePersona: PersonaData | undefined;
 
   /** Cached bridge instance — created lazily on first use. */
   private _bridge: EngineBridge | undefined;
 
   /** Cached GameWorld instance — created lazily after bridge init. */
   private _gameWorld: GameWorld | undefined;
+
+  /** Window resize handler cleanup function. */
+  private _resizeCleanup: (() => void) | undefined;
 
   /** Singleton game state service for persisting context data. */
   private readonly gameStateService = GameStateService.create({
@@ -215,6 +234,9 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
         this.gameStateService.removeActiveContext(event.entityId);
       });
 
+      // ── Load active persona for player name + data ──
+      await this._loadActivePersona();
+
       // ── Reactive canvas attachment via $effect ──
       // This replaces the old pendingCanvas pattern. When the View binds
       // the canvas element, this $effect fires and initializes the game world.
@@ -251,6 +273,47 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   /**
+   * Loads the active persona (from Firestore or localStorage) so the
+   * player character name and data are available for engine initialization.
+   */
+  private async _loadActivePersona(): Promise<void> {
+    try {
+      const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
+      const activePersona = await personaService.getActivePersona();
+      if (activePersona) {
+        this._activePersona = activePersona;
+        this._personaPlayerName = activePersona.name || activePersona.race || '';
+        this.debug('loadActivePersona', {
+          name: activePersona.name,
+          id: activePersona.id,
+        });
+        return;
+      }
+    } catch (error) {
+      this.debug('loadActivePersona:firestore-failed', error);
+    }
+
+    // Fallback: load most recent character from localStorage
+    try {
+      const stored = localStorage.getItem('aikami-characters');
+      if (stored) {
+        const characters = JSON.parse(stored) as Array<{ persona: PersonaData }>;
+        if (characters.length > 0) {
+          const persona = characters[characters.length - 1].persona;
+          this._activePersona = persona;
+          this._personaPlayerName = persona.name || persona.race || '';
+          this.debug('loadActivePersona:localStorage', {
+            name: persona.name,
+            id: persona.id,
+          });
+        }
+      }
+    } catch (error) {
+      this.debug('loadActivePersona:localStorage-failed', error);
+    }
+  }
+
+  /**
    * Internal: creates the GameWorld and attaches to the canvas.
    * Assumes this._bridge is already initialized.
    */
@@ -265,13 +328,29 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
       const initialPayload = consumePendingGameLoad();
 
+      const playerData: PlayerInitData | undefined = this._activePersona?.name
+        ? { name: this._activePersona.name }
+        : undefined;
+
       this._gameWorld = GameWorld.create({ className: 'GameWorld', bridge });
       await this._gameWorld.initialize({
         canvas,
         width: canvas.clientWidth,
         height: canvas.clientHeight,
         initialPayload,
+        playerData,
       });
+
+      // Register window resize handler — keep the PixiJS canvas filling the viewport
+      const handleResize = (): void => {
+        if (this._gameWorld) {
+          this._gameWorld.resize(window.innerWidth, window.innerHeight);
+        }
+      };
+      window.addEventListener('resize', handleResize);
+      this._resizeCleanup = (): void => {
+        window.removeEventListener('resize', handleResize);
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.gameError = message;
@@ -346,6 +425,11 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   /** @inheritdoc */
   override async dispose(): Promise<void> {
+    if (this._resizeCleanup) {
+      this._resizeCleanup();
+      this._resizeCleanup = undefined;
+    }
+
     if (this._gameWorld) {
       this._gameWorld.destroy();
       this._gameWorld = undefined;
