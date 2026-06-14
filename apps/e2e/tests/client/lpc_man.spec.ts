@@ -1,6 +1,7 @@
-import { test, type Page } from '@playwright/test';
+import { type Page, test } from '@playwright/test';
 
-const URL = 'http://localhost:5274/dev/lpc?l0=1%3A3&l1=0%3A94&l2=2%3A18&l3=3%3A1&l4=6%3A110&l5=7%3A30&l6=8%3A16&zoom=0.7&visual-testing=true';
+const URL =
+  'http://localhost:5274/dev/lpc?l0=1%3A3&l1=0%3A94&l2=2%3A18&l3=3%3A1&l4=6%3A110&l5=7%3A30&l6=8%3A16&zoom=0.7&visual-testing=true';
 
 const waitForPixiLoaded = async (page: Page): Promise<void> => {
   await page.waitForFunction(

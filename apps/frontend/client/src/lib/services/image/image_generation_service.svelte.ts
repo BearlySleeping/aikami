@@ -225,7 +225,8 @@ export class ImageGenerationService
     checkpoint?: string;
   }): Record<string, unknown> {
     const { prompt, checkpoint } = options;
-    const checkpointId = (checkpoint && checkpoint.length > 0 ? checkpoint : undefined) ?? this.selectedCheckpoint;
+    const checkpointId =
+      (checkpoint && checkpoint.length > 0 ? checkpoint : undefined) ?? this.selectedCheckpoint;
     const ckptName = checkpointId ? `${checkpointId}.safetensors` : undefined;
 
     if (!ckptName) {

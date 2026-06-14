@@ -1,6 +1,5 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/game_view.svelte
-  import { onMount } from 'svelte';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import type { GameViewModelInterface } from './game_view_model.svelte.ts';
 
@@ -9,29 +8,13 @@
   };
 
   const { viewModel }: Props = $props();
-
-  /** The canvas element that PixiJS will render into. */
-  let canvasElement: HTMLCanvasElement | undefined = $state();
-
-  onMount(() => {
-    if (canvasElement) {
-      void viewModel.attachCanvas(canvasElement);
-    }
-  });
-
-  const handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      viewModel.toggleOptions();
-    }
-  };
 </script>
 
-<svelte:window on:keydown={handleKeyDown} />
+<svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
 
 <BaseViewModelContainer {viewModel} fillHeight={true} class="relative">
   <!-- PixiJS canvas — the game engine owns this DOM element -->
-  <canvas bind:this={canvasElement} class="absolute inset-0 w-full h-full"></canvas>
+  <canvas bind:this={viewModel.canvasElement} class="absolute inset-0 w-full h-full"></canvas>
 
   <!-- Player HUD — top-left overlay -->
   {#if viewModel.isGameReady}

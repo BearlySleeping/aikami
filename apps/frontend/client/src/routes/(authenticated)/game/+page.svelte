@@ -1,37 +1,54 @@
 <script lang="ts">
   // apps/frontend/client/src/routes/(authenticated)/game/+page.svelte
-  import { onDestroy, onMount } from 'svelte';
+  import CreditsView from '$views/game/credits_view.svelte';
+  import { getCreditsViewModel } from '$views/game/credits_view_model.svelte.ts';
   import GameView from '$views/game/game_view.svelte';
   import { GameViewModel, type GameViewModelOptions } from '$views/game/game_view_model.svelte';
+  import MenuView from '$views/game/menu_view.svelte';
+  import { getMenuViewModel } from '$views/game/menu_view_model.svelte.ts';
+  import OptionsView from '$views/game/options_view.svelte';
+  import { getOptionsViewModel } from '$views/game/options_view_model.svelte.ts';
 
-  const viewModel = new GameViewModel({ className: 'GamePage' } satisfies GameViewModelOptions);
+  type GameScreen = 'menu' | 'options' | 'credits' | 'playing';
 
-  /**
-   * Initialize the ViewModel on mount.
-   *
-   * The ViewModel lazy-imports all PixiJS modules inside `initialize()`,
-   * which only runs after the component (and its canvas) is mounted in the
-   * DOM. This guarantees no `window` / `document` access during SSR.
-   *
-   * The ViewModel's `dispose()` is called on unmount via the returned
-   * cleanup function, ensuring WebGL contexts are freed.
-   */
-  onMount(() => {
-    void viewModel.initialize();
+  let screen = $state<GameScreen>('menu');
 
-    return () => {
-      viewModel.dispose();
-    };
+  const menuViewModel = getMenuViewModel({
+    className: 'GameMenu',
+    onStart: () => {
+      screen = 'playing';
+    },
+    onOptions: () => {
+      screen = 'options';
+    },
+    onCredits: () => {
+      screen = 'credits';
+    },
   });
 
-  /**
-   * Failsafe: if the component is destroyed without the onMount cleanup
-   * running (edge case — hot module reload, route preload cancellation),
-   * destroy the game world explicitly to prevent WebGL memory leaks.
-   */
-  onDestroy(() => {
-    viewModel.dispose();
+  const optionsViewModel = getOptionsViewModel({
+    className: 'GameOptions',
+    onBack: () => {
+      screen = 'menu';
+    },
   });
+
+  const creditsViewModel = getCreditsViewModel({
+    className: 'GameCredits',
+    onBack: () => {
+      screen = 'menu';
+    },
+  });
+
+  const gameViewModel = new GameViewModel({ className: 'GamePage' } satisfies GameViewModelOptions);
 </script>
 
-<GameView {viewModel} />
+{#if screen === 'menu'}
+  <MenuView viewModel={menuViewModel} />
+{:else if screen === 'options'}
+  <OptionsView viewModel={optionsViewModel} />
+{:else if screen === 'credits'}
+  <CreditsView viewModel={creditsViewModel} />
+{:else}
+  <GameView viewModel={gameViewModel} />
+{/if}

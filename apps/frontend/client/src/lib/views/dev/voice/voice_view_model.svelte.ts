@@ -5,11 +5,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { KOKORO_VOICES, VOICE_ENGINES } from '$lib/services/config/config_service.svelte';
 import { ttsService, type VoiceInfo } from '$services';
-import {
-  VOICE_ENGINES,
-  KOKORO_VOICES,
-} from '$lib/services/config/config_service.svelte';
 
 export type { VoiceInfo };
 
@@ -239,12 +236,12 @@ class VoiceViewModel
 
           // Progress: prefer Content-Length, fall back to chunk count estimate
           if (contentLength > 0) {
-            this.synthesisProgress = Math.min(95, Math.round((totalReceived / contentLength) * 100));
-          } else {
             this.synthesisProgress = Math.min(
               95,
-              Math.round((chunkCount / estimatedChunks) * 100),
+              Math.round((totalReceived / contentLength) * 100),
             );
+          } else {
+            this.synthesisProgress = Math.min(95, Math.round((chunkCount / estimatedChunks) * 100));
           }
         }
       }
