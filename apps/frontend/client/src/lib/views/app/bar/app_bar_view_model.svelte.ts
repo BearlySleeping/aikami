@@ -64,11 +64,6 @@ export type AppBarViewModelInterface = BaseViewModelInterface & {
   goToRegister(): Promise<void>;
 
   /**
-   * Navigates to the dashboard page.
-   */
-  goToDashboard(): Promise<void>;
-
-  /**
    * Navigates to the profile page.
    */
   goToProfile(): Promise<void>;
@@ -117,8 +112,6 @@ class AppBarViewModel
 
   get appBarTitle() {
     switch (this.currentRoute) {
-      case 'dashboard':
-        return t.dashboard();
       case 'settings':
         return t.settings();
       case 'login':
@@ -136,11 +129,6 @@ class AppBarViewModel
         icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
         text: t.profile(),
         click: () => this.goToProfile(),
-      },
-      {
-        icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2V7zm16 4l-4-4h8l-4 4z',
-        text: t.dashboard(),
-        click: () => this.goToDashboard(),
       },
       {
         icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37... ', // truncated for brevity
@@ -161,12 +149,12 @@ class AppBarViewModel
 
   async goToHome(): Promise<void> {
     if (this.isLoggedIn) {
-      await routerService.goToRoute('dashboard', {
+      await routerService.goToRoute('settings', {
         pathParameters: undefined,
         queryParameters: undefined,
       });
     } else {
-      await routerService.goToRoute('dashboard', {
+      await routerService.goToRoute('settings', {
         pathParameters: undefined,
         queryParameters: undefined,
       });
@@ -182,13 +170,6 @@ class AppBarViewModel
 
   async goToRegister(): Promise<void> {
     await routerService.goToRoute('register', {
-      pathParameters: undefined,
-      queryParameters: undefined,
-    });
-  }
-
-  async goToDashboard(): Promise<void> {
-    await routerService.goToRoute('dashboard', {
       pathParameters: undefined,
       queryParameters: undefined,
     });

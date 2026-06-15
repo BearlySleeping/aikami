@@ -72,6 +72,8 @@ P2 (Polish — after P1):
 | C-012 | [Generate llms.txt and CONTEXT.md](C-012-generate-llms-and-context.md) | AI-first file index and project briefing | C-002, C-007 |
 | C-131 | [Native WebGPU Voice via Kokoro](C-131-native-webgpu-voice.md) ✅ | Browser-native TTS with Kokoro 82M model via WebGPU Worker | — |
 | C-132 | [Persistence - Save/Load System](C-132-save-load-system.md) ✅ | ECS snapshot persistence to browser IndexedDB — Main Menu Continue, Pause Menu Save, unit+E2E tests | C-117, C-118, C-125 |
+| C-133 | [Flexible AI Provider Onboarding](C-133-flexible-provider-onboarding.md) ✅ | Remove strict dual-local requirement — boot on Text provider only (Ollama or OpenRouter), image/voice optional with graceful degradation | C-130 |
+| C-134 | [Inline Provider Setup & Routing Fix](C-134-inline-provider-setup.md) ✅ | Inline OpenRouter API key input on boot screen, routing gate bypass for /settings | C-133 |
 
 ## Contract Format
 

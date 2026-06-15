@@ -1,6 +1,7 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/app_view.svelte
   import type { Snippet } from 'svelte';
+  // apps/frontend/client/src/lib/views/app/app_view.svelte
+  import { page } from '$app/stores';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import ModeIndicator from '$lib/components/mode_indicator.svelte';
   import type { AppViewModelInterface } from './app_view_model.svelte.ts';
@@ -14,18 +15,13 @@
 
   let { viewModel, children }: Props = $props();
 
-  /**
-   * Boot diagnostics ViewModel — created once, lives for the lifetime of
-   * the diagnostics screen. Passes `onBootComplete` from the AppViewModel
-   * so the diagnostics can signal when it's time to proceed.
-   */
   const bootDiagnosticsViewModel = getBootDiagnosticsViewModel({
     className: 'BootDiagnosticsViewModel',
     onBootComplete: () => viewModel.onBootComplete(),
   });
 </script>
 
-{#if viewModel.showBootDiagnostics}
+{#if viewModel.showBootDiagnostics && !$page.url.pathname.startsWith('/settings')}
   <BootDiagnosticsView viewModel={bootDiagnosticsViewModel} />
 {:else}
   <BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
@@ -35,7 +31,7 @@
 
 <style>
   /* Hide the default Firebase emulator warning banner injected by the SDK —
-                                                                           replaced by our custom ModeIndicator component. */
+                                                                                                               replaced by our custom ModeIndicator component. */
   :global(.firebase-emulator-warning) {
     display: none;
   }
