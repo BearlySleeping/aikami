@@ -200,7 +200,7 @@ const handleBridgeCommand = (command: GameCommand): void => {
 // -- Worker-side recipe resolver --------------------------------------------
 
 /** Slot name lookup for converting Appearance layer IDs to recipes. */
-const WORKER_SLOT_NAMES = ['body', 'hair', 'torso', 'legs', 'feet'] as const;
+const WORKER_SLOT_NAMES = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
 /**
  * Converts entity layer IDs to {@link LpcLayerRecipe} arrays using

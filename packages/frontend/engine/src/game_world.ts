@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application } from 'pixi.js';
-import { Container, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import {
@@ -182,6 +182,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
 
+  /**
+   * Master container for all game entities.
+   *
+   * Scaled 4× for visible pixel-art entities and positioned so (0,0) maps
+   * to the center of the canvas. All entities are added to this container
+   * instead of the stage directly, which keeps the coordinate origin
+   * consistent and enables future camera transforms.
+   */
+  private _worldContainer: Container | undefined;
+
   /** The Web Worker running the bitECS simulation. */
   private _worker: Worker | undefined;
 
@@ -260,8 +270,29 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // ---- 1. Create PixiJS Application (main thread) -------------------
-    const pixiInstance: PixiAppInstance = await createPixiApp(options);
+    // resizeTo: window ensures the canvas fills the viewport immediately
+    // instead of waiting for the parent element's CSS layout to resolve.
+    // Without this PixiJS may init at 0×0 when the $effect fires before
+    // layout is calculated.
+    const pixiInstance: PixiAppInstance = await createPixiApp({
+      ...options,
+      resizeTo: window,
+    });
     this._app = pixiInstance.app;
+
+    // ---- 1a. Build the world container with camera transform ----------
+    this._worldContainer = new Container();
+
+    // Scale everything so pixel-art sprites are visible (4× zoom)
+    this._worldContainer.scale.set(4);
+
+    // Camera centering is handled dynamically in _updateRenderFromBuffer —
+    // it follows the player entity every frame. No static offset here.
+
+    this._app.stage.addChild(this._worldContainer);
+
+    // Draw a debug floor grid for spatial orientation
+    this._drawDebugGrid();
 
     // ---- 2. Allocate shared memory buffers ----------------------------
     this._allocateBuffers();
@@ -360,6 +391,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._app.destroy(true, { children: true });
       this._app = undefined;
     }
+
+    this._worldContainer = undefined;
   }
 
   // -----------------------------------------------------------------------
@@ -415,8 +448,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // Use the direct new Worker(new URL(...)) pattern so Vite's worker
       // plugin detects the worker entry during build and emits a proper
       // .js chunk instead of a .ts file (which gets served as video/mp2t
-      // by the preview server).
-      this._worker = new Worker(new URL('./worker/ecs_worker.ts', import.meta.url), {
+      // by the preview server). Cache-bust with timestamp to force reload
+      // during development when the worker source changes.
+      const workerUrl = new URL('./worker/ecs_worker.ts', import.meta.url);
+      if (import.meta.env?.DEV) {
+        workerUrl.searchParams.set('t', String(Date.now()));
+      }
+      this._worker = new Worker(workerUrl, {
         type: 'module',
       });
       this.debug('spawnWorker:created');
@@ -580,14 +618,35 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Create an LPC-compatible container.
     // When the first APPEARANCE_CHANGED event arrives, the container will
     // be populated with layer sprites.
+    //
+    // ⚠️  NEVER set .width / .height on an empty Container. PixiJS
+    // computes an internal scale multiplier by dividing target width by
+    // the container's local bounds — when there are no children the
+    // local bounds are (0,0,0,0), producing a scale of 0 (or Infinity),
+    // which makes ALL future children invisible.
     const container = new Container();
-    container.width = 48;
-    container.height = 48;
+
+    // Draw a debug colored square using the worker's tint so entities are
+    // visible even before LPC textures load. Uses Sprite(Texture.WHITE)
+    // because PixiJS v8 Graphics has compat issues in headless WebGL.
+    // Centered 32×32 world units → 128×128 screen pixels at 4× scale.
+    const parsedTint =
+      typeof tint === 'string' ? Number.parseInt(String(tint).replace('0x', ''), 16) : tint;
+    const safeTint =
+      typeof parsedTint === 'number' && !Number.isNaN(parsedTint) ? parsedTint : 0xff00ff;
+    const sprite = new Sprite(Texture.WHITE);
+    sprite.width = 32;
+    sprite.height = 32;
+    sprite.anchor.set(0.5);
+    sprite.tint = safeTint;
+    container.addChild(sprite);
 
     // Per-contract C-032: bypass layout hit-tests for character visuals
     container.eventMode = 'none';
 
-    this._app.stage.addChild(container);
+    // Add to the world container (scaled + centered) instead of raw stage
+    const target = this._worldContainer ?? this._app.stage;
+    target.addChild(container);
     this.debug('entity-added-to-stage', {
       eid,
       stageChildren: this._app.stage.children.length,
@@ -881,6 +940,47 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   // -----------------------------------------------------------------------
+  // Internal: Debug grid
+  // -----------------------------------------------------------------------
+
+  /**
+   * Draws a 10×10 tile debug grid centered on the world origin.
+   *
+   * Each tile is 32×32 world units. With the 4× scale transform on
+   * {@link _worldContainer}, tiles appear as 128×128 screen pixels —
+   * large enough to be clearly visible. Provides spatial reference
+   * during development.
+   */
+  private _drawDebugGrid(): void {
+    if (!this._app || !this._worldContainer) {
+      return;
+    }
+
+    const grid = new Graphics();
+    const strokeColor = 0x33334a;
+
+    const tileSize = 32;
+    const tiles = 10;
+    const halfExtent = (tiles * tileSize) / 2;
+
+    for (let i = 0; i <= tiles; i++) {
+      const pos = i * tileSize - halfExtent;
+      // Vertical lines
+      grid
+        .moveTo(pos, -halfExtent)
+        .lineTo(pos, halfExtent)
+        .stroke({ width: 1, color: strokeColor });
+      // Horizontal lines
+      grid
+        .moveTo(-halfExtent, pos)
+        .lineTo(halfExtent, pos)
+        .stroke({ width: 1, color: strokeColor });
+    }
+
+    this._worldContainer.addChildAt(grid, 0); // behind all entities
+  }
+
+  // -----------------------------------------------------------------------
   // Internal: Render from buffer
   // -----------------------------------------------------------------------
 
@@ -929,6 +1029,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.x = x;
       entry.displayObject.y = y;
 
+      // Dynamic camera: center the world container on the player every frame.
+      // The worker spawns entities at canvas-relative coords (e.g., x=960).
+      // We offset _worldContainer so the player appears at screen center.
+      if (eid === this._playerEntityId && this._app && this._worldContainer) {
+        this._worldContainer.x = this._app.screen.width / 2 - x * this._worldContainer.scale.x;
+        this._worldContainer.y = this._app.screen.height / 2 - y * this._worldContainer.scale.y;
+      }
+
       // Drive per-entity animation controller from positional deltas.
       // The controller computes dx/dy across frames to derive facing
       // direction and walk/idle transitions.
@@ -939,20 +1047,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._applyLpcFrame(entry, entry.animationController);
       }
 
-      // Spatial culling for cullable entities
-      if (entry.cullable) {
-        const isOffScreen =
-          x + 48 < stageBounds.x ||
-          x > stageBounds.x + stageBounds.width ||
-          y + 48 < stageBounds.y ||
-          y > stageBounds.y + stageBounds.height;
-
-        entry.displayObject.visible = !isOffScreen;
-      }
-
-      if (entry.displayObject.visible) {
-        visibleCount++;
-      }
+      // Spatial culling: temporaily disabled.
+      // FIXME: The math is broken now that the world origin is centered
+      // and scaled via _worldContainer. Raw world coordinates can be
+      // negative (e.g., player at -100, -100) while the camera centers
+      // them on-screen, but this check treats negative coords as off-screen.
+      // Hardcoded outside any if-block to guarantee visibility.
+      entry.displayObject.visible = true;
+      visibleCount++;
     }
 
     // Throttled per-second render diagnostic (only when BaseEngineClass.setRenderDebug(true))
@@ -981,13 +1083,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // We assume container since it's now a Container.
     const container = entry.displayObject as Container;
 
-    // Clear existing sprites.
-    if (entry.layerSprites) {
-      for (const { sprite } of entry.layerSprites) {
-        container.removeChild(sprite);
-        sprite.destroy();
-      }
-    }
     entry.layerSprites = [];
 
     // Dynamically import Assets to avoid tying the engine to PixiJS asset loader in simple setups
@@ -995,6 +1090,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const stateStr = 'walk'; // default state for engine
 
     const layerSprites: NonNullable<RenderEntry['layerSprites']> = [];
+    let texturesLoaded = false;
 
     // Map recipes to promises. We await them all below.
     const loadPromises = recipes.map(async (recipe) => {
@@ -1010,12 +1106,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const texture = await Assets.load(url);
         texture.source.scaleMode = 'nearest';
 
+        // Remove debug sprites on first successful texture load
+        if (!texturesLoaded) {
+          texturesLoaded = true;
+          container.removeChildren();
+        }
+
         const sprite = new Sprite(Texture.WHITE);
         sprite.eventMode = 'none';
-
-        // Apply tint if provided (for placeholder or fallback tinting)
-        // Note: For LPC full-color assets we often don't tint, but for fallback we might.
-        // We'll skip tinting for now to avoid muddy colors, similar to LpcCharacterRenderer.
 
         container.addChild(sprite);
         layerSprites.push({ sprite, recipe, texture });

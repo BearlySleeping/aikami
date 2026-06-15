@@ -50,17 +50,13 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
     }),
   );
 
-  // Set default Appearance (Male Muscular, Short Hair, Shirt, Pants, Shoes)
-  // Layer IDs map to asset catalog indices. We'll use placeholder IDs for now,
-  // the recipeResolver on the main thread will map them back.
-  // We'll use specific IDs to be mapped by the client:
-  // 1 = muscular body
-  // 2 = short hair
-  // 3 = long sleeve shirt
-  // 4 = pants
-  // 5 = shoes
+  // Set default Appearance with all 6 engine slots:
+  //   body, hair, torso, legs, feet, head
+  // Variant indices are 1-indexed (0 = first variant in catalog).
+  // Head uses variant 95 (= index 94, head/heads/human_male) so the
+  // character has a visible face instead of just ear accessories.
   addComponent(world, entityId, Appearance);
-  setAppearanceLayers(world, entityId, [1, 2, 3, 4, 5]);
+  setAppearanceLayers(world, entityId, [1, 1, 1, 1, 1, 95]);
 
   // Store player name as a numeric hash on the entity for reference.
   // The UI layer (GameViewModel) owns the display name; the engine
