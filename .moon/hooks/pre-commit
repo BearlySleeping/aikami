@@ -10,5 +10,7 @@ done
 
 bunx moon run :fix --affected --status=staged
 bunx moon run :typecheck --affected --status=staged
+bun knowledge:sync
+git add .context/llms.txt docs/contracts/ || true
 git diff -z --name-only --cached | xargs -0 git add || true
 

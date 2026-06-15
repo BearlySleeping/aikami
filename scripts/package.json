@@ -14,5 +14,8 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*"
+  },
+  "devDependencies": {
+    "firebase-tools": "15.20.0"
   }
 }

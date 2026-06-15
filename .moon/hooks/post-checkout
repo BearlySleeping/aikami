@@ -9,5 +9,4 @@ done
 # https://moonrepo.dev/docs/guides/vcs-hooks
 
 bunx moon sync
-bun run knowledge:generate
 
