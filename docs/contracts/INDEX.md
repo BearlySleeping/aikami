@@ -58,6 +58,7 @@ P2 (Polish — after P1):
 | C-124 | [Game Engine Initialization & Overlay Base](C-124-game-engine-initialization.md) ✅ | Wire /game route to GameView, two-layer DOM overlay (canvas + UI), load active persona into engine, window resize + lifecycle cleanup | C-123 |
 | C-125 | [Game UI Overlay Architecture & State Sync](C-125-game-ui-overlay-architecture.md) ✅ | Reactive bridge between ECS worker and Svelte UI — GameUIViewModel overlay router, Pause Menu with Resume/Settings/Quit, Escape key toggle | C-124 |
 | C-126 | [Headless App Shell & Initialization](C-126-headless-app-shell.md) ✅ | Resolve RouterService init error — headless AppShell bootstrapper, strip AppViewModel UI state, wire root layout | C-125 |
+| C-127 | [Settings Menu Refactor](C-127-settings-menu-refactor.md) ✅ | Overhaul /settings to game options menu — Game (Display/Audio/Controls) and AI Engine (Text/Image/Voice) tabs, mount C-120 ProvidersView | C-126 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 
