@@ -12,9 +12,18 @@ export type VoiceInfo = {
   readonly description: string;
 };
 
+/** Lifecycle status of the native Kokoro WebGPU TTS engine. */
+export type TtsStatus = 'uninitialized' | 'initializing' | 'ready' | 'error';
+
 export type TtsOptions = BaseFrontendClassOptions;
 
 export type TtsServiceInterface = BaseFrontendClassInterface & {
+  /** Lifecycle status of the native Kokoro WebGPU engine. */
+  readonly status: TtsStatus;
+
+  /** Error message when status is 'error'. */
+  readonly errorMessage: string | null;
+
   /** Whether audio is currently playing. */
   readonly isPlaying: boolean;
 
@@ -77,6 +86,31 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
 
   /** Marks the streaming session as complete (flushes final chunk). */
   endStream(): void;
+
+  /**
+   * Initializes the native Kokoro TTS Web Worker.
+   * Spawns a dedicated worker that loads the 82M Kokoro model via WebGPU.
+   * Must be called before {@link synthesize}.
+   */
+  initialize(): Promise<void>;
+
+  /**
+   * Synthesizes text to speech using the native Kokoro WebGPU engine.
+   * Posts a synthesize message to the worker and awaits the PCM result.
+   *
+   * @param options.text The text to synthesize.
+   * @param options.voice The Kokoro voice key (e.g., 'af_bella').
+   */
+  synthesize(options: { text: string; voice: string }): Promise<void>;
+
+  /**
+   * Converts raw PCM Float32Array data into an AudioBuffer and schedules
+   * gapless playback through the Web Audio API.
+   *
+   * @param options.pcmData Raw PCM audio samples.
+   * @param options.sampleRate Sample rate in Hz (e.g., 24000).
+   */
+  playAudioBuffer(options: { pcmData: Float32Array; sampleRate: number }): Promise<void>;
 };
 
 type WordBoundary = {
@@ -85,6 +119,8 @@ type WordBoundary = {
 };
 
 class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInterface {
+  status: TtsStatus = $state('uninitialized');
+  errorMessage: string | null = $state(null);
   isPlaying = $state(false);
   isSynthesizing = $state(false);
   currentWordIndex = $state(-1);
@@ -92,6 +128,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   voices: VoiceInfo[] = $state([]);
   selectedVoice = $state('af_heart');
 
+  private _worker: Worker | null = null;
   private _abortController: AbortController | undefined;
   private currentAudio: HTMLAudioElement | null = null;
 
@@ -309,6 +346,112 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   endStream(): void {
     this._streamEnded = true;
+  }
+
+  // ── Kokoro WebGPU TTS ──
+
+  async initialize(): Promise<void> {
+    if (this.status !== 'uninitialized') {
+      this.debug('initialize:skipped', { status: this.status });
+      return;
+    }
+
+    this.status = 'initializing';
+    this.errorMessage = null;
+
+    try {
+      this._worker = new Worker(new URL('./kokoro_worker.ts', import.meta.url), { type: 'module' });
+
+      this._worker.onmessage = (event: MessageEvent) => {
+        const payload = event.data as {
+          type: 'ready' | 'complete' | 'error';
+          pcmData?: Float32Array;
+          sampleRate?: number;
+          message?: string;
+        };
+
+        switch (payload.type) {
+          case 'ready':
+            this.status = 'ready';
+            this.debug('initialize:ready');
+            break;
+
+          case 'complete':
+            if (payload.pcmData && payload.sampleRate !== undefined) {
+              this.playAudioBuffer({
+                pcmData: payload.pcmData,
+                sampleRate: payload.sampleRate,
+              });
+            }
+            break;
+
+          case 'error':
+            this.error('kokoro:worker-error', { message: payload.message });
+            break;
+
+          default:
+            break;
+        }
+      };
+
+      this._worker.onerror = (error: ErrorEvent) => {
+        this.status = 'error';
+        this.errorMessage = error.message || 'Unknown worker error';
+        this.error('kokoro:worker-onerror', { message: this.errorMessage });
+      };
+
+      this._worker.postMessage({ action: 'initialize' });
+    } catch (error: unknown) {
+      this.status = 'error';
+      this.errorMessage = error instanceof Error ? error.message : 'Failed to spawn Kokoro worker';
+      this.error('initialize:failed', error);
+    }
+  }
+
+  async synthesize(options: { text: string; voice: string }): Promise<void> {
+    const { text, voice } = options;
+
+    if (!this._worker || this.status !== 'ready') {
+      this.debug('synthesize:not-ready', { status: this.status });
+      return;
+    }
+
+    if (!text.trim()) {
+      return;
+    }
+
+    this._worker.postMessage({ action: 'synthesize', text, voice });
+  }
+
+  async playAudioBuffer(options: { pcmData: Float32Array; sampleRate: number }): Promise<void> {
+    const { pcmData, sampleRate } = options;
+
+    audioContextManager.unlock();
+    const ctx = audioContextManager.context;
+
+    const audioBuffer = ctx.createBuffer(1, pcmData.length, sampleRate);
+    audioBuffer.getChannelData(0).set(pcmData);
+
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
+
+    // Schedule gapless playback
+    const scheduleTime = Math.max(ctx.currentTime, this.nextStartTime);
+    source.start(scheduleTime);
+
+    // Update scheduling clock
+    this.nextStartTime = scheduleTime + audioBuffer.duration;
+
+    // Track source for cleanup
+    this.sourceNodes.push(source);
+
+    source.onended = () => {
+      const idx = this.sourceNodes.indexOf(source);
+      if (idx !== -1) {
+        this.sourceNodes.splice(idx, 1);
+      }
+    };
   }
 
   // ── Private ──

@@ -32,6 +32,7 @@
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
 | C-130 | In-Game AI Diagnostics & Onboarding | ✅ completed |
+| C-131 | Native WebGPU Voice via Kokoro | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -598,3 +599,36 @@
 - In browser dev mode, `@tauri-apps/plugin-http` import will fail — providers always show "offline" since CORS blocks localhost pings. Diagnostics only works correctly in the Tauri desktop app.
 - No graceful degradation for non-Tauri environments — the diagnostics screen is always shown, even when running in a regular browser where providers can never be pinged. A future enhancement could detect `!window.__TAURI__` and skip diagnostics.
 - The `comfyStatus` is currently unused by any downstream game code — the game only checks for text providers (Ollama). Image AI gating is ready for future contracts.
+
+### C-131: Native WebGPU Voice via Kokoro
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/services/audio/kokoro_worker.ts` — Dedicated Web Worker wrapping the 82M Kokoro TTS model. Handles `initialize` action (configures ONNX Runtime WebGPU execution provider, sets WASM paths to jsDelivr CDN, loads `onnx-community/Kokoro-82M-ONNX` with `dtype: 'q8'` and `enableGraphCapture: true`) and `synthesize` action (runs tokenizer + model forward pass, returns `Float32Array` PCM buffer with zero-copy `transfer`). Communicates via `postMessage` with `ready`/`complete`/`error` response types.
+- `apps/frontend/client/src/lib/services/audio/tts_service.test.ts` — 5 Bun unit tests mocking the Worker global: initialize posts initialize action, status transitions to ready on worker response, synthesize posts correct message when ready, synthesize is no-op when not ready or with empty text.
+- `apps/e2e/tests/client/tts_worker.spec.ts` — Playwright e2e test: loads the start menu route, captures console errors, asserts zero WebGPU/WASM/Kokoro-related errors on page load (worker is lazy-loaded, so simple page load should have no errors).
+
+**Files modified**:
+- `apps/frontend/client/package.json` — Added `@huggingface/transformers` (^4.2.0), `kokoro-js` (^1.0.0), `onnxruntime-web` (^1.19.0) to dependencies.
+- `apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts` — Added `TtsStatus` type (`'uninitialized' | 'initializing' | 'ready' | 'error'`), `status` and `errorMessage` `$state` fields, `_worker` private field. Added `initialize()` (spawns dedicated Worker, sets onmessage/onerror handlers), `synthesize(options: { text, voice })` (posts synthesize message to worker), `playAudioBuffer(options: { pcmData, sampleRate })` (converts raw PCM Float32Array to AudioBuffer and schedules gapless playback via Web Audio API). Existing REST-based `speak()` method preserved unchanged.
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Injected `ttsService` singleton and `SentenceBoundaryChunker`. `initialize()` creates chunker, registers `onSentence` callback that calls `ttsService.synthesize()`, and kicks off `ttsService.initialize()` (fire-and-forget). Both streaming paths (`_streamViaOllama` and `_streamViaTextGenerationService`) feed each token chunk to the chunker via `_chunker.feed()`. `endChat()` calls `_chunker.close()` to flush remaining buffered text. `close()` is also called at end of each AI response stream.
+
+**Deviations**:
+1. **No `executionProviders` option in KokoroTTS.from_pretrained()**: Removed from options — kokoro-js determines providers automatically from the `device: 'webgpu'` setting. The `enableGraphCapture: true` flag is passed through.
+2. **Voice type cast**: `session.generate()` voice parameter is a narrow union of known Kokoro presets. The worker receives `string` from the main thread and casts via `as Parameters<typeof session.generate>[1]` to satisfy the type constraint.
+3. **TTS initialized fire-and-forget in dialogue**: `ttsService.initialize()` is called in the dialogue overlay's `initialize()` without awaiting — speech works once the worker reports 'ready'. `_ttsInitialized` flag prevents redundant initialization on subsequent dialogue opens.
+4. **`_chunker` per-overlay instance**: A fresh `SentenceBoundaryChunker` is created per dialogue session (constructor), resetting sentence detection state on each NPC interaction.
+
+**Design decisions**:
+1. **Dual TTS architecture**: Native Kokoro WebGPU TTS (`initialize()` + `synthesize()` + `playAudioBuffer()`) coexists with existing REST-based TTS (`speak()` + `enqueueChunk()`). The `speak()` method continues to use the Kokoro REST endpoint (`/api/voice/v1/audio/speech`) for backward compatibility and server-based voice generation. The new WebGPU path is triggered via `synthesize()`.
+2. **Zero-copy PCM transfer**: The worker uses `self.postMessage(response, { transfer: [pcmData.buffer] })` so the Float32Array's underlying ArrayBuffer is transferred to the main thread without copying.
+3. **Sentence-boundary TTS**: Each complete sentence (detected by the existing `SentenceBoundaryChunker`) is sent as a separate synthesis request — sentences play sequentially with gapless scheduling via `nextStartTime`.
+4. **`onnxruntime-web/webgpu` import path**: Imports the WebGPU-specific backend entry point which registers the `webgpu` execution provider with ONNX runtime at import time.
+
+**Known limitations**:
+- WebGPU availability depends on browser + hardware. Chromium-based browsers with `--enable-unsafe-webgpu` or WebGPU-enabled flags required. Firefox and Safari have limited WebGPU support.
+- Model download on first use: the 82M Kokoro ONNX model (~300MB) is fetched from HuggingFace CDN on first `initialize()` call — subsequent loads use browser cache.
+- No abort/stop for in-progress synthesis: the worker's `generate()` is not abortable. Text stream cancel in dialogue stops feeding new sentences but in-flight audio continues.
+- `playAudioBuffer` uses Web Audio API `createBuffer` + `createBufferSource` (not AudioWorklet) — suitable for sentence-length chunks but incurs buffer allocation per sentence.
+- E2E test is minimal — only verifies no console errors on page load. Full WebGPU integration test requires a browser with WebGPU hardware (not available in headless CI).
