@@ -18,6 +18,36 @@ import type {
   TtsOptions,
 } from '../types.ts';
 
+// ---------------------------------------------------------------------------
+// Ollama-specific error types
+// ---------------------------------------------------------------------------
+
+/** Thrown when Ollama is not reachable (connection refused). */
+export class OllamaConnectionError extends Error {
+  constructor(baseUrl: string, cause?: unknown) {
+    super(
+      `Ollama connection refused at ${baseUrl}${cause instanceof Error ? `: ${cause.message}` : ''}`,
+    );
+    this.name = 'OllamaConnectionError';
+  }
+}
+
+/** Thrown when an Ollama request times out. */
+export class OllamaTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Ollama request timed out after ${timeoutMs}ms`);
+    this.name = 'OllamaTimeoutError';
+  }
+}
+
+/** Thrown when the Ollama stream encounters an error (non-200 response or parse failure). */
+export class OllamaStreamError extends Error {
+  constructor(status: number, message: string) {
+    super(`Ollama stream error (${status}): ${message}`);
+    this.name = 'OllamaStreamError';
+  }
+}
+
 /**
  * Ollama local provider — connects directly to a local Ollama instance.
  *
@@ -207,6 +237,119 @@ class OllamaClient implements FrontendAiInterface {
   // -----------------------------------------------------------------------
 
   /**
+   * Streams NPC dialogue from Ollama's /api/generate endpoint using
+   * application/x-ndjson streaming. Yields text chunks as they arrive.
+   *
+   * Unlike generateDialogue() which uses /api/chat, this uses the raw
+   * generate endpoint for token-by-token streaming into the dialogue UI.
+   *
+   * @param prompt - The full prompt text (includes system prompt and conversation).
+   * @param context - Optional model override and generation parameters.
+   * @yields Text chunks as Ollama generates them.
+   * @throws {OllamaConnectionError} If Ollama is not reachable.
+   * @throws {OllamaTimeoutError} If the request times out.
+   * @throws {OllamaStreamError} If the stream encounters an API error.
+   */
+  async *streamChat(
+    prompt: string,
+    context?: Array<{ role: string; content: string }>,
+  ): AsyncGenerator<string, void, undefined> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      prompt,
+      stream: true,
+      options: {
+        temperature: this.defaultOptions.temperature,
+        top_p: this.defaultOptions.topP,
+        num_predict: this.defaultOptions.maxTokens,
+      },
+    };
+
+    // If context messages are provided, build a formatted prompt from them
+    if (context && context.length > 0) {
+      const formattedContext = context.map((m) => `${m.role}: ${m.content}`).join('\n');
+      body.prompt = `${formattedContext}\nassistant:`;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new OllamaStreamError(response.status, text);
+      }
+
+      if (!response.body) {
+        throw new OllamaStreamError(response.status, 'No response body');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.length === 0) {
+              continue;
+            }
+
+            try {
+              const parsed = JSON.parse(trimmed) as OllamaGenerateResponse;
+              if (parsed.response) {
+                yield parsed.response;
+              }
+              if (parsed.done) {
+                return;
+              }
+            } catch {
+              // Skip unparseable lines (partial buffers at stream start)
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (err) {
+      clearTimeout(timeoutId);
+
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new OllamaTimeoutError(this.timeoutMs);
+      }
+
+      if (err instanceof OllamaStreamError) {
+        throw err;
+      }
+
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        throw new OllamaConnectionError(this.baseUrl, err);
+      }
+
+      throw err;
+    }
+  }
+
+  /**
    * POST to Ollama's local API.
    */
   private async post<TResponse>(path: string, body: unknown): Promise<TResponse> {
@@ -293,4 +436,16 @@ type OllamaChatResponse = {
 /** Response from GET /api/tags */
 type OllamaTagsResponse = {
   models: Array<{ name: string; modified_at: string; size: number }>;
+};
+
+/** Response chunk from POST /api/generate (streaming). */
+type OllamaGenerateResponse = {
+  model: string;
+  created_at: string;
+  response: string;
+  done: boolean;
+  context?: number[];
+  total_duration?: number;
+  prompt_eval_count?: number;
+  eval_count?: number;
 };

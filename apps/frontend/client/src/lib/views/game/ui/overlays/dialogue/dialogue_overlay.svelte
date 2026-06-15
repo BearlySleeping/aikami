@@ -11,13 +11,13 @@
   /** Reference to the scrollable message container for auto-scroll. */
   let messageContainer = $state<HTMLDivElement>();
 
-  /** Auto-scroll to the bottom when new messages arrive or AI is typing. */
+  /** Auto-scroll to the bottom when new messages arrive or AI is streaming. */
   $effect(() => {
-    // Track message count and AI typing state to trigger scroll
+    // Track message count and streaming state to trigger scroll
     const count = viewModel.messages.length;
-    const typing = viewModel.isAiTyping;
+    const streaming = viewModel.isStreaming;
     void count;
-    void typing;
+    void streaming;
 
     if (messageContainer) {
       messageContainer.scrollTop = messageContainer.scrollHeight;
@@ -27,13 +27,13 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div
-  class="pointer-events-auto absolute inset-0 z-20 flex flex-col justify-end bg-base-300/40 backdrop-blur-sm"
+  class="pointer-events-auto absolute inset-0 z-10 flex flex-col justify-end bg-gradient-to-t from-base-300/60 to-transparent"
   role="dialog"
   aria-label="Dialogue with {viewModel.npcName}"
 >
   <!-- Dialogue Box — positioned at the bottom 40% of the screen -->
   <div
-    class="mx-auto mb-8 flex w-full max-w-2xl flex-col rounded-xl border border-base-300 bg-base-200/90 shadow-2xl"
+    class="mx-auto mb-8 flex w-full max-w-2xl flex-col rounded-xl border border-base-300 bg-base-200/95 shadow-2xl"
     style="height: 40vh;"
   >
     <!-- Header: NPC name + End Chat button -->
@@ -47,22 +47,22 @@
     <!-- Scrollable message history -->
     <div bind:this={messageContainer} class="flex-1 space-y-2 overflow-y-auto px-4 py-3">
       {#each viewModel.messages as message (message.id)}
-        <div class="chat {message.sender === 'player' ? 'chat-end' : 'chat-start'}">
+        <div class="chat {message.role === 'player' ? 'chat-end' : 'chat-start'}">
           <div class="chat-header mb-0.5 text-xs text-base-content/50">
-            {message.sender === 'player' ? 'You' : viewModel.npcName}
+            {message.role === 'player' ? 'You' : viewModel.npcName}
           </div>
           <div
-            class="chat-bubble text-sm {message.sender === 'player'
+            class="chat-bubble text-sm {message.role === 'player'
               ? 'chat-bubble-primary'
               : 'chat-bubble-secondary'}"
           >
-            {message.text || ''}
+            {message.content || ''}
           </div>
         </div>
       {/each}
 
-      <!-- AI typing indicator -->
-      {#if viewModel.isAiTyping}
+      <!-- AI streaming indicator — shows when last NPC message is still arriving -->
+      {#if viewModel.isStreaming}
         <div class="chat chat-start">
           <div class="chat-header mb-0.5 text-xs text-base-content/50">
             {viewModel.npcName}
@@ -74,9 +74,9 @@
       {/if}
 
       <!-- Error message -->
-      {#if viewModel.errorMessage}
+      {#if viewModel.streamError}
         <div class="rounded-lg bg-error/10 p-2 text-center text-xs text-error">
-          {viewModel.errorMessage}
+          {viewModel.streamError}
         </div>
       {/if}
     </div>
@@ -88,17 +88,17 @@
           class="textarea textarea-bordered textarea-sm flex-1 resize-none text-sm"
           rows="2"
           placeholder="Type your message..."
-          value={viewModel.currentInput}
+          value={viewModel.inputText}
           oninput={(e) => viewModel.setInput(e.currentTarget.value)}
           onkeydown={(e) => viewModel.handleKeyDown(e)}
-          disabled={viewModel.isAiTyping}
+          disabled={viewModel.isStreaming}
         ></textarea>
         <button
           class="btn btn-primary btn-sm"
           onclick={() => viewModel.sendMessage()}
-          disabled={viewModel.isAiTyping || !viewModel.currentInput.trim()}
+          disabled={viewModel.isStreaming || !viewModel.inputText.trim()}
         >
-          {#if viewModel.isAiTyping}
+          {#if viewModel.isStreaming}
             <span class="loading loading-spinner loading-xs"></span>
           {:else}
             Send
