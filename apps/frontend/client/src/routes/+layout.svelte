@@ -1,10 +1,20 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/+layout.svelte
+  // apps/frontend/chat/src/routes/+layout.svelte
   import '../app.css';
-  import AppShell from '$lib/views/app/app_view.svelte';
+  import { untrack } from 'svelte';
+  import AppView from '$lib/views/app/app_view.svelte';
+  import { getAppViewModel } from '$lib/views/app/app_view_model.svelte.ts';
   import type { LayoutProps } from './$types';
 
   let { data, children }: LayoutProps = $props();
+
+  // Layout data is static per SvelteKit mount — read non-reactively.
+  const viewModel = untrack(() =>
+    getAppViewModel({
+      className: 'AppViewModel',
+      data: data ?? {},
+    }),
+  );
 </script>
 
-<AppShell {data}> {@render children()} </AppShell>
+<AppView {viewModel}> {@render children()} </AppView>
