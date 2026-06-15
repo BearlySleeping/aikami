@@ -236,7 +236,7 @@ class StartViewModel
   /** @inheritdoc */
   async goToOptions(): Promise<void> {
     await routerService.goToRoute('settings', {
-      queryParameters: undefined,
+      queryParameters: { from: 'start' },
       pathParameters: undefined,
     });
   }
@@ -265,7 +265,7 @@ class StartViewModel
   async goToSettingsForProviderSetup(): Promise<void> {
     this.showMissingProvidersDialog = false;
     await routerService.goToRoute('settings', {
-      queryParameters: undefined,
+      queryParameters: { from: 'start' },
       pathParameters: undefined,
     });
   }
