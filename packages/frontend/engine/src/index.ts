@@ -86,9 +86,22 @@ export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer
 
 // Rendering
 
+// Entity spawner (C-136)
+export { resolveNpcTexture, resolvePropTexture } from './assets/lpc_asset_catalog.ts';
 // Tilemap & collision (C-135)
-export type { TilemapData, TilemapLayer, TilemapTileset } from './assets/map_loader.ts';
-export { clearMapCache, extractCollisionGrid, loadTilemap } from './assets/map_loader.ts';
+export type {
+  ObjectLayer,
+  SpawnPoint,
+  TilemapData,
+  TilemapLayer,
+  TilemapTileset,
+} from './assets/map_loader.ts';
+export {
+  clearMapCache,
+  extractCollisionGrid,
+  extractSpawnPoints,
+  loadTilemap,
+} from './assets/map_loader.ts';
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
 export {
@@ -109,6 +122,8 @@ export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export { isWalkable, resetCollisionGrid, setCollisionGrid } from './systems/collision_system.ts';
+export type { SpawnEntitiesOptions, SpawnResult } from './systems/entity_spawner.ts';
+export { spawnEntities } from './systems/entity_spawner.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   animateEntitySystem,
