@@ -29,6 +29,7 @@
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
 | C-127 | Settings Menu Refactor | ✅ completed |
+| C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -488,3 +489,35 @@
 - No tests written for `AppViewModel` — pre-existing gap, contract didn't specify test hooks.
 - `AppViewModelOptions` still requires `data: PWAHookData` (non-nullable type). The headless shell passes `{}` when `data` is null. All PWAHookData fields are optional so this is safe.
 - The old `HeadTagsView`, `AppBar`, `NavigationDrawer`, `AppFooter`, `AppDialogsView`, and `AppLoading` components still exist in the codebase but are no longer referenced by any route layout. They can be removed in a future cleanup contract.
+
+### C-128: Dialogue Overlay & AI Chat
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Manages chat history, AI text streaming via `textGenerationService.streamChat()`, system prompt construction from NPC data, player input state, and Escape-to-close behavior
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` — Visual novel-style dialogue box: daisyUI `chat-bubble` messages, scrollable history with auto-scroll, text input with Enter/Escape key handling, "End Chat" button, AI typing indicator with loading dots
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `dialogueNpc` state and `endDialogue()` method; `initialize()` registers `EngineBridge` listeners for `NPC_DIALOG_START`/`NPC_DIALOG_END` events; Escape key closes dialogue before toggling pause menu; exported `DialogueNpcData` type
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Renders `DialogueOverlay` when `activeOverlay === 'DIALOGUE'`; `DialogueOverlayViewModel` created lazily via `$effect()` when dialogue activates
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Removed `activeDialog` state and `NPC_DIALOG_START`/`NPC_DIALOG_END` bridge listeners (migrated to `GameUIViewModel`)
+- `apps/frontend/client/src/lib/views/game/canvas/game_view.svelte` — Removed legacy inline `activeDialog` rendering block (replaced by DialogueOverlay)
+
+**Deviations**:
+1. **GameUIViewModel listens to bridge directly**: Instead of passing interaction data from GameViewModel, GameUIViewModel.initialize() directly attaches to the EngineBridge singleton. Keeps dialogue routing self-contained within the overlay controller.
+2. **NPC_DIALOG_END cleanup**: When the ECS emits NPC_DIALOG_END (player moves out of range), GameUIViewModel calls endDialogue() which resets the overlay and resumes the engine.
+
+**Design decisions**:
+1. **System prompt from NPC name + greeting**: _buildSystemPrompt() constructs persona prompt from NPC name and initial dialog. No Firestore persona lookup — out of scope.
+2. **Streaming token accumulation**: AI responses stream token-by-token via textGenerationService.streamChat(). Each onChunk mutates the last message in-place.
+3. **DialogueOverlayViewModel created lazily**: Created via $effect() when dialogue activates, destroyed on close. Fresh state per interaction.
+4. **Escape key priority**: Dialogue open → Escape closes dialogue. Dialogue closed → Escape toggles pause menu.
+5. **DaisyUI chat-bubble components**: chat-start/chat-end with chat-bubble-primary/chat-bubble-secondary for NPC vs player distinction.
+
+**Known limitations**:
+- No chat persistence — conversation history lost on overlay close or navigation.
+- No NPC persona data injection — system prompt uses only NPC name and greeting.
+- No slash command or macro parsing in dialogue input. No TTS or audio playback.
+- Brief empty bubble flash before first streamed token arrives.
+- Textarea is fixed 2 rows — no auto-resize on long input.
