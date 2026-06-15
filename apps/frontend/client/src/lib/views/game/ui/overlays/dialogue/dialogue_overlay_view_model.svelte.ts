@@ -14,6 +14,11 @@ import {
 } from '$services';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
+// ── LPC fallback constants ────────────────────────────────────────────
+
+/** Default LPC spritesheet URL used as fallback NPC avatar when image generation is disabled. */
+const FALLBACK_AVATAR_URL = '/lpc/body/male/walk.png' as const;
+
 // ---------------------------------------------------------------------------
 // DialogueOverlayViewModel — orchestrates AI chat with an NPC
 //
@@ -49,11 +54,25 @@ export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
    * instead of routing through textGenerationService (OpenRouter).
    */
   ollamaClient?: OllamaClient;
+  /**
+   * Whether image generation (ComfyUI or Cloud) is available.
+   * When false, ComfyUI requests are skipped and fallback NPC
+   * avatars from lpc_asset_catalog are displayed instead.
+   *
+   * Defaults to true for backwards compatibility.
+   */
+  imageProviderAvailable?: boolean;
 };
 
 export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** The NPC's display name. */
   readonly npcName: string;
+
+  /** URL for the NPC's avatar image (LPC spritesheet or generated portrait). */
+  readonly npcAvatarUrl: string;
+
+  /** Whether the image generation provider is available. */
+  readonly imageProviderAvailable: boolean;
 
   /** Conversation history — player and NPC messages. */
   readonly messages: DialogueMessage[];
@@ -107,6 +126,8 @@ class DialogueOverlayViewModel
 
   private readonly _ollamaClient?: OllamaClient;
 
+  private readonly _imageProviderAvailable: boolean;
+
   private readonly _chunker = new SentenceBoundaryChunker();
 
   private _ttsInitialized = false;
@@ -116,10 +137,25 @@ class DialogueOverlayViewModel
     this._npcData = options.npcData;
     this._onEndChat = options.onEndChat;
     this._ollamaClient = options.ollamaClient;
+    this._imageProviderAvailable = options.imageProviderAvailable ?? true;
   }
 
   get npcName(): string {
     return this._npcData.npcName;
+  }
+
+  /**
+   * NPC avatar URL.
+   * Uses the fallback LPC spritesheet from the asset catalog when image
+   * generation is unavailable, or the default body walk sheet otherwise.
+   */
+  get npcAvatarUrl(): string {
+    return FALLBACK_AVATAR_URL;
+  }
+
+  /** @inheritdoc */
+  get imageProviderAvailable(): boolean {
+    return this._imageProviderAvailable;
   }
 
   /** @inheritdoc */
@@ -232,6 +268,9 @@ class DialogueOverlayViewModel
    *
    * When an OllamaClient is available, uses direct /api/generate streaming.
    * Falls back to textGenerationService (OpenRouter SSE) otherwise.
+   *
+   * Image generation (ComfyUI) requests are skipped entirely when
+   * imageProviderAvailable is false — see C-133 graceful degradation.
    */
   private async _generateAiResponse(): Promise<void> {
     this.isStreaming = true;

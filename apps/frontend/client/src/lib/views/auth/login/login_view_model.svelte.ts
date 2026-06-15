@@ -65,7 +65,7 @@ class LoginViewModel
       if (!result.success) {
         throw result.error;
       }
-      await routerService.goToRoute('dashboard', {
+      await routerService.goToRoute('settings', {
         pathParameters: undefined,
         queryParameters: undefined,
       });

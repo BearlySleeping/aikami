@@ -14,7 +14,7 @@
   <ul class="menu bg-base-200 text-base-content min-h-full w-64 p-4">
     <!-- Logo/Brand -->
     <li class="mb-4">
-      <button class="text-xl font-bold" onclick={() => viewModel.goToRoute("dashboard")}>
+      <button class="text-xl font-bold" onclick={() => viewModel.goToRoute("settings")}>
         Aikami
       </button>
     </li>

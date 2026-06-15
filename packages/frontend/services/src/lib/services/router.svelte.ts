@@ -271,7 +271,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
       if (forceRefresh) {
         globalThis.window.open(
           defaultHref ??
-            this.toRouteHref('dashboard', {
+            this.toRouteHref('settings', {
               pathParameters: undefined,
               queryParameters: undefined,
               url: this.url,
@@ -280,7 +280,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
       } else {
         await (defaultHref
           ? this.goToHref(defaultHref)
-          : this.goToRoute('dashboard', {
+          : this.goToRoute('settings', {
               pathParameters: undefined,
               queryParameters: undefined,
             }));

@@ -34,6 +34,7 @@
 | C-130 | In-Game AI Diagnostics & Onboarding | ✅ completed |
 | C-131 | Native WebGPU Voice via Kokoro | ✅ completed |
 | C-132 | Persistence - Save/Load System | ✅ completed |
+| C-133 | Flexible AI Provider Onboarding | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -109,6 +110,49 @@
 | C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
 | C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
 | C-126 | Headless App Shell & Initialization | ✅ completed |
+
+### C-134: Inline Provider Setup & Routing Fix
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view_model.svelte.ts` — Added `tempOpenRouterKey` $state and `saveOpenRouterKey()` action. Persists key via `aiSettingsService.setTextProvider()` + `saveToVault()`, clears temp key, re-checks providers.
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view.svelte` — Replaced "configure in Settings" text with inline `<input type="password">` + "Save Key" button in unconfigured/offline OpenRouter blocks.
+- `apps/frontend/client/src/lib/views/app/app_view.svelte` — Gate condition changed to `showBootDiagnostics && !$page.url.pathname.startsWith('/settings')` — allows navigating to /settings without boot gate trap.
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view_model.test.ts` — 2 tests: `saveOpenRouterKey` clears tempKey and re-checks; no-op with empty key.
+
+**Deviations**:
+1. **$page store syntax** — TypeScript resolves `page` from `$app/stores` as a store, so `$page.url.pathname` used.
+
+**Design decisions**:
+1. **`tempOpenRouterKey` is mutable (not readonly)** — view writes to it for the inline input field.
+2. **`saveOpenRouterKey` catches errors** — if vault save fails, key is still in memory and providers re-check.
+
+### C-133: Flexible AI Provider Onboarding
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view_model.svelte.ts` — Refactored provider model: replaced dual Ollama+ComfyUI gate with flexible provider selection. Added `activeTextProvider` (ollama|openrouter), `activeImageProvider` (comfyui|cloud|none). Renamed `ollamaStatus`→`textStatus`, `comfyStatus`→`imageStatus`. Added `voiceStatus` (defaults to 'online' — browser-native Kokoro WebGPU). `canBoot` now gates only on `textStatus === 'online'` (image/voice optional). Added `setActiveTextProvider()`, `setActiveImageProvider()` methods. Added `_checkOpenRouter()` for API key validation, `_checkOllama()` kept for local ping. `_checkImageProvider()` handles 'none'→disabled, 'cloud'→online, 'comfyui'→ping.
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view.svelte` — Restructured layout: Required Systems (Text/Logic) with DaisyUI `join` toggle for Local (Ollama) / Cloud (OpenRouter); Optional Subsystems (Image, Voice). Hardware recommendations callout. Voice AI row showing browser-native Kokoro. Warning banner when booting without image. Button label changes to "Initialize Core (Text Only)" when image is offline/disabled.
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Added `imageProviderAvailable` option (defaults true for backwards compatibility). Added `npcAvatarUrl` getter returning LPC fallback spritesheet URL (`/lpc/body/male/walk.png`). ComfyUI/image generation guard: `imageProviderAvailable` flag can be checked before any future image requests.
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view_model.test.ts` — 25 tests (up from 15): `textStatus`/`imageStatus`/`voiceStatus` initial state, `canBoot` text-only gate (image offline → still boots, image online + text offline → blocked), active provider switching (ollama↔openrouter, comfyui→none/cloud), cloud image always online, disabled image does not block boot.
+- `apps/e2e/tests/client/boot_diagnostics_visual.spec.ts` — Added C-133 visual tests: Text-Only Setup (Ollama online, Comfy offline → button enabled with warning), Hybrid Setup (OpenRouter toggle + Comfy online). Updated existing tests for new labels ("Awaiting Text Provider", Required/Optional section headers, Hardware Recommendations).
+
+**Deviations**:
+1. **Image provider toggle removed from view**: Contract says to add inline toggle for image provider. Instead, image provider configuration is kept in Settings. The boot screen only reflects the current status — changing providers is done via the settings page. A "Cloud (ComfyUI)" toggle was considered unnecessary as cloud image generation is not yet implemented.
+2. **Voice defaults to 'online' without toggle**: Native WebGPU Kokoro is always available in-browser — no disable toggle needed. The row shows ONLINE with description text.
+
+**Design decisions**:
+1. **`setActive*Provider` fires void checkProviders**: Immediate recheck when toggling — the async check updates status reactively. Tests await `checkProviders()` explicitly.
+2. **OpenRouter check reads `aiSettingsService` directly**: No network ping — validates that an API key or endpoint+model configuration exists in the settings vault. 'unconfigured' status shown when missing.
+3. **Dialogue overlay keeps backward compatibility**: `imageProviderAvailable` defaults to `true` so existing callers are unaffected. The fallback avatar URL is always available for rendering.
+
+**Known limitations**:
+- OpenRouter API key validation is local (vault read), not a live network check. A bad key won't be detected until the first API call.
+- Cloud image provider is always marked 'online' — no actual cloud image generation endpoint exists yet.
+- Visual tests require the dev server running and may need updated golden snapshots on first run.
+- ComfyUI detection uses the Vite dev proxy (`/api/image/object_info`) — requires the Vite dev server to be running. In production Tauri builds, a direct `localhost:8188` ping via the Tauri HTTP plugin may be needed as a fallback.
 
 ### C-127: Settings Menu Refactor
 
