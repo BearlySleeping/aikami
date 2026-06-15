@@ -81,9 +81,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
   /**
    * Canvas element that PixiJS renders into — set by the View via bind:this.
-   * A registered $effect watches this and initializes the game world when set.
+   *
+   * Uses {@link $state.raw} so Svelte stores the canvas by reference without
+   * deep-proxying it. WebGL contexts cannot survive Svelte's Proxy wrapper —
+   * proxied canvas elements silently fail to render.
    */
-  canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+  canvasElement = $state.raw<HTMLCanvasElement | undefined>(undefined);
 
   /**
    * The player character's name.
@@ -161,12 +164,21 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       // ── Reactive canvas attachment via $effect ──
       // This replaces the old pendingCanvas pattern. When the View binds
       // the canvas element, this $effect fires and initializes the game world.
+      // The return cleanup destroys PixiJS when the canvas unmounts, preventing
+      // WebGL context leaks on HMR and route navigation.
+      //
+      // NOTE: canvasElement is $state.raw, so Svelte does NOT proxy the canvas.
+      // Only top-level reference changes trigger this effect — WebGL is safe.
       this.registerEffectRoot(() => {
         $effect(() => {
           const canvas = this.canvasElement;
           if (canvas && this._bridge) {
-            void this._attachCanvasNow(canvas);
+            void this.initializeEngine(canvas);
           }
+
+          return () => {
+            this.destroyEngine();
+          };
         });
       });
 
@@ -227,10 +239,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   /**
-   * Internal: creates the GameWorld and attaches to the canvas.
+   * Creates the GameWorld and attaches to the canvas.
+   * Public so the View can call it inside `untrack()` to prevent Svelte
+   * from intercepting engine state changes through the reactivity graph.
    * Assumes this._bridge is already initialized.
    */
-  private async _attachCanvasNow(canvas: HTMLCanvasElement): Promise<void> {
+  async initializeEngine(canvas: HTMLCanvasElement): Promise<void> {
     const bridge = this._bridge;
     if (!bridge) {
       return;
@@ -245,7 +259,68 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
         ? { name: this._activePersona.name }
         : undefined;
 
-      this._gameWorld = GameWorld.create({ className: 'GameWorld', bridge });
+      // Wire up the LPC rendering pipeline so APPEARANCE_CHANGED events
+      // from the worker produce visible character sprites.
+      //
+      // Uses the same LPC asset resolution as the sandbox — Firebase
+      // Storage URLs in live mode, local filesystem in dev mode
+      // (PUBLIC_LPC_USE_LOCAL=true).
+      const { TextureManager } = await import('@aikami/frontend/engine');
+      const { getLpcAssetPath } = await import('$lib/data/lpc_asset_catalog');
+      const { GENERATED_LPC_SLOTS } = await import('$lib/data/lpc_asset_catalog_generated');
+
+      // Slot name → index in GENERATED_LPC_SLOTS
+      const SLOT_CATALOG_INDEX: Record<string, number> = {};
+      for (let idx = 0; idx < GENERATED_LPC_SLOTS.length; idx++) {
+        SLOT_CATALOG_INDEX[GENERATED_LPC_SLOTS[idx].slot] = idx;
+      }
+
+      // Worker slot ordering must match WORKER_SLOT_NAMES in ecs_worker.ts
+      const ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+
+      const recipeResolver = (
+        layerIds: readonly number[],
+      ): import('@aikami/frontend/engine').LpcLayerRecipe[] => {
+        const recipes: import('@aikami/frontend/engine').LpcLayerRecipe[] = [];
+        // Iterate ALL engine slots so head is always included even when
+        // the worker sends fewer layers (backward compat while worker reloads).
+        for (let i = 0; i < ENGINE_SLOTS.length; i++) {
+          const rawId = layerIds[i];
+          const slotName = ENGINE_SLOTS[i] ?? `layer_${i}`;
+          const catalogIdx = SLOT_CATALOG_INDEX[slotName];
+          if (catalogIdx === undefined) continue;
+          const slotDef = GENERATED_LPC_SLOTS[catalogIdx];
+          // For head, default to human_male (index 94) when no variant is set.
+          let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : slotName === 'head' ? 94 : -1;
+          if (slotName === 'head' && effectiveIdx < 0) effectiveIdx = 94;
+          const variant = slotDef?.variants[effectiveIdx];
+          if (!variant) continue;
+          recipes.push({
+            slot: slotName,
+            assetId: variant.assetId,
+            hexPalette: new Uint8Array(1024),
+          });
+        }
+        return recipes;
+      };
+
+      const assetUrlResolver = (_slot: string, assetId: string, state: string): string => {
+        return getLpcAssetPath(
+          _slot,
+          assetId,
+          state as unknown as import('$lib/data/lpc_models').LpcAnimationState,
+        );
+      };
+
+      const textureManager = new TextureManager();
+
+      this._gameWorld = (GameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
+        className: 'GameWorld',
+        bridge,
+        recipeResolver,
+        assetUrlResolver,
+        textureManager,
+      });
       await this._gameWorld.initialize({
         canvas,
         width: canvas.clientWidth,
@@ -286,8 +361,17 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     }
   }
 
-  /** @inheritdoc */
-  override async dispose(): Promise<void> {
+  /**
+   * Destroys the game engine (PixiJS app, worker, input listeners)
+   * and resets all engine-related state.
+   *
+   * Called by the View's `$effect` cleanup and by {@link dispose}.
+   *
+   * ⚠️  Does NOT clear {@link _bridge} — the bridge must survive the
+   * `$effect` cleanup so {@link initializeEngine} can use it on the next
+   * run. Only {@link dispose} clears the bridge for final teardown.
+   */
+  destroyEngine(): void {
     if (this._resizeCleanup) {
       this._resizeCleanup();
       this._resizeCleanup = undefined;
@@ -298,9 +382,13 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       this._gameWorld = undefined;
     }
 
-    this._bridge = undefined;
     this.isGameReady = false;
+  }
 
+  /** @inheritdoc */
+  override async dispose(): Promise<void> {
+    this.destroyEngine();
+    this._bridge = undefined;
     await super.dispose();
   }
 }

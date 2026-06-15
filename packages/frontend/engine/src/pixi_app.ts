@@ -122,8 +122,10 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
     antialias,
     backgroundAlpha,
     resizeTo: options.resizeTo,
-    // PixiJS v8 auto-detects WebGPU first, falls back to WebGL
-    preference: 'webgpu',
+    // Use WebGL with drawing buffer preservation for headless Chromium
+    // screenshot capture (Playwright visual tests).
+    preference: 'webgl',
+    preserveDrawingBuffer: true,
   });
 
   // Pipeline gate: compile LPC shaders now that the renderer context

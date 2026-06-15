@@ -9,7 +9,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { aiSettingsService, authService, routerService } from '$services';
+import type { PersonaData } from '@aikami/types';
+import { aiSettingsService, authService, characterCreationService, routerService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -191,6 +192,16 @@ class StartViewModel
       return;
     }
 
+    // If the player has a saved character, load it directly and skip
+    // character creation. The most recently saved character is used.
+    if (this._loadSavedCharacter()) {
+      await routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+      return;
+    }
+
     await routerService.goToRoute('setup', {
       queryParameters: undefined,
       pathParameters: undefined,
@@ -276,6 +287,45 @@ class StartViewModel
    */
   get creditGroups(): readonly CreditGroup[] {
     return CREDIT_GROUPS;
+  }
+
+  /**
+   * Loads the most recently saved character from localStorage into the
+   * character creation service so the game can pick it up on /game.
+   *
+   * @returns `true` if a saved character was found and loaded, `false` otherwise.
+   */
+  private _loadSavedCharacter(): boolean {
+    try {
+      const stored = localStorage.getItem('aikami-characters');
+      if (!stored) {
+        return false;
+      }
+
+      const characters = JSON.parse(stored) as Array<{
+        persona: PersonaData;
+        avatarUrl: string;
+      }>;
+
+      if (characters.length === 0) {
+        return false;
+      }
+
+      // Use the most recently saved character
+      const latest = characters[characters.length - 1];
+      characterCreationService.persona = latest.persona;
+      characterCreationService.avatarUrl = latest.avatarUrl;
+
+      this.debug('_loadSavedCharacter:loaded', {
+        name: latest.persona.name,
+        id: latest.persona.id,
+      });
+
+      return true;
+    } catch (error) {
+      this.warn('_loadSavedCharacter:failed', error);
+      return false;
+    }
   }
 
   /**

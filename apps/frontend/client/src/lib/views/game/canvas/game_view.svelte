@@ -1,5 +1,6 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/canvas/game_view.svelte
+  import { untrack } from 'svelte';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
   import GameUIView from '../ui/game_ui_view.svelte';
   import type { GameUIViewModelInterface } from '../ui/game_ui_view_model.svelte';
@@ -11,6 +12,26 @@
   };
 
   const { viewModel, gameUIViewModel }: Props = $props();
+
+  let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+
+  $effect(() => {
+    const el = canvasElement;
+    if (el) {
+      // untrack prevents Svelte from intercepting engine state changes
+      // through the reactivity graph. The engine (PixiJS + WebGL) must
+      // run outside Svelte's proxy trap.
+      untrack(() => {
+        viewModel.canvasElement = el;
+      });
+
+      return () => {
+        untrack(() => {
+          viewModel.canvasElement = undefined;
+        });
+      };
+    }
+  });
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
@@ -20,7 +41,7 @@
       The engine renders directly into the <canvas> at WebGL native resolution.
     -->
     <div id="game-canvas-container" class="absolute inset-0 z-0">
-      <canvas bind:this={viewModel.canvasElement} class="absolute inset-0 w-full h-full"></canvas>
+      <canvas bind:this={canvasElement} class="w-full h-full block touch-none"></canvas>
     </div>
 
     <!--
