@@ -14,7 +14,7 @@ import {
   configService,
   type GenerationParams,
   type InstructTemplate,
-} from '$lib/services/config/config_service.svelte';
+} from '$services';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
