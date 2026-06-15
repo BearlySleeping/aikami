@@ -57,6 +57,38 @@ export type TilemapLayer = {
 };
 
 /**
+ * A spawn point extracted from a Tiled objectgroup layer.
+ *
+ * Each object in an objectgroup is mapped to a SpawnPoint
+ * with its type, position, and custom properties.
+ */
+export type SpawnPoint = {
+  /** Unique identifier from the Tiled object. */
+  id: string;
+  /** Object type (e.g., 'npc', 'prop'). */
+  type: string;
+  /** X position in pixels. */
+  x: number;
+  /** Y position in pixels. */
+  y: number;
+  /** Custom properties defined in Tiled (e.g., npcId, dialogueKey). */
+  properties: Record<string, unknown>;
+};
+
+/**
+ * A raw objectgroup layer extracted from Tiled JSON.
+ *
+ * Stored on TilemapData for later extraction via
+ * {@link extractSpawnPoints}.
+ */
+export type ObjectLayer = {
+  /** Layer name. */
+  name: string;
+  /** Raw Tiled objects in this group. */
+  objects: Record<string, unknown>[];
+};
+
+/**
  * Fully parsed Tiled JSON tilemap.
  */
 export type TilemapData = {
@@ -72,6 +104,8 @@ export type TilemapData = {
   tilesets: TilemapTileset[];
   /** All tile layers in draw order (bottom to top). */
   layers: TilemapLayer[];
+  /** Objectgroup layers extracted from the map (if any). */
+  objectLayers?: ObjectLayer[];
 };
 
 /**
@@ -185,7 +219,10 @@ const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData =
 
   const layers = tileLayers.map((layer) => _parseLayer(layer, width, height, url));
 
-  return { width, height, tilewidth, tileheight, tilesets, layers };
+  // Extract objectgroup layers (spawn points for NPCs and props)
+  const objectLayers = _parseObjectLayers(rawLayers, url);
+
+  return { width, height, tilewidth, tileheight, tilesets, layers, objectLayers };
 };
 
 /**
@@ -288,6 +325,132 @@ const _getString = (obj: Record<string, unknown>, key: string, url: string): str
     );
   }
   return value;
+};
+
+/**
+ * Parses objectgroup layers from raw Tiled JSON into {@link ObjectLayer} entries.
+ *
+ * Returns `undefined` when no objectgroup layers are present —
+ * this keeps TilemapData compact for maps without spawn data.
+ */
+const _parseObjectLayers = (
+  rawLayers: Record<string, unknown>[],
+  url: string,
+): ObjectLayer[] | undefined => {
+  const objectGroups = rawLayers.filter((layer) => layer.type === 'objectgroup');
+
+  if (objectGroups.length === 0) {
+    return undefined;
+  }
+
+  return objectGroups.map((layer) => {
+    const name = _getString(layer, 'name', url);
+    const objects = layer.objects as Record<string, unknown>[] | undefined;
+
+    if (!Array.isArray(objects)) {
+      throw new Error(`MapLoader: objectgroup layer "${name}" has no "objects" array at "${url}"`);
+    }
+
+    return { name, objects };
+  });
+};
+
+/**
+ * Extracts spawn points from all objectgroup layers in a parsed tilemap.
+ *
+ * Each Tiled object is mapped to a {@link SpawnPoint} with its type,
+ * pixel position, and custom properties.
+ *
+ * @param tilemap - The parsed tilemap data.
+ * @returns Flat array of spawn points, or empty array if no object layers exist.
+ */
+export const extractSpawnPoints = (tilemap: TilemapData): SpawnPoint[] => {
+  if (!tilemap.objectLayers || tilemap.objectLayers.length === 0) {
+    return [];
+  }
+
+  const spawnPoints: SpawnPoint[] = [];
+
+  for (const objectLayer of tilemap.objectLayers) {
+    for (const object of objectLayer.objects) {
+      const spawnPoint = _parseSpawnPoint(object, objectLayer.name);
+      if (spawnPoint) {
+        spawnPoints.push(spawnPoint);
+      }
+    }
+  }
+
+  return spawnPoints;
+};
+
+/**
+ * Parses a single Tiled object into a {@link SpawnPoint}.
+ *
+ * Tiled objects can define custom properties in two formats:
+ * - An array of `{ name, type, value }` entries (Tiled 1.x)
+ * - A flat `{ key: value }` object (some Tiled exporters)
+ *
+ * Objects without a `type` field are skipped (they carry no spawn logic).
+ */
+const _parseSpawnPoint = (
+  object: Record<string, unknown>,
+  layerName: string,
+): SpawnPoint | undefined => {
+  const id = object.id;
+  if (id === undefined) {
+    logger.debug('_parseSpawnPoint:skipped-no-id', { layerName });
+    return undefined;
+  }
+
+  const type = object.type;
+  if (typeof type !== 'string' || type.length === 0) {
+    logger.debug('_parseSpawnPoint:skipped-no-type', { layerName, id });
+    return undefined;
+  }
+
+  const x = typeof object.x === 'number' ? object.x : 0;
+  const y = typeof object.y === 'number' ? object.y : 0;
+
+  const properties = _extractProperties(object);
+
+  return {
+    id: String(id),
+    type,
+    x,
+    y,
+    properties,
+  };
+};
+
+/**
+ * Extracts custom properties from a Tiled object.
+ *
+ * Handles both array-style `[{ name, type, value }]` and
+ * flat-object `{ key: value }` property formats.
+ */
+const _extractProperties = (object: Record<string, unknown>): Record<string, unknown> => {
+  const raw = object.properties;
+
+  // Array format: [{ name: "key", type: "string", value: "val" }]
+  if (Array.isArray(raw)) {
+    const result: Record<string, unknown> = {};
+    for (const entry of raw) {
+      if (entry && typeof entry === 'object' && 'name' in entry && 'value' in entry) {
+        const { name, value } = entry as { name: string; value: unknown };
+        if (typeof name === 'string' && name.length > 0) {
+          result[name] = value;
+        }
+      }
+    }
+    return result;
+  }
+
+  // Flat object format: { key: value }
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return { ...(raw as Record<string, unknown>) };
+  }
+
+  return {};
 };
 
 /**

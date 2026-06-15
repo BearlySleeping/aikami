@@ -36,6 +36,8 @@
 | C-132 | Persistence - Save/Load System | ✅ completed |
 | C-133 | Flexible AI Provider Onboarding | ✅ completed |
 | C-134 | Inline Provider Setup & Routing Fix | ✅ completed |
+| C-135 | Tilemap & Environment Parsing | ✅ completed |
+| C-136 | Entity & Prop Spawner | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -752,3 +754,35 @@
 - The visual regression test (`map_rendering_visual.spec.ts`) does not perform pixel-level snapshot comparison yet — it only verifies the canvas renders without errors. Full snapshot comparison requires running game dev server + golden baseline images.
 - Collision grid has no diagonal-blocking awareness — entities moving diagonally into a corner of two solid tiles can squeeze through if the center pixel is in a walkable tile. This is a known limitation of tile-based collision without swept AABB.
 - Fixed 3 pre-existing serializer test failures: error messages updated to match TypeBox-based `validateEcsSnapshot` output ("Invalid JSON", "Schema validation failed", "Unsupported version").
+
+### C-136: Entity & Prop Spawner
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/assets/lpc_asset_catalog.ts` — Lightweight asset catalog mapping spawn properties to LPC sprite texture keys. `resolveNpcTexture()` returns the default walk spritesheet; `resolvePropTexture()` maps `assetId` properties to prop spritesheet paths with a default fallback.
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — ECS spawner system digesting SpawnPoint arrays. `spawnEntities()` creates entities with appropriate component sets: NPCs get Position, Sprite (gold tint), Appearance (standard body layers), and NPCDialog; props get Position and Sprite (white tint). Property extraction helpers resolve per-spawn overrides (npcId, npcName, dialogueKey, interactionRadius) with sensible defaults.
+- `packages/frontend/engine/src/systems/entity_spawner.test.ts` — 14 unit tests: NPC spawning with full component verification, npcId fallback to spawnPoint.id, default dialog/name/radius, prop spawning with assetId texture resolution, default prop texture, no NPCDialog/Appearance on props, multiple spawn points, coordinate positioning, empty input, unknown type skipping, unique EID assignment, empty properties handling.
+
+**Files modified**:
+- `packages/frontend/engine/src/assets/map_loader.ts` — Added `SpawnPoint`, `ObjectLayer` types; added `objectLayers?: ObjectLayer[]` to `TilemapData`; added `_parseObjectLayers()` to extract objectgroup layers during parsing; added `extractSpawnPoints()` public API to flatten object layers into SpawnPoint arrays; added `_parseSpawnPoint()` and `_extractProperties()` internal helpers handling both array-style and flat-object Tiled property formats.
+- `packages/frontend/engine/src/assets/map_loader.test.ts` — 12 new tests: extractSpawnPoints (empty/no layers, array-format properties, flat-object properties, multiple layers, missing id/type skipping, zero coordinate defaults, no properties), loadTilemap objectgroup parsing (alongside tilelayers, undefined when absent, throws on missing objects array).
+- `packages/frontend/engine/src/index.ts` — Exported new types (`SpawnPoint`, `ObjectLayer`, `SpawnEntitiesOptions`, `SpawnResult`) and functions (`extractSpawnPoints`, `spawnEntities`, `resolveNpcTexture`, `resolvePropTexture`).
+
+**Deviations**:
+1. **No `Interactable` component**: The contract mentions an `Interactable` component for NPCs. NPCDialog already serves this role — it carries `playerInRange` boolean and is used by the dialog_trigger_system and context_system for proximity-based interaction detection. No separate Interactable component needed.
+2. **No `NpcData` separate component**: The contract mentions `NpcData`. The existing `NPCDialog` component (with `npcId`, `npcName`, `dialog`, `interactionRadius`, `playerInRange`) covers the same data surface. Entities created by `spawnEntities()` use `NPCDialog`.
+3. **LPC asset catalog is a new file**: The contract says to resolve via `lpc_asset_catalog`. No catalog previously existed, so a lightweight mapping module was created (`lpc_asset_catalog.ts`) with two resolver functions.
+4. **Prop entities are decorative-only**: Props get Position and Sprite but no interaction components. Future contracts can wire prop-specific interaction logic.
+
+**Design decisions**:
+1. **`spawnEntities` is a pure function** — takes `{ world, spawnPoints }` options object and returns `SpawnResult[]`. No side effects beyond bitECS entity/component creation. No class or stateful singleton — consistent with the existing `createNPC` / `createPlayer` factory pattern.
+2. **`NPCDialog` used instead of creating new component**: Reuses the existing component rather than introducing schema duplication. `createNPC` already uses NPCDialog — the spawner follows the same convention.
+3. **Properties support dual format**: Tiled exports custom properties in array format `[{name, type, value}]` or flat-object format `{key: value}`. `_extractProperties()` handles both.
+4. **Unknown spawn types silently skipped**: A spawn point with `type: 'unknown'` produces no entity and no error. This allows Tiled maps to contain editor-only objects (guides, annotations) without breaking the spawner.
+
+**Known limitations**:
+- NPCs always use the default LPC body spritesheet (`/lpc/body/male/walk.png`). Per-NPC appearance customization (hairstyle, outfit) requires the SpriteComposer multi-layer pipeline and data-driven LPC recipes — out of scope for this contract.
+- Props are static sprites with no interaction logic. A future prop interaction system would need to query entities by type or component set.
+- The spawner is not yet wired into the map loading pipeline — `ecs_worker.ts` would need to call `spawnEntities()` when a map is loaded and object layers exist. This integration is a separate step.
+- Asset catalog uses hardcoded path strings (`/lpc/props/{assetId}.png`). A future dynamic asset pipeline could replace this with a PixiJS Assets-based resolver pattern.
