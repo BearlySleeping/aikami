@@ -70,6 +70,29 @@ export type EngineBridge = {
    * @param entityId - Optional entity ID of the character the macro applies to.
    */
   triggerMacro(macro: string, args: string[], entityId?: number): void;
+
+  /**
+   * Creates a serialized snapshot of the current ECS world state.
+   *
+   * Delegates to the worker which calls {@link import('./serialization/ecs_serializer.ts').serializeWorld}
+   * on the active bitECS world. Returns the JSON payload string.
+   *
+   * @returns The serialized ECS world state as a JSON string.
+   * @throws If the engine is not initialized or the worker is not running.
+   */
+  createSnapshot(): Promise<string>;
+
+  /**
+   * Restores the ECS world state from a previously-created snapshot.
+   *
+   * Clears all current entities and display objects, then hydrates the
+   * world from the snapshot payload. The engine remains running during
+   * the restore — no re-initialization is required.
+   *
+   * @param snapshot - A JSON string produced by {@link createSnapshot}.
+   * @throws If the engine is not initialized or the payload is invalid.
+   */
+  restoreSnapshot(snapshot: string): Promise<void>;
 };
 
 // ===========================================================================
@@ -221,6 +244,12 @@ class EngineBridgeImpl implements EngineBridge {
     };
   }
 
+  /** Snapshot handler registered by the GameWorld. */
+  private _snapshotHandler: (() => Promise<string>) | undefined;
+
+  /** Restore handler registered by the GameWorld. */
+  private _restoreHandler: ((snapshot: string) => Promise<void>) | undefined;
+
   /**
    * Sets the engine ready state. Called by GameWorld after PixiJS
    * initialization completes.
@@ -235,7 +264,41 @@ class EngineBridgeImpl implements EngineBridge {
   reset(): void {
     this.listeners.clear();
     this.commandHandlers.clear();
+    this._snapshotHandler = undefined;
+    this._restoreHandler = undefined;
     this.ready = false;
+  }
+
+  /**
+   * Registers the snapshot handler callback. Called by GameWorld during
+   * initialization so {@link createSnapshot} delegates to the worker.
+   */
+  setSnapshotHandler(handler: () => Promise<string>): void {
+    this._snapshotHandler = handler;
+  }
+
+  /**
+   * Registers the restore handler callback. Called by GameWorld during
+   * initialization so {@link restoreSnapshot} delegates to the worker.
+   */
+  setRestoreHandler(handler: (snapshot: string) => Promise<void>): void {
+    this._restoreHandler = handler;
+  }
+
+  /** @inheritdoc */
+  async createSnapshot(): Promise<string> {
+    if (!this._snapshotHandler) {
+      throw new Error('EngineBridge: no snapshot handler registered (engine not initialized)');
+    }
+    return this._snapshotHandler();
+  }
+
+  /** @inheritdoc */
+  async restoreSnapshot(snapshot: string): Promise<void> {
+    if (!this._restoreHandler) {
+      throw new Error('EngineBridge: no restore handler registered (engine not initialized)');
+    }
+    return this._restoreHandler(snapshot);
   }
 }
 
@@ -305,6 +368,26 @@ export class MockEngineBridge implements EngineBridge {
   /** @see EngineBridgeImpl.setReady */
   setReady(value: boolean): void {
     this.impl.setReady(value);
+  }
+
+  /** @see EngineBridgeImpl.setSnapshotHandler */
+  setSnapshotHandler(handler: () => Promise<string>): void {
+    this.impl.setSnapshotHandler(handler);
+  }
+
+  /** @see EngineBridgeImpl.setRestoreHandler */
+  setRestoreHandler(handler: (snapshot: string) => Promise<void>): void {
+    this.impl.setRestoreHandler(handler);
+  }
+
+  /** @inheritdoc */
+  async createSnapshot(): Promise<string> {
+    return this.impl.createSnapshot();
+  }
+
+  /** @inheritdoc */
+  async restoreSnapshot(snapshot: string): Promise<void> {
+    return this.impl.restoreSnapshot(snapshot);
   }
 
   /** @see EngineBridgeImpl.reset */
