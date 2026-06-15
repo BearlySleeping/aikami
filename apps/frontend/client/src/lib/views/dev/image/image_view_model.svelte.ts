@@ -247,7 +247,9 @@ class ImageViewModel
   // ── Public: Image Gen ─────────────────────────────────────────────────
 
   async generate(): Promise<void> {
-    if (!this.prompt.trim()) return;
+    if (!this.prompt.trim()) {
+      return;
+    }
 
     this.cancel();
     this.results = [];
@@ -278,7 +280,9 @@ class ImageViewModel
       const url = await this._executeWorkflow(workflow, abortController.signal);
       this.results = [url];
     } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') return;
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
       this.error('generate:failed', error);
     } finally {
       this.isGenerating = false;
@@ -289,7 +293,9 @@ class ImageViewModel
   // ── Public: Expression Pack ───────────────────────────────────────────
 
   async generateExpressions(): Promise<void> {
-    if (!this.inputImageDataUrl) return;
+    if (!this.inputImageDataUrl) {
+      return;
+    }
 
     this.cancel();
     this.isGenerating = true;
@@ -304,11 +310,15 @@ class ImageViewModel
     try {
       // Upload the input image to ComfyUI
       const imageName = await this._uploadImage(this.inputImageDataUrl, abortController.signal);
-      if (!imageName) return;
+      if (!imageName) {
+        return;
+      }
 
       // Run each expression sequentially
       for (const expr of EXPRESSIONS) {
-        if (abortController.signal.aborted) break;
+        if (abortController.signal.aborted) {
+          break;
+        }
 
         this.expressionProgress = { ...this.expressionProgress, [expr.id]: 'Generating...' };
 
@@ -336,7 +346,9 @@ class ImageViewModel
         }
       }
     } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') return;
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
       this.error('generateExpressions:failed', error);
     } finally {
       this.isGenerating = false;
@@ -347,7 +359,9 @@ class ImageViewModel
   // ── Public: Image Edit ────────────────────────────────────────────────
 
   async editImage(): Promise<void> {
-    if (!this.inputImageDataUrl || !this.editPrompt.trim()) return;
+    if (!this.inputImageDataUrl || !this.editPrompt.trim()) {
+      return;
+    }
 
     this.cancel();
     this.isGenerating = true;
@@ -359,7 +373,9 @@ class ImageViewModel
 
     try {
       const imageName = await this._uploadImage(this.inputImageDataUrl, abortController.signal);
-      if (!imageName) return;
+      if (!imageName) {
+        return;
+      }
 
       const workflow = this._buildImg2ImgWorkflow({
         checkpoint: this.selectedCheckpoint,
@@ -377,7 +393,9 @@ class ImageViewModel
       const url = await this._executeWorkflow(workflow, abortController.signal);
       this.results = [url];
     } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') return;
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
       this.error('editImage:failed', error);
     } finally {
       this.isGenerating = false;
@@ -445,7 +463,9 @@ class ImageViewModel
     this.generationProgress = 10;
 
     for (let attempt = 1; attempt <= MAX_POLL_ATTEMPTS; attempt++) {
-      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (signal.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
 
       const historyResponse = await fetch(`/api/image/history/${promptId}`, { signal });
 
@@ -470,7 +490,9 @@ class ImageViewModel
               `&subfolder=${encodeURIComponent(img.subfolder ?? '')}&type=output`;
 
             const blobResponse = await fetch(imageUrl, { signal });
-            if (!blobResponse.ok) throw new Error(`Failed to fetch image (${blobResponse.status})`);
+            if (!blobResponse.ok) {
+              throw new Error(`Failed to fetch image (${blobResponse.status})`);
+            }
 
             const blob = await blobResponse.blob();
             return URL.createObjectURL(blob);

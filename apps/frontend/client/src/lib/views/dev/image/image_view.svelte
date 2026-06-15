@@ -13,7 +13,9 @@
   /** Handles file input change events. */
   const onFileChange = (e: Event) => {
     const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) viewModel.handleImageUpload(file);
+    if (file) {
+      viewModel.handleImageUpload(file);
+    }
   };
 </script>
 
@@ -188,7 +190,7 @@
                 placeholder="Describe the image you want to generate..."
                 bind:value={viewModel.prompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void viewModel.generate(); }}
+                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.generate(); } }}
               ></textarea>
             </label>
             <label class="form-control w-full">
@@ -233,7 +235,7 @@
             {#if hasInputImage}
               <div class="flex items-start gap-4">
                 <img
-                  src={viewModel.inputImageDataUrl!}
+                  src={viewModel.inputImageDataUrl ?? ''}
                   alt="Input"
                   class="w-24 h-24 rounded object-cover border border-white/10"
                 >
@@ -341,7 +343,7 @@
             {#if hasInputImage}
               <div class="flex items-start gap-4">
                 <img
-                  src={viewModel.inputImageDataUrl!}
+                  src={viewModel.inputImageDataUrl ?? ''}
                   alt="Input"
                   class="w-24 h-24 rounded object-cover border border-white/10"
                 >
@@ -484,7 +486,7 @@
                 placeholder="Describe how to edit this image..."
                 bind:value={viewModel.editPrompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void viewModel.editImage(); }}
+                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.editImage(); } }}
               ></textarea>
             </label>
             <div class="flex gap-3 mt-4">

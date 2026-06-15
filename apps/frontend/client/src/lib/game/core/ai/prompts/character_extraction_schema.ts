@@ -7,13 +7,7 @@
 //
 // Contract: C-081
 
-import {
-  AbilityScoresSchema,
-  AlignmentSchema,
-  BackgroundSchema,
-  ClassSchema,
-  RaceSchema,
-} from '@aikami/schemas';
+import { AbilityScoresSchema, AlignmentSchema, ClassSchema, RaceSchema } from '@aikami/schemas';
 import Type from 'typebox';
 import { getLpcCatalogPrompt } from '$lib/data/lpc_asset_catalog_generated';
 
