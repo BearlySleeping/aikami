@@ -42,21 +42,11 @@
       {/if}
 
       <!--
-        Game UI Overlay Router (C-125).
+        Game UI Overlay Router (C-125, C-128).
         Switches between overlays (PAUSE_MENU, DIALOGUE, COMBAT) based on
-        GameUIViewModel.activeOverlay. The Escape key is handled inside.
+        GameUIViewModel.activeOverlay. Escape key is handled inside.
       -->
       <GameUIView viewModel={gameUIViewModel} />
-
-      <!-- Active NPC Dialog — bottom overlay -->
-      {#if viewModel.activeDialog}
-        <div class="pointer-events-auto absolute bottom-0 inset-x-0 p-4">
-          <div class="mx-auto max-w-lg rounded-lg border border-base-300 bg-base-200 p-4 shadow-lg">
-            <p class="text-sm font-bold text-primary">{viewModel.activeDialog.npcName}</p>
-            <p class="mt-1 text-sm text-base-content">{viewModel.activeDialog.dialog}</p>
-          </div>
-        </div>
-      {/if}
 
       <!-- Game Error — centered top overlay -->
       {#if viewModel.gameError}
