@@ -1,5 +1,16 @@
 # Contract: C-131 Native WebGPU Voice via Kokoro
 
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Source** | Aikami Feature Spec — Browser-native TTS via WebGPU Worker |
+| **Target** | `apps/frontend/client/src/lib/workers/voice/`, `apps/frontend/client/package.json` |
+| **Priority** | P2 — Optional quality-of-life feature; enables voice without cloud dependencies |
+| **Dependencies** | None |
+| **Status** | **completed** |
+| **Contract version** | 1.0.0 |
+
 ## Goal
 Implement a native, zero-setup text-to-speech engine using the 82M Kokoro TTS model running directly in the browser via WebGPU. This will be orchestrated through an isolated Web Worker to ensure the Svelte 5 UI and PixiJS canvas maintain a strict 60 FPS while synthesizing audio.
 

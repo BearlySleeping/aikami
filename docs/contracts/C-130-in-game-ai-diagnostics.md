@@ -1,5 +1,16 @@
 # Contract: C-130 In-Game AI Diagnostics & Onboarding
 
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Source** | Active memory — C-122 Onboarding & Provider Gate UX refinement |
+| **Target** | `apps/frontend/client/src/lib/views/app/boot/` |
+| **Priority** | P1 — Gates game entry on AI service health |
+| **Dependencies** | C-122, C-126 |
+| **Status** | **completed** |
+| **Contract version** | 1.0.0 |
+
 ## Goal
 Replace the placeholder "Missing Providers" screen with an immersive, retro-terminal "Boot Diagnostics" dashboard. This view will ping the local AI providers (Ollama and ComfyUI) and gate entry to the game loop until the required offline environment is running. 
 

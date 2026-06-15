@@ -74,6 +74,7 @@ P2 (Polish — after P1):
 | C-132 | [Persistence - Save/Load System](C-132-save-load-system.md) ✅ | ECS snapshot persistence to browser IndexedDB — Main Menu Continue, Pause Menu Save, unit+E2E tests | C-117, C-118, C-125 |
 | C-133 | [Flexible AI Provider Onboarding](C-133-flexible-provider-onboarding.md) ✅ | Remove strict dual-local requirement — boot on Text provider only (Ollama or OpenRouter), image/voice optional with graceful degradation | C-130 |
 | C-134 | [Inline Provider Setup & Routing Fix](C-134-inline-provider-setup.md) ✅ | Inline OpenRouter API key input on boot screen, routing gate bypass for /settings | C-133 |
+| C-135 | [Tilemap & Environment Parsing](C-135-tilemap-environment-parsing.md) ✅ | Tiled JSON map loader, PixiJS tilemap rendering, collision grid initialization for physics | — |
 
 ## Contract Format
 
