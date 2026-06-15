@@ -4,7 +4,12 @@ export { ComfyUiClient } from './ai/clients/comfyui_client.ts';
 export { GeminiClient } from './ai/clients/gemini_client.ts';
 export { LocalTtsClient } from './ai/clients/local_tts_client.ts';
 // AI Implementations — Local
-export { OllamaClient } from './ai/clients/ollama_client.ts';
+export {
+  OllamaClient,
+  OllamaConnectionError,
+  OllamaStreamError,
+  OllamaTimeoutError,
+} from './ai/clients/ollama_client.ts';
 // AI Implementations — Cloud
 export { OpenAiClient } from './ai/clients/openai_client.ts';
 // Factory
