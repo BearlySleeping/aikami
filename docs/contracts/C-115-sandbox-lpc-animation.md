@@ -6,7 +6,7 @@
 | **Target** | `packages/frontend/engine/src/game_world.ts` — Sandbox LPC Visuals |
 | **Priority** | P1 — Visual parity for the vertical slice |
 | **Dependencies** | C-114 |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -6,7 +6,7 @@
 | **Target**           | `apps/backend/text` — Text Generator Service & Tmux integration |
 | **Priority**         | P1                                                              |
 | **Dependencies**     | C-070                                                           |
-| **Status**           | not_started                                                     |
+| **Status**           | **completed**                                                     |
 | **Contract version** | 1.0.0                                                           |
 
 ## Overview

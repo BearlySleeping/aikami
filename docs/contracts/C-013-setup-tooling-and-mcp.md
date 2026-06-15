@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/` — Tauri initialization; `.pi/mcp.json` + `.pi/skills/` — AI tooling context |
 | **Priority** | P1 — Foundation for desktop exports and game engine integration; enables AI-assisted Tauri/PixiJS development |
 | **Dependencies** | C-012 (knowledge docs must be current before adding new skills) |
-| **Status** | not_started |
+| **Status** | **—** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

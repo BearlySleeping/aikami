@@ -6,7 +6,7 @@
 | **Target** | `/aikami/tests/blackbox/` + test infrastructure |
 | **Priority** | P2 — Important for regression safety but not blocking initial refactor |
 | **Dependencies** | C-007 (scripts project), C-009 (standardized configs) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -55,6 +55,9 @@
           bun
           nodejs_24
 
+          # TLS CA certificates (needed by apps for HTTPS)
+          cacert
+
           # Playwright with Nix-fixed browsers
           playwright-test
 
@@ -169,6 +172,11 @@ sys.exit(1)
             echo "⚠️  PixiJS DevTools not found — set PIXI_DEVTOOLS_PATH to unpacked extension"
             echo "   https://github.com/pixijs/devtools/releases"
           fi
+
+          # SSL CA certificates — needed by apps (like Zed git panel) for HTTPS
+          export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+          export NIX_SSL_CERT_FILE="$SSL_CERT_FILE"
+          export CURL_CA_BUNDLE="$SSL_CERT_FILE"
         '';
       };
     });

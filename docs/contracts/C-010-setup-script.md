@@ -6,7 +6,7 @@
 | **Target** | `/aikami/scripts/src/lib/setup.ts` |
 | **Priority** | P2 — Quality of life for developers; not blocking |
 | **Dependencies** | C-007 (scripts project), C-008 (.moon setup) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

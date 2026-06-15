@@ -6,7 +6,7 @@
 | **Target** | `/aikami/scripts/` |
 | **Priority** | P1 — Required for developer onboarding, CI, and operational scripts |
 | **Dependencies** | C-001 (clean root), C-005 (packages/shared/) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

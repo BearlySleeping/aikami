@@ -6,7 +6,7 @@
 | **Target** | `/aikami/.pi/` |
 | **Priority** | P0 — Required for pi agent to work with project-specific tools and skills |
 | **Dependencies** | C-001 (clean root), C-002 (knowledge dir for contract-implementer skill) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview
