@@ -7,7 +7,7 @@
 | **Target**           | `apps/frontend/client/src/lib/views/dev/config/` — Ultimate Configuration Dashboard |
 | **Priority**         | P2 — Establishes the central hub for all developer and system configurations     |
 | **Dependencies**     | C-078                                                                            |
-| **Status**           | completed                                                                        |
+| **Status**           | **completed**                                                                        |
 | **Contract version** | 1.0.0                                                                            |
 
 ## Overview

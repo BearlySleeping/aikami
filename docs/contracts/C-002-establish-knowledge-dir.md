@@ -6,7 +6,7 @@
 | **Target** | `/knowledge/` — aikami monorepo root |
 | **Priority** | P0 — Required before any other contract can reference knowledge docs |
 | **Dependencies** | C-001 (clean root first) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

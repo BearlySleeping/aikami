@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-12
-> Files: 132 across 10 categories
+> Generated: 2026-06-15
+> Files: 144 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -123,9 +123,21 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [C 114 sandbox engine wiring](contracts/C-114-sandbox-engine-wiring.md)
 - [C 115 sandbox lpc animation](contracts/C-115-sandbox-lpc-animation.md)
 - [C 116 sandbox ai dialogue](contracts/C-116-sandbox-ai-dialogue.md)
+- [Contract: C-117 — ECS Snapshot Serializer](contracts/C-117-ecs-snapshot-serializer.md)
+- [Contract: C-118 — Save/Load UI & Engine Boundary](contracts/C-118-save-load-ui-wiring.md)
+- [Contract: C-119 Routing and Layout Simplification](contracts/C-119-routing-and-layout-simplification.md)
+- [Contract: C-120 View Folder Restructure & ViewModel Inheritance](contracts/C-120-view-folder-restructure.md)
+- [Contract: C-121 Start Menu & Optional Authentication ✅](contracts/C-121-start-menu-and-auth.md)
+- [Contract: C-122 Onboarding & Provider Gate](contracts/C-122-onboarding-provider-gate.md)
+- [Contract: C-123 Character Creation Flow](contracts/C-123-character-creation-flow.md)
+- [Contract: C-124 Game Engine Initialization & Overlay Base](contracts/C-124-game-engine-initialization.md)
+- [Contract: C-125 Game UI Overlay Architecture & State Sync](contracts/C-125-game-ui-overlay-architecture.md)
+- [Contract: C-126 Headless App Shell & Initialization](contracts/C-126-headless-app-shell.md)
+- [Contract: C-127 Settings Menu Refactor](contracts/C-127-settings-menu-refactor.md)
+- [Contract: C-128 Dialogue Overlay & AI Chat](contracts/C-128-dialogue-overlay-and-ai-chat.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
-- [MIG 002 backend dataconnect](contracts/MIG-002-backend-dataconnect.md)
+- [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
 - [MIG 003 scripting infra](contracts/MIG-003-scripting-infra.md)
 - [MIG 004 frontend configs](contracts/MIG-004-frontend-configs.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
