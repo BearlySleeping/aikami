@@ -491,6 +491,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // Forward bridge commands to the worker
     this._setupCommandForwarding();
+
+    // Register snapshot/restore handlers on the bridge
+    this._setupSnapshotHandlers();
   }
 
   /**
@@ -733,6 +736,25 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   // -----------------------------------------------------------------------
 
   /**
+   * Registers snapshot and restore handler callbacks on the engine bridge
+   * so the UI can request serialization without direct access to the worker.
+   */
+  private _setupSnapshotHandlers(): void {
+    const bridgeWithHandlers = this._bridge as unknown as {
+      setSnapshotHandler: (handler: () => Promise<string>) => void;
+      setRestoreHandler: (handler: (snapshot: string) => Promise<void>) => void;
+    };
+
+    if (typeof bridgeWithHandlers.setSnapshotHandler === 'function') {
+      bridgeWithHandlers.setSnapshotHandler(() => this.snapshotWorld());
+    }
+
+    if (typeof bridgeWithHandlers.setRestoreHandler === 'function') {
+      bridgeWithHandlers.setRestoreHandler((payload: string) => this.restoreWorld(payload));
+    }
+  }
+
+  /**
    * Sets the global input lock state.
    *
    * When `true`, keyboard movement keys (WASD/arrows) are suppressed.
@@ -936,6 +958,57 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       this._worker.addEventListener('message', handler);
       this._worker.postMessage({ type: 'REQUEST_SNAPSHOT' });
+    });
+  }
+
+  /**
+   * Restores the ECS world from a saved snapshot payload.
+   *
+   * Clears all current entity display objects from the main-thread render
+   * map, then posts a LOAD_GAME message to the worker. The worker clears
+   * all bitECS entities, deserializes the snapshot, and posts
+   * ENTITY_CREATED messages for each new entity.
+   *
+   * Resolves when the worker sends ENGINE_READY after the restore.
+   *
+   * @param payload - The serialized ECS snapshot JSON string.
+   * @throws If the worker is not running or the restore fails.
+   */
+  restoreWorld(payload: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this._worker) {
+        reject(new Error('Worker not running — cannot restore'));
+        return;
+      }
+
+      // Clear all existing render entries (PixiJS display objects)
+      for (const entry of this._renderEntries.values()) {
+        entry.displayObject.destroy({ children: true });
+      }
+      this._renderEntries.clear();
+      this._npcMeta.clear();
+      this._playerEntityId = 0;
+
+      // Wait for the worker to finish restoring
+      const handler = (event: MessageEvent): void => {
+        const message = event.data;
+
+        if (message.type === 'ENGINE_ERROR') {
+          this._worker?.removeEventListener('message', handler);
+          reject(new Error(message.message as string));
+          return;
+        }
+
+        if (message.type !== 'ENGINE_READY') {
+          return;
+        }
+
+        this._worker?.removeEventListener('message', handler);
+        resolve();
+      };
+
+      this._worker.addEventListener('message', handler);
+      this._worker.postMessage({ type: 'LOAD_GAME', payload });
     });
   }
 

@@ -4,7 +4,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { authService } from '$services';
+import {
+  authService,
+  gameSaveService,
+  routerService,
+  type SaveSlotInfo,
+  setPendingGameLoad,
+} from '$services';
 
 export type MenuViewModelOptions = BaseViewModelOptions & {
   /** Called when the player clicks "Start" to begin the game. */
@@ -30,8 +36,22 @@ export type MenuViewModelInterface = BaseViewModelInterface & {
   /** The logged-in player's display name, or undefined. */
   readonly playerDisplayName: string | undefined;
 
+  /** Whether there is at least one saved game available to continue. */
+  readonly canContinue: boolean;
+
+  /** The most recent save slot, or undefined when no saves exist. */
+  readonly latestSave: SaveSlotInfo | undefined;
+
   /** Starts the game — works offline without login. */
   startGame(): void;
+
+  /**
+   * Continues from the most recent saved game.
+   *
+   * Loads the snapshot payload from IndexedDB, sets it as the pending
+   * game load, and navigates to the game canvas.
+   */
+  continueGame(): Promise<void>;
 
   /** Signs in with Google (optional). */
   loginWithGoogle(): Promise<void>;
@@ -48,6 +68,12 @@ export type MenuViewModelInterface = BaseViewModelInterface & {
 
 class MenuViewModel extends BaseViewModel<MenuViewModelOptions> implements MenuViewModelInterface {
   private _isSigningIn = $state(false);
+
+  /** @inheritdoc */
+  async initialize(): Promise<void> {
+    await gameSaveService.fetchAvailableSaves();
+    await super.initialize();
+  }
 
   /** @inheritdoc */
   get isLoggedIn(): boolean {
@@ -70,8 +96,41 @@ class MenuViewModel extends BaseViewModel<MenuViewModelOptions> implements MenuV
   }
 
   /** @inheritdoc */
+  get canContinue(): boolean {
+    return gameSaveService.availableSaves.length > 0;
+  }
+
+  /** @inheritdoc */
+  get latestSave(): SaveSlotInfo | undefined {
+    const saves = gameSaveService.availableSaves;
+    if (saves.length === 0) {
+      return undefined;
+    }
+    return saves.reduce((a, b) => (a.timestamp > b.timestamp ? a : b));
+  }
+
+  /** @inheritdoc */
   startGame(): void {
     this._options.onStart();
+  }
+
+  /** @inheritdoc */
+  async continueGame(): Promise<void> {
+    const latest = this.latestSave;
+    if (!latest) {
+      return;
+    }
+
+    try {
+      const payload = await gameSaveService.getSavePayload(latest.id);
+      setPendingGameLoad(payload);
+      routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.debug('continueGame:error', { error: String(error) });
+    }
   }
 
   /** @inheritdoc */

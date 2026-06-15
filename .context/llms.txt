@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-06-15
-> Files: 145 across 10 categories
+> Files: 149 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -136,6 +136,10 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-127 Settings Menu Refactor](contracts/C-127-settings-menu-refactor.md)
 - [Contract: C-128 Dialogue Overlay & AI Chat](contracts/C-128-dialogue-overlay-and-ai-chat.md)
 - [Contract: C-129 Dialogue AI Integration & Polish](contracts/C-129-dialogue-ai-integration-polish.md)
+- [Contract: C-130 In-Game AI Diagnostics & Onboarding](contracts/C-130-in-game-ai-diagnostics.md)
+- [Contract: C-131 Native WebGPU Voice via Kokoro](contracts/C-131-native-webgpu-voice.md)
+- [Contract: C-132 Persistence - Save/Load System](contracts/C-132-save-load-system.md)
+- [Contract: C-133 Flexible AI Provider Onboarding](contracts/C-133-flexible-provider-onboarding.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

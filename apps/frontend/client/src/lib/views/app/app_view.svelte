@@ -35,7 +35,7 @@
 
 <style>
   /* Hide the default Firebase emulator warning banner injected by the SDK —
-                                                         replaced by our custom ModeIndicator component. */
+                                                                           replaced by our custom ModeIndicator component. */
   :global(.firebase-emulator-warning) {
     display: none;
   }
