@@ -35,6 +35,7 @@
 | C-131 | Native WebGPU Voice via Kokoro | ✅ completed |
 | C-132 | Persistence - Save/Load System | ✅ completed |
 | C-133 | Flexible AI Provider Onboarding | ✅ completed |
+| C-134 | Inline Provider Setup & Routing Fix | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -103,6 +104,8 @@
 | C-114 | Sandbox Engine Wiring | ✅ completed |
 | C-115 | Sandbox LPC Animation | ✅ completed |
 | C-117 | ECS Snapshot Serializer | ✅ completed |
+| C-118 | Save/Load UI & Engine Boundary | ✅ completed |
+| C-119 | Routing and Layout Simplification | ✅ completed |
 | C-120 | View Folder Restructure & ViewModel Inheritance | ✅ completed |
 | C-121 | Start Menu & Optional Authentication | ✅ completed |
 | C-122 | Onboarding & Provider Gate | ✅ completed |
@@ -715,3 +718,37 @@
 - Save slots are ID-based strings (no fixed slot count). UI currently only writes to `'manual-1'` from the pause menu.
 - The worker `LOAD_GAME` handler pauses the tick loop during entity teardown/recreate — there's a brief visual freeze during restore.
 - E2E test requires the game engine to be running (PixiJS + Web Worker) — may be flaky in CI without proper GPU/WASM setup.
+
+### C-135: Tilemap & Environment Parsing
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/assets/map_loader.ts` — Fetches and parses Tiled JSON tilemaps. Extracts width/height/tilewidth/tileheight, tilesets, and tile layers. In-memory cache per URL. Validates all required fields, layer dimensions, and data array lengths.
+- `packages/frontend/engine/src/assets/map_loader.test.ts` — 26 unit tests: parsing valid maps, extracting tileset fields, layer data as numbers, multiple layers/tilesets, caching (cache hit, clearMapCache, independent URLs), validation errors (invalid JSON, missing fields, dimension mismatches, non-tilelayer filtering, no tile layers), spacing/margin defaults, and extractCollisionGrid (custom layer name, non-zero GID mapping).
+- `packages/frontend/engine/src/systems/collision_system.ts` — Module-level 2D boolean collision grid storage. `setCollisionGrid()` sets the active grid; `isWalkable(pixelX, pixelY)` converts pixel coordinates to tile coordinates using the grid's tileSize and returns whether the tile is walkable. Out-of-bounds = blocked. `resetCollisionGrid()` clears for teardown.
+- `packages/frontend/engine/src/systems/tilemap_render_system.ts` — Renders parsed tilemap layers into a PixiJS Container. Each visible non-collision layer is rendered as individual tile Sprites. Optional `RenderTexture` baking for production (falls back to direct rendering when no renderer available). Layers added bottom-to-top. Returns a Container ready for insertion into the world scene behind entity sprites.
+- `apps/e2e/tests/game/map_rendering_visual.spec.ts` — Playwright visual regression test skeleton: defines a 10×10 test map (wall border + floor interior + collision layer), intercepts map JSON request, navigates to `/game`, waits for PixiJS canvas, takes screenshot. Placeholder for full snapshot comparison.
+
+**Files modified**:
+- `packages/frontend/engine/src/systems/movement_system.ts` — Added collision check via `isWalkable()` from collision_system. Before snapping to a target cell center or taking a partial step, the movement system verifies the destination tile is walkable. Blocked entities stop at their current position with movement state cleared.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Added `setCollisionGrid` import. `initializeEngine()` accepts optional `collisionGrid` parameter and calls `setCollisionGrid()` before creating the world. `INITIALIZE_ENGINE` handler extracts `collisionGrid` from the message and passes it to `initializeEngine()`.
+- `packages/frontend/engine/src/game_world.ts` — Added `collisionGrid?: CollisionGrid` to `GameWorldInitializeOptions`. `_spawnWorker()` accepts and forwards `collisionGrid` via the `INITIALIZE_ENGINE` message to the worker.
+- `packages/frontend/engine/src/index.ts` — Exported new modules: `loadTilemap`, `clearMapCache`, `extractCollisionGrid` from map_loader; `setCollisionGrid`, `resetCollisionGrid`, `isWalkable` from collision_system; `renderTilemap` from tilemap_render_system. Exported types: `TilemapData`, `TilemapLayer`, `TilemapTileset`, `CollisionGrid`, `TilemapRenderOptions`, `TilemapRenderResult`.
+
+**Deviations**:
+1. **Collision grid via INITIALIZE_ENGINE (not separate message)**: Contract says "update the physics system" and "check this grid before applying velocity". Rather than exposing a new `SET_COLLISION_GRID` command, the grid is passed as part of the `INITIALIZE_ENGINE` message payload. This ensures the collision grid is set before any entity movement begins — no race condition possible.
+2. **Tilemap renderer uses individual sprites (not RenderTexture by default)**: The `RenderTexture` baking path exists but requires a live PixiJS `Renderer` reference. For the MVP, direct sprite rendering is used which PixiJS batches efficiently for shared-texture tiles. RenderTexture optimization is available when a `Renderer` is provided.
+3. **Movement system grid vs collision grid tile sizes**: The movement system uses a fixed 32px cell grid (`CELL_SIZE = 32`). The collision system respects the map's `tilewidth`/`tileheight` independently. `isWalkable()` converts pixel coordinates to collision-grid tile coordinates using the grid's tile size, so the two grids can differ.
+
+**Design decisions**:
+1. **Map loader uses `globalThis.fetch`**: The loader accepts an optional `fetch` implementation via `MapLoaderOptions` for testability. In production, `globalThis.fetch` is used. No dependency on PixiJS `Assets` — the loader is a pure data parser.
+2. **Collision grid is a module-level singleton**: `_activeGrid` is stored at module scope in `collision_system.ts`. Only one scene is active at a time — the grid is set during initialization and cleared during teardown.
+3. **`extractCollisionGrid` returns `boolean[]`**: A flat row-major boolean array rather than a `boolean[][]` for simpler serialization across the worker boundary. Row/column access is computed as `index = row * width + col`.
+4. **Tilemap renderer skips `collision` layer**: Layers named `collision` are automatically excluded from rendering. The `layerFilter` option allows callers to further control which layers appear.
+
+**Known limitations**:
+- Tilemap rendering does not use a `CompositeTilemap` or `@pixi/tilemap` — individual Sprite objects are created per tile. For large maps (>100×100), this may produce thousands of draw calls. The `RenderTexture` baking path mitigates this but requires API wiring.
+- The visual regression test (`map_rendering_visual.spec.ts`) does not perform pixel-level snapshot comparison yet — it only verifies the canvas renders without errors. Full snapshot comparison requires running game dev server + golden baseline images.
+- Collision grid has no diagonal-blocking awareness — entities moving diagonally into a corner of two solid tiles can squeeze through if the center pixel is in a walkable tile. This is a known limitation of tile-based collision without swept AABB.
+- Fixed 3 pre-existing serializer test failures: error messages updated to match TypeBox-based `validateEcsSnapshot` output ("Invalid JSON", "Schema validation failed", "Unsupported version").

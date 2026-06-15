@@ -1,5 +1,16 @@
 # Contract: C-129 Dialogue AI Integration & Polish
 
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Source** | Active memory — C-128 Dialogue Overlay & AI Chat completion |
+| **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/`, `packages/frontend/api-core/src/ai/clients/ollama_client.ts` |
+| **Priority** | P1 — Completes the dialogue system MVP |
+| **Dependencies** | C-128 |
+| **Status** | **completed** |
+| **Contract version** | 1.0.0 |
+
 ## Goal
 Finalize the MVP Dialogue system by connecting the Svelte 5 Dialogue Overlay (MVVM) to the local Ollama streaming backend. Ensure seamless text streaming into DaisyUI chat bubbles over the PixiJS canvas, and implement comprehensive Unit, E2E, and Visual testing to validate the overlay mechanics.
 

@@ -1,5 +1,16 @@
 # Contract: C-134 Inline Provider Setup & Routing Fix
 
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Source** | Active memory — C-133 provider onboarding UX gap |
+| **Target** | `apps/frontend/client/src/lib/views/app/boot/`, `apps/frontend/client/src/lib/views/app/app_view.svelte` |
+| **Priority** | P2 — Quality of life UX improvement |
+| **Dependencies** | C-133 |
+| **Status** | **completed** |
+| **Contract version** | 1.0.0 |
+
 ## Goal
 Add an inline API key input directly on the Boot Diagnostics screen when a cloud provider (OpenRouter) is selected. Additionally, fix the global App View gatekeeper so that it does not block navigation to the `/settings` route.
 

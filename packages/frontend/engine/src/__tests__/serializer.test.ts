@@ -529,25 +529,27 @@ describe('Edge Cases', () => {
   });
 
   it('throws on invalid JSON payload', () => {
-    expect(() => deserializeWorld(world, 'not-valid-json')).toThrow(
-      'EcsSerializer: invalid payload',
-    );
+    expect(() => deserializeWorld(world, 'not-valid-json')).toThrow('EcsSerializer: Invalid JSON');
   });
 
   it('throws on payload missing required fields', () => {
     expect(() => deserializeWorld(world, JSON.stringify({}))).toThrow(
-      'EcsSerializer: payload missing required fields',
+      'EcsSerializer: Schema validation failed',
     );
   });
 
   it('throws on unsupported version', () => {
+    const components: Record<string, Record<string, number[]>> = {};
+    components.Position = { x: [0], y: [0] };
+
     const badPayload = JSON.stringify({
       version: '999.0.0',
+      timestamp: Date.now(),
       entities: [1],
-      components: {},
+      components,
     });
 
-    expect(() => deserializeWorld(world, badPayload)).toThrow('unsupported version');
+    expect(() => deserializeWorld(world, badPayload)).toThrow('Unsupported version');
   });
 
   it('handles entities that only have a subset of persistent components', () => {

@@ -1,10 +1,11 @@
-// apps/frontend/game/src/engine/systems/movement_system.ts
+// packages/frontend/engine/src/systems/movement_system.ts
 import type { World } from 'bitecs';
 import { addComponent, getComponent, query, set } from 'bitecs';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
+import { isWalkable } from './collision_system.ts';
 
 // ---------------------------------------------------------------------------
 // MovementSystem — grid-aligned cell-based movement pipeline
@@ -230,16 +231,39 @@ const updateMovement = (world: World, deltaMs: number): void => {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist <= remainingStep || dist < 0.01) {
+        // Check collision before snapping to the target cell
+        if (!isWalkable(target.x, target.y)) {
+          // Blocked — stop at current position, clear movement state
+          remainingStep = 0;
+          entityTargets.delete(eid);
+          entityAligned.delete(eid);
+          prevAxis.delete(eid);
+          break;
+        }
+
         // Reached target cell center — snap exactly and advance to next cell
         currentX = target.x;
         currentY = target.y;
         remainingStep -= dist;
         entityTargets.delete(eid);
       } else {
-        // Partial step toward the target cell center
+        // Partial step toward the target cell center.
+        // Check collision on the interpolated position.
         const ratio = remainingStep / dist;
-        currentX += dx * ratio;
-        currentY += dy * ratio;
+        const nextX = currentX + dx * ratio;
+        const nextY = currentY + dy * ratio;
+
+        if (!isWalkable(nextX, nextY)) {
+          // Blocked partway — stop at current position
+          remainingStep = 0;
+          entityTargets.delete(eid);
+          entityAligned.delete(eid);
+          prevAxis.delete(eid);
+          break;
+        }
+
+        currentX = nextX;
+        currentY = nextY;
         remainingStep = 0;
       }
     }

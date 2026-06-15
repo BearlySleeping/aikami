@@ -86,6 +86,9 @@ export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer
 
 // Rendering
 
+// Tilemap & collision (C-135)
+export type { TilemapData, TilemapLayer, TilemapTileset } from './assets/map_loader.ts';
+export { clearMapCache, extractCollisionGrid, loadTilemap } from './assets/map_loader.ts';
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
 export {
@@ -104,6 +107,8 @@ export {
 } from './rendering/sprite_composer.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
+export type { CollisionGrid } from './systems/collision_system.ts';
+export { isWalkable, resetCollisionGrid, setCollisionGrid } from './systems/collision_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   animateEntitySystem,
@@ -121,6 +126,8 @@ export {
   updateRender,
   updateRenderFromBuffer,
 } from './systems/render_system.ts';
+export type { TilemapRenderOptions, TilemapRenderResult } from './systems/tilemap_render_system.ts';
+export { renderTilemap } from './systems/tilemap_render_system.ts';
 
 // Types (plain serializable — safe for UI consumption)
 export type {
