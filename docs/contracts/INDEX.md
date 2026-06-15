@@ -60,6 +60,7 @@ P2 (Polish — after P1):
 | C-126 | [Headless App Shell & Initialization](C-126-headless-app-shell.md) ✅ | Resolve RouterService init error — headless AppShell bootstrapper, strip AppViewModel UI state, wire root layout | C-125 |
 | C-127 | [Settings Menu Refactor](C-127-settings-menu-refactor.md) ✅ | Overhaul /settings to game options menu — Game (Display/Audio/Controls) and AI Engine (Text/Image/Voice) tabs, mount C-120 ProvidersView | C-126 |
 | C-128 | [Dialogue Overlay & AI Chat](C-128-dialogue-overlay-and-ai-chat.md) ✅ | Visual novel dialogue UI wired to AI text generation — ECS interaction bridge, streaming AI chat, overlay router integration | C-125, C-080 |
+| C-129 | [Dialogue AI Integration & Polish](C-129-dialogue-ai-integration-polish.md) ✅ | Ollama `/api/generate` streaming client, ViewModel dual-backend (Ollama + OpenRouter), polished DaisyUI overlay, unit/E2E/visual tests | C-128 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 

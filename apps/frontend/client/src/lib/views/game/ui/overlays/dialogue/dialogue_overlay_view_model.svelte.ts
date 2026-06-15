@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts
 
+import type { OllamaClient } from '@aikami/frontend/api-core';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -15,14 +16,21 @@ import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 // for the in-game dialogue overlay. Injected with NPC data from the
 // GameUIViewModel when the player interacts with an NPC.
 //
-// Contract: C-128 Dialogue Overlay & AI Chat
+// Supports two streaming backends:
+// 1. OllamaClient.streamChat() — direct local streaming via Ollama's /api/generate
+// 2. textGenerationService.streamChat() — OpenRouter cloud streaming fallback
+//
+// Contract: C-128 (origin), C-129 (polish)
 // ---------------------------------------------------------------------------
 
 /** A single chat message rendered in the dialogue history. */
 export type DialogueMessage = {
+  /** Unique identifier for the message (used as Svelte {#each} key). */
   id: string;
-  text: string;
-  sender: 'player' | 'npc';
+  /** The role of the speaker. */
+  role: 'player' | 'npc';
+  /** The message content text. */
+  content: string;
 };
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
@@ -30,6 +38,12 @@ export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
   npcData: DialogueNpcData;
   /** Called when the player ends the conversation. */
   onEndChat: () => void;
+  /**
+   * Optional OllamaClient instance for direct local streaming.
+   * When provided, streamChat() uses Ollama's /api/generate directly
+   * instead of routing through textGenerationService (OpenRouter).
+   */
+  ollamaClient?: OllamaClient;
 };
 
 export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
@@ -39,20 +53,23 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Conversation history — player and NPC messages. */
   readonly messages: DialogueMessage[];
 
-  /** Whether the AI is currently generating a response. */
-  readonly isAiTyping: boolean;
+  /** Whether the AI is currently streaming a response. */
+  readonly isStreaming: boolean;
 
   /** The player's current input text (bound to the text input field). */
-  readonly currentInput: string;
+  readonly inputText: string;
 
   /** Error message from the last failed generation, if any. */
-  readonly errorMessage: string | undefined;
+  readonly streamError: string | null;
 
   /**
-   * Sends the current input as a player message and triggers AI response.
-   * Does nothing if input is empty or AI is already typing.
+   * Sends the given text (or current input) as a player message
+   * and triggers AI response streaming. Does nothing if input is
+   * empty or AI is already streaming.
+   *
+   * @param text — Optional explicit text to send. Falls back to current inputText.
    */
-  sendMessage(): Promise<void>;
+  sendMessage(text?: string): Promise<void>;
 
   /** Sets the player's input text (bound to text input field). */
   setInput(text: string): void;
@@ -73,20 +90,23 @@ class DialogueOverlayViewModel
 {
   messages = $state<DialogueMessage[]>([]);
 
-  isAiTyping = $state<boolean>(false);
+  isStreaming = $state<boolean>(false);
 
-  currentInput = $state<string>('');
+  inputText = $state<string>('');
 
-  errorMessage = $state<string | undefined>(undefined);
+  streamError = $state<string | null>(null);
 
   private readonly _npcData: DialogueNpcData;
 
   private readonly _onEndChat: () => void;
 
+  private readonly _ollamaClient?: OllamaClient;
+
   constructor(options: DialogueOverlayViewModelOptions) {
     super(options);
     this._npcData = options.npcData;
     this._onEndChat = options.onEndChat;
+    this._ollamaClient = options.ollamaClient;
   }
 
   get npcName(): string {
@@ -100,8 +120,8 @@ class DialogueOverlayViewModel
       this.messages = [
         {
           id: crypto.randomUUID(),
-          text: this._npcData.dialog,
-          sender: 'npc',
+          content: this._npcData.dialog,
+          role: 'npc',
         },
       ];
     }
@@ -111,29 +131,29 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   setInput(text: string): void {
-    this.currentInput = text;
+    this.inputText = text;
   }
 
   /** @inheritdoc */
-  async sendMessage(): Promise<void> {
-    const text = this.currentInput.trim();
-    if (!text || this.isAiTyping) {
+  async sendMessage(text?: string): Promise<void> {
+    const content = (text ?? this.inputText).trim();
+    if (!content || this.isStreaming) {
       return;
     }
 
     // Clear input immediately so the player sees feedback
-    this.currentInput = '';
-    this.errorMessage = undefined;
+    this.inputText = '';
+    this.streamError = null;
 
     // Append the player's message
     const playerMessage: DialogueMessage = {
       id: crypto.randomUUID(),
-      text,
-      sender: 'player',
+      content,
+      role: 'player',
     };
     this.messages = [...this.messages, playerMessage];
 
-    // Generate AI response
+    // Generate AI response via appropriate backend
     await this._generateAiResponse();
   }
 
@@ -181,65 +201,131 @@ class DialogueOverlayViewModel
   }
 
   /**
-   * Sends the conversation history to the AI text generation service and
-   * streams the response token by token into the last message.
+   * Sends the conversation history to the AI and streams the response
+   * token by token into the last message.
+   *
+   * When an OllamaClient is available, uses direct /api/generate streaming.
+   * Falls back to textGenerationService (OpenRouter SSE) otherwise.
    */
   private async _generateAiResponse(): Promise<void> {
-    this.isAiTyping = true;
-    this.errorMessage = undefined;
+    this.isStreaming = true;
+    this.streamError = null;
 
-    // Create a placeholder NPC message that will accumulate streamed tokens
+    // Create a placeholder NPC message that accumulates streamed tokens
     const npcMessageId = crypto.randomUUID();
     this.messages = [
       ...this.messages,
       {
         id: npcMessageId,
-        text: '',
-        sender: 'npc',
+        content: '',
+        role: 'npc' as const,
       },
     ];
 
     try {
-      // Build the full message array for the LLM
-      const llmMessages: TextChatMessage[] = [
-        { role: 'system', content: this._buildSystemPrompt() },
-        ...this.messages
-          .filter((m) => m.id !== npcMessageId) // exclude empty placeholder
-          .map((m) => ({
-            role: m.sender === 'player' ? ('user' as const) : ('assistant' as const),
-            content: m.text,
-          })),
-      ];
-
-      let accumulated = '';
-
-      await textGenerationService.streamChat({
-        messages: llmMessages,
-        onChunk: (text: string) => {
-          accumulated += text;
-          // Mutate the last message in-place for smooth streaming
-          this.messages = this.messages.map((m) =>
-            m.id === npcMessageId ? { ...m, text: accumulated } : m,
-          );
-        },
-      });
-
-      // Ensure the final accumulated text is set (in case onChunk was never called)
-      if (accumulated) {
-        this.messages = this.messages.map((m) =>
-          m.id === npcMessageId ? { ...m, text: accumulated } : m,
-        );
+      if (this._ollamaClient) {
+        await this._streamViaOllama({ npcMessageId });
+      } else {
+        await this._streamViaTextGenerationService({ npcMessageId });
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.errorMessage = message;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.streamError = message;
 
       // Replace the empty NPC message with an error placeholder
       this.messages = this.messages.map((m) =>
-        m.id === npcMessageId ? { ...m, text: '*...*' } : m,
+        m.id === npcMessageId ? { ...m, content: '*...*' } : m,
       );
     } finally {
-      this.isAiTyping = false;
+      this.isStreaming = false;
+    }
+  }
+
+  /**
+   * Streams NPC response directly from Ollama's /api/generate endpoint.
+   * Formats the conversation into a prompt string for Ollama's completion API.
+   */
+  private async _streamViaOllama(options: { npcMessageId: string }): Promise<void> {
+    const { npcMessageId } = options;
+
+    const systemPrompt = this._buildSystemPrompt();
+
+    // Build context array for Ollama's generate endpoint
+    const context: Array<{ role: string; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      ...this.messages
+        .filter((m) => m.id !== npcMessageId)
+        .map((m) => ({
+          role: m.role === 'player' ? 'user' : 'assistant',
+          content: m.content,
+        })),
+    ];
+
+    // Build a plain-text prompt from the context for Ollama's generate API
+    const prompt = `${context
+      .filter((c) => c.content.trim().length > 0)
+      .map(
+        (c) =>
+          `${c.role === 'system' ? 'System' : c.role === 'user' ? 'Player' : this._npcData.npcName}: ${c.content}`,
+      )
+      .join('\n')}\n${this._npcData.npcName}:`;
+
+    let accumulated = '';
+
+    const client = this._ollamaClient;
+    if (!client) {
+      return; // Should not happen — caller checks this._ollamaClient
+    }
+    const stream = client.streamChat(prompt);
+
+    for await (const chunk of stream) {
+      accumulated += chunk;
+      this.messages = this.messages.map((m) =>
+        m.id === npcMessageId ? { ...m, content: accumulated } : m,
+      );
+    }
+
+    // Ensure final text is set (in case stream yielded nothing)
+    if (accumulated) {
+      this.messages = this.messages.map((m) =>
+        m.id === npcMessageId ? { ...m, content: accumulated } : m,
+      );
+    }
+  }
+
+  /**
+   * Streams NPC response via textGenerationService (OpenRouter SSE).
+   * Used as fallback when no OllamaClient is available.
+   */
+  private async _streamViaTextGenerationService(options: { npcMessageId: string }): Promise<void> {
+    const { npcMessageId } = options;
+
+    const llmMessages: TextChatMessage[] = [
+      { role: 'system', content: this._buildSystemPrompt() },
+      ...this.messages
+        .filter((m) => m.id !== npcMessageId) // exclude empty placeholder
+        .map((m) => ({
+          role: m.role === 'player' ? ('user' as const) : ('assistant' as const),
+          content: m.content,
+        })),
+    ];
+
+    let accumulated = '';
+
+    await textGenerationService.streamChat({
+      messages: llmMessages,
+      onChunk: (text: string) => {
+        accumulated += text;
+        this.messages = this.messages.map((m) =>
+          m.id === npcMessageId ? { ...m, content: accumulated } : m,
+        );
+      },
+    });
+
+    if (accumulated) {
+      this.messages = this.messages.map((m) =>
+        m.id === npcMessageId ? { ...m, content: accumulated } : m,
+      );
     }
   }
 }
