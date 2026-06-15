@@ -1,269 +1,115 @@
-// apps/frontend/client/src/lib/views/settings/settings-view-model.svelte.ts
+// apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts
+//
+// ViewModel for the Settings page. Manages Game (Display / Audio / Controls) and
+// AI Engine (Text / Image / Voice) tab navigation. The Text sub-tab hosts the
+// full ProvidersView from C-120 for AI provider configuration.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { CoreFormSchema } from '@aikami/schemas';
-import Type from 'typebox';
-import { authService, dialogService, routerService } from '$services';
+import { routerService } from '$services';
+import {
+  getProvidersViewModel,
+  type ProvidersViewModelInterface,
+} from './providers/providers_view_model.svelte';
 
-const ProfileFormSchema = Type.Intersect([
-  CoreFormSchema,
-  Type.Object({
-    displayName: Type.String({ minLength: 1 }),
-    email: Type.String({ minLength: 1, format: 'email' }),
-    phoneNumber: Type.Optional(Type.String()),
-  }),
-]);
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-const PreferencesFormSchema = Type.Intersect([
-  CoreFormSchema,
-  Type.Object({
-    theme: Type.Union([Type.Literal('system'), Type.Literal('light'), Type.Literal('dark')]),
-    language: Type.Union([Type.Literal('en'), Type.Literal('es'), Type.Literal('fr')]),
-    notifications: Type.Boolean(),
-  }),
-]);
+export type SettingsCategory = 'game' | 'ai_engine';
 
-type ProfileFormData = Type.Static<typeof ProfileFormSchema>;
-type PreferencesFormData = Type.Static<typeof PreferencesFormSchema>;
+export type GameSubTab = 'display' | 'audio' | 'controls';
+
+export type AiEngineSubTab = 'text' | 'image' | 'voice';
+
+// ---------------------------------------------------------------------------
+// Interface
+// ---------------------------------------------------------------------------
+
+export type SettingsViewModelInterface = BaseViewModelInterface & {
+  /** Currently selected primary category. */
+  readonly activeCategory: SettingsCategory;
+  /** Currently selected sub-tab under the Game category. */
+  readonly gameSubTab: GameSubTab;
+  /** Currently selected sub-tab under the AI Engine category. */
+  readonly aiEngineSubTab: AiEngineSubTab;
+  /** The C-120 ProvidersViewModel for AI provider configuration. */
+  readonly providersViewModel: ProvidersViewModelInterface;
+
+  setActiveCategory(category: SettingsCategory): void;
+  setGameSubTab(tab: GameSubTab): void;
+  setAiEngineSubTab(tab: AiEngineSubTab): void;
+  /**
+   * Closes settings and navigates back to the originating page.
+   * Reads the `from` query parameter to determine the destination:
+   *   - `?from=game` → navigates to `/game`
+   *   - `?from=start` (or any other value) → navigates to `/`
+   *   - No parameter → defaults to `/`
+   */
+  closeSettings(): Promise<void>;
+};
+
+// ---------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------
 
 export type SettingsViewModelOptions = BaseViewModelOptions;
 
-export type SettingsViewModelInterface = BaseViewModelInterface & {
-  readonly profileForm: ProfileFormData;
-  readonly profileErrors: Partial<Record<keyof ProfileFormData, string>>;
-  readonly isProfileSubmitting: boolean;
-  readonly preferencesForm: PreferencesFormData;
-  readonly preferencesErrors: Partial<Record<keyof PreferencesFormData, string>>;
-  readonly isPreferencesSubmitting: boolean;
-  updateProfileField(key: keyof ProfileFormData, value: string): void;
-  updatePreferencesField(key: keyof PreferencesFormData, value: string | boolean): void;
-  saveProfile(): Promise<void>;
-  savePreferences(): Promise<void>;
-  logout(): Promise<void>;
-  deleteAccount(): Promise<void>;
-};
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
 
 class SettingsViewModel
   extends BaseViewModel<SettingsViewModelOptions>
   implements SettingsViewModelInterface
 {
-  private _profileForm = $state<ProfileFormData>({
-    displayName: '',
-    email: '',
-  });
+  activeCategory: SettingsCategory = $state('game');
+  gameSubTab: GameSubTab = $state('display');
+  aiEngineSubTab: AiEngineSubTab = $state('text');
 
-  private _profileErrors = $state<Partial<Record<keyof ProfileFormData, string>>>({});
+  readonly providersViewModel: ProvidersViewModelInterface;
 
-  private _isProfileSubmitting = $state(false);
-
-  private _preferencesForm = $state<PreferencesFormData>({
-    theme: 'system',
-    language: 'en',
-    notifications: true,
-  });
-
-  private _preferencesErrors = $state<Partial<Record<keyof PreferencesFormData, string>>>({});
-
-  private _isPreferencesSubmitting = $state(false);
-
-  profileForm = $derived(this._profileForm);
-  profileErrors = $derived(this._profileErrors);
-  isProfileSubmitting = $derived(this._isProfileSubmitting);
-
-  preferencesForm = $derived(this._preferencesForm);
-  preferencesErrors = $derived(this._preferencesErrors);
-  isPreferencesSubmitting = $derived(this._isPreferencesSubmitting);
+  constructor(options: SettingsViewModelOptions) {
+    super(options);
+    this.providersViewModel = getProvidersViewModel({ className: 'ProvidersViewModel' });
+  }
 
   override async initialize(): Promise<void> {
+    this.debug('initialize');
+    // ProvidersViewModel handles its own initialization (config load + service
+    // detection) when its BaseViewModelContainer mounts.
     await super.initialize();
-    this._loadUserData();
-    this._loadPreferences();
   }
 
-  private _loadUserData(): void {
-    const user = authService.currentUser;
-    if (user) {
-      this._profileForm.displayName = user.displayName || '';
-      this._profileForm.email = user.email || '';
-      this._profileForm.phoneNumber = user.phoneNumber || '';
-    }
+  setActiveCategory(category: SettingsCategory): void {
+    this.activeCategory = category;
   }
 
-  private _loadPreferences(): void {
-    const savedTheme = (localStorage.getItem('theme') as 'system' | 'light' | 'dark') || 'system';
-    const savedLanguage = (localStorage.getItem('language') as 'en' | 'es' | 'fr') || 'en';
-    const savedNotifications = localStorage.getItem('notifications') !== 'false';
-
-    this._preferencesForm.theme = savedTheme;
-    this._preferencesForm.language = savedLanguage;
-    this._preferencesForm.notifications = savedNotifications;
+  setGameSubTab(tab: GameSubTab): void {
+    this.gameSubTab = tab;
   }
 
-  updateProfileField(key: keyof ProfileFormData, value: string): void {
-    this._profileForm[key] = value as never;
-
-    if (this._profileErrors[key]) {
-      this._profileErrors[key] = undefined;
-    }
+  setAiEngineSubTab(tab: AiEngineSubTab): void {
+    this.aiEngineSubTab = tab;
   }
 
-  updatePreferencesField(key: keyof PreferencesFormData, value: string | boolean): void {
-    this._preferencesForm[key] = value as never;
+  async closeSettings(): Promise<void> {
+    this.debug('closeSettings');
 
-    if (this._preferencesErrors[key]) {
-      this._preferencesErrors[key] = undefined;
-    }
-  }
+    const params = new URLSearchParams(window.location.search);
+    const from = params.get('from');
 
-  private async _validateProfile(): Promise<boolean> {
-    // TODO: Add TypeBox runtime validation when available
-    // Basic structural check
-    const form = this._profileForm;
-    if (!form.displayName || !form.email) {
-      this._profileErrors = {
-        displayName: !form.displayName ? 'Required' : undefined,
-        email: !form.email ? 'Required' : undefined,
-      };
-      return false;
-    }
-    this._profileErrors = {};
-    return true;
-  }
-
-  private async _validatePreferences(): Promise<boolean> {
-    // TODO: Add TypeBox runtime validation when available
-    this._preferencesErrors = {};
-    return true;
-  }
-
-  async saveProfile(): Promise<void> {
-    if (this._isProfileSubmitting) {
-      return;
-    }
-
-    if (!(await this._validateProfile())) {
-      return;
-    }
-
-    this._isProfileSubmitting = true;
-    this.debug('Saving profile', this._profileForm);
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      dialogService.showSnackbar({
-        text: 'Profile updated successfully!',
-        type: 'success',
-      });
-    } catch (err) {
-      this.error('Failed to save profile', err);
-      dialogService.showSnackbar({
-        text: 'Failed to update profile. Please try again.',
-        type: 'error',
-      });
-    } finally {
-      this._isProfileSubmitting = false;
-    }
-  }
-
-  async savePreferences(): Promise<void> {
-    if (this._isPreferencesSubmitting) {
-      return;
-    }
-
-    if (!(await this._validatePreferences())) {
-      return;
-    }
-
-    this._isPreferencesSubmitting = true;
-    this.debug('Saving preferences', this._preferencesForm);
-
-    try {
-      localStorage.setItem('theme', this._preferencesForm.theme);
-      localStorage.setItem('language', this._preferencesForm.language);
-      localStorage.setItem('notifications', this._preferencesForm.notifications.toString());
-
-      this._applyTheme(this._preferencesForm.theme);
-
-      dialogService.showSnackbar({
-        text: 'Preferences updated successfully!',
-        type: 'success',
-      });
-    } catch (err) {
-      this.error('Failed to save preferences', err);
-      dialogService.showSnackbar({
-        text: 'Failed to update preferences. Please try again.',
-        type: 'error',
-      });
-    } finally {
-      this._isPreferencesSubmitting = false;
-    }
-  }
-
-  private _applyTheme(theme: 'system' | 'light' | 'dark'): void {
-    const html = document.documentElement;
-
-    if (theme === 'system') {
-      html.removeAttribute('data-theme');
-    } else {
-      html.setAttribute('data-theme', theme);
-    }
-  }
-
-  async logout(): Promise<void> {
-    try {
-      await authService.signOut();
-      await routerService.goToRoute('login', {
+    if (from === 'game') {
+      await routerService.goToRoute('game', {
         pathParameters: undefined,
         queryParameters: undefined,
       });
-    } catch (err) {
-      this.error('Failed to logout', err);
-      await dialogService.showSnackbar({
-        text: 'Failed to logout. Please try again.',
-        type: 'error',
-      });
-    }
-  }
-
-  async deleteAccount(): Promise<void> {
-    const confirmed = await dialogService.openConfirmDialog({
-      title: 'Delete Account',
-      message: 'Are you sure you want to delete your account? This action cannot be undone.',
-      agreeLabel: 'Delete Account',
-      disagreeLabel: 'Cancel',
-      agreeColor: 'danger',
-    });
-
-    if (!confirmed) {
       return;
     }
 
-    try {
-      this.setAppLoading(true);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      await dialogService.showSnackbar({
-        text: 'Account deleted successfully',
-        type: 'success',
-      });
-
-      await routerService.goToRoute('login', {
-        pathParameters: undefined,
-        queryParameters: undefined,
-      });
-    } catch (err) {
-      this.error('Failed to delete account', err);
-      await dialogService.showSnackbar({
-        text: 'Failed to delete account. Please try again.',
-        type: 'error',
-      });
-    } finally {
-      this.setAppLoading(false);
-    }
+    await routerService.navigateToApp();
   }
 }
 

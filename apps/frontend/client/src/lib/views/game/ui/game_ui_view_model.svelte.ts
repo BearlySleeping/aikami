@@ -95,7 +95,7 @@ class GameUIViewModel
   /** @inheritdoc */
   async goToSettings(): Promise<void> {
     await routerService.goToRoute('settings', {
-      queryParameters: undefined,
+      queryParameters: { from: 'game' },
       pathParameters: undefined,
     });
   }
