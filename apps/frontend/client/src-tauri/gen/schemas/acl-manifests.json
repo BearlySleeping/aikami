@@ -3577,6 +3577,93 @@
       "title": "FsScopeEntry"
     }
   },
+  "http": {
+    "default_permission": {
+      "identifier": "default",
+      "description": "This permission set configures what kind of\nfetch operations are available from the http plugin.\n\nThis enables all fetch operations but does not\nallow explicitly any origins to be fetched. This needs to\nbe manually configured before usage.\n\n#### Granted Permissions\n\nAll fetch operations are enabled.\n\n",
+      "permissions": [
+        "allow-fetch",
+        "allow-fetch-cancel",
+        "allow-fetch-send",
+        "allow-fetch-read-body",
+        "allow-fetch-cancel-body"
+      ]
+    },
+    "permissions": {
+      "allow-fetch": {
+        "identifier": "allow-fetch",
+        "description": "Enables the fetch command without any pre-configured scope.",
+        "commands": { "allow": ["fetch"], "deny": [] }
+      },
+      "allow-fetch-cancel": {
+        "identifier": "allow-fetch-cancel",
+        "description": "Enables the fetch_cancel command without any pre-configured scope.",
+        "commands": { "allow": ["fetch_cancel"], "deny": [] }
+      },
+      "allow-fetch-cancel-body": {
+        "identifier": "allow-fetch-cancel-body",
+        "description": "Enables the fetch_cancel_body command without any pre-configured scope.",
+        "commands": { "allow": ["fetch_cancel_body"], "deny": [] }
+      },
+      "allow-fetch-read-body": {
+        "identifier": "allow-fetch-read-body",
+        "description": "Enables the fetch_read_body command without any pre-configured scope.",
+        "commands": { "allow": ["fetch_read_body"], "deny": [] }
+      },
+      "allow-fetch-send": {
+        "identifier": "allow-fetch-send",
+        "description": "Enables the fetch_send command without any pre-configured scope.",
+        "commands": { "allow": ["fetch_send"], "deny": [] }
+      },
+      "deny-fetch": {
+        "identifier": "deny-fetch",
+        "description": "Denies the fetch command without any pre-configured scope.",
+        "commands": { "allow": [], "deny": ["fetch"] }
+      },
+      "deny-fetch-cancel": {
+        "identifier": "deny-fetch-cancel",
+        "description": "Denies the fetch_cancel command without any pre-configured scope.",
+        "commands": { "allow": [], "deny": ["fetch_cancel"] }
+      },
+      "deny-fetch-cancel-body": {
+        "identifier": "deny-fetch-cancel-body",
+        "description": "Denies the fetch_cancel_body command without any pre-configured scope.",
+        "commands": { "allow": [], "deny": ["fetch_cancel_body"] }
+      },
+      "deny-fetch-read-body": {
+        "identifier": "deny-fetch-read-body",
+        "description": "Denies the fetch_read_body command without any pre-configured scope.",
+        "commands": { "allow": [], "deny": ["fetch_read_body"] }
+      },
+      "deny-fetch-send": {
+        "identifier": "deny-fetch-send",
+        "description": "Denies the fetch_send command without any pre-configured scope.",
+        "commands": { "allow": [], "deny": ["fetch_send"] }
+      }
+    },
+    "permission_sets": {},
+    "global_scope_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "anyOf": [
+        {
+          "description": "A URL that can be accessed by the webview when using the HTTP APIs. Wildcards can be used following the URL pattern standard.\n\nSee [the URL Pattern spec](https://urlpattern.spec.whatwg.org/) for more information.\n\nExamples:\n\n- \"https://*\" : allows all HTTPS origin on port 443\n\n- \"https://*:*\" : allows all HTTPS origin on any port\n\n- \"https://*.github.com/tauri-apps/tauri\": allows any subdomain of \"github.com\" with the \"tauri-apps/api\" path\n\n- \"https://myapi.service.com/users/*\": allows access to any URLs that begins with \"https://myapi.service.com/users/\"",
+          "type": "string"
+        },
+        {
+          "properties": {
+            "url": {
+              "description": "A URL that can be accessed by the webview when using the HTTP APIs. Wildcards can be used following the URL pattern standard.\n\nSee [the URL Pattern spec](https://urlpattern.spec.whatwg.org/) for more information.\n\nExamples:\n\n- \"https://*\" : allows all HTTPS origin on port 443\n\n- \"https://*:*\" : allows all HTTPS origin on any port\n\n- \"https://*.github.com/tauri-apps/tauri\": allows any subdomain of \"github.com\" with the \"tauri-apps/api\" path\n\n- \"https://myapi.service.com/users/*\": allows access to any URLs that begins with \"https://myapi.service.com/users/\"",
+              "type": "string"
+            }
+          },
+          "required": ["url"],
+          "type": "object"
+        }
+      ],
+      "description": "HTTP scope entry.",
+      "title": "HttpScopeEntry"
+    }
+  },
   "opener": {
     "default_permission": {
       "identifier": "default",
