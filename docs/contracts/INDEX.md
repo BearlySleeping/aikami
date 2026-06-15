@@ -61,6 +61,7 @@ P2 (Polish — after P1):
 | C-127 | [Settings Menu Refactor](C-127-settings-menu-refactor.md) ✅ | Overhaul /settings to game options menu — Game (Display/Audio/Controls) and AI Engine (Text/Image/Voice) tabs, mount C-120 ProvidersView | C-126 |
 | C-128 | [Dialogue Overlay & AI Chat](C-128-dialogue-overlay-and-ai-chat.md) ✅ | Visual novel dialogue UI wired to AI text generation — ECS interaction bridge, streaming AI chat, overlay router integration | C-125, C-080 |
 | C-129 | [Dialogue AI Integration & Polish](C-129-dialogue-ai-integration-polish.md) ✅ | Ollama `/api/generate` streaming client, ViewModel dual-backend (Ollama + OpenRouter), polished DaisyUI overlay, unit/E2E/visual tests | C-128 |
+| C-130 | [In-Game AI Diagnostics & Onboarding](C-130-in-game-ai-diagnostics.md) ✅ | Retro-terminal boot diagnostics dashboard replacing Missing Providers — pings Ollama (11434) + ComfyUI (8188) via Tauri HTTP, gates game entry until both online | C-122, C-126 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 
