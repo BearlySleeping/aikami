@@ -1,59 +1,24 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/app/app_view.svelte
-  import type { Snippet } from 'svelte';
-  import AppLoading from '$components/app_loading.svelte';
+  import { untrack } from 'svelte';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { AppViewModelInterface } from './app_view_model.svelte.ts';
-  import AppBar from './bar/app_bar.svelte';
-  import NavigationDrawer from './drawer/navigation/navigation_drawer.svelte';
-  import AppFooter from './footer/app_footer.svelte';
-  import HeadTagsView from './metadata/head_tags_view.svelte';
+  import type { PWAHookData } from '$types';
+  import { getAppViewModel } from './app_view_model.svelte.ts';
 
   type Props = {
-    viewModel: AppViewModelInterface;
-    children: Snippet;
+    data: PWAHookData | null;
+    children: import('svelte').Snippet;
   };
 
-  let { viewModel, children }: Props = $props();
+  let { data, children }: Props = $props();
+
+  // Layout data is static per SvelteKit mount — read non-reactively.
+  const viewModel = untrack(() =>
+    getAppViewModel({
+      className: 'AppViewModel',
+      data: data ?? {},
+    }),
+  );
 </script>
 
-<HeadTagsView data={viewModel.defaultMetaTags} />
-<svelte:window on:beforeunload={(event) => viewModel.handleAppClose(event)} />
-
-{#if viewModel.isFullscreen}
-  <BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
-{:else}
-  <BaseViewModelContainer {viewModel} class="drawer lg:drawer-open">
-    <input id="left-drawer" type="checkbox" class="drawer-toggle">
-
-    <div class="drawer-content flex h-screen flex-col">
-      {#if viewModel.showAppBar}
-        <header><AppBar /></header>
-      {/if}
-
-      <main class="flex-1 overflow-y-auto relative">
-        {#if viewModel.showAppLoading}
-          <div class="absolute inset-0 z-50 flex items-center justify-center bg-background">
-            <AppLoading />
-          </div>
-        {/if}
-
-        <div class:hidden={viewModel.showAppLoading}>
-          {@render children()}
-        </div>
-      </main>
-
-      {#if viewModel.showFooter}
-        <AppFooter />
-      {/if}
-    </div>
-
-    {#if viewModel.navigationDrawerEnabled && viewModel.isLoggedIn}
-      <NavigationDrawer />
-    {/if}
-  </BaseViewModelContainer>
-{/if}
-
-{#await import('./dialogs/app_dialogs_view.svelte') then { default: AppDialogsView }}
-  <AppDialogsView />
-{/await}
+<BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>

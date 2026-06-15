@@ -102,6 +102,7 @@
 | C-123 | Character Creation Flow | ✅ completed |
 | C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
 | C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
+| C-126 | Headless App Shell & Initialization | ✅ completed |
 
 ### C-119: Routing and Layout Simplification
 
@@ -423,3 +424,30 @@
 - Save functionality is not accessible from the pause menu — must be re-added via a future contract.
 - Settings button navigates away from the game (to `/settings`) — no in-game settings overlay yet.
 - No animation/transition on overlay mount/unmount — instant show/hide.
+
+### C-126: Headless App Shell & Initialization
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/app/app_view_model.svelte.ts` — Stripped all UI-specific state (`isNavigationDrawerMinified`, `navigationDrawerEnabled`, `showAppBar`, `isFullscreen`, `showFooter`, `showAppLoading`, `defaultMetaTags`, `handleAppClose`, `toggleNavigationDrawer`, `_isMinimalRouteView`). Removed `HeadTagsView`-related imports. Kept core initialization: `routerService.initialize()`, `authService.initialize()`, Svelte 5 reactive router bridge, Eruda dev tool init. Simplified route guards — removed login/register redirects (dead routes in offline-first flow). `_handleRouteTransitions` now only runs `onboardingService.redirectIfNeeded()` for authenticated users.
+- `apps/frontend/client/src/lib/views/app/app_view.svelte` — Replaced full app shell (AppBar, NavigationDrawer, AppFooter, HeadTagsView, AppDialogsView, loading view, drawer content, header/footer conditionals) with a headless `BaseViewModelContainer` wrapper. Uses `untrack()` to read SvelteKit layout data non-reactively (static per mount). Renders `{@render children()}` with no DOM chrome.
+- `apps/frontend/client/src/routes/+layout.svelte` — Wired `AppShell` component wrapping children. Receives `data` from SvelteKit layout props and passes to AppShell.
+
+**Files NOT modified** (by design):
+- `apps/frontend/client/src/routes/settings/+layout.svelte` — NOT created. Contract Task 4 is "Optional Prep" and the old Navigation Drawer UI is being removed entirely, not relocated. Settings is a single placeholder page (`<h1>Settings</h1>`) with no sub-routes needing layout chrome.
+
+**Deviations**:
+1. **Route guards simplified to near-no-op**: The old `_handleRouteTransitions` redirected authenticated users away from public pages (login/register) and unauthenticated users to login. With the offline-first SPA (C-119, C-121), login/register routes have no page files and all active routes are public. The method now only calls `onboardingService.redirectIfNeeded()` for authenticated users.
+2. **`_handleAuthStateChanges` removed entirely**: The notification listener start is not critical for the headless bootstrapper and can be initiated by the NotificationService directly when needed.
+3. **`AppViewModelInterface` reduced from 15+ properties to 3**: `isLoggedIn`, `currentUser`, `currentRoute`. All UI chrome state moved out of scope.
+
+**Design decisions**:
+1. **`untrack()` for layout data**: SvelteKit layout `data` is static per mount — `untrack(() => data)` explicitly signalsintentional non-reactive capture. Eliminates the Svelte 5 `state_referenced_locally` warning.
+2. **No `HeadTagsView` in headless shell**: Meta tags (title, description) are now set by individual route pages (StartView already does this via `HeadTagsView`). The app-level defaults were non-critical.
+3. **No `AppLoading` spinner**: The loading state was tightly coupled to the old UI chrome (drawer-content overlay). The root layout loads synchronously in SPA mode — no visible loading flash.
+
+**Known limitations**:
+- No tests written for `AppViewModel` — pre-existing gap, contract didn't specify test hooks.
+- `AppViewModelOptions` still requires `data: PWAHookData` (non-nullable type). The headless shell passes `{}` when `data` is null. All PWAHookData fields are optional so this is safe.
+- The old `HeadTagsView`, `AppBar`, `NavigationDrawer`, `AppFooter`, `AppDialogsView`, and `AppLoading` components still exist in the codebase but are no longer referenced by any route layout. They can be removed in a future cleanup contract.
