@@ -29,12 +29,6 @@ export const routes = {
     routeId: '/(unauthenticated)/register',
     type: 'unauthenticated',
   },
-  dashboard: {
-    getPath: () => '/dashboard',
-    queryParameters: undefined,
-    routeId: '/(authenticated)/dashboard',
-    type: 'authenticated',
-  },
   settings: {
     getPath: () => '/settings',
     queryParameters: undefined as
