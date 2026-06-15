@@ -6,7 +6,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { type TextChatMessage, textGenerationService } from '$services';
+import {
+  SentenceBoundaryChunker,
+  type TextChatMessage,
+  textGenerationService,
+  ttsService,
+} from '$services';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -102,6 +107,10 @@ class DialogueOverlayViewModel
 
   private readonly _ollamaClient?: OllamaClient;
 
+  private readonly _chunker = new SentenceBoundaryChunker();
+
+  private _ttsInitialized = false;
+
   constructor(options: DialogueOverlayViewModelOptions) {
     super(options);
     this._npcData = options.npcData;
@@ -124,6 +133,21 @@ class DialogueOverlayViewModel
           role: 'npc',
         },
       ];
+    }
+
+    // Initialize native Kokoro TTS if not already done
+    if (!this._ttsInitialized) {
+      this._ttsInitialized = true;
+      this._chunker.onSentence(({ sentence }) => {
+        ttsService.synthesize({
+          text: sentence,
+          voice: ttsService.selectedVoice,
+        });
+      });
+
+      // Fire-and-forget — TTS init happens in background, speech works
+      // once the worker reports 'ready'.
+      void ttsService.initialize();
     }
 
     await super.initialize();
@@ -159,6 +183,8 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   endChat(): void {
+    // Flush any remaining buffered text as a final sentence
+    this._chunker.close();
     this._onEndChat();
   }
 
@@ -283,7 +309,11 @@ class DialogueOverlayViewModel
       this.messages = this.messages.map((m) =>
         m.id === npcMessageId ? { ...m, content: accumulated } : m,
       );
+      this._chunker.feed(chunk);
     }
+
+    // Flush any remaining text at end of stream
+    this._chunker.close();
 
     // Ensure final text is set (in case stream yielded nothing)
     if (accumulated) {
@@ -319,8 +349,12 @@ class DialogueOverlayViewModel
         this.messages = this.messages.map((m) =>
           m.id === npcMessageId ? { ...m, content: accumulated } : m,
         );
+        this._chunker.feed(text);
       },
     });
+
+    // Flush any remaining text at end of stream
+    this._chunker.close();
 
     if (accumulated) {
       this.messages = this.messages.map((m) =>
