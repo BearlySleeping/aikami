@@ -381,7 +381,7 @@
                   type="text"
                   class="input input-bordered w-full text-sm"
                   value={viewModel.persona.languages?.join(', ') ?? ''}
-                  oninput={(e: Event) => { if (viewModel.persona) viewModel.persona.languages = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); }}
+                  oninput={(e: Event) => { if (viewModel.persona) { viewModel.persona.languages = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); } }}
                   placeholder="Common, Elvish, Dwarvish..."
                 >
               </label>
@@ -396,7 +396,7 @@
                   type="text"
                   class="input input-bordered w-full text-sm"
                   value={viewModel.persona.proficiencies?.join(', ') ?? ''}
-                  oninput={(e: Event) => { if (viewModel.persona) viewModel.persona.proficiencies = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); }}
+                  oninput={(e: Event) => { if (viewModel.persona) { viewModel.persona.proficiencies = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); } }}
                   placeholder="Arcana, Stealth, Persuasion..."
                 >
               </label>
@@ -411,7 +411,7 @@
                   type="text"
                   class="input input-bordered w-full text-sm"
                   value={viewModel.persona.equipment?.join(', ') ?? ''}
-                  oninput={(e: Event) => { if (viewModel.persona) viewModel.persona.equipment = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); }}
+                  oninput={(e: Event) => { if (viewModel.persona) { viewModel.persona.equipment = (e.target as HTMLInputElement).value.split(',').map((s: string) => s.trim()).filter(Boolean); } }}
                   placeholder="Longsword, Shield, Explorer's Pack..."
                 >
               </label>
@@ -530,8 +530,8 @@
   {#if viewModel.showRegenerationPanel && viewModel.isImageGenReady}
     <dialog
       class="modal modal-open"
-      onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) viewModel.toggleRegenerationPanel(); }}
-      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') viewModel.toggleRegenerationPanel(); }}
+      onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.toggleRegenerationPanel(); } }}
+      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.toggleRegenerationPanel(); } }}
     >
       <div class="modal-box max-w-lg">
         <div class="flex items-center justify-between mb-4">

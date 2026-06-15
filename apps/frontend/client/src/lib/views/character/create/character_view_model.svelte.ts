@@ -179,16 +179,22 @@ export class CharacterViewModel
 
   /** LPC preview URL — opens the LPC dev page with this character's recipe. */
   get lpcPreviewUrl(): string | null {
-    if (!this.lpcRecipe) return null;
+    if (!this.lpcRecipe) {
+      return null;
+    }
     const params = new URLSearchParams();
     let layerIdx = 0;
     for (const [slotName, assetId] of Object.entries(this.lpcRecipe)) {
       // Use the slot ordering from the generated catalog
       const slotIdx = _LPC_SLOT_INDEX.get(slotName);
-      if (slotIdx === undefined) continue;
+      if (slotIdx === undefined) {
+        continue;
+      }
       const variants = _LPC_VARIANT_MAP.get(slotName);
-      const vIdx = variants?.findIndex((v) => v === assetId) ?? -1;
-      if (vIdx < 0) continue;
+      const vIdx = variants?.indexOf(assetId) ?? -1;
+      if (vIdx < 0) {
+        continue;
+      }
       params.set(`l${layerIdx}`, `${slotIdx}:${vIdx}`);
       layerIdx++;
     }
@@ -227,7 +233,9 @@ export class CharacterViewModel
   // ── Public API ────────────────────────────────────────────────────────
 
   async sendChatMessage(text: string): Promise<void> {
-    if (!text.trim()) return;
+    if (!text.trim()) {
+      return;
+    }
 
     // Optimistically add user message to chat IMMEDIATELY
     this.messages = [...this.messages, { role: 'user' as const, content: text }];
@@ -270,7 +278,9 @@ export class CharacterViewModel
 
   async handleSend(): Promise<void> {
     const text = this.chatInput.trim();
-    if (!text || this.isStreaming) return;
+    if (!text || this.isStreaming) {
+      return;
+    }
     this.chatInput = '';
     await this.sendChatMessage(text);
   }
@@ -333,8 +343,12 @@ export class CharacterViewModel
   }
 
   updateAppearanceDescription(value: string): void {
-    if (!this.persona) return;
-    if (!this.persona.appearance) this.persona.appearance = {};
+    if (!this.persona) {
+      return;
+    }
+    if (!this.persona.appearance) {
+      this.persona.appearance = {};
+    }
     this.persona.appearance.physicalDescription = value;
   }
 
@@ -354,27 +368,37 @@ export class CharacterViewModel
   }
 
   async regenerateAvatar(): Promise<void> {
-    if (!this.isImageGenReady) return;
+    if (!this.isImageGenReady) {
+      return;
+    }
 
     this.isRegenerating = true;
 
     try {
       if (this.regenerationMode === 'appearance') {
         const appearance = this.persona?.appearance?.physicalDescription ?? '';
-        if (!appearance) return;
+        if (!appearance) {
+          return;
+        }
         const prompt = this._enhanceForComfyUI(appearance);
         const result = await imageGenerationService.generateImage({ prompt });
         characterCreationService.avatarUrl = result.url;
       } else if (this.regenerationMode === 'direct') {
         const prompt = this.directPrompt.trim();
-        if (!prompt) return;
+        if (!prompt) {
+          return;
+        }
         const result = await imageGenerationService.generateImage({ prompt });
         characterCreationService.avatarUrl = result.url;
       } else if (this.regenerationMode === 'edit') {
         const instruction = this.editInstruction.trim();
-        if (!instruction) return;
+        if (!instruction) {
+          return;
+        }
         const currentUrl = characterCreationService.avatarUrl;
-        if (!currentUrl) return;
+        if (!currentUrl) {
+          return;
+        }
         await this._editAvatarImage(currentUrl, instruction);
       }
     } catch (error) {
@@ -419,7 +443,9 @@ export class CharacterViewModel
 
   private async _persistCharacter(): Promise<void> {
     const persona = this.persona;
-    if (!persona) return;
+    if (!persona) {
+      return;
+    }
 
     // Ensure the persona has an ID
     if (!persona.id) {
@@ -428,7 +454,7 @@ export class CharacterViewModel
 
     // Convert blob URL to data URL so it survives page refresh
     let persistentAvatarUrl = characterCreationService.avatarUrl;
-    if (persistentAvatarUrl && persistentAvatarUrl.startsWith('blob:')) {
+    if (persistentAvatarUrl?.startsWith('blob:')) {
       try {
         const blobResponse = await fetch(persistentAvatarUrl);
         const blob = await blobResponse.blob();
@@ -474,7 +500,7 @@ export class CharacterViewModel
         // Upload avatar to Firebase Storage first, then save persona to Firestore
         let firestoreAvatarUrl = characterCreationService.avatarUrl;
 
-        if (firestoreAvatarUrl && firestoreAvatarUrl.startsWith('blob:')) {
+        if (firestoreAvatarUrl?.startsWith('blob:')) {
           // Convert blob URL to a file and upload
           const blobResponse = await fetch(firestoreAvatarUrl);
           const blob = await blobResponse.blob();
@@ -519,7 +545,9 @@ export class CharacterViewModel
   private async _editAvatarImage(imageUrl: string, instruction: string): Promise<void> {
     // Fetch current avatar as blob
     const response = await fetch(imageUrl);
-    if (!response.ok) throw new Error('Failed to fetch current avatar');
+    if (!response.ok) {
+      throw new Error('Failed to fetch current avatar');
+    }
     const blob = await response.blob();
 
     // Upload to ComfyUI
@@ -531,10 +559,14 @@ export class CharacterViewModel
       body: formData,
     });
 
-    if (!uploadResponse.ok) throw new Error('Failed to upload image to ComfyUI');
+    if (!uploadResponse.ok) {
+      throw new Error('Failed to upload image to ComfyUI');
+    }
     const uploadResult = (await uploadResponse.json()) as { name?: string };
     const imageName = uploadResult.name;
-    if (!imageName) throw new Error('No image name returned from upload');
+    if (!imageName) {
+      throw new Error('No image name returned from upload');
+    }
 
     // Build img2img workflow
     const checkpoint = imageGenerationService.selectedCheckpoint || 'sd_xl_base_1.0';
@@ -581,7 +613,9 @@ export class CharacterViewModel
       body: JSON.stringify({ client_id: `aikami-edit-${Date.now()}`, prompt: workflow }),
     });
 
-    if (!queueResponse.ok) throw new Error('Failed to queue image edit workflow');
+    if (!queueResponse.ok) {
+      throw new Error('Failed to queue image edit workflow');
+    }
 
     const { prompt_id: promptId } = (await queueResponse.json()) as { prompt_id: string };
 
@@ -589,7 +623,9 @@ export class CharacterViewModel
     for (let attempt = 1; attempt <= 60; attempt++) {
       await new Promise((r) => setTimeout(r, 1000));
       const historyResponse = await fetch(`/api/image/history/${promptId}`);
-      if (!historyResponse.ok) continue;
+      if (!historyResponse.ok) {
+        continue;
+      }
 
       const history = (await historyResponse.json()) as Record<string, unknown>;
       const entry = history[promptId] as Record<string, unknown> | undefined;
@@ -631,7 +667,9 @@ export class CharacterViewModel
         systemPrompt: CHARACTER_EXTRACTION_SYSTEM_PROMPT,
       });
 
-      if (!extracted) return null;
+      if (!extracted) {
+        return null;
+      }
 
       const extractedObj = extracted as Record<string, unknown>;
 
@@ -656,22 +694,42 @@ export class CharacterViewModel
         isActive: false,
       };
 
-      if (extractedObj.race) persona.race = extractedObj.race as string;
-      if ((extractedObj as { class?: string }).class)
+      if (extractedObj.race) {
+        persona.race = extractedObj.race as string;
+      }
+      if ((extractedObj as { class?: string }).class) {
         persona.class = (extractedObj as { class?: string }).class;
-      if (extractedObj.subclass) persona.subclass = extractedObj.subclass as string;
-      if (extractedObj.alignment) persona.alignment = extractedObj.alignment as string;
-      if (extractedObj.level) persona.level = extractedObj.level as number;
-      if (extractedObj.personalityTraits)
+      }
+      if (extractedObj.subclass) {
+        persona.subclass = extractedObj.subclass as string;
+      }
+      if (extractedObj.alignment) {
+        persona.alignment = extractedObj.alignment as string;
+      }
+      if (extractedObj.level) {
+        persona.level = extractedObj.level as number;
+      }
+      if (extractedObj.personalityTraits) {
         persona.personalityTraits = extractedObj.personalityTraits as string;
-      if (extractedObj.ideals) persona.ideals = extractedObj.ideals as string;
-      if (extractedObj.bonds) persona.bonds = extractedObj.bonds as string;
-      if (extractedObj.flaws) persona.flaws = extractedObj.flaws as string;
-      if (extractedObj.proficiencies)
+      }
+      if (extractedObj.ideals) {
+        persona.ideals = extractedObj.ideals as string;
+      }
+      if (extractedObj.bonds) {
+        persona.bonds = extractedObj.bonds as string;
+      }
+      if (extractedObj.flaws) {
+        persona.flaws = extractedObj.flaws as string;
+      }
+      if (extractedObj.proficiencies) {
         persona.proficiencies = extractedObj.proficiencies as string[];
-      if (extractedObj.languages)
+      }
+      if (extractedObj.languages) {
         persona.languages = [...persona.languages, ...(extractedObj.languages as string[])];
-      if (extractedObj.equipment) persona.equipment = extractedObj.equipment as string[];
+      }
+      if (extractedObj.equipment) {
+        persona.equipment = extractedObj.equipment as string[];
+      }
       if (extractedObj.lpcRecipe) {
         this.lpcRecipe = extractedObj.lpcRecipe as Record<string, string>;
       }
@@ -693,9 +751,13 @@ export class CharacterViewModel
 
   /** Starts avatar generation if ComfyUI is available. */
   private _startAvatarIfReady(): void {
-    if (!this.isImageGenReady) return;
+    if (!this.isImageGenReady) {
+      return;
+    }
     const p = characterCreationService.persona;
-    if (!p) return;
+    if (!p) {
+      return;
+    }
     const imagePrompt =
       p?.appearance?.physicalDescription ||
       (p?.race && p?.class

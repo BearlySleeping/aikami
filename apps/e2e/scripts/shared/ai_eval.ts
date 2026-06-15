@@ -94,9 +94,7 @@ export const DEFAULT_EVAL_PROMPT = [
  *
  * @returns A structured {@link VisualEvalResult}.
  */
-export const evaluateScreenshot = async (
-  options: EvalOptions,
-): Promise<VisualEvalResult> => {
+export const evaluateScreenshot = async (options: EvalOptions): Promise<VisualEvalResult> => {
   const {
     model = DEFAULT_MODEL,
     imageDataUri,
@@ -106,9 +104,7 @@ export const evaluateScreenshot = async (
   } = options;
 
   if (!key) {
-    throw new Error(
-      'OPENROUTER_API_KEY not set. Export it or pass apiKey in options.',
-    );
+    throw new Error('OPENROUTER_API_KEY not set. Export it or pass apiKey in options.');
   }
 
   let lastError: unknown;
