@@ -5,9 +5,12 @@
     onResume: () => void;
     onSettings: () => void;
     onQuit: () => void;
+    onSave: () => void;
+    isSaving?: boolean;
+    saveMessage?: string;
   };
 
-  const { onResume, onSettings, onQuit }: Props = $props();
+  const { onResume, onSettings, onQuit, onSave, isSaving = false, saveMessage }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -21,6 +24,25 @@
 
     <div class="mt-6 space-y-3">
       <button class="btn btn-primary btn-block" onclick={onResume}>Resume Game</button>
+
+      <button class="btn btn-outline btn-block" disabled={isSaving} onclick={onSave}>
+        {#if isSaving}
+          <span class="loading loading-spinner loading-xs"></span>
+          Saving...
+        {:else}
+          Save Game
+        {/if}
+      </button>
+
+      {#if saveMessage}
+        <p
+          class="text-center text-sm"
+          class:text-success={saveMessage === 'Game Saved!'}
+          class:text-error={saveMessage === 'Save failed'}
+        >
+          {saveMessage}
+        </p>
+      {/if}
 
       <button class="btn btn-outline btn-block" onclick={onSettings}>Settings</button>
 

@@ -18,8 +18,21 @@
 
     <!-- Menu buttons -->
     <div class="mt-8 flex w-64 flex-col gap-3">
+      <!-- Continue (shown when saves exist) -->
+      {#if viewModel.canContinue}
+        <button class="btn btn-secondary btn-lg" onclick={() => viewModel.continueGame()}>
+          Continue
+        </button>
+      {/if}
+
       <!-- Start (always enabled — works offline) -->
-      <button class="btn btn-primary btn-lg" onclick={() => viewModel.startGame()}>Start</button>
+      <button class="btn btn-primary btn-lg" onclick={() => viewModel.startGame()}>
+        {#if viewModel.canContinue}
+          New Game
+        {:else}
+          Start
+        {/if}
+      </button>
 
       <!-- Options -->
       <button class="btn btn-outline btn-lg" onclick={() => viewModel.goToOptions()}>

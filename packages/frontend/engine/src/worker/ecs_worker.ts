@@ -1,7 +1,15 @@
 // packages/frontend/engine/src/worker/ecs_worker.ts
 /// <reference lib="webworker" />
 import type { World } from 'bitecs';
-import { addComponent, createWorld, getComponent, query, set } from 'bitecs';
+import {
+  addComponent,
+  createWorld,
+  getAllEntities,
+  getComponent,
+  query,
+  removeEntity,
+  set,
+} from 'bitecs';
 import { type LpcLayerRecipe, registerAppearanceObservers } from '../components/appearance.ts';
 import { registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
@@ -119,6 +127,12 @@ const workerBridge: EngineBridge = {
   },
   triggerMacro(_macro: string, _args: string[], _entityId?: number): void {
     // No-op: macros are handled by the main thread
+  },
+  async createSnapshot(): Promise<string> {
+    throw new Error('createSnapshot is only available on the main-thread bridge');
+  },
+  async restoreSnapshot(_snapshot: string): Promise<void> {
+    throw new Error('restoreSnapshot is only available on the main-thread bridge');
   },
 };
 
@@ -641,6 +655,55 @@ self.onmessage = (event: MessageEvent): void => {
             type: 'SNAPSHOT_RESPONSE',
             payload: undefined,
             error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        break;
+      }
+
+      case 'LOAD_GAME': {
+        if (!world) {
+          postMessage({
+            type: 'ENGINE_ERROR',
+            message: 'Cannot load game: world not initialized',
+          });
+          break;
+        }
+
+        try {
+          // Pause the tick loop during entity teardown + recreate
+          const wasRunning = running;
+          running = false;
+
+          // Clear all existing entities
+          const allEids = getAllEntities(world);
+          for (const eid of allEids) {
+            removeEntity(world, eid);
+          }
+          playerEntityId = 0;
+
+          // Deserialize from the snapshot payload
+          const loadPayload = message.payload as string;
+          const eidMap = deserializeWorld(world, loadPayload);
+
+          // Notify main thread about all hydrated entities
+          for (const [oldEid, newEid] of eidMap) {
+            const tint = oldEid === 1 ? 0x00ff88 : 0xffcc00;
+            if (playerEntityId === 0) {
+              playerEntityId = newEid;
+            }
+            postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
+          }
+
+          // Restore the tick loop if it was running
+          running = wasRunning;
+
+          queueMicrotask(() => {
+            postMessage({ type: 'ENGINE_READY' });
+          });
+        } catch (err) {
+          postMessage({
+            type: 'ENGINE_ERROR',
+            message: `Load game failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         }
         break;

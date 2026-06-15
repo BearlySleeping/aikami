@@ -31,6 +31,7 @@ export * from './config/config_service.svelte.ts';
 export * from './dice/dice_service.svelte.ts';
 export * from './expression/expression_asset_resolver';
 export * from './game/game_load_state.svelte.ts';
+export * from './game/game_save_service.svelte.ts';
 export * from './game/game_state_service.svelte.ts';
 export * from './game/pixi_texture_injector';
 export * from './image/image_generation_service.svelte.ts';

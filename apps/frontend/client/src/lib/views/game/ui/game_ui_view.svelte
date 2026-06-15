@@ -45,8 +45,11 @@
 {#if viewModel.activeOverlay === 'PAUSE_MENU'}
   <PauseMenuOverlay
     onResume={() => viewModel.resumeGame()}
+    onSave={() => viewModel.saveGame()}
     onSettings={() => viewModel.goToSettings()}
     onQuit={() => viewModel.quitToMainMenu()}
+    isSaving={viewModel.isSaving}
+    saveMessage={viewModel.saveMessage}
   />
 {/if}
 
