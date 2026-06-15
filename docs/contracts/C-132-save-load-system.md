@@ -1,6 +1,17 @@
 <!-- completed: 2026-06-15 -->
 # Contract: C-132 Persistence - Save/Load System
 
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Source** | Aikami Feature Spec — Game state persistence across Tauri sessions |
+| **Target** | `apps/frontend/client/src/lib/views/game/`, `apps/frontend/client/src/lib/views/dashboard/`, `apps/frontend/client/src/lib/services/game/` |
+| **Priority** | P2 — Quality of life; enables session continuity |
+| **Dependencies** | C-117, C-118, C-125 |
+| **Status** | **completed** |
+| **Contract version** | 1.0.0 |
+
 ## Goal
 Wire the engine's ECS snapshot system to the Svelte 5 frontend, serializing the game world state to browser `IndexedDB`. This ensures player progress (coordinates, map, relationships, inventory) is retained across Tauri desktop application sessions.
 

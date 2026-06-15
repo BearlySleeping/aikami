@@ -25,6 +25,7 @@ import { createPlayer, type PlayerCreateOptions } from '../entities/create_playe
 import { createTestSprite } from '../entities/create_test_sprite.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
+import { type CollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
@@ -258,11 +259,17 @@ const initializeEngine = (
   canvasHeight: number,
   loadPayload?: string,
   playerData?: PlayerCreateOptions,
+  collisionGrid?: CollisionGrid,
 ): void => {
-  // 1. Create the bitECS world
+  // 1. Set the collision grid before any entities or systems start
+  if (collisionGrid) {
+    setCollisionGrid(collisionGrid);
+  }
+
+  // 2. Create the bitECS world
   world = createWorld();
 
-  // 2. Register component observers
+  // 3. Register component observers
   registerPositionObservers(world);
   registerVelocityObservers(world);
   registerSpriteObservers(world);
@@ -569,7 +576,8 @@ self.onmessage = (event: MessageEvent): void => {
   try {
     switch (message.type) {
       case 'INITIALIZE_ENGINE': {
-        const { canvasWidth, canvasHeight, buffers, loadPayload, playerData } = message;
+        const { canvasWidth, canvasHeight, buffers, loadPayload, playerData, collisionGrid } =
+          message;
 
         // Determine whether we have shared memory
         const firstBuffer = buffers[0] as ArrayBuffer;
@@ -593,6 +601,7 @@ self.onmessage = (event: MessageEvent): void => {
           canvasHeight as number,
           loadPayload as string | undefined,
           playerData as PlayerCreateOptions | undefined,
+          collisionGrid as CollisionGrid | undefined,
         );
         break;
       }
