@@ -6,7 +6,7 @@
 | **Target** | `/aikami/.moon/` |
 | **Priority** | P1 — Required for consistent task orchestration across all projects |
 | **Dependencies** | C-005 (packages/shared/ restructured), C-006 (frontend configs), C-007 (scripts) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

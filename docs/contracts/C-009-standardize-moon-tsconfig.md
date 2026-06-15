@@ -6,7 +6,7 @@
 | **Target**           | All packages and apps in aikami                                                         |
 | **Priority**         | P1 — Standardization pass after all structural changes                                  |
 | **Dependencies**     | C-005 (packages/shared), C-006 (frontend configs), C-007 (scripts), C-008 (.moon setup) |
-| **Status**           | not_started                                                                             |
+| **Status**           | **completed**                                                                             |
 | **Contract version** | 1.0.0                                                                                   |
 
 ## Overview
