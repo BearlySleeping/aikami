@@ -123,10 +123,21 @@ export default defineConfig({
     {
       name: 'client-visual',
       testDir: './tests/client',
-      testMatch: /lpc_visual\.spec\.ts/,
+      testMatch: /(?:lpc|sandbox)_visual\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: PWA_BASE_URL,
+        // WebGL rendering in headless Chromium.
+        // The Nix bundle ships libvk_swiftshader.so — use Vulkan SwiftShader.
+        launchOptions: {
+          args: [
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--enable-webgl',
+            '--ignore-gpu-blocklist',
+            '--enable-features=Vulkan,UseSkiaRenderer',
+          ],
+        },
       },
     },
 

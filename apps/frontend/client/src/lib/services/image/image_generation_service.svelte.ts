@@ -301,7 +301,6 @@ export class ImageGenerationService
         if (outputs) {
           for (const nodeOutput of Object.values(outputs)) {
             if (nodeOutput.images && nodeOutput.images.length > 0) {
-              controller.abort();
               const image = nodeOutput.images[0];
               return { filename: image.filename, subfolder: image.subfolder ?? null };
             }
@@ -371,15 +370,15 @@ export class ImageGenerationService
         reject(new DOMException('Aborted', 'AbortError'));
         return;
       }
-      const id = setTimeout(resolve, ms);
-      signal.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(id);
-          reject(new DOMException('Aborted', 'AbortError'));
-        },
-        { once: true },
-      );
+      const onAbort = () => {
+        clearTimeout(id);
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      const id = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal.addEventListener('abort', onAbort, { once: true });
     });
   }
 }
