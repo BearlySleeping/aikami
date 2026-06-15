@@ -6,7 +6,7 @@
 | **Target** | `packages/backend/database/` — BaseDatabaseService interface + FirebaseDataConnectService; `packages/shared/mocks/` — MockDatabaseService; `apps/backend/functions/firestack.config.ts` — Data Connect emulator |
 | **Priority** | P1 — Foundation for replacing Firestore with Data Connect; enables TDD with mockable database abstraction |
 | **Dependencies** | C-005 (packages/shared structure), C-009 (standardized moon configs), C-013 (Tauri/PixiJS tooling — same priority tier) |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -6,7 +6,7 @@
 | **Target** | `/aikami/knowledge/llms.txt` + `knowledge/CONTEXT.md` |
 | **Priority** | P2 — AI tooling QoL; not blocking development |
 | **Dependencies** | C-002 (knowledge dir), C-007 (scripts project) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

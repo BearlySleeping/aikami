@@ -6,7 +6,7 @@
 | **Target** | New `packages/frontend/api-core/` — `GameApiClient`, `FrontendAiInterface`, `OpenAiClient`, `GeminiClient`, `OllamaClient`, `ComfyUiClient`, `LocalTtsClient`, `MockAiClient`; game engine integration in `apps/frontend/game/src/engine/services/` |
 | **Priority** | P1 — Foundational layer for the PixiJS+bitECS game engine (C-016); without this, the game cannot communicate with the backend or leverage AI providers. Unblocks NPC dialogue, procedural content generation, and image synthesis features. |
 | **Dependencies** | C-015 (backend `AiServiceInterface` — provides API shapes to mirror), C-016 (game engine boundary — this package communicates through EngineBridge), C-005 (packages/shared structure — types/schemas already defined), C-006 (frontend-configs — provides Firebase function URLs) |
-| **Status** | not_started |
+| **Status** | **—** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

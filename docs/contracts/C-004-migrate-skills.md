@@ -6,7 +6,7 @@
 | **Target** | `/aikami/.pi/skills/` |
 | **Priority** | P0 — Skills must be available to pi BEFORE any feature work |
 | **Dependencies** | C-001 (clean root), C-003 (.pi directory) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

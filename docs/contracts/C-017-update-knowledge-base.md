@@ -8,7 +8,7 @@
 | **Target** | `knowledge/architecture/architecture.md`, `knowledge/architecture/limitations.md`, `knowledge/guides/STACK.md`, `knowledge/guides/STRUCTURE.md`, `knowledge/guides/CODING_STANDARDS.md`, `knowledge/index.md`, `knowledge/CONTEXT.md`, `knowledge/llms.txt` |
 | **Priority** | P1 — Documentation must reflect the actual project direction before any further engine/stack implementation contracts are executed |
 | **Dependencies** | C-013 (PixiJS v8 + bitECS + Tauri deps installed), C-014 (Database Abstraction & Data Connect — documents PostgreSQL migration path), C-015 (AI Service Abstraction), C-016 (Game Engine Boundary — documents Svelte↔PixiJS split) |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

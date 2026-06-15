@@ -6,7 +6,7 @@
 | **Target** | `/aikami/packages/shared/` |
 | **Priority** | P1 — Foundation change required before adding new packages |
 | **Dependencies** | C-001 (clean root) |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

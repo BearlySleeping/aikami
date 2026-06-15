@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client` & `apps/e2e` — Client Voice Hooking & End-to-End Diagnostic Harness |
 | **Priority** | P1 — Bridge local container layers directly to interactive frontend debug paths |
 | **Dependencies** | C-056, C-067, C-071 |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/dev/sandbox/` — Dev Sandbox Game Engine Integration |
 | **Priority** | P1 — Essential for the vertical slice and validating the Web Worker ECS engine inside the Svelte UI. |
 | **Dependencies** | `@aikami/engine` (`packages/frontend/engine`) |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview
