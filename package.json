@@ -25,7 +25,7 @@
     "scripts": "bun run scripts/src/index.ts",
     "setup": "bun run scripts/src/lib/setup/setup.ts",
     "dev:all": "bun run scripts/src/lib/ops/dev_all.ts",
-    "knowledge:generate": "bun run scripts/src/lib/ops/generate_llms_txt.ts",
+    "knowledge:sync": "bun run scripts/src/lib/ops/sync_contracts.ts && bun run scripts/src/lib/ops/generate_llms_txt.ts",
     "test:blackbox": "bun run scripts/src/lib/test_blackbox/run.ts",
     "tmux:start": "bun run scripts/src/lib/tmux/start.ts",
     "tmux:join": "bun run scripts/src/lib/tmux/join.ts",
