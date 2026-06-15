@@ -12,7 +12,13 @@ import { goto } from '$app/navigation';
 import { navigating, page } from '$app/state';
 import { logger } from '$logger';
 import type { RouteName } from '$router';
-import { appService, authService, onboardingService, routerService } from '$services';
+import {
+  aiSettingsService,
+  appService,
+  authService,
+  onboardingService,
+  routerService,
+} from '$services';
 import type { PWAHookData } from '$types';
 
 export type AppViewModelOptions = BaseViewModelOptions & {
@@ -38,6 +44,8 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
 
   constructor(options: AppViewModelOptions) {
     super(options);
+    // this data comes from PWA hook (ssr), but since we are a SPA this is will always be {}, but keeping the code
+    // here to handle it in case we ever switch back to SSR
     const { userSession, device, logLevel, currentRoute, sessionId } = options.data;
 
     if (userSession) {
@@ -91,6 +99,11 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   // --------------------------------------------------------------------------
 
   override async initialize(): Promise<void> {
+    // 0. Bootstrap AI settings from environment defaults (e.g. OpenRouter
+    //    API key / model from .env) so text providers are available before
+    //    the start screen checks for them.
+    await aiSettingsService.loadFromVault();
+
     // 1. Wire router into SvelteKit primitives.
     routerService.initialize({ goto, page });
 
