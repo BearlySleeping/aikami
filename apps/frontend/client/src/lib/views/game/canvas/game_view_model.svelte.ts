@@ -14,12 +14,6 @@ import type { ActiveContextEntry } from '$types';
 // GameViewModel — Svelte 5 ViewModel for the game canvas
 // ---------------------------------------------------------------------------
 
-/** Active dialog state pushed from the game engine via bridge events. */
-type ActiveDialog = {
-  npcName: string;
-  dialog: string;
-};
-
 /** Data passed to the engine for player entity initialization. */
 type PlayerInitData = {
   /** The player character's name (from persona). */
@@ -29,9 +23,6 @@ type PlayerInitData = {
 export type GameViewModelOptions = BaseViewModelOptions;
 
 export type GameViewModelInterface = BaseViewModelInterface & {
-  /** Currently active NPC dialog, or undefined when no dialog is open. */
-  readonly activeDialog: ActiveDialog | undefined;
-
   /** The player's current scene name. */
   readonly playerScene: string;
 
@@ -80,8 +71,6 @@ export type GameViewModelInterface = BaseViewModelInterface & {
  * through the typed {@link import('@aikami/frontend/engine').EngineBridge}.
  */
 class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameViewModelInterface {
-  activeDialog = $state<ActiveDialog | undefined>(undefined);
-
   playerScene = $state<string>('unknown');
 
   isGameReady = $state<boolean>(false);
@@ -132,17 +121,6 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       this._bridge = createEngineBridge();
 
       // Register bridge event listeners
-      this._bridge.on('NPC_DIALOG_START', (event) => {
-        this.activeDialog = {
-          npcName: event.npcName,
-          dialog: event.dialog,
-        };
-      });
-
-      this._bridge.on('NPC_DIALOG_END', () => {
-        this.activeDialog = undefined;
-      });
-
       this._bridge.on('GAME_READY', () => {
         this.isGameReady = true;
       });
