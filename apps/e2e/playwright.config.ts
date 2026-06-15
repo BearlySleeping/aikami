@@ -123,7 +123,7 @@ export default defineConfig({
     {
       name: 'client-visual',
       testDir: './tests/client',
-      testMatch: /(?:lpc|sandbox)_visual\.spec\.ts/,
+      testMatch: /(?:lpc|sandbox|dialogue)_visual\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: PWA_BASE_URL,

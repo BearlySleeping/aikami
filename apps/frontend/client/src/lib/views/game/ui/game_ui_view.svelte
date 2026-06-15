@@ -1,5 +1,6 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
+  import { OllamaClient } from '@aikami/frontend/api-core';
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
   import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
@@ -19,10 +20,13 @@
 
   $effect(() => {
     if (viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueNpc) {
+      // Create OllamaClient for direct local streaming.
+      // Falls back gracefully if Ollama is not running (errors caught in VM).
       dialogueVM = new DialogueOverlayViewModel({
         className: 'DialogueOverlayViewModel',
         npcData: viewModel.dialogueNpc,
         onEndChat: () => viewModel.endDialogue(),
+        ollamaClient: new OllamaClient(),
       });
     } else if (viewModel.activeOverlay !== 'DIALOGUE') {
       dialogueVM = undefined;

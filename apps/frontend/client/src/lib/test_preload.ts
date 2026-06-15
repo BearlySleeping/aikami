@@ -67,6 +67,7 @@ const frontendServicesMock = {
   BaseFormModel: class {},
   dialogService: {},
   routerService: {},
+  gameStateSyncService: {},
   firebaseFunctionsService: { call: mock(async () => ({})) },
   firebaseAnalyticService: { logEvent: mock(async () => {}) },
   firebaseAuthService: {
@@ -77,8 +78,18 @@ const frontendServicesMock = {
   firebaseRemoteConfig: {},
   firebaseStorageService: {},
   routerUtils: {},
-  PreferenceService: class {},
-  CorePreferenceProviderService: class {},
+  // biome-ignore lint/complexity/noStaticOnlyClass: mock must match real class shape
+  PreferenceService: class {
+    static create() {
+      return {};
+    }
+  },
+  // biome-ignore lint/complexity/noStaticOnlyClass: mock must match real class shape
+  CorePreferenceProviderService: class {
+    static create() {
+      return {};
+    }
+  },
 };
 
 mock.module('@aikami/frontend/services', () => frontendServicesMock);

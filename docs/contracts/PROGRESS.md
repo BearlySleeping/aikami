@@ -30,6 +30,7 @@
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
+| C-129 | Dialogue AI Integration & Polish | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -521,3 +522,41 @@
 - No slash command or macro parsing in dialogue input. No TTS or audio playback.
 - Brief empty bubble flash before first streamed token arrives.
 - Textarea is fixed 2 rows — no auto-resize on long input.
+
+### C-129: Dialogue AI Integration & Polish
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/api-core/src/ai/clients/ollama_client.ts` — Added `streamChat()` async generator that POSTs to `/api/generate` with `application/x-ndjson` streaming; yields text chunks as they arrive. Added `OllamaConnectionError`, `OllamaTimeoutError`, `OllamaStreamError` typed error classes. Added `OllamaGenerateResponse` response type.
+- `packages/frontend/api-core/src/index.ts` — Exported new error classes (`OllamaConnectionError`, `OllamaStreamError`, `OllamaTimeoutError`).
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Refactored for dual-backend streaming: supports OllamaClient.streamChat() (local) and textGenerationService.streamChat() (OpenRouter fallback). Renamed state fields per contract: `isAiTyping` → `isStreaming`, `currentInput` → `inputText`, `errorMessage` → `streamError`. Updated `DialogueMessage` type from `{sender, text}` to `{role, content}`. Added `sendMessage(text?)` overload for explicit text parameter. Accepts optional `ollamaClient?: OllamaClient` in constructor options.
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` — Updated to use new state names (`isStreaming`, `inputText`, `streamError`) and message shape (`role`, `content`). Changed background to `bg-gradient-to-t from-base-300/60 to-transparent` for visual polish.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Creates and injects `new OllamaClient()` into `DialogueOverlayViewModel` for direct local streaming.
+- `apps/frontend/client/src/lib/test_preload.ts` — Added `gameStateSyncService` to frontend services mock; added `noStaticOnlyClass` biome-ignore on `PreferenceService`/`CorePreferenceProviderService` mocks.
+- `apps/frontend/client/package.json` — Added `@aikami/frontend-api-core` dependency.
+- `apps/frontend/client/moon.yml` — Added `frontend-api-core` to `dependsOn`.
+- `apps/frontend/client/tsconfig.test.json` — Added `@aikami/frontend/api-core` path alias.
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` — 17 Vitest/bun unit tests covering: initialization, input state, sendMessage (happy path, empty, streaming guard), isStreaming toggle, chunk accumulation, error handling, explicit text parameter, endChat callback, Enter/Escape key handling, Shift+Enter suppression, and OllamaClient integration path.
+- `apps/e2e/tests/client/dialogue_visual.spec.ts` — 2 Playwright tests (client-visual project): Test 1 mocks `localhost:11434/api/generate` ndjson streaming, navigates to `/game`, triggers dialogue overlay via custom event, types message, asserts DaisyUI chat-bubble rendering. Test 2 captures full-page screenshot with populated player+NPC bubbles, verifies z-index >= 10 and pointer-events-auto on overlay.
+- `apps/e2e/playwright.config.ts` — Added `dialogue` to `testMatch` regex for client-visual project.
+
+**Deviations**:
+1. **`streamError` used instead of `error`**: BaseViewModel already has an `error` method (from logger mixin). Renamed to `streamError` to avoid name collision. Type is `string | null` per contract.
+2. **`sendMessage` accepts optional `text` parameter**: Per contract `sendMessage(text: string)`. Falls back to `inputText` when no argument provided for ergonomic template binding (`onclick={() => viewModel.sendMessage()}`).
+3. **E2E tests use `/game` route with custom event dispatch**: No dedicated dialogue sandbox route exists. Tests dispatch `npc-dialogue-start` CustomEvent on `window` to trigger the overlay, then interact with the resulting DOM. The Ollama endpoint is mocked at the Playwright network level.
+4. **OllamaClient injected from game_ui_view.svelte**: Created with default options (`localhost:11434`, `llama3`). Falls back gracefully if Ollama not running — errors caught in ViewModel.
+
+**Design decisions**:
+1. **Dual-backend architecture**: ViewModel checks `this._ollamaClient` at AI response time. Ollama present → direct `/api/generate` streaming. No Ollama → `textGenerationService` (OpenRouter SSE) fallback. No provider switching at runtime — decided at overlay mount time.
+2. **Prompt formatting for Ollama generate API**: Ollama's `/api/generate` uses a raw prompt string, not chat messages. Context formatted as `Role: message\n` lines with final `NPCName:` prefix so the model continues in character.
+3. **`streamChat` is an async generator (not callback-based)**: Uses `for await...of` for clean consumption. Allows the ViewModel to accumulate tokens reactively in the Svelte 5 `$state` array.
+
+**Known limitations**:
+- E2E tests require `/game` route (needs game engine initialization). If engine fails to init, dialogue overlay won't mount and tests will timeout.
+- Ollama's `/api/generate` has no native chat-message format — context flattening loses role semantics compared to `/api/chat`.
+- No abort controller integration for Ollama streaming — stream runs until completion or error.
+- Visual regression baseline not yet committed — `test-results/dialogue-visual/dialogue-overlay.png` must be generated on first run.
+- `streamError` type is `string | null` (not `undefined`) per contract's `error: string | null` spec.

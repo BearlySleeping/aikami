@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-06-15
-> Files: 144 across 10 categories
+> Files: 145 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -135,6 +135,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-126 Headless App Shell & Initialization](contracts/C-126-headless-app-shell.md)
 - [Contract: C-127 Settings Menu Refactor](contracts/C-127-settings-menu-refactor.md)
 - [Contract: C-128 Dialogue Overlay & AI Chat](contracts/C-128-dialogue-overlay-and-ai-chat.md)
+- [Contract: C-129 Dialogue AI Integration & Polish](contracts/C-129-dialogue-ai-integration-polish.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
