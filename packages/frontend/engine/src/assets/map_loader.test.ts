@@ -2,7 +2,12 @@
 
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import type { TilemapData } from './map_loader.ts';
-import { clearMapCache, extractCollisionGrid, loadTilemap } from './map_loader.ts';
+import {
+  clearMapCache,
+  extractCollisionGrid,
+  extractSpawnPoints,
+  loadTilemap,
+} from './map_loader.ts';
 
 // ---------------------------------------------------------------------------
 // C-135 Task 4: Unit tests for Map Asset Loader
@@ -493,8 +498,391 @@ describe('loadTilemap: validation errors', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC: Extract collision grid
+// AC: Object layer parsing and spawn point extraction
 // ---------------------------------------------------------------------------
+
+describe('extractSpawnPoints', () => {
+  it('returns empty array when no objectLayers exist', () => {
+    const tilemap: TilemapData = {
+      width: 4,
+      height: 3,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 4,
+          height: 3,
+          data: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+          visible: true,
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toEqual([]);
+  });
+
+  it('returns empty array when objectLayers is an empty array', () => {
+    const tilemap: TilemapData = {
+      width: 4,
+      height: 3,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toEqual([]);
+  });
+
+  it('extracts NPC spawn points with custom properties (array format)', () => {
+    const tilemap: TilemapData = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [
+        {
+          name: 'npcs',
+          objects: [
+            {
+              id: 1,
+              type: 'npc',
+              x: 320,
+              y: 256,
+              properties: [
+                { name: 'npcId', type: 'string', value: 'guard_town_1' },
+                { name: 'dialogueKey', type: 'string', value: 'guard_greeting' },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toHaveLength(1);
+    expect(spawnPoints[0].id).toBe('1');
+    expect(spawnPoints[0].type).toBe('npc');
+    expect(spawnPoints[0].x).toBe(320);
+    expect(spawnPoints[0].y).toBe(256);
+    expect(spawnPoints[0].properties).toEqual({
+      npcId: 'guard_town_1',
+      dialogueKey: 'guard_greeting',
+    });
+  });
+
+  it('extracts spawn points with flat object properties format', () => {
+    const tilemap: TilemapData = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [
+        {
+          name: 'props',
+          objects: [
+            {
+              id: 5,
+              type: 'prop',
+              x: 128,
+              y: 64,
+              properties: {
+                assetId: 'chest_01',
+                interactive: true,
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toHaveLength(1);
+    expect(spawnPoints[0].id).toBe('5');
+    expect(spawnPoints[0].type).toBe('prop');
+    expect(spawnPoints[0].properties).toEqual({
+      assetId: 'chest_01',
+      interactive: true,
+    });
+  });
+
+  it('extracts multiple spawn points from multiple object layers', () => {
+    const tilemap: TilemapData = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [
+        {
+          name: 'npcs',
+          objects: [
+            { id: 1, type: 'npc', x: 100, y: 200, properties: [] },
+            { id: 2, type: 'npc', x: 300, y: 400, properties: [] },
+          ],
+        },
+        {
+          name: 'props',
+          objects: [{ id: 3, type: 'prop', x: 50, y: 150, properties: [] }],
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toHaveLength(3);
+    expect(spawnPoints[0].type).toBe('npc');
+    expect(spawnPoints[1].type).toBe('npc');
+    expect(spawnPoints[2].type).toBe('prop');
+  });
+
+  it('skips objects without an id', () => {
+    const tilemap: TilemapData = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [
+        {
+          name: 'npcs',
+          objects: [
+            { type: 'npc', x: 100, y: 200 }, // no id
+            { id: 2, type: 'npc', x: 300, y: 400 },
+          ],
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toHaveLength(1);
+    expect(spawnPoints[0].id).toBe('2');
+  });
+
+  it('skips objects without a type', () => {
+    const tilemap: TilemapData = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [
+        {
+          name: 'npcs',
+          objects: [
+            { id: 1, x: 100, y: 200 }, // no type
+            { id: 2, type: 'npc', x: 300, y: 400 },
+          ],
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toHaveLength(1);
+    expect(spawnPoints[0].id).toBe('2');
+  });
+
+  it('defaults x and y to 0 when missing', () => {
+    const tilemap: TilemapData = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [
+        {
+          name: 'npcs',
+          objects: [{ id: 1, type: 'npc' }],
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toHaveLength(1);
+    expect(spawnPoints[0].x).toBe(0);
+    expect(spawnPoints[0].y).toBe(0);
+  });
+
+  it('handles objects with no properties', () => {
+    const tilemap: TilemapData = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [],
+      objectLayers: [
+        {
+          name: 'npcs',
+          objects: [{ id: 1, type: 'npc', x: 100, y: 200 }],
+        },
+      ],
+    };
+
+    const spawnPoints = extractSpawnPoints(tilemap);
+    expect(spawnPoints).toHaveLength(1);
+    expect(spawnPoints[0].properties).toEqual({});
+  });
+});
+
+describe('loadTilemap: objectgroup parsing', () => {
+  it('parses objectgroup layers alongside tilelayers', async () => {
+    const raw = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test_tileset',
+          image: 'tileset.png',
+          imagewidth: 256,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 8,
+          tilecount: 64,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width: 10,
+          height: 8,
+          data: new Array(80).fill(1),
+          visible: true,
+          type: 'tilelayer',
+        },
+        {
+          name: 'npcs',
+          width: 10,
+          height: 8,
+          objects: [{ id: 1, type: 'npc', x: 320, y: 256 }],
+          visible: true,
+          type: 'objectgroup',
+        },
+      ],
+    };
+    const fetcher = mock(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(raw),
+      } as Response),
+    ) as unknown as typeof fetch;
+
+    const result = await loadTilemap({ url: 'test://obj.json', fetch: fetcher });
+
+    expect(result.layers).toHaveLength(1);
+    expect(result.layers[0].name).toBe('ground');
+    expect(result.objectLayers).toHaveLength(1);
+    expect(result.objectLayers?.[0].name).toBe('npcs');
+    expect(result.objectLayers?.[0].objects).toHaveLength(1);
+  });
+
+  it('sets objectLayers to undefined when no objectgroup layers exist', async () => {
+    const raw = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test_tileset',
+          image: 'tileset.png',
+          imagewidth: 256,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 8,
+          tilecount: 64,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width: 10,
+          height: 8,
+          data: new Array(80).fill(1),
+          visible: true,
+          type: 'tilelayer',
+        },
+      ],
+    };
+    const fetcher = mock(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(raw),
+      } as Response),
+    ) as unknown as typeof fetch;
+
+    const result = await loadTilemap({ url: 'test://noobj.json', fetch: fetcher });
+
+    expect(result.objectLayers).toBeUndefined();
+  });
+
+  it('throws when objectgroup has no objects array', async () => {
+    const raw = {
+      width: 10,
+      height: 8,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'test_tileset',
+          image: 'tileset.png',
+          imagewidth: 256,
+          imageheight: 256,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 8,
+          tilecount: 64,
+        },
+      ],
+      layers: [
+        {
+          name: 'ground',
+          width: 10,
+          height: 8,
+          data: new Array(80).fill(1),
+          visible: true,
+          type: 'tilelayer',
+        },
+        {
+          name: 'broken',
+          width: 10,
+          height: 8,
+          visible: true,
+          type: 'objectgroup',
+        },
+      ],
+    };
+    const fetcher = mock(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(raw),
+      } as Response),
+    ) as unknown as typeof fetch;
+
+    await expect(loadTilemap({ url: 'test://badobj.json', fetch: fetcher })).rejects.toThrow(
+      'has no "objects" array',
+    );
+  });
+});
 
 describe('extractCollisionGrid', () => {
   it('extracts the collision layer as a boolean array', () => {
