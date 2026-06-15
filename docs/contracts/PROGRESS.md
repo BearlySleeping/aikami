@@ -28,6 +28,7 @@
 | C-102 | Tauri SPA Enforcement | ✅ completed |
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
+| C-127 | Settings Menu Refactor | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -103,6 +104,42 @@
 | C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
 | C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
 | C-126 | Headless App Shell & Initialization | ✅ completed |
+
+### C-127: Settings Menu Refactor
+
+**Status**: ✅ completed
+
+**Files deleted**:
+- `apps/frontend/client/src/lib/views/settings/tabs/ai_providers_tab.svelte` — Legacy AI providers tab (replaced by ProvidersView)
+- `apps/frontend/client/src/lib/views/settings/tabs/instruct_templates_tab.svelte` — Legacy instruct templates tab (removed per contract)
+- `apps/frontend/client/src/lib/views/settings/tabs/` — Empty directory removed
+
+**Files rewritten**:
+- `apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts` — New `SettingsViewModel` with `Game` / `AI Engine` primary categories, `Display`/`Audio`/`Controls` sub-tabs for Game, `Text`/`Image`/`Voice` sub-tabs for AI Engine. Creates and exposes `ProvidersViewModel` (C-120) for the Text sub-tab. `closeSettings()` reads `?from=` query parameter and navigates to `/game` (for `?from=game`) or `/` (default).
+- `apps/frontend/client/src/lib/views/settings/settings_view.svelte` — New game-style tabbed layout: header with "Close" button, daisyUI `tabs-boxed` for primary categories, `tabs-bordered` for sub-tabs. Game sub-tabs render placeholder cards (Display: resolution/fullscreen, Audio: volume sliders, Controls: keybinding table). AI Engine Text sub-tab mounts the full C-120 `ProvidersView`. Image and Voice sub-tabs show "Coming Soon" placeholder cards.
+
+**Files modified**:
+- `apps/frontend/client/src/routes/settings/+page.svelte` — Replaced `<h1>Settings</h1>` placeholder with `SettingsView` + `getSettingsViewModel()` instantiation
+- `apps/frontend/client/src/lib/constants/routes.ts` — Added `from?: string` query parameter type to `settings` route (union with `undefined` for backwards compatibility)
+- `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` — `goToOptions()` and `goToSettingsForProviderSetup()` now pass `queryParameters: { from: 'start' }` so SettingsViewModel can route back to the Start Menu
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — `goToSettings()` now passes `queryParameters: { from: 'game' }` so SettingsViewModel can route back to the game
+
+**Deviations**:
+1. **`ProvidersView` mounted as complete nested component**: The contract says to "Mount the ProvidersView" into the AI Engine Text tab. It's mounted as-is with its full dev dashboard UI (API Keys, Models, Voice, Image, Memory internal tabs). The Text sub-tab renders the entire C-120 configuration dashboard — no attempt was made to extract only the text-relevant portions.
+2. **`closeSettings()` uses `URLSearchParams(window.location.search)`**: The contract says to "read the current URL query parameters". Since SvelteKit's `page` store is server-incompatible in static SPA mode, `URLSearchParams` from the browser URL is the correct client-side approach for reading `?from=`.
+3. **Image/Voice sub-tabs are daisyUI cards**: "Coming Soon" placeholder cards with descriptions rather than empty divs — provides visual clarity for future wiring.
+
+**Design decisions**:
+1. **`SettingsViewModel` owns `ProvidersViewModel`**: Created in the constructor and exposed via `readonly providersViewModel` getter. The `ProvidersViewModel` handles its own initialization lifecycle through its own `BaseViewModelContainer` when mounted.
+2. **Placeholder controls use `disabled` + `opacity-50`**: Audio sliders, resolution dropdown, and keybinding table are visually muted to clearly signal they are non-functional placeholders (contract scope: "Just build the UI placeholders").
+3. **Sub-tabs use `tabs-bordered` vs primary tabs use `tabs-boxed`**: Visual hierarchy — primary categories are prominent boxed tabs, sub-tabs are lighter bordered tabs.
+4. **`settings` route `queryParameters` union type**: `undefined | { from?: string }` — existing callers pass `undefined` without breaking; new callers pass `{ from: 'start' }` or `{ from: 'game' }`.
+
+**Known limitations**:
+- Game sub-tabs (Display, Audio, Controls) have no wired logic — purely visual placeholders.
+- AI Engine Image and Voice sub-tabs are placeholders — full configuration requires future contracts.
+- No tests written for `SettingsViewModel` — pre-existing gap, contract didn't specify test hooks.
+- `ProvidersView` header ("Configuration Dashboard") and internal tabs create nested navigation within the settings page — this is visually complex but functional.
 
 ### C-119: Routing and Layout Simplification
 

@@ -37,7 +37,11 @@ export const routes = {
   },
   settings: {
     getPath: () => '/settings',
-    queryParameters: undefined,
+    queryParameters: undefined as
+      | undefined
+      | {
+          from?: string;
+        },
     routeId: '/settings',
     type: 'public',
   },
