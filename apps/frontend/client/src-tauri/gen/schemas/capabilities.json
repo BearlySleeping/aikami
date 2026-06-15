@@ -4,6 +4,12 @@
     "description": "Default capabilities for the main window",
     "local": true,
     "windows": ["main"],
-    "permissions": ["core:default", "opener:default", "fs:default", "dialog:default"]
+    "permissions": [
+      "core:default",
+      "opener:default",
+      "fs:default",
+      "dialog:default",
+      "http:default"
+    ]
   }
 }

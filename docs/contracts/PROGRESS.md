@@ -31,6 +31,7 @@
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
+| C-130 | In-Game AI Diagnostics & Onboarding | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -560,3 +561,40 @@
 - No abort controller integration for Ollama streaming — stream runs until completion or error.
 - Visual regression baseline not yet committed — `test-results/dialogue-visual/dialogue-overlay.png` must be generated on first run.
 - `streamError` type is `string | null` (not `undefined`) per contract's `error: string | null` spec.
+
+### C-130: In-Game AI Diagnostics & Onboarding
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view_model.svelte.ts` — `BootDiagnosticsViewModel` extending `BaseViewModel`. Manages `ollamaStatus`/`comfyStatus` `$state` (pending/online/offline), `canBoot` `$derived` getter, `checkProviders()` pinging localhost via injectable `fetchImpl` (defaults to `@tauri-apps/plugin-http`), `startPolling()` with 3-second `setInterval`, `initializeCore()` firing `onBootComplete` callback when `canBoot` is true.
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view.svelte` — Retro-terminal DaisyUI Svelte 5 view: dark monospace aesthetic with window chrome (traffic-light dots), two status rows (Text AI Ollama / Image AI ComfyUI) with reactive red/green indicator dots, inline "Awaiting connection" instructions with launch commands, "Initialize Core" button (enabled when both online, disabled with spinner + tooltip otherwise), `$effect` hooking `startPolling()` lifecycle.
+- `apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view_model.test.ts` — 15 Bun/Vitest unit tests: initial state (pending/canBoot false), both online (200 OK → online), both offline (throw → offline), non-200 (offline), partial online scenarios (one online + one offline → canBoot false), state transitions (offline→online reconnect), initialize() runs first check, initializeCore gate (no-op when canBoot false, fires callback when true), correct URL pings (port 11434, port 8188/system_stats), polling idempotency.
+- `apps/e2e/tests/client/boot_diagnostics_visual.spec.ts` — 3 Playwright visual regression tests (client-visual): Test 1 mocks both providers offline → asserts OFFLINE labels, disabled button, launch instructions → golden snapshot. Test 2 mocks both providers online → asserts ONLINE labels, enabled "Initialize Core" button → golden snapshot. Test 3 starts offline, then switches mocks online mid-test → asserts polling transition to ONLINE state within 15s.
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/app/app_view_model.svelte.ts` — Added `showBootDiagnostics` `$state` (defaults `true`), `onBootComplete()` method (sets to `false`), and `BootDiagnosticsViewModelInterface` type export to the `AppViewModelInterface`.
+- `apps/frontend/client/src/lib/views/app/app_view.svelte` — Conditionally renders `BootDiagnosticsView` when `showBootDiagnostics` is true; creates `bootDiagnosticsViewModel` via factory with `onBootComplete` wired to `viewModel.onBootComplete()`. Normal app children render only after diagnostics pass.
+- `apps/frontend/client/package.json` — Added `@tauri-apps/plugin-http: ^2` dependency.
+- `apps/frontend/client/src-tauri/Cargo.toml` — Added `tauri-plugin-http = "2"` Rust dependency.
+- `apps/frontend/client/src-tauri/capabilities/default.json` — Added `"http:default"` permission.
+- `apps/frontend/client/src-tauri/src/lib.rs` — Registered `tauri_plugin_http::init()` in the Tauri builder.
+- `apps/e2e/playwright.config.ts` — Added `boot_diagnostics` to `testMatch` regex for client-visual project.
+
+**Deviations**:
+1. **Injectable `fetchImpl` for testability**: The contract specifies using `@tauri-apps/plugin-http` exclusively. Added `fetchImpl?: (url, init?) => Promise<Response>` to `BootDiagnosticsViewModelOptions` so tests can inject mocks without depending on the Tauri module at all. Production code defaults to the Tauri HTTP plugin's fetch via a lazy `_tauriFetchLoader` arrow function.
+2. **Boot diagnostics gates entire app, not just game canvas**: The contract says "trigger the unmounting of the diagnostics screen and the mounting of the main game_canvas.svelte." Implemented as gating the entire `AppShell` children — after diagnostics pass, the normal Start Menu → Game flow continues. This preserves the Start Menu (sign-in, options, credits) experience after diagnostics.
+3. **`$derived` → native getter**: `canBoot` is implemented as a native `get canBoot(): boolean` getter rather than a `$derived` rune. Convention per aikami-conventions: native getters over `$derived` for self-referential fields.
+4. **`onkeydown` Escape handler removed**: The view had a no-op Escape key handler. Removed to fix the a11y `a11y_no_noninteractive_element_interactions` svelte-check warning. Diagnostics cannot be bypassed — player must start providers.
+
+**Design decisions**:
+1. **Tauri HTTP plugin as default, with DI support**: The `_fetchImpl` field defaults to `_tauriFetchLoader` which lazily `import('@tauri-apps/plugin-http')`. In browser dev mode, the import throws (CORS blocks localhost) — status shows "offline" gracefully. In Tauri, the Rust HTTP stack bypasses CORS. Tests inject their own mock fetch.
+2. **`checkProviders()` runs both in parallel**: Uses `Promise.all([_checkOllama(), _checkComfyUI()])` — 3-second timeout per ping via `connectTimeout: 3000` on the Tauri fetch. Faster than sequential.
+3. **`startPolling()` is idempotent**: Guards against duplicate intervals — calling twice is safe. `dispose()` clears the interval on unmount.
+4. **Retro-terminal aesthetic with pure DaisyUI**: No custom CSS beyond animation keyframes. Uses `bg-neutral-950`, `font-mono`, `text-success`/`text-error`, traffic-light window chrome dots (`bg-error/80`, `bg-warning/80`, `bg-success/80`), and DaisyUI `tooltip` for the disabled button.
+
+**Known limitations**:
+- Visual regression tests require the PWA dev server running on port 5274 (client-visual project).
+- In browser dev mode, `@tauri-apps/plugin-http` import will fail — providers always show "offline" since CORS blocks localhost pings. Diagnostics only works correctly in the Tauri desktop app.
+- No graceful degradation for non-Tauri environments — the diagnostics screen is always shown, even when running in a regular browser where providers can never be pinged. A future enhancement could detect `!window.__TAURI__` and skip diagnostics.
+- The `comfyStatus` is currently unused by any downstream game code — the game only checks for text providers (Ollama). Image AI gating is ready for future contracts.

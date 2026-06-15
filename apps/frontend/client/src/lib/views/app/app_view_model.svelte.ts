@@ -29,6 +29,10 @@ export type AppViewModelInterface = BaseViewModelInterface & {
   readonly isLoggedIn: boolean;
   readonly currentRoute: RouteName | undefined;
   readonly currentUser: CurrentUser | undefined;
+  /** Whether the boot diagnostics screen is currently visible. */
+  readonly showBootDiagnostics: boolean;
+  /** Called when the player clicks "Initialize Core" on the boot screen. */
+  onBootComplete(): void;
 };
 
 /**
@@ -41,6 +45,9 @@ export type AppViewModelInterface = BaseViewModelInterface & {
  */
 class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppViewModelInterface {
   private _initialRouteHandled = false;
+
+  /** Whether the boot diagnostics screen is currently shown. */
+  showBootDiagnostics = $state(true);
 
   constructor(options: AppViewModelOptions) {
     super(options);
@@ -97,6 +104,11 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   // --------------------------------------------------------------------------
   // Initialization
   // --------------------------------------------------------------------------
+
+  /** Hides the boot diagnostics screen and proceeds to the main app. */
+  onBootComplete(): void {
+    this.showBootDiagnostics = false;
+  }
 
   override async initialize(): Promise<void> {
     // 0. Bootstrap AI settings from environment defaults (e.g. OpenRouter
