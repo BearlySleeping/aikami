@@ -16,6 +16,7 @@ import { AnimationController } from './rendering/animation_controller.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
+import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import type { GameEvent } from './types.ts';
 
@@ -147,6 +148,13 @@ export type GameWorldInitializeOptions = PixiAppOptions & {
   initialPayload?: string;
   /** Optional player data for new-game character initialization. */
   playerData?: PlayerInitData;
+  /**
+   * Optional collision grid for the current scene.
+   *
+   * When provided, the worker sets this grid before any entities move,
+   * preventing the player from walking through walls or off the map.
+   */
+  collisionGrid?: CollisionGrid;
 };
 
 /**
@@ -298,7 +306,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._allocateBuffers();
 
     // ---- 3. Spawn the simulation worker -------------------------------
-    await this._spawnWorker(canvas.width, canvas.height, initialPayload, playerData);
+    await this._spawnWorker(
+      canvas.width,
+      canvas.height,
+      initialPayload,
+      playerData,
+      options.collisionGrid,
+    );
 
     // ---- 4. Set up keyboard input (main thread) -----------------------
     this._inputTeardown = this._setupKeyboardInput();
@@ -440,6 +454,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     canvasHeight: number,
     loadPayload?: string,
     playerData?: PlayerInitData,
+    collisionGrid?: CollisionGrid,
   ): Promise<void> {
     if (this._workerFactory) {
       this.debug('spawnWorker:using-workerFactory');
@@ -468,6 +483,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       buffers: this._bufferPool,
       loadPayload,
       playerData,
+      collisionGrid,
     });
 
     // Set up message listener for worker → main communication

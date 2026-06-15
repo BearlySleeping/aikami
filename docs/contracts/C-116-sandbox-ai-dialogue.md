@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/dev/sandbox/` — Sandbox AI Dialogue Engine |
 | **Priority** | P1 — Completes the vertical slice interactive loop (ECS Engine -> Svelte UI -> AI -> Svelte UI) |
 | **Dependencies** | C-115 |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

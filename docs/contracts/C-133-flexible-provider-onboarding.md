@@ -1,5 +1,16 @@
 # Contract: C-133 Flexible AI Provider Onboarding
 
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Source** | Active memory — C-130 Boot Diagnostics UX refinement |
+| **Target** | `apps/frontend/client/src/lib/views/app/boot/` |
+| **Priority** | P1 — Removes strict dual-local AI requirement for broader hardware support |
+| **Dependencies** | C-130 |
+| **Status** | **completed** |
+| **Contract version** | 1.0.0 |
+
 ## Goal
 
 Refactor the Boot Diagnostics screen introduced in C-130. Remove the strict dual-local requirement. The game must only enforce a **Text Provider** (Local Ollama OR Cloud OpenRouter) to boot. Image and Voice providers should be made optional and gracefully degrade if missing, allowing players with lower-end PCs to still play the game using hybrid or text-only setups.
