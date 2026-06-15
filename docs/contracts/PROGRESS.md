@@ -33,6 +33,7 @@
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
 | C-130 | In-Game AI Diagnostics & Onboarding | ✅ completed |
 | C-131 | Native WebGPU Voice via Kokoro | ✅ completed |
+| C-132 | Persistence - Save/Load System | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -632,3 +633,41 @@
 - No abort/stop for in-progress synthesis: the worker's `generate()` is not abortable. Text stream cancel in dialogue stops feeding new sentences but in-flight audio continues.
 - `playAudioBuffer` uses Web Audio API `createBuffer` + `createBufferSource` (not AudioWorklet) — suitable for sentence-length chunks but incurs buffer allocation per sentence.
 - E2E test is minimal — only verifies no console errors on page load. Full WebGPU integration test requires a browser with WebGPU hardware (not available in headless CI).
+
+### C-132: Persistence - Save/Load System
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/services/game/game_save_service.svelte.ts` — GameSaveService: IndexedDB persistence for ECS snapshots. Manages `availableSaves`, `isSaving`, `isLoading` reactive state; `fetchAvailableSaves()`/`saveGame(slotId)`/`loadGame(slotId)`/`deleteSave(slotId)`/`getSavePayload(slotId)` methods. Uses native IndexedDB API with promisified wrapper. Bridge reference is optional (only needed for save/load operations that involve the engine).
+- `apps/frontend/client/src/lib/services/game/game_save_service.test.ts` — 11 unit tests: mock IndexedDB + EngineBridge, verifies save/load/delete/getPayload, concurrent save guard, read-only bridge-less mode.
+- `apps/e2e/tests/client/save_load.spec.ts` — 2 E2E tests: save from pause menu → reload → Continue loads game canvas; verifies Continue button hidden when no saves exist.
+
+**Files modified**:
+- `packages/frontend/engine/src/engine_bridge.ts` — Added `createSnapshot(): Promise<string>` + `restoreSnapshot(snapshot: string): Promise<void>` to `EngineBridge` type, `EngineBridgeImpl`, and `MockEngineBridge`. Added `setSnapshotHandler`/`setRestoreHandler` callback registration on `EngineBridgeImpl` so `GameWorld` can wire the worker-based snapshot pipeline.
+- `packages/frontend/engine/src/game_world.ts` — Added `restoreWorld(payload: string): Promise<void>` (clears render entries, posts `LOAD_GAME` to worker, waits for `ENGINE_READY`). Added `_setupSnapshotHandlers()` called during init to register callbacks on the bridge.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Added `LOAD_GAME` message handler: pauses tick loop, removes all entities via `removeEntity`, deserializes from payload, posts `ENTITY_CREATED` for each new entity, posts `ENGINE_READY`. Extended `workerBridge` stub with no-op `createSnapshot`/`restoreSnapshot`.
+- `apps/frontend/client/src/lib/views/game/menu/menu_view_model.svelte.ts` — Added `canContinue` getter (derived from `availableSaves.length > 0`), `latestSave` getter, `continueGame()` method (loads payload via `getSavePayload`, sets pending load, navigates to `/game`), `initialize()` calls `fetchAvailableSaves()`.
+- `apps/frontend/client/src/lib/views/game/menu/menu_view.svelte` — Added "Continue" button (shown when `canContinue` is true, above Start). Start button shows "New Game" text when saves exist.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `saveGame()` method, `isSaving`/`saveMessage` `$state`, lazily creates `GameSaveService` with bridge, exposes `GameSaveServiceInterface` via `$services` import.
+- `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu_overlay.svelte` — Added "Save Game" button with spinner, disabled state during save, "Game Saved!" / "Save failed" feedback message.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Passes `onSave`, `isSaving`, `saveMessage` props to `PauseMenuOverlay`.
+- `apps/frontend/client/src/lib/services/index.ts` — Added `export * from './game/game_save_service.svelte.ts'`.
+
+**Deviations**:
+1. **File naming**: Contract specified `game_state_service.svelte.ts` but that file already exists with fundamentally different concerns (world state management: locations, events, NPCs, variables). Created `game_save_service.svelte.ts` to avoid API collision and maintain separation of concerns.
+2. **Worker LOAD_GAME message**: Contract described `restoreSnapshot` as "clears current volatile ECS entities and restores state." Added a new `LOAD_GAME` worker message (not `INITIALIZE_ENGINE` reuse) to support mid-game restore without re-creating the entire engine.
+3. **Bridge bridge-optional**: `GameSaveServiceOptions.bridge` is optional — required only for `saveGame()`/`loadGame()` (which need the engine). `fetchAvailableSaves()` and `getSavePayload()` work without a bridge, enabling main menu usage before the game engine is initialized.
+4. **Continue flow uses pending load pattern**: `continueGame()` in the menu loads the raw payload from IndexedDB and sets it via `setPendingGameLoad()` (existing C-118 pattern). The `GameViewModel.initialize()` already picks up the pending payload via `consumePendingGameLoad()` and passes it as `initialPayload` to `GameWorld.initialize()`.
+
+**Design decisions**:
+1. **Native IndexedDB without wrapper**: Used the raw `indexedDB` browser API with promisified helpers rather than an abstraction layer — keeps the service self-contained with zero new dependencies.
+2. **Callback-based bridge wiring**: Rather than passing the worker reference to the bridge (which violates the bridge's UI↔Game boundary abstraction), `GameWorld` registers snapshot/restore callbacks on the bridge during initialization. The bridge delegates to these callbacks when `createSnapshot()`/`restoreSnapshot()` are called.
+3. **`GameSaveService` is instantiated per-use**: The main menu uses a shared bridge-less instance (`gameSaveService` singleton). The GameUIViewModel creates a private instance with the bridge injected when the user first clicks Save.
+4. **`SaveSlotInfo.mapName` is hardcoded to `'World'`**: No scene-name system is wired yet; the metadata field is prepared for future contracts.
+
+**Known limitations**:
+- No played-time or screenshot thumbnail in save metadata (just timestamp + mapName).
+- Save slots are ID-based strings (no fixed slot count). UI currently only writes to `'manual-1'` from the pause menu.
+- The worker `LOAD_GAME` handler pauses the tick loop during entity teardown/recreate — there's a brief visual freeze during restore.
+- E2E test requires the game engine to be running (PixiJS + Web Worker) — may be flaky in CI without proper GPU/WASM setup.

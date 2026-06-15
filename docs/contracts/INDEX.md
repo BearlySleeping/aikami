@@ -71,6 +71,7 @@ P2 (Polish — after P1):
 | C-011 | [Blackbox Testing Infrastructure](C-011-blackbox-testing.md) | E2E testing with Playwright, Firebase emulators, visual regression | C-007, C-009 |
 | C-012 | [Generate llms.txt and CONTEXT.md](C-012-generate-llms-and-context.md) | AI-first file index and project briefing | C-002, C-007 |
 | C-131 | [Native WebGPU Voice via Kokoro](C-131-native-webgpu-voice.md) ✅ | Browser-native TTS with Kokoro 82M model via WebGPU Worker | — |
+| C-132 | [Persistence - Save/Load System](C-132-save-load-system.md) ✅ | ECS snapshot persistence to browser IndexedDB — Main Menu Continue, Pause Menu Save, unit+E2E tests | C-117, C-118, C-125 |
 
 ## Contract Format
 

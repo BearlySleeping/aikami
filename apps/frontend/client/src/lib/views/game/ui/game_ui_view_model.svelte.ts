@@ -6,7 +6,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { routerService } from '$services';
+import { GameSaveService, type GameSaveServiceInterface, routerService } from '$services';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -44,6 +44,12 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   /** NPC data for the active dialogue overlay, or undefined. */
   readonly dialogueNpc: DialogueNpcData | undefined;
 
+  /** Whether a save operation is currently in progress. */
+  readonly isSaving: boolean;
+
+  /** Feedback message shown after a save completes (e.g., 'Saved!'). */
+  readonly saveMessage: string | undefined;
+
   /**
    * Handles global keydown events for overlay toggling.
    * Escape opens/closes the pause menu or ends dialogue.
@@ -69,6 +75,14 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
    * presses Escape while the dialogue is open.
    */
   endDialogue(): void;
+
+  /**
+   * Saves the current game state to IndexedDB.
+   *
+   * Captures an ECS snapshot via the engine bridge and persists it
+   * under the 'manual-1' slot. Shows a temporary feedback message.
+   */
+  saveGame(): Promise<void>;
 };
 
 class GameUIViewModel
@@ -79,7 +93,17 @@ class GameUIViewModel
 
   dialogueNpc = $state<DialogueNpcData | undefined>(undefined);
 
+  isSaving = $state<boolean>(false);
+
+  saveMessage = $state<string | undefined>(undefined);
+
   private readonly _gameViewModel: GameViewModelInterface;
+
+  /** Lazily-created save service (requires engine bridge from the game). */
+  private _saveService: GameSaveServiceInterface | undefined;
+
+  /** Cached bridge instance shared with the game ViewModel. */
+  private _bridge: EngineBridge | undefined;
 
   constructor(options: GameUIViewModelOptions) {
     super(options);
@@ -101,6 +125,7 @@ class GameUIViewModel
     try {
       const { createEngineBridge } = await import('@aikami/frontend/engine');
       const bridge: EngineBridge = createEngineBridge();
+      this._bridge = bridge;
 
       bridge.on('NPC_DIALOG_START', (event) => {
         if (this.activeOverlay === 'NONE') {
@@ -179,6 +204,37 @@ class GameUIViewModel
     this.activeOverlay = 'NONE';
     this.dialogueNpc = undefined;
     this._gameViewModel.resumeEngine();
+  }
+
+  /** @inheritdoc */
+  async saveGame(): Promise<void> {
+    if (this.isSaving) {
+      return;
+    }
+
+    this.isSaving = true;
+    this.saveMessage = undefined;
+
+    try {
+      if (!this._saveService) {
+        const bridge = this._bridge;
+        if (!bridge) {
+          throw new Error('Engine bridge not available for save');
+        }
+        this._saveService = new GameSaveService({
+          className: 'GameSaveService',
+          bridge,
+        });
+      }
+
+      await this._saveService.saveGame('manual-1');
+      this.saveMessage = 'Game Saved!';
+    } catch (error) {
+      this.debug('saveGame:error', { error: String(error) });
+      this.saveMessage = 'Save failed';
+    } finally {
+      this.isSaving = false;
+    }
   }
 }
 
