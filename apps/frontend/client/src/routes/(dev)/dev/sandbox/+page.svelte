@@ -16,7 +16,7 @@
   // so this is a module-level side effect guarded by the 'browser' check.
   if (browser) {
     const existing = localStorage.getItem('aikami-characters');
-    if (!existing || !existing.includes('Sandbox Adventurer')) {
+    if (!existing?.includes('Sandbox Adventurer')) {
       const mockCharacters = [
         {
           persona: {

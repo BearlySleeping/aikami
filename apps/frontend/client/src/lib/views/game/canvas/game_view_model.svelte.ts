@@ -288,13 +288,19 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
           const rawId = layerIds[i];
           const slotName = ENGINE_SLOTS[i] ?? `layer_${i}`;
           const catalogIdx = SLOT_CATALOG_INDEX[slotName];
-          if (catalogIdx === undefined) continue;
+          if (catalogIdx === undefined) {
+            continue;
+          }
           const slotDef = GENERATED_LPC_SLOTS[catalogIdx];
           // For head, default to human_male (index 94) when no variant is set.
           let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : slotName === 'head' ? 94 : -1;
-          if (slotName === 'head' && effectiveIdx < 0) effectiveIdx = 94;
+          if (slotName === 'head' && effectiveIdx < 0) {
+            effectiveIdx = 94;
+          }
           const variant = slotDef?.variants[effectiveIdx];
-          if (!variant) continue;
+          if (!variant) {
+            continue;
+          }
           recipes.push({
             slot: slotName,
             assetId: variant.assetId,

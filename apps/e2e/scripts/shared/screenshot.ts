@@ -45,10 +45,7 @@ export type CaptureOptions = {
  * After the signal, flushes one animation frame to ensure the WebGL
  * canvas has composited.
  */
-export const waitForPixiLoaded = async (
-  page: Page,
-  timeout = 15_000,
-): Promise<void> => {
+export const waitForPixiLoaded = async (page: Page, timeout = 15_000): Promise<void> => {
   await page.waitForFunction(
     () =>
       (window as unknown as Record<string, unknown>).__PIXI_LOADED__ === true ||
@@ -58,9 +55,7 @@ export const waitForPixiLoaded = async (
   );
 
   // Flush one rAF so the WebGL canvas composites the final frame
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(resolve)),
-  );
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
 };
 
 /**
@@ -69,10 +64,7 @@ export const waitForPixiLoaded = async (
  * Checks for the "Engine Running" or "isGameReady" indicator.
  * Useful when PixiJS doesn't set __PIXI_LOADED__.
  */
-export const waitForEngineReady = async (
-  page: Page,
-  timeout = 20_000,
-): Promise<void> => {
+export const waitForEngineReady = async (page: Page, timeout = 20_000): Promise<void> => {
   const deadline = Date.now() + timeout;
   let ready = false;
 

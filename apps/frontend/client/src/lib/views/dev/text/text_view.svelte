@@ -211,7 +211,7 @@
                 placeholder="Enter your prompt here..."
                 bind:value={viewModel.prompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void viewModel.generate(); }}
+                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.generate(); } }}
               ></textarea>
               <div class="label">
                 <span class="label-text-alt text-base-content/40">Ctrl+Enter to generate</span>
@@ -328,7 +328,7 @@
                 placeholder="Enter text to extract structured data from..."
                 bind:value={viewModel.schemaPrompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void viewModel.validateSchema(); }}
+                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.validateSchema(); } }}
               ></textarea>
             </label>
             <div class="flex gap-3 mt-3">
