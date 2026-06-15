@@ -151,7 +151,7 @@ class AppErrorViewModel
   async handleRetry(): Promise<void> {
     const currentErrorType = this.errorType;
     if (currentErrorType === 'page-not-found') {
-      await routerService.goToRoute('dashboard', {
+      await routerService.goToRoute('settings', {
         queryParameters: undefined,
         pathParameters: undefined,
       });

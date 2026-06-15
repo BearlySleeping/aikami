@@ -75,7 +75,7 @@ class RegisterViewModel
         type: 'success',
       });
 
-      await routerService.goToRoute('dashboard', {
+      await routerService.goToRoute('settings', {
         pathParameters: undefined,
         queryParameters: undefined,
       });
@@ -116,7 +116,7 @@ class RegisterViewModel
           type: 'success',
         });
 
-        await routerService.goToRoute('dashboard', {
+        await routerService.goToRoute('settings', {
           pathParameters: undefined,
           queryParameters: undefined,
         });

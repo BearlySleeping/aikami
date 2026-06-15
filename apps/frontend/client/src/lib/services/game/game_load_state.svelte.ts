@@ -3,7 +3,7 @@
 /**
  * Simple module-level payload store for cross-route game load handoff.
  *
- * When the Dashboard ViewModel loads a saved game, it stores the ECS
+ * When the Start Menu ViewModel loads a saved game, it stores the ECS
  * payload here and navigates to /game. The Game ViewModel checks for
  * a pending payload during initialization and passes it to GameWorld.
  */

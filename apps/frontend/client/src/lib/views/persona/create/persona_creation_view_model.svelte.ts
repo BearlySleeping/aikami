@@ -54,7 +54,7 @@ class PersonaCreationViewModel
 
   async skipOnboarding(): Promise<void> {
     const { goto } = await import('$app/navigation');
-    await goto('/dashboard');
+    await goto('/settings');
   }
 
   async createPersonaFromAI(): Promise<void> {
