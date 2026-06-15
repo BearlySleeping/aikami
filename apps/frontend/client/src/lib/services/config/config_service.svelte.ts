@@ -554,23 +554,22 @@ class ConfigService
   // ── Private: env helpers ─────────────────────────────────────────────
 
   /**
-   * Injects defaults from environment variables when no user configuration
-   * has been persisted. User config from localStorage always wins.
+   * Injects defaults from environment variables. The preferred model is
+   * only injected when no user configuration exists in localStorage, but
+   * the API key is always injected from env if available and not already
+   * set — this ensures the key survives stale vaults and model-only saves.
    */
   private _injectEnvDefaults(): void {
-    if (this.state.preferredModel || this.state.models.length > 0) {
-      return;
-    }
-
     const envModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
-    if (!envModel) {
-      return;
+    const envKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
+
+    // Only inject the model from env when no user config has been saved.
+    if (!this.state.preferredModel && this.state.models.length === 0 && envModel) {
+      this.state.preferredModel = envModel;
     }
 
-    this.state.preferredModel = envModel;
-
-    const envKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
-    if (envKey) {
+    // Always inject the API key from env when available and not already set.
+    if (envKey && !this.state.apiKeys.openrouter) {
       this.state.apiKeys = { ...this.state.apiKeys, openrouter: envKey };
     }
   }
@@ -578,10 +577,7 @@ class ConfigService
   /** Safely reads a Vite PUBLIC_* env var. Returns undefined in tests. */
   private _readEnv(name: string): string | undefined {
     try {
-      const env = (import.meta as unknown as Record<string, unknown>).env as
-        | Record<string, string>
-        | undefined;
-      const value = env?.[name];
+      const value = (import.meta.env as Record<string, string | undefined>)[name];
       return value && value.length > 0 ? value : undefined;
     } catch {
       return undefined;
