@@ -342,11 +342,7 @@ class StartViewModel
     }
 
     // Local text service: endpoint is a localhost URL with a model name
-    if (
-      textProvider.endpoint &&
-      textProvider.endpoint.includes('localhost') &&
-      textProvider.model
-    ) {
+    if (textProvider.endpoint?.includes('localhost') && textProvider.model) {
       return true;
     }
 

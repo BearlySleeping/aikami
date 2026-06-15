@@ -303,14 +303,22 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     for (let i = 0; i < this.activeLayers.length; i++) {
       const layer = this.activeLayers[i];
-      if (!layer) continue;
+      if (!layer) {
+        continue;
+      }
 
-      if (this.isolateLayerIndex >= 0 && i !== this.isolateLayerIndex) continue;
+      if (this.isolateLayerIndex >= 0 && i !== this.isolateLayerIndex) {
+        continue;
+      }
 
       const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
-      if (!slotDef) continue;
+      if (!slotDef) {
+        continue;
+      }
       const variant = slotDef.variants[layer.variantIndex];
-      if (!variant) continue;
+      if (!variant) {
+        continue;
+      }
 
       result.push({
         slot: slotDef.slot,
@@ -376,9 +384,13 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     const cacheKey = `__lpc__${assetId}`;
 
     const cached = this._sheetTextureCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
     const cachedPromise = this._sheetTexturePromises.get(cacheKey);
-    if (cachedPromise) return cachedPromise;
+    if (cachedPromise) {
+      return cachedPromise;
+    }
 
     const promise = (async () => {
       const { Assets } = await import('pixi.js');
@@ -409,18 +421,24 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     const currentState = this.animationState;
     const currentDirection = this.facingDirection;
 
-    if (!this.pixiApp || currentRecipes.length === 0) return;
+    if (!this.pixiApp || currentRecipes.length === 0) {
+      return;
+    }
 
     try {
       const newSprites: Sprite[] = [];
 
       const layerPromises = currentRecipes.map(async (recipe, i) => {
         const layer = this.activeLayers[i];
-        if (!recipe || !layer) return;
+        if (!recipe || !layer) {
+          return;
+        }
 
         const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
         const variant = slotDef?.variants[layer.variantIndex];
-        if (!variant) return;
+        if (!variant) {
+          return;
+        }
 
         // Load webp spritesheet for the current animation state
         const stateMap: Record<number, string> = {
@@ -437,7 +455,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           slotDef.slot,
           `${variant.assetId}.${stateSuffix}`,
         );
-        if (!texture || texture === Texture.EMPTY) return;
+        if (!texture || texture === Texture.EMPTY) {
+          return;
+        }
 
         // Extract frame from spritesheet
         const columns = Math.max(1, Math.floor(texture.width / 64));
@@ -448,7 +468,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         const x = col * 64;
         const y = row * 64;
 
-        if (x + 64 > texture.width || y + 64 > texture.height) return;
+        if (x + 64 > texture.width || y + 64 > texture.height) {
+          return;
+        }
 
         const { Rectangle } = await import('pixi.js');
         const frameTexture = new Texture({
@@ -578,8 +600,12 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     const bodyIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'body');
     const headIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'head');
     const layers: ActiveLayerConfig[] = [];
-    if (bodyIdx >= 0) layers.push({ slotDefIndex: bodyIdx, variantIndex: 0 });
-    if (headIdx >= 0) layers.push({ slotDefIndex: headIdx, variantIndex: 0 });
+    if (bodyIdx >= 0) {
+      layers.push({ slotDefIndex: bodyIdx, variantIndex: 0 });
+    }
+    if (headIdx >= 0) {
+      layers.push({ slotDefIndex: headIdx, variantIndex: 0 });
+    }
     return layers.length > 0 ? layers : [{ slotDefIndex: 0, variantIndex: 0 }];
   }
 
@@ -606,7 +632,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   }
 
   private _pushStateToUrl(): void {
-    if (this._isApplyingUrlState) return;
+    if (this._isApplyingUrlState) {
+      return;
+    }
 
     if (this._pushUrlTimer !== undefined) {
       clearTimeout(this._pushUrlTimer);

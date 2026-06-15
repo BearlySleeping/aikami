@@ -157,7 +157,9 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
   async generate(): Promise<void> {
     const prompt = this.prompt;
-    if (!prompt.trim()) return;
+    if (!prompt.trim()) {
+      return;
+    }
 
     // Cancel previous
     const prevController = this._abortController;
@@ -199,8 +201,12 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
       // For non-streaming mode, the full output is now accumulated
     } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') return;
-      if (this.output.length > 0) return;
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
+      if (this.output.length > 0) {
+        return;
+      }
       this.output = `Error: ${(error as Error).message ?? 'Unknown error'}`;
     } finally {
       this.isGenerating = false;
@@ -222,7 +228,9 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   // ── Public: Schema tab — validate ─────────────────────────────────────
 
   async validateSchema(): Promise<void> {
-    if (!this.schemaDefinition.trim() || !this.schemaPrompt.trim()) return;
+    if (!this.schemaDefinition.trim() || !this.schemaPrompt.trim()) {
+      return;
+    }
 
     this.cancel();
     this.output = '';
@@ -258,7 +266,7 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
       });
 
       this.schemaResult = result;
-      this.output = '✅ Schema validation passed.\n\n' + JSON.stringify(result, null, 2);
+      this.output = `✅ Schema validation passed.\n\n${JSON.stringify(result, null, 2)}`;
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
         this.output += '\n⏹ Cancelled.';

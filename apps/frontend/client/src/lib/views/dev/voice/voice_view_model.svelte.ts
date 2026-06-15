@@ -85,9 +85,13 @@ class VoiceViewModel
 
   /** Word-level playback progress (0–100), derived from TTS word tracking. */
   get playbackProgress(): number {
-    if (!ttsService.isPlaying) return 0;
+    if (!ttsService.isPlaying) {
+      return 0;
+    }
     const total = this._words.length;
-    if (total === 0) return 0;
+    if (total === 0) {
+      return 0;
+    }
     return Math.min(100, Math.round(((ttsService.currentWordIndex + 1) / total) * 100));
   }
 
@@ -128,7 +132,9 @@ class VoiceViewModel
 
   async generateAndPlay(): Promise<void> {
     const trimmed = this.text.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      return;
+    }
 
     // Cancel any in-progress request
     this.cancel();
@@ -173,7 +179,9 @@ class VoiceViewModel
         await this._playBatchResponse(response, signal);
       }
     } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') return;
+      if ((error as Error).name === 'AbortError') {
+        return;
+      }
       this.error('generateAndPlay:failed', error);
     } finally {
       this.isSynthesizing = false;
@@ -199,7 +207,7 @@ class VoiceViewModel
    * that can be enqueued directly into the TTS pipeline for gapless playback.
    * Progress is tracked by chunk count vs estimated sentence count.
    */
-  private async _playStreamResponse(response: Response, signal: AbortSignal): Promise<void> {
+  private async _playStreamResponse(response: Response, _signal: AbortSignal): Promise<void> {
     const reader = response.body?.getReader();
     if (!reader) {
       this.error('_playStreamResponse: no body reader');
@@ -219,7 +227,9 @@ class VoiceViewModel
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         if (value && value.byteLength > 0) {
           // Slice words for this chunk to enable word-level progress tracking
@@ -264,7 +274,9 @@ class VoiceViewModel
     if (!reader) {
       // Fallback: read as arrayBuffer (no progress tracking possible)
       const buffer = await response.arrayBuffer();
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        return;
+      }
 
       this.synthesisProgress = 100;
       ttsService.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
@@ -279,7 +291,9 @@ class VoiceViewModel
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         if (value) {
           chunks.push(value);
@@ -305,7 +319,9 @@ class VoiceViewModel
       offset += chunk.byteLength;
     }
 
-    if (signal.aborted) return;
+    if (signal.aborted) {
+      return;
+    }
 
     ttsService.startStream({ messageId: `tts_${Date.now()}`, text: this.text });
     await ttsService.enqueueChunk({

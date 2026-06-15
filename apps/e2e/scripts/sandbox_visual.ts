@@ -45,10 +45,9 @@ if (!evalOnly) {
 
   // Use the same Playwright test infrastructure as lpc_smoke.
   // Run the client-visual project which matches sandbox_visual.spec.ts.
-  const result =
-    await $`bunx playwright test --project=client-visual --grep sandbox`.cwd(
-      E2E_DIR,
-    ).nothrow();
+  const result = await $`bunx playwright test --project=client-visual --grep sandbox`
+    .cwd(E2E_DIR)
+    .nothrow();
 
   if (result.exitCode !== 0) {
     console.log('⚠️  Playwright capture had failures.');
