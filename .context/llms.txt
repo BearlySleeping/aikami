@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-06-15
-> Files: 151 across 10 categories
+> Files: 152 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -142,6 +142,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-133 Flexible AI Provider Onboarding](contracts/C-133-flexible-provider-onboarding.md)
 - [Contract: C-134 Inline Provider Setup & Routing Fix](contracts/C-134-inline-provider-setup.md)
 - [Contract: C-135 Tilemap & Environment Parsing](contracts/C-135-tilemap-environment-parsing.md)
+- [Contract: C-136 Entity & Prop Spawner](contracts/C-136-entity-prop-spawner.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
