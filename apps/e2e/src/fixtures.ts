@@ -8,9 +8,9 @@
 // Domain isolation: authUser and guestUser use separate browser contexts
 // with distinct cookies/storage, preventing session bleed between tests.
 
-import { EMULATOR_PORTS } from './config';
 import { test as base, type Page } from '@playwright/test';
-import { GameMenuPage, ClientAuthPage, ClientChatPage, ClientNavigation } from './pom/index';
+import { EMULATOR_PORTS } from './config';
+import { ClientAuthPage, ClientChatPage, ClientNavigation, GameMenuPage } from './pom/index';
 
 // ── Configuration ───────────────────────────────────────────
 
