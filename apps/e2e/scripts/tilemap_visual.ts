@@ -12,8 +12,7 @@
 //
 // Does NOT require a dev server — self-contained HTML page.
 
-import { $ } from 'bun';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { evaluateScreenshot } from './shared/ai_eval';
@@ -26,7 +25,7 @@ const NIX_CHROMIUM =
 
 // ── Paths ────────────────────────────────────────────────
 
-const REPO_ROOT = resolve(import.meta.dirname, '../../..');
+const _REPO_ROOT = resolve(import.meta.dirname, '../../..');
 const E2E_DIR = resolve(import.meta.dirname, '..');
 const SCREENSHOT_DIR = join(E2E_DIR, 'test-results', 'tilemap-visual');
 const SCREENSHOT_FILE = 'tilemap-10x10.png';
@@ -65,16 +64,10 @@ const TEST_MAP = {
       width: 10,
       height: 10,
       data: [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 2, 2, 2, 2, 2, 2, 2, 2, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1,
+        2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2,
+        2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1,
       ],
       visible: true,
       type: 'tilelayer',
@@ -84,16 +77,10 @@ const TEST_MAP = {
       width: 10,
       height: 10,
       data: [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+        1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+        0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1,
       ],
       visible: true,
       type: 'tilelayer',
@@ -322,4 +309,6 @@ if (!captureOnly) {
 
 console.log('\n✅ Tilemap visual smoke complete.');
 console.log(`   Screenshot: ${SCREENSHOT_PATH}`);
-if (!captureOnly) console.log(`   Report:     ${REPORT_PATH}`);
+if (!captureOnly) {
+  console.log(`   Report:     ${REPORT_PATH}`);
+}

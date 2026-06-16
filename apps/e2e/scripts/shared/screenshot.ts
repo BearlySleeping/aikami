@@ -4,14 +4,13 @@
 // Handles Playwright canvas capture, image optimization via
 // ImageMagick, and base64 encoding for AI evaluation.
 
-import { readFileSync } from 'node:fs';
-import { mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Page } from 'playwright';
 
 // ── Path resolution ──────────────────────────────────────────
 
-const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
+const _REPO_ROOT = resolve(import.meta.dirname, '../../../..');
 const E2E_DIR = resolve(import.meta.dirname, '../..');
 
 /** Default output directory for visual test screenshots. */
@@ -71,15 +70,21 @@ export const waitForEngineReady = async (page: Page, timeout = 20_000): Promise<
   while (Date.now() < deadline && !ready) {
     ready = await page.evaluate(() => {
       const el = document.querySelector('[data-testid="game-ready"]');
-      if (el) return true;
+      if (el) {
+        return true;
+      }
       // Fallback: check engine running indicator text
       const labels = document.querySelectorAll('span');
       for (const label of labels) {
-        if (label.textContent?.includes('Engine Running')) return true;
+        if (label.textContent?.includes('Engine Running')) {
+          return true;
+        }
       }
       return false;
     });
-    if (!ready) await new Promise((r) => setTimeout(r, 500));
+    if (!ready) {
+      await new Promise((r) => setTimeout(r, 500));
+    }
   }
 };
 
