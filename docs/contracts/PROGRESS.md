@@ -40,6 +40,7 @@
 | C-136 | Entity & Prop Spawner | ✅ completed |
 | C-137 | Camera Follow & Viewport | ✅ completed |
 | C-138 | Map Transitions (Zoning) | ✅ completed |
+| C-139 | Isolated Dev Sandboxes & Map Wiring | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |

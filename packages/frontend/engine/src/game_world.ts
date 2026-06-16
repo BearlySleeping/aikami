@@ -542,6 +542,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _handleWorkerMessage(message: { type: string } & Record<string, unknown>): void {
     switch (message.type) {
+      case 'SYNC':
       case 'STATE_UPDATE': {
         this._handleStateUpdate(message);
         break;
@@ -621,6 +622,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       for (const gameEvent of events) {
         // Intercept APPEARANCE_CHANGED for composited sprite invalidation
         if (gameEvent.type === 'APPEARANCE_CHANGED') {
+          this.debug('appearance-changed', {
+            eid: gameEvent.eid,
+            layers: gameEvent.layerIds.length,
+          });
           const entry = this._renderEntries.get(gameEvent.eid);
           if (entry && this._recipeResolver) {
             entry.recipes = this._recipeResolver(gameEvent.layerIds);
@@ -1120,7 +1125,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // 5. Render the new tilemap background
     if (this._app && this._worldContainer) {
-      const result = renderTilemap({
+      const result = await renderTilemap({
         tilemap,
         renderer: this._app.renderer as Renderer,
       });
@@ -1182,7 +1187,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           return;
         }
 
-        if (message.type !== 'ENGINE_READY') {
+        if (message.type !== 'MAP_LOADED') {
           return;
         }
 
@@ -1396,6 +1401,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     });
 
     await Promise.all(loadPromises);
+
+    if (texturesLoaded) {
+      this.debug('lpc-loaded', { eid, layers: layerSprites.length });
+    }
 
     // After all loaded, sort by slot standard z-index?
     // Wait, the client handles z-index, but we don't have LPC_LAYER_Z_INDEX here.

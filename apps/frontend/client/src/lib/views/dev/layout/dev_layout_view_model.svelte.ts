@@ -68,6 +68,11 @@ export const NAV_ITEMS = [
     label: 'Save/Load',
     icon: 'M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4',
   },
+  {
+    route: '/dev/sandbox/map',
+    label: 'Map & Zones',
+    icon: 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7',
+  },
 ] as const;
 
 /** Navigation item for the dev console drawer. */
