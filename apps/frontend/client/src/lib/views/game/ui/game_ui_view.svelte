@@ -5,6 +5,7 @@
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
   import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
   import PauseMenuOverlay from './overlays/pause_menu_overlay.svelte';
+  import TransitionOverlay from './overlays/transition_overlay.svelte';
 
   type Props = {
     viewModel: GameUIViewModelInterface;
@@ -59,3 +60,6 @@
 {/if}
 
 <!-- COMBAT overlay is out of scope for C-125 and C-128. -->
+
+<!-- Map Transition Overlay (C-138) — black fade during zone transitions -->
+<TransitionOverlay {viewModel} />
