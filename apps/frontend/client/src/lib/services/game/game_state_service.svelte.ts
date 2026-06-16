@@ -5,7 +5,12 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { ActiveSessionData, WorldEvent, WorldLocation, WorldState } from '@aikami/types';
-import type { ActiveContextEntry, GameStateEvent, GameStateListener } from '$types/game.ts';
+import type {
+  ActiveContextEntry,
+  GameMode,
+  GameStateEvent,
+  GameStateListener,
+} from '$types/game.ts';
 
 export type GameStateServiceOptions = BaseFrontendClassOptions & {
   uid: string;
@@ -17,6 +22,7 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   readonly worldVariables: Record<string, unknown>;
   readonly isConnected: boolean;
   readonly activeContexts: readonly ActiveContextEntry[];
+  readonly currentMode: GameMode;
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -37,6 +43,7 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   createSession(characterIds: string[]): Promise<ActiveSessionData>;
   endSession(): Promise<void>;
   getActiveSession(): ActiveSessionData | undefined;
+  setMode(mode: GameMode): void;
 };
 
 export class GameStateService
@@ -47,6 +54,7 @@ export class GameStateService
   currentLocation = $state<WorldLocation | undefined>(undefined);
   activeSession = $state<ActiveSessionData | undefined>(undefined);
   activeContexts = $state<ActiveContextEntry[]>([]);
+  currentMode = $state<GameMode>('EXPLORE');
 
   get worldVariables(): Record<string, unknown> {
     return this.currentWorld?.variables ?? {};
@@ -277,6 +285,39 @@ export class GameStateService
 
   getActiveSession(): ActiveSessionData | undefined {
     return this.activeSession;
+  }
+
+  /**
+   * Sets the current game mode and broadcasts the change to the ECS worker
+   * via the EngineBridge.
+   *
+   * The worker uses this to gate movement (only EXPLORE allows player movement).
+   * The UI uses this to toggle overlay visibility (DIALOGUE → dialogue overlay).
+   */
+  setMode(mode: GameMode): void {
+    if (this.currentMode === mode) {
+      return;
+    }
+
+    this.currentMode = mode;
+
+    // Broadcast to the ECS worker via the EngineBridge so the movement
+    // system can gate player input.
+    void this._broadcastModeToEngine(mode);
+  }
+
+  /**
+   * Lazily imports the EngineBridge singleton and sends a SET_GAME_MODE
+   * command to the ECS worker.
+   */
+  private async _broadcastModeToEngine(mode: GameMode): Promise<void> {
+    try {
+      const { createEngineBridge } = await import('@aikami/frontend/engine');
+      const bridge = createEngineBridge();
+      bridge.send({ type: 'SET_GAME_MODE' as never, mode } as never);
+    } catch (error) {
+      this.debug('_broadcastModeToEngine:failed', { mode, error: String(error) });
+    }
   }
 }
 

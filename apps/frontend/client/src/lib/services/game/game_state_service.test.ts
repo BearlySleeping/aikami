@@ -76,4 +76,27 @@ describe('GameStateService', () => {
     expect(service.getActiveSession()?.isActive).toBe(false);
     expect(service.isConnected).toBe(false);
   });
+
+  // ── C-140: Game Mode System ──
+
+  test('should initialize currentMode as EXPLORE', () => {
+    expect(service.currentMode).toBe('EXPLORE');
+  });
+
+  test('setMode should change state', () => {
+    service.setMode('DIALOGUE');
+    expect(service.currentMode).toBe('DIALOGUE');
+
+    service.setMode('MENU');
+    expect(service.currentMode).toBe('MENU');
+
+    service.setMode('EXPLORE');
+    expect(service.currentMode).toBe('EXPLORE');
+  });
+
+  test('setMode should be a no-op when setting the same mode', () => {
+    expect(service.currentMode).toBe('EXPLORE');
+    service.setMode('EXPLORE');
+    expect(service.currentMode).toBe('EXPLORE');
+  });
 });

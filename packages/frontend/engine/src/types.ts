@@ -69,6 +69,17 @@ export type GameCommand =
       type: 'RESUME_GAME';
     }
   | {
+      /**
+       * Sets the global game mode state machine.
+       *
+       * EXPLORE — free movement, interaction allowed.
+       * DIALOGUE — locked into conversation, movement disabled.
+       * MENU — paused in overlay, all game input disabled.
+       */
+      type: 'SET_GAME_MODE';
+      mode: 'EXPLORE' | 'DIALOGUE' | 'MENU';
+    }
+  | {
       /** Slash command from the parser (e.g. /roll, /move). */
       type: 'EXECUTE_COMMAND';
       command: string;

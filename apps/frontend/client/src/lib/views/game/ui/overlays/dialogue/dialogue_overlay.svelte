@@ -1,5 +1,6 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte
+  import { gameStateService } from '$services';
   import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
 
   type Props = {
@@ -10,6 +11,16 @@
 
   /** Reference to the scrollable message container for auto-scroll. */
   let messageContainer = $state<HTMLDivElement>();
+
+  /** Reference to the textarea for mode-aware autofocus. */
+  let inputElement = $state<HTMLTextAreaElement>();
+
+  /** Mode-aware autofocus: focus the textarea when DIALOGUE mode is active. */
+  $effect(() => {
+    if (gameStateService.currentMode === 'DIALOGUE' && inputElement) {
+      inputElement.focus();
+    }
+  });
 
   /** Auto-scroll to the bottom when new messages arrive or AI is streaming. */
   $effect(() => {
@@ -85,6 +96,7 @@
     <div class="border-t border-base-300 px-4 py-3">
       <div class="flex items-end gap-2">
         <textarea
+          bind:this={inputElement}
           class="textarea textarea-bordered textarea-sm flex-1 resize-none text-sm"
           rows="2"
           placeholder="Type your message..."

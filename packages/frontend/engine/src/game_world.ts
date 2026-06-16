@@ -775,6 +775,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         },
       });
     });
+
+    // Forward SET_GAME_MODE commands (C-140)
+    bridgeWithCommands.onCommand('SET_GAME_MODE', (cmd: unknown) => {
+      const modeCmd = cmd as { mode: 'EXPLORE' | 'DIALOGUE' | 'MENU' };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'SET_GAME_MODE',
+          mode: modeCmd.mode,
+        },
+      });
+    });
   }
 
   /**

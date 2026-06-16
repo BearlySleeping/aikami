@@ -6,7 +6,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { GameSaveService, type GameSaveServiceInterface, routerService } from '$services';
+import {
+  GameSaveService,
+  type GameSaveServiceInterface,
+  gameStateService,
+  routerService,
+} from '$services';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -135,6 +140,7 @@ class GameUIViewModel
       bridge.on('NPC_DIALOG_START', (event) => {
         if (this.activeOverlay === 'NONE') {
           this.activeOverlay = 'DIALOGUE';
+          gameStateService.setMode('DIALOGUE');
           this.dialogueNpc = {
             npcId: event.npcId,
             npcName: event.npcName,
@@ -189,6 +195,7 @@ class GameUIViewModel
       this.resumeGame();
     } else if (this.activeOverlay === 'NONE') {
       this.activeOverlay = 'PAUSE_MENU';
+      gameStateService.setMode('MENU');
       this._gameViewModel.pauseEngine();
     }
   }
@@ -196,6 +203,7 @@ class GameUIViewModel
   /** @inheritdoc */
   resumeGame(): void {
     this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
   }
 
@@ -218,6 +226,7 @@ class GameUIViewModel
   endDialogue(): void {
     this.activeOverlay = 'NONE';
     this.dialogueNpc = undefined;
+    gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
   }
 

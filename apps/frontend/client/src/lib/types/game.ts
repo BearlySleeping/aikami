@@ -31,3 +31,12 @@ export type ActiveContextEntry = {
 export type GameStateOptions = {
   uid: string;
 };
+
+/**
+ * Centralized game mode state machine.
+ *
+ * EXPLORE — free movement, interaction allowed
+ * DIALOGUE — locked into conversation, movement disabled
+ * MENU — paused in overlay, all game input disabled
+ */
+export type GameMode = 'EXPLORE' | 'DIALOGUE' | 'MENU';
