@@ -8,15 +8,14 @@
 // Relies on the existing tmux session infrastructure (scripts/src/lib/tmux/session.ts)
 // for reliable direnv-aware service startup, port polling, and session teardown.
 
-import { $ } from 'bun';
 import { resolve } from 'node:path';
+import { $ } from 'bun';
 import {
-  type DevService,
-  type SessionConfig,
   buildSessionName,
+  type DevService,
   expandServices,
   isPortReady,
-  listServices,
+  type SessionConfig,
   startServices,
   stopServices,
 } from '../../../scripts/src/lib/tmux/session.ts';

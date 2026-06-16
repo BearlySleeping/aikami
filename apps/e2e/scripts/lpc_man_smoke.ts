@@ -1,6 +1,7 @@
 // Quick single-screenshot smoke test for the LPC character URL.
-import { $ } from 'bun';
+
 import { resolve } from 'node:path';
+import { $ } from 'bun';
 
 const E2E_DIR = resolve(import.meta.dirname, '..');
 
