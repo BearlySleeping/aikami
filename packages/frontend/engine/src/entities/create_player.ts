@@ -3,6 +3,7 @@
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
+import { CameraFocus } from '../components/camera_focus.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
 import { Velocity } from '../components/velocity.ts';
@@ -49,6 +50,9 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
       displayObject: undefined,
     }),
   );
+
+  // Camera system tracks this entity for smooth viewport following
+  addComponent(world, entityId, CameraFocus);
 
   // Set default Appearance with all 6 engine slots:
   //   body, hair, torso, legs, feet, head

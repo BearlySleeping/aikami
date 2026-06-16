@@ -10,7 +10,13 @@ export {
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
-
+export {
+  getCameraPosition,
+  resetCameraTracking,
+  setMapBounds,
+  setScreenSize,
+  updateCameraSystem,
+} from './systems/camera_system.ts';
 export {
   addItemStack,
   deductItem,
@@ -38,6 +44,7 @@ export {
   getAppearanceLayers,
   registerAppearanceObservers,
 } from './components/appearance.ts';
+export { CameraFocus, registerCameraFocusObservers } from './components/camera_focus.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export type { InventoryData, WalletData } from './components/inventory.ts';

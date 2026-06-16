@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Audit: 2026-06-15)
+## Status Summary (Audit: 2026-06-16)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -38,6 +38,7 @@
 | C-134 | Inline Provider Setup & Routing Fix | ✅ completed |
 | C-135 | Tilemap & Environment Parsing | ✅ completed |
 | C-136 | Entity & Prop Spawner | ✅ completed |
+| C-137 | Camera Follow & Viewport | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -786,3 +787,39 @@
 - Props are static sprites with no interaction logic. A future prop interaction system would need to query entities by type or component set.
 - The spawner is not yet wired into the map loading pipeline — `ecs_worker.ts` would need to call `spawnEntities()` when a map is loaded and object layers exist. This integration is a separate step.
 - Asset catalog uses hardcoded path strings (`/lpc/props/{assetId}.png`). A future dynamic asset pipeline could replace this with a PixiJS Assets-based resolver pattern.
+
+---
+
+### C-137: Camera Follow & Viewport
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/camera_focus.ts` — Tag component (`CameraFocus`) marking the entity the camera tracks. Registers observers on the bitECS world so `query([CameraFocus, Position])` finds the target entity.
+- `packages/frontend/engine/src/systems/camera_system.ts` — Camera system running in the worker's tick loop. Finds the CameraFocus-tagged entity, lerps toward it each frame (0.08 factor, dt-scaled), and clamps to map boundaries. Exports `setMapBounds`, `setScreenSize`, `getCameraPosition`, `resetCameraTracking`.
+- `packages/frontend/engine/src/systems/camera_system.test.ts` — 15 unit tests: lerp snap, multi-tick convergence, dt scaling, no-target resilience, zero-delta, edge clamping (left/top + right/bottom), small-map centering, no-bounds (free camera), zero bounds, screen resize, multiple CameraFocus entities, reset, high-dt.
+- `apps/e2e/tests/game/camera_visual.spec.ts` — 3 Playwright visual tests: initial viewport screenshot, camera follows after keyboard movement (D key), camera clamps at world origin (A+W keys held).
+
+**Files modified**:
+- `packages/frontend/engine/src/entities/create_player.ts` — Adds `CameraFocus` component to the player entity during creation.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Imports and registers `CameraFocus` observers; calls `updateCameraSystem(world, deltaMs)` in tick loop after movement; initializes camera bounds from `canvasWidth`/`canvasHeight` + collision grid; handles `SET_MAP_BOUNDS` and `SET_SCREEN_SIZE` messages; includes `cameraX`/`cameraY` in STATE_UPDATE messages; re-attaches CameraFocus to player entity in LOAD_GAME handler.
+- `packages/frontend/engine/src/game_world.ts` — Stores `_cameraX`/`_cameraY` from worker STATE_UPDATE messages; applies camera transform after entity positions in render loop (replaces old per-player-entity centering); `resize()` now also posts `SET_SCREEN_SIZE` to worker.
+- `packages/frontend/engine/src/index.ts` — Exports `CameraFocus`, `registerCameraFocusObservers`, `updateCameraSystem`, `setMapBounds`, `setScreenSize`, `getCameraPosition`, `resetCameraTracking`.
+
+**Deviations**:
+1. **Camera position transmitted via STATE_UPDATE message** (not shared buffer): The worker sends `cameraX`/`cameraY` as message fields alongside the entity buffer. This avoids modifying the buffer layout (COMPONENT_STRIDE) and keeps camera state separate from entity state. The main thread stores camera coords in `_cameraX`/`_cameraY` fields.
+2. **Map bounds derived from collision grid**: On INITIALIZE_ENGINE, if a `collisionGrid` is provided, map pixel dimensions are computed as `width * tileSize` and `height * tileSize`. A separate `SET_MAP_BOUNDS` message allows explicit map dimension override.
+3. **No separate component for MapData**: The contract mentions a MapData component. Instead, map dimensions are stored as module-level state in `camera_system.ts` — simpler and avoids creating an entity just for map metadata.
+
+**Design decisions**:
+1. **CameraFocus is a pure tag component**: No SoA arrays — the component serves only as a query marker. Observers are registered solely so bitECS tracks which entities have the component for `query()` resolution.
+2. **Lerp factor 0.08**: Provides smooth following (~0.5s to cover half the remaining distance at 60fps). Delta-time scaling (`dt / REFERENCE_FRAME_MS`) makes tracking speed consistent across frame rate fluctuations.
+3. **Clamping on first frame**: The initial snap (first tick) also applies clamping — prevents the camera from briefly showing void when the player spawns at a boundary.
+4. **World scale (4×) factored into clamp math**: `halfScreenWorld = screenSize / (2 * WORLD_SCALE)` ensures clamping is correct with the scaled world container.
+5. **Camera transform applied once per frame after all entities**: In `_updateRenderFromBuffer`, the `_worldContainer.x/y` is set outside the entity loop using the stored camera position — more efficient than per-entity checks.
+
+**Known limitations**:
+- Camera lerp is exponential (not configurable per-scene or per-entity). A future contract could add lerp factor overrides via component data.
+- No zoom support — the camera only pans. Zoom would require additional scale adjustments to the world container and clamp math.
+- Map bounds are global — multi-map/scene transitions would require calling `setMapBounds()` each time.
+- Visual tests use Playwright visual snapshots (`.png` comparisons) — they require the game dev server running. New goldens must be generated first time via `--update-snapshots`.

@@ -76,6 +76,7 @@ P2 (Polish — after P1):
 | C-134 | [Inline Provider Setup & Routing Fix](C-134-inline-provider-setup.md) ✅ | Inline OpenRouter API key input on boot screen, routing gate bypass for /settings | C-133 |
 | C-135 | [Tilemap & Environment Parsing](C-135-tilemap-environment-parsing.md) ✅ | Tiled JSON map loader, PixiJS tilemap rendering, collision grid initialization for physics | — |
 | C-136 | [Entity & Prop Spawner](C-136-entity-prop-spawner.md) ✅ | Objectgroup layer parsing, SpawnPoint extraction, NPC/prop entity factory with LPC asset catalog | C-135 |
+| C-137 | [Camera Follow & Viewport](C-137-camera-follow-viewport.md) ✅ | 2D camera with lerp tracking, map boundary clamping, window resize handling | — |
 
 ## Contract Format
 
