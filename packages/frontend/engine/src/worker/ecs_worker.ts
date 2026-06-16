@@ -195,6 +195,7 @@ const handleSpawnNPC = (npcData: NPCSpawnData): void => {
       personaId: npcData.personaId || 'default',
       interactionRadius: npcData.interactionRadius,
       relationshipValue: npcData.relationshipValue || 0,
+      dialog: npcData.dialog || '',
     },
   });
 };
@@ -846,7 +847,39 @@ self.onmessage = (event: MessageEvent): void => {
           // 8. Notify main thread about all spawned NPC/prop entities
           for (const result of results) {
             const tint = result.type === 'npc' ? 0xffcc00 : 0xffffff;
-            postMessage({ type: 'ENTITY_CREATED', eid: result.eid, tint });
+
+            // Read NPCDialog data for NPC entities so the main thread
+            // can track them in _npcMeta for interaction key (E/Enter).
+            let npcData: Record<string, unknown> | undefined;
+            if (result.type === 'npc') {
+              const dialogComp = getComponent(world, result.eid, NPCDialog) as
+                | {
+                    npcId: string;
+                    npcName: string;
+                    dialog: string;
+                    interactionRadius: number;
+                    personaId?: string;
+                  }
+                | undefined;
+              if (dialogComp) {
+                npcData = {
+                  npcId: dialogComp.npcId || `npc_${result.eid}`,
+                  npcName: dialogComp.npcName || 'Unknown',
+                  personaId:
+                    (result.spawnPoint.properties?.personaId as string | undefined) || 'default',
+                  interactionRadius: dialogComp.interactionRadius || 64,
+                  relationshipValue: 0,
+                  dialog: dialogComp.dialog || '',
+                };
+              }
+            }
+
+            postMessage({
+              type: 'ENTITY_CREATED',
+              eid: result.eid,
+              tint,
+              ...(npcData ? { npcData } : {}),
+            });
 
             // Emit APPEARANCE_CHANGED for entities with Appearance component
             // so the main thread loads LPC textures immediately instead of
