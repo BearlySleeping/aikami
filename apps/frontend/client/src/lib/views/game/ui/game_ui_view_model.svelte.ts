@@ -83,6 +83,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
    * under the 'manual-1' slot. Shows a temporary feedback message.
    */
   saveGame(): Promise<void>;
+
+  /** Whether a map transition is currently in progress (fade overlay visible). */
+  readonly isTransitioning: boolean;
 };
 
 class GameUIViewModel
@@ -96,6 +99,8 @@ class GameUIViewModel
   isSaving = $state<boolean>(false);
 
   saveMessage = $state<string | undefined>(undefined);
+
+  isTransitioning = $state<boolean>(false);
 
   private readonly _gameViewModel: GameViewModelInterface;
 
@@ -143,6 +148,16 @@ class GameUIViewModel
         if (this.activeOverlay === 'DIALOGUE') {
           this.endDialogue();
         }
+      });
+
+      // Listen for ZONE_TRIGGERED events to show the transition overlay
+      bridge.on('ZONE_TRIGGERED', () => {
+        this.isTransitioning = true;
+      });
+
+      // Listen for GAME_READY to hide the transition overlay after load completes
+      bridge.on('GAME_READY', () => {
+        this.isTransitioning = false;
       });
     } catch (error) {
       this.debug('_listenForDialogueEvents:failed', error);

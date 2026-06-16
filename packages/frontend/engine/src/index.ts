@@ -61,6 +61,8 @@ export type { PositionData } from './components/position.ts';
 export { Position, registerPositionObservers } from './components/position.ts';
 export type { SpriteData } from './components/sprite.ts';
 export { registerSpriteObservers, Sprite } from './components/sprite.ts';
+export type { TransitionData } from './components/transition.ts';
+export { registerTransitionObservers, Transition } from './components/transition.ts';
 export type { TurnOrderData } from './components/turn_order.ts';
 export { registerTurnOrderObservers, TurnOrder } from './components/turn_order.ts';
 export type { VelocityData } from './components/velocity.ts';
@@ -102,11 +104,13 @@ export type {
   TilemapData,
   TilemapLayer,
   TilemapTileset,
+  TransitionZone,
 } from './assets/map_loader.ts';
 export {
   clearMapCache,
   extractCollisionGrid,
   extractSpawnPoints,
+  extractTransitionZones,
   loadTilemap,
 } from './assets/map_loader.ts';
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
@@ -129,8 +133,12 @@ export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export { isWalkable, resetCollisionGrid, setCollisionGrid } from './systems/collision_system.ts';
-export type { SpawnEntitiesOptions, SpawnResult } from './systems/entity_spawner.ts';
-export { spawnEntities } from './systems/entity_spawner.ts';
+export type {
+  SpawnEntitiesOptions,
+  SpawnResult,
+  SpawnTransitionOptions,
+} from './systems/entity_spawner.ts';
+export { spawnEntities, spawnTransitionEntities } from './systems/entity_spawner.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   animateEntitySystem,
@@ -150,6 +158,7 @@ export {
 } from './systems/render_system.ts';
 export type { TilemapRenderOptions, TilemapRenderResult } from './systems/tilemap_render_system.ts';
 export { renderTilemap } from './systems/tilemap_render_system.ts';
+export { updateZoningSystem } from './systems/zoning_system.ts';
 
 // Types (plain serializable — safe for UI consumption)
 export type {

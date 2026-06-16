@@ -178,6 +178,23 @@ export type GameEvent =
       type: 'COMBAT_ENDED';
       /** `true` if the player's party won, `false` if they lost. */
       victory: boolean;
+    }
+  | {
+      /**
+       * Emitted when the player steps into a map transition zone.
+       *
+       * The UI should start a fade-out transition while the engine loads
+       * the new map. Movement is locked until the transition completes.
+       *
+       * Contract: C-138 Map Transitions
+       */
+      type: 'ZONE_TRIGGERED';
+      /** Target map filename or ID to load. */
+      targetMap: string;
+      /** Target X pixel coordinate for the player on the new map. */
+      targetX: number;
+      /** Target Y pixel coordinate for the player on the new map. */
+      targetY: number;
     };
 
 // ---------------------------------------------------------------------------

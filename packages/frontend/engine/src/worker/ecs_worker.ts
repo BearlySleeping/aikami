@@ -17,6 +17,7 @@ import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerSpriteObservers } from '../components/sprite.ts';
+import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
@@ -36,6 +37,7 @@ import {
 import { type CollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
+import { spawnEntities, spawnTransitionEntities } from '../systems/entity_spawner.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
 import {
@@ -43,6 +45,7 @@ import {
   LpcBatchManager,
   syncAppearanceSystem,
 } from '../systems/render_worker.ts';
+import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
 // ---------------------------------------------------------------------------
@@ -295,6 +298,7 @@ const initializeEngine = (
   registerCombatStatsObservers(world);
   registerTurnOrderObservers(world);
   registerCameraFocusObservers(world);
+  registerTransitionObservers(world);
 
   // 5. Create headless LpcBatchManager for slot tracking + fingerprint eval
   //    No createBuffer factory → operates without GPU Buffers in the worker.
@@ -386,6 +390,7 @@ const tickLoop = (): void => {
   updateMovement(world, deltaMs);
   updateCameraSystem(world, deltaMs);
   updateDialogTriggers(world, playerEntityId, workerBridge);
+  updateZoningSystem(world, playerEntityId, workerBridge);
 
   if (spatialGrid) {
     updateContextSystem({
@@ -762,6 +767,81 @@ self.onmessage = (event: MessageEvent): void => {
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Load game failed: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
+        break;
+      }
+
+      case 'LOAD_MAP': {
+        if (!world) {
+          postMessage({
+            type: 'ENGINE_ERROR',
+            message: 'Cannot load map: world not initialized',
+          });
+          break;
+        }
+
+        try {
+          // Pause the tick loop during map teardown + recreate
+          const wasRunning = running;
+          running = false;
+
+          const {
+            spawnPoints,
+            transitionZones,
+            collisionGrid,
+            mapPixelWidth,
+            mapPixelHeight,
+            targetX,
+            targetY,
+          } = message;
+
+          // 1. Clear non-player entities (NPCs, props, transitions).
+          //    Preserve the player entity and any persistent entities.
+          const allEids = getAllEntities(world);
+          for (const eid of allEids) {
+            if (eid !== playerEntityId) {
+              removeEntity(world, eid);
+            }
+          }
+
+          // 2. Update player position to the target spawn coordinates
+          if (playerEntityId > 0) {
+            addComponent(world, playerEntityId, set(Position, { x: targetX, y: targetY }));
+          }
+
+          // 3. Spawn new NPC and prop entities from the new map
+          const results = spawnEntities({ world, spawnPoints });
+
+          // 4. Spawn transition zone trigger entities
+          spawnTransitionEntities({ world, transitionZones });
+
+          // 5. Set the new collision grid
+          setCollisionGrid(collisionGrid as CollisionGrid);
+
+          // 6. Set camera map bounds and reset tracking for snap
+          setMapBounds({ width: mapPixelWidth as number, height: mapPixelHeight as number });
+          resetCameraTracking();
+
+          // 7. Notify main thread about the player entity (position updated)
+          postMessage({ type: 'ENTITY_CREATED', eid: playerEntityId, tint: 0x00ff88 });
+
+          // 8. Notify main thread about all spawned NPC/prop entities
+          for (const result of results) {
+            const tint = result.type === 'npc' ? 0xffcc00 : 0xffffff;
+            postMessage({ type: 'ENTITY_CREATED', eid: result.eid, tint });
+          }
+
+          // 9. Restore the tick loop
+          running = wasRunning;
+
+          queueMicrotask(() => {
+            postMessage({ type: 'ENGINE_READY' });
+          });
+        } catch (err) {
+          postMessage({
+            type: 'ENGINE_ERROR',
+            message: `Load map failed: ${err instanceof Error ? err.message : String(err)}`,
           });
         }
         break;

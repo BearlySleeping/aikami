@@ -1,6 +1,12 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application } from 'pixi.js';
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, type Renderer, Sprite, Texture } from 'pixi.js';
+import {
+  extractCollisionGrid,
+  extractSpawnPoints,
+  extractTransitionZones,
+  loadTilemap,
+} from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import {
@@ -18,6 +24,7 @@ import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
+import { renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -523,6 +530,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // Register snapshot/restore handlers on the bridge
     this._setupSnapshotHandlers();
+
+    // Listen for ZONE_TRIGGERED events from the worker to trigger map transitions
+    this._bridge.on('ZONE_TRIGGERED', (event) => {
+      void this.loadMap(event.targetMap, event.targetX, event.targetY);
+    });
   }
 
   /**
@@ -1047,6 +1059,148 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       this._worker.addEventListener('message', handler);
       this._worker.postMessage({ type: 'LOAD_GAME', payload });
+    });
+  }
+
+  /**
+   * Loads a new map at the given URL and places the player at the target
+   * coordinates. Orchestrates the full map transition lifecycle:
+   *
+   * 1. Pauses the engine (stop tick loop + lock input).
+   * 2. Clears all existing render entries and tilemap background.
+   * 3. Loads and parses the new Tiled JSON tilemap.
+   * 4. Extracts collision grid, spawn points, and transition zones.
+   * 5. Renders the new tilemap into a RenderTexture-backed Container.
+   * 6. Posts a LOAD_MAP message to the worker with all map data.
+   * 7. Worker clears non-player entities, updates player position,
+   *    spawns new NPCs/props/transitions, sets collision + camera bounds.
+   * 8. Resumes the engine and unlocks input when the worker finishes.
+   *
+   * Called from the {@link EngineBridge} ZONE_TRIGGERED listener.
+   *
+   * @param mapUrl - URL to the new Tiled JSON tilemap.
+   * @param targetX - X pixel coordinate for the player on the new map.
+   * @param targetY - Y pixel coordinate for the player on the new map.
+   * @throws If the worker is not running or the map fails to load.
+   *
+   * Contract: C-138 Map Transitions
+   */
+  async loadMap(mapUrl: string, targetX: number, targetY: number): Promise<void> {
+    this.debug('loadMap', { mapUrl, targetX, targetY });
+
+    // 1. Pause the engine
+    this._running = false;
+    this.setInputLocked(true);
+
+    // 2. Clear all existing render entries (old map display objects)
+    for (const entry of this._renderEntries.values()) {
+      entry.displayObject.destroy({ children: true });
+    }
+    this._renderEntries.clear();
+    this._npcMeta.clear();
+    this._playerEntityId = 0;
+
+    // 3. Remove old tilemap from the world container
+    if (this._worldContainer) {
+      const oldTilemap = this._worldContainer.getChildByLabel('tilemap-background');
+      if (oldTilemap) {
+        this._worldContainer.removeChild(oldTilemap);
+        oldTilemap.destroy({ children: true });
+      }
+    }
+
+    // 4. Load and parse the new tilemap
+    const tilemap = await loadTilemap({ url: mapUrl });
+    const collisionGridData = extractCollisionGrid(tilemap);
+    const spawnPoints = extractSpawnPoints(tilemap);
+    const transitionZones = extractTransitionZones(tilemap);
+
+    const mapPixelWidth = tilemap.width * tilemap.tilewidth;
+    const mapPixelHeight = tilemap.height * tilemap.tileheight;
+
+    // 5. Render the new tilemap background
+    if (this._app && this._worldContainer) {
+      const result = renderTilemap({
+        tilemap,
+        renderer: this._app.renderer as Renderer,
+      });
+      // Place at z-index 0 — behind all entity sprites
+      this._worldContainer.addChildAt(result.container, 0);
+      this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
+    }
+
+    // 6. Post LOAD_MAP to worker and wait for completion
+    await this._postLoadMap({
+      spawnPoints,
+      transitionZones,
+      collisionGrid: collisionGridData
+        ? {
+            width: tilemap.width,
+            height: tilemap.height,
+            tileSize: tilemap.tilewidth,
+            grid: collisionGridData,
+          }
+        : undefined,
+      mapPixelWidth,
+      mapPixelHeight,
+      targetX,
+      targetY,
+    });
+
+    // 7. Resume the engine
+    this._running = true;
+    this.setInputLocked(false);
+
+    this.debug('loadMap:complete');
+  }
+
+  /**
+   * Posts a LOAD_MAP message to the worker and returns a promise that
+   * resolves when the worker responds with ENGINE_READY.
+   */
+  private _postLoadMap(options: {
+    spawnPoints: import('./assets/map_loader.ts').SpawnPoint[];
+    transitionZones: import('./assets/map_loader.ts').TransitionZone[];
+    collisionGrid: CollisionGrid | undefined;
+    mapPixelWidth: number;
+    mapPixelHeight: number;
+    targetX: number;
+    targetY: number;
+  }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this._worker) {
+        reject(new Error('Worker not running — cannot load map'));
+        return;
+      }
+
+      const handler = (event: MessageEvent): void => {
+        const message = event.data;
+
+        if (message.type === 'ENGINE_ERROR') {
+          this._worker?.removeEventListener('message', handler);
+          reject(new Error(message.message as string));
+          return;
+        }
+
+        if (message.type !== 'ENGINE_READY') {
+          return;
+        }
+
+        this._worker?.removeEventListener('message', handler);
+        resolve();
+      };
+
+      this._worker.addEventListener('message', handler);
+      this._worker.postMessage({
+        type: 'LOAD_MAP',
+        spawnPoints: options.spawnPoints,
+        transitionZones: options.transitionZones,
+        collisionGrid: options.collisionGrid,
+        mapPixelWidth: options.mapPixelWidth,
+        mapPixelHeight: options.mapPixelHeight,
+        targetX: options.targetX,
+        targetY: options.targetY,
+      });
     });
   }
 

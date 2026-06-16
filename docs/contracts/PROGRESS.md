@@ -39,6 +39,7 @@
 | C-135 | Tilemap & Environment Parsing | ✅ completed |
 | C-136 | Entity & Prop Spawner | ✅ completed |
 | C-137 | Camera Follow & Viewport | ✅ completed |
+| C-138 | Map Transitions (Zoning) | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -823,3 +824,44 @@
 - No zoom support — the camera only pans. Zoom would require additional scale adjustments to the world container and clamp math.
 - Map bounds are global — multi-map/scene transitions would require calling `setMapBounds()` each time.
 - Visual tests use Playwright visual snapshots (`.png` comparisons) — they require the game dev server running. New goldens must be generated first time via `--update-snapshots`.
+
+---
+
+### C-138: Map Transitions (Zoning)
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/transition.ts` — SoA component (`Transition`) storing targetMap, targetX, targetY, width, height, triggered fields. Registers onSet/onGet observers.
+- `packages/frontend/engine/src/systems/zoning_system.ts` — ECS system running each tick in the worker. Queries entities with Position + Transition, checks AABB overlap with the player's Position, and emits ZONE_TRIGGERED bridge event on first overlap (one-shot lock via `triggered` flag).
+- `packages/frontend/engine/src/systems/zoning_system.test.ts` — 9 unit tests: overlap detection (emits ZONE_TRIGGERED, no event outside zone, one-shot lock), boundary conditions (no player, no Position, no zones, edge exact), multiple zones (only overlapping triggers, adjacent zones).
+- `apps/frontend/client/src/lib/views/game/ui/overlays/transition_overlay.svelte` — Full-screen black fade overlay. Always in DOM, toggles between `opacity-0` (transparent, `pointer-events-none`) and `opacity-100` (opaque, `pointer-events-auto`) with `transition-opacity duration-300` CSS animation.
+- `apps/e2e/tests/game/map_transitions.spec.ts` — 3 Playwright E2E tests: game page loads without errors, transition overlay exists in DOM with initial opacity-0, extractTransitionZones correctly parses Tiled transition objects (targetMap, targetX, targetY, position, dimensions).
+
+**Files modified**:
+- `packages/frontend/engine/src/assets/map_loader.ts` — Added `TransitionZone` type (id, x, y, width, height, targetMap, targetX, targetY). Added `extractTransitionZones()` function parsing objects with `type === 'transition'` from objectgroup layers. Added `_parseTransitionZone()` internal helper.
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — Added `SpawnTransitionOptions` type and `spawnTransitionEntities()` function. Creates invisible trigger entities with Position (center of zone rectangle) and Transition component (target map data).
+- `packages/frontend/engine/src/types.ts` — Added `ZONE_TRIGGERED` GameEvent with `targetMap`, `targetX`, `targetY` fields.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Registered `Transition` observers; added `updateZoningSystem(world, playerEntityId, workerBridge)` to tick loop after dialog triggers; added `LOAD_MAP` message handler: pauses tick loop, clears non-player entities, updates player position to target coordinates, spawns NPCs/props/transitions from new map data, sets collision grid + camera bounds, resets camera tracking, posts ENTITY_CREATED for all entities, resumes tick loop.
+- `packages/frontend/engine/src/game_world.ts` — Added `loadMap(mapUrl, targetX, targetY)` orchestrator method: pauses engine, clears render entries + old tilemap, loads new tilemap via `loadTilemap()`, extracts collision grid + spawn points + transition zones, renders new tilemap background, posts LOAD_MAP to worker, waits for ENGINE_READY, resumes engine. Added `_postLoadMap()` promise-based helper. Registered ZONE_TRIGGERED bridge listener in `initialize()`. Imported `Renderer`, `loadTilemap`, `extractCollisionGrid`, `extractSpawnPoints`, `extractTransitionZones`, `renderTilemap`.
+- `packages/frontend/engine/src/index.ts` — Exported `TransitionZone` type, `extractTransitionZones` function, `Transition` component + `TransitionData` type + `registerTransitionObservers`, `SpawnTransitionOptions` type + `spawnTransitionEntities` function, `updateZoningSystem` function.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `isTransitioning: boolean` field and interface property. Listens for `ZONE_TRIGGERED` (sets `isTransitioning = true`) and `GAME_READY` (sets `isTransitioning = false`) via EngineBridge.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Imports and renders `TransitionOverlay` at bottom of template (always mounted, opacity toggled by state).
+
+**Deviations**:
+1. **Transition zones use center-based Position**: In the entity spawner, transition entities are positioned at the center of the Tiled object rectangle (`x + width/2`, `y + height/2`). The zoning system treats the entity's Position as the center and uses half-width/half-height for AABB overlap. This simplifies collision math compared to using top-left corner coordinates.
+2. **Spatial grid clear via repopulation**: The `SpatialHashGrid` has no explicit `clear()` method. After clearing non-player entities and spawning new ones, the next tick's `populateSpatialGrid()` call rebuilds the hash from scratch — no explicit clear needed.
+3. **GAME_READY reused for map transition completion**: The worker emits `ENGINE_READY` (→ bridge `GAME_READY`) after LOAD_MAP completes. The UI listens for GAME_READY to dismiss the transition overlay. This overloads the initial-engine-ready signal, but since `isTransitioning` defaults to `false`, the initial GAME_READY is a no-op.
+4. **E2E tests use direct function import** (not full engine integration): The `extractTransitionZones` parsing test uses `page.evaluate()` to import the function directly, rather than requiring a running game engine with transition zones. Full integration testing of zone → loadMap → new map requires tilemap rendering infrastructure not yet wired in the game flow.
+
+**Design decisions**:
+1. **One-shot trigger lock via `triggered` flag**: The `Transition.triggered[eid]` boolean is set to `true` on the first overlap and never reset. This prevents double-triggering even if the player remains in the zone across multiple ticks. A full round-trip (map transition) clears all entities, so stale triggered flags don't persist.
+2. **`loadMap` is async with Promise**: The load-then-post pattern mirrors `restoreWorld()` — clears old state synchronously, posts to worker, awaits ENGINE_READY via a temporary `addEventListener`. This keeps the GameWorld API simple: `await gameWorld.loadMap(url, x, y)`.
+3. **Tilemap rendered BEFORE worker gets data**: The main thread loads and parses the tilemap, extracts all data, renders the background, THEN posts LOAD_MAP to the worker. The worker spawns entities which trigger ENTITY_CREATED → display object creation. This ordering ensures the tilemap background is already in the world container when entity sprites arrive.
+4. **Transition overlay always in DOM**: The Svelte component renders a permanent `<div>` and toggles CSS classes (opacity-0/100, pointer-events-none/auto). This allows CSS transitions to animate in both directions — `{#if}` would remove the element from DOM before the fade-out animation plays.
+
+**Known limitations**:
+- No map URL resolution — `loadMap` receives a raw URL string. A future contract could add a manifest/map registry for proper map ID → URL resolution.
+- Collision grid is sent as a complete boolean array (not incremental). For large maps this could be a performance concern in the postMessage serialization.
+- Transition zones are not visible in-game (no debug rendering). A future contract could add a dev-mode overlay showing zone boundaries.
+- E2E tests do not exercise the full map transition pipeline (zone → loadMap → new map). Full integration requires wiring tilemap loading into the default game initialization flow.

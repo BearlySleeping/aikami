@@ -3,16 +3,17 @@
 // Entity Spawner — digests SpawnPoint arrays from Tiled object
 // layers and creates NPC and prop entities in the ECS world.
 //
-// Contract C-136 Task 3
+// Contract C-136 Task 3, C-138 Task 1
 
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { resolveNpcTexture, resolvePropTexture } from '../assets/lpc_asset_catalog.ts';
-import type { SpawnPoint } from '../assets/map_loader.ts';
+import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
+import { Transition } from '../components/transition.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,6 +91,60 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
   }
 
   return results;
+};
+
+/**
+ * Options for spawning transition zone entities.
+ */
+export type SpawnTransitionOptions = {
+  /** The bitECS world to create entities in. */
+  world: World;
+  /** Transition zones extracted from Tiled object layers. */
+  transitionZones: TransitionZone[];
+};
+
+/**
+ * Creates invisible ECS trigger entities from an array of TransitionZones.
+ *
+ * Each entity gets Position (center of the zone rectangle) and Transition
+ * (with target map + coordinates). These entities are queried by the
+ * zoning system each tick to detect player overlap.
+ *
+ * @param options - World and transition zones.
+ * @returns Array of created entity IDs.
+ */
+export const spawnTransitionEntities = (options: SpawnTransitionOptions): number[] => {
+  const { world, transitionZones } = options;
+  const eids: number[] = [];
+
+  for (const zone of transitionZones) {
+    const eid = addEntity(world);
+
+    // Center the entity at the middle of the zone rectangle
+    const centerX = zone.x + zone.width / 2;
+    const centerY = zone.y + zone.height / 2;
+
+    addComponent(world, eid, Position);
+    addComponent(world, eid, set(Position, { x: centerX, y: centerY }));
+
+    addComponent(world, eid, Transition);
+    addComponent(
+      world,
+      eid,
+      set(Transition, {
+        targetMap: zone.targetMap,
+        targetX: zone.targetX,
+        targetY: zone.targetY,
+        width: zone.width,
+        height: zone.height,
+        triggered: false,
+      }),
+    );
+
+    eids.push(eid);
+  }
+
+  return eids;
 };
 
 // ---------------------------------------------------------------------------
