@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app; img-src 'self' data: blob:",
+      "csp": "default-src 'self' tauri: asset:; script-src 'self' https://apis.google.com https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://*.googleapis.com; connect-src 'self' tauri: asset: https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app https://*.gstatic.com https://identitytoolkit.googleapis.com; img-src 'self' data: blob: tauri: asset: https://*.googleapis.com; font-src 'self' data:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com",
       "headers": {
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Embedder-Policy": "require-corp"

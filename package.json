@@ -40,7 +40,7 @@
     "deps:pin-dependencies": "bun run scripts/src/lib/ops/pin_dependencies.ts",
     "deps:sync": "syncpack fix --dependency-types prod,dev",
     "deps:check": "syncpack lint --dependency-types prod,dev",
-    "preview": "bun scripts/src/lib/ops/build_preview_client.ts --open"
+    "preview": "bun run scripts/src/lib/ops/preview.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

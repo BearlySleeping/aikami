@@ -1,5 +1,9 @@
 // packages/frontend/engine/src/pixi_app.ts
 
+// Must be imported before any pixi.js imports — installs polyfills
+// for environments without eval() (e.g., Tauri's CSP).
+import 'pixi.js/unsafe-eval';
+
 import { isEmulatorModePublic } from '@aikami/frontend/configs';
 import { Application } from 'pixi.js';
 import { initLpcShaders } from './rendering/sprite_composer.ts';

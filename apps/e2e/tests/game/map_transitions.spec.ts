@@ -148,8 +148,8 @@ test.describe('Map Transitions (C-138)', () => {
     // Verify the canvas is present and has dimensions
     const canvasBox = await canvas.boundingBox();
     expect(canvasBox).toBeTruthy();
-    expect(canvasBox!.width).toBeGreaterThan(0);
-    expect(canvasBox!.height).toBeGreaterThan(0);
+    expect(canvasBox?.width).toBeGreaterThan(0);
+    expect(canvasBox?.height).toBeGreaterThan(0);
   });
 
   test('transition overlay is renderable in the DOM', async ({ page }) => {
@@ -187,7 +187,7 @@ test.describe('Map Transitions (C-138)', () => {
 
     // Inject a script that calls extractTransitionZones on our test map
     const zones = await page.evaluate(async () => {
-      const { extractTransitionZones, loadTilemap } = await import(
+      const { extractTransitionZones } = await import(
         /* webpackIgnore: true */ '/@fs/home/sonny/Development/Projects/passion/aikami/packages/frontend/engine/src/assets/map_loader.ts'
       );
 
