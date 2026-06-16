@@ -67,22 +67,14 @@
               ? 'chat-bubble-primary'
               : 'chat-bubble-secondary'}"
           >
-            {message.content || ''}
+            {#if message.content}
+              {message.content}
+            {:else if viewModel.isStreaming}
+              <span class="loading loading-dots loading-xs"></span>
+            {/if}
           </div>
         </div>
       {/each}
-
-      <!-- AI streaming indicator — shows when last NPC message is still arriving -->
-      {#if viewModel.isStreaming}
-        <div class="chat chat-start">
-          <div class="chat-header mb-0.5 text-xs text-base-content/50">
-            {viewModel.npcName}
-          </div>
-          <div class="chat-bubble chat-bubble-secondary text-sm">
-            <span class="loading loading-dots loading-xs"></span>
-          </div>
-        </div>
-      {/if}
 
       <!-- Error message -->
       {#if viewModel.streamError}

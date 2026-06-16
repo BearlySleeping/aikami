@@ -84,6 +84,8 @@ type NpcMetaEntry = {
   personaId: string;
   interactionRadius: number;
   relationshipValue: number;
+  /** Initial greeting dialog text from the NPC's spawn data. */
+  dialog: string;
 };
 
 /**
@@ -661,6 +663,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           personaId: npcData.personaId || 'default',
           interactionRadius: npcData.interactionRadius || 64,
           relationshipValue: npcData.relationshipValue || 0,
+          dialog: npcData.dialog || '',
         });
       }
     }
@@ -896,8 +899,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     const handleKeyDown = (event: KeyboardEvent): void => {
       const key = event.key.toLowerCase();
-      // Interaction key — check for nearby NPCs regardless of lock state
-      if (key === 'e' || key === 'enter') {
+      // Interaction key — only when input is not locked (DIALOGUE/MENU)
+      if ((key === 'e' || key === 'enter') && !this._inputLocked) {
         event.preventDefault();
         this._handleInteractKey();
         return;
@@ -957,7 +960,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const playerX = this._activeRenderView[pOffset];
     const playerY = this._activeRenderView[pOffset + 1];
 
-    if (playerX === undefined || playerY === undefined) {
+    if (playerX === undefined || playerY === undefined || (playerX === 0 && playerY === 0)) {
+      return;
+    }
+
+    const npcCount = this._npcMeta.size;
+    if (npcCount === 0) {
       return;
     }
 
@@ -976,8 +984,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const distSq = dx * dx + dy * dy;
       const radiusSq = npc.interactionRadius * npc.interactionRadius;
 
-      if (distSq <= radiusSq && this._interactRequestCallback) {
-        this._interactRequestCallback(npc);
+      if (distSq <= radiusSq) {
+        // Emit through the engine bridge for the UI to consume
+        this._bridge.emit({
+          type: 'NPC_INTERACTED',
+          npcId: npc.npcId,
+          npcName: npc.npcName,
+          dialog: npc.dialog,
+          personaId: npc.personaId,
+        });
+
+        // Also notify legacy callback consumers (sandbox, interaction_bridge)
+        if (this._interactRequestCallback) {
+          this._interactRequestCallback(npc);
+        }
         return;
       }
     }

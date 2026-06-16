@@ -1,11 +1,13 @@
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts
 
+import { OllamaClient } from '@aikami/frontend/api-core';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { aiSettingsService } from '$lib/services/settings/ai_settings.svelte';
 import {
   GameSaveService,
   type GameSaveServiceInterface,
@@ -13,6 +15,7 @@ import {
   routerService,
 } from '$services';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
+import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // GameUIViewModel — overlay router for the game UI layer
@@ -35,6 +38,8 @@ export type DialogueNpcData = {
   npcName: string;
   /** Initial greeting dialog text. */
   dialog: string;
+  /** AI persona template ID for contextual prompt injection. */
+  personaId?: string;
 };
 
 export type GameUIViewModelOptions = BaseViewModelOptions & {
@@ -54,6 +59,17 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
 
   /** Feedback message shown after a save completes (e.g., 'Saved!'). */
   readonly saveMessage: string | undefined;
+
+  /** Active text provider config (used to detect Ollama vs OpenRouter). */
+  readonly textProvider: { endpoint: string } | undefined;
+
+  /** Whether Ollama (localhost) is the active text provider. */
+  readonly useOllama: boolean;
+
+  /** The active DialogueOverlayViewModel, or undefined when dialogue is closed. */
+  readonly dialogueViewModel:
+    | import('./overlays/dialogue/dialogue_overlay_view_model.svelte').DialogueOverlayViewModel
+    | undefined;
 
   /**
    * Handles global keydown events for overlay toggling.
@@ -107,6 +123,16 @@ class GameUIViewModel
 
   isTransitioning = $state<boolean>(false);
 
+  dialogueViewModel = $state<DialogueOverlayViewModel | undefined>(undefined);
+
+  /** Whether Ollama (localhost) is the active text provider (vs OpenRouter). */
+  readonly useOllama: boolean;
+
+  /** @inheritdoc */
+  get textProvider(): { endpoint: string } | undefined {
+    return { endpoint: this._textProviderEndpoint };
+  }
+
   private readonly _gameViewModel: GameViewModelInterface;
 
   /** Lazily-created save service (requires engine bridge from the game). */
@@ -115,9 +141,18 @@ class GameUIViewModel
   /** Cached bridge instance shared with the game ViewModel. */
   private _bridge: EngineBridge | undefined;
 
+  /** Cached text provider endpoint — read once to avoid reactive re-renders. */
+  private readonly _textProviderEndpoint: string;
+
   constructor(options: GameUIViewModelOptions) {
     super(options);
     this._gameViewModel = options.gameViewModel;
+    this._textProviderEndpoint = aiSettingsService.textProvider?.endpoint ?? '';
+    this.useOllama = this._textProviderEndpoint.includes('localhost');
+    // Register bridge listeners eagerly — _listenForDialogueEvents is
+    // normally called from initialize() but the consumer may render
+    // GameUIView without a BaseViewModelContainer wrapper.
+    void this._listenForDialogueEvents();
   }
 
   /** @inheritdoc */
@@ -137,7 +172,12 @@ class GameUIViewModel
       const bridge: EngineBridge = createEngineBridge();
       this._bridge = bridge;
 
-      bridge.on('NPC_DIALOG_START', (event) => {
+      bridge.on('NPC_DIALOG_START', () => {
+        // Proximity event — not used in the game UI view.
+        // The dialogue opens exclusively via NPC_INTERACTED (manual E/Enter).
+      });
+
+      bridge.on('NPC_INTERACTED', (event) => {
         if (this.activeOverlay === 'NONE') {
           this.activeOverlay = 'DIALOGUE';
           gameStateService.setMode('DIALOGUE');
@@ -145,7 +185,14 @@ class GameUIViewModel
             npcId: event.npcId,
             npcName: event.npcName,
             dialog: event.dialog,
+            personaId: event.personaId,
           };
+          this.dialogueViewModel = new DialogueOverlayViewModel({
+            className: 'DialogueOverlayViewModel',
+            npcData: this.dialogueNpc,
+            onEndChat: () => this.endDialogue(),
+            ollamaClient: this.useOllama ? new OllamaClient() : undefined,
+          });
           this._gameViewModel.pauseEngine();
         }
       });
@@ -226,6 +273,7 @@ class GameUIViewModel
   endDialogue(): void {
     this.activeOverlay = 'NONE';
     this.dialogueNpc = undefined;
+    this.dialogueViewModel = undefined;
     gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
   }
