@@ -19,6 +19,30 @@ import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 /** Default LPC spritesheet URL used as fallback NPC avatar when image generation is disabled. */
 const FALLBACK_AVATAR_URL = '/lpc/body/male/walk.png' as const;
 
+// ── Persona prompt templates ───────────────────────────────────────
+
+/** Known NPC persona archetypes with their role-playing descriptions. */
+const PERSONA_PROMPTS: Record<string, string> = {
+  default: 'You are a helpful and knowledgeable non-player character in a fantasy world.',
+  blacksmith:
+    'You are an old, grumpy blacksmith who has worked the forge for forty years. You speak in short, gruff sentences and complain about your aching back. You take pride in your craft but are suspicious of strangers.',
+  innkeeper:
+    'You are a warm, gossipy innkeeper who knows everyone in town. You love sharing rumors and making travelers feel welcome. You speak in a friendly, chatty manner and often offer unsolicited advice.',
+  guard:
+    'You are a disciplined town guard who takes your duty seriously. You speak formally and are suspicious of troublemakers. You follow orders but have a hidden soft spot for honest folk.',
+  merchant:
+    'You are a charismatic traveling merchant always looking for a good deal. You speak enthusiastically about your wares and use flowery language. Everything is "the finest in the land" according to you.',
+  sage: 'You are a wise, ancient sage who speaks in riddles and cryptic warnings. You know secrets about the world but reveal them only to those who prove worthy. Your speech is measured and mysterious.',
+  bandit:
+    'You are a rough-edged bandit hiding in the hills. You speak with a coarse accent and make veiled threats. Deep down you have a code of honor, but you would never admit it.',
+  healer:
+    'You are a gentle, compassionate healer dedicated to helping the injured and sick. You speak softly and always put others before yourself. You have a deep knowledge of herbs and medicine.',
+  guild_master:
+    'You are a shrewd guild master who runs the local trade organization with an iron fist. You speak in calculated terms and weigh every word. You are always looking to expand your influence.',
+} as const;
+
+const FALLBACK_PERSONA_ID = 'default' as const;
+
 // ---------------------------------------------------------------------------
 // DialogueOverlayViewModel — orchestrates AI chat with an NPC
 //
@@ -138,6 +162,19 @@ class DialogueOverlayViewModel
     this._onEndChat = options.onEndChat;
     this._ollamaClient = options.ollamaClient;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
+
+    // Show the NPC's initial greeting dialog as the first message.
+    // Done in constructor (not initialize) because the consumer may
+    // not wrap with BaseViewModelContainer.
+    if (this._npcData.dialog) {
+      this.messages = [
+        {
+          id: crypto.randomUUID(),
+          content: this._npcData.dialog,
+          role: 'npc' as const,
+        },
+      ];
+    }
   }
 
   get npcName(): string {
@@ -160,17 +197,6 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    // Show the NPC's initial greeting dialog as the first message
-    if (this._npcData.dialog) {
-      this.messages = [
-        {
-          id: crypto.randomUUID(),
-          content: this._npcData.dialog,
-          role: 'npc',
-        },
-      ];
-    }
-
     // Initialize native Kokoro TTS if not already done
     if (!this._ttsInitialized) {
       this._ttsInitialized = true;
@@ -243,15 +269,20 @@ class DialogueOverlayViewModel
    * response style. Uses the NPC name and greeting for context.
    */
   private _buildSystemPrompt(): string {
-    const { npcName, dialog } = this._npcData;
+    const { npcName, dialog, personaId } = this._npcData;
+
+    // Start with the persona-specific archetype description
+    const personaPrompt =
+      PERSONA_PROMPTS[personaId ?? FALLBACK_PERSONA_ID] ?? PERSONA_PROMPTS[FALLBACK_PERSONA_ID];
 
     const lines = [
-      `You are ${npcName}, a character in a fantasy game world.`,
+      personaPrompt,
+      `Your name is ${npcName}.`,
       `Stay in character at all times. Respond as ${npcName} would.`,
     ];
 
     if (dialog) {
-      lines.push(`Your initial greeting was: "${dialog}"`);
+      lines.push(`Your initial greeting to the player was: "${dialog}"`);
     }
 
     lines.push(

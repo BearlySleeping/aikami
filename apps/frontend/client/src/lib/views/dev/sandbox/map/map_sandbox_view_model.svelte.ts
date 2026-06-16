@@ -38,12 +38,24 @@ export type MapSandboxViewModelInterface = BaseViewModelInterface & {
   readonly engineError: string | undefined;
   /** URL of the currently loaded map, or undefined if none loaded yet. */
   readonly currentMap: string | undefined;
+  /** Interaction hint shown when player is near an NPC. */
+  readonly interactionHint: string | undefined;
+  /** Whether the NPC dialog overlay is visible. */
+  readonly showDialog: boolean;
+  /** Current NPC dialog text. */
+  readonly dialogText: string;
+  /** Name of the NPC in the active dialog. */
+  readonly dialogNpcName: string;
+  /** Whether AI streaming is in progress. */
+  readonly isStreaming: boolean;
   /** Initializes the game engine, binding it to the given canvas. */
   initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
   /** Loads sandbox_zone_a.json via the engine's loadMap. */
   loadZoneA: () => Promise<void>;
   /** Loads sandbox_zone_b.json via the engine's loadMap. */
   loadZoneB: () => Promise<void>;
+  /** Closes the NPC dialog overlay and resumes the game. */
+  dismissDialog: () => void;
   /** Destroys the engine, releasing WebGL and worker resources. */
   destroyEngine: () => void;
 };
@@ -61,10 +73,16 @@ class MapSandboxViewModel
   engineReady = $state<boolean>(false);
   engineError = $state<string | undefined>(undefined);
   currentMap = $state<string | undefined>(undefined);
+  interactionHint = $state<string | undefined>(undefined);
+  showDialog = $state<boolean>(false);
+  dialogText = $state<string>('');
+  dialogNpcName = $state<string>('');
+  isStreaming = $state<boolean>(false);
 
   private _engineBridge: EngineBridge | undefined;
   private _gameWorld: GameWorld | undefined;
   private _readyCleanup: (() => void) | undefined;
+  private _dialogEndCleanup: (() => void) | undefined;
   private _initialMapLoaded = false;
 
   /**
@@ -118,6 +136,26 @@ class MapSandboxViewModel
         this.engineError = event.message;
       });
 
+      // Proximity: show "Press E to interact" hint when near NPC
+      this._engineBridge.on('NPC_DIALOG_START', (event) => {
+        this.debug('map-sandbox:event:NPC_DIALOG_START', { npcName: event.npcName });
+        this.interactionHint = `Press E to interact with ${event.npcName}`;
+      });
+
+      // Proximity exit: hide hint
+      this._dialogEndCleanup = this._engineBridge.on('NPC_DIALOG_END', () => {
+        this.debug('map-sandbox:event:NPC_DIALOG_END');
+        this.interactionHint = undefined;
+      });
+
+      // Manual key interact (E/Enter): open dialog overlay
+      this._engineBridge.on('NPC_INTERACTED', (event) => {
+        this.debug('map-sandbox:event:NPC_INTERACTED', { npcName: event.npcName });
+        this.dialogNpcName = event.npcName;
+        this.dialogText = event.dialog;
+        this.showDialog = true;
+      });
+
       const EcsWorker = await _resolveEcsWorker();
       const tm = new TextureManager();
       const paletteBytes = new Uint8Array(1024);
@@ -148,6 +186,15 @@ class MapSandboxViewModel
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);
+
+      // Key press (E): open full dialog via NPC_INTERACTED bridge event
+      // (emitted by _handleInteractKey in GameWorld)
+      this._gameWorld.onInteractRequest((npc) => {
+        this.debug('map-sandbox:interact-request', { npcName: npc.npcName });
+        this.dialogNpcName = npc.npcName;
+        this.dialogText = npc.dialog || `You approach ${npc.npcName}.`;
+        this.showDialog = true;
+      });
 
       this.debug('map-sandbox:initializeEngine:creating-app');
       await this._gameWorld.initialize({
@@ -215,6 +262,10 @@ class MapSandboxViewModel
       this._readyCleanup();
       this._readyCleanup = undefined;
     }
+    if (this._dialogEndCleanup) {
+      this._dialogEndCleanup();
+      this._dialogEndCleanup = undefined;
+    }
 
     if (this._gameWorld) {
       this._gameWorld.destroy();
@@ -226,6 +277,20 @@ class MapSandboxViewModel
     this.engineError = undefined;
     this.currentMap = undefined;
     this._initialMapLoaded = false;
+    this.showDialog = false;
+    this.dialogText = '';
+    this.dialogNpcName = '';
+    this.interactionHint = undefined;
+  }
+
+  /**
+   * Closes the NPC dialog overlay and resumes the game.
+   */
+  dismissDialog(): void {
+    this.showDialog = false;
+    this.dialogText = '';
+    this.dialogNpcName = '';
+    this.isStreaming = false;
   }
 
   /** @inheritdoc */

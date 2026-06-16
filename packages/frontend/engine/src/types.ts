@@ -111,6 +111,15 @@ export type GameEvent =
       npcId: string;
       npcName: string;
       dialog: string;
+      personaId?: string;
+    }
+  | {
+      /** Emitted when the player presses the interact key (E/Enter) near an NPC. */
+      type: 'NPC_INTERACTED';
+      npcId: string;
+      npcName: string;
+      dialog: string;
+      personaId?: string;
     }
   | {
       type: 'NPC_DIALOG_END';
