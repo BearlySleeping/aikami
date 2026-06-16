@@ -42,6 +42,7 @@
 | C-138 | Map Transitions (Zoning) | ✅ completed |
 | C-139 | Isolated Dev Sandboxes & Map Wiring | ✅ completed |
 | C-140 | Game Mode System & Input Routing | ✅ completed |
+| C-141 | NPC Interaction & Dialogue Trigger | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -914,3 +915,48 @@
 - **Bug**: Switching modes had no effect — player could still move. Root cause: `_setupCommandForwarding()` in `game_world.ts` did not register a handler for `SET_GAME_MODE`, so `bridge.send()` silently dropped the command.
 - **Fix 1**: Added `onCommand('SET_GAME_MODE', ...)` handler in `_setupCommandForwarding()` to forward the mode change to the worker via `BRIDGE_COMMAND` postMessage.
 - **Fix 2**: Sandbox ViewModel now calls `_gameWorld.setInputLocked(true)` on DIALOGUE/MENU and `setInputLocked(false)` on EXPLORE, providing defense-in-depth alongside the worker-side movement gate.
+
+### C-141: NPC Interaction & Dialogue Trigger
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/engine/src/types.ts` — Added `personaId?: string` to `NPC_DIALOG_START` event. Added new `NPC_INTERACTED` GameEvent type (`npcId`, `npcName`, `dialog`, `personaId?`).
+- `packages/frontend/engine/src/game_world.ts` — Added `dialog: string` field to `NpcMetaEntry`. Updated `_npcMeta.set()` to store `dialog` from `ENTITY_CREATED` npcData. Rewired `_handleInteractKey()` to emit `NPC_INTERACTED` through the engine bridge (in addition to existing `_interactRequestCallback` for legacy consumers).
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Added `dialog: npcData.dialog || ''` to `ENTITY_CREATED` npcData in `handleSpawnNPC()`.
+- `packages/frontend/engine/src/index.ts` — `GameEvent` already exported; new `NPC_INTERACTED` variant included automatically.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `personaId?: string` to `DialogueNpcData` type. Added `personaId: event.personaId` to `NPC_DIALOG_START` handler. Added `NPC_INTERACTED` listener (identical handling: sets activeOverlay→DIALOGUE, sets dialogueNpc, calls pauseEngine).
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Added module-level `PERSONA_PROMPTS` map (9 archetypes: default, blacksmith, innkeeper, guard, merchant, sage, bandit, healer, guild_master). Added `FALLBACK_PERSONA_ID` constant. Updated `_buildSystemPrompt()` to prepend persona-specific archetype description when `personaId` is available; falls back to `'default'` prompt.
+
+**Files NOT created** (requested but not feasible):
+- `packages/frontend/engine/src/systems/interaction_system.test.ts` — Interaction key handling is main-thread code requiring a running PixiJS instance. Not unit-testable in Bun without canvas.
+- `apps/e2e/tests/client/npc_interaction.spec.ts` — Full-stack E2E test requires running dev server + canvas + ECS worker + AI backend. Deferred.
+
+**Deviations**:
+1. **`NPC_INTERACTED` as GameEvent (not GameCommand)**: Flows engine→UI (event direction). Existing `NPC_DIALOG_START` (auto-trigger) preserved for backward compatibility.
+2. **Persona prompts inlined in ViewModel**: Static `PERSONA_PROMPTS` map with 9 RPG archetypes. Simple enough for MVP.
+3. **`dialog` added to worker ENTITY_CREATED npcData**: Needed in NpcMetaEntry for the bridge event.
+4. **E2E + engine unit tests not created**: Interaction key is main-thread code requiring PixiJS; E2E test requires full stack.
+
+**Design decisions**:
+1. **Bridge emit + legacy callback**: `_handleInteractKey` emits via bridge AND calls `_interactRequestCallback` — both paths preserved.
+2. **Separate events**: `NPC_DIALOG_START` (auto) vs `NPC_INTERACTED` (manual key) for clean separation.
+3. **Persona prompt fallback**: Unknown `personaId` → `'default'` prompt. Graceful degradation.
+4. **Dual bridge listeners**: `GameUIViewModel` listens for both `NPC_DIALOG_START` and `NPC_INTERACTED`.
+
+**Known limitations**:
+- E2E test deferred (requires full-stack environment).
+- Engine unit test for interaction key not feasible (main-thread code, requires PixiJS canvas).
+- `PERSONA_PROMPTS` map is static/hardcoded — no dynamic persona prompt loading.
+- `frontend-engine:typecheck` has 4 pre-existing errors (Vite `?worker` import + `this._worker` possibly-undefined) unrelated to C-141.
+
+**Post-implementation fix** (2026-06-16):
+- **Bug**: Map-spawned NPCs (via `sandbox_zone_a.json`) did not include `npcData` in their `ENTITY_CREATED` messages. `_handleInteractKey()` reads `_npcMeta` which is only populated when `npcData` is present on `ENTITY_CREATED`. Map NPCs had no `_npcMeta` entries, so pressing E near them did nothing.
+- **Fix 1**: Added `npcData` extraction in the worker's `LOAD_MAP` handler — reads `NPCDialog` component from newly spawned entities and includes `npcData` (npcId, npcName, dialog, interactionRadius, personaId) in the `ENTITY_CREATED` postMessage.
+- **Fix 2**: Updated `MapSandboxViewModel` (used by `/dev/sandbox` route) to register `onInteractRequest` callback and listen for `NPC_DIALOG_START` / `NPC_INTERACTED` bridge events. Previously it only listened for `GAME_READY` and `GAME_ERROR`.
+- **Fix 3**: Added interaction hint and dialog overlay UI to `MapSandboxView` (matching the basic sandbox pattern).
+- **Fix 4**: `GameUIViewModel._listenForDialogueEvents()` was only called from `initialize()`, which requires a `BaseViewModelContainer` wrapper. On `/dev/sandbox`, `GameUIView` is rendered directly without a container, so `initialize()` never fired and the bridge listener for `NPC_INTERACTED` was never registered. Fixed by calling `void this._listenForDialogueEvents()` eagerly in the constructor.
+- **Fix 5**: `GameUIView` unconditionally created `OllamaClient` for dialogue streaming, bypassing OpenRouter config. Fixed by checking `textProvider.endpoint?.includes('localhost')` via ViewModel getter — only creates `OllamaClient` for Ollama, otherwise lets `DialogueOverlayViewModel` fall through to `textGenerationService` (OpenRouter).
+- **Fix 6**: `$effect`/`$derived` patterns in `GameUIView` could not reliably track `$state` changes on the ViewModel when mutations occurred in non-Svelte callbacks (bridge event handlers). Fixed by having `GameUIViewModel` own the `DialogueOverlayViewModel` lifecycle directly — creates in `NPC_INTERACTED` handler, clears in `endDialogue()`. The view reads `viewModel.dialogueViewModel` directly in `{#if}`.
+- **Fix 7**: Pressing 'E' key was impossible in chat input because the engine's keyboard handler called `preventDefault()` on 'E' regardless of game mode. Fixed by gating the interaction key handling behind `!this._inputLocked` — when in DIALOGUE/MENU mode, 'E' passes through normally to the textarea.
+- **Fix 8**: `DialogueOverlay` showed dual messages during AI streaming (empty placeholder + separate dots indicator). Fixed by merging the dots indicator into the placeholder message bubble, removing the separate streaming indicator div.
