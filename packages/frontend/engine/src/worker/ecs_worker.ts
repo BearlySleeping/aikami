@@ -11,6 +11,7 @@ import {
   set,
 } from 'bitecs';
 import { type LpcLayerRecipe, registerAppearanceObservers } from '../components/appearance.ts';
+import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
@@ -25,6 +26,13 @@ import { createPlayer, type PlayerCreateOptions } from '../entities/create_playe
 import { createTestSprite } from '../entities/create_test_sprite.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
+import {
+  getCameraPosition,
+  resetCameraTracking,
+  setMapBounds,
+  setScreenSize,
+  updateCameraSystem,
+} from '../systems/camera_system.ts';
 import { type CollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
@@ -269,7 +277,16 @@ const initializeEngine = (
   // 2. Create the bitECS world
   world = createWorld();
 
-  // 3. Register component observers
+  // 3. Initialize camera bounds from provided canvas dims + collision grid
+  setScreenSize({ width: canvasWidth, height: canvasHeight });
+  if (collisionGrid) {
+    setMapBounds({
+      width: collisionGrid.width * collisionGrid.tileSize,
+      height: collisionGrid.height * collisionGrid.tileSize,
+    });
+  }
+
+  // 4. Register component observers
   registerPositionObservers(world);
   registerVelocityObservers(world);
   registerSpriteObservers(world);
@@ -277,15 +294,16 @@ const initializeEngine = (
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);
   registerTurnOrderObservers(world);
+  registerCameraFocusObservers(world);
 
-  // 3. Create headless LpcBatchManager for slot tracking + fingerprint eval
+  // 5. Create headless LpcBatchManager for slot tracking + fingerprint eval
   //    No createBuffer factory → operates without GPU Buffers in the worker.
   lpcBatchManager = new LpcBatchManager({ maxInstances: 64 });
 
-  // 4. Start the tick loop (~60fps = 16ms interval)
+  // 6. Start the tick loop (~60fps = 16ms interval)
   running = true;
 
-  // 5. Initialize spatial hash grid (cellSize 50, capacity = MAX_ENTITIES * 2)
+  // 7. Initialize spatial hash grid (cellSize 50, capacity = MAX_ENTITIES * 2)
   spatialGrid = new SpatialHashGrid({
     cellSize: 50,
     capacity: MAX_ENTITIES * 2,
@@ -294,7 +312,7 @@ const initializeEngine = (
 
   setInterval(tickLoop, 16);
 
-  // 6. Spawn entities — from saved payload or defaults
+  // 8. Spawn entities — from saved payload or defaults
   if (loadPayload) {
     const eidMap = deserializeWorld(world, loadPayload);
 
@@ -366,6 +384,7 @@ const tickLoop = (): void => {
   // Run game systems
   updateExpressions(world, workerBridge);
   updateMovement(world, deltaMs);
+  updateCameraSystem(world, deltaMs);
   updateDialogTriggers(world, playerEntityId, workerBridge);
 
   if (spatialGrid) {
@@ -405,9 +424,12 @@ const tickLoop = (): void => {
 
   if (useSharedMemory) {
     // SharedArrayBuffer — main thread reads directly, no transfer needed
+    const camera = getCameraPosition();
     postMessage({
       type: 'STATE_UPDATE',
       events,
+      cameraX: camera.x,
+      cameraY: camera.y,
     });
   } else {
     // ArrayBuffer fallback — transfer ownership so main thread can read.
@@ -447,11 +469,14 @@ const tickLoop = (): void => {
     activeBufferIndex = nextWritableIndex;
     activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
 
+    const camera = getCameraPosition();
     postMessage(
       {
         type: 'STATE_UPDATE',
         buffer,
         events,
+        cameraX: camera.x,
+        cameraY: camera.y,
       },
       // Transfer the buffer to the main thread (zero-copy handoff)
       [buffer],
@@ -579,6 +604,9 @@ self.onmessage = (event: MessageEvent): void => {
         const { canvasWidth, canvasHeight, buffers, loadPayload, playerData, collisionGrid } =
           message;
 
+        // Reset camera state for fresh engine
+        resetCameraTracking();
+
         // Determine whether we have shared memory
         const firstBuffer = buffers[0] as ArrayBuffer;
         useSharedMemory =
@@ -669,6 +697,22 @@ self.onmessage = (event: MessageEvent): void => {
         break;
       }
 
+      case 'SET_MAP_BOUNDS': {
+        setMapBounds({
+          width: message.width as number,
+          height: message.height as number,
+        });
+        break;
+      }
+
+      case 'SET_SCREEN_SIZE': {
+        setScreenSize({
+          width: message.width as number,
+          height: message.height as number,
+        });
+        break;
+      }
+
       case 'LOAD_GAME': {
         if (!world) {
           postMessage({
@@ -694,12 +738,17 @@ self.onmessage = (event: MessageEvent): void => {
           const loadPayload = message.payload as string;
           const eidMap = deserializeWorld(world, loadPayload);
 
+          // Re-attach CameraFocus to the player (not serialized — tag component)
+          for (const [oldEid, newEid] of eidMap) {
+            if (oldEid === 1) {
+              addComponent(world, newEid, CameraFocus);
+              playerEntityId = newEid;
+            }
+          }
+
           // Notify main thread about all hydrated entities
           for (const [oldEid, newEid] of eidMap) {
             const tint = oldEid === 1 ? 0x00ff88 : 0xffcc00;
-            if (playerEntityId === 0) {
-              playerEntityId = newEid;
-            }
             postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
           }
 
