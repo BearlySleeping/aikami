@@ -26,6 +26,7 @@ import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { renderTilemap } from './systems/tilemap_render_system.ts';
 import type { GameEvent } from './types.ts';
+import EcsWorker from './worker/ecs_worker.ts?worker';
 
 // ---------------------------------------------------------------------------
 // GameWorld — worker-based bitECS + PixiJS lifecycle manager
@@ -480,19 +481,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('spawnWorker:using-workerFactory');
       this._worker = this._workerFactory();
     } else {
-      // Use the direct new Worker(new URL(...)) pattern so Vite's worker
-      // plugin detects the worker entry during build and emits a proper
-      // .js chunk instead of a .ts file (which gets served as video/mp2t
-      // by the preview server). Cache-bust with timestamp to force reload
-      // during development when the worker source changes.
-      const workerUrl = new URL('./worker/ecs_worker.ts', import.meta.url);
-      if (import.meta.env?.DEV) {
-        workerUrl.searchParams.set('t', String(Date.now()));
-      }
-      this._worker = new Worker(workerUrl, {
-        type: 'module',
-      });
-      this.debug('spawnWorker:created');
+      // Vite's ?worker import provides a Worker constructor that handles
+      // both dev (transpiled TS) and prod (bundled JS) correctly.
+      this._worker = new EcsWorker();
+      this.debug('spawnWorker:created', { name: EcsWorker.name });
     }
 
     // Send initialization message with buffers

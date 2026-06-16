@@ -70,6 +70,7 @@ test('boot diagnostics terminal — both providers online', async ({ page }) => 
     route.fulfill({
       status: 200,
       contentType: 'application/json',
+      // biome-ignore lint/style/useNamingConvention: PixiJS extension name
       body: JSON.stringify({ CheckpointLoaderSimple: {} }),
     });
   });
@@ -127,6 +128,7 @@ test('boot diagnostics terminal — transitions from offline to online', async (
     route.fulfill({
       status: 200,
       contentType: 'application/json',
+      // biome-ignore lint/style/useNamingConvention: PixiJS extension name
       body: JSON.stringify({ CheckpointLoaderSimple: {} }),
     });
   });
@@ -190,6 +192,7 @@ test('C-133: boot diagnostics — hybrid setup (openrouter configured, comfy onl
     route.fulfill({
       status: 200,
       contentType: 'application/json',
+      // biome-ignore lint/style/useNamingConvention: PixiJS extension name
       body: JSON.stringify({ CheckpointLoaderSimple: {} }),
     });
   });

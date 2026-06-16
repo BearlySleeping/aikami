@@ -83,7 +83,11 @@ export default defineConfig(({ mode }) => {
     },
 
     worker: {
-      format: 'es',
+      // iife format produces classic worker scripts (no type: 'module' needed).
+      // Tauri's webview cannot load ES module workers — they fail with
+      // "SyntaxError: Unexpected token '{'. Expected 'from' before imported module name"
+      // because the build output bundles dynamic imports that confuse the module parser.
+      format: 'iife',
     },
 
     server: {

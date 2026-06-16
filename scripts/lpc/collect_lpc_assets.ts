@@ -154,10 +154,14 @@ function parsePath(fullPath: string): {
 } | null {
   const rel = relative(SPRITESHEETS_DIR, fullPath);
   const parts = rel.split('/');
-  if (parts.length < 2) return null;
+  if (parts.length < 2) {
+    return null;
+  }
 
   const slot = parts[0];
-  if (!SLOT_MAP[slot]) return null;
+  if (!SLOT_MAP[slot]) {
+    return null;
+  }
 
   // Find body type boundary
   let bodyIdx = -1;
@@ -246,12 +250,19 @@ function walkFiles(dir: string, ext: string): string[] {
   const stack = [dir];
   while (stack.length) {
     const c = stack.pop();
-    if (!c) continue;
-    if (!existsSync(c)) continue;
+    if (!c) {
+      continue;
+    }
+    if (!existsSync(c)) {
+      continue;
+    }
     for (const e of readdirSync(c)) {
       const p = join(c, e);
-      if (statSync(p).isDirectory()) stack.push(p);
-      else if (p.endsWith(ext)) results.push(p);
+      if (statSync(p).isDirectory()) {
+        stack.push(p);
+      } else if (p.endsWith(ext)) {
+        results.push(p);
+      }
     }
   }
   return results;
@@ -273,7 +284,9 @@ const bestPerState = new Map<string, { parsed: ReturnType<typeof parsePath>; pat
 
 for (const file of allFiles) {
   const p = parsePath(file);
-  if (!p) continue;
+  if (!p) {
+    continue;
+  }
   // Key includes animation state: slot/type/bodyType/anim
   const key = `${p.slot}/${p.type}/${p.bodyType}/${p.anim}`;
   const existing = bestPerState.get(key);
@@ -287,7 +300,7 @@ const assets: AssetEntry[] = [];
 // Map of asset key → all available states (for catalog + per-state webp generation)
 const assetStates = new Map<string, Set<string>>();
 
-for (const [key, entry] of bestPerState) {
+for (const [_key, entry] of bestPerState) {
   const { slot, type, bodyType, anim } = entry.parsed;
   const btSuffix = bodyType !== 'default' ? `_${bodyType}` : '';
   const assetKey = `${slot}/${type}${btSuffix}`;
@@ -300,7 +313,9 @@ for (const [key, entry] of bestPerState) {
 
   // Only create one catalog entry per base asset key
   const existing = assets.find((a) => a.key === assetKey);
-  if (existing) continue;
+  if (existing) {
+    continue;
+  }
 
   assets.push({
     key: assetKey,
@@ -340,15 +355,23 @@ const slotOrder = [
 ];
 const slotEntries = new Map<string, AssetEntry[]>();
 for (const a of assets) {
-  if (!slotEntries.has(a.slot)) slotEntries.set(a.slot, []);
-  slotEntries.get(a.slot)!.push(a);
+  if (!slotEntries.has(a.slot)) {
+    slotEntries.set(a.slot, []);
+  }
+  slotEntries.get(a.slot)?.push(a);
 }
 const sortedSlots = [...slotEntries.entries()].sort((a, b) => {
   const ai = slotOrder.indexOf(a[0]),
     bi = slotOrder.indexOf(b[0]);
-  if (ai >= 0 && bi >= 0) return ai - bi;
-  if (ai >= 0) return -1;
-  if (bi >= 0) return 1;
+  if (ai >= 0 && bi >= 0) {
+    return ai - bi;
+  }
+  if (ai >= 0) {
+    return -1;
+  }
+  if (bi >= 0) {
+    return 1;
+  }
   return a[0].localeCompare(b[0]);
 });
 
@@ -392,7 +415,7 @@ lines.push('');
 lines.push('export function getLpcCatalogPrompt(): string {');
 lines.push("  const parts: string[] = ['Available LPC sprite components (asset IDs by slot):'];");
 lines.push('  for (const [slot, ids] of Object.entries(LPC_ASSET_IDS_BY_SLOT)) {');
-lines.push("    parts.push(`  ${slot}: ${ids.join(', ')}`);");
+lines.push(`    parts.push(\`  \${slot}: \${ids.join(', ')}\`);`);
 lines.push('  }');
 lines.push(
   '  parts.push(\'\\\\nWhen generating a character appearance, return a JSON object: {"lpcRecipe": {"head": "head/heads/human_male", ...}}\');',
@@ -408,15 +431,15 @@ console.log(`📝 Catalog written: ${OUTPUT_CATALOG}`);
 if (CONVERT) {
   // Build manifest: one entry per (asset key, animation state) pair
   const manifest: { src: string; dst: string }[] = [];
-  let totalStates = 0;
+  let _totalStates = 0;
 
-  for (const [stateKey, entry] of bestPerState) {
+  for (const [_stateKey, entry] of bestPerState) {
     const { slot, type, bodyType, anim } = entry.parsed;
     const btSuffix = bodyType !== 'default' ? `_${bodyType}` : '';
     const relPath = `${slot}/${type.split('/').join('/')}${btSuffix}.${anim}.webp`;
     const dst = join(OUTPUT_ASSETS_DIR, relPath);
     manifest.push({ src: entry.path, dst });
-    totalStates++;
+    _totalStates++;
   }
 
   writeFileSync(MANIFEST_FILE, JSON.stringify(manifest, null, 2));
