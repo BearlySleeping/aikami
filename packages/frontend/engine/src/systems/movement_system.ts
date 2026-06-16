@@ -5,6 +5,7 @@ import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
+import { getEngineGameMode } from '../state/game_mode.ts';
 import { isWalkable } from './collision_system.ts';
 
 // ---------------------------------------------------------------------------
@@ -164,6 +165,13 @@ const resolveDiagonalVelocity = (vel: VelocityData): { x: number; y: number } =>
  */
 const updateMovement = (world: World, deltaMs: number): void => {
   if (!world) {
+    return;
+  }
+
+  // Gate: only process movement in EXPLORE mode.
+  // During DIALOGUE or MENU the player must not move regardless
+  // of the Velocity component value.
+  if (getEngineGameMode() !== 'EXPLORE') {
     return;
   }
 
