@@ -240,6 +240,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** The Float32Array view used for rendering the current frame. */
   private _activeRenderView: Float32Array | undefined;
 
+  /** Current camera position received from the worker (world-space pixels). */
+  private _cameraX = 0;
+
+  /** Current camera position received from the worker (world-space pixels). */
+  private _cameraY = 0;
+
   // -- Render state (main thread) ------------------------------------------
 
   /** Map of entity ID → render entry (display object + tint). */
@@ -336,11 +342,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Resizes the PixiJS renderer to fill the given dimensions.
    *
    * Called by the ViewModel in response to `window.resize` events
-   * so the game canvas always fills the viewport.
+   * so the game canvas always fills the viewport. Also forwards the
+   * new screen size to the worker so the camera system can update its
+   * clamping bounds and center offset.
    */
   resize(width: number, height: number): void {
     if (this._app) {
       this._app.renderer.resize(width, height);
+    }
+
+    // Notify the worker so the camera system updates its screen dimensions
+    if (this._worker) {
+      this._worker.postMessage({ type: 'SET_SCREEN_SIZE', width, height });
     }
   }
 
@@ -556,9 +569,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /**
    * Handles a STATE_UPDATE message from the worker.
    *
-   * Swaps the active render view and re-emits bridged events.
+   * Swaps the active render view, stores the camera position, and
+   * re-emits bridged events.
    */
   private _handleStateUpdate(message: { type: string } & Record<string, unknown>): void {
+    // Store camera position from the worker for use in the render loop
+    if (typeof message.cameraX === 'number') {
+      this._cameraX = message.cameraX;
+    }
+    if (typeof message.cameraY === 'number') {
+      this._cameraY = message.cameraY;
+    }
+
     if (this._useSharedMemory) {
       // SharedArrayBuffer — render view is already the same memory.
       // No swap needed; main thread reads the same bytes the worker writes.
@@ -1115,16 +1137,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         continue;
       }
 
+      // Dynamic camera: center the world container on the camera position
+      // computed by the CameraSystem in the worker (with lerp + clamping).
+      // The old per-player-entity centering is replaced by this global
+      // camera transform applied once per frame outside the entity loop.
+      // Past this point in _updateRenderFromBuffer, the camera transform
+      // is applied after all entity positions are updated.
       entry.displayObject.x = x;
       entry.displayObject.y = y;
-
-      // Dynamic camera: center the world container on the player every frame.
-      // The worker spawns entities at canvas-relative coords (e.g., x=960).
-      // We offset _worldContainer so the player appears at screen center.
-      if (eid === this._playerEntityId && this._app && this._worldContainer) {
-        this._worldContainer.x = this._app.screen.width / 2 - x * this._worldContainer.scale.x;
-        this._worldContainer.y = this._app.screen.height / 2 - y * this._worldContainer.scale.y;
-      }
 
       // Drive per-entity animation controller from positional deltas.
       // The controller computes dx/dy across frames to derive facing
@@ -1144,6 +1164,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // Hardcoded outside any if-block to guarantee visibility.
       entry.displayObject.visible = true;
       visibleCount++;
+    }
+
+    // Camera transform: center the world container at the camera position
+    // computed by the CameraSystem in the worker (lerp + clamping).
+    // Applied once per frame after all entity display objects are positioned.
+    if (this._app && this._worldContainer) {
+      this._worldContainer.x =
+        this._app.screen.width / 2 - this._cameraX * this._worldContainer.scale.x;
+      this._worldContainer.y =
+        this._app.screen.height / 2 - this._cameraY * this._worldContainer.scale.y;
     }
 
     // Throttled per-second render diagnostic (only when BaseEngineClass.setRenderDebug(true))
