@@ -37,6 +37,16 @@ export type AppServiceInterface = BaseFrontendClassInterface & {
   readonly showNotificationDrawer: boolean;
 
   /**
+   * Whether the boot diagnostics screen has been completed on this device.
+   * Persisted in localStorage so the boot screen only appears on the very
+   * first visit, not on every page refresh.
+   */
+  readonly bootComplete: boolean;
+
+  /** Persists bootComplete to localStorage so subsequent visits skip the boot screen. */
+  markBootComplete(): void;
+
+  /**
    * Sets the current device data.
    * @param device The device data to set.
    */
@@ -84,8 +94,29 @@ export class AppService
     logger.logLevel = logLevel;
   }
 
+  /** Whether the boot diagnostics screen has been completed. Backed by localStorage. */
+  bootComplete = $state(this._loadBootComplete());
+
   toggleNotificationDrawer(value?: boolean) {
     this.showNotificationDrawer = value ?? !this.showNotificationDrawer;
+  }
+
+  markBootComplete(): void {
+    this.bootComplete = true;
+    try {
+      localStorage.setItem('aikami_boot_complete', 'true');
+    } catch {
+      // localStorage unavailable (SSR or privacy mode) — flag is still in memory
+    }
+  }
+
+  /** Reads the persisted boot-complete flag from localStorage. */
+  private _loadBootComplete(): boolean {
+    try {
+      return localStorage.getItem('aikami_boot_complete') === 'true';
+    } catch {
+      return false;
+    }
   }
 }
 
