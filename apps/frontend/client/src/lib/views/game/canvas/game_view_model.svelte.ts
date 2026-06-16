@@ -335,6 +335,18 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
         playerData,
       });
 
+      // ── Load the starting map after engine initialization ──
+      // New Game: loads the default starting zone so the canvas is not empty.
+      // Loaded Save: the ECS snapshot restores entity state; the map renders
+      //              underneath it. The saved player position is preserved
+      //              because loadMap does NOT clobber existing entities that
+      //              came from the snapshot.
+      //
+      // TODO(C-139): track mapId in save metadata so loaded games restore to
+      //              the correct room instead of always loading the default.
+      const DEFAULT_STARTING_MAP = '/assets/maps/sandbox_zone_a.json';
+      await this._gameWorld.loadMap(DEFAULT_STARTING_MAP, 160, 192);
+
       // Register window resize handler — keep the PixiJS canvas filling the viewport
       const handleResize = (): void => {
         if (this._gameWorld) {

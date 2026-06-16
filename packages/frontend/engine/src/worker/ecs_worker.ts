@@ -10,7 +10,11 @@ import {
   removeEntity,
   set,
 } from 'bitecs';
-import { type LpcLayerRecipe, registerAppearanceObservers } from '../components/appearance.ts';
+import {
+  getAppearanceLayers,
+  type LpcLayerRecipe,
+  registerAppearanceObservers,
+} from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
@@ -830,13 +834,45 @@ self.onmessage = (event: MessageEvent): void => {
           for (const result of results) {
             const tint = result.type === 'npc' ? 0xffcc00 : 0xffffff;
             postMessage({ type: 'ENTITY_CREATED', eid: result.eid, tint });
+
+            // Emit APPEARANCE_CHANGED for entities with Appearance component
+            // so the main thread loads LPC textures immediately instead of
+            // waiting for the tick-loop sync system to detect them.
+            const layers = getAppearanceLayers(result.eid);
+            if (layers.length > 0) {
+              postMessage({
+                type: 'SYNC',
+                events: [
+                  {
+                    type: 'APPEARANCE_CHANGED',
+                    eid: result.eid,
+                    layerIds: [...layers],
+                  },
+                ],
+              });
+            }
+          }
+
+          // Also emit APPEARANCE_CHANGED for the player after position update
+          const playerLayers = getAppearanceLayers(playerEntityId);
+          if (playerLayers.length > 0) {
+            postMessage({
+              type: 'SYNC',
+              events: [
+                {
+                  type: 'APPEARANCE_CHANGED',
+                  eid: playerEntityId,
+                  layerIds: [...playerLayers],
+                },
+              ],
+            });
           }
 
           // 9. Restore the tick loop
           running = wasRunning;
 
           queueMicrotask(() => {
-            postMessage({ type: 'ENGINE_READY' });
+            postMessage({ type: 'MAP_LOADED' });
           });
         } catch (err) {
           postMessage({

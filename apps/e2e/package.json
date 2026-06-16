@@ -9,6 +9,7 @@
     "test:game": "npx playwright test --project=game",
     "test:visual": "bunx playwright test --project=client-visual",
     "lpc:smoke": "bun run scripts/lpc_smoke.ts",
+    "map:visual": "bun run scripts/map_sandbox_eval.ts",
     "test:ai-services": "npx playwright test --project=ai-services",
     "lint": "biome lint tests",
     "format": "biome format tests",
