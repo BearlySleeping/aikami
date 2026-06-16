@@ -76,6 +76,35 @@ export type SpawnPoint = {
 };
 
 /**
+ * A transition zone extracted from a Tiled objectgroup layer.
+ *
+ * Objects with `type: 'transition'` in Tiled are parsed into
+ * TransitionZones that define map-to-map travel. When the player
+ * steps into the zone's bounding rectangle, the zoning system
+ * triggers a map transition to the target map at the given coordinates.
+ *
+ * Contract: C-138 Map Transitions
+ */
+export type TransitionZone = {
+  /** Unique identifier from the Tiled object. */
+  id: string;
+  /** X position in pixels (top-left of the trigger rectangle). */
+  x: number;
+  /** Y position in pixels (top-left of the trigger rectangle). */
+  y: number;
+  /** Width of the trigger rectangle in pixels. */
+  width: number;
+  /** Height of the trigger rectangle in pixels. */
+  height: number;
+  /** Target map filename or ID to transition to. */
+  targetMap: string;
+  /** Target X pixel coordinate on the destination map. */
+  targetX: number;
+  /** Target Y pixel coordinate on the destination map. */
+  targetY: number;
+};
+
+/**
  * A raw objectgroup layer extracted from Tiled JSON.
  *
  * Stored on TilemapData for later extraction via
@@ -476,4 +505,80 @@ export const extractCollisionGrid = (
   }
 
   return layer.data.map((gid) => gid !== 0);
+};
+
+/**
+ * Extracts transition zones from all objectgroup layers in a parsed tilemap.
+ *
+ * Objects with `type === 'transition'` are parsed into {@link TransitionZone}
+ * entries. Each zone requires custom properties `targetMap` (string),
+ * `targetX` (number), and `targetY` (number). The object's bounding
+ * rectangle defines the trigger area.
+ *
+ * @param tilemap - The parsed tilemap data.
+ * @returns Flat array of transition zones, or empty array if none exist.
+ */
+export const extractTransitionZones = (tilemap: TilemapData): TransitionZone[] => {
+  if (!tilemap.objectLayers || tilemap.objectLayers.length === 0) {
+    return [];
+  }
+
+  const zones: TransitionZone[] = [];
+
+  for (const objectLayer of tilemap.objectLayers) {
+    for (const object of objectLayer.objects) {
+      const zone = _parseTransitionZone(object);
+      if (zone) {
+        zones.push(zone);
+      }
+    }
+  }
+
+  return zones;
+};
+
+/**
+ * Parses a single Tiled object into a {@link TransitionZone}.
+ *
+ * Only objects with `type === 'transition'` are parsed. The required
+ * custom properties are `targetMap`, `targetX`, and `targetY`.
+ * Objects without these properties are silently skipped.
+ */
+const _parseTransitionZone = (object: Record<string, unknown>): TransitionZone | undefined => {
+  if (object.type !== 'transition') {
+    return undefined;
+  }
+
+  const id = object.id;
+  if (id === undefined) {
+    return undefined;
+  }
+
+  const properties = _extractProperties(object);
+
+  const targetMap = properties.targetMap;
+  if (typeof targetMap !== 'string' || targetMap.length === 0) {
+    return undefined;
+  }
+
+  const targetX = properties.targetX;
+  if (typeof targetX !== 'number') {
+    return undefined;
+  }
+
+  const targetY = properties.targetY;
+  if (typeof targetY !== 'number') {
+    return undefined;
+  }
+
+  return {
+    id: String(id),
+    x: typeof object.x === 'number' ? object.x : 0,
+    y: typeof object.y === 'number' ? object.y : 0,
+    width: typeof object.width === 'number' ? object.width : 0,
+    height: typeof object.height === 'number' ? object.height : 0,
+    targetMap,
+    targetX,
+    targetY,
+  };
 };
