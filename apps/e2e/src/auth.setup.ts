@@ -9,8 +9,8 @@
 // browser's IndexedDB storage layer, and persists the full storageState
 // (cookies + localStorage + IndexedDB origins) to disk.
 
-import { EMULATOR_PORTS } from './config';
 import { test as setup } from '@playwright/test';
+import { EMULATOR_PORTS } from './config';
 
 // ── Configuration ───────────────────────────────────────────
 

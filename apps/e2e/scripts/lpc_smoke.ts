@@ -11,9 +11,9 @@
 //   bun run apps/e2e/scripts/lpc_smoke.ts --eval-only      (skip Playwright capture)
 //   bun run apps/e2e/scripts/lpc_smoke.ts --recapture      (force re-capture, skip cache)
 
-import { $ } from 'bun';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { $ } from 'bun';
 
 // ── Configuration ──────────────────────────────────────────
 
@@ -38,7 +38,9 @@ const hasExistingScreenshots = (): boolean =>
 
 const checkPwaRunning = async (): Promise<boolean> => {
   try {
-    const res = await fetch(`http://localhost:${PWA_PORT}/`, { signal: AbortSignal.timeout(2000) });
+    const _res = await fetch(`http://localhost:${PWA_PORT}/`, {
+      signal: AbortSignal.timeout(2000),
+    });
     return true; // Any response (even 404) means the server is up
   } catch {
     return false;

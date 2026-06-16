@@ -108,7 +108,7 @@ test('tilemap collision layer is parsed correctly', async ({ page }) => {
 
   // Inject a script that checks window state for collision grid
   // (implementation detail — can be wired when engine exposes collision grid)
-  const hasCollision = await page.evaluate(() => {
+  const _hasCollision = await page.evaluate(() => {
     return typeof (window as unknown as Record<string, unknown>).__AikamiEngine !== 'undefined';
   });
 

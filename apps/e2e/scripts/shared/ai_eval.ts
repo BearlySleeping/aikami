@@ -114,6 +114,7 @@ export const evaluateScreenshot = async (options: EvalOptions): Promise<VisualEv
       const res = await fetch(OPENROUTER_URL, {
         method: 'POST',
         headers: {
+          // biome-ignore lint/style/useNamingConvention: HTTP header name
           Authorization: `Bearer ${key}`,
           'Content-Type': 'application/json',
         },
@@ -124,6 +125,7 @@ export const evaluateScreenshot = async (options: EvalOptions): Promise<VisualEv
               role: 'user',
               content: [
                 { type: 'text', text: prompt },
+                // biome-ignore lint/style/useNamingConvention: OpenAI-compatible API field
                 { type: 'image_url', image_url: { url: imageDataUri } },
               ],
             },
