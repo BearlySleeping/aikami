@@ -20,6 +20,8 @@ import { c, error, log, ok } from './lib/cli_utils';
 // ---------------------------------------------------------------------------
 const SCRIPT_MAP: Record<string, string> = {
   // Ops scripts
+  preview: 'ops/preview.ts',
+  build_preview_client: 'ops/preview.ts',
   dev_all: 'ops/dev_all.ts',
   dev: 'ops/dev_all.ts',
   generate_llms: 'ops/generate_llms_txt.ts',
