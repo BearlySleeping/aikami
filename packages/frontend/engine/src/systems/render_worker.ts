@@ -261,6 +261,7 @@ const syncAppearanceSystem = (options: {
     if (!currentSet.has(eid)) {
       batchManager.deregisterEntity(eid);
       _lastKnownAppearanceLayers.delete(eid);
+      tracked.delete(eid);
     }
   }
 

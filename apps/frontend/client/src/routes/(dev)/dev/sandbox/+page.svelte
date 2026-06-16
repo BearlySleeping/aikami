@@ -4,6 +4,7 @@
   // infrastructure, but seeds localStorage with a mock persona so a character
   // loads instantly without needing to go through the character creation flow.
   import { browser } from '$app/environment';
+  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
   import GameView from '$lib/views/game/canvas/game_view.svelte';
   import { GameViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
   import { GameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
@@ -68,3 +69,14 @@
 </script>
 
 <GameView {viewModel} {gameUIViewModel} />
+
+<DevToolsPanel
+  actions={[
+    {
+      label: 'Map & Zoning Sandbox',
+      onClick: () => {
+        window.location.href = '/dev/sandbox/map';
+      },
+    },
+  ]}
+/>

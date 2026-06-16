@@ -21,7 +21,7 @@
   });
 </script>
 
-{#if viewModel.showBootDiagnostics && !$page.url.pathname.startsWith('/settings')}
+{#if viewModel.showBootDiagnostics && !$page.url.pathname.startsWith('/settings') && !$page.url.pathname.startsWith('/dev') && $page.url.searchParams.get('skip-onboarding') === null}
   <BootDiagnosticsView viewModel={bootDiagnosticsViewModel} />
 {:else}
   <BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
@@ -31,7 +31,7 @@
 
 <style>
   /* Hide the default Firebase emulator warning banner injected by the SDK —
-                                                                                                               replaced by our custom ModeIndicator component. */
+                                                                                                                                         replaced by our custom ModeIndicator component. */
   :global(.firebase-emulator-warning) {
     display: none;
   }

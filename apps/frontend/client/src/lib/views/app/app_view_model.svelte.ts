@@ -46,8 +46,8 @@ export type AppViewModelInterface = BaseViewModelInterface & {
 class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppViewModelInterface {
   private _initialRouteHandled = false;
 
-  /** Whether the boot diagnostics screen is currently shown. */
-  showBootDiagnostics = $state(true);
+  /** Boot screen is shown only on first visit; subsequent refreshes skip it. */
+  showBootDiagnostics = $state(!appService.bootComplete);
 
   constructor(options: AppViewModelOptions) {
     super(options);
@@ -105,8 +105,9 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   // Initialization
   // --------------------------------------------------------------------------
 
-  /** Hides the boot diagnostics screen and proceeds to the main app. */
+  /** Hides the boot diagnostics screen and persists the flag so it won't show again. */
   onBootComplete(): void {
+    appService.markBootComplete();
     this.showBootDiagnostics = false;
   }
 

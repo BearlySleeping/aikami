@@ -1,6 +1,14 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
-import { Container, Rectangle, type Renderer, RenderTexture, Sprite, Texture } from 'pixi.js';
+import {
+  Assets,
+  Container,
+  Rectangle,
+  type Renderer,
+  RenderTexture,
+  Sprite,
+  Texture,
+} from 'pixi.js';
 import type { TilemapData, TilemapTileset } from '../assets/map_loader.ts';
 
 // ---------------------------------------------------------------------------
@@ -76,7 +84,9 @@ type TilesetEntry = TilemapTileset & {
  * @param options - Tilemap data and texture resolution.
  * @returns A container with all rendered layers.
  */
-export const renderTilemap = (options: TilemapRenderOptions): TilemapRenderResult => {
+export const renderTilemap = async (
+  options: TilemapRenderOptions,
+): Promise<TilemapRenderResult> => {
   const { tilemap, layerFilter, skipRenderTexture } = options;
 
   const container = new Container();
@@ -84,6 +94,10 @@ export const renderTilemap = (options: TilemapRenderOptions): TilemapRenderResul
 
   // Pre-compute tileset frame lookups
   const tilesetEntries = _buildTilesetLookup(tilemap.tilesets);
+
+  // Pre-load all tileset textures before rendering
+  const textureLoadPromises = tilesetEntries.map((entry) => Assets.load(entry.image));
+  await Promise.all(textureLoadPromises);
 
   let layerCount = 0;
 
