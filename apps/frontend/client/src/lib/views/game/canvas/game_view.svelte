@@ -2,6 +2,7 @@
   // apps/frontend/client/src/lib/views/game/canvas/game_view.svelte
   import { untrack } from 'svelte';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import ModeIndicator from '$lib/components/mode_indicator.svelte';
   import GameUIView from '../ui/game_ui_view.svelte';
   import type { GameUIViewModelInterface } from '../ui/game_ui_view_model.svelte';
   import type { GameViewModelInterface } from './game_view_model.svelte';
@@ -68,6 +69,9 @@
         GameUIViewModel.activeOverlay. Escape key is handled inside.
       -->
       <GameUIView viewModel={gameUIViewModel} />
+
+      <!-- Mode Indicator (C-140) — floating badge showing current game mode -->
+      <ModeIndicator />
 
       <!-- Game Error — centered top overlay -->
       {#if viewModel.gameError}

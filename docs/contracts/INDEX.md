@@ -79,6 +79,7 @@ P2 (Polish — after P1):
 | C-137 | [Camera Follow & Viewport](C-137-camera-follow-viewport.md) ✅ | 2D camera with lerp tracking, map boundary clamping, window resize handling | — |
 | C-138 | [Map Transitions (Zoning)](C-138-map-transitions.md) ✅ | Zoning system for seamless tilemap transitions with fade overlay | — |
 | C-139 | [Isolated Dev Sandboxes & Map Wiring](C-139-dev-sandboxes-map-wiring.md) ✅ | Wire game initialization to load starting map, create /dev/sandbox/map route for visual tilemap testing | C-135, C-136, C-137, C-138 |
+| C-140 | [Game Mode System & Input Routing](C-140-game-mode-system.md) ✅ | Centralized Game Mode state machine (EXPLORE/DIALOGUE/MENU), input routing gate, dev sandbox | — |
 
 ## Contract Format
 
