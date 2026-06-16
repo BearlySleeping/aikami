@@ -31,6 +31,7 @@ import { createPlayer, type PlayerCreateOptions } from '../entities/create_playe
 import { createTestSprite } from '../entities/create_test_sprite.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
+import { getEngineGameMode, setEngineGameMode } from '../state/game_mode.ts';
 import {
   getCameraPosition,
   resetCameraTracking,
@@ -156,9 +157,17 @@ const workerBridge: EngineBridge = {
 
 /**
  * Applies a SET_PLAYER_VELOCITY command to the player entity's velocity.
+ *
+ * Gates on the current engine game mode — velocity is ignored when the
+ * mode is not EXPLORE (e.g., during DIALOGUE or MENU overlays).
  */
 const handleSetPlayerVelocity = (velocity: { x: number; y: number }): void => {
   if (!world) {
+    return;
+  }
+
+  // Gate: only apply velocity in EXPLORE mode
+  if (getEngineGameMode() !== 'EXPLORE') {
     return;
   }
 
@@ -201,6 +210,10 @@ const handleBridgeCommand = (command: GameCommand): void => {
     }
     case 'SPAWN_NPC': {
       handleSpawnNPC(command.npcData);
+      break;
+    }
+    case 'SET_GAME_MODE': {
+      setEngineGameMode(command.mode);
       break;
     }
     case 'INTERACT':

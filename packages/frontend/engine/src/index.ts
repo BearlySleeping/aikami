@@ -131,6 +131,8 @@ export {
 } from './rendering/sprite_composer.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
+// State (engine-level mode gate)
+export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export { isWalkable, resetCollisionGrid, setCollisionGrid } from './systems/collision_system.ts';
 export type {
