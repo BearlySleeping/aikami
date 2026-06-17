@@ -14,6 +14,7 @@ import {
   gameStateService,
   routerService,
 } from '$services';
+import { CombatViewModel } from '../../combat/combat_view_model.svelte.ts';
 import { InventoryViewModel } from '../../inventory/inventory_view_model.svelte';
 import { QuestViewModel } from '../../quest/quest_view_model.svelte.ts';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
@@ -84,6 +85,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   /** The active QuestViewModel, or undefined when the quest log is closed. */
   readonly questViewModel: QuestViewModel | undefined;
 
+  /** The active CombatViewModel, or undefined when no combat is in progress. */
+  readonly combatViewModel: CombatViewModel | undefined;
+
   /**
    * Handles global keydown events for overlay toggling.
    * Escape opens/closes the pause menu or ends dialogue.
@@ -141,6 +145,8 @@ class GameUIViewModel
   inventoryViewModel = $state<InventoryViewModel | undefined>(undefined);
 
   questViewModel = $state<QuestViewModel | undefined>(undefined);
+
+  combatViewModel = $state<CombatViewModel | undefined>(undefined);
 
   /** Whether Ollama (localhost) is the active text provider (vs OpenRouter). */
   readonly useOllama: boolean;
@@ -228,6 +234,38 @@ class GameUIViewModel
       // Listen for GAME_READY to hide the transition overlay after load completes
       bridge.on('GAME_READY', () => {
         this.isTransitioning = false;
+      });
+
+      // Listen for COMBAT_STARTED to mount the combat overlay
+      bridge.on('COMBAT_STARTED', (event) => {
+        if (this.activeOverlay !== 'NONE' && this.activeOverlay !== 'COMBAT') {
+          return;
+        }
+        this.activeOverlay = 'COMBAT';
+        gameStateService.setMode('COMBAT');
+        this._gameViewModel.pauseEngine();
+        this.combatViewModel = new CombatViewModel({
+          className: 'CombatViewModel',
+        });
+        // Initialize the combat view model so it registers bridge listeners
+        void this.combatViewModel.initialize();
+        // Feed the enemy data into the combat VM after bridge listeners are registered
+        if (this.combatViewModel) {
+          this.combatViewModel.enemyName = event.enemyName ?? 'Unknown Enemy';
+          this.combatViewModel.enemyHp = event.enemyHp ?? 80;
+          this.combatViewModel.enemyMaxHp = event.enemyMaxHp ?? 80;
+          this.combatViewModel.activeEntities = event.participantIds;
+          this.combatViewModel.currentTurnEntity = event.firstTurnEntityId;
+          this.combatViewModel.totalParticipants = event.participantIds.length;
+          this.combatViewModel.isPlayerTurn = true;
+        }
+      });
+
+      // Listen for COMBAT_ENDED to dismiss the combat overlay
+      bridge.on('COMBAT_ENDED', () => {
+        if (this.activeOverlay === 'COMBAT') {
+          this._endCombat();
+        }
       });
     } catch (error) {
       this.debug('_listenForDialogueEvents:failed', error);
@@ -413,6 +451,20 @@ class GameUIViewModel
     gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
     this.questViewModel = undefined;
+  }
+
+  /**
+   * Ends the combat overlay and restores EXPLORE mode.
+   *
+   * Called when COMBAT_ENDED is received from the engine bridge or
+   * when the player chooses to flee.
+   */
+  private _endCombat(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._gameViewModel.resumeEngine();
+    void this.combatViewModel?.dispose();
+    this.combatViewModel = undefined;
   }
 }
 

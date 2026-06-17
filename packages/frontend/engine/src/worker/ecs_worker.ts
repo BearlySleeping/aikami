@@ -17,6 +17,7 @@ import {
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { registerEnemyObservers } from '../components/enemy.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
@@ -44,6 +45,7 @@ import {
 import { type CollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
+import { updateEncounterSystem } from '../systems/encounter_system.ts';
 import { spawnEntities, spawnTransitionEntities } from '../systems/entity_spawner.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { handleInteract } from '../systems/interaction_system.ts';
@@ -322,6 +324,7 @@ const initializeEngine = (
   registerNPCDialogObservers(world);
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);
+  registerEnemyObservers(world);
   registerInventoryObservers(world);
   registerInteractableObservers(world);
   registerTurnOrderObservers(world);
@@ -462,6 +465,10 @@ const tickLoop = (): void => {
   updateExpressions(world, workerBridge);
   updateMovement(world, deltaMs);
   updateCameraSystem(world, deltaMs);
+
+  // Run encounter system after movement — positions are finalized
+  updateEncounterSystem({ world, playerEntityId, bridge: workerBridge });
+
   updateDialogTriggers(world, playerEntityId, workerBridge);
   updateZoningSystem(world, playerEntityId, workerBridge);
 
@@ -901,7 +908,14 @@ self.onmessage = (event: MessageEvent): void => {
 
           // 8. Notify main thread about all spawned NPC/prop entities
           for (const result of results) {
-            const tint = result.type === 'npc' ? 0xffcc00 : 0xffffff;
+            let tint: number;
+            if (result.type === 'npc') {
+              tint = 0xffcc00;
+            } else if (result.type === 'enemy') {
+              tint = 0xff4444;
+            } else {
+              tint = 0xffffff;
+            }
 
             // Read NPCDialog data for NPC entities so the main thread
             // can track them in _npcMeta for interaction key (E/Enter).
