@@ -921,4 +921,261 @@ describe('handleCombatAction', () => {
       expect(playerAttackEntry.targetMaxHp).toBe(50);
     }
   });
+
+  // ── C-146: Advantage —─────────────────────────────────────────────────
+
+  it('ADVANTAGE: rolls 2d20 and takes the higher for hit check', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 12,
+      accuracy: 4,
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 10,
+      accuracy: 2,
+      evasion: 15, // needs 11+ to hit: 4 + roll >= 16
+    });
+
+    initCombat(world, bridge);
+
+    // First roll = 5 (would miss: 5+4=9 < 15), second roll = 18 (hits: 18+4=22 >= 15)
+    const roller = createDeterministicRoller([5, 18, 3]); // adv roll 1, adv roll 2, damage roll
+
+    const logEntries: string[] = [];
+    bridge.on('COMBAT_LOG', (event) => {
+      logEntries.push(event.message);
+    });
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: roller,
+      advantage: true,
+    });
+
+    // Should hit (took the 18)
+    const hitEntry = logEntries.find((m) => m.includes('to hit'));
+    expect(hitEntry).toBeDefined();
+    if (hitEntry) {
+      expect(hitEntry).toMatch(/rolls 18/); // took the higher roll
+      expect(hitEntry).toMatch(/\[ADV\]/); // advantage label present
+    }
+
+    // Enemy HP should be reduced (hit landed)
+    const enemyStats = getComponent(world, enemyEid, CombatStats) as CombatStatsData;
+    expect(enemyStats.health).toBeLessThan(50);
+  });
+
+  it('ADVANTAGE: still misses when both rolls are low', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 12,
+      accuracy: 1,
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 10,
+      accuracy: 2,
+      evasion: 20, // needs 20+ to hit
+    });
+
+    initCombat(world, bridge);
+
+    // Both rolls are low: 3 and 7, max = 7, 7+1=8 < 20 evasion → miss
+    const roller = createDeterministicRoller([3, 7]);
+
+    const logEntries: string[] = [];
+    bridge.on('COMBAT_LOG', (event) => {
+      logEntries.push(event.message);
+    });
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: roller,
+      advantage: true,
+    });
+
+    // Should contain a miss entry with ADV label
+    const missEntry = logEntries.find((m) => m.includes('Miss') && m.includes('[ADV]'));
+    expect(missEntry).toBeDefined();
+
+    // Enemy HP unchanged
+    const enemyStats = getComponent(world, enemyEid, CombatStats) as CombatStatsData;
+    expect(enemyStats.health).toBe(50);
+  });
+
+  // ── C-146: Bonus damage ───────────────────────────────────────────────
+
+  it('BONUS_DAMAGE: adds bonusDamage to the final damage calculation', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 20,
+      attack: 5,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 15,
+      attack: 3,
+      defense: 0, // no defense
+      accuracy: 2,
+      evasion: 10,
+    });
+
+    initCombat(world, bridge);
+
+    // Roll: d20=15, d6=4, bonusDamage=3, attack=5, defense=0
+    // Raw: 4+5+3 = 12, damage = 12, remaining HP = 50-12 = 38
+    // Roll: d20=15, d6=4, bonusDamage=3, attack=5, defense=0
+    // Raw: 4+5+3 = 12, damage = 12, remaining HP = 50-12 = 38
+    const roller = createDeterministicRoller([15, 4, 1, 1]);
+
+    const logEntries: Array<{
+      message: string;
+      targetRemainingHp: number;
+      targetMaxHp: number;
+    }> = [];
+    bridge.on('COMBAT_LOG', (event) => {
+      logEntries.push(event);
+    });
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: roller,
+      bonusDamage: 3,
+    });
+
+    // Find the player hit entry
+    const hitEntry = logEntries.find((e) => e.message.includes('to hit'));
+    expect(hitEntry).toBeDefined();
+    if (hitEntry) {
+      // Without bonusDamage: 4+5-0 = 9 dmg, remaining 41
+      // With bonusDamage=3: 4+5+3-0 = 12 dmg, remaining 38
+      expect(hitEntry.targetRemainingHp).toBe(38);
+      expect(hitEntry.targetMaxHp).toBe(50);
+    }
+  });
+
+  it('BONUS_DAMAGE: bonusDamage of 0 does not change standard behavior', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 10,
+    });
+
+    initCombat(world, bridge);
+
+    // d20=15, d6=4, bonusDamage=0, attack=5, defense=0 → 9 damage
+    const roller = createDeterministicRoller([15, 4, 1, 1]);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: roller,
+      bonusDamage: 0,
+    });
+
+    const enemyStats = getComponent(world, enemyEid, CombatStats) as CombatStatsData;
+    expect(enemyStats.health).toBe(41); // 50 - 9 = 41
+  });
+
+  // ── C-146: Combined advantage + bonusDamage ───────────────────────────
+
+  it('ADVANTAGE + BONUS_DAMAGE: both modifiers apply simultaneously', () => {
+    const playerEid = createStatParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 10,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+    });
+    const enemyEid = createStatParticipant(world, {
+      health: 80,
+      maxHealth: 80,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 10,
+    });
+
+    initCombat(world, bridge);
+
+    // Advantage: rolls 10 and 19, takes 19 → 19+20=39 >= 10 evasion → hit
+    // Damage: d6=5 + attack=10 + bonusDamage=4 - defense=0 = 19
+    const roller = createDeterministicRoller([10, 19, 5, 1, 1]);
+
+    const logEntries: string[] = [];
+    bridge.on('COMBAT_LOG', (event) => {
+      logEntries.push(event.message);
+    });
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      targetId: enemyEid,
+      bridge,
+      diceRoller: roller,
+      advantage: true,
+      bonusDamage: 4,
+    });
+
+    const hitEntry = logEntries.find((m) => m.includes('to hit'));
+    expect(hitEntry).toBeDefined();
+    if (hitEntry) {
+      expect(hitEntry).toMatch(/\[ADV\]/);
+    }
+
+    const enemyStats = getComponent(world, enemyEid, CombatStats) as CombatStatsData;
+    expect(enemyStats.health).toBe(61); // 80 - 19 = 61
+  });
 });

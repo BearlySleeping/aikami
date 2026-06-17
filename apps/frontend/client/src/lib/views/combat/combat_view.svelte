@@ -8,6 +8,9 @@
   };
 
   const { viewModel }: Props = $props();
+
+  /** Temporary input value for the freeform custom action text field. */
+  let customActionInput = $state('');
 </script>
 
 <BaseViewModelContainer {viewModel} class="relative">
@@ -99,7 +102,7 @@
           <button
             class="btn btn-success btn-sm"
             onclick={() => viewModel.attack()}
-            disabled={viewModel.isAttacking}
+            disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
             data-testid="combat-attack-btn"
           >
             {viewModel.isAttacking ? '⚔️ ...' : '⚔️ Attack'}
@@ -107,7 +110,7 @@
           <button
             class="btn btn-outline btn-sm"
             onclick={() => viewModel.defend()}
-            disabled={viewModel.isAttacking}
+            disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
             data-testid="combat-defend-btn"
           >
             🛡️ Defend
@@ -115,12 +118,46 @@
           <button
             class="btn btn-ghost btn-sm text-error"
             onclick={() => viewModel.flee()}
-            disabled={viewModel.isAttacking}
+            disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
             data-testid="combat-flee-btn"
           >
             🏃 Flee
           </button>
         </div>
+
+        <!-- Freeform AI custom action (C-146) -->
+        <form
+          class="flex gap-2"
+          onsubmit={(e: SubmitEvent) => {
+            e.preventDefault();
+            if (customActionInput.trim().length > 0) {
+              void viewModel.executeCustomAction(customActionInput);
+              customActionInput = '';
+            }
+          }}
+        >
+          <input
+            type="text"
+            bind:value={customActionInput}
+            placeholder="Describe your action (e.g. backflip kick)..."
+            class="input input-bordered input-sm flex-1"
+            disabled={viewModel.isResolvingAiAction || viewModel.isAttacking}
+            data-testid="combat-custom-action-input"
+          >
+          <button
+            type="submit"
+            class="btn btn-primary btn-sm"
+            disabled={viewModel.isResolvingAiAction || viewModel.isAttacking || customActionInput.trim().length === 0}
+            data-testid="combat-custom-action-submit"
+          >
+            {#if viewModel.isResolvingAiAction}
+              <span class="loading loading-spinner loading-xs"></span>
+              Interpreting…
+            {:else}
+              ✨ Submit Action
+            {/if}
+          </button>
+        </form>
       {/if}
 
       <!-- Combat log -->

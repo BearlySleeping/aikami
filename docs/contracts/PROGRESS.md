@@ -30,6 +30,7 @@
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
+| C-146 | Freeform AI Combat Actions | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -163,6 +164,42 @@
 - `advanceTurn` still exists but is not used in the current 1v1 combat flow (player → enemy counter-attack → repeat).
 - Engine typecheck has 4 pre-existing errors (game_world.ts `?worker` import, undefined checks) — not caused by C-145.
 - Client fix task has 1 pre-existing suppression warning (test_preload.ts) — not caused by C-145.
+
+### C-146: Freeform AI Combat Actions
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/game/core/ai/prompts/combat_action_schema.ts` — TypeBox `CombatActionSchema` (actionType, narrative, bonusDamage, advantage, generateImage) + `COMBAT_ACTION_SYSTEM_PROMPT` for LLM extraction
+- `apps/e2e/tests/client/combat_sandbox.spec.ts` — 9 E2E tests verifying text input renders, accepts input, disables UI during AI resolution, clears after submit, appends to combat log
+
+**Files modified**:
+- `packages/frontend/engine/src/types.ts` — Added `advantage?: boolean` and `bonusDamage?: number` to `COMBAT_ACTION` payload
+- `packages/frontend/engine/src/systems/turn_manager_system.ts` — Refactored `_processPlayerAttack` to options-object pattern; added advantage logic (roll 2d20, take higher) and bonusDamage injection; updated `CombatActionParams` type and `handleCombatAction` to pass new fields
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Worker handler passes `advantage` and `bonusDamage` from `COMBAT_ACTION` command to `handleCombatAction`
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Added `isResolvingAiAction` state, `executeCustomAction(prompt)` method importing `textGenerationService`/`imageGenerationService` + `CombatActionSchema`; builds contextual prompt, calls `extractStructure()`, appends narrative to log, fires async image generation for cinematic actions, dispatches `COMBAT_ACTION` with advantage/bonusDamage
+- `apps/frontend/client/src/lib/views/combat/combat_view.svelte` — Added text input + "Submit Action" button with loading spinner; disables all buttons during AI resolution; clears input after submission; `$state` for input value
+- `apps/frontend/client/src/lib/views/combat/combat_dev_view_model.svelte.ts` — Override `executeCustomAction` with mock AI interpretation (500ms simulated delay, random advantage/bonusDamage for testing)
+- `packages/frontend/engine/src/__tests__/turn_manager.test.ts` — 5 new tests: advantage hit (takes higher of 2d20), advantage miss (both low), bonusDamage injection, bonusDamage=0 no-op, combined advantage+bonusDamage
+
+**Deviations**:
+1. **Schema placed in client app, not shared packages**: Contract specifies `apps/frontend/client/src/lib/game/core/ai/prompts/`. Conventionally TypeBox schemas go in `packages/shared/schemas/`, but the contract path is followed. The schema is only used by the CombatViewModel (single consumer) — migration to shared can happen if other consumers emerge.
+2. **`import Type from 'typebox'` not `@sinclair/typebox`**: Follows existing codebase convention (`character_extraction_schema.ts` uses same import). Root `package.json` aliases `typebox@1.2.8`.
+
+**Design decisions**:
+1. **Image generation is fire-and-forget**: `generateImage()` is called via `void` (not awaited) so the combat flow is not blocked by ComfyUI generation latency. The image URL is logged but not yet wired into the scene — future contract for background/scene updates.
+2. **`imageGenerationService` imported directly**: Singleton import, not injected — matches the existing ViewModel pattern where services are imported as module-level singletons.
+3. **`executeCustomAction` catches LLM errors gracefully**: If `extractStructure()` fails, an error message is appended to the combat log instead of crashing the UI. The player can retry.
+4. **Dev VM simulates AI with 500ms delay**: Allows testing the loading spinner + disabled state without requiring a real LLM backend.
+5. **`_processPlayerAttack` refactored to options object**: Existing code used 6 positional args — now uses a typed options object (`ProcessPlayerAttackParams`) matching aikami conventions.
+
+**Known limitations**:
+- Text generation requires a configured AI provider (OpenRouter API key). Without one, `executeCustomAction` will show an error in the combat log.
+- Image generation requires a running ComfyUI instance. If offline, the async call silently fails (logged via `warn`).
+- The generated image URL is not wired into the scene background — only logged. Future contract for dynamic scene updates.
+- No unit tests for `CombatViewModel.executeCustomAction` (requires mocking `textGenerationService`/`imageGenerationService` which are module-level singletons). E2E tests cover the flow via the dev sandbox.
+- Engine typecheck has 4 pre-existing errors (C-145) — not caused by C-146.
+- Client fix task has 1 pre-existing suppression warning (C-145) — not caused by C-146.
 
 ### C-134: Inline Provider Setup & Routing Fix
 
