@@ -1,4 +1,6 @@
 // apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts
+
+import type { QuestData } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -24,6 +26,8 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   readonly activeContexts: readonly ActiveContextEntry[];
   readonly currentMode: GameMode;
   inventory: Array<{ itemId: string; quantity: number }>;
+  /** Quest data synced from the ECS engine via QUESTS_UPDATED events. */
+  readonly quests: readonly QuestData[];
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -57,6 +61,7 @@ export class GameStateService
   activeContexts = $state<ActiveContextEntry[]>([]);
   currentMode = $state<GameMode>('EXPLORE');
   inventory = $state<Array<{ itemId: string; quantity: number }>>([]);
+  quests = $state<QuestData[]>([]);
 
   get worldVariables(): Record<string, unknown> {
     return this.currentWorld?.variables ?? {};
@@ -74,6 +79,7 @@ export class GameStateService
     super(options);
     this.uid = options.uid;
     void this._listenForInventoryUpdates();
+    void this._listenForQuestUpdates();
   }
 
   private emitEvent(event: GameStateEvent): void {
@@ -340,6 +346,28 @@ export class GameStateService
       });
     } catch (error) {
       this.debug('_listenForInventoryUpdates:failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Listens for QUESTS_UPDATED events from the ECS via the EngineBridge.
+   *
+   * When quests are added, progressed, or completed in the ECS, the engine
+   * emits the full quest list. This method updates the reactive `quests`
+   * state so the Quest Log UI overlay renders the latest quest data.
+   *
+   * Contract: C-143 Quest Log Sync
+   */
+  private async _listenForQuestUpdates(): Promise<void> {
+    try {
+      const { createEngineBridge } = await import('@aikami/frontend/engine');
+      const bridge = createEngineBridge();
+
+      bridge.on('QUESTS_UPDATED', (event) => {
+        this.quests = event.quests;
+      });
+    } catch (error) {
+      this.debug('_listenForQuestUpdates:failed', { error: String(error) });
     }
   }
 }

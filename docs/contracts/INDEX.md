@@ -82,6 +82,7 @@ P2 (Polish — after P1):
 | C-140 | [Game Mode System & Input Routing](C-140-game-mode-system.md) ✅ | Centralized Game Mode state machine (EXPLORE/DIALOGUE/MENU), input routing gate, dev sandbox | — |
 | C-141 | [NPC Interaction & Dialogue Trigger](C-141-npc-interaction-trigger.md) ✅ | Proximity-based E key interaction, NPC_INTERACTED bridge event, persona-aware AI prompts | — |
 | C-142 | [Inventory Sync & Item Pickups](C-142-inventory-item-pickups.md) ✅ | ECS Inventory→Svelte UI sync, item spawn points, Interact key pickup, Inventory overlay with I toggle | — |
+| C-143 | [Quest Log Sync & Test Fixes](C-143-quest-log-and-test-fixes.md) ✅ | Fix 46→17 test failures, QUESTS_UPDATED bridge event, QuestViewModel→GameStateService wiring, Q-key quest overlay | — |
 
 ## Contract Format
 

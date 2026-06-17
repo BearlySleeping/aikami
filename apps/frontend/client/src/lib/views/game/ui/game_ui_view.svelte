@@ -1,6 +1,7 @@
 <script lang="ts">
-  import InventoryView from '../../inventory/inventory_view.svelte';
   // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
+  import InventoryView from '../../inventory/inventory_view.svelte';
+  import QuestView from '../../quest/quest_view.svelte';
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
   import PauseMenuOverlay from './overlays/pause_menu_overlay.svelte';
@@ -50,6 +51,24 @@
       class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
     >
       <p class="text-lg font-bold text-error">Inventory loading...</p>
+    </div>
+  {/if}
+{/if}
+
+{#if viewModel.activeOverlay === 'QUEST_LOG'}
+  {#if viewModel.questViewModel}
+    <div
+      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    >
+      <div class="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl">
+        <QuestView viewModel={viewModel.questViewModel} />
+      </div>
+    </div>
+  {:else}
+    <div
+      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
+    >
+      <p class="text-lg font-bold text-error">Quest Log loading...</p>
     </div>
   {/if}
 {/if}
