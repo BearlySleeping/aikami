@@ -49,9 +49,45 @@ export class CombatDevViewModel extends CombatViewModel {
     this.playerMaxHp = MOCK_PLAYER_MAX_HP;
     this.enemyHp = MOCK_ENEMY_MAX_HP;
     this.enemyMaxHp = MOCK_ENEMY_MAX_HP;
+    this.enemyEntityId = 2002;
     this.combatResult = null;
 
     return await super.initialize();
+  }
+
+  // ── Override combat actions — bypass bridge, use mock sim ────────────
+
+  /** @inheritdoc */
+  override attack(): void {
+    if (this.combatResult || this.isAttacking) {
+      return;
+    }
+    this.isAttacking = true;
+    this.simulatePlayerAttack();
+    this.isAttacking = false;
+  }
+
+  /** @inheritdoc */
+  override flee(): void {
+    if (this.combatResult || this.isAttacking) {
+      return;
+    }
+    this.isAttacking = true;
+    this.combatResult = 'defeat';
+    this.currentTurnEntity = null;
+    this._addLogEntry('[Dev Mock] Fled from battle!');
+    this.isAttacking = false;
+  }
+
+  /** @inheritdoc */
+  override defend(): void {
+    if (this.combatResult || this.isAttacking) {
+      return;
+    }
+    this.isAttacking = true;
+    this._addLogEntry('[Dev Mock] Player takes a defensive stance!');
+    this.simulateEnemyTurn();
+    this.isAttacking = false;
   }
 
   // ── Dev-only methods ──────────────────────────────────────────────────
@@ -135,6 +171,7 @@ export class CombatDevViewModel extends CombatViewModel {
     this.enemyMaxHp = MOCK_ENEMY_MAX_HP;
     this.combatLog = [];
     this.combatResult = null;
+    this.enemyEntityId = 2002;
     this.activeEntities = [1001, 2002];
     this.currentTurnEntity = 1001;
     this.totalParticipants = 2;
@@ -146,6 +183,7 @@ export class CombatDevViewModel extends CombatViewModel {
   private _endBattle(result: 'victory' | 'defeat'): void {
     this.combatResult = result;
     this.currentTurnEntity = null;
+    this.isAttacking = false;
     const label = result === 'victory' ? 'Victory!' : 'Defeat...';
     this._addLogEntry(`[Dev Mock] Battle ended — ${label}`);
   }

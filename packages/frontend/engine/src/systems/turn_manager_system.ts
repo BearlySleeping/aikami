@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/systems/turn_manager_system.ts
 import type { World } from 'bitecs';
-import { getComponent, query } from 'bitecs';
+import { getComponent, query, removeEntity } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
@@ -8,14 +8,17 @@ import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 
 // ---------------------------------------------------------------------------
-// TurnManagerSystem — turn-based combat sequencing
+// TurnManagerSystem — turn-based combat sequencing + dice combat math
 //
 // Manages turn progression for combat encounters. Sorts participants by
-// initiative, advances turns on demand, and emits TURN_CHANGED / COMBAT_ENDED
-// events through the EngineBridge.
+// initiative, advances turns on demand, resolves combat actions (attack,
+// flee, defend) with d20-style dice RNG, and emits COMBAT_LOG /
+// COMBAT_STATE_UPDATE / COMBAT_ENDED events through the EngineBridge.
 //
 // Designed to run in the Web Worker alongside other game systems. Uses
 // direct SoA array mutation for performance — no observer overhead per frame.
+//
+// Contract: C-145 Turn-Based Combat Loop
 // ---------------------------------------------------------------------------
 
 /** Cached query terms for active combat participants. */
@@ -232,4 +235,364 @@ const getActiveParticipantIds = (world: World): number[] => {
   return active;
 };
 
-export { advanceTurn, endCombat, initCombat, resetTurnTracking };
+// ---------------------------------------------------------------------------
+// Dice RNG
+// ---------------------------------------------------------------------------
+
+/**
+ * Cryptographically-strong dice roller.
+ *
+ * Returns an integer in [1, sides] inclusive (e.g., `rollDice(20)` → 1–20).
+ *
+ * @param sides - Number of faces on the die.
+ * @returns A random integer between 1 and sides.
+ */
+const rollDice = (sides: number): number => {
+  if (sides < 1) {
+    return 0;
+  }
+  // Use crypto.getRandomValues for uniform distribution
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  return (array[0] % sides) + 1;
+};
+
+// ---------------------------------------------------------------------------
+// Combat action handling (C-145)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parameters for {@link handleCombatAction}.
+ */
+type CombatActionParams = {
+  world: World;
+  /** Player entity ID for damage application and death checks. */
+  playerEntityId: number;
+  /** The combat action to execute. */
+  action: 'ATTACK' | 'FLEE' | 'DEFEND';
+  /** Target entity ID (defaults to first non-player enemy participant). */
+  targetId?: number;
+  bridge: EngineBridge;
+  /**
+   * Override the dice roller for deterministic testing.
+   * When omitted, {@link rollDice} is used (crypto.getRandomValues).
+   */
+  diceRoller?: (sides: number) => number;
+};
+
+/**
+ * Processes a COMBAT_ACTION command from the UI.
+ *
+ * Called by the worker's message handler. Routes ATTACK (hit check →
+ * damage roll → enemy turn), FLEE (ends combat), and DEFEND (future:
+ * apply defense buff). Emits COMBAT_LOG and COMBAT_STATE_UPDATE through
+ * the bridge.
+ */
+const handleCombatAction = (params: CombatActionParams): void => {
+  const { world, playerEntityId, action, targetId, bridge, diceRoller } = params;
+
+  if (!world || !bridge) {
+    return;
+  }
+
+  // Combat must be initialized
+  if (turnOrderList.length === 0) {
+    return;
+  }
+
+  const roller = diceRoller ?? rollDice;
+
+  switch (action) {
+    case 'ATTACK': {
+      _processPlayerAttack(world, playerEntityId, targetId, bridge, roller);
+      break;
+    }
+    case 'FLEE': {
+      endCombat(bridge, false);
+      break;
+    }
+    case 'DEFEND': {
+      // DEFEND is a defensive stance — future implementation may apply a
+      // temporary evasion buff. For now, emit a log entry and end the
+      // player's action so the enemy can take its turn.
+      bridge.emit({
+        type: 'COMBAT_LOG',
+        message: 'Player takes a defensive stance!',
+        sourceId: playerEntityId,
+        targetId: playerEntityId,
+        targetRemainingHp: _getHp(world, playerEntityId),
+        targetMaxHp: _getMaxHp(world, playerEntityId),
+      });
+      _emitCombatStateUpdate(world, bridge);
+      _processEnemyTurn(world, playerEntityId, bridge, roller);
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Internal — player attack
+// ---------------------------------------------------------------------------
+
+/**
+ * Processes a player ATTACK action.
+ *
+ * 1. Finds the target enemy (from targetId or first enemy participant).
+ * 2. d20 + player accuracy vs enemy evasion for hit check.
+ * 3. d6 + player attack - enemy defense for damage.
+ * 4. Applies damage, emits COMBAT_LOG.
+ * 5. If enemy survives, processes enemy counter-attack.
+ * 6. If enemy dies, destroys entity + grants loot + emits COMBAT_ENDED.
+ */
+const _processPlayerAttack = (
+  world: World,
+  playerEntityId: number,
+  targetId: number | undefined,
+  bridge: EngineBridge,
+  roller: (sides: number) => number,
+): void => {
+  // Find the target enemy — the first non-player combat participant
+  const enemyId = targetId && targetId > 0 ? targetId : _findFirstEnemyParticipant(playerEntityId);
+
+  if (enemyId <= 0) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: 'No valid target to attack!',
+      sourceId: playerEntityId,
+      targetId: 0,
+      targetRemainingHp: 0,
+      targetMaxHp: 0,
+    });
+    return;
+  }
+
+  const playerStats = getComponent(world, playerEntityId, CombatStats) as
+    | CombatStatsData
+    | undefined;
+  const enemyStats = getComponent(world, enemyId, CombatStats) as CombatStatsData | undefined;
+
+  if (!playerStats || !enemyStats) {
+    return;
+  }
+
+  // ── Hit check: d20 + player accuracy vs enemy evasion ──
+  const attackRoll = roller(20);
+  const hitTotal = attackRoll + (playerStats.accuracy ?? 0);
+  const hitThreshold = enemyStats.evasion ?? 0;
+
+  if (hitTotal < hitThreshold) {
+    // Miss!
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Player rolls ${attackRoll} (+${playerStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+      sourceId: playerEntityId,
+      targetId: enemyId,
+      targetRemainingHp: enemyStats.health,
+      targetMaxHp: enemyStats.maxHealth,
+    });
+    _emitCombatStateUpdate(world, bridge);
+    _processEnemyTurn(world, playerEntityId, bridge, roller);
+    return;
+  }
+
+  // ── Damage roll: d6 + player attack - enemy defense ──
+  const damageRoll = roller(6);
+  const rawDamage = damageRoll + (playerStats.attack ?? 0);
+  const damage = Math.max(1, rawDamage - (enemyStats.defense ?? 0)); // minimum 1 damage
+
+  // Apply damage
+  CombatStats.health[enemyId] = Math.max(0, enemyStats.health - damage);
+  const remainingHp = CombatStats.health[enemyId];
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `Player rolls ${attackRoll} (+${playerStats.accuracy ?? 0} = ${hitTotal}) to hit. Hits for ${damage} damage! (Enemy HP: ${remainingHp}/${enemyStats.maxHealth})`,
+    sourceId: playerEntityId,
+    targetId: enemyId,
+    targetRemainingHp: remainingHp,
+    targetMaxHp: enemyStats.maxHealth,
+  });
+
+  _emitCombatStateUpdate(world, bridge);
+
+  // ── Check if enemy is defeated ──
+  if (remainingHp <= 0) {
+    _handleEnemyDefeated(world, enemyId, bridge);
+    return;
+  }
+
+  // Enemy counter-attacks
+  _processEnemyTurn(world, playerEntityId, bridge, roller);
+};
+
+// ---------------------------------------------------------------------------
+// Internal — enemy turn
+// ---------------------------------------------------------------------------
+
+/**
+ * Processes the enemy's turn (counter-attack after player action).
+ *
+ * Uses the same d20 hit check + d6 damage roll against the player.
+ * Emits COMBAT_LOG and COMBAT_STATE_UPDATE.
+ */
+const _processEnemyTurn = (
+  world: World,
+  playerEntityId: number,
+  bridge: EngineBridge,
+  roller: (sides: number) => number,
+): void => {
+  const enemyId = _findFirstEnemyParticipant(playerEntityId);
+  if (enemyId <= 0) {
+    return;
+  }
+
+  const playerStats = getComponent(world, playerEntityId, CombatStats) as
+    | CombatStatsData
+    | undefined;
+  const enemyStats = getComponent(world, enemyId, CombatStats) as CombatStatsData | undefined;
+
+  if (!playerStats || !enemyStats) {
+    return;
+  }
+
+  // ── Hit check: d20 + enemy accuracy vs player evasion ──
+  const attackRoll = roller(20);
+  const hitTotal = attackRoll + (enemyStats.accuracy ?? 0);
+  const hitThreshold = playerStats.evasion ?? 0;
+
+  if (hitTotal < hitThreshold) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+      sourceId: enemyId,
+      targetId: playerEntityId,
+      targetRemainingHp: playerStats.health,
+      targetMaxHp: playerStats.maxHealth,
+    });
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  // ── Damage roll: d6 + enemy attack - player defense ──
+  const damageRoll = roller(6);
+  const rawDamage = damageRoll + (enemyStats.attack ?? 0);
+  const damage = Math.max(1, rawDamage - (playerStats.defense ?? 0));
+
+  // Apply damage
+  CombatStats.health[playerEntityId] = Math.max(0, playerStats.health - damage);
+  const remainingHp = CombatStats.health[playerEntityId];
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) to hit. Deals ${damage} damage! (Player HP: ${remainingHp}/${playerStats.maxHealth})`,
+    sourceId: enemyId,
+    targetId: playerEntityId,
+    targetRemainingHp: remainingHp,
+    targetMaxHp: playerStats.maxHealth,
+  });
+
+  _emitCombatStateUpdate(world, bridge);
+
+  // ── Check if player is defeated ──
+  if (remainingHp <= 0) {
+    bridge.emit({ type: 'COMBAT_ENDED', victory: false });
+    turnOrderList = [];
+    currentTurnIndex = -1;
+    return;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Internal — defeat + loot
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles enemy defeat: destroys the entity, grants loot via INVENTORY_UPDATED,
+ * and emits COMBAT_ENDED with victory = true.
+ */
+const _handleEnemyDefeated = (world: World, enemyId: number, bridge: EngineBridge): void => {
+  // Emit a loot event — each enemy drops a generic item on defeat.
+  // In a full implementation, the itemId would come from the enemy's
+  // spawn properties or a loot table.
+  bridge.emit({
+    type: 'INVENTORY_UPDATED',
+    inventory: [
+      {
+        itemId: `loot_${enemyId}`,
+        quantity: 1,
+      },
+    ],
+  });
+
+  // Remove the entity from the world
+  removeEntity(world, enemyId);
+
+  // End combat with victory
+  bridge.emit({ type: 'COMBAT_ENDED', victory: true });
+  turnOrderList = [];
+  currentTurnIndex = -1;
+};
+
+// ---------------------------------------------------------------------------
+// Internal — helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Finds the first enemy participant in the turn order list.
+ *
+ * @param playerEntityId - The player's entity ID (excluded from results).
+ * @returns The entity ID of the first enemy, or 0 if none found.
+ */
+const _findFirstEnemyParticipant = (playerEntityId: number): number => {
+  for (const eid of turnOrderList) {
+    if (eid !== playerEntityId && eid > 0) {
+      return eid;
+    }
+  }
+  return 0;
+};
+
+/**
+ * Reads the current HP of an entity from the CombatStats SoA.
+ */
+const _getHp = (world: World, eid: number): number => {
+  const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
+  return stats?.health ?? 0;
+};
+
+/**
+ * Reads the max HP of an entity from the CombatStats SoA.
+ */
+const _getMaxHp = (world: World, eid: number): number => {
+  const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
+  return stats?.maxHealth ?? 0;
+};
+
+/**
+ * Emits a COMBAT_STATE_UPDATE event with current HP totals for all
+ * combat participants. Called after every action (player attack, enemy
+ * counter-attack) so the UI can reactively update HP bars.
+ */
+const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
+  const hpMap: Record<number, number> = {};
+  const maxHpMap: Record<number, number> = {};
+
+  for (const eid of turnOrderList) {
+    const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
+    if (stats) {
+      hpMap[eid] = stats.health;
+      maxHpMap[eid] = stats.maxHealth;
+    }
+  }
+
+  bridge.emit({
+    type: 'COMBAT_STATE_UPDATE',
+    entityHpMap: hpMap,
+    entityMaxHpMap: maxHpMap,
+  });
+};
+
+export { advanceTurn, endCombat, handleCombatAction, initCombat, resetTurnTracking };

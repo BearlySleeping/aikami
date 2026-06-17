@@ -67,6 +67,7 @@ P2 (Polish — after P1):
 
 | # | Contract | Description | Depends On |
 |---|----------|-------------|------------|
+| C-145 | [Turn-Based Combat Loop](C-145-turn-based-combat-loop.md) ✅ | d20 dice RNG combat, hit/damage/loot, COMBAT_ACTION bridge, unit tests | C-144 |
 | C-010 | [Setup Script](C-010-setup-script.md) | Interactive developer onboarding script | C-007, C-008 |
 | C-011 | [Blackbox Testing Infrastructure](C-011-blackbox-testing.md) | E2E testing with Playwright, Firebase emulators, visual regression | C-007, C-009 |
 | C-012 | [Generate llms.txt and CONTEXT.md](C-012-generate-llms-and-context.md) | AI-first file index and project briefing | C-002, C-007 |

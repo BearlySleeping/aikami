@@ -29,6 +29,7 @@ export { resetMovementTracking, updateMovement } from './systems/movement_system
 export {
   advanceTurn,
   endCombat,
+  handleCombatAction,
   initCombat,
   resetTurnTracking,
 } from './systems/turn_manager_system.ts';
