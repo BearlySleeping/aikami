@@ -23,7 +23,14 @@ import {
 // to reactively update HP bars, battle log, and overlay state.
 // ---------------------------------------------------------------------------
 
-export type CombatViewModelOptions = BaseViewModelOptions;
+export type CombatViewModelOptions = BaseViewModelOptions & {
+  /**
+   * Optional callback invoked when the user dismisses the battle result.
+   * When provided, {@link dismissResult} calls this instead of just
+   * clearing the result — allowing the parent to close the overlay.
+   */
+  onDismissOverlay?: () => void;
+};
 
 export type CombatViewModelInterface = BaseViewModelInterface & {
   /**
@@ -85,6 +92,13 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
 
   /** Whether a combat encounter is currently in progress. */
   readonly inCombat: boolean;
+
+  /**
+   * Dismisses the battle result banner after combat ends.
+   * Sets {@link combatResult} to null so the action buttons re-appear
+   * (or the parent overlay can be dismissed).
+   */
+  dismissResult(): void;
 
   /** Whether the attack button should be disabled (waiting for engine response). */
   readonly isAttacking: boolean;
@@ -199,6 +213,18 @@ export class CombatViewModel
       return 'bg-error/20 text-error';
     }
     return '';
+  }
+
+  /** @inheritdoc */
+  dismissResult(): void {
+    const onDismiss = (this as unknown as { _options?: CombatViewModelOptions })._options
+      ?.onDismissOverlay;
+    if (onDismiss) {
+      this.combatResult = null;
+      onDismiss();
+      return;
+    }
+    this.combatResult = null;
   }
 
   /** Cached bridge instance — created lazily on first use. */

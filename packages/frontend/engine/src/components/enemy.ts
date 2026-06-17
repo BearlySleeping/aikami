@@ -13,6 +13,13 @@ import { observe, onSet } from 'bitecs';
 export const Enemy = {
   /** Whether this entity is a hostile enemy. */
   isActive: [] as boolean[],
+  /**
+   * The spawn point ID from the Tiled tilemap.
+   * Used for defeated-enemy persistence across map transitions.
+   *
+   * Contract: C-147 Progression & Persistence
+   */
+  spawnId: [] as string[],
 };
 
 /**
@@ -22,7 +29,10 @@ export const Enemy = {
  * @param world - The bitECS world to register observers on.
  */
 export const registerEnemyObservers = (world: World): void => {
-  observe(world, onSet(Enemy), (eid: number, params: { isActive: boolean }) => {
+  observe(world, onSet(Enemy), (eid: number, params: { isActive: boolean; spawnId?: string }) => {
     Enemy.isActive[eid] = params.isActive;
+    if (params.spawnId !== undefined) {
+      Enemy.spawnId[eid] = params.spawnId;
+    }
   });
 };

@@ -5,7 +5,7 @@
 // tilemap with an enemy spawn point, and wires up the CombatViewModel
 // when the player triggers an encounter.
 //
-// Contract: C-144 Task 5
+// Contract: C-144 Task 5, C-147 Progression & Persistence
 
 import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
@@ -42,12 +42,32 @@ export type CombatSandboxViewModelInterface = BaseViewModelInterface & {
   readonly mapLoaded: boolean;
   /** The active CombatViewModel, or undefined when combat is not active. */
   readonly combatViewModel: CombatDevViewModel | undefined;
+  /** Whether the Game Over overlay is visible (player defeated). */
+  readonly isGameOver: boolean;
+  /** Player XP from combat victories (C-147). */
+  readonly playerXp: number;
+  /** Player level (C-147). */
+  readonly playerLevel: number;
+  /** XP needed for next level (C-147). */
+  readonly playerXpToNextLevel: number;
+  /** Spawn point IDs of defeated enemies (C-147). */
+  readonly defeatedEnemyIds: string[];
+  /** Last level-up event data for display (C-147). */
+  readonly lastLevelUpEvent: string | undefined;
   /** Initializes the game engine, binding it to the given canvas. */
   initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
   /** Dismisses the combat overlay after the encounter ends. */
   dismissCombat: () => void;
+  /** Respaws the player after defeat (reloads map). */
+  respawnPlayer: () => Promise<void>;
   /** Destroys the engine, releasing WebGL and worker resources. */
   destroyEngine: () => void;
+  /** DEV: force game over overlay (C-147). */
+  devForceGameOver: () => void;
+  /** DEV: grant XP directly (C-147). */
+  devGrantXp: () => void;
+  /** DEV: simulate COMBAT_ENDED victory with a specific enemy ID. */
+  devSimulateVictoryWithEnemy: () => void;
 };
 
 export type CombatSandboxViewModelOptions = BaseViewModelOptions & {};
@@ -75,6 +95,12 @@ class CombatSandboxViewModel
   engineError = $state<string | undefined>(undefined);
   mapLoaded = $state<boolean>(false);
   combatViewModel = $state<CombatDevViewModel | undefined>(undefined);
+  isGameOver = $state<boolean>(false);
+  playerXp = $state<number>(0);
+  playerLevel = $state<number>(1);
+  playerXpToNextLevel = $state<number>(100);
+  defeatedEnemyIds = $state<string[]>([]);
+  lastLevelUpEvent = $state<string | undefined>(undefined);
 
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
@@ -132,6 +158,8 @@ class CombatSandboxViewModel
 
   /** @inheritdoc */
   dismissCombat(): void {
+    // Reset engine mode to EXPLORE so the player can move again (C-147)
+    this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
     void this.combatViewModel?.dispose();
     this.combatViewModel = undefined;
   }
@@ -159,9 +187,9 @@ class CombatSandboxViewModel
   // -----------------------------------------------------------------------
 
   /**
-   * Registers listeners for COMBAT_STARTED and COMBAT_ENDED events
-   * from the engine bridge so the sandbox can mount/dismiss the
-   * CombatViewModel in response to encounter triggers.
+   * Registers listeners for COMBAT_STARTED, COMBAT_ENDED, and
+   * PLAYER_LEVELED_UP events from the engine bridge so the sandbox
+   * can mount/dismiss the CombatViewModel and track progression.
    */
   private _registerBridgeListeners(): void {
     const bridge = this._bridge;
@@ -178,6 +206,7 @@ class CombatSandboxViewModel
 
       this.combatViewModel = new CombatDevViewModel({
         className: 'CombatSandboxCombatViewModel',
+        onDismissOverlay: () => this.dismissCombat(),
       });
 
       // Feed enemy data into the combat VM — skip initialize()
@@ -194,10 +223,85 @@ class CombatSandboxViewModel
       this.combatViewModel.playerMaxHp = 100;
     });
 
-    bridge.on('COMBAT_ENDED', () => {
-      this.debug('combat-ended');
-      this.dismissCombat();
+    bridge.on('COMBAT_ENDED', (event) => {
+      this.debug('combat-ended', event);
+
+      // Track defeated enemy for persistence demo (C-147)
+      if (event.victory && event.defeatedEnemyId) {
+        if (!this.defeatedEnemyIds.includes(event.defeatedEnemyId)) {
+          this.defeatedEnemyIds = [...this.defeatedEnemyIds, event.defeatedEnemyId];
+        }
+      }
+
+      if (event.victory) {
+        // Delay dismiss so the victory banner is visible (C-147)
+        setTimeout(() => this.dismissCombat(), 2500);
+      } else {
+        // Player defeated — show Game Over, reset engine mode (C-147)
+        this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
+        this.isGameOver = true;
+        void this.combatViewModel?.dispose();
+        this.combatViewModel = undefined;
+      }
     });
+
+    // Listen for level-up events (C-147)
+    bridge.on('PLAYER_LEVELED_UP', (event) => {
+      this.debug('player-leveled-up', event);
+      this.playerLevel = event.newLevel;
+      this.playerXpToNextLevel = event.xpToNextLevel;
+      this.lastLevelUpEvent = `Level ${event.newLevel}! HP: ${event.maxHp}, ATK: ${event.attack}, DEF: ${event.defense}`;
+
+      // Clear the notification after 4 seconds
+      setTimeout(() => {
+        this.lastLevelUpEvent = undefined;
+      }, 4000);
+    });
+  }
+  /** @inheritdoc */
+  async respawnPlayer(): Promise<void> {
+    this.isGameOver = false;
+    this.engineReady = false;
+    this.mapLoaded = false;
+
+    // Reload the combat sandbox map — defeated enemies are filtered
+    await this._gameWorld?.loadMap(
+      COMBAT_MAP_URL,
+      PLAYER_SPAWN_X,
+      PLAYER_SPAWN_Y,
+      this.defeatedEnemyIds,
+    );
+    this.mapLoaded = true;
+    this.engineReady = true;
+  }
+
+  /** @inheritdoc */
+  devForceGameOver(): void {
+    this.isGameOver = true;
+    void this.combatViewModel?.dispose();
+    this.combatViewModel = undefined;
+  }
+
+  /** @inheritdoc */
+  devGrantXp(): void {
+    this.playerXp += 50;
+    if (this.playerXp >= this.playerXpToNextLevel) {
+      // Simulate level-up manually since this is dev-only
+      this.playerLevel += 1;
+      this.playerXp -= this.playerXpToNextLevel;
+      this.playerXpToNextLevel = Math.floor(this.playerXpToNextLevel * 1.5);
+      this.lastLevelUpEvent = `[DEV] Level ${this.playerLevel}! (Manual grant)`;
+      setTimeout(() => {
+        this.lastLevelUpEvent = undefined;
+      }, 4000);
+    }
+  }
+
+  /** @inheritdoc */
+  devSimulateVictoryWithEnemy(): void {
+    const testEnemyId = `enemy_dev_${Date.now()}`;
+    this.defeatedEnemyIds = [...this.defeatedEnemyIds, testEnemyId];
+    this.playerXp += 25;
   }
 }
 

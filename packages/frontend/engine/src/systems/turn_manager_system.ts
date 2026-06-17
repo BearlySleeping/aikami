@@ -3,6 +3,7 @@ import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
+import { Enemy } from '../components/enemy.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -453,7 +454,7 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
 
   // ── Check if enemy is defeated ──
   if (remainingHp <= 0) {
-    _handleEnemyDefeated(world, enemyId, bridge);
+    _handleEnemyDefeated(world, enemyId, bridge, playerEntityId);
     return;
   }
 
@@ -543,10 +544,24 @@ const _processEnemyTurn = (
 // ---------------------------------------------------------------------------
 
 /**
- * Handles enemy defeat: destroys the entity, grants loot via INVENTORY_UPDATED,
- * and emits COMBAT_ENDED with victory = true.
+ * Handles enemy defeat: grants XP, destroys the entity, grants loot via
+ * INVENTORY_UPDATED, and emits COMBAT_ENDED with victory = true.
+ *
+ * Contract: C-147 Progression & Persistence — XP grant + level-up check
+ *
+ * @param playerEntityId - The player entity ID for XP granting.
  */
-const _handleEnemyDefeated = (world: World, enemyId: number, bridge: EngineBridge): void => {
+const _handleEnemyDefeated = (
+  world: World,
+  enemyId: number,
+  bridge: EngineBridge,
+  playerEntityId: number,
+): void => {
+  // Grant XP to the player for this victory
+  if (playerEntityId > 0) {
+    _grantXp(world, playerEntityId, 25, bridge);
+  }
+
   // Emit a loot event — each enemy drops a generic item on defeat.
   // In a full implementation, the itemId would come from the enemy's
   // spawn properties or a loot table.
@@ -560,11 +575,18 @@ const _handleEnemyDefeated = (world: World, enemyId: number, bridge: EngineBridg
     ],
   });
 
+  // Read the spawn point ID from the Enemy component for persistence tracking
+  const spawnId = Enemy.spawnId[enemyId] ?? '';
+
   // Remove the entity from the world
   removeEntity(world, enemyId);
 
-  // End combat with victory
-  bridge.emit({ type: 'COMBAT_ENDED', victory: true });
+  // End combat with victory, including the spawn ID for persistence
+  bridge.emit({
+    type: 'COMBAT_ENDED',
+    victory: true,
+    ...(spawnId ? { defeatedEnemyId: spawnId } : {}),
+  });
   turnOrderList = [];
   currentTurnIndex = -1;
 };
@@ -586,6 +608,93 @@ const _findFirstEnemyParticipant = (playerEntityId: number): number => {
     }
   }
   return 0;
+};
+
+// ---------------------------------------------------------------------------
+// Internal — experience and leveling (C-147)
+// ---------------------------------------------------------------------------
+
+/**
+ * Grants XP to the player entity and checks for level-up.
+ *
+ * Awards the given amount of XP, then checks if the player's total XP
+ * meets or exceeds the threshold to reach the next level. If so,
+ * triggers a level-up that increases max HP, fully restores HP,
+ * boosts base attack and defense, and scales the next XP threshold.
+ *
+ * Emits {@link PLAYER_LEVELED_UP} through the bridge when a level-up occurs.
+ *
+ * Contract: C-147 Progression & Persistence
+ *
+ * @param world - The bitECS world.
+ * @param playerEid - The player entity ID to grant XP to.
+ * @param amount - Amount of XP to award.
+ * @param bridge - The EngineBridge for emitting level-up events.
+ */
+const _grantXp = (world: World, playerEid: number, amount: number, bridge: EngineBridge): void => {
+  const stats = getComponent(world, playerEid, CombatStats) as CombatStatsData | undefined;
+  if (!stats) {
+    return;
+  }
+
+  // Add XP
+  const currentXp = (stats.xp ?? 0) + amount;
+  CombatStats.xp[playerEid] = currentXp;
+
+  // Check for level-up
+  const xpThreshold = stats.xpToNextLevel ?? 100;
+  if (currentXp >= xpThreshold) {
+    _triggerLevelUp(world, playerEid, currentXp, xpThreshold, bridge);
+  }
+};
+
+/**
+ * Triggers a level-up for the player entity.
+ *
+ * Resets XP (carrying over remainder), increments level, increases max HP
+ * by 20, fully restores HP, boosts attack by 2 and defense by 2, and
+ * scales the next XP threshold by 1.5×.
+ *
+ * Emits {@link PLAYER_LEVELED_UP} so the UI can display a level-up notification.
+ */
+const _triggerLevelUp = (
+  world: World,
+  playerEid: number,
+  currentXp: number,
+  oldThreshold: number,
+  bridge: EngineBridge,
+): void => {
+  const stats = getComponent(world, playerEid, CombatStats) as CombatStatsData | undefined;
+  if (!stats) {
+    return;
+  }
+
+  // Calculate new values
+  const newLevel = (stats.level ?? 1) + 1;
+  const nextThreshold = Math.floor(oldThreshold * 1.5);
+  const remainingXp = currentXp - oldThreshold;
+  const newMaxHp = (stats.maxHealth ?? 100) + 20;
+  const newAttack = (stats.attack ?? 5) + 2;
+  const newDefense = (stats.defense ?? 12) + 2;
+
+  // Apply the level-up stat changes
+  CombatStats.level[playerEid] = newLevel;
+  CombatStats.xpToNextLevel[playerEid] = nextThreshold;
+  CombatStats.xp[playerEid] = remainingXp;
+  CombatStats.maxHealth[playerEid] = newMaxHp;
+  CombatStats.health[playerEid] = newMaxHp; // full heal on level-up
+  CombatStats.attack[playerEid] = newAttack;
+  CombatStats.defense[playerEid] = newDefense;
+
+  // Emit the level-up event to the UI
+  bridge.emit({
+    type: 'PLAYER_LEVELED_UP',
+    newLevel,
+    maxHp: newMaxHp,
+    attack: newAttack,
+    defense: newDefense,
+    xpToNextLevel: nextThreshold,
+  });
 };
 
 /**
