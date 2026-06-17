@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-16
-> Files: 156 across 10 categories
+> Generated: 2026-06-17
+> Files: 165 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -147,6 +147,13 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-138 Map Transitions (Zoning)](contracts/C-138-map-transitions.md)
 - [Contract: C-139 Isolated Dev Sandboxes & Map Wiring](contracts/C-139-dev-sandboxes-map-wiring.md)
 - [Contract: C-140 Game Mode System & Input Routing](contracts/C-140-game-mode-system.md)
+- [Contract: C-141 NPC Interaction & Dialogue Trigger](contracts/C-141-npc-interaction-trigger.md)
+- [Contract: C-142 Inventory Sync & Item Pickups](contracts/C-142-inventory-item-pickups.md)
+- [Contract: C-143 Quest Log Sync & Technical Debt](contracts/C-143-quest-log-and-test-fixes.md)
+- [Contract: C-144 Combat Encounter Integration](contracts/C-144-combat-encounter-integration.md)
+- [Contract: C-145 Turn-Based Combat Loop & Dice RNG](contracts/C-145-turn-based-combat-loop.md)
+- [Contract: C-146 Freeform AI Combat Actions](contracts/C-146-freeform-ai-combat.md)
+- [Contract: C-147 Progression, Game Over, and Persistence](contracts/C-147-progression-and-persistence.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
@@ -162,6 +169,9 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 ## design/
 
 - [Design](design/README.md)
+## gotchas/
+
+- [NPC Interaction & Dialogue — Gotchas & Lessons Learned](gotchas/npc_interaction_dialogue.md)
 ## guides/
 
 - [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
@@ -176,6 +186,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Guides](guides/README.md)
 - [Technology Stack](guides/STACK.md)
 - [Structure](guides/STRUCTURE.md)
+- [Tauri Desktop App — Development Guide](guides/TAURI.md)
 - [Testing Strategy](guides/TESTING.md)
 - [Todo & Future Features](guides/TODO.md)
 ## index.md/

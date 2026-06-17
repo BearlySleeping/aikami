@@ -99,11 +99,16 @@ export type GameCommand =
        * Routed to the turn_manager_system in the ECS worker.
        *
        * Contract: C-145 Turn-Based Combat Loop
+       * Contract: C-146 Freeform AI Combat Actions
        */
       type: 'COMBAT_ACTION';
       action: 'ATTACK' | 'FLEE' | 'DEFEND';
       /** Target entity ID (defaults to the first enemy if omitted). */
       targetId?: number;
+      /** When true, roll 2d20 and take the higher for the hit check (C-146). */
+      advantage?: boolean;
+      /** Extra damage added to the final damage roll (0–5, C-146). */
+      bonusDamage?: number;
     };
 
 // ---------------------------------------------------------------------------

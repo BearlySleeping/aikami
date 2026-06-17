@@ -90,6 +90,155 @@ export class CombatDevViewModel extends CombatViewModel {
     this.isAttacking = false;
   }
 
+  /** @inheritdoc */
+  override async executeCustomAction(prompt: string): Promise<void> {
+    if (this.combatResult || this.isResolvingAiAction) {
+      this.debug('executeCustomAction: blocked', {
+        reason: this.combatResult ? 'combat ended' : 'already resolving',
+      });
+      return;
+    }
+
+    const trimmed = prompt.trim();
+    if (trimmed.length === 0) {
+      this.debug('executeCustomAction: empty prompt, skipping');
+      return;
+    }
+
+    this.isResolvingAiAction = true;
+    this.debug('executeCustomAction: resolving', {
+      promptLength: trimmed.length,
+      promptPreview: trimmed.slice(0, 40),
+    });
+
+    // Simulate AI interpretation with a brief delay
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // ── Keyword-based action classification (mock AI) ──
+    const actionType = this._classifyMockAction(trimmed);
+    this.debug('executeCustomAction: classified', { actionType, prompt: trimmed.slice(0, 40) });
+
+    const mockNarrative = `[Dev Mock] You attempt: "${trimmed.slice(0, 40)}${trimmed.length > 40 ? '…' : ''}" — the DM nods approvingly.`;
+    this._addLogEntry(mockNarrative);
+
+    // Randomly award advantage/bonusDamage for variety (ATTACK only)
+    const hasAdvantage = actionType === 'ATTACK' && Math.random() > 0.5;
+    const bonusDamage = actionType === 'ATTACK' ? Math.floor(Math.random() * 4) : 0; // 0–3
+
+    const mods: string[] = [];
+    if (hasAdvantage) {
+      mods.push('ADV');
+    }
+    if (bonusDamage > 0) {
+      mods.push(`+${bonusDamage} DMG`);
+    }
+    const modLabel = mods.length > 0 ? ` (${mods.join(', ')})` : '';
+
+    // ── Route based on classified action type ──
+    switch (actionType) {
+      case 'FLEE': {
+        this.combatLog = [
+          `[Dev Mock] AI interpreted as FLEE${modLabel}. Retreating…`,
+          ...this.combatLog,
+        ];
+        this._endBattle('defeat');
+        this.isResolvingAiAction = false;
+        this.debug('executeCustomAction: resolved as FLEE — battle ended');
+        return;
+      }
+      case 'DEFEND': {
+        this.combatLog = [
+          `[Dev Mock] AI interpreted as DEFEND${modLabel}. Bracing…`,
+          ...this.combatLog,
+        ];
+        // Enemy gets a free counter-attack (standard defend behavior)
+        this.simulateEnemyTurn();
+        this.isResolvingAiAction = false;
+        this.debug('executeCustomAction: resolved as DEFEND — enemy turn follows');
+        return;
+      }
+      default: {
+        this.isAttacking = true;
+        this.combatLog = [
+          `[Dev Mock] AI interpreted as ATTACK${modLabel}. Rolling…`,
+          ...this.combatLog,
+        ];
+
+        // Apply damage to enemy
+        const damage = 10 + bonusDamage * 2;
+        this.enemyHp = Math.max(0, this.enemyHp - damage);
+        this._addLogEntry(
+          `[Dev Mock] Custom action deals ${damage} damage! (Enemy HP: ${this.enemyHp}/${this.enemyMaxHp})`,
+        );
+
+        if (this.enemyHp <= 0) {
+          this._endBattle('victory');
+          this.debug('executeCustomAction: enemy defeated');
+        } else {
+          this.simulateEnemyTurn();
+          this.debug('executeCustomAction: enemy turn follows');
+        }
+
+        this.isAttacking = false;
+        this.isResolvingAiAction = false;
+        break;
+      }
+    }
+  }
+
+  /**
+   * Classifies a freeform prompt into a combat action type using keyword
+   * heuristics. Simulates what the LLM would do — no network call.
+   *
+   * Priority: FLEE > DEFEND > ATTACK (default).
+   */
+  private _classifyMockAction(prompt: string): 'ATTACK' | 'DEFEND' | 'FLEE' {
+    const lower = prompt.toLowerCase();
+
+    // ── Flee detection ──
+    const fleeKeywords = [
+      'flee',
+      'run away',
+      'escape',
+      'retreat',
+      'run for it',
+      'get out',
+      'bolt',
+      'dash away',
+      'withdraw',
+      'disengage',
+      'surrender',
+      'yield',
+      'give up',
+    ];
+    if (fleeKeywords.some((kw) => lower.includes(kw))) {
+      return 'FLEE';
+    }
+
+    // ── Defend detection ──
+    const defendKeywords = [
+      'defend',
+      'block',
+      'parry',
+      'guard',
+      'shield',
+      'dodge',
+      'brace',
+      'take cover',
+      'cover',
+      'protect',
+      'hold position',
+      'stand ground',
+      'stand my ground',
+    ];
+    if (defendKeywords.some((kw) => lower.includes(kw))) {
+      return 'DEFEND';
+    }
+
+    // Default: any offensive or ambiguous action → ATTACK
+    return 'ATTACK';
+  }
+
   // ── Dev-only methods ──────────────────────────────────────────────────
 
   /**
