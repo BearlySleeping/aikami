@@ -83,6 +83,7 @@ P2 (Polish — after P1):
 | C-141 | [NPC Interaction & Dialogue Trigger](C-141-npc-interaction-trigger.md) ✅ | Proximity-based E key interaction, NPC_INTERACTED bridge event, persona-aware AI prompts | — |
 | C-142 | [Inventory Sync & Item Pickups](C-142-inventory-item-pickups.md) ✅ | ECS Inventory→Svelte UI sync, item spawn points, Interact key pickup, Inventory overlay with I toggle | — |
 | C-143 | [Quest Log Sync & Test Fixes](C-143-quest-log-and-test-fixes.md) ✅ | Fix 46→17 test failures, QUESTS_UPDATED bridge event, QuestViewModel→GameStateService wiring, Q-key quest overlay | — |
+| C-144 | [Combat Encounter Integration](C-144-combat-encounter-integration.md) ✅ | Wire turn_manager_system + combat components to Svelte frontend — enemy spawn points, encounter trigger, CombatViewModel overlay, dev sandbox | C-140, C-141 |
 
 ## Contract Format
 

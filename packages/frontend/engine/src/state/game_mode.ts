@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 /** The current game mode — defaults to EXPLORE (free movement). */
-let _currentMode: 'EXPLORE' | 'DIALOGUE' | 'MENU' = 'EXPLORE';
+let _currentMode: 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT' = 'EXPLORE';
 
 /**
  * Sets the engine-level game mode.
@@ -16,7 +16,7 @@ let _currentMode: 'EXPLORE' | 'DIALOGUE' | 'MENU' = 'EXPLORE';
  * Called by the worker when it receives a SET_GAME_MODE command from
  * the main thread via the EngineBridge.
  */
-const setEngineGameMode = (mode: 'EXPLORE' | 'DIALOGUE' | 'MENU'): void => {
+const setEngineGameMode = (mode: 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT'): void => {
   _currentMode = mode;
 };
 
@@ -26,7 +26,7 @@ const setEngineGameMode = (mode: 'EXPLORE' | 'DIALOGUE' | 'MENU'): void => {
  * Called by {@link import('../systems/movement_system.ts').updateMovement}
  * to gate player movement — movement is skipped when the mode is not EXPLORE.
  */
-const getEngineGameMode = (): 'EXPLORE' | 'DIALOGUE' | 'MENU' => {
+const getEngineGameMode = (): 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT' => {
   return _currentMode;
 };
 

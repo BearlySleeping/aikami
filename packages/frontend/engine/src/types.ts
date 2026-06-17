@@ -77,7 +77,7 @@ export type GameCommand =
        * MENU — paused in overlay, all game input disabled.
        */
       type: 'SET_GAME_MODE';
-      mode: 'EXPLORE' | 'DIALOGUE' | 'MENU';
+      mode: 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT';
     }
   | {
       /** Slash command from the parser (e.g. /roll, /move). */
@@ -200,6 +200,14 @@ export type GameEvent =
       participantIds: number[];
       /** The entity ID that has the first turn. */
       firstTurnEntityId: number;
+      /** The enemy entity ID that triggered the encounter. */
+      enemyId?: number;
+      /** Display name of the enemy (e.g. "Goblin"). */
+      enemyName?: string;
+      /** Current hit points of the enemy that triggered the encounter. */
+      enemyHp?: number;
+      /** Maximum hit points of the enemy that triggered the encounter. */
+      enemyMaxHp?: number;
     }
   | {
       /**
