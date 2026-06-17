@@ -8,6 +8,8 @@
   import GameView from '$lib/views/game/canvas/game_view.svelte';
   import { GameViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
   import { GameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
+  import { gameStateService } from '$services';
+  import type { DevAction } from '$types';
 
   // Seed a mock persona into localStorage before the GameViewModel loads.
   // This gives the engine an active character with LPC layer IDs [1,2,3,4,5]
@@ -66,17 +68,49 @@
     className: 'GameUIViewModel',
     gameViewModel: viewModel,
   });
-</script>
 
-<GameView {viewModel} {gameUIViewModel} />
-
-<DevToolsPanel
-  actions={[
+  const devActions = [
+    {
+      label: 'Insert Item (Sword)',
+      onClick: () => {
+        gameStateService.inventory = [
+          ...gameStateService.inventory,
+          { itemId: 'iron-sword', quantity: 1 },
+        ];
+      },
+    },
+    {
+      label: 'Insert Item (Potion)',
+      onClick: () => {
+        gameStateService.inventory = [
+          ...gameStateService.inventory,
+          { itemId: 'health-potion', quantity: 1 },
+        ];
+      },
+    },
+    {
+      label: 'Remove Last Item',
+      onClick: () => {
+        if (gameStateService.inventory.length > 0) {
+          gameStateService.inventory = gameStateService.inventory.slice(0, -1);
+        }
+      },
+    },
+    {
+      label: 'Clear Inventory',
+      onClick: () => {
+        gameStateService.inventory = [];
+      },
+    },
     {
       label: 'Map & Zoning Sandbox',
       onClick: () => {
         window.location.href = '/dev/sandbox/map';
       },
     },
-  ]}
-/>
+  ] satisfies DevAction[];
+</script>
+
+<GameView {viewModel} {gameUIViewModel} />
+
+<DevToolsPanel actions={devActions} />

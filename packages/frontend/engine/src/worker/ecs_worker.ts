@@ -17,6 +17,8 @@ import {
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { registerInteractableObservers } from '../components/interactable.ts';
+import { registerInventoryObservers } from '../components/inventory.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
@@ -44,6 +46,7 @@ import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
 import { spawnEntities, spawnTransitionEntities } from '../systems/entity_spawner.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
+import { handleInteract } from '../systems/interaction_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
 import {
   animateEntitySystem,
@@ -217,7 +220,12 @@ const handleBridgeCommand = (command: GameCommand): void => {
       setEngineGameMode(command.mode);
       break;
     }
-    case 'INTERACT':
+    case 'INTERACT': {
+      if (world) {
+        handleInteract({ world, playerEntityId, bridge: workerBridge });
+      }
+      break;
+    }
     case 'OPEN_MENU':
     case 'CLOSE_MENU':
     case 'LOAD_SCENE':
@@ -314,6 +322,8 @@ const initializeEngine = (
   registerNPCDialogObservers(world);
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);
+  registerInventoryObservers(world);
+  registerInteractableObservers(world);
   registerTurnOrderObservers(world);
   registerCameraFocusObservers(world);
   registerTransitionObservers(world);

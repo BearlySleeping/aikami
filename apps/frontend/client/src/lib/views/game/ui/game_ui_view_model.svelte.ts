@@ -14,6 +14,7 @@ import {
   gameStateService,
   routerService,
 } from '$services';
+import { InventoryViewModel } from '../../inventory/inventory_view_model.svelte';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
 import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
 
@@ -28,7 +29,7 @@ import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_v
 // ---------------------------------------------------------------------------
 
 /** Discriminated union of all possible game overlay states. */
-export type GameOverlayType = 'NONE' | 'PAUSE_MENU' | 'DIALOGUE' | 'COMBAT';
+export type GameOverlayType = 'NONE' | 'PAUSE_MENU' | 'DIALOGUE' | 'COMBAT' | 'INVENTORY';
 
 /** NPC data passed to the dialogue overlay when an interaction starts. */
 export type DialogueNpcData = {
@@ -70,6 +71,8 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly dialogueViewModel:
     | import('./overlays/dialogue/dialogue_overlay_view_model.svelte').DialogueOverlayViewModel
     | undefined;
+
+  readonly inventoryViewModel: InventoryViewModel | undefined;
 
   /**
    * Handles global keydown events for overlay toggling.
@@ -124,6 +127,8 @@ class GameUIViewModel
   isTransitioning = $state<boolean>(false);
 
   dialogueViewModel = $state<DialogueOverlayViewModel | undefined>(undefined);
+
+  inventoryViewModel = $state<InventoryViewModel | undefined>(undefined);
 
   /** Whether Ollama (localhost) is the active text provider (vs OpenRouter). */
   readonly useOllama: boolean;
@@ -227,7 +232,23 @@ class GameUIViewModel
         return;
       }
 
+      if (this.activeOverlay === 'INVENTORY') {
+        this._closeInventory();
+        return;
+      }
+
       this._togglePauseMenu();
+      return;
+    }
+
+    if (event.key === 'i' || event.key === 'I') {
+      event.preventDefault();
+
+      if (this.activeOverlay === 'INVENTORY') {
+        this._closeInventory();
+      } else if (this.activeOverlay === 'NONE') {
+        this._openInventory();
+      }
     }
   }
 
@@ -307,6 +328,34 @@ class GameUIViewModel
     } finally {
       this.isSaving = false;
     }
+  }
+
+  /**
+   * Opens the inventory overlay.
+   *
+   * Locks the game in MENU mode (movement disabled) and creates the
+   * InventoryViewModel that reads from GameStateService.inventory.
+   */
+  private _openInventory(): void {
+    this.activeOverlay = 'INVENTORY';
+    gameStateService.setMode('MENU');
+    this._gameViewModel.pauseEngine();
+    this.inventoryViewModel = new InventoryViewModel({
+      className: 'InventoryViewModel',
+      onClose: () => this._closeInventory(),
+    });
+  }
+
+  /**
+   * Closes the inventory overlay.
+   *
+   * Restores EXPLORE mode and disposes the InventoryViewModel.
+   */
+  private _closeInventory(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._gameViewModel.resumeEngine();
+    this.inventoryViewModel = undefined;
   }
 }
 

@@ -10,6 +10,7 @@ import { addComponent, addEntity, set } from 'bitecs';
 import { resolveNpcTexture, resolvePropTexture } from '../assets/lpc_asset_catalog.ts';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
+import { Interactable } from '../components/interactable.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
@@ -71,6 +72,9 @@ const NPC_APPEARANCE_LAYERS: [number, number, number, number, number] = [10, 11,
  * - `type === 'prop'`: Creates a static entity with Position and Sprite
  *   components. No interaction components are attached (props are
  *   decorative until a future interaction system wires them up).
+ * - `type === 'item'`: Creates a pickup item with Position, Sprite,
+ *   and Interactable components. The `itemId` and `quantity` Tiled
+ *   properties define what the player receives on pickup.
  *
  * @param options - World and spawn points.
  * @returns Array of results with entity IDs and metadata.
@@ -86,6 +90,9 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
     } else if (spawnPoint.type === 'prop') {
       const eid = _spawnProp(world, spawnPoint);
       results.push({ type: 'prop', eid, spawnPoint });
+    } else if (spawnPoint.type === 'item') {
+      const eid = _spawnItem(world, spawnPoint);
+      results.push({ type: 'item', eid, spawnPoint });
     }
     // Unknown types are silently skipped — they carry no spawn logic
   }
@@ -194,6 +201,47 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
       dialog,
       interactionRadius,
       playerInRange: false,
+    }),
+  );
+
+  return eid;
+};
+
+/**
+ * Creates an item pickup entity from a spawn point.
+ *
+ * Item entities use the Interactable component with `type: 'item'`
+ * so the interaction system can distinguish them from NPCs.
+ */
+const _spawnItem = (world: World, spawnPoint: SpawnPoint): number => {
+  const eid = addEntity(world);
+
+  const itemId = _getStringProperty(spawnPoint.properties, 'itemId', `item_${spawnPoint.id}`);
+  const quantity = _getNumberProperty(spawnPoint.properties, 'quantity', 1);
+  const textureKey = resolvePropTexture(spawnPoint.properties);
+
+  addComponent(world, eid, Position);
+  addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
+
+  addComponent(world, eid, Sprite);
+  addComponent(
+    world,
+    eid,
+    set(Sprite, {
+      textureKey,
+      tint: PROP_TINT,
+      displayObject: undefined,
+    }),
+  );
+
+  addComponent(world, eid, Interactable);
+  addComponent(
+    world,
+    eid,
+    set(Interactable, {
+      type: 'item',
+      itemId,
+      quantity,
     }),
   );
 
