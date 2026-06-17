@@ -4,9 +4,11 @@ import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { CameraFocus } from '../components/camera_focus.ts';
+import { CombatStats } from '../components/combat_stats.ts';
 import { Inventory, MAX_INVENTORY_SLOTS } from '../components/inventory.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
+import { TurnOrder } from '../components/turn_order.ts';
 import { Velocity } from '../components/velocity.ts';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +76,35 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
       itemIds: new Array(MAX_INVENTORY_SLOTS).fill(0),
       quantities: new Array(MAX_INVENTORY_SLOTS).fill(0),
       itemTypes: new Array(MAX_INVENTORY_SLOTS).fill(0),
+    }),
+  );
+
+  // Give the player combat stats for turn-based encounters.
+  // Default values: 100 HP, moderate attack, decent defense.
+  addComponent(world, entityId, CombatStats);
+  addComponent(
+    world,
+    entityId,
+    set(CombatStats, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 12,
+      attack: 5,
+      defense: 12,
+      accuracy: 4,
+      evasion: 12,
+    }),
+  );
+
+  // Give the player a TurnOrder component for combat participation.
+  addComponent(world, entityId, TurnOrder);
+  addComponent(
+    world,
+    entityId,
+    set(TurnOrder, {
+      currentTurn: false,
+      initiativeValue: 12,
+      isActive: true,
     }),
   );
 

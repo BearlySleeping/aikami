@@ -782,6 +782,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         },
       });
     });
+
+    // Forward COMBAT_ACTION commands (C-145)
+    bridgeWithCommands.onCommand('COMBAT_ACTION', (cmd: unknown) => {
+      const actionCmd = cmd as { action: 'ATTACK' | 'FLEE' | 'DEFEND'; targetId?: number };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'COMBAT_ACTION',
+          action: actionCmd.action,
+          targetId: actionCmd.targetId,
+        },
+      });
+    });
   }
 
   /**

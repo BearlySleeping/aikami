@@ -55,6 +55,7 @@ import {
   LpcBatchManager,
   syncAppearanceSystem,
 } from '../systems/render_worker.ts';
+import { handleCombatAction } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
@@ -243,6 +244,18 @@ const handleBridgeCommand = (command: GameCommand): void => {
         args: command.args,
         entityId: command.entityId ?? 0,
       });
+      break;
+    }
+    case 'COMBAT_ACTION': {
+      if (world) {
+        handleCombatAction({
+          world,
+          playerEntityId,
+          action: command.action,
+          targetId: command.targetId,
+          bridge: workerBridge,
+        });
+      }
       break;
     }
     default: {
