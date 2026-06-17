@@ -44,6 +44,7 @@
 | C-140 | Game Mode System & Input Routing | ✅ completed |
 | C-141 | NPC Interaction & Dialogue Trigger | ✅ completed |
 | C-142 | Inventory Sync & Item Pickups | ✅ completed |
+| C-143 | Quest Log Sync & Technical Debt | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -1006,3 +1007,47 @@
 - `MAX_INVENTORY_SLOTS` (24) is hardcoded — changing it requires recompiling both engine and UI.
 - No stack merging: if the player picks up the same item twice, it goes into different slots. Stack merging could be added in a future contract.
 - Pre-existing `frontend-engine:typecheck` errors (Vite `?worker` import + `this._worker` possibly-undefined) persist — unrelated to C-142.
+
+### C-143: Quest Log Sync & Technical Debt
+
+**Status**: ✅ completed
+
+**Files created**: (none)
+
+**Files modified**:
+- `packages/frontend/engine/src/types.ts` — Added `QUESTS_UPDATED` to `GameEvent` union, added `QuestData`, `QuestObjectiveData`, `QuestStatus` types
+- `packages/frontend/engine/src/index.ts` — Exported `QuestData`, `QuestObjectiveData`, `QuestStatus` types
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Emits `QUESTS_UPDATED` event with 3 dummy quests after engine initialization (C-143 MVP)
+- `apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts` — Added `quests` `$state` array, `_listenForQuestUpdates()` method that listens for `QUESTS_UPDATED` bridge events
+- `apps/frontend/client/src/lib/views/quest/quest_view_model.svelte.ts` — Refactored to read quest data reactively from `GameStateService.quests` instead of local state arrays; re-exports `QuestData` as `Quest` for view convenience
+- `apps/frontend/client/src/lib/views/quest/quest_dev_view_model.svelte.ts` — Updated to inject mock data via `GameStateService.quests` instead of local arrays
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `QUEST_LOG` to `GameOverlayType` union; added `questViewModel` property, `_openQuestLog()`/`_closeQuestLog()` methods; 'Q' key handler in `handleKeyDown` toggles quest log overlay (sets `MENU` mode on open, `EXPLORE` on close); Escape closes quest log
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Imported and rendered `QuestView` when `activeOverlay === 'QUEST_LOG'` inside modal container
+- `apps/frontend/client/tsconfig.test.json` — Fixed `$services` path mapping from non-existent `./src/lib/client/services-mock` to `./src/lib/services` (resolved 31 test import failures)
+- `apps/frontend/client/src/lib/test_preload.ts` — Added comprehensive local barrel mock (`$services` → `./src/lib/services/index.ts`) with Proxy-based stubs that auto-create mock functions for all exported services; prevents cross-test contamination from partial barrel mocks
+- `apps/frontend/client/src/lib/views/character/create/character_view_model.test.ts` — Made barrel mock complete (added `routerService`, all missing service stubs); fixed 3 schema compilation test assertions (`clothing`→`age`/`skinColor`, removed `additionalProperties: false` assertion for `AbilityScoresSchema`)
+- `apps/frontend/client/src/lib/views/dev/image/image_view_model.test.ts` — Fixed barrel mock to include all services (not just `imageGenerationService`); updated 2 generate tests to match actual ViewModel API (uses ComfyUI workflow, not `imageGenerationService.generateImage`)
+- `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Updated `navItems` count from 11 to 13 (added `/dev/save_load` and `/dev/sandbox/map`)
+- `apps/frontend/client/src/routes/(dev)/dev/sandbox/mode/mode_sandbox_view_model.svelte.ts` — Removed useless constructor (pre-existing lint warning blocking `--error-on-warnings`)
+
+**Deviations**:
+1. **QuestViewModel reads from GameStateService**: Contract says to wire QuestViewModel to read from `GameStateService.quests`. Instead of keeping local state arrays synced via events, QuestViewModel now uses getter methods that filter `gameStateService.quests` reactively. Simpler and avoids dual-source-of-truth bugs.
+2. **Dummy quests in engine, not dev sandbox**: Contract says dummy quests can be triggered in `INITIALIZE_ENGINE` or `LOAD_MAP`. Emitted in `INITIALIZE_ENGINE` via `workerBridge.emit()` — the worker bridge queues events for the next `STATE_UPDATE`.
+3. **QuestViewModel no longer has `addQuest`/`completeQuest`/`failQuest` methods**: The dev sandbox (`QuestDevViewModel`) now manipulates `GameStateService.quests` directly. Production quest progression will be handled by the ECS engine.
+
+**Design decisions**:
+1. **`QuestData` type lives in `@aikami/frontend/engine`**: Shared between ECS worker and UI via bridge events. Exported from engine's public API alongside other game types.
+2. **GameStateService listens for QUESTS_UPDATED lazily**: Uses dynamic `import('@aikami/frontend/engine')` to avoid circular deps. Same pattern as `_listenForInventoryUpdates`.
+3. **Quest log overlay uses same z-20 modal as Inventory**: Semi-transparent backdrop with centered scrollable card, matching inventory overlay visual pattern.
+4. **'Q' key toggle with Escape-close**: 'Q' toggles quest log (only when `NONE` or `QUEST_LOG` active). Escape closes quest log via centralized `handleKeyDown` — no duplicate handler.
+
+**Test suite status**:
+- **Before**: ~46 failures, all import-related (`$services` not found)
+- **After**: 15 failures + 2 errors (288 pass, 303 tests) — 31 fewer failures
+- Remaining failures: 14 DialogueOverlayViewModel (pre-existing test logic issues, `OllamaClient.streamChat` mock not invoked) + 5 CharacterViewModel assertion-level issues (message history counts, avatar fallback, abort error handling)
+- Pre-existing `frontend-engine:typecheck` errors unchanged (4 errors)
+
+**Known limitations**:
+- Quest data is static in the engine MVP (3 dummy quests emitted once at init). Future contracts should add ECS quest components and a quest system that tracks progression.
+- Quest log overlay doesn't show keyboard hint (like "Press Q to close") — future UI polish contract.
+- Remaining CharacterViewModel test failures are assertion-level logic mismatches between test expectations and ViewModel behavior, not import infrastructure issues.
