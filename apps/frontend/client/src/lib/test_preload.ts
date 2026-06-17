@@ -183,7 +183,6 @@ const _localServicesMock = () => ({
     }
   },
   aiSettingsService: _createServiceStub(),
-  // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
   AISettingsService: class {},
   storageService: _createServiceStub(),
   StorageService: class {},

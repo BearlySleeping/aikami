@@ -5,6 +5,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import {
+  COMBAT_ACTION_SYSTEM_PROMPT,
+  type CombatActionIntent,
+  CombatActionSchema,
+} from '../../game/core/ai/prompts/combat_action_schema.ts';
 
 // ---------------------------------------------------------------------------
 // CombatViewModel — Svelte 5 ViewModel for the combat / turn-based battle UI
@@ -82,6 +89,9 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Whether the attack button should be disabled (waiting for engine response). */
   readonly isAttacking: boolean;
 
+  /** Whether the AI is resolving a freeform custom action (disables all inputs). */
+  readonly isResolvingAiAction: boolean;
+
   /**
    * Executes a basic player attack via the engine bridge.
    *
@@ -107,6 +117,19 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    * enemy counter-attack.
    */
   defend(): void;
+
+  /**
+   * Executes a freeform custom combat action via AI interpretation.
+   *
+   * The player's natural-language prompt is sent to the TextGenerationService
+   * which extracts a {@link CombatActionIntent} (actionType, advantage,
+   * bonusDamage, narrative, generateImage). The narrative is appended to
+   * the combat log, image generation is optionally triggered, and the
+   * mapped COMBAT_ACTION command is dispatched to the ECS engine.
+   *
+   * Contract: C-146 Freeform AI Combat Actions
+   */
+  executeCustomAction(prompt: string): Promise<void>;
 };
 
 /**
@@ -149,6 +172,9 @@ export class CombatViewModel
 
   /** Whether we're waiting for the engine to resolve an attack. */
   isAttacking = $state(false);
+
+  /** Whether the AI is resolving a freeform custom action. */
+  isResolvingAiAction = $state(false);
 
   combatLog: string[] = $state([]);
 
@@ -211,6 +237,12 @@ export class CombatViewModel
     });
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
+      this.debug('COMBAT_STARTED received', {
+        participantCount: event.participantIds.length,
+        firstTurnId: event.firstTurnEntityId,
+        enemyName: event.enemyName,
+        enemyHp: event.enemyHp,
+      });
       this.activeEntities = event.participantIds;
       this.currentTurnEntity = event.firstTurnEntityId;
       this.totalParticipants = event.participantIds.length;
@@ -224,6 +256,7 @@ export class CombatViewModel
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
+      this.debug('COMBAT_ENDED received', { victory: event.victory });
       if (event.victory) {
         this.combatResult = 'victory';
       } else {
@@ -235,6 +268,12 @@ export class CombatViewModel
     });
 
     const removeCombatLog = bridge.on('COMBAT_LOG', (event) => {
+      this.debug('COMBAT_LOG received', {
+        sourceId: event.sourceId,
+        targetId: event.targetId,
+        targetRemainingHp: event.targetRemainingHp,
+        messageLength: event.message.length,
+      });
       this.combatLog = [event.message, ...this.combatLog];
       this.isAttacking = false;
 
@@ -295,10 +334,126 @@ export class CombatViewModel
     this.enemyEntityId = null;
     this.isPlayerTurn = true;
     this.isAttacking = false;
+    this.isResolvingAiAction = false;
     this.combatLog = [];
     this.combatResult = null;
 
     await super.dispose();
+  }
+
+  // -----------------------------------------------------------------------
+  // Custom action — AI-interpreted freeform combat (C-146)
+  // -----------------------------------------------------------------------
+
+  /** @inheritdoc */
+  async executeCustomAction(prompt: string): Promise<void> {
+    if (!this.inCombat || !this._bridge || this.isResolvingAiAction) {
+      this.debug('executeCustomAction: blocked', {
+        inCombat: this.inCombat,
+        hasBridge: !!this._bridge,
+        alreadyResolving: this.isResolvingAiAction,
+      });
+      return;
+    }
+
+    const trimmed = prompt.trim();
+    if (trimmed.length === 0) {
+      this.debug('executeCustomAction: empty prompt, skipping');
+      return;
+    }
+
+    this.isResolvingAiAction = true;
+    this.debug('executeCustomAction: resolving', {
+      promptLength: trimmed.length,
+      promptPreview: trimmed.slice(0, 60),
+      enemyName: this.enemyName,
+      playerHp: `${this.playerHp}/${this.playerMaxHp}`,
+      enemyHp: `${this.enemyHp}/${this.enemyMaxHp}`,
+    });
+
+    try {
+      // Build contextual prompt with player stats, enemy info, and user input
+      const contextualPrompt = [
+        `Player HP: ${this.playerHp}/${this.playerMaxHp}`,
+        `Enemy: ${this.enemyName} (HP: ${this.enemyHp}/${this.enemyMaxHp})`,
+        `Player action: "${trimmed}"`,
+      ].join('\n');
+
+      this.debug('executeCustomAction: calling extractStructure', {
+        schemaName: 'CombatActionIntent',
+        contextualPromptLength: contextualPrompt.length,
+      });
+
+      // Extract structured combat intent from the LLM
+      const raw = await textGenerationService.extractStructure({
+        schema: CombatActionSchema as unknown as Record<string, unknown>,
+        schemaName: 'CombatActionIntent',
+        prompt: contextualPrompt,
+        systemPrompt: COMBAT_ACTION_SYSTEM_PROMPT,
+      });
+
+      const intent = raw as CombatActionIntent;
+
+      this.debug('executeCustomAction: LLM response', {
+        actionType: intent.actionType,
+        bonusDamage: intent.bonusDamage,
+        advantage: intent.advantage,
+        generateImage: intent.generateImage,
+        narrativeLength: intent.narrative.length,
+        narrativePreview: intent.narrative.slice(0, 80),
+      });
+
+      // Append the DM narrative to the combat log
+      this.combatLog = [intent.narrative, ...this.combatLog];
+
+      // Fire image generation asynchronously if the action is cinematic
+      if (intent.generateImage) {
+        this.debug('executeCustomAction: triggering image generation', {
+          prompt: intent.narrative.slice(0, 60),
+        });
+        void imageGenerationService
+          .generateImage({
+            prompt: `Fantasy combat scene: ${intent.narrative}`,
+          })
+          .then((result) => {
+            this.debug('executeCustomAction: image generated', {
+              url: result.url,
+              isDemo: result.isDemo,
+            });
+          })
+          .catch((error) => {
+            this.warn('executeCustomAction: image generation failed', error);
+          });
+      }
+
+      // Dispatch the mapped COMBAT_ACTION to the ECS engine
+      this.isAttacking = true;
+      this.debug('executeCustomAction: dispatching COMBAT_ACTION', {
+        action: intent.actionType,
+        targetId: this.enemyEntityId,
+        advantage: intent.advantage,
+        bonusDamage: intent.bonusDamage,
+      });
+      this._bridge.send({
+        type: 'COMBAT_ACTION',
+        action: intent.actionType,
+        targetId: this.enemyEntityId ?? undefined,
+        advantage: intent.advantage,
+        bonusDamage: intent.bonusDamage,
+      });
+    } catch (error) {
+      this.warn('executeCustomAction: failed', {
+        error: (error as Error).message,
+        promptPreview: trimmed.slice(0, 60),
+      });
+      this.combatLog = [
+        `[AI] Failed to interpret action: ${(error as Error).message}`,
+        ...this.combatLog,
+      ];
+    } finally {
+      this.isResolvingAiAction = false;
+      this.debug('executeCustomAction: resolved', { isResolvingAiAction: false });
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -308,9 +463,15 @@ export class CombatViewModel
   /** @inheritdoc */
   attack(): void {
     if (!this.inCombat || !this._bridge || this.isAttacking) {
+      this.debug('attack: blocked', {
+        inCombat: this.inCombat,
+        hasBridge: !!this._bridge,
+        isAttacking: this.isAttacking,
+      });
       return;
     }
 
+    this.debug('attack: dispatching', { targetId: this.enemyEntityId });
     this.isAttacking = true;
 
     this._bridge.send({
@@ -323,9 +484,14 @@ export class CombatViewModel
   /** @inheritdoc */
   flee(): void {
     if (!this.inCombat || !this._bridge) {
+      this.debug('flee: blocked', {
+        inCombat: this.inCombat,
+        hasBridge: !!this._bridge,
+      });
       return;
     }
 
+    this.debug('flee: dispatching');
     this.isAttacking = true;
 
     this._bridge.send({
@@ -337,9 +503,15 @@ export class CombatViewModel
   /** @inheritdoc */
   defend(): void {
     if (!this.inCombat || !this._bridge || this.isAttacking) {
+      this.debug('defend: blocked', {
+        inCombat: this.inCombat,
+        hasBridge: !!this._bridge,
+        isAttacking: this.isAttacking,
+      });
       return;
     }
 
+    this.debug('defend: dispatching');
     this.isAttacking = true;
 
     this._bridge.send({

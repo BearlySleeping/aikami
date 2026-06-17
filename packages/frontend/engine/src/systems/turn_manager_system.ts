@@ -278,6 +278,10 @@ type CombatActionParams = {
    * When omitted, {@link rollDice} is used (crypto.getRandomValues).
    */
   diceRoller?: (sides: number) => number;
+  /** When true, roll 2d20 and take the higher for the hit check (C-146). */
+  advantage?: boolean;
+  /** Extra damage added to the final damage calculation (C-146). */
+  bonusDamage?: number;
 };
 
 /**
@@ -289,7 +293,8 @@ type CombatActionParams = {
  * the bridge.
  */
 const handleCombatAction = (params: CombatActionParams): void => {
-  const { world, playerEntityId, action, targetId, bridge, diceRoller } = params;
+  const { world, playerEntityId, action, targetId, bridge, diceRoller, advantage, bonusDamage } =
+    params;
 
   if (!world || !bridge) {
     return;
@@ -304,7 +309,15 @@ const handleCombatAction = (params: CombatActionParams): void => {
 
   switch (action) {
     case 'ATTACK': {
-      _processPlayerAttack(world, playerEntityId, targetId, bridge, roller);
+      _processPlayerAttack({
+        world,
+        playerEntityId,
+        targetId,
+        bridge,
+        roller,
+        advantage,
+        bonusDamage,
+      });
       break;
     }
     case 'FLEE': {
@@ -338,22 +351,32 @@ const handleCombatAction = (params: CombatActionParams): void => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Parameters for the private player attack processor.
+ */
+type ProcessPlayerAttackParams = {
+  world: World;
+  playerEntityId: number;
+  targetId: number | undefined;
+  bridge: EngineBridge;
+  roller: (sides: number) => number;
+  /** When true, roll 2d20 and take the higher for the hit check (C-146). */
+  advantage?: boolean;
+  /** Extra damage to add to the final damage calculation (C-146). */
+  bonusDamage?: number;
+};
+
+/**
  * Processes a player ATTACK action.
  *
  * 1. Finds the target enemy (from targetId or first enemy participant).
- * 2. d20 + player accuracy vs enemy evasion for hit check.
- * 3. d6 + player attack - enemy defense for damage.
+ * 2. d20 + player accuracy vs enemy evasion for hit check (with optional advantage).
+ * 3. d6 + player attack - enemy defense + bonusDamage for damage.
  * 4. Applies damage, emits COMBAT_LOG.
  * 5. If enemy survives, processes enemy counter-attack.
  * 6. If enemy dies, destroys entity + grants loot + emits COMBAT_ENDED.
  */
-const _processPlayerAttack = (
-  world: World,
-  playerEntityId: number,
-  targetId: number | undefined,
-  bridge: EngineBridge,
-  roller: (sides: number) => number,
-): void => {
+const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
+  const { world, playerEntityId, targetId, bridge, roller, advantage, bonusDamage } = params;
   // Find the target enemy — the first non-player combat participant
   const enemyId = targetId && targetId > 0 ? targetId : _findFirstEnemyParticipant(playerEntityId);
 
@@ -379,15 +402,25 @@ const _processPlayerAttack = (
   }
 
   // ── Hit check: d20 + player accuracy vs enemy evasion ──
-  const attackRoll = roller(20);
+  // Advantage (C-146): roll two d20s, take the higher
+  let attackRoll: number;
+  if (advantage) {
+    const roll1 = roller(20);
+    const roll2 = roller(20);
+    attackRoll = Math.max(roll1, roll2);
+  } else {
+    attackRoll = roller(20);
+  }
   const hitTotal = attackRoll + (playerStats.accuracy ?? 0);
   const hitThreshold = enemyStats.evasion ?? 0;
+
+  const advantageLabel = advantage ? ' [ADV]' : '';
 
   if (hitTotal < hitThreshold) {
     // Miss!
     bridge.emit({
       type: 'COMBAT_LOG',
-      message: `Player rolls ${attackRoll} (+${playerStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+      message: `Player rolls ${attackRoll}${advantageLabel} (+${playerStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
       sourceId: playerEntityId,
       targetId: enemyId,
       targetRemainingHp: enemyStats.health,
@@ -398,9 +431,9 @@ const _processPlayerAttack = (
     return;
   }
 
-  // ── Damage roll: d6 + player attack - enemy defense ──
+  // ── Damage roll: d6 + player attack - enemy defense + bonusDamage ──
   const damageRoll = roller(6);
-  const rawDamage = damageRoll + (playerStats.attack ?? 0);
+  const rawDamage = damageRoll + (playerStats.attack ?? 0) + (bonusDamage ?? 0);
   const damage = Math.max(1, rawDamage - (enemyStats.defense ?? 0)); // minimum 1 damage
 
   // Apply damage
@@ -409,7 +442,7 @@ const _processPlayerAttack = (
 
   bridge.emit({
     type: 'COMBAT_LOG',
-    message: `Player rolls ${attackRoll} (+${playerStats.accuracy ?? 0} = ${hitTotal}) to hit. Hits for ${damage} damage! (Enemy HP: ${remainingHp}/${enemyStats.maxHealth})`,
+    message: `Player rolls ${attackRoll}${advantageLabel} (+${playerStats.accuracy ?? 0} = ${hitTotal}) to hit. Hits for ${damage} damage! (Enemy HP: ${remainingHp}/${enemyStats.maxHealth})`,
     sourceId: playerEntityId,
     targetId: enemyId,
     targetRemainingHp: remainingHp,

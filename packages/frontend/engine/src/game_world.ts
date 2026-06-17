@@ -490,7 +490,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // Send initialization message with buffers
-    this._worker.postMessage({
+    const worker = this._worker;
+    if (!worker) {
+      this.error('spawnWorker: worker is undefined after creation');
+      return;
+    }
+
+    worker.postMessage({
       type: 'INITIALIZE_ENGINE',
       canvasWidth,
       canvasHeight,
@@ -501,11 +507,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     });
 
     // Set up message listener for worker → main communication
-    this._worker.onmessage = (event: MessageEvent): void => {
+    worker.onmessage = (event: MessageEvent): void => {
       this._handleWorkerMessage(event.data);
     };
 
-    this._worker.onerror = (error: ErrorEvent): void => {
+    worker.onerror = (error: ErrorEvent): void => {
       const detail = {
         message: error.message || '(no message)',
         filename: error.filename || '(unknown)',
