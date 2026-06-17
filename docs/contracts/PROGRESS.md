@@ -29,6 +29,7 @@
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
 | C-144 | Combat Encounter Integration | ✅ completed |
+| C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -123,6 +124,45 @@
 | C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
 | C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
 | C-126 | Headless App Shell & Initialization | ✅ completed |
+
+### C-145: Turn-Based Combat Loop & Dice RNG
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/engine/src/types.ts` — Added `COMBAT_ACTION` to `GameCommand`, `COMBAT_LOG` + `COMBAT_STATE_UPDATE` to `GameEvent`
+- `packages/frontend/engine/src/components/combat_stats.ts` — Extended with `attack`, `defense`, `accuracy`, `evasion` fields
+- `packages/frontend/engine/src/systems/turn_manager_system.ts` — Added `rollDice(sides)`, `handleCombatAction()`, full d20 combat math (hit check, damage roll, enemy counter-attack), defeat+loot handling, `COMBAT_LOG`/`COMBAT_STATE_UPDATE`/`COMBAT_ENDED` emission
+- `packages/frontend/engine/src/entities/create_player.ts` — Gave player `CombatStats` (100 HP, attack 5, defense 12, accuracy 4, evasion 12) and `TurnOrder` (initiative 12)
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — Enemy spawn picks up `attack`/`defense`/`accuracy`/`evasion` from Tiled properties
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Imports+handles `COMBAT_ACTION` in `handleBridgeCommand`, routing to `handleCombatAction`
+- `packages/frontend/engine/src/game_world.ts` — Registers `COMBAT_ACTION` command forwarding to worker
+- `packages/frontend/engine/src/index.ts` — Exports `handleCombatAction`
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Rewired `attack()`/`flee()`/`defend()` to send `COMBAT_ACTION` via bridge; listens for `COMBAT_LOG`/`COMBAT_STATE_UPDATE`/`COMBAT_ENDED`; added `isAttacking`/`enemyEntityId`/`defend()` interface
+- `apps/frontend/client/src/lib/views/combat/combat_view.svelte` — Added Attack/Defend/Flee buttons with disable state
+- `apps/frontend/client/src/lib/views/combat/combat_dev_view_model.svelte.ts` — Updated to match new interface (`enemyEntityId`, `isAttacking`)
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added 2.5s delay before dismissing combat overlay on `COMBAT_ENDED` so victory/defeat banner is visible
+- `packages/frontend/engine/src/__tests__/turn_manager.test.ts` — Added 14 combat math tests (hit/miss/kill/HP floor/flee/defend/log format/state update emission)
+
+**Deviations**:
+1. **Dice roller injection**: `handleCombatAction` accepts optional `diceRoller` parameter for deterministic testing. Default uses `crypto.getRandomValues`.
+2. **`removeEntity` import**: `turn_manager_system.ts` now imports `removeEntity` from bitECS for enemy destruction.
+3. **COMBAT_ENDED dismissal delay**: GameUIViewModel waits 2.5s before dismissing combat overlay after `COMBAT_ENDED` — allows the victory/defeat banner to display.
+4. **Player gets `CombatStats` at creation**: Added in `create_player.ts` instead of a separate system — simpler and ensures stats exist before any combat encounter.
+
+**Design decisions**:
+1. **`_handleEnemyDefeated` emits `INVENTORY_UPDATED`** — Each defeated enemy drops `{ itemId: 'loot_<eid>', quantity: 1 }`. A full loot table system (reading item drops from spawn properties) is future work.
+2. **All dice rolls use `crypto.getRandomValues`** — Uniform distribution, no seed needed for MVP. Injectable roller for tests.
+3. **Enemy counter-attack happens immediately after player action** — No turn queue advancement in MVP. The turn_manager's `advanceTurn` is kept for future multi-enemy encounters.
+4. **Minimum 1 damage** — Attacks always deal at least 1 damage after defense reduction, ensuring progress even against high-defense enemies.
+5. **DEFEND stance emits log entry only** — Full evasion buff implementation is deferred. The action still allows the enemy to counter-attack normally.
+
+**Known limitations**:
+- `defend` action doesn't actually modify evasion/defense — it's a pass action with flavor text.
+- Loot drops are generic (`loot_<eid>`) — no item definition table or loot table from enemy properties.
+- `advanceTurn` still exists but is not used in the current 1v1 combat flow (player → enemy counter-attack → repeat).
+- Engine typecheck has 4 pre-existing errors (game_world.ts `?worker` import, undefined checks) — not caused by C-145.
+- Client fix task has 1 pre-existing suppression warning (test_preload.ts) — not caused by C-145.
 
 ### C-134: Inline Provider Setup & Routing Fix
 

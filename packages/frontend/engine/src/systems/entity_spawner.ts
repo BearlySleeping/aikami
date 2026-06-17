@@ -270,6 +270,10 @@ const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
   const hp = _getNumberProperty(spawnPoint.properties, 'hp', 50);
   const maxHp = _getNumberProperty(spawnPoint.properties, 'maxHp', hp);
   const initiative = _getNumberProperty(spawnPoint.properties, 'initiative', 10);
+  const attack = _getNumberProperty(spawnPoint.properties, 'attack', 3);
+  const defense = _getNumberProperty(spawnPoint.properties, 'defense', 10);
+  const accuracy = _getNumberProperty(spawnPoint.properties, 'accuracy', 2);
+  const evasion = _getNumberProperty(spawnPoint.properties, 'evasion', 10);
 
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
@@ -293,6 +297,10 @@ const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
       health: hp,
       maxHealth: maxHp,
       initiative,
+      attack,
+      defense,
+      accuracy,
+      evasion,
     }),
   );
 

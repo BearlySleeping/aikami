@@ -6,8 +6,8 @@
   //
   // Contract: C-144 Task 5
 
-  import CombatView from '$lib/views/combat/combat_view.svelte';
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+  import CombatView from '$lib/views/combat/combat_view.svelte';
   import type { CombatSandboxViewModelInterface } from './combat_sandbox_view_model.svelte.ts';
 
   type Props = {

@@ -93,6 +93,36 @@
         {/if}
       </div>
 
+      <!-- Combat actions -->
+      {#if !viewModel.combatResult}
+        <div class="grid grid-cols-3 gap-2">
+          <button
+            class="btn btn-success btn-sm"
+            onclick={() => viewModel.attack()}
+            disabled={viewModel.isAttacking}
+            data-testid="combat-attack-btn"
+          >
+            {viewModel.isAttacking ? '⚔️ ...' : '⚔️ Attack'}
+          </button>
+          <button
+            class="btn btn-outline btn-sm"
+            onclick={() => viewModel.defend()}
+            disabled={viewModel.isAttacking}
+            data-testid="combat-defend-btn"
+          >
+            🛡️ Defend
+          </button>
+          <button
+            class="btn btn-ghost btn-sm text-error"
+            onclick={() => viewModel.flee()}
+            disabled={viewModel.isAttacking}
+            data-testid="combat-flee-btn"
+          >
+            🏃 Flee
+          </button>
+        </div>
+      {/if}
+
       <!-- Combat log -->
       <div class="rounded-lg border border-base-300 bg-base-200 p-4">
         <h2 class="mb-2 text-sm font-semibold text-base-content/70">Combat Log</h2>

@@ -92,6 +92,18 @@ export type GameCommand =
       args: string[];
       /** Entity ID of the character the macro applies to. */
       entityId?: number;
+    }
+  | {
+      /**
+       * Combat action from the UI (Attack, Flee, Defend).
+       * Routed to the turn_manager_system in the ECS worker.
+       *
+       * Contract: C-145 Turn-Based Combat Loop
+       */
+      type: 'COMBAT_ACTION';
+      action: 'ATTACK' | 'FLEE' | 'DEFEND';
+      /** Target entity ID (defaults to the first enemy if omitted). */
+      targetId?: number;
     };
 
 // ---------------------------------------------------------------------------
@@ -233,6 +245,36 @@ export type GameEvent =
       targetX: number;
       /** Target Y pixel coordinate for the player on the new map. */
       targetY: number;
+    }
+  | {
+      /**
+       * Emitted when a combat action resolves (hit/miss, damage, status).
+       * The CombatViewModel listens for this to populate the scrolling battle log.
+       *
+       * Contract: C-145 Turn-Based Combat Loop
+       */
+      type: 'COMBAT_LOG';
+      /** Human-readable log entry (e.g. "Player rolls 14 to hit. Hits for 4 damage!"). */
+      message: string;
+      /** Source entity ID that performed the action. */
+      sourceId: number;
+      /** Target entity ID that received the action. */
+      targetId: number;
+      /** Remaining HP of the target after the action resolved. */
+      targetRemainingHp: number;
+      /** Maximum HP of the target. */
+      targetMaxHp: number;
+    }
+  | {
+      /**
+       * Emitted when an entity's CombatStats change (HP, status).
+       * The CombatViewModel listens for this to reactively update HP bars.
+       */
+      type: 'COMBAT_STATE_UPDATE';
+      /** Map of entity ID → current HP. */
+      entityHpMap: Record<number, number>;
+      /** Map of entity ID → max HP. */
+      entityMaxHpMap: Record<number, number>;
     }
   | {
       /**
