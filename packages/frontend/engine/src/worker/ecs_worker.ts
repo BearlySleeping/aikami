@@ -254,6 +254,8 @@ const handleBridgeCommand = (command: GameCommand): void => {
           action: command.action,
           targetId: command.targetId,
           bridge: workerBridge,
+          advantage: command.advantage,
+          bonusDamage: command.bonusDamage,
         });
       }
       break;
