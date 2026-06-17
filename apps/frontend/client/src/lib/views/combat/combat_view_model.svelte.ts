@@ -50,6 +50,12 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Maximum enemy hit points. */
   readonly enemyMaxHp: number;
 
+  /** Display name of the active enemy (e.g. "Goblin"). */
+  readonly enemyName: string;
+
+  /** Whether it's currently the player's turn in combat. */
+  readonly isPlayerTurn: boolean;
+
   /** Ordered combat log entries — most recent first. */
   readonly combatLog: readonly string[];
 
@@ -95,6 +101,10 @@ export class CombatViewModel
   enemyHp = $state(80);
 
   enemyMaxHp = $state(80);
+
+  enemyName = $state('');
+
+  isPlayerTurn = $state(true);
 
   combatLog: string[] = $state([]);
 
@@ -160,6 +170,10 @@ export class CombatViewModel
       this.activeEntities = event.participantIds;
       this.currentTurnEntity = event.firstTurnEntityId;
       this.totalParticipants = event.participantIds.length;
+      this.enemyName = event.enemyName ?? 'Unknown Enemy';
+      this.enemyHp = event.enemyHp ?? 80;
+      this.enemyMaxHp = event.enemyMaxHp ?? 80;
+      this.isPlayerTurn = true;
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', () => {
@@ -188,10 +202,82 @@ export class CombatViewModel
     this.playerMaxHp = 100;
     this.enemyHp = 80;
     this.enemyMaxHp = 80;
+    this.enemyName = '';
+    this.isPlayerTurn = true;
     this.combatLog = [];
     this.combatResult = null;
 
     await super.dispose();
+  }
+
+  // -----------------------------------------------------------------------
+  // Combat actions
+  // -----------------------------------------------------------------------
+
+  /**
+   * Executes a basic player attack.
+   *
+   * For this MVP: reduces enemy HP by a flat amount (15) and logs
+   * the action. In a full implementation this would post an ATTACK
+   * command to the engine via the bridge.
+   */
+  attack(): void {
+    if (!this.inCombat) {
+      return;
+    }
+
+    const damage = 15;
+    this.enemyHp = Math.max(0, this.enemyHp - damage);
+    this.combatLog = [
+      `Player attacks ${this.enemyName || 'enemy'} for ${damage} damage! (Enemy HP: ${this.enemyHp}/${this.enemyMaxHp})`,
+      ...this.combatLog,
+    ];
+
+    if (this.enemyHp <= 0) {
+      this._endCombatWithResult('victory');
+    }
+  }
+
+  /**
+   * Flees from combat.
+   *
+   * Immediately emits COMBAT_ENDED via the bridge to instruct the
+   * engine to restore EXPLORE mode and dismiss the combat overlay.
+   */
+  flee(): void {
+    if (!this.inCombat || !this._bridge) {
+      return;
+    }
+
+    this._bridge.emit({ type: 'COMBAT_ENDED', victory: false });
+    this.activeEntities = [];
+    this.currentTurnEntity = null;
+    this.totalParticipants = 0;
+    this.enemyName = '';
+    this.isPlayerTurn = true;
+    this.combatResult = null;
+  }
+
+  /**
+   * Ends combat with the given result.
+   *
+   * Called internally when HP reaches 0. Emits COMBAT_ENDED through
+   * the bridge so the engine and GameUIViewModel dismiss the overlay.
+   */
+  private _endCombatWithResult(result: 'victory' | 'defeat'): void {
+    this.combatResult = result;
+    this.currentTurnEntity = null;
+    this.isPlayerTurn = false;
+    this.combatLog = [
+      result === 'victory'
+        ? `Victory! ${this.enemyName || 'Enemy'} defeated.`
+        : `Defeat... the ${this.enemyName || 'enemy'} was too strong.`,
+      ...this.combatLog,
+    ];
+
+    if (this._bridge) {
+      this._bridge.emit({ type: 'COMBAT_ENDED', victory: result === 'victory' });
+    }
   }
 }
 

@@ -39,4 +39,4 @@ export type GameStateOptions = {
  * DIALOGUE — locked into conversation, movement disabled
  * MENU — paused in overlay, all game input disabled
  */
-export type GameMode = 'EXPLORE' | 'DIALOGUE' | 'MENU';
+export type GameMode = 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT';

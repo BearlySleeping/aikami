@@ -10,11 +10,14 @@ import { addComponent, addEntity, set } from 'bitecs';
 import { resolveNpcTexture, resolvePropTexture } from '../assets/lpc_asset_catalog.ts';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
+import { CombatStats } from '../components/combat_stats.ts';
+import { Enemy } from '../components/enemy.ts';
 import { Interactable } from '../components/interactable.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
 import { Transition } from '../components/transition.ts';
+import { TurnOrder } from '../components/turn_order.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,6 +96,9 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
     } else if (spawnPoint.type === 'item') {
       const eid = _spawnItem(world, spawnPoint);
       results.push({ type: 'item', eid, spawnPoint });
+    } else if (spawnPoint.type === 'enemy') {
+      const eid = _spawnEnemy(world, spawnPoint);
+      results.push({ type: 'enemy', eid, spawnPoint });
     }
     // Unknown types are silently skipped — they carry no spawn logic
   }
@@ -242,6 +248,65 @@ const _spawnItem = (world: World, spawnPoint: SpawnPoint): number => {
       type: 'item',
       itemId,
       quantity,
+    }),
+  );
+
+  return eid;
+};
+
+/**
+ * Creates an enemy entity from a spawn point.
+ *
+ * Enemies get Position, Sprite, CombatStats (HP/Attack/Defense),
+ * Enemy tag, and TurnOrder components. Custom properties like
+ * `npcName`, `hp`, `maxHp`, and `initiative` from Tiled define
+ * combat attributes.
+ *
+ * Contract: C-144 Combat Encounter Integration
+ */
+const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
+  const eid = addEntity(world);
+
+  const hp = _getNumberProperty(spawnPoint.properties, 'hp', 50);
+  const maxHp = _getNumberProperty(spawnPoint.properties, 'maxHp', hp);
+  const initiative = _getNumberProperty(spawnPoint.properties, 'initiative', 10);
+
+  addComponent(world, eid, Position);
+  addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
+
+  addComponent(world, eid, Sprite);
+  addComponent(
+    world,
+    eid,
+    set(Sprite, {
+      textureKey: '',
+      tint: 0xff4444, // red tint for hostile enemies
+      displayObject: undefined,
+    }),
+  );
+
+  addComponent(world, eid, CombatStats);
+  addComponent(
+    world,
+    eid,
+    set(CombatStats, {
+      health: hp,
+      maxHealth: maxHp,
+      initiative,
+    }),
+  );
+
+  addComponent(world, eid, Enemy);
+  addComponent(world, eid, set(Enemy, { isActive: true }));
+
+  addComponent(world, eid, TurnOrder);
+  addComponent(
+    world,
+    eid,
+    set(TurnOrder, {
+      currentTurn: false,
+      initiativeValue: initiative,
+      isActive: true,
     }),
   );
 
