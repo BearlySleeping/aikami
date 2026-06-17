@@ -37,7 +37,8 @@ export type GameOverlayType =
   | 'DIALOGUE'
   | 'COMBAT'
   | 'INVENTORY'
-  | 'QUEST_LOG';
+  | 'QUEST_LOG'
+  | 'GAME_OVER';
 
 /** NPC data passed to the dialogue overlay when an interaction starts. */
 export type DialogueNpcData = {
@@ -124,6 +125,12 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
 
   /** Whether a map transition is currently in progress (fade overlay visible). */
   readonly isTransitioning: boolean;
+
+  /** Respawns the player after defeat (reloads current map). */
+  respawnPlayer(): Promise<void>;
+
+  /** Loads the last save after defeat (quits to main menu). */
+  loadLastSave(): Promise<void>;
 };
 
 class GameUIViewModel
@@ -227,8 +234,15 @@ class GameUIViewModel
       });
 
       // Listen for ZONE_TRIGGERED events to show the transition overlay
-      bridge.on('ZONE_TRIGGERED', () => {
+      // and trigger the actual map load with defeated enemy persistence.
+      bridge.on('ZONE_TRIGGERED', (event) => {
         this.isTransitioning = true;
+        void this._gameViewModel.loadMap(
+          event.targetMap,
+          event.targetX,
+          event.targetY,
+          gameStateService.defeatedEnemies as string[],
+        );
       });
 
       // Listen for GAME_READY to hide the transition overlay after load completes
@@ -261,16 +275,20 @@ class GameUIViewModel
         }
       });
 
-      // Listen for COMBAT_ENDED to dismiss the combat overlay.
-      // Add a brief delay so the player can see the victory/defeat banner
-      // before the overlay is dismissed.
-      bridge.on('COMBAT_ENDED', () => {
+      // Listen for COMBAT_ENDED to dismiss the combat overlay or show game over.
+      // Victory: brief delay then dismiss. Defeat: show GAME_OVER overlay.
+      bridge.on('COMBAT_ENDED', (event) => {
         if (this.activeOverlay === 'COMBAT') {
-          // Give the CombatViewModel 2.5 seconds to show the result banner
-          // before dismissing the overlay.
-          setTimeout(() => {
-            this._endCombat();
-          }, 2500);
+          if (event.victory) {
+            // Give the CombatViewModel 2.5 seconds to show the victory banner
+            // before dismissing the overlay.
+            setTimeout(() => {
+              this._endCombat();
+            }, 2500);
+          } else {
+            // Player was defeated — show Game Over
+            this._showGameOver();
+          }
         }
       });
     } catch (error) {
@@ -471,6 +489,43 @@ class GameUIViewModel
     this._gameViewModel.resumeEngine();
     void this.combatViewModel?.dispose();
     this.combatViewModel = undefined;
+  }
+
+  /**
+   * Shows the Game Over overlay after player defeat.
+   *
+   * Switches to GAME_OVER overlay type and disposes the combat VM.
+   * The game remains paused — the player must choose Respawn or Load Last Save.
+   *
+   * Contract: C-147 Progression & Persistence
+   */
+  private _showGameOver(): void {
+    this.activeOverlay = 'GAME_OVER';
+    gameStateService.setMode('MENU');
+    void this.combatViewModel?.dispose();
+    this.combatViewModel = undefined;
+  }
+
+  /** @inheritdoc */
+  async respawnPlayer(): Promise<void> {
+    // Reload the default starting map — defeated enemies are already tracked
+    // in GameStateService and will be filtered out during map load.
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._gameViewModel.resumeEngine();
+    await this._gameViewModel.loadMap(
+      '/assets/maps/sandbox_zone_a.json',
+      160,
+      192,
+      gameStateService.defeatedEnemies as string[],
+    );
+  }
+
+  /** @inheritdoc */
+  async loadLastSave(): Promise<void> {
+    // Quit to main menu so the player can use the "Continue" button
+    // which reads from the save system's IndexedDB slot.
+    await routerService.navigateToApp();
   }
 }
 

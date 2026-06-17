@@ -14,15 +14,38 @@
 </script>
 
 <BaseViewModelContainer {viewModel} class="relative">
-  {#if viewModel.inCombat}
-    <div class="flex flex-col gap-4 p-4">
-      <!-- Battle result banner -->
-      {#if viewModel.combatResult}
-        <div class="rounded-lg p-3 text-center font-bold {viewModel.combatResultBannerClass}">
-          {viewModel.combatResult === 'victory' ? '🏆 Victory!' : '💀 Defeat'}
+  {#if viewModel.combatResult}
+    <!-- Victory / Defeat result screen -->
+    <div class="flex flex-col items-center justify-center gap-6 p-8">
+      <div class="text-6xl">
+        {viewModel.combatResult === 'victory' ? '🏆' : '💀'}
+      </div>
+      <h2
+        class="text-3xl font-bold {viewModel.combatResult === 'victory' ? 'text-success' : 'text-error'}"
+      >
+        {viewModel.combatResult === 'victory' ? 'Victory!' : 'Defeat'}
+      </h2>
+      <p class="text-base-content/60 text-center">
+        {viewModel.combatResult === 'victory'
+          ? 'The enemy has been vanquished. Glory is yours!'
+          : 'Your journey has come to an end... for now.'}
+      </p>
+      <!-- Combat log summary -->
+      {#if viewModel.combatLog.length > 0}
+        <div
+          class="w-full max-h-32 overflow-y-auto rounded-lg border border-base-300 bg-base-200 p-3"
+        >
+          <ul class="space-y-1">
+            {#each viewModel.combatLog as entry}
+              <li class="text-xs text-base-content/60">{entry}</li>
+            {/each}
+          </ul>
         </div>
       {/if}
-
+      <button class="btn btn-primary" onclick={() => viewModel.dismissResult()}>Continue</button>
+    </div>
+  {:else if viewModel.inCombat}
+    <div class="flex flex-col gap-4 p-4">
       <!-- Turn indicator -->
       <div class="rounded-lg border border-primary/30 bg-primary/10 p-3 text-center">
         <span class="text-sm font-semibold text-primary">

@@ -531,10 +531,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Register snapshot/restore handlers on the bridge
     this._setupSnapshotHandlers();
 
-    // Listen for ZONE_TRIGGERED events from the worker to trigger map transitions
-    this._bridge.on('ZONE_TRIGGERED', (event) => {
-      void this.loadMap(event.targetMap, event.targetX, event.targetY);
-    });
+    // ZONE_TRIGGERED is handled by the ViewModel (GameUIViewModel) so
+    // defeatedEnemies can be threaded from GameStateService into loadMap.
+    // This keeps persistence state in the UI layer where it belongs.
   }
 
   /**
@@ -1133,7 +1132,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * Contract: C-138 Map Transitions
    */
-  async loadMap(mapUrl: string, targetX: number, targetY: number): Promise<void> {
+  async loadMap(
+    mapUrl: string,
+    targetX: number,
+    targetY: number,
+    defeatedEnemies?: string[],
+  ): Promise<void> {
     this.debug('loadMap', { mapUrl, targetX, targetY });
 
     // 1. Pause the engine
@@ -1193,6 +1197,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       mapPixelHeight,
       targetX,
       targetY,
+      defeatedEnemies,
     });
 
     // 7. Resume the engine
@@ -1214,6 +1219,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     mapPixelHeight: number;
     targetX: number;
     targetY: number;
+    defeatedEnemies?: string[];
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this._worker) {
@@ -1248,6 +1254,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         mapPixelHeight: options.mapPixelHeight,
         targetX: options.targetX,
         targetY: options.targetY,
+        defeatedEnemies: options.defeatedEnemies,
       });
     });
   }

@@ -5,6 +5,7 @@
   import QuestView from '../../quest/quest_view.svelte';
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
+  import GameOverOverlay from './overlays/game_over_overlay.svelte';
   import PauseMenuOverlay from './overlays/pause_menu_overlay.svelte';
   import TransitionOverlay from './overlays/transition_overlay.svelte';
 
@@ -88,6 +89,13 @@
       <p class="text-lg font-bold text-error">Combat loading...</p>
     </div>
   {/if}
+{/if}
+
+{#if viewModel.activeOverlay === 'GAME_OVER'}
+  <GameOverOverlay
+    onRespawn={() => viewModel.respawnPlayer()}
+    onLoadLastSave={() => viewModel.loadLastSave()}
+  />
 {/if}
 
 <TransitionOverlay {viewModel} />
