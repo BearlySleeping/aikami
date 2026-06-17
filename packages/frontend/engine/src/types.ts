@@ -137,6 +137,16 @@ export type GameEvent =
       itemName: string;
     }
   | {
+      /**
+       * Emitted when the player's inventory changes (pickup or removal).
+       * Contains the complete inventory array for reactive UI sync.
+       *
+       * Contract: C-142 Inventory Item Pickups
+       */
+      type: 'INVENTORY_UPDATED';
+      inventory: Array<{ itemId: string; quantity: number }>;
+    }
+  | {
       type: 'SCENE_LOADED';
       sceneId: string;
     }

@@ -43,6 +43,7 @@
 | C-139 | Isolated Dev Sandboxes & Map Wiring | ✅ completed |
 | C-140 | Game Mode System & Input Routing | ✅ completed |
 | C-141 | NPC Interaction & Dialogue Trigger | ✅ completed |
+| C-142 | Inventory Sync & Item Pickups | ✅ completed |
 | C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
 | C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
 | C-034 | LPC Render Pipeline | ✅ completed |
@@ -960,3 +961,48 @@
 - **Fix 6**: `$effect`/`$derived` patterns in `GameUIView` could not reliably track `$state` changes on the ViewModel when mutations occurred in non-Svelte callbacks (bridge event handlers). Fixed by having `GameUIViewModel` own the `DialogueOverlayViewModel` lifecycle directly — creates in `NPC_INTERACTED` handler, clears in `endDialogue()`. The view reads `viewModel.dialogueViewModel` directly in `{#if}`.
 - **Fix 7**: Pressing 'E' key was impossible in chat input because the engine's keyboard handler called `preventDefault()` on 'E' regardless of game mode. Fixed by gating the interaction key handling behind `!this._inputLocked` — when in DIALOGUE/MENU mode, 'E' passes through normally to the textarea.
 - **Fix 8**: `DialogueOverlay` showed dual messages during AI streaming (empty placeholder + separate dots indicator). Fixed by merging the dots indicator into the placeholder message bubble, removing the separate streaming indicator div.
+
+### C-142: Inventory Sync & Item Pickups
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/interactable.ts` — New ECS component (`Interactable` SoA) with `type` ('npc'|'item'), `itemId`, `quantity`; observers registered per bitECS pattern.
+- `packages/frontend/engine/src/systems/interaction_system.ts` — Handles INTERACT command: finds closest Interactable entity, dispatches item pickup (adds to Inventory, destroys entity, emits INVENTORY_UPDATED) or NPC interaction (emits NPC_INTERACTED).
+- `packages/frontend/engine/src/systems/interaction_system.test.ts` — 9 unit tests: item pickup within range, entity destruction, out-of-range ignored, slot stacking, full inventory guard, event emission, no-entity no-op, no-position no-op, closest-item priority.
+- `apps/frontend/client/src/lib/views/inventory/inventory_view_model.svelte.ts` — `InventoryViewModel`: reads `gameStateService.inventory`, exposes `items` getter + `closeInventory()`. Extends `BaseViewModel`.
+- `apps/frontend/client/src/lib/views/inventory/inventory_view.svelte` — DaisyUI card overlay with header (title + close button), 4-column item grid, empty state with backpack icon + hint text, footer with `I` keybinding hint.
+- `apps/e2e/tests/client/inventory_pickup.spec.ts` — 5 Playwright E2E tests: open inventory (I key), toggle close (I again), escape close, close button click, no-open-when-paused gate.
+
+**Files modified**:
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — Added `type === 'item'` branch in `spawnEntities()`; new `_spawnItem()` helper creates entity with Position + Sprite + Interactable components from Tiled item spawn points.
+- `packages/frontend/engine/src/entities/create_player.ts` — Player now starts with empty `Inventory` component (24 zero-filled slots).
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Registered `registerInventoryObservers` + `registerInteractableObservers`; wired INTERACT command to `handleInteract()`.
+- `packages/frontend/engine/src/types.ts` — Added `INVENTORY_UPDATED` event type (`{ inventory: Array<{ itemId: string; quantity: number }> }`).
+- `packages/frontend/engine/src/index.ts` — Exported `Interactable`, `InteractableData`, `InteractableType`, `registerInteractableObservers`, `handleInteract`.
+- `apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts` — Added `inventory` `$state` array; `_listenForInventoryUpdates()` registers bridge listener for `INVENTORY_UPDATED`.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `INVENTORY` to `GameOverlayType` union; `handleKeyDown` handles `I` key toggle + `Escape` close; `_openInventory()`/`_closeInventory()` manage MENU mode lock + `InventoryViewModel` lifecycle.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Renders `InventoryView` when `activeOverlay === 'INVENTORY'`.
+- `apps/frontend/client/src/lib/views/inventory/inventory_dev_view_model.svelte.ts` — Updated dev sandbox to match new ViewModel interface (uses `gameStateService.inventory` for mock state, removed gold/maxCapacity).
+- `apps/frontend/client/src/routes/(dev)/dev/inventory/+page.svelte` — Fixed `getInventoryDevViewModel` call to include required `onClose` option; removed `giveMaxGold` action.
+
+**Deviations**:
+1. **No dedicated `interaction_system.ts` before C-142**: The C-141 contract wired NPC interaction through the `dialog_trigger_system.ts` and `NPC_INTERACTED` bridge event. C-142 adds `interaction_system.ts` to handle the INTERACT command (originally a no-op in the worker). Item pickup and NPC interaction now share this system.
+2. **Item entities use Interactable component (not NPCDialog)**: Items aren't NPCs — they use a separate `Interactable` component with `type: 'item'`. The interaction system queries both `Position + Interactable` (items) and `Position + NPCDialog` (NPCs), picking the closest entity regardless of type.
+3. **Inventory stores raw slot data, not named items**: The ECS `Inventory` component uses numeric arrays (`itemIds`, `quantities`, `itemTypes`) for SoA efficiency. The bridge converts this to `{ itemId: string, quantity: number }` for the UI layer. Slot 0 = empty slot.
+4. **INVENTORY_UPDATED emits full array**: The event carries the complete inventory array (not just the delta) — simplifies UI state sync (replace vs merge).
+
+**Design decisions**:
+1. **Interactable component is a discriminated union**: `type: 'npc' | 'item'` plus optional `itemId`/`quantity` fields. NPCs can also wear this component for future non-dialogue NPC interactions (combat start, trade).
+2. **Closest-entity priority**: When both an item and NPC are in range, the closest entity wins. Items are queried first (same priority as NPCs — the closest distance wins).
+3. **EngineBridge listener in service constructor**: `_listenForInventoryUpdates()` is called eagerly from `GameStateService` constructor (not `initialize()`), matching the pattern used for `_broadcastModeToEngine`. Ensures the listener is registered before any game events fire.
+4. **Inventory view reads from `gameStateService.inventory` directly**: No copy-on-read — the ViewModel `items` getter returns the reactive `$state` reference. Svelte 5 reactivity updates the view automatically when the bridge callback mutates the array.
+5. **Dev sandbox uses `gameStateService.inventory` for mock state**: Instead of extending `items` getter, `InventoryDevViewModel` writes directly to `gameStateService.inventory` in `initialize()`. This keeps mock data in the same reactive path as production data.
+
+**Known limitations**:
+- No items on the default `sandbox_zone_a.json` map — item pickup can't be tested in the live game without adding item spawn points to a Tiled map.
+- E2E tests only verify inventory overlay open/close — walk-up-and-pickup test requires item entities on the map.
+- `Interactable` component's `itemId` is a string stored outside SoA arrays — bitECS observers handle it correctly but direct SoA reads return the raw array index.
+- `MAX_INVENTORY_SLOTS` (24) is hardcoded — changing it requires recompiling both engine and UI.
+- No stack merging: if the player picks up the same item twice, it goes into different slots. Stack merging could be added in a future contract.
+- Pre-existing `frontend-engine:typecheck` errors (Vite `?worker` import + `this._worker` possibly-undefined) persist — unrelated to C-142.
