@@ -81,6 +81,7 @@ P2 (Polish — after P1):
 | C-139 | [Isolated Dev Sandboxes & Map Wiring](C-139-dev-sandboxes-map-wiring.md) ✅ | Wire game initialization to load starting map, create /dev/sandbox/map route for visual tilemap testing | C-135, C-136, C-137, C-138 |
 | C-140 | [Game Mode System & Input Routing](C-140-game-mode-system.md) ✅ | Centralized Game Mode state machine (EXPLORE/DIALOGUE/MENU), input routing gate, dev sandbox | — |
 | C-141 | [NPC Interaction & Dialogue Trigger](C-141-npc-interaction-trigger.md) ✅ | Proximity-based E key interaction, NPC_INTERACTED bridge event, persona-aware AI prompts | — |
+| C-142 | [Inventory Sync & Item Pickups](C-142-inventory-item-pickups.md) ✅ | ECS Inventory→Svelte UI sync, item spawn points, Interact key pickup, Inventory overlay with I toggle | — |
 
 ## Contract Format
 

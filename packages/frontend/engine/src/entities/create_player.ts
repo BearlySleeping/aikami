@@ -4,6 +4,7 @@ import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { CameraFocus } from '../components/camera_focus.ts';
+import { Inventory, MAX_INVENTORY_SLOTS } from '../components/inventory.ts';
 import { Position } from '../components/position.ts';
 import { Sprite } from '../components/sprite.ts';
 import { Velocity } from '../components/velocity.ts';
@@ -61,6 +62,20 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
   // character has a visible face instead of just ear accessories.
   addComponent(world, entityId, Appearance);
   setAppearanceLayers(world, entityId, [1, 1, 1, 1, 1, 95]);
+
+  // Initialize empty inventory with zero-filled slots.
+  // Contract C-142: player must start with an empty Inventory component
+  // so the interaction system has somewhere to store picked-up items.
+  addComponent(world, entityId, Inventory);
+  addComponent(
+    world,
+    entityId,
+    set(Inventory, {
+      itemIds: new Array(MAX_INVENTORY_SLOTS).fill(0),
+      quantities: new Array(MAX_INVENTORY_SLOTS).fill(0),
+      itemTypes: new Array(MAX_INVENTORY_SLOTS).fill(0),
+    }),
+  );
 
   // Store player name as a numeric hash on the entity for reference.
   // The UI layer (GameViewModel) owns the display name; the engine

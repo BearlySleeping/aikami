@@ -23,6 +23,7 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   readonly isConnected: boolean;
   readonly activeContexts: readonly ActiveContextEntry[];
   readonly currentMode: GameMode;
+  inventory: Array<{ itemId: string; quantity: number }>;
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -55,6 +56,7 @@ export class GameStateService
   activeSession = $state<ActiveSessionData | undefined>(undefined);
   activeContexts = $state<ActiveContextEntry[]>([]);
   currentMode = $state<GameMode>('EXPLORE');
+  inventory = $state<Array<{ itemId: string; quantity: number }>>([]);
 
   get worldVariables(): Record<string, unknown> {
     return this.currentWorld?.variables ?? {};
@@ -71,6 +73,7 @@ export class GameStateService
   constructor(options: GameStateServiceOptions) {
     super(options);
     this.uid = options.uid;
+    void this._listenForInventoryUpdates();
   }
 
   private emitEvent(event: GameStateEvent): void {
@@ -317,6 +320,26 @@ export class GameStateService
       bridge.send({ type: 'SET_GAME_MODE' as never, mode } as never);
     } catch (error) {
       this.debug('_broadcastModeToEngine:failed', { mode, error: String(error) });
+    }
+  }
+
+  /**
+   * Listens for INVENTORY_UPDATED events from the ECS via the EngineBridge.
+   *
+   * When the player picks up or drops an item, the ECS emits the full
+   * inventory array. This method updates the reactive `inventory` state
+   * so the Inventory UI overlay renders the latest contents.
+   */
+  private async _listenForInventoryUpdates(): Promise<void> {
+    try {
+      const { createEngineBridge } = await import('@aikami/frontend/engine');
+      const bridge = createEngineBridge();
+
+      bridge.on('INVENTORY_UPDATED', (event) => {
+        this.inventory = event.inventory;
+      });
+    } catch (error) {
+      this.debug('_listenForInventoryUpdates:failed', { error: String(error) });
     }
   }
 }

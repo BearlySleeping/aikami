@@ -4,120 +4,48 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { gameStateService } from '$services';
 
 // ---------------------------------------------------------------------------
-// Item type
+// InventoryViewModel — Svelte 5 ViewModel for the inventory overlay
+//
+// Contract C-142 Task 4: Reads from GameStateService.inventory and exposes
+// the item list reactively to the InventoryView.
 // ---------------------------------------------------------------------------
 
-/** Lightweight mock Item type for the inventory sandbox. */
-export type InventoryItem = {
-  readonly id: string;
-  readonly name: string;
-  quantity: number;
+export type InventoryViewModelOptions = BaseViewModelOptions & {
+  /** Callback when the player closes the inventory overlay. */
+  onClose: () => void;
 };
-
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
-
-export type InventoryViewModelOptions = BaseViewModelOptions;
 
 export type InventoryViewModelInterface = BaseViewModelInterface & {
-  readonly items: InventoryItem[];
-  readonly gold: number;
-  readonly maxCapacity: number;
+  /** The current inventory items from the game state. */
+  readonly items: Array<{ itemId: string; quantity: number }>;
 
-  /** Number of occupied slots. */
-  readonly usedSlots: number;
-
-  /** Percentage of capacity used (0-100). */
-  readonly capacityPercent: number;
-
-  /** Whether the inventory is completely empty. */
-  readonly isEmpty: boolean;
-
-  /** Whether the inventory is at or over capacity. */
-  readonly isFull: boolean;
-
-  /** Remove an item by ID. */
-  dropItem(id: string): void;
-
-  /** Use/consume one quantity of an item by ID. */
-  useItem(id: string): void;
+  /** Closes the inventory overlay (delegates to parent callback). */
+  closeInventory(): void;
 };
 
-// ---------------------------------------------------------------------------
-// ViewModel
-// ---------------------------------------------------------------------------
-
-/**
- * ViewModel for the inventory UI route.
- *
- * Follows the Svelte 5 ViewModel pattern: all reactive state lives here
- * via `$state` runes. The View (.svelte) is a thin wrapper.
- */
-export class InventoryViewModel
+class InventoryViewModel
   extends BaseViewModel<InventoryViewModelOptions>
   implements InventoryViewModelInterface
 {
-  items: InventoryItem[] = $state([]);
+  private readonly _onClose: () => void;
 
-  gold = $state(0);
-
-  maxCapacity = $state(30);
-
-  // ── Derived ──────────────────────────────────────────────────────────
-
-  get usedSlots(): number {
-    return this.items.reduce((sum, item) => sum + item.quantity, 0);
+  constructor(options: InventoryViewModelOptions) {
+    super(options);
+    this._onClose = options.onClose;
   }
 
-  get capacityPercent(): number {
-    if (this.maxCapacity <= 0) {
-      return 100;
-    }
-    return Math.min(100, Math.round((this.usedSlots / this.maxCapacity) * 100));
+  /** @inheritdoc */
+  get items(): Array<{ itemId: string; quantity: number }> {
+    return gameStateService.inventory;
   }
 
-  get isEmpty(): boolean {
-    return this.items.length === 0;
-  }
-
-  get isFull(): boolean {
-    return this.usedSlots >= this.maxCapacity;
-  }
-
-  // ── Methods ──────────────────────────────────────────────────────────
-
-  dropItem(id: string): void {
-    this.debug('dropItem', { id });
-    this.items = this.items.filter((item) => item.id !== id);
-  }
-
-  useItem(id: string): void {
-    this.debug('useItem', { id });
-    const index = this.items.findIndex((item) => item.id === id);
-    if (index === -1) {
-      return;
-    }
-
-    const item = this.items[index];
-    if (!item) {
-      return;
-    }
-    if (item.quantity <= 1) {
-      // Remove completely
-      this.items = this.items.filter((_, i) => i !== index);
-    } else {
-      // Decrement quantity
-      this.items[index] = { ...item, quantity: item.quantity - 1 };
-    }
+  /** @inheritdoc */
+  closeInventory(): void {
+    this._onClose();
   }
 }
 
-/**
- * Factory function for creating InventoryViewModel instances.
- */
-export const getInventoryViewModel = (options: InventoryViewModelOptions): InventoryViewModel => {
-  return new InventoryViewModel(options);
-};
+export { InventoryViewModel };

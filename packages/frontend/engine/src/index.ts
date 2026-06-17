@@ -47,6 +47,8 @@ export {
 export { CameraFocus, registerCameraFocusObservers } from './components/camera_focus.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
+export type { InteractableData, InteractableType } from './components/interactable.ts';
+export { Interactable, registerInteractableObservers } from './components/interactable.ts';
 export type { InventoryData, WalletData } from './components/inventory.ts';
 export {
   Inventory,
@@ -141,6 +143,7 @@ export type {
   SpawnTransitionOptions,
 } from './systems/entity_spawner.ts';
 export { spawnEntities, spawnTransitionEntities } from './systems/entity_spawner.ts';
+export { handleInteract } from './systems/interaction_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   animateEntitySystem,
