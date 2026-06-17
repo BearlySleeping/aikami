@@ -47,6 +47,7 @@ export {
 export { CameraFocus, registerCameraFocusObservers } from './components/camera_focus.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
+export { Enemy, registerEnemyObservers } from './components/enemy.ts';
 export type { InteractableData, InteractableType } from './components/interactable.ts';
 export { Interactable, registerInteractableObservers } from './components/interactable.ts';
 export type { InventoryData, WalletData } from './components/inventory.ts';
@@ -137,6 +138,7 @@ export { TextureManager } from './rendering/texture_manager.ts';
 export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export { isWalkable, resetCollisionGrid, setCollisionGrid } from './systems/collision_system.ts';
+export { updateEncounterSystem } from './systems/encounter_system.ts';
 export type {
   SpawnEntitiesOptions,
   SpawnResult,

@@ -28,6 +28,7 @@
 | C-102 | Tauri SPA Enforcement | ✅ completed |
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
+| C-144 | Combat Encounter Integration | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -1051,3 +1052,48 @@
 - Quest data is static in the engine MVP (3 dummy quests emitted once at init). Future contracts should add ECS quest components and a quest system that tracks progression.
 - Quest log overlay doesn't show keyboard hint (like "Press Q to close") — future UI polish contract.
 - Remaining CharacterViewModel test failures are assertion-level logic mismatches between test expectations and ViewModel behavior, not import infrastructure issues.
+
+### C-144: Combat Encounter Integration
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/enemy.ts` — Enemy tag component with `isActive` boolean SoA field and observer registration
+- `packages/frontend/engine/src/systems/encounter_system.ts` — Encounter system: checks player↔enemy spatial overlap each tick, triggers COMBAT_STARTED, halts player velocity, sets engine mode to COMBAT
+- `apps/frontend/client/static/assets/maps/sandbox_combat.json` — 15×10 room tilemap with collision walls and a single Green Slime enemy spawn point (hp=40, initiative=5)
+- `apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view_model.svelte.ts` — Sandbox ViewModel: initializes GameWorld + EngineBridge, loads combat map, listens for COMBAT_STARTED/ENDED, mounts CombatViewModel
+- `apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte` — Sandbox view: canvas + CombatView overlay with status overlays
+- `apps/frontend/client/src/routes/(dev)/dev/sandbox/combat/+page.svelte` — Dev sandbox route at `/dev/sandbox/combat`
+
+**Files modified**:
+- `apps/frontend/client/src/lib/types/game.ts` — Added `'COMBAT'` to `GameMode` union
+- `packages/frontend/engine/src/types.ts` — Added `'COMBAT'` to `SET_GAME_MODE` mode param; extended `COMBAT_STARTED` with optional `enemyId`, `enemyName`, `enemyHp`, `enemyMaxHp` fields
+- `packages/frontend/engine/src/state/game_mode.ts` — Extended mode type to include `'COMBAT'`
+- `packages/frontend/engine/src/game_world.ts` — Updated `SET_GAME_MODE` command forwarding type to accept `'COMBAT'`
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — Added `type === 'enemy'` spawn support: creates entities with Position, Sprite (red tint), CombatStats, Enemy tag, and TurnOrder components
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Registered Enemy observers; wired `updateEncounterSystem` into tick loop (after movement, before dialog triggers); updated LOAD_MAP handler to tint enemy entities correctly (0xff4444)
+- `packages/frontend/engine/src/index.ts` — Exported `Enemy`, `registerEnemyObservers`, `updateEncounterSystem`
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Added `enemyName`, `isPlayerTurn` $state; extended `COMBAT_STARTED` listener to capture enemy metadata; added `attack()` and `flee()` combat action methods; added `_endCombatWithResult()` private method
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `combatViewModel` state field; listens for `COMBAT_STARTED` → mounts CombatViewModel, sets mode to COMBAT, pauses engine; listens for `COMBAT_ENDED` → dismisses overlay, restores EXPLORE mode; added `_endCombat()` private method; imported `CombatViewModel`
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Renders `CombatView` when `activeOverlay === 'COMBAT'` (with backdrop blur + centered card layout)
+
+**Deviations**:
+1. **`COMBAT_STARTED` enemy metadata as optional fields**: Added `enemyId`, `enemyName`, `enemyHp`, `enemyMaxHp` as optional fields on the existing `COMBAT_STARTED` event rather than creating a separate event type. This preserves backward compatibility — existing `turn_manager_system.ts` emits `COMBAT_STARTED` without enemy metadata, while the new `encounter_system.ts` populates these fields.
+2. **Enemy component is a simple tag (boolean)**: The contract implies an Enemy component; implemented as a minimal `isActive` boolean tag following bitECS conventions. Does not carry enemy-specific attributes (HP/Attack/Defense live in CombatStats separately).
+3. **Encounter system uses direct distance check, not spatial grid**: Queries all Enemy-tagged entities each tick with O(N) distance check. For MVP with <100 enemies, this is simpler than extending the spatial hash grid. Future optimization: add Enemy entities to the spatial grid and use `queryNeighborhood` for O(1) proximity.
+4. **CombatViewModel.attack() is a local HP reducer (MVP)**: Reduces enemy HP by 15 directly in the ViewModel — does not post commands to the engine. Full implementation would use a bridge command to simulate combat rounds server-side. `flee()` emits `COMBAT_ENDED` directly through the bridge.
+5. **Combat sandbox reuses MapSandboxViewModel pattern**: Loads a tilemap with enemy spawn point via `GameWorld.loadMap()` rather than programmatic entity creation. This is simpler than adding a `SPAWN_ENEMY` bridge command for the MVP.
+
+**Design decisions**:
+1. **Encounter radius 48px (squared 48²)**: Matches the interaction radius used by NPCs. The encounter triggers when the player's position is within 48 pixels of the enemy's center.
+2. **Encounter system runs after movement**: Placed between `updateMovement` and `updateDialogTriggers` in the tick loop — positions are finalized before checking for overlaps.
+3. **Enemy entities get red tint (0xff4444)**: Visual distinction from NPCs (gold, 0xffcc00) and players (green, 0x00ff88).
+4. **CombatViewModel bridges the COMBAT_ENDED event via flee()**: When the player flees, the VM emits directly through the bridge — this lets the engine restore EXPLORE mode without the turn manager needing to be initialized.
+5. **Sandbox map uses the existing `debug_tiles.png` tileset**: 4-tile atlas (grass = tile 1, wall = tile 2). The 15×10 room has walls around all edges with an open interior and a single slime enemy positioned at (240, 128).
+
+**Known limitations**:
+- `attack()` does not post commands to the engine — HP changes are local to the ViewModel and won't persist if the overlay is dismissed and re-opened.
+- Encounter system does not handle multiple overlapping enemies (triggers on the first one found).
+- No enemy AI or automated enemy turns — turn-based combat rounds are a future contract.
+- Combat sandbox requires the dev server running (`bun moon run pwa:dev`) — the canvas and map tile URL are served by Vite.
+- `frontend-engine:typecheck` has 4 pre-existing errors (Vite `?worker` import type declaration, null checks on `_worker`) — not related to this contract.
