@@ -1,9 +1,12 @@
 // apps/frontend/client/src/lib/views/quest/quest_dev_view_model.svelte.ts
 //
-// Dev sandbox override — injects mock quest data without hitting any backend.
+// Dev sandbox override — injects mock quest data via GameStateService.
 // NEVER import this file from production code or non-(dev) routes.
+//
+// Contract: C-143 Quest Log Sync
 
-import type { Quest, QuestObjective } from './quest_view_model.svelte.ts';
+import type { QuestData } from '@aikami/frontend/engine';
+import { gameStateService } from '$services';
 import {
   QuestViewModel,
   type QuestViewModelInterface,
@@ -12,7 +15,7 @@ import {
 
 // ── Mock data ──────────────────────────────────────────────────────────
 
-const MOCK_QUESTS: Quest[] = [
+const MOCK_QUESTS: QuestData[] = [
   {
     id: 'q-slimes',
     title: 'Slime Extermination',
@@ -93,40 +96,35 @@ export class QuestDevViewModel extends QuestViewModel implements QuestViewModelI
   // ── Dev-only methods ─────────────────────────────────────────────────
 
   /**
-   * Populates the view model with a mix of active, completed, and failed quests.
-   * Safe to call multiple times — clears existing data first.
+   * Populates the GameStateService quests with mock data.
+   * Safe to call multiple times — overwrites existing data.
    */
   injectMockQuests(): void {
     this.debug('injectMockQuests');
 
-    this.activeQuests = [];
-    this.completedQuests = [];
-    this.failedQuests = [];
+    // Deep-clone objectives so mutations during dev testing are isolated
+    const clones: QuestData[] = MOCK_QUESTS.map((q) => ({
+      ...q,
+      objectives: q.objectives.map((o) => ({ ...o })),
+    }));
 
-    for (const quest of MOCK_QUESTS) {
-      // Deep-clone objectives so mutations during dev testing are isolated
-      const clone: Quest = {
-        ...quest,
-        objectives: quest.objectives.map((o): QuestObjective => ({ ...o, current: o.current })),
-      };
-
-      if (clone.status === 'active') {
-        this.activeQuests.push(clone);
-      } else if (clone.status === 'completed') {
-        this.completedQuests.push(clone);
-      } else {
-        this.failedQuests.push(clone);
-      }
+    // quests is $state so mutations trigger reactivity. The interface
+    // marks it readonly, but at runtime it's a mutable $state array.
+    (gameStateService.quests as QuestData[]).length = 0;
+    for (const clone of clones) {
+      (gameStateService.quests as QuestData[]).push(clone);
     }
   }
 
   /**
    * Finds the first active quest with an incomplete objective and increments it.
    * Caps at the objective's `max` value.
-   * Safe to call when there are no active quests — logs a debug message.
    */
   progressObjective(): void {
-    for (const quest of this.activeQuests) {
+    for (const quest of gameStateService.quests) {
+      if (quest.status !== 'active') {
+        continue;
+      }
       for (const objective of quest.objectives) {
         if (objective.current < objective.max) {
           objective.current++;
@@ -144,19 +142,19 @@ export class QuestDevViewModel extends QuestViewModel implements QuestViewModelI
 
   /**
    * Moves a random active quest to the failed state.
-   * Safe to call when there are no active quests — logs a debug message.
    */
   failRandomQuest(): void {
-    if (this.activeQuests.length === 0) {
+    const activeQuests = gameStateService.quests.filter((q) => q.status === 'active');
+    if (activeQuests.length === 0) {
       this.debug('failRandomQuest: no active quests to fail');
       return;
     }
-    const randomIndex = Math.floor(Math.random() * this.activeQuests.length);
-    const quest = this.activeQuests[randomIndex];
+    const randomIndex = Math.floor(Math.random() * activeQuests.length);
+    const quest = activeQuests[randomIndex];
     if (!quest) {
       return;
     }
-    this.failQuest(quest.id);
+    quest.status = 'failed';
     this.debug('failRandomQuest', { questId: quest.id, title: quest.title });
   }
 }

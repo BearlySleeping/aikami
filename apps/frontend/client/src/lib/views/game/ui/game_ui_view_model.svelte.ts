@@ -15,6 +15,7 @@ import {
   routerService,
 } from '$services';
 import { InventoryViewModel } from '../../inventory/inventory_view_model.svelte';
+import { QuestViewModel } from '../../quest/quest_view_model.svelte.ts';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
 import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
 
@@ -29,7 +30,13 @@ import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_v
 // ---------------------------------------------------------------------------
 
 /** Discriminated union of all possible game overlay states. */
-export type GameOverlayType = 'NONE' | 'PAUSE_MENU' | 'DIALOGUE' | 'COMBAT' | 'INVENTORY';
+export type GameOverlayType =
+  | 'NONE'
+  | 'PAUSE_MENU'
+  | 'DIALOGUE'
+  | 'COMBAT'
+  | 'INVENTORY'
+  | 'QUEST_LOG';
 
 /** NPC data passed to the dialogue overlay when an interaction starts. */
 export type DialogueNpcData = {
@@ -73,6 +80,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
     | undefined;
 
   readonly inventoryViewModel: InventoryViewModel | undefined;
+
+  /** The active QuestViewModel, or undefined when the quest log is closed. */
+  readonly questViewModel: QuestViewModel | undefined;
 
   /**
    * Handles global keydown events for overlay toggling.
@@ -129,6 +139,8 @@ class GameUIViewModel
   dialogueViewModel = $state<DialogueOverlayViewModel | undefined>(undefined);
 
   inventoryViewModel = $state<InventoryViewModel | undefined>(undefined);
+
+  questViewModel = $state<QuestViewModel | undefined>(undefined);
 
   /** Whether Ollama (localhost) is the active text provider (vs OpenRouter). */
   readonly useOllama: boolean;
@@ -237,6 +249,11 @@ class GameUIViewModel
         return;
       }
 
+      if (this.activeOverlay === 'QUEST_LOG') {
+        this._closeQuestLog();
+        return;
+      }
+
       this._togglePauseMenu();
       return;
     }
@@ -248,6 +265,17 @@ class GameUIViewModel
         this._closeInventory();
       } else if (this.activeOverlay === 'NONE') {
         this._openInventory();
+      }
+      return;
+    }
+
+    if (event.key === 'q' || event.key === 'Q') {
+      event.preventDefault();
+
+      if (this.activeOverlay === 'QUEST_LOG') {
+        this._closeQuestLog();
+      } else if (this.activeOverlay === 'NONE') {
+        this._openQuestLog();
       }
     }
   }
@@ -356,6 +384,35 @@ class GameUIViewModel
     gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
     this.inventoryViewModel = undefined;
+  }
+
+  /**
+   * Opens the quest log overlay.
+   *
+   * Sets game mode to MENU (locking player movement) and instantiates
+   * a QuestViewModel that reads quest data from GameStateService.
+   *
+   * Contract: C-143 Quest Log Sync
+   */
+  private _openQuestLog(): void {
+    this.activeOverlay = 'QUEST_LOG';
+    gameStateService.setMode('MENU');
+    this._gameViewModel.pauseEngine();
+    this.questViewModel = new QuestViewModel({
+      className: 'QuestViewModel',
+    });
+  }
+
+  /**
+   * Closes the quest log overlay.
+   *
+   * Restores EXPLORE mode and disposes the QuestViewModel.
+   */
+  private _closeQuestLog(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._gameViewModel.resumeEngine();
+    this.questViewModel = undefined;
   }
 }
 

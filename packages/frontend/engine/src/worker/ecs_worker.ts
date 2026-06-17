@@ -387,6 +387,51 @@ const initializeEngine = (
       type: 'ENGINE_READY',
     });
   });
+
+  // Emit a dummy quest so the quest log UI has data to display (C-143 MVP).
+  // In a full implementation, quests would be tracked via ECS components
+  // and emitted whenever a quest is added, progressed, or completed.
+  queueMicrotask(() => {
+    workerBridge.emit({
+      type: 'QUESTS_UPDATED',
+      quests: [
+        {
+          id: 'q-slimes',
+          title: 'Slime Extermination',
+          description:
+            'Clear the eastern road of slimes to ensure safe passage for merchant caravans.',
+          status: 'active',
+          objectives: [
+            { label: 'Defeat Blue Slimes', current: 2, max: 5 },
+            { label: 'Defeat Red Slimes', current: 1, max: 3 },
+            { label: 'Report to Guard Captain', current: 0, max: 1 },
+          ],
+        },
+        {
+          id: 'q-herbs',
+          title: 'Gather Moonpetal Herbs',
+          description: 'Collect rare Moonpetal herbs from the Silverwood Grove for the apothecary.',
+          status: 'active',
+          objectives: [
+            { label: 'Find Moonpetal Herbs', current: 4, max: 6 },
+            { label: 'Deliver herbs to Apothecary Mira', current: 0, max: 1 },
+          ],
+        },
+        {
+          id: 'q-artifact',
+          title: 'The Lost Artifact of Valdris',
+          description: 'Recover the ancient artifact from the ruins beneath the Howling Mountains.',
+          status: 'completed',
+          objectives: [
+            { label: 'Find the entrance to the ruins', current: 1, max: 1 },
+            { label: 'Solve the Guardian puzzle', current: 1, max: 1 },
+            { label: 'Retrieve the Artifact', current: 1, max: 1 },
+            { label: 'Return to Sage Theron', current: 1, max: 1 },
+          ],
+        },
+      ],
+    });
+  });
 };
 
 // -- Tick loop --------------------------------------------------------------

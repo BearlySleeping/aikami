@@ -225,7 +225,40 @@ export type GameEvent =
       targetX: number;
       /** Target Y pixel coordinate for the player on the new map. */
       targetY: number;
+    }
+  | {
+      /**
+       * Emitted when quest data changes in the ECS (quest added, progressed, or completed).
+       * The UI quest log listens for this to keep the displayed quest list in sync.
+       *
+       * Contract: C-143 Quest Log Sync
+       */
+      type: 'QUESTS_UPDATED';
+      quests: QuestData[];
     };
+
+// ---------------------------------------------------------------------------
+// Quest data (shared between ECS and UI)
+// ---------------------------------------------------------------------------
+
+/** A single objective within a quest, as tracked by the ECS. */
+export type QuestObjectiveData = {
+  readonly label: string;
+  current: number;
+  readonly max: number;
+};
+
+/** Quest status values emitted by the ECS. */
+export type QuestStatus = 'active' | 'completed' | 'failed';
+
+/** Quest data emitted from ECS to UI via QUESTS_UPDATED. */
+export type QuestData = {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  status: QuestStatus;
+  objectives: QuestObjectiveData[];
+};
 
 // ---------------------------------------------------------------------------
 // Helper types for discriminated union extraction

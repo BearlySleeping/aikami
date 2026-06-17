@@ -105,6 +105,97 @@ mock.module(_FRONTEND_SVC_PATH, () => ({
   __esModule: true,
 }));
 
+// ── Consistent mock for $services (local barrel) ──────────────────────────
+// All ViewModels import from $services. Without a global mock, the first
+// test file that mocks the barrel with mock.module() leaks its partial
+// mock to all subsequent test files. Provide a comprehensive stub barrel
+// here so every test sees a consistent set of functional stubs.
+
+const _LOCAL_SVC_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts';
+
+const _createServiceStub = () => {
+  const handler: ProxyHandler<Record<string, unknown>> = {
+    get(_target, prop) {
+      if (!(prop in _target)) {
+        // Auto-create mock functions for any missing method
+        (_target as Record<string, unknown>)[prop] = mock(() => {});
+      }
+      return (_target as Record<string, unknown>)[prop];
+    },
+  };
+  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
+};
+
+const _localServicesMock = () => ({
+  aiService: _createServiceStub(),
+  AIService: class {},
+  SentenceBoundaryChunker: class {},
+  streamOrchestratorService: _createServiceStub(),
+  textGenerationService: _createServiceStub(),
+  TextGenerationService: class {},
+  analyticService: _createServiceStub(),
+  AnalyticService: class {},
+  appService: _createServiceStub(),
+  AppService: class {},
+  audioContextManager: _createServiceStub(),
+  AudioContextManager: class {},
+  audioQueuePlayer: _createServiceStub(),
+  AudioQueuePlayer: class {},
+  ttsService: _createServiceStub(),
+  TtsService: class {},
+  authService: _createServiceStub(),
+  AuthService: class {},
+  characterCreationService: _createServiceStub(),
+  CharacterCreationService: class {},
+  characterService: _createServiceStub(),
+  CharacterService: class {},
+  characterTextStreamService: _createServiceStub(),
+  CharacterTextStreamService: class {},
+  chatService: _createServiceStub(),
+  contextBuilder: _createServiceStub(),
+  conversationRepository: _createServiceStub(),
+  npcChatService: _createServiceStub(),
+  configService: _createServiceStub(),
+  ConfigService: class {},
+  diceService: _createServiceStub(),
+  DiceService: class {},
+  ExpressionAssetResolver: class {},
+  setPendingGameLoad: mock(() => {}),
+  consumePendingGameLoad: mock(() => undefined),
+  gameSaveService: _createServiceStub(),
+  GameSaveService: class {},
+  gameStateService: _createServiceStub(),
+  GameStateService: class {},
+  imageGenerationService: _createServiceStub(),
+  ImageGenerationService: class {},
+  notificationService: _createServiceStub(),
+  NotificationService: class {},
+  npcService: _createServiceStub(),
+  NpcService: class {},
+  onboardingService: _createServiceStub(),
+  personaService: _createServiceStub(),
+  preferenceService: _createServiceStub(),
+  // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
+  PreferenceService: class {
+    static create() {
+      return {};
+    }
+  },
+  aiSettingsService: _createServiceStub(),
+  // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
+  AISettingsService: class {},
+  storageService: _createServiceStub(),
+  StorageService: class {},
+  userService: _createServiceStub(),
+  UserService: class {},
+  routerService: _createServiceStub(),
+  pixiTextureInjector: _createServiceStub(),
+  __esModule: true,
+});
+
+mock.module(_LOCAL_SVC_PATH, _localServicesMock);
+
 // ── Mock SvelteKit virtual modules required by transitive dependencies ──────
 
 mock.module('$app/navigation', () => ({
