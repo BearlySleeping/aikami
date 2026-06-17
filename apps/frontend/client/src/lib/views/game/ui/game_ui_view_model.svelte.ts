@@ -261,10 +261,16 @@ class GameUIViewModel
         }
       });
 
-      // Listen for COMBAT_ENDED to dismiss the combat overlay
+      // Listen for COMBAT_ENDED to dismiss the combat overlay.
+      // Add a brief delay so the player can see the victory/defeat banner
+      // before the overlay is dismissed.
       bridge.on('COMBAT_ENDED', () => {
         if (this.activeOverlay === 'COMBAT') {
-          this._endCombat();
+          // Give the CombatViewModel 2.5 seconds to show the result banner
+          // before dismissing the overlay.
+          setTimeout(() => {
+            this._endCombat();
+          }, 2500);
         }
       });
     } catch (error) {
