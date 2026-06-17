@@ -28,6 +28,13 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   inventory: Array<{ itemId: string; quantity: number }>;
   /** Quest data synced from the ECS engine via QUESTS_UPDATED events. */
   readonly quests: readonly QuestData[];
+  /**
+   * Spawn point IDs of defeated enemies.
+   * Used to filter enemies out during map load so they don't respawn.
+   *
+   * Contract: C-147 Progression & Persistence
+   */
+  readonly defeatedEnemies: readonly string[];
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -62,6 +69,8 @@ export class GameStateService
   currentMode = $state<GameMode>('EXPLORE');
   inventory = $state<Array<{ itemId: string; quantity: number }>>([]);
   quests = $state<QuestData[]>([]);
+  /** Spawn point IDs of defeated enemies (C-147). */
+  defeatedEnemies = $state<string[]>([]);
 
   get worldVariables(): Record<string, unknown> {
     return this.currentWorld?.variables ?? {};
@@ -80,6 +89,7 @@ export class GameStateService
     this.uid = options.uid;
     void this._listenForInventoryUpdates();
     void this._listenForQuestUpdates();
+    void this._listenForCombatEnded();
   }
 
   private emitEvent(event: GameStateEvent): void {
@@ -346,6 +356,34 @@ export class GameStateService
       });
     } catch (error) {
       this.debug('_listenForInventoryUpdates:failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Listens for COMBAT_ENDED events from the ECS via the EngineBridge.
+   *
+   * When a combat victory is registered with a `defeatedEnemyId`, this
+   * method pushes the spawn point ID into the {@link defeatedEnemies} array
+   * so the enemy is permanently removed during future map loads.
+   *
+   * Contract: C-147 Progression & Persistence
+   */
+  private async _listenForCombatEnded(): Promise<void> {
+    try {
+      const { createEngineBridge } = await import('@aikami/frontend/engine');
+      const bridge = createEngineBridge();
+
+      bridge.on('COMBAT_ENDED', (event) => {
+        if (
+          event.victory &&
+          event.defeatedEnemyId &&
+          !this.defeatedEnemies.includes(event.defeatedEnemyId)
+        ) {
+          this.defeatedEnemies = [...this.defeatedEnemies, event.defeatedEnemyId];
+        }
+      });
+    } catch (error) {
+      this.debug('_listenForCombatEnded:failed', { error: String(error) });
     }
   }
 

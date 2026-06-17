@@ -889,6 +889,7 @@ self.onmessage = (event: MessageEvent): void => {
             mapPixelHeight,
             targetX,
             targetY,
+            defeatedEnemies,
           } = message;
 
           // 1. Clear non-player entities (NPCs, props, transitions).
@@ -905,8 +906,13 @@ self.onmessage = (event: MessageEvent): void => {
             addComponent(world, playerEntityId, set(Position, { x: targetX, y: targetY }));
           }
 
-          // 3. Spawn new NPC and prop entities from the new map
-          const results = spawnEntities({ world, spawnPoints });
+          // 3. Spawn new NPC and prop entities from the new map.
+          //    Pass defeatedEnemies so previously-defeated enemies are filtered.
+          const results = spawnEntities({
+            world,
+            spawnPoints,
+            defeatedEnemies: defeatedEnemies as string[] | undefined,
+          });
 
           // 4. Spawn transition zone trigger entities
           spawnTransitionEntities({ world, transitionZones });

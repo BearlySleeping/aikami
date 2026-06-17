@@ -44,6 +44,13 @@ export type SpawnEntitiesOptions = {
   world: World;
   /** Spawn points extracted from Tiled object layers. */
   spawnPoints: SpawnPoint[];
+  /**
+   * Spawn point IDs of enemies that have already been defeated.
+   * Enemies matching these IDs are skipped during spawn.
+   *
+   * Contract: C-147 Progression & Persistence
+   */
+  defeatedEnemies?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -83,10 +90,16 @@ const NPC_APPEARANCE_LAYERS: [number, number, number, number, number] = [10, 11,
  * @returns Array of results with entity IDs and metadata.
  */
 export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
-  const { world, spawnPoints } = options;
+  const { world, spawnPoints, defeatedEnemies } = options;
   const results: SpawnResult[] = [];
+  const defeatedSet = new Set(defeatedEnemies ?? []);
 
   for (const spawnPoint of spawnPoints) {
+    // Skip enemies that have already been defeated (C-147)
+    if (spawnPoint.type === 'enemy' && defeatedSet.has(spawnPoint.id)) {
+      continue;
+    }
+
     if (spawnPoint.type === 'npc') {
       const eid = _spawnNpc(world, spawnPoint);
       results.push({ type: 'npc', eid, spawnPoint });
@@ -305,7 +318,7 @@ const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
   );
 
   addComponent(world, eid, Enemy);
-  addComponent(world, eid, set(Enemy, { isActive: true }));
+  addComponent(world, eid, set(Enemy, { isActive: true, spawnId: spawnPoint.id }));
 
   addComponent(world, eid, TurnOrder);
   addComponent(

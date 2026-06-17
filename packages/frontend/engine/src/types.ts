@@ -233,6 +233,8 @@ export type GameEvent =
       type: 'COMBAT_ENDED';
       /** `true` if the player's party won, `false` if they lost. */
       victory: boolean;
+      /** The spawn point ID of the defeated enemy (only set on victory). */
+      defeatedEnemyId?: string;
     }
   | {
       /**
@@ -290,6 +292,25 @@ export type GameEvent =
        */
       type: 'QUESTS_UPDATED';
       quests: QuestData[];
+    }
+  | {
+      /**
+       * Emitted when the player levels up after gaining enough XP.
+       * Carries the new level, stat gains, and updated XP progress.
+       *
+       * Contract: C-147 Progression & Persistence
+       */
+      type: 'PLAYER_LEVELED_UP';
+      /** The level the player just reached. */
+      newLevel: number;
+      /** New max HP after level-up. */
+      maxHp: number;
+      /** New base attack after level-up. */
+      attack: number;
+      /** New base defense after level-up. */
+      defense: number;
+      /** XP threshold for the next level (scaled up). */
+      xpToNextLevel: number;
     };
 
 // ---------------------------------------------------------------------------

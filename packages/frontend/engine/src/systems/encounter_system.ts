@@ -135,18 +135,22 @@ type EncounterTriggerParams = {
 const _triggerEncounter = (params: EncounterTriggerParams): void => {
   const { world, playerEntityId, enemyEid, bridge } = params;
 
-  // 1. Halt player velocity immediately
+  // 1. Deactivate the enemy so it won't re-trigger on the next tick
+  //    even if the player hasn't moved away (C-147).
+  Enemy.isActive[enemyEid] = false;
+
+  // 2. Halt player velocity immediately
   addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
 
-  // 2. Read enemy combat stats for the event payload
+  // 3. Read enemy combat stats for the event payload
   const stats = getComponent(world, enemyEid, CombatStats) as CombatStatsData | undefined;
   const enemyHp = stats?.health ?? 0;
   const enemyMaxHp = stats?.maxHealth ?? 0;
 
-  // 3. Switch engine mode to COMBAT (gates movement)
+  // 4. Switch engine mode to COMBAT (gates movement)
   setEngineGameMode('COMBAT');
 
-  // 4. Emit COMBAT_STARTED with enemy metadata
+  // 5. Emit COMBAT_STARTED with enemy metadata
   bridge.emit({
     type: 'COMBAT_STARTED',
     participantIds: [playerEntityId, enemyEid],

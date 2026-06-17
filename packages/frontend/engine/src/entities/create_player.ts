@@ -81,6 +81,7 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
 
   // Give the player combat stats for turn-based encounters.
   // Default values: 100 HP, moderate attack, decent defense.
+  // C-147: XP starts at 0, level 1, 100 XP to reach level 2.
   addComponent(world, entityId, CombatStats);
   addComponent(
     world,
@@ -93,6 +94,9 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
       defense: 12,
       accuracy: 4,
       evasion: 12,
+      xp: 0,
+      level: 1,
+      xpToNextLevel: 100,
     }),
   );
 
