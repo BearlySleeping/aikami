@@ -1179,3 +1179,401 @@ describe('handleCombatAction', () => {
     expect(enemyStats.health).toBe(61); // 80 - 19 = 61
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-147: Experience & Leveling tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a participant with XP/level/xpToNextLevel for progression tests.
+ */
+const createProgressionParticipant = (
+  world: World,
+  options: {
+    health: number;
+    maxHealth: number;
+    initiative: number;
+    attack: number;
+    defense: number;
+    accuracy: number;
+    evasion: number;
+    xp: number;
+    level: number;
+    xpToNextLevel: number;
+  },
+): number => {
+  const eid = addEntity(world);
+  addComponent(world, eid, CombatStats);
+  addComponent(
+    world,
+    eid,
+    set(CombatStats, {
+      health: options.health,
+      maxHealth: options.maxHealth,
+      initiative: options.initiative,
+      attack: options.attack,
+      defense: options.defense,
+      accuracy: options.accuracy,
+      evasion: options.evasion,
+      xp: options.xp,
+      level: options.level,
+      xpToNextLevel: options.xpToNextLevel,
+    }),
+  );
+  addComponent(world, eid, TurnOrder);
+  addComponent(
+    world,
+    eid,
+    set(TurnOrder, {
+      currentTurn: false,
+      initiativeValue: options.initiative,
+      isActive: true,
+    }),
+  );
+  return eid;
+};
+
+describe('C-147: Experience & Leveling', () => {
+  let world: World;
+  let bridge: MockEngineBridge;
+
+  beforeEach(() => {
+    world = createCombatWorld();
+    bridge = new MockEngineBridge();
+    resetTurnTracking();
+  });
+
+  afterEach(() => {
+    resetTurnTracking();
+  });
+
+  // ── XP grant on enemy defeat ──
+
+  it('grants 25 XP to the player on enemy defeat', () => {
+    const playerEid = createProgressionParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 50, // one-shot kill
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+      xp: 0,
+      level: 1,
+      xpToNextLevel: 100,
+    });
+    createStatParticipant(world, {
+      health: 10,
+      maxHealth: 10,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 5,
+    });
+
+    initCombat(world, bridge);
+
+    const roller = createDeterministicRoller([20, 6]);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      bridge,
+      diceRoller: roller,
+    });
+
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    expect(playerStats.xp).toBe(25);
+    expect(playerStats.level).toBe(1);
+  });
+
+  // ── Level-up triggers at threshold ──
+
+  it('triggers level-up when XP reaches xpToNextLevel', () => {
+    const playerEid = createProgressionParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 50,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+      xp: 80, // 5 XP short of threshold
+      level: 1,
+      xpToNextLevel: 100,
+    });
+    createStatParticipant(world, {
+      health: 10,
+      maxHealth: 10,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 5,
+    });
+
+    initCombat(world, bridge);
+
+    const levelUpEvents: Array<{
+      newLevel: number;
+      maxHp: number;
+      attack: number;
+      defense: number;
+      xpToNextLevel: number;
+    }> = [];
+    bridge.on('PLAYER_LEVELED_UP', (event) => {
+      levelUpEvents.push(event);
+    });
+
+    const roller = createDeterministicRoller([20, 6]);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      bridge,
+      diceRoller: roller,
+    });
+
+    // Level-up should have fired
+    expect(levelUpEvents).toHaveLength(1);
+    const levelUp = levelUpEvents[0];
+    if (levelUp) {
+      expect(levelUp.newLevel).toBe(2);
+      expect(levelUp.maxHp).toBe(120); // 100 + 20
+      expect(levelUp.attack).toBe(52); // 50 + 2
+      expect(levelUp.defense).toBe(14); // 12 + 2
+      expect(levelUp.xpToNextLevel).toBe(150); // 100 * 1.5 = 150
+    }
+
+    // Player stats should reflect level-up
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    expect(playerStats.level).toBe(2);
+    expect(playerStats.maxHealth).toBe(120);
+    expect(playerStats.health).toBe(120); // full heal
+    expect(playerStats.xp).toBe(5); // carryover: 80+25=105, 105-100=5
+  });
+
+  // ── XP carryover ──
+
+  it('carries over excess XP after level-up', () => {
+    const playerEid = createProgressionParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 50,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+      xp: 90,
+      level: 1,
+      xpToNextLevel: 100,
+    });
+    createStatParticipant(world, {
+      health: 10,
+      maxHealth: 10,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 5,
+    });
+
+    initCombat(world, bridge);
+
+    const roller = createDeterministicRoller([20, 6]);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      bridge,
+      diceRoller: roller,
+    });
+
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    // 90 + 25 = 115, threshold = 100, carryover = 15
+    expect(playerStats.xp).toBe(15);
+    expect(playerStats.level).toBe(2);
+  });
+
+  // ── No level-up when below threshold ──
+
+  it('does not level up when XP is below threshold after grant', () => {
+    const playerEid = createProgressionParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+      xp: 0,
+      level: 1,
+      xpToNextLevel: 100,
+    });
+    createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 10,
+    });
+
+    initCombat(world, bridge);
+
+    const levelUpEvents: Array<{ newLevel: number }> = [];
+    bridge.on('PLAYER_LEVELED_UP', (event) => {
+      levelUpEvents.push(event);
+    });
+
+    // Enemy survives the first hit (HP 50, dmg ~9)
+    const roller = createDeterministicRoller([15, 4, 1, 1]);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      bridge,
+      diceRoller: roller,
+    });
+
+    // No level-up event — XP is only granted on enemy DEFEAT, not on hit
+    expect(levelUpEvents).toHaveLength(0);
+
+    // XP unchanged (enemy not defeated)
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    expect(playerStats.xp).toBe(0);
+    expect(playerStats.level).toBe(1);
+  });
+
+  // ── HP fully restores on level-up ──
+
+  it('fully restores HP on level-up', () => {
+    const playerEid = createProgressionParticipant(world, {
+      health: 30, // damaged
+      maxHealth: 100,
+      initiative: 15,
+      attack: 50,
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+      xp: 80,
+      level: 1,
+      xpToNextLevel: 100,
+    });
+    createStatParticipant(world, {
+      health: 10,
+      maxHealth: 10,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 5,
+    });
+
+    initCombat(world, bridge);
+
+    const roller = createDeterministicRoller([20, 6]);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      bridge,
+      diceRoller: roller,
+    });
+
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    expect(playerStats.health).toBe(playerStats.maxHealth);
+    expect(playerStats.maxHealth).toBe(120); // 100 + 20
+  });
+
+  // ── Multiple level-ups (big XP) ──
+
+  it('handles large XP grants without crashing (no multi-level-up in MVP)', () => {
+    const playerEid = createProgressionParticipant(world, {
+      health: 100,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 200, // one-shot + massive XP
+      defense: 12,
+      accuracy: 20,
+      evasion: 12,
+      xp: 0,
+      level: 1,
+      xpToNextLevel: 100,
+    });
+    createStatParticipant(world, {
+      health: 10,
+      maxHealth: 10,
+      initiative: 10,
+      attack: 3,
+      defense: 0,
+      accuracy: 2,
+      evasion: 5,
+    });
+
+    initCombat(world, bridge);
+
+    const roller = createDeterministicRoller([20, 6]);
+
+    // Should not throw — even with only 25 XP per enemy
+    expect(() => {
+      handleCombatAction({
+        world,
+        playerEntityId: playerEid,
+        action: 'ATTACK',
+        bridge,
+        diceRoller: roller,
+      });
+    }).not.toThrow();
+  });
+
+  // ── XP only granted on victory, not defeat ──
+
+  it('does not grant XP when the player is defeated', () => {
+    const playerEid = createProgressionParticipant(world, {
+      health: 5,
+      maxHealth: 100,
+      initiative: 15,
+      attack: 5,
+      defense: 0,
+      accuracy: 20,
+      evasion: 0,
+      xp: 50,
+      level: 1,
+      xpToNextLevel: 100,
+    });
+    createStatParticipant(world, {
+      health: 50,
+      maxHealth: 50,
+      initiative: 10,
+      attack: 100, // will kill player on counter-attack
+      defense: 0,
+      accuracy: 20,
+      evasion: 0,
+    });
+
+    initCombat(world, bridge);
+
+    const roller = createDeterministicRoller([20, 6, 20, 6]);
+
+    handleCombatAction({
+      world,
+      playerEntityId: playerEid,
+      action: 'ATTACK',
+      bridge,
+      diceRoller: roller,
+    });
+
+    // XP should be unchanged — player was defeated, enemy survived
+    const playerStats = getComponent(world, playerEid, CombatStats) as CombatStatsData;
+    expect(playerStats.xp).toBe(50);
+    expect(playerStats.level).toBe(1);
+  });
+});

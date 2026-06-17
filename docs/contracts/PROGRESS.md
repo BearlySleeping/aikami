@@ -31,6 +31,7 @@
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
+| C-147 | Progression, Game Over, and Persistence | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -200,6 +201,53 @@
 - No unit tests for `CombatViewModel.executeCustomAction` (requires mocking `textGenerationService`/`imageGenerationService` which are module-level singletons). E2E tests cover the flow via the dev sandbox.
 - Engine typecheck has 4 pre-existing errors (C-145) — not caused by C-146.
 - Client fix task has 1 pre-existing suppression warning (C-145) — not caused by C-146.
+
+### C-147: Progression, Game Over, and Persistence
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/engine/src/components/combat_stats.ts` — Extended `CombatStats` SoA with `xp`, `level`, `xpToNextLevel` fields; updated observers and `CombatStatsData` type
+- `packages/frontend/engine/src/components/enemy.ts` — Added `spawnId` field to Enemy component for defeated-enemy persistence tracking
+- `packages/frontend/engine/src/types.ts` — Added `PLAYER_LEVELED_UP` event; added `defeatedEnemyId` to `COMBAT_ENDED` event
+- `packages/frontend/engine/src/systems/turn_manager_system.ts` — Added `_grantXp()` (awards 25 XP on enemy defeat) and `_triggerLevelUp()` (increases level, max HP +20, full heal, attack +2, defense +2, threshold ×1.5); emits `PLAYER_LEVELED_UP`; reads `Enemy.spawnId` for `defeatedEnemyId` on COMBAT_ENDED; imports `Enemy` component
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — Extended `SpawnEntitiesOptions` with `defeatedEnemies?: string[]`; skips enemy spawn points whose ID is in the defeated set
+- `packages/frontend/engine/src/entities/create_player.ts` — Initializes player with `xp: 0`, `level: 1`, `xpToNextLevel: 100`
+- `packages/frontend/engine/src/game_world.ts` — Extended `loadMap()` and `_postLoadMap()` with `defeatedEnemies?: string[]` parameter; removed internal ZONE_TRIGGERED handler (delegated to ViewModel)
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — LOAD_MAP handler passes `defeatedEnemies` to `spawnEntities()`
+- `apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts` — Added `defeatedEnemies: string[]` to interface + implementation; added `_listenForCombatEnded()` to track defeated enemies from COMBAT_ENDED victory events
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `GAME_OVER` to `GameOverlayType`; COMBAT_ENDED handler now shows Game Over overlay on defeat; added `respawnPlayer()` and `loadLastSave()` methods; ZONE_TRIGGERED handler calls `loadMap()` with `gameStateService.defeatedEnemies`
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Added `loadMap()` method to `GameViewModelInterface` and implementation; delegates to `gameWorld.loadMap()` with optional `defeatedEnemies`
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/game_over_overlay.svelte` — Game Over overlay: 💀 You Died, Respawn button, Load Last Save button
+- `apps/e2e/tests/client/progression_persistence.spec.ts` — E2E test verifying defeatedEnemies tracking via engine bridge injection
+
+**Files modified (tests)**:
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Added `GameOverOverlay` import and conditional render block
+- `packages/frontend/engine/src/__tests__/turn_manager.test.ts` — 7 new unit tests: XP grant on defeat (25 XP), level-up at threshold (level 1→2, HP+20, attack+2, defense+2, threshold ×1.5), XP carryover, no level-up below threshold, full HP restore, graceful handling of large XP, no XP on player defeat
+
+**Deviations**:
+1. **ZONE_TRIGGERED handling moved to ViewModel**: The internal game_world.ts handler was removed and delegated to GameUIViewModel so `defeatedEnemies` from GameStateService can be threaded into `loadMap()`. This keeps persistence state in the UI layer where it belongs.
+2. **Enemy spawn ID tracked on Enemy component**: Added `spawnId` field to the bitECS `Enemy` SoA component instead of maintaining a separate mapping table. The `entity_spawner` sets it at creation, and `turn_manager_system` reads it at defeat.
+
+**Design decisions**:
+1. **XP granted on enemy defeat only (not per-hit)**: `_grantXp()` is called from `_handleEnemyDefeated()` — only when the enemy entity is actually destroyed. No XP for partial damage.
+2. **25 XP per enemy (fixed)**: Simplifies MVP — no per-enemy XP scaling yet. Future: read XP value from enemy spawn properties.
+3. **Level-up is single-step**: If XP exceeds the threshold multiple times over, only one level-up triggers. MVP decision — stacking multiple level-ups per kill is future work.
+4. **`defeatedEnemies` stored as plain string array**: Spawn point IDs from Tiled (e.g., "12") are tracked in GameStateService. The array survives SPA navigation via the singleton service pattern.
+5. **Respawn reloads the starting map**: `respawnPlayer()` calls `loadMap()` with the default zone and current `defeatedEnemies` array — previously-defeated enemies are filtered during respawn.
+
+**Known limitations**:
+- No per-enemy XP scaling — all enemies grant 25 XP regardless of difficulty.
+- Level-up only triggers once per kill (no multi-level stacking if XP exceeds threshold ×2).
+- `defend` action does not grant XP or affect leveling.
+- Defeated enemies are tracked in memory only (GameStateService singleton) — not persisted to IndexedDB or cloud. A page refresh clears the defeated enemies list.
+- The `defeatedEnemies` list is never pruned — it grows unbounded as the player defeats more enemies.
+- COMBAT_ENDED's `defeatedEnemyId` is only set for victory (not for FLEE or TURN_MANAGER defeat).
+- E2E test for enemy persistence across map transitions is scaffold-only — full verification requires a running game engine with two tilemaps and combat system.
+- Engine typecheck has 4 pre-existing errors (C-145) — not caused by C-147.
+- Client unit tests have 15 pre-existing failures — not caused by C-147.
 
 ### C-134: Inline Provider Setup & Routing Fix
 

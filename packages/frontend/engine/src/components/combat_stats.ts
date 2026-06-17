@@ -19,6 +19,12 @@ export const CombatStats = {
   accuracy: [] as number[],
   /** Evasion target number (attacker must meet or exceed this). */
   evasion: [] as number[],
+  /** Experience points accumulated from combat victories. */
+  xp: [] as number[],
+  /** Current character level. */
+  level: [] as number[],
+  /** XP threshold required to reach the next level. */
+  xpToNextLevel: [] as number[],
 };
 
 /** Payload shape stored/retrieved via observers. */
@@ -30,6 +36,9 @@ export type CombatStatsData = {
   defense: number;
   accuracy: number;
   evasion: number;
+  xp: number;
+  level: number;
+  xpToNextLevel: number;
 };
 
 /**
@@ -47,6 +56,9 @@ export const registerCombatStatsObservers = (world: World): void => {
     CombatStats.defense[eid] = params.defense;
     CombatStats.accuracy[eid] = params.accuracy;
     CombatStats.evasion[eid] = params.evasion;
+    CombatStats.xp[eid] = params.xp;
+    CombatStats.level[eid] = params.level;
+    CombatStats.xpToNextLevel[eid] = params.xpToNextLevel;
   });
 
   observe(
@@ -60,6 +72,9 @@ export const registerCombatStatsObservers = (world: World): void => {
       defense: CombatStats.defense[eid],
       accuracy: CombatStats.accuracy[eid],
       evasion: CombatStats.evasion[eid],
+      xp: CombatStats.xp[eid],
+      level: CombatStats.level[eid],
+      xpToNextLevel: CombatStats.xpToNextLevel[eid],
     }),
   );
 };

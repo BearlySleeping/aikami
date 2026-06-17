@@ -58,6 +58,19 @@ export type GameViewModelInterface = BaseViewModelInterface & {
 
   /** Resumes the game engine (restarts the tick loop). Called when an overlay closes. */
   resumeEngine(): void;
+
+  /**
+   * Loads a new map at the given coordinates.
+   * Accepts an optional list of defeated enemy spawn IDs to filter out.
+   *
+   * Contract: C-147 Progression & Persistence
+   */
+  loadMap(
+    mapUrl: string,
+    targetX: number,
+    targetY: number,
+    defeatedEnemies?: string[],
+  ): Promise<void>;
 };
 
 /**
@@ -376,6 +389,18 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     if (this._gameWorld) {
       this._gameWorld.setInputLocked(false);
       this._gameWorld.resume();
+    }
+  }
+
+  /** @inheritdoc */
+  async loadMap(
+    mapUrl: string,
+    targetX: number,
+    targetY: number,
+    defeatedEnemies?: string[],
+  ): Promise<void> {
+    if (this._gameWorld) {
+      await this._gameWorld.loadMap(mapUrl, targetX, targetY, defeatedEnemies);
     }
   }
 
