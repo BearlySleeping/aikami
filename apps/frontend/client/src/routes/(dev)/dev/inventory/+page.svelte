@@ -10,14 +10,11 @@
 
   const viewModel = getInventoryDevViewModel({
     className: 'InventoryDevViewModel',
+    onClose: () => {},
   });
 
   /** Dev tools actions wired to InventoryDevViewModel sandbox methods. */
   const devActions = [
-    {
-      label: 'Give Max Gold (999,999)',
-      onClick: () => viewModel.giveMaxGold(),
-    },
     {
       label: 'Fill with Junk',
       onClick: () => viewModel.fillWithJunk(),

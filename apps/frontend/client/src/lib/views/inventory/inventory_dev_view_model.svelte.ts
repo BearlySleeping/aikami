@@ -3,8 +3,8 @@
 // Dev sandbox override — injects mock inventory state for sandbox testing.
 // NEVER import this file from production code or non-(dev) routes.
 
+import { gameStateService } from '$services';
 import {
-  type InventoryItem,
   InventoryViewModel,
   type InventoryViewModelOptions,
 } from './inventory_view_model.svelte.ts';
@@ -13,19 +13,19 @@ import {
 // Mock data
 // ---------------------------------------------------------------------------
 
-const JUNK_NAMES = [
-  'Rusty Sword',
-  'Old Boot',
-  'Torn Cloak',
-  'Cracked Shield',
-  'Broken Arrow',
-  'Faded Scroll',
-  'Empty Vial',
-  'Bent Spoon',
-  'Tattered Map',
-  'Dull Knife',
-  'Rotten Apple',
-  'Wooden Figurine',
+const MOCK_ITEM_IDS = [
+  'rusty-sword',
+  'old-boot',
+  'torn-cloak',
+  'cracked-shield',
+  'broken-arrow',
+  'faded-scroll',
+  'empty-vial',
+  'bent-spoon',
+  'tattered-map',
+  'dull-knife',
+  'rotten-apple',
+  'wooden-figurine',
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -35,20 +35,19 @@ const JUNK_NAMES = [
 /**
  * Dev sandbox override for InventoryViewModel.
  *
- * Injects mock inventory data and provides sandbox actions for
- * testing edge cases: max gold, full bag, empty inventory.
+ * Injects mock inventory data directly into GameStateService.inventory
+ * and provides sandbox actions for testing edge cases: full bag, empty inventory.
  */
 export class InventoryDevViewModel extends InventoryViewModel {
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    // Start with some initial mock items
-    this.gold = 150;
-    this.items = [
-      { id: 'mock-sword', name: 'Iron Sword', quantity: 1 },
-      { id: 'mock-potion', name: 'Health Potion', quantity: 3 },
-      { id: 'mock-shield', name: 'Wooden Shield', quantity: 1 },
-      { id: 'mock-arrow', name: 'Arrow', quantity: 15 },
+    // Inject mock items into the game state service inventory
+    gameStateService.inventory = [
+      { itemId: 'iron-sword', quantity: 1 },
+      { itemId: 'health-potion', quantity: 3 },
+      { itemId: 'wooden-shield', quantity: 1 },
+      { itemId: 'arrow', quantity: 15 },
     ];
 
     return await super.initialize();
@@ -57,45 +56,34 @@ export class InventoryDevViewModel extends InventoryViewModel {
   // ── Dev-only methods ──────────────────────────────────────────────────
 
   /**
-   * Sets gold to 999,999 to test the high-wealth UI state.
-   */
-  giveMaxGold(): void {
-    this.debug('giveMaxGold');
-    this.gold = 999_999;
-  }
-
-  /**
-   * Fills the inventory with mock "Junk" items up to max capacity (30 slots).
+   * Fills the inventory with mock items up to a high capacity.
    */
   fillWithJunk(): void {
-    this.debug('fillWithJunk');
-    const junkItems: InventoryItem[] = [];
+    const junkItems: Array<{ itemId: string; quantity: number }> = [];
 
     let totalQuantity = 0;
     let nameIndex = 0;
+    const maxCapacity = 30;
 
-    while (totalQuantity < this.maxCapacity) {
-      const name = JUNK_NAMES[nameIndex % JUNK_NAMES.length] ?? 'Junk';
-      const remainingSpace = this.maxCapacity - totalQuantity;
-      // Random quantity 1-5, but cap at remaining space
+    while (totalQuantity < maxCapacity) {
+      const itemId = MOCK_ITEM_IDS[nameIndex % MOCK_ITEM_IDS.length] ?? 'junk';
+      const remainingSpace = maxCapacity - totalQuantity;
       const quantity = Math.min(Math.floor(Math.random() * 5) + 1, remainingSpace);
 
-      junkItems.push({ id: `junk-${nameIndex}`, name, quantity });
+      junkItems.push({ itemId, quantity });
 
       totalQuantity += quantity;
       nameIndex++;
     }
 
-    this.items = junkItems;
+    gameStateService.inventory = junkItems;
   }
 
   /**
-   * Empties all items and sets gold to 0.
+   * Empties all items.
    */
   clearInventory(): void {
-    this.debug('clearInventory');
-    this.items = [];
-    this.gold = 0;
+    gameStateService.inventory = [];
   }
 }
 

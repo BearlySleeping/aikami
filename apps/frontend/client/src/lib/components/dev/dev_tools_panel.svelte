@@ -5,23 +5,7 @@
   // Accepts generic actions (buttons) and toggles (checkboxes).
   // NEVER import this file from production code or non-(dev) routes.
 
-  // ── Types ─────────────────────────────────────────────────────────────
-
-  /** A single action button in the dev tools panel. */
-  type DevAction = {
-    /** Visible button label. */
-    readonly label: string;
-    /** Callback invoked on click. */
-    onClick: () => void;
-  };
-
-  /** A single toggle (checkbox) in the dev tools panel. */
-  type DevToggle = {
-    /** Label shown next to the checkbox. */
-    readonly label: string;
-    /** Callback invoked when toggled. Receives the new checked state. */
-    onChange: (checked: boolean) => void;
-  };
+  import type { DevAction, DevToggle } from '$types';
 
   type Props = {
     /** Action buttons to render. */

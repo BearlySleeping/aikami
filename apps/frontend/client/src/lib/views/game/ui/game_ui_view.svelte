@@ -1,4 +1,5 @@
 <script lang="ts">
+  import InventoryView from '../../inventory/inventory_view.svelte';
   // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
@@ -37,6 +38,18 @@
         <p class="text-sm">activeOverlay: {viewModel.activeOverlay}</p>
         <p class="text-sm">dialogueNpc: {viewModel.dialogueNpc?.npcName ?? 'undefined'}</p>
       </div>
+    </div>
+  {/if}
+{/if}
+
+{#if viewModel.activeOverlay === 'INVENTORY'}
+  {#if viewModel.inventoryViewModel}
+    <InventoryView viewModel={viewModel.inventoryViewModel} />
+  {:else}
+    <div
+      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
+    >
+      <p class="text-lg font-bold text-error">Inventory loading...</p>
     </div>
   {/if}
 {/if}
