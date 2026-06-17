@@ -172,4 +172,7 @@ export type {
   GameEvent,
   GameEventOfType,
   NPCSpawnData,
+  QuestData,
+  QuestObjectiveData,
+  QuestStatus,
 } from './types.ts';

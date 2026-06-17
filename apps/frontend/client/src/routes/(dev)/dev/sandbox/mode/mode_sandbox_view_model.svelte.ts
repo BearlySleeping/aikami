@@ -61,10 +61,6 @@ class ModeSandboxViewModel
   /** Cached GameWorld instance. */
   private _gameWorld: GameWorld | undefined;
 
-  constructor(options: ModeSandboxViewModelOptions) {
-    super(options);
-  }
-
   /** @inheritdoc */
   async initialize(): Promise<void> {
     try {

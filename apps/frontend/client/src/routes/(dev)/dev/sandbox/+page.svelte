@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { QuestData } from '@aikami/frontend/engine';
   // apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.svelte
   // Extends /game — reuses the same GameView + GameViewModel + GameUIViewModel
   // infrastructure, but seeds localStorage with a mock persona so a character
@@ -10,6 +11,107 @@
   import { GameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
   import { gameStateService } from '$services';
   import type { DevAction } from '$types';
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Mock quest data for the sandbox quest dev tools.
+  // Matches the dummy quests emitted by the ECS worker on init (C-143).
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const MOCK_SANDBOX_QUESTS: QuestData[] = [
+    {
+      id: 'q-slimes',
+      title: 'Slime Extermination',
+      description: 'Clear the eastern road of slimes to ensure safe passage for merchant caravans.',
+      status: 'active',
+      objectives: [
+        { label: 'Defeat Blue Slimes', current: 0, max: 5 },
+        { label: 'Defeat Red Slimes', current: 0, max: 3 },
+        { label: 'Report to Guard Captain', current: 0, max: 1 },
+      ],
+    },
+    {
+      id: 'q-herbs',
+      title: 'Gather Moonpetal Herbs',
+      description: 'Collect rare Moonpetal herbs from the Silverwood Grove for the apothecary.',
+      status: 'active',
+      objectives: [
+        { label: 'Find Moonpetal Herbs', current: 0, max: 6 },
+        { label: 'Deliver herbs to Apothecary Mira', current: 0, max: 1 },
+      ],
+    },
+    {
+      id: 'q-cave',
+      title: 'Explore the Crystal Caverns',
+      description:
+        'Map the depths of the Crystal Caverns and discover the source of the strange glow.',
+      status: 'active',
+      objectives: [
+        { label: 'Descend to level 2', current: 0, max: 1 },
+        { label: 'Find the glowing source', current: 0, max: 1 },
+        { label: 'Collect Crystal Shards', current: 0, max: 5 },
+      ],
+    },
+    {
+      id: 'q-artifact',
+      title: 'The Lost Artifact of Valdris',
+      description: 'Recover the ancient artifact from the ruins beneath the Howling Mountains.',
+      status: 'completed',
+      objectives: [
+        { label: 'Find the entrance to the ruins', current: 1, max: 1 },
+        { label: 'Solve the Guardian puzzle', current: 1, max: 1 },
+        { label: 'Retrieve the Artifact', current: 1, max: 1 },
+        { label: 'Return to Sage Theron', current: 1, max: 1 },
+      ],
+    },
+    {
+      id: 'q-bandits',
+      title: 'Bandit Camp Investigation',
+      description:
+        'Scout the bandit camp near the Old Mill and report their numbers and armaments.',
+      status: 'failed',
+      objectives: [
+        { label: 'Scout without being detected', current: 0, max: 1 },
+        { label: 'Count enemy numbers', current: 0, max: 1 },
+        { label: 'Report to Commander Voss', current: 0, max: 1 },
+      ],
+    },
+  ];
+
+  const _seedQuests = (): void => {
+    const clones: QuestData[] = MOCK_SANDBOX_QUESTS.map((q) => ({
+      ...q,
+      objectives: q.objectives.map((o) => ({ ...o })),
+    }));
+    (gameStateService.quests as QuestData[]).length = 0;
+    for (const clone of clones) {
+      (gameStateService.quests as QuestData[]).push(clone);
+    }
+  };
+
+  const _progressRandomObjective = (): void => {
+    const active = gameStateService.quests.filter((q) => q.status === 'active');
+    for (const quest of active) {
+      for (const obj of quest.objectives) {
+        if (obj.current < obj.max) {
+          obj.current++;
+          return;
+        }
+      }
+    }
+  };
+
+  const _failRandomQuest = (): void => {
+    const active = gameStateService.quests.filter((q) => q.status === 'active');
+    if (active.length === 0) {
+      return;
+    }
+    const idx = Math.floor(Math.random() * active.length);
+    active[idx].status = 'failed';
+  };
+
+  const _clearQuests = (): void => {
+    (gameStateService.quests as QuestData[]).length = 0;
+  };
 
   // Seed a mock persona into localStorage before the GameViewModel loads.
   // This gives the engine an active character with LPC layer IDs [1,2,3,4,5]
@@ -70,6 +172,7 @@
   });
 
   const devActions = [
+    // ── Inventory ─────────────────────────────────────────────────
     {
       label: 'Insert Item (Sword)',
       onClick: () => {
@@ -102,6 +205,24 @@
         gameStateService.inventory = [];
       },
     },
+    // ── Quest Log ─────────────────────────────────────────────────
+    {
+      label: 'Seed Quest Log',
+      onClick: () => _seedQuests(),
+    },
+    {
+      label: 'Progress Objective',
+      onClick: () => _progressRandomObjective(),
+    },
+    {
+      label: 'Fail Random Quest',
+      onClick: () => _failRandomQuest(),
+    },
+    {
+      label: 'Clear Quests',
+      onClick: () => _clearQuests(),
+    },
+    // ── Navigation ────────────────────────────────────────────────
     {
       label: 'Map & Zoning Sandbox',
       onClick: () => {

@@ -4,8 +4,8 @@
     "paths": {
       "$lib": ["./src/lib"],
       "$lib/*": ["./src/lib/*"],
-      "$services": ["./src/lib/client/services-mock"],
-      "$services/*": ["./src/lib/client/services-mock/*"],
+      "$services": ["./src/lib/services"],
+      "$services/*": ["./src/lib/services/*"],
       "$router": ["../../../packages/frontend/services/src/lib/router/router-utils.ts"],
       "$router/*": ["../../../packages/frontend/services/src/lib/router/router-utils/*"],
       "$logger": ["../../../packages/shared/logger/src/lib/svelte-kit.ts"],
