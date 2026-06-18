@@ -9,6 +9,7 @@
 // are mocked locally for fast iteration.
 
 import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
@@ -498,7 +499,14 @@ export class CombatDevViewModel extends CombatViewModel {
 
       // Enemy voice taunt (C-148)
       if (intent.enemyQuote && intent.enemyQuote.trim().length > 0) {
+        // Log the voice pipeline: show what WOULD be spoken
+        this.combatLog = [
+          `🔊 TTS: ${this.enemyName} says "${intent.enemyQuote}"`,
+          ...this.combatLog,
+        ];
         this.combatLog = [`*${this.enemyName} ${intent.enemyQuote}*`, ...this.combatLog];
+        // Fire-and-forget TTS synthesis
+        void ttsService.synthesize({ text: intent.enemyQuote, voice: 'af_heart' });
       }
 
       // Fire image generation if the action is cinematic (C-148)
