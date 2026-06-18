@@ -10,6 +10,19 @@ query ListUsers @auth(level: PUBLIC) {
 }
 
 # ---------------------------------------------------------------------------
+# Audio Tracks — C-151 AI Dynamic Music
+# ---------------------------------------------------------------------------
+
+# Fetch audio tracks filtered by mood for the AI Director's music control.
+query GetTracksByMood($mood: String!) @auth(level: PUBLIC) {
+  audioTracks(where: { mood: { eq: $mood } }, limit: 10) {
+    id
+    title
+    storageUrl
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Save Slots
 # ---------------------------------------------------------------------------
 

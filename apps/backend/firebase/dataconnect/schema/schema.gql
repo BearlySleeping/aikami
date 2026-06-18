@@ -229,6 +229,17 @@ type SaveSlot @table {
 }
 
 # ---------------------------------------------------------------------------
+# Audio Tracks — mood-driven BGM catalog for AI Director (C-151)
+# ---------------------------------------------------------------------------
+
+type AudioTrack @table {
+  id: UUID! @default(expr: "uuidV4()")
+  title: String!
+  mood: String!
+  storageUrl: String!
+}
+
+# ---------------------------------------------------------------------------
 # Configs (key-value app configuration)
 # ---------------------------------------------------------------------------
 

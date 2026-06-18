@@ -57,6 +57,25 @@ export const upsertSaveSlotRef = (dcOrVars, vars) => {
 };
 upsertSaveSlotRef.operationName = 'UpsertSaveSlot';
 
+export const getTracksByMoodRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetTracksByMood', inputVars);
+};
+getTracksByMoodRef.operationName = 'GetTracksByMood';
+
+export function getTracksByMood(dcOrVars, varsOrOptions, options) {
+  const {
+    dc: dcInstance,
+    vars: inputVars,
+    options: inputOpts,
+  } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(
+    getTracksByMoodRef(dcInstance, inputVars),
+    inputOpts && { fetchPolicy: inputOpts.fetchPolicy },
+  );
+}
+
 export function upsertSaveSlot(dcOrVars, vars) {
   const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   return executeMutation(upsertSaveSlotRef(dcInstance, inputVars));

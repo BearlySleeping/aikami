@@ -32,6 +32,10 @@
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
 | C-147 | Progression, Game Over, and Persistence | ✅ completed |
+| C-148 | Combat Immersion | ✅ completed |
+| C-149 | Combat Mechanics & AI Gatekeeping | ✅ completed |
+| C-150 | Audio System — BGM & SFX | ✅ completed |
+| C-151 | AI Dynamic Music via Data Connect | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -167,6 +171,42 @@
 - Crossfade duration is hardcoded to 1500ms default (overridable via `durationMs` parameter).
 - The service worker intercepts ALL `/assets/audio/` requests globally — could conflict with other audio-consuming features.
 - Audio buffer cache grows unbounded — no eviction policy for rarely-used tracks.
+
+### C-151: AI Dynamic Music via Data Connect
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/backend/firebase/dataconnect/schema/schema.gql` — Added `AudioTrack` @table type (id UUID, title, mood, storageUrl)
+- `apps/backend/firebase/dataconnect/connector/queries.gql` — Added `GetTracksByMood($mood: String!)` query with @auth(level: PUBLIC)
+- `packages/frontend/dataconnect/src/lib/generated/index.d.ts` — Added `AudioTrack_Key`, `GetTracksByMoodData/Variables`, `getTracksByMoodRef`, `getTracksByMood` function declarations
+- `packages/frontend/dataconnect/src/lib/generated/esm/index.esm.js` — Added `getTracksByMoodRef` and `getTracksByMood` query functions
+- `packages/frontend/dataconnect/src/lib/generated/index.cjs.js` — Added CJS variants of `getTracksByMoodRef`, `getTracksByMood`
+- `packages/frontend/dataconnect/src/index.ts` — Re-exported `getTracksByMood`, `getTracksByMoodRef`
+- `apps/frontend/client/src/lib/game/core/ai/prompts/combat_action_schema.ts` — Added `sceneMood: Type.Optional(Type.String())` to `CombatActionSchema`; added guideline #8 to `COMBAT_ACTION_SYSTEM_PROMPT` instructing LLM when to set sceneMood
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Added `_transitionBgmByMood(mood)` method querying Data Connect for tracks by mood and calling `audioService.transitionToBgm()` (dynamic imports); added `_transitionBgmFallback(mood)` with hardcoded placeholder URLs (C-150 assets); wired into `executeCustomAction()` after LLM extraction when `sceneMood` is defined
+- `apps/frontend/client/src/lib/views/combat/combat_dev_view_model.svelte.ts` — Added `_mockMusicTransition()` method mapping combat context to mood (epic/tense/triumph); added combat log entry `🎵 BGM transition` for E2E testability; wired into mock `executeCustomAction()` and `_executeRealAiAction()` paths
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.test.ts` — 2 new unit tests: LLM response with `sceneMood: 'triumph'` verifies `_transitionBgmByMood` called; LLM response without sceneMood verifies NOT called
+- `apps/e2e/tests/client/combat_immersion.spec.ts` — 2 new E2E tests: heroic action triggers BGM transition log; routine attack does NOT trigger BGM transition
+
+**Deviations**:
+1. **Dynamic imports for audioService and Data Connect**: Both `audioService` and `getTracksByMood`/`dataConnect` are imported dynamically inside the private methods (`_transitionBgmByMood`, `_transitionBgmFallback`) rather than at module level. This avoids pulling in `window.AudioContext` and Firebase SDK at module load time, which would break unit tests (Bun has no browser globals).
+2. **Manual SDK generation**: Like MIG-002, Data Connect SDK types and query functions were generated manually in `packages/frontend/dataconnect/src/lib/generated/` following the exact pattern of existing `listSaveSlots`/`upsertSaveSlot`.
+3. **sceneMood added to CombatActionSchema directly**: Followed the contract path (`apps/frontend/client/src/lib/game/core/ai/prompts/`) rather than moving to shared `@aikami/schemas`. Single-consumer pattern — migration to shared can happen if other consumers emerge.
+
+**Design decisions**:
+1. **Fire-and-forget BGM transitions**: Both `_transitionBgmByMood` and `_transitionBgmFallback` are called via `void` — the player's combat flow is never blocked waiting for audio. Errors are logged but never propagated to the UI.
+2. **Random track selection**: When multiple tracks match a mood, one is selected via `Math.random()` for variety.
+3. **Graceful fallback chain**: Data Connect → mood-matched tracks → hardcoded placeholder. If Firebase is offline, the fallback uses C-150 placeholder audio files (`bgm_combat.webm` / `bgm_explore.webm`).
+4. **Dev VM mock transition rules**: Epic mood for advantage/high bonus damage attacks, triumphant when enemy <30% HP, tense for flee/defend, skip for routine attacks.
+5. **Mood-to-placeholder mapping**: Epic/heroic/tense/foreboding → combat BGM; triumph/sorrow/mysterious/peaceful → explore BGM. Unknown moods default to combat BGM.
+
+**Known limitations**:
+- Data Connect requires a live Firebase project — in emulator mode with no Firebase, only fallback placeholders are used.
+- The `AudioTrack` table must be populated with real tracks via Data Connect for the live query to return results.
+- E2E tests verify the mock dev VM's BGM transition log entries, not actual audio playback.
+- The `sceneMood` field relies on the LLM correctly identifying mood shifts — no client-side validation of mood values beyond the `String()` type check.
+- Image and voice fire-and-forget calls compete with BGM for network bandwidth on slow connections.
 
 ### C-145: Turn-Based Combat Loop & Dice RNG
 

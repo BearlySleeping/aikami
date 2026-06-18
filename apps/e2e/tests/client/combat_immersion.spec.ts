@@ -189,4 +189,47 @@ test.describe('Combat Immersion (C-148)', () => {
     const submitButton = page.locator('[data-testid="combat-custom-action-submit"]');
     await expect(submitButton).toBeEnabled();
   });
+
+  // ── C-151: AI Dynamic Music — BGM transition on heroic actions ────────
+
+  test('should trigger BGM transition on heroic custom action', async ({ page }) => {
+    await page.goto(COMBAT_DEV_URL, { waitUntil: 'domcontentloaded' });
+    await waitForCombatReady(page);
+
+    // Submit an epic/heroic action that should trigger the epic mood
+    // (dev VM triggers epic mood for ATTACK with advantage/high bonus)
+    await submitCustomAction(page, 'I leap from the chandelier and drive my sword into the dragons heart!');
+
+    // Wait for dice animation to complete
+    await page.waitForTimeout(2000);
+
+    // Combat log should contain a BGM transition entry
+    const combatLog = page.locator('ul.max-h-40');
+    const logText = await combatLog.textContent();
+
+    // The dev VM logs the BGM transition with a music emoji
+    expect(logText).toContain('🎵 BGM transition');
+    expect(logText).toContain("mood='epic'");
+  });
+
+  test('should NOT trigger BGM transition on routine attacks', async ({ page }) => {
+    await page.goto(COMBAT_DEV_URL, { waitUntil: 'domcontentloaded' });
+    await waitForCombatReady(page);
+
+    // Clear any existing log entries from setup
+    // Submit a routine attack — no advantage, no bonus damage
+    await submitCustomAction(page, 'I swing my sword');
+
+    // Wait for dice animation
+    await page.waitForTimeout(2000);
+
+    // Combat log should NOT contain BGM transition for routine attacks
+    const combatLog = page.locator('ul.max-h-40');
+    const logText = await combatLog.textContent();
+
+    // Verify the attack was processed
+    expect(logText).toContain('Dev Mock');
+    // But no BGM transition for routine attacks (dev VM skips when no mood shift)
+    expect(logText).not.toContain('🎵 BGM transition');
+  });
 });

@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
+
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -578,6 +579,14 @@ export class CombatViewModel
           });
       }
 
+      // ── AI Director: mood-driven BGM crossfade (C-151) ──
+      if (intent.sceneMood && intent.sceneMood.trim().length > 0) {
+        this.debug('executeCustomAction: sceneMood detected', {
+          sceneMood: intent.sceneMood,
+        });
+        void this._transitionBgmByMood(intent.sceneMood.trim());
+      }
+
       // Dispatch the mapped COMBAT_ACTION to the ECS engine
       this.isAttacking = true;
       this.debug('executeCustomAction: dispatching COMBAT_ACTION', {
@@ -735,6 +744,95 @@ export class CombatViewModel
       inventoryLines,
       '--- End Character Sheet ---',
     ].join('\n');
+  }
+
+  // -----------------------------------------------------------------------
+  // Private — AI Director: mood-driven BGM crossfade (C-151)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Queries Data Connect for audio tracks matching a scene mood and
+   * triggers an equal-power BGM crossfade via {@link audioService}.
+   *
+   * Picks a random track from matching results for variety. Falls back
+   * to a hardcoded placeholder URL when Firebase is unavailable or no
+   * tracks match the requested mood.
+   *
+   * Fire-and-forget — errors are logged but never propagated to the UI.
+   *
+   * @param mood - Musical mood tag (e.g. 'epic', 'tense', 'triumph').
+   *
+   * Contract: C-151 AI Dynamic Music
+   */
+  private async _transitionBgmByMood(mood: string): Promise<void> {
+    try {
+      // Dynamic import — avoids pulling in Firebase SDK at module load time
+      const { dataConnect, getTracksByMood } = await import('@aikami/frontend/dataconnect');
+      const result = await getTracksByMood(dataConnect, { mood });
+
+      if (result.data?.audioTracks && result.data.audioTracks.length > 0) {
+        const tracks = result.data.audioTracks;
+        const selected = tracks[Math.floor(Math.random() * tracks.length)];
+        if (!selected) {
+          return;
+        }
+
+        this.debug('_transitionBgmByMood: crossfading', {
+          mood,
+          track: selected.title,
+          url: selected.storageUrl,
+          availableTracks: tracks.length,
+        });
+
+        // Dynamic import — avoids pulling in Web Audio API at module load time
+        const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
+        await audioService.transitionToBgm(selected.storageUrl, 2000);
+      } else {
+        // No tracks found for this mood — fall back to placeholder
+        this.debug('_transitionBgmByMood: no tracks for mood, using fallback', { mood });
+        await this._transitionBgmFallback(mood);
+      }
+    } catch (error) {
+      // Firebase / Data Connect unavailable — use hardcoded placeholder
+      this.debug('_transitionBgmByMood: query failed, using fallback', {
+        mood,
+        error: (error as Error).message,
+      });
+      await this._transitionBgmFallback(mood);
+    }
+  }
+
+  /**
+   * Hardcoded fallback BGM URLs for when Firebase Data Connect is
+   * unavailable or no tracks exist for the requested mood.
+   *
+   * Maps moods to the placeholder audio files created in C-150.
+   *
+   * @param mood - Musical mood tag.
+   */
+  private async _transitionBgmFallback(mood: string): Promise<void> {
+    const fallbackMap: Record<string, string> = {
+      epic: '/assets/audio/bgm_combat.webm',
+      heroic: '/assets/audio/bgm_combat.webm',
+      tense: '/assets/audio/bgm_combat.webm',
+      foreboding: '/assets/audio/bgm_combat.webm',
+      triumph: '/assets/audio/bgm_explore.webm',
+      sorrow: '/assets/audio/bgm_explore.webm',
+      mysterious: '/assets/audio/bgm_explore.webm',
+      peaceful: '/assets/audio/bgm_explore.webm',
+    };
+
+    const url = fallbackMap[mood] ?? '/assets/audio/bgm_combat.webm';
+
+    this.debug('_transitionBgmFallback', { mood, url });
+
+    try {
+      // Dynamic import — avoids pulling in Web Audio API at module load time
+      const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
+      await audioService.transitionToBgm(url, 2000);
+    } catch (error) {
+      this.warn('_transitionBgmFallback: crossfade failed', error);
+    }
   }
 
   // -----------------------------------------------------------------------
