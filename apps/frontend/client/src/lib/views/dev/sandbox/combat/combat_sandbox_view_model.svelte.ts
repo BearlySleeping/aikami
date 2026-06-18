@@ -79,6 +79,8 @@ export type CombatSandboxViewModelInterface = BaseViewModelInterface & {
   readonly useRealAi: boolean;
   /** DEV: initialize the native Kokoro WebGPU TTS engine. */
   devInitTts: () => Promise<void>;
+  /** DEV: check for a running Kokoro REST API server (Docker/binary). */
+  devCheckKokoroServer: () => Promise<void>;
   /** DEV: speak a test enemy voice taunt via TTS. */
   devTestEnemyVoice: () => void;
   /** Current TTS engine status (for debug display). */
@@ -356,7 +358,18 @@ class CombatSandboxViewModel
   /** @inheritdoc */
   async devInitTts(): Promise<void> {
     this.debug('devInitTts', { currentStatus: ttsService.status });
+    // checkKokoroServer is called automatically inside initialize()
     await ttsService.initialize();
+  }
+
+  /** @inheritdoc */
+  async devCheckKokoroServer(): Promise<void> {
+    this.debug('devCheckKokoroServer');
+    await ttsService.checkKokoroServer();
+    this.debug('devCheckKokoroServer:result', {
+      available: ttsService.isKokoroServerAvailable,
+      status: ttsService.status,
+    });
   }
 
   /** @inheritdoc */

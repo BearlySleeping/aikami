@@ -42,8 +42,18 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
   /** The currently selected voice ID. */
   selectedVoice: string;
 
+  /** Whether a running Kokoro REST API server was detected (faster than WebGPU). */
+  readonly isKokoroServerAvailable: boolean;
+
   /** Fetches the list of available voices from the Kokoro REST API. */
   loadVoices(): Promise<void>;
+
+  /**
+   * Checks whether a Kokoro REST API server is reachable at localhost:8880.
+   * If found, future {@link synthesize} calls will use the REST API
+   * instead of the WebGPU worker (faster + higher quality).
+   */
+  checkKokoroServer(): Promise<void>;
 
   /**
    * Converts text to speech and plays the resulting audio immediately.
@@ -138,6 +148,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private wordBoundaries: WordBoundary[] = [];
   private sourceNodes: AudioBufferSourceNode[] = [];
   private rafId: ReturnType<typeof requestAnimationFrame> | undefined;
+
+  /** Whether a running Kokoro REST API server was detected on localhost:8880. */
+  isKokoroServerAvailable = $state(false);
+
+  /** Kokoro REST API base URL (detected from docker/local server). */
+  private _kokoroServerUrl = '';
 
   isDemoMode(): boolean {
     return false;
@@ -356,6 +372,18 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
+    // ── Step 1: Check for a running Kokoro REST API server ──
+    // If a Docker container or local binary is running on port 8880,
+    // we use the REST API (faster, higher quality) and skip WebGPU.
+    await this.checkKokoroServer();
+
+    if (this.isKokoroServerAvailable) {
+      this.status = 'ready';
+      this.debug('initialize:using-kokoro-server', { url: this._kokoroServerUrl });
+      return;
+    }
+
+    // ── Step 2: Fall back to browser-native WebGPU worker ──
     this.status = 'initializing';
     this.errorMessage = null;
 
@@ -380,6 +408,15 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
           case 'complete':
             if (payload.pcmData && payload.sampleRate !== undefined) {
+              this.debug('kokoro:complete', {
+                pcmLength: payload.pcmData.length,
+                sampleRate: payload.sampleRate,
+                durationSec: (payload.pcmData.length / payload.sampleRate).toFixed(2),
+              });
+              // Single-shot playback — reset scheduling clock so audio
+              // starts immediately rather than waiting for stale stream timing.
+              audioContextManager.unlock();
+              this.nextStartTime = 0;
               this.playAudioBuffer({
                 pcmData: payload.pcmData,
                 sampleRate: payload.sampleRate,
@@ -413,16 +450,109 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   async synthesize(options: { text: string; voice: string }): Promise<void> {
     const { text, voice } = options;
 
-    if (!this._worker || this.status !== 'ready') {
-      this.debug('synthesize:not-ready', { status: this.status });
-      return;
-    }
-
     if (!text.trim()) {
       return;
     }
 
+    // ── Path 1: Kokoro REST API (Docker / local server on port 8880) ──
+    if (this.isKokoroServerAvailable && this._kokoroServerUrl) {
+      await this._synthesizeViaRestApi({ text, voice });
+      return;
+    }
+
+    // ── Path 2: WebGPU worker (browser-native) ──
+    if (!this._worker || this.status !== 'ready') {
+      this.debug('synthesize:not-ready', {
+        status: this.status,
+        hasWorker: !!this._worker,
+        hasKokoroServer: this.isKokoroServerAvailable,
+      });
+      return;
+    }
+
     this._worker.postMessage({ action: 'synthesize', text, voice });
+  }
+
+  /**
+   * Synthesizes text via the Kokoro REST API (Docker container on port 8880).
+   * Returns a WAV blob which is decoded and played through the Web Audio API.
+   */
+  private async _synthesizeViaRestApi(options: { text: string; voice: string }): Promise<void> {
+    const { text, voice } = options;
+
+    try {
+      const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'kokoro',
+          input: text,
+          voice,
+          response_format: 'wav',
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        this.error('_synthesizeViaRestApi:fetch-failed', {
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+
+      audioContextManager.unlock();
+      const ctx = audioContextManager.context;
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.start();
+
+      this.debug('_synthesizeViaRestApi:playing', {
+        durationSec: audioBuffer.duration.toFixed(2),
+        sampleRate: audioBuffer.sampleRate,
+      });
+    } catch (error) {
+      this.error('_synthesizeViaRestApi:failed', error);
+    }
+  }
+
+  /** @inheritdoc */
+  async checkKokoroServer(): Promise<void> {
+    const urls = ['http://localhost:8880', 'http://127.0.0.1:8880'];
+
+    for (const url of urls) {
+      try {
+        const response = await fetch(`${url}/v1/audio/speech`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'kokoro',
+            input: 'test',
+            voice: 'af_heart',
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (response.ok || response.status === 422) {
+          // 422 = validation error (empty text "test" may be too short),
+          // but this still proves the server is running.
+          this._kokoroServerUrl = url;
+          this.isKokoroServerAvailable = true;
+          this.debug('checkKokoroServer:found', { url });
+          return;
+        }
+      } catch {
+        // Server not reachable at this URL — try next
+      }
+    }
+
+    this.isKokoroServerAvailable = false;
+    this.debug('checkKokoroServer:not-found');
   }
 
   async playAudioBuffer(options: { pcmData: Float32Array; sampleRate: number }): Promise<void> {
