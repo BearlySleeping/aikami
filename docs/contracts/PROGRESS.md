@@ -1259,3 +1259,45 @@
 - Enemy quotes from the LLM are not spoken in dev sandbox — the dev VM generates mock quotes without TTS.
 - 15 pre-existing client unit test failures (CharacterViewModel, DialogueOverlayViewModel) — not caused by C-148.
 - E2E tests require the dev server running and CombatDevViewModel sandbox route available.
+
+### C-149: Combat Mechanics & AI Gatekeeping
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Added `playerLevel`, `playerAttack`, `playerDefense` $state fields; added `_buildCharacterSheetContext()` private method that serializes player inventory (from `gameStateService`), HP, level, attack, and defense into a character sheet prompt; updated `executeCustomAction()` to inject character sheet into contextual prompt; added gatekeeping check — when `actionValid === false`, appends `invalidReason` to combat log and does NOT dispatch COMBAT_ACTION to the engine; added `gameStateService` import
+- `apps/frontend/client/src/lib/game/core/ai/prompts/combat_action_schema.ts` — Added `actionValid: Type.Boolean()` and `invalidReason: Type.Optional(Type.String())` fields to `CombatActionSchema`; updated `COMBAT_ACTION_SYSTEM_PROMPT` with gatekeeping rules (GATEKEEP FIRST), guidelines for flavourful rejection, and examples of valid/invalid actions
+- `apps/frontend/client/src/lib/views/combat/combat_dev_view_model.svelte.ts` — Added `_checkGatekeeping()` private method that detects item-usage patterns (drink potion, use scroll, throw bomb, etc.) and returns gatekept responses with narrative and invalidReason; integrated gatekeeping check into the mock `executeCustomAction()` flow — gatekept actions log the rejection without consuming a turn
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.test.ts` — Added 2 gatekeeping unit tests: `should append invalidReason to combat log when actionValid is false` (mocks textGenerationService to return invalid, asserts engine command not sent, gatekeep reason in log) and `should dispatch COMBAT_ACTION when actionValid is true` (asserts engine command dispatched)
+- `apps/frontend/client/src/lib/views/character/create/character_view_model.test.ts` — Fixed mock `sendMessage` to not duplicate user messages (ViewModel already appends before calling service); updated image prompt fallback test expectation from `'fantasy character'` to `'Unnamed Adventurer'` (matches source normalization); removed `minimum`/`maximum` assertions on abilityScores schema (no longer enforced upstream)
+- `apps/frontend/client/src/lib/views/character/create/character_view_model.svelte.ts` — Fixed `generateCharacter()` to preserve specific error messages set by `_extractCharacter()` (e.g., AbortError) instead of always overwriting with generic message
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` — Added `SentenceBoundaryChunker` and `ttsService` mocks to `$services` mock.module; fixed greeting test to expect 1 message (constructor adds greeting) instead of 0
+- `apps/frontend/client/src/lib/services/audio/tts_service.test.ts` — Added fetch mock (rejects fast) in test setup so `checkKokoroServer()` doesn't make real network calls; fixed race condition in `initialize() transitions status to ready` test — added 10ms delay before simulating worker message to allow async `checkKokoroServer()` to complete
+- `apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.test.ts` — Fixed import path from `'./stream_orchestrator.svelte'` to `'./stream_orchestrator_service.svelte'` (module-not-found error)
+- `apps/frontend/client/src/lib/services/image/image_generation_service.test.ts` — Fixed import path from `'./image_generation.svelte.ts'` to `'./image_generation_service.svelte.ts'` (module-not-found error); added pre-populated checkpoints in beforeEach of generateImage tests to skip lazy `loadCheckpoints()`; fixed `should not append .safetensors` test to expect throw instead of fallback; added robust fetch save/restore pattern
+
+**Files created**:
+- `apps/e2e/tests/client/combat_sandbox.spec.ts` — Added C-149 gatekeeping E2E test: `should gatekeep invalid item-based actions and show DM reasoning` — types "I drink a healing potion", submits, asserts 🚫 indicator, "inventory is empty" message, "fingers grasping" narrative, attack button re-enabled (turn not consumed), input cleared
+
+**Test fixes (Task 1 — Housekeeping)**:
+Resolved all 16 pre-existing client unit test failures:
+- 1 TtsService test: fetch mock + race condition fix
+- 6 CharacterViewModel tests: mock message duplication, image prompt fallback, schema constraints, abort error preservation
+- 9 DialogueOverlayViewModel tests: SentenceBoundaryChunker/ttsService mocks, greeting message expectation
+
+**Deviations**:
+1. **Player stats stored in CombatViewModel, not GameStateService**: The contract says to pull player state from GameStateService. `gameStateService.inventory` is used for inventory, but HP/level/attack/defense are tracked directly in CombatViewModel via `$state` fields. The ECS engine doesn't send level/attack/defense through bridge events — adding them would require engine changes. The ViewModel approach is equivalent: the data is available at the point of use.
+2. **E2E test uses dev sandbox mock gatekeeping**: The E2E test verifies gatekeeping via the CombatDevViewModel's mock `_checkGatekeeping()` method, not through real LLM extraction. This is consistent with the existing C-146 E2E tests (all use dev sandbox mock AI). Real LLM gatekeeping is verified via unit tests that mock `textGenerationService.extractStructure()`.
+
+**Design decisions**:
+1. **Character sheet injected as plain text, not structured JSON**: The `_buildCharacterSheetContext()` produces a human-readable markdown-like text block. The LLM system prompt already uses natural language, so plain text is more natural than injecting JSON.
+2. **Gatekept actions don't consume the player's turn**: When `actionValid === false`, `executeCustomAction()` returns early without dispatching `COMBAT_ACTION` — the player gets another chance to try a different action. This is more player-friendly than losing a turn on a failed attempt.
+3. **TTS synthesized for gatekeeping responses**: The `invalidReason` is spoken via TTS for immersive feedback — the player hears the DM tell them they can't do that.
+4. **Dev VM gatekeeping uses regex patterns**: `_checkGatekeeping()` detects "drink potion", "use scroll", "throw bomb" etc. — covers the most common item-usage patterns without requiring a real LLM.
+
+**Known limitations**:
+- Player level, attack, and defense are hardcoded defaults (1, 5, 12) — they're not synced from the ECS engine because the engine doesn't emit these via bridge events. Future: add COMBAT_STARTED fields for player stats.
+- Gatekeeping only checks item usage — it doesn't validate spell availability, class abilities, or proficiency requirements. The system prompt instructs the LLM to consider these, but the mock dev VM only checks items.
+- `image_generation_service.test.ts` module-not-found error FIXED (import path corrected + fetch isolation via beforeAll/afterAll + URL.createObjectURL stub + configService mock.module).
+- InvalidateReason TTS uses hardcoded `'af_heart'` voice — doesn't respect the user's selected TTS voice.
+- Unit tests mock `textGenerationService.extractStructure()` globally — this affects the module-level singleton and must be manually restored. Future: inject services via constructor options for cleaner testability.

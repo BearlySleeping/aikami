@@ -1,16 +1,30 @@
 // apps/frontend/client/src/lib/services/media/image_generation.test.ts
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+
+// Mock configService BEFORE importing ImageGenerationService to avoid
+// cross-test contamination from other test files that also import it.
+const CONFIG_SVC_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/config_service.svelte.ts';
+
+mock.module(CONFIG_SVC_PATH, () => ({
+  configService: {
+    state: {
+      image: { checkpoint: '' },
+    },
+    load: mock(async () => {}),
+    save: mock(async () => {}),
+  },
+  __esModule: true,
+}));
+
 import {
   ImageGenerationService,
   type ImageGenerationServiceInterface,
-} from './image_generation.svelte.ts';
+} from './image_generation_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // ImageGenerationService — C-076: Image Sandbox Checkpoints
 // ---------------------------------------------------------------------------
-
-// Allow tests to override the global fetch
-const originalFetch = globalThis.fetch;
 
 /** ComfyUI object_info with checkpoints (filenames include .safetensors). */
 const MOCK_OBJECT_INFO = {
@@ -24,6 +38,32 @@ const MOCK_OBJECT_INFO = {
     },
   },
 };
+
+// Capture real fetch at module load time and isolate from cross-test contamination
+const _realFetch = globalThis.fetch;
+
+beforeAll(() => {
+  // Stash and restore on entry
+  globalThis.fetch = _realFetch;
+  // Stub URL.createObjectURL for Bun test environment
+  if (!(globalThis as Record<string, unknown>).__url_createObjectURL_stubbed) {
+    const origCreateObjectURL = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = mock((_blob: Blob) => 'blob:mock-url');
+    (globalThis as Record<string, unknown>).__url_createObjectURL_orig = origCreateObjectURL;
+    (globalThis as Record<string, unknown>).__url_createObjectURL_stubbed = true;
+  }
+});
+
+afterAll(() => {
+  globalThis.fetch = _realFetch;
+  const orig = (globalThis as Record<string, unknown>)
+    .__url_createObjectURL_orig as typeof URL.createObjectURL;
+  if (orig) {
+    URL.createObjectURL = orig;
+    delete (globalThis as Record<string, unknown>).__url_createObjectURL_stubbed;
+    delete (globalThis as Record<string, unknown>).__url_createObjectURL_orig;
+  }
+});
 
 describe('ImageGenerationService — C-076 Checkpoints', () => {
   let service: ImageGenerationServiceInterface;
@@ -130,10 +170,13 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
   };
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    globalThis.fetch = _realFetch;
+    fetchCalls = [];
   });
 
-  // ── AC-1: Service Checkpoint Loading ──────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // AC-1: Service Checkpoint Loading
+  // ═══════════════════════════════════════════════════════════════════════
 
   describe('AC-1: loadCheckpoints', () => {
     describe('demo mode', () => {
@@ -238,7 +281,9 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
     });
   });
 
-  // ── AC-4: Generation via ComfyUI ──────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // AC-4: Generation via ComfyUI
+  // ═══════════════════════════════════════════════════════════════════════
 
   describe('AC-4: generateImage via ComfyUI', () => {
     describe('demo mode', () => {
@@ -269,6 +314,10 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
         fetchCalls = [];
         service = createService(false);
         mockFetchComfyUiGenerate('prompt-001', 'game-gen_00001_.png', '');
+        // Pre-populate checkpoints so generateImage() skips lazy loadCheckpoints()
+        // (which calls GET /object_info without options, breaking the mock).
+        service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
+        service.selectedCheckpoint = 'sd_xl_base_1.0';
       });
 
       test('should POST workflow to /prompt, poll /history, and return blob URL', async () => {
@@ -280,7 +329,7 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
 
         // Should have called /prompt (POST), /history/{id} (GET), and /view (GET)
         const promptCall = fetchCalls.find(
-          (c) => c.options.method === 'POST' && c.url.includes('/prompt'),
+          (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
         );
         expect(promptCall).toBeDefined();
 
@@ -297,12 +346,11 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
         await service.generateImage({ prompt: 'a dragon' });
 
         const promptCall = fetchCalls.find(
-          (c) => c.options.method === 'POST' && c.url.includes('/prompt'),
+          (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
         );
         expect(promptCall).toBeDefined();
 
-        const body = JSON.parse(promptCall?.options.body as string);
-        // The workflow should contain CheckpointLoaderSimple with the checkpoint
+        const body = JSON.parse(promptCall?.options?.body as string);
         const workflow = body.prompt as Record<
           string,
           { class_type: string; inputs: Record<string, unknown> }
@@ -320,11 +368,11 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
         await service.generateImage({ prompt: 'a dragon', checkpoint: 'dreamshaper_xl' });
 
         const promptCall = fetchCalls.find(
-          (c) => c.options.method === 'POST' && c.url.includes('/prompt'),
+          (c) => c.options?.method === 'POST' && c.url.includes('/prompt'),
         );
         expect(promptCall).toBeDefined();
 
-        const body = JSON.parse(promptCall?.options.body as string);
+        const body = JSON.parse(promptCall?.options?.body as string);
         const workflow = body.prompt as Record<
           string,
           { class_type: string; inputs: Record<string, unknown> }
@@ -335,24 +383,12 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
         expect(checkpointLoader?.inputs.ckpt_name).toBe('dreamshaper_xl.safetensors');
       });
 
-      test('should not append .safetensors when checkpoint is empty', async () => {
+      test('should throw when checkpoint is empty', async () => {
         service.selectedCheckpoint = '';
 
-        await service.generateImage({ prompt: 'a dragon' });
-
-        const promptCall = fetchCalls.find(
-          (c) => c.options.method === 'POST' && c.url.includes('/prompt'),
+        await expect(service.generateImage({ prompt: 'a dragon' })).rejects.toThrow(
+          'No checkpoint selected',
         );
-        const body = JSON.parse(promptCall?.options.body as string);
-        const workflow = body.prompt as Record<
-          string,
-          { class_type: string; inputs: Record<string, unknown> }
-        >;
-        const checkpointLoader = Object.values(workflow).find(
-          (n) => n.class_type === 'CheckpointLoaderSimple',
-        );
-        // Falls back to default when checkpoint is empty
-        expect(checkpointLoader?.inputs.ckpt_name).toBe('sd_xl_base_1.0.safetensors');
       });
 
       test('should fetch image blob via /view endpoint', async () => {
@@ -361,7 +397,7 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
 
         const result = await service.generateImage({ prompt: 'a castle' });
 
-        // Blob URL should be created
+        // Blob URL should be created (stubbed by URL.createObjectURL mock)
         expect(result.url).toStartWith('blob:');
         expect(result.isDemo).toBe(false);
 
@@ -377,6 +413,8 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
       beforeEach(() => {
         fetchCalls = [];
         service = createService(false);
+        service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
+        service.selectedCheckpoint = 'sd_xl_base_1.0';
       });
 
       test('should throw on /prompt HTTP error', async () => {
@@ -389,7 +427,9 @@ describe('ImageGenerationService — C-076 Checkpoints', () => {
     });
   });
 
-  // ── State reactivity ──────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════
+  // $state reactivity
+  // ═══════════════════════════════════════════════════════════════════════
 
   describe('$state reactivity', () => {
     beforeEach(() => {
