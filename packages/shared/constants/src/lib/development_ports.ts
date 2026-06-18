@@ -48,7 +48,7 @@ export const EMULATOR_PORTS = {
   client: 5274,
   voice: 8089,
   image: 8188,
-  text: 11436,
+  text: 11434,
 } as const;
 
 export const STAGING_PORTS = {
