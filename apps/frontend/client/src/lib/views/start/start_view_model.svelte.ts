@@ -9,8 +9,15 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { PersonaData } from '@aikami/types';
-import { aiSettingsService, authService, characterCreationService, routerService } from '$services';
+import type { SaveSlotInfo } from '$services';
+import {
+  aiSettingsService,
+  authService,
+  gameSaveService,
+  gameStateService,
+  routerService,
+  setPendingGameLoad,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,7 +44,19 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether the missing AI text provider dialog is visible. */
   readonly showMissingProvidersDialog: boolean;
 
-  /** Start the game — checks for a configured text AI provider before proceeding. */
+  /** Whether there are existing IndexedDB saves available. */
+  readonly hasSaves: boolean;
+
+  /** Available save slots from IndexedDB (sorted newest first). */
+  readonly availableSaves: readonly SaveSlotInfo[];
+
+  /** Start a New Game — resets state and routes to character creation. */
+  startNewGame(): Promise<void>;
+
+  /** Continue the most recent saved game. */
+  continueGame(): Promise<void>;
+
+  /** @deprecated Use {@link startNewGame} instead. */
   startGame(): Promise<void>;
 
   /** Signs in with Google (optional). Updates to "Sign Out" when logged in. */
@@ -159,6 +178,12 @@ class StartViewModel
   /** Private — tracks sign-in/sign-out progress to prevent double-clicks. */
   private _isSigningIn = $state(false);
 
+  /** Whether there are existing IndexedDB saves. */
+  hasSaves = $state(false);
+
+  /** Available save slots from IndexedDB (sorted newest first). */
+  availableSaves: SaveSlotInfo[] = $state([]);
+
   /** Whether the credits modal is currently visible. */
   showCredits = $state(false);
 
@@ -186,26 +211,73 @@ class StartViewModel
   }
 
   /** @inheritdoc */
-  async startGame(): Promise<void> {
+  async startNewGame(): Promise<void> {
     if (!this._hasTextProvider()) {
       this.showMissingProvidersDialog = true;
       return;
     }
 
-    // If the player has a saved character, load it directly and skip
-    // character creation. The most recently saved character is used.
-    if (this._loadSavedCharacter()) {
-      await routerService.goToRoute('game', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
-      return;
-    }
+    // Clear any stale state from a previous play session
+    gameStateService.reset();
 
     await routerService.goToRoute('setup', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
+  }
+
+  /** @inheritdoc */
+  async continueGame(): Promise<void> {
+    if (!this._hasTextProvider()) {
+      this.showMissingProvidersDialog = true;
+      return;
+    }
+
+    if (this.availableSaves.length === 0) {
+      this.warn('continueGame:no-saves');
+      return;
+    }
+
+    // Load the most recent save (sorted newest first)
+    const latestSave = this.availableSaves[0];
+
+    try {
+      const payload = await gameSaveService.getSavePayload(latestSave.id);
+      setPendingGameLoad(payload);
+
+      await routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.error('continueGame:failed', error);
+      this.errorMessage = 'Failed to load save. Try starting a new game.';
+    }
+  }
+
+  /** @inheritdoc @deprecated */
+  async startGame(): Promise<void> {
+    return this.startNewGame();
+  }
+
+  /** @inheritdoc */
+  override async initialize(): Promise<void> {
+    this.debug('initialize');
+
+    // Check IndexedDB for existing game saves
+    try {
+      await gameSaveService.fetchAvailableSaves();
+      this.availableSaves = gameSaveService.availableSaves;
+      this.hasSaves = this.availableSaves.length > 0;
+      this.debug('initialize:saves-checked', {
+        count: this.availableSaves.length,
+      });
+    } catch (error) {
+      this.warn('initialize:save-check-failed', error);
+      this.hasSaves = false;
+    }
+
+    await super.initialize();
   }
 
   /** @inheritdoc */
@@ -287,45 +359,6 @@ class StartViewModel
    */
   get creditGroups(): readonly CreditGroup[] {
     return CREDIT_GROUPS;
-  }
-
-  /**
-   * Loads the most recently saved character from localStorage into the
-   * character creation service so the game can pick it up on /game.
-   *
-   * @returns `true` if a saved character was found and loaded, `false` otherwise.
-   */
-  private _loadSavedCharacter(): boolean {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (!stored) {
-        return false;
-      }
-
-      const characters = JSON.parse(stored) as Array<{
-        persona: PersonaData;
-        avatarUrl: string;
-      }>;
-
-      if (characters.length === 0) {
-        return false;
-      }
-
-      // Use the most recently saved character
-      const latest = characters[characters.length - 1];
-      characterCreationService.persona = latest.persona;
-      characterCreationService.avatarUrl = latest.avatarUrl;
-
-      this.debug('_loadSavedCharacter:loaded', {
-        name: latest.persona.name,
-        id: latest.persona.id,
-      });
-
-      return true;
-    } catch (error) {
-      this.warn('_loadSavedCharacter:failed', error);
-      return false;
-    }
   }
 
   /**

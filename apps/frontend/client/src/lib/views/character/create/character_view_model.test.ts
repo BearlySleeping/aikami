@@ -27,6 +27,10 @@ let extractionCalls: Array<{
 let extractionResult: object | undefined;
 let extractionError: Error | undefined;
 
+// C-152: enterWorld tracking
+let resetCalls = 0;
+let enterWorldRouteCalls: Array<{ route: string }> = [];
+
 // ---------------------------------------------------------------------------
 // Setup: install test-specific overrides on the preload barrel stubs
 // ---------------------------------------------------------------------------
@@ -164,7 +168,11 @@ const _setupServiceOverrides = (): void => {
     consumePendingGameLoad: mock(() => undefined),
     gameSaveService: _createServiceStub(),
     GameSaveService: class {},
-    gameStateService: _createServiceStub(),
+    gameStateService: {
+      reset: mock(() => {
+        resetCalls++;
+      }),
+    },
     GameStateService: class {},
     ImageGenerationService: class {},
     notificationService: _createServiceStub(),
@@ -186,7 +194,11 @@ const _setupServiceOverrides = (): void => {
     StorageService: class {},
     userService: _createServiceStub(),
     UserService: class {},
-    routerService: _createServiceStub(),
+    routerService: {
+      goToRoute: mock(async (route: string) => {
+        enterWorldRouteCalls.push({ route });
+      }),
+    },
     pixiTextureInjector: _createServiceStub(),
     __esModule: true,
   }));
@@ -225,6 +237,8 @@ describe('CharacterViewModel — C-078', () => {
     extractionCalls = [];
     extractionResult = undefined;
     extractionError = undefined;
+    resetCalls = 0;
+    enterWorldRouteCalls = [];
     _setupServiceOverrides();
   });
 
@@ -853,6 +867,67 @@ describe('CharacterViewModel — C-078', () => {
 
       expect(vm.phase).toBe('CHAT');
       expect(vm.errorMessage).toBe('Character generation was cancelled.');
+    });
+  });
+
+  // ── C-152: enterWorld resets state and routes to /game ──────────────
+
+  describe('C-152: enterWorld', () => {
+    test('calls gameStateService.reset() before routing to /game', async () => {
+      const vm = await loadVm();
+
+      // Set up a persona so _persistCharacter has data
+      mockPersona = {
+        id: 'test-persona-id',
+        name: 'Test Hero',
+        background: '',
+        abilityScores: {},
+        appearance: {},
+        hitPoints: 10,
+        hitPointsMax: 10,
+        temporaryHitPoints: 0,
+        armorClass: 10,
+        speed: 30,
+        experiencePoints: 0,
+        savingThrows: [],
+        skills: [],
+        proficiencies: [],
+        languages: ['Common'],
+        equipment: [],
+        inventory: [],
+        isActive: false,
+      };
+      mockAvatarUrl = 'data:image/png;base64,test';
+
+      // Mock localStorage for _persistCharacter
+      const localStorageItems: Record<string, string> = {};
+      const origGetItem = globalThis.localStorage?.getItem;
+      const origSetItem = globalThis.localStorage?.setItem;
+      if (globalThis.localStorage) {
+        globalThis.localStorage.getItem = (key: string) => localStorageItems[key] ?? null;
+        globalThis.localStorage.setItem = (key: string, value: string) => {
+          localStorageItems[key] = value;
+        };
+      }
+
+      await vm.enterWorld();
+
+      // Verify reset was called
+      expect(resetCalls).toBe(1);
+
+      // Verify route to /game
+      expect(enterWorldRouteCalls.length).toBeGreaterThanOrEqual(1);
+      expect(enterWorldRouteCalls.some((c) => c.route === 'game')).toBe(true);
+
+      // Restore localStorage
+      if (globalThis.localStorage) {
+        if (origGetItem) {
+          globalThis.localStorage.getItem = origGetItem;
+        }
+        if (origSetItem) {
+          globalThis.localStorage.setItem = origSetItem;
+        }
+      }
     });
   });
 });

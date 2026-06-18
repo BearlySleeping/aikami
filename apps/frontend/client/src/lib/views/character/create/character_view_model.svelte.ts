@@ -15,6 +15,7 @@ import {
   aiSettingsService,
   authService,
   characterCreationService,
+  gameStateService,
   imageGenerationService,
   routerService,
   textGenerationService,
@@ -422,6 +423,10 @@ export class CharacterViewModel
 
   async enterWorld(): Promise<void> {
     await this._persistCharacter();
+
+    // Clear any stale game state from a previous play session
+    // so the new game starts with a clean inventory, quest log, etc.
+    gameStateService.reset();
 
     // Set persona as active if user is logged in
     const uid = (authService as { uid?: string }).uid;

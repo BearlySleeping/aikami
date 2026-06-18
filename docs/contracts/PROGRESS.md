@@ -36,6 +36,7 @@
 | C-149 | Combat Mechanics & AI Gatekeeping | ✅ completed |
 | C-150 | Audio System — BGM & SFX | ✅ completed |
 | C-151 | AI Dynamic Music via Data Connect | ✅ completed |
+| C-152 | End-to-End Boot Flow | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -207,6 +208,37 @@
 - E2E tests verify the mock dev VM's BGM transition log entries, not actual audio playback.
 - The `sceneMood` field relies on the LLM correctly identifying mood shifts — no client-side validation of mood values beyond the `String()` type check.
 - Image and voice fire-and-forget calls compete with BGM for network bandwidth on slow connections.
+
+### C-152: End-to-End Boot Flow
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts` — Added `reset()` method to interface + implementation; clears `inventory`, `defeatedEnemies`, `quests` arrays
+- `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` — Added `hasSaves`/`availableSaves` state; `startNewGame()` action (reset state → `/setup`); `continueGame()` action (load IndexedDB save → `setPendingGameLoad` → `/game`); `initialize()` override checks IndexedDB for saves; removed obsolete `_loadSavedCharacter()`
+- `apps/frontend/client/src/lib/views/start/start_view.svelte` — Split single "Start Game" button into "New Game" + conditional "Continue" (shown when saves exist). New Game uses `btn-outline` when saves present, `btn-primary` otherwise
+- `apps/frontend/client/src/lib/views/character/create/character_view_model.svelte.ts` — `enterWorld()` now calls `gameStateService.reset()` before routing to `/game`
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/start/start_view_model.test.ts` — 9 unit tests: startNewGame routes to /setup + calls reset; continueGame loads payload + routes to /game; no-saves guard; getSavePayload error handling; initialize populates hasSaves/availableSaves
+
+**Files modified (tests)**:
+- `apps/frontend/client/src/lib/views/character/create/character_view_model.test.ts` — Added `resetCalls`/`enterWorldRouteCalls` tracking; `enterWorld` test verifies `gameStateService.reset()` called before routing to `/game`
+- `apps/frontend/client/src/lib/services/game/game_state_service.test.ts` — Added `reset` test verifying inventory, defeatedEnemies, quests emptied
+
+**Deviations**:
+1. **`gameSaveService` used without bridge**: The `gameSaveService` exported from the barrel is created without an engine bridge (read-only). `getSavePayload()` returns the raw snapshot payload without restoring — the payload is passed to `setPendingGameLoad()` for GameViewModel to consume during initialization. This matches the cross-route payload handoff pattern established in C-118.
+2. **Most recent save auto-selected**: `continueGame()` loads `availableSaves[0]` (sorted newest first) instead of presenting a save slot selector. Slot selection is already handled by C-132's Pause Menu UI.
+
+**Design decisions**:
+1. **`startNewGame()` always routes to `/setup`**: No more `_loadSavedCharacter()` shortcut that bypassed character creation. Character creation is now the mandatory first step for any New Game — the player must explicitly create a character before entering the world.
+2. **`reset()` called in both `startNewGame()` and `enterWorld()`**: Double-gate ensures stale state is cleared regardless of navigation path. `startNewGame()` clears state before routing to `/setup`; `enterWorld()` clears again before routing to `/game`.
+3. **`hasSaves` checked on initialize**: The StartViewModel asynchronously checks IndexedDB for existing saves via `gameSaveService.fetchAvailableSaves()` during `initialize()`. The reactive `hasSaves` state controls whether the "Continue" button renders.
+
+**Known limitations**:
+- `gameStateService.reset()` clears the reactive arrays but does NOT reset `currentWorld`, `currentLocation`, `activeSession`, or broadcast event listeners. These are re-initialized when the engine starts.
+- The "Continue" button loads the most recent save only — no slot picker at the Main Menu level. Slot selection is handled in-game via C-132's Pause Menu.
+- No save deletion from the Main Menu — saves can only be deleted in-game.
 
 ### C-145: Turn-Based Combat Loop & Dice RNG
 
