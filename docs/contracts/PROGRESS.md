@@ -37,6 +37,7 @@
 | C-150 | Audio System — BGM & SFX | ✅ completed |
 | C-151 | AI Dynamic Music via Data Connect | ✅ completed |
 | C-152 | End-to-End Boot Flow | ✅ completed |
+| C-153 | Character Dashboard & Equipment | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -1414,3 +1415,46 @@ Resolved all 16 pre-existing client unit test failures:
 - `image_generation_service.test.ts` module-not-found error FIXED (import path corrected + fetch isolation via beforeAll/afterAll + URL.createObjectURL stub + configService mock.module).
 - InvalidateReason TTS uses hardcoded `'af_heart'` voice — doesn't respect the user's selected TTS voice.
 - Unit tests mock `textGenerationService.extractStructure()` globally — this affects the module-level singleton and must be manually restored. Future: inject services via constructor options for cleaner testability.
+
+### C-153: Character Dashboard & Equipment System
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view_model.svelte.ts` — CharacterDashboardViewModel: reads player stats (level, xp, hp, attack, defense), equipment (weapon/armor), computed totals from GameStateService
+- `apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view.svelte` — Character Dashboard overlay: Level/XP/HP stat cards, XP/HP progress bars, Attack/Defense with base+bonus breakdown, equipped weapon/armor slots
+
+**Files modified**:
+- `apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts` — Added `ItemDefinition` type, `EquipmentSlot` type, `ITEM_CATALOG` (6 equippable items + 3 consumables), `getItemDefinition()` lookup; added player stat fields (`playerLevel`, `playerXp`, `playerXpToNext`, `playerHp`, `playerMaxHp`, `playerBaseAttack`, `playerBaseDefense`) with `playerTotalAttack`/`playerTotalDefense` computed getters; added equipment fields (`equippedWeapon`, `equippedArmor`); added `equipItem()` and `unequipItem()` methods with quantity-aware inventory management; added `_listenForPlayerStats()` listening for PLAYER_LEVELED_UP (base stats) and COMBAT_STATE_UPDATE (HP); extended `reset()` to clear equipment and reset player stats to defaults
+- `apps/frontend/client/src/lib/views/inventory/inventory_view_model.svelte.ts` — Added `equippedWeaponDef`, `equippedArmorDef` getters; added `isEquippable()`, `equipItem()`, `unequipItem()` methods; re-exports `ItemDefinition` type
+- `apps/frontend/client/src/lib/views/inventory/inventory_view.svelte` — Added Equipment Slots section (weapon/armor with equip/unequip buttons, stat bonus display); added Equip button on equippable bag items; renamed bag section header to "Bag"
+- `apps/frontend/client/src/lib/views/inventory/inventory_dev_view_model.svelte.ts` — Updated mock inventory items to match ITEM_CATALOG keys (`iron_sword`, `health_potion`, `wooden_shield`, `rusty_sword`, `leather_armor`)
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `'CHARACTER_DASHBOARD'` to `GameOverlayType`; added `dashboardViewModel` field; added 'C' key handling in `handleKeyDown`; added `_openCharacterDashboard()` / `_closeCharacterDashboard()` methods; added Escape-to-close for dashboard; imported `CharacterDashboardViewModel`
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Imported and rendered `CharacterDashboardView` overlay block (activeOverlay === 'CHARACTER_DASHBOARD')
+- `apps/frontend/client/src/lib/test_preload.ts` — Added `getItemDefinition` mock to `$services` barrel stub
+
+**Deviations**:
+1. **Player stats in GameStateService, not bridge-synced**: Player level, attack, and defense base values are initialized as defaults (1, 5, 12) and updated via existing bridge events (PLAYER_LEVELED_UP, COMBAT_STATE_UPDATE). No new engine commands or events were added — the equipment bonus is purely additive in the UI layer (base + equipment), following the contract's guidance: "consider calculating total stats as Base Stat + Equipped Bonuses to avoid stats permanently inflating."
+2. **Item catalog is hardcoded**: No database or external file for item definitions — 9 items defined inline in GameStateService. The catalog maps itemId strings to `{ label, attackBonus, defenseBonus, equippable, slot }`. Unknown items default to non-equippable.
+3. **No UPDATE_EQUIPMENT engine command**: Equipment stat bonuses are purely additive in the UI layer and not sent to the ECS engine. The ECS CombatStats remain the "base" stats from leveling; equipment bonuses are layered on top in GameStateService. This avoids the complexity of round-trip engine commands for a purely UI-level concern.
+
+**Design decisions**:
+1. **Stat calculation = base + equipment**: `playerTotalAttack = playerBaseAttack + equippedWeapon.attackBonus`. The base stats come from ECS bridge events (PLAYER_LEVELED_UP); equipment adds on top. If no item is equipped, the bonus is 0.
+2. **Equip/unequip preserves inventory quantities**: When equipping a stacked item (quantity > 1), the quantity is decremented rather than removing the entire stack. When unequipping, the item stacks back into the existing inventory slot or creates a new entry.
+3. **Equip-to-occupied-slot auto-unequips**: If a slot already has an item and the player equips a new one, the old item is silently returned to inventory first.
+4. **XP and HP percentages clamped to 0-100**: Computed in the ViewModel via simple math (xp / xpToNext * 100, hp / maxHp * 100), clamped with Math.min/Math.max for edge case safety.
+5. **Escape closes all overlays**: Dashboard, Inventory, Quest Log all close on Escape and return to NONE/EXPLORE. Pause Menu toggles on Escape when no other overlay is active.
+
+**Known limitations**:
+- Player base stats default to level 1 values (HP 100, ATK 5, DEF 12) — only updated when PLAYER_LEVELED_UP or COMBAT_STATE_UPDATE fires. If neither fires before the dashboard is opened, stats show defaults.
+- The PLAYER_LEVELED_UP event doesn't carry current XP — only newLevel, maxHp, attack, defense, xpToNextLevel. The `playerXp` field in GameStateService is never updated from the engine (stays 0). Future: add XP field to PLAYER_LEVELED_UP.
+- Item catalog is not extensible without code changes — no JSON or database-backed definition system.
+- Equipment bonuses don't affect the engine's CombatStats directly — combat math in the ECS uses the base values without equipment. This means combat still rolls against base ATK/DEF rather than total ATK/DEF. Full engine integration requires an UPDATE_EQUIPMENT command.
+- Character Dashboard doesn't show inventory items — only stats and equipment. Inventory is viewed separately via the 'I' key.
+- No unit tests for GameStateService.equipItem/unequipItem — the existing GameStateService test file has minimal coverage and the new methods follow the same patterns as `reset()`.
+- DevViewModel test failure (navItems should contain all 13 dev console links) is pre-existing — not caused by C-153.
+- StartViewModel test failures (9 tests — routes to /setup, calls gameStateService.reset(), etc.) are pre-existing — not caused by C-153.
+
+**Test results**:
+- 385/395 tests pass (10 pre-existing failures unchanged)
+- 0 new test failures

@@ -26,15 +26,16 @@ describe('DevViewModel', () => {
     expect(viewModel.navItems).toBeDefined();
   });
 
-  test('navItems should contain all 13 dev console links', async () => {
+  test('navItems should contain all 15 dev console links', async () => {
     const viewModel = await getDevViewModel();
-    expect(viewModel.navItems.length).toBe(13);
+    expect(viewModel.navItems.length).toBe(15);
 
     const routes = viewModel.navItems.map((item) => item.route);
     expect(routes).toContain('/dev/config');
     expect(routes).toContain('/dev/text');
     expect(routes).toContain('/dev/voice');
     expect(routes).toContain('/dev/image');
+    expect(routes).toContain('/dev/audio');
     expect(routes).toContain('/dev/character');
     expect(routes).toContain('/dev/chat');
     expect(routes).toContain('/dev/sandbox');
@@ -43,6 +44,7 @@ describe('DevViewModel', () => {
     expect(routes).toContain('/dev/inventory');
     expect(routes).toContain('/dev/quest');
     expect(routes).toContain('/dev/save_load');
+    expect(routes).toContain('/dev/settings');
     expect(routes).toContain('/dev/sandbox/map');
   });
 

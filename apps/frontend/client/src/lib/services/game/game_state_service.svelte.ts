@@ -14,6 +14,120 @@ import type {
   GameStateListener,
 } from '$types/game.ts';
 
+// ---------------------------------------------------------------------------
+// Item definition catalog — maps itemId strings to stat bonuses and metadata
+//
+// Contract: C-153 Character Dashboard & Equipment
+// ---------------------------------------------------------------------------
+
+/** Equipment slot type for distinguishing weapon vs armor. */
+export type EquipmentSlot = 'weapon' | 'armor';
+
+/** Definition for a single item type in the game. */
+export type ItemDefinition = {
+  /** Display label shown in the UI. */
+  readonly label: string;
+  /** Attack bonus when equipped (0 for non-weapons). */
+  readonly attackBonus: number;
+  /** Defense bonus when equipped (0 for non-armor). */
+  readonly defenseBonus: number;
+  /** Whether the item can be equipped at all. */
+  readonly equippable: boolean;
+  /** Which slot the item occupies when equipped (only relevant when equippable). */
+  readonly slot: EquipmentSlot | undefined;
+};
+
+/**
+ * Hardcoded item catalog for MVP equipment system.
+ *
+ * When items are picked up in the game, this catalog is consulted to
+ * determine if they can be equipped and what stat bonuses they provide.
+ * Unknown item IDs default to non-equippable generic items.
+ */
+const ITEM_CATALOG: Record<string, ItemDefinition> = {
+  rusty_sword: {
+    label: 'Rusty Sword',
+    attackBonus: 3,
+    defenseBonus: 0,
+    equippable: true,
+    slot: 'weapon',
+  },
+  iron_sword: {
+    label: 'Iron Sword',
+    attackBonus: 5,
+    defenseBonus: 0,
+    equippable: true,
+    slot: 'weapon',
+  },
+  steel_sword: {
+    label: 'Steel Sword',
+    attackBonus: 8,
+    defenseBonus: 0,
+    equippable: true,
+    slot: 'weapon',
+  },
+  wooden_shield: {
+    label: 'Wooden Shield',
+    attackBonus: 0,
+    defenseBonus: 2,
+    equippable: true,
+    slot: 'armor',
+  },
+  leather_armor: {
+    label: 'Leather Armor',
+    attackBonus: 0,
+    defenseBonus: 3,
+    equippable: true,
+    slot: 'armor',
+  },
+  iron_armor: {
+    label: 'Iron Armor',
+    attackBonus: 0,
+    defenseBonus: 5,
+    equippable: true,
+    slot: 'armor',
+  },
+  health_potion: {
+    label: 'Health Potion',
+    attackBonus: 0,
+    defenseBonus: 0,
+    equippable: false,
+    slot: undefined,
+  },
+  mana_potion: {
+    label: 'Mana Potion',
+    attackBonus: 0,
+    defenseBonus: 0,
+    equippable: false,
+    slot: undefined,
+  },
+  gold_coin: {
+    label: 'Gold Coin',
+    attackBonus: 0,
+    defenseBonus: 0,
+    equippable: false,
+    slot: undefined,
+  },
+} as const satisfies Record<string, ItemDefinition>;
+
+/** Default definition for unknown item IDs. */
+const DEFAULT_ITEM_DEFINITION: ItemDefinition = {
+  label: 'Unknown Item',
+  attackBonus: 0,
+  defenseBonus: 0,
+  equippable: false,
+  slot: undefined,
+};
+
+/**
+ * Looks up the {@link ItemDefinition} for a given item ID.
+ *
+ * Falls back to {@link DEFAULT_ITEM_DEFINITION} for unknown IDs.
+ */
+export const getItemDefinition = (itemId: string): ItemDefinition => {
+  return ITEM_CATALOG[itemId] ?? { ...DEFAULT_ITEM_DEFINITION, label: itemId };
+};
+
 export type GameStateServiceOptions = BaseFrontendClassOptions & {
   uid: string;
 };
@@ -35,6 +149,47 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
    * Contract: C-147 Progression & Persistence
    */
   readonly defeatedEnemies: readonly string[];
+
+  // ── Player stats (C-153 Character Dashboard) ──
+
+  /** Player's base character level (from ECS CombatStats). */
+  readonly playerLevel: number;
+  /** Current XP (from ECS CombatStats). */
+  readonly playerXp: number;
+  /** XP needed to reach the next level. */
+  readonly playerXpToNext: number;
+  /** Current HP (from ECS CombatStats + combat state updates). */
+  readonly playerHp: number;
+  /** Maximum HP (from ECS CombatStats). */
+  readonly playerMaxHp: number;
+  /** Base attack from leveling (before equipment bonuses). */
+  readonly playerBaseAttack: number;
+  /** Base defense from leveling (before equipment bonuses). */
+  readonly playerBaseDefense: number;
+  /** Total attack = base + equipped weapon bonus. */
+  readonly playerTotalAttack: number;
+  /** Total defense = base + equipped armor bonus. */
+  readonly playerTotalDefense: number;
+
+  // ── Equipment (C-153 Equipping) ──
+
+  /** Item ID of the currently equipped weapon, or undefined if none. */
+  readonly equippedWeapon: string | undefined;
+  /** Item ID of the currently equipped armor, or undefined if none. */
+  readonly equippedArmor: string | undefined;
+
+  /**
+   * Equips an item from the inventory into its designated slot.
+   *
+   * Moves the item from the inventory to the equipment slot and updates
+   * total attack/defense accordingly. If an item is already in that slot,
+   * it is unequipped first (returned to inventory).
+   */
+  equipItem(options: { itemId: string }): void;
+  /**
+   * Unequips the item in the given slot and returns it to the inventory.
+   */
+  unequipItem(options: { slot: EquipmentSlot }): void;
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -58,7 +213,8 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   setMode(mode: GameMode): void;
 
   /**
-   * Resets all mutable game state arrays (inventory, defeatedEnemies, quests).
+   * Resets all mutable game state arrays (inventory, defeatedEnemies, quests,
+   * equipment, player stats).
    *
    * Called when starting a New Game to prevent stale state from a previous
    * or aborted play session from leaking into the new session.
@@ -80,6 +236,47 @@ export class GameStateService
   /** Spawn point IDs of defeated enemies (C-147). */
   defeatedEnemies = $state<string[]>([]);
 
+  // ── Player stats (C-153 Character Dashboard) ──
+  playerLevel = $state<number>(1);
+  playerXp = $state<number>(0);
+  playerXpToNext = $state<number>(100);
+  playerHp = $state<number>(100);
+  playerMaxHp = $state<number>(100);
+  playerBaseAttack = $state<number>(5);
+  playerBaseDefense = $state<number>(12);
+
+  // ── Equipment slots (C-153 Equipping) ──
+  equippedWeapon = $state<string | undefined>(undefined);
+  equippedArmor = $state<string | undefined>(undefined);
+
+  // ── Computed stat getters ──
+
+  /** Total attack = base + weapon bonus. */
+  get playerTotalAttack(): number {
+    return this.playerBaseAttack + this._equipmentAttackBonus;
+  }
+
+  /** Total defense = base + armor bonus. */
+  get playerTotalDefense(): number {
+    return this.playerBaseDefense + this._equipmentDefenseBonus;
+  }
+
+  /** Attack bonus from currently equipped weapon. */
+  private get _equipmentAttackBonus(): number {
+    if (!this.equippedWeapon) {
+      return 0;
+    }
+    return getItemDefinition(this.equippedWeapon).attackBonus;
+  }
+
+  /** Defense bonus from currently equipped armor. */
+  private get _equipmentDefenseBonus(): number {
+    if (!this.equippedArmor) {
+      return 0;
+    }
+    return getItemDefinition(this.equippedArmor).defenseBonus;
+  }
+
   get worldVariables(): Record<string, unknown> {
     return this.currentWorld?.variables ?? {};
   }
@@ -98,6 +295,7 @@ export class GameStateService
     void this._listenForInventoryUpdates();
     void this._listenForQuestUpdates();
     void this._listenForCombatEnded();
+    void this._listenForPlayerStats();
   }
 
   private emitEvent(event: GameStateEvent): void {
@@ -319,7 +517,98 @@ export class GameStateService
     this.inventory = [];
     this.defeatedEnemies = [];
     this.quests = [];
+    this.equippedWeapon = undefined;
+    this.equippedArmor = undefined;
+    this.playerLevel = 1;
+    this.playerXp = 0;
+    this.playerXpToNext = 100;
+    this.playerHp = 100;
+    this.playerMaxHp = 100;
+    this.playerBaseAttack = 5;
+    this.playerBaseDefense = 12;
     this.debug('reset:cleared');
+  }
+
+  // ── Equipment methods (C-153) ──
+
+  /** @inheritdoc */
+  equipItem(options: { itemId: string }): void {
+    const { itemId } = options;
+    const definition = getItemDefinition(itemId);
+
+    if (!definition.equippable || !definition.slot) {
+      this.debug('equipItem:not-equippable', { itemId });
+      return;
+    }
+
+    // Find the item in inventory
+    const index = this.inventory.findIndex((item) => item.itemId === itemId);
+    if (index < 0) {
+      this.debug('equipItem:not-in-inventory', { itemId });
+      return;
+    }
+
+    const slot = definition.slot;
+
+    // If there's already an item in this slot, unequip it first
+    if (slot === 'weapon' && this.equippedWeapon) {
+      this._unequipCurrent(slot);
+    } else if (slot === 'armor' && this.equippedArmor) {
+      this._unequipCurrent(slot);
+    }
+
+    // Remove from inventory (reduce quantity or remove entirely)
+    const item = this.inventory[index];
+    if (item.quantity > 1) {
+      this.inventory[index] = { itemId, quantity: item.quantity - 1 };
+    } else {
+      this.inventory = this.inventory.filter((_, i) => i !== index);
+    }
+
+    // Equip into slot
+    if (slot === 'weapon') {
+      this.equippedWeapon = itemId;
+    } else {
+      this.equippedArmor = itemId;
+    }
+
+    this.debug('equipItem:equipped', { itemId, slot });
+  }
+
+  /** @inheritdoc */
+  unequipItem(options: { slot: EquipmentSlot }): void {
+    const { slot } = options;
+    this._unequipCurrent(slot);
+  }
+
+  /**
+   * Moves the currently equipped item in the given slot back to inventory.
+   */
+  private _unequipCurrent(slot: EquipmentSlot): void {
+    const itemId = slot === 'weapon' ? this.equippedWeapon : this.equippedArmor;
+    if (!itemId) {
+      return;
+    }
+
+    // Return to inventory (stack if existing, otherwise new entry)
+    const existingIndex = this.inventory.findIndex((item) => item.itemId === itemId);
+    if (existingIndex >= 0) {
+      this.inventory[existingIndex] = {
+        itemId,
+        quantity: this.inventory[existingIndex].quantity + 1,
+      };
+    } else {
+      this.inventory = [...this.inventory, { itemId, quantity: 1 }];
+    }
+
+    // Clear the slot
+    if (slot === 'weapon') {
+      this.equippedWeapon = undefined;
+    } else {
+      this.equippedArmor = undefined;
+    }
+
+    this.debug('_unequipCurrent', { itemId, slot });
   }
 
   /**
@@ -422,6 +711,46 @@ export class GameStateService
       });
     } catch (error) {
       this.debug('_listenForQuestUpdates:failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Listens for player stat events from the ECS via the EngineBridge.
+   *
+   * Tracks:
+   * - {@link PLAYER_LEVELED_UP} — updates level, base attack, base defense,
+   *   max HP, and XP threshold.
+   * - {@link COMBAT_STATE_UPDATE} — updates current HP from the entity HP map.
+   *
+   * Contract: C-153 Character Dashboard & Equipment
+   */
+  private async _listenForPlayerStats(): Promise<void> {
+    try {
+      const { createEngineBridge } = await import('@aikami/frontend/engine');
+      const bridge = createEngineBridge();
+
+      bridge.on('PLAYER_LEVELED_UP', (event) => {
+        this.playerLevel = event.newLevel;
+        this.playerMaxHp = event.maxHp;
+        this.playerBaseAttack = event.attack;
+        this.playerBaseDefense = event.defense;
+        this.playerXpToNext = event.xpToNextLevel;
+        this.debug('_listenForPlayerStats:leveledUp', {
+          level: event.newLevel,
+          attack: event.attack,
+          defense: event.defense,
+        });
+      });
+
+      bridge.on('COMBAT_STATE_UPDATE', (event) => {
+        // Player entity is always entity ID 1 in our ECS
+        const playerHp = event.entityHpMap[1];
+        if (playerHp !== undefined) {
+          this.playerHp = playerHp;
+        }
+      });
+    } catch (error) {
+      this.debug('_listenForPlayerStats:failed', { error: String(error) });
     }
   }
 }

@@ -92,6 +92,7 @@ P2 (Polish — after P1):
 | C-150 | [Audio System — BGM & SFX](C-150-audio-system-bgm-sfx.md) ✅ | Web Audio API audio engine with Equal-Power crossfade, Service Worker range interceptor for iOS, game state-driven BGM/SFX hooks | — |
 | C-151 | [AI Dynamic Music via Data Connect](C-151-ai-dynamic-music.md) ✅ | AI Director mood-driven BGM crossfade via Data Connect AudioTrack queries, LLM sceneMood extraction, graceful fallback to placeholder tracks | C-150 |
 | C-152 | [End-to-End Boot Flow](C-152-end-to-end-boot-flow.md) ✅ | Stitch Main Menu → Character Creation → Starting Map; New Game/Continue branching, GameStateService.reset(), enterWorld clear state | C-121, C-123, C-132, C-138 |
+| C-153 | [Character Dashboard & Equipment](C-153-character-dashboard-equipment.md) ✅ | Character Dashboard (C-key overlay), Level/XP/HP/ATK/DEF display, Equipment slots with equip/unequip, stat bonuses from weapons/armor | C-152 |
 
 ## Contract Format
 
