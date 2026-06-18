@@ -24,7 +24,6 @@
 //   --force               Force rebuild clean
 
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { EMULATOR_PORTS, PORTS } from '@aikami/constants';
 import { buildSessionName, sessionExists, startServices, waitForReady } from '../tmux/session.ts';
@@ -69,7 +68,7 @@ const BUILD_DIR = resolve(CLIENT_DIR, 'build');
 const SVELTE_KIT_DIR = resolve(CLIENT_DIR, '.svelte-kit');
 const PREVIEW_PORT = EMULATOR_PORTS.client; // vite preview always on 5274
 const STARTUP_TIMEOUT_MS = 15_000;
-const CHROMIUM_PROFILE_DIR = resolve(homedir(), '.aikami-chromium-profile');
+const CHROMIUM_PROFILE_DIR = resolve(ROOT, 'dist/tmp/.chromium-profile');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -353,6 +352,10 @@ const launchChromium = async (mode: AikamiMode): Promise<void> => {
     '--no-pings',
     '--enable-unsafe-webgpu',
     '--enable-features=Vulkan',
+    '--ozone-platform=x11',
+    '--disable-gcm',
+    '--disable-push-notifications',
+    '--disable-features=PushMessaging,GCM',
   ];
 
   // Load extension if available
@@ -367,7 +370,7 @@ const launchChromium = async (mode: AikamiMode): Promise<void> => {
 
   info(`Launching Chromium → ${clientUrl}`);
   if (devtoolsPath) {
-    info('Auth & settings persisted in ~/.aikami-chromium-profile');
+    info(`Auth & settings persisted in ${CHROMIUM_PROFILE_DIR}`);
   }
 
   const proc = Bun.spawn(chromiumArgs, {

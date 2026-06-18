@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-06-18
-> Files: 167 across 11 categories
+> Files: 168 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -156,6 +156,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-147 Progression, Game Over, and Persistence](contracts/C-147-progression-and-persistence.md)
 - [Contract: C-148 Combat Immersion (Dice UI, Images & Voice)](contracts/C-148-combat-immersion.md)
 - [Contract: C-149 Combat Mechanics & AI Gatekeeping](contracts/C-149-combat-gatekeeping.md)
+- [Contract: C-150 Low-Latency Audio Engine & Service Worker](contracts/C-150-audio-system-bgm-sfx.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

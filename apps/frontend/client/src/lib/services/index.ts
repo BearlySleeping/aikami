@@ -18,6 +18,7 @@ export * from './app/app.svelte.ts';
 export * from './app/preference.svelte.ts';
 export * from './audio/audio_context_manager';
 export * from './audio/audio_queue_player';
+export * from './audio/audio_service.svelte';
 export * from './audio/tts_service.svelte.ts';
 export * from './auth/auth_service.svelte.ts';
 export * from './character/character.svelte.ts';
