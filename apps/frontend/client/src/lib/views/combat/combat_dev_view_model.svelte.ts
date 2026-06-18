@@ -207,6 +207,8 @@ export class CombatDevViewModel extends CombatViewModel {
     // ── Mock enemy quote (C-148 Combat Immersion) ──
     if (Math.random() > 0.4) {
       const quote = MOCK_ENEMY_QUOTES[Math.floor(Math.random() * MOCK_ENEMY_QUOTES.length)];
+      // Simulate voice pipeline: log what would be spoken, then show quote
+      this.combatLog = [`🔊 TTS: Goblin says ${quote}`, ...this.combatLog];
       this.combatLog = [`*Goblin ${quote}*`, ...this.combatLog];
     }
 
