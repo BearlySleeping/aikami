@@ -523,7 +523,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   /** @inheritdoc */
   async checkKokoroServer(): Promise<void> {
-    const urls = ['http://localhost:8880', 'http://127.0.0.1:8880'];
+    const urls = ['/api/kokoro-tts', 'http://localhost:8880', 'http://127.0.0.1:8880'];
 
     for (const url of urls) {
       try {
