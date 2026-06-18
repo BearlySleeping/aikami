@@ -319,7 +319,10 @@ export class CharacterViewModel
       this.phase = 'TWEAK';
     } else {
       this.phase = 'CHAT';
-      this.errorMessage = 'Failed to generate character. Please try again.';
+      // Preserve specific error messages (e.g., AbortError) set by _extractCharacter()
+      if (!this.errorMessage) {
+        this.errorMessage = 'Failed to generate character. Please try again.';
+      }
     }
   }
 

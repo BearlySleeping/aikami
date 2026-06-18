@@ -8,6 +8,7 @@ import {
 import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
 import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import { gameStateService } from '$services';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,
@@ -69,6 +70,15 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
 
   /** Maximum enemy hit points. */
   readonly enemyMaxHp: number;
+
+  /** Player's character level. */
+  readonly playerLevel: number;
+
+  /** Player's attack value. */
+  readonly playerAttack: number;
+
+  /** Player's defense value. */
+  readonly playerDefense: number;
 
   /** Display name of the active enemy (e.g. "Goblin"). */
   readonly enemyName: string;
@@ -207,6 +217,13 @@ export class CombatViewModel
   enemyHp = $state(80);
 
   enemyMaxHp = $state(80);
+
+  /** Player combat stats — synced from engine via bridge events or defaults. */
+  playerLevel = $state(1);
+
+  playerAttack = $state(5);
+
+  playerDefense = $state(12);
 
   enemyName = $state('');
 
@@ -466,8 +483,9 @@ export class CombatViewModel
 
     try {
       // Build contextual prompt with player stats, enemy info, and user input
+      const characterSheet = this._buildCharacterSheetContext();
       const contextualPrompt = [
-        `Player HP: ${this.playerHp}/${this.playerMaxHp}`,
+        characterSheet,
         `Enemy: ${this.enemyName} (HP: ${this.enemyHp}/${this.enemyMaxHp})`,
         `Player action: "${trimmed}"`,
       ].join('\n');
@@ -492,12 +510,32 @@ export class CombatViewModel
         bonusDamage: intent.bonusDamage,
         advantage: intent.advantage,
         generateImage: intent.generateImage,
+        actionValid: intent.actionValid,
+        invalidReason: intent.invalidReason,
         narrativeLength: intent.narrative.length,
         narrativePreview: intent.narrative.slice(0, 80),
       });
 
-      // Append the DM narrative to the combat log
+      // Append the DM narrative to the combat log (always — even for invalid actions)
       this.combatLog = [intent.narrative, ...this.combatLog];
+
+      // ── Gatekeeping: reject impossible actions (C-149) ──
+      if (intent.actionValid === false) {
+        this.debug('executeCustomAction: gatekept — action rejected by DM', {
+          invalidReason: intent.invalidReason,
+        });
+        // Append the invalid reason as an additional log entry for clarity
+        if (intent.invalidReason) {
+          this.combatLog = [`🚫 ${intent.invalidReason}`, ...this.combatLog];
+          // Synthesize the gatekeeping response via TTS for immersion
+          void ttsService.synthesize({
+            text: intent.invalidReason,
+            voice: 'af_heart',
+          });
+        }
+        // Do NOT dispatch COMBAT_ACTION — the player loses their action
+        return;
+      }
 
       // Enemy voice taunt — C-148 Combat Immersion
       if (intent.enemyQuote && intent.enemyQuote.trim().length > 0) {
@@ -663,6 +701,40 @@ export class CombatViewModel
       .catch((error) => {
         this.warn('generateSceneImage: failed', error);
       });
+  }
+
+  // -----------------------------------------------------------------------
+  // Private — character sheet context builder (C-149)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Builds a serialized character sheet string for the LLM system prompt.
+   *
+   * Pulls the player's current state — inventory from GameStateService,
+   * HP/level/attack/defense from this ViewModel's reactive state — and
+   * formats it as a clean text block. This tells the AI exactly what the
+   * player is capable of, enabling gatekeeping of impossible freeform
+   * actions (e.g., using items they don't have).
+   *
+   * @returns A formatted multi-line string describing the player's current state.
+   */
+  private _buildCharacterSheetContext(): string {
+    const inventory = gameStateService.inventory;
+    const inventoryLines =
+      inventory.length > 0
+        ? inventory.map((item) => `  - ${item.itemId} x${item.quantity}`).join('\n')
+        : '  (empty)';
+
+    return [
+      '--- Player Character Sheet ---',
+      `Level: ${this.playerLevel}`,
+      `HP: ${this.playerHp}/${this.playerMaxHp}`,
+      `Attack: ${this.playerAttack}`,
+      `Defense: ${this.playerDefense}`,
+      'Inventory:',
+      inventoryLines,
+      '--- End Character Sheet ---',
+    ].join('\n');
   }
 
   // -----------------------------------------------------------------------
