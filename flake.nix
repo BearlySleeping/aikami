@@ -93,6 +93,7 @@
           glib-networking
           libayatana-appindicator
           google-cloud-sdk
+          nodePackages.pg
 ];
 
         # nix-direnv location — used by .envrc on subsequent loads to

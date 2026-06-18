@@ -1,9 +1,9 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.test.ts
 //
-// Unit tests for CombatViewModel C-148 Combat Immersion features:
-// - Dice roll state (activeDiceRoll parsing + lifecycle)
-// - Scene image generation (combatBackgroundImageUrl)
-// - Enemy quote integration (appended to combat log)
+// Unit tests for CombatViewModel:
+// - C-148 Combat Immersion (dice roll state, enemy quotes, scene images)
+// - C-149 Combat Gatekeeping (actionValid gatekeeping)
+// - C-151 AI Dynamic Music (sceneMood → BGM crossfade)
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
@@ -281,6 +281,160 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
           extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
         }
       ).extractStructure = origExtract;
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // C-151: AI Dynamic Music — sceneMood triggers BGM crossfade
+  // -----------------------------------------------------------------------
+
+  describe('executeCustomAction — C-151 AI Dynamic Music', () => {
+    let viewModel: CombatViewModel;
+    let bridgeSendCalls: Array<Record<string, unknown>>;
+
+    beforeEach(() => {
+      viewModel = createViewModel();
+      bridgeSendCalls = [];
+
+      // Set up mock engine bridge
+      const vm = viewModel as unknown as {
+        _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
+      };
+      vm._bridge = {
+        send: (cmd: Record<string, unknown>) => {
+          bridgeSendCalls.push(cmd);
+        },
+        on: () => () => {},
+      };
+
+      // Put the ViewModel in active combat state
+      viewModel.currentTurnEntity = 1;
+      viewModel.enemyEntityId = 2;
+      viewModel.enemyName = 'Goblin';
+      viewModel.playerHp = 80;
+      viewModel.playerMaxHp = 100;
+      viewModel.enemyHp = 60;
+      viewModel.enemyMaxHp = 80;
+      viewModel.activeEntities = [1, 2];
+      viewModel.playerLevel = 3;
+      viewModel.playerAttack = 7;
+      viewModel.playerDefense = 14;
+    });
+
+    afterEach(() => {
+      // Unmock audioService
+      try {
+        (
+          viewModel as unknown as {
+            _transitionBgmByMood: (mood: string) => Promise<void>;
+          }
+        )._transitionBgmByMood = async () => {};
+      } catch {
+        // No-op
+      }
+    });
+
+    test('should call _transitionBgmByMood when LLM returns sceneMood', async () => {
+      // Mock textGenerationService to return a response with sceneMood
+      const extractStructureMod = await import(
+        '$lib/services/ai/text_generation_service.svelte.ts'
+      );
+      const origExtract = (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure;
+
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = async () => ({
+        actionType: 'ATTACK',
+        narrative: 'With a thunderous roar, you strike the killing blow!',
+        bonusDamage: 3,
+        advantage: true,
+        generateImage: false,
+        actionValid: true,
+        sceneMood: 'triumph',
+      });
+
+      // Spy on _transitionBgmByMood via method override
+      let wasCalled = false;
+      let receivedMood = '';
+      const vm = viewModel as unknown as {
+        _transitionBgmByMood: (mood: string) => Promise<void>;
+      };
+      const origTransition = vm._transitionBgmByMood;
+      vm._transitionBgmByMood = async (mood: string) => {
+        wasCalled = true;
+        receivedMood = mood;
+      };
+
+      await viewModel.executeCustomAction('I strike the final blow!');
+
+      expect(wasCalled).toBe(true);
+      expect(receivedMood).toBe('triumph');
+
+      // The engine command should still be dispatched
+      expect(bridgeSendCalls.length).toBe(1);
+
+      // Restore
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = origExtract;
+      vm._transitionBgmByMood = origTransition;
+    });
+
+    test('should NOT call _transitionBgmByMood when sceneMood is undefined', async () => {
+      const extractStructureMod = await import(
+        '$lib/services/ai/text_generation_service.svelte.ts'
+      );
+      const origExtract = (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure;
+
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = async () => ({
+        actionType: 'ATTACK',
+        narrative: 'You swing your sword at the goblin.',
+        bonusDamage: 0,
+        advantage: false,
+        generateImage: false,
+        actionValid: true,
+        // sceneMood intentionally omitted
+      });
+
+      let wasCalled = false;
+      const vm = viewModel as unknown as {
+        _transitionBgmByMood: (mood: string) => Promise<void>;
+      };
+      const origTransition = vm._transitionBgmByMood;
+      vm._transitionBgmByMood = async () => {
+        wasCalled = true;
+      };
+
+      await viewModel.executeCustomAction('I swing my sword');
+
+      expect(wasCalled).toBe(false);
+
+      // Engine command should still be dispatched
+      expect(bridgeSendCalls.length).toBe(1);
+
+      // Restore
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = origExtract;
+      vm._transitionBgmByMood = origTransition;
     });
   });
 });
