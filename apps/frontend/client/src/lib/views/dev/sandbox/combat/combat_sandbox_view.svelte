@@ -135,6 +135,8 @@
         { label: 'Sim Victory + Enemy', onClick: () => viewModel.devSimulateVictoryWithEnemy() },
         { label: 'Force Game Over', onClick: () => viewModel.devForceGameOver() },
         viewModel.isGameOver ? { label: 'Respawn', onClick: () => viewModel.respawnPlayer() } : undefined,
+        { label: '🎤 Init Kokoro TTS', onClick: () => { void viewModel.devInitTts(); } },
+        { label: '🔊 Test Enemy Voice', onClick: () => viewModel.devTestEnemyVoice() },
       ].filter((a): a is { label: string; onClick: () => void } => a !== undefined)}
       toggles={[
         {
