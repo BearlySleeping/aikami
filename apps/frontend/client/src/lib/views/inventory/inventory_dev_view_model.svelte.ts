@@ -44,10 +44,11 @@ export class InventoryDevViewModel extends InventoryViewModel {
   override async initialize(): Promise<void> {
     // Inject mock items into the game state service inventory
     gameStateService.inventory = [
-      { itemId: 'iron-sword', quantity: 1 },
-      { itemId: 'health-potion', quantity: 3 },
-      { itemId: 'wooden-shield', quantity: 1 },
-      { itemId: 'arrow', quantity: 15 },
+      { itemId: 'iron_sword', quantity: 1 },
+      { itemId: 'health_potion', quantity: 3 },
+      { itemId: 'wooden_shield', quantity: 1 },
+      { itemId: 'rusty_sword', quantity: 1 },
+      { itemId: 'leather_armor', quantity: 1 },
     ];
 
     return await super.initialize();

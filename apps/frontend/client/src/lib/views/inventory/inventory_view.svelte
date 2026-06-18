@@ -28,12 +28,83 @@
 
       <div class="divider my-0"></div>
 
-      <!-- Items list -->
+      <!-- Equipment Slots -->
+      <div class="grid grid-cols-2 gap-3">
+        <!-- Weapon Slot -->
+        <div class="rounded-lg bg-base-200 p-3 flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-md {viewModel.equippedWeaponDef ? 'bg-warning/20' : 'bg-base-300'}"
+          >
+            <span class="text-lg">
+              {viewModel.equippedWeaponDef ? '⚔️' : '🗡️'}
+            </span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs opacity-50">Weapon</div>
+            <div class="text-sm font-medium truncate">
+              {viewModel.equippedWeaponDef?.label ?? 'Empty'}
+            </div>
+            {#if viewModel.equippedWeaponDef}
+              <div class="flex items-center gap-1 mt-1">
+                <span class="text-xs text-warning"
+                  >+{viewModel.equippedWeaponDef.attackBonus}
+                  ATK</span
+                >
+                <button
+                  class="btn btn-xs btn-ghost text-error"
+                  onclick={() => viewModel.unequipItem('weapon')}
+                  aria-label="Unequip weapon"
+                >
+                  Unequip
+                </button>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Armor Slot -->
+        <div class="rounded-lg bg-base-200 p-3 flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-md {viewModel.equippedArmorDef ? 'bg-info/20' : 'bg-base-300'}"
+          >
+            <span class="text-lg">
+              {viewModel.equippedArmorDef ? '🛡️' : '👕'}
+            </span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs opacity-50">Armor</div>
+            <div class="text-sm font-medium truncate">
+              {viewModel.equippedArmorDef?.label ?? 'Empty'}
+            </div>
+            {#if viewModel.equippedArmorDef}
+              <div class="flex items-center gap-1 mt-1">
+                <span class="text-xs text-info"
+                  >+{viewModel.equippedArmorDef.defenseBonus}
+                  DEF</span
+                >
+                <button
+                  class="btn btn-xs btn-ghost text-error"
+                  onclick={() => viewModel.unequipItem('armor')}
+                  aria-label="Unequip armor"
+                >
+                  Unequip
+                </button>
+              </div>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <div class="divider my-0"></div>
+
+      <!-- Bag items -->
+      <h3 class="text-sm font-semibold text-base-content/70">Bag</h3>
+
       {#if viewModel.items.length === 0}
-        <div class="flex flex-col items-center gap-3 py-8 text-base-content/50">
+        <div class="flex flex-col items-center gap-3 py-4 text-base-content/50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-12 w-12"
+            class="h-10 w-10"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -49,8 +120,9 @@
           <p class="text-xs">Walk up to items and press E to collect them</p>
         </div>
       {:else}
-        <div class="grid grid-cols-4 gap-2 max-h-64 overflow-y-auto pr-1">
+        <div class="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
           {#each viewModel.items as item, index (index)}
+            {@const definition = viewModel.isEquippable(item.itemId)}
             <div
               class="flex flex-col items-center gap-1 rounded-lg bg-base-200 p-3 transition-colors hover:bg-base-300"
             >
@@ -64,6 +136,15 @@
               </span>
               {#if item.quantity > 1}
                 <span class="badge badge-sm badge-primary">{item.quantity}</span>
+              {/if}
+              {#if definition}
+                <button
+                  class="btn btn-xs btn-primary btn-outline mt-1"
+                  onclick={() => viewModel.equipItem(item.itemId)}
+                  aria-label="Equip {item.itemId}"
+                >
+                  Equip
+                </button>
               {/if}
             </div>
           {/each}

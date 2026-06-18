@@ -19,6 +19,7 @@ import { CombatViewModel } from '../../combat/combat_view_model.svelte.ts';
 import { InventoryViewModel } from '../../inventory/inventory_view_model.svelte';
 import { QuestViewModel } from '../../quest/quest_view_model.svelte.ts';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
+import { CharacterDashboardViewModel } from '../dashboard/character_dashboard_view_model.svelte';
 import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -39,7 +40,8 @@ export type GameOverlayType =
   | 'COMBAT'
   | 'INVENTORY'
   | 'QUEST_LOG'
-  | 'GAME_OVER';
+  | 'GAME_OVER'
+  | 'CHARACTER_DASHBOARD';
 
 /** NPC data passed to the dialogue overlay when an interaction starts. */
 export type DialogueNpcData = {
@@ -83,6 +85,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
     | undefined;
 
   readonly inventoryViewModel: InventoryViewModel | undefined;
+
+  /** The active CharacterDashboardViewModel, or undefined when closed. */
+  readonly dashboardViewModel: CharacterDashboardViewModel | undefined;
 
   /** The active QuestViewModel, or undefined when the quest log is closed. */
   readonly questViewModel: QuestViewModel | undefined;
@@ -151,6 +156,8 @@ class GameUIViewModel
   dialogueViewModel = $state<DialogueOverlayViewModel | undefined>(undefined);
 
   inventoryViewModel = $state<InventoryViewModel | undefined>(undefined);
+
+  dashboardViewModel = $state<CharacterDashboardViewModel | undefined>(undefined);
 
   questViewModel = $state<QuestViewModel | undefined>(undefined);
 
@@ -335,6 +342,11 @@ class GameUIViewModel
         return;
       }
 
+      if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
+        this._closeCharacterDashboard();
+        return;
+      }
+
       if (this.activeOverlay === 'QUEST_LOG') {
         this._closeQuestLog();
         return;
@@ -362,6 +374,17 @@ class GameUIViewModel
         this._closeQuestLog();
       } else if (this.activeOverlay === 'NONE') {
         this._openQuestLog();
+      }
+      return;
+    }
+
+    if (event.key === 'c' || event.key === 'C') {
+      event.preventDefault();
+
+      if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
+        this._closeCharacterDashboard();
+      } else if (this.activeOverlay === 'NONE') {
+        this._openCharacterDashboard();
       }
     }
   }
@@ -499,6 +522,36 @@ class GameUIViewModel
     gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
     this.questViewModel = undefined;
+  }
+
+  /**
+   * Opens the character dashboard overlay.
+   *
+   * Locks the game in MENU mode (movement disabled) and creates the
+   * CharacterDashboardViewModel that reads player stats from GameStateService.
+   *
+   * Contract: C-153 Character Dashboard & Equipment
+   */
+  private _openCharacterDashboard(): void {
+    this.activeOverlay = 'CHARACTER_DASHBOARD';
+    gameStateService.setMode('MENU');
+    this._gameViewModel.pauseEngine();
+    this.dashboardViewModel = new CharacterDashboardViewModel({
+      className: 'CharacterDashboardViewModel',
+      onClose: () => this._closeCharacterDashboard(),
+    });
+  }
+
+  /**
+   * Closes the character dashboard overlay.
+   *
+   * Restores EXPLORE mode and disposes the CharacterDashboardViewModel.
+   */
+  private _closeCharacterDashboard(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._gameViewModel.resumeEngine();
+    this.dashboardViewModel = undefined;
   }
 
   /**
