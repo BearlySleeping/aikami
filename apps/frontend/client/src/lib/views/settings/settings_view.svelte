@@ -118,28 +118,82 @@
           </div>
         </div>
       {:else if viewModel.gameSubTab === 'audio'}
+        {@const hasVolume = viewModel.masterVolume !== undefined && viewModel.setMasterVolume !== undefined}
         <div class="card bg-base-100 shadow">
           <div class="card-body">
             <h2 class="card-title">Audio Settings</h2>
             <p class="text-base-content/60">Master volume, sound effects, and music.</p>
             <div class="divider"></div>
-            <div class="space-y-4 opacity-50">
-              {#each ['Master Volume', 'Sound Effects', 'Music'] as label, i}
-                <div class="form-control">
-                  <label class="label" for="settings-audio-{i}">
-                    <span class="label-text">{label}</span>
-                  </label>
-                  <input
-                    id="settings-audio-{i}"
-                    type="range"
-                    min="0"
-                    max="100"
-                    value="80"
-                    class="range"
-                    disabled
-                  >
-                </div>
-              {/each}
+            <div class={hasVolume ? 'space-y-4' : 'space-y-4 opacity-50'}>
+              <!-- Master Volume -->
+              <div class="form-control">
+                <label class="label" for="settings-audio-master">
+                  <span class="label-text">Master Volume</span>
+                  <span class="label-text-alt">
+                    {hasVolume ? Math.round((viewModel.masterVolume ?? 0.8) * 100) : 80}%
+                  </span>
+                </label>
+                <input
+                  id="settings-audio-master"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={hasVolume ? Math.round((viewModel.masterVolume ?? 0.8) * 100) : 80}
+                  class="range"
+                  disabled={!hasVolume}
+                  oninput={(e) => {
+                    if (viewModel.setMasterVolume) {
+                      viewModel.setMasterVolume(Number(e.currentTarget.value) / 100);
+                    }
+                  }}
+                >
+              </div>
+              <!-- BGM Volume -->
+              <div class="form-control">
+                <label class="label" for="settings-audio-bgm">
+                  <span class="label-text">Music</span>
+                  <span class="label-text-alt">
+                    {hasVolume ? Math.round((viewModel.bgmVolume ?? 0.8) * 100) : 80}%
+                  </span>
+                </label>
+                <input
+                  id="settings-audio-bgm"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={hasVolume ? Math.round((viewModel.bgmVolume ?? 0.8) * 100) : 80}
+                  class="range"
+                  disabled={!hasVolume}
+                  oninput={(e) => {
+                    if (viewModel.setBgmVolume) {
+                      viewModel.setBgmVolume(Number(e.currentTarget.value) / 100);
+                    }
+                  }}
+                >
+              </div>
+              <!-- SFX Volume -->
+              <div class="form-control">
+                <label class="label" for="settings-audio-sfx">
+                  <span class="label-text">Sound Effects</span>
+                  <span class="label-text-alt">
+                    {hasVolume ? Math.round((viewModel.sfxVolume ?? 1) * 100) : 80}%
+                  </span>
+                </label>
+                <input
+                  id="settings-audio-sfx"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={hasVolume ? Math.round((viewModel.sfxVolume ?? 1) * 100) : 80}
+                  class="range"
+                  disabled={!hasVolume}
+                  oninput={(e) => {
+                    if (viewModel.setSfxVolume) {
+                      viewModel.setSfxVolume(Number(e.currentTarget.value) / 100);
+                    }
+                  }}
+                >
+              </div>
             </div>
           </div>
         </div>

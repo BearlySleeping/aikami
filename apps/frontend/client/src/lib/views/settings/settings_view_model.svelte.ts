@@ -49,6 +49,17 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
    *   - No parameter → defaults to `/`
    */
   closeSettings(): Promise<void>;
+
+  // ── Volume controls (wired by DevSettingsViewModel) ──
+  /** Master volume (0–1). */
+  readonly masterVolume?: number;
+  /** BGM volume (0–1). */
+  readonly bgmVolume?: number;
+  /** SFX volume (0–1). */
+  readonly sfxVolume?: number;
+  setMasterVolume?(volume: number): void;
+  setBgmVolume?(volume: number): void;
+  setSfxVolume?(volume: number): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -61,7 +72,7 @@ export type SettingsViewModelOptions = BaseViewModelOptions;
 // Implementation
 // ---------------------------------------------------------------------------
 
-class SettingsViewModel
+export class SettingsViewModel
   extends BaseViewModel<SettingsViewModelOptions>
   implements SettingsViewModelInterface
 {

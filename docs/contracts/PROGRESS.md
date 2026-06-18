@@ -127,6 +127,47 @@
 | C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
 | C-126 | Headless App Shell & Initialization | ✅ completed |
 
+### C-150: Low-Latency Audio Engine & Service Worker
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/static/assets/audio/bgm_explore.webm` — Placeholder exploration BGM (Opus, 1s silent)
+- `apps/frontend/client/static/assets/audio/bgm_combat.webm` — Placeholder combat BGM (Opus, 1s silent)
+- `apps/frontend/client/static/assets/audio/sfx_hit.wav` — Placeholder hit SFX (PCM S16LE, 0.1s silent)
+- `apps/frontend/client/static/assets/audio/sfx_pickup.wav` — Placeholder pickup SFX (PCM S16LE, 0.1s silent)
+- `apps/frontend/client/static/service-worker.js` — Service Worker with Range request interceptor for iOS Safari audio compatibility
+- `apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts` — AudioService class (192 lines): Equal-Power crossfade BGM with dual GainNodes, concurrent SFX playback, reactive volume controls
+- `apps/frontend/client/src/lib/services/audio/audio_service.test.ts` — 16 unit tests: gain node creation, equal-power crossfade, track caching, SFX concurrency, volume clamping, stopAll cleanup, rapid crossfade cancellation, isCrossfading flag
+
+**Files modified**:
+- `apps/frontend/client/src/app.html` — Added inline script to register `/service-worker.js` with scope `/`
+- `apps/frontend/client/src/lib/services/index.ts` — Added `export * from './audio/audio_service.svelte'`
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Wired audio hooks: COMBAT_STARTED → combat BGM crossfade, COMBAT_ENDED/_endCombat/respawnPlayer → explore BGM crossfade, GAME_READY → initial explore BGM start, COMBAT_LOG ("Hits for") → sfx_hit.wav, INVENTORY_UPDATED (quantity increase) → sfx_pickup.wav; added `_previousInventoryCount` private field for inventory change detection
+- `apps/frontend/client/src/lib/test_preload.ts` — Added `audioService` and `AudioService` stubs to `$services` barrel mock
+
+**Deviations**:
+1. **Placeholder audio files are silent**: Short silent tracks (1s WebM, 0.1s WAV) generated with ffmpeg. Real audio content is out of scope — placeholder files use correct codecs for format validation.
+2. **GainNode graph built lazily**: `_ensureGraph()` creates 5 GainNodes (master, bgm, sfx, active, next) on first use via the constructor. The AudioContext starts suspended under autoplay policy.
+3. **Equal-power via linearRampToValueAtTime**: Uses Web Audio API built-in linear ramps instead of manual sine/cosine scaling. Two complementary ramps (active 0→1, next 1→0) approximate equal-power closely enough for the API's decibel-linear interpolation.
+4. **No audio ducking during SFX**: SFX and BGM play at full volume through independent gain chains. Volume ducking (lowering BGM during SFX) is future work.
+5. **Audio buffer cache**: Decoded AudioBuffers are cached via URL-keyed Map to avoid re-decoding on repeated transitions.
+
+**Design decisions**:
+1. **SFX sources are fire-and-forget**: Each `playSfx()` creates an independent `AudioBufferSourceNode` and releases it via `onended`. `stopAll()` only stops BGM sources (looping).
+2. **Crossfade uses AbortController**: Rapid transitions (e.g., combat→explore→combat) cancel the in-progress crossfade via `AbortController`, aborting both the delay timer and pending fetch.
+3. **Volume controls clamped**: `setMasterVolume/setBgmVolume/setSfxVolume` clamp to [0, 1] range and update both the reactive `$state` property and the underlying GainNode value immediately.
+4. **COMBAT_LOG hit detection via string match**: "Hits for" substring in the COMBAT_LOG message determines if a hit SFX plays. Both player and enemy hits trigger the sound.
+5. **INVENTORY_UPDATED detection via total quantity**: Compares `item.quantity` sum before/after update — triggers pickup SFX when total increases.
+
+**Known limitations**:
+- Service Worker is not yet tested in iOS Safari — the 206 byte-range response is implemented but needs real-device verification.
+- Audio files are silent placeholders — real BGM/SFX content is out of scope for this contract.
+- No audio ducking/mixing during SFX playback — BGM continues at full volume.
+- Crossfade duration is hardcoded to 1500ms default (overridable via `durationMs` parameter).
+- The service worker intercepts ALL `/assets/audio/` requests globally — could conflict with other audio-consuming features.
+- Audio buffer cache grows unbounded — no eviction policy for rarely-used tracks.
+
 ### C-145: Turn-Based Combat Loop & Dice RNG
 
 **Status**: ✅ completed

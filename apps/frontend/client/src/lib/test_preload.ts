@@ -141,6 +141,8 @@ const _localServicesMock = () => ({
   audioContextManager: _createServiceStub(),
   AudioContextManager: class {},
   audioQueuePlayer: _createServiceStub(),
+  audioService: _createServiceStub(),
+  AudioService: class {},
   AudioQueuePlayer: class {},
   ttsService: _createServiceStub(),
   TtsService: class {},
