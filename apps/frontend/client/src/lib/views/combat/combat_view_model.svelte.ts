@@ -6,6 +6,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
@@ -107,6 +108,26 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   readonly isResolvingAiAction: boolean;
 
   /**
+   * Visual dice roll state for CSS-animated d20 component.
+   * `null` when no dice roll is in progress or recently completed.
+   *
+   * Contract: C-148 Combat Immersion
+   */
+  readonly activeDiceRoll: {
+    readonly value: number;
+    readonly isRolling: boolean;
+    readonly isSuccess: boolean;
+  } | null;
+
+  /**
+   * Cinematic background image URL for the combat scene.
+   * `null` when no image has been generated yet.
+   *
+   * Contract: C-148 Combat Immersion
+   */
+  readonly combatBackgroundImageUrl: string | null;
+
+  /**
    * Executes a basic player attack via the engine bridge.
    *
    * Sends a COMBAT_ACTION(ATTACK) command to the ECS worker.
@@ -137,13 +158,23 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    *
    * The player's natural-language prompt is sent to the TextGenerationService
    * which extracts a {@link CombatActionIntent} (actionType, advantage,
-   * bonusDamage, narrative, generateImage). The narrative is appended to
-   * the combat log, image generation is optionally triggered, and the
-   * mapped COMBAT_ACTION command is dispatched to the ECS engine.
+   * bonusDamage, narrative, generateImage, enemyQuote). The narrative is
+   * appended to the combat log, image generation is optionally awaited
+   * and displayed as a background, and the mapped COMBAT_ACTION command
+   * is dispatched to the ECS engine.
    *
    * Contract: C-146 Freeform AI Combat Actions
+   * Contract: C-148 Combat Immersion (image + voice)
    */
   executeCustomAction(prompt: string): Promise<void>;
+
+  /**
+   * Manually requests a cinematic scene image for the current combat state.
+   * Uses the last combat log entry as the image prompt.
+   *
+   * Contract: C-148 Combat Immersion
+   */
+  generateSceneImage(): void;
 };
 
 /**
@@ -189,6 +220,31 @@ export class CombatViewModel
 
   /** Whether the AI is resolving a freeform custom action. */
   isResolvingAiAction = $state(false);
+
+  /**
+   * Visual dice roll state — populated when a COMBAT_LOG event contains
+   * a recognizable dice roll value (e.g., "Player rolls 17").
+   * Set to `null` when idle.
+   *
+   * Contract: C-148 Combat Immersion
+   */
+  activeDiceRoll: {
+    value: number;
+    isRolling: boolean;
+    isSuccess: boolean;
+  } | null = $state(null);
+
+  /** Timeout handle for clearing the active dice roll after animation. */
+  private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Cinematic background image URL for the combat scene.
+   * Updated when an AI-generated image completes or when the player
+   * manually requests a scene generation.
+   *
+   * Contract: C-148 Combat Immersion
+   */
+  combatBackgroundImageUrl: string | null = $state(null);
 
   combatLog: string[] = $state([]);
 
@@ -303,6 +359,9 @@ export class CombatViewModel
       this.combatLog = [event.message, ...this.combatLog];
       this.isAttacking = false;
 
+      // Extract dice roll value for animated d20 component (C-148)
+      this._triggerDiceRoll(event.message);
+
       // Update HP bars from the log event target data
       // The player ID in combat is always entity 1 (bitECS sequential allocation)
       if (event.targetId === 1) {
@@ -348,6 +407,12 @@ export class CombatViewModel
     }
     this._disposeListeners = [];
 
+    // Clear pending dice animation timeout
+    if (this._diceTimeout) {
+      clearTimeout(this._diceTimeout);
+      this._diceTimeout = null;
+    }
+
     this._bridge = undefined;
     this.activeEntities = [];
     this.currentTurnEntity = null;
@@ -361,6 +426,8 @@ export class CombatViewModel
     this.isPlayerTurn = true;
     this.isAttacking = false;
     this.isResolvingAiAction = false;
+    this.activeDiceRoll = null;
+    this.combatBackgroundImageUrl = null;
     this.combatLog = [];
     this.combatResult = null;
 
@@ -432,9 +499,23 @@ export class CombatViewModel
       // Append the DM narrative to the combat log
       this.combatLog = [intent.narrative, ...this.combatLog];
 
-      // Fire image generation asynchronously if the action is cinematic
+      // Enemy voice taunt — C-148 Combat Immersion
+      if (intent.enemyQuote && intent.enemyQuote.trim().length > 0) {
+        this.debug('executeCustomAction: enemy quote spoken', {
+          quote: intent.enemyQuote,
+        });
+        // Append the quote to the battle log (italicized enemy dialogue)
+        this.combatLog = [`*${this.enemyName} ${intent.enemyQuote}*`, ...this.combatLog];
+        // Synthesize via native Kokoro WebGPU TTS — fire-and-forget
+        void ttsService.synthesize({
+          text: intent.enemyQuote,
+          voice: 'af_heart',
+        });
+      }
+
+      // Fire image generation — await the result for background display (C-148)
       if (intent.generateImage) {
-        this.debug('executeCustomAction: triggering image generation', {
+        this.debug('executeCustomAction: generating scene image', {
           prompt: intent.narrative.slice(0, 60),
         });
         void imageGenerationService
@@ -446,6 +527,7 @@ export class CombatViewModel
               url: result.url,
               isDemo: result.isDemo,
             });
+            this.combatBackgroundImageUrl = result.url;
           })
           .catch((error) => {
             this.warn('executeCustomAction: image generation failed', error);
@@ -544,6 +626,85 @@ export class CombatViewModel
       type: 'COMBAT_ACTION',
       action: 'DEFEND',
     });
+  }
+
+  /** @inheritdoc */
+  generateSceneImage(): void {
+    if (!this.inCombat) {
+      this.debug('generateSceneImage: blocked — no combat in progress');
+      return;
+    }
+
+    const lastLogEntry = this.combatLog[0];
+    const prompt = lastLogEntry
+      ? `Fantasy combat scene — ${this.enemyName} battle: ${lastLogEntry}`
+      : `Fantasy combat scene against a fearsome ${this.enemyName}`;
+
+    this.debug('generateSceneImage: requesting', {
+      promptPreview: prompt.slice(0, 60),
+      hasLastLog: !!lastLogEntry,
+    });
+
+    void imageGenerationService
+      .generateImage({ prompt })
+      .then((result) => {
+        this.debug('generateSceneImage: complete', {
+          url: result.url,
+          isDemo: result.isDemo,
+        });
+        this.combatBackgroundImageUrl = result.url;
+      })
+      .catch((error) => {
+        this.warn('generateSceneImage: failed', error);
+      });
+  }
+
+  // -----------------------------------------------------------------------
+  // Private — dice roll animation trigger (C-148 Combat Immersion)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Extracts a d20 roll value from a COMBAT_LOG message and triggers
+   * the animated dice component.
+   *
+   * The engine emits messages like "Player rolls 17 (+4 = 21) to hit."
+   * or "Enemy rolls 5 (+3 = 8) vs Evasion 12 — Miss!".
+   * This method parses the roll value, sets {@link activeDiceRoll} with
+   * `isRolling: true`, then resolves the animation after ~1.5 seconds.
+   *
+   * Detects success/failure by checking for "Miss!" in the message.
+   * If no dice pattern is found, the method is a no-op.
+   */
+  private _triggerDiceRoll(message: string): void {
+    // Clear any pending dice timeout
+    if (this._diceTimeout) {
+      clearTimeout(this._diceTimeout);
+      this._diceTimeout = null;
+    }
+
+    // Parse the dice roll: "Player rolls 17" or "Enemy rolls 5"
+    const diceMatch = message.match(/(?:Player|Enemy) rolls (\d+)/);
+    if (!diceMatch) {
+      return;
+    }
+
+    const value = Number.parseInt(diceMatch[1], 10);
+    if (Number.isNaN(value) || value < 1 || value > 20) {
+      return;
+    }
+
+    const isSuccess = !message.includes('Miss!');
+
+    this.debug('_triggerDiceRoll', { value, isSuccess, messagePreview: message.slice(0, 60) });
+
+    // Start the rolling animation
+    this.activeDiceRoll = { value, isRolling: true, isSuccess };
+
+    // After ~1.5 seconds, reveal the final result
+    this._diceTimeout = setTimeout(() => {
+      this.activeDiceRoll = { value, isRolling: false, isSuccess };
+      this._diceTimeout = null;
+    }, 1500);
   }
 }
 

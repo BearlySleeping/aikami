@@ -15,7 +15,11 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { CombatDevViewModel } from '$lib/views/combat/combat_dev_view_model.svelte';
+import {
+  CombatDevViewModel,
+  type CombatDevViewModelOptions,
+} from '$lib/views/combat/combat_dev_view_model.svelte';
+import { gameStateService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -68,6 +72,10 @@ export type CombatSandboxViewModelInterface = BaseViewModelInterface & {
   devGrantXp: () => void;
   /** DEV: simulate COMBAT_ENDED victory with a specific enemy ID. */
   devSimulateVictoryWithEnemy: () => void;
+  /** DEV: toggle real AI services (text + image generation). */
+  devToggleRealAi: (enabled: boolean) => void;
+  /** Whether real AI services (vs mock) are enabled. */
+  readonly useRealAi: boolean;
 };
 
 export type CombatSandboxViewModelOptions = BaseViewModelOptions & {};
@@ -101,6 +109,9 @@ class CombatSandboxViewModel
   playerXpToNextLevel = $state<number>(100);
   defeatedEnemyIds = $state<string[]>([]);
   lastLevelUpEvent = $state<string | undefined>(undefined);
+
+  /** Whether real AI services (text + image) are enabled. */
+  useRealAi = $state<boolean>(false);
 
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
@@ -158,8 +169,10 @@ class CombatSandboxViewModel
 
   /** @inheritdoc */
   dismissCombat(): void {
-    // Reset engine mode to EXPLORE so the player can move again (C-147)
+    // Reset engine mode and unlock input so the player can move again
     this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
+    this._gameWorld?.setInputLocked(false);
+    gameStateService.setMode('EXPLORE');
     void this.combatViewModel?.dispose();
     this.combatViewModel = undefined;
   }
@@ -204,10 +217,17 @@ class CombatSandboxViewModel
         enemyHp: event.enemyHp,
       });
 
+      // Lock input and set engine mode to COMBAT so WASD/E keys
+      // pass through to the combat dialog's text input (C-148 fix)
+      this._gameWorld?.setInputLocked(true);
+      this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'COMBAT' } as never);
+      gameStateService.setMode('COMBAT');
+
       this.combatViewModel = new CombatDevViewModel({
         className: 'CombatSandboxCombatViewModel',
         onDismissOverlay: () => this.dismissCombat(),
-      });
+        useRealAi: this.useRealAi,
+      } satisfies CombatDevViewModelOptions);
 
       // Feed enemy data into the combat VM — skip initialize()
       // because CombatDevViewModel.initialize() overwrites with mock data.
@@ -237,8 +257,10 @@ class CombatSandboxViewModel
         // Delay dismiss so the victory banner is visible (C-147)
         setTimeout(() => this.dismissCombat(), 2500);
       } else {
-        // Player defeated — show Game Over, reset engine mode (C-147)
+        // Player defeated — show Game Over, unlock input
+        this._gameWorld?.setInputLocked(false);
         this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
+        gameStateService.setMode('EXPLORE');
         this.isGameOver = true;
         void this.combatViewModel?.dispose();
         this.combatViewModel = undefined;
@@ -263,6 +285,9 @@ class CombatSandboxViewModel
     this.isGameOver = false;
     this.engineReady = false;
     this.mapLoaded = false;
+
+    // Unlock input before reloading map
+    this._gameWorld?.setInputLocked(false);
 
     // Reload the combat sandbox map — defeated enemies are filtered
     await this._gameWorld?.loadMap(
@@ -302,6 +327,14 @@ class CombatSandboxViewModel
     const testEnemyId = `enemy_dev_${Date.now()}`;
     this.defeatedEnemyIds = [...this.defeatedEnemyIds, testEnemyId];
     this.playerXp += 25;
+  }
+
+  /** @inheritdoc */
+  devToggleRealAi(enabled: boolean): void {
+    this.useRealAi = enabled;
+    // Push to existing combat VM so toggle takes effect mid-combat
+    this.combatViewModel?.setUseRealAi(enabled);
+    this.debug('devToggleRealAi', { enabled });
   }
 }
 

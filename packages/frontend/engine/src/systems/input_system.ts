@@ -5,6 +5,7 @@ import { addComponent, set } from 'bitecs';
 import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { getEngineGameMode } from '../state/game_mode.ts';
 import type { Direction } from '../types.ts';
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,13 @@ const setupInput = (world: World, playerEntityId: number, bridge: EngineBridge):
 
   // Keyboard input: WASD + arrow keys
   const handleKeyDown = (event: KeyboardEvent): void => {
+    // Gate on game mode — only process movement keys in EXPLORE mode.
+    // During COMBAT/MENU/DIALOGUE, keyboard events pass through to the
+    // overlay UI (combat dialog text input, etc.).
+    if (getEngineGameMode() !== 'EXPLORE') {
+      return;
+    }
+
     const direction = keyToDirection(event.key);
     if (!direction) {
       return;
@@ -87,6 +95,11 @@ const setupInput = (world: World, playerEntityId: number, bridge: EngineBridge):
   };
 
   const handleKeyUp = (event: KeyboardEvent): void => {
+    // Gate on game mode — same as keydown above
+    if (getEngineGameMode() !== 'EXPLORE') {
+      return;
+    }
+
     const direction = keyToDirection(event.key);
     if (!direction) {
       return;
