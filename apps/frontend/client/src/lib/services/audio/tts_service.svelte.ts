@@ -128,6 +128,41 @@ type WordBoundary = {
   endTime: number;
 };
 
+// ---------------------------------------------------------------------------
+// TtsService
+//
+// Text-to-speech with dual backend: voice microservice (REST) or
+// browser-native WebGPU Kokoro worker.
+//
+// Architecture:
+//   1. initialize() → checkKokoroServer() → /api/voice proxy
+//      ├─ Found: status='ready', routes synthesize() through REST API
+//      │         (voice microservice → Docker/binary Kokoro on port 8880)
+//      └─ Not found: spawns WebGPU worker, loads 82M Kokoro-ONNX model
+//
+//   2. synthesize() — fire-and-forget, does not await playback
+//      ├─ REST path: POST /api/voice/v1/audio/speech → WAV → decode → play
+//      └─ WebGPU path: postMessage to worker → PCM → AudioBuffer → play
+//
+// Limitations:
+//   - WebGPU requires Chrome with --enable-unsafe-webgpu flag.
+//     Without it, initialize() fails with "no available backend found".
+//     preview.ts launches Chromium with this flag by default.
+//   - WebGPU model load takes 20-40s on first run (downloads 82M ONNX weights
+//     from HuggingFace CDN). Subsequent loads use browser cache.
+//   - WebGPU uses q8 quantization — lower quality than full-precision REST.
+//   - REST path requires a running voice microservice (tmux voice) or Docker
+//     Kokoro container on port 8880 with --publish 8880:8880.
+//   - synthesize() is fire-and-forget — callers that need playback-completion
+//     awareness should use speak() with word-level tracking instead.
+//   - Audio may sound sped up if sample rate mismatch between Kokoro output
+//     (24kHz) and AudioContext. The worker passes the correct rate via
+//     result.sampling_rate; playAudioBuffer resets scheduling clock before
+//     each single-shot playback.
+//
+// Contract: C-131, C-148
+// ---------------------------------------------------------------------------
+
 class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInterface {
   status: TtsStatus = $state('uninitialized');
   errorMessage: string | null = $state(null);
