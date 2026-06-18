@@ -28,10 +28,7 @@ const waitForCombatReady = async (page: import('@playwright/test').Page) => {
 /**
  * Triggers a custom action and waits for the mock AI resolution to complete.
  */
-const submitCustomAction = async (
-  page: import('@playwright/test').Page,
-  prompt: string,
-) => {
+const submitCustomAction = async (page: import('@playwright/test').Page, prompt: string) => {
   const input = page.locator('[data-testid="combat-custom-action-input"]');
   const submitButton = page.locator('[data-testid="combat-custom-action-submit"]');
 
@@ -198,7 +195,10 @@ test.describe('Combat Immersion (C-148)', () => {
 
     // Submit an epic/heroic action that should trigger the epic mood
     // (dev VM triggers epic mood for ATTACK with advantage/high bonus)
-    await submitCustomAction(page, 'I leap from the chandelier and drive my sword into the dragons heart!');
+    await submitCustomAction(
+      page,
+      'I leap from the chandelier and drive my sword into the dragons heart!',
+    );
 
     // Wait for dice animation to complete
     await page.waitForTimeout(2000);
