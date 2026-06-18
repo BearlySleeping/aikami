@@ -2,7 +2,19 @@
 //
 // Dev sandbox override — injects mock combat state for sandbox testing.
 // NEVER import this file from production code or non-(dev) routes.
+//
+// When useRealAi is enabled, executeCustomAction routes through the real
+// TextGenerationService (LLM) and generateSceneImage through the real
+// ImageGenerationService (ComfyUI). When disabled (default), all AI calls
+// are mocked locally for fast iteration.
 
+import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import {
+  COMBAT_ACTION_SYSTEM_PROMPT,
+  type CombatActionIntent,
+  CombatActionSchema,
+} from '../../game/core/ai/prompts/combat_action_schema.ts';
 import { CombatViewModel, type CombatViewModelOptions } from './combat_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +36,30 @@ const MOCK_PLAYER_ATTACKS = [
   '[Dev Mock] Critical hit! Player deals 30 damage!',
 ];
 
+const MOCK_ENEMY_QUOTES = [
+  '"You dare challenge me?!"',
+  '"Pathetic! Is that all you have?"',
+  '"I shall feast on your bones!"',
+  '"A worthy opponent... but not worthy enough!"',
+  '"You cannot defeat me!"',
+];
+
+// ---------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------
+
+/** Extended options for the dev sandbox combat VM. */
+export type CombatDevViewModelOptions = CombatViewModelOptions & {
+  /**
+   * When true, routes executeCustomAction through the real
+   * TextGenerationService (LLM) and generateSceneImage through the real
+   * ImageGenerationService (ComfyUI).
+   *
+   * When false (default), all AI calls are mocked locally.
+   */
+  useRealAi?: boolean;
+};
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -37,6 +73,25 @@ const MOCK_PLAYER_ATTACKS = [
 export class CombatDevViewModel extends CombatViewModel {
   /** Counter for cycling through mock attack messages. */
   private _attackIndex = 0;
+
+  /** Whether to use real AI services instead of mock responses. */
+  private _useRealAi: boolean;
+
+  constructor(options: CombatDevViewModelOptions) {
+    super(options);
+    this._useRealAi = options.useRealAi ?? false;
+  }
+
+  /**
+   * Enables or disables real AI services at runtime.
+   * When enabled, subsequent {@link executeCustomAction} calls route
+   * through TextGenerationService (LLM) and {@link generateSceneImage}
+   * calls route through ImageGenerationService (ComfyUI).
+   */
+  setUseRealAi(enabled: boolean): void {
+    this._useRealAi = enabled;
+    this.debug('setUseRealAi', { enabled });
+  }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -63,6 +118,8 @@ export class CombatDevViewModel extends CombatViewModel {
       return;
     }
     this.isAttacking = true;
+    // Show mock dice roll before simulation (C-148)
+    this._mockDiceRoll(true);
     this.simulatePlayerAttack();
     this.isAttacking = false;
   }
@@ -86,6 +143,8 @@ export class CombatDevViewModel extends CombatViewModel {
     }
     this.isAttacking = true;
     this._addLogEntry('[Dev Mock] Player takes a defensive stance!');
+    // Show mock dice roll before enemy counter-attack (C-148)
+    this._mockDiceRoll(true);
     this.simulateEnemyTurn();
     this.isAttacking = false;
   }
@@ -109,9 +168,19 @@ export class CombatDevViewModel extends CombatViewModel {
     this.debug('executeCustomAction: resolving', {
       promptLength: trimmed.length,
       promptPreview: trimmed.slice(0, 40),
+      useRealAi: this._useRealAi,
     });
 
-    // Simulate AI interpretation with a brief delay
+    // Trigger mock dice roll (C-148)
+    this._mockDiceRoll(true);
+
+    if (this._useRealAi) {
+      // ── Real AI path: call TextGenerationService ──
+      await this._executeRealAiAction(trimmed);
+      return;
+    }
+
+    // ── Mock AI path (default) ──
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     // ── Keyword-based action classification (mock AI) ──
@@ -133,6 +202,12 @@ export class CombatDevViewModel extends CombatViewModel {
       mods.push(`+${bonusDamage} DMG`);
     }
     const modLabel = mods.length > 0 ? ` (${mods.join(', ')})` : '';
+
+    // ── Mock enemy quote (C-148 Combat Immersion) ──
+    if (Math.random() > 0.4) {
+      const quote = MOCK_ENEMY_QUOTES[Math.floor(Math.random() * MOCK_ENEMY_QUOTES.length)];
+      this.combatLog = [`*Goblin ${quote}*`, ...this.combatLog];
+    }
 
     // ── Route based on classified action type ──
     switch (actionType) {
@@ -184,6 +259,54 @@ export class CombatDevViewModel extends CombatViewModel {
         break;
       }
     }
+  }
+
+  /** @inheritdoc */
+  override generateSceneImage(): void {
+    if (!this.inCombat) {
+      return;
+    }
+
+    if (this._useRealAi) {
+      this.debug('generateSceneImage: real AI — calling ImageGenerationService');
+      // Build a contextual prompt from the combat state
+      const prompt = [
+        `Fantasy combat scene — fighting a ${this.enemyName}`,
+        `Player HP: ${this.playerHp}/${this.playerMaxHp}`,
+        `Enemy HP: ${this.enemyHp}/${this.enemyMaxHp}`,
+        this.combatLog[0] ? `Latest action: ${this.combatLog[0]}` : undefined,
+      ]
+        .filter(Boolean)
+        .join('. ');
+
+      void imageGenerationService
+        .generateImage({ prompt })
+        .then((result) => {
+          this.debug('generateSceneImage: real AI complete', {
+            url: result.url,
+            isDemo: result.isDemo,
+          });
+          this.combatBackgroundImageUrl = result.url;
+        })
+        .catch((error) => {
+          this.warn('generateSceneImage: real AI failed', error);
+        });
+      return;
+    }
+
+    this.debug('generateSceneImage: dev mock — setting placeholder background');
+    // Use a data URI gradient so it renders without CORP issues
+    this.combatBackgroundImageUrl =
+      'data:image/svg+xml,' +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">' +
+          '<defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">' +
+          '<stop offset="0%" style="stop-color:#2a1a3a"/>' +
+          '<stop offset="100%" style="stop-color:#1a2a3a"/></linearGradient></defs>' +
+          '<rect width="800" height="600" fill="url(#g)"/>' +
+          '<text x="400" y="300" font-family="monospace" font-size="28" fill="#9f7aea" text-anchor="middle" dominant-baseline="middle">' +
+          '⚔️ Combat Scene ⚔️</text></svg>',
+      );
   }
 
   /**
@@ -320,6 +443,8 @@ export class CombatDevViewModel extends CombatViewModel {
     this.enemyMaxHp = MOCK_ENEMY_MAX_HP;
     this.combatLog = [];
     this.combatResult = null;
+    this.combatBackgroundImageUrl = null;
+    this.activeDiceRoll = null;
     this.enemyEntityId = 2002;
     this.activeEntities = [1001, 2002];
     this.currentTurnEntity = 1001;
@@ -328,6 +453,180 @@ export class CombatDevViewModel extends CombatViewModel {
   }
 
   // ── Private helpers ───────────────────────────────────────────────────
+
+  /**
+   * Executes a custom combat action via the real TextGenerationService
+   * (LLM). Called when {@link _useRealAi} is true.
+   *
+   * Calls extractStructure with the CombatActionSchema, then applies the
+   * LLM's response to the mock combat flow (narrative, bonusDamage,
+   * advantage, enemyQuote, generateImage). Falls back to mock classification
+   * on error.
+   */
+  private async _executeRealAiAction(trimmed: string): Promise<void> {
+    try {
+      const contextualPrompt = [
+        `Player HP: ${this.playerHp}/${this.playerMaxHp}`,
+        `Enemy: ${this.enemyName} (HP: ${this.enemyHp}/${this.enemyMaxHp})`,
+        `Player action: "${trimmed}"`,
+      ].join('\n');
+
+      this.debug('_executeRealAiAction: calling extractStructure', {
+        contextualPromptLength: contextualPrompt.length,
+      });
+
+      const raw = await textGenerationService.extractStructure({
+        schema: CombatActionSchema as unknown as Record<string, unknown>,
+        schemaName: 'CombatActionIntent',
+        prompt: contextualPrompt,
+        systemPrompt: COMBAT_ACTION_SYSTEM_PROMPT,
+      });
+
+      const intent = raw as CombatActionIntent;
+
+      this.debug('_executeRealAiAction: LLM response', {
+        actionType: intent.actionType,
+        bonusDamage: intent.bonusDamage,
+        advantage: intent.advantage,
+        generateImage: intent.generateImage,
+        hasEnemyQuote: !!intent.enemyQuote,
+        narrativePreview: intent.narrative.slice(0, 80),
+      });
+
+      // Append the DM narrative to the combat log
+      this.combatLog = [intent.narrative, ...this.combatLog];
+
+      // Enemy voice taunt (C-148)
+      if (intent.enemyQuote && intent.enemyQuote.trim().length > 0) {
+        this.combatLog = [`*${this.enemyName} ${intent.enemyQuote}*`, ...this.combatLog];
+      }
+
+      // Fire image generation if the action is cinematic (C-148)
+      if (intent.generateImage) {
+        this.debug('_executeRealAiAction: triggering image generation');
+        void imageGenerationService
+          .generateImage({ prompt: `Fantasy combat scene: ${intent.narrative}` })
+          .then((result) => {
+            this.combatBackgroundImageUrl = result.url;
+          })
+          .catch((error) => {
+            this.warn('_executeRealAiAction: image generation failed', error);
+          });
+      }
+
+      // Apply combat mechanics based on LLM classification
+      switch (intent.actionType) {
+        case 'FLEE': {
+          this.combatLog = [`[AI] Interpreted as FLEE. Retreating…`, ...this.combatLog];
+          this._endBattle('defeat');
+          break;
+        }
+        case 'DEFEND': {
+          this.combatLog = [`[AI] Interpreted as DEFEND. Bracing…`, ...this.combatLog];
+          this.simulateEnemyTurn();
+          break;
+        }
+        default: {
+          this.isAttacking = true;
+          // Apply bonus damage from LLM
+          const damage = 10 + (intent.bonusDamage ?? 0) * 2;
+          const advLabel = intent.advantage ? ' [ADV]' : '';
+          this.combatLog = [
+            `[AI] Interpreted as ATTACK${advLabel} (bonus +${intent.bonusDamage ?? 0} DMG). Rolling…`,
+            ...this.combatLog,
+          ];
+          this.enemyHp = Math.max(0, this.enemyHp - damage);
+          this._addLogEntry(
+            `[AI] Deals ${damage} damage! (Enemy HP: ${this.enemyHp}/${this.enemyMaxHp})`,
+          );
+
+          if (this.enemyHp <= 0) {
+            this._endBattle('victory');
+          } else {
+            this.simulateEnemyTurn();
+          }
+          this.isAttacking = false;
+          break;
+        }
+      }
+    } catch (error) {
+      this.warn('_executeRealAiAction: failed, falling back to mock', error);
+      this.combatLog = [
+        `[AI Error] ${(error as Error).message}. Using mock fallback.`,
+        ...this.combatLog,
+      ];
+      // Fall back to mock classification
+      const actionType = this._classifyMockAction(trimmed);
+      this._applyMockAction(trimmed, actionType, 0, false);
+    } finally {
+      this.isResolvingAiAction = false;
+    }
+  }
+
+  /**
+   * Applies mock combat results based on action classification.
+   * Extracted from executeCustomAction so both mock and real-fallback
+   * paths can reuse it.
+   */
+  private _applyMockAction(
+    _trimmed: string,
+    actionType: 'ATTACK' | 'DEFEND' | 'FLEE',
+    bonusDamage: number,
+    hasAdvantage: boolean,
+  ): void {
+    const mods: string[] = [];
+    if (hasAdvantage) {
+      mods.push('ADV');
+    }
+    if (bonusDamage > 0) {
+      mods.push(`+${bonusDamage} DMG`);
+    }
+    const modLabel = mods.length > 0 ? ` (${mods.join(', ')})` : '';
+
+    switch (actionType) {
+      case 'FLEE': {
+        this.combatLog = [
+          `[Dev Mock] AI interpreted as FLEE${modLabel}. Retreating…`,
+          ...this.combatLog,
+        ];
+        this._endBattle('defeat');
+        this.isResolvingAiAction = false;
+        return;
+      }
+      case 'DEFEND': {
+        this.combatLog = [
+          `[Dev Mock] AI interpreted as DEFEND${modLabel}. Bracing…`,
+          ...this.combatLog,
+        ];
+        this.simulateEnemyTurn();
+        this.isResolvingAiAction = false;
+        return;
+      }
+      default: {
+        this.isAttacking = true;
+        this.combatLog = [
+          `[Dev Mock] AI interpreted as ATTACK${modLabel}. Rolling…`,
+          ...this.combatLog,
+        ];
+
+        const damage = 10 + bonusDamage * 2;
+        this.enemyHp = Math.max(0, this.enemyHp - damage);
+        this._addLogEntry(
+          `[Dev Mock] Custom action deals ${damage} damage! (Enemy HP: ${this.enemyHp}/${this.enemyMaxHp})`,
+        );
+
+        if (this.enemyHp <= 0) {
+          this._endBattle('victory');
+        } else {
+          this.simulateEnemyTurn();
+        }
+
+        this.isAttacking = false;
+        this.isResolvingAiAction = false;
+        break;
+      }
+    }
+  }
 
   private _endBattle(result: 'victory' | 'defeat'): void {
     this.combatResult = result;
@@ -340,12 +639,37 @@ export class CombatDevViewModel extends CombatViewModel {
   private _addLogEntry(text: string): void {
     this.combatLog = [text, ...this.combatLog];
   }
+
+  /**
+   * Triggers a mock d20 dice roll animation.
+   * Generates a random 1–20 value and sets {@link activeDiceRoll}
+   * directly on the parent class.
+   *
+   * @param success - Whether the roll is a hit (true) or miss (false).
+   *   When not provided, randomly determines based on roll value.
+   *
+   * Contract: C-148 Combat Immersion
+   */
+  private _mockDiceRoll(success?: boolean): void {
+    const value = Math.floor(Math.random() * 20) + 1;
+    const isSuccess = success ?? value >= 10;
+
+    this.debug('_mockDiceRoll', { value, isSuccess });
+
+    // Start the rolling animation
+    this.activeDiceRoll = { value, isRolling: true, isSuccess };
+
+    // After ~1.5 seconds, reveal the final result
+    setTimeout(() => {
+      this.activeDiceRoll = { value, isRolling: false, isSuccess };
+    }, 1500);
+  }
 }
 
 /**
  * Factory function — returns a CombatDevViewModel with mock data.
  * Only use in (dev) routes or tests.
  */
-export const getCombatDevViewModel = (options: CombatViewModelOptions): CombatDevViewModel => {
+export const getCombatDevViewModel = (options: CombatDevViewModelOptions): CombatDevViewModel => {
   return new CombatDevViewModel(options);
 };

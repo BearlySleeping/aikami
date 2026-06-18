@@ -136,6 +136,12 @@
         { label: 'Force Game Over', onClick: () => viewModel.devForceGameOver() },
         viewModel.isGameOver ? { label: 'Respawn', onClick: () => viewModel.respawnPlayer() } : undefined,
       ].filter((a): a is { label: string; onClick: () => void } => a !== undefined)}
+      toggles={[
+        {
+          label: 'Use Real AI (LLM + Image)',
+          onChange: (checked: boolean) => viewModel.devToggleRealAi(checked),
+        },
+      ]}
     />
   {/if}
 </div>
