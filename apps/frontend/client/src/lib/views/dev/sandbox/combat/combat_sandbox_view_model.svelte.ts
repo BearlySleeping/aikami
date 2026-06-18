@@ -15,6 +15,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import {
   CombatDevViewModel,
   type CombatDevViewModelOptions,
@@ -76,6 +77,12 @@ export type CombatSandboxViewModelInterface = BaseViewModelInterface & {
   devToggleRealAi: (enabled: boolean) => void;
   /** Whether real AI services (vs mock) are enabled. */
   readonly useRealAi: boolean;
+  /** DEV: initialize the native Kokoro WebGPU TTS engine. */
+  devInitTts: () => Promise<void>;
+  /** DEV: speak a test enemy voice taunt via TTS. */
+  devTestEnemyVoice: () => void;
+  /** Current TTS engine status (for debug display). */
+  readonly devTtsStatus: string;
 };
 
 export type CombatSandboxViewModelOptions = BaseViewModelOptions & {};
@@ -335,6 +342,34 @@ class CombatSandboxViewModel
     // Push to existing combat VM so toggle takes effect mid-combat
     this.combatViewModel?.setUseRealAi(enabled);
     this.debug('devToggleRealAi', { enabled });
+  }
+
+  /** @inheritdoc */
+  get devTtsStatus(): string {
+    const status = ttsService.status;
+    if (ttsService.errorMessage) {
+      return `${status} (${ttsService.errorMessage})`;
+    }
+    return status;
+  }
+
+  /** @inheritdoc */
+  async devInitTts(): Promise<void> {
+    this.debug('devInitTts', { currentStatus: ttsService.status });
+    await ttsService.initialize();
+  }
+
+  /** @inheritdoc */
+  devTestEnemyVoice(): void {
+    this.debug('devTestEnemyVoice', { status: ttsService.status });
+    const phrases = [
+      'You dare challenge me, mortal?!',
+      'I shall feast on your bones!',
+      'Pathetic! Is that all you have?',
+      'A worthy opponent... but not worthy enough!',
+    ];
+    const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+    void ttsService.synthesize({ text: phrase, voice: 'af_heart' });
   }
 }
 
