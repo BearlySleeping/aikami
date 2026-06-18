@@ -157,4 +157,130 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       expect(viewModel.combatBackgroundImageUrl).toBeNull();
     });
   });
+
+  // -----------------------------------------------------------------------
+  // Gatekeeping — C-149 Combat Mechanics & AI Gatekeeping
+  // -----------------------------------------------------------------------
+
+  describe('executeCustomAction — C-149 Gatekeeping', () => {
+    let viewModel: CombatViewModel;
+    let bridgeSendCalls: Array<Record<string, unknown>>;
+
+    beforeEach(() => {
+      viewModel = createViewModel();
+      bridgeSendCalls = [];
+
+      // Set up mock engine bridge
+      const vm = viewModel as unknown as {
+        _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
+      };
+      vm._bridge = {
+        send: (cmd: Record<string, unknown>) => {
+          bridgeSendCalls.push(cmd);
+        },
+        on: () => () => {}, // No-op listener cleanup
+      };
+
+      // Put the ViewModel in an active combat state
+      viewModel.currentTurnEntity = 1;
+      viewModel.enemyEntityId = 2;
+      viewModel.enemyName = 'Goblin';
+      viewModel.playerHp = 80;
+      viewModel.playerMaxHp = 100;
+      viewModel.enemyHp = 60;
+      viewModel.enemyMaxHp = 80;
+      viewModel.activeEntities = [1, 2];
+      viewModel.playerLevel = 3;
+      viewModel.playerAttack = 7;
+      viewModel.playerDefense = 14;
+    });
+
+    test('should append invalidReason to combat log when actionValid is false', async () => {
+      // Mock textGenerationService to return a gatekept response
+      const extractStructureMod = await import(
+        '$lib/services/ai/text_generation_service.svelte.ts'
+      );
+      const origExtract = (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure;
+
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = async () => ({
+        actionType: 'ATTACK',
+        narrative: "You reach for your potion belt — but it's empty!",
+        bonusDamage: 0,
+        advantage: false,
+        generateImage: false,
+        actionValid: false,
+        invalidReason:
+          'You reach for a healing potion, but your bags are empty! The goblin snickers at your misfortune.',
+      });
+
+      await viewModel.executeCustomAction('I drink a healing potion');
+
+      // The invalid reason should appear in the combat log
+      const logString = viewModel.combatLog.join(' ');
+      expect(logString).toContain('bags are empty');
+      expect(logString).toContain('potion belt');
+
+      // The engine command must NOT be dispatched
+      expect(bridgeSendCalls.length).toBe(0);
+
+      // Should not be stuck in resolving state
+      expect(viewModel.isResolvingAiAction).toBe(false);
+
+      // Restore original
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = origExtract;
+    });
+
+    test('should dispatch COMBAT_ACTION when actionValid is true', async () => {
+      const extractStructureMod = await import(
+        '$lib/services/ai/text_generation_service.svelte.ts'
+      );
+      const origExtract = (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure;
+
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = async () => ({
+        actionType: 'ATTACK',
+        narrative: 'You swing your sword in a wide arc!',
+        bonusDamage: 2,
+        advantage: false,
+        generateImage: false,
+        actionValid: true,
+      });
+
+      await viewModel.executeCustomAction('I swing my sword at the goblin');
+
+      // The engine command MUST be dispatched
+      expect(bridgeSendCalls.length).toBe(1);
+      expect(bridgeSendCalls[0].type).toBe('COMBAT_ACTION');
+      expect(bridgeSendCalls[0].action).toBe('ATTACK');
+
+      // Should not be stuck in resolving state
+      expect(viewModel.isResolvingAiAction).toBe(false);
+
+      // Restore original
+      (
+        extractStructureMod.textGenerationService as {
+          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        }
+      ).extractStructure = origExtract;
+    });
+  });
 });

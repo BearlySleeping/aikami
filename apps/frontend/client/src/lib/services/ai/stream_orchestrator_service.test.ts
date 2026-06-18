@@ -27,7 +27,7 @@ import {
   type StreamOrchestratorInterface,
   type StreamOrchestratorOptions,
   type TextStreamConnection,
-} from './stream_orchestrator.svelte';
+} from './stream_orchestrator_service.svelte';
 
 // Default fetch mock — tests override per describe() block as needed.
 // Silences "ConnectionRefused" noise from Kokoro dispatch in tests that

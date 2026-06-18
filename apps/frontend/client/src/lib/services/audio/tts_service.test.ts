@@ -30,6 +30,12 @@ const setupWorkerMock = (): void => {
     instances: [],
   };
 
+  // Stub fetch so checkKokoroServer() fails fast (no real network calls)
+  // @ts-expect-error — replacing global fetch
+  globalThis.fetch = mock(async () => {
+    throw new Error('fetch not available in test');
+  });
+
   // @ts-expect-error — replacing native Worker with mock
   globalThis.Worker = class MockWorker {
     onmessage: ((event: MessageEvent) => void) | null = null;
@@ -62,6 +68,7 @@ const setupWorkerMock = (): void => {
 
 const teardownWorkerMock = (): void => {
   delete (globalThis as Record<string, unknown>).Worker;
+  delete (globalThis as Record<string, unknown>).fetch;
 };
 
 /** Simulate the worker posting a response to the main thread. */
@@ -120,6 +127,10 @@ describe('TtsService — Native WebGPU Voice (C-131)', () => {
     (ttsService as unknown as Record<string, unknown>)._worker = null;
 
     const initPromise = ttsService.initialize();
+
+    // Wait for checkKokoroServer() to complete and worker to be created
+    // before simulating the worker response (avoid race condition).
+    await new Promise((r) => setTimeout(r, 10));
 
     // Simulate worker responding with 'ready'
     simulateWorkerMessage({ type: 'ready' });

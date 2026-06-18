@@ -184,6 +184,18 @@ export class CombatDevViewModel extends CombatViewModel {
     // ── Mock AI path (default) ──
     await new Promise((resolve) => setTimeout(resolve, 500));
 
+    // ── Gatekeeping: detect impossible item-based actions (C-149) ──
+    const gatekeepResult = this._checkGatekeeping(trimmed);
+    if (gatekeepResult) {
+      this.combatLog = [gatekeepResult.narrative, ...this.combatLog];
+      this.combatLog = [`🚫 ${gatekeepResult.invalidReason}`, ...this.combatLog];
+      this.isResolvingAiAction = false;
+      this.debug('executeCustomAction: gatekept', {
+        invalidReason: gatekeepResult.invalidReason,
+      });
+      return;
+    }
+
     // ── Keyword-based action classification (mock AI) ──
     const actionType = this._classifyMockAction(trimmed);
     this.debug('executeCustomAction: classified', { actionType, prompt: trimmed.slice(0, 40) });
@@ -310,6 +322,42 @@ export class CombatDevViewModel extends CombatViewModel {
           '<text x="400" y="300" font-family="monospace" font-size="28" fill="#9f7aea" text-anchor="middle" dominant-baseline="middle">' +
           '⚔️ Combat Scene ⚔️</text></svg>',
       );
+  }
+
+  /**
+   * Checks whether a player action should be gatekept (rejected) because
+   * they're trying to use items they don't have.
+   *
+   * Simulates the LLM's gatekeeping role — no network call.
+   *
+   * @returns A gatekeep result with narrative and invalidReason, or null if allowed.
+   *
+   * Contract: C-149 Combat Gatekeeping
+   */
+  private _checkGatekeeping(_prompt: string): { narrative: string; invalidReason: string } | null {
+    const lower = _prompt.toLowerCase();
+
+    // Detect item-usage patterns that imply the player has an item they don't
+    const itemPatterns = [
+      /drink.*(potion|elixir|tonic)/i,
+      /use.*(potion|scroll|wand|bomb)/i,
+      /throw.*(bomb|grenade|knife|dart)/i,
+      /quaff/i,
+    ];
+
+    for (const pattern of itemPatterns) {
+      if (pattern.test(lower)) {
+        // Player is trying to use an item — gatekeep since inventory is empty
+        return {
+          narrative:
+            'You reach for the item, fingers grasping at empty air. Your pack is bare — nothing but lint and old breadcrumbs!',
+          invalidReason:
+            'You reach for the item, but your inventory is empty! The goblin cackles at your foolishness. "Nice try, hero!"',
+        };
+      }
+    }
+
+    return null;
   }
 
   /**

@@ -198,4 +198,41 @@ test.describe('Freeform AI Combat Actions (C-146)', () => {
     const submitButton = page.locator('[data-testid="combat-custom-action-submit"]');
     await expect(submitButton).not.toBeVisible();
   });
+
+  test('should gatekeep invalid item-based actions and show DM reasoning (C-149)', async ({
+    page,
+  }) => {
+    await page.goto(COMBAT_DEV_URL, { waitUntil: 'domcontentloaded' });
+    await waitForCombatReady(page);
+
+    const input = page.locator('[data-testid="combat-custom-action-input"]');
+    const submitButton = page.locator('[data-testid="combat-custom-action-submit"]');
+
+    // Type an action that tries to use an item the player doesn't have
+    await input.fill('I drink a healing potion');
+    await submitButton.click();
+
+    // Wait for mock resolution (500ms dev VM delay)
+    await page.waitForTimeout(1000);
+
+    // The combat log should contain the gatekeeping response
+    const combatLog = page.locator('ul.max-h-40');
+    const logText = await combatLog.textContent();
+
+    // The 🚫 gatekeeping indicator should appear
+    expect(logText).toContain('🚫');
+
+    // The invalid reason should mention empty inventory
+    expect(logText).toContain('inventory is empty');
+
+    // The narrative should be visible too
+    expect(logText).toContain('fingers grasping');
+
+    // The attack button should be re-enabled (turn was NOT consumed)
+    const attackButton = page.locator('[data-testid="combat-attack-btn"]');
+    await expect(attackButton).toBeEnabled();
+
+    // Input should be cleared
+    await expect(input).toHaveValue('');
+  });
 });
