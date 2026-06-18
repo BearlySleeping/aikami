@@ -56,6 +56,14 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   endSession(): Promise<void>;
   getActiveSession(): ActiveSessionData | undefined;
   setMode(mode: GameMode): void;
+
+  /**
+   * Resets all mutable game state arrays (inventory, defeatedEnemies, quests).
+   *
+   * Called when starting a New Game to prevent stale state from a previous
+   * or aborted play session from leaking into the new session.
+   */
+  reset(): void;
 };
 
 export class GameStateService
@@ -304,6 +312,14 @@ export class GameStateService
 
   getActiveSession(): ActiveSessionData | undefined {
     return this.activeSession;
+  }
+
+  /** @inheritdoc */
+  reset(): void {
+    this.inventory = [];
+    this.defeatedEnemies = [];
+    this.quests = [];
+    this.debug('reset:cleared');
   }
 
   /**
