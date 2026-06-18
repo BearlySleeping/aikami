@@ -87,6 +87,7 @@ P2 (Polish — after P1):
 | C-144 | [Combat Encounter Integration](C-144-combat-encounter-integration.md) ✅ | Wire turn_manager_system + combat components to Svelte frontend — enemy spawn points, encounter trigger, CombatViewModel overlay, dev sandbox | C-140, C-141 |
 | C-146 | [Freeform AI Combat Actions](C-146-freeform-ai-combat.md) ✅ | Freeform text input → LLM interpretation → mechanical modifiers (advantage/bonusDamage) → image generation for cinematic actions | C-145 |
 | C-147 | [Progression, Game Over, and Persistence](C-147-progression-and-persistence.md) ✅ | XP/leveling system, defeated enemy persistence across maps, Game Over overlay with Respawn/Load Last Save | C-145, C-146 |
+| C-148 | [Combat Immersion](C-148-combat-immersion.md) ✅ | Dice UI animation, enemy voice taunts via Kokoro TTS, cinematic image backgrounds, combat log enrichment | C-146 |
 
 ## Contract Format
 

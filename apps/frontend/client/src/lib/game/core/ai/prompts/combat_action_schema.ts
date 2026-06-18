@@ -44,6 +44,14 @@ export const CombatActionSchema = Type.Object(
      * scene — triggers background/scene image generation.
      */
     generateImage: Type.Boolean(),
+
+    /**
+     * A short, in-character taunt or reaction from the enemy based on
+     * the player's action. Max 1 sentence. Spoken via TTS when present.
+     *
+     * Contract: C-148 Combat Immersion
+     */
+    enemyQuote: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );
@@ -72,6 +80,7 @@ The player has described a combat action in freeform text. Your job is to:
 3. Award **bonusDamage** (0–5) if the action is clever, exploits the environment, or uses the enemy's weakness creatively.
 4. Set **advantage** to true if the action is so well-described or tactically brilliant that it deserves advantage on the d20 roll.
 5. Set **generateImage** to true if the action is highly cinematic — something that drastically changes the scene visually (explosions, transformations, environmental destruction, etc.).
+6. Occasionally include an **enemyQuote** — a short, in-character taunt or reaction (1 sentence max) that the enemy would speak in response to the player's action. This is spoken via voice AI. Include enemyQuotes for about 40–60% of actions to keep combat lively.
 
 ## Guidelines
 
@@ -92,5 +101,8 @@ Player: "I do a backflip off the wall and kick the slime into the campfire!"
 
 Player: "I dive behind the overturned table for cover."
 → DEFEND, narrative: "You throw yourself behind the heavy oak table, splinters flying as arrows thud into the wood.", bonusDamage: 0, advantage: false, generateImage: false
+
+Player: "I cast a fireball at the goblin!"
+→ ATTACK, narrative: "A blazing sphere of flame erupts from your hands, roaring toward the goblin.", bonusDamage: 1, advantage: false, generateImage: true, enemyQuote: "No! Not fire! I'll burn!"
 
 Respond ONLY with the JSON object defined by the schema. No markdown fences, no explanations.` as const;
