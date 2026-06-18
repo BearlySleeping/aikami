@@ -89,6 +89,7 @@ P2 (Polish — after P1):
 | C-147 | [Progression, Game Over, and Persistence](C-147-progression-and-persistence.md) ✅ | XP/leveling system, defeated enemy persistence across maps, Game Over overlay with Respawn/Load Last Save | C-145, C-146 |
 | C-148 | [Combat Immersion](C-148-combat-immersion.md) ✅ | Dice UI animation, enemy voice taunts via Kokoro TTS, cinematic image backgrounds, combat log enrichment | C-146 |
 | C-149 | [Combat Mechanics & AI Gatekeeping](C-149-combat-gatekeeping.md) ✅ | Feed ECS state into LLM context, AI gatekeeping of invalid freeform actions, character sheet serialization, test sweep | C-145, C-146 |
+| C-150 | [Audio System — BGM & SFX](C-150-audio-system-bgm-sfx.md) ✅ | Web Audio API audio engine with Equal-Power crossfade, Service Worker range interceptor for iOS, game state-driven BGM/SFX hooks | — |
 
 ## Contract Format
 
