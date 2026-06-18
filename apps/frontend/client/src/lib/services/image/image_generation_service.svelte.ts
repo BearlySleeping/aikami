@@ -57,6 +57,15 @@ export type ImageGenerationServiceInterface = BaseFrontendClassInterface & {
    * Checks if the service is running in demo mode.
    */
   isDemoMode(): boolean;
+
+  /** Whether an image generation is currently in progress. */
+  readonly isGenerating: boolean;
+
+  /** Progress of the current generation (0-100). */
+  readonly generationProgress: number;
+
+  /** Human-readable status label for the current generation step. */
+  readonly generationStatus: string;
 };
 
 // ── ComfyUI API types (internal) ────────────────────────────────────────
@@ -94,6 +103,15 @@ export class ImageGenerationService
 
   checkpoints: CheckpointInfo[] = $state([]);
   selectedCheckpoint = $state('');
+
+  /** Whether an image generation is currently in progress. */
+  isGenerating = $state(false);
+
+  /** Progress of the current generation (0-100). */
+  generationProgress = $state(0);
+
+  /** Human-readable status label for the current generation step. */
+  generationStatus = $state('');
 
   /** Whether image generation is ready to use. */
   get isReady(): boolean {
@@ -177,6 +195,11 @@ export class ImageGenerationService
       };
     }
 
+    // Reset progress state
+    this.isGenerating = true;
+    this.generationProgress = 0;
+    this.generationStatus = 'Queuing...';
+
     // Lazy-load checkpoints if not already fetched
     if (this.checkpoints.length === 0) {
       await this.loadCheckpoints();
@@ -186,6 +209,8 @@ export class ImageGenerationService
     const effectiveCheckpoint = checkpoint ?? this.selectedCheckpoint;
 
     try {
+      this.generationProgress = 5;
+
       // Step 1 — queue the prompt
       const queueResponse = await this._post<ComfyUiQueueResponse>('/prompt', {
         client_id: `aikami-dev-${Date.now()}`,
@@ -195,8 +220,14 @@ export class ImageGenerationService
       const promptId = queueResponse.prompt_id;
       this.debug('generateImage: queued', { promptId });
 
-      // Step 2 — poll for result
+      this.generationStatus = 'Generating...';
+      this.generationProgress = 10;
+
+      // Step 2 — poll for result with progress updates
       const imageRef = await this._pollForResult(promptId);
+
+      this.generationProgress = 95;
+      this.generationStatus = 'Downloading...';
 
       // Step 3 — fetch the image blob to bypass CORP restrictions
       const imageUrl =
@@ -206,10 +237,21 @@ export class ImageGenerationService
       const blob = await this._fetchBlob(imageUrl);
       const objectUrl = URL.createObjectURL(blob);
 
+      this.generationProgress = 100;
+      this.generationStatus = 'Complete';
+
       return { url: objectUrl, isDemo: false };
     } catch (error) {
+      this.generationStatus = 'Failed';
       this.error('generateImage failed', error);
       throw error;
+    } finally {
+      this.isGenerating = false;
+      // Reset progress after a brief delay so the consumer can read 'Complete'/'Failed'
+      setTimeout(() => {
+        this.generationProgress = 0;
+        this.generationStatus = '';
+      }, 2000);
     }
   }
 
@@ -293,6 +335,9 @@ export class ImageGenerationService
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       await this._sleep(pollIntervalMs, controller.signal);
+
+      // Update progress — linear from 10% to 95% over maxAttempts
+      this.generationProgress = Math.min(95, 10 + Math.round((attempt / maxAttempts) * 85));
 
       try {
         const history = await this._get<ComfyUiHistoryEntry>(`/history/${promptId}`, controller);

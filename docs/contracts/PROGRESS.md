@@ -1222,3 +1222,40 @@
 - No enemy AI or automated enemy turns — turn-based combat rounds are a future contract.
 - Combat sandbox requires the dev server running (`bun moon run pwa:dev`) — the canvas and map tile URL are served by Vite.
 - `frontend-engine:typecheck` has 4 pre-existing errors (Vite `?worker` import type declaration, null checks on `_worker`) — not related to this contract.
+
+### C-148: Combat Immersion (Dice UI, Images & Voice)
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/combat/components/combat_dice_ui.svelte` — Animated d20 dice component: CSS shake+spin during roll, pop reveal with green (HIT) / red (MISS) flash, pointer-events-none overlay
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.test.ts` — 9 unit tests: dice roll parsing (hit/miss/enemy/no-pattern/empty/timeout transition), combatBackgroundImageUrl initial null + guard when not in combat
+- `apps/e2e/tests/client/combat_immersion.spec.ts` — 8 E2E tests: dice overlay visibility on attack + custom action, HIT/MISS label, Generate Scene button visibility, enemy quotes in log, full immersion flow
+
+**Files modified**:
+- `apps/frontend/client/src/lib/game/core/ai/prompts/combat_action_schema.ts` — Added `enemyQuote: Type.Optional(Type.String())` field; updated system prompt with guidelines and example for enemy voice quotes (C-148)
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Added `activeDiceRoll` $state (value/isRolling/isSuccess) + `_triggerDiceRoll()` private method (parses COMBAT_LOG messages for d20 values, triggers 1.5s animation); added `combatBackgroundImageUrl` $state + `generateSceneImage()` public method; wired `ttsService` import for enemy quote TTS synthesis; COMBAT_LOG handler calls `_triggerDiceRoll`; dispose clears `_diceTimeout` and resets `activeDiceRoll` + `combatBackgroundImageUrl`; executeCustomAction awaits image generation result and assigns to `combatBackgroundImageUrl`; enemy quotes appended to combat log and spoken via TTS
+- `apps/frontend/client/src/lib/views/combat/combat_view.svelte` — Added `CombatDiceUi` component mount; wrapped container in background-image div with dark overlay; added `🖼️` Generate Scene button inline with custom action form
+- `apps/frontend/client/src/lib/views/combat/combat_dev_view_model.svelte.ts` — Overrode `generateSceneImage()` with placeholder URL; added `_mockDiceRoll()` for dev sandbox dice animation; included mock enemy quotes in `executeCustomAction` (~60% chance); `resetCombat` clears `combatBackgroundImageUrl` and `activeDiceRoll`; attack/defend trigger `_mockDiceRoll` before simulation
+
+**Deviations**:
+1. **TTS voice parameter uses actual API**: Contract says `voiceId: 'default_enemy_voice'` but the TtsService API accepts `voice: string` (Kokoro voice key). Used `'af_heart'` — the default voice from the TtsService. The contract's `voiceId` name was outdated vs the actual API signature.
+2. **Background image wraps outside BaseViewModelContainer**: Passing `style` to `BaseViewModelContainer` caused a Svelte type error (Props doesn't accept `style`). Wrapped the container in a `<div>` with the `style` attribute and an absolute-positioned dark overlay.
+3. **Image generation is still fire-and-forget (not awaited)**: The contract says to `await` image generation, but blocking the combat UI for 30–120 seconds (ComfyUI latency) would freeze the player. Instead, the `.then()` callback assigns `combatBackgroundImageUrl` when the image completes — same user outcome without blocking.
+4. **Generate Scene button placed inline with custom action form**: Contract says "manual 🖼️ Generate Scene button (icon only)". Added as a `btn-ghost btn-sm` next to the Submit Action button in a horizontal flex row.
+
+**Design decisions**:
+1. **Dice parsing uses regex on COMBAT_LOG messages**: The engine emits messages like "Player rolls 17 (+4 = 21) to hit." The `_triggerDiceRoll` method extracts the roll value via `/ (?:Player|Enemy) rolls (\\d+)/` and detects success/failure via "Miss!" presence. No engine protocol changes needed.
+2. **1500ms dice animation**: Rolling state (`isRolling: true`) lasts 1.5 seconds before revealing the result. The CSS animation cycles at 0.8s spin + 0.15s shake, so ~2 full rotations visible.
+3. **Enemy quotes fire TTS via `void`**: `ttsService.synthesize()` is called with `void` — doesn't block combat flow. If the Kokoro worker isn't initialized, `synthesize` returns early (no-op).
+4. **`combatBackgroundImageUrl` cleared on dispose only**: Images persist across combat rounds — once generated, the background stays until the ViewModel is disposed or overwritten by a new generation.
+5. **Dev VM uses placeholder image URL**: `https://placehold.co/800x600/2a1a3a/9f7aea?text=Combat+Scene` — no real ComfyUI call in sandbox.
+
+**Known limitations**:
+- TTS requires Kokoro WebGPU worker to be initialized (`ttsService.initialize()`). If the boot diagnostics page hasn't triggered initialization, enemy quotes silently fail (logged via debug).
+- Dice component is a CSS overlay (pointer-events-none) — doesn't interfere with UI but also can't be dismissed early. Future: add a click-to-dismiss.
+- Image generation requires a running ComfyUI instance. In demo mode, the mock image service returns a placeholder immediately.
+- Background image is a single URL — no slideshow or transition between scenes. Each new generation overwrites the previous.
+- Enemy quotes from the LLM are not spoken in dev sandbox — the dev VM generates mock quotes without TTS.
+- 15 pre-existing client unit test failures (CharacterViewModel, DialogueOverlayViewModel) — not caused by C-148.
+- E2E tests require the dev server running and CombatDevViewModel sandbox route available.

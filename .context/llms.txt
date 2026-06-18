@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-17
-> Files: 165 across 11 categories
+> Generated: 2026-06-18
+> Files: 166 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -154,6 +154,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-145 Turn-Based Combat Loop & Dice RNG](contracts/C-145-turn-based-combat-loop.md)
 - [Contract: C-146 Freeform AI Combat Actions](contracts/C-146-freeform-ai-combat.md)
 - [Contract: C-147 Progression, Game Over, and Persistence](contracts/C-147-progression-and-persistence.md)
+- [Contract: C-148 Combat Immersion (Dice UI, Images & Voice)](contracts/C-148-combat-immersion.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
