@@ -115,6 +115,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/image/, ''),
         },
+        '/api/kokoro-tts': {
+          target: 'http://localhost:8880',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/kokoro-tts/, ''),
+        },
       },
       watch: {
         ignored: [
