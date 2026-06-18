@@ -7,6 +7,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { audioService } from '$lib/services/audio/audio_service.svelte';
 import { aiSettingsService } from '$lib/services/settings/ai_settings.svelte';
 import {
   GameSaveService,
@@ -173,6 +174,8 @@ class GameUIViewModel
 
   /** Cached text provider endpoint — read once to avoid reactive re-renders. */
   private readonly _textProviderEndpoint: string;
+  /** Tracked total inventory quantity for detecting item pickups (C-150). */
+  private _previousInventoryCount = 0;
 
   constructor(options: GameUIViewModelOptions) {
     super(options);
@@ -248,6 +251,8 @@ class GameUIViewModel
       // Listen for GAME_READY to hide the transition overlay after load completes
       bridge.on('GAME_READY', () => {
         this.isTransitioning = false;
+        // Start exploration BGM on initial game load
+        void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
       });
 
       // Listen for COMBAT_STARTED to mount the combat overlay
@@ -257,6 +262,8 @@ class GameUIViewModel
         }
         this.activeOverlay = 'COMBAT';
         gameStateService.setMode('COMBAT');
+        // Transition BGM to combat track (C-150)
+        void audioService.transitionToBgm('/assets/audio/music/bgm_combat.webm');
         this._gameViewModel.pauseEngine();
         this.combatViewModel = new CombatViewModel({
           className: 'CombatViewModel',
@@ -273,6 +280,23 @@ class GameUIViewModel
           this.combatViewModel.totalParticipants = event.participantIds.length;
           this.combatViewModel.isPlayerTurn = true;
         }
+      });
+
+      // Listen for COMBAT_LOG to trigger hit SFX (C-150)
+      bridge.on('COMBAT_LOG', (event) => {
+        // Play hit SFX when any entity lands a successful hit
+        if (event.message.includes('Hits for')) {
+          void audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+        }
+      });
+
+      // Listen for INVENTORY_UPDATED to trigger pickup SFX (C-150)
+      bridge.on('INVENTORY_UPDATED', (event) => {
+        const newCount = event.inventory.reduce((sum, item) => sum + item.quantity, 0);
+        if (newCount > this._previousInventoryCount) {
+          void audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+        }
+        this._previousInventoryCount = newCount;
       });
 
       // Listen for COMBAT_ENDED to dismiss the combat overlay or show game over.
@@ -486,6 +510,8 @@ class GameUIViewModel
   private _endCombat(): void {
     this.activeOverlay = 'NONE';
     gameStateService.setMode('EXPLORE');
+    // Transition BGM back to exploration track (C-150)
+    void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
     this._gameViewModel.resumeEngine();
     void this.combatViewModel?.dispose();
     this.combatViewModel = undefined;
@@ -512,6 +538,8 @@ class GameUIViewModel
     // in GameStateService and will be filtered out during map load.
     this.activeOverlay = 'NONE';
     gameStateService.setMode('EXPLORE');
+    // Transition BGM back to exploration track (C-150)
+    void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
     this._gameViewModel.resumeEngine();
     await this._gameViewModel.loadMap(
       '/assets/maps/sandbox_zone_a.json',
