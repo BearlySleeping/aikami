@@ -100,6 +100,17 @@ mock.module('$services', () => ({
     cancelAll: mock(() => {}),
   },
   routerService: {},
+  SentenceBoundaryChunker: class {
+    feed(_text: string) {}
+    close() {}
+    onSentence(_handler: (event: { sentence: string }) => void) {}
+  },
+  ttsService: {
+    synthesize: mock(() => {}),
+    initialize: mock(async () => {}),
+    selectedVoice: 'af_bella',
+    status: 'uninitialized',
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -159,7 +170,10 @@ describe('DialogueOverlayViewModel', () => {
     });
 
     expect(vm.npcName).toBe('Elder Thrain');
-    expect(vm.messages.length).toBe(0);
+    // The constructor appends the NPC greeting dialog as the first message
+    expect(vm.messages.length).toBe(1);
+    expect(vm.messages[0].content).toBe('Greetings, hero!');
+    expect(vm.messages[0].role).toBe('npc');
 
     // initialize() must be called (handled by BaseViewModelContainer in production)
     // For unit test we call it directly
