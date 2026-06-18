@@ -360,7 +360,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     this.errorMessage = null;
 
     try {
-      this._worker = new Worker(new URL('./kokoro_worker.ts', import.meta.url));
+      this._worker = new Worker(new URL('./kokoro_worker.ts', import.meta.url), {
+        type: 'module',
+      });
 
       this._worker.onmessage = (event: MessageEvent) => {
         const payload = event.data as {

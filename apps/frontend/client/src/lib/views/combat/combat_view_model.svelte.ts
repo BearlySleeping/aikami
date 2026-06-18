@@ -501,9 +501,15 @@ export class CombatViewModel
 
       // Enemy voice taunt — C-148 Combat Immersion
       if (intent.enemyQuote && intent.enemyQuote.trim().length > 0) {
-        this.debug('executeCustomAction: enemy quote spoken', {
+        this.debug('executeCustomAction: enemy quote received', {
           quote: intent.enemyQuote,
+          ttsStatus: 'would-speak',
         });
+        // Log the voice pipeline: show what WOULD be spoken
+        this.combatLog = [
+          `🔊 TTS: ${this.enemyName} says "${intent.enemyQuote}"`,
+          ...this.combatLog,
+        ];
         // Append the quote to the battle log (italicized enemy dialogue)
         this.combatLog = [`*${this.enemyName} ${intent.enemyQuote}*`, ...this.combatLog];
         // Synthesize via native Kokoro WebGPU TTS — fire-and-forget
