@@ -485,7 +485,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'kokoro',
+          model: 'tts-1',
           input: text,
           voice,
           response_format: 'wav',
@@ -523,7 +523,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   /** @inheritdoc */
   async checkKokoroServer(): Promise<void> {
-    const urls = ['/api/kokoro-tts', 'http://localhost:8880', 'http://127.0.0.1:8880'];
+    // Try the voice microservice first (Vite proxy /api/voice → voice service → Kokoro).
+    // This is the same endpoint /dev/voice uses — handles Docker/binary Kokoro internally.
+    const urls = ['/api/voice', 'http://localhost:8880', 'http://127.0.0.1:8880'];
 
     for (const url of urls) {
       try {
@@ -531,7 +533,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'kokoro',
+            model: 'tts-1',
             input: 'test',
             voice: 'af_heart',
           }),
