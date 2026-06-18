@@ -99,4 +99,30 @@ describe('GameStateService', () => {
     service.setMode('EXPLORE');
     expect(service.currentMode).toBe('EXPLORE');
   });
+
+  // ── C-152: reset() clears all mutable arrays ─────────────────────────
+
+  test('reset should clear inventory, defeatedEnemies, and quests', () => {
+    // Seed state with stale data
+    service.inventory = [
+      { itemId: 'sword', quantity: 1 },
+      { itemId: 'potion', quantity: 3 },
+    ];
+    service.defeatedEnemies = ['spawn-42', 'spawn-99'];
+    service.quests = [
+      {
+        id: 'q1',
+        title: 'Old Quest',
+        description: 'Leftover',
+        status: 'active',
+        objectives: [],
+      },
+    ];
+
+    service.reset();
+
+    expect(service.inventory).toEqual([]);
+    expect(service.defeatedEnemies).toEqual([]);
+    expect(service.quests).toEqual([]);
+  });
 });

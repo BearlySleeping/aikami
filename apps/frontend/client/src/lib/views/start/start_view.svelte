@@ -15,9 +15,19 @@
 
       <!-- Menu Buttons -->
       <div class="flex flex-col gap-3 w-64 mx-auto">
-        <!-- Start Game -->
-        <button class="btn btn-primary btn-lg" onclick={() => viewModel.startGame()}>
-          Start Game
+        <!-- Continue (only shown when saves exist) -->
+        {#if viewModel.hasSaves}
+          <button class="btn btn-primary btn-lg" onclick={() => viewModel.continueGame()}>
+            Continue
+          </button>
+        {/if}
+
+        <!-- New Game -->
+        <button
+          class="btn {viewModel.hasSaves ? 'btn-outline' : 'btn-primary'} btn-lg"
+          onclick={() => viewModel.startNewGame()}
+        >
+          New Game
         </button>
 
         <!-- Sign In / Sign Out -->
