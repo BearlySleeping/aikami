@@ -1,8 +1,9 @@
 <script lang="ts">
   import CombatView from '../../combat/combat_view.svelte';
-  // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
   import InventoryView from '../../inventory/inventory_view.svelte';
   import QuestView from '../../quest/quest_view.svelte';
+  // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
+  import CharacterDashboardView from '../dashboard/character_dashboard_view.svelte';
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
   import GameOverOverlay from './overlays/game_over_overlay.svelte';
@@ -53,6 +54,18 @@
       class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
     >
       <p class="text-lg font-bold text-error">Inventory loading...</p>
+    </div>
+  {/if}
+{/if}
+
+{#if viewModel.activeOverlay === 'CHARACTER_DASHBOARD'}
+  {#if viewModel.dashboardViewModel}
+    <CharacterDashboardView viewModel={viewModel.dashboardViewModel} />
+  {:else}
+    <div
+      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
+    >
+      <p class="text-lg font-bold text-error">Character Dashboard loading...</p>
     </div>
   {/if}
 {/if}
