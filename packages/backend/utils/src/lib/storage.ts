@@ -42,7 +42,10 @@ export const uploadToFirebase = async (options: {
 
   // Use emulator URL if running in emulator mode
   if (isEmulatorMode()) {
-    return `http://localhost:9199/v0/b/${bucket.name}/o/${encodeURIComponent(uploadedFileName)}?alt=media&token=${firebaseStorageDownloadTokens}`;
+    // Storage emulator serves downloads on its configured port (default 9198).
+    // Port 9199 is the upload-only API — downloads fail with connection refused.
+    const storagePort = process.env.STORAGE_EMULATOR_PORT ?? '9198';
+    return `http://localhost:${storagePort}/v0/b/${bucket.name}/o/${encodeURIComponent(uploadedFileName)}?alt=media&token=${firebaseStorageDownloadTokens}`;
   }
 
   return (

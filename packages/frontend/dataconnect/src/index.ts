@@ -17,6 +17,8 @@ export type * from './lib/generated';
 // Re-export generated query/mutation action shortcut functions.
 // Re-export refs for advanced usage.
 export {
+  getTracksByMood,
+  getTracksByMoodRef,
   listSaveSlots,
   listSaveSlotsRef,
   upsertSaveSlot,

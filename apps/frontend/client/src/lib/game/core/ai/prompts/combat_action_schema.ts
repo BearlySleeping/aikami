@@ -73,6 +73,18 @@ export const CombatActionSchema = Type.Object(
      * Contract: C-149 Combat Gatekeeping
      */
     invalidReason: Type.Optional(Type.String()),
+
+    /**
+     * If the narrative drastically shifts the scene's emotional tone,
+     * suggest a new musical mood to crossfade the BGM.
+     *
+     * Valid values: 'epic', 'tense', 'triumph', 'sorrow', 'mysterious',
+     * 'peaceful', 'heroic', 'foreboding'. Leave undefined when the
+     * current mood is still appropriate.
+     *
+     * Contract: C-151 AI Dynamic Music
+     */
+    sceneMood: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );
@@ -106,6 +118,7 @@ The player has described a combat action in freeform text. Your job is to:
 5. Set **advantage** to true if the action is so well-described or tactically brilliant that it deserves advantage on the d20 roll.
 6. Set **generateImage** to true if the action is highly cinematic — something that drastically changes the scene visually (explosions, transformations, environmental destruction, etc.).
 7. Occasionally include an **enemyQuote** — a short, in-character taunt or reaction (1 sentence max) that the enemy would speak in response to the player's action. This is spoken via voice AI. Include enemyQuotes for about 40–60% of actions to keep combat lively.
+8. If the narrative drastically shifts the emotional tone of the scene, set **sceneMood** to one of: 'epic', 'tense', 'triumph', 'sorrow', 'mysterious', 'peaceful', 'heroic', 'foreboding'. Only set this when the tone CLEARLY changes — heroic last stands, tragic moments, sudden bravery, or overwhelming dread. Leave undefined for routine attacks.
 
 ## Gatekeeping Rules
 
