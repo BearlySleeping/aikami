@@ -127,6 +127,43 @@ const _createServiceStub = () => {
   return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
 };
 
+/**
+ * Creates a callable Proxy stub with a mutable `.fn` property.
+ *
+ * Bun's mock.module() freezes module exports, preventing tests from
+ * reassigning exported mock functions. This wrapper makes the export
+ * callable (via `apply` trap) while also supporting property mutation
+ * through a writable `.fn` on the underlying target object.
+ *
+ * Tests can replace the implementation by mutating `stub.fn = newMock`
+ * instead of trying to reassign `setPendingGameLoad = newMock` on the
+ * frozen module namespace.
+ */
+const _createCallableStub = () => {
+  const target = { fn: mock(() => {}) as (...args: never) => unknown };
+  return new Proxy(
+    mock(() => {}),
+    {
+      apply(_t, _thisArg, args) {
+        return target.fn(...args);
+      },
+      get(_t, prop) {
+        if (prop === 'fn') {
+          return target.fn;
+        }
+        return Reflect.get(_t, prop);
+      },
+      set(_t, prop, value) {
+        if (prop === 'fn') {
+          target.fn = value as (...args: never) => unknown;
+          return true;
+        }
+        return Reflect.set(_t, prop, value);
+      },
+    },
+  );
+};
+
 const _localServicesMock = () => ({
   aiService: _createServiceStub(),
   AIService: class {},
@@ -163,12 +200,19 @@ const _localServicesMock = () => ({
   diceService: _createServiceStub(),
   DiceService: class {},
   ExpressionAssetResolver: class {},
-  setPendingGameLoad: mock(() => {}),
-  consumePendingGameLoad: mock(() => undefined),
+  setPendingGameLoad: _createCallableStub(),
+  consumePendingGameLoad: _createCallableStub(),
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
   gameStateService: _createServiceStub(),
   GameStateService: class {},
+  getItemDefinition: mock((itemId: string) => ({
+    label: itemId,
+    attackBonus: 0,
+    defenseBonus: 0,
+    equippable: false,
+    slot: undefined,
+  })),
   imageGenerationService: _createServiceStub(),
   ImageGenerationService: class {},
   notificationService: _createServiceStub(),

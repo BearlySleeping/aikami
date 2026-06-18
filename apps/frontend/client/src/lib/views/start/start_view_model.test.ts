@@ -80,9 +80,11 @@ const _setupServiceOverrides = (): void => {
   });
 
   // ── setPendingGameLoad ───────────────────────────────────────────────
-  (_svcStubs as Record<string, unknown>).setPendingGameLoad = mock((payload: string) => {
-    pendingPayload = payload;
-  });
+  (_svcStubs.setPendingGameLoad as unknown as { fn: (...args: never) => unknown }).fn = mock(
+    (payload: string) => {
+      pendingPayload = payload;
+    },
+  );
 
   // ── aiSettingsService.textProvider — ensure it returns a configured key ──
   Object.defineProperty(_svcStubs.aiSettingsService, 'textProvider', {
