@@ -2,6 +2,7 @@
   import CombatView from '../../combat/combat_view.svelte';
   import InventoryView from '../../inventory/inventory_view.svelte';
   import QuestView from '../../quest/quest_view.svelte';
+  import VendorView from '../../vendor/vendor_view.svelte';
   // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
   import CharacterDashboardView from '../dashboard/character_dashboard_view.svelte';
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
@@ -109,6 +110,18 @@
     onRespawn={() => viewModel.respawnPlayer()}
     onLoadLastSave={() => viewModel.loadLastSave()}
   />
+{/if}
+
+{#if viewModel.activeOverlay === 'VENDOR'}
+  {#if viewModel.vendorViewModel}
+    <VendorView viewModel={viewModel.vendorViewModel} />
+  {:else}
+    <div
+      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
+    >
+      <p class="text-lg font-bold text-error">Vendor loading...</p>
+    </div>
+  {/if}
 {/if}
 
 <TransitionOverlay {viewModel} />

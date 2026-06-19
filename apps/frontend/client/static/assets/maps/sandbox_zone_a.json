@@ -69,7 +69,13 @@
               "type": "string",
               "value": "Welcome to Zone A, traveler! Goods for sale ahead."
             },
-            { "name": "interactionRadius", "type": "float", "value": 48 }
+            { "name": "interactionRadius", "type": "float", "value": 48 },
+            { "name": "isVendor", "type": "bool", "value": true },
+            {
+              "name": "vendorInventory",
+              "type": "string",
+              "value": "rusty_sword,iron_sword,wooden_shield,leather_armor,health_potion,mana_potion"
+            }
           ]
         },
         {

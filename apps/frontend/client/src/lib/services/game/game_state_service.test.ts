@@ -125,4 +125,44 @@ describe('GameStateService', () => {
     expect(service.defeatedEnemies).toEqual([]);
     expect(service.quests).toEqual([]);
   });
+
+  // ── C-154: Gold economy ────────────────────────────────────────────
+
+  test('gold should initialize to 100', () => {
+    expect(service.gold).toBe(100);
+  });
+
+  test('addGold should increase gold balance', () => {
+    service.addGold({ amount: 50 });
+    expect(service.gold).toBe(150);
+  });
+
+  test('addGold should ignore non-positive amounts', () => {
+    service.addGold({ amount: 0 });
+    expect(service.gold).toBe(100);
+    service.addGold({ amount: -10 });
+    expect(service.gold).toBe(100);
+  });
+
+  test('removeGold should decrease gold balance', () => {
+    service.removeGold({ amount: 30 });
+    expect(service.gold).toBe(70);
+  });
+
+  test('removeGold should throw on insufficient funds', () => {
+    expect(() => service.removeGold({ amount: 200 })).toThrow('Insufficient gold');
+    expect(service.gold).toBe(100);
+  });
+
+  test('removeGold should ignore non-positive amounts', () => {
+    service.removeGold({ amount: 0 });
+    expect(service.gold).toBe(100);
+  });
+
+  test('reset should reset gold to 100 (starting amount)', () => {
+    service.addGold({ amount: 500 });
+    expect(service.gold).toBe(600);
+    service.reset();
+    expect(service.gold).toBe(100);
+  });
 });

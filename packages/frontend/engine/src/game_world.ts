@@ -86,6 +86,10 @@ type NpcMetaEntry = {
   relationshipValue: number;
   /** Initial greeting dialog text from the NPC's spawn data. */
   dialog: string;
+  /** Whether this NPC is a vendor (opens VendorView instead of DialogueOverlay). */
+  isVendor: boolean;
+  /** Comma-separated list of item IDs sold by this vendor. */
+  vendorInventory: string;
 };
 
 /**
@@ -669,6 +673,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           interactionRadius: npcData.interactionRadius || 64,
           relationshipValue: npcData.relationshipValue || 0,
           dialog: npcData.dialog || '',
+          isVendor: npcData.isVendor || false,
+          vendorInventory: npcData.vendorInventory || '',
         });
       }
     }
@@ -1003,14 +1009,29 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const radiusSq = npc.interactionRadius * npc.interactionRadius;
 
       if (distSq <= radiusSq) {
-        // Emit through the engine bridge for the UI to consume
-        this._bridge.emit({
-          type: 'NPC_INTERACTED',
-          npcId: npc.npcId,
-          npcName: npc.npcName,
-          dialog: npc.dialog,
-          personaId: npc.personaId,
-        });
+        // Vendor NPCs open the trading UI; non-vendor NPCs open dialogue
+        if (npc.isVendor) {
+          this.debug('_handleInteractKey:vendor-interacted', {
+            npcId: npc.npcId,
+            npcName: npc.npcName,
+            vendorInventory: npc.vendorInventory,
+          });
+          this._bridge.emit({
+            type: 'VENDOR_INTERACTED',
+            npcId: npc.npcId,
+            npcName: npc.npcName,
+            dialog: npc.dialog,
+            vendorInventory: npc.vendorInventory,
+          });
+        } else {
+          this._bridge.emit({
+            type: 'NPC_INTERACTED',
+            npcId: npc.npcId,
+            npcName: npc.npcName,
+            dialog: npc.dialog,
+            personaId: npc.personaId,
+          });
+        }
 
         // Also notify legacy callback consumers (sandbox, interaction_bridge)
         if (this._interactRequestCallback) {
