@@ -2,6 +2,7 @@
 import type { LogEntry, LoggerInterface, LogSink } from '@aikami/types';
 import { BaseLoggerService } from './base.ts';
 
+export type { LogEntry };
 export type FrontendLoggerInterface = LoggerInterface;
 
 /**

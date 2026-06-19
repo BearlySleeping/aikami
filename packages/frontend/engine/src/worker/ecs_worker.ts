@@ -10,6 +10,7 @@ import {
   removeEntity,
   set,
 } from 'bitecs';
+import { logger } from '$logger';
 import type { TransitionZone } from '../assets/map_loader.ts';
 import {
   getAppearanceLayers,
@@ -59,7 +60,6 @@ import {
 import { handleCombatAction } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
-import { logger } from './worker_logger.ts';
 
 // ---------------------------------------------------------------------------
 // Worker: owns the full bitECS world and system ticking
