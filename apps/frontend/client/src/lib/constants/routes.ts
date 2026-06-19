@@ -77,6 +77,12 @@ export const routes = {
     routeId: '/setup',
     type: 'public',
   },
+  characters: {
+    getPath: () => '/characters',
+    queryParameters: undefined,
+    routeId: '/characters',
+    type: 'public',
+  },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;
