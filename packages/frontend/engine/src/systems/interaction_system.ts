@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/systems/interaction_system.ts
 import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
+import { logger } from '$logger';
 import type { InteractableData } from '../components/interactable.ts';
 import { Interactable } from '../components/interactable.ts';
 import { Inventory, MAX_INVENTORY_SLOTS } from '../components/inventory.ts';
@@ -220,8 +221,7 @@ const _handleNpcInteraction = (options: {
   }
 
   if (npcDialog.isVendor) {
-    // biome-ignore lint/suspicious/noConsole: worker debug logging — vendor interaction path
-    console.log('[interaction_system] VENDOR NPC interacted:', {
+    logger.debug('[interaction_system] VENDOR NPC interacted:', {
       npcId: npcDialog.npcId,
       npcName: npcDialog.npcName,
       isVendor: npcDialog.isVendor,
@@ -235,8 +235,7 @@ const _handleNpcInteraction = (options: {
       vendorInventory: npcDialog.vendorInventory,
     });
   } else {
-    // biome-ignore lint/suspicious/noConsole: worker debug logging — non-vendor interaction path
-    console.log('[interaction_system] NON-VENDOR NPC interacted:', {
+    logger.debug('[interaction_system] NON-VENDOR NPC interacted:', {
       npcId: npcDialog.npcId,
       npcName: npcDialog.npcName,
       isVendor: npcDialog.isVendor,
