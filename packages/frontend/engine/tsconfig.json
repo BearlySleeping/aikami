@@ -23,8 +23,7 @@
       "@aikami/types/*": ["../../shared/types/src/*"],
       "@aikami/utils": ["../../shared/utils/src/index.ts"],
       "@aikami/utils/*": ["../../shared/utils/src/*"],
-      "$logger": ["../../shared/logger/src/index.ts"],
-      "$logger/*": ["../../shared/logger/src/*"]
+      "$logger": ["../../shared/logger/src/lib/logger_browser.ts"]
     }
   },
   "include": ["src/**/*"],
