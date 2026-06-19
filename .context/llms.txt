@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-18
-> Files: 171 across 11 categories
+> Generated: 2026-06-19
+> Files: 172 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -160,6 +160,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-151 AI Dynamic Music via Data Connect](contracts/C-151-ai-dynamic-music.md)
 - [C 152 end to end boot flow](contracts/C-152-end-to-end-boot-flow.md)
 - [C 153 character dashboard equipment](contracts/C-153-character-dashboard-equipment.md)
+- [C 154 ai vendors economy](contracts/C-154-ai-vendors-economy.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

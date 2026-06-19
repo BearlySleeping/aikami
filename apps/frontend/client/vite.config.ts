@@ -1,4 +1,5 @@
 // apps/frontend/client/vite.config.ts
+import { Buffer } from 'node:buffer';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +39,34 @@ export default defineConfig(({ mode }) => {
           res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
           res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
           next();
+        });
+      },
+    } as PluginOption,
+    {
+      name: 'api-logs-endpoint',
+      configureServer(server) {
+        server.middlewares.use('/api/logs', (req, res) => {
+          if (req.method !== 'POST') {
+            res.writeHead(405).end();
+            return;
+          }
+          const chunks: Uint8Array[] = [];
+          req.on('data', (chunk: Uint8Array) => chunks.push(chunk));
+          req.on('end', () => {
+            try {
+              const body = Buffer.concat(chunks).toString('utf-8');
+              const parsed = JSON.parse(body);
+              const ts = new Date().toISOString();
+              const label = parsed.label || 'api';
+              const payload = parsed.payload;
+              // biome-ignore lint/suspicious/noConsole: /api/logs server-side endpoint — writes to tmux stdout
+              console.log(`[api-logs] ${ts} [${label}]`, JSON.stringify(payload));
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: true }));
+            } catch {
+              res.writeHead(400).end();
+            }
+          });
         });
       },
     } as PluginOption,

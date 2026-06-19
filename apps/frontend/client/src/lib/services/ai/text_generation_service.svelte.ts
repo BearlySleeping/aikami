@@ -91,11 +91,15 @@ const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 /** Timeout for the entire fetch+stream operation (90 seconds). */
 const FETCH_TIMEOUT_MS = 90_000;
 
-/** Timeout for individual SSE stream read operations (30 seconds). */
-const READ_TIMEOUT_MS = 30_000;
-
 /** Maximum time to wait for the first SSE chunk (15 seconds). */
 const FIRST_CHUNK_TIMEOUT_MS = 15_000;
+
+/**
+ * Timeout for individual SSE stream read operations after content has started
+ * flowing. Kept short (5s) to prevent the text input from staying disabled
+ * when OpenRouter delays the [DONE] signal after the last text chunk.
+ */
+const IDLE_TIMEOUT_MS = 5_000;
 
 /** OpenRouter requires these headers for ranking/attribution on free models. */
 const OPENROUTER_HEADERS = {
@@ -257,6 +261,7 @@ class TextGenerationService
         signal: abortController.signal,
         onChunk,
       });
+      this.info('streamChat:complete', { chunkCount: undefined });
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
         this.debug('streamChat:aborted');
@@ -445,6 +450,7 @@ class TextGenerationService
     let buffer = '';
     let chunkCount = 0;
     let isFirstChunk = true;
+    let hasReceivedContent = false;
 
     try {
       while (true) {
@@ -452,7 +458,11 @@ class TextGenerationService
           return;
         }
 
-        const timeout = isFirstChunk ? FIRST_CHUNK_TIMEOUT_MS : READ_TIMEOUT_MS;
+        const timeout = isFirstChunk
+          ? FIRST_CHUNK_TIMEOUT_MS
+          : hasReceivedContent
+            ? IDLE_TIMEOUT_MS
+            : FIRST_CHUNK_TIMEOUT_MS;
         const result = await Promise.race([
           reader.read(),
           new Promise<never>((_, reject) =>
@@ -504,6 +514,7 @@ class TextGenerationService
 
             const token = choice.delta?.content;
             if (token) {
+              hasReceivedContent = true;
               onChunk(token);
               chunkCount++;
             }

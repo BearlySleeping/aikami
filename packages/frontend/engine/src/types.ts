@@ -139,6 +139,20 @@ export type GameEvent =
       personaId?: string;
     }
   | {
+      /**
+       * Emitted when the player interacts with a vendor NPC.
+       * Carries the vendor's item inventory list for the trading UI.
+       *
+       * Contract: C-154 AI Vendors Economy
+       */
+      type: 'VENDOR_INTERACTED';
+      npcId: string;
+      npcName: string;
+      dialog: string;
+      /** Comma-separated list of item IDs sold by this vendor. */
+      vendorInventory: string;
+    }
+  | {
       type: 'NPC_DIALOG_END';
       npcId: string;
     }

@@ -13,6 +13,15 @@ export const NPCDialog = {
   dialog: [] as string[],
   interactionRadius: [] as number[],
   playerInRange: [] as boolean[],
+  /** Whether this NPC is a vendor (opens VendorView instead of DialogueOverlay). Contract: C-154 */
+  isVendor: [] as boolean[],
+  /**
+   * Comma-separated list of item IDs the vendor sells.
+   * Parsed from Tiled properties.
+   *
+   * Contract: C-154 AI Vendors Economy
+   */
+  vendorInventory: [] as string[],
 };
 
 /** Payload shape stored/retrieved via observers. */
@@ -22,6 +31,8 @@ export type NPCDialogData = {
   dialog: string;
   interactionRadius: number;
   playerInRange: boolean;
+  isVendor: boolean;
+  vendorInventory: string;
 };
 
 /**
@@ -36,6 +47,8 @@ export const registerNPCDialogObservers = (world: World): void => {
     NPCDialog.dialog[eid] = params.dialog;
     NPCDialog.interactionRadius[eid] = params.interactionRadius;
     NPCDialog.playerInRange[eid] = params.playerInRange;
+    NPCDialog.isVendor[eid] = params.isVendor;
+    NPCDialog.vendorInventory[eid] = params.vendorInventory;
   });
 
   observe(
@@ -47,6 +60,8 @@ export const registerNPCDialogObservers = (world: World): void => {
       dialog: NPCDialog.dialog[eid],
       interactionRadius: NPCDialog.interactionRadius[eid],
       playerInRange: NPCDialog.playerInRange[eid],
+      isVendor: NPCDialog.isVendor[eid] ?? false,
+      vendorInventory: NPCDialog.vendorInventory[eid] ?? '',
     }),
   );
 };
