@@ -1,5 +1,6 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
+  import { logger } from '$logger';
   import { gameStateService } from '$services';
   import type { VendorViewModelInterface } from './vendor_view_model.svelte';
 
@@ -45,8 +46,7 @@
    * inline bar — this adds a floating toast for extra visibility.
    */
   const buyItemWithToast = async (itemId: string, label: string) => {
-    // biome-ignore lint/suspicious/noConsole: purchase flow debug
-    console.log('[vendor_view] buyItemWithToast:click', {
+    logger.debug('[vendor_view] buyItemWithToast:click', {
       itemId,
       label,
       playerGold: viewModel.playerGold,
@@ -56,8 +56,7 @@
     });
     const goldBefore = viewModel.playerGold;
     await viewModel.buyItem(itemId);
-    // biome-ignore lint/suspicious/noConsole: purchase result debug
-    console.log('[vendor_view] buyItemWithToast:after-buyItem', {
+    logger.debug('[vendor_view] buyItemWithToast:after-buyItem', {
       itemId,
       goldBefore,
       goldAfter: viewModel.playerGold,
@@ -76,16 +75,14 @@
   const submitHaggle = async () => {
     const text = haggleInput.trim();
     if (!text || viewModel.isHaggling || viewModel.refusesToSell) {
-      // biome-ignore lint/suspicious/noConsole: haggle flow debug
-      console.log('[vendor_view] submitHaggle:blocked', {
+      logger.debug('[vendor_view] submitHaggle:blocked', {
         text: !!text,
         isHaggling: viewModel.isHaggling,
         refusesToSell: viewModel.refusesToSell,
       });
       return;
     }
-    // biome-ignore lint/suspicious/noConsole: haggle send debug
-    console.log('[vendor_view] submitHaggle:sending', { text: text.slice(0, 50) });
+    logger.debug('[vendor_view] submitHaggle:sending', { text: text.slice(0, 50) });
     haggleInput = '';
     await viewModel.haggle(text);
   };

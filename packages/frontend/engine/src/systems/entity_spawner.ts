@@ -7,6 +7,7 @@
 
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
+import { logger } from '$logger';
 import { resolveNpcTexture, resolvePropTexture } from '../assets/lpc_asset_catalog.ts';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
@@ -228,8 +229,7 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
   );
 
   if (isVendor) {
-    // biome-ignore lint/suspicious/noConsole: worker debug logging — vendor spawn
-    console.log('[entity_spawner] Spawned VENDOR NPC:', {
+    logger.debug('[entity_spawner] Spawned VENDOR NPC:', {
       eid,
       npcId,
       npcName,
