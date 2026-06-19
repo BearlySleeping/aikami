@@ -170,7 +170,7 @@ apps/
 │   │           ├── views/       # Svelte 5 ViewModels
 │   │           ├── components/  # Shared Svelte UI components
 │   │           └── client/      # Client-side services
-│   ├── landing_page/            # Landing page (Astro)
+│   ├── site/                     # Public site (Astro)
 │   ├── docs/                    # Documentation site (Astro)
 │   └── gamejs/                  # ⚠️ DEPRECATED — Legacy GodotJS client
 │                                #    Migration target: client/src/lib/game/
@@ -442,7 +442,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 3. Update `STRUCTURE.md` — update directory tree, mark deprecations
 4. Update `architecture.md` — full rewrite with new diagrams (depends on STACK.md + STRUCTURE.md context)
 5. Update `limitations.md` — add engine boundary constraints (depends on architecture.md being updated)
-6. Update `index.md` — landing page reflects new direction (depends on all above)
+6. Update `index.md` — site reflects new direction (depends on all above)
 7. Update `CONTEXT.md` — comprehensive AI briefing refresh (depends on all above)
 8. Regenerate `llms.txt` — final step
 9. Run `bun run typecheck` — verify no regressions

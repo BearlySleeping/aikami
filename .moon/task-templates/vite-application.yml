@@ -1,7 +1,7 @@
 # =============================================================================
 # Task Template: Vite/SvelteKit Application
 # =============================================================================
-# For SvelteKit frontend apps: client, landing-page, docs
+# For SvelteKit frontend apps: client, site, docs
 # All apps use "bun run <name>" to delegate to package.json scripts.
 # =============================================================================
 

@@ -138,7 +138,7 @@ import { logger } from "@aikami/logger";
 | ----------------------- | ------------------------------------------- |
 | SvelteKit (PWA)         | `shared/logger/src/lib/svelte_kit.ts`       |
 | Firebase Functions      | `shared/logger/src/lib/logger_functions.ts` |
-| Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts`   |
+| Browser (game, site) | `shared/logger/src/lib/logger_browser.ts`   |
 | AWS / Node.js           | `shared/logger/src/lib/logger_aws.ts`       |
 
 **Why**: Each environment configures `$logger` in its own `tsconfig.json` `paths`
@@ -525,7 +525,7 @@ library needed.
 aikami/
   apps/
     frontend/pwa/          — SvelteKit PWA
-    frontend/landing_page/ — Landing page (Astro)
+    frontend/site/ — Public site (Astro)
     frontend/docs/         — Documentation site (Astro)
     frontend/game/         — PixiJS v8 + bitECS game engine
     backend/firebase/      — Firebase Cloud Functions v2
