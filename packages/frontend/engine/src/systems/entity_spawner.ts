@@ -191,6 +191,8 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
     'interactionRadius',
     DEFAULT_INTERACTION_RADIUS,
   );
+  const isVendor = _getBoolProperty(spawnPoint.properties, 'isVendor', false);
+  const vendorInventory = _getStringProperty(spawnPoint.properties, 'vendorInventory', '');
   const textureKey = resolveNpcTexture(spawnPoint.properties);
 
   addComponent(world, eid, Position);
@@ -220,8 +222,21 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
       dialog,
       interactionRadius,
       playerInRange: false,
+      isVendor,
+      vendorInventory,
     }),
   );
+
+  if (isVendor) {
+    // biome-ignore lint/suspicious/noConsole: worker debug logging — vendor spawn
+    console.log('[entity_spawner] Spawned VENDOR NPC:', {
+      eid,
+      npcId,
+      npcName,
+      isVendor,
+      vendorInventory,
+    });
+  }
 
   return eid;
 };
@@ -357,6 +372,27 @@ const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
   );
 
   return eid;
+};
+
+/**
+ * Extracts a boolean property from a spawn point's properties map.
+ *
+ * Accepts boolean true, or string 'true'/'1'.
+ * Falls back to `defaultValue` otherwise.
+ */
+const _getBoolProperty = (
+  properties: Record<string, unknown>,
+  key: string,
+  defaultValue: boolean,
+): boolean => {
+  const value = properties[key];
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (value === 'true' || value === '1') {
+    return true;
+  }
+  return defaultValue;
 };
 
 // ---------------------------------------------------------------------------

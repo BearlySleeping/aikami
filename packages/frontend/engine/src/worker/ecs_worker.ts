@@ -949,6 +949,8 @@ self.onmessage = (event: MessageEvent): void => {
                     dialog: string;
                     interactionRadius: number;
                     personaId?: string;
+                    isVendor?: boolean;
+                    vendorInventory?: string;
                   }
                 | undefined;
               if (dialogComp) {
@@ -960,6 +962,8 @@ self.onmessage = (event: MessageEvent): void => {
                   interactionRadius: dialogComp.interactionRadius || 64,
                   relationshipValue: 0,
                   dialog: dialogComp.dialog || '',
+                  isVendor: dialogComp.isVendor || false,
+                  vendorInventory: dialogComp.vendorInventory || '',
                 };
               }
             }
