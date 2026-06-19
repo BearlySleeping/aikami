@@ -143,6 +143,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   /** Whether a map transition is currently in progress (fade overlay visible). */
   readonly isTransitioning: boolean;
 
+  /** Auto-save status for the toast notification. */
+  readonly autoSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
+
   /** Respawns the player after defeat (reloads current map). */
   respawnPlayer(): Promise<void>;
 
@@ -163,6 +166,8 @@ class GameUIViewModel
   saveMessage = $state<string | undefined>(undefined);
 
   isTransitioning = $state<boolean>(false);
+
+  autoSaveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   dialogueViewModel = $state<DialogueOverlayViewModel | undefined>(undefined);
 
@@ -196,6 +201,8 @@ class GameUIViewModel
   private readonly _textProviderEndpoint: string;
   /** Tracked total inventory quantity for detecting item pickups (C-150). */
   private _previousInventoryCount = 0;
+  /** Whether the initial map has loaded — first MAP_LOADED is skipped for auto-save. */
+  private _firstMapLoaded = false;
 
   constructor(options: GameUIViewModelOptions) {
     super(options);
@@ -279,19 +286,36 @@ class GameUIViewModel
       // and trigger the actual map load with defeated enemy persistence.
       bridge.on('ZONE_TRIGGERED', (event) => {
         this.isTransitioning = true;
+        // Stop old map's BGM before transition (AC-4: Audio Buffer Cleanup)
+        audioService.stopAll();
         void this._gameViewModel.loadMap(
           event.targetMap,
           event.targetX,
           event.targetY,
-          gameStateService.defeatedEnemies as string[],
+          // Spread to plain array — $state proxies can't be postMessage'd
+          [...(gameStateService.defeatedEnemies as string[])],
         );
       });
 
-      // Listen for GAME_READY to hide the transition overlay after load completes
+      // Listen for GAME_READY — fires once on engine initialization
       bridge.on('GAME_READY', () => {
         this.isTransitioning = false;
-        // Start exploration BGM on initial game load
         void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+      });
+
+      // MAP_LOADED fires after each map load completes — dismisses the
+      // fade-to-black transition overlay and restarts BGM.
+      bridge.on('MAP_LOADED', () => {
+        this.isTransitioning = false;
+        void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+
+        // Auto-save on zone transitions only (skip the initial map load).
+        // The first MAP_LOADED is the initial map; subsequent ones are
+        // triggered by ZONE_TRIGGERED transitions.
+        if (this._firstMapLoaded) {
+          void this._triggerAutoSave();
+        }
+        this._firstMapLoaded = true;
       });
 
       // Listen for COMBAT_STARTED to mount the combat overlay
@@ -514,6 +538,54 @@ class GameUIViewModel
   }
 
   /**
+   * Triggers an auto-save on zone transition completion.
+   *
+   * Fire-and-forget — never blocks the game loop. Writes the current
+   * ECS snapshot to the 'auto-save' IndexedDB slot and shows a brief
+   * toast notification via {@link autoSaveStatus}.
+   *
+   * Contract: C-155 AC-1 Zone Transition Auto-Save
+   */
+  private async _triggerAutoSave(): Promise<void> {
+    this.autoSaveStatus = 'saving';
+
+    try {
+      if (!this._saveService) {
+        const bridge = this._bridge;
+        if (!bridge) {
+          this.debug('_triggerAutoSave:no-bridge');
+          this.autoSaveStatus = 'error';
+          return;
+        }
+        this._saveService = new GameSaveService({
+          className: 'GameSaveService',
+          bridge,
+        });
+      }
+
+      await this._saveService.saveGame('auto-save');
+      this.autoSaveStatus = 'saved';
+
+      // Clear the toast after 2 seconds
+      setTimeout(() => {
+        if (this.autoSaveStatus === 'saved') {
+          this.autoSaveStatus = 'idle';
+        }
+      }, 2000);
+    } catch (error) {
+      this.debug('_triggerAutoSave:error', { error: String(error) });
+      this.autoSaveStatus = 'error';
+
+      // Clear the error toast after 3 seconds
+      setTimeout(() => {
+        if (this.autoSaveStatus === 'error') {
+          this.autoSaveStatus = 'idle';
+        }
+      }, 3000);
+    }
+  }
+
+  /**
    * Opens the inventory overlay.
    *
    * Locks the game in MENU mode (movement disabled) and creates the
@@ -640,12 +712,9 @@ class GameUIViewModel
     // Transition BGM back to exploration track (C-150)
     void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
     this._gameViewModel.resumeEngine();
-    await this._gameViewModel.loadMap(
-      '/assets/maps/sandbox_zone_a.json',
-      160,
-      192,
-      gameStateService.defeatedEnemies as string[],
-    );
+    await this._gameViewModel.loadMap('/assets/maps/sandbox_zone_a.json', 160, 192, [
+      ...(gameStateService.defeatedEnemies as string[]),
+    ]);
   }
 
   /** @inheritdoc */

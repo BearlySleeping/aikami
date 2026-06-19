@@ -71,6 +71,17 @@ export type GameViewModelInterface = BaseViewModelInterface & {
     targetY: number,
     defeatedEnemies?: string[],
   ): Promise<void>;
+
+  /**
+   * Restores the game world from a saved ECS snapshot payload.
+   *
+   * Clears all current entities and hydrates from the serialized state.
+   * The engine must be initialized before calling this method.
+   *
+   * @param payload - The serialized ECS snapshot JSON string from IndexedDB.
+   * @throws If the engine is not yet initialized.
+   */
+  loadSave(payload: string): Promise<void>;
 };
 
 /**
@@ -402,6 +413,14 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     if (this._gameWorld) {
       await this._gameWorld.loadMap(mapUrl, targetX, targetY, defeatedEnemies);
     }
+  }
+
+  /** @inheritdoc */
+  async loadSave(payload: string): Promise<void> {
+    if (!this._gameWorld) {
+      throw new Error('Engine not initialized — cannot load save');
+    }
+    await this._gameWorld.restoreWorld(payload);
   }
 
   /**

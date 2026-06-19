@@ -94,6 +94,7 @@ P2 (Polish — after P1):
 | C-152 | [End-to-End Boot Flow](C-152-end-to-end-boot-flow.md) ✅ | Stitch Main Menu → Character Creation → Starting Map; New Game/Continue branching, GameStateService.reset(), enterWorld clear state | C-121, C-123, C-132, C-138 |
 | C-153 | [Character Dashboard & Equipment](C-153-character-dashboard-equipment.md) ✅ | Character Dashboard (C-key overlay), Level/XP/HP/ATK/DEF display, Equipment slots with equip/unequip, stat bonuses from weapons/armor | C-152 |
 | C-154 | [AI Vendors & Economy](C-154-ai-vendors-economy.md) ✅ | Gold currency, vendor NPCs, Trading UI with AI haggling, buy/sell transactions | C-142, C-149, C-153 |
+| C-155 | [Autosave & Memory Hardening](C-155-autosave-memory-hardening.md) ✅ | Zone transition auto-save, UI feedback toast, PixiJS tilemap texture cleanup, audio buffer cleanup on map change | C-152, C-153, C-154 |
 
 ## Contract Format
 
