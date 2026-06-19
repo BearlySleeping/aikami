@@ -43,7 +43,7 @@
       "visible": false,
       "data": [
         2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0,
-        2, 2, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 2, 0, 0, 2, 2, 2, 2,
         2, 2
       ]
     },
@@ -60,14 +60,26 @@
           "width": 0,
           "height": 0,
           "properties": [
-            { "name": "npcId", "type": "string", "value": "zone_b_guard" },
-            { "name": "npcName", "type": "string", "value": "Zone B Guard" },
+            {
+              "name": "npcId",
+              "type": "string",
+              "value": "zone_b_guard"
+            },
+            {
+              "name": "npcName",
+              "type": "string",
+              "value": "Zone B Guard"
+            },
             {
               "name": "dialogueKey",
               "type": "string",
               "value": "You've reached Zone B! The transition system works."
             },
-            { "name": "interactionRadius", "type": "float", "value": 48 }
+            {
+              "name": "interactionRadius",
+              "type": "float",
+              "value": 48
+            }
           ]
         },
         {
@@ -78,8 +90,16 @@
           "width": 0,
           "height": 0,
           "properties": [
-            { "name": "propId", "type": "string", "value": "sign_zone_b" },
-            { "name": "propName", "type": "string", "value": "Zone B Sign" }
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "sign_zone_b"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Zone B Sign"
+            }
           ]
         }
       ]
@@ -93,13 +113,25 @@
           "id": 7,
           "type": "transition",
           "x": 4,
-          "y": 4,
+          "y": 224,
           "width": 40,
           "height": 24,
           "properties": [
-            { "name": "targetMap", "type": "string", "value": "/assets/maps/sandbox_zone_a.json" },
-            { "name": "targetX", "type": "float", "value": 288 },
-            { "name": "targetY", "type": "float", "value": 96 }
+            {
+              "name": "targetMap",
+              "type": "string",
+              "value": "/assets/maps/sandbox_zone_a.json"
+            },
+            {
+              "name": "targetX",
+              "type": "float",
+              "value": 288
+            },
+            {
+              "name": "targetY",
+              "type": "float",
+              "value": 160
+            }
           ]
         }
       ]

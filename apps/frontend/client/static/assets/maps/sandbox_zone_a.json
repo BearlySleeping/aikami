@@ -46,7 +46,7 @@
         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2,
         0, 0, 2, 0, 0, 2, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0,
         0, 2, 0, 0, 2, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2,
-        2, 2, 2, 2, 2, 2, 2
+        2, 2, 2, 2, 2, 0, 0
       ]
     },
     {
@@ -62,15 +62,31 @@
           "width": 0,
           "height": 0,
           "properties": [
-            { "name": "npcId", "type": "string", "value": "wandering_merchant" },
-            { "name": "npcName", "type": "string", "value": "Wandering Merchant" },
+            {
+              "name": "npcId",
+              "type": "string",
+              "value": "wandering_merchant"
+            },
+            {
+              "name": "npcName",
+              "type": "string",
+              "value": "Wandering Merchant"
+            },
             {
               "name": "dialogueKey",
               "type": "string",
               "value": "Welcome to Zone A, traveler! Goods for sale ahead."
             },
-            { "name": "interactionRadius", "type": "float", "value": 48 },
-            { "name": "isVendor", "type": "bool", "value": true },
+            {
+              "name": "interactionRadius",
+              "type": "float",
+              "value": 48
+            },
+            {
+              "name": "isVendor",
+              "type": "bool",
+              "value": true
+            },
             {
               "name": "vendorInventory",
               "type": "string",
@@ -86,8 +102,16 @@
           "width": 0,
           "height": 0,
           "properties": [
-            { "name": "propId", "type": "string", "value": "barrel_1" },
-            { "name": "propName", "type": "string", "value": "Old Barrel" }
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "barrel_1"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Old Barrel"
+            }
           ]
         },
         {
@@ -98,8 +122,16 @@
           "width": 0,
           "height": 0,
           "properties": [
-            { "name": "propId", "type": "string", "value": "crate_1" },
-            { "name": "propName", "type": "string", "value": "Wooden Crate" }
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "crate_1"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Wooden Crate"
+            }
           ]
         }
       ]
@@ -113,13 +145,25 @@
           "id": 4,
           "type": "transition",
           "x": 272,
-          "y": 4,
+          "y": 290,
           "width": 40,
           "height": 24,
           "properties": [
-            { "name": "targetMap", "type": "string", "value": "/assets/maps/sandbox_zone_b.json" },
-            { "name": "targetX", "type": "float", "value": 96 },
-            { "name": "targetY", "type": "float", "value": 160 }
+            {
+              "name": "targetMap",
+              "type": "string",
+              "value": "/assets/maps/sandbox_zone_b.json"
+            },
+            {
+              "name": "targetX",
+              "type": "float",
+              "value": 96
+            },
+            {
+              "name": "targetY",
+              "type": "float",
+              "value": 96
+            }
           ]
         }
       ]

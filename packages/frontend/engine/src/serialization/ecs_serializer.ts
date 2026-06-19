@@ -38,7 +38,7 @@ const PERSISTENT_COMPONENTS: Array<[string, Record<string, Array<unknown>>]> = [
  * Allows `undefined` because SoA arrays may have gaps.
  * Not exposed — the wire format uses EcsSnapshot from @aikami/types.
  */
-type ComponentSlice = Record<string, Array<number | string | boolean | undefined>>;
+type ComponentSlice = Record<string, Array<number | string | boolean | null | undefined>>;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -114,7 +114,9 @@ const _restoreComponentSlice = (
     for (let i = 0; i < eids.length; i++) {
       const eid = eids[i];
       const value = values[i];
-      if (value === undefined) {
+      // Skip null/undefined — these represent gaps in sparse SoA arrays
+      // (entity exists but field is not set for this entity).
+      if (value === undefined || value === null) {
         continue;
       }
 
