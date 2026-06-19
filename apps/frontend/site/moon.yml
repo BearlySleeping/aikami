@@ -9,8 +9,8 @@ tags:
   - 'application'
 
 project:
-  name: 'landing-page'
-  description: 'Public marketing landing page built with Astro.'
+  name: 'site'
+  description: 'Public marketing site built with Astro.'
   channel: '#frontend'
   owner: 'Frontend Team'
 

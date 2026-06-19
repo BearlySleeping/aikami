@@ -1,5 +1,5 @@
 {
-  "name": "@app/landing_page",
+  "name": "@aikami/site",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",

@@ -20,10 +20,10 @@ export const backendAppIds = ['firebase'] as const;
  * |----------------|-------------------------------|---------------------------------------|
  * | `docs`         | `apps/frontend/docs`          | Documentation site                    |
  * | `game`       | `apps/frontend/game`        | game rendering engine               |
- * | `landing_page` | `apps/frontend/landing_page`  | Marketing landing page                |
+ * | `site`         | `apps/frontend/site`           | Public marketing site                 |
  * | `client`       | `apps/frontend/client`           | Main client app (characters, chat, settings) |
  */
-export const frontendAppIds = ['docs', 'landing_page', 'client'] as const;
+export const frontendAppIds = ['docs', 'site', 'client'] as const;
 
 /**
  * All Aikami application identifiers (backend + frontend).

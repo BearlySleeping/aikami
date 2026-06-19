@@ -47,7 +47,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   private _initialRouteHandled = false;
 
   /** Boot screen is shown only on first visit; subsequent refreshes skip it. */
-  showBootDiagnostics = $state(!appService.bootComplete);
+  private _showBootDiagnostics = $state(!appService.bootComplete);
 
   constructor(options: AppViewModelOptions) {
     super(options);
@@ -101,6 +101,20 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     return routerService.currentRoute;
   }
 
+  get showBootDiagnostics() {
+    const { url } = page;
+    const { pathname, searchParams } = url;
+    if (
+      !pathname.startsWith('/settings') ||
+      pathname.startsWith('/dev') ||
+      searchParams.get('skip-onboarding') !== null
+    ) {
+      return false;
+    }
+
+    return this._showBootDiagnostics;
+  }
+
   // --------------------------------------------------------------------------
   // Initialization
   // --------------------------------------------------------------------------
@@ -108,7 +122,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   /** Hides the boot diagnostics screen and persists the flag so it won't show again. */
   onBootComplete(): void {
     appService.markBootComplete();
-    this.showBootDiagnostics = false;
+    this._showBootDiagnostics = false;
   }
 
   override async initialize(): Promise<void> {
