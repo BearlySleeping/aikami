@@ -1539,3 +1539,102 @@ Resolved all 16 pre-existing client unit test failures:
 - Tilemap texture cleanup relies on PixiJS v8's BaseTexture ref-counting — if a future change bypasses the Assets cache for tile textures, `texture: true` could prematurely destroy shared resources. This is monitored via the AC-3 acceptance criterion (Chrome DevTools memory profiling).
 - Audio buffer cache in `AudioService` grows unbounded — `stopAll()` stops playback but doesn't evict decoded AudioBuffers from the cache. Extended play sessions across many maps with different BGM tracks will accumulate memory. This is pre-existing (C-150) and noted as a known limitation there.
 - No unit tests for `_triggerAutoSave` or auto-save toast — tested manually via the AC criteria. Unit testing would require mocking `GameSaveService` + `IndexedDB` + `EngineBridge` which is future work.
+
+### 🧠 C-155 Developer Notes — Quirks, Gotchas & Post-Mortem
+
+These notes capture undocumented behaviors discovered during implementation
+that are not obvious from reading the code. Keep these in mind when debugging
+zone transitions, save/load, or memory issues.
+
+#### postMessage & Svelte 5 \$state Proxies
+
+`gameStateService.defeatedEnemies` is a `\$state` array — a Svelte 5 reactive Proxy.
+The Web Worker `postMessage` API uses the **structured clone algorithm** which
+**cannot clone Proxies**. Passing a \$state array directly causes:
+
+```
+DataCloneError: Failed to execute 'postMessage' on 'Worker': [object Array] could not be cloned.
+```
+
+**Fix**: Always spread to a plain array before passing to `postMessage`:
+```typescript
+// ❌ Breaks:
+gameWorld.loadMap(url, x, y, gameStateService.defeatedEnemies);
+
+// ✅ Works:
+gameWorld.loadMap(url, x, y, [...gameStateService.defeatedEnemies]);
+```
+
+This applies to ANY reactive state passed across the worker boundary —
+inventory, quests, defeatedEnemies, etc.
+
+#### postMessage & Tiled Property Values
+
+Spawn point properties from Tiled JSON can contain values that `postMessage`
+can't clone (e.g., Python `True` converted to a JS boolean via Vite's JSON
+loader may end up as a non-plain object). **Always sanitize with**
+`JSON.parse(JSON.stringify(...))` before sending spawn data to the worker.
+
+#### GAME_READY vs MAP_LOADED
+
+These are NOT the same thing:
+- `GAME_READY` — fires **once** when the engine initializes
+- `MAP_LOADED` — fires after **every** `loadMap()` call (including the initial one)
+
+Zone transition overlays (the fade-to-black) were broken because the code
+listened for `GAME_READY` to dismiss them, but `GAME_READY` never fires after
+a zone transition. Now `MAP_LOADED` handles the overlay dismissal.
+
+#### Transition Zone Entities Are NOT Serialized
+
+Transition zones are map data (from Tiled), not ECS state. They are **not**
+included in the ECS snapshot. After `LOAD_GAME` clears all entities and
+restores from snapshot, transition zone triggers are gone.
+
+The worker stores `_lastTransitionZones` during `LOAD_MAP` and re-spawns
+them after `LOAD_GAME`. If you add new component types that should survive
+save/load, check whether they need similar re-spawning logic.
+
+#### Camera Reset After LOAD_GAME
+
+The camera system uses `initialized` flag + lerp. After `LOAD_GAME` restores
+entities at new positions, the camera was lerping from the OLD position instead
+of snapping. `resetCameraTracking()` must be called in `LOAD_GAME` (matching
+`INITIALIZE_ENGINE` and `LOAD_MAP` patterns).
+
+#### APPEARANCE_CHANGED Required for LPC Textures
+
+When entities are created (either from spawn or from save/load), the main
+thread creates **colored debug squares** (Sprite + Texture.WHITE + tint).
+Only when `APPEARANCE_CHANGED` is emitted does the LPC texture loading
+pipeline kick in. `LOAD_GAME` originally did NOT emit these events, so
+restored entities stayed as colored squares.
+
+#### ECS Snapshot Schema: null in Component Arrays
+
+The `ComponentSliceSchema` uses `Type.Union([Number, String, Boolean, Null])`.
+The `Null` variant is essential because SoA (Structure of Arrays) components
+have gaps: if entity 1 has `hp: 100` but entity 2 has no CombatStats, the array
+is `[100, undefined]`. After `JSON.stringify`, `undefined` becomes `null`.
+Without `Type.Null()` in the schema, deserialization rejects valid snapshots.
+
+#### Debug Grid vs Map Coordinates
+
+The debug grid was originally centered at (0,0) spanning (-160 to +160),
+while maps start at (0,0) spanning (0 to 320). This made it look like the
+map was offset from the grid. The grid now aligns with the map origin.
+
+#### Tilemap Collision at Map Edges
+
+Tiled maps typically have full collision rows at the edges (row 0 and last row).
+When placing transition zone portals near map edges, you MUST clear collision
+tiles at the portal opening or the player can never walk into the trigger zone.
+See `sandbox_zone_a.json` row 9 columns 8-9 for the pattern.
+
+#### Worker Logging
+
+The ECS worker runs in a Web Worker context. Path aliases (`\$logger`) and
+NPM packages may not resolve correctly. Use the local `worker_logger.ts`
+wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
+`\$logger` imports. The wrapper exists at:
+`packages/frontend/engine/src/worker/worker_logger.ts`
