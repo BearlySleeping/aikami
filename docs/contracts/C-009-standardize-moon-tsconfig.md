@@ -127,7 +127,7 @@ template: "vite-application"
 | `frontend-repositories` | `packages/frontend/repositories` | frontend | library     | typescript-library |
 | `frontend-components`   | `packages/frontend/components`   | frontend | library     | typescript-library |
 | `client`                   | `apps/frontend/client`              | frontend | application | vite-application   |
-| `landing-page`          | `apps/frontend/landing_page`     | frontend | application | vite-application   |
+| `site`                  | `apps/frontend/site`             | frontend | application | vite-application   |
 | `docs`                  | `apps/frontend/docs`             | frontend | application | vite-application   |
 | `gamejs`                | `apps/frontend/gamejs`           | frontend | application | vite-application   |
 | `functions`             | `apps/backend/functions`         | backend  | application | firebase-functions |

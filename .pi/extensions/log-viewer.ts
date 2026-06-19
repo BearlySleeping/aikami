@@ -19,7 +19,7 @@ import { Type } from "typebox"
 const APP_CONFIG: Record<string, { serviceType: string }> = {
   pwa: { serviceType: "cloud-run" },
   functions: { serviceType: "firebase-functions" },
-  "landing-page": { serviceType: "firebase-hosting" },
+  site: { serviceType: "firebase-hosting" },
 }
 
 const APP_SERVICE_TYPES: Record<string, string> = Object.fromEntries(
@@ -36,7 +36,7 @@ export default function (pi: ExtensionAPI) {
     label: "Logs: View Service Logs",
     description:
       "View logs for Aikami services. "
-      + "Apps: pwa, admin, landing, functions. "
+      + "Apps: pwa, admin, site, functions. "
       + "Log actions: tail, line limits, time filters, function name filters. "
       + "For Firestore log_entries (client-side structured logs), use firestore_query instead.",
     promptSnippet:
@@ -47,7 +47,7 @@ export default function (pi: ExtensionAPI) {
       "Use service_logs when user says 'tail the logs' → tail=true.",
       "Use firestore_query(collection='log_entries', env='emulator') for structured Firestore logs.",
       "For functions, route via firestack (handles --only, --type, --since, --tail, --mode natively).",
-      "For Cloud Run (pwa, admin) and Hosting (landing), route via gcloud logging script.",
+      "For Cloud Run (pwa, admin) and Hosting (site), route via gcloud logging script.",
     ],
     parameters: Type.Object({
       action: Type.Optional(

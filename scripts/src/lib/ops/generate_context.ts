@@ -23,7 +23,7 @@ async function main() {
       path: 'apps/frontend/client',
       desc: 'Main Progressive Web App (SvelteKit 2, Svelte 5)',
     },
-    { name: 'Landing', path: 'apps/frontend/landing_page', desc: 'Public landing page' },
+    { name: 'Site', path: 'apps/frontend/site', desc: 'Public site' },
     { name: 'Docs', path: 'apps/frontend/docs', desc: 'Documentation site (Astro)' },
     {
       name: 'Firebase',

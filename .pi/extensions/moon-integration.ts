@@ -4,7 +4,7 @@ import { Type } from "typebox"
 
 /** Fallback workspace summary — used if moon query fails. Update when projects change. */
 const FALLBACK_SUMMARY = `Workspace: aikami projects (moon)
-Apps:  pwa, landing-page, docs, game, firebase
+Apps:  pwa, site, docs, game, firebase
 Libs:  constants, schemas, types, logger, utils, mocks, backend-*, frontend-*`
 
 export default function (pi: ExtensionAPI) {
@@ -283,7 +283,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Runs blackbox integration tests against local emulators + dev servers. "
       + "Starts/stops emulators and dev servers automatically. "
-      + "Suites: schema-check, functions, pwa, landing-page, docs, cross-service.",
+      + "Suites: schema-check, functions, pwa, site, docs, cross-service.",
     promptSnippet:
       "Use blackbox_test to run full-stack blackbox integration tests locally.",
     promptGuidelines: [
@@ -298,7 +298,7 @@ export default function (pi: ExtensionAPI) {
       suites: Type.Optional(
         Type.Array(Type.String(), {
           description:
-            "Specific suites to run: schema-check, functions, pwa, landing-page, docs, cross-service. Omit to run all.",
+            "Specific suites to run: schema-check, functions, pwa, site, docs, cross-service. Omit to run all.",
           default: [],
         })
       ),

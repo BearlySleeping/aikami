@@ -52,11 +52,11 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     prefix: 'CLIENT',
     cloudRunServiceId: 'client',
   },
-  landing_page: {
+  site: {
     serviceType: 'firebase-hosting',
-    path: 'apps/frontend/landing',
-    shortName: 'info',
-    prefix: 'LANDING',
+    path: 'apps/frontend/site',
+    shortName: 'site',
+    prefix: 'SITE',
     deployBranches: ['master', 'dev'],
   },
   firebase: {

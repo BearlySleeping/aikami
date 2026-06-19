@@ -1,5 +1,5 @@
 {
-  "name": "@app/docs",
+  "name": "@aikami/docs",
   "scripts": {
     "dev": "astro dev",
     "start": "astro start",
