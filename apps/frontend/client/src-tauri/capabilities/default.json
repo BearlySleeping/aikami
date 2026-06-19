@@ -3,5 +3,18 @@
   "identifier": "default",
   "description": "Default capabilities for the main window",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default", "fs:default", "dialog:default", "http:default"]
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "fs:default",
+    "dialog:default",
+    "http:default",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "http://localhost:11434/**" },
+        { "url": "http://localhost:8188/**" }
+      ]
+    }
+  ]
 }

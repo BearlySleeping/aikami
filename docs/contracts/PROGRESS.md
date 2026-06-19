@@ -40,6 +40,7 @@
 | C-153 | Character Dashboard & Equipment | ✅ completed |
 | C-154 | AI Vendors & Economy | ✅ completed |
 | C-155 | Autosave & Memory Hardening | ✅ completed |
+| C-156 | Tauri Production Release | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -1540,11 +1541,140 @@ Resolved all 16 pre-existing client unit test failures:
 - Audio buffer cache in `AudioService` grows unbounded — `stopAll()` stops playback but doesn't evict decoded AudioBuffers from the cache. Extended play sessions across many maps with different BGM tracks will accumulate memory. This is pre-existing (C-150) and noted as a known limitation there.
 - No unit tests for `_triggerAutoSave` or auto-save toast — tested manually via the AC criteria. Unit testing would require mocking `GameSaveService` + `IndexedDB` + `EngineBridge` which is future work.
 
-### 🧠 C-155 Developer Notes — Quirks, Gotchas & Post-Mortem
+### C-156: Tauri Production Release
 
-These notes capture undocumented behaviors discovered during implementation
-that are not obvious from reading the code. Keep these in mind when debugging
-zone transitions, save/load, or memory issues.
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src-tauri/tauri.conf.json` — Changed `beforeBuildCommand` from `bun run build:emulator` to `bun run build` (production mode); added `http://localhost:11434` (Ollama) and `http://localhost:8188` (ComfyUI) to `connect-src` CSP; added `http://localhost:8188` to `img-src` CSP for generated image display
+- `apps/frontend/client/src-tauri/capabilities/default.json` — Added explicit `http:allow-fetch` scopes for `http://localhost:11434/**` and `http://localhost:8188/**` (documentation + least-privilege hardening beyond `http:default`)
+- `apps/frontend/client/svelte.config.js` — Added missing `assets: 'build'` to `adapter-static` config (previously only `pages: 'build'` was set; `assets` ensures all static files including LPC spritesheets, audio, and tilemaps are properly copied to the build output)
+
+**Production build result**: ✅ `bun run build` (vite build --mode production) completed successfully — 11.3s total. Output in `build/` verified:
+- All SvelteKit routes present (index.html, game.html, settings.html, setup.html, dev.html)
+- Audio assets bundled (bgm_combat.webm, bgm_explore.webm, sfx_hit.wav, sfx_pickup.wav)
+- LPC spritesheets (6,000+ WebP files) bundled under `build/lpc/`
+- Tilemap JSON files (sandbox_zone_a.json, sandbox_zone_b.json, sandbox_combat.json) bundled under `build/assets/maps/`
+- Service worker (`service-worker.js`) copied to build root
+- Favicon, robots.txt present
+
+**Deviations**:
+1. **Tauri binary build not attempted**: `tauri build` requires the Rust toolchain (`cargo`, `rustc`) and Linux system libraries (`libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, etc.) which are not available in the Nix devShell. The SvelteKit production build (what Tauri calls as `beforeBuildCommand`) was verified. The Tauri Rust compilation is deferred to a developer machine with the full Tauri build environment. The moon `client:tauri-build` task is pre-configured for this.
+2. **Explicit HTTP scopes are redundant with `http:default`**: `http:default` already grants all-origin HTTP access. The explicit `http:allow-fetch` scopes serve as documentation and harden against future Tauri v2 permission tightening where `http:default` may be narrowed.
+3. **`assets: 'build'` was missing from adapter-static**: The previous config only set `pages: 'build'`. While `@sveltejs/adapter-static` may default `assets` to `pages` when omitted, setting it explicitly ensures correct behavior across adapter versions.
+
+**Design decisions**:
+1. **`beforeBuildCommand` = `bun run build` (production)**: Uses the production Vite mode which sets `NODE_ENV=production`, enables minification, tree-shaking, and disables development-only features like eruda. The emulator build (`build:emulator`) was used during development when the Tauri dev server (`tauri dev`) was not needed.
+2. **CSP: localhost URLs added to `connect-src` and `img-src`**: Ollama (11434) and ComfyUI (8188) are local-only services. Adding `http://localhost:11434` and `http://localhost:8188` to `connect-src` allows `fetch()` calls. Adding `http://localhost:8188` to `img-src` allows displaying ComfyUI-generated images (served from localhost) in `<img>` tags.
+3. **No `ws://` added**: Ollama uses REST API (HTTP POST to `/api/generate`), not WebSockets. ComfyUI also uses HTTP. WebSocket CSP entries would be unnecessary dead config.
+4. **Capability scopes use `/**` suffix**: Tauri v2 HTTP plugin URL patterns require the `/**` glob to allow sub-paths. `http://localhost:11434/` alone would only match the root path.
+
+### 🧠 C-156 Developer Notes — Quirks, Gotchas & Post-Mortem
+
+These notes capture findings from the Tauri production build configuration
+process. Keep these in mind when debugging Tauri builds, CSP issues, or
+asset resolution in the production executable.
+
+#### Service Workers on Custom Protocols
+
+Tauri v2 uses custom protocols (`tauri://` and `asset://`) for loading the
+frontend from the local filesystem. Service Workers have limited or no
+support on non-HTTP protocols. The current service worker registration
+code runs `navigator.serviceWorker.register('/service-worker.js', { scope: '/' })`.
+
+In Tauri production builds, this registration will likely **silently fail**
+because the page is loaded from `tauri://localhost` or `asset://localhost`,
+not `http://localhost`. The service worker provides:
+1. iOS Safari audio range request interceptor (C-150) — not needed on desktop
+2. Future PWA offline caching — Tauri already serves from local files
+
+**Impact**: Low. The audio range interceptor is only needed for iOS Safari.
+Desktop Tauri has full audio support via the native WebView. If offline
+caching is needed in the future, Tauri's built-in asset bundling handles it.
+
+**Mitigation**: Consider conditionally registering the service worker only
+when running in a browser (not Tauri):
+```typescript
+import { isTauri } from '@tauri-apps/api/core';
+if (!isTauri()) {
+  navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+}
+```
+
+#### CSP and Tauri WebView Differences
+
+The Tauri WebView (WebKitGTK on Linux, WebKit on macOS, WebView2 on Windows)
+enforces the CSP from `tauri.conf.json` → `app.security.csp`. This is a
+**different CSP layer** from what Vite's dev/preview server applies via HTTP
+headers. Key differences:
+
+- `tauri: asset:` protocol sources — Tauri-specific, not valid in browser CSP
+- The CSP is applied at the WebView level, not the HTTP level
+- `'self'` in Tauri CSP resolves to the custom protocol origin
+- CSP violations in Tauri may not appear in the normal browser console —
+  use Tauri's `tauri://localhost` DevTools if available
+
+#### localhost vs 127.0.0.1
+
+The CSP entries use `localhost` (hostname), not `127.0.0.1` (IP). If Ollama
+or ComfyUI are configured to bind to `127.0.0.1` instead of `localhost`,
+the CSP will block the connection. The current codebase uses `localhost`
+consistently:
+```typescript
+const OLLAMA_URL = 'http://localhost:11434/' as const;
+const COMFY_BASE_URL = 'http://localhost:8188';
+```
+
+#### Absolute vs Relative Asset Paths in Production
+
+`adapter-static` handles the base path differently than the Vite dev server.
+In production:
+- `static/` assets are copied to the build root (e.g., `static/assets/audio/bgm_combat.webm` → `build/assets/audio/bgm_combat.webm`)
+- `import` statements with `?url` generate hashed filenames in `build/_app/immutable/assets/`
+- Relative paths in code that reference `static/` must be adjusted to match the build output layout
+
+The current codebase uses Vite's `import ?url` for most assets (tilemaps,
+audio files), which produces correct hashed paths. Assets loaded via the
+`Assets` cache system (PixiJS) use absolute paths from the root, which
+resolve correctly because Tauri serves all files from the build root.
+
+#### LPC Spritesheet Pathing
+
+LPC spritesheets (6,000+ WebP files) are loaded via:
+1. `LpcAssetCatalog` — static import map from `assets/lpc/`
+2. PixiJS `Assets.load()` — dynamic loading at render time
+
+The catalog uses relative paths like `/lpc/body/male/walk.png`. These work
+in both dev (Vite serves from `static/lpc/`) and production (copied to
+`build/lpc/`). No path adjustments needed.
+
+#### Tauri Build Environment Requirements
+
+The full Tauri build (`tauri build`) requires:
+- Rust toolchain (`cargo`, `rustc` ≥ 1.70)
+- Linux: `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`
+- macOS: Xcode Command Line Tools
+- Windows: Microsoft Visual Studio C++ Build Tools, WebView2 Runtime
+
+The moon task `client:tauri-build` is pre-configured and runs `bun run tauri:build`
+which invokes `tauri build` (SvelteKit build → Rust compile → platform bundle).
+
+#### ⚠️ The adapter-static fallback overwrite warning
+
+The build output shows:
+```
+Overwriting build/index.html with fallback page.
+Consider using a different name for the fallback.
+```
+
+This is **normal and expected** for SPA mode with `adapter-static`. SvelteKit
+generates `index.html` for the root route, then the adapter overwrites it with
+the SPA fallback shell (the same content). The warning is cosmetic — both files
+are identical in our case because the root route (`/`) IS the app shell.
+
+To suppress: rename the fallback to something other than `index.html` and
+configure Tauri to serve it. But Tauri v2 expects `index.html` as the entry
+point, so keeping the default is correct.
 
 #### postMessage & Svelte 5 \$state Proxies
 

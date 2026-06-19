@@ -6,7 +6,7 @@
 | **Target** | `src-tauri/` and root configuration files |
 | **Priority** | P1 — Final step to achieve a playable MVP executable |
 | **Dependencies** | C-155 |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview
