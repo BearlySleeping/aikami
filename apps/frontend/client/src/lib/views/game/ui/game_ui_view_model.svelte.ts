@@ -18,6 +18,7 @@ import {
 import { CombatViewModel } from '../../combat/combat_view_model.svelte.ts';
 import { InventoryViewModel } from '../../inventory/inventory_view_model.svelte';
 import { QuestViewModel } from '../../quest/quest_view_model.svelte.ts';
+import { VendorViewModel } from '../../vendor/vendor_view_model.svelte';
 import type { GameViewModelInterface } from '../canvas/game_view_model.svelte';
 import { CharacterDashboardViewModel } from '../dashboard/character_dashboard_view_model.svelte';
 import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
@@ -41,7 +42,8 @@ export type GameOverlayType =
   | 'INVENTORY'
   | 'QUEST_LOG'
   | 'GAME_OVER'
-  | 'CHARACTER_DASHBOARD';
+  | 'CHARACTER_DASHBOARD'
+  | 'VENDOR';
 
 /** NPC data passed to the dialogue overlay when an interaction starts. */
 export type DialogueNpcData = {
@@ -94,6 +96,15 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
 
   /** The active CombatViewModel, or undefined when no combat is in progress. */
   readonly combatViewModel: CombatViewModel | undefined;
+
+  /** The active VendorViewModel, or undefined when the vendor overlay is closed. */
+  readonly vendorViewModel: VendorViewModel | undefined;
+
+  /** Opens the vendor overlay when a VENDOR_INTERACTED event is received. */
+  openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void;
+
+  /** Closes the vendor overlay and resumes the game. */
+  closeVendor(): void;
 
   /**
    * Handles global keydown events for overlay toggling.
@@ -163,6 +174,8 @@ class GameUIViewModel
 
   combatViewModel = $state<CombatViewModel | undefined>(undefined);
 
+  vendorViewModel = $state<VendorViewModel | undefined>(undefined);
+
   /** Whether Ollama (localhost) is the active text provider (vs OpenRouter). */
   readonly useOllama: boolean;
 
@@ -218,23 +231,42 @@ class GameUIViewModel
       });
 
       bridge.on('NPC_INTERACTED', (event) => {
-        if (this.activeOverlay === 'NONE') {
-          this.activeOverlay = 'DIALOGUE';
-          gameStateService.setMode('DIALOGUE');
-          this.dialogueNpc = {
-            npcId: event.npcId,
-            npcName: event.npcName,
-            dialog: event.dialog,
-            personaId: event.personaId,
-          };
-          this.dialogueViewModel = new DialogueOverlayViewModel({
-            className: 'DialogueOverlayViewModel',
-            npcData: this.dialogueNpc,
-            onEndChat: () => this.endDialogue(),
-            ollamaClient: this.useOllama ? new OllamaClient() : undefined,
-          });
-          this._gameViewModel.pauseEngine();
+        if (this.activeOverlay !== 'NONE') {
+          return;
         }
+        this.activeOverlay = 'DIALOGUE';
+        gameStateService.setMode('DIALOGUE');
+        this.dialogueNpc = {
+          npcId: event.npcId,
+          npcName: event.npcName,
+          dialog: event.dialog,
+          personaId: event.personaId,
+        };
+        this.dialogueViewModel = new DialogueOverlayViewModel({
+          className: 'DialogueOverlayViewModel',
+          npcData: this.dialogueNpc,
+          onEndChat: () => this.endDialogue(),
+          ollamaClient: this.useOllama ? new OllamaClient() : undefined,
+        });
+        this._gameViewModel.pauseEngine();
+      });
+
+      bridge.on('VENDOR_INTERACTED', (event) => {
+        this.debug('VENDOR_INTERACTED:received', {
+          npcId: event.npcId,
+          npcName: event.npcName,
+          vendorInventory: event.vendorInventory,
+          currentOverlay: this.activeOverlay,
+        });
+        if (this.activeOverlay !== 'NONE') {
+          this.debug('VENDOR_INTERACTED:blocked-by-overlay', { activeOverlay: this.activeOverlay });
+          return;
+        }
+        this.openVendor({
+          vendorId: event.npcId,
+          vendorName: event.npcName,
+          vendorInventory: event.vendorInventory,
+        });
       });
 
       bridge.on('NPC_DIALOG_END', () => {
@@ -347,6 +379,11 @@ class GameUIViewModel
         return;
       }
 
+      if (this.activeOverlay === 'VENDOR') {
+        this.closeVendor();
+        return;
+      }
+
       if (this.activeOverlay === 'QUEST_LOG') {
         this._closeQuestLog();
         return;
@@ -357,34 +394,43 @@ class GameUIViewModel
     }
 
     if (event.key === 'i' || event.key === 'I') {
-      event.preventDefault();
-
       if (this.activeOverlay === 'INVENTORY') {
+        event.preventDefault();
         this._closeInventory();
-      } else if (this.activeOverlay === 'NONE') {
+        return;
+      }
+      if (this.activeOverlay === 'NONE') {
+        event.preventDefault();
         this._openInventory();
+        return;
       }
       return;
     }
 
     if (event.key === 'q' || event.key === 'Q') {
-      event.preventDefault();
-
       if (this.activeOverlay === 'QUEST_LOG') {
+        event.preventDefault();
         this._closeQuestLog();
-      } else if (this.activeOverlay === 'NONE') {
+        return;
+      }
+      if (this.activeOverlay === 'NONE') {
+        event.preventDefault();
         this._openQuestLog();
+        return;
       }
       return;
     }
 
     if (event.key === 'c' || event.key === 'C') {
-      event.preventDefault();
-
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
+        event.preventDefault();
         this._closeCharacterDashboard();
-      } else if (this.activeOverlay === 'NONE') {
+        return;
+      }
+      if (this.activeOverlay === 'NONE') {
+        event.preventDefault();
         this._openCharacterDashboard();
+        return;
       }
     }
   }
@@ -607,6 +653,40 @@ class GameUIViewModel
     // Quit to main menu so the player can use the "Continue" button
     // which reads from the save system's IndexedDB slot.
     await routerService.navigateToApp();
+  }
+
+  /** @inheritdoc */
+  openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
+    this.debug('openVendor', {
+      vendorId: options.vendorId,
+      vendorName: options.vendorName,
+      vendorInventory: options.vendorInventory,
+    });
+    this.activeOverlay = 'VENDOR';
+    gameStateService.setMode('MENU');
+    this._gameViewModel.pauseEngine();
+    this.vendorViewModel = new VendorViewModel({
+      className: 'VendorViewModel',
+      vendorId: options.vendorId,
+      vendorName: options.vendorName,
+      vendorInventory: options.vendorInventory,
+      onClose: () => this.closeVendor(),
+    });
+    this.debug('openVendor:created', {
+      vendorItemCount: this.vendorViewModel.items.length,
+      vendorItems: this.vendorViewModel.items.map((i) => i.itemId),
+      playerGold: gameStateService.gold,
+    });
+  }
+
+  /** @inheritdoc */
+  closeVendor(): void {
+    this.debug('closeVendor');
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._gameViewModel.resumeEngine();
+    void this.vendorViewModel?.dispose();
+    this.vendorViewModel = undefined;
   }
 }
 

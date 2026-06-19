@@ -202,9 +202,10 @@ const _handleItemPickup = (options: {
 };
 
 /**
- * Emits {@link NPC_INTERACTED} for the given NPC entity.
+ * Emits {@link NPC_INTERACTED} or {@link VENDOR_INTERACTED} for the given NPC entity.
  *
- * This triggers the dialogue overlay in the UI layer.
+ * Vendor NPCs (isVendor=true) open the VendorView overlay.
+ * Non-vendor NPCs open the DialogueOverlay.
  */
 const _handleNpcInteraction = (options: {
   world: World;
@@ -218,12 +219,35 @@ const _handleNpcInteraction = (options: {
     return;
   }
 
-  bridge.emit({
-    type: 'NPC_INTERACTED',
-    npcId: npcDialog.npcId,
-    npcName: npcDialog.npcName,
-    dialog: npcDialog.dialog,
-  });
+  if (npcDialog.isVendor) {
+    // biome-ignore lint/suspicious/noConsole: worker debug logging — vendor interaction path
+    console.log('[interaction_system] VENDOR NPC interacted:', {
+      npcId: npcDialog.npcId,
+      npcName: npcDialog.npcName,
+      isVendor: npcDialog.isVendor,
+      vendorInventory: npcDialog.vendorInventory,
+    });
+    bridge.emit({
+      type: 'VENDOR_INTERACTED',
+      npcId: npcDialog.npcId,
+      npcName: npcDialog.npcName,
+      dialog: npcDialog.dialog,
+      vendorInventory: npcDialog.vendorInventory,
+    });
+  } else {
+    // biome-ignore lint/suspicious/noConsole: worker debug logging — non-vendor interaction path
+    console.log('[interaction_system] NON-VENDOR NPC interacted:', {
+      npcId: npcDialog.npcId,
+      npcName: npcDialog.npcName,
+      isVendor: npcDialog.isVendor,
+    });
+    bridge.emit({
+      type: 'NPC_INTERACTED',
+      npcId: npcDialog.npcId,
+      npcName: npcDialog.npcName,
+      dialog: npcDialog.dialog,
+    });
+  }
 };
 
 export { handleInteract };

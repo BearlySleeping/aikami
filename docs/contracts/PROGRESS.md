@@ -38,6 +38,7 @@
 | C-151 | AI Dynamic Music via Data Connect | ✅ completed |
 | C-152 | End-to-End Boot Flow | ✅ completed |
 | C-153 | Character Dashboard & Equipment | ✅ completed |
+| C-154 | AI Vendors & Economy | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -1458,3 +1459,55 @@ Resolved all 16 pre-existing client unit test failures:
 **Test results**:
 - 385/395 tests pass (10 pre-existing failures unchanged)
 - 0 new test failures
+
+### C-154: AI Vendors & Economy
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/vendor/vendor_view_model.svelte.ts` — VendorViewModel: parses vendor inventory from comma-separated item IDs, manages AI haggling chat history, price multiplier tracking (0.5–1.5), gold-aware purchase flow with insufficient funds guard, plays pickup SFX on successful purchase, resets multiplier on close. ~270 lines.
+- `apps/frontend/client/src/lib/views/vendor/vendor_view.svelte` — VendorView: dual-pane DaisyUI overlay (left: AI chat with DaisyUI chat bubbles + textarea; right: gold display with price modifier badge, item grid with Buy buttons, transaction message feedback). ~210 lines.
+- `apps/frontend/client/src/lib/game/core/ai/prompts/vendor_action_schema.ts` — TypeBox `VendorActionSchema` with `narrative`, `priceMultiplier` (0.5–1.5), `refusesToSell`; `VENDOR_ACTION_SYSTEM_PROMPT` for LLM-driven vendor roleplaying with discount/punishment guidelines and example conversations.
+- `apps/frontend/client/src/lib/views/vendor/vendor_dev_view_model.svelte.ts` — VendorDevViewModel: overrides `haggle()` with 5-cycle mock AI responses (discount, deep discount, neutral, rage-quit, price gouge) for sandbox testing without LLM.
+- `apps/frontend/client/src/routes/(dev)/dev/sandbox/vendor/+page.svelte` — Vendor sandbox route: mounts VendorView with Grimbold's Forge vendor data, 8-item inventory, pre-seeded 500 gold.
+- `apps/frontend/client/src/lib/views/vendor/vendor_view_model.test.ts` — 21 unit tests: item parsing (comma-separated, whitespace trimming, empty/malformed), getFinalPrice (1.0x, 0.8x, 1.3x, 0.5x, 1.5x, 0), refusesToSell guard, closeVendor reset, initial state assertions.
+
+**Files modified**:
+- `apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts` — Added `gold: number` ($state, default 100), `addGold(options)`, `removeGold(options)` with insufficient-funds throw; added `gold = 0` to `reset()`
+- `apps/frontend/client/src/lib/services/game/game_state_service.test.ts` — 7 gold tests: initial balance, addGold increase, addGold non-positive discard, removeGold decrease, removeGold insufficient throw, removeGold non-positive discard, reset clears gold
+- `packages/frontend/engine/src/components/npc_dialog.ts` — Extended `NPCDialog` SoA with `isVendor: boolean[]`, `vendorInventory: string[]`; extended `NPCDialogData` type and `registerNPCDialogObservers` onSet/onGet
+- `packages/frontend/engine/src/types.ts` — Added `VENDOR_INTERACTED` event to `GameEvent` union with `npcId`, `npcName`, `dialog`, `vendorInventory` fields
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — `_spawnNpc()` parses `isVendor` (boolean) and `vendorInventory` (string) from Tiled properties via new `_getBoolProperty()` helper; passes both to `set(NPCDialog, {...})`
+- `packages/frontend/engine/src/systems/interaction_system.ts` — `_handleNpcInteraction()` checks `isVendor`: emits `VENDOR_INTERACTED` for vendors, `NPC_INTERACTED` for non-vendor NPCs
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `'VENDOR'` to `GameOverlayType`; added `vendorViewModel` field + `openVendor()`/`closeVendor()` methods; `_listenForDialogueEvents()` listens for `VENDOR_INTERACTED` → opens vendor overlay; Escape key closes vendor overlay
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Imported `VendorView`, rendered vendor overlay block when `activeOverlay === 'VENDOR'`
+- `apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.svelte` — Added "Vendor Sandbox (C-154)" navigation link to DevToolsPanel actions
+
+**Deviations**:
+1. **Gold starts at 100**: Player begins with 100 gold (reasonable starting currency for early-game trading). This can be adjusted or made configurable via character creation in a future contract.
+2. **Vendor inventory is comma-separated string**: The Tiled property `vendorInventory` stores item IDs as comma-separated text (e.g., `"rusty_sword,health_potion"`) rather than a structured array. Simpler for map authors and trivial to parse client-side.
+3. **VendorItem base prices are hardcoded**: The `VENDOR_ITEM_BASE_PRICES` map in the ViewModel defines prices for known items. Unknown items default to 10 gold. No external price database — future contracts could add price configuration via Tiled properties.
+4. **VENDOR_ACTION system prompt uses 'typebox' alias**: Same as `combat_action_schema.ts` — follows existing codebase convention (root `package.json` aliases `typebox@1.2.8`).
+
+**Design decisions**:
+1. **Additive gold, no economy service**: Gold is a simple number on GameStateService with `addGold`/`removeGold` methods. No separate EconomyService — follows the single-source-of-truth pattern established by existing state (inventory, quests, defeatedEnemies).
+2. **Haggle uses extractStructure, not streaming chat**: Unlike the dialogue overlay which uses `streamChat()`, vendor haggling uses `extractStructure()` for structured extraction. The LLM receives the full conversation context + item list and returns a single JSON object — faster and more predictable for mechanical price adjustments.
+3. **Multiplier resets on close**: Per contract requirement — the `priceMultiplier` resets to 1.0 when `closeVendor()` is called, preventing permanent discounts from carrying across visits.
+4. **Buy pushes directly to inventory array**: Items purchased from a vendor are pushed directly into `gameStateService.inventory` via reactive reassignment. Unlike world pickups, there's no ECS entity to destroy — the vendor's stock is purely virtual.
+5. **Pickup SFX on purchase**: `audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav')` is called on successful purchase — same sound as world item pickups for auditory consistency.
+6. **Transaction message auto-clears**: Success/error messages shown for 3 seconds via `setTimeout` then auto-dismiss — keeps the UI clean without requiring user dismissal.
+7. **Price modifier shows colored badge**: When `priceMultiplier !== 1.0`, a badge appears showing percentage change with color (green for discount, red for penalty) and direction arrow (▼/▲).
+
+**Known limitations**:
+- No sell-back mechanic — players can only buy from vendors, not sell their own items. Full two-way trading is future work.
+- Vendor stock is infinite — items are never depleted after purchase. A limited-stock system with restock mechanics is future work.
+- AI haggling requires a configured text AI provider (Ollama or OpenRouter). Without one, `haggle()` will show an error via catch block and the vendor AI will respond with "...".
+- The `VendorActionSchema` is only used by the VendorViewModel (single consumer). If other systems need vendor AI interaction (e.g., mobile app), the schema should migrate to `@aikami/schemas`.
+- Vendor inventory is static per NPC — no dynamic restocking, no per-visit randomization.
+- The `VENDOR_INTERACTED` event doesn't carry the vendor's `personaId` — all vendors use the same system prompt. Persona-aware vendor personalities (matching the dialogue overlay's `PERSONA_PROMPTS`) would improve roleplay depth.
+- No E2E tests for the vendor overlay — unit tests cover the ViewModel logic; visual verification via the /dev/sandbox/vendor route.
+
+**Test results**:
+- 21/21 new unit tests pass (VendorViewModel)
+- 7/7 new unit tests pass (GameStateService gold)
+- 0 pre-existing test regressions

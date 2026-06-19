@@ -229,6 +229,12 @@
         window.location.href = '/dev/sandbox/map';
       },
     },
+    {
+      label: 'Vendor Sandbox (C-154)',
+      onClick: () => {
+        window.location.href = '/dev/sandbox/vendor';
+      },
+    },
   ] satisfies DevAction[];
 </script>
 

@@ -149,6 +149,20 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
    * Contract: C-147 Progression & Persistence
    */
   readonly defeatedEnemies: readonly string[];
+  /**
+   * Player's current gold balance.
+   * Earned from quests, loot, and trading. Spent at vendors.
+   *
+   * Contract: C-154 AI Vendors Economy
+   */
+  readonly gold: number;
+  /** Adds the given amount to the player's gold balance. */
+  addGold(options: { amount: number }): void;
+  /**
+   * Removes the given amount from the player's gold balance.
+   * Throws if the player doesn't have enough gold.
+   */
+  removeGold(options: { amount: number }): void;
 
   // ── Player stats (C-153 Character Dashboard) ──
 
@@ -235,6 +249,9 @@ export class GameStateService
   quests = $state<QuestData[]>([]);
   /** Spawn point IDs of defeated enemies (C-147). */
   defeatedEnemies = $state<string[]>([]);
+
+  // ── Economy (C-154 AI Vendors Economy) ──
+  gold = $state<number>(100);
 
   // ── Player stats (C-153 Character Dashboard) ──
   playerLevel = $state<number>(1);
@@ -519,6 +536,7 @@ export class GameStateService
     this.quests = [];
     this.equippedWeapon = undefined;
     this.equippedArmor = undefined;
+    this.gold = 100;
     this.playerLevel = 1;
     this.playerXp = 0;
     this.playerXpToNext = 100;
@@ -527,6 +545,33 @@ export class GameStateService
     this.playerBaseAttack = 5;
     this.playerBaseDefense = 12;
     this.debug('reset:cleared');
+  }
+
+  // ── Gold methods (C-154) ──
+
+  /** @inheritdoc */
+  addGold(options: { amount: number }): void {
+    const { amount } = options;
+    if (amount <= 0) {
+      this.debug('addGold:non-positive', { amount });
+      return;
+    }
+    this.gold += amount;
+    this.debug('addGold', { amount, newBalance: this.gold });
+  }
+
+  /** @inheritdoc */
+  removeGold(options: { amount: number }): void {
+    const { amount } = options;
+    if (amount <= 0) {
+      this.debug('removeGold:non-positive', { amount });
+      return;
+    }
+    if (this.gold < amount) {
+      throw new Error(`Insufficient gold: have ${this.gold}, need ${amount}`);
+    }
+    this.gold -= amount;
+    this.debug('removeGold', { amount, newBalance: this.gold });
   }
 
   // ── Equipment methods (C-153) ──
