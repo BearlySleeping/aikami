@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/systems/zoning_system.ts
 import type { World } from 'bitecs';
 import { getComponent, query } from 'bitecs';
+import { logger } from '$logger';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { Transition, type TransitionData } from '../components/transition.ts';
@@ -51,8 +52,7 @@ export const updateZoningSystem = (
   // Debug: log player position and zone count once per second
   if (!_debugLogThrottle || performance.now() - _debugLogThrottle > 2000) {
     _debugLogThrottle = performance.now();
-    // biome-ignore lint/suspicious/noConsole: zone transition debug logging
-    console.debug(
+    logger.debug(
       `[ZoningSystem] player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) zones=${transitionEntities.length}`,
     );
   }
@@ -88,8 +88,7 @@ export const updateZoningSystem = (
     const dy = Math.max(0, zoneMinY - playerPos.y, playerPos.y - zoneMaxY);
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 80) {
-      // biome-ignore lint/suspicious/noConsole: zone proximity debug
-      console.debug(
+      logger.debug(
         `[ZoningSystem] near zone eid=${eid} dist=${dist.toFixed(0)} ` +
           `player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) ` +
           `zone=[${zoneMinX.toFixed(0)}..${zoneMaxX.toFixed(0)}, ${zoneMinY.toFixed(0)}..${zoneMaxY.toFixed(0)}] ` +
@@ -98,8 +97,7 @@ export const updateZoningSystem = (
     }
 
     if (inBoundsX && inBoundsY) {
-      // biome-ignore lint/suspicious/noConsole: zone trigger event
-      console.debug(`[ZoningSystem] 🚪 ZONE TRIGGERED! eid=${eid} → ${zoneData.targetMap}`);
+      logger.debug(`[ZoningSystem] 🚪 ZONE TRIGGERED! eid=${eid} → ${zoneData.targetMap}`);
       Transition.triggered[eid] = true;
 
       bridge.emit({
