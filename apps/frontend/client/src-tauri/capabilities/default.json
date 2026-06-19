@@ -11,10 +11,7 @@
     "http:default",
     {
       "identifier": "http:allow-fetch",
-      "allow": [
-        { "url": "http://localhost:11434/**" },
-        { "url": "http://localhost:8188/**" }
-      ]
+      "allow": [{ "url": "http://localhost:11434/**" }, { "url": "http://localhost:8188/**" }]
     }
   ]
 }

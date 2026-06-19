@@ -42,7 +42,7 @@ type AppID = Type.Static<typeof FrontendAppIdSchema>;
 
 const APP_REQUIREMENTS: Record<AppID, (keyof MasterEnv)[]> = {
   docs: [],
-  landing_page: [],
+  site: [],
   client: [],
 };
 

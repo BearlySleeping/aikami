@@ -45,7 +45,7 @@ Copy from aikami. Defines file groups and tasks inherited by ALL projects:
 ### 2. `.moon/task-templates/` — Task Templates
 Copy all three templates from aikami:
 - **typescript-library.yml**: For packages/shared/*, packages/backend/*, packages/frontend/* — vitest, biome, tsc
-- **vite-application.yml**: For apps/frontend/client, apps/frontend/docs, apps/frontend/landing_page — vite build, preview, dev
+- **vite-application.yml**: For apps/frontend/client, apps/frontend/docs, apps/frontend/site — vite build, preview, dev
 - **firebase-functions.yml**: For apps/backend/functions — firebase deploy, emulator
 
 ### 3. `.moon/hooks/` — Git Hooks

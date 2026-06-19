@@ -18,7 +18,7 @@ The Aikami ecosystem is composed of several key components that work together to
 ### 1. Frontend Applications
 
 -   **PWA (SvelteKit):** The main user-facing application. It's a Progressive Web App built with SvelteKit, allowing for a fast, native-like experience on both web and mobile. It handles user authentication, character management, and provides a rich interface for interacting with the game's world and community.
--   **Static Sites (Astro):** The landing page and documentation sites are built with Astro, which is perfect for content-heavy, performance-focused websites.
+-   **Static Sites (Astro):** The public site and documentation sites are built with Astro, which is perfect for content-heavy, performance-focused websites.
 -   **Game Client (Godot):** The game itself is a 2D top-down RPG built with the Godot Engine. It communicates with our backend services to fetch game data, process player actions, and receive real-time updates.
 
 ### 2. Backend Services

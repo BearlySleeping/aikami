@@ -36,11 +36,11 @@ export const ProjectIdMapSchema = Type.Object(
 
 // appIds, backendAppIds, frontendAppIds are spread from constants
 // backendAppIds = ['firebase'] as const
-// frontendAppIds = ['docs', 'game', 'landing_page', 'client'] as const
+// frontendAppIds = ['docs', 'site', 'client'] as const
 export const AppIdSchema = Type.Union([
   Type.Literal('firebase'),
   Type.Literal('docs'),
-  Type.Literal('landing_page'),
+  Type.Literal('site'),
   Type.Literal('client'),
 ]);
 
@@ -48,6 +48,6 @@ export const BackendAppIdSchema = Type.Union([Type.Literal('firebase')]);
 
 export const FrontendAppIdSchema = Type.Union([
   Type.Literal('docs'),
-  Type.Literal('landing_page'),
+  Type.Literal('site'),
   Type.Literal('client'),
 ]);

@@ -34,7 +34,7 @@ apps/
 │   │           ├── views/        # Svelte 5 ViewModels ($state runes)
 │   │           ├── components/   # Shared Svelte UI components
 │   │           └── client/       # Client-side services
-│   ├── landing_page/            # Landing page (Astro)
+│   ├── site/                     # Public site (Astro)
 │   ├── docs/                    # Documentation site (Astro)
 │   └── gamejs/                  # ⚠️ DEPRECATED — Legacy GodotJS client
 │                                #    Migration target: client/src/lib/game/
