@@ -39,6 +39,7 @@
 | C-152 | End-to-End Boot Flow | ✅ completed |
 | C-153 | Character Dashboard & Equipment | ✅ completed |
 | C-154 | AI Vendors & Economy | ✅ completed |
+| C-155 | Autosave & Memory Hardening | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -1511,3 +1512,30 @@ Resolved all 16 pre-existing client unit test failures:
 - 21/21 new unit tests pass (VendorViewModel)
 - 7/7 new unit tests pass (GameStateService gold)
 - 0 pre-existing test regressions
+
+### C-155: Autosave & Memory Hardening
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `autoSaveStatus` reactive state ('idle'|'saving'|'saved'|'error'), `_initialLoadComplete` flag to skip auto-save on first engine load, `_triggerAutoSave()` private method saving to 'auto-save' IndexedDB slot on zone transitions, `audioService.stopAll()` call in ZONE_TRIGGERED handler to free old map audio buffers before transition
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Added auto-save toast notification (bottom-right corner): spinner during save, green checkmark + "Saved!" on success, red exclamation + "Auto-save failed" on error; auto-dismisses after 2-3 seconds via reactive `autoSaveStatus` state
+- `packages/frontend/engine/src/game_world.ts` — Enhanced tilemap cleanup in `loadMap()` to use `destroy({ children: true, texture: true })` on old tilemap container, freeing map-specific RenderTextures and GPU memory on zone transitions
+
+**Deviations**:
+1. **Auto-save uses 'auto-save' slot (separate from manual 'manual-1')**: Manual saves via Pause Menu go to 'manual-1' slot. Auto-saves go to 'auto-save' slot. This prevents manual saves from being silently overwritten by zone transitions and allows the Continue button on the Main Menu to load the most recent save (auto-save) without confusion.
+2. **`_initialLoadComplete` flag in ViewModel, not engine**: The flag tracking whether the initial engine load has completed lives in GameUIViewModel (the overlay router) rather than the engine. This is correct — the engine emits GAME_READY for both initial load and zone transitions; only the ViewModel knows which is which.
+3. **Audio stop on ZONE_TRIGGERED, not in loadMap**: `audioService.stopAll()` is called in the ZONE_TRIGGERED bridge handler before `loadMap()` fires. This ensures the old map's BGM stops before the fade-to-black transition begins, rather than cutting out mid-fade.
+
+**Design decisions**:
+1. **Fire-and-forget auto-save**: `_triggerAutoSave()` is called via `void` — the player's movement is never blocked by IndexedDB writes. The toast notification provides async feedback without pausing gameplay.
+2. **Toast auto-dismiss timers**: Success toasts dismiss after 2s, error toasts after 3s. Timers check the current `autoSaveStatus` before clearing to avoid race conditions with rapid zone transitions.
+3. **`destroy({ texture: true })` on tilemap container only**: Entity render entries (LPC sprites) are NOT destroyed with `texture: true` because their textures come from the PixiJS Assets cache and are shared across maps. Only the tilemap's RenderTextures (created via `RenderTexture.create()`, map-specific) are explicitly freed. PixiJS v8 ref-counts BaseTextures so cached `Texture.from()` textures are safe from premature destruction.
+4. **No separate audio service audit modifications**: The existing `AudioService` already supports `stopAll()` (stops BGM sources, resets state, clears active track URL). The ZONE_TRIGGERED handler calls `stopAll()` before map transition and `transitionToBgm()` on GAME_READY to restart appropriate BGM. No service-level changes needed.
+
+**Known limitations**:
+- Auto-save fires on every zone transition — rapid back-and-forth transitions will create multiple IndexedDB writes in quick succession. The `isSaving` guard in `GameSaveService.saveGame()` prevents overlapping writes.
+- The auto-save toast is positioned at bottom-right (fixed) — not configurable.
+- Tilemap texture cleanup relies on PixiJS v8's BaseTexture ref-counting — if a future change bypasses the Assets cache for tile textures, `texture: true` could prematurely destroy shared resources. This is monitored via the AC-3 acceptance criterion (Chrome DevTools memory profiling).
+- Audio buffer cache in `AudioService` grows unbounded — `stopAll()` stops playback but doesn't evict decoded AudioBuffers from the cache. Extended play sessions across many maps with different BGM tracks will accumulate memory. This is pre-existing (C-150) and noted as a known limitation there.
+- No unit tests for `_triggerAutoSave` or auto-save toast — tested manually via the AC criteria. Unit testing would require mocking `GameSaveService` + `IndexedDB` + `EngineBridge` which is future work.

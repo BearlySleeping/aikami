@@ -48,6 +48,15 @@ export const updateZoningSystem = (
 
   const transitionEntities = query(world, TRANSITION_QUERY_TERMS);
 
+  // Debug: log player position and zone count once per second
+  if (!_debugLogThrottle || performance.now() - _debugLogThrottle > 2000) {
+    _debugLogThrottle = performance.now();
+    // biome-ignore lint/suspicious/noConsole: zone transition debug logging
+    console.debug(
+      `[ZoningSystem] player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) zones=${transitionEntities.length}`,
+    );
+  }
+
   for (const eid of transitionEntities) {
     // Skip already-triggered zones
     if (Transition.triggered[eid]) {
@@ -64,20 +73,33 @@ export const updateZoningSystem = (
       continue;
     }
 
-    // AABB overlap check: player point vs zone rectangle.
-    // The zone's Position is treated as the top-left corner; width/height
-    // define the extent. Using point-in-rect for simplicity — players are
-    // single-tile entities (1 pixel for collision purposes).
     const halfW = zoneData.width / 2;
     const halfH = zoneData.height / 2;
-    const zoneCenterX = zonePos.x;
-    const zoneCenterY = zonePos.y;
+    const zoneMinX = zonePos.x - halfW;
+    const zoneMaxX = zonePos.x + halfW;
+    const zoneMinY = zonePos.y - halfH;
+    const zoneMaxY = zonePos.y + halfH;
 
-    const inBoundsX = playerPos.x >= zoneCenterX - halfW && playerPos.x <= zoneCenterX + halfW;
-    const inBoundsY = playerPos.y >= zoneCenterY - halfH && playerPos.y <= zoneCenterY + halfH;
+    const inBoundsX = playerPos.x >= zoneMinX && playerPos.x <= zoneMaxX;
+    const inBoundsY = playerPos.y >= zoneMinY && playerPos.y <= zoneMaxY;
+
+    // Debug: log proximity when player is near a zone
+    const dx = Math.max(0, zoneMinX - playerPos.x, playerPos.x - zoneMaxX);
+    const dy = Math.max(0, zoneMinY - playerPos.y, playerPos.y - zoneMaxY);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 80) {
+      // biome-ignore lint/suspicious/noConsole: zone proximity debug
+      console.debug(
+        `[ZoningSystem] near zone eid=${eid} dist=${dist.toFixed(0)} ` +
+          `player=(${playerPos.x.toFixed(0)},${playerPos.y.toFixed(0)}) ` +
+          `zone=[${zoneMinX.toFixed(0)}..${zoneMaxX.toFixed(0)}, ${zoneMinY.toFixed(0)}..${zoneMaxY.toFixed(0)}] ` +
+          `inX=${inBoundsX} inY=${inBoundsY}`,
+      );
+    }
 
     if (inBoundsX && inBoundsY) {
-      // One-shot lock — prevent multiple triggers from the same zone
+      // biome-ignore lint/suspicious/noConsole: zone trigger event
+      console.debug(`[ZoningSystem] 🚪 ZONE TRIGGERED! eid=${eid} → ${zoneData.targetMap}`);
       Transition.triggered[eid] = true;
 
       bridge.emit({
@@ -89,3 +111,6 @@ export const updateZoningSystem = (
     }
   }
 };
+
+/** Throttle for per-second debug logs. */
+let _debugLogThrottle: number | undefined;

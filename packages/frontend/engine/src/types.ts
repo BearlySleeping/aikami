@@ -131,7 +131,10 @@ export type GameEvent =
       personaId?: string;
     }
   | {
-      /** Emitted when the player presses the interact key (E/Enter) near an NPC. */
+      /** Emitted when map transition completes — UI dismisses fade overlay. */
+      type: 'MAP_LOADED';
+    }
+  | {
       type: 'NPC_INTERACTED';
       npcId: string;
       npcName: string;

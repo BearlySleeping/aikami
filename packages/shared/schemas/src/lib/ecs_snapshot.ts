@@ -22,7 +22,10 @@ export const CURRENT_SNAPSHOT_VERSION = '1.0.0';
  */
 const ComponentSliceSchema = Type.Record(
   Type.String(),
-  Type.Array(Type.Union([Type.Number(), Type.String(), Type.Boolean()])),
+  // null represents "no value for this entity slot" — occurs when
+  // a component has a field that is undefined for some entities
+  // but populated for others (sparse SoA arrays).
+  Type.Array(Type.Union([Type.Number(), Type.String(), Type.Boolean(), Type.Null()])),
 );
 
 /**

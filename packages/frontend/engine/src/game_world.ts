@@ -561,6 +561,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         break;
       }
 
+      case 'CAMERA_SNAP': {
+        // Immediate camera position update from worker (used after
+        // LOAD_GAME to avoid waiting for the next tick-loop sync).
+        if (typeof message.x === 'number') {
+          this._cameraX = message.x;
+        }
+        if (typeof message.y === 'number') {
+          this._cameraY = message.y;
+        }
+        break;
+      }
+
       case 'ENGINE_ERROR': {
         this._bridge.emit({
           type: 'GAME_ERROR',
@@ -1173,12 +1185,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._npcMeta.clear();
     this._playerEntityId = 0;
 
-    // 3. Remove old tilemap from the world container
+    // 3. Remove old tilemap from the world container.
+    //    Destroy with texture:true to free map-specific RenderTextures
+    //    and GPU memory (C-155 AC-3: PixiJS Asset Cleanup).
+    //    PixiJS v8 ref-counts BaseTextures, so cached Assets textures
+    //    (Texture.from) shared across maps are NOT prematurely freed.
     if (this._worldContainer) {
       const oldTilemap = this._worldContainer.getChildByLabel('tilemap-background');
       if (oldTilemap) {
         this._worldContainer.removeChild(oldTilemap);
-        oldTilemap.destroy({ children: true });
+        oldTilemap.destroy({ children: true, texture: true });
       }
     }
 
@@ -1202,6 +1218,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
     }
 
+    // 5b. Render transition zone debug overlays so portals are visible.
+    //     Transition zones are invisible ECS triggers — without visual
+    //     indicators, the player cannot find where to walk.
+    this._renderTransitionZoneOverlays(transitionZones);
+
+    // 5c. Redraw the debug grid to match the new map's dimensions.
+    //     Different maps may have different tile counts.
+    this._drawDebugGrid({
+      width: tilemap.width,
+      height: tilemap.height,
+      tileSize: tilemap.tilewidth,
+    });
+
     // 6. Post LOAD_MAP to worker and wait for completion
     await this._postLoadMap({
       spawnPoints,
@@ -1224,6 +1253,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // 7. Resume the engine
     this._running = true;
     this.setInputLocked(false);
+
+    // Signal the UI layer that the map transition is complete so
+    // the fade-to-black overlay can be dismissed.
+    this._bridge.emit({ type: 'MAP_LOADED' });
 
     this.debug('loadMap:complete');
   }
@@ -1266,11 +1299,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       };
 
       this._worker.addEventListener('message', handler);
+
+      // Sanitize spawn-point properties for postMessage — some Tiled
+      // property values (e.g. Python bools read as Proxy) may not be
+      // structurally clonable by the Worker API.
+      const safeSpawnPoints = options.spawnPoints.map((sp) => ({
+        ...sp,
+        properties: JSON.parse(JSON.stringify(sp.properties)),
+      }));
+
+      // Sanitize collision grid — ensure it is a plain boolean array,
+      // not a typed array or proxy that postMessage cannot clone.
+      const safeCollisionGrid = options.collisionGrid
+        ? { ...options.collisionGrid, grid: [...options.collisionGrid.grid] }
+        : undefined;
+
       this._worker.postMessage({
         type: 'LOAD_MAP',
-        spawnPoints: options.spawnPoints,
+        spawnPoints: safeSpawnPoints,
         transitionZones: options.transitionZones,
-        collisionGrid: options.collisionGrid,
+        collisionGrid: safeCollisionGrid,
         mapPixelWidth: options.mapPixelWidth,
         mapPixelHeight: options.mapPixelHeight,
         targetX: options.targetX,
@@ -1285,45 +1333,96 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   // -----------------------------------------------------------------------
 
   /**
-   * Draws a 10×10 tile debug grid centered on the world origin.
+   * Draws a tile-aligned debug grid matching the map dimensions.
    *
-   * Each tile is 32×32 world units. With the 4× scale transform on
-   * {@link _worldContainer}, tiles appear as 128×128 screen pixels —
-   * large enough to be clearly visible. Provides spatial reference
-   * during development.
+   * Called during initialization with default 10×10 tiles, and after
+   * each {@link loadMap} with the actual map's tile count.
    */
-  private _drawDebugGrid(): void {
+  private _drawDebugGrid(opts?: { width: number; height: number; tileSize: number }): void {
     if (!this._app || !this._worldContainer) {
       return;
     }
 
+    // Remove old debug grid
+    const oldGrid = this._worldContainer.children.find((c) => c.label === 'debug-grid');
+    if (oldGrid) {
+      this._worldContainer.removeChild(oldGrid);
+      oldGrid.destroy();
+    }
+
     const grid = new Graphics();
+    grid.label = 'debug-grid';
     const strokeColor = 0x33334a;
+    const tileSize = opts?.tileSize ?? 32;
+    const gridW = opts?.width ?? 10;
+    const gridH = opts?.height ?? 10;
+    const pixelW = gridW * tileSize;
+    const pixelH = gridH * tileSize;
 
-    const tileSize = 32;
-    const tiles = 10;
-    const halfExtent = (tiles * tileSize) / 2;
-
-    for (let i = 0; i <= tiles; i++) {
-      const pos = i * tileSize - halfExtent;
-      // Vertical lines
-      grid
-        .moveTo(pos, -halfExtent)
-        .lineTo(pos, halfExtent)
-        .stroke({ width: 1, color: strokeColor });
-      // Horizontal lines
-      grid
-        .moveTo(-halfExtent, pos)
-        .lineTo(halfExtent, pos)
-        .stroke({ width: 1, color: strokeColor });
+    for (let col = 0; col <= gridW; col++) {
+      const x = col * tileSize;
+      grid.moveTo(x, 0).lineTo(x, pixelH).stroke({ width: 1, color: strokeColor });
+    }
+    for (let row = 0; row <= gridH; row++) {
+      const y = row * tileSize;
+      grid.moveTo(0, y).lineTo(pixelW, y).stroke({ width: 1, color: strokeColor });
     }
 
     this._worldContainer.addChildAt(grid, 0); // behind all entities
   }
 
-  // -----------------------------------------------------------------------
-  // Internal: Render from buffer
-  // -----------------------------------------------------------------------
+  /**
+   * Draws debug overlays for transition zones so portals are visible.
+   *
+   * Each zone is rendered as a semi-transparent colored rectangle with
+   * a pulsing animation and an arrow indicator. This is the ONLY way
+   * players can see where to walk to trigger zone transitions.
+   *
+   * Called from {@link loadMap} after the tilemap is rendered.
+   */
+  private _renderTransitionZoneOverlays(
+    zones: import('./assets/map_loader.ts').TransitionZone[],
+  ): void {
+    if (!this._worldContainer || zones.length === 0) {
+      return;
+    }
+
+    // Remove old overlays first
+    const oldOverlays = this._worldContainer.children.filter(
+      (c) => typeof c.label === 'string' && c.label.startsWith('zone-overlay-'),
+    );
+    for (const overlay of oldOverlays) {
+      this._worldContainer.removeChild(overlay);
+      overlay.destroy({ children: true });
+    }
+
+    for (const zone of zones) {
+      const graphics = new Graphics();
+
+      // Semi-transparent fill
+      graphics.rect(zone.x, zone.y, zone.width, zone.height);
+      graphics.fill({ color: 0x00ff88, alpha: 0.2 });
+
+      // Bright border
+      graphics.rect(zone.x, zone.y, zone.width, zone.height);
+      graphics.stroke({ width: 2, color: 0x00ff88, alpha: 0.8 });
+
+      // Direction arrow (pointing into the zone)
+      const cx = zone.x + zone.width / 2;
+      const cy = zone.y + zone.height / 2;
+      graphics.moveTo(cx, cy - 8);
+      graphics.lineTo(cx, cy + 4);
+      graphics.lineTo(cx - 6, cy - 2);
+      graphics.moveTo(cx, cy + 4);
+      graphics.lineTo(cx + 6, cy - 2);
+      graphics.stroke({ width: 1.5, color: 0x00ff88, alpha: 0.9 });
+
+      graphics.label = `zone-overlay-${zone.id}`;
+      graphics.eventMode = 'none';
+
+      this._worldContainer.addChild(graphics);
+    }
+  }
 
   /**
    * Updates PixiJS display object positions from the active render buffer.

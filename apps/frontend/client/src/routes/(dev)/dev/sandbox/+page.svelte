@@ -222,11 +222,68 @@
       label: 'Clear Quests',
       onClick: () => _clearQuests(),
     },
+    // ── Save/Load ─────────────────────────────────────────────────
+    {
+      label: '💾 Save Game (manual-1)',
+      onClick: async () => {
+        const { GameSaveService } = await import('$lib/services/game/game_save_service.svelte');
+        const { createEngineBridge } = await import('@aikami/frontend/engine');
+        const bridge = createEngineBridge();
+        type SaveSvc = { saveGame: (slot: string) => Promise<void> };
+        const saveService = new (
+          GameSaveService as unknown as new (
+            opts: Record<string, unknown>,
+          ) => SaveSvc
+        )({
+          className: 'SandboxSaveService',
+          bridge,
+        });
+        await saveService.saveGame('manual-1');
+        alert('Game Saved! Position + items captured. Use "Load Last Save" to restore.');
+      },
+    },
+    {
+      label: '📂 Load Last Save',
+      onClick: async () => {
+        const { GameSaveService } = await import('$lib/services/game/game_save_service.svelte');
+        type LoadSvc = {
+          fetchAvailableSaves: () => Promise<void>;
+          availableSaves: Array<{ id: string }>;
+          getSavePayload: (slotId: string) => Promise<string>;
+        };
+        const saveService = new (
+          GameSaveService as unknown as new (
+            opts: Record<string, unknown>,
+          ) => LoadSvc
+        )({ className: 'SandboxLoadService' });
+        await saveService.fetchAvailableSaves();
+        if (saveService.availableSaves.length === 0) {
+          alert('No saves found. Save the game first.');
+          return;
+        }
+        const latest = saveService.availableSaves[0];
+        if (!latest) {
+          alert('No save slot available.');
+          return;
+        }
+        const payload = await saveService.getSavePayload(latest.id);
+        await viewModel.loadSave(payload);
+        // Engine was paused by Pause Menu — resume so the player can move
+        viewModel.resumeEngine();
+        alert('Save loaded! Position + items restored.');
+      },
+    },
     // ── Navigation ────────────────────────────────────────────────
     {
       label: 'Map & Zoning Sandbox',
       onClick: () => {
         window.location.href = '/dev/sandbox/map';
+      },
+    },
+    {
+      label: 'Zone Transition & Autosave (C-155)',
+      onClick: () => {
+        window.location.href = '/dev/sandbox/zone-transition';
       },
     },
     {

@@ -10,6 +10,7 @@ import {
   removeEntity,
   set,
 } from 'bitecs';
+import type { TransitionZone } from '../assets/map_loader.ts';
 import {
   getAppearanceLayers,
   type LpcLayerRecipe,
@@ -58,14 +59,14 @@ import {
 import { handleCombatAction } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
+import { logger } from './worker_logger.ts';
 
 // ---------------------------------------------------------------------------
 // Worker: owns the full bitECS world and system ticking
 // ---------------------------------------------------------------------------
 
 // Startup sentinel — confirms the worker module loaded and executed.
-// biome-ignore lint/suspicious/noConsole: worker startup diagnostic
-console.log('[ecs_worker] Module loaded, ready for INITIALIZE_ENGINE');
+logger.info('worker', 'Module loaded, ready for INITIALIZE_ENGINE');
 
 // -- Worker-global state ----------------------------------------------------
 
@@ -74,6 +75,9 @@ let world: World | undefined;
 
 /** The player entity ID, set during initialization. */
 let playerEntityId = 0;
+
+/** Last transition zones from LOAD_MAP — re-spawned after LOAD_GAME. */
+let _lastTransitionZones: TransitionZone[] | undefined;
 
 /** Whether the tick loop is currently running. */
 let running = false;
@@ -666,8 +670,7 @@ self.onerror = (event: string | Event): void => {
     lineno: evt?.lineno,
     colno: evt?.colno,
   };
-  // biome-ignore lint/suspicious/noConsole: worker error diagnostic
-  console.error('[ecs_worker] Unhandled error:', detail);
+  logger.error('worker', 'Unhandled error', detail);
   postMessage({
     type: 'ENGINE_ERROR',
     message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}`,
@@ -679,8 +682,7 @@ self.onerror = (event: string | Event): void => {
  */
 self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
   const message = event.reason instanceof Error ? event.reason.message : String(event.reason);
-  // biome-ignore lint/suspicious/noConsole: worker rejection diagnostic
-  console.error('[ecs_worker] Unhandled rejection:', message, event.reason);
+  logger.error('worker', `Unhandled rejection: ${message}`, event.reason);
   postMessage({
     type: 'ENGINE_ERROR',
     message: `Worker rejection: ${message}`,
@@ -834,6 +836,10 @@ self.onmessage = (event: MessageEvent): void => {
           }
           playerEntityId = 0;
 
+          // Reset camera tracking so the viewport snaps to the restored
+          // player position instead of lerping from the old camera coords.
+          resetCameraTracking();
+
           // Deserialize from the snapshot payload
           const loadPayload = message.payload as string;
           const eidMap = deserializeWorld(world, loadPayload);
@@ -846,10 +852,79 @@ self.onmessage = (event: MessageEvent): void => {
             }
           }
 
-          // Notify main thread about all hydrated entities
+          // Notify main thread about all hydrated entities.
+          // Include NPC metadata for non-player entities so the
+          // main thread can populate its interaction map.
+          let npcIndex = 0;
           for (const [oldEid, newEid] of eidMap) {
-            const tint = oldEid === 1 ? 0x00ff88 : 0xffcc00;
-            postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
+            const isPlayer = oldEid === 1;
+            const tint = isPlayer ? 0x00ff88 : 0xffcc00;
+
+            if (!isPlayer) {
+              npcIndex++;
+              postMessage({
+                type: 'ENTITY_CREATED',
+                eid: newEid,
+                tint,
+                npcData: {
+                  eid: newEid,
+                  npcId: `npc_${newEid}`,
+                  npcName: `Restored NPC #${npcIndex}`,
+                  personaId: 'default',
+                  interactionRadius: 64,
+                  relationshipValue: 0,
+                  dialog: '...',
+                  isVendor: false,
+                  vendorInventory: '',
+                },
+              });
+            } else {
+              postMessage({ type: 'ENTITY_CREATED', eid: newEid, tint });
+            }
+          }
+
+          // Send the restored player position as a camera-snap message
+          // so the main thread centers the viewport immediately, without
+          // waiting for the next tick-loop STATE_UPDATE.
+          const playerPosX = Position.x[playerEntityId] ?? 0;
+          const playerPosY = Position.y[playerEntityId] ?? 0;
+          postMessage({
+            type: 'CAMERA_SNAP',
+            x: playerPosX,
+            y: playerPosY,
+          });
+
+          // Emit APPEARANCE_CHANGED for entities that have the Appearance
+          // component so the main thread loads LPC textures immediately.
+          // Without this, restored entities stay as colored debug squares
+          // until the next tick-loop sync picks up the change.
+          for (const [, newEid] of eidMap) {
+            const layers = getAppearanceLayers(newEid);
+            if (layers.length > 0) {
+              postMessage({
+                type: 'SYNC',
+                events: [
+                  {
+                    type: 'APPEARANCE_CHANGED',
+                    eid: newEid,
+                    layerIds: [...layers],
+                  },
+                ],
+              });
+            }
+          }
+
+          // Re-spawn transition zone entities so portals work after load.
+          // Transition zones are NOT serialized in the snapshot — they
+          // come from the map's Tiled data and are re-created here.
+          if (_lastTransitionZones && _lastTransitionZones.length > 0) {
+            logger.debug(
+              'LOAD_GAME',
+              `re-spawning ${_lastTransitionZones.length} transition zones`,
+            );
+            spawnTransitionEntities({ world, transitionZones: _lastTransitionZones });
+          } else {
+            logger.debug('LOAD_GAME', 'no transition zones to re-spawn');
           }
 
           // Restore the tick loop if it was running
@@ -915,6 +990,8 @@ self.onmessage = (event: MessageEvent): void => {
           });
 
           // 4. Spawn transition zone trigger entities
+          _lastTransitionZones = transitionZones;
+          logger.debug('LOAD_MAP', `storing ${transitionZones.length} transition zones`);
           spawnTransitionEntities({ world, transitionZones });
 
           // 5. Set the new collision grid
@@ -1028,8 +1105,7 @@ self.onmessage = (event: MessageEvent): void => {
       }
     }
   } catch (err) {
-    // biome-ignore lint/suspicious/noConsole: worker handler error diagnostic
-    console.error('[ecs_worker] Message handler error:', err);
+    logger.error('worker', 'Message handler error', err);
     postMessage({
       type: 'ENGINE_ERROR',
       message: `Worker handler error: ${err instanceof Error ? err.message : String(err)}`,
