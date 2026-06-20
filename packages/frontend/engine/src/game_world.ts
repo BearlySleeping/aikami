@@ -369,8 +369,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * Called by the ViewModel in response to `window.resize` events
    * so the game canvas always fills the viewport. Also forwards the
-   * new screen size to the worker so the camera system can update its
-   * clamping bounds and center offset.
+   * new screen size and current world container scale to the worker
+   * so the camera system can update its clamping bounds with the
+   * correct world-to-screen ratio.
    */
   resize(width: number, height: number): void {
     if (this._app) {
@@ -378,8 +379,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // Notify the worker so the camera system updates its screen dimensions
+    // and recalculates clamping with the active world container scale.
     if (this._worker) {
-      this._worker.postMessage({ type: 'SET_SCREEN_SIZE', width, height });
+      this._worker.postMessage({
+        type: 'SET_SCREEN_SIZE',
+        width,
+        height,
+        scale: this._worldContainer?.scale.x ?? 4,
+      });
     }
   }
 
@@ -1588,12 +1595,22 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('lpc-loaded', { eid, layers: layerSprites.length });
     }
 
-    // After all loaded, sort by slot standard z-index?
-    // Wait, the client handles z-index, but we don't have LPC_LAYER_Z_INDEX here.
-    // Assuming the recipes are provided in sorted order by the resolver!
-    // We can just rely on the array order. The array order might be scrambled by Promise.all,
-    // so let's sort them back to match recipe order.
-    layerSprites.sort((a, b) => recipes.indexOf(a.recipe) - recipes.indexOf(b.recipe));
+    // Sort by z-depth so back-to-front rendering is correct:
+    // body behind legs behind feet behind torso behind head behind hair.
+    // Promise.all may scramble the order, so we re-sort here.
+    const SlotZ: Record<string, number> = {
+      body: 0,
+      legs: 1,
+      feet: 2,
+      torso: 3,
+      head: 4,
+      hair: 5,
+    } as const;
+    layerSprites.sort((a, b) => {
+      const zA = SlotZ[a.recipe.slot] ?? 0;
+      const zB = SlotZ[b.recipe.slot] ?? 0;
+      return zA - zB;
+    });
 
     // Re-add in correct order
     for (const { sprite } of layerSprites) {

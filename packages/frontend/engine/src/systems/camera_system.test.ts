@@ -274,6 +274,78 @@ describe('camera_system', () => {
       expect(camera.x).toBe(400);
       expect(camera.y).toBe(300);
     });
+
+    it('clamping adjusts to custom scale value', () => {
+      // Set scale to 2 (half the default) — larger viewport in world-space
+      setScreenSize({ width: 1920, height: 1080, scale: 2 });
+      setMapBounds({ width: 3200, height: 2400 });
+
+      // Place target beyond the right edge
+      _createTarget(world, { x: 9999, y: 500 });
+
+      updateCameraSystem(world, 16); // snap + clamp on first tick
+
+      const camera = getCameraPosition();
+
+      // With scale=2: halfScreenWorld = 1920 / (2*2) = 480
+      // Max x = 3200 - 480 = 2720
+      expect(camera.x).toBeLessThanOrEqual(2720);
+      // x should be greater than with scale=4 (which gives half=240, max=2960)
+      expect(camera.x).toBeLessThan(2960); // scale=2 gives tighter clamp
+    });
+
+    it('scale=8 gives wider clamping range than scale=4', () => {
+      setScreenSize({ width: 1920, height: 1080, scale: 8 });
+      setMapBounds({ width: 3200, height: 2400 });
+
+      _createTarget(world, { x: 9999, y: 500 });
+
+      updateCameraSystem(world, 16);
+
+      const camera = getCameraPosition();
+
+      // With scale=8: halfScreenWorld = 1920 / (2*8) = 120
+      // Max x = 3200 - 120 = 3080
+      expect(camera.x).toBeLessThanOrEqual(3080);
+      expect(camera.x).toBeGreaterThan(2960); // wider than default scale=4
+    });
+
+    it('ignores zero or negative scale (falls back to default 4)', () => {
+      setScreenSize({ width: 1920, height: 1080, scale: 0 });
+      setMapBounds({ width: 3200, height: 2400 });
+
+      _createTarget(world, { x: 9999, y: 500 });
+
+      updateCameraSystem(world, 16);
+
+      const camera = getCameraPosition();
+
+      // Zero scale is ignored → falls back to 4
+      // halfScreenWorld = 1920 / 8 = 240, max x = 3200 - 240 = 2960
+      expect(camera.x).toBeLessThanOrEqual(2960);
+      expect(camera.x).toBeGreaterThan(2700);
+    });
+
+    it('resetCameraTracking resets scale to default 4', () => {
+      // Set scale to 2 and verify clamping
+      setScreenSize({ width: 1920, height: 1080, scale: 2 });
+      setMapBounds({ width: 3200, height: 2400 });
+      _createTarget(world, { x: 500, y: 500 });
+      updateCameraSystem(world, 16);
+
+      resetCameraTracking();
+
+      // After reset, camera should be at (0,0) and scale back to 4
+      // Set up again without specifying scale
+      setScreenSize({ width: 1920, height: 1080 });
+      setMapBounds({ width: 3200, height: 2400 });
+      _createTarget(world, { x: 9999, y: 500 });
+      updateCameraSystem(world, 16);
+
+      const camera = getCameraPosition();
+      // Default scale 4: halfScreenWorld = 240, max = 2960
+      expect(camera.x).toBeLessThanOrEqual(2960);
+    });
   });
 
   // ---------------------------------------------------------------------

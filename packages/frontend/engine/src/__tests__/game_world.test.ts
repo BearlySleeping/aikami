@@ -130,16 +130,15 @@ describe('GameWorld — movement system', () => {
     addComponent(world, eid, Position);
     addComponent(world, eid, set(Position, { x: 0, y: 0 }));
     addComponent(world, eid, Velocity);
-    // Diagonal velocity blocked — horizontal dominant → vertical zeroed
+    // Axis-independent: diagonal is now supported — both axes advance
     addComponent(world, eid, set(Velocity, { x: 100, y: 50 }));
 
     updateMovement(world, 1000);
 
     const pos = getComponent(world, eid, Position) as PositionData;
-    // Grid-aligned: snap to (16,16), then step 100px right through cells
-    // 3 full cells (96px) + 4px partial → 16+96+4 = 116
-    expect(pos.x).toBe(116);
-    expect(pos.y).toBe(16);
+    // Continuous: x = 0 + 100*1 = 100, y = 0 + 50*1 = 50
+    expect(pos.x).toBe(100);
+    expect(pos.y).toBe(50);
   });
 
   it('handles fractional delta time (16ms = ~1 frame at 60fps)', () => {
@@ -152,9 +151,9 @@ describe('GameWorld — movement system', () => {
     updateMovement(world, 16);
 
     const pos = getComponent(world, eid, Position) as PositionData;
-    // Grid-aligned: snap to (16,16), then move 0.96px toward (48,16)
-    expect(pos.x).toBeCloseTo(16.96, 2);
-    expect(pos.y).toBe(16);
+    // Continuous: 0 + 60*0.016 = 0.96
+    expect(pos.x).toBeCloseTo(0.96, 2);
+    expect(pos.y).toBe(0);
   });
 
   it('does not move entities with zero velocity', () => {
@@ -207,10 +206,10 @@ describe('GameWorld — movement system', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Grid cell alignment tests (C-040)
+// Axis-independent movement tests (C-160 AC-2)
 // ---------------------------------------------------------------------------
 
-describe('GameWorld — grid cell alignment', () => {
+describe('GameWorld — axis-independent movement', () => {
   let world: World;
 
   beforeEach(() => {
@@ -221,8 +220,22 @@ describe('GameWorld — grid cell alignment', () => {
     resetMovementTracking(world);
   });
 
-  it('snaps position to cell center on first movement frame', () => {
-    // Entity at off-grid position (50, 50) — nearest cell center is (48, 48)
+  it('supports diagonal movement (both axes advance)', () => {
+    const eid = addEntity(world);
+    addComponent(world, eid, Position);
+    addComponent(world, eid, set(Position, { x: 0, y: 0 }));
+    addComponent(world, eid, Velocity);
+    addComponent(world, eid, set(Velocity, { x: 100, y: 100 }));
+
+    updateMovement(world, 1000);
+
+    const pos = getComponent(world, eid, Position) as PositionData;
+    expect(pos.x).toBe(100);
+    expect(pos.y).toBe(100);
+  });
+
+  it('does not snap position to grid on movement start', () => {
+    // With axis-independent movement, off-grid positions are preserved
     const eid = addEntity(world);
     addComponent(world, eid, Position);
     addComponent(world, eid, set(Position, { x: 50, y: 50 }));
@@ -232,103 +245,46 @@ describe('GameWorld — grid cell alignment', () => {
     updateMovement(world, 16);
 
     const pos = getComponent(world, eid, Position) as PositionData;
-    // After alignment + 16ms of movement: snapped to cell center (48, 48)
-    // then moved right by 100 * 0.016 = 1.6 pixels toward target cell (80, 48)
-    expect(pos.x).toBeCloseTo(49.6, 1);
-    expect(pos.y).toBe(48);
+    // Continuous: 50 + 100*0.016 = 51.6 (not snapped to 48)
+    expect(pos.x).toBeCloseTo(51.6, 1);
+    expect(pos.y).toBe(50);
   });
 
-  it('moves in 32px cell strides along a single axis', () => {
+  it('does not block diagonal velocity', () => {
     const eid = addEntity(world);
     addComponent(world, eid, Position);
-    // Start at a cell center (16, 16)
-    addComponent(world, eid, set(Position, { x: 16, y: 16 }));
+    addComponent(world, eid, set(Position, { x: 0, y: 0 }));
     addComponent(world, eid, Velocity);
-    addComponent(world, eid, set(Velocity, { x: 32, y: 0 }));
-
-    // Move 1000ms at 32 px/s = 32 pixels → should reach next cell center at (48, 16)
-    updateMovement(world, 1000);
-
-    const pos = getComponent(world, eid, Position) as PositionData;
-    expect(pos.x).toBe(48);
-    expect(pos.y).toBe(16);
-  });
-
-  it('chains multiple cell strides over consecutive frames', () => {
-    const eid = addEntity(world);
-    addComponent(world, eid, Position);
-    addComponent(world, eid, set(Position, { x: 16, y: 16 }));
-    addComponent(world, eid, Velocity);
-    addComponent(world, eid, set(Velocity, { x: 96, y: 0 }));
-
-    // 96 px/s for 1000ms = 96px = 3 cells of 32px each
-    updateMovement(world, 1000);
-
-    const pos = getComponent(world, eid, Position) as PositionData;
-    // Should land at cell center 16 + 3*32 = 112
-    expect(pos.x).toBe(112);
-    expect(pos.y).toBe(16);
-  });
-
-  it('blocks diagonal velocity, preferring the dominant horizontal axis', () => {
-    const eid = addEntity(world);
-    addComponent(world, eid, Position);
-    addComponent(world, eid, set(Position, { x: 16, y: 16 }));
-    addComponent(world, eid, Velocity);
-    // Horizontal is dominant (100 > 50)
+    // Both axes have velocity — both should advance
     addComponent(world, eid, set(Velocity, { x: 100, y: 50 }));
 
     updateMovement(world, 16);
 
     const pos = getComponent(world, eid, Position) as PositionData;
-    // y must NOT change — vertical component blocked
-    expect(pos.y).toBe(16);
-    // x should advance toward target cell (16 + 32 = 48)
-    expect(pos.x).toBeGreaterThan(16);
-    expect(pos.x).toBeLessThan(48);
+    expect(pos.x).toBeGreaterThan(0);
+    expect(pos.y).toBeGreaterThan(0);
   });
 
-  it('blocks diagonal velocity, preferring the dominant vertical axis', () => {
+  it('preserves position precision across consecutive frames', () => {
     const eid = addEntity(world);
     addComponent(world, eid, Position);
-    addComponent(world, eid, set(Position, { x: 16, y: 16 }));
-    addComponent(world, eid, Velocity);
-    // Vertical is dominant (100 > 50)
-    addComponent(world, eid, set(Velocity, { x: 50, y: 100 }));
-
-    updateMovement(world, 16);
-
-    const pos = getComponent(world, eid, Position) as PositionData;
-    // x must NOT change — horizontal component blocked
-    expect(pos.x).toBe(16);
-    // y should advance toward target cell (16 + 32 = 48)
-    expect(pos.y).toBeGreaterThan(16);
-    expect(pos.y).toBeLessThan(48);
-  });
-
-  it('preserves position precision across small delta steps', () => {
-    const eid = addEntity(world);
-    addComponent(world, eid, Position);
-    addComponent(world, eid, set(Position, { x: 16, y: 16 }));
+    addComponent(world, eid, set(Position, { x: 0, y: 0 }));
     addComponent(world, eid, Velocity);
     addComponent(world, eid, set(Velocity, { x: 32, y: 0 }));
 
-    // Simulate 64 frames at 16ms each (= 1024ms total, enough for 32px cell crossing)
     for (let frame = 0; frame < 64; frame++) {
       updateMovement(world, 16);
     }
 
     const pos = getComponent(world, eid, Position) as PositionData;
-    // 32 px/s × 1.024s = 32.768px accumulated, enough to cross (48,16) cell boundary
-    expect(pos.x).toBeGreaterThanOrEqual(48);
-    expect(pos.x).toBeLessThanOrEqual(64);
-    expect(pos.y).toBe(16);
+    // 32 px/s × 1.024s = 32.768 pixels accumulated continuously
+    expect(pos.x).toBeCloseTo(32.768, 1);
+    expect(pos.y).toBe(0);
   });
 
-  it('preserves idle position without cell snapping', () => {
+  it('preserves idle position without modification', () => {
     const eid = addEntity(world);
     addComponent(world, eid, Position);
-    // Off-grid idle position — should NOT snap
     addComponent(world, eid, set(Position, { x: 50, y: 50 }));
     addComponent(world, eid, Velocity);
     addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
@@ -340,54 +296,27 @@ describe('GameWorld — grid cell alignment', () => {
     expect(pos.y).toBe(50);
   });
 
-  it('clears target state when velocity drops to zero', () => {
+  it('direction change is seamless (no re-alignment needed)', () => {
     const eid = addEntity(world);
     addComponent(world, eid, Position);
-    addComponent(world, eid, set(Position, { x: 16, y: 16 }));
+    addComponent(world, eid, set(Position, { x: 0, y: 0 }));
     addComponent(world, eid, Velocity);
     addComponent(world, eid, set(Velocity, { x: 32, y: 0 }));
 
-    // Move halfway through a cell
-    updateMovement(world, 500);
-    let pos = getComponent(world, eid, Position) as PositionData;
-    expect(pos.x).toBeGreaterThan(16);
-    expect(pos.x).toBeLessThan(48);
-
-    // Stop movement
-    addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
-    updateMovement(world, 16);
-    pos = getComponent(world, eid, Position) as PositionData;
-    const stoppedX = pos.x;
-
-    // Subsequent frames should not move the entity
-    updateMovement(world, 16);
-    pos = getComponent(world, eid, Position) as PositionData;
-    expect(pos.x).toBe(stoppedX);
-  });
-
-  it('restarts grid alignment when velocity changes direction', () => {
-    const eid = addEntity(world);
-    addComponent(world, eid, Position);
-    addComponent(world, eid, set(Position, { x: 16, y: 16 }));
-    addComponent(world, eid, Velocity);
-    addComponent(world, eid, set(Velocity, { x: 32, y: 0 }));
-
-    // Move right partway
+    // Move right for 200ms
     updateMovement(world, 200);
+    const afterRight = getComponent(world, eid, Position) as PositionData;
+    expect(afterRight.x).toBeCloseTo(6.4, 1); // 32*0.2 = 6.4
 
-    // Switch to moving down — should trigger re-alignment
+    // Switch to moving down — no re-alignment, just change velocity
     addComponent(world, eid, set(Velocity, { x: 0, y: 32 }));
     updateMovement(world, 16);
 
     const pos = getComponent(world, eid, Position) as PositionData;
-    // Direction change triggers snap to nearest cell center, then move down.
-    // x snaps back from ~22.4 to nearest cell center (16).
-    // Then y advances 0.512px from 16.
-    // x should be at a cell center (mod 32 === 16 within float tolerance)
-    const remainder = ((pos.x % 32) + 32) % 32; // handles negative remainder
-    expect(Math.abs(remainder - 16)).toBeLessThan(0.1);
-    // y should have advanced downward from the cell center
-    expect(pos.y).toBeGreaterThan(16);
+    // x stays where it was (no snap-back)
+    expect(pos.x).toBeCloseTo(6.4, 1);
+    // y advances: 0 + 32*0.016 = 0.512
+    expect(pos.y).toBeCloseTo(0.512, 1);
   });
 });
 
