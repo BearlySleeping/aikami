@@ -99,6 +99,9 @@ mock.module('$services', () => ({
     extractStructure: mock(async () => ({})),
     cancelAll: mock(() => {}),
   },
+  diceService: {
+    rollD20: (_modifier: number) => ({ natural: 14, total: 14 }),
+  },
   routerService: {},
   SentenceBoundaryChunker: class {
     feed(_text: string) {}
@@ -413,5 +416,140 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.messages.length).toBe(2);
     expect(vm.messages[1].role).toBe('npc');
     expect(vm.messages[1].content).toContain('Hello');
+  });
+
+  // ── C-162: Action Context Menu & Interactive Dice ───────────────────
+
+  test('dialoguePhase defaults to MENU', () => {
+    const vm = createViewModel();
+    expect(vm.dialoguePhase).toBe('MENU');
+  });
+
+  test('actionOptions returns the 5 predefined actions', () => {
+    const vm = createViewModel();
+    expect(vm.actionOptions.length).toBe(5);
+    expect(vm.actionOptions[0].id).toBe('persuasion');
+    expect(vm.actionOptions[1].id).toBe('intimidation');
+    expect(vm.actionOptions[2].id).toBe('stealth');
+    expect(vm.actionOptions[3].id).toBe('attack');
+    expect(vm.actionOptions[4].id).toBe('custom');
+  });
+
+  test('selectAction("custom") sets dialoguePhase to CUSTOM_INPUT', async () => {
+    const vm = createViewModel();
+    await vm.selectAction('custom');
+    expect(vm.dialoguePhase).toBe('CUSTOM_INPUT');
+  });
+
+  test('selectAction("attack") triggers combat via onEndChat + onStartCombat', async () => {
+    let endChatCalled = false;
+    let combatCalled = false;
+    let combatNpcData: ReturnType<typeof createNpcData> | undefined;
+
+    const npcData = createNpcData({ npcName: 'Bandit Leader' });
+    const vmWithCombat = new DialogueOverlayViewModel({
+      className: 'TestDialogueOverlayViewModel',
+      npcData,
+      onEndChat: () => {
+        endChatCalled = true;
+      },
+      onStartCombat: (data) => {
+        combatCalled = true;
+        combatNpcData = data;
+      },
+    });
+
+    await vmWithCombat.selectAction('attack');
+
+    // Allow the 1200ms delay to run
+    await new Promise<void>((resolve) => setTimeout(resolve, 1300));
+
+    expect(endChatCalled).toBe(true);
+    expect(combatCalled).toBe(true);
+    expect(combatNpcData?.npcName).toBe('Bandit Leader');
+  });
+
+  test('selectAction("unknown") does nothing and logs warning', async () => {
+    const vm = createViewModel();
+    const phaseBefore = vm.dialoguePhase;
+    await vm.selectAction('nonexistent');
+    expect(vm.dialoguePhase).toBe(phaseBefore);
+    expect(vm.skillCheckState).toBeNull();
+  });
+
+  test('selectAction("persuasion") shows interactive dice awaiting click', async () => {
+    const vm = createViewModel();
+    await vm.selectAction('persuasion');
+
+    expect(vm.dialoguePhase).toBe('DICE');
+    expect(vm.selectedActionId).toBe('persuasion');
+    expect(vm.skillCheckState).not.toBeNull();
+    expect(vm.skillCheckState?.checkType).toBe('Persuasion');
+    expect(vm.skillCheckState?.phase).toBe('awaiting_click');
+    expect(vm.skillCheckState?.rollValue).toBeNull();
+    expect(vm.skillCheckState?.isSuccess).toBeNull();
+  });
+
+  test('rollDice() no-ops when skillCheckState is null', async () => {
+    const vm = createViewModel();
+    expect(vm.skillCheckState).toBeNull();
+    await vm.rollDice();
+    expect(vm.skillCheckState).toBeNull();
+  });
+
+  test('rollDice() no-ops when phase is not awaiting_click', async () => {
+    const vm = createViewModel();
+    // Manually set a non-awaiting_click state
+    (vm as Record<string, unknown>).skillCheckState = {
+      checkType: 'Persuasion',
+      difficultyClass: 12,
+      rollValue: null,
+      phase: 'rolling',
+      isSuccess: null,
+    };
+    await vm.rollDice();
+    // Phase should remain 'rolling' (no-op)
+    expect(vm.skillCheckState?.phase).toBe('rolling');
+  });
+
+  test('rollDice() transitions through awaiting_click → rolling → revealed → MENU', async () => {
+    const vm = createViewModel();
+    await vm.selectAction('persuasion');
+
+    expect(vm.skillCheckState?.phase).toBe('awaiting_click');
+
+    // Start the dice roll — this will transition through all phases asynchronously
+    const rollPromise = vm.rollDice();
+
+    // Immediately after calling rollDice, the phase should switch to 'rolling'
+    // (happens synchronously within the first part of rollDice)
+    // Wait a microtick for the async continuation
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    expect(vm.skillCheckState?.phase).toBe('rolling');
+
+    // Wait for animation to complete and result to be revealed
+    await new Promise<void>((resolve) => setTimeout(resolve, 1600));
+    expect(vm.skillCheckState?.phase).toBe('revealed');
+    expect(vm.skillCheckState?.rollValue).toBe(14);
+
+    // Wait for the LLM resolution + return to menu
+    await rollPromise;
+
+    // After completion, dice is cleared and phase returns to MENU
+    expect(vm.skillCheckState).toBeNull();
+    expect(vm.dialoguePhase).toBe('MENU');
+    expect(vm.selectedActionId).toBeNull();
+  });
+
+  test('goToMenu() resets phase to MENU and clears input', () => {
+    const vm = createViewModel();
+    vm.setInput('some text');
+    // Simulate being in CUSTOM_INPUT
+    (vm as Record<string, unknown>).dialoguePhase = 'CUSTOM_INPUT';
+
+    vm.goToMenu();
+
+    expect(vm.dialoguePhase).toBe('MENU');
+    expect(vm.inputText).toBe('');
   });
 });
