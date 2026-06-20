@@ -293,6 +293,12 @@
       },
     },
     {
+      label: 'Dialogue Action Menu (C-162)',
+      onClick: () => {
+        window.location.href = '/dev/sandbox/dialogue';
+      },
+    },
+    {
       label: 'Vendor Sandbox (C-154)',
       onClick: () => {
         window.location.href = '/dev/sandbox/vendor';

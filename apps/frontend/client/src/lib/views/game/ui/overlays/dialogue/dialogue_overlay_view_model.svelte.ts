@@ -73,6 +73,34 @@ export type DialogueMessage = {
   content: string;
 };
 
+// ── Action Context Menu Types (C-162) ────────────────────────────────
+
+/**
+ * A pre-written action option shown in the BG3-style action context menu.
+ *
+ * Contract: C-162 BG3 Action Menu & Dice
+ */
+export type ActionOption = {
+  /** Unique action identifier. */
+  id: string;
+  /** Display label shown on the action button. */
+  label: string;
+  /** The type of action — determines the resolution flow. */
+  type: 'skill_check' | 'direct_combat' | 'custom';
+  /** The skill being tested, if this is a skill_check action. */
+  skill?: string;
+};
+
+/**
+ * Phases of the dialogue interaction loop.
+ *
+ * - `MENU`: Action context menu is visible.
+ * - `CUSTOM_INPUT`: Freeform text input is visible (triggered by [Custom]).
+ * - `DICE`: Interactive d20 is visible, awaiting player click.
+ * - `CHAT`: Standard chat flow (after dice resolution or during streaming).
+ */
+export type DialoguePhase = 'MENU' | 'CUSTOM_INPUT' | 'DICE' | 'CHAT';
+
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
   /** NPC data from the ECS interaction event. */
   npcData: DialogueNpcData;
@@ -125,16 +153,38 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   readonly streamError: string | null;
 
   /**
+   * Current phase of the dialogue interaction loop.
+   *
+   * Controls which UI elements are visible: action menu, text input,
+   * interactive dice, or standard chat.
+   *
+   * Contract: C-162 BG3 Action Menu & Dice
+   */
+  readonly dialoguePhase: DialoguePhase;
+
+  /** The ID of the currently selected action, or `null` if no action is selected. */
+  readonly selectedActionId: string | null;
+
+  /** Available action options for the current NPC interaction. */
+  readonly actionOptions: readonly ActionOption[];
+
+  /**
    * Skill check UI state for the animated d20 component.
    * `null` when no skill check is in progress or recently completed.
    *
-   * Contract: C-157 Dialogue Skill Checks
+   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice
    */
   readonly skillCheckState: {
     readonly checkType: string;
     readonly difficultyClass: number;
     readonly rollValue: number | null;
-    readonly isRolling: boolean;
+    /**
+     * Interactive dice phase:
+     * - `awaiting_click`: Dice visible, waiting for player click (C-162).
+     * - `rolling`: Spin animation playing (same as old `isRolling`).
+     * - `revealed`: Result shown (same as old `!isRolling` with value).
+     */
+    readonly phase: 'awaiting_click' | 'rolling' | 'revealed';
     readonly isSuccess: boolean | null;
   } | null;
 
@@ -165,6 +215,26 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   hasNpcScreenPosition: boolean;
 
   /**
+   * Selects an action from the context menu.
+   *
+   * - `skill_check`: Sets up interactive dice, waits for player click (C-162).
+   * - `direct_combat`: Bypasses LLM, triggers combat immediately.
+   * - `custom`: Switches to freeform text input.
+   */
+  selectAction(actionId: string): Promise<void>;
+
+  /**
+   * Rolls the interactive d20 after the player clicks it.
+   *
+   * Only valid when `skillCheckState.phase === 'awaiting_click'`.
+   * Performs the roll, plays the spin animation, reveals the result,
+   * then sends the outcome to the LLM for narrative resolution.
+   *
+   * Contract: C-162 Interactive Latency Masking
+   */
+  rollDice(): Promise<void>;
+
+  /**
    * Sends the given text (or current input) as a player message
    * and triggers AI response streaming. Does nothing if input is
    * empty or AI is already streaming.
@@ -178,6 +248,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Sets the player's input text (bound to text input field). */
   setInput(text: string): void;
+
+  /** Returns to the action context menu from the custom input or dice phases. */
+  goToMenu(): void;
 
   /** Closes the dialogue overlay and resumes the game. */
   endChat(): void;
@@ -193,6 +266,19 @@ class DialogueOverlayViewModel
   extends BaseViewModel<DialogueOverlayViewModelOptions>
   implements DialogueOverlayViewModelInterface
 {
+  /**
+   * Pre-written action buttons for the BG3-style context menu.
+   *
+   * Contract: C-162 BG3 Action Menu & Dice
+   */
+  static readonly ACTION_OPTIONS: readonly ActionOption[] = [
+    { id: 'persuasion', label: 'Persuasion', type: 'skill_check', skill: 'persuasion' },
+    { id: 'intimidation', label: 'Intimidation', type: 'skill_check', skill: 'intimidation' },
+    { id: 'stealth', label: 'Stealth', type: 'skill_check', skill: 'sleight_of_hand' },
+    { id: 'attack', label: 'Attack', type: 'direct_combat' },
+    { id: 'custom', label: 'Custom', type: 'custom' },
+  ] as const;
+
   messages = $state<DialogueMessage[]>([]);
 
   isStreaming = $state<boolean>(false);
@@ -202,14 +288,23 @@ class DialogueOverlayViewModel
   streamError = $state<string | null>(null);
 
   /**
+   * Current phase of the dialogue interaction loop (C-162).
+   * Starts in `MENU` — action context menu visible.
+   */
+  dialoguePhase = $state<DialoguePhase>('MENU');
+
+  /** The ID of the currently selected action, or `null`. */
+  selectedActionId = $state<string | null>(null);
+
+  /**
    * Skill check dice roll UI state — null when idle.
-   * Contract: C-157 Dialogue Skill Checks
+   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice
    */
   skillCheckState: {
     checkType: string;
     difficultyClass: number;
     rollValue: number | null;
-    isRolling: boolean;
+    phase: 'awaiting_click' | 'rolling' | 'revealed';
     isSuccess: boolean | null;
   } | null = $state(null);
 
@@ -279,6 +374,11 @@ class DialogueOverlayViewModel
     return this._imageProviderAvailable;
   }
 
+  /** Available action options for the context menu (C-162). */
+  get actionOptions(): readonly ActionOption[] {
+    return DialogueOverlayViewModel.ACTION_OPTIONS;
+  }
+
   /** @inheritdoc */
   async initialize(): Promise<void> {
     // Initialize native Kokoro TTS if not already done
@@ -300,8 +400,98 @@ class DialogueOverlayViewModel
   }
 
   /** @inheritdoc */
+  goToMenu(): void {
+    this.dialoguePhase = 'MENU';
+    this.inputText = '';
+  }
+
+  /** @inheritdoc */
   setInput(text: string): void {
     this.inputText = text;
+  }
+
+  // ── Action Context Menu (C-162) ─────────────────────────────────────
+
+  /** @inheritdoc */
+  async selectAction(actionId: string): Promise<void> {
+    this.debug('selectAction', { actionId });
+
+    if (actionId === 'attack') {
+      await this._handleDirectCombat();
+      return;
+    }
+
+    if (actionId === 'custom') {
+      this.dialoguePhase = 'CUSTOM_INPUT';
+      return;
+    }
+
+    const option = DialogueOverlayViewModel.ACTION_OPTIONS.find((o) => o.id === actionId);
+    if (option?.type !== 'skill_check' || !option.skill) {
+      this.warn('selectAction:unknown-action', { actionId });
+      return;
+    }
+
+    this.selectedActionId = actionId;
+    this.dialoguePhase = 'DICE';
+
+    // Determine the difficulty class based on the NPC's persona difficulty
+    const difficultyClass = this._getDifficultyClass(option.skill);
+
+    // Set up interactive dice — player must click to roll
+    this.skillCheckState = {
+      checkType: option.label,
+      difficultyClass,
+      rollValue: null,
+      phase: 'awaiting_click',
+      isSuccess: null,
+    };
+  }
+
+  /** @inheritdoc */
+  async rollDice(): Promise<void> {
+    const state = this.skillCheckState;
+    if (state?.phase !== 'awaiting_click') {
+      this.debug('rollDice:invalid-phase', { phase: state?.phase });
+      return;
+    }
+
+    // Roll the d20
+    const { natural: rollValue, total } = diceService.rollD20(0);
+    const isSuccess = total >= state.difficultyClass;
+
+    this.debug('rollDice', {
+      checkType: state.checkType,
+      difficultyClass: state.difficultyClass,
+      rollValue,
+      total,
+      isSuccess,
+    });
+
+    // Show rolling animation
+    this.skillCheckState = { ...state, phase: 'rolling' };
+
+    // Wait for the spin animation (~1.5s)
+    await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+
+    // Reveal the result
+    this.skillCheckState = { ...state, rollValue, phase: 'revealed', isSuccess };
+
+    // Brief pause so the player can absorb the outcome
+    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+
+    // Now send the action + dice result to the LLM for narrative resolution
+    await this._executeSkillCheckAction({
+      skill: state.checkType,
+      difficultyClass: state.difficultyClass,
+      rollValue,
+      isSuccess,
+    });
+
+    // Clear dice overlay and return to menu for the next action
+    this.skillCheckState = null;
+    this.selectedActionId = null;
+    this.dialoguePhase = 'MENU';
   }
 
   /** @inheritdoc */
@@ -659,7 +849,7 @@ class DialogueOverlayViewModel
       checkType,
       difficultyClass,
       rollValue: null,
-      isRolling: true,
+      phase: 'rolling',
       isSuccess: null,
     };
 
@@ -671,7 +861,7 @@ class DialogueOverlayViewModel
       checkType,
       difficultyClass,
       rollValue,
-      isRolling: false,
+      phase: 'revealed',
       isSuccess,
     };
 
@@ -809,6 +999,139 @@ class DialogueOverlayViewModel
     if (intent.stateMutation === 'give_item' && intent.itemId) {
       this.debug('_handleStateMutation:give_item', { itemId: intent.itemId });
       this._appendNpcMessage(`*Received: ${intent.itemId}*`);
+    }
+  }
+
+  // ── Private: Action Menu Helpers (C-162) ───────────────────────────
+
+  /**
+   * Returns a difficulty class for the given skill check against this NPC.
+   *
+   * Base DC is 12; harder NPC personas (guard, bandit, guild_master) get
+   * +2, softer personas (innkeeper, healer, merchant) get -2.
+   *
+   * Contract: C-162 BG3 Action Menu & Dice
+   */
+  private _getDifficultyClass(_skill: string): number {
+    const hardPersonas = ['guard', 'bandit', 'guild_master'] as const;
+    const softPersonas = ['innkeeper', 'healer', 'merchant'] as const;
+    const personaId = this._npcData.personaId ?? FALLBACK_PERSONA_ID;
+
+    if (hardPersonas.includes(personaId as (typeof hardPersonas)[number])) {
+      return 14;
+    }
+    if (softPersonas.includes(personaId as (typeof softPersonas)[number])) {
+      return 10;
+    }
+    return 12;
+  }
+
+  /**
+   * Bypasses the LLM entirely and triggers combat against the current NPC.
+   *
+   * Appends a combat transition message, ends the dialogue, and notifies
+   * the parent to start the combat overlay.
+   *
+   * Contract: C-162 AC-1 — [Attack] bypasses LLM
+   */
+  private async _handleDirectCombat(): Promise<void> {
+    this.debug('_handleDirectCombat', {
+      npcName: this._npcData.npcName,
+      npcId: this._npcData.npcId,
+    });
+
+    // Append a combat initiation message
+    this._appendNpcMessage(`*${this._npcData.npcName} reaches for a weapon — combat begins!*`);
+
+    // Brief delay so the player can read the transition message
+    await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+
+    // End the dialogue
+    this._onEndChat();
+
+    // Notify parent to start combat
+    if (this._onStartCombat) {
+      this._onStartCombat(this._npcData);
+    }
+  }
+
+  /**
+   * Executes the LLM resolution for a skill check action selected from
+   * the action context menu.
+   *
+   * The dice has already been rolled and the result is known. This method
+   * sends the action + dice result to the LLM for structured extraction
+   * (narrative response + state mutations), streams the NPC response,
+   * and handles any state mutations.
+   *
+   * Contract: C-162 Interactive Latency Masking — LLM request fires
+   * ONLY after dice click + animation complete.
+   */
+  protected async _executeSkillCheckAction(options: {
+    skill: string;
+    difficultyClass: number;
+    rollValue: number;
+    isSuccess: boolean;
+  }): Promise<void> {
+    const { skill, difficultyClass, rollValue, isSuccess } = options;
+    this.isResolvingSkillCheck = true;
+    this.streamError = null;
+
+    try {
+      // Build the conversation context for the LLM
+      const conversationContext = this.messages
+        .filter((m) => m.content.trim().length > 0)
+        .map((m) =>
+          m.role === 'player' ? `Player: ${m.content}` : `${this._npcData.npcName}: ${m.content}`,
+        )
+        .join('\n');
+
+      const contextualPrompt = [
+        `NPC Name: ${this._npcData.npcName}`,
+        `NPC Personality: ${PERSONA_PROMPTS[this._npcData.personaId ?? FALLBACK_PERSONA_ID]}`,
+        conversationContext ? `\nConversation history:\n${conversationContext}` : '',
+        `\nThe player is attempting a **${skill}** skill check.`,
+        `Dice result: Rolled **${rollValue}** vs DC ${difficultyClass} — **${isSuccess ? 'SUCCESS' : 'FAILURE'}**`,
+        isSuccess
+          ? 'The player succeeded on the skill check. Provide the NPC narrative response and any state mutations.'
+          : 'The player failed the skill check. Provide the NPC narrative response and any state mutations.',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      this.debug('_executeSkillCheckAction:calling-extractStructure', {
+        skill,
+        rollValue,
+        isSuccess,
+        contextLength: contextualPrompt.length,
+      });
+
+      const intent = (await textGenerationService.extractStructure({
+        schema: DialogActionSchema as unknown as Record<string, unknown>,
+        schemaName: 'DialogActionIntent',
+        prompt: contextualPrompt,
+        systemPrompt: DIALOG_ACTION_SYSTEM_PROMPT,
+      })) as DialogActionIntent;
+
+      this.debug('_executeSkillCheckAction:LLM-response', {
+        hasCheck: !!intent.requiredCheck,
+        stateMutation: intent.stateMutation,
+        narrativeLength: intent.narrative.length,
+      });
+
+      // Append the NPC's narrative response (structural extraction result)
+      this._appendNpcMessage(intent.narrative);
+
+      // Handle any state mutations returned by the LLM
+      await this._handleStateMutation({ intent });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.warn('_executeSkillCheckAction:failed', { message });
+      this.streamError = `Skill check failed: ${message}`;
+    } finally {
+      this.isResolvingSkillCheck = false;
+      // Return to chat phase after resolution
+      this.dialoguePhase = 'MENU';
     }
   }
 
