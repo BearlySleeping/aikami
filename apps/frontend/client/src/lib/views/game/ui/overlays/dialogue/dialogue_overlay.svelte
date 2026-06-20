@@ -42,6 +42,54 @@
   role="dialog"
   aria-label="Dialogue with {viewModel.npcName}"
 >
+  <!-- d20 Skill Check Dice Overlay (C-157) -->
+  {#if viewModel.skillCheckState}
+    <div
+      class="dice-check-overlay absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+    >
+      <div
+        class="dice-container flex flex-col items-center gap-3 rounded-2xl bg-base-100/95 p-8 shadow-2xl"
+      >
+        <!-- Check type label -->
+        <span class="text-xs font-semibold uppercase tracking-widest text-base-content/70">
+          {viewModel.skillCheckState.checkType}
+          Check
+        </span>
+
+        <!-- DC indicator -->
+        <span class="text-sm text-base-content/70">
+          DC {viewModel.skillCheckState.difficultyClass}
+        </span>
+
+        <!-- d20 die -->
+        <div
+          class="d20-die"
+          class:d20-spinning={viewModel.skillCheckState.isRolling}
+          class:d20-reveal={!viewModel.skillCheckState.isRolling}
+          class:d20-success={!viewModel.skillCheckState.isRolling && viewModel.skillCheckState.isSuccess === true}
+          class:d20-failure={!viewModel.skillCheckState.isRolling && viewModel.skillCheckState.isSuccess === false}
+        >
+          {#if !viewModel.skillCheckState.isRolling && viewModel.skillCheckState.rollValue !== null}
+            <span class="d20-value">{viewModel.skillCheckState.rollValue}</span>
+          {:else}
+            <span class="d20-question">?</span>
+          {/if}
+        </div>
+
+        <!-- Result label -->
+        {#if !viewModel.skillCheckState.isRolling && viewModel.skillCheckState.isSuccess !== null}
+          <span
+            class="text-lg font-bold"
+            class:text-success={viewModel.skillCheckState.isSuccess}
+            class:text-error={!viewModel.skillCheckState.isSuccess}
+          >
+            {viewModel.skillCheckState.isSuccess ? 'SUCCESS!' : 'FAILURE'}
+          </span>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   <!-- Dialogue Box — positioned at the bottom 40% of the screen -->
   <div
     class="mx-auto mb-8 flex w-full max-w-2xl flex-col rounded-xl border border-base-300 bg-base-200/95 shadow-2xl"
@@ -82,6 +130,14 @@
           {viewModel.streamError}
         </div>
       {/if}
+
+      <!-- Skill check resolving indicator -->
+      {#if viewModel.isResolvingSkillCheck}
+        <div class="flex items-center justify-center gap-2 py-2 text-xs text-base-content/60">
+          <span class="loading loading-spinner loading-xs"></span>
+          <span>Resolving skill check...</span>
+        </div>
+      {/if}
     </div>
 
     <!-- Input area -->
@@ -95,14 +151,14 @@
           value={viewModel.inputText}
           oninput={(e) => viewModel.setInput(e.currentTarget.value)}
           onkeydown={(e) => viewModel.handleKeyDown(e)}
-          disabled={viewModel.isStreaming}
+          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
         ></textarea>
         <button
           class="btn btn-primary btn-sm"
           onclick={() => viewModel.sendMessage()}
-          disabled={viewModel.isStreaming || !viewModel.inputText.trim()}
+          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
         >
-          {#if viewModel.isStreaming}
+          {#if viewModel.isStreaming || viewModel.isResolvingSkillCheck}
             <span class="loading loading-spinner loading-xs"></span>
           {:else}
             Send
@@ -112,3 +168,82 @@
     </div>
   </div>
 </div>
+
+<style>
+  .d20-die {
+    width: 80px;
+    height: 80px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 900;
+    font-family: monospace;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border: 3px solid #4a6fa5;
+    color: #e0e0e0;
+    box-shadow: 0 0 20px rgba(74, 111, 165, 0.4);
+    transition:
+      transform 0.3s ease,
+      box-shadow 0.3s ease,
+      background 0.3s ease;
+  }
+
+  .d20-spinning {
+    animation:
+      d20-shake 0.15s ease-in-out infinite alternate,
+      d20-spin 0.8s linear infinite;
+    box-shadow: 0 0 30px rgba(74, 111, 165, 0.7);
+  }
+
+  .d20-reveal {
+    animation: d20-pop 0.4s ease-out;
+  }
+
+  .d20-success {
+    background: linear-gradient(135deg, #1a3a1a 0%, #225522 50%, #2d7a2d 100%);
+    border-color: #4ade80;
+    box-shadow: 0 0 30px rgba(74, 222, 128, 0.6);
+    color: #4ade80;
+  }
+
+  .d20-failure {
+    background: linear-gradient(135deg, #3a1a1a 0%, #552222 50%, #7a2d2d 100%);
+    border-color: #f87171;
+    box-shadow: 0 0 30px rgba(248, 113, 113, 0.6);
+    color: #f87171;
+  }
+
+  @keyframes d20-shake {
+    0% {
+      transform: translateX(-3px) translateY(-2px) rotate(-5deg);
+    }
+    100% {
+      transform: translateX(3px) translateY(2px) rotate(5deg);
+    }
+  }
+
+  @keyframes d20-spin {
+    0% {
+      transform: rotateY(0deg) rotateX(0deg);
+    }
+    100% {
+      transform: rotateY(360deg) rotateX(360deg);
+    }
+  }
+
+  @keyframes d20-pop {
+    0% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scale(1.15);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+</style>

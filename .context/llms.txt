@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-19
-> Files: 174 across 11 categories
+> Generated: 2026-06-20
+> Files: 175 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -163,6 +163,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [C 154 ai vendors economy](contracts/C-154-ai-vendors-economy.md)
 - [C 155 autosave memory hardening](contracts/C-155-autosave-memory-hardening.md)
 - [C 156 tauri production release](contracts/C-156-tauri-production-release.md)
+- [C 157 dialogue skill checks](contracts/C-157-dialogue-skill-checks.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

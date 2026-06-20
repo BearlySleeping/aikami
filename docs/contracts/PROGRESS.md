@@ -41,6 +41,7 @@
 | C-154 | AI Vendors & Economy | ✅ completed |
 | C-155 | Autosave & Memory Hardening | ✅ completed |
 | C-156 | Tauri Production Release | ✅ completed |
+| C-157 | Dialogue Skill Checks | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -1768,3 +1769,38 @@ NPM packages may not resolve correctly. Use the local `worker_logger.ts`
 wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 `\$logger` imports. The wrapper exists at:
 `packages/frontend/engine/src/worker/worker_logger.ts`
+
+### C-157: Dialogue Skill Checks
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/game/core/ai/prompts/dialog_action_schema.ts` — TypeBox `DialogActionSchema` (narrative, requiredCheck, difficultyClass, stateMutation, itemId) + `DIALOG_ACTION_SYSTEM_PROMPT` (Game Master adjudication rules, DC reference table, persona-aware prompt injection)
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Added `skillCheckState`, `isResolvingSkillCheck` reactive state; `onStartCombat` callback option; `_isRiskyAction()` keyword-based detection (6 regex patterns: threaten, steal, persuade, lie, attack, force); `_executeStructuredIntent()` main skill check flow (extractStructure → roll → resolve → mutate); `_performSkillCheck()` d20 roll with 1.5s spinning animation + result reveal via diceService; `_resolveSkillCheck()` second LLM call feeding roll result for narrative resolution (Ollama + OpenRouter dual-backend); `_handleStateMutation()` dispatches `trigger_combat` (close dialogue → notify parent) and `give_item` (narrative note); `_appendNpcMessage()` helper; modified `sendMessage()` to branch risky actions into structured extraction
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` — Added d20 dice overlay component with CSS keyframe animations (shake + spin + pop, inherited from combat_dice_ui.svelte patterns); DC indicator; check type label; SUCCESS/FAILURE result banner; `isResolvingSkillCheck` disabling inputs + spinner in chat log; Send button disabled during resolution
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `onStartCombat` callback wiring when creating `DialogueOverlayViewModel`; `_startCombatFromDialogue(npcData)` method transitions to COMBAT overlay, creates `CombatViewModel`, sets enemy data from NPC (name, HP 60/60, isPlayerTurn), pauses engine, switches game mode
+
+**Deviations**:
+1. **Keyword-based risky action detection**: Uses 6 regex patterns at the ViewModel level before extractStructure instead of running the LLM on every message. Casual chat still uses fast streaming; only risky-looking inputs pay the extractStructure cost. Patterns cover: intimidation/threat, theft/pickpocket, persuasion/negotiation, deception, direct attacks, and forceful demands. Future: could also accept a modifier key (Shift+Enter) for explicit skill action submission.
+2. **Two LLM calls per skill check**: First call (extractStructure with DialogActionSchema) extracts intent; second call (streamChat) feeds the d20 result for narrative resolution. This is consistent with the contract's instruction to "feed the result back to the LLM for the final narrative resolution."
+3. **Combat triggered via callback, not bridge event**: The `trigger_combat` mutation closes the dialogue via `_onEndChat()` then calls `_onStartCombat(npcData)`. The parent creates a CombatViewModel directly (not through the ECS engine encounter system). The CombatViewModel uses manually-set enemy stats (60 HP, name from NPC). This avoids needing an engine-side enemy entity for dialogue-triggered combat.
+4. **give_item is narrative-only**: Items are noted in the chat log but not actually added to inventory. Full inventory mutation via `INVENTORY_UPDATED` bridge event is future work.
+5. **Dice check has no modifier**: d20 rolls use `diceService.rollD20(0)` (no stat modifier). Character-specific skill bonuses (Charisma for Persuasion, Dexterity for Sleight of Hand) are future work requiring a character sheet integration.
+
+**Design decisions**:
+1. **`skillCheckState` holds dice UI state separate from messages**: The d20 overlay sits above the dialogue box (z-20) with its own backdrop blur — keeps the dice animation visually prominent without cluttering the chat.
+2. **1.5s spin + 2s reveal timing**: Same animation cadence as combat dice (C-148). The state clearing happens AFTER `_resolveSkillCheck` completes to ensure the result is visible during the LLM resolution.
+3. **`isResolvingSkillCheck` is separate from `isStreaming`**: Both disable inputs, but `isResolvingSkillCheck` spans the entire structured flow (extractStructure + roll animation + resolution streaming) while `isStreaming` is only the stream phase.
+4. **Ollama and OpenRouter both supported for resolution**: `_resolveSkillCheck` uses the same dual-backend pattern as `_generateAiResponse` — OllamaClient for local streaming, textGenerationService for OpenRouter SSE.
+5. **Graceful failure in _resolveSkillCheck**: If the second LLM call fails, a fallback narrative (`*The attempt succeeded/failed.*`) is appended — the player still gets closure.
+
+**Known limitations**:
+- No character sheet stat modifiers on skill checks (always d20+0). Requires character sheet integration.
+- `give_item` is chat-log only — no actual inventory mutation.
+- `trigger_combat` creates a CombatViewModel with hardcoded enemy stats (60 HP) — engine-side enemy entities are not used.
+- Keyword detection may miss nuanced risky actions (e.g., "I subtly imply that his family might be in danger"). The LLM gateway in `_executeStructuredIntent` still validates intent.
+- No modifier key (e.g., Shift+Enter) for explicit skill action — all detection is automatic via regex.
+- Dice service uses `Math.random()`, not `crypto.getRandomValues` — consistent with combat dice (C-145).
+- The `DialogActionSchema` is defined in the client app, not shared `@aikami/schemas` — single-consumer pattern matching `combat_action_schema.ts` (C-146).
