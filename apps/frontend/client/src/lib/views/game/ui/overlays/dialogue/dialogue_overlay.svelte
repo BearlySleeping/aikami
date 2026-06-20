@@ -54,7 +54,7 @@
     </div>
   {/if}
 
-  <!-- d20 Skill Check Dice Overlay (C-157) -->
+  <!-- d20 Skill Check Dice Overlay (C-157 / C-162 Interactive) -->
   {#if viewModel.skillCheckState}
     <div
       class="dice-check-overlay absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm"
@@ -74,22 +74,38 @@
         </span>
 
         <!-- d20 die -->
-        <div
-          class="d20-die"
-          class:d20-spinning={viewModel.skillCheckState.isRolling}
-          class:d20-reveal={!viewModel.skillCheckState.isRolling}
-          class:d20-success={!viewModel.skillCheckState.isRolling && viewModel.skillCheckState.isSuccess === true}
-          class:d20-failure={!viewModel.skillCheckState.isRolling && viewModel.skillCheckState.isSuccess === false}
-        >
-          {#if !viewModel.skillCheckState.isRolling && viewModel.skillCheckState.rollValue !== null}
-            <span class="d20-value">{viewModel.skillCheckState.rollValue}</span>
-          {:else}
+        {#if viewModel.skillCheckState.phase === 'awaiting_click'}
+          <!-- Interactive: player must click to roll (C-162) -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div
+            class="d20-die d20-interactive cursor-pointer"
+            role="button"
+            tabindex="0"
+            aria-label="Click to roll d20"
+            onclick={() => viewModel.rollDice()}
+            onkeydown={(e) => e.key === 'Enter' && viewModel.rollDice()}
+          >
             <span class="d20-question">?</span>
-          {/if}
-        </div>
+          </div>
+          <span class="text-sm font-medium text-base-content/60 animate-pulse">Click to roll</span>
+        {:else if viewModel.skillCheckState.phase === 'rolling'}
+          <!-- Spinning animation -->
+          <div class="d20-die d20-spinning">
+            <span class="d20-question">?</span>
+          </div>
+        {:else if viewModel.skillCheckState.phase === 'revealed'}
+          <!-- Revealed result -->
+          <div
+            class="d20-die d20-reveal"
+            class:d20-success={viewModel.skillCheckState.isSuccess === true}
+            class:d20-failure={viewModel.skillCheckState.isSuccess === false}
+          >
+            <span class="d20-value">{viewModel.skillCheckState.rollValue}</span>
+          </div>
+        {/if}
 
         <!-- Result label -->
-        {#if !viewModel.skillCheckState.isRolling && viewModel.skillCheckState.isSuccess !== null}
+        {#if viewModel.skillCheckState.phase === 'revealed'}
           <span
             class="text-lg font-bold"
             class:text-success={viewModel.skillCheckState.isSuccess}
@@ -152,31 +168,86 @@
       {/if}
     </div>
 
-    <!-- Input area -->
+    <!-- Input area — action context menu or text input (C-162) -->
     <div class="border-t border-base-300 px-4 py-3">
-      <div class="flex items-end gap-2">
-        <textarea
-          bind:this={inputElement}
-          class="textarea textarea-bordered textarea-sm flex-1 resize-none text-sm"
-          rows="2"
-          placeholder="Type your message..."
-          value={viewModel.inputText}
-          oninput={(e) => viewModel.setInput(e.currentTarget.value)}
-          onkeydown={(e) => viewModel.handleKeyDown(e)}
-          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-        ></textarea>
-        <button
-          class="btn btn-primary btn-sm"
-          onclick={() => viewModel.sendMessage()}
-          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
-        >
-          {#if viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-            <span class="loading loading-spinner loading-xs"></span>
-          {:else}
-            Send
-          {/if}
+      {#if viewModel.dialoguePhase === 'MENU'}
+        <!-- Action Context Menu — BG3-style skill check buttons -->
+        <div class="flex flex-wrap gap-2">
+          {#each viewModel.actionOptions as action (action.id)}
+            <button
+              class="btn btn-sm {action.type === 'direct_combat' ? 'btn-error' : action.type === 'skill_check' ? 'btn-outline btn-info' : 'btn-ghost'}"
+              onclick={() => viewModel.selectAction(action.id)}
+              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+            >
+              {#if action.type === 'direct_combat'}
+                ⚔️
+              {:else if action.skill === 'persuasion'}
+                🗣️
+              {:else if action.skill === 'intimidation'}
+                😠
+              {:else if action.skill === 'sleight_of_hand'}
+                🤫
+              {:else}
+                ✏️
+              {/if}
+              {action.label}
+            </button>
+          {/each}
+        </div>
+      {:else if viewModel.dialoguePhase === 'CUSTOM_INPUT'}
+        <!-- Custom freeform text input -->
+        <div class="flex items-end gap-2">
+          <textarea
+            bind:this={inputElement}
+            class="textarea textarea-bordered textarea-sm flex-1 resize-none text-sm"
+            rows="2"
+            placeholder="Type your message..."
+            value={viewModel.inputText}
+            oninput={(e) => viewModel.setInput(e.currentTarget.value)}
+            onkeydown={(e) => viewModel.handleKeyDown(e)}
+            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+          ></textarea>
+          <button
+            class="btn btn-primary btn-sm"
+            onclick={() => viewModel.sendMessage()}
+            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
+          >
+            {#if viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+              <span class="loading loading-spinner loading-xs"></span>
+            {:else}
+              Send
+            {/if}
+          </button>
+        </div>
+        <button class="btn btn-ghost btn-xs mt-2" onclick={() => viewModel.goToMenu()}>
+          ← Back to actions
         </button>
-      </div>
+      {:else}
+        <!-- Standard chat input (DICE / CHAT / RESOLVING phases — fallback) -->
+        <div class="flex items-end gap-2">
+          <textarea
+            bind:this={inputElement}
+            class="textarea textarea-bordered textarea-sm flex-1 resize-none text-sm"
+            rows="2"
+            placeholder="Type your message..."
+            value={viewModel.inputText}
+            oninput={(e) => viewModel.setInput(e.currentTarget.value)}
+            onkeydown={(e) => viewModel.handleKeyDown(e)}
+            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+          ></textarea>
+          <button
+            class="btn btn-primary btn-sm"
+            onclick={() => viewModel.sendMessage()}
+            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
+          >
+            {#if viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+              <span class="loading loading-spinner loading-xs"></span>
+            {:else}
+              Send
+            {/if}
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
@@ -200,6 +271,17 @@
       transform 0.3s ease,
       box-shadow 0.3s ease,
       background 0.3s ease;
+  }
+
+  /* Interactive dice — pulsing glow to invite click (C-162) */
+  .d20-interactive {
+    animation: d20-pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 30px rgba(74, 111, 165, 0.7);
+  }
+
+  .d20-interactive:hover {
+    transform: scale(1.15);
+    box-shadow: 0 0 40px rgba(74, 111, 165, 0.9);
   }
 
   .d20-spinning {
@@ -233,6 +315,16 @@
     }
     100% {
       transform: translateX(3px) translateY(2px) rotate(5deg);
+    }
+  }
+
+  @keyframes d20-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 30px rgba(74, 111, 165, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 50px rgba(74, 111, 165, 0.9);
     }
   }
 

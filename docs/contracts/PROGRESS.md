@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Audit: 2026-06-16)
+## Status Summary (Audit: 2026-06-21)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -1930,3 +1930,34 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - Camera zoom does not affect PixiJS spatial culling (currently disabled anyway).
 - No unit tests added for the new camera zoom functions — covered by integration testing.
 - The speech bubble uses `window.innerWidth/Height` which won't update if the window is resized during dialogue (practically unlikely since the game pauses during dialogue).
+
+### C-162: BG3 Action Menu & Interactive Dice
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Added `DialoguePhase` type ('MENU'|'CUSTOM_INPUT'|'DICE'|'CHAT'), `ActionOption` interface (+`readonly ActionOption[]`), `dialoguePhase`/`selectedActionId`/$state fields, `ACTION_OPTIONS` static constant (5 pre-written actions), `actionOptions` getter, `selectAction()` method (routes to skill check/direct combat/custom), `rollDice()` method (interactive d20 with click-to-roll), `goToMenu()` method (back to action menu), `_handleDirectCombat()` (bypasses LLM, triggers combat), `_executeSkillCheckAction()` (sends action+dice result to LLM for structured extraction), `_getDifficultyClass()` (persona-based DC scaling). Modified `skillCheckState` type: replaced `isRolling: boolean` with `phase: 'awaiting_click' | 'rolling' | 'revealed'`. Updated `_performSkillCheck` to use `phase` instead of `isRolling`.
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` — Replaced text input area with phase-aware conditional rendering: action context menu buttons (`MENU`), custom freeform text input + back button (`CUSTOM_INPUT`), fallback text input (`DICE`/`CHAT`). Enhanced dice overlay with `awaiting_click` interactive state (pulsing glow, hover scale, `onclick`→`rollDice()`), `rolling` animation, and `revealed` result display. Added `d20-interactive` CSS class with `d20-pulse` keyframe animation.
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` — Added 10 unit tests: `dialoguePhase` defaults to MENU, `actionOptions` returns 5 actions, `selectAction('custom')` sets CUSTOM_INPUT, `selectAction('attack')` triggers combat (onEndChat+onStartCombat with 1200ms delay), `selectAction('unknown')` no-op, `selectAction('persuasion')` shows interactive dice awaiting click, `rollDice()` no-ops on null/rolling state, `rollDice()` transitions through all phases to MENU, `goToMenu()` resets phase+input. Added `diceService` mock to `$services` barrel.
+
+**Deviations**:
+1. **Dual resolution paths preserved**: The action menu buttons use the new interactive dice flow; the `[Custom]` freeform path still uses the existing `sendMessage()`→`_isRiskyAction()`→`_executeStructuredIntent()`→`_performSkillCheck()`(auto-roll) flow. Both paths coexist — the action menu is the primary entry point, freeform is the escape hatch.
+2. **`_getDifficultyClass` uses persona-based scaling**: Hard personas (guard, bandit, guild_master) get DC 14, soft personas (innkeeper, healer, merchant) get DC 10, default DC 12. Simpler than per-skill per-NPC difficulty tables.
+3. **`skillCheckState.phase` replaces `isRolling`**: Changed from boolean to 3-state enum (`awaiting_click`→`rolling`→`revealed`). Backward-compatible — all existing code reading `rollValue`/`isSuccess` fields works unchanged.
+4. **`_executeSkillCheckAction` sends single LLM call**: Unlike the original `_executeStructuredIntent` (extractStructure→performSkillCheck→resolveSkillCheck), the new flow sends the skill+diceResult in one `extractStructure` call and handles narrative+mutations from a single response. Simpler and avoids a second LLM round-trip.
+
+**Design decisions**:
+1. **Action buttons styled by type**: `direct_combat` uses `btn-error` (⚔️ Attack), `skill_check` uses `btn-outline btn-info` (🗣️ Persuasion, 😠 Intimidation, 🤫 Stealth), `custom` uses `btn-ghost` (✏️ Custom). Emoji icons provide visual distinction.
+2. **Interactive dice has pulsing glow**: CSS `d20-pulse` animation (2s ease-in-out infinite) with `box-shadow` oscillating between 30px/50px blur and 0.5/0.9 opacity. Hover scales to 1.15× with intensified glow. Click triggers `rollDice()`.
+3. **Dice result visible for 1s before LLM**: After `revealed` phase, `rollDice()` waits 1000ms before calling `_executeSkillCheckAction()` so the player can absorb success/failure.
+4. **`[Attack]` has 1200ms transition delay**: Matches the existing `_handleStateMutation:trigger_combat` pattern — appends combat message, waits 1.2s, calls `onEndChat()` + `onStartCombat()`.
+5. **`goToMenu()` clears input text**: When returning from CUSTOM_INPUT to MENU, the inputText is reset to empty to avoid stale text.
+
+**Known limitations**:
+- The `phase` type in `skillCheckState` changed from `isRolling: boolean` to `phase: 'awaiting_click'|'rolling'|'revealed'` — external consumers reading `skillCheckState.isRolling` would break, but the only consumer is the Svelte View (updated).
+- `_executeSkillCheckAction` uses `extractStructure` for the LLM call, which requires a configured text provider (OpenRouter API key). Without one, skill check resolution silently fails.
+- Action menu buttons are always shown in the same order (Persuasion, Intimidation, Stealth, Attack, Custom) — no NPC-specific tailoring of available actions.
+- The dice is purely CSS-based (not a 3D WebGL die) — the contract mentions "3D/CSS d20" — CSS implementation was chosen for simplicity and performance.
+- No E2E test verifying the interactive dice click flow (AC-2) — requires Playwright with a running dev server and mocked AI backend.
+- The `[Custom]` button still uses the old `sendMessage()` flow which auto-rolls — not interactive. Future contract could make `[Custom]`→LLM→roll flow interactive too.
+- **Dev sandbox**: `routes/(dev)/dev/sandbox/dialogue/+page.svelte` mounts the DialogueOverlay with mock NPC (Elder Thrain, sage persona). Accessible from the sandbox index DevToolsPanel via "Dialogue Action Menu (C-162)" button. Tests all three action types (skill check→dice, Attack→combat transition, Custom→freeform text).
