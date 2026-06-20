@@ -1,6 +1,6 @@
 // packages/shared/mocks/tests/mock-database-service.test.ts
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { MockDatabaseService } from '../src/lib/mock-database-service';
+import { MockDatabaseService } from '../src/lib/mock_database_service';
 
 // ---------------------------------------------------------------------------
 // Test fixtures

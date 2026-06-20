@@ -2,21 +2,21 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { MockAiService } from '@aikami/mocks';
 import type { AiServiceInterface } from '@aikami/types';
-import { z } from 'zod';
+import Type from 'typebox';
 
 // ─── Zod schemas for extraction tests ────────────────────────────────────────
 
-const PersonSchema = z.object({
-  name: z.string(),
-  age: z.number(),
-  email: z.string().email(),
+const PersonSchema = Type.Object({
+  name: Type.String(),
+  age: Type.Number(),
+  email: Type.String().email(),
 });
 
-const ProductSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  price: z.number().positive(),
-  inStock: z.boolean(),
+const ProductSchema = Type.Object({
+  id: Type.String(),
+  title: Type.String(),
+  price: Type.Number().positive(),
+  inStock: Type.Boolean(),
 });
 
 // ─── Shared mock factory ────────────────────────────────────────────────────

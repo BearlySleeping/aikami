@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import {
   NotificationCreateSchema,
   NotificationGenericSchema,
@@ -14,14 +14,14 @@ describe('NotificationGenericSchema', () => {
       title: 'Test Title',
       description: 123,
     };
-    const result = NotificationGenericSchema.parse(validData);
+    const result = Value.Parse(NotificationGenericSchema, validData);
     expect(result.title).toBe('Test Title');
     expect(result.description).toBe(123);
   });
 
   test('should reject missing title', () => {
     const invalidData = { description: 123 };
-    expect(() => NotificationGenericSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(NotificationGenericSchema, invalidData)).toThrow();
   });
 });
 
@@ -31,14 +31,14 @@ describe('NotificationTextSchema', () => {
       title: 'Test Title',
       subtitle: 'Test Subtitle',
     };
-    const result = NotificationTextSchema.parse(validData);
+    const result = Value.Parse(NotificationTextSchema, validData);
     expect(result.title).toBe('Test Title');
     expect(result.subtitle).toBe('Test Subtitle');
   });
 
   test('should parse with optional subtitle undefined', () => {
     const validData = { title: 'Test Title' };
-    const result = NotificationTextSchema.parse(validData);
+    const result = Value.Parse(NotificationTextSchema, validData);
     expect(result.title).toBe('Test Title');
     expect(result.subtitle).toBeUndefined();
   });
@@ -46,15 +46,15 @@ describe('NotificationTextSchema', () => {
 
 describe('NotificationTypeSchema', () => {
   test('should parse ctaClicked type', () => {
-    expect(NotificationTypeSchema.parse('ctaClicked')).toBe('ctaClicked');
+    expect(Value.Parse(NotificationTypeSchema, 'ctaClicked')).toBe('ctaClicked');
   });
 
   test('should parse videoViewed type', () => {
-    expect(NotificationTypeSchema.parse('videoViewed')).toBe('videoViewed');
+    expect(Value.Parse(NotificationTypeSchema, 'videoViewed')).toBe('videoViewed');
   });
 
   test('should reject invalid type', () => {
-    expect(() => NotificationTypeSchema.parse('clicked')).toThrow(z.ZodError);
+    expect(() => Value.Parse(NotificationTypeSchema, 'clicked')).toThrow();
   });
 });
 
@@ -70,7 +70,7 @@ describe('NotificationSchema', () => {
   };
 
   test('should parse valid notification data', () => {
-    const result = NotificationSchema.parse(validNotificationData);
+    const result = Value.Parse(NotificationSchema, validNotificationData);
     expect(result.id).toBe('notif-123');
     expect(result.notificationType).toBe('ctaClicked');
     expect(result.uid).toBe('user-123');
@@ -81,7 +81,7 @@ describe('NotificationSchema', () => {
       id: 'notif-123',
       notificationType: 'ctaClicked' as const,
     };
-    expect(() => NotificationSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(NotificationSchema, invalidData)).toThrow();
   });
 });
 
@@ -95,7 +95,7 @@ describe('NotificationCreateSchema', () => {
       notificationType: 'videoViewed' as const,
       uid: 'user-123',
     };
-    const result = NotificationCreateSchema.parse(validData);
+    const result = Value.Parse(NotificationCreateSchema, validData);
     expect(result.notificationPayload.title).toBe('New Notification');
     expect(result.uid).toBe('user-123');
   });

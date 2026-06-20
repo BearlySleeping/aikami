@@ -72,7 +72,7 @@ test.describe('C-147: Progression & Persistence', () => {
     await waitForEngineReady(page);
 
     // Re-check that the defeated enemy ID is still tracked
-    const persisted = await page.evaluate((enemyId) => {
+    const persisted = await page.evaluate((_enemyId) => {
       const bridgeModule = (window as unknown as Record<string, unknown>).__ENGINE_BRIDGE__;
       if (!bridgeModule) {
         return false;

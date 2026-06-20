@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import {
   FieldValueSchema,
   GeoPointSchema,
@@ -15,7 +15,7 @@ describe('TimestampSchema', () => {
       toDate: () => new Date(),
       toMillis: () => 1700000000000,
     };
-    const result = TimestampSchema.parse(validTimestamp);
+    const result = Value.Parse(TimestampSchema, validTimestamp);
     expect(result.seconds).toBe(1700000000);
     expect(result.nanoseconds).toBe(0);
   });
@@ -24,18 +24,18 @@ describe('TimestampSchema', () => {
     const invalidTimestamp = {
       seconds: 'not a number',
     };
-    expect(() => TimestampSchema.parse(invalidTimestamp)).toThrow(z.ZodError);
+    expect(() => Value.Assert(TimestampSchema, invalidTimestamp)).toThrow();
   });
 });
 
 describe('FieldValueSchema', () => {
   test('should parse non-null value as field value', () => {
-    const result = FieldValueSchema.parse('some value');
+    const result = Value.Parse(FieldValueSchema, 'some value');
     expect(result).toBe('some value');
   });
 
   test('should reject null', () => {
-    expect(() => FieldValueSchema.parse(null)).toThrow(z.ZodError);
+    expect(() => Value.Assert(FieldValueSchema, null)).toThrow();
   });
 });
 
@@ -45,30 +45,30 @@ describe('GeoPointSchema', () => {
       latitude: 40.7128,
       longitude: -74.006,
     };
-    const result = GeoPointSchema.parse(validGeoPoint);
+    const result = Value.Parse(GeoPointSchema, validGeoPoint);
     expect(result.latitude).toBe(40.7128);
     expect(result.longitude).toBe(-74.006);
   });
 
   test('should reject null', () => {
-    expect(() => GeoPointSchema.parse(null)).toThrow(z.ZodError);
+    expect(() => Value.Assert(GeoPointSchema, null)).toThrow();
   });
 });
 
 describe('UniversalValueSchema', () => {
   test('should parse string', () => {
-    expect(UniversalValueSchema.parse('hello')).toBe('hello');
+    expect(Value.Parse(UniversalValueSchema, 'hello')).toBe('hello');
   });
 
   test('should parse number', () => {
-    expect(UniversalValueSchema.parse(42)).toBe(42);
+    expect(Value.Parse(UniversalValueSchema, 42)).toBe(42);
   });
 
   test('should reject array', () => {
-    expect(() => UniversalValueSchema.parse(['a', 'b'])).toThrow(z.ZodError);
+    expect(() => Value.Assert(UniversalValueSchema, ['a', 'b'])).toThrow();
   });
 
   test('should reject object', () => {
-    expect(() => UniversalValueSchema.parse({ key: 'value' })).toThrow(z.ZodError);
+    expect(() => Value.Assert(UniversalValueSchema, { key: 'value' })).toThrow();
   });
 });

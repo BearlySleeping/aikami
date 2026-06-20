@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import {
   PersonaCreateSchema,
   PersonaSchema,
@@ -34,7 +34,7 @@ describe('PersonaSheetSchema', () => {
   };
 
   test('should parse valid persona sheet data', () => {
-    const result = PersonaSheetSchema.parse(validPersonaData);
+    const result = Value.Parse(PersonaSheetSchema, validPersonaData);
     expect(result.name).toBe('Hero Character');
     expect(result.level).toBe(5);
   });
@@ -47,7 +47,7 @@ describe('PersonaSheetSchema', () => {
       bonds: 'Oath to the king',
       flaws: 'Too trusting',
     };
-    const result = PersonaSheetSchema.parse(dataWithOptional);
+    const result = Value.Parse(PersonaSheetSchema, dataWithOptional);
     expect(result.personalityTraits).toBe('Brave and honorable');
   });
 });
@@ -82,7 +82,7 @@ describe('PersonaSchema', () => {
   };
 
   test('should parse valid persona data', () => {
-    const result = PersonaSchema.parse(validPersonaData);
+    const result = Value.Parse(PersonaSchema, validPersonaData);
     expect(result.id).toBe('persona-123');
     expect(result.avatarUrl).toBe('https://example.com/avatar.png');
     expect(result.uid).toBe('user-123');
@@ -90,7 +90,7 @@ describe('PersonaSchema', () => {
 
   test('should parse with optional fields undefined', () => {
     const { avatarUrl, uid, ...rest } = validPersonaData;
-    const result = PersonaSchema.parse(rest);
+    const result = Value.Parse(PersonaSchema, rest);
     expect(result.avatarUrl).toBeUndefined();
     expect(result.uid).toBeUndefined();
   });
@@ -100,7 +100,7 @@ describe('PersonaSchema', () => {
       ...validPersonaData,
       avatarUrl: 'not-a-url',
     };
-    expect(() => PersonaSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(PersonaSchema, invalidData)).toThrow();
   });
 });
 
@@ -130,13 +130,13 @@ describe('PersonaCreateSchema', () => {
       equipment: ['Longbow', 'Arrow'],
       inventory: [],
     };
-    const result = PersonaCreateSchema.parse(validData);
+    const result = Value.Parse(PersonaCreateSchema, validData);
     expect(result.name).toBe('New Persona');
   });
 
   test('should reject when required fields missing', () => {
     const invalidData = { name: 'Incomplete Persona' };
-    expect(() => PersonaCreateSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(PersonaCreateSchema, invalidData)).toThrow();
   });
 });
 
@@ -167,7 +167,7 @@ describe('PersonaUpdateSchema', () => {
       equipment: ['Longsword'],
       inventory: [],
     };
-    const result = PersonaUpdateSchema.parse(validData);
+    const result = Value.Parse(PersonaUpdateSchema, validData);
     expect(result.name).toBe('Updated Name');
     expect(result.level).toBe(6);
   });

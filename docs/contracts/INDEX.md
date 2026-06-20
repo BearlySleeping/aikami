@@ -98,6 +98,7 @@ P2 (Polish — after P1):
 | C-156 | [Tauri Production Release](C-156-tauri-production-release.md) ✅ | Finalize tauri.conf.json, CSP/HTTP permissions for Ollama (11434) + ComfyUI (8188), adapter-static assets config, post-mortem docs | C-155 |
 | C-157 | [Dialogue Skill Checks](C-157-dialogue-skill-checks.md) ✅ | d20 skill checks (Persuasion/Intimidation/Sleight_of_Hand) during NPC dialogue, structured LLM intent extraction, state mutations (trigger_combat, give_item), animated dice UI | C-129, C-145 |
 | C-158 | [LPC Avatar Integration](C-158-lpc-avatar-integration.md) ✅ | Dynamic player sprite from character creation appearance traits, layered LPC textures via Appearance component, catalog-driven recipe resolution | C-123, C-081 |
+| C-159 | [Demo Happy Path E2E](C-159-demo-happy-path-e2e.md) ✅ | Master Playwright E2E test covering Start Menu → Character Creation → Game Canvas → Dialogue Skill Check → Combat → Save Game with mocked AI backends | C-157, C-158 |
 
 ## Contract Format
 
