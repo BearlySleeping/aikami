@@ -35,7 +35,7 @@ export const EXPRESSION_MAP: Record<string, number> = {
 export const FACE_LAYER_INDEX = 1;
 
 /** Number of asset layers an entity can compose from. */
-export const APPEARANCE_LAYER_COUNT = 5;
+export const APPEARANCE_LAYER_COUNT = 6;
 
 /**
  * Describes a single layer in an AI-generated LPC character manifest.
@@ -59,12 +59,13 @@ export type LpcLayerRecipe = {
 
 /** SoA storage for appearance data. Indexed by entity ID. */
 export const Appearance = {
-  /** Asset hash / texture key for each compositing layer (0 = empty). */
   layer0: [] as number[],
   layer1: [] as number[],
   layer2: [] as number[],
   layer3: [] as number[],
   layer4: [] as number[],
+  /** Head slot — 6th layer. C-161: bumped from 5 to 6 layers. */
+  layer5: [] as number[],
 };
 
 /** Payload shape stored / retrieved via observers. */
@@ -74,13 +75,13 @@ export type AppearanceData = {
   layer2: number;
   layer3: number;
   layer4: number;
+  layer5: number;
 };
 
 /**
- * Helper that returns all 5 layer IDs for a given entity as a readonly array.
+ * Helper that returns all 6 layer IDs for a given entity as a readonly array.
  *
  * @param eid - The entity ID.
- * @returns A readonly array of 5 layer asset IDs (0 means no asset).
  */
 export const getAppearanceLayers = (eid: number): readonly number[] => [
   Appearance.layer0[eid] ?? 0,
@@ -88,13 +89,11 @@ export const getAppearanceLayers = (eid: number): readonly number[] => [
   Appearance.layer2[eid] ?? 0,
   Appearance.layer3[eid] ?? 0,
   Appearance.layer4[eid] ?? 0,
+  Appearance.layer5[eid] ?? 0,
 ];
 
 /**
  * Helper to update the Appearance layers for an entity.
- * Uses bitECS `set` under the hood if it was standard, but since Appearance is
- * an object of arrays, we can just assign directly or use a helper.
- * Actually, to trigger observers, we should return an object that can be passed to bitECS `set()`.
  */
 export const setAppearanceLayers = (
   _world: World,
@@ -106,6 +105,7 @@ export const setAppearanceLayers = (
   Appearance.layer2[eid] = layers[2] ?? 0;
   Appearance.layer3[eid] = layers[3] ?? 0;
   Appearance.layer4[eid] = layers[4] ?? 0;
+  Appearance.layer5[eid] = layers[5] ?? 0;
 };
 
 /**
@@ -120,6 +120,7 @@ export const registerAppearanceObservers = (world: World): void => {
     Appearance.layer2[eid] = params.layer2;
     Appearance.layer3[eid] = params.layer3;
     Appearance.layer4[eid] = params.layer4;
+    Appearance.layer5[eid] = params.layer5;
   });
 
   observe(
@@ -131,6 +132,7 @@ export const registerAppearanceObservers = (world: World): void => {
       layer2: Appearance.layer2[eid] ?? 0,
       layer3: Appearance.layer3[eid] ?? 0,
       layer4: Appearance.layer4[eid] ?? 0,
+      layer5: Appearance.layer5[eid] ?? 0,
     }),
   );
 };

@@ -38,7 +38,10 @@ import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
 import { getEngineGameMode, setEngineGameMode } from '../state/game_mode.ts';
 import {
+  endDialogueZoom,
+  getActiveNpcScreenPosition,
   getCameraPosition,
+  getCameraZoom,
   resetCameraTracking,
   setMapBounds,
   setScreenSize,
@@ -224,7 +227,15 @@ const handleBridgeCommand = (command: GameCommand): void => {
       break;
     }
     case 'SET_GAME_MODE': {
+      const previousMode = getEngineGameMode();
       setEngineGameMode(command.mode);
+
+      // End cinematic dialogue zoom when transitioning away from DIALOGUE.
+      // Covers both the "End Chat" button and proximity-leave flows.
+      // Contract: C-161 Spatial UI Camera
+      if (previousMode === 'DIALOGUE' && command.mode !== 'DIALOGUE') {
+        endDialogueZoom();
+      }
       break;
     }
     case 'INTERACT': {
@@ -529,12 +540,31 @@ const tickLoop = (): void => {
   if (useSharedMemory) {
     // SharedArrayBuffer — main thread reads directly, no transfer needed
     const camera = getCameraPosition();
-    postMessage({
+    const zoom = getCameraZoom();
+    const screenPos = getActiveNpcScreenPosition();
+    const message: Record<string, unknown> = {
       type: 'STATE_UPDATE',
       events,
       cameraX: camera.x,
       cameraY: camera.y,
-    });
+      zoom,
+    };
+    if (screenPos.x !== undefined) {
+      message.npcScreenX = screenPos.x;
+      message.npcScreenY = screenPos.y;
+    }
+
+    // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
+    if (screenPos.x !== undefined) {
+      events.push({
+        type: 'CAMERA_ZOOM_UPDATE',
+        zoom,
+        npcScreenX: screenPos.x,
+        npcScreenY: screenPos.y,
+      });
+    }
+
+    postMessage(message);
   } else {
     // ArrayBuffer fallback — transfer ownership so main thread can read.
     // IMPORTANT: after transfer the worker's reference to `buffer` is
@@ -574,14 +604,34 @@ const tickLoop = (): void => {
     activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
 
     const camera = getCameraPosition();
+    const zoom = getCameraZoom();
+    const screenPos = getActiveNpcScreenPosition();
+
+    // Emit CAMERA_ZOOM_UPDATE event for the UI overlay when dialogue is active (C-161)
+    if (screenPos.x !== undefined) {
+      events.push({
+        type: 'CAMERA_ZOOM_UPDATE',
+        zoom,
+        npcScreenX: screenPos.x,
+        npcScreenY: screenPos.y,
+      });
+    }
+
+    const message: Record<string, unknown> = {
+      type: 'STATE_UPDATE',
+      buffer,
+      events,
+      cameraX: camera.x,
+      cameraY: camera.y,
+      zoom,
+    };
+    if (screenPos.x !== undefined) {
+      message.npcScreenX = screenPos.x;
+      message.npcScreenY = screenPos.y;
+    }
+
     postMessage(
-      {
-        type: 'STATE_UPDATE',
-        buffer,
-        events,
-        cameraX: camera.x,
-        cameraY: camera.y,
-      },
+      message,
       // Transfer the buffer to the main thread (zero-copy handoff)
       [buffer],
     );
