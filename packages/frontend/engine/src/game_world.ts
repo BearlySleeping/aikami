@@ -152,6 +152,18 @@ export type GameWorldOptions = BaseEngineClassOptions & {
 export type PlayerInitData = {
   /** The player character's display name. */
   name: string;
+  /**
+   * LPC appearance layer indices (1-indexed variant numbers per slot).
+   *
+   * Order matches the engine slot order: body, hair, torso, legs, feet, head.
+   * Each value is a 1-indexed variant number within the corresponding slot's
+   * catalog entries. A value of 0 means "no asset for this slot."
+   *
+   * When omitted, defaults to [1, 1, 1, 1, 1, 95] (basic male human).
+   *
+   * Contract: C-158 LPC Avatar Integration
+   */
+  appearanceLayers?: number[];
 };
 
 /**
