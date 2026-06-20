@@ -42,6 +42,7 @@
 | C-155 | Autosave & Memory Hardening | ✅ completed |
 | C-156 | Tauri Production Release | ✅ completed |
 | C-157 | Dialogue Skill Checks | ✅ completed |
+| C-158 | LPC Avatar Integration | ✅ completed |
 | C-127 | Settings Menu Refactor | ✅ completed |
 | C-128 | Dialogue Overlay & AI Chat | ✅ completed |
 | C-129 | Dialogue AI Integration & Polish | ✅ completed |
@@ -1804,3 +1805,30 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - No modifier key (e.g., Shift+Enter) for explicit skill action — all detection is automatic via regex.
 - Dice service uses `Math.random()`, not `crypto.getRandomValues` — consistent with combat dice (C-145).
 - The `DialogActionSchema` is defined in the client app, not shared `@aikami/schemas` — single-consumer pattern matching `combat_action_schema.ts` (C-146).
+
+### C-158: LPC Avatar Integration
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/engine/src/game_world.ts` — Extended `PlayerInitData` with `appearanceLayers?: number[]` (1-indexed variant numbers per slot: body, hair, torso, legs, feet, head)
+- `packages/frontend/engine/src/entities/create_player.ts` — Extended `PlayerCreateOptions` with `appearanceLayers?: number[]`; `createPlayer()` now reads `options?.appearanceLayers` and passes to `setAppearanceLayers()` instead of hardcoded `[1, 1, 1, 1, 1, 95]`
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Extended local `PlayerInitData` type with `appearanceLayers?: number[]`; `initializeEngine()` extracts `lpcRecipe` from active persona's `appearance` metadata, converts string asset IDs to 1-indexed layer variant numbers via `GENERATED_LPC_SLOTS` catalog lookup, and passes as `playerData.appearanceLayers`
+- `apps/frontend/client/src/lib/views/character/create/character_view_model.svelte.ts` — `_extractCharacter()` now persists `lpcRecipe` onto the persona's `appearance` object so it survives page refresh and reaches the game engine
+
+**Deviations**:
+1. **lpcRecipe piggybacks on persona.appearance**: Rather than adding a new schema field to `PersonaData`, the `lpcRecipe` is stored as `(persona.appearance as Record<string, unknown>).lpcRecipe`. This avoids a shared schema change while keeping the data available at engine init time. A future schema migration can formalize this.
+2. **No engine-side asset URL mapping**: The engine's `lpc_asset_catalog.ts` still returns hardcoded default texture keys (`/lpc/body/male/walk.png`) for NPCS. The dynamic appearance pipeline for the player entity is driven entirely by the `recipeResolver` in `GameViewModel.initializeEngine`, which converts layer IDs → `LpcLayerRecipe[]` using the generated catalog.
+3. **Variant index fallback to 1**: When an asset ID from `lpcRecipe` is not found in the catalog, the code defaults to layer value 1 (first variant) instead of skipping the slot. This ensures the entity always has a visible rendering rather than invisible/missing layers.
+
+**Design decisions**:
+1. **Cross-route data via persona persistence**: Rather than using a cross-route module variable (like `game_load_state.svelte.ts`), `lpcRecipe` is stored directly on the persona object during `_extractCharacter`. The persona is persisted to localStorage by `_persistCharacter`, and `GameViewModel.loadActivePersona()` reads it back. This ensures the data survives both SPA navigation and page refresh.
+2. **Catalog resolution at engine init**: The string→index conversion happens in `GameViewModel.initializeEngine` (main thread), not in the engine worker. This keeps the worker free of UI-level catalog imports and matches the existing `recipeResolver` pattern.
+3. **1-indexed layer values**: Layer indices are 1-indexed (0 = first variant → layerId 1) to match the existing bitECS convention where 0 means "no asset for this slot." The `recipeResolver` already subtracts 1 when converting back to 0-indexed catalog lookups.
+4. **Existing render pipeline unchanged**: The `APPEARANCE_CHANGED` → `recipeResolver` → `_loadEntityRecipes` → `dirtyCheckAppearance` pipeline in `game_world.ts` already handles the complete sprite composition flow. This contract only ensures the correct appearance data reaches the pipeline.
+
+**Known limitations**:
+- NPCS still use default LPC textures — only the player entity gets dynamic appearance. Per-NPC LPC recipes require extending the entity spawner.
+- `lpcRecipe` is stored loosely typed on `persona.appearance` — a formal schema field would provide type safety.
+- The engine's `lpc_asset_catalog.ts` `resolveNpcTexture` still returns the hardcoded male default. A full catalog-driven NPC texture resolver is future work.
+- No visual regression test added — the AC-1 test hook suggests a Playwright screenshot comparison, which requires the full dev stack running.

@@ -740,6 +740,9 @@ export class CharacterViewModel
       }
       if (extractedObj.lpcRecipe) {
         this.lpcRecipe = extractedObj.lpcRecipe as Record<string, string>;
+        // Persist lpcRecipe on the persona so the game engine can use it.
+        // Contract C-158
+        (persona.appearance as Record<string, unknown>).lpcRecipe = extractedObj.lpcRecipe;
       }
 
       if (persona.name === 'Unnamed Adventurer' && persona.race && persona.class) {
