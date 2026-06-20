@@ -18,6 +18,13 @@ import type { ActiveContextEntry } from '$types';
 type PlayerInitData = {
   /** The player character's name (from persona). */
   name: string;
+  /**
+   * LPC appearance layer indices from character creation.
+   * 1-indexed variant numbers: [body, hair, torso, legs, feet, head].
+   *
+   * Contract: C-158 LPC Avatar Integration
+   */
+  appearanceLayers?: number[];
 };
 
 export type GameViewModelOptions = BaseViewModelOptions;
@@ -279,10 +286,6 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
       const initialPayload = consumePendingGameLoad();
 
-      const playerData: PlayerInitData | undefined = this._activePersona?.name
-        ? { name: this._activePersona.name }
-        : undefined;
-
       // Wire up the LPC rendering pipeline so APPEARANCE_CHANGED events
       // from the worker produce visible character sprites.
       //
@@ -292,6 +295,54 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       const { TextureManager } = await import('@aikami/frontend/engine');
       const { getLpcAssetPath } = await import('$lib/data/lpc_asset_catalog');
       const { GENERATED_LPC_SLOTS } = await import('$lib/data/lpc_asset_catalog_generated');
+
+      // Build player data from the active persona, including LPC appearance
+      // layers from character creation (C-158).
+      let playerData: PlayerInitData | undefined;
+      if (this._activePersona?.name) {
+        playerData = { name: this._activePersona.name };
+
+        // Extract lpcRecipe from the persona's appearance metadata and
+        // convert string asset IDs to 1-indexed layer variant numbers.
+        const lpcRecipe = (this._activePersona.appearance as Record<string, unknown> | undefined)
+          ?.lpcRecipe as Record<string, string> | undefined;
+        if (lpcRecipe) {
+          // Slot ordering must match ENGINE_SLOTS in the recipeResolver below
+          // and WORKER_SLOT_NAMES in ecs_worker.ts.
+          const ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+          const slotIndexMap = new Map<string, number>();
+          for (let i = 0; i < GENERATED_LPC_SLOTS.length; i++) {
+            slotIndexMap.set(GENERATED_LPC_SLOTS[i].slot, i);
+          }
+
+          const appearanceLayers: number[] = [];
+          for (const slotName of ENGINE_SLOTS) {
+            const assetId = lpcRecipe[slotName];
+            if (!assetId) {
+              appearanceLayers.push(1);
+              continue;
+            }
+            const catalogIdx = slotIndexMap.get(slotName);
+            if (catalogIdx === undefined) {
+              appearanceLayers.push(1);
+              continue;
+            }
+            const slotDef = GENERATED_LPC_SLOTS[catalogIdx];
+            if (!slotDef) {
+              appearanceLayers.push(1);
+              continue;
+            }
+            const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
+            // 1-indexed: variant 0 → layerId 1, variant -1 (not found) → default to 1
+            appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : 1);
+          }
+          playerData.appearanceLayers = appearanceLayers;
+          this.debug('initializeEngine:resolved-appearance', {
+            lpcRecipe,
+            appearanceLayers,
+          });
+        }
+      }
 
       // Slot name → index in GENERATED_LPC_SLOTS
       const SLOT_CATALOG_INDEX: Record<string, number> = {};

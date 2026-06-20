@@ -97,6 +97,7 @@ P2 (Polish — after P1):
 | C-155 | [Autosave & Memory Hardening](C-155-autosave-memory-hardening.md) ✅ | Zone transition auto-save, UI feedback toast, PixiJS tilemap texture cleanup, audio buffer cleanup on map change | C-152, C-153, C-154 |
 | C-156 | [Tauri Production Release](C-156-tauri-production-release.md) ✅ | Finalize tauri.conf.json, CSP/HTTP permissions for Ollama (11434) + ComfyUI (8188), adapter-static assets config, post-mortem docs | C-155 |
 | C-157 | [Dialogue Skill Checks](C-157-dialogue-skill-checks.md) ✅ | d20 skill checks (Persuasion/Intimidation/Sleight_of_Hand) during NPC dialogue, structured LLM intent extraction, state mutations (trigger_combat, give_item), animated dice UI | C-129, C-145 |
+| C-158 | [LPC Avatar Integration](C-158-lpc-avatar-integration.md) ✅ | Dynamic player sprite from character creation appearance traits, layered LPC textures via Appearance component, catalog-driven recipe resolution | C-123, C-081 |
 
 ## Contract Format
 
