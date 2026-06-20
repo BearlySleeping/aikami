@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import {
   UserCreateSchema,
   UserLiteCreateSchema,
@@ -21,7 +21,7 @@ describe('UserSessionSchema', () => {
       email: 'john@example.com',
       currentSignInProvider: 'google',
     };
-    const result = UserSessionSchema.parse(validData);
+    const result = Value.Parse(UserSessionSchema, validData);
     expect(result.id).toBe('user-123');
     expect(result.userRole).toBe('member');
   });
@@ -41,7 +41,7 @@ describe('UserLiteSchema', () => {
         toMillis: () => 1700000000000,
       },
     };
-    const result = UserLiteSchema.parse(validData);
+    const result = Value.Parse(UserLiteSchema, validData);
     expect(result.id).toBe('user-123');
   });
 });
@@ -64,7 +64,7 @@ describe('UserSchema', () => {
       countryCode: 'US',
       localeCode: 'en',
     };
-    const result = UserSchema.parse(validData);
+    const result = Value.Parse(UserSchema, validData);
     expect(result.id).toBe('user-123');
     expect(result.firstName).toBe('John');
   });
@@ -82,7 +82,7 @@ describe('UserSchema', () => {
         toMillis: () => 1700000000000,
       },
     };
-    const result = UserSchema.parse(validData);
+    const result = Value.Parse(UserSchema, validData);
     expect(result.firstName).toBeUndefined();
     expect(result.countryCode).toBeUndefined();
   });
@@ -97,7 +97,7 @@ describe('UserCreateSchema', () => {
       createdAt: { seconds: 1700000000, nanoseconds: 0 },
       firstName: 'John',
     };
-    const result = UserCreateSchema.parse(validData);
+    const result = Value.Parse(UserCreateSchema, validData);
     expect(result.firstName).toBe('John');
   });
 
@@ -105,7 +105,7 @@ describe('UserCreateSchema', () => {
     const data = {
       displayName: 'John Doe',
     };
-    const result = UserCreateSchema.parse(data);
+    const result = Value.Parse(UserCreateSchema, data);
     expect(result.displayName).toBe('John Doe');
   });
 });
@@ -116,7 +116,7 @@ describe('UserUpdateSchema', () => {
       updatedAt: { seconds: 1700000000, nanoseconds: 0 },
       firstName: 'John Updated',
     };
-    const result = UserUpdateSchema.parse(validData);
+    const result = Value.Parse(UserUpdateSchema, validData);
     expect(result.firstName).toBe('John Updated');
   });
 });
@@ -128,7 +128,7 @@ describe('UserLiteCreateSchema', () => {
       email: 'john@example.com',
       userRole: 'member',
     };
-    const result = UserLiteCreateSchema.parse(validData);
+    const result = Value.Parse(UserLiteCreateSchema, validData);
     expect(result.email).toBe('john@example.com');
     expect(result.userRole).toBe('member');
   });
@@ -139,6 +139,6 @@ describe('UserLiteCreateSchema', () => {
       email: 'not-an-email',
       userRole: 'member',
     };
-    expect(() => UserLiteCreateSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(UserLiteCreateSchema, invalidData)).toThrow();
   });
 });

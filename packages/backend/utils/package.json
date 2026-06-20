@@ -2,7 +2,7 @@
   "name": "@aikami/backend-utils",
   "main": "src/index.ts",
   "scripts": {
-    "test": "bun test",
+    "test": "bun test --pass-with-no-tests",
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",

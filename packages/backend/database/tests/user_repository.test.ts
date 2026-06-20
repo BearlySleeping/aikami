@@ -1,9 +1,9 @@
 // packages/backend/database/tests/user-repository.test.ts
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { MockDatabaseService } from '../../../shared/mocks/src/lib/mock_database_service.ts';
-import type { BaseDatabaseService } from '../src/lib/base-database-service';
-import { FirebaseDataConnectService } from '../src/lib/firebase-data-connect-service';
-import { type CreateUserInput, UserRepository } from '../src/lib/user-repository';
+import type { BaseDatabaseService } from '../src/lib/base_database_service';
+import { FirebaseDataConnectService } from '../src/lib/firebase_data_connect_service';
+import { type CreateUserInput, UserRepository } from '../src/lib/user_repository';
 
 // ---------------------------------------------------------------------------
 // Helpers

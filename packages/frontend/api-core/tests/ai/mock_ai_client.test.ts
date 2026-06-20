@@ -1,15 +1,14 @@
 // packages/frontend/api-core/tests/ai/mock_ai_client.test.ts
 
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { z } from 'zod';
-
+import Type from 'typebox';
 import { MockAiClient } from '../../src/ai/mock/mock_ai_client.ts';
 
-const ItemSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  value: z.number().positive(),
-  requiredLevel: z.number().min(1).max(100),
+const ItemSchema = Type.Object({
+  name: Type.String(),
+  description: Type.String(),
+  value: Type.Number({ exclusiveMinimum: 0 }),
+  requiredLevel: Type.Number({ minimum: 1, maximum: 100 }),
 });
 
 describe('MockAiClient', () => {
