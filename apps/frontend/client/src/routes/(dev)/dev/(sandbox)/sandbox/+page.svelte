@@ -287,6 +287,12 @@
       },
     },
     {
+      label: 'Camera & Spatial UI (C-161)',
+      onClick: () => {
+        window.location.href = '/dev/sandbox/camera';
+      },
+    },
+    {
       label: 'Vendor Sandbox (C-154)',
       onClick: () => {
         window.location.href = '/dev/sandbox/vendor';

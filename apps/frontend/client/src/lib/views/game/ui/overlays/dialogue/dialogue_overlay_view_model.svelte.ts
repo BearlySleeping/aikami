@@ -142,6 +142,29 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   readonly isResolvingSkillCheck: boolean;
 
   /**
+   * Screen-space X coordinate of the active dialogue NPC (CSS pixels).
+   * Updated reactively from CAMERA_ZOOM_UPDATE bridge events.
+   *
+   * Contract: C-161 Spatial UI Camera
+   */
+  npcScreenX: number;
+
+  /**
+   * Screen-space Y coordinate of the active dialogue NPC (CSS pixels).
+   * Updated reactively from CAMERA_ZOOM_UPDATE bridge events.
+   *
+   * Contract: C-161 Spatial UI Camera
+   */
+  npcScreenY: number;
+
+  /**
+   * Whether the NPC screen position is available for speech bubble
+   * positioning. `true` when dialogue zoom is active and the worker
+   * is sending CAMERA_ZOOM_UPDATE events.
+   */
+  hasNpcScreenPosition: boolean;
+
+  /**
    * Sends the given text (or current input) as a player message
    * and triggers AI response streaming. Does nothing if input is
    * empty or AI is already streaming.
@@ -192,6 +215,15 @@ class DialogueOverlayViewModel
 
   /** Whether the AI is resolving a structured skill check. */
   isResolvingSkillCheck = $state(false);
+
+  /** @inheritdoc */
+  npcScreenX = $state<number>(0);
+
+  /** @inheritdoc */
+  npcScreenY = $state<number>(0);
+
+  /** @inheritdoc */
+  hasNpcScreenPosition = $state<boolean>(false);
 
   private readonly _npcData: DialogueNpcData;
 

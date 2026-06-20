@@ -42,6 +42,18 @@
   role="dialog"
   aria-label="Dialogue with {viewModel.npcName}"
 >
+  <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->
+  {#if viewModel.hasNpcScreenPosition}
+    {@const clampedX = Math.max(16, Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400))}
+    {@const clampedY = Math.max(16, Math.min(viewModel.npcScreenY, typeof window !== 'undefined' ? window.innerHeight - 16 : 300))}
+    <div
+      class="speech-bubble pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-base-100/90 px-3 py-1.5 text-xs font-semibold text-primary shadow-lg backdrop-blur-sm"
+      style="left: {clampedX}px; top: {clampedY - 48}px;"
+    >
+      {viewModel.npcName}
+    </div>
+  {/if}
+
   <!-- d20 Skill Check Dice Overlay (C-157) -->
   {#if viewModel.skillCheckState}
     <div

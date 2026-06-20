@@ -1897,3 +1897,36 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 1. **Hair z-order**: Added `LPC_SLOT_Z_ORDER` mapping (body=0, legs=1, feet=2, torso=3, head=4, hair=5) and sort recipes by depth in `packRecipeToUboBuffer` and `_loadAndComposeMultiLayer`. Fixes hair rendering behind torso.
 2. **Animation direction priority**: Changed `velocityToDirection` from dominant-axis to horizontal-priority — when both axes are active, always faces LEFT or RIGHT. Prevents flicker when holding A+W simultaneously.
 3. Updated 2 animation controller tests to match new horizontal-priority behavior.
+
+### C-161: Spatial UI Camera
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/engine/src/systems/camera_system.ts` — Added dialogue zoom state (currentZoom, targetZoom, isDialogueZooming, NPC/player world coords), `startDialogueZoom()`, `endDialogueZoom()`, `getCameraZoom()`, `getActiveNpcScreenPosition()`; zoom lerp toward target in `updateCameraSystem()`; midpoint tracking when dialogue active instead of player-only tracking; zoom reset in `resetCameraTracking()`
+- `packages/frontend/engine/src/systems/interaction_system.ts` — Imported `startDialogueZoom`; added `playerEntityId` to `_handleNpcInteraction` params; reads NPC + player positions and calls `startDialogueZoom()` for non-vendor NPCs
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Imported `endDialogueZoom`, `getActiveNpcScreenPosition`, `getCameraZoom`; emits `CAMERA_ZOOM_UPDATE` event + zoom/screen-position fields in STATE_UPDATE postMessage; calls `endDialogueZoom()` when game mode transitions away from DIALOGUE
+- `packages/frontend/engine/src/game_world.ts` — Added `_cameraZoom` field (default 1.0); applies dynamic `4 * zoom` scale to `_worldContainer` in `_updateRenderFromBuffer`; extracts zoom from STATE_UPDATE in `_handleStateUpdate`
+- `packages/frontend/engine/src/types.ts` — Added `CAMERA_ZOOM_UPDATE` GameEvent (zoom, npcScreenX, npcScreenY)
+- `packages/frontend/engine/src/index.ts` — Exported `endDialogueZoom`, `getActiveNpcScreenPosition`, `getCameraZoom`, `startDialogueZoom` from camera_system barrel
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — Added `npcScreenX`, `npcScreenY`, `hasNpcScreenPosition` reactive $state fields to interface and class
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` — Added spatial speech bubble `<div>` positioned via clamped screen coordinates (48px above NPC head), viewport-edge clamped via `Math.max/min` with 16px margin
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — Added `CAMERA_ZOOM_UPDATE` bridge listener forwarding screen position to active DialogueOverlayViewModel; clears `hasNpcScreenPosition` in `endDialogue()`
+
+**Deviations**:
+1. **CAMERA_ZOOM_UPDATE emitted only during dialogue**: To avoid 60fps bridge event spam, the event is only pushed to `pendingEvents` when `isDialogueZooming` is true. The zoom/position data is always included in the STATE_UPDATE message for the main thread's world container scaling.
+2. **Dynamic world container scale**: The PixiJS `_worldContainer.scale` is updated every render frame to `4 * _cameraZoom` instead of a fixed 4. The camera position (cameraX/cameraY) flows through the existing transform formula which already uses `this._worldContainer.scale.x/.y`.
+3. **Zoom lerp threaded within updateCameraSystem**: Same per-tick cadence as position lerp (frame-rate independent via dtScale). Zoom snaps to target when within 0.001 tolerance.
+4. **Speech bubble offset hardcoded**: Positioned at `top: {clampedY - 48}px` (48px above NPC screen position) — no per-NPC height config.
+
+**Design decisions**:
+1. **Midpoint tracking during dialogue**: Camera lerps toward `(npcX + playerX) / 2` instead of the player alone. This centers the viewport on the interaction, framing both characters.
+2. **Screen-space projection in worker**: The camera_system computes CSS-pixel coordinates via `(worldX - cameraX) * worldScale * zoom + screenWidth/2` — this matches the PixiJS transform chain exactly.
+3. **Zoom reverts automatically on mode change**: `endDialogueZoom()` is called in the worker's `SET_GAME_MODE` handler when the previous mode was DIALOGUE. Covers both "End Chat" button and NPC proximity-leave flows.
+4. **Viewport clamping for speech bubble**: The Svelte template computes `clampedX`/`clampedY` with 16px viewport margins using `window.innerWidth/Height` for runtime viewport dimensions. The bubble uses `-translate-x-1/2 -translate-y-full` transforms for centered-above positioning.
+
+**Known limitations**:
+- The speech bubble is a simple NPC name badge — no dynamic dialogue preview text.
+- Camera zoom does not affect PixiJS spatial culling (currently disabled anyway).
+- No unit tests added for the new camera zoom functions — covered by integration testing.
+- The speech bubble uses `window.innerWidth/Height` which won't update if the window is resized during dialogue (practically unlikely since the game pauses during dialogue).
