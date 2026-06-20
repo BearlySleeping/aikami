@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import { AppearanceSchema } from './appearance.ts';
 
 describe('AppearanceSchema', () => {
@@ -16,14 +16,14 @@ describe('AppearanceSchema', () => {
       skinColor: 'Fair',
       distinguishingMarks: 'Scar on left cheek',
     };
-    const result = AppearanceSchema.parse(appearance);
+    const result = Value.Parse(AppearanceSchema, appearance);
     expect(result.avatarUrl).toBe('https://example.com/avatar.png');
     expect(result.physicalDescription).toBe('Tall and muscular');
     expect(result.age).toBe('30');
   });
 
   test('should parse empty object as valid', () => {
-    const result = AppearanceSchema.parse({});
+    const result = Value.Parse(AppearanceSchema, {});
     expect(result.avatarUrl).toBeUndefined();
     expect(result.physicalDescription).toBeUndefined();
   });
@@ -33,7 +33,7 @@ describe('AppearanceSchema', () => {
       eyeColor: 'Green',
       hairColor: 'Red',
     };
-    const result = AppearanceSchema.parse(appearance);
+    const result = Value.Parse(AppearanceSchema, appearance);
     expect(result.eyeColor).toBe('Green');
     expect(result.hairColor).toBe('Red');
     expect(result.avatarUrl).toBeUndefined();
@@ -43,14 +43,14 @@ describe('AppearanceSchema', () => {
     const appearance = {
       avatarUrl: 'not-a-url',
     };
-    expect(() => AppearanceSchema.parse(appearance)).toThrow(z.ZodError);
+    expect(() => Value.Parse(AppearanceSchema, appearance)).toThrow();
   });
 
   test('should reject invalid portraitUrl', () => {
     const appearance = {
       portraitUrl: 'invalid',
     };
-    expect(() => AppearanceSchema.parse(appearance)).toThrow(z.ZodError);
+    expect(() => Value.Parse(AppearanceSchema, appearance)).toThrow();
   });
 
   test('should accept valid optional fields', () => {
@@ -61,7 +61,7 @@ describe('AppearanceSchema', () => {
       weight: '150 lbs',
       distinguishingMarks: 'Tattoo of a dragon on forearm',
     };
-    const result = AppearanceSchema.parse(appearance);
+    const result = Value.Parse(AppearanceSchema, appearance);
     expect(result.physicalDescription).toBe('Short and stocky');
     expect(result.distinguishingMarks).toBe('Tattoo of a dragon on forearm');
   });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import {
   ConfigCreateSchema,
   ConfigSchema,
@@ -10,30 +10,30 @@ import {
 
 describe('ThemeSchema', () => {
   test('should accept valid themes', () => {
-    expect(ThemeSchema.parse('dark')).toBe('dark');
-    expect(ThemeSchema.parse('light')).toBe('light');
-    expect(ThemeSchema.parse('system')).toBe('system');
+    expect(Value.Parse(ThemeSchema, 'dark')).toBe('dark');
+    expect(Value.Parse(ThemeSchema, 'light')).toBe('light');
+    expect(Value.Parse(ThemeSchema, 'system')).toBe('system');
   });
 
   test('should default to system', () => {
-    const result = ThemeSchema.parse(undefined);
+    const result = Value.Parse(ThemeSchema, undefined);
     expect(result).toBe('system');
   });
 
   test('should reject invalid theme', () => {
-    expect(() => ThemeSchema.parse('purple')).toThrow(z.ZodError);
+    expect(() => Value.Parse(ThemeSchema, 'purple')).toThrow();
   });
 });
 
 describe('GameDifficultySchema', () => {
   test('should accept valid difficulties', () => {
-    expect(GameDifficultySchema.parse('easy')).toBe('easy');
-    expect(GameDifficultySchema.parse('normal')).toBe('normal');
-    expect(GameDifficultySchema.parse('hard')).toBe('hard');
+    expect(Value.Parse(GameDifficultySchema, 'easy')).toBe('easy');
+    expect(Value.Parse(GameDifficultySchema, 'normal')).toBe('normal');
+    expect(Value.Parse(GameDifficultySchema, 'hard')).toBe('hard');
   });
 
   test('should default to normal', () => {
-    const result = GameDifficultySchema.parse(undefined);
+    const result = Value.Parse(GameDifficultySchema, undefined);
     expect(result).toBe('normal');
   });
 });
@@ -52,7 +52,7 @@ describe('ConfigSchema', () => {
   };
 
   test('should parse valid config data', () => {
-    const result = ConfigSchema.parse(validConfig);
+    const result = Value.Parse(ConfigSchema, validConfig);
     expect(result.id).toBe('user-123');
     expect(result.uid).toBe('user-123');
     expect(result.theme).toBe('dark');
@@ -64,7 +64,7 @@ describe('ConfigSchema', () => {
       id: 'user-456',
       uid: 'user-456',
     };
-    const result = ConfigSchema.parse(minimalConfig);
+    const result = Value.Parse(ConfigSchema, minimalConfig);
     expect(result.theme).toBe('system');
     expect(result.locale).toBe('en');
     expect(result.notificationsEnabled).toBe(true);
@@ -79,7 +79,7 @@ describe('ConfigSchema', () => {
       ...validConfig,
       locale: 123,
     };
-    expect(() => ConfigSchema.parse(invalidConfig)).toThrow(z.ZodError);
+    expect(() => Value.Parse(ConfigSchema, invalidConfig)).toThrow();
   });
 
   test('should reject invalid gameDifficulty', () => {
@@ -87,7 +87,7 @@ describe('ConfigSchema', () => {
       ...validConfig,
       gameDifficulty: 'impossible',
     };
-    expect(() => ConfigSchema.parse(invalidConfig)).toThrow(z.ZodError);
+    expect(() => Value.Parse(ConfigSchema, invalidConfig)).toThrow();
   });
 });
 
@@ -98,7 +98,7 @@ describe('ConfigCreateSchema', () => {
       theme: 'light',
       locale: 'da',
     };
-    const result = ConfigCreateSchema.parse(createData);
+    const result = Value.Parse(ConfigCreateSchema, createData);
     expect(result.uid).toBe('user-789');
     expect(result.theme).toBe('light');
     expect(result.locale).toBe('da');
@@ -108,7 +108,7 @@ describe('ConfigCreateSchema', () => {
     const invalidData = {
       theme: 'dark',
     };
-    expect(() => ConfigCreateSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(ConfigCreateSchema, invalidData)).toThrow();
   });
 });
 
@@ -122,7 +122,7 @@ describe('ConfigUpdateSchema', () => {
       theme: 'dark',
       notificationsEnabled: false,
     };
-    const result = ConfigUpdateSchema.parse(updateData);
+    const result = Value.Parse(ConfigUpdateSchema, updateData);
     expect(result.theme).toBe('dark');
     expect(result.notificationsEnabled).toBe(false);
   });
@@ -133,7 +133,7 @@ describe('ConfigUpdateSchema', () => {
       updatedAt: mockServerTimestamp,
       locale: 'es',
     };
-    const result = ConfigUpdateSchema.parse(updateData);
+    const result = Value.Parse(ConfigUpdateSchema, updateData);
     expect(result.locale).toBe('es');
   });
 });

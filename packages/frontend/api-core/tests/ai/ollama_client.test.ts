@@ -2,7 +2,7 @@
 // packages/frontend/api-core/tests/ai/ollama_client.test.ts
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { z } from 'zod';
+import Type from 'typebox';
 
 import { OllamaClient } from '../../src/ai/clients/ollama_client.ts';
 
@@ -189,10 +189,10 @@ describe('OllamaClient', () => {
       },
     });
 
-    const schema = z.object({
-      name: z.string(),
-      damage: z.number(),
-      weight: z.number(),
+    const schema = Type.Object({
+      name: Type.String(),
+      damage: Type.Number(),
+      weight: Type.Number(),
     });
 
     const result = await client.generateStructured('Generate a weapon', schema);
@@ -213,7 +213,7 @@ describe('OllamaClient', () => {
       })(input, init);
     };
 
-    const schema = z.object({ id: z.string() });
+    const schema = Type.Object({ id: Type.String() });
     await client.generateStructured('Generate an item', schema);
 
     const body = capturedBody as { format: string };

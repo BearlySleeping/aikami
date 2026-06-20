@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import { MessageCreateSchema, MessageSchema, MessageUpdateSchema } from './message.ts';
 
 describe('MessageSchema', () => {
@@ -10,7 +10,7 @@ describe('MessageSchema', () => {
   };
 
   test('should parse valid message data', () => {
-    const result = MessageSchema.parse(validMessageData);
+    const result = Value.Parse(MessageSchema, validMessageData);
     expect(result.id).toBe('msg-123');
     expect(result.text).toBe('Hello, world!');
     expect(result.sender).toBe('user');
@@ -18,18 +18,18 @@ describe('MessageSchema', () => {
 
   test('should parse ai sender', () => {
     const data = { ...validMessageData, sender: 'ai' as const };
-    const result = MessageSchema.parse(data);
+    const result = Value.Parse(MessageSchema, data);
     expect(result.sender).toBe('ai');
   });
 
   test('should reject invalid sender', () => {
     const invalidData = { ...validMessageData, sender: 'bot' };
-    expect(() => MessageSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(MessageSchema, invalidData)).toThrow();
   });
 
   test('should reject missing required fields', () => {
     const invalidData = { id: 'msg-123' };
-    expect(() => MessageSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(MessageSchema, invalidData)).toThrow();
   });
 });
 
@@ -39,7 +39,7 @@ describe('MessageCreateSchema', () => {
       text: 'New message',
       sender: 'user' as const,
     };
-    const result = MessageCreateSchema.parse(validData);
+    const result = Value.Parse(MessageCreateSchema, validData);
     expect(result.text).toBe('New message');
     expect(result.sender).toBe('user');
   });
@@ -48,7 +48,7 @@ describe('MessageCreateSchema', () => {
     const invalidData = {
       sender: 'user' as const,
     };
-    expect(() => MessageCreateSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(MessageCreateSchema, invalidData)).toThrow();
   });
 });
 
@@ -59,7 +59,7 @@ describe('MessageUpdateSchema', () => {
       text: 'Updated message text',
       sender: 'user' as const,
     };
-    const result = MessageUpdateSchema.parse(validData);
+    const result = Value.Parse(MessageUpdateSchema, validData);
     expect(result.text).toBe('Updated message text');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import { BaseCharacterSheetSchema } from './character.ts';
 import { DEFAULT_SAVING_THROWS, DEFAULT_SKILLS } from './skills.ts';
 
@@ -30,7 +30,7 @@ describe('BaseCharacterSheetSchema', () => {
   };
 
   test('should parse valid character data', () => {
-    const result = BaseCharacterSheetSchema.parse(validCharacterData);
+    const result = Value.Parse(BaseCharacterSheetSchema, validCharacterData);
     expect(result.name).toBe('Gandalf');
     expect(result.race).toBe('Maia');
     expect(result.level).toBe(10);
@@ -45,7 +45,7 @@ describe('BaseCharacterSheetSchema', () => {
       flaws: 'Tends to be cryptic',
       notes: 'A powerful wizard',
     };
-    const result = BaseCharacterSheetSchema.parse(dataWithOptional);
+    const result = Value.Parse(BaseCharacterSheetSchema, dataWithOptional);
     expect(result.personalityTraits).toBe('Wise and mysterious');
     expect(result.notes).toBe('A powerful wizard');
   });
@@ -55,7 +55,7 @@ describe('BaseCharacterSheetSchema', () => {
       name: 'Gandalf',
       race: 'Maia',
     };
-    expect(() => BaseCharacterSheetSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(BaseCharacterSheetSchema, invalidData)).toThrow();
   });
 
   test('should accept ability scores outside D&D range', () => {
@@ -70,7 +70,7 @@ describe('BaseCharacterSheetSchema', () => {
         charisma: 16,
       },
     };
-    const result = BaseCharacterSheetSchema.parse(data);
+    const result = Value.Parse(BaseCharacterSheetSchema, data);
     expect(result.abilityScores.strength).toBe(50);
   });
 
@@ -79,7 +79,7 @@ describe('BaseCharacterSheetSchema', () => {
       ...validCharacterData,
       hitPoints: -5,
     };
-    const result = BaseCharacterSheetSchema.parse(data);
+    const result = Value.Parse(BaseCharacterSheetSchema, data);
     expect(result.hitPoints).toBe(-5);
   });
 
@@ -88,16 +88,16 @@ describe('BaseCharacterSheetSchema', () => {
       ...validCharacterData,
       level: 5.5,
     };
-    expect(() => BaseCharacterSheetSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(BaseCharacterSheetSchema, invalidData)).toThrow();
   });
 
   test('should have default skills', () => {
-    const result = BaseCharacterSheetSchema.parse(validCharacterData);
+    const result = Value.Parse(BaseCharacterSheetSchema, validCharacterData);
     expect(result.skills).toEqual(DEFAULT_SKILLS);
   });
 
   test('should have default saving throws', () => {
-    const result = BaseCharacterSheetSchema.parse(validCharacterData);
+    const result = Value.Parse(BaseCharacterSheetSchema, validCharacterData);
     expect(result.savingThrows).toEqual(DEFAULT_SAVING_THROWS);
   });
 
@@ -117,7 +117,7 @@ describe('BaseCharacterSheetSchema', () => {
       },
     ];
     const data = { ...validCharacterData, skills: customSkills };
-    const result = BaseCharacterSheetSchema.parse(data);
+    const result = Value.Parse(BaseCharacterSheetSchema, data);
     expect(result.skills).toHaveLength(2);
     expect(result.skills[0].isProficient).toBe(true);
     expect(result.skills[1].isExpertise).toBe(true);
@@ -137,7 +137,7 @@ describe('BaseCharacterSheetSchema', () => {
       distinguishingMarks: 'Flowing grey robes',
     };
     const data = { ...validCharacterData, appearance };
-    const result = BaseCharacterSheetSchema.parse(data);
+    const result = Value.Parse(BaseCharacterSheetSchema, data);
     expect(result.appearance?.avatarUrl).toBe('https://example.com/avatar.png');
     expect(result.appearance?.physicalDescription).toBe('Tall and wise, with long grey beard');
     expect(result.appearance?.eyeColor).toBe('Grey');
@@ -148,25 +148,25 @@ describe('BaseCharacterSheetSchema', () => {
       physicalDescription: 'Tall wizard',
     };
     const data = { ...validCharacterData, appearance };
-    const result = BaseCharacterSheetSchema.parse(data);
+    const result = Value.Parse(BaseCharacterSheetSchema, data);
     expect(result.appearance?.physicalDescription).toBe('Tall wizard');
     expect(result.appearance?.avatarUrl).toBeUndefined();
   });
 
   test('should parse optional subclass', () => {
     const data = { ...validCharacterData, subclass: 'Divine Soul' };
-    const result = BaseCharacterSheetSchema.parse(data);
+    const result = Value.Parse(BaseCharacterSheetSchema, data);
     expect(result.subclass).toBe('Divine Soul');
   });
 
   test('should parse optional hitPointsMax', () => {
     const data = { ...validCharacterData, hitPointsMax: 60 };
-    const result = BaseCharacterSheetSchema.parse(data);
+    const result = Value.Parse(BaseCharacterSheetSchema, data);
     expect(result.hitPointsMax).toBe(60);
   });
 
   test('should have default temporaryHitPoints', () => {
-    const result = BaseCharacterSheetSchema.parse(validCharacterData);
+    const result = Value.Parse(BaseCharacterSheetSchema, validCharacterData);
     expect(result.temporaryHitPoints).toBe(0);
   });
 });
