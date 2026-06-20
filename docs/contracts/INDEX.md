@@ -96,6 +96,7 @@ P2 (Polish — after P1):
 | C-154 | [AI Vendors & Economy](C-154-ai-vendors-economy.md) ✅ | Gold currency, vendor NPCs, Trading UI with AI haggling, buy/sell transactions | C-142, C-149, C-153 |
 | C-155 | [Autosave & Memory Hardening](C-155-autosave-memory-hardening.md) ✅ | Zone transition auto-save, UI feedback toast, PixiJS tilemap texture cleanup, audio buffer cleanup on map change | C-152, C-153, C-154 |
 | C-156 | [Tauri Production Release](C-156-tauri-production-release.md) ✅ | Finalize tauri.conf.json, CSP/HTTP permissions for Ollama (11434) + ComfyUI (8188), adapter-static assets config, post-mortem docs | C-155 |
+| C-157 | [Dialogue Skill Checks](C-157-dialogue-skill-checks.md) ✅ | d20 skill checks (Persuasion/Intimidation/Sleight_of_Hand) during NPC dialogue, structured LLM intent extraction, state mutations (trigger_combat, give_item), animated dice UI | C-129, C-145 |
 
 ## Contract Format
 

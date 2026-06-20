@@ -254,6 +254,7 @@ class GameUIViewModel
           npcData: this.dialogueNpc,
           onEndChat: () => this.endDialogue(),
           ollamaClient: this.useOllama ? new OllamaClient() : undefined,
+          onStartCombat: (npcData) => this._startCombatFromDialogue(npcData),
         });
         this._gameViewModel.pauseEngine();
       });
@@ -504,6 +505,45 @@ class GameUIViewModel
     this.dialogueViewModel = undefined;
     gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
+  }
+
+  /**
+   * Transitions from dialogue to combat when a skill check or hostile
+   * dialogue action triggers a state mutation (trigger_combat).
+   *
+   * Called by the DialogueOverlayViewModel's onStartCombat callback
+   * after the dialogue is closed. Creates a CombatViewModel and
+   * transitions the game mode to COMBAT.
+   *
+   * Contract: C-157 Dialogue Skill Checks AC-2
+   */
+  private _startCombatFromDialogue(npcData: DialogueNpcData): void {
+    this.debug('_startCombatFromDialogue', {
+      npcName: npcData.npcName,
+      npcId: npcData.npcId,
+      currentOverlay: this.activeOverlay,
+    });
+
+    // Transition to COMBAT overlay
+    this.activeOverlay = 'COMBAT';
+    gameStateService.setMode('COMBAT');
+    this._gameViewModel.pauseEngine();
+
+    // Create and initialize the CombatViewModel for this NPC
+    this.combatViewModel = new CombatViewModel({
+      className: 'CombatViewModel',
+    });
+
+    // Set up the enemy data from the NPC
+    this.combatViewModel.enemyName = npcData.npcName;
+    this.combatViewModel.enemyHp = 60;
+    this.combatViewModel.enemyMaxHp = 60;
+    this.combatViewModel.isPlayerTurn = true;
+    this.combatViewModel.activeEntities = [1, 2];
+    this.combatViewModel.currentTurnEntity = 1;
+    this.combatViewModel.totalParticipants = 2;
+
+    void this.combatViewModel.initialize();
   }
 
   /** @inheritdoc */
