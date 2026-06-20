@@ -272,6 +272,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Current camera position received from the worker (world-space pixels). */
   private _cameraY = 0;
 
+  /** Current camera zoom received from the worker (1.0–1.5). */
+  private _cameraZoom = 1.0;
+
   // -- Render state (main thread) ------------------------------------------
 
   /** Map of entity ID → render entry (display object + tint). */
@@ -628,6 +631,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._cameraY = message.cameraY;
     }
 
+    // Store zoom factor for world container scale (C-161)
+    if (typeof message.zoom === 'number') {
+      this._cameraZoom = message.zoom;
+    }
+
     if (this._useSharedMemory) {
       // SharedArrayBuffer — render view is already the same memory.
       // No swap needed; main thread reads the same bytes the worker writes.
@@ -834,6 +842,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           type: 'COMBAT_ACTION',
           action: actionCmd.action,
           targetId: actionCmd.targetId,
+        },
+      });
+    });
+
+    // Forward INTERACT commands (C-161 camera zoom)
+    bridgeWithCommands.onCommand('INTERACT', (cmd: unknown) => {
+      const interactCmd = cmd as { targetEntityId: string };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'INTERACT',
+          targetEntityId: interactCmd.targetEntityId,
         },
       });
     });
@@ -1518,6 +1538,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // computed by the CameraSystem in the worker (lerp + clamping).
     // Applied once per frame after all entity display objects are positioned.
     if (this._app && this._worldContainer) {
+      // Apply dynamic zoom to the world container scale (C-161).
+      // Base scale is 4× for pixel-art, multiplied by lerped zoom (1.0–1.5).
+      const dynamicScale = 4 * this._cameraZoom;
+      if (this._worldContainer.scale.x !== dynamicScale) {
+        this._worldContainer.scale.set(dynamicScale);
+      }
+
       this._worldContainer.x =
         this._app.screen.width / 2 - this._cameraX * this._worldContainer.scale.x;
       this._worldContainer.y =

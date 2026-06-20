@@ -11,6 +11,10 @@ import { Position } from '../components/position.ts';
 // Runs every tick in the worker. Finds the entity tagged with CameraFocus
 // and linearly interpolates the camera position toward it. Clamps the
 // result so the viewport never shows off-map void.
+//
+// Contract C-161: Adds cinematic zoom and midpoint tracking for NPC
+// dialogue interactions — camera zooms to 1.5× centered on the player↔NPC
+// midpoint during dialogue, reverting to 1.0× when dialogue ends.
 // ---------------------------------------------------------------------------
 
 /**
@@ -21,6 +25,9 @@ import { Position } from '../components/position.ts';
  * more cinematic drift.
  */
 const DEFAULT_LERP_FACTOR = 0.08;
+
+/** Zoom lerp factor — same cadence as position tracking for consistency. */
+const ZOOM_LERP_FACTOR = 0.08;
 
 /** World-space scale factor applied by the main-thread world container.
  *
@@ -55,6 +62,29 @@ let screenHeight = 0;
 
 /** Whether the camera has been initialized (tracking started). */
 let initialized = false;
+
+// -- Zoom & dialogue midpoint state (C-161) --------------------------------
+
+/** Current zoom factor (lerps smoothly toward {@link targetZoom}). */
+let currentZoom = 1.0;
+
+/** Target zoom factor. 1.0 = normal, 1.5 = dialogue close-up. */
+let targetZoom = 1.0;
+
+/** NPC world X when dialogue zoom is active. */
+let dialogueNpcX = 0;
+
+/** NPC world Y when dialogue zoom is active. */
+let dialogueNpcY = 0;
+
+/** Player world X when dialogue began (for midpoint calculation). */
+let dialoguePlayerX = 0;
+
+/** Player world Y when dialogue began (for midpoint calculation). */
+let dialoguePlayerY = 0;
+
+/** Whether the camera is currently tracking a dialogue midpoint. */
+let isDialogueZooming = false;
 
 // -- Cached query terms ----------------------------------------------------
 
@@ -106,6 +136,88 @@ export const getCameraPosition = (): { x: number; y: number } => {
 };
 
 /**
+ * Returns the current camera zoom factor (lerped).
+ *
+ * Called by the worker to include in STATE_UPDATE for the main thread
+ * to apply as a scale multiplier on the PixiJS world container.
+ *
+ * Contract C-161: Spatial UI Camera
+ */
+export const getCameraZoom = (): number => {
+  return currentZoom;
+};
+
+/**
+ * Returns the screen-space position of the active dialogue NPC.
+ *
+ * Projects the NPC's world coordinates through the current camera
+ * offset, world scale, and zoom factor to produce CSS-pixel coordinates
+ * suitable for DOM element positioning (e.g., speech bubble overlay).
+ *
+ * Returns `undefined` for both axes when no dialogue zoom is active.
+ *
+ * Contract C-161: Spatial UI Camera
+ */
+export const getActiveNpcScreenPosition = (): {
+  x: number | undefined;
+  y: number | undefined;
+} => {
+  if (!isDialogueZooming) {
+    return { x: undefined, y: undefined };
+  }
+
+  const effectiveScale = currentWorldScale * currentZoom;
+  const x = (dialogueNpcX - cameraX) * effectiveScale + screenWidth / 2;
+  const y = (dialogueNpcY - cameraY) * effectiveScale + screenHeight / 2;
+  return { x, y };
+};
+
+/**
+ * Begins the cinematic dialogue zoom.
+ *
+ * Sets the zoom target to 1.5× and stores the NPC and player positions
+ * so the camera can lerp toward their midpoint during the dialogue.
+ *
+ * Called from the interaction system when the player interacts with an
+ * NPC (non-vendor).
+ *
+ * Contract C-161: Spatial UI Camera
+ *
+ * @param options.npcX - NPC world X coordinate.
+ * @param options.npcY - NPC world Y coordinate.
+ * @param options.playerX - Player world X coordinate.
+ * @param options.playerY - Player world Y coordinate.
+ */
+export const startDialogueZoom = (options: {
+  npcX: number;
+  npcY: number;
+  playerX: number;
+  playerY: number;
+}): void => {
+  dialogueNpcX = options.npcX;
+  dialogueNpcY = options.npcY;
+  dialoguePlayerX = options.playerX;
+  dialoguePlayerY = options.playerY;
+  targetZoom = 1.5;
+  isDialogueZooming = true;
+};
+
+/**
+ * Ends the cinematic dialogue zoom.
+ *
+ * Sets the zoom target back to 1.0× and clears the dialogue midpoint
+ * flag so the camera resumes tracking the CameraFocus entity (the player).
+ *
+ * Called when the game mode transitions away from DIALOGUE.
+ *
+ * Contract C-161: Spatial UI Camera
+ */
+export const endDialogueZoom = (): void => {
+  targetZoom = 1.0;
+  isDialogueZooming = false;
+};
+
+/**
  * Resets all camera tracking state to defaults.
  *
  * Useful between scene loads or in test teardown.
@@ -119,6 +231,13 @@ export const resetCameraTracking = (): void => {
   screenHeight = 0;
   initialized = false;
   currentWorldScale = 4;
+  currentZoom = 1.0;
+  targetZoom = 1.0;
+  dialogueNpcX = 0;
+  dialogueNpcY = 0;
+  dialoguePlayerX = 0;
+  dialoguePlayerY = 0;
+  isDialogueZooming = false;
 };
 
 // -- System update ---------------------------------------------------------
@@ -170,9 +289,25 @@ export const updateCameraSystem = (world: World, deltaMs: number): void => {
   const dtScale = deltaMs / REFERENCE_FRAME_MS;
   const t = lerpFactor * dtScale;
 
+  // Lerp zoom factor toward its target (C-161 dialogue zoom).
+  if (currentZoom !== targetZoom) {
+    const zoomT = ZOOM_LERP_FACTOR * dtScale;
+    currentZoom += (targetZoom - currentZoom) * zoomT;
+
+    // Snap to target when close enough to avoid infinite lerp.
+    if (Math.abs(targetZoom - currentZoom) < 0.001) {
+      currentZoom = targetZoom;
+    }
+  }
+
+  // When dialogue zoom is active, track the midpoint between player and NPC.
+  // Otherwise, track the CameraFocus entity (the player) as normal.
+  const targetX = isDialogueZooming ? (dialogueNpcX + dialoguePlayerX) / 2 : pos.x;
+  const targetY = isDialogueZooming ? (dialogueNpcY + dialoguePlayerY) / 2 : pos.y;
+
   // Smoothly interpolate toward the target.
-  cameraX += (pos.x - cameraX) * t;
-  cameraY += (pos.y - cameraY) * t;
+  cameraX += (targetX - cameraX) * t;
+  cameraY += (targetY - cameraY) * t;
 
   // Clamp to map boundaries when map dimensions are set.
   if (mapPixelWidth > 0 && mapPixelHeight > 0) {

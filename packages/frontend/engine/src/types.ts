@@ -328,6 +328,26 @@ export type GameEvent =
       defense: number;
       /** XP threshold for the next level (scaled up). */
       xpToNextLevel: number;
+    }
+  | {
+      /**
+       * Emitted every tick during dialogue zoom to carry the current camera
+       * zoom factor and the active NPC's screen-space coordinates.
+       *
+       * The DialogueOverlay uses these to position a speech bubble directly
+       * over the NPC's rendered PixiJS sprite.
+       *
+       * Only emitted while `isDialogueZooming` is true (dialogue active).
+       *
+       * Contract: C-161 Spatial UI Camera
+       */
+      type: 'CAMERA_ZOOM_UPDATE';
+      /** Current lerped zoom factor (1.0–1.5). */
+      zoom: number;
+      /** NPC screen-space X coordinate (CSS pixels), or undefined. */
+      npcScreenX?: number;
+      /** NPC screen-space Y coordinate (CSS pixels), or undefined. */
+      npcScreenY?: number;
     };
 
 // ---------------------------------------------------------------------------
