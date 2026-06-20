@@ -10,6 +10,7 @@ import { NPCDialog } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { startDialogueZoom } from '../systems/camera_system.ts';
 
 // ---------------------------------------------------------------------------
 // Interaction System — handle INTERACT command for item pickup and NPC dialogue
@@ -125,7 +126,7 @@ const handleInteract = (options: {
   if (closestType === 'item') {
     _handleItemPickup({ world, playerEntityId, itemEid: closestEid, bridge });
   } else {
-    _handleNpcInteraction({ world, npcEid: closestEid, bridge });
+    _handleNpcInteraction({ world, npcEid: closestEid, playerEntityId, bridge });
   }
 };
 
@@ -211,13 +212,28 @@ const _handleItemPickup = (options: {
 const _handleNpcInteraction = (options: {
   world: World;
   npcEid: number;
+  playerEntityId: number;
   bridge: EngineBridge;
 }): void => {
-  const { world, npcEid, bridge } = options;
+  const { world, npcEid, playerEntityId, bridge } = options;
 
   const npcDialog = getComponent(world, npcEid, NPCDialog) as NPCDialogData | undefined;
   if (!npcDialog) {
     return;
+  }
+
+  // Start cinematic dialogue zoom — camera lerps to 1.5× centered on
+  // the midpoint between the player and the NPC (C-161).
+  // Fires for ALL NPCs (vendors + non-vendors).
+  const npcPos = getComponent(world, npcEid, Position) as PositionData | undefined;
+  const playerPos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
+  if (npcPos && playerPos) {
+    startDialogueZoom({
+      npcX: npcPos.x,
+      npcY: npcPos.y,
+      playerX: playerPos.x,
+      playerY: playerPos.y,
+    });
   }
 
   if (npcDialog.isVendor) {
@@ -240,6 +256,7 @@ const _handleNpcInteraction = (options: {
       npcName: npcDialog.npcName,
       isVendor: npcDialog.isVendor,
     });
+
     bridge.emit({
       type: 'NPC_INTERACTED',
       npcId: npcDialog.npcId,

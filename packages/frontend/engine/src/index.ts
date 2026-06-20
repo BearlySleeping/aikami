@@ -11,10 +11,14 @@ export {
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
 export {
+  endDialogueZoom,
+  getActiveNpcScreenPosition,
   getCameraPosition,
+  getCameraZoom,
   resetCameraTracking,
   setMapBounds,
   setScreenSize,
+  startDialogueZoom,
   updateCameraSystem,
 } from './systems/camera_system.ts';
 export {

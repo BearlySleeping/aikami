@@ -259,6 +259,21 @@ class GameUIViewModel
         this._gameViewModel.pauseEngine();
       });
 
+      // Camera zoom updates — forward screen-space NPC position to the
+      // active dialogue overlay for spatial speech bubble positioning (C-161).
+      bridge.on('CAMERA_ZOOM_UPDATE', (event) => {
+        if (!this.dialogueViewModel) {
+          return;
+        }
+        if (event.npcScreenX !== undefined) {
+          this.dialogueViewModel.npcScreenX = event.npcScreenX;
+          this.dialogueViewModel.npcScreenY = event.npcScreenY ?? 0;
+          this.dialogueViewModel.hasNpcScreenPosition = true;
+        } else {
+          this.dialogueViewModel.hasNpcScreenPosition = false;
+        }
+      });
+
       bridge.on('VENDOR_INTERACTED', (event) => {
         this.debug('VENDOR_INTERACTED:received', {
           npcId: event.npcId,
@@ -502,6 +517,9 @@ class GameUIViewModel
   endDialogue(): void {
     this.activeOverlay = 'NONE';
     this.dialogueNpc = undefined;
+    if (this.dialogueViewModel) {
+      this.dialogueViewModel.hasNpcScreenPosition = false;
+    }
     this.dialogueViewModel = undefined;
     gameStateService.setMode('EXPLORE');
     this._gameViewModel.resumeEngine();
