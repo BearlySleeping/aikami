@@ -811,6 +811,7 @@ self.onmessage = (event: MessageEvent): void => {
         setScreenSize({
           width: message.width as number,
           height: message.height as number,
+          scale: message.scale as number | undefined,
         });
         break;
       }

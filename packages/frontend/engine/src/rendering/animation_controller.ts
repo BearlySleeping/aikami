@@ -102,9 +102,10 @@ const FRAMES_PER_STATE = {
 /**
  * Derives an {@link LpcDirection} from a 2D velocity vector.
  *
- * Uses the dominant axis to select direction:
- * - When `|vx| > |vy|`: LEFT or RIGHT based on `vx` sign.
- * - When `|vy| >= |vx|`: UP or DOWN based on `vy` sign.
+ * Horizontal axis takes priority over vertical — when both axes are
+ * active, the entity faces LEFT or RIGHT based on `vx` sign. This gives
+ * the classic RPG feel where holding left+up shows the left walk
+ * animation, not a flickering alternation between left and up.
  *
  * At zero velocity, returns `DOWN` as the default idle-facing direction.
  *
@@ -117,7 +118,11 @@ export const velocityToDirection = (vx: number, vy: number): LpcDirection => {
     return LpcDirection.Down;
   }
 
-  if (Math.abs(vx) > Math.abs(vy)) {
+  // Horizontal axis has priority — when both axes are active,
+  // face LEFT or RIGHT based on vx sign. This prevents flickering
+  // between horizontal and vertical directions when diagonal
+  // velocity components have near-equal magnitude.
+  if (vx !== 0) {
     return vx > 0 ? LpcDirection.Right : LpcDirection.Left;
   }
 

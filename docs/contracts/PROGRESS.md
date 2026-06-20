@@ -28,6 +28,7 @@
 | C-102 | Tauri SPA Enforcement | ✅ completed |
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
+| C-160 | Engine Polish (Shader/Movement/Camera) | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
@@ -1860,3 +1861,39 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - The test has a 120-second timeout but realistically requires ~60-90 seconds for all LLM mock interactions + UI transitions.
 - Golden screenshot must be generated locally before CI can pass `toHaveScreenshot`.
 - No Firebase emulator dependency — the test uses the PWA dev server (`localhost:5274`) only.
+
+### C-160: Engine Polish — Shader, Movement, and Camera
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/engine/src/rendering/sprite_composer.ts` — Rewrote `LPC_MULTI_LAYER_FRAGMENT_SHADER` with Porter-Duff "over" operator (`src + dst * (1.0 - src.a)`), fixing double-multiplied alpha bug that caused dark artifacts on hair/clothing layers
+- `packages/frontend/engine/src/systems/movement_system.ts` — Replaced grid-snapping pipeline with axis-independent continuous collision detection; removed `resolveDiagonalVelocity`, `snapToCellCenter`, `computeTargetCell`, and all per-world tracking maps; entities now slide along walls on the unblocked axis when the other is blocked
+- `packages/frontend/engine/src/systems/camera_system.ts` — Replaced hardcoded `WORLD_SCALE = 4` with `currentWorldScale` (default 4); added optional `scale` parameter to `setScreenSize()`; `resetCameraTracking()` resets scale to default
+- `packages/frontend/engine/src/game_world.ts` — Wired `_worldContainer.scale.x` into `SET_SCREEN_SIZE` worker message during `resize()`
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Forwarded `scale` parameter from `SET_SCREEN_SIZE` message to `setScreenSize()`
+
+**Files created**:
+- `packages/frontend/engine/src/systems/movement_system.test.ts` — 11 unit tests: basic movement (right/down/diagonal), wall sliding (X-blocked, Y-blocked, corner approach), edge cases (zero velocity, negative velocity, negative-axis wall slide, delta zero, no collision grid)
+
+**Files modified (tests)**:
+- `packages/frontend/engine/src/systems/camera_system.test.ts` — Added 4 new tests: clamping with custom scale (2 and 8), zero/negative scale fallback, resetCameraTracking resets scale
+- `packages/frontend/engine/src/__tests__/game_world.test.ts` — Rewrote "movement system" describe block (grid-aligned → continuous) and replaced "grid cell alignment" describe block with "axis-independent movement" (6 new tests): diagonal support, no grid snap, no diagonal blocking, precision across frames, idle preservation, seamless direction change
+
+**Deviations**:
+1. **GameWorld grid tests replaced, not removed**: The old C-040 "grid cell alignment" describe block was replaced with a new "axis-independent movement" block covering the new behavior. All 13 old grid tests are replaced with 8 new continuous-movement tests.
+2. **`resetMovementTracking` is now a no-op**: The function is preserved as an export with a JSDoc noting it's a no-op for downstream compatibility — callers that invoke it during world teardown continue to work without errors.
+
+**Design decisions**:
+1. **Shader uses exact contract formula**: Each layer computes `src = vec4(tint * a, a)` then `result = src + result * (1.0 - src.a)`. Layer 0 = base (body), layer 7 = topmost (hair/accessories). No alpha double-multiplication.
+2. **Movement uses two-phase axis check**: `isWalkable(nextX, pos.y)` first (freeze X if blocked), then `isWalkable(nextX, nextY)` (freeze Y if blocked against the possibly-clamped X). This allows diagonal drift into walls to resolve to smooth wall-sliding.
+3. **Camera scale defaults to 4**: `setScreenSize({ scale: 0 })` is ignored (no division by zero), and `resetCameraTracking()` sets `currentWorldScale = 4`.
+
+**Test results**:
+- Engine unit tests: 375 pass, 0 fail (230ms)
+- All 4 validate checks pass (fix, format, lint, typecheck)
+
+**Post-review fixes (2026-06-20)**:
+1. **Hair z-order**: Added `LPC_SLOT_Z_ORDER` mapping (body=0, legs=1, feet=2, torso=3, head=4, hair=5) and sort recipes by depth in `packRecipeToUboBuffer` and `_loadAndComposeMultiLayer`. Fixes hair rendering behind torso.
+2. **Animation direction priority**: Changed `velocityToDirection` from dominant-axis to horizontal-priority — when both axes are active, always faces LEFT or RIGHT. Prevents flicker when holding A+W simultaneously.
+3. Updated 2 animation controller tests to match new horizontal-priority behavior.
