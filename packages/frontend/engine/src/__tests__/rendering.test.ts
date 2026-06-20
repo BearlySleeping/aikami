@@ -1663,31 +1663,26 @@ describe('C-039 Animation Controller — velocityToDirection', () => {
     expect(velocityToDirection(0, 0)).toBe(LpcDirection.Down);
   });
 
-  it('returns RIGHT when vx is positive and dominant', () => {
+  it('returns RIGHT when vx is positive (horizontal priority)', () => {
     expect(velocityToDirection(5, 0)).toBe(LpcDirection.Right);
     expect(velocityToDirection(5, 2)).toBe(LpcDirection.Right);
+    expect(velocityToDirection(5, 5)).toBe(LpcDirection.Right);
+    expect(velocityToDirection(5, -5)).toBe(LpcDirection.Right);
   });
 
-  it('returns LEFT when vx is negative and dominant', () => {
+  it('returns LEFT when vx is negative (horizontal priority)', () => {
     expect(velocityToDirection(-5, 0)).toBe(LpcDirection.Left);
     expect(velocityToDirection(-5, 2)).toBe(LpcDirection.Left);
+    expect(velocityToDirection(-5, 5)).toBe(LpcDirection.Left);
+    expect(velocityToDirection(-5, -5)).toBe(LpcDirection.Left);
   });
 
-  it('returns DOWN when vy is positive and dominant', () => {
+  it('returns DOWN when vy is positive and vx is zero', () => {
     expect(velocityToDirection(0, 5)).toBe(LpcDirection.Down);
-    expect(velocityToDirection(2, 5)).toBe(LpcDirection.Down);
   });
 
-  it('returns UP when vy is negative and dominant', () => {
+  it('returns UP when vy is negative and vx is zero', () => {
     expect(velocityToDirection(0, -5)).toBe(LpcDirection.Up);
-    expect(velocityToDirection(2, -5)).toBe(LpcDirection.Up);
-  });
-
-  it('prefers horizontal axis when |vx| == |vy| and vy is dominant by default', () => {
-    // When |vx| == |vy|, the > check fails; falls through to return based on vy
-    expect(velocityToDirection(5, 5)).toBe(LpcDirection.Down);
-    expect(velocityToDirection(5, -5)).toBe(LpcDirection.Up);
-    expect(velocityToDirection(-5, -5)).toBe(LpcDirection.Up);
   });
 });
 

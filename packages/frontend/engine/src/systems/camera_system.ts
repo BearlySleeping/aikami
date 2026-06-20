@@ -22,8 +22,13 @@ import { Position } from '../components/position.ts';
  */
 const DEFAULT_LERP_FACTOR = 0.08;
 
-/** World-space scale factor applied by the main-thread world container. */
-const WORLD_SCALE = 4;
+/** World-space scale factor applied by the main-thread world container.
+ *
+ * Defaults to 4 (matching the initial {@link GameWorld._worldContainer}
+ * scale). Updated via {@link setScreenSize} when the main thread reports
+ * a new container scale during resize events.
+ */
+let currentWorldScale = 4;
 
 /** Reference frame duration in milliseconds (60fps = ~16.67ms). */
 const REFERENCE_FRAME_MS = 1000 / 60;
@@ -76,11 +81,18 @@ export const setMapBounds = (options: { width: number; height: number }): void =
  *
  * Must be called on engine initialization and every window resize.
  *
- * @param options - Screen dimensions in CSS pixels.
+ * @param options - Screen dimensions in CSS pixels + optional world scale.
+ * @param options.width - Screen width in CSS pixels.
+ * @param options.height - Screen height in CSS pixels.
+ * @param options.scale - World-space scale factor applied by the main-thread
+ *   world container. Defaults to 4 when omitted or zero.
  */
-export const setScreenSize = (options: { width: number; height: number }): void => {
+export const setScreenSize = (options: { width: number; height: number; scale?: number }): void => {
   screenWidth = options.width;
   screenHeight = options.height;
+  if (options.scale && options.scale > 0) {
+    currentWorldScale = options.scale;
+  }
 };
 
 /**
@@ -106,6 +118,7 @@ export const resetCameraTracking = (): void => {
   screenWidth = 0;
   screenHeight = 0;
   initialized = false;
+  currentWorldScale = 4;
 };
 
 // -- System update ---------------------------------------------------------
@@ -183,7 +196,7 @@ export const updateCameraSystem = (world: World, deltaMs: number): void => {
  * @returns The clamped camera coordinate.
  */
 const _clampCamera = (cameraCoord: number, screenSize: number, mapSize: number): number => {
-  const halfScreenWorld = screenSize / (2 * WORLD_SCALE);
+  const halfScreenWorld = screenSize / (2 * currentWorldScale);
 
   // If the map is smaller than the viewport, center on the map.
   if (mapSize <= halfScreenWorld * 2) {
