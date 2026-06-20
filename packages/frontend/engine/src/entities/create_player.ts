@@ -21,6 +21,15 @@ import { Velocity } from '../components/velocity.ts';
 export type PlayerCreateOptions = {
   /** The player character's display name (from active persona). */
   name?: string;
+  /**
+   * LPC appearance layer indices (1-indexed variant numbers per slot).
+   *
+   * Order matches the engine slot order: body, hair, torso, legs, feet, head.
+   * When omitted, defaults to [1, 1, 1, 1, 1, 95] (basic male human).
+   *
+   * Contract: C-158 LPC Avatar Integration
+   */
+  appearanceLayers?: number[];
 };
 
 /**
@@ -62,8 +71,12 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
   // Variant indices are 1-indexed (0 = first variant in catalog).
   // Head uses variant 95 (= index 94, head/heads/human_male) so the
   // character has a visible face instead of just ear accessories.
+  //
+  // Contract C-158: when appearanceLayers is provided from character
+  // creation, use those values instead of the hardcoded defaults.
   addComponent(world, entityId, Appearance);
-  setAppearanceLayers(world, entityId, [1, 1, 1, 1, 1, 95]);
+  const layers = options?.appearanceLayers ?? [1, 1, 1, 1, 1, 95];
+  setAppearanceLayers(world, entityId, layers);
 
   // Initialize empty inventory with zero-filled slots.
   // Contract C-142: player must start with an empty Inventory component
