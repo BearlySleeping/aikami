@@ -122,6 +122,30 @@ const getLpcProgram = (): GlProgram => {
 const LPC_MAX_LAYERS = 8;
 
 /**
+ * Z-depth ordering for LPC body slots (back-to-front).
+ *
+ * Lower values render first (behind), higher values render last (on top).
+ * Body is at the back (0), hair and head accessories at the front (5–6).
+ * Unsorted recipes slot into layer 0→7 in the UBO, which composites
+ * back-to-front — so this z-order directly controls visual stacking.
+ */
+const LPC_SLOT_Z_ORDER: Record<string, number> = {
+  body: 0,
+  legs: 1,
+  feet: 2,
+  torso: 3,
+  head: 4,
+  hair: 5,
+} as const;
+
+/**
+ * Returns the z-depth for a slot name, defaulting to 0 for unknown slots.
+ */
+const _getSlotZ = (slot: string): number => {
+  return LPC_SLOT_Z_ORDER[slot] ?? 0;
+};
+
+/**
  * Byte size of the std140 UBO buffer.
  *
  * Layout (std140, every field 16-byte aligned):
@@ -138,6 +162,10 @@ const LPC_UBO_FLOAT_COUNT = LPC_UBO_BYTE_SIZE / 4; // 64
  * Packs an array of {@link LpcLayerRecipe} entries into an std140-compliant
  * Float32Array suitable for upload as a uniform buffer object.
  *
+ * Recipes are sorted by slot z-depth ({@link LPC_SLOT_Z_ORDER}) so that
+ * back-to-front compositing produces correct visual layering: body behind
+ * legs behind feet behind torso behind head behind hair.
+ *
  * The caller owns the returned buffer and must re-pack when recipes change.
  * Up to {@link LPC_MAX_LAYERS} recipes are processed; extras are ignored.
  * Missing / inactive slots get zero-filled tint and `active = 0.0`.
@@ -148,8 +176,15 @@ const LPC_UBO_FLOAT_COUNT = LPC_UBO_BYTE_SIZE / 4; // 64
 export const packRecipeToUboBuffer = (recipes: readonly LpcLayerRecipe[]): Float32Array => {
   const buffer = new Float32Array(LPC_UBO_FLOAT_COUNT);
 
+  // Sort by z-depth so layer 0 = body (back), layer 5 = hair (front)
+  const sorted = [...recipes].sort((a, b) => {
+    const zA = _getSlotZ(a.slot);
+    const zB = _getSlotZ(b.slot);
+    return zA - zB;
+  });
+
   for (let i = 0; i < LPC_MAX_LAYERS; i++) {
-    const recipe = recipes[i];
+    const recipe = sorted[i];
     const tintBase = i * 4; // vec4 = 4 floats, tightly packed
 
     if (recipe) {
@@ -218,13 +253,14 @@ void main(void) {
  * GLSL ES 3.0 fragment shader for multi-layer LPC compositing with std140 UBO.
  *
  * Samples up to 8 grayscale layer textures, tints each via the UBO-supplied
- * `u_layer_tints` colour, and composites active layers via additive blending.
+ * `u_layer_tints` colour, and composites active layers in order (layer 0 = body
+ * base, layer 7 = topmost hair/accessories) via back-to-front alpha blending.
  * Inactive layers (`u_active_layers[i] == 0.0`) are skipped at zero branch cost
  * (all fragments follow the same instruction path).
  *
  * Each grayscale texture's red channel provides the opacity mask; the UBO tint
- * supplies the RGB colour. Layers blend top-to-bottom via front-to-back
- * alpha compositing.
+ * supplies the RGB colour. Layers composite via the standard Porter-Duff
+ * "over" operator in premultiplied-alpha form: `src + dst * (1.0 - src.a)`.
  */
 const LPC_MULTI_LAYER_FRAGMENT_SHADER = /* glsl */ `#version 300 es
 
@@ -253,91 +289,63 @@ layout(std140) uniform LpcCharacterData {
 out vec4 outColor;
 
 void main(void) {
-  // Accumulated colour (premultiplied alpha)
+  // Accumulated colour (premultiplied alpha) — initialised to transparent
   vec4 result = vec4(0.0);
 
-  // Layer 0
+  // Layer 0 — base (body): initialise result to first source
   if (u_active_layers[0] > 0.5) {
-    vec4 src = texture(uTexture0, vUV);
-    vec4 tinted = vec4(u_layer_tints[0].rgb, 1.0) * src.r;
-    result = vec4(tinted.rgb * tinted.a, tinted.a);
+    float a = texture(uTexture0, vUV).r;
+    vec4 src = vec4(u_layer_tints[0].rgb * a, a);
+    result = src;
   }
 
-  // Layer 1 — front-to-back composite
+  // Layer 1 — composite over previous result (over operator, premultiplied)
   if (u_active_layers[1] > 0.5) {
-    vec4 src = texture(uTexture1, vUV);
-    vec4 tinted = vec4(u_layer_tints[1].rgb, 1.0) * src.r;
-    float srcAlpha = tinted.a;
-    result = vec4(
-      result.rgb + tinted.rgb * srcAlpha * (1.0 - result.a),
-      result.a + srcAlpha * (1.0 - result.a)
-    );
+    float a = texture(uTexture1, vUV).r;
+    vec4 src = vec4(u_layer_tints[1].rgb * a, a);
+    result = src + result * (1.0 - src.a);
   }
 
   // Layer 2
   if (u_active_layers[2] > 0.5) {
-    vec4 src = texture(uTexture2, vUV);
-    vec4 tinted = vec4(u_layer_tints[2].rgb, 1.0) * src.r;
-    float srcAlpha = tinted.a;
-    result = vec4(
-      result.rgb + tinted.rgb * srcAlpha * (1.0 - result.a),
-      result.a + srcAlpha * (1.0 - result.a)
-    );
+    float a = texture(uTexture2, vUV).r;
+    vec4 src = vec4(u_layer_tints[2].rgb * a, a);
+    result = src + result * (1.0 - src.a);
   }
 
   // Layer 3
   if (u_active_layers[3] > 0.5) {
-    vec4 src = texture(uTexture3, vUV);
-    vec4 tinted = vec4(u_layer_tints[3].rgb, 1.0) * src.r;
-    float srcAlpha = tinted.a;
-    result = vec4(
-      result.rgb + tinted.rgb * srcAlpha * (1.0 - result.a),
-      result.a + srcAlpha * (1.0 - result.a)
-    );
+    float a = texture(uTexture3, vUV).r;
+    vec4 src = vec4(u_layer_tints[3].rgb * a, a);
+    result = src + result * (1.0 - src.a);
   }
 
   // Layer 4
   if (u_active_layers[4] > 0.5) {
-    vec4 src = texture(uTexture4, vUV);
-    vec4 tinted = vec4(u_layer_tints[4].rgb, 1.0) * src.r;
-    float srcAlpha = tinted.a;
-    result = vec4(
-      result.rgb + tinted.rgb * srcAlpha * (1.0 - result.a),
-      result.a + srcAlpha * (1.0 - result.a)
-    );
+    float a = texture(uTexture4, vUV).r;
+    vec4 src = vec4(u_layer_tints[4].rgb * a, a);
+    result = src + result * (1.0 - src.a);
   }
 
   // Layer 5
   if (u_active_layers[5] > 0.5) {
-    vec4 src = texture(uTexture5, vUV);
-    vec4 tinted = vec4(u_layer_tints[5].rgb, 1.0) * src.r;
-    float srcAlpha = tinted.a;
-    result = vec4(
-      result.rgb + tinted.rgb * srcAlpha * (1.0 - result.a),
-      result.a + srcAlpha * (1.0 - result.a)
-    );
+    float a = texture(uTexture5, vUV).r;
+    vec4 src = vec4(u_layer_tints[5].rgb * a, a);
+    result = src + result * (1.0 - src.a);
   }
 
   // Layer 6
   if (u_active_layers[6] > 0.5) {
-    vec4 src = texture(uTexture6, vUV);
-    vec4 tinted = vec4(u_layer_tints[6].rgb, 1.0) * src.r;
-    float srcAlpha = tinted.a;
-    result = vec4(
-      result.rgb + tinted.rgb * srcAlpha * (1.0 - result.a),
-      result.a + srcAlpha * (1.0 - result.a)
-    );
+    float a = texture(uTexture6, vUV).r;
+    vec4 src = vec4(u_layer_tints[6].rgb * a, a);
+    result = src + result * (1.0 - src.a);
   }
 
-  // Layer 7
+  // Layer 7 — topmost (hair, accessories)
   if (u_active_layers[7] > 0.5) {
-    vec4 src = texture(uTexture7, vUV);
-    vec4 tinted = vec4(u_layer_tints[7].rgb, 1.0) * src.r;
-    float srcAlpha = tinted.a;
-    result = vec4(
-      result.rgb + tinted.rgb * srcAlpha * (1.0 - result.a),
-      result.a + srcAlpha * (1.0 - result.a)
-    );
+    float a = texture(uTexture7, vUV).r;
+    vec4 src = vec4(u_layer_tints[7].rgb * a, a);
+    result = src + result * (1.0 - src.a);
   }
 
   outColor = result;
@@ -616,7 +624,14 @@ export class SpriteComposer {
     placeholder: Graphics,
     recipes: readonly LpcLayerRecipe[],
   ): Promise<void> {
-    const activeRecipes = recipes.filter((r) => r?.assetId);
+    // Sort by z-depth so texture[0] = body (back), texture[5] = hair (front)
+    const sortedRecipes = [...recipes].sort((a, b) => {
+      const zA = _getSlotZ(a.slot);
+      const zB = _getSlotZ(b.slot);
+      return zA - zB;
+    });
+
+    const activeRecipes = sortedRecipes.filter((r) => r?.assetId);
 
     if (activeRecipes.length === 0) {
       container.cacheAsTexture(true);
