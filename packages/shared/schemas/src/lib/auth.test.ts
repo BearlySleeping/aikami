@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { Value } from 'typebox/value';
 import {
   FirebaseAuthMetadataSchema,
   FirebaseSignInProviderNameSchema,
@@ -23,40 +23,40 @@ describe('FirebaseAuthMetadataSchema', () => {
       phoneNumber: '+1234567890',
       photoURL: 'https://example.com/photo.jpg',
     };
-    const result = FirebaseAuthMetadataSchema.parse(validData);
+    const result = Value.Parse(FirebaseAuthMetadataSchema, validData);
     expect(result.displayName).toBe('John Doe');
     expect(result.email).toBe('john@example.com');
   });
 
   test('should parse with all optional fields undefined', () => {
     const validData = {};
-    const result = FirebaseAuthMetadataSchema.parse(validData);
+    const result = Value.Parse(FirebaseAuthMetadataSchema, validData);
     expect(result.displayName).toBeUndefined();
   });
 });
 
 describe('SignInSocialProviderSchema', () => {
   test('should parse google provider', () => {
-    expect(SignInSocialProviderSchema.parse('google')).toBe('google');
+    expect(Value.Parse(SignInSocialProviderSchema, 'google')).toBe('google');
   });
 
   test('should parse github provider', () => {
-    expect(SignInSocialProviderSchema.parse('github')).toBe('github');
+    expect(Value.Parse(SignInSocialProviderSchema, 'github')).toBe('github');
   });
 
   test('should reject invalid provider', () => {
-    expect(() => SignInSocialProviderSchema.parse('facebook')).toThrow(z.ZodError);
+    expect(() => Value.Parse(SignInSocialProviderSchema, 'facebook')).toThrow();
   });
 });
 
 describe('SignInProviderSchema', () => {
   test('should parse email provider', () => {
-    expect(SignInProviderSchema.parse('email')).toBe('email');
+    expect(Value.Parse(SignInProviderSchema, 'email')).toBe('email');
   });
 
   test('should parse social providers', () => {
-    expect(SignInProviderSchema.parse('google')).toBe('google');
-    expect(SignInProviderSchema.parse('github')).toBe('github');
+    expect(Value.Parse(SignInProviderSchema, 'google')).toBe('google');
+    expect(Value.Parse(SignInProviderSchema, 'github')).toBe('github');
   });
 });
 
@@ -69,13 +69,13 @@ describe('UserMetadataSchema', () => {
       phoneNumber: '+1234567890',
       photoURL: 'https://example.com/photo.jpg',
     };
-    const result = UserMetadataSchema.parse(validData);
+    const result = Value.Parse(UserMetadataSchema, validData);
     expect(result.firstName).toBe('John');
     expect(result.lastName).toBe('Doe');
   });
 
   test('should parse with empty object', () => {
-    const result = UserMetadataSchema.parse({});
+    const result = Value.Parse(UserMetadataSchema, {});
     expect(result.firstName).toBeUndefined();
   });
 });
@@ -90,7 +90,7 @@ describe('RegisterDataSchema', () => {
         firstName: 'John',
       },
     };
-    const result = RegisterDataSchema.parse(validData);
+    const result = Value.Parse(RegisterDataSchema, validData);
     expect(result.email).toBe('john@example.com');
     expect(result.signInProvider).toBe('email');
   });
@@ -100,7 +100,7 @@ describe('RegisterDataSchema', () => {
       email: 'not-an-email',
       signInProvider: 'email',
     };
-    const result = RegisterDataSchema.parse(validData);
+    const result = Value.Parse(RegisterDataSchema, validData);
     expect(result.email).toBe('not-an-email');
   });
 });
@@ -119,7 +119,7 @@ describe('GoogleMetadataSchema', () => {
       // biome-ignore lint/style/useNamingConvention: Google API field name
       verified_email: true,
     };
-    const result = GoogleMetadataSchema.parse(validData);
+    const result = Value.Parse(GoogleMetadataSchema, validData);
     expect(result.email).toBe('john@gmail.com');
     expect(result.verified_email).toBe(true);
   });
@@ -139,46 +139,46 @@ describe('MicrosoftMetadataSchema', () => {
       // biome-ignore lint/style/useNamingConvention: Microsoft API field name
       verified_email: true,
     };
-    const result = MicrosoftMetadataSchema.parse(validData);
+    const result = Value.Parse(MicrosoftMetadataSchema, validData);
     expect(result.email).toBe('john@outlook.com');
   });
 });
 
 describe('UserRoleSchema', () => {
   test('should parse member role', () => {
-    expect(UserRoleSchema.parse('member')).toBe('member');
+    expect(Value.Parse(UserRoleSchema, 'member')).toBe('member');
   });
 
   test('should parse superAdmin role', () => {
-    expect(UserRoleSchema.parse('superAdmin')).toBe('superAdmin');
+    expect(Value.Parse(UserRoleSchema, 'superAdmin')).toBe('superAdmin');
   });
 
   test('should reject invalid role', () => {
-    expect(() => UserRoleSchema.parse('admin')).toThrow(z.ZodError);
+    expect(() => Value.Parse(UserRoleSchema, 'admin')).toThrow();
   });
 });
 
 describe('FirebaseSignInProviderNameSchema', () => {
   test('should parse google provider name', () => {
-    expect(FirebaseSignInProviderNameSchema.parse('google')).toBe('google');
+    expect(Value.Parse(FirebaseSignInProviderNameSchema, 'google')).toBe('google');
   });
 
   test('should parse github provider name', () => {
-    expect(FirebaseSignInProviderNameSchema.parse('github')).toBe('github');
+    expect(Value.Parse(FirebaseSignInProviderNameSchema, 'github')).toBe('github');
   });
 });
 
 describe('UserStatusSchema', () => {
   test('should parse unconfirmed-terms status', () => {
-    expect(UserStatusSchema.parse('unconfirmed-terms')).toBe('unconfirmed-terms');
+    expect(Value.Parse(UserStatusSchema, 'unconfirmed-terms')).toBe('unconfirmed-terms');
   });
 
   test('should parse active status', () => {
-    expect(UserStatusSchema.parse('active')).toBe('active');
+    expect(Value.Parse(UserStatusSchema, 'active')).toBe('active');
   });
 
   test('should reject invalid status', () => {
-    expect(() => UserStatusSchema.parse('pending')).toThrow(z.ZodError);
+    expect(() => Value.Parse(UserStatusSchema, 'pending')).toThrow();
   });
 });
 
@@ -190,7 +190,7 @@ describe('UserTokenSchema', () => {
       status: 'active',
       userRole: 'member',
     };
-    const result = UserTokenSchema.parse(validData);
+    const result = Value.Parse(UserTokenSchema, validData);
     expect(result.isBetaTester).toBe(true);
     expect(result.preferredLocale).toBe('en');
     expect(result.status).toBe('active');
@@ -199,7 +199,7 @@ describe('UserTokenSchema', () => {
 
   test('should parse with all optional fields undefined', () => {
     const validData = {};
-    const result = UserTokenSchema.parse(validData);
+    const result = Value.Parse(UserTokenSchema, validData);
     expect(result.isBetaTester).toBeUndefined();
     expect(result.preferredLocale).toBeUndefined();
   });
@@ -211,7 +211,7 @@ describe('UserClaimsSchema', () => {
       id: 'user-123',
       userRole: 'member',
     };
-    const result = UserClaimsSchema.parse(validData);
+    const result = Value.Parse(UserClaimsSchema, validData);
     expect(result.id).toBe('user-123');
     expect(result.userRole).toBe('member');
   });
@@ -220,6 +220,6 @@ describe('UserClaimsSchema', () => {
     const invalidData = {
       userRole: 'member',
     };
-    expect(() => UserClaimsSchema.parse(invalidData)).toThrow(z.ZodError);
+    expect(() => Value.Parse(UserClaimsSchema, invalidData)).toThrow();
   });
 });

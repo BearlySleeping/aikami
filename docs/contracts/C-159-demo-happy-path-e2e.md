@@ -6,7 +6,7 @@
 | **Target** | `apps/e2e/tests/client/demo_happy_path.spec.ts` |
 | **Priority** | P1 — Final validation |
 | **Dependencies** | C-157, C-158 |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview
