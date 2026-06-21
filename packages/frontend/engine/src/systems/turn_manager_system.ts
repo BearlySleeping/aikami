@@ -4,6 +4,7 @@ import { getComponent, query, removeEntity } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Enemy } from '../components/enemy.ts';
+import { Position } from '../components/position.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -450,6 +451,18 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
     targetMaxHp: enemyStats.maxHealth,
   });
 
+  // ── Visceral feedback: floating damage text (C-163) ──
+  const enemyScreenX = Position.x[enemyId] ?? 0;
+  const enemyScreenY = Position.y[enemyId] ?? 0;
+  bridge.emit({
+    type: 'DAMAGE_DEALT',
+    entityId: enemyId,
+    amount: damage,
+    isCritical: false,
+    screenX: enemyScreenX,
+    screenY: enemyScreenY,
+  });
+
   _emitCombatStateUpdate(world, bridge);
 
   // ── Check if enemy is defeated ──
@@ -526,6 +539,18 @@ const _processEnemyTurn = (
     targetId: playerEntityId,
     targetRemainingHp: remainingHp,
     targetMaxHp: playerStats.maxHealth,
+  });
+
+  // ── Visceral feedback: floating damage text + screen shake on player hit (C-163) ──
+  const playerScreenX = Position.x[playerEntityId] ?? 0;
+  const playerScreenY = Position.y[playerEntityId] ?? 0;
+  bridge.emit({
+    type: 'DAMAGE_DEALT',
+    entityId: playerEntityId,
+    amount: damage,
+    isCritical: false,
+    screenX: playerScreenX,
+    screenY: playerScreenY,
   });
 
   _emitCombatStateUpdate(world, bridge);

@@ -29,6 +29,20 @@ type PlayerInitData = {
 
 export type GameViewModelOptions = BaseViewModelOptions;
 
+/** A single floating damage text instance rendered in the Svelte UI layer. */
+export type FloatingTextInstance = {
+  /** Unique ID for Svelte {#each} keying. */
+  readonly id: number;
+  /** Damage amount to display. */
+  readonly amount: number;
+  /** Screen-space X coordinate (CSS pixels). */
+  readonly x: number;
+  /** Screen-space Y coordinate (CSS pixels). */
+  readonly y: number;
+  /** Whether this was a critical hit. */
+  readonly isCritical: boolean;
+};
+
 export type GameViewModelInterface = BaseViewModelInterface & {
   /** The player's current scene name. */
   readonly playerScene: string;
@@ -47,6 +61,23 @@ export type GameViewModelInterface = BaseViewModelInterface & {
 
   /** The logged-in player's display name, or 'Unknown' if not available. */
   readonly playerDisplayName: string;
+
+  /**
+   * Active floating damage text instances to render in the UI.
+   * Each entry auto-removes after its animation completes (~1.2s).
+   *
+   * Contract: C-163 Visceral Feedback Juice
+   */
+  readonly floatingTexts: readonly FloatingTextInstance[];
+
+  /**
+   * Whether the screen is currently shaking from a player hit.
+   * Triggers a brief CSS animation on the game viewport container.
+   */
+  readonly isShaking: boolean;
+
+  /** Removes a floating text instance by ID (called when animation completes). */
+  removeFloatingText(id: number): void;
 
   /**
    * The canvas element that PixiJS renders into.
@@ -130,6 +161,26 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     return authService.currentUser?.displayName || authService.currentUser?.email || 'Unknown';
   }
 
+  /**
+   * Active floating damage text instances — populated by DAMAGE_DEALT bridge events.
+   * Each instance auto-removes after its CSS animation completes (~1.2s).
+   *
+   * Contract: C-163 Visceral Feedback Juice
+   */
+  floatingTexts: FloatingTextInstance[] = $state([]);
+
+  /**
+   * Screen shake flag — set to true when the player takes damage,
+   * cleared after the shake animation completes (~300ms).
+   */
+  isShaking = $state(false);
+
+  /** Incrementing counter for floating text instance IDs. */
+  private _floatingTextIdCounter = 0;
+
+  /** Screen shake timeout handle for cleanup. */
+  private _shakeTimeout: ReturnType<typeof setTimeout> | undefined;
+
   /** Player character name loaded from the active persona. */
   private _personaPlayerName = $state<string>('');
 
@@ -189,6 +240,30 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
         this.activeContexts = this.activeContexts.filter((ctx) => ctx.entityId !== event.entityId);
       });
 
+      // ── Visceral combat feedback: floating damage text + screen shake (C-163) ──
+      this._bridge.on('DAMAGE_DEALT', (event) => {
+        const id = ++this._floatingTextIdCounter;
+        // Use center-screen positioning since canvas scale may not match world coords
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+        const instance: FloatingTextInstance = {
+          id,
+          amount: event.amount,
+          x: centerX,
+          y: centerY - 60,
+          isCritical: event.isCritical,
+        };
+        this.floatingTexts = [...this.floatingTexts, instance];
+
+        // Player entity is always eid 1 — shake the screen when the player is hit
+        if (event.entityId === 1) {
+          this._triggerScreenShake();
+        }
+
+        // Play hit SFX on every damage event
+        void this._playHitSfx();
+      });
+
       // ── Load active persona for player name + data ──
       await this._loadActivePersona();
 
@@ -219,6 +294,47 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     }
   }
 
+  /** @inheritdoc */
+  removeFloatingText(id: number): void {
+    this.floatingTexts = this.floatingTexts.filter((ft) => ft.id !== id);
+  }
+
+  /**
+   * Triggers a brief screen shake animation when the player takes damage.
+   *
+   * Sets {@link isShaking} to true for ~300ms, then clears it so the CSS
+   * animation can replay on subsequent hits.
+   */
+  private _triggerScreenShake(): void {
+    if (this._shakeTimeout) {
+      clearTimeout(this._shakeTimeout);
+    }
+    this.isShaking = true;
+    this._shakeTimeout = setTimeout(() => {
+      this.isShaking = false;
+      this._shakeTimeout = undefined;
+    }, 300);
+  }
+
+  /**
+   * Plays the combat hit SFX asynchronously.
+   *
+   * Fire-and-forget — errors are logged but never propagated.
+   *
+   * Contract: C-163 Visceral Feedback Juice
+   */
+  private async _playHitSfx(): Promise<void> {
+    try {
+      const { audioContextManager } = await import('$lib/services/audio/audio_context_manager.ts');
+      if (audioContextManager.context.state === 'suspended') {
+        await audioContextManager.context.resume();
+      }
+      const { audioService } = await import('$services');
+      await audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+    } catch (error) {
+      this.debug('_playHitSfx:failed', { error: String(error) });
+    }
+  }
   /** @inheritdoc */
   sendCommand(command: GameCommand): void {
     if (!this._bridge) {
@@ -502,6 +618,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   override async dispose(): Promise<void> {
     this.destroyEngine();
     this._bridge = undefined;
+
+    if (this._shakeTimeout) {
+      clearTimeout(this._shakeTimeout);
+      this._shakeTimeout = undefined;
+    }
+
     await super.dispose();
   }
 }
