@@ -2,6 +2,7 @@
   // apps/frontend/client/src/lib/views/game/canvas/game_view.svelte
   import { untrack } from 'svelte';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import FloatingText from '$lib/components/game/floating_text.svelte';
   import ModeIndicator from '$lib/components/mode_indicator.svelte';
   import GameUIView from '../ui/game_ui_view.svelte';
   import type { GameUIViewModelInterface } from '../ui/game_ui_view_model.svelte';
@@ -41,7 +42,11 @@
       Layer 0 (z-0): Game canvas container — PixiJS owns this DOM element.
       The engine renders directly into the <canvas> at WebGL native resolution.
     -->
-    <div id="game-canvas-container" class="absolute inset-0 z-0">
+    <div
+      id="game-canvas-container"
+      class="absolute inset-0 z-0"
+      class:animate-shake={viewModel.isShaking}
+    >
       <canvas bind:this={canvasElement} class="w-full h-full block touch-none"></canvas>
     </div>
 
@@ -73,6 +78,20 @@
       <!-- Mode Indicator (C-140) — floating badge showing current game mode -->
       <ModeIndicator />
 
+      <!--
+        Floating damage text (C-163) — rendered as DOM elements on top of
+        the WebGL canvas. Each instance floats upward and fades out.
+      -->
+      {#each viewModel.floatingTexts as ft (ft.id)}
+        <FloatingText
+          amount={ft.amount}
+          x={ft.x}
+          y={ft.y}
+          isCritical={ft.isCritical}
+          onComplete={() => viewModel.removeFloatingText(ft.id)}
+        />
+      {/each}
+
       <!-- Game Error — centered top overlay -->
       {#if viewModel.gameError}
         <div
@@ -93,3 +112,43 @@
     </div>
   </div>
 </BaseViewModelContainer>
+
+<style>
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    10% {
+      transform: translate(-4px, -2px);
+    }
+    20% {
+      transform: translate(3px, 1px);
+    }
+    30% {
+      transform: translate(-3px, 2px);
+    }
+    40% {
+      transform: translate(2px, -1px);
+    }
+    50% {
+      transform: translate(-2px, -2px);
+    }
+    60% {
+      transform: translate(1px, 1px);
+    }
+    70% {
+      transform: translate(-1px, -1px);
+    }
+    80% {
+      transform: translate(1px, 0);
+    }
+    90% {
+      transform: translate(-1px, 1px);
+    }
+  }
+
+  .animate-shake {
+    animation: shake 0.3s ease-in-out;
+  }
+</style>
