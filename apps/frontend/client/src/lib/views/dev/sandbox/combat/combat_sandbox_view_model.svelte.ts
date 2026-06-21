@@ -85,6 +85,23 @@ export type CombatSandboxViewModelInterface = BaseViewModelInterface & {
   devTestEnemyVoice: () => void;
   /** Current TTS engine status (for debug display). */
   readonly devTtsStatus: string;
+  /** DEV: trigger floating damage text + screen shake for visual testing. */
+  devTriggerFloatingDamage: () => void;
+  /** DEV: play equip SFX for audio testing. */
+  devTriggerEquipSfx: () => Promise<void>;
+
+  /** Active floating damage text instances (C-163). */
+  readonly floatingTexts: Array<{
+    readonly id: number;
+    readonly amount: number;
+    readonly x: number;
+    readonly y: number;
+    readonly isCritical: boolean;
+  }>;
+  /** Whether screen shake is active (C-163). */
+  readonly isShaking: boolean;
+  /** Removes a floating text by ID (C-163). */
+  removeFloatingText: (id: number) => void;
 };
 
 export type CombatSandboxViewModelOptions = BaseViewModelOptions & {};
@@ -121,6 +138,21 @@ class CombatSandboxViewModel
 
   /** Whether real AI services (text + image) are enabled. */
   useRealAi = $state<boolean>(false);
+
+  /** Active floating damage text instances (C-163). */
+  floatingTexts: Array<{
+    id: number;
+    amount: number;
+    x: number;
+    y: number;
+    isCritical: boolean;
+  }> = $state([]);
+
+  /** Screen shake flag (C-163). */
+  isShaking = $state(false);
+
+  private _floatingTextIdCounter = 0;
+  private _shakeTimeout: ReturnType<typeof setTimeout> | undefined;
 
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
@@ -288,6 +320,30 @@ class CombatSandboxViewModel
         this.lastLevelUpEvent = undefined;
       }, 4000);
     });
+
+    // Listen for damage events — spawn floating text + screen shake (C-163)
+    bridge.on('DAMAGE_DEALT', (event) => {
+      const id = ++this._floatingTextIdCounter;
+      // Use center-screen positioning since canvas scale may not match world coords
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      this.floatingTexts = [
+        ...this.floatingTexts,
+        {
+          id,
+          amount: event.amount,
+          x: centerX,
+          y: centerY - 60,
+          isCritical: event.isCritical,
+        },
+      ];
+
+      if (event.entityId === 1) {
+        this._triggerScreenShake();
+      }
+
+      void this._playHitSfx();
+    });
   }
   /** @inheritdoc */
   async respawnPlayer(): Promise<void> {
@@ -373,6 +429,39 @@ class CombatSandboxViewModel
   }
 
   /** @inheritdoc */
+  devTriggerFloatingDamage(): void {
+    this.debug('devTriggerFloatingDamage');
+    // Use center-screen coordinates since combat focuses on center
+    const centerX = typeof window !== 'undefined' ? window.innerWidth / 2 : 400;
+    const centerY = typeof window !== 'undefined' ? window.innerHeight / 2 : 300;
+    this._bridge?.emit({
+      type: 'DAMAGE_DEALT',
+      entityId: 1,
+      amount: 15,
+      isCritical: false,
+      screenX: centerX,
+      screenY: centerY - 40, // offset above center for readability
+    } as never);
+  }
+
+  /** @inheritdoc */
+  async devTriggerEquipSfx(): Promise<void> {
+    this.debug('devTriggerEquipSfx');
+    try {
+      const { audioContextManager } = await import('$lib/services/audio/audio_context_manager.ts');
+      // Resume AudioContext directly — unlock() only attaches future listeners
+      if (audioContextManager.context.state === 'suspended') {
+        await audioContextManager.context.resume();
+      }
+      const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
+      await audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+      this.debug('devTriggerEquipSfx:played');
+    } catch (error) {
+      this.debug('devTriggerEquipSfx:failed', { error: String(error) });
+    }
+  }
+
+  /** @inheritdoc */
   devTestEnemyVoice(): void {
     this.debug('devTestEnemyVoice', { status: ttsService.status });
     const phrases = [
@@ -383,6 +472,37 @@ class CombatSandboxViewModel
     ];
     const phrase = phrases[Math.floor(Math.random() * phrases.length)];
     void ttsService.synthesize({ text: phrase, voice: 'af_heart' });
+  }
+
+  /** @inheritdoc */
+  removeFloatingText(id: number): void {
+    this.floatingTexts = this.floatingTexts.filter((ft) => ft.id !== id);
+  }
+
+  /** Triggers a brief screen shake (C-163). */
+  private _triggerScreenShake(): void {
+    if (this._shakeTimeout) {
+      clearTimeout(this._shakeTimeout);
+    }
+    this.isShaking = true;
+    this._shakeTimeout = setTimeout(() => {
+      this.isShaking = false;
+      this._shakeTimeout = undefined;
+    }, 300);
+  }
+
+  /** Plays combat hit SFX (C-163). */
+  private async _playHitSfx(): Promise<void> {
+    try {
+      const { audioContextManager } = await import('$lib/services/audio/audio_context_manager.ts');
+      if (audioContextManager.context.state === 'suspended') {
+        await audioContextManager.context.resume();
+      }
+      const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
+      await audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
+    } catch (error) {
+      this.debug('_playHitSfx:failed', { error: String(error) });
+    }
   }
 }
 

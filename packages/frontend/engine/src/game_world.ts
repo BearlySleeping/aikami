@@ -846,6 +846,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       });
     });
 
+    // Forward UPDATE_PLAYER_APPEARANCE commands (C-163)
+    bridgeWithCommands.onCommand('UPDATE_PLAYER_APPEARANCE', (cmd: unknown) => {
+      const appearanceCmd = cmd as { weapon?: string; armor?: string };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'UPDATE_PLAYER_APPEARANCE',
+          weapon: appearanceCmd.weapon,
+          armor: appearanceCmd.armor,
+        },
+      });
+    });
+
     // Forward INTERACT commands (C-161 camera zoom)
     bridgeWithCommands.onCommand('INTERACT', (cmd: unknown) => {
       const interactCmd = cmd as { targetEntityId: string };

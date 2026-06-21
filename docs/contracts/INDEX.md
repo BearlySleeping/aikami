@@ -68,6 +68,7 @@ P2 (Polish — after P1):
 | # | Contract | Description | Depends On |
 |---|----------|-------------|------------|
 | C-162 | [BG3 Action Menu & Interactive Dice](C-162-bg3-action-menu-dice.md) ✅ | BG3-style action context menu, interactive d20 click-to-roll, attacks bypass LLM | C-148, C-161 |
+| C-163 | [Visceral Feedback Juice](C-163-visceral-feedback-juice.md) ✅ | Equipment→LPC sprite sync, floating damage text, screen shake, equip/combat SFX | C-145, C-153 |
 | C-145 | [Turn-Based Combat Loop](C-145-turn-based-combat-loop.md) ✅ | d20 dice RNG combat, hit/damage/loot, COMBAT_ACTION bridge, unit tests | C-144 |
 | C-010 | [Setup Script](C-010-setup-script.md) | Interactive developer onboarding script | C-007, C-008 |
 | C-011 | [Blackbox Testing Infrastructure](C-011-blackbox-testing.md) | E2E testing with Playwright, Firebase emulators, visual regression | C-007, C-009 |

@@ -109,6 +109,20 @@ export type GameCommand =
       advantage?: boolean;
       /** Extra damage added to the final damage roll (0–5, C-146). */
       bonusDamage?: number;
+    }
+  | {
+      /**
+       * Updates the player entity's Appearance component layers based on
+       * current equipment state. Sent by the InventoryViewModel after equip
+       * or unequip resolves.
+       *
+       * Contract: C-163 Visceral Feedback Juice
+       */
+      type: 'UPDATE_PLAYER_APPEARANCE';
+      /** Item ID of the equipped weapon, or undefined if none. */
+      weapon?: string;
+      /** Item ID of the equipped armor, or undefined if none. */
+      armor?: string;
     };
 
 // ---------------------------------------------------------------------------
@@ -348,6 +362,25 @@ export type GameEvent =
       npcScreenX?: number;
       /** NPC screen-space Y coordinate (CSS pixels), or undefined. */
       npcScreenY?: number;
+    }
+  | {
+      /**
+       * Emitted when damage is applied to a combat participant.
+       * The UI uses this to spawn floating damage text and screen shake.
+       *
+       * Contract: C-163 Visceral Feedback Juice
+       */
+      type: 'DAMAGE_DEALT';
+      /** Entity ID that took the damage. */
+      entityId: number;
+      /** Amount of damage dealt. */
+      amount: number;
+      /** Whether this was a critical hit. */
+      isCritical: boolean;
+      /** Screen-space X coordinate for floating text placement. */
+      screenX: number;
+      /** Screen-space Y coordinate for floating text placement. */
+      screenY: number;
     };
 
 // ---------------------------------------------------------------------------
