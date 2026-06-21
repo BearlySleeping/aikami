@@ -13,6 +13,7 @@ import {
 import { logger } from '$logger';
 import type { TransitionZone } from '../assets/map_loader.ts';
 import {
+  Appearance,
   getAppearanceLayers,
   type LpcLayerRecipe,
   registerAppearanceObservers,
@@ -275,6 +276,18 @@ const handleBridgeCommand = (command: GameCommand): void => {
       }
       break;
     }
+    case 'UPDATE_PLAYER_APPEARANCE': {
+      // ── Equipment → Appearance layer sync (C-163) ──
+      // When equipment changes, update the player entity's Appearance
+      // component layers so the LPC sprite reflects the new gear.
+      if (world && playerEntityId > 0) {
+        _updatePlayerAppearanceFromEquipment(playerEntityId, {
+          weapon: (command as { weapon?: string }).weapon,
+          armor: (command as { armor?: string }).armor,
+        });
+      }
+      break;
+    }
     default: {
       break;
     }
@@ -282,6 +295,85 @@ const handleBridgeCommand = (command: GameCommand): void => {
 };
 
 // -- Worker-side recipe resolver --------------------------------------------
+
+/**
+ * Updates the player entity's Appearance component layers based on
+ * current equipment state.
+ *
+ * Maps equipment item IDs to LPC layer variant indices:
+ * - Armor: updates layer2 (torso)
+ *   - leather_armor → layer 2
+ *   - iron_armor   → layer 3
+ *   - no armor     → layer 1 (default)
+ *
+ * After updating, emits APPEARANCE_CHANGED through the bridge so the
+ * LPC rendering pipeline picks up the change immediately.
+ *
+ * Contract: C-163 Visceral Feedback Juice
+ */
+const _updatePlayerAppearanceFromEquipment = (
+  eid: number,
+  equipment: { weapon?: string; armor?: string },
+): void => {
+  // Read current layers
+  const currentLayers = getAppearanceLayers(eid);
+  const newLayers = [...currentLayers];
+
+  // Map armor to torso layer (index 2)
+  if (equipment.armor) {
+    const armorToLayer = (armorId: string): number => {
+      switch (armorId) {
+        case 'leather_armor':
+        case 'wooden_shield':
+          return 2;
+        case 'iron_armor':
+          return 3;
+        default:
+          return 2;
+      }
+    };
+    newLayers[2] = armorToLayer(equipment.armor);
+  } else {
+    // No armor equipped — revert torso to default
+    newLayers[2] = 1;
+  }
+
+  // Apply updated layers
+  for (let i = 0; i < newLayers.length; i++) {
+    const layerValue = newLayers[i];
+    if (layerValue === undefined) {
+      continue;
+    }
+    switch (i) {
+      case 0:
+        Appearance.layer0[eid] = layerValue;
+        break;
+      case 1:
+        Appearance.layer1[eid] = layerValue;
+        break;
+      case 2:
+        Appearance.layer2[eid] = layerValue;
+        break;
+      case 3:
+        Appearance.layer3[eid] = layerValue;
+        break;
+      case 4:
+        Appearance.layer4[eid] = layerValue;
+        break;
+      case 5:
+        Appearance.layer5[eid] = layerValue;
+        break;
+    }
+  }
+
+  // Emit APPEARANCE_CHANGED so the LPC rendering pipeline regenerates
+  // the sprite with the updated layers.
+  workerBridge.emit({
+    type: 'APPEARANCE_CHANGED',
+    eid,
+    layerIds: newLayers as number[],
+  });
+};
 
 /** Slot name lookup for converting Appearance layer IDs to recipes. */
 const WORKER_SLOT_NAMES = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;

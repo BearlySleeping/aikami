@@ -7,6 +7,7 @@
   // C-144 Task 5, C-147 Progression & Persistence
 
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+  import FloatingText from '$lib/components/game/floating_text.svelte';
   import CombatView from '$lib/views/combat/combat_view.svelte';
   import GameOverOverlay from '../../../game/ui/overlays/game_over_overlay.svelte';
   import type { CombatSandboxViewModelInterface } from './combat_sandbox_view_model.svelte.ts';
@@ -68,11 +69,9 @@
   {/if}
 
   <!-- Game canvas -->
-  <canvas
-    id="combat-sandbox-canvas"
-    class="absolute inset-0 h-full w-full"
-    bind:this={canvasElement}
-  ></canvas>
+  <div class="absolute inset-0" class:animate-shake={viewModel.isShaking}>
+    <canvas id="combat-sandbox-canvas" class="h-full w-full" bind:this={canvasElement}></canvas>
+  </div>
 
   <!-- Progression debug HUD -->
   {#if viewModel.engineReady}
@@ -112,6 +111,19 @@
     </div>
   {/if}
 
+  <!-- Floating damage text (C-163) — z-40 renders ABOVE combat overlay -->
+  <div class="pointer-events-none absolute inset-0 z-40">
+    {#each viewModel.floatingTexts as ft (ft.id)}
+      <FloatingText
+        amount={ft.amount}
+        x={ft.x}
+        y={ft.y}
+        isCritical={ft.isCritical}
+        onComplete={() => viewModel.removeFloatingText(ft.id)}
+      />
+    {/each}
+  </div>
+
   <!-- Game Over overlay -->
   {#if viewModel.isGameOver}
     <GameOverOverlay
@@ -138,6 +150,8 @@
         { label: '🎤 Init Kokoro TTS', onClick: () => { void viewModel.devInitTts(); } },
         { label: '🔍 Check Kokoro Server', onClick: () => { void viewModel.devCheckKokoroServer(); } },
         { label: '🔊 Test Enemy Voice', onClick: () => viewModel.devTestEnemyVoice() },
+        { label: '💥 Trigger Floating Damage', onClick: () => viewModel.devTriggerFloatingDamage() },
+        { label: '🔊 Play Equip SFX', onClick: () => { void viewModel.devTriggerEquipSfx(); } },
       ].filter((a): a is { label: string; onClick: () => void } => a !== undefined)}
       toggles={[
         {
@@ -148,3 +162,43 @@
     />
   {/if}
 </div>
+
+<style>
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translate(0, 0);
+    }
+    10% {
+      transform: translate(-4px, -2px);
+    }
+    20% {
+      transform: translate(3px, 1px);
+    }
+    30% {
+      transform: translate(-3px, 2px);
+    }
+    40% {
+      transform: translate(2px, -1px);
+    }
+    50% {
+      transform: translate(-2px, -2px);
+    }
+    60% {
+      transform: translate(1px, 1px);
+    }
+    70% {
+      transform: translate(-1px, -1px);
+    }
+    80% {
+      transform: translate(1px, 0);
+    }
+    90% {
+      transform: translate(-1px, 1px);
+    }
+  }
+
+  .animate-shake {
+    animation: shake 0.3s ease-in-out;
+  }
+</style>
