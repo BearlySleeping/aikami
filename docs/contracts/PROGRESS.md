@@ -27,7 +27,7 @@
 | C-101 | Shared Package Enforce (Boundary Bleed) | ✅ completed |
 | C-102 | Tauri SPA Enforcement | ✅ completed |
 | C-030 | (no contract file) | — |
-| C-031 | SvelteKit Adapter Static & Firebase Hosting | ⏳ not_started |
+| C-031 | SvelteKit Adapter Static & Firebase Hosting | ✅ completed |
 | C-160 | Engine Polish (Shader/Movement/Camera) | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
@@ -2070,3 +2070,24 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - Gallery masonry uses CSS columns (top-to-bottom fill) — items in the second column may appear out of chronological order compared to a true masonry layout.
 - No E2E test added for inline image rendering — existing E2E tests (combat_immersion.spec.ts) may need updating.
 - Image generation callbacks use closure-captured `narrativeEntryId` — if the entry is removed before the callback fires (e.g., combat ends), the `findIndex` is a no-op.
+
+### C-031: SvelteKit Adapter Static & Firebase Hosting
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `apps/frontend/client/src/routes/+layout.ts` — Changed `prerender: true` → `prerender: false` for pure SPA mode.
+- `apps/frontend/client/package.json` — Removed unused `@sveltejs/adapter-auto` and `@sveltejs/adapter-node` devDependencies.
+- `apps/backend/firebase/dist/emulator/firebase.json` — Added `hosting` emulator on port 5000 + SPA rewrite `/**` → `/index.html`.
+
+**Files created**:
+- `firebase.json` (root) — Production Firebase Hosting: SPA rewrites, immutable cache for hashed assets, `no-cache` for HTML.
+
+**Deviations**:
+1. **`adapter-static` already configured**: svelte.config.js already used `@sveltejs/adapter-static` with `fallback: 'index.html'`.
+2. **`svelte-adapter-bun` already removed**: Pre-existing cleanup from earlier contract.
+3. **Emulator firebase.json may be overwritten**: The hosting config was added directly to the firestack-generated file. Root firebase.json is the canonical hosting config.
+
+**Known limitations**:
+- No CI/CD for Firebase Hosting deploys — manual `firebase deploy --only hosting` required.
+- `prerender: false` means no static HTML for SEO — acceptable for Tauri desktop app.
