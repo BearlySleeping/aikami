@@ -15,6 +15,8 @@
   import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
   import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
   import CombatDiceUi from './components/combat_dice_ui.svelte';
+  import CombatGallery from './components/combat_gallery.svelte';
+  import CombatInlineImage from './components/combat_inline_image.svelte';
 
   type Props = {
     viewModel: CombatViewModelInterface;
@@ -52,7 +54,7 @@
         >
           <ul class="space-y-0.5">
             {#each viewModel.combatLog as entry}
-              <li class="text-xs text-base-content/60">{entry}</li>
+              <li class="text-xs text-base-content/60">{entry.actionText}</li>
             {/each}
           </ul>
         </div>
@@ -125,27 +127,34 @@
       <!-- Scrollable combat log -->
       <div class="flex-1 overflow-y-auto px-3 py-2 min-h-0">
         {#if viewModel.combatLog.length > 0}
-          <ul class="space-y-1">
-            {#each viewModel.combatLog as entry}
-              <li
+          <div class="space-y-1">
+            {#each viewModel.combatLog as entry (entry.id)}
+              <div
                 class="text-xs leading-relaxed text-base-content/70 border-b border-base-200 pb-1"
               >
-                {entry}
-              </li>
+                <span class="font-semibold text-base-content/50">{entry.actor}</span>
+                <span class="ml-1">{entry.actionText}</span>
+              </div>
+              <!-- Inline image for this turn (C-165 AC-1) -->
+              {#if entry.imageUrl || entry.isGeneratingImage}
+                <CombatInlineImage
+                  imageUrl={entry.imageUrl}
+                  isGenerating={entry.isGeneratingImage === true}
+                  onRegenerate={() => viewModel.generateSceneImage()}
+                />
+              {/if}
             {/each}
-          </ul>
+          </div>
         {:else}
           <p class="text-xs text-base-content/40 italic">No events yet.</p>
         {/if}
       </div>
     {:else}
-      <!-- Gallery tab — cinematic scene background + manual image gen -->
-      <div class="flex-1 overflow-y-auto px-3 py-2 min-h-0">
-        {#if viewModel.combatBackgroundImageUrl}
-          <div class="rounded-lg overflow-hidden border border-base-300 mb-3">
-            <img src={viewModel.combatBackgroundImageUrl} alt="Combat scene" class="w-full h-auto">
-          </div>
-        {/if}
+      <!-- Gallery tab — masonry grid of all encounter images (C-165 AC-3) -->
+      <div class="flex-1 overflow-y-auto min-h-0">
+        <CombatGallery images={viewModel.encounterImages} />
+      </div>
+      <div class="border-t border-base-300 px-3 py-2 bg-base-100 flex-shrink-0">
         <div class="text-center">
           <button
             class="btn btn-ghost btn-sm"

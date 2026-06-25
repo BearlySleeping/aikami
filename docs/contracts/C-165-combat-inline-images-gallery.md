@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/combat/components/` — Combat Log & Imagery |
 | **Priority** | P1 — Narrative Immersion |
 | **Dependencies** | C-164 |
-| **Status** | not_started |
+| **Status** | ✅ completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview
