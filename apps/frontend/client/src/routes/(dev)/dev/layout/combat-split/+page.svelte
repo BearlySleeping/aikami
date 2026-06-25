@@ -19,6 +19,7 @@
     type CombatDevViewModelOptions,
   } from '$lib/views/combat/combat_dev_view_model.svelte';
   import CombatSidebar from '$lib/views/combat/combat_sidebar.svelte';
+  import type { CombatLogEntry } from '$lib/views/combat/combat_view_model.svelte';
   import { gameStateService } from '$services';
 
   // ── Mock CombatViewModel with pre-loaded data ──
@@ -37,6 +38,25 @@
   viewModel.currentTurnEntity = 1;
   viewModel.totalParticipants = 2;
   viewModel.isPlayerTurn = true;
+  // Helper: create a CombatLogEntry from a plain string message
+  let _entryId = 0;
+  const makeEntry = (message: string): CombatLogEntry => {
+    const actor = message.startsWith('Player ')
+      ? 'Player'
+      : message.startsWith('Goblin')
+        ? 'Goblin Skirmisher'
+        : message.startsWith('The goblin')
+          ? 'Goblin Skirmisher'
+          : 'System';
+    return {
+      id: `test-${++_entryId}`,
+      turnNumber: _entryId,
+      actor,
+      actionText: message,
+      outcomeText: '',
+    };
+  };
+
   viewModel.combatLog = [
     'A wild Goblin Skirmisher emerges from the shadows!',
     'Goblin Skirmisher rolls 12 (+3 = 15) vs Evasion 12 — Hits for 8 damage!',
@@ -46,7 +66,7 @@
     'Goblin Skirmisher rolls 5 (+3 = 8) vs Evasion 12 — Miss!',
     'Player rolls 19 (+4 = 23) vs Evasion 10 — Hits for 15 damage! Critical!',
     'The goblin staggers, bleeding from multiple wounds.',
-  ];
+  ].map(makeEntry);
 
   // Set game mode to COMBAT so the CSS grid in game_view.svelte activates
   onMount(() => {
@@ -70,13 +90,15 @@
       `[Test #${logEntryCount}] Goblin drinks a murky potion — HP restored slightly.`,
     ];
     const entry = actions[logEntryCount % actions.length] ?? `[Test #${logEntryCount}] Event`;
-    viewModel.combatLog = [entry, ...viewModel.combatLog];
+    viewModel.combatLog = [makeEntry(entry), ...viewModel.combatLog];
   };
 
   const fillLogForScrollTest = () => {
     const entries = Array.from({ length: 40 }, (_, i) => {
       const n = logEntryCount + i + 1;
-      return `[Scroll test #${n}] ${['Player attacks', 'Goblin dodges', 'Player blocks', 'Goblin casts', 'Player heals', 'Goblin rages'][n % 6]} — combat continues...`;
+      return makeEntry(
+        `[Scroll test #${n}] ${['Player attacks', 'Goblin dodges', 'Player blocks', 'Goblin casts', 'Player heals', 'Goblin rages'][n % 6]} — combat continues...`,
+      );
     });
     viewModel.combatLog = [...entries, ...viewModel.combatLog];
     logEntryCount += 40;
