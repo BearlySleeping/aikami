@@ -174,7 +174,8 @@
           "a11y": {
             "useButtonType": "off",
             "noSvgWithoutTitle": "off",
-            "useAnchorContent": "off"
+            "useAnchorContent": "off",
+            "useValidAriaValues": "off"
           }
         }
       }

@@ -8,7 +8,7 @@
 
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
   import FloatingText from '$lib/components/game/floating_text.svelte';
-  import CombatView from '$lib/views/combat/combat_view.svelte';
+  import CombatSidebar from '$lib/views/combat/combat_sidebar.svelte';
   import GameOverOverlay from '../../../game/ui/overlays/game_over_overlay.svelte';
   import type { CombatSandboxViewModelInterface } from './combat_sandbox_view_model.svelte.ts';
 
@@ -25,8 +25,23 @@
       void viewModel.initializeEngine(canvasElement);
     }
   });
+
+  /**
+   * When combat starts/ends, the CSS grid layout changes the canvas size.
+   * Trigger a PixiJS resize so the engine doesn't render stretched pixels (C-164).
+   */
+  $effect(() => {
+    const _hasCombat = !!viewModel.combatViewModel;
+    if (viewModel.engineReady) {
+      requestAnimationFrame(() => {
+        viewModel.triggerResize();
+      });
+    }
+  });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: svelte:window is a valid global key handler -->
 <svelte:window
   onkeydown={(e) => {
     if (e.key === 'Escape' && viewModel.combatViewModel) {
@@ -68,47 +83,87 @@
     </div>
   {/if}
 
-  <!-- Game canvas -->
-  <div class="absolute inset-0" class:animate-shake={viewModel.isShaking}>
-    <canvas id="combat-sandbox-canvas" class="h-full w-full" bind:this={canvasElement}></canvas>
-  </div>
-
-  <!-- Progression debug HUD -->
-  {#if viewModel.engineReady}
-    <div
-      class="pointer-events-none absolute left-4 top-4 z-10 rounded-lg bg-black/70 px-4 py-3 font-mono text-sm text-white backdrop-blur-sm"
-    >
-      <div class="mb-1 text-xs font-bold uppercase tracking-wider text-primary/70">Progression</div>
-      <div class="flex gap-4">
-        <span>Lv.{viewModel.playerLevel}</span>
-        <span>XP: {viewModel.playerXp}/{viewModel.playerXpToNextLevel}</span>
-      </div>
-      {#if viewModel.defeatedEnemyIds.length > 0}
-        <div class="mt-1 text-xs text-orange-300/80">
-          Defeated: {viewModel.defeatedEnemyIds.join(', ')}
-        </div>
-      {/if}
-    </div>
-  {/if}
-
-  <!-- Level-up notification -->
-  {#if viewModel.lastLevelUpEvent}
-    <div
-      class="pointer-events-none absolute left-1/2 top-20 z-30 -translate-x-1/2 animate-bounce rounded-lg bg-yellow-500/90 px-6 py-3 text-center font-bold text-black shadow-lg"
-    >
-      ⬆ {viewModel.lastLevelUpEvent}
-    </div>
-  {/if}
-
-  <!-- Combat overlay -->
+  <!--
+    C-164: Combat split-screen layout.
+    When combat is active, switch from full-canvas to CSS Grid:
+    left 35vw = CombatSidebar, right 1fr = game canvas.
+  -->
   {#if viewModel.combatViewModel}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-    >
-      <div class="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl">
-        <CombatView viewModel={viewModel.combatViewModel} />
+    <div class="grid h-screen w-screen overflow-hidden" style="grid-template-columns: 35vw 1fr;">
+      <CombatSidebar viewModel={viewModel.combatViewModel} />
+      <div class="relative w-full h-full overflow-hidden">
+        <div class="absolute inset-0" class:animate-shake={viewModel.isShaking}>
+          <canvas
+            id="combat-sandbox-canvas"
+            class="h-full w-full"
+            bind:this={canvasElement}
+          ></canvas>
+        </div>
+
+        <!-- Progression debug HUD -->
+        {#if viewModel.engineReady}
+          <div
+            class="pointer-events-none absolute left-4 top-4 z-10 rounded-lg bg-black/70 px-4 py-3 font-mono text-sm text-white backdrop-blur-sm"
+          >
+            <div class="mb-1 text-xs font-bold uppercase tracking-wider text-primary/70">
+              Progression
+            </div>
+            <div class="flex gap-4">
+              <span>Lv.{viewModel.playerLevel}</span>
+              <span>XP: {viewModel.playerXp}/{viewModel.playerXpToNextLevel}</span>
+            </div>
+            {#if viewModel.defeatedEnemyIds.length > 0}
+              <div class="mt-1 text-xs text-orange-300/80">
+                Defeated: {viewModel.defeatedEnemyIds.join(', ')}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Level-up notification -->
+        {#if viewModel.lastLevelUpEvent}
+          <div
+            class="pointer-events-none absolute left-1/2 top-20 z-30 -translate-x-1/2 animate-bounce rounded-lg bg-yellow-500/90 px-6 py-3 text-center font-bold text-black shadow-lg"
+          >
+            ⬆ {viewModel.lastLevelUpEvent}
+          </div>
+        {/if}
       </div>
     </div>
+  {:else}
+    <!-- Full-screen canvas when no combat is active -->
+    <div class="absolute inset-0" class:animate-shake={viewModel.isShaking}>
+      <canvas id="combat-sandbox-canvas" class="h-full w-full" bind:this={canvasElement}></canvas>
+    </div>
+
+    <!-- Progression debug HUD -->
+    {#if viewModel.engineReady}
+      <div
+        class="pointer-events-none absolute left-4 top-4 z-10 rounded-lg bg-black/70 px-4 py-3 font-mono text-sm text-white backdrop-blur-sm"
+      >
+        <div class="mb-1 text-xs font-bold uppercase tracking-wider text-primary/70">
+          Progression
+        </div>
+        <div class="flex gap-4">
+          <span>Lv.{viewModel.playerLevel}</span>
+          <span>XP: {viewModel.playerXp}/{viewModel.playerXpToNextLevel}</span>
+        </div>
+        {#if viewModel.defeatedEnemyIds.length > 0}
+          <div class="mt-1 text-xs text-orange-300/80">
+            Defeated: {viewModel.defeatedEnemyIds.join(', ')}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Level-up notification -->
+    {#if viewModel.lastLevelUpEvent}
+      <div
+        class="pointer-events-none absolute left-1/2 top-20 z-30 -translate-x-1/2 animate-bounce rounded-lg bg-yellow-500/90 px-6 py-3 text-center font-bold text-black shadow-lg"
+      >
+        ⬆ {viewModel.lastLevelUpEvent}
+      </div>
+    {/if}
   {/if}
 
   <!-- Floating damage text (C-163) — z-40 renders ABOVE combat overlay -->

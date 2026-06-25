@@ -127,6 +127,7 @@
               <!-- Status dot -->
               <span
                 class="w-3 h-3 rounded-full inline-block {statusDotClass(viewModel.textStatus)}"
+                role="status"
                 aria-label="Text AI status: {statusLabel(viewModel.textStatus)}"
               ></span>
               <span class="text-neutral-200 text-sm font-semibold">Text AI (Logic Engine)</span>
@@ -137,7 +138,7 @@
           </div>
 
           <!-- Provider Toggle: Ollama / OpenRouter -->
-          <div class="join w-full" role="group" aria-label="Text Provider Selection">
+          <div class="join w-full" role="radiogroup" aria-label="Text Provider Selection">
             <button
               class="join-item btn btn-xs flex-1 {viewModel.activeTextProvider === 'ollama'
                 ? 'btn-primary'
@@ -234,6 +235,7 @@
             <div class="flex items-center gap-3">
               <span
                 class="w-3 h-3 rounded-full inline-block {statusDotClass(viewModel.imageStatus)}"
+                role="status"
                 aria-label="Image AI status: {statusLabel(viewModel.imageStatus)}"
               ></span>
               <span class="text-neutral-200 text-sm font-semibold">Image AI (Visual Engine)</span>
@@ -268,6 +270,7 @@
             <div class="flex items-center gap-3">
               <span
                 class="w-3 h-3 rounded-full inline-block {statusDotClass(viewModel.voiceStatus)}"
+                role="status"
                 aria-label="Voice AI status: {statusLabel(viewModel.voiceStatus)}"
               ></span>
               <span class="text-neutral-200 text-sm font-semibold">Voice AI (Kokoro WebGPU)</span>

@@ -89,6 +89,7 @@
                 {#if viewModel.isStreaming}
                   <span
                     class="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-accent align-middle"
+                    role="status"
                     aria-label="AI is typing"
                   ></span>
                 {/if}

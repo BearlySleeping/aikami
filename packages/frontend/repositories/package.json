@@ -13,6 +13,6 @@
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "firebase": "^12.14.0"
+    "firebase": "12.15.0"
   }
 }

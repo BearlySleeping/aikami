@@ -213,12 +213,14 @@
           <button class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
         </div>
       </div>
+      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
       <div
         class="modal-backdrop"
         onclick={() => (showUrlModal = false)}
         onkeydown={(e) => { if (e.key === 'Enter') { showUrlModal = false; } }}
         role="button"
         tabindex="0"
+        aria-label="Close"
       ></div>
     </div>
   {/if}
@@ -233,12 +235,14 @@
           <button class="btn btn-ghost" onclick={() => (showCreateModal = false)}>Close</button>
         </div>
       </div>
+      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
       <div
         class="modal-backdrop"
         onclick={() => (showCreateModal = false)}
         onkeydown={(e) => { if (e.key === 'Enter') { showCreateModal = false; } }}
         role="button"
         tabindex="0"
+        aria-label="Close"
       ></div>
     </div>
   {/if}
@@ -330,12 +334,14 @@
           <button class="btn btn-primary" onclick={() => viewModel.closeEditModal()}>Done</button>
         </div>
       </div>
+      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
       <div
         class="modal-backdrop"
         onclick={() => viewModel.closeEditModal()}
         onkeydown={(e) => { if (e.key === 'Enter') { viewModel.closeEditModal(); } }}
         role="button"
         tabindex="0"
+        aria-label="Close"
       ></div>
     </div>
   {/if}

@@ -3,9 +3,12 @@
   //
   // Sandbox route for CombatViewModel + DevTools
   // NEVER import production ViewModels or services here.
+  //
+  // C-164: Toggle between old full-screen CombatView and new CombatSidebar.
 
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
   import { getCombatDevViewModel } from '$views/combat/combat_dev_view_model.svelte';
+  import CombatSidebar from '$views/combat/combat_sidebar.svelte';
   import CombatView from '$views/combat/combat_view.svelte';
 
   const viewModel = getCombatDevViewModel({
@@ -15,6 +18,9 @@
 
   let useRealAi = $state(false);
   let useRealMusic = $state(true);
+
+  /** Toggle between old full-screen overlay and new sidebar layout. */
+  let useSidebarLayout = $state(false);
 
   // Music test controls
   const MOODS = [
@@ -79,7 +85,32 @@
   ];
 </script>
 
-<CombatView {viewModel} />
+<!-- Layout toggle — switch between old full-screen modal and new sidebar -->
+<div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg mb-2">
+  <span class="text-xs font-mono opacity-50 uppercase tracking-wider">📐 Layout (C-164)</span>
+  <!-- biome-ignore lint/a11y/noLabelWithoutControl: label wraps checkbox input with text -->
+  <label class="flex items-center gap-2 cursor-pointer">
+    <input type="checkbox" class="toggle toggle-sm toggle-accent" bind:checked={useSidebarLayout}>
+    <span class="text-sm font-mono">{useSidebarLayout ? '🧭 Sidebar' : '🖥️ Full-Screen'}</span>
+  </label>
+</div>
+
+{#if useSidebarLayout}
+  <!-- Split-screen layout: sidebar + canvas placeholder -->
+  <div class="grid h-screen w-screen overflow-hidden" style="grid-template-columns: 35vw 1fr;">
+    <CombatSidebar {viewModel} />
+    <div class="relative w-full h-full overflow-hidden bg-neutral">
+      <div class="absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <div class="rounded-lg border-2 border-dashed border-base-content/20 px-6 py-4 text-center">
+          <p class="text-sm font-mono font-bold text-base-content/30">🎮 PIXIJS CANVAS</p>
+          <p class="text-xs font-mono text-base-content/20 mt-1">65% viewport width</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{:else}
+  <CombatView {viewModel} />
+{/if}
 
 <!-- 🎵 Music Test — direct Data Connect → Storage → AudioService pipeline -->
 <div class="flex flex-col gap-2 p-3 bg-base-200 rounded-lg mb-2">

@@ -1,6 +1,12 @@
 // .pi/extensions/moon-integration.ts
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Type } from "typebox"
+import {
+  parseMoonProjects,
+  formatProjectList,
+  extractAffectedIds,
+  filterByTaskType,
+} from "./lib/output-filter"
 
 /** Fallback workspace summary — used if moon query fails. Update when projects change. */
 const FALLBACK_SUMMARY = `Workspace: aikami projects (moon)
@@ -19,15 +25,14 @@ export default function (pi: ExtensionAPI) {
   // ── Fetch workspace dynamically on session start ─────────────────────
   pi.on("session_start", async (_event, _ctx) => {
     try {
-      const result = await pi.exec("bun", ["moon", "query", "projects", "--json"])
+      const result = await pi.exec("bun", ["moon", "query", "projects"])
       if (result.code === 0 && result.stdout) {
-        const data = JSON.parse(result.stdout)
-        const projects = data.projects ?? []
-        const apps = projects.filter((p: any) => p.tags?.includes("application") ?? false)
-        const libs = projects.filter((p: any) => !p.tags?.includes("application"))
-        const appNames = apps.map((p: any) => p.id).join(", ")
-        const libNames = libs.map((p: any) => p.id).join(", ")
-        workspaceSummary = `Workspace: ${projects.length} projects (moon)\nApps:  ${appNames}\nLibs:  ${libNames}`
+        const projects = parseMoonProjects(result.stdout)
+        if (projects) {
+          workspaceSummary = formatProjectList(projects)
+            .replace(/\*\*/g, "")
+            .replace(/^/gm, "Workspace: ")
+        }
       }
     } catch {
       // Keep fallback
@@ -53,9 +58,24 @@ export default function (pi: ExtensionAPI) {
         "projects",
         "--affected",
       ], { signal, timeout: DEFAULT_TIMEOUT })
+      const raw = result.stdout || result.stderr
+      const ids = extractAffectedIds(raw)
+      if (ids.length === 0) {
+        return {
+          content: [{ type: "text", text: "No affected projects detected." }],
+          details: { code: result.code, affectedCount: 0 },
+        }
+      }
+      const apps = ids.filter((id) =>
+        ["pwa", "site", "docs", "game", "firebase", "functions", "scripts", "e2e", "client", "image", "text", "voice"].includes(id)
+      )
+      const libs = ids.filter((id) => !apps.includes(id))
+      const parts: string[] = []
+      if (apps.length > 0) parts.push(`Apps: ${apps.join(", ")}`)
+      if (libs.length > 0) parts.push(`Libs: ${libs.join(", ")}`)
       return {
-        content: [{ type: "text", text: result.stdout || result.stderr }],
-        details: { code: result.code },
+        content: [{ type: "text", text: `**Affected (${ids.length})**: ${parts.join(" | ")}` }],
+        details: { code: result.code, affectedCount: ids.length, ids },
       }
     },
   })
@@ -151,8 +171,10 @@ export default function (pi: ExtensionAPI) {
         "run",
         params.target,
       ], { signal, timeout: DEFAULT_TIMEOUT })
+      const raw = result.stdout || result.stderr || ""
+      const filtered = filterByTaskType(raw, target)
       return {
-        content: [{ type: "text", text: result.stdout || result.stderr }],
+        content: [{ type: "text", text: filtered }],
         details: { code: result.code },
       }
     },
@@ -173,8 +195,16 @@ export default function (pi: ExtensionAPI) {
         "query",
         "projects",
       ], { signal, timeout: DEFAULT_TIMEOUT })
+      const raw = result.stdout || result.stderr
+      const projects = parseMoonProjects(raw)
+      if (projects) {
+        return {
+          content: [{ type: "text", text: formatProjectList(projects) }],
+          details: { code: result.code, projectCount: projects.length },
+        }
+      }
       return {
-        content: [{ type: "text", text: result.stdout || result.stderr }],
+        content: [{ type: "text", text: raw.slice(0, 2000) }],
         details: { code: result.code },
       }
     },
@@ -213,13 +243,7 @@ export default function (pi: ExtensionAPI) {
         "projects",
         "--affected",
       ], { signal, timeout: DEFAULT_TIMEOUT })
-      let affectedProjects: string[] = []
-      try {
-        const parsed = JSON.parse(affectedResult.stdout || "{}")
-        affectedProjects = parsed.projects?.map((p: { id: string }) => p.id) || []
-      } catch {
-        affectedProjects = (affectedResult.stdout || "").split("\n").filter(Boolean)
-      }
+      const affectedProjects = extractAffectedIds(affectedResult.stdout || "")
 
       if (affectedProjects.length === 0) {
         return {
@@ -229,18 +253,22 @@ export default function (pi: ExtensionAPI) {
       }
 
       const projList = affectedProjects.join(", ")
+      const detailSections: string[] = []
+
       // 2. Run fix + typecheck via workspace-level --affected.
       // --concurrency 4 caps parallel project builds to prevent OOM crashes.
       const fixResult = await pi.exec("bun", ["moon", "run", ":fix", "--affected", "--concurrency", "4"], { signal, timeout: DEFAULT_TIMEOUT })
       if (fixResult.code !== 0) {
-        errors.push(":fix failed (see output for details)")
+        errors.push(":fix")
+        detailSections.push(`**:fix** ❌\n${filterByTaskType(fixResult.stdout || fixResult.stderr || "", "root:fix")}`)
       } else {
         ok.push(":fix")
       }
 
       const tcResult = await pi.exec("bun", ["moon", "run", ":typecheck", "--affected", "--concurrency", "4"], { signal, timeout: DEFAULT_TIMEOUT })
       if (tcResult.code !== 0) {
-        errors.push(":typecheck failed (see output for details)")
+        errors.push(":typecheck")
+        detailSections.push(`**::typecheck** ❌\n${filterByTaskType(tcResult.stdout || tcResult.stderr || "", "root:typecheck")}`)
       } else {
         ok.push(":typecheck")
       }
@@ -249,14 +277,16 @@ export default function (pi: ExtensionAPI) {
       if (params.test && errors.length === 0) {
         const buildResult = await pi.exec("bun", ["moon", "run", ":build", "--affected", "--concurrency", "4"], { signal, timeout: HEAVY_TIMEOUT })
         if (buildResult.code !== 0) {
-          errors.push(":build failed (see output for details)")
+          errors.push(":build")
+          detailSections.push(`**::build** ❌\n${filterByTaskType(buildResult.stdout || buildResult.stderr || "", "root:build")}`)
         } else {
           ok.push(":build")
         }
 
         const testResult = await pi.exec("bun", ["moon", "run", ":test", "--affected", "--concurrency", "4"], { signal, timeout: HEAVY_TIMEOUT })
         if (testResult.code !== 0) {
-          errors.push(":test failed (see output for details)")
+          errors.push(":test")
+          detailSections.push(`**::test** ❌\n${filterByTaskType(testResult.stdout || testResult.stderr || "", "root:test")}`)
         } else {
           ok.push(":test")
         }
@@ -266,7 +296,10 @@ export default function (pi: ExtensionAPI) {
       let report = `Projects: ${projList}\n\n`
       report += `✅ ${ok.length} passed\n`
       if (errors.length > 0) {
-        report += `❌ ${errors.length} failed:\n${errors.map((e) => `  - ${e}`).join("\n")}\n`
+        report += `❌ ${errors.length} failed: ${errors.join(", ")}\n`
+        if (detailSections.length > 0) {
+          report += `\n── Details ──\n${detailSections.join("\n\n")}\n`
+        }
       }
 
       return {
@@ -352,11 +385,11 @@ export default function (pi: ExtensionAPI) {
   // ── Lightweight workspace context (dynamically fetched) ────────────
   pi.on("before_agent_start", async (event, _ctx) => {
     const modeInfo = process.env.AIKAMI_MODE
-      ? `\nDirenv: AIKAMI_MODE=${process.env.AIKAMI_MODE}  project=${process.env.AIKAMI_PROJECT_ID || "?"}`
+      ? "\nDirenv: AIKAMI_MODE=" + process.env.AIKAMI_MODE + "  project=" + (process.env.AIKAMI_PROJECT_ID || "?")
       : ""
     const devServerRule = "\n🔴 NEVER call moon_run_task for :dev or :preview targets — these are long-running servers that hang forever. Use tmux_session start <service> instead. Registered tmux services: firebase, client, image, text, voice."
     return {
-      systemPrompt: `${event.systemPrompt}\n\n${workspaceSummary}${modeInfo}${devServerRule}`,
+      systemPrompt: event.systemPrompt + "\n" + workspaceSummary + modeInfo + devServerRule,
     }
   })
 }
