@@ -233,8 +233,8 @@ export class CombatDevViewModel extends CombatViewModel {
     // ── Gatekeeping: detect impossible item-based actions (C-149) ──
     const gatekeepResult = this._checkGatekeeping(trimmed);
     if (gatekeepResult) {
-      this.combatLog = [gatekeepResult.narrative, ...this.combatLog];
-      this.combatLog = [`🚫 ${gatekeepResult.invalidReason}`, ...this.combatLog];
+      this._addLogEntry(gatekeepResult.narrative);
+      this._addLogEntry(`🚫 ${gatekeepResult.invalidReason}`);
       this.isResolvingAiAction = false;
       this.debug('executeCustomAction: gatekept', {
         invalidReason: gatekeepResult.invalidReason,
@@ -266,8 +266,8 @@ export class CombatDevViewModel extends CombatViewModel {
     if (Math.random() > 0.4) {
       const quote = MOCK_ENEMY_QUOTES[Math.floor(Math.random() * MOCK_ENEMY_QUOTES.length)];
       // Simulate voice pipeline: log what would be spoken, then show quote
-      this.combatLog = [`🔊 TTS: Goblin says ${quote}`, ...this.combatLog];
-      this.combatLog = [`*Goblin ${quote}*`, ...this.combatLog];
+      this._addLogEntry(`🔊 TTS: Goblin says ${quote}`);
+      this._addLogEntry(`*Goblin ${quote}*`);
     }
 
     // ── Mock AI Director: mood-driven BGM crossfade (C-151) ──
@@ -276,20 +276,14 @@ export class CombatDevViewModel extends CombatViewModel {
     // ── Route based on classified action type ──
     switch (actionType) {
       case 'FLEE': {
-        this.combatLog = [
-          `[Dev Mock] AI interpreted as FLEE${modLabel}. Retreating…`,
-          ...this.combatLog,
-        ];
+        this._addLogEntry(`[Dev Mock] AI interpreted as FLEE${modLabel}. Retreating…`);
         this._endBattle('defeat');
         this.isResolvingAiAction = false;
         this.debug('executeCustomAction: resolved as FLEE — battle ended');
         return;
       }
       case 'DEFEND': {
-        this.combatLog = [
-          `[Dev Mock] AI interpreted as DEFEND${modLabel}. Bracing…`,
-          ...this.combatLog,
-        ];
+        this._addLogEntry(`[Dev Mock] AI interpreted as DEFEND${modLabel}. Bracing…`);
         // Enemy gets a free counter-attack (standard defend behavior)
         this.simulateEnemyTurn();
         this.isResolvingAiAction = false;
@@ -298,10 +292,7 @@ export class CombatDevViewModel extends CombatViewModel {
       }
       default: {
         this.isAttacking = true;
-        this.combatLog = [
-          `[Dev Mock] AI interpreted as ATTACK${modLabel}. Rolling…`,
-          ...this.combatLog,
-        ];
+        this._addLogEntry(`[Dev Mock] AI interpreted as ATTACK${modLabel}. Rolling…`);
 
         // Apply damage to enemy
         const damage = 10 + bonusDamage * 2;
@@ -338,7 +329,7 @@ export class CombatDevViewModel extends CombatViewModel {
         `Fantasy combat scene — fighting a ${this.enemyName}`,
         `Player HP: ${this.playerHp}/${this.playerMaxHp}`,
         `Enemy HP: ${this.enemyHp}/${this.enemyMaxHp}`,
-        this.combatLog[0] ? `Latest action: ${this.combatLog[0]}` : undefined,
+        this.combatLog[0] ? `Latest action: ${this.combatLog[0].actionText}` : undefined,
       ]
         .filter(Boolean)
         .join('. ');
@@ -594,16 +585,13 @@ export class CombatDevViewModel extends CombatViewModel {
       });
 
       // Append the DM narrative to the combat log
-      this.combatLog = [intent.narrative, ...this.combatLog];
+      this._addLogEntry(intent.narrative);
 
       // Enemy voice taunt (C-148)
       if (intent.enemyQuote && intent.enemyQuote.trim().length > 0) {
         // Log the voice pipeline: show what WOULD be spoken
-        this.combatLog = [
-          `🔊 TTS: ${this.enemyName} says "${intent.enemyQuote}"`,
-          ...this.combatLog,
-        ];
-        this.combatLog = [`*${this.enemyName} ${intent.enemyQuote}*`, ...this.combatLog];
+        this._addLogEntry(`🔊 TTS: ${this.enemyName} says "${intent.enemyQuote}"`);
+        this._addLogEntry(`*${this.enemyName} ${intent.enemyQuote}*`);
         // Fire-and-forget TTS synthesis
         void ttsService.synthesize({ text: intent.enemyQuote, voice: 'af_heart' });
       }
@@ -636,12 +624,12 @@ export class CombatDevViewModel extends CombatViewModel {
       // Apply combat mechanics based on LLM classification
       switch (intent.actionType) {
         case 'FLEE': {
-          this.combatLog = [`[AI] Interpreted as FLEE. Retreating…`, ...this.combatLog];
+          this._addLogEntry(`[AI] Interpreted as FLEE. Retreating…`);
           this._endBattle('defeat');
           break;
         }
         case 'DEFEND': {
-          this.combatLog = [`[AI] Interpreted as DEFEND. Bracing…`, ...this.combatLog];
+          this._addLogEntry(`[AI] Interpreted as DEFEND. Bracing…`);
           this.simulateEnemyTurn();
           break;
         }
@@ -650,10 +638,9 @@ export class CombatDevViewModel extends CombatViewModel {
           // Apply bonus damage from LLM
           const damage = 10 + (intent.bonusDamage ?? 0) * 2;
           const advLabel = intent.advantage ? ' [ADV]' : '';
-          this.combatLog = [
+          this._addLogEntry(
             `[AI] Interpreted as ATTACK${advLabel} (bonus +${intent.bonusDamage ?? 0} DMG). Rolling…`,
-            ...this.combatLog,
-          ];
+          );
           this.enemyHp = Math.max(0, this.enemyHp - damage);
           this._addLogEntry(
             `[AI] Deals ${damage} damage! (Enemy HP: ${this.enemyHp}/${this.enemyMaxHp})`,
@@ -670,10 +657,7 @@ export class CombatDevViewModel extends CombatViewModel {
       }
     } catch (error) {
       this.warn('_executeRealAiAction: failed, falling back to mock', error);
-      this.combatLog = [
-        `[AI Error] ${(error as Error).message}. Using mock fallback.`,
-        ...this.combatLog,
-      ];
+      this._addLogEntry(`[AI Error] ${(error as Error).message}. Using mock fallback.`);
       // Fall back to mock classification
       const actionType = this._classifyMockAction(trimmed);
       this._applyMockAction(trimmed, actionType, 0, false);
@@ -704,29 +688,20 @@ export class CombatDevViewModel extends CombatViewModel {
 
     switch (actionType) {
       case 'FLEE': {
-        this.combatLog = [
-          `[Dev Mock] AI interpreted as FLEE${modLabel}. Retreating…`,
-          ...this.combatLog,
-        ];
+        this._addLogEntry(`[Dev Mock] AI interpreted as FLEE${modLabel}. Retreating…`);
         this._endBattle('defeat');
         this.isResolvingAiAction = false;
         return;
       }
       case 'DEFEND': {
-        this.combatLog = [
-          `[Dev Mock] AI interpreted as DEFEND${modLabel}. Bracing…`,
-          ...this.combatLog,
-        ];
+        this._addLogEntry(`[Dev Mock] AI interpreted as DEFEND${modLabel}. Bracing…`);
         this.simulateEnemyTurn();
         this.isResolvingAiAction = false;
         return;
       }
       default: {
         this.isAttacking = true;
-        this.combatLog = [
-          `[Dev Mock] AI interpreted as ATTACK${modLabel}. Rolling…`,
-          ...this.combatLog,
-        ];
+        this._addLogEntry(`[Dev Mock] AI interpreted as ATTACK${modLabel}. Rolling…`);
 
         const damage = 10 + bonusDamage * 2;
         this.enemyHp = Math.max(0, this.enemyHp - damage);
@@ -755,8 +730,32 @@ export class CombatDevViewModel extends CombatViewModel {
     this._addLogEntry(`[Dev Mock] Battle ended — ${label}`);
   }
 
+  /**
+   * Accessor for the parent's private _logEntryCounter via structural cast.
+   * The dev VM extends CombatViewModel and needs to create CombatLogEntry
+   * objects matching the parent's counter state.
+   */
+  private get _counterNext(): number {
+    const parent = this as unknown as { _logEntryCounter: number };
+    return ++parent._logEntryCounter;
+  }
+
+  private get _currentTurn(): number {
+    return (this as unknown as { _turnCounter: number })._turnCounter;
+  }
+
   private _addLogEntry(text: string): void {
-    this.combatLog = [text, ...this.combatLog];
+    const actor = text.startsWith('*') ? this.enemyName : 'System';
+    this.combatLog = [
+      {
+        id: `log-${this._counterNext}`,
+        turnNumber: this._currentTurn,
+        actor,
+        actionText: text,
+        outcomeText: '',
+      },
+      ...this.combatLog,
+    ] as unknown as typeof this.combatLog;
   }
 
   /**
