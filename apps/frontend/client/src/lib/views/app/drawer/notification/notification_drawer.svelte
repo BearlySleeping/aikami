@@ -19,7 +19,11 @@
             viewModel.toggleNotificationDrawer(e.currentTarget.checked)}
   >
   <div class="drawer-side z-50">
-    <label for="notification-drawer" class="drawer-overlay"></label>
+    <label
+      for="notification-drawer"
+      class="drawer-overlay"
+      aria-label="Close notifications"
+    ></label>
     <div class="menu p-4 w-80 min-h-full bg-base-200 text-base-content">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold">{t.notifications()}</h2>

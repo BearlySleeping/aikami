@@ -19,12 +19,12 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "firebase": "^12.14.0",
+    "firebase": "12.15.0",
     "idb-keyval": "6.2.5"
   },
   "devDependencies": {
-    "@sveltejs/kit": "2.65.0",
-    "svelte": "5.56.3",
-    "vite": "^8.0.16"
+    "@sveltejs/kit": "2.68.0",
+    "svelte": "5.56.4",
+    "vite": "8.1.0"
   }
 }

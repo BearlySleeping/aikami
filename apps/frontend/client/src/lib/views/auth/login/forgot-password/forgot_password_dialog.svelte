@@ -33,6 +33,7 @@
                 }}
       >
         <div class="form-control">
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: label has for attribute matching input id -->
           <label class="label" for="forgot-email">
             <span class="label-text">{t.email()}</span>
           </label>
@@ -80,6 +81,9 @@
         </div>
       </form>
     </div>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
     <div
       class="modal-backdrop"
       onclick={() => viewModel.close()}
@@ -90,6 +94,7 @@
             }}
       role="button"
       tabindex="0"
+      aria-label="Close dialog"
     ></div>
   </BaseViewModelContainer>
 {/if}

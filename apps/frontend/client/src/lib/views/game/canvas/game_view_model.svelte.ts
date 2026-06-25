@@ -98,6 +98,17 @@ export type GameViewModelInterface = BaseViewModelInterface & {
   resumeEngine(): void;
 
   /**
+   * Forces a PixiJS resize to the canvas element's current client dimensions.
+   *
+   * Called when the CSS grid layout changes (combat split-screen transition)
+   * so the engine doesn't render stretched or blurry pixels. Also used by
+   * the window resize handler.
+   *
+   * Contract: C-164 Combat Split-Screen Layout
+   */
+  triggerResize(): void;
+
+  /**
    * Loads a new map at the given coordinates.
    * Accepts an optional list of defeated enemy spawn IDs to filter out.
    *
@@ -538,10 +549,12 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       const DEFAULT_STARTING_MAP = '/assets/maps/sandbox_zone_a.json';
       await this._gameWorld.loadMap(DEFAULT_STARTING_MAP, 160, 192);
 
-      // Register window resize handler — keep the PixiJS canvas filling the viewport
+      // Register window resize handler — keep the PixiJS canvas filling its container.
+      // Uses canvas client dimensions so it works correctly in split-screen combat
+      // mode where the canvas occupies only 65% of the viewport width.
       const handleResize = (): void => {
-        if (this._gameWorld) {
-          this._gameWorld.resize(window.innerWidth, window.innerHeight);
+        if (this._gameWorld && this.canvasElement) {
+          this._gameWorld.resize(this.canvasElement.clientWidth, this.canvasElement.clientHeight);
         }
       };
       window.addEventListener('resize', handleResize);
@@ -567,6 +580,13 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     if (this._gameWorld) {
       this._gameWorld.setInputLocked(false);
       this._gameWorld.resume();
+    }
+  }
+
+  /** @inheritdoc */
+  triggerResize(): void {
+    if (this._gameWorld && this.canvasElement) {
+      this._gameWorld.resize(this.canvasElement.clientWidth, this.canvasElement.clientHeight);
     }
   }
 

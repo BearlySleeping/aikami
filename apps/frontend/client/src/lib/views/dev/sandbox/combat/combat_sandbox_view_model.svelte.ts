@@ -61,6 +61,11 @@ export type CombatSandboxViewModelInterface = BaseViewModelInterface & {
   readonly lastLevelUpEvent: string | undefined;
   /** Initializes the game engine, binding it to the given canvas. */
   initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
+  /**
+   * Forces a PixiJS resize to the canvas element's current client dimensions.
+   * Called when combat mode splits the screen (C-164).
+   */
+  triggerResize: () => void;
   /** Dismisses the combat overlay after the encounter ends. */
   dismissCombat: () => void;
   /** Respaws the player after defeat (reloads map). */
@@ -157,6 +162,8 @@ class CombatSandboxViewModel
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
   private _textureManager: TextureManager | undefined;
+  /** Canvas element reference for resize operations (C-164). */
+  private _canvas: HTMLCanvasElement | undefined;
 
   // -----------------------------------------------------------------------
   // Public API
@@ -196,6 +203,8 @@ class CombatSandboxViewModel
         playerData: { name: 'Adventurer' },
       });
 
+      this._canvas = canvas;
+
       this._registerBridgeListeners();
 
       // Load the combat sandbox map
@@ -231,9 +240,22 @@ class CombatSandboxViewModel
     }
 
     this._bridge = undefined;
+    this._canvas = undefined;
     this.engineReady = false;
     this.mapLoaded = false;
     this.combatViewModel = undefined;
+  }
+
+  /**
+   * Forces a PixiJS resize to the canvas element's current client dimensions.
+   *
+   * Called when combat mode triggers the CSS grid split-screen transition
+   * so the engine doesn't render stretched or blurry pixels (C-164).
+   */
+  triggerResize(): void {
+    if (this._gameWorld && this._canvas) {
+      this._gameWorld.resize(this._canvas.clientWidth, this._canvas.clientHeight);
+    }
   }
 
   // -----------------------------------------------------------------------

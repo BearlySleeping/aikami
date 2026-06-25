@@ -16,6 +16,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent"
 import { Type } from "typebox"
 
+import { smartTruncate } from "./lib/output-filter"
+
 const APP_CONFIG: Record<string, { serviceType: string }> = {
   pwa: { serviceType: "cloud-run" },
   functions: { serviceType: "firebase-functions" },
@@ -141,8 +143,9 @@ export default function (pi: ExtensionAPI) {
         if (params.since) args.push("--since", params.since)
 
         const result = await pi.exec("env", args, { signal, timeout: DEFAULT_TIMEOUT })
+        const raw = result.stdout || result.stderr || ""
         return {
-          content: [{ type: "text", text: result.stdout || result.stderr }],
+          content: [{ type: "text", text: smartTruncate(raw, 100) }],
           details: { code: result.code, source: "firebase-functions", tail },
         }
       }
@@ -159,8 +162,9 @@ export default function (pi: ExtensionAPI) {
         if (params.since) args.push("--since", params.since)
 
         const result = await pi.exec("env", args, { signal, timeout: DEFAULT_TIMEOUT })
+        const raw = result.stdout || result.stderr || ""
         return {
-          content: [{ type: "text", text: result.stdout || result.stderr }],
+          content: [{ type: "text", text: smartTruncate(raw, 100) }],
           details: { code: result.code, source: serviceType, tail },
         }
       }
