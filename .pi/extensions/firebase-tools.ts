@@ -5,6 +5,8 @@ import { Type } from "typebox"
 // Direnv env vars (set by .envrc / scripts/direnv/) — always available:
 //   AIKAMI_MODE          — emulator | staging | production
 //   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
+import { smartTruncate } from "./lib/output-filter"
+
 const MODES = ["staging", "production"] as const
 type Mode = (typeof MODES)[number]
 
@@ -115,8 +117,10 @@ export default function (pi: ExtensionAPI) {
       const args = ["bun", "moon", "run", "functions:deploy", "--", mode]
       if (params.only) args.push("--only", params.only)
       const result = await pi.exec("env", args, { signal, timeout: HEAVY_TIMEOUT })
+      const raw = result.stdout || result.stderr || ""
+      const filtered = raw.length > 8000 ? smartTruncate(raw, 80) : raw
       return {
-        content: [{ type: "text", text: result.stdout || result.stderr }],
+        content: [{ type: "text", text: filtered }],
         details: { code: result.code, mode, only: params.only },
       }
     },
@@ -205,9 +209,27 @@ export default function (pi: ExtensionAPI) {
         "-tlnp",
         "( sport = :4000 or sport = :4400 or sport = :5001 or sport = :8080 or sport = :9099 or sport = :8085 or sport = :9199 or sport = :9150 or sport = :4500 or sport = :9299 or sport = :9499 )",
       ], { signal, timeout: QUICK_TIMEOUT })
+      const raw = result.stdout || result.stderr || ""
+      // Parse ss output into compact summary
+      const EMULATOR_PORTS: Record<string, string> = {
+        "4000": "Firestore", "4400": "Emulator UI", "5001": "Hosting",
+        "8080": "Pub/Sub", "9099": "Auth", "8085": "Cloud Tasks",
+        "9199": "Storage", "9150": "Dataconnect", "4500": "Data Connect",
+        "9299": "Eventarc", "9499": "Extensions",
+      }
+      const lines = raw.split("\n").filter(Boolean)
+      const active: string[] = []
+      for (const port of Object.keys(EMULATOR_PORTS)) {
+        if (lines.some((l) => l.includes(`:${port}`))) {
+          active.push(`${EMULATOR_PORTS[port]} (:${port})`)
+        }
+      }
+      const text = active.length > 0
+        ? `✅ **Emulator ports active**: ${active.join(", ")}`
+        : "⏸️  No emulator ports detected"
       return {
-        content: [{ type: "text", text: result.stdout || result.stderr }],
-        details: { code: result.code },
+        content: [{ type: "text", text }],
+        details: { code: result.code, activePorts: active },
       }
     },
   })

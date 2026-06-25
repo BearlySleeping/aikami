@@ -14,6 +14,7 @@
         for="left-drawer"
         class="btn btn-ghost btn-circle lg:hidden"
         data-testid="drawer-toggle"
+        aria-label="Open navigation menu"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -21,6 +22,7 @@
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
+          aria-hidden="true"
         >
           <path
             stroke-linecap="round"
@@ -48,7 +50,7 @@
     {#if viewModel.isLoggedIn}
       <!-- User menu dropdown -->
       <div class="dropdown dropdown-end">
-        <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+        <button class="btn btn-ghost btn-circle avatar">
           <div class="w-10 rounded-full bg-base-300 flex items-center justify-center">
             {#if viewModel.currentUser?.photoURL}
               <img
@@ -73,7 +75,7 @@
               </svg>
             {/if}
           </div>
-        </div>
+        </button>
         <ul class="menu dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow">
           {#each viewModel.profileMenuOptions as option (option.text)}
             <li>
