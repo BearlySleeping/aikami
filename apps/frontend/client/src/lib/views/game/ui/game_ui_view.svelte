@@ -1,5 +1,4 @@
 <script lang="ts">
-  import CombatView from '../../combat/combat_view.svelte';
   import InventoryView from '../../inventory/inventory_view.svelte';
   import QuestView from '../../quest/quest_view.svelte';
   import VendorView from '../../vendor/vendor_view.svelte';
@@ -18,6 +17,7 @@
   const { viewModel }: Props = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/noStaticElementInteractions: svelte:window is a valid global key handler -->
 <svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
 
 {#if viewModel.activeOverlay === 'PAUSE_MENU'}
@@ -85,22 +85,6 @@
       class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
     >
       <p class="text-lg font-bold text-error">Quest Log loading...</p>
-    </div>
-  {/if}
-{/if}
-
-{#if viewModel.activeOverlay === 'COMBAT'}
-  {#if viewModel.combatViewModel}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-    >
-      <CombatView viewModel={viewModel.combatViewModel} />
-    </div>
-  {:else}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
-    >
-      <p class="text-lg font-bold text-error">Combat loading...</p>
     </div>
   {/if}
 {/if}

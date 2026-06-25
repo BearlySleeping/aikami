@@ -149,10 +149,11 @@
   };
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions a11y_interactive_supports_focus -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm"
   role="dialog"
+  tabindex="-1"
   aria-label="Trading with {viewModel.vendorName}"
   onkeydown={handleKeyDown}
 >

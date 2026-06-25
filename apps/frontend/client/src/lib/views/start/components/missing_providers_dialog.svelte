@@ -10,6 +10,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- biome-ignore lint/a11y/useSemanticElements: modal overlay contains nested buttons -->
 <div
   class="modal modal-open"
   role="button"
@@ -24,9 +25,9 @@
   <div
     class="modal-box max-w-md"
     role="dialog"
+    tabindex="-1"
     aria-modal="true"
     aria-label="AI Text Provider Required"
-    tabindex="0"
     onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => e.stopPropagation()}
   >

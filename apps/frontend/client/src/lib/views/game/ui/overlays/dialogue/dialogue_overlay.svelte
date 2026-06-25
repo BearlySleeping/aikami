@@ -77,6 +77,7 @@
         {#if viewModel.skillCheckState.phase === 'awaiting_click'}
           <!-- Interactive: player must click to roll (C-162) -->
           <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- biome-ignore lint/a11y/useSemanticElements: interactive dice with custom styling -->
           <div
             class="d20-die d20-interactive cursor-pointer"
             role="button"

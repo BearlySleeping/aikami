@@ -36,16 +36,16 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@genkit-ai/googleai": "1.28.0",
-    "@snorreks/firestack": "0.0.72",
-    "axios": "1.17.0",
-    "firebase-admin": "14.0.0",
+    "@snorreks/firestack": "0.0.73",
+    "axios": "1.18.1",
+    "firebase-admin": "14.1.0",
     "firebase-functions": "7.2.5",
-    "genkit": "1.37.0",
-    "pg": "^8.16.3"
+    "genkit": "1.38.0",
+    "pg": "8.22.0"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",
-    "@types/pg": "^8.11.10",
-    "firebase-tools": "15.20.0"
+    "@types/pg": "8.20.0",
+    "firebase-tools": "15.22.2"
   }
 }

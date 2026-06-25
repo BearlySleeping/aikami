@@ -66,8 +66,8 @@
       <div class="grid gap-3">
         {#each viewModel.characters as char (char.persona.id)}
           {@const p = char.persona}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <!-- biome-ignore lint/a11y/useSemanticElements: card contains nested Delete button -->
           <div
             class="card bg-base-100 shadow hover:shadow-md transition-shadow cursor-pointer"
             onclick={() => viewModel.selectCharacter({ id: p.id })}

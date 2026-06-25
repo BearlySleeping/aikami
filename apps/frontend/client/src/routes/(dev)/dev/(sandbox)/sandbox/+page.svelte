@@ -304,6 +304,12 @@
         window.location.href = '/dev/sandbox/vendor';
       },
     },
+    {
+      label: 'Combat Encounter (C-144)',
+      onClick: () => {
+        window.location.href = '/dev/sandbox/combat';
+      },
+    },
   ] satisfies DevAction[];
 </script>
 

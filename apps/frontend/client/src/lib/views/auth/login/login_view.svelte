@@ -88,7 +88,10 @@
                 }}
       >
         <div class="form-control">
-          <label class="label" for="email"> <span class="label-text">{t.email()}</span> </label>
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: label has for attribute matching input id -->
+          <label class="label" for="email">
+            <span class="label-text">{t.email()}</span>
+          </label>
           <input
             id="email"
             type="email"
@@ -112,6 +115,7 @@
         </div>
 
         <div class="form-control">
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: label has for attribute matching input id -->
           <label class="label" for="password">
             <span class="label-text">{t.password()}</span>
           </label>

@@ -74,6 +74,7 @@
 <!-- Credits Modal -->
 {#if viewModel.showCredits}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- biome-ignore lint/a11y/useSemanticElements: modal overlay needs full-layer click handling -->
   <div
     class="modal modal-open"
     role="button"

@@ -1989,3 +1989,50 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - `sfx_hit.wav` is emitted via the existing engine bridge — the Svelte layer must listen separately for audio playback. Currently `sfx_hit.wav` is NOT played from combat log events; only `sfx_pickup.wav` is played from inventory changes. Combat audio requires future wiring.
 - One pre-existing engine test failure: `ExpressionSystem — Appearance mutation > emits APPEARANCE_CHANGED event on expression update` — expects 5 layers but the component now has 6 (C-161 added layer5). Not caused by C-163.
 - No unit tests were added for the new floating text component or equipment-appearance sync — covered by integration testing.
+
+### C-164: Combat Split-Screen Layout
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte` — Left-pane combat sidebar (212 lines): compact HP bars, Log|Gallery tabs, scrollable combat log (flex-grow), fixed action bar anchored to bottom with Attack/Defend/Flee buttons + freeform custom action input
+- `apps/frontend/client/src/routes/(dev)/dev/layout/combat-split/+page.svelte` — Isolated split-screen test route: mock CombatDevViewModel with 8 pre-loaded log entries, CSS Grid 35/65 layout, test controls panel (add log entries, fill 40 for scroll test, toggle victory/defeat, change HP), canvas placeholder on right
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/game/canvas/game_view.svelte` — Added CSS Grid toggle: outer container switches to `grid-template-columns: 35vw 1fr` when `gameStateService.currentMode === 'COMBAT'`; renders `CombatSidebar` in left column, canvas+UI layer in right column; `$effect` watches mode changes to trigger PixiJS resize via `requestAnimationFrame`
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Added `triggerResize()` public method to `GameViewModelInterface` + implementation; window resize handler now uses `canvasElement.clientWidth/Height` instead of `window.innerWidth/Height` so PixiJS correctly fills 65% width in split-screen mode
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` — Removed COMBAT overlay block (full-screen modal); comment updated to note combat now renders as sidebar
+- `apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte` — Replaced full-screen modal combat overlay with split-screen layout: CSS Grid `35vw 1fr`, `CombatSidebar` on left, game canvas on right; `$effect` triggers `triggerResize()` on combat mode change
+- `apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view_model.svelte.ts` — Added `triggerResize()` to interface + implementation; added `_canvas` private field for resize operations
+- `apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte` — Added layout toggle (Sidebar vs Full-Screen) with mock split-screen container; imports `CombatSidebar`
+- `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/+page.svelte` — Added "Combat Encounter (C-144)" dev action navigating to `/dev/sandbox/combat`
+- `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.svelte.ts` — Added `/dev/layout/combat-split` to `NAV_ITEMS` (now 16 items)
+- `apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts` — Updated navItems count: 15→16; added assertion for `/dev/layout/combat-split` route
+- `apps/frontend/client/src/lib/views/app/app_view.svelte` — Whitespace-only lint fix (pre-existing)
+
+**Test routes**:
+| Route | What it tests |
+|-------|--------------|
+| `/dev/layout/combat-split` | Isolated CSS grid layout, scroll behavior, fixed action bar, victory/defeat banners, HP bar reactivity — NO game engine |
+| `/dev/combat` | Toggle between old `CombatView` (full-screen) and new `CombatSidebar` in mock split-screen — compare side-by-side |
+| `/dev/sandbox/combat` | Full integration: PixiJS engine + tilemap + enemy spawn → combat triggers split-screen sidebar (previously full-screen modal) |
+
+**Deviations**:
+1. **CombatViewModel lifecycle unchanged**: The `GameUIViewModel` still creates/disposes the `CombatViewModel` on `COMBAT_STARTED`/`COMBAT_ENDED` events. Only the rendering location changed — from full-screen modal to sidebar grid column.
+2. **Gallery tab added**: The contract mentions "Log | Gallery" tabs as a header. The Gallery tab shows cinematic background image + manual image generation button, repurposing the existing `generateSceneImage()` functionality from the old overlay.
+3. **`triggerResize` called on every mode change**: The `$effect` in `game_view.svelte` fires on any `gameStateService.currentMode` change — not just COMBAT entries. This is safe: a no-op resize is free, and it ensures the canvas resizes correctly after any mode transition.
+4. **Existing `combat_view.svelte` preserved**: The old full-screen combat view is not deleted — it may still be used by the dev sandbox or other routes. Future cleanup can remove it once all consumers migrate to the sidebar.
+5. **Combat result banner duplicated in sidebar**: The victory/defeat screen from `combat_view.svelte` is replicated in `combat_sidebar.svelte` instead of being extracted to a shared component, since the layout context differs (sidebar vs full-screen modal).
+
+**Design decisions**:
+1. **Sidebar receives CombatViewModel from gameUIViewModel**: `game_view.svelte` already receives `gameUIViewModel` as a prop — accessing `gameUIViewModel.combatViewModel` avoids threading another prop through the component tree.
+2. **Canvas resize triggered via requestAnimationFrame**: The CSS grid layout change is not synchronous — `requestAnimationFrame` ensures the browser has laid out the new grid before PixiJS reads the canvas dimensions.
+3. **`window.innerWidth/Height` replaced with `canvasElement.clientWidth/Height`**: Both the `triggerResize()` method and the existing window resize handler now use canvas client dimensions. This makes the resize handler correct in all layouts — full-screen explore mode and split-screen combat mode.
+4. **Sandbox view mirrors production gating**: The `combat_sandbox_view.svelte` uses `{#if viewModel.combatViewModel}` to switch between full-canvas and split-screen, matching the production `game_view.svelte` pattern with `gameStateService.currentMode`.
+5. **Dev index route added to sandbox**: Combat Encounter link in sandbox DevToolsPanel so testers can navigate directly.
+
+**Known limitations**:
+- The `combat_view.svelte` file still exists and is no longer imported by `game_ui_view.svelte`. It may still be used by dev sandboxes — cleanup is future work.
+- The CombatViewModel is still created inside `GameUIViewModel`'s `_listenForDialogueEvents` — this couples the sidebar rendering to the overlay router. Moving CombatViewModel ownership to a dedicated service is future work.
+- No E2E test added for the split-screen transition — existing E2E tests (combat_immersion.spec.ts, combat_sandbox.spec.ts) target the old full-screen modal layout and may need updating.
+- Sandbox resize uses `viewModel.combatViewModel` as a signal — fires on any combat state change, not just start/end. The `requestAnimationFrame` guard ensures a single resize per frame.
