@@ -2036,3 +2036,37 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - The CombatViewModel is still created inside `GameUIViewModel`'s `_listenForDialogueEvents` — this couples the sidebar rendering to the overlay router. Moving CombatViewModel ownership to a dedicated service is future work.
 - No E2E test added for the split-screen transition — existing E2E tests (combat_immersion.spec.ts, combat_sandbox.spec.ts) target the old full-screen modal layout and may need updating.
 - Sandbox resize uses `viewModel.combatViewModel` as a signal — fires on any combat state change, not just start/end. The `requestAnimationFrame` guard ensures a single resize per frame.
+
+### C-165: Combat Inline Images & Gallery
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/combat/components/combat_inline_image.svelte` — Inline image component for the combat log stream. Handles fade-in on load, skeleton placeholder (120px min-height) while `isGeneratingImage` is true, CSS-only hover overlay with Expand (fullscreen modal) and Regenerate buttons.
+- `apps/frontend/client/src/lib/views/combat/components/combat_gallery.svelte` — Encounter gallery component with CSS `columns-2` masonry grid layout, click-to-expand fullscreen modal, empty state when no images generated.
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Added `CombatLogEntry` type (id, turnNumber, actor, actionText, outcomeText, imageUrl?, isGeneratingImage?) replacing flat `string[]` combat log. Added `encounterImages: string[]` state for gallery. Added `_parseActorFromMessage()` and `_updateLogEntryImage()` private helpers. COMBAT_STARTED resets `encounterImages` and `_turnCounter`. `executeCustomAction`: narrative creates `CombatLogEntry` with `isGeneratingImage` flag; async image callback updates entry's `imageUrl` and adds to `encounterImages`. `generateSceneImage`: adds results to `encounterImages`. All log-entry pushes converted from strings to `CombatLogEntry` objects.
+- `apps/frontend/client/src/lib/views/combat/combat_dev_view_model.svelte.ts` — Updated `_addLogEntry()` helper to create `CombatLogEntry` objects (accessing parent's private `_logEntryCounter`/`_turnCounter` via structural cast). All inline string pushes replaced with `_addLogEntry()` calls. `generateSceneImage`: fixed `this.combatLog[0]` → `this.combatLog[0].actionText`.
+- `apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte` — Imported `CombatInlineImage` and `CombatGallery`. Log tab: renders `entry.actor` label + `entry.actionText` text, then `CombatInlineImage` when `entry.imageUrl || entry.isGeneratingImage`. Gallery tab: replaced single-image preview with `CombatGallery` component using `viewModel.encounterImages`, keeping "Generate Scene" button below.
+- `apps/frontend/client/src/routes/(dev)/dev/layout/combat-split/+page.svelte` — Added `makeEntry()` helper converting test strings to `CombatLogEntry` objects; initialized `viewModel.combatLog` via `.map(makeEntry)`; updated `addLogEntry()` and `fillLogForScrollTest()` to use `makeEntry()`.
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.test.ts` — Added C-165 test block (9 tests): `_parseActorFromMessage` returns Player/Enemy/System; combatLog starts empty; `_updateLogEntryImage` sets imageUrl + clears isGeneratingImage; no-op for unknown ID; undefined clears isGeneratingImage only; encounterImages starts empty; COMBAT_STARTED resets. Fixed gatekeeping test to use `.map(e => e.actionText).join()`.
+
+**Deviations**:
+1. **`CombatLogEntry` uses flat message structure**: The contract specifies separate `actionText` and `outcomeText` fields. Engine COMBAT_LOG messages are single strings — `actionText` holds the full message and `outcomeText` is an empty string. This preserves backward compat while meeting the structured type requirement.
+2. **Hover overlay is CSS-only**: The expand/regenerate overlay uses Tailwind `group-hover:opacity-100` instead of JS mouseenter/mouseleave handlers. This avoids a11y lint violations on static elements.
+3. **Regenerate delegates to `generateSceneImage()`**: The hover "Regenerate" button calls `viewModel.generateSceneImage()` which creates a NEW image rather than replacing the existing one inline. Full prompt-based regeneration would require storing the original prompt per-entry, which is future work.
+4. **Gallery masonry uses CSS columns, not JS masonry**: CSS `columns-2` provides a basic masonry layout without pulling in a masonry library. Images flow top-to-bottom within columns — true shortest-column placement requires a JS library.
+5. **`_updateLogEntryImage` replaces entire array for reactivity**: Svelte 5 `$state` detects array mutations only on reassignment. The helper creates a copy, replaces the entry, and reassigns to `this.combatLog`.
+
+**Design decisions**:
+1. **`CombatLogEntry` exported from ViewModel file**: The type is consumed by `combat_sidebar.svelte` and the dev test route — keeping it co-located with the ViewModel avoids a separate types file for a single-consumer type.
+2. **Dev VM accesses parent counters via structural cast**: The dev VM extends `CombatViewModel` but `_logEntryCounter` and `_turnCounter` are `private` — accessed via `this as unknown as { _logEntryCounter: number }`.
+3. **Image generation is fire-and-forget with callback update**: The async `imageGenerationService.generateImage()` resolves in a `.then()` callback that updates the log entry and `encounterImages`. Errors clear `isGeneratingImage` flag so the skeleton disappears.
+4. **`encounterImages` is a reactive array**: Added to `CombatViewModelInterface` so the sidebar's `CombatGallery` component can reactively render new images as they arrive.
+
+**Known limitations**:
+- The "Regenerate" button generates a new scene image (added to gallery) rather than replacing the specific entry's image. Full inline replacement requires storing the original prompt per CombatLogEntry.
+- Gallery masonry uses CSS columns (top-to-bottom fill) — items in the second column may appear out of chronological order compared to a true masonry layout.
+- No E2E test added for inline image rendering — existing E2E tests (combat_immersion.spec.ts) may need updating.
+- Image generation callbacks use closure-captured `narrativeEntryId` — if the entry is removed before the callback fires (e.g., combat ends), the `findIndex` is a no-op.

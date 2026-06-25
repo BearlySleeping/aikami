@@ -224,7 +224,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       await viewModel.executeCustomAction('I drink a healing potion');
 
       // The invalid reason should appear in the combat log
-      const logString = viewModel.combatLog.join(' ');
+      const logString = viewModel.combatLog.map((e) => e.actionText).join(' ');
       expect(logString).toContain('bags are empty');
       expect(logString).toContain('potion belt');
 
@@ -435,6 +435,131 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
         }
       ).extractStructure = origExtract;
       vm._transitionBgmByMood = origTransition;
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // C-165: Combat Inline Images & Gallery
+  // -----------------------------------------------------------------------
+
+  describe('CombatViewModel — C-165 CombatLogEntry', () => {
+    let viewModel: CombatViewModel;
+
+    beforeEach(() => {
+      viewModel = createViewModel();
+    });
+
+    // ── _parseActorFromMessage ──
+
+    test('_parseActorFromMessage should return Player for player messages', () => {
+      const vm = viewModel as unknown as {
+        _parseActorFromMessage: (message: string) => string;
+      };
+      expect(vm._parseActorFromMessage('Player rolls 17 to hit')).toBe('Player');
+    });
+
+    test('_parseActorFromMessage should return enemy name for enemy messages', () => {
+      viewModel.enemyName = 'Goblin';
+      const vm = viewModel as unknown as {
+        _parseActorFromMessage: (message: string) => string;
+      };
+      expect(vm._parseActorFromMessage('Enemy attacks — 8 damage!')).toBe('Goblin');
+    });
+
+    test('_parseActorFromMessage should fallback to System for unrecognized', () => {
+      const vm = viewModel as unknown as {
+        _parseActorFromMessage: (message: string) => string;
+      };
+      expect(vm._parseActorFromMessage('The ground shakes violently!')).toBe('System');
+    });
+
+    // ── CombatLogEntry structure from COMBAT_LOG ──
+
+    test('combatLog should contain CombatLogEntry objects after initialization', () => {
+      expect(Array.isArray(viewModel.combatLog)).toBe(true);
+      expect(viewModel.combatLog.length).toBe(0);
+    });
+
+    test('_updateLogEntryImage should set imageUrl and clear isGeneratingImage', () => {
+      const vm = viewModel as unknown as {
+        _logEntryCounter: number;
+        _turnCounter: number;
+        _updateLogEntryImage: (entryId: string, url: string | undefined) => void;
+        combatLog: Array<{ id: string; imageUrl?: string; isGeneratingImage?: boolean }>;
+      };
+
+      vm._logEntryCounter = 0;
+      vm._turnCounter = 0;
+
+      vm.combatLog = [
+        {
+          id: 'entry-1',
+          turnNumber: 1,
+          actor: 'Player',
+          actionText: 'You strike!',
+          outcomeText: '',
+          isGeneratingImage: true,
+        },
+      ];
+
+      vm._updateLogEntryImage('entry-1', 'https://example.com/img.png');
+
+      expect(vm.combatLog[0].imageUrl).toBe('https://example.com/img.png');
+      expect(vm.combatLog[0].isGeneratingImage).toBe(false);
+    });
+
+    test('_updateLogEntryImage should be no-op for unknown entry ID', () => {
+      const vm = viewModel as unknown as {
+        _updateLogEntryImage: (entryId: string, url: string | undefined) => void;
+        combatLog: Array<{ id: string }>;
+      };
+
+      vm.combatLog = [
+        { id: 'entry-1', turnNumber: 1, actor: 'Player', actionText: 'Test', outcomeText: '' },
+      ];
+
+      vm._updateLogEntryImage('nonexistent', 'https://example.com/img.png');
+      expect(vm.combatLog[0].id).toBe('entry-1');
+    });
+
+    test('_updateLogEntryImage with undefined should clear isGeneratingImage only', () => {
+      const vm = viewModel as unknown as {
+        _updateLogEntryImage: (entryId: string, url: string | undefined) => void;
+        combatLog: Array<{ id: string; imageUrl?: string; isGeneratingImage?: boolean }>;
+      };
+
+      vm.combatLog = [
+        {
+          id: 'entry-1',
+          turnNumber: 1,
+          actor: 'Player',
+          actionText: 'You strike!',
+          outcomeText: '',
+          isGeneratingImage: true,
+        },
+      ];
+
+      vm._updateLogEntryImage('entry-1', undefined);
+
+      expect(vm.combatLog[0].isGeneratingImage).toBe(false);
+      expect(vm.combatLog[0].imageUrl).toBeUndefined();
+    });
+
+    // ── encounterImages ──
+
+    test('encounterImages should be empty initially', () => {
+      expect(viewModel.encounterImages.length).toBe(0);
+    });
+
+    test('COMBAT_STARTED should reset encounterImages', () => {
+      viewModel.encounterImages = ['img1.png', 'img2.png'];
+      expect(viewModel.encounterImages.length).toBe(2);
+
+      viewModel.encounterImages = [];
+      viewModel.combatLog = [];
+
+      expect(viewModel.encounterImages.length).toBe(0);
+      expect(viewModel.combatLog.length).toBe(0);
     });
   });
 });

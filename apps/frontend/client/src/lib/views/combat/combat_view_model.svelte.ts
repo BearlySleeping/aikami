@@ -26,6 +26,34 @@ import {
 // to reactively update HP bars, battle log, and overlay state.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// CombatLogEntry — structured combat log entry (C-165)
+// ---------------------------------------------------------------------------
+
+/**
+ * A single entry in the combat log, replacing the old flat string format.
+ * Each entry tracks its turn, actor, narrative text, and optionally an
+ * AI-generated inline image.
+ *
+ * Contract: C-165 Combat Inline Images & Gallery
+ */
+export type CombatLogEntry = {
+  /** Unique ID for Svelte {#each} keying. */
+  readonly id: string;
+  /** Turn number this entry belongs to (monotonically increasing). */
+  readonly turnNumber: number;
+  /** Who performed the action — 'Player' or the enemy name. */
+  readonly actor: string;
+  /** Description of the action taken. */
+  readonly actionText: string;
+  /** Outcome or result of the action, if distinct from actionText. */
+  readonly outcomeText: string;
+  /** AI-generated image URL for this combat turn, if available. */
+  readonly imageUrl?: string;
+  /** Whether an image is currently being generated for this entry. */
+  readonly isGeneratingImage?: boolean;
+};
+
 export type CombatViewModelOptions = BaseViewModelOptions & {
   /**
    * Optional callback invoked when the user dismisses the battle result.
@@ -90,8 +118,22 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Whether it's currently the player's turn in combat. */
   readonly isPlayerTurn: boolean;
 
-  /** Ordered combat log entries — most recent first. */
-  readonly combatLog: readonly string[];
+  /**
+   * Ordered combat log entries — most recent first.
+   * Each entry carries structured actor/action/outcome data and
+   * an optional inline AI-generated image.
+   *
+   * Contract: C-165 Combat Inline Images & Gallery
+   */
+  readonly combatLog: readonly CombatLogEntry[];
+
+  /**
+   * All AI-generated image URLs produced during this combat encounter.
+   * Used by the Gallery tab's masonry grid. Reset on COMBAT_STARTED.
+   *
+   * Contract: C-165 Combat Inline Images & Gallery
+   */
+  readonly encounterImages: readonly string[];
 
   /**
    * Battle outcome.
@@ -264,9 +306,28 @@ export class CombatViewModel
    */
   combatBackgroundImageUrl: string | null = $state(null);
 
-  combatLog: string[] = $state([]);
+  /**
+   * Structured combat log entries — most recent first.
+   * Replaces the old flat string[] format (C-165).
+   */
+  combatLog: CombatLogEntry[] = $state([]);
+
+  /**
+   * All AI-generated image URLs for this encounter.
+   * Populated as async image generation completes.
+   * Reset on COMBAT_STARTED.
+   *
+   * Contract: C-165 Combat Inline Images & Gallery
+   */
+  encounterImages: string[] = $state([]);
 
   combatResult: 'victory' | 'defeat' | null = $state(null);
+
+  /** Monotonically increasing counter for CombatLogEntry IDs. */
+  private _logEntryCounter = 0;
+
+  /** Monotonically increasing counter for combat turn numbers. */
+  private _turnCounter = 0;
 
   /** Derived count of alive entities. */
   get aliveCount(): number {
@@ -353,6 +414,8 @@ export class CombatViewModel
       this.isPlayerTurn = true;
       this.combatResult = null;
       this.combatLog = [];
+      this.encounterImages = [];
+      this._turnCounter = 0;
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
@@ -374,7 +437,18 @@ export class CombatViewModel
         targetRemainingHp: event.targetRemainingHp,
         messageLength: event.message.length,
       });
-      this.combatLog = [event.message, ...this.combatLog];
+
+      // Create a structured log entry from the engine's raw message (C-165)
+      const actor = this._parseActorFromMessage(event.message);
+      this._turnCounter++;
+      const entry: CombatLogEntry = {
+        id: `log-${++this._logEntryCounter}`,
+        turnNumber: this._turnCounter,
+        actor,
+        actionText: event.message,
+        outcomeText: '',
+      };
+      this.combatLog = [entry, ...this.combatLog];
       this.isAttacking = false;
 
       // Extract dice roll value for animated d20 component (C-148)
@@ -447,7 +521,10 @@ export class CombatViewModel
     this.activeDiceRoll = null;
     this.combatBackgroundImageUrl = null;
     this.combatLog = [];
+    this.encounterImages = [];
     this.combatResult = null;
+    this._logEntryCounter = 0;
+    this._turnCounter = 0;
 
     await super.dispose();
   }
@@ -517,8 +594,17 @@ export class CombatViewModel
         narrativePreview: intent.narrative.slice(0, 80),
       });
 
-      // Append the DM narrative to the combat log (always — even for invalid actions)
-      this.combatLog = [intent.narrative, ...this.combatLog];
+      // Create a structured log entry for the DM narrative (C-165)
+      const narrativeEntryId = `log-${++this._logEntryCounter}`;
+      const narrativeEntry: CombatLogEntry = {
+        id: narrativeEntryId,
+        turnNumber: ++this._turnCounter,
+        actor: 'Player',
+        actionText: intent.narrative,
+        outcomeText: '',
+        isGeneratingImage: intent.generateImage === true,
+      };
+      this.combatLog = [narrativeEntry, ...this.combatLog];
 
       // ── Gatekeeping: reject impossible actions (C-149) ──
       if (intent.actionValid === false) {
@@ -527,7 +613,14 @@ export class CombatViewModel
         });
         // Append the invalid reason as an additional log entry for clarity
         if (intent.invalidReason) {
-          this.combatLog = [`🚫 ${intent.invalidReason}`, ...this.combatLog];
+          const invalidEntry: CombatLogEntry = {
+            id: `log-${++this._logEntryCounter}`,
+            turnNumber: narrativeEntry.turnNumber,
+            actor: 'DM',
+            actionText: `🚫 ${intent.invalidReason}`,
+            outcomeText: '',
+          };
+          this.combatLog = [invalidEntry, ...this.combatLog];
           // Synthesize the gatekeeping response via TTS for immersion
           void ttsService.synthesize({
             text: intent.invalidReason,
@@ -545,12 +638,23 @@ export class CombatViewModel
           ttsStatus: 'would-speak',
         });
         // Log the voice pipeline: show what WOULD be spoken
-        this.combatLog = [
-          `🔊 TTS: ${this.enemyName} says "${intent.enemyQuote}"`,
-          ...this.combatLog,
-        ];
+        const ttsEntry: CombatLogEntry = {
+          id: `log-${++this._logEntryCounter}`,
+          turnNumber: narrativeEntry.turnNumber,
+          actor: 'System',
+          actionText: `🔊 TTS: ${this.enemyName} says "${intent.enemyQuote}"`,
+          outcomeText: '',
+        };
+        this.combatLog = [ttsEntry, ...this.combatLog];
         // Append the quote to the battle log (italicized enemy dialogue)
-        this.combatLog = [`*${this.enemyName} ${intent.enemyQuote}*`, ...this.combatLog];
+        const quoteEntry: CombatLogEntry = {
+          id: `log-${++this._logEntryCounter}`,
+          turnNumber: narrativeEntry.turnNumber,
+          actor: this.enemyName,
+          actionText: `*${this.enemyName} ${intent.enemyQuote}*`,
+          outcomeText: '',
+        };
+        this.combatLog = [quoteEntry, ...this.combatLog];
         // Synthesize via native Kokoro WebGPU TTS — fire-and-forget
         void ttsService.synthesize({
           text: intent.enemyQuote,
@@ -558,7 +662,7 @@ export class CombatViewModel
         });
       }
 
-      // Fire image generation — await the result for background display (C-148)
+      // Fire image generation — wire result into log entry + gallery (C-148, C-165)
       if (intent.generateImage) {
         this.debug('executeCustomAction: generating scene image', {
           prompt: intent.narrative.slice(0, 60),
@@ -573,9 +677,15 @@ export class CombatViewModel
               isDemo: result.isDemo,
             });
             this.combatBackgroundImageUrl = result.url;
+            // Update the narrative entry's inline image (C-165)
+            this._updateLogEntryImage(narrativeEntryId, result.url);
+            // Add to encounter gallery (C-165)
+            this.encounterImages = [...this.encounterImages, result.url];
           })
           .catch((error) => {
             this.warn('executeCustomAction: image generation failed', error);
+            // Clear the isGeneratingImage flag on failure (C-165)
+            this._updateLogEntryImage(narrativeEntryId, undefined);
           });
       }
 
@@ -607,10 +717,14 @@ export class CombatViewModel
         error: (error as Error).message,
         promptPreview: trimmed.slice(0, 60),
       });
-      this.combatLog = [
-        `[AI] Failed to interpret action: ${(error as Error).message}`,
-        ...this.combatLog,
-      ];
+      const errorEntry: CombatLogEntry = {
+        id: `log-${++this._logEntryCounter}`,
+        turnNumber: this._turnCounter,
+        actor: 'System',
+        actionText: `[AI] Failed to interpret action: ${(error as Error).message}`,
+        outcomeText: '',
+      };
+      this.combatLog = [errorEntry, ...this.combatLog];
     } finally {
       this.isResolvingAiAction = false;
       this.debug('executeCustomAction: resolved', { isResolvingAiAction: false });
@@ -690,7 +804,7 @@ export class CombatViewModel
 
     const lastLogEntry = this.combatLog[0];
     const prompt = lastLogEntry
-      ? `Fantasy combat scene — ${this.enemyName} battle: ${lastLogEntry}`
+      ? `Fantasy combat scene — ${this.enemyName} battle: ${lastLogEntry.actionText}`
       : `Fantasy combat scene against a fearsome ${this.enemyName}`;
 
     this.debug('generateSceneImage: requesting', {
@@ -706,10 +820,59 @@ export class CombatViewModel
           isDemo: result.isDemo,
         });
         this.combatBackgroundImageUrl = result.url;
+        // Add to encounter gallery (C-165)
+        this.encounterImages = [...this.encounterImages, result.url];
       })
       .catch((error) => {
         this.warn('generateSceneImage: failed', error);
       });
+  }
+
+  // -----------------------------------------------------------------------
+  // Private — combat log helpers (C-165)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Parses the actor name from a COMBAT_LOG engine message.
+   * Messages from the engine follow the pattern "Player rolls..." or
+   * "Enemy attacks...". Fallback to "System" if unrecognized.
+   */
+  private _parseActorFromMessage(message: string): string {
+    if (message.startsWith('Player ')) {
+      return 'Player';
+    }
+    if (message.startsWith('Enemy ')) {
+      return this.enemyName || 'Enemy';
+    }
+    return 'System';
+  }
+
+  /**
+   * Updates the inline image URL on a combat log entry.
+   *
+   * Finds the entry by ID and replaces it in the reactive array with a new
+   * object carrying the updated imageUrl (or clearing isGeneratingImage).
+   * If the ID is not found, the method is a no-op.
+   *
+   * @param entryId - The CombatLogEntry ID to update.
+   * @param imageUrl - The new image URL, or `undefined` to clear
+   *   `isGeneratingImage` without setting an image.
+   */
+  private _updateLogEntryImage(entryId: string, imageUrl: string | undefined): void {
+    const idx = this.combatLog.findIndex((e) => e.id === entryId);
+    if (idx === -1) {
+      return;
+    }
+    const old = this.combatLog[idx];
+    const updated: CombatLogEntry = {
+      ...old,
+      imageUrl: imageUrl ?? old.imageUrl,
+      isGeneratingImage: false,
+    };
+    // Replace the entry in place to trigger Svelte reactivity
+    const copy = [...this.combatLog];
+    copy[idx] = updated;
+    this.combatLog = copy;
   }
 
   // -----------------------------------------------------------------------
