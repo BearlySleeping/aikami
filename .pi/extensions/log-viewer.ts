@@ -7,7 +7,7 @@
 //     firebase-hosting       → scripts/ops/logs.ts → gcloud logging
 //     firebase-functions     → bun moon run functions:logs → firestack → gcloud
 //
-// Also delegates Firestore log_entries queries to firestore_query tool.
+// Also delegates Firestore data queries to firestore_query tool.
 //
 // Direnv env vars (set by .envrc) — always available:
 //   AIKAMI_MODE          — emulator | staging | production
@@ -40,14 +40,13 @@ export default function (pi: ExtensionAPI) {
       "View logs for Aikami services. "
       + "Apps: pwa, admin, site, functions. "
       + "Log actions: tail, line limits, time filters, function name filters. "
-      + "For Firestore log_entries (client-side structured logs), use firestore_query instead.",
+      + "For emulator Firestore data inspection, use firestore_query.",
     promptSnippet:
-      "Use service_logs to view Cloud Run / Firebase logs. For Firestore log_entries use firestore_query.",
+      "Use service_logs to view Cloud Run / Firebase logs. All logs are streamed to Cloud Run stdout — not stored in Firestore.",
     promptGuidelines: [
       "Use service_logs when user says 'the PWA crashed in dev' → app=pwa, mode=staging.",
       "Use service_logs when user says 'check function logs for pollGmail' → app=functions, only=pollGmail.",
       "Use service_logs when user says 'tail the logs' → tail=true.",
-      "Use firestore_query(collection='log_entries', env='emulator') for structured Firestore logs.",
       "For functions, route via firestack (handles --only, --type, --since, --tail, --mode natively).",
       "For Cloud Run (pwa, admin) and Hosting (site), route via gcloud logging script.",
     ],

@@ -8,6 +8,7 @@ import { Position } from '../components/position.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { getCombatantScreenStates } from './combat_stage_system.ts';
 
 // ---------------------------------------------------------------------------
 // TurnManagerSystem — turn-based combat sequencing + dice combat math
@@ -755,10 +756,26 @@ const _emitCombatStateUpdate = (world: World, bridge: EngineBridge): void => {
     }
   }
 
+  // Compute screen-space positions for diegetic HP bars (C-166)
+  const screenStates = getCombatantScreenStates(world);
+  const screenX: Record<number, number> = {};
+  const screenY: Record<number, number> = {};
+  let activeTurnEntity: number | undefined;
+  for (const state of screenStates) {
+    screenX[state.entityId] = state.screenX;
+    screenY[state.entityId] = state.screenY;
+    if (state.isActiveTurn) {
+      activeTurnEntity = state.entityId;
+    }
+  }
+
   bridge.emit({
     type: 'COMBAT_STATE_UPDATE',
     entityHpMap: hpMap,
     entityMaxHpMap: maxHpMap,
+    entityScreenX: screenX,
+    entityScreenY: screenY,
+    activeTurnEntity,
   });
 };
 

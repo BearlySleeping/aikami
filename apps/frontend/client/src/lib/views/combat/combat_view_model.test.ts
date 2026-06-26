@@ -228,8 +228,9 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       expect(logString).toContain('bags are empty');
       expect(logString).toContain('potion belt');
 
-      // The engine command must NOT be dispatched
-      expect(bridgeSendCalls.length).toBe(0);
+      // COMBAT_ACTION_ANIMATE is sent, but COMBAT_ACTION must NOT be dispatched (gatekept)
+      expect(bridgeSendCalls.length).toBe(1);
+      expect(bridgeSendCalls[0].type).toBe('COMBAT_ACTION_ANIMATE');
 
       // Should not be stuck in resolving state
       expect(viewModel.isResolvingAiAction).toBe(false);
@@ -267,10 +268,11 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       await viewModel.executeCustomAction('I swing my sword at the goblin');
 
-      // The engine command MUST be dispatched
-      expect(bridgeSendCalls.length).toBe(1);
-      expect(bridgeSendCalls[0].type).toBe('COMBAT_ACTION');
-      expect(bridgeSendCalls[0].action).toBe('ATTACK');
+      // COMBAT_ACTION_ANIMATE + COMBAT_ACTION MUST be dispatched
+      expect(bridgeSendCalls.length).toBe(2);
+      expect(bridgeSendCalls[0].type).toBe('COMBAT_ACTION_ANIMATE');
+      expect(bridgeSendCalls[1].type).toBe('COMBAT_ACTION');
+      expect(bridgeSendCalls[1].action).toBe('ATTACK');
 
       // Should not be stuck in resolving state
       expect(viewModel.isResolvingAiAction).toBe(false);
@@ -376,8 +378,8 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       expect(wasCalled).toBe(true);
       expect(receivedMood).toBe('triumph');
 
-      // The engine command should still be dispatched
-      expect(bridgeSendCalls.length).toBe(1);
+      // COMBAT_ACTION_ANIMATE + COMBAT_ACTION dispatched
+      expect(bridgeSendCalls.length).toBe(2);
 
       // Restore
       (
@@ -426,7 +428,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       expect(wasCalled).toBe(false);
 
       // Engine command should still be dispatched
-      expect(bridgeSendCalls.length).toBe(1);
+      expect(bridgeSendCalls.length).toBe(2);
 
       // Restore
       (
