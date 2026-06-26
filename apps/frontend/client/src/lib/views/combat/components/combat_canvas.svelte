@@ -185,35 +185,34 @@
     }
   };
 
-  const _textureCache = new Map<string, Texture>();
+  /** Base textures (full spritesheets), cached by assetId. Sub-textures created fresh each call. */
+  const _baseTextureCache = new Map<string, Texture>();
 
   const loadLpcTexture = async (assetId: string, facingRight: boolean): Promise<Texture> => {
-    const cached = _textureCache.get(assetId);
-    if (cached) {
-      return cached;
+    // Load base spritesheet texture (cached)
+    let base = _baseTextureCache.get(assetId);
+    if (base === undefined) {
+      try {
+        const path = getLpcAssetPath('body', assetId, LpcAnimationState.Walk);
+        const mod = await import(/* @vite-ignore */ `${path}?url`);
+        const url = (mod as { default: string }).default;
+        const loaded = (await Assets.load(url)) as Texture;
+        loaded.source.scaleMode = 'nearest';
+        _baseTextureCache.set(assetId, loaded);
+        base = loaded;
+      } catch {
+        return Texture.EMPTY;
+      }
     }
-    try {
-      const path = getLpcAssetPath('body', assetId, LpcAnimationState.Walk);
-      const mod = await import(/* @vite-ignore */ `${path}?url`);
-      const url = (mod as { default: string }).default;
-      const baseTexture = await Assets.load(url);
-      baseTexture.source.scaleMode = 'nearest';
-      // Crop to first frame of Walk spritesheet
-      // PixiJS v8: Texture(frame) crops the source to the given rectangle
-      // Player faces Right (row 2, y=128), Enemy faces Left (row 1, y=64)
-      // Down=row0(0), Left=row1(64), Right=row2(128), Up=row3(192)
-      const { Rectangle } = await import('pixi.js');
-      const rowY = facingRight ? 128 : 64;
-      const frame = new Texture({
-        source: baseTexture,
-        frame: new Rectangle(0, rowY, 64, 64),
-      });
-      _textureCache.set(assetId, frame);
-      return frame;
-    } catch {
-      _textureCache.set(assetId, Texture.EMPTY);
+
+    // Create sub-texture: player=Right(row2,y128), enemy=Left(row1,y64)
+    const { Rectangle } = await import('pixi.js');
+    const rowY = facingRight ? 128 : 64;
+    const tex = base;
+    if (!tex) {
       return Texture.EMPTY;
     }
+    return new Texture({ source: tex.source, frame: new Rectangle(0, rowY, 64, 64) });
   };
 
   const applyHpTint = (container: Container | undefined, hp: number): void => {
