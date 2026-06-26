@@ -41,7 +41,7 @@ describe('DevViewModel', () => {
     expect(routes).toContain('/dev/sandbox');
     expect(routes).toContain('/dev/lpc');
     expect(routes).toContain('/dev/combat');
-    expect(routes).toContain('/dev/layout/combat-split');
+    expect(routes).toContain('/dev/sandbox/map');
     expect(routes).toContain('/dev/inventory');
     expect(routes).toContain('/dev/quest');
     expect(routes).toContain('/dev/save_load');

@@ -112,11 +112,32 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Display name of the active enemy (e.g. "Goblin"). */
   readonly enemyName: string;
 
+  /** Display name of the player. */
+  readonly playerName: string;
+
   /** The entity ID of the current enemy target. */
   readonly enemyEntityId: number | null;
 
   /** Whether it's currently the player's turn in combat. */
   readonly isPlayerTurn: boolean;
+
+  /** Portrait image URL for the player character. */
+  readonly playerPortraitUrl: string;
+
+  /** Portrait image URL for the enemy character. */
+  readonly enemyPortraitUrl: string;
+
+  /** Whether the player is currently taking damage (triggers CSS shake/flash). */
+  readonly isPlayerTakingDamage: boolean;
+
+  /** Whether the enemy is currently taking damage (triggers CSS shake/flash). */
+  readonly isEnemyTakingDamage: boolean;
+
+  /** Whether it's the player's active turn (for portrait highlight). */
+  readonly isPlayerActiveTurn: boolean;
+
+  /** Whether it's the enemy's active turn (for portrait highlight). */
+  readonly isEnemyActiveTurn: boolean;
 
   /**
    * Ordered combat log entries — most recent first.
@@ -270,10 +291,25 @@ export class CombatViewModel
 
   enemyName = $state('');
 
+  /** Display name for the player character. */
+  playerName = $state('Player');
+
   /** The enemy entity ID set when combat starts. */
   enemyEntityId: number | null = $state(null);
 
   isPlayerTurn = $state(true);
+
+  /** Portrait image URL for the player character. */
+  playerPortraitUrl = $state('/assets/images/combat/player_portrait.webp');
+
+  /** Portrait image URL for the enemy character. */
+  enemyPortraitUrl = $state('/assets/images/combat/enemy_portrait.webp');
+
+  /** Whether the player is currently taking damage (triggers CSS shake/flash). */
+  isPlayerTakingDamage = $state(false);
+
+  /** Whether the enemy is currently taking damage (triggers CSS shake/flash). */
+  isEnemyTakingDamage = $state(false);
 
   /** Whether we're waiting for the engine to resolve an attack. */
   isAttacking = $state(false);
@@ -296,6 +332,9 @@ export class CombatViewModel
 
   /** Timeout handle for clearing the active dice roll after animation. */
   private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  /** Timeout handles for clearing damage flash states. */
+  private _damageFlashTimeout: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Cinematic background image URL for the combat scene.
@@ -332,6 +371,16 @@ export class CombatViewModel
   /** Derived count of alive entities. */
   get aliveCount(): number {
     return this.activeEntities.length;
+  }
+
+  /** Whether it's the player's active turn (for portrait highlight). */
+  get isPlayerActiveTurn(): boolean {
+    return this.isPlayerTurn && this.inCombat;
+  }
+
+  /** Whether it's the enemy's active turn (for portrait highlight). */
+  get isEnemyActiveTurn(): boolean {
+    return !this.isPlayerTurn && this.inCombat;
   }
 
   /** Whether a combat encounter is currently in progress. */
@@ -457,11 +506,21 @@ export class CombatViewModel
       // Update HP bars from the log event target data
       // The player ID in combat is always entity 1 (bitECS sequential allocation)
       if (event.targetId === 1) {
+        const prevPlayerHp = this.playerHp;
         this.playerHp = event.targetRemainingHp;
         this.playerMaxHp = event.targetMaxHp;
+        // Trigger damage flash if player HP decreased
+        if (event.targetRemainingHp < prevPlayerHp) {
+          this._triggerDamageFlash('player');
+        }
       } else {
+        const prevEnemyHp = this.enemyHp;
         this.enemyHp = event.targetRemainingHp;
         this.enemyMaxHp = event.targetMaxHp;
+        // Trigger damage flash if enemy HP decreased
+        if (event.targetRemainingHp < prevEnemyHp) {
+          this._triggerDamageFlash('enemy');
+        }
       }
     });
 
@@ -505,6 +564,12 @@ export class CombatViewModel
       this._diceTimeout = null;
     }
 
+    // Clear pending damage flash timeout
+    if (this._damageFlashTimeout) {
+      clearTimeout(this._damageFlashTimeout);
+      this._damageFlashTimeout = null;
+    }
+
     this._bridge = undefined;
     this.activeEntities = [];
     this.currentTurnEntity = null;
@@ -520,6 +585,10 @@ export class CombatViewModel
     this.isResolvingAiAction = false;
     this.activeDiceRoll = null;
     this.combatBackgroundImageUrl = null;
+    this.isPlayerTakingDamage = false;
+    this.isEnemyTakingDamage = false;
+    this.playerPortraitUrl = '/assets/images/combat/player_portrait.webp';
+    this.enemyPortraitUrl = '/assets/images/combat/enemy_portrait.webp';
     this.combatLog = [];
     this.encounterImages = [];
     this.combatResult = null;
@@ -1000,6 +1069,40 @@ export class CombatViewModel
     } catch (error) {
       this.warn('_transitionBgmFallback: crossfade failed', error);
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // Private — damage flash trigger (C-167)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Triggers a CSS damage flash animation on the specified combatant's portrait.
+   *
+   * Sets {@link isPlayerTakingDamage} or {@link isEnemyTakingDamage} to `true`
+   * for 400ms (slightly longer than the 350ms CSS animation to ensure it
+   * completes), then resets to `false`.
+   *
+   * Debounces — if a damage flash is already active for this combatant,
+   * the timeout is reset so rapid hits extend the animation.
+   *
+   * @param target - 'player' or 'enemy' portrait to flash.
+   */
+  private _triggerDamageFlash(target: 'player' | 'enemy'): void {
+    if (target === 'player') {
+      this.isPlayerTakingDamage = true;
+    } else {
+      this.isEnemyTakingDamage = true;
+    }
+
+    if (this._damageFlashTimeout) {
+      clearTimeout(this._damageFlashTimeout);
+    }
+
+    this._damageFlashTimeout = setTimeout(() => {
+      this.isPlayerTakingDamage = false;
+      this.isEnemyTakingDamage = false;
+      this._damageFlashTimeout = null;
+    }, 400);
   }
 
   // -----------------------------------------------------------------------

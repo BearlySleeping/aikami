@@ -2091,3 +2091,41 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 **Known limitations**:
 - No CI/CD for Firebase Hosting deploys — manual `firebase deploy --only hosting` required.
 - `prerender: false` means no static HTML for SEO — acceptable for Tauri desktop app.
+
+### C-167: Svelte Native Combat UI MVP
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/src/lib/views/combat/components/combat_portrait_stage.svelte` — Pure DOM portrait stage (C-167): CSS Grid/Flexbox layout showing player portrait (left) and enemy portrait (right) with HP bars, active-turn highlight, and CSS @keyframes damage animations (shake + red flash overlay). Uses `object-cover` portrait scaling with `aspect-[3/4]` containers.
+- `apps/frontend/client/static/assets/images/combat/player_portrait.webp` — Placeholder player portrait (copied from aragon/neutral.webp).
+- `apps/frontend/client/static/assets/images/combat/enemy_portrait.webp` — Placeholder enemy portrait (copied from troll/neutral.webp).
+- `apps/e2e/tests/client/combat_static_visual.spec.ts` — Visual regression E2E tests (7 tests): AC1 verifies `[data-testid="combat-portrait-stage"]` visible + no `<canvas>`; AC2 desktop + mobile viewport layout; AC3 damage flash after attack click; AC4 idle/victory/defeat snapshot baseline comparison with CSS animations disabled for stability.
+
+**Files modified**:
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` — Added `playerName`, `playerPortraitUrl`, `enemyPortraitUrl`, `isPlayerTakingDamage`, `isEnemyTakingDamage` reactive state; added `isPlayerActiveTurn` / `isEnemyActiveTurn` getters; `_triggerDamageFlash(target)` sets damage flags with 400ms auto-clear timeout; COMBAT_LOG handler compares HP before/after to detect damage and trigger flash; `dispose()` resets all new portrait state.
+- `apps/frontend/client/src/lib/views/combat/combat_view.svelte` — Added `CombatPortraitStage` import and rendering block (h-[320px] sm:h-[380px] md:h-[420px]) above the turn indicator in the active combat section; passes all portrait props from ViewModel.
+- `apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte` — Replaced `CombatCanvas` (PixiJS) import and rendering with `CombatPortraitStage` (DOM); right pane now renders via portrait stage instead of `<canvas>`.
+
+**Files deleted**:
+- `apps/frontend/client/src/lib/views/combat/components/combat_canvas.svelte` — PixiJS LPC character rendering component, fully replaced by `combat_portrait_stage.svelte`. No remaining imports.
+
+**Deviations**:
+1. **`combat_view.svelte` already pure DOM**: The existing combat overlay view had no PixiJS or `<canvas>` dependency — the canvas was only in the dev route page. The contract's "rip and replace" directive targeted the `combat_canvas.svelte` component used by the dev combat page.
+2. **Placeholder portraits from NPC assets**: Player/enemy portrait images were copied from `apps/backend/firebase/assets/images/npc/` (aragon/neutral.webp → player, troll/neutral.webp → enemy) to `apps/frontend/client/static/assets/images/combat/`. These are placeholder assets — future contracts can replace with dynamic character portraits.
+3. **Damage flash is debounced**: `_triggerDamageFlash` uses a shared 400ms timeout — if both player and enemy take damage in quick succession, both flags clear simultaneously. This is intentional for the MVP (rapid multi-hit sequences in one log entry would be rare).
+4. **Portrait URLs are static**: No dynamic portrait selection based on character creation or enemy type. Both use hardcoded placeholder URLs. Dynamic portrait resolution is future work.
+
+**Design decisions**:
+1. **`CombatPortraitStage` is a props-only component**: Accepts all state via Svelte 5 `$props()` — no ViewModel or service imports. Pure presentation component following the View → ViewModel one-way data flow.
+2. **Portrait container `aspect-[3/4]`**: Fixed aspect ratio prevents layout breaking on mis-sized images. `object-cover` + `object-top` ensures portraits fill the container without distortion.
+3. **Active turn indicator via `scale-105` + colored border**: Player/enemy portrait card gets `border-primary` and `scale-105` when it's their turn — provides clear visual turn indication separate from the text-based turn indicator.
+4. **Damage animation uses two CSS classes**: `animate-damage-shake` (translate keyframes) + `animate-damage-flash` (border + box-shadow red pulse). An additional overlay div with `animate-flash-overlay` provides a red tint that fades in/out. All animations are 350ms.
+5. **VS divider**: Sword emoji (⚔️) + "VS" text centered between portraits — provides a visual-novel style matchup presentation.
+
+**Known limitations**:
+- Portrait URLs are hardcoded — enemy portrait doesn't change based on enemy type (goblin, orc, troll all use the same placeholder).
+- No HP bar animation/tween when values change — HP jumps instantly. Smooth HP bar transitions are future work.
+- Damage flash timeout is shared (not per-combatant) — if player and enemy both take damage within 400ms, the second hit resets the timer for both.
+- `combat_sidebar.svelte` (split-screen 35% sidebar) does not show portraits — it's too narrow for the portrait layout. The sidebar's compact HP bars + log remain unchanged.
+- Visual regression tests require dev server running and baseline screenshots to be created on first run (Playwright `toHaveScreenshot` creates baselines).
