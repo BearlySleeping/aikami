@@ -1,31 +1,34 @@
 <script lang="ts">
   // apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte
   //
-  // Sandbox route for CombatViewModel + DevTools
-  // NEVER import production ViewModels or services here.
+  // Unified Combat Dev Sandbox — Sidebar Layout Only
   //
-  // C-164: Toggle between old full-screen CombatView and new CombatSidebar.
+  // URL params:
+  //   ?state=initial|log-filled|low-hp|victory|defeat (visual test presets)
+  //   ?ally-hp=N&enemy-hp=N&enemy-name=X&log=entry1|entry2
+  //
+  // Merged from C-164 combat-split + C-166 visual testing.
 
   import { onMount } from 'svelte';
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
   import { getCombatDevViewModel } from '$views/combat/combat_dev_view_model.svelte';
   import CombatSidebar from '$views/combat/combat_sidebar.svelte';
-  import CombatView from '$views/combat/combat_view.svelte';
+  import { gameStateService } from '$services';
 
-  // Read URL search params for visual testing initial state
-  const params =
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search)
-      : new URLSearchParams();
+  // ── URL params ──
+  const params = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search)
+    : new URLSearchParams();
+  const stateParam = params.get('state') ?? undefined;
   const allyHp = params.get('ally-hp') ? Number(params.get('ally-hp')) : undefined;
   const enemyHp = params.get('enemy-hp') ? Number(params.get('enemy-hp')) : undefined;
   const enemyName = params.get('enemy-name') ?? undefined;
   const logParam = params.get('log') ?? undefined;
   const logEntries = logParam ? logParam.split('|').filter(Boolean) : undefined;
-  const stateParam = params.get('state') ?? undefined;
 
   const viewModel = getCombatDevViewModel({
     className: 'CombatDevViewModel',
+    useRealAi: true,
     useRealMusic: true,
     initialState:
       allyHp || enemyHp || enemyName || logEntries || stateParam
@@ -33,28 +36,20 @@
         : undefined,
   });
 
-  // Manual initialization — CombatSidebar doesn't use BaseViewModelContainer
   onMount(() => {
+    gameStateService.setMode('COMBAT');
     void viewModel.initialize();
+    return () => {
+      gameStateService.setMode('EXPLORE');
+    };
   });
 
-  let useRealAi = $state(false);
+  // ── Toggles ──
+  let useRealAi = $state(true);
   let useRealMusic = $state(true);
 
-  /** Toggle between old full-screen overlay and new sidebar layout. */
-  let useSidebarLayout = $state(stateParam != null);
-
-  // Music test controls
-  const MOODS = [
-    'epic',
-    'tense',
-    'triumph',
-    'sorrow',
-    'mysterious',
-    'peaceful',
-    'heroic',
-    'foreboding',
-  ] as const;
+  // ── Music test ──
+  const MOODS = ['epic', 'tense', 'triumph', 'sorrow', 'mysterious', 'peaceful', 'heroic', 'foreboding'] as const;
   let selectedMood: string = $state('epic');
   let isPlayingMusic = $state(false);
   let musicStatus = $state<string>('');
@@ -78,104 +73,76 @@
     });
   };
 
-  /** Dev tools actions wired to CombatDevViewModel sandbox methods. */
+  // ── Dev tool actions ──
   const devActions = [
-    {
-      label: 'Force Player HP to 1',
-      onClick: () => viewModel.forcePlayer1HP(),
-    },
-    {
-      label: 'Simulate Enemy Turn',
-      onClick: () => viewModel.simulateEnemyTurn(),
-    },
-    {
-      label: 'Simulate Player Attack',
-      onClick: () => viewModel.simulatePlayerAttack(),
-    },
-    {
-      label: 'End Battle (Victory)',
-      onClick: () => viewModel.endBattle(true),
-    },
-    {
-      label: 'End Battle (Defeat)',
-      onClick: () => viewModel.endBattle(false),
-    },
-    {
-      label: 'Reset Combat',
-      onClick: () => viewModel.resetCombat(),
-    },
+    { label: 'Force Player HP to 1', onClick: () => viewModel.forcePlayer1HP() },
+    { label: 'Simulate Enemy Turn', onClick: () => viewModel.simulateEnemyTurn() },
+    { label: 'Simulate Player Attack', onClick: () => viewModel.simulatePlayerAttack() },
+    { label: 'End Battle (Victory)', onClick: () => viewModel.endBattle(true) },
+    { label: 'End Battle (Defeat)', onClick: () => viewModel.endBattle(false) },
+    { label: 'Reset Combat', onClick: () => viewModel.resetCombat() },
   ];
+
+  // Hide dev tools and controls for visual testing states
+  const hideControls = stateParam !== undefined && stateParam !== 'initial';
 </script>
 
-<!-- Layout toggle — switch between old full-screen modal and new sidebar -->
-<div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg mb-2">
-  <span class="text-xs font-mono opacity-50 uppercase tracking-wider">📐 Layout (C-164)</span>
-  <!-- biome-ignore lint/a11y/noLabelWithoutControl: label wraps checkbox input with text -->
-  <label class="flex items-center gap-2 cursor-pointer">
-    <input type="checkbox" class="toggle toggle-sm toggle-accent" bind:checked={useSidebarLayout}>
-    <span class="text-sm font-mono">{useSidebarLayout ? '🧭 Sidebar' : '🖥️ Full-Screen'}</span>
-  </label>
-</div>
+<svelte:head>
+  <title>Combat Dev — Aikami</title>
+</svelte:head>
 
-{#if useSidebarLayout}
-  <!-- Split-screen layout: sidebar + canvas placeholder -->
-  <div class="grid h-screen w-screen overflow-hidden" style="grid-template-columns: 35vw 1fr;">
-    <CombatSidebar {viewModel} />
-    <div class="relative w-full h-full overflow-hidden bg-neutral">
-      <div class="absolute inset-0 flex flex-col items-center justify-center gap-2">
-        <div class="rounded-lg border-2 border-dashed border-base-content/20 px-6 py-4 text-center">
-          <p class="text-sm font-mono font-bold text-base-content/30">🎮 PIXIJS CANVAS</p>
-          <p class="text-xs font-mono text-base-content/20 mt-1">65% viewport width</p>
-        </div>
+<div class="grid w-screen h-screen overflow-hidden" style="grid-template-columns: 35vw 1fr;">
+  <!-- Left pane: Combat Sidebar -->
+  <CombatSidebar {viewModel} />
+
+  <!-- Right pane: Canvas placeholder -->
+  <div class="relative w-full h-full overflow-hidden bg-neutral">
+    <div class="absolute inset-0 z-0 flex flex-col items-center justify-center gap-2">
+      <div class="rounded-lg border-2 border-dashed border-base-content/20 px-6 py-4 text-center">
+        <p class="text-sm font-mono font-bold text-base-content/30">🎮 PIXIJS CANVAS</p>
+        <p class="text-xs font-mono text-base-content/20 mt-1">65% viewport width</p>
+      </div>
+    </div>
+    <div class="absolute inset-0 z-10 pointer-events-none">
+      <div class="pointer-events-auto absolute top-3 left-3 rounded-lg bg-base-200/80 px-3 py-1.5">
+        <span class="text-xs font-medium text-base-content/70">Player</span>
+        <span class="ml-1.5 text-sm font-semibold text-primary">Hero</span>
       </div>
     </div>
   </div>
-{:else}
-  <CombatView {viewModel} />
-{/if}
+</div>
 
-<!-- 🎵 Music Test — direct Data Connect → Storage → AudioService pipeline -->
-<div class="flex flex-col gap-2 p-3 bg-base-200 rounded-lg mb-2">
-  <span class="text-xs font-mono opacity-50 uppercase tracking-wider">🎵 Music Test (C-151)</span>
-  <div class="flex items-center gap-2">
-    <select class="select select-sm select-bordered font-mono text-xs" bind:value={selectedMood}>
-      {#each MOODS as mood}
-        <option value={mood}>{mood}</option>
-      {/each}
-    </select>
-    <button class="btn btn-sm btn-primary" onclick={playTestMusic} disabled={isPlayingMusic}>
-      {isPlayingMusic ? '⏳ Querying...' : '▶ Play'}
-    </button>
-    <button class="btn btn-sm btn-ghost" onclick={stopMusic}>⏹ Stop</button>
+{#if !hideControls}
+  <!-- 🎵 Music Test -->
+  <div class="fixed bottom-20 right-4 z-[9998] flex flex-col gap-2 p-3 bg-base-200 rounded-lg shadow-lg min-w-[280px]">
+    <span class="text-xs font-mono opacity-50 uppercase tracking-wider">🎵 Music Test</span>
+    <div class="flex items-center gap-2">
+      <select class="select select-sm select-bordered font-mono text-xs flex-1" bind:value={selectedMood}>
+        {#each MOODS as mood}
+          <option value={mood}>{mood}</option>
+        {/each}
+      </select>
+      <button class="btn btn-sm btn-primary" onclick={playTestMusic} disabled={isPlayingMusic}>
+        {isPlayingMusic ? '⏳' : '▶'}
+      </button>
+      <button class="btn btn-sm btn-ghost" onclick={stopMusic}>⏹</button>
+    </div>
+    {#if musicStatus}
+      <span class="text-xs font-mono {musicStatus.startsWith('✅') ? 'text-success' : musicStatus.startsWith('❌') ? 'text-error' : 'text-warning'}">{musicStatus}</span>
+    {/if}
   </div>
-  {#if musicStatus}
-    <span
-      class="text-xs font-mono {musicStatus.startsWith('✅') ? 'text-success' : musicStatus.startsWith('❌') ? 'text-error' : 'text-warning'}"
-      >{musicStatus}</span
-    >
-  {/if}
-</div>
 
-<!-- Pipeline toggles — C-151 test controls -->
-<div class="flex gap-3 p-3 bg-base-200 rounded-lg mb-2">
-  <label class="flex items-center gap-2 cursor-pointer">
-    <input
-      type="checkbox"
-      class="toggle toggle-sm toggle-primary"
-      bind:checked={useRealMusic}
-      onchange={() => viewModel.setUseRealMusic(useRealMusic)}
-    >
-    <span class="text-sm font-mono">🎵 Data Connect BGM</span>
-  </label>
-  <label class="flex items-center gap-2 cursor-pointer">
-    <input
-      type="checkbox"
-      class="toggle toggle-sm toggle-secondary"
-      bind:checked={useRealAi}
-      onchange={() => viewModel.setUseRealAi(useRealAi)}
-    >
-    <span class="text-sm font-mono">🤖 Real LLM</span>
-  </label>
-</div>
+  <!-- Pipeline toggles -->
+  <div class="fixed bottom-4 right-4 z-[9998] flex gap-2">
+    <label class="flex items-center gap-2 cursor-pointer bg-base-200 px-2 py-1 rounded-lg">
+      <input type="checkbox" class="toggle toggle-sm toggle-primary" bind:checked={useRealMusic} onchange={() => viewModel.setUseRealMusic(useRealMusic)}>
+      <span class="text-xs font-mono">🎵 BGM</span>
+    </label>
+    <label class="flex items-center gap-2 cursor-pointer bg-base-200 px-2 py-1 rounded-lg">
+      <input type="checkbox" class="toggle toggle-sm toggle-secondary" bind:checked={useRealAi} onchange={() => viewModel.setUseRealAi(useRealAi)}>
+      <span class="text-xs font-mono">🤖 LLM</span>
+    </label>
+  </div>
 
-<DevToolsPanel actions={devActions} />
+  <DevToolsPanel actions={devActions} />
+{/if}
