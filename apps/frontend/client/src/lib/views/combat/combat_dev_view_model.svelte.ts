@@ -82,6 +82,8 @@ export type CombatDevViewModelOptions = CombatViewModelOptions & {
     enemyHp?: number;
     enemyName?: string;
     logEntries?: string[];
+    /** Visual state preset: 'victory' | 'defeat' | 'low-hp' | 'log-filled'. */
+    state?: string;
   };
 };
 
@@ -172,18 +174,33 @@ export class CombatDevViewModel extends CombatViewModel {
     const init = (this as unknown as { _initialState?: CombatDevViewModelOptions['initialState'] })
       ._initialState;
     if (init) {
-      if (init.allyHp !== undefined) {
-        this.playerHp = Math.min(init.allyHp, this.playerMaxHp);
-      }
-      if (init.enemyHp !== undefined) {
-        this.enemyHp = Math.min(init.enemyHp, this.enemyMaxHp);
-      }
-      if (init.enemyName) {
-        this.enemyName = init.enemyName;
-      }
-      if (init.logEntries && init.logEntries.length > 0) {
-        for (const entry of init.logEntries) {
-          this._addLogEntry(entry);
+      // Visual state presets take priority over individual params
+      if (init.state === 'victory') {
+        this.combatResult = 'victory';
+        this.enemyHp = 0;
+        this.currentTurnEntity = null;
+        this._addLogEntry('Player lands the final blow!');
+        this._addLogEntry('Goblin has been defeated!');
+      } else if (init.state === 'defeat') {
+        this.combatResult = 'defeat';
+        this.playerHp = 0;
+        this.currentTurnEntity = null;
+        this._addLogEntry('Goblin rolls 20 — Critical hit!');
+        this._addLogEntry('You have fallen in battle...');
+      } else {
+        if (init.allyHp !== undefined) {
+          this.playerHp = Math.min(init.allyHp, this.playerMaxHp);
+        }
+        if (init.enemyHp !== undefined) {
+          this.enemyHp = Math.min(init.enemyHp, this.enemyMaxHp);
+        }
+        if (init.enemyName) {
+          this.enemyName = init.enemyName;
+        }
+        if (init.logEntries && init.logEntries.length > 0) {
+          for (const entry of init.logEntries) {
+            this._addLogEntry(entry);
+          }
         }
       }
     }
