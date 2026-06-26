@@ -111,6 +111,9 @@ export type GameCommand =
       bonusDamage?: number;
     }
   | {
+      type: 'COMBAT_ACTION_ANIMATE';
+    }
+  | {
       /**
        * Updates the player entity's Appearance component layers based on
        * current equipment state. Sent by the InventoryViewModel after equip
@@ -313,6 +316,17 @@ export type GameEvent =
       entityHpMap: Record<number, number>;
       /** Map of entity ID → max HP. */
       entityMaxHpMap: Record<number, number>;
+      /**
+       * Map of entity ID → screen-space X coordinate for diegetic HP bars.
+       * Only populated during combat when the combat stage is active.
+       *
+       * Contract: C-166 Diegetic Combat Stage
+       */
+      entityScreenX?: Record<number, number>;
+      /** Map of entity ID → screen-space Y coordinate for diegetic HP bars. */
+      entityScreenY?: Record<number, number>;
+      /** Which entity currently has the active turn. */
+      activeTurnEntity?: number;
     }
   | {
       /**

@@ -6,7 +6,7 @@
 | **Target** | `packages/frontend/engine/src/` and Diegetic UI components |
 | **Priority** | P0 — Visual Combat Representation |
 | **Dependencies** | C-161, C-164 |
-| **Status** | not_started |
+| **Status** | ✅ completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -218,6 +218,13 @@ export const endDialogueZoom = (): void => {
 };
 
 /**
+ * Returns the current screen dimensions in CSS pixels.
+ */
+export const getScreenSize = (): { width: number; height: number } => {
+  return { width: screenWidth, height: screenHeight };
+};
+
+/**
  * Resets all camera tracking state to defaults.
  *
  * Useful between scene loads or in test teardown.
