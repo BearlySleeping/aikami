@@ -72,6 +72,17 @@ export type CombatDevViewModelOptions = CombatViewModelOptions & {
    * Contract: C-151 AI Dynamic Music
    */
   useRealMusic?: boolean;
+
+  /**
+   * Initial combat state from URL search params for visual testing.
+   * Applied in {@link initialize} after the default mock state.
+   */
+  initialState?: {
+    allyHp?: number;
+    enemyHp?: number;
+    enemyName?: string;
+    logEntries?: string[];
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -98,6 +109,9 @@ export class CombatDevViewModel extends CombatViewModel {
     super(options);
     this._useRealAi = options.useRealAi ?? false;
     this._useRealMusic = options.useRealMusic ?? false;
+    (
+      this as unknown as { _initialState: CombatDevViewModelOptions['initialState'] }
+    )._initialState = options.initialState;
   }
 
   /**
@@ -153,6 +167,26 @@ export class CombatDevViewModel extends CombatViewModel {
     this.enemyMaxHp = MOCK_ENEMY_MAX_HP;
     this.enemyEntityId = 2002;
     this.combatResult = null;
+
+    // ── Apply URL search param overrides for visual testing ──
+    const init = (this as unknown as { _initialState?: CombatDevViewModelOptions['initialState'] })
+      ._initialState;
+    if (init) {
+      if (init.allyHp !== undefined) {
+        this.playerHp = Math.min(init.allyHp, this.playerMaxHp);
+      }
+      if (init.enemyHp !== undefined) {
+        this.enemyHp = Math.min(init.enemyHp, this.enemyMaxHp);
+      }
+      if (init.enemyName) {
+        this.enemyName = init.enemyName;
+      }
+      if (init.logEntries && init.logEntries.length > 0) {
+        for (const entry of init.logEntries) {
+          this._addLogEntry(entry);
+        }
+      }
+    }
 
     return await super.initialize();
   }

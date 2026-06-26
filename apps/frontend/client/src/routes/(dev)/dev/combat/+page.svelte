@@ -6,14 +6,35 @@
   //
   // C-164: Toggle between old full-screen CombatView and new CombatSidebar.
 
+  import { onMount } from 'svelte';
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
   import { getCombatDevViewModel } from '$views/combat/combat_dev_view_model.svelte';
   import CombatSidebar from '$views/combat/combat_sidebar.svelte';
   import CombatView from '$views/combat/combat_view.svelte';
 
+  // Read URL search params for visual testing initial state
+  const params =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
+  const allyHp = params.get('ally-hp') ? Number(params.get('ally-hp')) : undefined;
+  const enemyHp = params.get('enemy-hp') ? Number(params.get('enemy-hp')) : undefined;
+  const enemyName = params.get('enemy-name') ?? undefined;
+  const logParam = params.get('log') ?? undefined;
+  const logEntries = logParam ? logParam.split('|').filter(Boolean) : undefined;
+
   const viewModel = getCombatDevViewModel({
     className: 'CombatDevViewModel',
     useRealMusic: true,
+    initialState:
+      allyHp || enemyHp || enemyName || logEntries
+        ? { allyHp, enemyHp, enemyName, logEntries }
+        : undefined,
+  });
+
+  // Manual initialization — CombatSidebar doesn't use BaseViewModelContainer
+  onMount(() => {
+    void viewModel.initialize();
   });
 
   let useRealAi = $state(false);
