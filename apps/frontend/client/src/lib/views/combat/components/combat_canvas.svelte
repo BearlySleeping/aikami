@@ -127,8 +127,8 @@
           const breathe = 1 + Math.sin(t * 0.8) * 0.005;
           for (const c of [playerContainer, enemyContainer]) {
             if (c) {
-              const base = Math.abs(c.scale.x);
-              c.scale.y = base * breathe;
+              const baseScale = Math.abs(c.scale.x);
+              c.scale.y = baseScale * breathe;
             }
           }
         });
@@ -198,15 +198,15 @@
       const url = (mod as { default: string }).default;
       const baseTexture = await Assets.load(url);
       baseTexture.source.scaleMode = 'nearest';
-      // LPC walk spritesheet: 9 frames × 4 rows (down/left/right/up)
-      // Frame 0: row 0=down(0), row 1=left(64), row 2=right(128), row 3=up(192)
+      // Crop to first frame of Walk spritesheet
+      // PixiJS v8: Texture(frame) crops the source to the given rectangle
+      // Player faces Right (row 2, y=128), Enemy faces Left (row 1, y=64)
+      // Down=row0(0), Left=row1(64), Right=row2(128), Up=row3(192)
       const { Rectangle } = await import('pixi.js');
-      const frameW = 64;
-      const frameH = 64;
-      const rowY = facingRight ? 192 : 64; // Right=row3(y192), Left=row1(y64)
+      const rowY = facingRight ? 128 : 64;
       const frame = new Texture({
-        source: baseTexture.source,
-        frame: new Rectangle(0, rowY, frameW, frameH),
+        source: baseTexture,
+        frame: new Rectangle(0, rowY, 64, 64),
       });
       _textureCache.set(assetId, frame);
       return frame;
