@@ -91,11 +91,11 @@
         enemyContainer = new Container();
         enemyContainer.x = cx + 64;
         enemyContainer.y = groundY;
-        enemyContainer.scale.set(-2.5, 2.5);
+        enemyContainer.scale.set(2.5, 2.5);
         app.stage.addChild(enemyContainer);
 
-        await loadCharacterSprites(playerContainer, PLAYER_LAYERS);
-        await loadCharacterSprites(enemyContainer, ENEMY_LAYERS);
+        await loadCharacterSprites(playerContainer, PLAYER_LAYERS, true);
+        await loadCharacterSprites(enemyContainer, ENEMY_LAYERS, false);
 
         applyHpTint(playerContainer, playerHp);
         applyHpTint(enemyContainer, enemyHp);
@@ -173,8 +173,9 @@
   const loadCharacterSprites = async (
     container: Container,
     layerIds: readonly string[],
+    facingRight: boolean,
   ): Promise<void> => {
-    const textures = await Promise.all(layerIds.map((id) => loadLpcTexture(id)));
+    const textures = await Promise.all(layerIds.map((id) => loadLpcTexture(id, facingRight)));
     for (const i of Z_ORDER) {
       const tex = textures[i];
       const sprite = new Sprite(tex ?? Texture.EMPTY);
@@ -186,7 +187,7 @@
 
   const _textureCache = new Map<string, Texture>();
 
-  const loadLpcTexture = async (assetId: string): Promise<Texture> => {
+  const loadLpcTexture = async (assetId: string, facingRight: boolean): Promise<Texture> => {
     const cached = _textureCache.get(assetId);
     if (cached) {
       return cached;
@@ -197,15 +198,15 @@
       const url = (mod as { default: string }).default;
       const baseTexture = await Assets.load(url);
       baseTexture.source.scaleMode = 'nearest';
-      // LPC walk spritesheets are 9 frames wide × 4 rows tall.
-      // Frame 0 (standing) is the first cell: row 0, col 0.
-      // Each frame is 64×64 pixels.
+      // LPC walk spritesheet: 9 frames × 4 rows (down/left/right/up)
+      // Frame 0: row 0=down(0), row 1=left(64), row 2=right(128), row 3=up(192)
       const { Rectangle } = await import('pixi.js');
       const frameW = 64;
       const frameH = 64;
+      const rowY = facingRight ? 192 : 64; // Right=row3(y192), Left=row1(y64)
       const frame = new Texture({
         source: baseTexture.source,
-        frame: new Rectangle(0, 0, frameW, frameH),
+        frame: new Rectangle(0, rowY, frameW, frameH),
       });
       _textureCache.set(assetId, frame);
       return frame;
