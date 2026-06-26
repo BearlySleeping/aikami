@@ -43,12 +43,19 @@ import {
   getActiveNpcScreenPosition,
   getCameraPosition,
   getCameraZoom,
+  getScreenSize,
   resetCameraTracking,
   setMapBounds,
   setScreenSize,
   updateCameraSystem,
 } from '../systems/camera_system.ts';
 import { type CollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
+import {
+  isCombatStageActive,
+  setupCombatStage,
+  teardownCombatStage,
+  triggerPlayerAttackAnimation,
+} from '../systems/combat_stage_system.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
 import { updateEncounterSystem } from '../systems/encounter_system.ts';
@@ -273,6 +280,13 @@ const handleBridgeCommand = (command: GameCommand): void => {
           advantage: command.advantage,
           bonusDamage: command.bonusDamage,
         });
+      }
+      break;
+    }
+    case 'COMBAT_ACTION_ANIMATE': {
+      // ── Trigger player attack animation during AI resolution (C-166) ──
+      if (world) {
+        triggerPlayerAttackAnimation(world);
       }
       break;
     }
@@ -590,6 +604,14 @@ const tickLoop = (): void => {
 
   // Run encounter system after movement — positions are finalized
   updateEncounterSystem({ world, playerEntityId, bridge: workerBridge });
+
+  // ── Combat stage setup / teardown (C-166) ──
+  const screen = getScreenSize();
+  if (getEngineGameMode() === 'COMBAT' && !isCombatStageActive()) {
+    setupCombatStage(world, { screenWidth: screen.width, screenHeight: screen.height });
+  } else if (getEngineGameMode() !== 'COMBAT' && isCombatStageActive()) {
+    teardownCombatStage(world);
+  }
 
   updateDialogTriggers(world, playerEntityId, workerBridge);
   updateZoningSystem(world, playerEntityId, workerBridge);

@@ -6,6 +6,7 @@
   import ModeIndicator from '$lib/components/mode_indicator.svelte';
   import { gameStateService } from '$services';
   import CombatSidebar from '../../combat/combat_sidebar.svelte';
+  import DiegeticHealthBar from '../../combat/components/diegetic_health_bar.svelte';
   import GameUIView from '../ui/game_ui_view.svelte';
   import type { GameUIViewModelInterface } from '../ui/game_ui_view_model.svelte';
   import type { GameViewModelInterface } from './game_view_model.svelte';
@@ -137,6 +138,19 @@
             y={ft.y}
             isCritical={ft.isCritical}
             onComplete={() => viewModel.removeFloatingText(ft.id)}
+          />
+        {/each}
+
+        <!-- Diegetic health bars — positioned over PixiJS sprites during combat (C-166 AC-2) -->
+        {#each viewModel.combatantScreenStates as cs (cs.entityId)}
+          <DiegeticHealthBar
+            entityId={cs.entityId}
+            hp={cs.hp}
+            maxHp={cs.maxHp}
+            screenX={cs.screenX}
+            screenY={cs.screenY}
+            isActiveTurn={cs.isActiveTurn}
+            label={cs.entityId === 1 ? 'Player' : 'Enemy'}
           />
         {/each}
 

@@ -43,6 +43,16 @@ export type FloatingTextInstance = {
   readonly isCritical: boolean;
 };
 
+/** Screen-space state for a combatant — used by diegetic health bars (C-166). */
+export type CombatantScreenState = {
+  readonly entityId: number;
+  readonly hp: number;
+  readonly maxHp: number;
+  readonly screenX: number;
+  readonly screenY: number;
+  readonly isActiveTurn: boolean;
+};
+
 export type GameViewModelInterface = BaseViewModelInterface & {
   /** The player's current scene name. */
   readonly playerScene: string;
@@ -69,6 +79,9 @@ export type GameViewModelInterface = BaseViewModelInterface & {
    * Contract: C-163 Visceral Feedback Juice
    */
   readonly floatingTexts: readonly FloatingTextInstance[];
+
+  /** Screen-space HP bar positions for active combatants (C-166). */
+  readonly combatantScreenStates: readonly CombatantScreenState[];
 
   /**
    * Whether the screen is currently shaking from a player hit.
@@ -180,6 +193,9 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
    */
   floatingTexts: FloatingTextInstance[] = $state([]);
 
+  /** Diegetic HP bar positions for active combatants (C-166). */
+  combatantScreenStates: CombatantScreenState[] = $state([]);
+
   /**
    * Screen shake flag — set to true when the player takes damage,
    * cleared after the shake animation completes (~300ms).
@@ -273,6 +289,32 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
 
         // Play hit SFX on every damage event
         void this._playHitSfx();
+      });
+
+      // ── Diegetic combat stage HP bar positions (C-166) ──
+      this._bridge.on('COMBAT_STATE_UPDATE', (event) => {
+        const screenX = event.entityScreenX as Record<number, number> | undefined;
+        const screenY = event.entityScreenY as Record<number, number> | undefined;
+        const hpMap = event.entityHpMap as Record<number, number> | undefined;
+        const maxHpMap = event.entityMaxHpMap as Record<number, number> | undefined;
+        const activeTurn = event.activeTurnEntity as number | undefined;
+        if (!screenX || !screenY || !hpMap || !maxHpMap) {
+          this.combatantScreenStates = [];
+          return;
+        }
+        const states: CombatantScreenState[] = [];
+        for (const key of Object.keys(screenX)) {
+          const eid = Number(key);
+          states.push({
+            entityId: eid,
+            hp: hpMap[eid] ?? 0,
+            maxHp: maxHpMap[eid] ?? 0,
+            screenX: screenX[eid] ?? 0,
+            screenY: screenY[eid] ?? 0,
+            isActiveTurn: eid === activeTurn,
+          });
+        }
+        this.combatantScreenStates = states;
       });
 
       // ── Load active persona for player name + data ──

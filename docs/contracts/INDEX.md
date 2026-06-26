@@ -71,6 +71,7 @@ P2 (Polish — after P1):
 | C-163 | [Visceral Feedback Juice](C-163-visceral-feedback-juice.md) ✅ | Equipment→LPC sprite sync, floating damage text, screen shake, equip/combat SFX | C-145, C-153 |
 | C-164 | [Combat Split-Screen Layout](C-164-combat-split-screen-layout.md) ✅ | CSS Grid 35/65 split-screen, combat sidebar with log + fixed action bar, PixiJS canvas resize on layout change | C-145 |
 | C-165 | [Combat Inline Images & Gallery](C-165-combat-inline-images-gallery.md) ✅ | Inline AI-generated images in combat log stream, hover Expand/Regenerate, masonry Gallery tab | C-164 |
+| C-166 | [Diegetic Combat Stage](C-166-diegetic-combat-stage.md) ✅ | JRPG battle stage positioning, diegetic floating HP bars, custom action sprite animation | C-161, C-164 |
 | C-145 | [Turn-Based Combat Loop](C-145-turn-based-combat-loop.md) ✅ | d20 dice RNG combat, hit/damage/loot, COMBAT_ACTION bridge, unit tests | C-144 |
 | C-031 | [SvelteKit Adapter Static & Firebase Hosting](C-031-adapter-static-and-hosting.md) ✅ | adapter-static SPA mode, Firebase Hosting emulator, SPA rewrites | — |
 | C-010 | [Setup Script](C-010-setup-script.md) | Interactive developer onboarding script | C-007, C-008 |

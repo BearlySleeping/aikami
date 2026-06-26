@@ -551,6 +551,10 @@ export class CombatViewModel
     }
 
     this.isResolvingAiAction = true;
+
+    // ── Trigger attack animation on player sprite (C-166 AC-3) ──
+    this._bridge?.send({ type: 'COMBAT_ACTION_ANIMATE' });
+
     this.debug('executeCustomAction: resolving', {
       promptLength: trimmed.length,
       promptPreview: trimmed.slice(0, 60),
