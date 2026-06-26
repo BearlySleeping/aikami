@@ -14,7 +14,7 @@
   import { gameStateService } from '$services';
   import { getCombatDevViewModel } from '$views/combat/combat_dev_view_model.svelte';
   import CombatSidebar from '$views/combat/combat_sidebar.svelte';
-  import CombatCanvas from '$views/combat/components/combat_canvas.svelte';
+  import CombatPortraitStage from '$views/combat/components/combat_portrait_stage.svelte';
 
   // ── URL params ──
   const params =
@@ -106,12 +106,21 @@
   <!-- Left pane: Combat Sidebar -->
   <CombatSidebar {viewModel} />
 
-  <!-- Right pane: LPC character canvas -->
+  <!-- Right pane: DOM portrait stage -->
   <div class="relative w-full h-full overflow-hidden bg-[#1a1a2e]">
-    <CombatCanvas
-      playerHp={viewModel.playerHp}
-      enemyHp={viewModel.enemyHp}
+    <CombatPortraitStage
+      playerName={viewModel.playerName}
+      playerPortraitUrl={viewModel.playerPortraitUrl}
+      playerCurrentHealth={viewModel.playerHp}
+      playerMaxHealth={viewModel.playerMaxHp}
+      isPlayerTakingDamage={viewModel.isPlayerTakingDamage}
+      isPlayerActiveTurn={viewModel.isPlayerActiveTurn}
       enemyName={viewModel.enemyName}
+      enemyPortraitUrl={viewModel.enemyPortraitUrl}
+      enemyCurrentHealth={viewModel.enemyHp}
+      enemyMaxHealth={viewModel.enemyMaxHp}
+      isEnemyTakingDamage={viewModel.isEnemyTakingDamage}
+      isEnemyActiveTurn={viewModel.isEnemyActiveTurn}
     />
   </div>
 </div>

@@ -4,6 +4,7 @@
   import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
   import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
   import CombatDiceUi from './components/combat_dice_ui.svelte';
+  import CombatPortraitStage from './components/combat_portrait_stage.svelte';
 
   type Props = {
     viewModel: CombatViewModelInterface;
@@ -62,6 +63,24 @@
       </div>
     {:else if viewModel.inCombat}
       <div class="flex flex-col gap-4 p-4 relative z-10">
+        <!-- Portrait stage — DOM-based character visuals (C-167) -->
+        <div class="h-[320px] sm:h-[380px] md:h-[420px] w-full">
+          <CombatPortraitStage
+            playerName={viewModel.playerName}
+            playerPortraitUrl={viewModel.playerPortraitUrl}
+            playerCurrentHealth={viewModel.playerHp}
+            playerMaxHealth={viewModel.playerMaxHp}
+            isPlayerTakingDamage={viewModel.isPlayerTakingDamage}
+            isPlayerActiveTurn={viewModel.isPlayerActiveTurn}
+            enemyName={viewModel.enemyName}
+            enemyPortraitUrl={viewModel.enemyPortraitUrl}
+            enemyCurrentHealth={viewModel.enemyHp}
+            enemyMaxHealth={viewModel.enemyMaxHp}
+            isEnemyTakingDamage={viewModel.isEnemyTakingDamage}
+            isEnemyActiveTurn={viewModel.isEnemyActiveTurn}
+          />
+        </div>
+
         <!-- Turn indicator -->
         <div class="rounded-lg border border-primary/30 bg-primary/10 p-3 text-center">
           <span class="text-sm font-semibold text-primary">
