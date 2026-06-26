@@ -1,11 +1,11 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/combat/components/combat_canvas.svelte
   //
-  // Lightweight PixiJS canvas rendering two LPC characters for the combat
-  // dev page. Player on left, enemy on right. Stacked layer sprites from
-  // the LPC asset catalog. Dev info overlay shows participant count.
+  // Lightweight PixiJS canvas rendering two LPC characters for combat dev.
+  // Player on left, enemy mirrored on right. Stacked layer sprites from LPC
+  // asset catalog using shared getLpcAssetPath (single source of truth).
   //
-  // Contract: C-166 Diegetic Combat Stage — AC-1 visual feedback
+  // Contract: C-166 Diegetic Combat Stage
 
   import { Application, Assets, Container, Sprite, Texture } from 'pixi.js';
   import { onMount } from 'svelte';
@@ -26,7 +26,6 @@
     showBackground = true,
   }: Props = $props();
 
-  // ── LPC character layers ──
   const PLAYER_LAYERS = [
     'body/bodies_male',
     'legs/cuffed_male',
@@ -43,13 +42,10 @@
     'hair/flat_top_fade_male',
   ] as const;
 
-  /** Layer z-order: body(0) → legs(2) → torso(1) → head(3) → hair(4) */
   const Z_ORDER = [0, 2, 1, 3, 4];
 
   let canvasElement = $state<HTMLCanvasElement>();
   let app: Application | undefined;
-  let playerContainer: Container | undefined;
-  let enemyContainer: Container | undefined;
   let isReady = $state(false);
   let _loaded = false;
 
@@ -58,7 +54,6 @@
       return;
     }
     _loaded = true;
-
     const canvas = canvasElement;
     if (!canvas) {
       return;
@@ -80,52 +75,44 @@
         const cx = app.screen.width / 2;
         const groundY = app.screen.height * 0.68;
 
-        // Player — left side
-        playerContainer = new Container();
-        playerContainer.x = cx - 64;
-        playerContainer.y = groundY;
-        playerContainer.scale.set(2.5);
-        app.stage.addChild(playerContainer);
+        const player = new Container();
+        player.x = cx - 120;
+        player.y = groundY;
+        player.scale.set(2.5);
+        app.stage.addChild(player);
 
-        // Enemy — right side, mirrored
-        enemyContainer = new Container();
-        enemyContainer.x = cx + 64;
-        enemyContainer.y = groundY;
-        enemyContainer.scale.set(2.5, 2.5);
-        app.stage.addChild(enemyContainer);
+        const enemy = new Container();
+        enemy.x = cx + 120;
+        enemy.y = groundY;
+        enemy.scale.set(-2.5, 2.5);
+        app.stage.addChild(enemy);
 
-        await loadCharacterSprites(playerContainer, PLAYER_LAYERS, true);
-        await loadCharacterSprites(enemyContainer, ENEMY_LAYERS, false);
+        await buildCharacter(player, PLAYER_LAYERS);
+        await buildCharacter(enemy, ENEMY_LAYERS);
 
-        applyHpTint(playerContainer, playerHp);
-        applyHpTint(enemyContainer, enemyHp);
+        tintHp(player, playerHp);
+        tintHp(enemy, enemyHp);
 
-        // Name labels (PixiJS Text)
         const { Text, TextStyle } = await import('pixi.js');
-        const labelStyle = new TextStyle({
-          fontSize: 12,
-          fill: 0xcccccc,
-          fontFamily: 'monospace',
-        });
+        const labelStyle = new TextStyle({ fontSize: 12, fill: 0xcccccc, fontFamily: 'monospace' });
         const playerLabel = new Text({ text: 'Player', style: labelStyle });
         playerLabel.anchor.set(0.5, 0);
-        playerLabel.x = playerContainer.x;
+        playerLabel.x = player.x;
         playerLabel.y = groundY - 120;
         app.stage.addChild(playerLabel);
 
         const enemyLabel = new Text({ text: enemyName, style: labelStyle });
         enemyLabel.anchor.set(0.5, 0);
-        enemyLabel.x = enemyContainer.x;
+        enemyLabel.x = enemy.x;
         enemyLabel.y = groundY - 120;
         app.stage.addChild(enemyLabel);
 
         isReady = true;
 
-        // Idle: very subtle breathing (slow, tiny amplitude)
         app.ticker.add(() => {
           const t = Date.now() / 1000;
           const breathe = 1 + Math.sin(t * 0.8) * 0.005;
-          for (const c of [playerContainer, enemyContainer]) {
+          for (const c of [player, enemy]) {
             if (c) {
               const baseScale = Math.abs(c.scale.x);
               c.scale.y = baseScale * breathe;
@@ -133,32 +120,22 @@
           }
         });
 
-        // Resize handler
         const onResize = () => {
           if (!app || !canvas) {
             return;
           }
           app.renderer.resize(canvas.clientWidth, canvas.clientHeight);
           const newCx = app.screen.width / 2;
-          if (playerContainer) {
-            playerContainer.x = newCx - 64;
-          }
-          if (enemyContainer) {
-            enemyContainer.x = newCx + 64;
-          }
-          if (playerLabel) {
-            playerLabel.x = playerContainer?.x ?? newCx - 64;
-          }
-          if (enemyLabel) {
-            enemyLabel.x = enemyContainer?.x ?? newCx + 64;
-          }
+          player.x = newCx - 120;
+          enemy.x = newCx + 120;
+          playerLabel.x = player.x;
+          enemyLabel.x = enemy.x;
         };
         window.addEventListener('resize', onResize);
 
         return () => {
           window.removeEventListener('resize', onResize);
           app?.destroy(true);
-          app = undefined;
           isReady = false;
           _loaded = false;
         };
@@ -170,60 +147,43 @@
 
   // ── Helpers ────────────────────────────────────────────────
 
-  const loadCharacterSprites = async (
-    container: Container,
-    layerIds: readonly string[],
-    facingRight: boolean,
-  ): Promise<void> => {
-    const textures = await Promise.all(layerIds.map((id) => loadLpcTexture(id, facingRight)));
-    for (const i of Z_ORDER) {
-      const tex = textures[i];
-      const sprite = new Sprite(tex ?? Texture.EMPTY);
-      sprite.anchor.set(0.5, 1);
-      sprite.y = 0;
-      container.addChild(sprite);
+  const _texCache = new Map<string, Texture>();
+
+  const loadTexture = async (assetId: string): Promise<Texture> => {
+    const cached = _texCache.get(assetId);
+    if (cached) {
+      return cached;
     }
-  };
-
-  /** Base textures (full spritesheets), cached by assetId. Sub-textures created fresh each call. */
-  const _baseTextureCache = new Map<string, Texture>();
-
-  const loadLpcTexture = async (assetId: string, facingRight: boolean): Promise<Texture> => {
-    // Load base spritesheet texture (cached)
-    let base = _baseTextureCache.get(assetId);
-    if (base === undefined) {
-      try {
-        const path = getLpcAssetPath('body', assetId, LpcAnimationState.Walk);
-        const mod = await import(/* @vite-ignore */ `${path}?url`);
-        const url = (mod as { default: string }).default;
-        const loaded = (await Assets.load(url)) as Texture;
-        loaded.source.scaleMode = 'nearest';
-        _baseTextureCache.set(assetId, loaded);
-        base = loaded;
-      } catch {
-        return Texture.EMPTY;
-      }
-    }
-
-    // Create sub-texture: player=Right(row2,y128), enemy=Left(row1,y64)
-    const { Rectangle } = await import('pixi.js');
-    const rowY = facingRight ? 128 : 64;
-    const tex = base;
-    if (!tex) {
+    try {
+      const path = getLpcAssetPath('body', assetId, LpcAnimationState.Walk);
+      const mod = await import(/* @vite-ignore */ `${path}?url`);
+      const loaded = await Assets.load((mod as { default: string }).default);
+      loaded.source.scaleMode = 'nearest';
+      _texCache.set(assetId, loaded);
+      return loaded;
+    } catch {
       return Texture.EMPTY;
     }
-    return new Texture({ source: tex.source, frame: new Rectangle(0, rowY, 64, 64) });
   };
 
-  const applyHpTint = (container: Container | undefined, hp: number): void => {
-    if (!container) {
+  const buildCharacter = async (c: Container, ids: readonly string[]) => {
+    const texs = await Promise.all(ids.map(loadTexture));
+    for (const i of Z_ORDER) {
+      const s = new Sprite(texs[i] ?? Texture.EMPTY);
+      s.anchor.set(0.5, 1);
+      c.addChild(s);
+    }
+  };
+
+  const tintHp = (c: Container | undefined, hp: number) => {
+    if (!c) {
       return;
     }
     const pct = Math.max(0, hp / 100);
     const tint = pct > 0.5 ? 0xffffff : pct > 0.25 ? 0xffcccc : 0xff6666;
-    for (const child of container.children) {
-      if (child instanceof Sprite) {
-        child.tint = tint;
+    for (const ch of c.children) {
+      if (ch instanceof Sprite) {
+        ch.tint = tint;
       }
     }
   };
@@ -238,7 +198,6 @@
     </div>
   {/if}
 
-  <!-- Dev info overlay -->
   <div class="absolute bottom-2 left-2 pointer-events-none">
     <div
       class="rounded bg-base-100/80 px-2 py-1 text-[10px] font-mono text-base-content/60 backdrop-blur-sm"
