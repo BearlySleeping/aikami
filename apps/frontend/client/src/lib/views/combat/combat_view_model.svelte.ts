@@ -1046,7 +1046,11 @@ export class CombatViewModel
     // After ~1.5 seconds, reveal the final result
     this._diceTimeout = setTimeout(() => {
       this.activeDiceRoll = { value, isRolling: false, isSuccess };
-      this._diceTimeout = null;
+      // After another ~1.5s, clear the dice entirely
+      this._diceTimeout = setTimeout(() => {
+        this.activeDiceRoll = null;
+        this._diceTimeout = null;
+      }, 1500);
     }, 1500);
   }
 }

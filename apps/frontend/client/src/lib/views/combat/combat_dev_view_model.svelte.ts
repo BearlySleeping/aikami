@@ -889,6 +889,9 @@ export class CombatDevViewModel extends CombatViewModel {
     // After ~1.5 seconds, reveal the final result
     setTimeout(() => {
       this.activeDiceRoll = { value, isRolling: false, isSuccess };
+      setTimeout(() => {
+        this.activeDiceRoll = null;
+      }, 1500);
     }, 1500);
   }
 }

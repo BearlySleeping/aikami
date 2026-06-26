@@ -26,9 +26,9 @@ describe('DevViewModel', () => {
     expect(viewModel.navItems).toBeDefined();
   });
 
-  test('navItems should contain all 16 dev console links', async () => {
+  test('navItems should contain all 15 dev console links', async () => {
     const viewModel = await getDevViewModel();
-    expect(viewModel.navItems.length).toBe(16);
+    expect(viewModel.navItems.length).toBe(15);
 
     const routes = viewModel.navItems.map((item) => item.route);
     expect(routes).toContain('/dev/config');
