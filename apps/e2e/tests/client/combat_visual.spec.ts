@@ -20,9 +20,13 @@ const gotoPage = async (page: Page, state: string): Promise<void> => {
 };
 
 const screenshot = async (page: Page, filename: string): Promise<void> => {
+  // Capture only the right 65% (canvas section) of the split-screen
+  const viewport = page.viewportSize();
+  const clipWidth = viewport ? Math.floor(viewport.width * 0.65) : 832;
   await page.screenshot({
     path: `test-results/combat-visual/${filename}`,
     fullPage: false,
+    clip: { x: viewport ? Math.floor(viewport.width * 0.35) : 448, y: 0, width: clipWidth, height: viewport?.height ?? 960 },
   });
 };
 
