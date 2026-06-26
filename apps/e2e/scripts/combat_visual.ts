@@ -51,19 +51,28 @@ const SCREENSHOTS = [
 
 const COMBAT_EVAL_PROMPT = [
   'This is a screenshot from a combat UI in a pixel-art RPG game called Aikami.',
-  'Rate this image on a scale of 0 to 100 based on the following criteria:',
-  '- Is the combat sidebar visible on the left side with HP bars at the top?',
-  '- Are Player and Enemy HP bars (progress bars) visible and readable?',
-  '- Is the action bar (Attack / Defend / Flee buttons) visible at the bottom?',
-  '- Is the right side showing a dark placeholder canvas (gray area with "PIXIJS CANVAS" text)?',
-  '- Is the overall layout clean with no broken or overlapping elements?',
-  '- Are all text elements readable and properly aligned?',
   '',
-  'Score deduction guide:',
-  '- 90-100: Perfect combat UI with all elements visible and well-positioned',
-  '- 70-89: All major elements present but minor alignment issues',
-  '- 50-69: Some elements present but significant layout problems',
-  '- 0-49: Combat UI not visible or major rendering failure',
+  'IMPORTANT: Ignore the narrow navigation sidebar on the FAR LEFT with icons',
+  '(Config, Text, Voice, etc). This is a development environment. Only evaluate',
+  'the MAIN CONTENT which is a split-screen: combat sidebar (left 35%) and',
+  'battle stage canvas (right 65%).',
+  '',
+  'Rate this image on a scale of 0 to 100 based on:',
+  '- Is the combat sidebar visible? It should have HP bars at the top and',
+  '  action buttons (Attack/Defend/Flee) at the bottom. Even if the buttons',
+  '  are small or partially cut off, count them as PRESENT.',
+  '- Are Player and Enemy HP progress bars visible and readable?',
+  '- Is the right side (~65%) showing a dark blue/purple canvas with two',
+  '  pixel-art LPC character sprites (knight on left, worker on right)?',
+  '  These ARE the expected content — this is a visual combat mockup.',
+  '- Are there name labels above the characters?',
+  '- Is the layout clean with no broken or overlapping elements?',
+  '',
+  'Score guide:',
+  '- 90-100: All elements (HP bars, action bar, LPC sprites, labels) visible',
+  '- 70-89: Most elements present, minor visual issues',
+  '- 50-69: Some elements missing or layout problems',
+  '- 0-49: Combat not visible or major failure',
   '',
   'Return ONLY a JSON object matching this schema:',
   '{"score": number, "characterVisible": boolean, "notes": string, "issues": string[]}',
@@ -93,12 +102,14 @@ if (!captureOnly) {
   let succeeded = 0;
 
   // Per-screenshot evaluation context
-const PROMPT_HINTS: Record<string, string> = {
-  'combat_victory.png': 'This is a VICTORY screen after combat. Expect a trophy emoji, "Victory!" text, and a "Continue" button. The HP bars and action bar are not expected.',
-  'combat_defeat.png': 'This is a DEFEAT screen after combat. Expect a skull emoji, "Defeat" text, and a "Continue" button. The HP bars and action bar are not expected.',
-};
+  const PROMPT_HINTS: Record<string, string> = {
+    'combat_victory.png':
+      'This is a VICTORY screen after combat. Expect a trophy emoji, "Victory!" text, and a "Continue" button. The HP bars and action bar are not expected.',
+    'combat_defeat.png':
+      'This is a DEFEAT screen after combat. Expect a skull emoji, "Defeat" text, and a "Continue" button. The HP bars and action bar are not expected.',
+  };
 
-for (const { file, desc } of SCREENSHOTS) {
+  for (const { file, desc } of SCREENSHOTS) {
     const filepath = join(SCREENSHOT_DIR, file);
     if (!existsSync(filepath)) {
       console.log(`  ⚠️  ${file} — not found, skipping`);

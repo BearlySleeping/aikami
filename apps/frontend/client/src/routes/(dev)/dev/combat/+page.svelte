@@ -108,7 +108,11 @@
 
   <!-- Right pane: LPC character canvas -->
   <div class="relative w-full h-full overflow-hidden bg-[#1a1a2e]">
-    <CombatCanvas playerHp={viewModel.playerHp} enemyHp={viewModel.enemyHp} />
+    <CombatCanvas
+      playerHp={viewModel.playerHp}
+      enemyHp={viewModel.enemyHp}
+      enemyName={viewModel.enemyName}
+    />
   </div>
 </div>
 
