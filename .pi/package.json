@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
-    "@mariozechner/pi-coding-agent": "^0.76.0"
+    "@mariozechner/pi-coding-agent": "^0.73.1"
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
