@@ -169,6 +169,7 @@ export class CombatDevViewModel extends CombatViewModel {
     this.enemyMaxHp = MOCK_ENEMY_MAX_HP;
     this.enemyEntityId = 2002;
     this.combatResult = null;
+    this.enemyName = 'Goblin'; // default mock enemy
 
     // ── Apply URL search param overrides for visual testing ──
     const init = (this as unknown as { _initialState?: CombatDevViewModelOptions['initialState'] })
@@ -176,12 +177,14 @@ export class CombatDevViewModel extends CombatViewModel {
     if (init) {
       // Visual state presets take priority over individual params
       if (init.state === 'victory') {
+        this.enemyName = init.enemyName ?? 'Goblin';
         this.combatResult = 'victory';
         this.enemyHp = 0;
         this.currentTurnEntity = null;
         this._addLogEntry('Player lands the final blow!');
         this._addLogEntry('Goblin has been defeated!');
       } else if (init.state === 'defeat') {
+        this.enemyName = init.enemyName ?? 'Goblin';
         this.combatResult = 'defeat';
         this.playerHp = 0;
         this.currentTurnEntity = null;
