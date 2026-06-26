@@ -10,6 +10,8 @@
 
   import { Application, Assets, Container, Sprite, Texture } from 'pixi.js';
   import { onMount } from 'svelte';
+  import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+  import { LpcAnimationState } from '$lib/data/lpc_models';
 
   /** Props */
   type Props = {
@@ -172,8 +174,9 @@
     }
 
     try {
-      // Dynamic import of webp asset via Vite
-      const mod = await import(/* @vite-ignore */ `/src/lib/assets/lpc/${assetId}/walk.webp?url`);
+      // Use shared LPC asset path resolver (single source of truth)
+      const path = getLpcAssetPath('body', assetId, LpcAnimationState.Walk);
+      const mod = await import(/* @vite-ignore */ `${path}?url`);
       const url = (mod as { default: string }).default;
       const texture = await Assets.load(url);
       texture.source.scaleMode = 'nearest';
