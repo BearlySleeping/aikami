@@ -32,7 +32,6 @@ export default function (pi: ExtensionAPI) {
       "Use firestore_query to inspect Firestore data during debugging.",
     promptGuidelines: [
       "Use firestore_query to peek at Firestore data instead of reading raw emulator exports.",
-      "Query 'log_entries' for structured client-side logs (level, context.source, metadata).",
     ],
     parameters: Type.Object({
       collection: Type.String({

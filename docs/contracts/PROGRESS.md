@@ -62,8 +62,8 @@
 | C-141 | NPC Interaction & Dialogue Trigger | ✅ completed |
 | C-142 | Inventory Sync & Item Pickups | ✅ completed |
 | C-143 | Quest Log Sync & Technical Debt | ✅ completed |
-| C-032 | LPC Spritesheet Shader & Pipeline Integration | ⏳ not_started |
-| C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ⏳ not_started |
+| C-032 | LPC Spritesheet Shader & Pipeline Integration | ✅ completed |
+| C-033 | LPC Multi-Layer UBO Batching & Reactive Buffer Pipeline | ✅ completed |
 | C-034 | LPC Render Pipeline | ✅ completed |
 | C-035-ecs | Combat Engine ECS-Svelte Sync | ✅ completed |
 | C-035-viewport | Viewport Layer Integration | ✅ completed |
@@ -76,7 +76,7 @@
 | C-042 | Reusable LPC Sprite Component | ✅ completed |
 | C-043 | LPC Layer Visual Debugger | ✅ completed |
 | C-044 | LPC Fallback Grid Projection | ✅ completed |
-| C-045 | Pixi Graphics Dirty Flag Synchronizer | ⏳ not_started |
+| C-045 | Pixi Graphics Dirty Flag Synchronizer | ✅ completed |
 | C-046 | Nix Chromium Extension Injection | ✅ completed |
 | C-047 | Pixi DevTools Emulator Wiring | ✅ completed |
 | C-048 | LPC Laboratory and Texture Projection | ✅ completed |
