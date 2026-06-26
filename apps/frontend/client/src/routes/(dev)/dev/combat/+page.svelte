@@ -22,13 +22,14 @@
   const enemyName = params.get('enemy-name') ?? undefined;
   const logParam = params.get('log') ?? undefined;
   const logEntries = logParam ? logParam.split('|').filter(Boolean) : undefined;
+  const stateParam = params.get('state') ?? undefined;
 
   const viewModel = getCombatDevViewModel({
     className: 'CombatDevViewModel',
     useRealMusic: true,
     initialState:
-      allyHp || enemyHp || enemyName || logEntries
-        ? { allyHp, enemyHp, enemyName, logEntries }
+      allyHp || enemyHp || enemyName || logEntries || stateParam
+        ? { allyHp, enemyHp, enemyName, logEntries, state: stateParam }
         : undefined,
   });
 
@@ -41,7 +42,7 @@
   let useRealMusic = $state(true);
 
   /** Toggle between old full-screen overlay and new sidebar layout. */
-  let useSidebarLayout = $state(false);
+  let useSidebarLayout = $state(stateParam != null);
 
   // Music test controls
   const MOODS = [
