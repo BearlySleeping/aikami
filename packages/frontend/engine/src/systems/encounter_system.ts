@@ -4,6 +4,7 @@ import { addComponent, getComponent, query, set } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Enemy } from '../components/enemy.ts';
+import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { Velocity } from '../components/velocity.ts';
@@ -63,6 +64,11 @@ export const updateEncounterSystem = (options: {
   const { world, playerEntityId, bridge } = options;
 
   if (!world || playerEntityId <= 0 || !bridge) {
+    return false;
+  }
+
+  // ── C-172 AC-1: Return early during map transitions ──
+  if (!isSimulationActive()) {
     return false;
   }
 

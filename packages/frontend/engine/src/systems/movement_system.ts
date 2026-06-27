@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/systems/movement_system.ts
 import type { World } from 'bitecs';
 import { addComponent, getComponent, query, set } from 'bitecs';
+import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { VelocityData } from '../components/velocity.ts';
@@ -38,6 +39,11 @@ const MOVEMENT_QUERY_TERMS = [Position, Velocity];
  */
 const updateMovement = (world: World, deltaMs: number): void => {
   if (!world) {
+    return;
+  }
+
+  // ── C-172 AC-1: Return early during map transitions ──
+  if (!isSimulationActive()) {
     return;
   }
 

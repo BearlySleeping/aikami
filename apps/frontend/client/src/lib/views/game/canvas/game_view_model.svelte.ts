@@ -123,15 +123,17 @@ export type GameViewModelInterface = BaseViewModelInterface & {
 
   /**
    * Loads a new map at the given coordinates.
-   * Accepts an optional list of defeated enemy spawn IDs to filter out.
+   * Accepts an optional list of defeated enemy spawn IDs to filter out,
+   * and an optional targetSpawnHash for C-172 spawn point resolution.
    *
-   * Contract: C-147 Progression & Persistence
+   * Contract: C-147 Progression & Persistence, C-172 Staging World Transitions
    */
   loadMap(
     mapUrl: string,
     targetX: number,
     targetY: number,
     defeatedEnemies?: string[],
+    targetSpawnHash?: number,
   ): Promise<void>;
 
   /**
@@ -638,9 +640,10 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     targetX: number,
     targetY: number,
     defeatedEnemies?: string[],
+    targetSpawnHash?: number,
   ): Promise<void> {
     if (this._gameWorld) {
-      await this._gameWorld.loadMap(mapUrl, targetX, targetY, defeatedEnemies);
+      await this._gameWorld.loadMap(mapUrl, targetX, targetY, defeatedEnemies, targetSpawnHash);
     }
   }
 
