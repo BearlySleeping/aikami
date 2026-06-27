@@ -7,6 +7,10 @@
     "reserveTokens": 16384,
     "keepRecentTokens": 20000
   },
+  "packages": [
+    "npm:context-mode",
+    "npm:pi-mcp-adapter"
+  ],
   "extensions": ["./.pi/extensions"],
   "skills": ["./.pi/skills", "./.pi/skills-pixijs"],
   "prompts": ["./.pi/prompts"]
