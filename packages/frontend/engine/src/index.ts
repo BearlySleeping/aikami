@@ -57,6 +57,12 @@ export {
   MAX_CHUNKS,
   registerChunkDataObservers,
 } from './components/chunk_data.ts';
+export type { CollisionDataPayload } from './components/collision_data.ts';
+export {
+  CollisionData,
+  CollisionLayer,
+  registerCollisionDataObservers,
+} from './components/collision_data.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export { Enemy, registerEnemyObservers } from './components/enemy.ts';
@@ -71,6 +77,8 @@ export {
   SimulationState,
   setSimulationState,
 } from './components/engine_state.ts';
+export type { GridPositionData } from './components/grid_position.ts';
+export { GridPosition, registerGridPositionObservers } from './components/grid_position.ts';
 export type { InteractableData, InteractableType } from './components/interactable.ts';
 export { Interactable, registerInteractableObservers } from './components/interactable.ts';
 export type { InventoryData, WalletData } from './components/inventory.ts';
@@ -81,10 +89,14 @@ export {
   registerWalletObservers,
   Wallet,
 } from './components/inventory.ts';
+export type { MoveIntentData } from './components/move_intent.ts';
+export { MoveIntent, registerMoveIntentObservers } from './components/move_intent.ts';
 export type { NPCDialogData } from './components/npc_dialog.ts';
 export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { PositionData } from './components/position.ts';
 export { Position, registerPositionObservers } from './components/position.ts';
+export type { SpatialLinkData } from './components/spatial_link.ts';
+export { registerSpatialLinkObservers, SpatialLink } from './components/spatial_link.ts';
 export type { SpawnPointData } from './components/spawn_point.ts';
 export {
   registerSpawnPointObservers,
@@ -180,7 +192,17 @@ export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk
 // State (engine-level mode gate)
 export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
-export { isWalkable, resetCollisionGrid, setCollisionGrid } from './systems/collision_system.ts';
+export {
+  initializeSpatialGrid,
+  insertIntoSpatialGrid,
+  isCellBlocked,
+  isWalkable,
+  moveInSpatialGrid,
+  removeFromSpatialGrid,
+  resetCollisionGrid,
+  resolveMoveIntents,
+  setCollisionGrid,
+} from './systems/collision_system.ts';
 export { updateEncounterSystem } from './systems/encounter_system.ts';
 export type {
   SpawnEntitiesOptions,

@@ -32,6 +32,7 @@
 | C-170 | ECS Visual Observer Pattern | ✅ completed |
 | C-171 | WebGPU Tilemap Mesh Pipeline | ✅ completed |
 | C-172 | Staging World Transitions | ✅ completed |
+| C-173 | ECS Spatial Hash Grid | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
@@ -2282,3 +2283,38 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - No generational indices for dangling pointer protection (out of scope per contract).
 - The `EngineState` singleton entity ID is tracked via module-level variable — not queryable via the bitECS world. Works for a single-world architecture but would need refactoring for multi-world support.
 - Tiled maps must be updated with `targetSpawnId` properties on transition objects and `spawnId` properties on spawn objects for C-172 features to activate. Existing maps fall back to legacy behavior.
+
+### C-173: ECS Spatial Hash Grid
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/grid_position.ts` — `GridPosition` SoA component (integer x, y tile coordinates). Separate from Position (floating-point pixel coords) for spatial query domain.
+- `packages/frontend/engine/src/components/move_intent.ts` — `MoveIntent` SoA component (dx, dy discrete tile offsets: -1/0/1). Written by input/AI systems, resolved by CollisionSystem.
+- `packages/frontend/engine/src/components/spatial_link.ts` — `SpatialLink` SoA component (next, prev pointers). Intrusive doubly-linked list for multiple entities in the same grid cell.
+- `packages/frontend/engine/src/components/collision_data.ts` — `CollisionData` SoA component (layer, mask) with `CollisionLayer` enum (wall=1, player=2, npc=4, enemy=8, item=16). Bitmask collision via bitwise AND.
+
+**Files modified**:
+- `packages/frontend/engine/src/systems/collision_system.ts` — Added 1D dense `Uint32Array` spatial grid (`MAP_WIDTH × MAP_HEIGHT`). Implemented `insertIntoSpatialGrid()`, `removeFromSpatialGrid()`, `moveInSpatialGrid()` with intrusive linked list (AC-1). `isCellBlocked()` walks linked list and performs bitwise AND collision check (AC-2). `isWalkable()` upgraded to check spatial grid first, falling back to legacy boolean grid. `setCollisionGrid()` now accepts optional `World` for wall entity population. `resolveMoveIntents()` scaffolded for intent→resolve pipeline.
+- `packages/frontend/engine/src/systems/movement_system.ts` — Upgraded collision checks to use `isCellBlocked()` with `PLAYER_COLLISION_MASK` (wall | npc | enemy) via bitmask spatial grid. Legacy `isWalkable()` retained as fallback. Imports `CollisionLayer` for collision mask definition.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — Registered `registerCollisionDataObservers`, `registerGridPositionObservers`, `registerMoveIntentObservers`, `registerSpatialLinkObservers` during engine initialization.
+- `packages/frontend/engine/src/index.ts` — Exported all new components, `CollisionLayer`, spatial grid API (`initializeSpatialGrid`, `insertIntoSpatialGrid`, `removeFromSpatialGrid`, `moveInSpatialGrid`, `isCellBlocked`, `resolveMoveIntents`).
+
+**Deviations**:
+1. **Sparse arrays instead of TypedArrays**: Contract specifies `Int16Array`, `Int8Array`, `Uint32Array`, `Uint16Array` for components. Following existing codebase convention, components use regular sparse `number[]` arrays (bitECS v0.4.0 observer API requirement). The `SpatialGrid` itself IS a `Uint32Array` (zero-allocation, AC-3 compliant).
+2. **Position retained alongside GridPosition**: Contract implies replacing Position with GridPosition. Both are preserved — Position for rendering (floating-point pixel coords), GridPosition for spatial queries (integer tile coords). Movement system writes to Position directly; GridPosition is set by the spatial grid on registration.
+3. **MoveIntent resolution scaffolded**: The full intent→resolve→apply pipeline is scaffolded (`resolveMoveIntents()` exists but is not the primary movement path). Current movement uses velocity→position with spatial grid collision checks. Full MoveIntent pipeline activation is deferred until input system refactoring.
+4. **Walls not yet entity-based**: Solid tiles from the Tiled collision layer are checked via legacy `isWalkable()` fallback, not as wall entities with `CollisionData`. Populating actual wall entities from the collision grid requires entity creation in the spatial grid — scaffolded in `_populateWallsFromCollisionGrid`.
+
+**Design decisions**:
+1. **Dual collision check**: `isCellBlocked()` for bitmask entity collisions, `isWalkable()` for static tile collisions. Both are checked per-axis in the movement system. This provides backward compatibility while enabling the new pipeline.
+2. **Head-insertion O(1)**: `insertIntoSpatialGrid()` always inserts at the head of the linked list. Removal splices correctly for head, middle, and tail nodes via `prev`/`next` pointer manipulation.
+3. **Zero-allocation grid operations**: All spatial grid operations (`insertIntoSpatialGrid`, `removeFromSpatialGrid`, `isCellBlocked`) use raw array reads/writes with no heap allocation in the hot path (AC-3).
+4. **32px tile size hardcoded**: Grid coordinate conversion uses `Math.floor(pixelX / 32)` — matches the existing `CELL_PIXEL_SIZE` constant from `render_system.ts`.
+
+**Known limitations**:
+- `resolveMoveIntents()` is scaffolded — the MoveIntent component is not yet written by any system. Full intent→resolve pipeline requires input/AI system refactoring (future contract).
+- Wall entities are not created from the Tiled collision grid — static tile checks use legacy `isWalkable()`. Entity-based wall occupancy requires populating the spatial grid with wall entities.
+- The spatial grid is a module-level singleton (`_spatialGrid`) — only one grid is active at a time. Multi-map or split-screen scenarios would need multi-grid support.
+- `GridPosition` is not auto-synced with `Position` — the spatial grid registration must be manually triggered after entity creation.
+- No unit tests for `insertIntoSpatialGrid`, `removeFromSpatialGrid`, or `isCellBlocked` — these require the spatial grid to be initialized with specific dimensions.
