@@ -34,6 +34,7 @@
 | C-172 | Staging World Transitions | ✅ completed |
 | C-173 | ECS Spatial Hash Grid | ✅ completed |
 | C-174 | ECS Bresenham Line of Sight | ✅ completed |
+| C-175 | LLM JTON Map Pipeline | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
