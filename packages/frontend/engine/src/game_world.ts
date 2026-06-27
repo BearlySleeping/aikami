@@ -1,5 +1,5 @@
 // packages/frontend/engine/src/game_world.ts
-import type { Application } from 'pixi.js';
+import type { Application, Spritesheet } from 'pixi.js';
 import { Container, Graphics, type Renderer, Sprite, Texture } from 'pixi.js';
 import {
   extractCollisionGrid,
@@ -70,7 +70,12 @@ type RenderEntry = {
   /** Layer recipes for multi-layer rendering. */
   recipes?: LpcLayerRecipe[];
   /** Array of active layer sprites and their loaded base textures. */
-  layerSprites?: { sprite: Sprite; recipe: LpcLayerRecipe; texture?: Texture }[];
+  layerSprites?: {
+    sprite: Sprite;
+    recipe: LpcLayerRecipe;
+    texture?: Texture;
+    spritesheet?: Spritesheet;
+  }[];
 };
 
 /**
@@ -1613,6 +1618,27 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const texture = await Assets.load(url);
         texture.source.scaleMode = 'nearest';
 
+        // C-168: Create a cached Spritesheet from the loaded texture
+        // so _applyLpcFrame can use WebGPU-compatible UV sub-textures.
+        let spritesheet: Spritesheet | undefined;
+        if (this._textureManager) {
+          const columns = Math.floor(texture.width / 64);
+          const rows = Math.floor(texture.height / 64);
+          if (columns > 0 && rows > 0) {
+            spritesheet = await this._textureManager.getOrCreateSpritesheet({
+              baseTexture: texture,
+              layout: {
+                frameWidth: 64,
+                frameHeight: 64,
+                columns,
+                rows,
+                keyPrefix: stateStr,
+              },
+              cacheKey: url,
+            });
+          }
+        }
+
         // Remove debug sprites on first successful texture load
         if (!texturesLoaded) {
           texturesLoaded = true;
@@ -1623,7 +1649,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         sprite.eventMode = 'none';
 
         container.addChild(sprite);
-        layerSprites.push({ sprite, recipe, texture });
+        layerSprites.push({ sprite, recipe, texture, spritesheet });
       } catch (err) {
         this.debug('lpc-load-error', { url, error: String(err) });
       }
@@ -1663,11 +1689,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   /**
-   * Slices the current animation frame from the loaded LPC walk spritesheets
-   * and applies them to the layer sprites.
+   * Applies the current animation frame from the loaded LPC walk
+   * spritesheets to the layer sprites.
+   *
+   * Uses the PixiJS `Spritesheet` API (C-168) instead of manual
+   * `new Texture({ source, frame: rect })` to ensure correct
+   * WebGPU-compatible UV mappings on every sub-texture.
+   *
+   * Spritesheet instances are created once in {@link _loadEntityRecipes}
+   * and cached via {@link TextureManager._spritesheetCache} — this
+   * method performs only synchronous `spritesheet.textures[key]`
+   * lookups each frame.
    */
   private _applyLpcFrame(entry: RenderEntry, controller: AnimationController): void {
-    if (!entry.layerSprites || entry.layerSprites.length === 0 || !this._textureManager) {
+    if (!entry.layerSprites || entry.layerSprites.length === 0) {
       return;
     }
 
@@ -1680,26 +1715,50 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         continue;
       }
 
-      const sheet = layer.texture;
-      const columns = Math.floor(sheet.width / 64);
-      const rows = Math.floor(sheet.height / 64);
+      // C-168: prefer the parsed Spritesheet for WebGPU-safe UV lookups.
+      // Fall back to legacy getFrameAt when no spritesheet was created
+      // (e.g., dimensions don't align to the 64×64 grid).
+      if (layer.spritesheet) {
+        const columns = Math.floor(layer.texture.width / 64);
+        const rows = Math.floor(layer.texture.height / 64);
 
-      let effectiveRow = row;
-      if (rows === 1) {
-        effectiveRow = 0;
-      }
+        let effectiveRow = row;
+        if (rows === 1) {
+          effectiveRow = 0;
+        }
 
-      const frameCol = column % columns;
-      const dynamicFrameIndex = effectiveRow * columns + frameCol;
+        const frameCol = column % columns;
+        const frameKey = `walk_${effectiveRow}_${frameCol}`;
 
-      const frameTexture = this._textureManager.getFrameAt({
-        texture: sheet,
-        layout: { frameWidth: 64, frameHeight: 64, columns, rows },
-        frameIndex: dynamicFrameIndex,
-      });
+        const frameTexture = layer.spritesheet.textures[frameKey];
+        if (frameTexture) {
+          layer.sprite.texture = frameTexture;
+        }
+      } else if (this._textureManager) {
+        // Legacy fallback — manual frame slicing via Rectangle.
+        // This path is kept for spritesheets that don't conform to
+        // the standard LPC 64×64 grid (e.g., odd-sized props).
+        const sheet = layer.texture;
+        const columns = Math.floor(sheet.width / 64);
+        const rows = Math.floor(sheet.height / 64);
 
-      if (frameTexture) {
-        layer.sprite.texture = frameTexture;
+        let effectiveRow = row;
+        if (rows === 1) {
+          effectiveRow = 0;
+        }
+
+        const frameCol = column % columns;
+        const dynamicFrameIndex = effectiveRow * columns + frameCol;
+
+        const frameTexture = this._textureManager.getFrameAt({
+          texture: sheet,
+          layout: { frameWidth: 64, frameHeight: 64, columns, rows },
+          frameIndex: dynamicFrameIndex,
+        });
+
+        if (frameTexture) {
+          layer.sprite.texture = frameTexture;
+        }
       }
     }
   }
