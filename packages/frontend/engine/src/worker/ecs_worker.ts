@@ -19,6 +19,7 @@ import {
   registerAppearanceObservers,
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
+import { registerCollisionDataObservers } from '../components/collision_data.ts';
 import { registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
 import {
@@ -27,11 +28,14 @@ import {
   SimulationState,
   setSimulationState,
 } from '../components/engine_state.ts';
+import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import { registerInventoryObservers } from '../components/inventory.ts';
+import { registerMoveIntentObservers } from '../components/move_intent.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
+import { registerSpatialLinkObservers } from '../components/spatial_link.ts';
 import { registerSpawnPointObservers } from '../components/spawn_point.ts';
 import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
@@ -479,6 +483,10 @@ const initializeEngine = (
   registerTransitionObservers(world);
   registerEngineStateObservers(world);
   registerSpawnPointObservers(world);
+  registerCollisionDataObservers(world);
+  registerGridPositionObservers(world);
+  registerMoveIntentObservers(world);
+  registerSpatialLinkObservers(world);
 
   // 4b. Create the EngineState singleton entity (C-172)
   createEngineStateEntity(world);
