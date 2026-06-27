@@ -78,6 +78,8 @@ P2 (Polish — after P1):
 | C-171 | [WebGPU Tilemap Mesh Pipeline](C-171-webgpu-tilemap-mesh-pipeline.md) ✅ | Replace RenderTexture baking with WebGPU chunking — 32×32 tile Mesh chunks, Float32Array/Uint32Array buffers, CPU frustum culling, GC mitigation | C-170 |
 | C-172 | [Staging World Transitions](C-172-staging-world-transitions.md) ✅ | EngineState singleton pausing core systems, staging world spawn resolution, decoupled SpawnPoint coordinates via string hash IDs | C-171 |
 | C-173 | [ECS Spatial Hash Grid](C-173-ecs-spatial-hash-grid.md) ✅ | Dense 1D Uint32Array spatial grid with intrusive linked list, bitmask CollisionData layer/mask, MoveIntent scaffold, dual isCellBlocked+isWalkable collision | C-172 |
+| C-174 | [ECS Bresenham Line of Sight](C-174-ecs-bresenham-line-of-sight.md) ✅ | Zero-allocation Bresenham raycaster, bitmask occlusion, NPC/encounter/context vision gating | C-173 |
+| C-175 | [LLM JTON Map Pipeline](C-175-llm-jton-map-pipeline.md) ✅ | Tiled JTON exporter plugin, Zen Grid parser, JTON→TilemapData conversion, token-optimized map format | C-171, C-172 |
 | C-145 | [Turn-Based Combat Loop](C-145-turn-based-combat-loop.md) ✅ | d20 dice RNG combat, hit/damage/loot, COMBAT_ACTION bridge, unit tests | C-144 |
 | C-031 | [SvelteKit Adapter Static & Firebase Hosting](C-031-adapter-static-and-hosting.md) ✅ | adapter-static SPA mode, Firebase Hosting emulator, SPA rewrites | — |
 | C-010 | [Setup Script](C-010-setup-script.md) | Interactive developer onboarding script | C-007, C-008 |
