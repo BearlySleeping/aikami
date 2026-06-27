@@ -375,6 +375,35 @@
             </label>
           </fieldset>
 
+          <!-- Global Tint -->
+          <fieldset class="border-0 border-b border-base-300 px-4 py-3 m-0 shrink-0">
+            <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
+              Global Tint
+            </legend>
+
+            <label for="global-tint" class="flex items-center gap-2 text-xs text-base-content/60"
+              >>
+              <input
+                type="color"
+                id="global-tint"
+                class="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent"
+                value={viewModel.globalTint || '#ffffff'}
+                oninput={(e: Event) => viewModel.setGlobalTint((e.target as HTMLInputElement).value)}
+              >
+              <span class="text-[0.65rem] text-base-content/40">
+                {viewModel.globalTint || 'none'}
+              </span>
+              {#if viewModel.globalTint}
+                <button
+                  class="btn btn-ghost btn-xs text-[0.65rem]"
+                  onclick={() => viewModel.setGlobalTint('')}
+                >
+                  clear
+                </button>
+              {/if}
+            </label>
+          </fieldset>
+
           <!-- Diagnostic Overlays -->
           <fieldset class="border-0 border-b border-base-300 px-4 py-3 m-0 shrink-0">
             <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
@@ -471,23 +500,47 @@
                     </select>
                   </label>
 
-                  <label class="flex items-center gap-2 text-xs text-base-content/60 mb-1">
-                    Tint
-                    <input
-                      type="color"
-                      class="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent"
-                      value={viewModel.paletteColors[i] ?? '#ffffff'}
-                      oninput={(e: Event) => viewModel.setLayerColor(i, (e.target as HTMLInputElement).value)}
-                    >
-                    <span class="text-[0.65rem] text-base-content/40 truncate max-w-[80px]">
-                      {viewModel.paletteColors[i] ?? 'none'}
-                    </span>
-                    {#if viewModel.paletteColors[i]}
-                      <button
-                        class="btn btn-ghost btn-xs text-[0.65rem]"
-                        onclick={() => viewModel.setLayerColor(i, '')}
+                  <label
+                    for="layer-tint-{i}"
+                    class="flex items-center gap-2 text-xs text-base-content/60 mb-1"
+                  >
+                    <span class="text-[0.65rem]">Tint</span>
+                    {#if viewModel.layerOverrides[i] ?? false}
+                      <!-- Override mode: own color -->
+                      <input
+                        type="color"
+                        id="layer-tint-{i}"
+                        class="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent"
+                        value={viewModel.paletteColors[i] ?? '#ffffff'}
+                        oninput={(e: Event) => viewModel.setLayerColor(i, (e.target as HTMLInputElement).value)}
                       >
-                        clear
+                      <span class="text-[0.65rem] text-base-content/40 truncate max-w-[60px]">
+                        {viewModel.paletteColors[i] || 'pick'}
+                      </span>
+                      {#if viewModel.paletteColors[i]}
+                        <button
+                          class="btn btn-ghost btn-xs text-[0.65rem]"
+                          onclick={() => viewModel.setLayerColor(i, '')}
+                        >
+                          clear
+                        </button>
+                      {/if}
+                      <button
+                        class="btn btn-ghost btn-xs text-[0.65rem] text-warning"
+                        onclick={() => viewModel.toggleLayerOverride(i)}
+                      >
+                        use global
+                      </button>
+                    {:else}
+                      <!-- Following global tint -->
+                      <span class="text-[0.65rem] text-base-content/40 italic">
+                        {viewModel.globalTint || 'none'}
+                      </span>
+                      <button
+                        class="btn btn-outline btn-xs text-[0.65rem]"
+                        onclick={() => viewModel.toggleLayerOverride(i)}
+                      >
+                        override
                       </button>
                     {/if}
                   </label>
