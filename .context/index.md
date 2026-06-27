@@ -10,15 +10,15 @@
 
 ## Project at a Glance
 
-Aikami is a monorepo application platform: SvelteKit PWA × PixiJS v8 game engine × Firebase Data Connect × Tauri v2.
+Aikami is a monorepo application platform bridging web and desktop paradigms. 
 
-**Tech stack**: Bun × SvelteKit 2 × PixiJS v8 × bitECS × Firebase Data Connect × Tauri v2 × Moon × Biome
+**Tech stack**: Bun × SvelteKit 2 (SPA/PWA) × PixiJS v8 (Game) × bitECS × Firebase Data Connect × Tauri v2 × Docker (Local AI Microservices) × Moon × Biome
 
 ## Key Docs by Topic
 
 | If you need... | Read... |
 |----------------|---------|
-| Architecture overview | `docs/architecture/architecture.md` |
+| Architecture overview | `docs/guides/ARCHITECTURE.md` |
 | Engine boundary rules | `docs/architecture/limitations.md` |
 | Coding standards | `docs/guides/CODING_STANDARDS.md` |
 | Tech stack details | `docs/guides/STACK.md` |
