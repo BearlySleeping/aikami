@@ -3,8 +3,8 @@
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { Position } from '../components/position.ts';
-import { Sprite } from '../components/sprite.ts';
 import { Velocity } from '../components/velocity.ts';
+import { AssetAlias, Visual } from '../components/visual.ts';
 
 // ---------------------------------------------------------------------------
 // Test sprite entity factory — MVP proof-of-life
@@ -45,14 +45,14 @@ const createTestSprite = (world: World, canvasWidth: number, canvasHeight: numbe
     }),
   );
 
-  addComponent(world, entityId, Sprite);
+  addComponent(world, entityId, Visual);
   addComponent(
     world,
     entityId,
-    set(Sprite, {
-      textureKey: 'test_sprite',
+    set(Visual, {
+      assetIndex: AssetAlias.TEST_SPRITE,
       tint: 0xff6688, // pinkish-red tint
-      displayObject: undefined,
+      visible: 1,
     }),
   );
 

@@ -6,7 +6,7 @@ import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
-import { registerSpriteObservers } from '../components/sprite.ts';
+import { registerVisualObservers } from '../components/visual.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
@@ -19,7 +19,7 @@ import { clearContextState, updateContextSystem } from '../systems/context_syste
 const createTestWorld = (): World => {
   const world = createWorld();
   registerPositionObservers(world);
-  registerSpriteObservers(world);
+  registerVisualObservers(world);
   registerNPCDialogObservers(world);
   return world;
 };

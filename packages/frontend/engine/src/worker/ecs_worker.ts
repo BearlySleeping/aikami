@@ -26,10 +26,10 @@ import { registerInventoryObservers } from '../components/inventory.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
-import { registerSpriteObservers } from '../components/sprite.ts';
 import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
+import { registerVisualObservers } from '../components/visual.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
@@ -456,7 +456,7 @@ const initializeEngine = (
   // 4. Register component observers
   registerPositionObservers(world);
   registerVelocityObservers(world);
-  registerSpriteObservers(world);
+  registerVisualObservers(world);
   registerNPCDialogObservers(world);
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);

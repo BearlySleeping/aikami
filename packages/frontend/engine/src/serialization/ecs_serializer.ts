@@ -13,7 +13,7 @@ import { Position } from '../components/position.ts';
 //
 // Contract C-117: Extracts persistent component data (Position, Appearance,
 // CombatStats) from active entities into a portable JSON payload. Ephemeral
-// components (Velocity, Sprite, DirtyGraphics, etc.) are deliberately
+// components (Velocity, Visual, DirtyGraphics, etc.) are deliberately
 // excluded to keep the payload dense and safe for cloud sync.
 //
 // Entity IDs are preserved across serialize/deserialize because bitECS
@@ -136,7 +136,7 @@ const _restoreComponentSlice = (
  * Serializes the persistent components of all active entities in a bitECS
  * world into a portable JSON string payload.
  *
- * Ephemeral components (Velocity, Sprite, DirtyGraphics, etc.) are excluded.
+ * Ephemeral components (Velocity, Visual, DirtyGraphics, etc.) are excluded.
  * The returned payload is safe to store locally or transmit to a cloud sync
  * endpoint.
  *

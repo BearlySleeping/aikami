@@ -6,9 +6,9 @@ import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
-import { registerSpriteObservers, Sprite } from '../components/sprite.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
+import { registerVisualObservers, Visual } from '../components/visual.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
@@ -24,7 +24,7 @@ const createTestWorld = (): World => {
   const world = createWorld();
   registerPositionObservers(world);
   registerVelocityObservers(world);
-  registerSpriteObservers(world);
+  registerVisualObservers(world);
   registerNPCDialogObservers(world);
   return world;
 };
@@ -44,7 +44,7 @@ describe('GameWorld — entity creation', () => {
     resetMovementTracking(world);
   });
 
-  it('createPlayer() adds an entity with Position, Velocity, and Sprite', () => {
+  it('createPlayer() adds an entity with Position, Velocity, and Visual', () => {
     const eid = createPlayer(world);
 
     expect(eid).toBeGreaterThan(0);
@@ -59,11 +59,11 @@ describe('GameWorld — entity creation', () => {
     expect(vel.x).toBe(0);
     expect(vel.y).toBe(0);
 
-    const sprite = getComponent(world, eid, Sprite);
-    expect(sprite).toBeDefined();
+    const visual = getComponent(world, eid, Visual);
+    expect(visual).toBeDefined();
   });
 
-  it('createNPC() adds an entity with Position, Sprite, and NPCDialog', () => {
+  it('createNPC() adds an entity with Position, Visual, and NPCDialog', () => {
     const eid = createNPC(world, {
       npcId: 'test-npc',
       npcName: 'Test NPC',

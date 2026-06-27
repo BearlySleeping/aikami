@@ -67,14 +67,19 @@ export type { NPCDialogData } from './components/npc_dialog.ts';
 export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { PositionData } from './components/position.ts';
 export { Position, registerPositionObservers } from './components/position.ts';
-export type { SpriteData } from './components/sprite.ts';
-export { registerSpriteObservers, Sprite } from './components/sprite.ts';
 export type { TransitionData } from './components/transition.ts';
 export { registerTransitionObservers, Transition } from './components/transition.ts';
 export type { TurnOrderData } from './components/turn_order.ts';
 export { registerTurnOrderObservers, TurnOrder } from './components/turn_order.ts';
 export type { VelocityData } from './components/velocity.ts';
 export { registerVelocityObservers, Velocity } from './components/velocity.ts';
+export type { VisualData } from './components/visual.ts';
+export {
+  AssetAlias,
+  registerVisualObservers,
+  resolveAssetPath,
+  Visual,
+} from './components/visual.ts';
 
 // Memory config (buffer constants and allocator)
 export {
@@ -161,6 +166,7 @@ export {
   LpcBatchManager,
   resetAnimationTracking,
   resetAppearanceTracking,
+  setupVisualObservers,
   syncAppearanceSystem,
   toCellDisplayPosition,
   toGridCellCenter,
