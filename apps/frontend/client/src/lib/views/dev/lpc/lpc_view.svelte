@@ -260,7 +260,7 @@
               <label class="flex flex-col gap-1 text-xs text-base-content/60 flex-1 min-w-0 mb-2">
                 State
                 <select
-                  class="select select-sm select-ghost w-full"
+                  class="select select-sm w-full bg-base-100"
                   value={viewModel.animationState}
                   onchange={(e: Event) => {
                   const target = e.target as HTMLSelectElement;
@@ -276,7 +276,7 @@
               <label class="flex flex-col gap-1 text-xs text-base-content/60 flex-1 min-w-0 mb-2">
                 Direction
                 <select
-                  class="select select-sm select-ghost w-full"
+                  class="select select-sm w-full bg-base-100"
                   value={viewModel.facingDirection}
                   onchange={(e: Event) => {
                   const target = e.target as HTMLSelectElement;
@@ -394,7 +394,7 @@
             <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
               Isolate Layer
               <select
-                class="select select-sm select-ghost w-full"
+                class="select select-sm w-full bg-base-100"
                 value={viewModel.isolateLayerIndex}
                 onchange={(e: Event) => {
                 const target = e.target as HTMLSelectElement;
@@ -441,7 +441,7 @@
                 <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
                   Slot
                   <select
-                    class="select select-sm select-ghost w-full"
+                    class="select select-sm w-full bg-base-100"
                     value={layer.slotDefIndex}
                     onchange={(e: Event) => {
                     const target = e.target as HTMLSelectElement;
@@ -458,7 +458,7 @@
                   <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-2">
                     Variant
                     <select
-                      class="select select-sm select-ghost w-full"
+                      class="select select-sm w-full bg-base-100"
                       value={layer.variantIndex}
                       onchange={(e: Event) => {
                       const target = e.target as HTMLSelectElement;
@@ -469,6 +469,27 @@
                         <option value={vIdx}>{varOpt.label}</option>
                       {/each}
                     </select>
+                  </label>
+
+                  <label class="flex items-center gap-2 text-xs text-base-content/60 mb-1">
+                    Tint
+                    <input
+                      type="color"
+                      class="w-6 h-6 rounded cursor-pointer border-0 p-0 bg-transparent"
+                      value={viewModel.paletteColors[i] ?? '#ffffff'}
+                      oninput={(e: Event) => viewModel.setLayerColor(i, (e.target as HTMLInputElement).value)}
+                    >
+                    <span class="text-[0.65rem] text-base-content/40 truncate max-w-[80px]">
+                      {viewModel.paletteColors[i] ?? 'none'}
+                    </span>
+                    {#if viewModel.paletteColors[i]}
+                      <button
+                        class="btn btn-ghost btn-xs text-[0.65rem]"
+                        onclick={() => viewModel.setLayerColor(i, '')}
+                      >
+                        clear
+                      </button>
+                    {/if}
                   </label>
                 {/if}
               </div>
