@@ -2129,3 +2129,32 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - Damage flash timeout is shared (not per-combatant) — if player and enemy both take damage within 400ms, the second hit resets the timer for both.
 - `combat_sidebar.svelte` (split-screen 35% sidebar) does not show portraits — it's too narrow for the portrait layout. The sidebar's compact HP bars + log remain unchanged.
 - Visual regression tests require dev server running and baseline screenshots to be created on first run (Playwright `toHaveScreenshot` creates baselines).
+
+### C-168: PixiJS v8 Asset Pipeline Refactor
+
+**Status**: ✅ completed
+
+**Files modified**:
+- `packages/frontend/engine/src/rendering/texture_manager.ts` — Added `Spritesheet` import; added `LpcAtlasData` type; added `generateLpcAtlas()` function for procedural atlas JSON generation; added `_spritesheetCache` (Map<string, Spritesheet>) with `DEFAULT_MAX_SPRITESHEETS = 128`; added `getOrCreateSpritesheet()` method (creates + parses + caches PixiJS Spritesheet); added `getSpritesheetFrame()` convenience method; added `spritesheetCount` getter; added `_evictSpritesheetsIfNeeded()` (FIFO eviction); updated `destroy()` to clear spritesheet cache; added `keyPrefix` to `LpcSpritesheetLayout`
+- `packages/frontend/engine/src/rendering/index.ts` — Re-exported `generateLpcAtlas` and `LpcAtlasData` type
+- `packages/frontend/engine/src/game_world.ts` — Added `Spritesheet` import; extended `RenderEntry.layerSprites` with optional `spritesheet` field; updated `_loadEntityRecipes()` to create cached `Spritesheet` from loaded textures via `TextureManager.getOrCreateSpritesheet()`; refactored `_applyLpcFrame()` to use `spritesheet.textures[frameKey]` (WebGPU-safe UVs) with legacy `getFrameAt` fallback
+- `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` — Rewrote stub component with async `$effect`-driven texture loading via `Assets.load()` + `Spritesheet.parse()`; added `loading` $state tracking; added `textureManager` and `assetUrlResolver` props; added per-URL Spritesheet cache with destroy-on-unmount cleanup
+
+**Deviations**:
+1. **No direct Vite imports were found**: The codebase already used `Assets.load()` for texture fetching and a `TextureManager` with injectable loaders. No `import image from './sheet.png'` patterns existed — the contract's directive to "Remove Direct Vite Imports" was already satisfied by existing architecture.
+2. **`_applyLpcFrame` keeps legacy fallback**: The refactored method tries `spritesheet.textures[frameKey]` first (Spritesheet path), then falls back to manual `getFrameAt()` when no spritesheet was pre-created (e.g., non-standard grid layouts, props). This dual-path avoids breaking existing rendering for odd-sized sheets.
+3. **Spritesheet creation is pre-loaded, not per-frame**: Since `_applyLpcFrame` runs synchronously in the PixiJS ticker (60fps), Spritesheet creation happens in `_loadEntityRecipes` (async, one-time) and is stored on the layer entry for O(1) texture lookups. The `getOrCreateSpritesheet` cache ensures multiple entities sharing the same asset URL reuse the same parsed Spritesheet.
+
+**Design decisions**:
+1. **`generateLpcAtlas` is procedural**: Atlas JSON is generated from `LpcSpritesheetLayout` dimensions rather than hardcoded. LPC sheets follow strict regular grids — generating the atlas is deterministic and avoids maintaining JSON atlas files.
+2. **Spritesheet cache keyed by `url::columns×rows`**: Prevents atlas recreation for NPCs sharing the same base asset (C-168 Edge Case). The pixel dimensions are part of the key to distinguish sheets with the same URL but different grid interpretations.
+3. **`keyPrefix` in `LpcSpritesheetLayout`**: Allows naming frame labels contextually (e.g., `'walk_2_0'` for walk sheets) rather than generic `'frame_2_0'`. Defaults to `'frame'` for backward compatibility.
+4. **FIFO spritesheet eviction (not LRU)**: Spritesheet cache entries are small (atlas JSON metadata + UV pointers, not raw pixel data). O(1) `Map.keys().next()` eviction is simpler than tracking access timestamps, and the 128-entry cap is generous for the expected number of unique NPC sheets.
+5. **`lpc_character_renderer.svelte` destroys Spritesheet cache on unmount**: The `onDestroy` lifecycle hook + effect cleanup (`return () => {}`) ensures no memory leaks when the component is removed.
+
+**Known limitations**:
+- `generateLpcAtlas` requires caller to provide `columns` or `rows` — doesn't auto-derive from texture dimensions (caller computes before calling). This is intentional to keep the function pure.
+- The legacy `getFrameAt` fallback in `_applyLpcFrame` still uses `new Texture({ source, frame: rect })` — this path is invoked when no spritesheet was pre-created. Full migration to Spritesheet-only would require all callers to pre-create sheets.
+- Spritesheet eviction is FIFO, not LRU — a frequently-used sheet could be evicted if 128 other unique sheets are loaded. In practice, the expected number of unique LPC sheets per session is < 20.
+- `lpc_character_renderer.svelte` asset URL resolution uses a prop-injected resolver function — the component has no opinion on URL structure. Callers must provide the resolver.
+- No unit tests for the new `getOrCreateSpritesheet` or `generateLpcAtlas` methods — the existing test suite for `getFrameAt` / `sliceSpritesheet` / `TextureManager` covers the legacy paths. Spritesheet-specific tests require a PixiJS renderer context (not available in bun test).

@@ -1,6 +1,30 @@
 // packages/frontend/engine/src/rendering/texture_manager.ts
-import { Rectangle, Texture } from 'pixi.js';
+import { Rectangle, Spritesheet, Texture } from 'pixi.js';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
+
+// ---------------------------------------------------------------------------
+// LPC Atlas Data — dynamically generated Spritesheet JSON descriptor
+// ---------------------------------------------------------------------------
+
+/**
+ * JSON atlas data format for PixiJS `Spritesheet` construction.
+ *
+ * Each entry in `frames` maps a string key (e.g. `'idle_down'`, `'walk_0'`)
+ * to a frame rectangle within the base texture. The `meta` block carries
+ * the image identifier (used for cache keying) and atlas format metadata.
+ *
+ * Generated procedurally by {@link generateLpcAtlas} from a grid layout
+ * rather than hardcoded — the LPC spritesheet grid is fully regular.
+ */
+export type LpcAtlasData = {
+  frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>;
+  meta: {
+    image: string;
+    format: string;
+    size: { w: number; h: number };
+    scale: number;
+  };
+};
 
 // ---------------------------------------------------------------------------
 // TextureManager — LRU cache for GPU textures + grayscale LPC sheets
@@ -50,6 +74,13 @@ export type LpcSpritesheetLayout = {
   columns?: number;
   /** Number of frame rows. Auto-derived from height when omitted. */
   rows?: number;
+  /**
+   * Optional key prefix for frame labels.
+   *
+   * When provided, frames are labelled `"{prefix}_{row}_{col}"`
+   * (e.g. `"walk_0_3"`). When omitted, labels use `"frame_{row}_{col}"`.
+   */
+  keyPrefix?: string;
 };
 
 /** Standard LPC color ramp size — one entry per palette index (0–255). */
@@ -85,6 +116,9 @@ const DEFAULT_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
 /** Default limit for grayscale sheet cache entries. */
 const DEFAULT_MAX_GRAYSCALE_SHEETS = 256;
+
+/** Default limit for Spritesheet cache entries. */
+const DEFAULT_MAX_SPRITESHEETS = 128;
 
 // ---------------------------------------------------------------------------
 // preparePaletteLUT — static palette utility
@@ -154,6 +188,72 @@ const defaultLoadTexture = async (_key: number): Promise<Texture> => {
 };
 
 // ---------------------------------------------------------------------------
+// generateLpcAtlas — dynamic Spritesheet atlas JSON
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a PixiJS-compatible {@link LpcAtlasData} JSON descriptor for
+ * a procedurally gridded LPC spritesheet.
+ *
+ * Since LPC spritesheets follow a strict regular grid (e.g. 9 columns ×
+ * 4 rows of 64×64 px frames for a walk sheet), the atlas is generated
+ * algorithmically rather than hand-authored. Each frame is labelled by
+ * `{keyPrefix}_{row}_{col}` (e.g. `"walk_0_0"` through `"walk_3_8"`).
+ *
+ * The `image` field in `meta` is set to the provided `cacheKey` so
+ * downstream consumers (Spritesheet cache, debug overlays) can identify
+ * the source asset without re-deriving the URL.
+ *
+ * @param options - Atlas generation options.
+ * @param options.layout - Grid layout descriptor.
+ * @param options.imageKey - String key for the `meta.image` field
+ *   (used as the spritesheet cache key — typically the asset URL).
+ * @returns A populated {@link LpcAtlasData} ready for
+ *   `new Spritesheet(baseTexture, atlasData)`.
+ */
+const generateLpcAtlas = (options: {
+  layout: LpcSpritesheetLayout;
+  imageKey: string;
+}): LpcAtlasData => {
+  const { layout, imageKey } = options;
+  const { frameWidth, frameHeight } = layout;
+
+  const columns = layout.columns ?? Math.floor(layout.rows ? layout.rows : 1);
+  // Derive rows from frameHeight and known sheet height, or use layout.rows
+  // Callers must provide at least `columns` or `rows` — validated upstream.
+  const rows = layout.rows ?? 1;
+  const totalWidth = columns * frameWidth;
+  const totalHeight = rows * frameHeight;
+  const keyPrefix = layout.keyPrefix ?? 'frame';
+
+  const frames: LpcAtlasData['frames'] = {};
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      const key = `${keyPrefix}_${row}_${col}`;
+      frames[key] = {
+        frame: {
+          x: col * frameWidth,
+          y: row * frameHeight,
+          w: frameWidth,
+          h: frameHeight,
+        },
+      };
+    }
+  }
+
+  return {
+    frames,
+    meta: {
+      image: imageKey,
+      format: 'RGBA8888',
+      size: { w: totalWidth, h: totalHeight },
+      scale: 1,
+    },
+  };
+};
+
+// ---------------------------------------------------------------------------
 // TextureManager
 // ---------------------------------------------------------------------------
 
@@ -200,6 +300,19 @@ export class TextureManager {
    */
   private readonly _frameSliceRefCounts: Map<string, number>;
 
+  /**
+   * Cache of parsed PixiJS `Spritesheet` instances.
+   *
+   * Keyed by `${cacheKey}::${columns}x${rows}` to avoid recreating
+   * atlas objects when multiple entities share the same base asset
+   * with the same grid layout (per C-168 Edge Cases).
+   *
+   * Spritesheet.parse() sets correct WebGPU-compatible UVs on
+   * every sub-texture — avoiding the UV fragmentation bug caused
+   * by manual `new Texture({ source, frame: rect })`.
+   */
+  private readonly _spritesheetCache: Map<string, Spritesheet>;
+
   /** Maximum textures before eviction. */
   private readonly _maxTextures: number;
 
@@ -226,6 +339,7 @@ export class TextureManager {
     this._grayscaleCache = new Map();
     this._frameSliceCache = new Map();
     this._frameSliceRefCounts = new Map();
+    this._spritesheetCache = new Map();
     this._maxTextures = config?.maxTextures ?? DEFAULT_MAX_TEXTURES;
     this._maxBytes = config?.maxBytes ?? DEFAULT_MAX_BYTES;
     this._maxGrayscaleSheets = DEFAULT_MAX_GRAYSCALE_SHEETS;
@@ -388,6 +502,98 @@ export class TextureManager {
   }
 
   /**
+   * Creates or retrieves a cached PixiJS `Spritesheet` for the given
+   * base texture and grid layout.
+   *
+   * On first call, generates a procedural {@link LpcAtlasData} JSON
+   * descriptor via {@link generateLpcAtlas}, constructs a
+   * `Spritesheet`, and awaits `sheet.parse()` — which sets correct
+   * WebGPU-compatible UV mappings on every sub-texture. Subsequent
+   * calls for the same `cacheKey + layout` hit the cache (O(1)
+   * Map lookup).
+   *
+   * Caching prevents atlas recreation when multiple NPCs share the
+   * same base asset (C-168 Edge Case: spritesheet cache).
+   *
+   * @param options - Spritesheet creation options.
+   * @param options.baseTexture - The loaded base spritesheet texture.
+   * @param options.layout - Grid layout descriptor.
+   * @param options.cacheKey - Unique key for the spritesheet cache
+   *   (typically the asset URL or a composite `url:layout` string).
+   * @returns A promise resolving to the parsed `Spritesheet`.
+   */
+  async getOrCreateSpritesheet(options: {
+    baseTexture: Texture;
+    layout: LpcSpritesheetLayout;
+    cacheKey: string;
+  }): Promise<Spritesheet> {
+    const { baseTexture, layout, cacheKey } = options;
+
+    const columns = layout.columns ?? Math.floor(baseTexture.width / layout.frameWidth);
+    const rows = layout.rows ?? Math.floor(baseTexture.height / layout.frameHeight);
+
+    const sheetKey = `${cacheKey}::${columns}x${rows}`;
+
+    const existing = this._spritesheetCache.get(sheetKey);
+    if (existing) {
+      return existing;
+    }
+
+    const atlasData = generateLpcAtlas({
+      layout: { ...layout, columns, rows },
+      imageKey: cacheKey,
+    });
+
+    const spritesheet = new Spritesheet(baseTexture, atlasData);
+    await spritesheet.parse();
+
+    this._spritesheetCache.set(sheetKey, spritesheet);
+    this._evictSpritesheetsIfNeeded();
+
+    return spritesheet;
+  }
+
+  /**
+   * Retrieves a single frame sub-texture from a cached or newly-created
+   * `Spritesheet`.
+   *
+   * Uses {@link getOrCreateSpritesheet} under the hood for caching,
+   * then returns `sheet.textures[frameKey]`. The returned texture has
+   * correct WebGPU UVs set by `Spritesheet.parse()`.
+   *
+   * @param options - Frame lookup options.
+   * @param options.baseTexture - The loaded base spritesheet texture.
+   * @param options.layout - Grid layout descriptor.
+   * @param options.cacheKey - Unique key for the spritesheet cache.
+   * @param options.frameKey - The frame label (e.g. `'walk_0_3'`).
+   * @returns A promise resolving to the frame sub-texture, or `null`
+   *   if the frame key is not found.
+   */
+  async getSpritesheetFrame(options: {
+    baseTexture: Texture;
+    layout: LpcSpritesheetLayout;
+    cacheKey: string;
+    frameKey: string;
+  }): Promise<Texture | null> {
+    const { baseTexture, layout, cacheKey, frameKey } = options;
+
+    const spritesheet = await this.getOrCreateSpritesheet({
+      baseTexture,
+      layout,
+      cacheKey,
+    });
+
+    return spritesheet.textures[frameKey] ?? null;
+  }
+
+  /**
+   * Returns the number of cached Spritesheet instances.
+   */
+  get spritesheetCount(): number {
+    return this._spritesheetCache.size;
+  }
+
+  /**
    * Decrements the reference count for a texture and removes it from the
    * cache. The underlying GPU texture is destroyed.
    *
@@ -476,6 +682,13 @@ export class TextureManager {
     // Just clear the cache and reference counts.
     this._frameSliceCache.clear();
     this._frameSliceRefCounts.clear();
+
+    // Spritesheet cache: destroy each Spritesheet to release its
+    // internal base texture references, then clear the cache.
+    for (const sheet of this._spritesheetCache.values()) {
+      sheet.destroy();
+    }
+    this._spritesheetCache.clear();
   }
 
   // -----------------------------------------------------------------------
@@ -646,6 +859,30 @@ export class TextureManager {
   }
 
   /**
+   * Evicts the oldest entries from the Spritesheet cache when
+   * the count exceeds {@link DEFAULT_MAX_SPRITESHEETS}.
+   *
+   * Spritesheets don't carry an access timestamp in the current
+   * implementation — eviction is simple FIFO (first inserted,
+   * first evicted) via `Map.keys().next()`. This is acceptable
+   * because Spritesheet cache entries are small (atlas JSON +
+   * sub-texture UV metadata, not raw pixel data).
+   */
+  private _evictSpritesheetsIfNeeded(): void {
+    while (this._spritesheetCache.size > DEFAULT_MAX_SPRITESHEETS) {
+      const firstKey = this._spritesheetCache.keys().next().value;
+      if (firstKey === undefined) {
+        break;
+      }
+      const sheet = this._spritesheetCache.get(firstKey);
+      if (sheet) {
+        sheet.destroy();
+      }
+      this._spritesheetCache.delete(firstKey);
+    }
+  }
+
+  /**
    * Finds and evicts the single least recently accessed entry from a cache.
    *
    * Iterates the entire cache to find the oldest entry. For production
@@ -685,4 +922,4 @@ export class TextureManager {
   }
 }
 
-export { PALETTE_LUT_BYTE_LENGTH, preparePaletteLUT };
+export { generateLpcAtlas, PALETTE_LUT_BYTE_LENGTH, preparePaletteLUT };
