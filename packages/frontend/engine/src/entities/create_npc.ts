@@ -5,7 +5,7 @@ import { addComponent, addEntity, set } from 'bitecs';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
-import { Sprite } from '../components/sprite.ts';
+import { AssetAlias, Visual } from '../components/visual.ts';
 import type { NPCSpawnData } from '../types.ts';
 
 // ---------------------------------------------------------------------------
@@ -28,14 +28,14 @@ const createNPC = (world: World, data: NPCSpawnData): number => {
   addComponent(world, entityId, Position);
   addComponent(world, entityId, set(Position, { x: data.x, y: data.y }));
 
-  addComponent(world, entityId, Sprite);
+  addComponent(world, entityId, Visual);
   addComponent(
     world,
     entityId,
-    set(Sprite, {
-      textureKey: data.textureKey,
+    set(Visual, {
+      assetIndex: AssetAlias.NPC,
       tint: 0xffcc00, // gold tint for NPCs
-      displayObject: undefined,
+      visible: 1,
     }),
   );
 

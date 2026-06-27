@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Audit: 2026-06-21)
+## Status Summary (Audit: 2026-06-27)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -29,6 +29,7 @@
 | C-030 | (no contract file) | — |
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ✅ completed |
 | C-160 | Engine Polish (Shader/Movement/Camera) | ✅ completed |
+| C-170 | ECS Visual Observer Pattern | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
@@ -2158,3 +2159,45 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - Spritesheet eviction is FIFO, not LRU — a frequently-used sheet could be evicted if 128 other unique sheets are loaded. In practice, the expected number of unique LPC sheets per session is < 20.
 - `lpc_character_renderer.svelte` asset URL resolution uses a prop-injected resolver function — the component has no opinion on URL structure. Callers must provide the resolver.
 - No unit tests for the new `getOrCreateSpritesheet` or `generateLpcAtlas` methods — the existing test suite for `getFrameAt` / `sliceSpritesheet` / `TextureManager` covers the legacy paths. Spritesheet-specific tests require a PixiJS renderer context (not available in bun test).
+
+### C-170: ECS Visual Observer Pattern
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/visual.ts` — Pure numeric `Visual` SoA component (assetIndex, tint, visible) with `registerVisualObservers`, `AssetAlias` enum (PLACEHOLDER/PLAYER/NPC/PROP_CHEST/ENEMY/TEST_SPRITE/ITEM), and `resolveAssetPath` helper
+
+**Files deleted**:
+- `packages/frontend/engine/src/components/sprite.ts` — Removed object-heavy `Sprite` component that stored `PIXI.Container` references in bitECS arrays
+
+**Files modified**:
+- `packages/frontend/engine/src/systems/render_system.ts` — Replaced `Sprite` with `Visual` in `RENDER_QUERY_TERMS`; added `setupVisualObservers()` registering `observe(world, onAdd(Visual))` and `observe(world, onRemove(Visual))` hooks; added private `_sceneMap: Map<number, Container>` for ECS-to-Pixi correlation; added `_createVisualPlaceholder()` for synchronous placeholder rendering; added `_loadVisualTextureAsync()` for async texture replacement with entity-lifetime guard via `hasComponent(world, eid, Visual)`; removed `ensureDisplayObject` (old lazy creation pattern)
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — Replaced all `Sprite` references with `Visual`/`AssetAlias`; removed `resolveNpcTexture`/`resolvePropTexture` imports (asset resolution now via `AssetAlias` enum + `resolveAssetPath` in render system)
+- `packages/frontend/engine/src/entities/create_player.ts` — `Sprite` → `Visual` with `AssetAlias.PLAYER`
+- `packages/frontend/engine/src/entities/create_npc.ts` — `Sprite` → `Visual` with `AssetAlias.NPC`
+- `packages/frontend/engine/src/entities/create_test_sprite.ts` — `Sprite` → `Visual` with `AssetAlias.TEST_SPRITE`
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — `registerSpriteObservers` → `registerVisualObservers`
+- `packages/frontend/engine/src/index.ts` — Updated exports: `Sprite`/`SpriteData`/`registerSpriteObservers` → `Visual`/`VisualData`/`registerVisualObservers`/`AssetAlias`/`resolveAssetPath`; added `setupVisualObservers` export
+- `packages/frontend/engine/src/serialization/ecs_serializer.ts` — Updated comments (Sprite → Visual)
+- `packages/frontend/engine/src/__tests__/game_world.test.ts` — Updated imports and assertions (Sprite → Visual)
+- `packages/frontend/engine/src/__tests__/context_system.test.ts` — `registerSpriteObservers` → `registerVisualObservers`
+- `packages/frontend/engine/src/systems/entity_spawner.test.ts` — Updated imports, `_resetComponentArrays`, and assertions to use `Visual`/`AssetAlias`
+
+**Deviations**:
+1. **Regular arrays instead of TypedArrays**: The contract specifies `Uint16Array`, `Uint32Array`, `Uint8Array` for cache-coherent memory. Switched to regular `number[]` arrays because bitECS v0.4.0's `observe`/`onSet`/`onGet`/`set` APIs require sparse arrays (indexed by entity ID). TypedArrays don't support sparse indexing and break bitECS component registration.
+2. **Observer setup is a separate function**: `setupVisualObservers(world, stage`) must be called after the stage is available, not during world creation. The `updateRender` function now reads display objects from `_sceneMap` instead of the component arrays.
+3. **Placeholder renders immediately**: `onAdd(Visual)` creates a `Graphics` rectangle colored with `tint` synchronously. The async texture load replaces it later — entities are never invisible.
+4. **`entity_spawner.ts` textureKey removed**: Asset resolution moved from spawner to render system via `AssetAlias` enum → `resolveAssetPath` dictionary. The spawner now assigns only numeric `assetIndex` values.
+
+**Design decisions**:
+1. **`_sceneMap` is module-private**: The ECS-to-Pixi mapping is completely hidden from the ECS world. Only `updateRender` and the observer hooks access it.
+2. **`onRemove` calls `.destroy({ children: true })`**: Full PixiJS cleanup including child containers. Prevents VRAM leaks when entities are despawned.
+3. **Async texture guard**: `hasComponent(world, eid, Visual)` check in `.then()` prevents texture replacement on entities destroyed during fetch latency.
+4. **Dynamic PixiJS import**: `import('pixi.js')` inside `_loadVisualTextureAsync` avoids pulling `Assets`/`Sprite` into the module scope, keeping the render system importable in worker contexts.
+
+**Known limitations**:
+- `AssetAlias` enum values are hardcoded to 6 types + PLACEHOLDER. No dynamic registration system for custom assets.
+- `resolveAssetPath` uses a switch statement — not extensible at runtime. Asset paths are string literals.
+- `_loadVisualTextureAsync` is fire-and-forget — no retry logic for failed texture loads. Placeholder remains visible on failure.
+- The async texture load path uses `import('pixi.js')` which may not work in a Web Worker context (where the render system runs). In worker mode, `updateRenderFromBuffer` is the active path and doesn't depend on observer hooks.
+- No unit tests for `setupVisualObservers` or `_loadVisualTextureAsync` — these require a PixiJS renderer context + stage (not available in bun test).

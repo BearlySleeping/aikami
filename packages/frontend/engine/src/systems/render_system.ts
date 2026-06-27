@@ -1,14 +1,14 @@
 // packages/frontend/engine/src/systems/render_system.ts
 import type { World } from 'bitecs';
-import { addComponent, getComponent, query, set } from 'bitecs';
+import { getComponent, hasComponent, observe, onAdd, onRemove, query } from 'bitecs';
 import { Buffer, BufferUsage, type Container, Graphics, Rectangle } from 'pixi.js';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
-import type { SpriteData } from '../components/sprite.ts';
-import { Sprite } from '../components/sprite.ts';
 import { Velocity } from '../components/velocity.ts';
+import type { VisualData } from '../components/visual.ts';
+import { AssetAlias, resolveAssetPath, Visual } from '../components/visual.ts';
 import { COMPONENT_STRIDE } from '../config/memory_config.ts';
 import {
   getLpcFrameIndex,
@@ -41,25 +41,87 @@ const CELL_HALF = CELL_PIXEL_SIZE / 2;
  */
 const CELL_GEOMETRY_RECT = new Rectangle(0, 0, CELL_PIXEL_SIZE, CELL_PIXEL_SIZE);
 
-/** Cached query terms — entities with Position + Sprite are rendered. */
-const RENDER_QUERY_TERMS = [Position, Sprite];
+/** Cached query terms — entities with Position + Visual are rendered. */
+const RENDER_QUERY_TERMS = [Position, Visual];
+
+// -------------------------------------------------------------------------
+// Scene map — private ECS-to-Pixi correlation
+// -------------------------------------------------------------------------
+
+/**
+ * Private map connecting bitECS entity IDs to their PixiJS display objects.
+ *
+ * The ECS world never holds PixiJS object references — all display objects
+ * are managed here by the rendering system's observer hooks.  Established
+ * by {@link setupVisualObservers} and consumed by {@link updateRender}.
+ */
+const _sceneMap = new Map<number, Container>();
+
+/**
+ * Registers `onAdd(Visual)` and `onRemove(Visual)` observer hooks for
+ * reactive PixiJS display object lifecycle management.
+ *
+ * **onAdd(Visual)**: Creates a placeholder {@link Graphics} rectangle
+ * coloured with the entity's tint and adds it to the stage immediately.
+ * An async texture load is kicked off in the background; once resolved,
+ * the placeholder is replaced with a proper {@link PIXI.Sprite} if the
+ * entity still carries the Visual component.
+ *
+ * **onRemove(Visual)**: Destroys the corresponding PixiJS object via
+ * `.destroy({ children: true })`, removes it from the stage, and deletes
+ * the entry from {@link _sceneMap}.
+ *
+ * @param options - Observer setup options.
+ * @param options.world - The bitECS world.
+ * @param options.stage - The PixiJS stage to add sprites to.
+ */
+const setupVisualObservers = (options: { world: World; stage: Container }): void => {
+  const { world, stage } = options;
+
+  // onAdd: create display object when Visual component is attached
+  observe(world, onAdd(Visual), (eid: number) => {
+    const visualData = getComponent(world, eid, Visual) as VisualData | undefined;
+    if (!visualData) {
+      return;
+    }
+
+    const displayObject = _createVisualPlaceholder(visualData.tint);
+    stage.addChild(displayObject);
+    _sceneMap.set(eid, displayObject);
+
+    // Kick off async texture load, replacing placeholder when ready
+    _loadVisualTextureAsync({ eid, world, stage, assetIndex: visualData.assetIndex });
+  });
+
+  // onRemove: destroy display object and clean up
+  observe(world, onRemove(Visual), (eid: number) => {
+    const displayObject = _sceneMap.get(eid);
+    if (displayObject) {
+      if (displayObject.parent) {
+        displayObject.parent.removeChild(displayObject);
+      }
+      displayObject.destroy({ children: true });
+      _sceneMap.delete(eid);
+    }
+  });
+};
 
 /**
  * Synchronizes bitECS entity positions to their PixiJS display objects.
  *
  * Runs every frame after the movement system. For each entity with both a
- * {@link Position} and {@link Sprite} component, updates the PixiJS
- * container transform to match the world-space position.
+ * {@link Position} and {@link Visual} component, reads the display object
+ * from the private {@link _sceneMap} and updates its transform.
  *
- * Entities without a `displayObject` are skipped — the display object is
- * created lazily in {@link ensureDisplayObject} and stored back via
- * {@link addComponent}.
+ * Display objects are created reactively by the `onAdd(Visual)` observer
+ * — entities without a scene map entry are skipped (observer fires on the
+ * next tick).
  *
  * Off-screen entities are hidden via `visible = false` to skip GPU
  * draw calls (spatial culling).
  *
  * @param world - The bitECS world.
- * @param stage - The PixiJS stage container to add sprites to.
+ * @param stage - The PixiJS stage container.
  */
 const updateRender = (world: World, stage: Container): void => {
   if (!world || !stage) {
@@ -68,26 +130,9 @@ const updateRender = (world: World, stage: Container): void => {
 
   const entities = query(world, RENDER_QUERY_TERMS);
   for (const eid of entities) {
-    const spriteData = getComponent(world, eid, Sprite) as SpriteData | undefined;
-    if (!spriteData) {
-      continue;
-    }
-
-    let displayObject = spriteData.displayObject;
+    const displayObject = _sceneMap.get(eid);
     if (!displayObject) {
-      displayObject = ensureDisplayObject(spriteData, stage);
-      if (!displayObject) {
-        continue;
-      }
-      // Store the display object back into the component arrays
-      addComponent(
-        world,
-        eid,
-        set(Sprite, {
-          ...spriteData,
-          displayObject,
-        }),
-      );
+      continue;
     }
 
     const pos = getComponent(world, eid, Position) as PositionData | undefined;
@@ -115,26 +160,22 @@ const updateRender = (world: World, stage: Container): void => {
 // ---------------------------------------------------------------------------
 
 /**
- * Creates and returns a PixiJS display object for the given sprite data.
+ * Creates a placeholder {@link Graphics} rectangle for a Visual entity.
  *
- * For the MVP, generates a colored rectangle via {@link Graphics} if no
- * texture key is provided. When texture atlases are available later, this
- * will use {@link PixiSprite} with `Assets.load()`.
+ * Provides an immediate synchronous visual so entities never appear
+ * invisible while textures load asynchronously.  Once the real texture
+ * resolves, the placeholder is replaced automatically.
  *
  * **Optimization flags applied:**
- * - `eventMode = 'none'` — bypasses layout hit-testing (character
- *   sprites are not interactive; interaction is handled via spatial
- *   queries against entity positions, not DOM events).
+ * - `eventMode = 'none'` — bypasses layout hit-tests for character
+ *   sprites (interaction is via spatial queries, not DOM events).
  * - `filterArea` — pre-assigned to match cell geometry bounds so the
  *   PixiJS renderer skips per-frame `getBounds()` recalculations.
  *
- * @param spriteData - The sprite component data.
- * @param stage - The PixiJS stage to add the new display object to.
- * @returns The created display object, or `undefined` on failure.
+ * @param tint - The hex tint colour for the placeholder rectangle.
+ * @returns A Graphics rectangle ready for the stage.
  */
-const ensureDisplayObject = (spriteData: SpriteData, stage: Container): Container | undefined => {
-  const { tint } = spriteData;
-
+const _createVisualPlaceholder = (tint: number): Graphics => {
   const graphic = new Graphics();
   graphic.rect(0, 0, 32, 32);
   graphic.fill({ color: tint });
@@ -144,8 +185,83 @@ const ensureDisplayObject = (spriteData: SpriteData, stage: Container): Containe
   // Pre-assign filter area to avoid per-frame bounds recalc overhead
   graphic.filterArea = CELL_GEOMETRY_RECT;
 
-  stage.addChild(graphic);
   return graphic;
+};
+
+/**
+ * Asynchronously loads the true texture for a Visual entity and replaces
+ * the placeholder when ready.
+ *
+ * Guards against entities destroyed during texture fetch by checking
+ * `hasComponent(world, Visual, eid)` in the `.then()` callback.
+ *
+ * For PLACEHOLDER alias (0) or empty paths, the async load is skipped —
+ * the placeholder Graphics rectangle is the final visual.
+ *
+ * @param options - Async load options.
+ * @param options.eid - The entity ID.
+ * @param options.world - The bitECS world.
+ * @param options.stage - The PixiJS stage.
+ * @param options.assetIndex - The numeric asset alias.
+ */
+const _loadVisualTextureAsync = (options: {
+  eid: number;
+  world: World;
+  stage: Container;
+  assetIndex: number;
+}): void => {
+  const { eid, world, stage, assetIndex } = options;
+
+  // Placeholder alias (0) or empty path — skip async load
+  if (assetIndex === AssetAlias.PLACEHOLDER || assetIndex === 0) {
+    return;
+  }
+
+  const assetPath = resolveAssetPath(assetIndex);
+  if (!assetPath) {
+    return;
+  }
+
+  // Use a dynamic import to bring in PixiJS Assets only when needed.
+  // The placeholder Graphics is already visible; the player won't notice
+  // the async resolution.
+  void import('pixi.js')
+    .then(({ Assets, Sprite: PixiSprite }) => {
+      return Assets.load(assetPath).then((texture) => ({
+        // biome-ignore lint/style/useNamingConvention: PixiJS import name
+        Sprite: PixiSprite,
+        texture,
+      }));
+    })
+    .then(({ Sprite: PixiSprite, texture }) => {
+      // Guard: entity may have been destroyed during fetch
+      if (!hasComponent(world, eid, Visual)) {
+        return;
+      }
+
+      const oldDisplayObject = _sceneMap.get(eid);
+      const sprite = new PixiSprite(texture);
+      sprite.eventMode = 'none';
+      sprite.filterArea = CELL_GEOMETRY_RECT;
+
+      // Preserve position from old placeholder
+      if (oldDisplayObject) {
+        sprite.x = oldDisplayObject.x;
+        sprite.y = oldDisplayObject.y;
+        sprite.visible = oldDisplayObject.visible;
+
+        if (oldDisplayObject.parent) {
+          oldDisplayObject.parent.removeChild(oldDisplayObject);
+        }
+        oldDisplayObject.destroy();
+      }
+
+      stage.addChild(sprite);
+      _sceneMap.set(eid, sprite);
+    })
+    .catch(() => {
+      // Texture load failed — placeholder remains visible
+    });
 };
 
 /**
@@ -1355,6 +1471,7 @@ export {
   LpcBatchManager,
   resetAnimationTracking,
   resetAppearanceTracking,
+  setupVisualObservers,
   syncAppearanceSystem,
   toCellDisplayPosition,
   toGridCellCenter,

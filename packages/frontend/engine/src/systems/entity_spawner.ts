@@ -8,7 +8,6 @@
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { logger } from '$logger';
-import { resolveNpcTexture, resolvePropTexture } from '../assets/lpc_asset_catalog.ts';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { CombatStats } from '../components/combat_stats.ts';
@@ -16,9 +15,9 @@ import { Enemy } from '../components/enemy.ts';
 import { Interactable } from '../components/interactable.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
-import { Sprite } from '../components/sprite.ts';
 import { Transition } from '../components/transition.ts';
 import { TurnOrder } from '../components/turn_order.ts';
+import { AssetAlias, Visual } from '../components/visual.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -194,19 +193,18 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint): number => {
   );
   const isVendor = _getBoolProperty(spawnPoint.properties, 'isVendor', false);
   const vendorInventory = _getStringProperty(spawnPoint.properties, 'vendorInventory', '');
-  const textureKey = resolveNpcTexture(spawnPoint.properties);
 
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
 
-  addComponent(world, eid, Sprite);
+  addComponent(world, eid, Visual);
   addComponent(
     world,
     eid,
-    set(Sprite, {
-      textureKey,
+    set(Visual, {
+      assetIndex: AssetAlias.NPC,
       tint: 0xffcc00, // gold tint for NPCs
-      displayObject: undefined,
+      visible: 1,
     }),
   );
 
@@ -252,19 +250,18 @@ const _spawnItem = (world: World, spawnPoint: SpawnPoint): number => {
 
   const itemId = _getStringProperty(spawnPoint.properties, 'itemId', `item_${spawnPoint.id}`);
   const quantity = _getNumberProperty(spawnPoint.properties, 'quantity', 1);
-  const textureKey = resolvePropTexture(spawnPoint.properties);
 
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
 
-  addComponent(world, eid, Sprite);
+  addComponent(world, eid, Visual);
   addComponent(
     world,
     eid,
-    set(Sprite, {
-      textureKey,
+    set(Visual, {
+      assetIndex: AssetAlias.ITEM,
       tint: PROP_TINT,
-      displayObject: undefined,
+      visible: 1,
     }),
   );
 
@@ -306,14 +303,14 @@ const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
 
-  addComponent(world, eid, Sprite);
+  addComponent(world, eid, Visual);
   addComponent(
     world,
     eid,
-    set(Sprite, {
-      textureKey: '',
+    set(Visual, {
+      assetIndex: AssetAlias.ENEMY,
       tint: 0xff4444, // red tint for hostile enemies
-      displayObject: undefined,
+      visible: 1,
     }),
   );
 
@@ -355,19 +352,17 @@ const _spawnEnemy = (world: World, spawnPoint: SpawnPoint): number => {
 const _spawnProp = (world: World, spawnPoint: SpawnPoint): number => {
   const eid = addEntity(world);
 
-  const textureKey = resolvePropTexture(spawnPoint.properties);
-
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
 
-  addComponent(world, eid, Sprite);
+  addComponent(world, eid, Visual);
   addComponent(
     world,
     eid,
-    set(Sprite, {
-      textureKey,
+    set(Visual, {
+      assetIndex: AssetAlias.PROP_CHEST,
       tint: PROP_TINT,
-      displayObject: undefined,
+      visible: 1,
     }),
   );
 
