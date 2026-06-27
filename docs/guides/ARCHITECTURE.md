@@ -4,35 +4,34 @@ This document provides a high-level overview of the technical architecture of th
 
 ## Guiding Principles
 
--   **Scalability:** The architecture is designed to scale with a growing user base, leveraging serverless technologies and a modern frontend stack.
--   **Maintainability:** By using a monorepo and organizing code into discrete packages, we aim to keep the codebase clean, maintainable, and easy to contribute to.
--   **Performance:** We prioritize performance at every layer of the stack, from the database to the game client.
+-   **Hybrid Scalability:** The architecture spans a cloud-hosted backend for persistence/multiplayer and local, containerized microservices for heavy AI workloads, balancing latency and server costs.
+-   **Maintainability:** Managed as a Bun monorepo orchestrated by Moon, cleanly separating the game engine, SvelteKit application, shared schemas, and backend microservices.
+-   **Performance:** The game client leverages WebGL/WebGPU via PixiJS v8 and Data-Oriented Design via bitECS to maintain 60FPS while rendering AI-driven entities.
 
 ## System Components
 
-The Aikami ecosystem is composed of several key components that work together to deliver the full experience.
+The Aikami ecosystem is composed of three primary layers: the Frontend Client, the Cloud Backend, and the Local AI Microservices.
 
-![Aikami Architecture Diagram](https://via.placeholder.com/800x450.png?text=Architecture+Diagram+Placeholder)
-*(TODO: Create architecture diagram)*
+### 1. Frontend Client (PWA & Desktop)
 
-### 1. Frontend Applications
+-   **SvelteKit 2 & Tauri v2:** The primary interface is a Progressive Web App that can also be compiled as a native desktop application using Tauri v2. It handles UI overlays, AI chat components, and character management using Svelte 5 runes (`ViewModel` patterns).
+-   **Game Engine (PixiJS v8 + bitECS):** Embedded directly inside the SvelteKit client (`packages/frontend/engine`). It eschews standard monolithic game engines (like our legacy Godot implementations) in favor of a lightweight, ECS-driven 2D web engine.
+-   **Static Sites (Astro):** The public landing page (`apps/frontend/site`) and documentation (`apps/frontend/docs`) are built with Astro for maximum performance and SEO.
 
--   **PWA (SvelteKit):** The main user-facing application. It's a Progressive Web App built with SvelteKit, allowing for a fast, native-like experience on both web and mobile. It handles user authentication, character management, and provides a rich interface for interacting with the game's world and community.
--   **Static Sites (Astro):** The public site and documentation sites are built with Astro, which is perfect for content-heavy, performance-focused websites.
--   **Game Client (Godot):** The game itself is a 2D top-down RPG built with the Godot Engine. It communicates with our backend services to fetch game data, process player actions, and receive real-time updates.
+### 2. Local AI Microservices (Docker/Tmux)
 
-### 2. Backend Services
+To handle computationally heavy generative AI locally (especially for desktop users), Aikami orchestrates several Dockerized microservices via Tmux scripts during development and runtime:
+-   **Image Generation (`apps/backend/image`):** Runs a headless ComfyUI API (`yanwk/comfyui-boot:cu130-slim-v2`) for generating character avatars, environments, and combat assets.
+-   **Text Generation (`apps/backend/text`):** Runs Ollama (`ollama/ollama`) exposing port 11434 to serve local LLMs for NPC dialogue and logic execution.
+-   **Voice Synthesis (`apps/backend/voice`):** Runs a headless Kokoro TTS engine (`hwdsl2/kokoro-server`), which can also be utilized as a native binary directly within the client for ultra-low latency voice lines.
 
--   **Firebase Functions:** Our backend is built on a serverless architecture using Firebase Functions. This allows us to write scalable, event-driven backend logic in TypeScript without managing servers.
--   **Firebase Authentication:** We use Firebase Authentication to manage user accounts, providing secure and easy-to-use authentication.
--   **Firestore:** Our primary database is Firestore, a NoSQL document database that provides real-time data synchronization and powerful querying capabilities.
--   **Firebase Storage:** We use Firebase Storage to store user-generated content and other large files.
+### 3. Cloud Backend Services
 
-### 3. AI Integration
-
--   **Genkit:** We use Google's Genkit as our AI framework. It provides a robust and extensible way to build AI-powered features, from dynamic NPC dialogue to generative world events. Genkit allows us to integrate with various AI models and services seamlessly.
+-   **Firebase Data Connect:** Utilizes modern GraphQL-based data pipelines (`apps/backend/firebase/dataconnect/schema/schema.gql`) to manage structured data in Postgres/Firestore natively.
+-   **Firebase Functions & Auth:** Serverless endpoints acting as authoritative logic checks and user authentication handlers.
+-   **Firestack Ecosystem:** Interaction with the Firebase emulator, database, and functions is managed efficiently via the custom `@aikami/firestack` package to enforce clean repository boundaries.
 
 ## Monorepo & Tooling
 
--   **Bun:** We use Bun as our primary runtime for TypeScript/JavaScript, providing a fast and modern development environment with built-in package management, testing, and bundling.
--   **Moon:** The entire project is managed as a monorepo using Moon, which helps us manage dependencies, run tasks, and maintain a consistent development experience across all our applications and packages.
+-   **Bun & Moon:** The monorepo heavily relies on Bun for blistering fast installations and script executions. Moon dictates task dependencies (e.g., ensuring `packages/shared/schemas` builds before the frontend engine).
+-   **Validation:** Biome is the sole linter and formatter, replacing Prettier and ESLint for uniform code syntax. Playwright acts as the E2E blackbox testing framework.
