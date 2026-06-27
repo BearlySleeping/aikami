@@ -166,6 +166,7 @@ export {
   extractTransitionZones,
   loadTilemap,
 } from './assets/map_loader.ts';
+export { checkLineOfSight, clearBresenhamGrid, setBresenhamGrid } from './math/bresenham.ts';
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
 export {
