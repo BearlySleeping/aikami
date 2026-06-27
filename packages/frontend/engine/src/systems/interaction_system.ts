@@ -2,6 +2,7 @@
 import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
 import { logger } from '$logger';
+import { isSimulationActive } from '../components/engine_state.ts';
 import type { InteractableData } from '../components/interactable.ts';
 import { Interactable } from '../components/interactable.ts';
 import { Inventory, MAX_INVENTORY_SLOTS } from '../components/inventory.ts';
@@ -54,6 +55,11 @@ const handleInteract = (options: {
   const { world, playerEntityId, bridge } = options;
 
   if (!world || !bridge) {
+    return;
+  }
+
+  // ── C-172 AC-1: Return early during map transitions ──
+  if (!isSimulationActive()) {
     return;
   }
 

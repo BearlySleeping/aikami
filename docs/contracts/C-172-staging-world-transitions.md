@@ -6,7 +6,7 @@
 | **Target** | `packages/frontend/engine/src/systems/zoning_system.ts`, `game_world.ts`, `assets/map_loader.ts` |
 | **Priority** | P0 — Eliminates main-thread stalls during transitions and prevents coordinate soft-locks |
 | **Dependencies** | C-171 |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

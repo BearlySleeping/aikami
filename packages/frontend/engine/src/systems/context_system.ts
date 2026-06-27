@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/systems/context_system.ts
 import type { World } from 'bitecs';
 import { getComponent } from 'bitecs';
+import { isSimulationActive } from '../components/engine_state.ts';
 import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
@@ -55,6 +56,11 @@ const updateContextSystem = (options: {
   const contextRadius = options.contextRadius ?? DEFAULT_CONTEXT_RADIUS;
 
   if (!world || !bridge || !spatialGrid) {
+    return;
+  }
+
+  // ── C-172 AC-1: Return early during map transitions ──
+  if (!isSimulationActive()) {
     return;
   }
 
