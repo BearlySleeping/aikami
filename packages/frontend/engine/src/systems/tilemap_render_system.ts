@@ -1,28 +1,24 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
-import {
-  Assets,
-  Container,
-  Rectangle,
-  type Renderer,
-  RenderTexture,
-  Sprite,
-  Texture,
-} from 'pixi.js';
-import type { TilemapData, TilemapTileset } from '../assets/map_loader.ts';
+import { Assets, Container, Texture } from 'pixi.js';
+import type { TilemapData } from '../assets/map_loader.ts';
+import { buildTilemapChunks, frustumCullChunks } from '../rendering/tilemap_chunk_renderer.ts';
 
 // ---------------------------------------------------------------------------
-// Tilemap Rendering System — renders static tilemap layers in PixiJS v8
+// Tilemap Rendering System — WebGPU chunk-based Mesh pipeline
 //
-// Contract C-135: Iterates through parsed map layers bottom-to-top,
-// renders each visible layer into a cached RenderTexture for optimal
-// performance, and returns a Container with the background at the
-// correct z-index (behind all entity sprites).
+// Contract C-171: Replaces the legacy RenderTexture baking system with a
+// spatial chunking architecture. The map is divided into 32×32 tile chunks,
+// each rendered as a single PixiJS `Mesh` backed by `Float32Array` vertex/UV
+// buffers and `Uint32Array` index buffers.
 //
-// Performance strategy: Instead of creating one Sprite per tile (which
-// produces thousands of draw calls), each layer is rendered into a
-// single RenderTexture. The resulting Container holds one Sprite per
-// layer — typically 2-4 draw calls total.
+// CPU-side frustum culling (via {@link frustumCullChunks}) removes off-screen
+// chunks from the scene graph, achieving zero-cost GPU culling for maps
+// larger than the viewport.
+//
+// All MeshGeometry and Buffer objects are created with `autoGarbageCollect = false`
+// to prevent the PixiJS v8 silent unbinding bug when chunks are temporarily
+// culled from the screen.
 // ---------------------------------------------------------------------------
 
 /**
@@ -39,93 +35,121 @@ export type TilemapRenderOptions = {
    * When omitted, all visible non-collision layers are rendered.
    */
   layerFilter?: (layerName: string) => boolean;
-  /**
-   * Optional renderer instance. When provided, `RenderTexture.create()`
-   * uses this renderer for the cached texture. In headless/test
-   * environments, set `skipRenderTexture` to `true` instead.
-   */
-  renderer?: Renderer;
-  /**
-   * Skip the RenderTexture optimization and return a Container with
-   * individual tile Sprites. Useful in test environments where no
-   * WebGL context exists.
-   */
-  skipRenderTexture?: boolean;
 };
 
 /**
  * Result of rendering a tilemap into the scene.
  */
 export type TilemapRenderResult = {
-  /** The Container holding all rendered layers. Add to the world container. */
+  /** The Container holding all chunk Meshes. Add to the world container. */
   container: Container;
-  /** The number of layers rendered. */
+  /** Number of layers rendered. */
   layerCount: number;
+  /** Number of mesh chunks created. */
+  chunkCount: number;
 };
 
 /**
- * Tileset lookup helper — finds the tileset that owns a given GID.
- */
-type TilesetEntry = TilemapTileset & {
-  /** Source rectangle in the tileset image for the tile's local ID. */
-  getFrame: (localId: number) => Rectangle;
-};
-
-/**
- * Renders a parsed tilemap into a PixiJS Container.
+ * Renders a parsed tilemap into a PixiJS Container using chunked Mesh
+ * rendering instead of RenderTexture baking.
  *
- * Each visible, non-collision layer is rendered as a single Sprite
- * backed by a RenderTexture for optimal draw-call count. Layers are
- * added bottom-to-top (matching the Tiled editor's draw order).
+ * Each visible, non-collision layer is divided into 32×32 tile chunks.
+ * Each chunk is a single {@link Mesh} with pre-allocated position/UV/index
+ * buffers. The tileset image is loaded as a Texture and shared across
+ * all chunks in its layer.
  *
- * The returned Container should be added to the world container
- * at z-index 0 (behind all entity sprites).
+ * The returned Container holds all chunk Meshes. Frustum culling is
+ * performed externally via {@link frustumCullChunks} every frame.
  *
- * @param options - Tilemap data and texture resolution.
- * @returns A container with all rendered layers.
+ * @param options - Tilemap data and optional layer filter.
+ * @returns A container with all chunk meshes.
  */
 export const renderTilemap = async (
   options: TilemapRenderOptions,
 ): Promise<TilemapRenderResult> => {
-  const { tilemap, layerFilter, skipRenderTexture } = options;
+  const { tilemap, layerFilter } = options;
 
   const container = new Container();
-  container.label = 'tilemap-background';
+  container.label = 'tilemap-chunks';
 
-  // Pre-compute tileset frame lookups
-  const tilesetEntries = _buildTilesetLookup(tilemap.tilesets);
+  // Collect unique tileset images to load
+  const imageSet = new Set<string>();
+  for (const layer of tilemap.layers) {
+    if (!layer.visible || layer.name === 'collision') {
+      continue;
+    }
+    if (layerFilter && !layerFilter(layer.name)) {
+    }
+    // No need to load tileset images per-layer — they're shared across all layers
+  }
+  for (const tileset of tilemap.tilesets) {
+    imageSet.add(tileset.image);
+  }
 
-  // Pre-load all tileset textures before rendering
-  const textureLoadPromises = tilesetEntries.map((entry) => Assets.load(entry.image));
-  await Promise.all(textureLoadPromises);
+  // Load all tileset textures
+  const loadPromises = [...imageSet].map((image) => Assets.load(image));
+  await Promise.all(loadPromises);
+
+  // Build a texture map keyed by image path
+  const textureMap = new Map<string, Texture>();
+  for (const image of imageSet) {
+    const texture = Texture.from(image);
+    textureMap.set(image, texture);
+  }
 
   let layerCount = 0;
+  let totalChunks = 0;
 
   // Render layers bottom-to-top (preserve Tiled draw order)
   for (const layer of tilemap.layers) {
     if (!layer.visible) {
       continue;
     }
-
     if (layer.name === 'collision') {
       continue;
     }
-
     if (layerFilter && !layerFilter(layer.name)) {
       continue;
     }
 
-    const layerContainer = skipRenderTexture
-      ? _renderLayerDirect(layer, tilemap, tilesetEntries)
-      : _renderLayerToTexture(layer, tilemap, tilesetEntries, options);
-
-    if (layerContainer) {
-      container.addChild(layerContainer);
-      layerCount += 1;
+    // Determine which tileset(s) this layer's GIDs reference.
+    // Build a filtered tileset list for this layer and use the
+    // primary tileset's texture for rendering.
+    const primaryTileset = _findPrimaryTilesetForLayer(layer, tilemap);
+    if (!primaryTileset) {
+      continue;
     }
+
+    const texture = textureMap.get(primaryTileset.image);
+    if (!texture) {
+      continue;
+    }
+
+    // Build a filtered tilemap containing only this layer + relevant tilesets
+    const layerTilemap: TilemapData = {
+      ...tilemap,
+      layers: [layer],
+      // Include only the tilesets that this layer references
+      tilesets: tilemap.tilesets.filter((ts) => {
+        return _layerReferencesTileset(layer, ts, tilemap.tilesets);
+      }),
+    };
+
+    const result = buildTilemapChunks({
+      tilemap: layerTilemap,
+      tilesetTexture: texture,
+    });
+
+    // Merge chunk children into the main container
+    while (result.container.children.length > 0) {
+      container.addChild(result.container.children[0]);
+    }
+
+    layerCount += 1;
+    totalChunks += result.chunkCount;
   }
 
-  return { container, layerCount };
+  return { container, layerCount, chunkCount: totalChunks };
 };
 
 // ---------------------------------------------------------------------------
@@ -133,189 +157,71 @@ export const renderTilemap = async (
 // ---------------------------------------------------------------------------
 
 /**
- * Builds a GID → (tileset, frame rectangle) lookup from the tileset array.
- */
-const _buildTilesetLookup = (tilesets: readonly TilemapTileset[]): TilesetEntry[] => {
-  return tilesets.map((ts) => {
-    const { tilewidth, tileheight, columns, spacing = 0, margin = 0 } = ts;
-
-    const getFrame = (localId: number): Rectangle => {
-      const col = localId % columns;
-      const row = Math.floor(localId / columns);
-      return new Rectangle(
-        margin + col * (tilewidth + spacing),
-        margin + row * (tileheight + spacing),
-        tilewidth,
-        tileheight,
-      );
-    };
-
-    return { ...ts, getFrame };
-  });
-};
-
-/**
- * Finds the tileset and local tile ID for a given global tile ID (GID).
+ * Finds the primary tileset for a layer by checking which tileset
+ * covers the most non-zero GIDs in the layer's tile data.
  *
- * @returns The matching entry and the local ID within that tileset,
- *   or `undefined` if the GID is 0 (empty) or no tileset matches.
+ * @param layer - The tile layer.
+ * @param tilemap - The full tilemap data with tilesets.
+ * @returns The primary tileset, or undefined if no tiles are found.
  */
-const _resolveTile = (
-  gid: number,
-  entries: readonly TilesetEntry[],
-): { entry: TilesetEntry; localId: number } | undefined => {
-  if (gid === 0) {
+const _findPrimaryTilesetForLayer = (
+  layer: { data: readonly number[] },
+  tilemap: TilemapData,
+): TilemapData['tilesets'][number] | undefined => {
+  if (tilemap.tilesets.length === 0) {
     return undefined;
   }
 
-  // Tilesets are ordered by ascending firstgid
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const entry = entries[i];
-    if (gid >= entry.firstgid) {
-      const localId = gid - entry.firstgid;
-      if (localId < entry.tilecount) {
-        return { entry, localId };
+  // Count GIDs per tileset
+  const counts = new Map<number, number>();
+
+  for (const gid of layer.data) {
+    if (gid === 0) {
+      continue;
+    }
+    for (let i = tilemap.tilesets.length - 1; i >= 0; i--) {
+      const ts = tilemap.tilesets[i];
+      if (gid >= ts.firstgid && gid - ts.firstgid < ts.tilecount) {
+        counts.set(i, (counts.get(i) ?? 0) + 1);
+        break;
       }
-      break;
     }
   }
 
-  return undefined;
-};
-
-/**
- * Renders a single layer into a cached RenderTexture-backed Sprite.
- *
- * This is the production path: all tiles in a layer are composited
- * into one GPU texture, reducing draw calls from N to 1 per layer.
- */
-const _renderLayerToTexture = (
-  layer: { width: number; height: number; data: readonly number[]; name: string },
-  tilemap: TilemapData,
-  entries: readonly TilesetEntry[],
-  options: TilemapRenderOptions,
-): Container | undefined => {
-  // Create a temporary container with all tile sprites
-  const tempContainer = new Container();
-  tempContainer.label = `layer-${layer.name}-tmp`;
-
-  let hasTiles = false;
-
-  for (let row = 0; row < layer.height; row++) {
-    for (let col = 0; col < layer.width; col++) {
-      const index = row * layer.width + col;
-      const gid = layer.data[index];
-      if (gid === 0) {
-        continue;
-      }
-
-      const resolved = _resolveTile(gid, entries);
-      if (!resolved) {
-        continue;
-      }
-
-      const { entry, localId } = resolved;
-      const texture = Texture.from(entry.image);
-      const frame = entry.getFrame(localId);
-
-      const sprite = new Sprite({
-        texture,
-        x: col * tilemap.tilewidth,
-        y: row * tilemap.tileheight,
-        width: tilemap.tilewidth,
-        height: tilemap.tileheight,
-      });
-
-      // Set the source frame for correct UV mapping
-      sprite.texture = new Texture({
-        source: texture.source,
-        frame,
-      });
-
-      tempContainer.addChild(sprite);
-      hasTiles = true;
-    }
-  }
-
-  if (!hasTiles) {
+  if (counts.size === 0) {
     return undefined;
   }
 
-  // Bake the temporary container into a RenderTexture
-  const layerWidth = layer.width * tilemap.tilewidth;
-  const layerHeight = layer.height * tilemap.tileheight;
-
-  // Try RenderTexture approach; fall back to direct if no renderer available
-  if (options.skipRenderTexture || !options.renderer) {
-    return tempContainer;
-  }
-
-  try {
-    const renderTexture = RenderTexture.create({
-      width: layerWidth,
-      height: layerHeight,
-    });
-
-    options.renderer.render({
-      container: tempContainer,
-      target: renderTexture,
-    });
-
-    const bakedSprite = new Sprite(renderTexture);
-    bakedSprite.label = `layer-${layer.name}`;
-
-    return new Container({ children: [bakedSprite] });
-  } catch {
-    // RenderTexture requires a live WebGL context — fall back to direct
-    // rendering which still works but produces more draw calls.
-    return tempContainer;
-  }
-};
-
-/**
- * Renders a layer directly as individual tile Sprites.
- *
- * Used in test/headless environments where RenderTexture is unavailable.
- */
-const _renderLayerDirect = (
-  layer: { width: number; height: number; data: readonly number[]; name: string },
-  tilemap: TilemapData,
-  entries: readonly TilesetEntry[],
-): Container | undefined => {
-  const container = new Container();
-  container.label = `layer-${layer.name}`;
-
-  let hasTiles = false;
-
-  for (let row = 0; row < layer.height; row++) {
-    for (let col = 0; col < layer.width; col++) {
-      const index = row * layer.width + col;
-      const gid = layer.data[index];
-      if (gid === 0) {
-        continue;
-      }
-
-      const resolved = _resolveTile(gid, entries);
-      if (!resolved) {
-        continue;
-      }
-
-      const { entry, localId } = resolved;
-      const texture = Texture.from(entry.image);
-      const frame = entry.getFrame(localId);
-
-      const sprite = new Sprite({
-        texture: new Texture({ source: texture.source, frame }),
-        x: col * tilemap.tilewidth,
-        y: row * tilemap.tileheight,
-        width: tilemap.tilewidth,
-        height: tilemap.tileheight,
-      });
-
-      container.addChild(sprite);
-      hasTiles = true;
+  // Find the tileset with the highest tile count in this layer
+  let bestIndex = -1;
+  let bestCount = 0;
+  for (const [index, count] of counts) {
+    if (count > bestCount) {
+      bestCount = count;
+      bestIndex = index;
     }
   }
 
-  return hasTiles ? container : undefined;
+  return bestIndex >= 0 ? tilemap.tilesets[bestIndex] : undefined;
+};
+
+/**
+ * Checks whether a layer references tiles from the given tileset.
+ *
+ * @param layer - The tile layer.
+ * @param tileset - The tileset to check.
+ * @param allTilesets - All tilesets in the map (for firstgid ordering).
+ * @returns True if at least one tile in the layer comes from this tileset.
+ */
+const _layerReferencesTileset = (
+  layer: { data: readonly number[] },
+  tileset: { firstgid: number; tilecount: number },
+  _allTilesets: readonly { firstgid: number; tilecount: number }[],
+): boolean => {
+  for (const gid of layer.data) {
+    if (gid >= tileset.firstgid && gid - tileset.firstgid < tileset.tilecount) {
+      return true;
+    }
+  }
+  return false;
 };

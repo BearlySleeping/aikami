@@ -75,6 +75,7 @@ P2 (Polish — after P1):
 | C-167 | [Svelte Native Combat UI MVP](C-167-svelte-combat-ui-mvp.md) ✅ | Pure DOM portrait stage replaces PixiJS canvas, CSS damage animations, Playwright visual regression tests | — |
 | C-168 | [PixiJS v8 Asset Pipeline Refactor](C-168-pixijs-asset-pipeline-fix.md) ✅ | PixiJS Spritesheet API for WebGPU-safe UV mapping, procedural atlas JSON generation, cached Spritesheet instances, async loading states | C-167 |
 | C-170 | [ECS Visual Observer Pattern](C-170-ecs-visual-observer-pattern.md) ✅ | Replace object-heavy Sprite component with pure numeric Visual component, bitECS `observe` hooks for PixiJS lifecycle, private SceneMap decoupling | C-136 |
+| C-171 | [WebGPU Tilemap Mesh Pipeline](C-171-webgpu-tilemap-mesh-pipeline.md) ✅ | Replace RenderTexture baking with WebGPU chunking — 32×32 tile Mesh chunks, Float32Array/Uint32Array buffers, CPU frustum culling, GC mitigation | C-170 |
 | C-145 | [Turn-Based Combat Loop](C-145-turn-based-combat-loop.md) ✅ | d20 dice RNG combat, hit/damage/loot, COMBAT_ACTION bridge, unit tests | C-144 |
 | C-031 | [SvelteKit Adapter Static & Firebase Hosting](C-031-adapter-static-and-hosting.md) ✅ | adapter-static SPA mode, Firebase Hosting emulator, SPA rewrites | — |
 | C-010 | [Setup Script](C-010-setup-script.md) | Interactive developer onboarding script | C-007, C-008 |
