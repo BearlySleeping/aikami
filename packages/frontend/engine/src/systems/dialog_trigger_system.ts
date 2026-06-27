@@ -1,12 +1,14 @@
 // apps/frontend/game/src/engine/systems/dialog_trigger_system.ts
 import type { World } from 'bitecs';
 import { getComponent, query } from 'bitecs';
+import { CollisionLayer } from '../components/collision_data.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { checkLineOfSight } from '../math/bresenham.ts';
 
 // ---------------------------------------------------------------------------
 // DialogTriggerSystem — emit bridge events when player is near an NPC
@@ -65,6 +67,20 @@ const updateDialogTriggers = (world: World, playerEntityId: number, bridge: Engi
     const isInRange = distSq <= radiusSq;
 
     if (isInRange && !npcDialog.playerInRange) {
+      // ── C-174 AC-3: Line-of-sight check ──
+      // Only trigger dialogue if the NPC can see the player.
+      const playerTileX = Math.floor(playerPos.x / 32);
+      const playerTileY = Math.floor(playerPos.y / 32);
+      const npcTileX = Math.floor(npcPos.x / 32);
+      const npcTileY = Math.floor(npcPos.y / 32);
+
+      // Walls block NPC vision
+      const sightMask = CollisionLayer.wall;
+
+      if (!checkLineOfSight(npcTileX, npcTileY, playerTileX, playerTileY, sightMask)) {
+        continue; // Line of sight blocked — skip this NPC
+      }
+
       // Player just entered interaction range — mutate SoA array directly
       NPCDialog.playerInRange[eid] = true;
       bridge.emit({

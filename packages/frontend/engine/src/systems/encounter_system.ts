@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/systems/encounter_system.ts
 import type { World } from 'bitecs';
 import { addComponent, getComponent, query, set } from 'bitecs';
+import { CollisionLayer } from '../components/collision_data.ts';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Enemy } from '../components/enemy.ts';
@@ -9,6 +10,7 @@ import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { Velocity } from '../components/velocity.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { checkLineOfSight } from '../math/bresenham.ts';
 import { getEngineGameMode, setEngineGameMode } from '../state/game_mode.ts';
 
 // ---------------------------------------------------------------------------
@@ -105,6 +107,20 @@ export const updateEncounterSystem = (options: {
     const distSq = dx * dx + dy * dy;
 
     if (distSq <= ENCOUNTER_RADIUS_SQ) {
+      // ── C-174 AC-3: Line-of-sight check ──
+      // Only trigger combat if the enemy can see the player.
+      const playerTileX = Math.floor(playerPos.x / 32);
+      const playerTileY = Math.floor(playerPos.y / 32);
+      const enemyTileX = Math.floor(enemyPos.x / 32);
+      const enemyTileY = Math.floor(enemyPos.y / 32);
+
+      // Walls block enemy vision
+      const sightMask = CollisionLayer.wall;
+
+      if (!checkLineOfSight(enemyTileX, enemyTileY, playerTileX, playerTileY, sightMask)) {
+        continue; // Line of sight blocked — enemy didn't spot you
+      }
+
       _triggerEncounter({ world, playerEntityId, enemyEid: eid, bridge });
       return true;
     }
