@@ -3,6 +3,7 @@ import type { Application, Spritesheet } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import {
   extractCollisionGrid,
+  extractSpawnPointEntities,
   extractSpawnPoints,
   extractTransitionZones,
   loadTilemap,
@@ -1217,17 +1218,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Called from the {@link EngineBridge} ZONE_TRIGGERED listener.
    *
    * @param mapUrl - URL to the new Tiled JSON tilemap.
-   * @param targetX - X pixel coordinate for the player on the new map.
-   * @param targetY - Y pixel coordinate for the player on the new map.
+   * @param targetX - X pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
+   * @param targetY - Y pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
+   * @param defeatedEnemies - Array of defeated enemy spawn IDs to filter during spawn.
+   * @param targetSpawnHash - Numeric hash of the target spawn point ID (C-172).
    * @throws If the worker is not running or the map fails to load.
    *
-   * Contract: C-138 Map Transitions
+   * Contract: C-138 Map Transitions, C-172 Staging World Transitions
    */
   async loadMap(
     mapUrl: string,
     targetX: number,
     targetY: number,
     defeatedEnemies?: string[],
+    targetSpawnHash?: number,
   ): Promise<void> {
     this.debug('loadMap', { mapUrl, targetX, targetY });
 
@@ -1261,6 +1265,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const collisionGridData = extractCollisionGrid(tilemap);
     const spawnPoints = extractSpawnPoints(tilemap);
     const transitionZones = extractTransitionZones(tilemap);
+    const spawnPointEntities = extractSpawnPointEntities(tilemap);
 
     const mapPixelWidth = tilemap.width * tilemap.tilewidth;
     const mapPixelHeight = tilemap.height * tilemap.tileheight;
@@ -1305,6 +1310,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       targetX,
       targetY,
       defeatedEnemies,
+      targetSpawnHash,
+      spawnPointEntities,
     });
 
     // 7. Resume the engine
@@ -1331,6 +1338,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetX: number;
     targetY: number;
     defeatedEnemies?: string[];
+    targetSpawnHash?: number;
+    spawnPointEntities?: import('./assets/map_loader.ts').SpawnPointEntity[];
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this._worker) {
@@ -1381,6 +1390,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         targetX: options.targetX,
         targetY: options.targetY,
         defeatedEnemies: options.defeatedEnemies,
+        targetSpawnHash: options.targetSpawnHash,
+        spawnPointEntities: options.spawnPointEntities,
       });
     });
   }

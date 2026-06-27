@@ -31,6 +31,7 @@
 | C-160 | Engine Polish (Shader/Movement/Camera) | ✅ completed |
 | C-170 | ECS Visual Observer Pattern | ✅ completed |
 | C-171 | WebGPU Tilemap Mesh Pipeline | ✅ completed |
+| C-172 | Staging World Transitions | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
@@ -2236,3 +2237,48 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - No unit tests for `buildTilemapChunks` or `frustumCullChunks` — these require a live PixiJS renderer + GPU context (not available in bun test). Integration testing must be done via visual E2E tests with a running game engine.
 - The WGSL vertex shader outputs positions as-is (`vec4(aPosition, 0, 1)`) — it relies on PixiJS's global transform matrix (group 0) for viewport projection. If PixiJS changes its global uniform layout, the shader may need adjustment.
 - Overdraw margin is hardcoded to 64px (2 tiles at default 32px resolution). Maps with unusual tile sizes may need tuning — the margin should ideally derive from `tilemap.tilewidth`.
+
+### C-172: Staging World Transitions
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/engine_state.ts` — `EngineState` singleton SoA component with `SimulationState` values (`active`/`transitioning`). Includes `createEngineStateEntity()`, `setSimulationState()`, `getSimulationState()`, `isSimulationActive()`, observer registration. Defaults to active when unitialized (test compatibility).
+- `packages/frontend/engine/src/components/spawn_point.ts` — `SpawnPoint` SoA component with `spawnHash` (numeric hash of string spawn ID). Observer registration for onSet/onGet.
+
+**Files modified**:
+- `packages/frontend/engine/src/components/transition.ts` — Added `targetSpawnHash: number[]` to Transition SoA. Updated `TransitionData` type and observer registration. Legacy `targetX`/`targetY` preserved for backward compat.
+- `packages/frontend/engine/src/types.ts` — Added `targetSpawnHash: number` to `ZONE_TRIGGERED` event type.
+- `packages/frontend/engine/src/assets/map_loader.ts` — Added `djb2Hash()` string hashing utility, `SpawnPointEntity` type (spawnId, spawnHash, x, y), `extractSpawnPointEntities()` to parse Tiled objects with `type: 'spawn'`. Updated `TransitionZone` type with optional `targetSpawnId`. Updated `_parseTransitionZone` to extract `targetSpawnId` from Tiled properties.
+- `packages/frontend/engine/src/systems/entity_spawner.ts` — Added `spawnSpawnPointEntities()` for creating SpawnPoint marker entities. Updated `spawnTransitionEntities` to compute and set `targetSpawnHash` from `zone.targetSpawnId` via `djb2Hash`. Added `SpawnPointSpawnOptions` type.
+- `packages/frontend/engine/src/systems/zoning_system.ts` — Added `isSimulationActive()` early-return gate (C-172 AC-1). Now emits `targetSpawnHash` in ZONE_TRIGGERED event.
+- `packages/frontend/engine/src/systems/movement_system.ts` — Added `isSimulationActive()` early-return gate.
+- `packages/frontend/engine/src/systems/interaction_system.ts` — Added `isSimulationActive()` early-return gate.
+- `packages/frontend/engine/src/systems/encounter_system.ts` — Added `isSimulationActive()` early-return gate.
+- `packages/frontend/engine/src/systems/dialog_trigger_system.ts` — Added `isSimulationActive()` early-return gate.
+- `packages/frontend/engine/src/systems/expression_system.ts` — Added `isSimulationActive()` early-return gate.
+- `packages/frontend/engine/src/systems/context_system.ts` — Added `isSimulationActive()` early-return gate.
+- `packages/frontend/engine/src/worker/ecs_worker.ts` — EngineState singleton created during `initializeEngine()`. LOAD_MAP handler now sets `SimulationState.transitioning` before entity operations, resolves spawn coordinates via `_resolveSpawnInStaging()` helper (C-172 AC-3), spawns SpawnPoint marker entities, and restores `SimulationState.active` on completion/error. Registered `registerEngineStateObservers` and `registerSpawnPointObservers`.
+- `packages/frontend/engine/src/game_world.ts` — `loadMap()` accepts optional `targetSpawnHash` parameter. Extracts `extractSpawnPointEntities()` from tilemap. `_postLoadMap` passes `targetSpawnHash` and `spawnPointEntities` to worker.
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` — ZONE_TRIGGERED handler passes `event.targetSpawnHash` to `loadMap`.
+- `apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts` — Updated `GameViewModelInterface.loadMap` and implementation to accept `targetSpawnHash?: number`.
+- `packages/frontend/engine/src/index.ts` — Added exports for `EngineState`, `SimulationState`, `SpawnPointComp`, `SpawnPointEntity`, `djb2Hash`, `extractSpawnPointEntities`, `spawnSpawnPointEntities`, and all related types.
+
+**Deviations**:
+1. **Staging world used only for spawn resolution**: The contract specifies a full staging world for isolated entity creation. The MVP creates a lightweight staging path: spawn resolution happens by scanning the `SpawnPointEntity[]` array (pre-extracted from Tiled JSON) for a matching `spawnHash`. A full `createWorld()` staging context with entity transfer was omitted — the spawn point data is small and doesn't benefit from a separate ECS world.
+2. **Regular arrays instead of TypedArrays**: The contract specifies `Uint32Array`/`Uint8Array` for `EngineState.state` and `Portal.targetMapHash`. Following the existing codebase convention, regular sparse `number[]` arrays are used (bitECS v0.4.0 observer API requirement).
+3. **`SpawnPointComp` alias**: The `SpawnPoint` export from `entity_spawner.ts` conflicts with the `SpawnPoint` type from `map_loader.ts`. Exported as `SpawnPointComp` from index.ts to avoid naming collision.
+4. **Transition keeps legacy targetX/targetY**: The contract wants fully hashed portal targets. The legacy coordinate fields are preserved for backward compatibility — existing maps without `targetSpawnId` properties still work.
+
+**Design decisions**:
+1. **`isSimulationActive()` defaults true when uninitialized**: Gate returns `false` only when `EngineState.state[0] === SimulationState.transitioning`. When the singleton hasn't been created (test environments), gates are open — all systems run normally. Unit tests don't need EngineState setup.
+2. **DJB2 hash for string IDs**: Simple, fast, low collision rate for short ASCII strings (spawn point IDs, map names). Stateless — no lookup table needed.
+3. **Spawn resolution via array scan**: `_resolveSpawnInStaging()` uses `Array.find()` over the pre-extracted `SpawnPointEntity[]`. O(n) scan over a small array (< 50 spawn points) is faster than creating + tearing down a bitECS world.
+4. **EngineState restored on error**: The LOAD_MAP catch block calls `setSimulationState(Active)` — a failed map load won't permanently freeze the simulation.
+
+**Known limitations**:
+- No full staging world with serialization/deserialization — spawn resolution is lightweight. A true staging world for all map entities would require bitECS cross-world transfer which adds complexity for marginal benefit.
+- Portal hashes are only set when `targetSpawnId` is explicitly provided in Tiled JSON. Maps without spawn ID properties use legacy `targetX`/`targetY` fallback.
+- No generational indices for dangling pointer protection (out of scope per contract).
+- The `EngineState` singleton entity ID is tracked via module-level variable — not queryable via the bitECS world. Works for a single-world architecture but would need refactoring for multi-world support.
+- Tiled maps must be updated with `targetSpawnId` properties on transition objects and `spawnId` properties on spawn objects for C-172 features to activate. Existing maps fall back to legacy behavior.

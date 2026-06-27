@@ -1,6 +1,7 @@
 // apps/frontend/game/src/engine/systems/dialog_trigger_system.ts
 import type { World } from 'bitecs';
 import { getComponent, query } from 'bitecs';
+import { isSimulationActive } from '../components/engine_state.ts';
 import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
@@ -31,6 +32,11 @@ const NPC_QUERY_TERMS = [Position, NPCDialog];
  */
 const updateDialogTriggers = (world: World, playerEntityId: number, bridge: EngineBridge): void => {
   if (!world || !bridge) {
+    return;
+  }
+
+  // ── C-172 AC-1: Return early during map transitions ──
+  if (!isSimulationActive()) {
     return;
   }
 

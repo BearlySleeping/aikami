@@ -98,10 +98,18 @@ export type TransitionZone = {
   height: number;
   /** Target map filename or ID to transition to. */
   targetMap: string;
-  /** Target X pixel coordinate on the destination map. */
+  /** Target X pixel coordinate on the destination map (legacy — use targetSpawnId). */
   targetX: number;
-  /** Target Y pixel coordinate on the destination map. */
+  /** Target Y pixel coordinate on the destination map (legacy — use targetSpawnId). */
   targetY: number;
+  /**
+   * String identifier of the spawn point on the destination map (C-172).
+   *
+   * When set, the engine resolves this to coordinates via SpawnPoint
+   * entities on the destination map. Hashed to a numeric value for
+   * bitECS component storage.
+   */
+  targetSpawnId?: string;
 };
 
 /**
@@ -115,6 +123,26 @@ export type ObjectLayer = {
   name: string;
   /** Raw Tiled objects in this group. */
   objects: Record<string, unknown>[];
+};
+
+/**
+ * A spawn point entity extracted from Tiled for C-172 decoupled coordinates.
+ *
+ * Objects with `type === 'spawn'` in Tiled objectgroup layers are parsed
+ * into SpawnPointEntity entries. Each entry has a string identifier
+ * (`spawnId` from custom properties) and pixel coordinates.
+ *
+ * Contract: C-172 Staging World Transitions
+ */
+export type SpawnPointEntity = {
+  /** String identifier (e.g., 'town_spawn', 'forest_entrance'). */
+  spawnId: string;
+  /** Numeric hash of the spawnId for bitECS component storage. */
+  spawnHash: number;
+  /** X position in pixels. */
+  x: number;
+  /** Y position in pixels. */
+  y: number;
 };
 
 /**
@@ -482,6 +510,77 @@ const _extractProperties = (object: Record<string, unknown>): Record<string, unk
   return {};
 };
 
+// ---------------------------------------------------------------------------
+// String hashing — DJB2 for spawn/portal ID resolution (C-172)
+// ---------------------------------------------------------------------------
+
+/**
+ * DJB2 hash function for converting string identifiers to numeric hashes.
+ *
+ * Used to store spawn point and portal target IDs in bitECS numeric
+ * component arrays. DJB2 is chosen for simplicity, speed, and low
+ * collision rate for short ASCII strings (map names, spawn IDs).
+ *
+ * @param str - The string to hash.
+ * @returns A 32-bit unsigned integer hash.
+ */
+export const djb2Hash = (str: string): number => {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+  }
+  return hash >>> 0;
+};
+
+// ---------------------------------------------------------------------------
+// Spawn point entity extraction (C-172)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts spawn point entities from all objectgroup layers in a tilemap.
+ *
+ * Objects with `type === 'spawn'` are parsed into {@link SpawnPointEntity}
+ * entries. Each entry requires a `spawnId` custom property (string) and
+ * carries pixel coordinates. The `spawnHash` is computed via {@link djb2Hash}.
+ *
+ * @param tilemap - The parsed tilemap data.
+ * @returns Flat array of spawn point entities, or empty array if none exist.
+ */
+export const extractSpawnPointEntities = (tilemap: TilemapData): SpawnPointEntity[] => {
+  if (!tilemap.objectLayers || tilemap.objectLayers.length === 0) {
+    return [];
+  }
+
+  const entities: SpawnPointEntity[] = [];
+
+  for (const objectLayer of tilemap.objectLayers) {
+    for (const object of objectLayer.objects) {
+      if (object.type !== 'spawn') {
+        continue;
+      }
+
+      const properties = _extractProperties(object);
+      const spawnId = properties.spawnId;
+      if (typeof spawnId !== 'string' || spawnId.length === 0) {
+        logger.debug('extractSpawnPointEntities:skipped-no-spawnId', {
+          layer: objectLayer.name,
+          id: object.id,
+        });
+        continue;
+      }
+
+      entities.push({
+        spawnId,
+        spawnHash: djb2Hash(spawnId),
+        x: typeof object.x === 'number' ? object.x : 0,
+        y: typeof object.y === 'number' ? object.y : 0,
+      });
+    }
+  }
+
+  return entities;
+};
+
 /**
  * Extracts the collision layer from a parsed tilemap.
  *
@@ -580,5 +679,7 @@ const _parseTransitionZone = (object: Record<string, unknown>): TransitionZone |
     targetMap,
     targetX,
     targetY,
+    targetSpawnId:
+      typeof properties.targetSpawnId === 'string' ? properties.targetSpawnId : undefined,
   };
 };

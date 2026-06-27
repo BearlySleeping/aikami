@@ -2,6 +2,7 @@
 import type { World } from 'bitecs';
 import { getComponent, query } from 'bitecs';
 import { logger } from '$logger';
+import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { Transition, type TransitionData } from '../components/transition.ts';
@@ -39,6 +40,11 @@ export const updateZoningSystem = (
   bridge: EngineBridge,
 ): void => {
   if (!world || !bridge || playerEntityId <= 0) {
+    return;
+  }
+
+  // ── C-172 AC-1: Return early during map transitions ──
+  if (!isSimulationActive()) {
     return;
   }
 
@@ -105,6 +111,7 @@ export const updateZoningSystem = (
         targetMap: zoneData.targetMap,
         targetX: zoneData.targetX,
         targetY: zoneData.targetY,
+        targetSpawnHash: zoneData.targetSpawnHash,
       });
     }
   }

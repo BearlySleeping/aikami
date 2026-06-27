@@ -282,10 +282,12 @@ export type GameEvent =
       type: 'ZONE_TRIGGERED';
       /** Target map filename or ID to load. */
       targetMap: string;
-      /** Target X pixel coordinate for the player on the new map. */
+      /** Target X pixel coordinate for the player on the new map (legacy — use targetSpawnHash). */
       targetX: number;
-      /** Target Y pixel coordinate for the player on the new map. */
+      /** Target Y pixel coordinate for the player on the new map (legacy — use targetSpawnHash). */
       targetY: number;
+      /** Numeric hash of the target spawn point ID on the destination map (C-172). */
+      targetSpawnHash: number;
     }
   | {
       /**

@@ -2,6 +2,7 @@
 
 import type { World } from 'bitecs';
 import { Appearance, EXPRESSION_MAP, getAppearanceLayers } from '../components/appearance.ts';
+import { isSimulationActive } from '../components/engine_state.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,11 @@ export const enqueueMacro = (macro: QueuedMacro): void => {
  */
 export const updateExpressions = (world: World, bridge: EngineBridge): void => {
   if (!world || !bridge || macroQueue.length === 0) {
+    return;
+  }
+
+  // ── C-172 AC-1: Return early during map transitions ──
+  if (!isSimulationActive()) {
     return;
   }
 
