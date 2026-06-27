@@ -1,13 +1,14 @@
 // packages/frontend/engine/src/systems/movement_system.ts
 import type { World } from 'bitecs';
 import { addComponent, getComponent, query, set } from 'bitecs';
+import { CollisionLayer } from '../components/collision_data.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
 import { getEngineGameMode } from '../state/game_mode.ts';
-import { isWalkable } from './collision_system.ts';
+import { isCellBlocked, isWalkable } from './collision_system.ts';
 
 // ---------------------------------------------------------------------------
 // MovementSystem — axis-independent continuous collision detection
@@ -16,10 +17,21 @@ import { isWalkable } from './collision_system.ts';
 // slide along walls when a single axis is blocked. Per-axis walkability
 // checks allow the player to continue moving on the unblocked axis rather
 // than stopping entirely or snapping to a grid cell.
+//
+// Contract C-173: Collision detection upgraded to use spatial grid +
+// bitmask collision. isCellBlocked() checks the dense spatial grid with
+// intrusive linked list and CollisionData layer/mask bitwise AND.
+// Falls back to legacy isWalkable() when no spatial grid is active.
 // ---------------------------------------------------------------------------
 
 /** Cached query terms — created once per world to avoid per-frame overhead. */
 const MOVEMENT_QUERY_TERMS = [Position, Velocity];
+
+/**
+ * Default collision mask for the player entity — collides with walls,
+ * NPCs, and enemies (not items).
+ */
+const PLAYER_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
 
 /**
  * Updates world-space positions for all entities that have both a
@@ -30,6 +42,10 @@ const MOVEMENT_QUERY_TERMS = [Position, Velocity];
  * walkability-checked in sequence. If one axis is blocked the entity
  * slides along the other — diagonal drift into walls resolves to
  * smooth wall sliding.
+ *
+ * Collision detection priority (C-173):
+ * 1. Bitmask spatial grid (isCellBlocked) — checks CollisionData layer/mask
+ * 2. Legacy boolean grid (isWalkable) — Tiled collision layer fallback
  *
  * Runs every frame at ~60fps via the PixiJS ticker. Pure imperative —
  * zero framework reactivity. Position data stays in bitECS raw arrays.
@@ -76,15 +92,29 @@ const updateMovement = (world: World, deltaMs: number): void => {
     let nextX = pos.x + vel.x * deltaSeconds;
     let nextY = pos.y + vel.y * deltaSeconds;
 
-    // X-axis: if the X candidate is blocked, revert X to the original
-    // position so the entity slides along the wall on the Y axis.
-    if (!isWalkable(nextX, pos.y)) {
+    // ── C-173: Bitmask collision via spatial grid ──
+    // Convert pixel positions to grid coordinates and check occupancy.
+    const tileSize = 32; // Default tile size (matches CELL_PIXEL_SIZE in render_system)
+
+    // X-axis: check grid cell at candidate X, current Y
+    const tileDestX = Math.floor(nextX / tileSize);
+    const tileCurrentY = Math.floor(pos.y / tileSize);
+
+    if (isCellBlocked(tileDestX, tileCurrentY, PLAYER_COLLISION_MASK)) {
+      nextX = pos.x;
+    } else if (!isWalkable(nextX, pos.y)) {
+      // Legacy fallback
       nextX = pos.x;
     }
 
-    // Y-axis: check against the (possibly clamped) X position so
-    // the entity cannot slide into a corner that is blocked on Y.
-    if (!isWalkable(nextX, nextY)) {
+    // Y-axis: check grid cell at (possibly clamped) X, candidate Y
+    const tileCurrentX = Math.floor(nextX / tileSize);
+    const tileDestY = Math.floor(nextY / tileSize);
+
+    if (isCellBlocked(tileCurrentX, tileDestY, PLAYER_COLLISION_MASK)) {
+      nextY = pos.y;
+    } else if (!isWalkable(nextX, nextY)) {
+      // Legacy fallback
       nextY = pos.y;
     }
 

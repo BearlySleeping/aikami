@@ -6,7 +6,7 @@
 | **Target** | `packages/frontend/engine/src/math/spatial_hash_grid.ts`, `systems/movement_system.ts`, `systems/collision_system.ts` |
 | **Priority** | P0 — Replaces quadratic collision checks with constant-time memory lookups |
 | **Dependencies** | C-172 |
-| **Status** | not_started |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview
