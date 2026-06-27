@@ -70,6 +70,12 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   /** Per-layer palette color (hex string, e.g. "#ff0000"). */
   readonly paletteColors: Record<number, string>;
   setLayerColor(layerIndex: number, hexColor: string): void;
+  /** Global tint applied to all layers without an override. */
+  readonly globalTint: string;
+  setGlobalTint(hexColor: string): void;
+  /** Which layers are overriding the global tint. */
+  readonly layerOverrides: Record<number, boolean>;
+  toggleLayerOverride(layerIndex: number): void;
 
   readonly fps: number;
   readonly frameDurationMs: number;
@@ -157,8 +163,12 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   // ── Palette colors ─────────────────────────────────────────────────
 
+  /** Global tint applied to all layers without a per-layer override. */
+  globalTint = $state('');
   /** Per-layer hex color overrides (key = layer index, value = "#rrggbb"). */
   paletteColors = $state<Record<number, string>>({});
+  /** Which layers override the global tint (key = layer index). */
+  layerOverrides = $state<Record<number, boolean>>({});
 
   // ── Telemetry ───────────────────────────────────────────────────────
 
@@ -314,6 +324,25 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     this.paletteColors = { ...this.paletteColors, [layerIndex]: hexColor };
   }
 
+  /**
+   * Sets the global tint applied to all layers without a per-layer override.
+   *
+   * @param hexColor - CSS hex color string, or empty string to clear.
+   */
+  setGlobalTint(hexColor: string): void {
+    this.globalTint = hexColor;
+  }
+
+  /**
+   * Toggles whether a layer uses its own color or falls back to global tint.
+   *
+   * @param layerIndex - The index in the active layers array.
+   */
+  toggleLayerOverride(layerIndex: number): void {
+    const current = this.layerOverrides[layerIndex] ?? false;
+    this.layerOverrides = { ...this.layerOverrides, [layerIndex]: !current };
+  }
+
   // ── Recipes (derived) ───────────────────────────────────────────────
 
   get recipes(): readonly LpcLayerRecipe[] {
@@ -339,7 +368,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       }
 
       const palette = new Uint8Array(1024);
-      const hexColor = this.paletteColors[i];
+      const hexColor =
+        this.layerOverrides[i] && this.paletteColors[i] ? this.paletteColors[i] : this.globalTint;
       if (hexColor) {
         // Parse #RRGGBB → RGBA bytes, fill all 256 palette entries
         const r = Number.parseInt(hexColor.slice(1, 3), 16);
@@ -521,12 +551,13 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         sprite.alpha = 1.0;
         sprite.zIndex = i * 10;
 
-        // Apply palette tint from color picker
-        const hexColor = this.paletteColors[i];
-        if (hexColor) {
-          const tintR = Number.parseInt(hexColor.slice(1, 3), 16);
-          const tintG = Number.parseInt(hexColor.slice(3, 5), 16);
-          const tintB = Number.parseInt(hexColor.slice(5, 7), 16);
+        // Apply palette tint: per-layer override takes priority, else global
+        const effectiveColor =
+          this.layerOverrides[i] && this.paletteColors[i] ? this.paletteColors[i] : this.globalTint;
+        if (effectiveColor) {
+          const tintR = Number.parseInt(effectiveColor.slice(1, 3), 16);
+          const tintG = Number.parseInt(effectiveColor.slice(3, 5), 16);
+          const tintB = Number.parseInt(effectiveColor.slice(5, 7), 16);
           if (!Number.isNaN(tintR) && !Number.isNaN(tintG) && !Number.isNaN(tintB)) {
             sprite.tint = (tintR << 16) | (tintG << 8) | tintB;
           }
