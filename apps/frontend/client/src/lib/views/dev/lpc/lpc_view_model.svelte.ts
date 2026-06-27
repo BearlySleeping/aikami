@@ -67,6 +67,9 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
 
   readonly activeLayers: ActiveLayerConfig[];
   readonly recipes: readonly LpcLayerRecipe[];
+  /** Per-layer palette color (hex string, e.g. "#ff0000"). */
+  readonly paletteColors: Record<number, string>;
+  setLayerColor(layerIndex: number, hexColor: string): void;
 
   readonly fps: number;
   readonly frameDurationMs: number;
@@ -152,6 +155,11 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   activeLayers = $state<ActiveLayerConfig[]>([]);
 
+  // ── Palette colors ─────────────────────────────────────────────────
+
+  /** Per-layer hex color overrides (key = layer index, value = "#rrggbb"). */
+  paletteColors = $state<Record<number, string>>({});
+
   // ── Telemetry ───────────────────────────────────────────────────────
 
   fps = $state(0);
@@ -175,7 +183,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   private _characterContainer: Container | undefined;
   private _layerSprites: Sprite[] = [];
-  private _gridGraphics: Graphics | undefined;
+  private _gridGraphics: Container | undefined;
   private _tickAccumulator = 0;
   private _isApplyingUrlState = false;
   private _pushUrlTimer: ReturnType<typeof setTimeout> | undefined;
@@ -296,6 +304,16 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     });
   }
 
+  /**
+   * Sets the palette tint color for a layer.
+   *
+   * @param layerIndex - The index in the active layers array.
+   * @param hexColor - CSS hex color string (e.g. "#ff0000").
+   */
+  setLayerColor(layerIndex: number, hexColor: string): void {
+    this.paletteColors = { ...this.paletteColors, [layerIndex]: hexColor };
+  }
+
   // ── Recipes (derived) ───────────────────────────────────────────────
 
   get recipes(): readonly LpcLayerRecipe[] {
@@ -320,10 +338,28 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         continue;
       }
 
+      const palette = new Uint8Array(1024);
+      const hexColor = this.paletteColors[i];
+      if (hexColor) {
+        // Parse #RRGGBB → RGBA bytes, fill all 256 palette entries
+        const r = Number.parseInt(hexColor.slice(1, 3), 16);
+        const g = Number.parseInt(hexColor.slice(3, 5), 16);
+        const b = Number.parseInt(hexColor.slice(5, 7), 16);
+        if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+          for (let entry = 0; entry < 256; entry++) {
+            const offset = entry * 4;
+            palette[offset] = r;
+            palette[offset + 1] = g;
+            palette[offset + 2] = b;
+            palette[offset + 3] = 255;
+          }
+        }
+      }
+
       result.push({
         slot: slotDef.slot,
         assetId: variant.assetId,
-        hexPalette: new Uint8Array(1024),
+        hexPalette: palette,
       });
     }
 
@@ -485,6 +521,17 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         sprite.alpha = 1.0;
         sprite.zIndex = i * 10;
 
+        // Apply palette tint from color picker
+        const hexColor = this.paletteColors[i];
+        if (hexColor) {
+          const tintR = Number.parseInt(hexColor.slice(1, 3), 16);
+          const tintG = Number.parseInt(hexColor.slice(3, 5), 16);
+          const tintB = Number.parseInt(hexColor.slice(5, 7), 16);
+          if (!Number.isNaN(tintR) && !Number.isNaN(tintG) && !Number.isNaN(tintB)) {
+            sprite.tint = (tintR << 16) | (tintG << 8) | tintB;
+          }
+        }
+
         newSprites.push(sprite);
       });
 
@@ -543,6 +590,14 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       this._characterContainer.destroy({ children: true });
       this._characterContainer = undefined;
     }
+
+    if (this._gridGraphics) {
+      if (this._gridGraphics.parent) {
+        this._gridGraphics.parent.removeChild(this._gridGraphics);
+      }
+      this._gridGraphics.destroy({ children: true });
+      this._gridGraphics = undefined;
+    }
   }
 
   // ── Grid overlay ────────────────────────────────────────────────────
@@ -579,12 +634,21 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     gfx.moveTo(0, 48);
     gfx.lineTo(64, 48);
     gfx.stroke({ color: 0x4444ff, width: 1, alpha: 0.18 });
-    gfx.x = CANVAS_WIDTH / 2 - 32;
-    gfx.y = CANVAS_HEIGHT / 2 - 32;
     gfx.eventMode = 'none';
 
-    this.pixiApp.stage.addChild(gfx);
-    this._gridGraphics = gfx;
+    // Nest the grid inside a container so it scales + positions
+    // with the same zoom/center as the character.
+    const gridContainer = new Container();
+    gridContainer.eventMode = 'none';
+    gridContainer.scale.set(this.zoom, this.zoom);
+    gridContainer.x = CANVAS_WIDTH / 2;
+    gridContainer.y = CANVAS_HEIGHT / 2;
+    gfx.x = -32;
+    gfx.y = -32;
+    gridContainer.addChild(gfx);
+
+    this.pixiApp.stage.addChild(gridContainer);
+    this._gridGraphics = gridContainer;
   }
 
   // ── URL sync (state ↔ URL) ──────────────────────────────────────────
@@ -729,6 +793,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     this.registerEffectRoot(() => {
       $effect(() => {
         void this.showGridOverlay;
+        void this.zoom;
         this._updateGridOverlay();
       });
       $effect(() => {
