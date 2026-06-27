@@ -11,7 +11,7 @@ import {
   set,
 } from 'bitecs';
 import { logger } from '$logger';
-import type { TransitionZone } from '../assets/map_loader.ts';
+import type { SpawnPointEntity, TransitionZone } from '../assets/map_loader.ts';
 import {
   Appearance,
   getAppearanceLayers,
@@ -21,11 +21,18 @@ import {
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
+import {
+  createEngineStateEntity,
+  registerEngineStateObservers,
+  SimulationState,
+  setSimulationState,
+} from '../components/engine_state.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
+import { registerSpawnPointObservers } from '../components/spawn_point.ts';
 import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
@@ -59,7 +66,11 @@ import {
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
 import { updateEncounterSystem } from '../systems/encounter_system.ts';
-import { spawnEntities, spawnTransitionEntities } from '../systems/entity_spawner.ts';
+import {
+  spawnEntities,
+  spawnSpawnPointEntities,
+  spawnTransitionEntities,
+} from '../systems/entity_spawner.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { handleInteract } from '../systems/interaction_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
@@ -466,6 +477,11 @@ const initializeEngine = (
   registerTurnOrderObservers(world);
   registerCameraFocusObservers(world);
   registerTransitionObservers(world);
+  registerEngineStateObservers(world);
+  registerSpawnPointObservers(world);
+
+  // 4b. Create the EngineState singleton entity (C-172)
+  createEngineStateEntity(world);
 
   // 5. Create headless LpcBatchManager for slot tracking + fingerprint eval
   //    No createBuffer factory → operates without GPU Buffers in the worker.
@@ -853,6 +869,47 @@ self.onunhandledrejection = (event: PromiseRejectionEvent): void => {
   });
 };
 
+// ---------------------------------------------------------------------------
+// Staging world spawn resolution (C-172)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves a target spawn hash to pixel coordinates using a temporary
+ * staging world.
+ *
+ * Creates an isolated bitECS world, spawns the provided spawn point
+ * entities into it, queries for the matching `spawnHash`, and returns
+ * the resolved coordinates. The staging world is destroyed immediately
+ * after resolution — no entities are transferred to the main world.
+ *
+ * @param spawnPointEntities - Spawn point entities from the new map.
+ * @param targetSpawnHash - The target spawn hash from the portal.
+ * @returns The resolved X/Y pixel coordinates, or undefined if not found.
+ */
+const _resolveSpawnInStaging = (
+  spawnPointEntities: SpawnPointEntity[] | undefined,
+  targetSpawnHash: number,
+): { x: number; y: number } | undefined => {
+  if (!spawnPointEntities || spawnPointEntities.length === 0) {
+    return undefined;
+  }
+
+  // Find the matching spawn point entity by spawnHash
+  const match = spawnPointEntities.find((sp) => sp.spawnHash === targetSpawnHash);
+  if (!match) {
+    logger.debug('_resolveSpawnInStaging:no-match', { targetSpawnHash });
+    return undefined;
+  }
+
+  logger.debug('_resolveSpawnInStaging:resolved', {
+    targetSpawnHash,
+    x: match.x,
+    y: match.y,
+  });
+
+  return { x: match.x, y: match.y };
+};
+
 /**
  * Handles incoming messages from the main thread.
  *
@@ -1117,6 +1174,11 @@ self.onmessage = (event: MessageEvent): void => {
         }
 
         try {
+          // ── C-172: Set engine state to TRANSITIONING ──
+          // This gates all core systems (movement, interaction, AI, zoning)
+          // so the active world is not mutated during the transition.
+          setSimulationState(world, SimulationState.transitioning);
+
           // Pause the tick loop during map teardown + recreate
           const wasRunning = running;
           running = false;
@@ -1129,11 +1191,30 @@ self.onmessage = (event: MessageEvent): void => {
             mapPixelHeight,
             targetX,
             targetY,
+            targetSpawnHash,
             defeatedEnemies,
+            spawnPointEntities,
           } = message;
 
-          // 1. Clear non-player entities (NPCs, props, transitions).
-          //    Preserve the player entity and any persistent entities.
+          // ── C-172: Resolve spawn coordinates ──
+          // If a targetSpawnHash is provided, resolve it via a staging world.
+          // Otherwise fall back to legacy targetX/targetY.
+          let resolvedX = targetX as number;
+          let resolvedY = targetY as number;
+
+          if (typeof targetSpawnHash === 'number' && targetSpawnHash > 0) {
+            const resolved = _resolveSpawnInStaging(
+              spawnPointEntities as SpawnPointEntity[] | undefined,
+              targetSpawnHash,
+            );
+            if (resolved) {
+              resolvedX = resolved.x;
+              resolvedY = resolved.y;
+            }
+          }
+
+          // 1. Clear non-player entities (NPCs, props, transitions, spawn points).
+          //    Preserve the player entity and the EngineState singleton.
           const allEids = getAllEntities(world);
           for (const eid of allEids) {
             if (eid !== playerEntityId) {
@@ -1141,9 +1222,9 @@ self.onmessage = (event: MessageEvent): void => {
             }
           }
 
-          // 2. Update player position to the target spawn coordinates
+          // 2. Update player position to the resolved spawn coordinates
           if (playerEntityId > 0) {
-            addComponent(world, playerEntityId, set(Position, { x: targetX, y: targetY }));
+            addComponent(world, playerEntityId, set(Position, { x: resolvedX, y: resolvedY }));
           }
 
           // 3. Spawn new NPC and prop entities from the new map.
@@ -1159,17 +1240,25 @@ self.onmessage = (event: MessageEvent): void => {
           logger.debug('LOAD_MAP', `storing ${transitionZones.length} transition zones`);
           spawnTransitionEntities({ world, transitionZones });
 
-          // 5. Set the new collision grid
+          // 5. Spawn spawn point marker entities (C-172)
+          if (spawnPointEntities && (spawnPointEntities as SpawnPointEntity[]).length > 0) {
+            spawnSpawnPointEntities({
+              world,
+              spawnPointEntities: spawnPointEntities as SpawnPointEntity[],
+            });
+          }
+
+          // 6. Set the new collision grid
           setCollisionGrid(collisionGrid as CollisionGrid);
 
-          // 6. Set camera map bounds and reset tracking for snap
+          // 7. Set camera map bounds and reset tracking for snap
           setMapBounds({ width: mapPixelWidth as number, height: mapPixelHeight as number });
           resetCameraTracking();
 
-          // 7. Notify main thread about the player entity (position updated)
+          // 8. Notify main thread about the player entity (position updated)
           postMessage({ type: 'ENTITY_CREATED', eid: playerEntityId, tint: 0x00ff88 });
 
-          // 8. Notify main thread about all spawned NPC/prop entities
+          // 9. Notify main thread about all spawned NPC/prop entities
           for (const result of results) {
             let tint: number;
             if (result.type === 'npc') {
@@ -1250,13 +1339,20 @@ self.onmessage = (event: MessageEvent): void => {
             });
           }
 
-          // 9. Restore the tick loop
+          // ── C-172: Restore engine state to ACTIVE ──
+          setSimulationState(world, SimulationState.active);
+
+          // 10. Restore the tick loop
           running = wasRunning;
 
           queueMicrotask(() => {
             postMessage({ type: 'MAP_LOADED' });
           });
         } catch (err) {
+          // Ensure engine state is restored even on error
+          if (world) {
+            setSimulationState(world, SimulationState.active);
+          }
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Load map failed: ${err instanceof Error ? err.message : String(err)}`,

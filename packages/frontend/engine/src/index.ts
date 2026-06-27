@@ -60,6 +60,17 @@ export {
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export { Enemy, registerEnemyObservers } from './components/enemy.ts';
+export type { EngineStateData } from './components/engine_state.ts';
+export {
+  createEngineStateEntity,
+  EngineState,
+  getEngineStateEntityId,
+  getSimulationState,
+  isSimulationActive,
+  registerEngineStateObservers,
+  SimulationState,
+  setSimulationState,
+} from './components/engine_state.ts';
 export type { InteractableData, InteractableType } from './components/interactable.ts';
 export { Interactable, registerInteractableObservers } from './components/interactable.ts';
 export type { InventoryData, WalletData } from './components/inventory.ts';
@@ -74,6 +85,11 @@ export type { NPCDialogData } from './components/npc_dialog.ts';
 export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { PositionData } from './components/position.ts';
 export { Position, registerPositionObservers } from './components/position.ts';
+export type { SpawnPointData } from './components/spawn_point.ts';
+export {
+  registerSpawnPointObservers,
+  SpawnPoint as SpawnPointComp,
+} from './components/spawn_point.ts';
 export type { TileVisualData } from './components/tile_visual.ts';
 export { MAX_TILES, registerTileVisualObservers, TileVisual } from './components/tile_visual.ts';
 export type { TransitionData } from './components/transition.ts';
@@ -123,6 +139,7 @@ export { resolveNpcTexture, resolvePropTexture } from './assets/lpc_asset_catalo
 export type {
   ObjectLayer,
   SpawnPoint,
+  SpawnPointEntity,
   TilemapData,
   TilemapLayer,
   TilemapTileset,
@@ -130,7 +147,9 @@ export type {
 } from './assets/map_loader.ts';
 export {
   clearMapCache,
+  djb2Hash,
   extractCollisionGrid,
+  extractSpawnPointEntities,
   extractSpawnPoints,
   extractTransitionZones,
   loadTilemap,
@@ -165,10 +184,15 @@ export { isWalkable, resetCollisionGrid, setCollisionGrid } from './systems/coll
 export { updateEncounterSystem } from './systems/encounter_system.ts';
 export type {
   SpawnEntitiesOptions,
+  SpawnPointSpawnOptions,
   SpawnResult,
   SpawnTransitionOptions,
 } from './systems/entity_spawner.ts';
-export { spawnEntities, spawnTransitionEntities } from './systems/entity_spawner.ts';
+export {
+  spawnEntities,
+  spawnSpawnPointEntities,
+  spawnTransitionEntities,
+} from './systems/entity_spawner.ts';
 export { handleInteract } from './systems/interaction_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {

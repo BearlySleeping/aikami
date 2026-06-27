@@ -310,6 +310,7 @@ class GameUIViewModel
           event.targetY,
           // Spread to plain array — $state proxies can't be postMessage'd
           [...(gameStateService.defeatedEnemies as string[])],
+          event.targetSpawnHash,
         );
       });
 

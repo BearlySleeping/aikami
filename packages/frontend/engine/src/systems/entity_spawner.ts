@@ -9,12 +9,14 @@ import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { logger } from '$logger';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
+import { djb2Hash } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Enemy } from '../components/enemy.ts';
 import { Interactable } from '../components/interactable.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import { Position } from '../components/position.ts';
+import { SpawnPoint as SpawnPointComp } from '../components/spawn_point.ts';
 import { Transition } from '../components/transition.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { AssetAlias, Visual } from '../components/visual.ts';
@@ -120,6 +122,45 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
 };
 
 /**
+ * Options for spawning map spawn point marker entities (C-172).
+ */
+export type SpawnPointSpawnOptions = {
+  /** The bitECS world to create entities in. */
+  world: World;
+  /** Spawn point entities extracted from Tiled object layers. */
+  spawnPointEntities: import('../assets/map_loader.ts').SpawnPointEntity[];
+};
+
+/**
+ * Creates invisible ECS spawn point marker entities.
+ *
+ * Each entity gets Position (pixel coordinates) and SpawnPoint
+ * (hashed string identifier). These entities are queried during
+ * map transitions to resolve portal targetSpawnHash → coordinates.
+ *
+ * @param options - World and spawn point entities.
+ * @returns Array of created entity IDs.
+ */
+export const spawnSpawnPointEntities = (options: SpawnPointSpawnOptions): number[] => {
+  const { world, spawnPointEntities } = options;
+  const eids: number[] = [];
+
+  for (const sp of spawnPointEntities) {
+    const eid = addEntity(world);
+
+    addComponent(world, eid, Position);
+    addComponent(world, eid, set(Position, { x: sp.x, y: sp.y }));
+
+    addComponent(world, eid, SpawnPointComp);
+    addComponent(world, eid, set(SpawnPointComp, { spawnHash: sp.spawnHash }));
+
+    eids.push(eid);
+  }
+
+  return eids;
+};
+
+/**
  * Options for spawning transition zone entities.
  */
 export type SpawnTransitionOptions = {
@@ -161,6 +202,7 @@ export const spawnTransitionEntities = (options: SpawnTransitionOptions): number
         targetMap: zone.targetMap,
         targetX: zone.targetX,
         targetY: zone.targetY,
+        targetSpawnHash: zone.targetSpawnId ? djb2Hash(zone.targetSpawnId) : 0,
         width: zone.width,
         height: zone.height,
         triggered: false,

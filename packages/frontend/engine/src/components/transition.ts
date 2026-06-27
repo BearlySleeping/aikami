@@ -16,10 +16,12 @@ import { observe, onGet, onSet } from 'bitecs';
 export const Transition = {
   /** Target map filename or ID. */
   targetMap: [] as string[],
-  /** Target X pixel coordinate on the destination map. */
+  /** Target X pixel coordinate on the destination map (legacy — use targetSpawnHash). */
   targetX: [] as number[],
-  /** Target Y pixel coordinate on the destination map. */
+  /** Target Y pixel coordinate on the destination map (legacy — use targetSpawnHash). */
   targetY: [] as number[],
+  /** Numeric hash of the target spawn point ID (C-172). */
+  targetSpawnHash: [] as number[],
   /** Pixel width of the trigger rectangle (for bounding-box overlap). */
   width: [] as number[],
   /** Pixel height of the trigger rectangle. */
@@ -38,6 +40,7 @@ export type TransitionData = {
   targetMap: string;
   targetX: number;
   targetY: number;
+  targetSpawnHash: number;
   width: number;
   height: number;
   triggered: boolean;
@@ -53,6 +56,7 @@ export const registerTransitionObservers = (world: World): void => {
     Transition.targetMap[eid] = params.targetMap;
     Transition.targetX[eid] = params.targetX;
     Transition.targetY[eid] = params.targetY;
+    Transition.targetSpawnHash[eid] = params.targetSpawnHash;
     Transition.width[eid] = params.width;
     Transition.height[eid] = params.height;
     Transition.triggered[eid] = params.triggered;
@@ -65,6 +69,7 @@ export const registerTransitionObservers = (world: World): void => {
       targetMap: Transition.targetMap[eid],
       targetX: Transition.targetX[eid],
       targetY: Transition.targetY[eid],
+      targetSpawnHash: Transition.targetSpawnHash[eid],
       width: Transition.width[eid],
       height: Transition.height[eid],
       triggered: Transition.triggered[eid],
