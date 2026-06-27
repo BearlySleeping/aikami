@@ -1,12 +1,14 @@
 // packages/frontend/engine/src/systems/context_system.ts
 import type { World } from 'bitecs';
 import { getComponent } from 'bitecs';
+import { CollisionLayer } from '../components/collision_data.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { checkLineOfSight } from '../math/bresenham.ts';
 import type { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 
 // ---------------------------------------------------------------------------
@@ -101,6 +103,17 @@ const updateContextSystem = (options: {
     const isInContext = distSq < contextRadiusSq;
 
     if (isInContext && !entitiesInContext.has(eid)) {
+      // ── C-174 AC-3: Line-of-sight check ──
+      const playerTileX = Math.floor(playerPos.x / 32);
+      const playerTileY = Math.floor(playerPos.y / 32);
+      const npcTileX = Math.floor(npcPos.x / 32);
+      const npcTileY = Math.floor(npcPos.y / 32);
+      const sightMask = CollisionLayer.wall;
+
+      if (!checkLineOfSight(npcTileX, npcTileY, playerTileX, playerTileY, sightMask)) {
+        return; // Line of sight blocked — keep scanning other candidates
+      }
+
       // Player just entered context range
       entitiesInContext.add(eid);
       bridge.emit({

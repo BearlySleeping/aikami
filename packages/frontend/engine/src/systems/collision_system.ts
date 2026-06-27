@@ -4,6 +4,7 @@ import type { World } from 'bitecs';
 import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
+import { clearBresenhamGrid, setBresenhamGrid } from '../math/bresenham.ts';
 
 // ---------------------------------------------------------------------------
 // Collision System — bitmask-based grid collision with intrusive linked list
@@ -93,6 +94,7 @@ export const resetCollisionGrid = (): void => {
   _spatialGrid = undefined;
   _gridWidth = 0;
   _gridHeight = 0;
+  clearBresenhamGrid();
 };
 
 /**
@@ -160,6 +162,9 @@ export const initializeSpatialGrid = (width: number, height: number): void => {
   _gridWidth = width;
   _gridHeight = height;
   _spatialGrid = new Uint32Array(width * height);
+
+  // Wire the grid into the Bresenham raycaster (C-174)
+  setBresenhamGrid(_spatialGrid, width, height);
 };
 
 /**
