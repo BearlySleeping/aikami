@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/assets/map_loader.ts
 
 import { logger } from '$logger';
+import { jtonToTilemapData, parseJtonMap } from './jton_parser.ts';
 
 // ---------------------------------------------------------------------------
 // Map Asset Loader — parses Tiled JSON tilemap format
@@ -229,6 +230,111 @@ export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapDat
  */
 export const clearMapCache = (): void => {
   _mapCache.clear();
+};
+
+// ---------------------------------------------------------------------------
+// JTON Map Loading (C-175)
+// ---------------------------------------------------------------------------
+
+/**
+ * Options for loading a JTON map.
+ */
+export type JtonMapLoaderOptions = {
+  /** URL to the JTON map file. */
+  url: string;
+  /** Optional fetch implementation (for testing / non-browser environments). */
+  fetch?: typeof fetch;
+};
+
+/**
+ * Fetches and parses a JTON (Zen Grid) tilemap from the given URL.
+ *
+ * Results are cached in memory — subsequent requests for the same URL
+ * return the cached data immediately without re-fetching.
+ *
+ * The returned {@link TilemapData} is compatible with the existing
+ * render/collision/spawn pipelines (C-135, C-171, C-172, C-173).
+ *
+ * @param options - URL and optional fetch override.
+ * @returns The parsed tilemap data.
+ * @throws If the fetch fails, the JTON is invalid, or required fields are missing.
+ */
+export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<TilemapData> => {
+  const { url } = options;
+
+  const cached = _mapCache.get(url);
+  if (cached) {
+    logger.debug('loadJtonMap:cache-hit', { url });
+    return cached;
+  }
+
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const response = await fetcher(url);
+
+  if (!response.ok) {
+    throw new Error(`MapLoader: failed to fetch JTON map at "${url}" (HTTP ${response.status})`);
+  }
+
+  const source = await response.text();
+  const parsed = parseJtonMap(source, url);
+
+  const data = jtonToTilemapData(parsed);
+  _mapCache.set(url, data);
+
+  logger.debug('loadJtonMap:parsed', {
+    url,
+    width: data.width,
+    height: data.height,
+    layers: data.layers.length,
+    tilesets: data.tilesets.length,
+  });
+
+  return data;
+};
+
+/**
+ * Converts JTON spawn points to the legacy {@link SpawnPoint} format.
+ *
+ * @param parsed - The parsed JTON map data.
+ * @returns Flat array of SpawnPoints compatible with entity_spawner.
+ */
+export const jtonSpawnsToLegacy = (
+  parsed: import('./jton_parser.ts').JtonParseResult,
+): SpawnPoint[] => {
+  return parsed.spawnPoints.map((sp, index) => ({
+    id: sp.spawnId || `jton_spawn_${index}`,
+    type: sp.type,
+    x: sp.x,
+    y: sp.y,
+    properties: {
+      ...(sp.npcId ? { npcId: sp.npcId } : {}),
+      ...(sp.dialogue ? { dialogueKey: sp.dialogue } : {}),
+      ...(sp.isVendor ? { isVendor: true } : {}),
+      ...(sp.vendorInventory ? { vendorInventory: sp.vendorInventory } : {}),
+    },
+  }));
+};
+
+/**
+ * Converts JTON transition zones to the legacy {@link TransitionZone} format.
+ *
+ * @param parsed - The parsed JTON map data.
+ * @returns Flat array of TransitionZones compatible with entity_spawner.
+ */
+export const jtonTransitionsToLegacy = (
+  parsed: import('./jton_parser.ts').JtonParseResult,
+): TransitionZone[] => {
+  return parsed.transitionZones.map((tz, index) => ({
+    id: `jton_transition_${index}`,
+    x: tz.x,
+    y: tz.y,
+    width: tz.width,
+    height: tz.height,
+    targetMap: tz.targetMap,
+    targetX: 0, // Will be resolved via spawn point
+    targetY: 0,
+    targetSpawnId: tz.targetSpawnId || undefined,
+  }));
 };
 
 // ---------------------------------------------------------------------------
