@@ -74,6 +74,7 @@ P2 (Polish — after P1):
 | C-166 | [Diegetic Combat Stage](C-166-diegetic-combat-stage.md) ✅ | JRPG battle stage positioning, diegetic floating HP bars, custom action sprite animation | C-161, C-164 |
 | C-167 | [Svelte Native Combat UI MVP](C-167-svelte-combat-ui-mvp.md) ✅ | Pure DOM portrait stage replaces PixiJS canvas, CSS damage animations, Playwright visual regression tests | — |
 | C-168 | [PixiJS v8 Asset Pipeline Refactor](C-168-pixijs-asset-pipeline-fix.md) ✅ | PixiJS Spritesheet API for WebGPU-safe UV mapping, procedural atlas JSON generation, cached Spritesheet instances, async loading states | C-167 |
+| C-170 | [ECS Visual Observer Pattern](C-170-ecs-visual-observer-pattern.md) ✅ | Replace object-heavy Sprite component with pure numeric Visual component, bitECS `observe` hooks for PixiJS lifecycle, private SceneMap decoupling | C-136 |
 | C-145 | [Turn-Based Combat Loop](C-145-turn-based-combat-loop.md) ✅ | d20 dice RNG combat, hit/damage/loot, COMBAT_ACTION bridge, unit tests | C-144 |
 | C-031 | [SvelteKit Adapter Static & Firebase Hosting](C-031-adapter-static-and-hosting.md) ✅ | adapter-static SPA mode, Firebase Hosting emulator, SPA rewrites | — |
 | C-010 | [Setup Script](C-010-setup-script.md) | Interactive developer onboarding script | C-007, C-008 |

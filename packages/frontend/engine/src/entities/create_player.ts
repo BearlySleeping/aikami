@@ -7,9 +7,9 @@ import { CameraFocus } from '../components/camera_focus.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Inventory, MAX_INVENTORY_SLOTS } from '../components/inventory.ts';
 import { Position } from '../components/position.ts';
-import { Sprite } from '../components/sprite.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { Velocity } from '../components/velocity.ts';
+import { AssetAlias, Visual } from '../components/visual.ts';
 
 // ---------------------------------------------------------------------------
 // Player entity factory
@@ -52,14 +52,14 @@ const createPlayer = (world: World, options?: PlayerCreateOptions): number => {
   addComponent(world, entityId, Velocity);
   addComponent(world, entityId, set(Velocity, { x: 0, y: 0 }));
 
-  addComponent(world, entityId, Sprite);
+  addComponent(world, entityId, Visual);
   addComponent(
     world,
     entityId,
-    set(Sprite, {
-      textureKey: 'player',
+    set(Visual, {
+      assetIndex: AssetAlias.PLAYER,
       tint: 0x00ff88,
-      displayObject: undefined,
+      visible: 1,
     }),
   );
 

@@ -138,7 +138,7 @@ describe('ExpressionSystem — Appearance mutation', () => {
     if (ev.type === 'APPEARANCE_CHANGED') {
       expect(ev.eid).toBe(eid);
       expect(ev.layerIds).toBeDefined();
-      expect(ev.layerIds.length).toBe(5);
+      expect(ev.layerIds.length).toBe(6);
       expect(ev.layerIds[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.joy);
     } else {
       throw new Error('Expected APPEARANCE_CHANGED event');

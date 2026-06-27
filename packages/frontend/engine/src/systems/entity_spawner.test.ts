@@ -9,7 +9,7 @@ import type { SpawnPoint } from '../assets/map_loader.ts';
 import { Appearance, registerAppearanceObservers } from '../components/appearance.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
-import { registerSpriteObservers, Sprite } from '../components/sprite.ts';
+import { AssetAlias, registerVisualObservers, Visual } from '../components/visual.ts';
 import { spawnEntities } from './entity_spawner.ts';
 
 // ---------------------------------------------------------------------------
@@ -22,9 +22,9 @@ import { spawnEntities } from './entity_spawner.ts';
 const _resetComponentArrays = (): void => {
   Position.x.length = 0;
   Position.y.length = 0;
-  Sprite.textureKey.length = 0;
-  Sprite.tint.length = 0;
-  Sprite.displayObject.length = 0;
+  Visual.assetIndex.length = 0;
+  Visual.tint.length = 0;
+  Visual.visible.length = 0;
   NPCDialog.npcId.length = 0;
   NPCDialog.npcName.length = 0;
   NPCDialog.dialog.length = 0;
@@ -43,7 +43,7 @@ const _resetComponentArrays = (): void => {
 const createTestWorld = (): World => {
   const world = createWorld();
   registerPositionObservers(world);
-  registerSpriteObservers(world);
+  registerVisualObservers(world);
   registerNPCDialogObservers(world);
   registerAppearanceObservers(world);
   return world;
@@ -100,7 +100,7 @@ describe('spawnEntities', () => {
   // NPC spawning
   // -------------------------------------------------------------------------
 
-  it('creates an NPC entity with Position, Sprite, Appearance, and NPCDialog', () => {
+  it('creates an NPC entity with Position, Visual, Appearance, and NPCDialog', () => {
     const spawnPoint = createNpcSpawnPoint();
 
     const results = spawnEntities({ world, spawnPoints: [spawnPoint] });
@@ -116,9 +116,9 @@ describe('spawnEntities', () => {
     expect(Position.x[eid]).toBe(320);
     expect(Position.y[eid]).toBe(256);
 
-    // Sprite
-    expect(Sprite.textureKey[eid]).toBe('/lpc/body/male/walk.png');
-    expect(Sprite.tint[eid]).toBe(0xffcc00);
+    // Visual
+    expect(Visual.assetIndex[eid]).toBe(AssetAlias.NPC);
+    expect(Visual.tint[eid]).toBe(0xffcc00);
 
     // Appearance
     expect(Appearance.layer0[eid]).toBe(10);
@@ -185,7 +185,7 @@ describe('spawnEntities', () => {
   // Prop spawning
   // -------------------------------------------------------------------------
 
-  it('creates a prop entity with Position and Sprite', () => {
+  it('creates a prop entity with Position and Visual', () => {
     const spawnPoint = createPropSpawnPoint();
 
     const results = spawnEntities({ world, spawnPoints: [spawnPoint] });
@@ -199,12 +199,12 @@ describe('spawnEntities', () => {
     expect(Position.x[eid]).toBe(128);
     expect(Position.y[eid]).toBe(64);
 
-    // Sprite
-    expect(Sprite.textureKey[eid]).toBe('/lpc/props/chest_01.png');
-    expect(Sprite.tint[eid]).toBe(0xffffff);
+    // Visual
+    expect(Visual.assetIndex[eid]).toBe(AssetAlias.PROP_CHEST);
+    expect(Visual.tint[eid]).toBe(0xffffff);
   });
 
-  it('uses default prop texture when assetId property is missing', () => {
+  it('uses default prop visual when assetId property is missing', () => {
     const spawnPoint = createPropSpawnPoint({
       properties: {},
     });
@@ -212,7 +212,7 @@ describe('spawnEntities', () => {
     const results = spawnEntities({ world, spawnPoints: [spawnPoint] });
     const eid = results[0].eid;
 
-    expect(Sprite.textureKey[eid]).toBe('/lpc/props/default.png');
+    expect(Visual.assetIndex[eid]).toBe(AssetAlias.PROP_CHEST);
   });
 
   it('prop entities do NOT have NPCDialog or Appearance components', () => {
