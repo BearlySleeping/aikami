@@ -30,6 +30,7 @@
 | C-031 | SvelteKit Adapter Static & Firebase Hosting | ✅ completed |
 | C-160 | Engine Polish (Shader/Movement/Camera) | ✅ completed |
 | C-170 | ECS Visual Observer Pattern | ✅ completed |
+| C-171 | WebGPU Tilemap Mesh Pipeline | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
@@ -2201,3 +2202,37 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - `_loadVisualTextureAsync` is fire-and-forget — no retry logic for failed texture loads. Placeholder remains visible on failure.
 - The async texture load path uses `import('pixi.js')` which may not work in a Web Worker context (where the render system runs). In worker mode, `updateRenderFromBuffer` is the active path and doesn't depend on observer hooks.
 - No unit tests for `setupVisualObservers` or `_loadVisualTextureAsync` — these require a PixiJS renderer context + stage (not available in bun test).
+
+### C-171: WebGPU Tilemap Mesh Pipeline
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/components/chunk_data.ts` — `ChunkData` SoA component (gridX, gridY, isActive, isDirty), `CHUNK_TILE_SIZE` (32), `MAX_CHUNKS` (256), observer registration
+- `packages/frontend/engine/src/components/tile_visual.ts` — `TileVisual` SoA component (textureLayer, tint), `MAX_TILES` (65536), observer registration
+- `packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts` — `TilemapChunkRenderer`: `buildTilemapChunks()` partitions map into 32×32 tile chunks, creates PixiJS `Mesh` per chunk with `Float32Array` position/UV + `Uint32Array` index buffers; `frustumCullChunks()` performs CPU-side AABB culling with overdraw margin (64px). All `MeshGeometry` and `Buffer` objects set `autoGarbageCollect = false` (C-171 AC-3 GC mitigation).
+
+**Files modified**:
+- `packages/frontend/engine/src/systems/tilemap_render_system.ts` — Full rewrite: removed all `RenderTexture` baking, `Sprite` per-tile, and `_renderLayerToTexture`/`_renderLayerDirect` helpers. Replaced with `renderTilemap()` that loads tileset textures via `Assets.load()`, partitions into per-layer chunked tilemaps, and delegates to `buildTilemapChunks()`. Exports `frustumCullChunks` for per-frame culling.
+- `packages/frontend/engine/src/game_world.ts` — Updated `renderTilemap` call to remove `renderer` parameter (no longer needed). Changed old tilemap removal label from `'tilemap-background'` to `'tilemap-chunks'`. Added per-frame `frustumCullChunks()` call inside `_updateRenderFromBuffer` after camera transform, using camera position + dynamic scale to compute world-space viewport bounds. Removed `type Renderer` from PixiJS imports.
+- `packages/frontend/engine/src/index.ts` — Added exports for `ChunkData`, `ChunkDataPayload`, `CHUNK_TILE_SIZE`, `MAX_CHUNKS`, `registerChunkDataObservers`, `TileVisual`, `TileVisualData`, `MAX_TILES`, `registerTileVisualObservers`, `TilemapChunkRendererOptions`, `TilemapChunkRenderResult`, `buildTilemapChunks`, `frustumCullChunks`.
+
+**Deviations**:
+1. **Custom WGSL via GpuProgram.from()**: Per Gemini's optimization note, upgraded from built-in TextureShader to custom WGSL shader. Uses `GpuProgram.from({ vertex, fragment })` with a shared cached `GpuProgram` instance. The shader declares single texture (`texture_2d<f32>`) at `@group(2) @binding(0)` and sampler at `@group(2) @binding(1)`. Each chunk Mesh gets its own `Shader` with `resources: { uTexture: source, uSampler: style }`. `texture_2d_array<f32>` upgrade remains future work.
+2. **MeshGeometry uses raw typed arrays**: The `MeshGeometry` constructor accepts raw `Float32Array`/`Uint32Array` directly (PixiJS internally creates `Buffer` objects). `autoGarbageCollect = false` is set post-construction via `geometry.getBuffer('aPosition')` / `geometry.getBuffer('aUV')` / `geometry.indexBuffer`. This achieves the same GC mitigation without pre-creating `Buffer` objects (which PixiJS type definitions don't accept as constructor args).
+3. **ChunkData/TileVisual are ECS components only**: The contract describes binding Tile entity IDs to Chunk entity IDs via `ChildOfChunk` relations. In the MVP, tile data lives in Mesh vertex buffers (not individual ECS entities). The `ChunkData` and `TileVisual` components exist for future worker-side tile manipulation (dynamic tiles, tile animations).
+4. **Per-layer chunking**: Tilesets may differ per layer. `renderTilemap()` builds filtered tilemaps per layer (only tilesets referenced by that layer) and passes them to `buildTilemapChunks()`. This avoids multiple tilesets in a single chunk (which would require multi-texture shader).
+
+**Design decisions**:
+1. **32×32 tile chunks**: Standard power-of-two chunk size. At 32px per tile, each chunk covers 1024×1024 world-space pixels. Maps up to 256×256 tiles produce at most 64 chunks (8×8 grid).
+2. **64px overdraw margin**: Chunks within 64px of the viewport boundary stay visible. This prevents visible geometry pops when the camera moves less than one tile per frame at 60fps.
+3. **Chunk metadata attached to Mesh**: `(mesh as Mesh & { _chunkMeta?: TilemapChunk })._chunkMeta` stores chunk bounds + active flag directly on the PixiJS object. `frustumCullChunks` reads this without an external Map lookup.
+4. **Empty chunks are skipped**: Chunks with zero visible tiles produce `undefined` and are never added to the scene graph. This avoids creating draw calls for void regions at map edges.
+5. **Layer order preserved**: `buildTilemapChunks` iterates layers bottom-to-top, maintaining Tiled's draw order. Chunk Meshes within the same layer are added in row-major grid order.
+
+**Known limitations**:
+- The WGSL shader uses a single `texture_2d<f32>` — multi-tileset layers require separate chunk passes per tileset (each chunk uses one tileset texture). `texture_2d_array<f32>` upgrade for multi-tileset in single draw call is future work.
+- `isDirty` flag on `ChunkData` component is not wired — tilemap chunks are static (never rebuilt after creation). Dynamic tile mutations (e.g., destructible terrain) would need dirty-check + buffer re-upload.
+- No unit tests for `buildTilemapChunks` or `frustumCullChunks` — these require a live PixiJS renderer + GPU context (not available in bun test). Integration testing must be done via visual E2E tests with a running game engine.
+- The WGSL vertex shader outputs positions as-is (`vec4(aPosition, 0, 1)`) — it relies on PixiJS's global transform matrix (group 0) for viewport projection. If PixiJS changes its global uniform layout, the shader may need adjustment.
+- Overdraw margin is hardcoded to 64px (2 tiles at default 32px resolution). Maps with unusual tile sizes may need tuning — the margin should ideally derive from `tilemap.tilewidth`.

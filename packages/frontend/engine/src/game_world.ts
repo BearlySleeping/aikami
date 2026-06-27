@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application, Spritesheet } from 'pixi.js';
-import { Container, Graphics, type Renderer, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import {
   extractCollisionGrid,
   extractSpawnPoints,
@@ -20,6 +20,7 @@ import type { PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 import { createPixiApp } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
+import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
@@ -1248,7 +1249,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     //    PixiJS v8 ref-counts BaseTextures, so cached Assets textures
     //    (Texture.from) shared across maps are NOT prematurely freed.
     if (this._worldContainer) {
-      const oldTilemap = this._worldContainer.getChildByLabel('tilemap-background');
+      const oldTilemap = this._worldContainer.getChildByLabel('tilemap-chunks');
       if (oldTilemap) {
         this._worldContainer.removeChild(oldTilemap);
         oldTilemap.destroy({ children: true, texture: true });
@@ -1268,7 +1269,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (this._app && this._worldContainer) {
       const result = await renderTilemap({
         tilemap,
-        renderer: this._app.renderer as Renderer,
       });
       // Place at z-index 0 — behind all entity sprites
       this._worldContainer.addChildAt(result.container, 0);
@@ -1567,6 +1567,25 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._app.screen.width / 2 - this._cameraX * this._worldContainer.scale.x;
       this._worldContainer.y =
         this._app.screen.height / 2 - this._cameraY * this._worldContainer.scale.y;
+
+      // ── C-171: CPU-side frustum culling for tilemap chunks ──
+      // Camera position is in world-space pixels; viewport dimensions
+      // are divided by the world scale to convert screen-space → world-space.
+      const viewportWorldW = this._app.screen.width / dynamicScale;
+      const viewportWorldH = this._app.screen.height / dynamicScale;
+
+      const chunkContainer = this._worldContainer.getChildByLabel('tilemap-chunks') as
+        | Container
+        | undefined;
+      if (chunkContainer) {
+        frustumCullChunks(
+          chunkContainer,
+          this._cameraX - viewportWorldW / 2,
+          this._cameraY - viewportWorldH / 2,
+          viewportWorldW,
+          viewportWorldH,
+        );
+      }
     }
 
     // Throttled per-second render diagnostic (only when BaseEngineClass.setRenderDebug(true))
