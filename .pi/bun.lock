@@ -5,7 +5,7 @@
     "": {
       "name": "pi",
       "devDependencies": {
-        "@mariozechner/pi-coding-agent": "^0.73.1",
+        "@mariozechner/pi-coding-agent": "latest",
         "@types/bun": "latest",
       },
     },
