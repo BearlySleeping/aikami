@@ -50,6 +50,13 @@ export {
   registerAppearanceObservers,
 } from './components/appearance.ts';
 export { CameraFocus, registerCameraFocusObservers } from './components/camera_focus.ts';
+export type { ChunkDataPayload } from './components/chunk_data.ts';
+export {
+  CHUNK_TILE_SIZE,
+  ChunkData,
+  MAX_CHUNKS,
+  registerChunkDataObservers,
+} from './components/chunk_data.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export { Enemy, registerEnemyObservers } from './components/enemy.ts';
@@ -67,6 +74,8 @@ export type { NPCDialogData } from './components/npc_dialog.ts';
 export { NPCDialog, registerNPCDialogObservers } from './components/npc_dialog.ts';
 export type { PositionData } from './components/position.ts';
 export { Position, registerPositionObservers } from './components/position.ts';
+export type { TileVisualData } from './components/tile_visual.ts';
+export { MAX_TILES, registerTileVisualObservers, TileVisual } from './components/tile_visual.ts';
 export type { TransitionData } from './components/transition.ts';
 export { registerTransitionObservers, Transition } from './components/transition.ts';
 export type { TurnOrderData } from './components/turn_order.ts';
@@ -144,6 +153,11 @@ export {
 } from './rendering/sprite_composer.ts';
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
+export type {
+  TilemapChunkRendererOptions,
+  TilemapChunkRenderResult,
+} from './rendering/tilemap_chunk_renderer.ts';
+export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
 // State (engine-level mode gate)
 export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
