@@ -11,9 +11,9 @@
     "lpc:smoke": "bun run scripts/lpc_smoke.ts",
     "map:visual": "bun run scripts/map_sandbox_eval.ts",
     "test:ai-services": "npx playwright test --project=ai-services",
-    "lint": "biome lint tests",
-    "format": "biome format tests",
-    "fix": "biome check --write tests --error-on-warnings && biome format --write tests",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "fix": "biome check --write . --error-on-warnings",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {

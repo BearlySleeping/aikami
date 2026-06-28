@@ -38,7 +38,7 @@ const hasExistingScreenshots = (): boolean =>
 
 const checkPwaRunning = async (): Promise<boolean> => {
   try {
-    const _res = await fetch(`http://localhost:${PWA_PORT}/`, {
+    await fetch(`http://localhost:${PWA_PORT}/`, {
       signal: AbortSignal.timeout(2000),
     });
     return true; // Any response (even 404) means the server is up

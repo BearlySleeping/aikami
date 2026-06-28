@@ -49,7 +49,10 @@ test.describe('C-147: Progression & Persistence', () => {
 
       // Simulate a combat victory — the GameStateService listener should
       // push this spawn ID into its defeatedEnemies array.
-      (bridgeModule as Record<string, unknown>).emit({
+      const emit = (bridgeModule as Record<string, unknown>).emit as (
+        event: Record<string, unknown>,
+      ) => void;
+      emit({
         type: 'COMBAT_ENDED',
         victory: true,
         defeatedEnemyId: enemyId,

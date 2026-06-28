@@ -10,7 +10,6 @@ import type { Page } from 'playwright';
 
 // ── Path resolution ──────────────────────────────────────────
 
-const _REPO_ROOT = resolve(import.meta.dirname, '../../../..');
 const E2E_DIR = resolve(import.meta.dirname, '../..');
 
 /** Default output directory for visual test screenshots. */
