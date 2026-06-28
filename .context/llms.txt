@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-06-28
-> Files: 193 across 11 categories
+> Files: 194 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -182,6 +182,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [C 173 ecs spatial hash grid](contracts/C-173-ecs-spatial-hash-grid.md)
 - [C 174 ecs bresenham line of sight](contracts/C-174-ecs-bresenham-line-of-sight.md)
 - [C 175 llm jton map pipeline](contracts/C-175-llm-jton-map-pipeline.md)
+- [C 176 ecs generational indices](contracts/C-176-ecs-generational-indices.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
