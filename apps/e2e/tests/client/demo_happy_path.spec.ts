@@ -324,8 +324,6 @@ test.describe('Demo Happy Path (C-159)', () => {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(500);
 
-    // Look for pause menu or save-related UI
-    const _saveIndicator = page.locator('text="Save"') || page.locator('button:has-text("Save")');
     // The pause/save menu may or may not appear depending on overlay state.
     // The key assertion: the game has not crashed.
     const canvasStillAlive = page.locator('canvas');

@@ -187,9 +187,11 @@ test.describe('Map Transitions (C-138)', () => {
 
     // Inject a script that calls extractTransitionZones on our test map
     const zones = await page.evaluate(async () => {
-      const { extractTransitionZones } = await import(
-        /* webpackIgnore: true */ '/@fs/home/sonny/Development/Projects/passion/aikami/packages/frontend/engine/src/assets/map_loader.ts'
+      const mod = await import(
+        // @ts-expect-error — Vite /@fs/ path resolves in dev server only
+        '/@fs/home/sonny/Development/Projects/passion/aikami/packages/frontend/engine/src/assets/map_loader.ts'
       );
+      const { extractTransitionZones } = mod;
 
       const mapData = {
         width: 10,

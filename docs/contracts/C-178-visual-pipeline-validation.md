@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/static/assets/images/tilesets/debug_tiles.png`, `apps/frontend/client/static/assets/maps/debug_map.jton`, `map_sandbox_view_model.svelte.ts` |
 | **Priority** | P0 — Visually validates the entire engine rewrite (C-171 through C-177) |
 | **Dependencies** | C-175 |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

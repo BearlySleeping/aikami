@@ -5,7 +5,7 @@
 // Verifies that the `/dev/sandbox/mode` route loads, the mode indicator
 // renders the current mode, and toggling modes via the control panel works.
 
-import { test } from '../../src/fixtures';
+import { expect, test } from '../../src/fixtures';
 
 test.describe('Mode Sandbox (C-140)', () => {
   test('should load the mode sandbox page', async ({ guestUser }) => {
