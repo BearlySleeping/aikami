@@ -26,7 +26,12 @@ const screenshot = async (page: Page, filename: string): Promise<void> => {
   await page.screenshot({
     path: `test-results/combat-visual/${filename}`,
     fullPage: false,
-    clip: { x: viewport ? Math.floor(viewport.width * 0.35) : 448, y: 0, width: clipWidth, height: viewport?.height ?? 960 },
+    clip: {
+      x: viewport ? Math.floor(viewport.width * 0.35) : 448,
+      y: 0,
+      width: clipWidth,
+      height: viewport?.height ?? 960,
+    },
   });
 };
 
