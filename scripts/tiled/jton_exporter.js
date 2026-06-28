@@ -50,13 +50,11 @@ const jtonMapFormat = {
    * @param {string} fileName - The target file name.
    * @returns {string} The JTON-formatted map string.
    */
-  write(map, fileName) {
+  write(map, _fileName) {
     const lines = [];
 
     // ── Map header ──
-    lines.push(
-      `:map: ${map.width} ${map.height} ${map.tileWidth} ${map.tileHeight}`,
-    );
+    lines.push(`:map: ${map.width} ${map.height} ${map.tileWidth} ${map.tileHeight}`);
 
     // ── Tilesets ──
     for (const ts of map.tilesets) {
@@ -108,7 +106,7 @@ const jtonMapFormat = {
       }
 
       for (const obj of layer.objects) {
-        if (!obj || !obj.type) {
+        if (!obj?.type) {
           continue;
         }
 
@@ -172,7 +170,9 @@ const _getProperties = (obj) => {
   const props = {};
 
   try {
-    const source = obj.resolvedProperties || (typeof obj.properties === 'function' ? obj.properties() : obj.properties);
+    const source =
+      obj.resolvedProperties ||
+      (typeof obj.properties === 'function' ? obj.properties() : obj.properties);
 
     if (source && typeof source === 'object') {
       for (const key of Object.keys(source)) {
