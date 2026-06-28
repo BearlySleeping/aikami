@@ -10,6 +10,7 @@ import type { NPCDialogData } from '../components/npc_dialog.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
+import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { startDialogueZoom } from '../systems/camera_system.ts';
 
@@ -188,6 +189,7 @@ const _handleItemPickup = (options: {
 
   // ── Destroy the item entity ──
 
+  incrementEntityGeneration(itemEid);
   removeEntity(world, itemEid);
 
   // ── Emit INVENTORY_UPDATED with full inventory ──
