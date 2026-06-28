@@ -292,51 +292,6 @@ export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<Tilema
   return data;
 };
 
-/**
- * Converts JTON spawn points to the legacy {@link SpawnPoint} format.
- *
- * @param parsed - The parsed JTON map data.
- * @returns Flat array of SpawnPoints compatible with entity_spawner.
- */
-export const jtonSpawnsToLegacy = (
-  parsed: import('./jton_parser.ts').JtonParseResult,
-): SpawnPoint[] => {
-  return parsed.spawnPoints.map((sp, index) => ({
-    id: sp.spawnId || `jton_spawn_${index}`,
-    type: sp.type,
-    x: sp.x,
-    y: sp.y,
-    properties: {
-      ...(sp.npcId ? { npcId: sp.npcId } : {}),
-      ...(sp.dialogue ? { dialogueKey: sp.dialogue } : {}),
-      ...(sp.isVendor ? { isVendor: true } : {}),
-      ...(sp.vendorInventory ? { vendorInventory: sp.vendorInventory } : {}),
-    },
-  }));
-};
-
-/**
- * Converts JTON transition zones to the legacy {@link TransitionZone} format.
- *
- * @param parsed - The parsed JTON map data.
- * @returns Flat array of TransitionZones compatible with entity_spawner.
- */
-export const jtonTransitionsToLegacy = (
-  parsed: import('./jton_parser.ts').JtonParseResult,
-): TransitionZone[] => {
-  return parsed.transitionZones.map((tz, index) => ({
-    id: `jton_transition_${index}`,
-    x: tz.x,
-    y: tz.y,
-    width: tz.width,
-    height: tz.height,
-    targetMap: tz.targetMap,
-    targetX: 0, // Will be resolved via spawn point
-    targetY: 0,
-    targetSpawnId: tz.targetSpawnId || undefined,
-  }));
-};
-
 // ---------------------------------------------------------------------------
 // Internal parsing
 // ---------------------------------------------------------------------------

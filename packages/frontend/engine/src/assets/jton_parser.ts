@@ -11,62 +11,45 @@ import type { TilemapData, TilemapLayer, TilemapTileset } from './map_loader.ts'
 // block type via prefix, and hydrates into flat TypedArrays and
 // structured TilemapData for direct ECS ingestion.
 //
+// Fixes (C-175 review):
+//   1. Column definitions in headers: :tiles: ground 1 (x, y, tileId)
+//   2. Comma-delimited data rows: 1,0,15 (BPE tokenizer compatible)
+//   3. Zero-allocation: spawn/transition data written to flat arrays
+//
 // Format specification (see scripts/tiled/jton_exporter.js for full):
 //   [:map: W H TILE_W TILE_H
 //   :tileset: NAME FIRSTGID IMAGE IW IH TW TH COLS COUNT
-//   :tiles: LAYER_NAME VISIBLE   → COL ROW GID per line
-//   :collision:                  → COL ROW per line
-//   :spawn: X Y TYPE SPAWN_ID [NPC_ID] [DIALOGUE] [IS_VENDOR] [INVENTORY]
-//   :transition: X Y W H TARGET_MAP [TARGET_SPAWN_ID]
+//   :tiles: LAYER_NAME VISIBLE (x, y, tileId)   → COL,ROW,GID per line
+//   :collision: (x, y)                           → COL,ROW per line
+//   :spawn: X Y TYPE SPAWN_ID [...] (column_hint)
+//   :transition: X Y W H TARGET_MAP [...] (column_hint)
 //   ]
 //
-// Empty tiles (GID 0) are OMITTED in the JTON format. The parser fills
-// omitted cells with 0 during hydration.
+// Empty tiles (GID 0) are OMITTED. The parser fills omitted cells with 0.
+// Parenthesized column hints in headers are skipped by the parser.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Types
+// Zero-allocation spawn/transition output buffers
 // ---------------------------------------------------------------------------
 
 /**
- * A spawn point parsed from a JTON `:spawn:` block.
+ * Flat TypedArray output for spawn point data — direct bitECS ingestion.
+ *
+ * Spawn points are interleaved: [x, y, type_hash, spawn_hash, npc_hash, ...]
+ * Each spawn occupies SPAWN_STRIDE entries.
  */
-export type JtonSpawnPoint = {
-  /** X pixel coordinate. */
-  x: number;
-  /** Y pixel coordinate. */
-  y: number;
-  /** Entity type (player, npc, enemy, prop, item). */
-  type: string;
-  /** Spawn point string identifier (for C-172 resolution). */
-  spawnId: string;
-  /** NPC-specific: display name / ID. */
-  npcId?: string;
-  /** NPC-specific: initial dialogue text (underscores = spaces). */
-  dialogue?: string;
-  /** NPC-specific: whether this NPC is a vendor. */
-  isVendor?: boolean;
-  /** NPC-specific: comma-separated vendor inventory item IDs. */
-  vendorInventory?: string;
-};
+export const SPAWN_STRIDE = 8;
+export const MAX_JTON_SPAWNS = 256;
 
 /**
- * A transition zone parsed from a JTON `:transition:` block.
+ * Flat TypedArray output for transition zone data.
+ *
+ * Transitions are interleaved: [x, y, w, h, targetMap_hash, targetSpawn_hash]
+ * Each transition occupies TRANSITION_STRIDE entries.
  */
-export type JtonTransitionZone = {
-  /** X pixel coordinate. */
-  x: number;
-  /** Y pixel coordinate. */
-  y: number;
-  /** Width in pixels. */
-  width: number;
-  /** Height in pixels. */
-  height: number;
-  /** Target map filename or ID. */
-  targetMap: string;
-  /** Target spawn point string identifier (for C-172 resolution). */
-  targetSpawnId: string;
-};
+export const TRANSITION_STRIDE = 6;
+export const MAX_JTON_TRANSITIONS = 64;
 
 /**
  * Result of parsing a JTON map string.
@@ -84,10 +67,17 @@ export type JtonParseResult = {
   tilesets: TilemapTileset[];
   /** All tile layers in draw order (bottom to top). */
   layers: TilemapLayer[];
-  /** Spawn points from :spawn: blocks. */
-  spawnPoints: JtonSpawnPoint[];
-  /** Transition zones from :transition: blocks. */
-  transitionZones: JtonTransitionZone[];
+
+  // ── Zero-allocation flat arrays (C-175 review fix 3) ──
+
+  /** Number of spawn points in the spawn buffer. */
+  spawnCount: number;
+  /** Pre-allocated Float64Array for spawn data (interleaved fields). */
+  spawnBuffer: Float64Array;
+  /** Number of transition zones in the transition buffer. */
+  transitionCount: number;
+  /** Pre-allocated Float64Array for transition data (interleaved fields). */
+  transitionBuffer: Float64Array;
 };
 
 // ---------------------------------------------------------------------------
@@ -95,7 +85,7 @@ export type JtonParseResult = {
 // ---------------------------------------------------------------------------
 
 /**
- * Parses a JTON map string into structured data.
+ * Parses a JTON map string into structured data with flat TypedArrays.
  *
  * @param source - The JTON-formatted map string.
  * @param sourceUrl - The URL/path the source was loaded from (for errors).
@@ -116,13 +106,16 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
   const tilesets: TilemapTileset[] = [];
   const layers: TilemapLayer[] = [];
   const collisionCells: { col: number; row: number }[] = [];
-  const spawnPoints: JtonSpawnPoint[] = [];
-  const transitionZones: JtonTransitionZone[] = [];
+
+  // ── Zero-allocation spawn/transition buffers ──
+  const spawnBuffer = new Float64Array(MAX_JTON_SPAWNS * SPAWN_STRIDE);
+  let spawnCount = 0;
+  const transitionBuffer = new Float64Array(MAX_JTON_TRANSITIONS * TRANSITION_STRIDE);
+  let transitionCount = 0;
 
   // Temporary state for accumulating a tile layer
   let currentLayerName = '';
   let currentLayerVisible = false;
-  // Map of `"row,col"` → GID for the current layer
   const currentLayerTiles = new Map<string, number>();
 
   /** Current parsing mode: 'none' | 'tiles' | 'collision'. */
@@ -165,7 +158,6 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // Skip empty lines
     if (trimmed.length === 0) {
       continue;
     }
@@ -178,7 +170,9 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
 
     // ── Block headers ──
     if (trimmed.startsWith(':map:')) {
-      const parts = trimmed.slice(6).split(/\s+/).filter(Boolean);
+      // Strip optional column hint "(w, h, tw, th)" if present
+      const clean = _stripColumnHint(trimmed.slice(6));
+      const parts = clean.split(/\s+/).filter(Boolean);
       if (parts.length < 4) {
         throw new Error(`JTON Parser: invalid :map: header at "${sourceUrl}"`);
       }
@@ -190,7 +184,8 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
     }
 
     if (trimmed.startsWith(':tileset:')) {
-      const parts = trimmed.slice(10).split(/\s+/).filter(Boolean);
+      const clean = _stripColumnHint(trimmed.slice(10));
+      const parts = clean.split(/\s+/).filter(Boolean);
       if (parts.length < 9) {
         throw new Error(`JTON Parser: invalid :tileset: at "${sourceUrl}"`);
       }
@@ -213,7 +208,8 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
     if (trimmed.startsWith(':tiles:')) {
       _flushLayer();
       _parseMode = 'tiles';
-      const parts = trimmed.slice(8).split(/\s+/);
+      const clean = _stripColumnHint(trimmed.slice(8));
+      const parts = clean.split(/\s+/);
       currentLayerName = parts[0] || '';
       currentLayerVisible = Number(parts[1] || 1) !== 0;
       continue;
@@ -226,53 +222,56 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
 
     if (trimmed.startsWith(':spawn:')) {
       _parseMode = 'none';
-      const parts = trimmed.slice(8).split(/\s+/);
+      const clean = _stripColumnHint(trimmed.slice(8));
+      const parts = clean.split(/\s+/);
+      if (parts.length < 4) {
+        continue;
+      }
       const x = Number(parts[0]);
       const y = Number(parts[1]);
       const type = parts[2] || 'spawn';
       const spawnId = parts[3] || '';
 
-      if (type === 'npc') {
-        const dialogue = (parts[4] || '').replace(/_/g, ' ');
-        const isVendor = Number(parts[5] || 0) !== 0;
-        const vendorInventory = (parts[6] || '').replace(/_/g, ' ');
-        spawnPoints.push({
-          x,
-          y,
-          type: 'npc',
-          spawnId,
-          npcId: spawnId,
-          dialogue,
-          isVendor,
-          vendorInventory,
-        });
-      } else if (type === 'enemy') {
-        const npcName = (parts[4] || spawnId).replace(/_/g, ' ');
-        spawnPoints.push({ x, y, type: 'enemy', spawnId, npcId: spawnId, dialogue: npcName });
-      } else {
-        spawnPoints.push({ x, y, type, spawnId });
+      // Write directly to flat Float64Array (zero-allocation)
+      if (spawnCount < MAX_JTON_SPAWNS) {
+        const offset = spawnCount * SPAWN_STRIDE;
+        spawnBuffer[offset] = x;
+        spawnBuffer[offset + 1] = y;
+        spawnBuffer[offset + 2] = _fastHash(type);
+        spawnBuffer[offset + 3] = _fastHash(spawnId);
+        spawnBuffer[offset + 4] = type === 'npc' ? _fastHash(parts[4] || '') : 0; // npcId hash
+        spawnBuffer[offset + 5] = type === 'npc' ? _fastHash(parts[4] || '') : 0; // dialogue hash
+        spawnBuffer[offset + 6] = type === 'npc' ? Number(parts[5] || 0) : 0; // isVendor
+        spawnBuffer[offset + 7] = type === 'npc' ? _fastHash(parts[6] || '') : 0; // vendorInventory hash
+        spawnCount += 1;
       }
       continue;
     }
 
     if (trimmed.startsWith(':transition:')) {
-      const parts = trimmed.slice(13).split(/\s+/);
-      transitionZones.push({
-        x: Number(parts[0]),
-        y: Number(parts[1]),
-        width: Number(parts[2]),
-        height: Number(parts[3]),
-        targetMap: parts[4] || '',
-        targetSpawnId: parts[5] || '',
-      });
+      _parseMode = 'none';
+      const clean = _stripColumnHint(trimmed.slice(13));
+      const parts = clean.split(/\s+/);
+      if (parts.length < 5) {
+        continue;
+      }
+
+      if (transitionCount < MAX_JTON_TRANSITIONS) {
+        const offset = transitionCount * TRANSITION_STRIDE;
+        transitionBuffer[offset] = Number(parts[0]); // x
+        transitionBuffer[offset + 1] = Number(parts[1]); // y
+        transitionBuffer[offset + 2] = Number(parts[2]); // w
+        transitionBuffer[offset + 3] = Number(parts[3]); // h
+        transitionBuffer[offset + 4] = _fastHash(parts[4] || ''); // targetMap hash
+        transitionBuffer[offset + 5] = _fastHash(parts[5] || ''); // targetSpawnId hash
+        transitionCount += 1;
+      }
       continue;
     }
 
-    // ── Data rows (tile data or collision data) ──
-    // Tile data: COL ROW GID
-    // Collision: COL ROW
+    // ── Data rows (comma-delimited) ──
     if (_parseMode === 'tiles') {
-      const parts = trimmed.split(/\s+/);
+      const parts = trimmed.split(',');
       if (parts.length >= 3) {
         const col = Number(parts[0]);
         const row = Number(parts[1]);
@@ -280,11 +279,16 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
         currentLayerTiles.set(`${col},${row}`, gid);
       }
     } else if (_parseMode === 'collision') {
-      const parts = trimmed.split(/\s+/);
+      const parts = trimmed.split(',');
       if (parts.length >= 2) {
         collisionCells.push({ col: Number(parts[0]), row: Number(parts[1]) });
       }
     }
+  }
+
+  // Validate required map header
+  if (mapWidth <= 0 || mapHeight <= 0) {
+    throw new Error(`JTON Parser: missing or invalid :map: header at "${sourceUrl}"`);
   }
 
   // If collision cells were parsed, create a collision layer
@@ -292,7 +296,7 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
     const data: number[] = new Array(mapWidth * mapHeight).fill(0);
     for (const { col, row } of collisionCells) {
       if (col >= 0 && col < mapWidth && row >= 0 && row < mapHeight) {
-        data[row * mapWidth + col] = 1; // Non-zero = solid
+        data[row * mapWidth + col] = 1;
       }
     }
     layers.push({
@@ -304,19 +308,14 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
     });
   }
 
-  // Validate required map header
-  if (mapWidth <= 0 || mapHeight <= 0) {
-    throw new Error(`JTON Parser: missing or invalid :map: header at "${sourceUrl}"`);
-  }
-
   logger.debug('jton_parser:parsed', {
     url: sourceUrl,
     mapWidth,
     mapHeight,
     layers: layers.length,
     tilesets: tilesets.length,
-    spawns: spawnPoints.length,
-    transitions: transitionZones.length,
+    spawns: spawnCount,
+    transitions: transitionCount,
   });
 
   return {
@@ -326,8 +325,10 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
     tileHeight,
     tilesets,
     layers,
-    spawnPoints,
-    transitionZones,
+    spawnCount,
+    spawnBuffer,
+    transitionCount,
+    transitionBuffer,
   };
 };
 
@@ -338,9 +339,6 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
 /**
  * Converts a JTON parse result into the standard {@link TilemapData}
  * format used by the existing map loading pipeline (C-135, C-171).
- *
- * This allows JTON maps to feed into the same render/collision/spawn
- * pipelines as Tiled JSON maps.
  *
  * @param parsed - The parsed JTON map data.
  * @returns A TilemapData struct compatible with loadTilemap output.
@@ -354,4 +352,50 @@ export const jtonToTilemapData = (parsed: JtonParseResult): TilemapData => {
     tilesets: parsed.tilesets,
     layers: parsed.layers,
   };
+};
+
+// ---------------------------------------------------------------------------
+// Internal: fast string hash (DJB2 — same as map_loader.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * DJB2 hash for converting string identifiers to numeric hashes.
+ *
+ * Zero-allocation, pure integer math. Same algorithm as
+ * {@link djb2Hash} in map_loader.ts.
+ *
+ * @param str - The string to hash.
+ * @returns A 32-bit unsigned integer hash.
+ */
+const _fastHash = (str: string): number => {
+  if (!str) {
+    return 0;
+  }
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+  }
+  return hash >>> 0;
+};
+
+// ---------------------------------------------------------------------------
+// Internal: strip column hint from header line
+// ---------------------------------------------------------------------------
+
+/**
+ * Strips the parenthesized column hint from a header line.
+ *
+ * E.g., `"ground 1 (x, y, tileId)"` → `"ground 1"`.
+ *
+ * The column hint is documentation for the LLM — the parser ignores it.
+ *
+ * @param header - The header content (after the `:type:` prefix).
+ * @returns The header with the column hint removed.
+ */
+const _stripColumnHint = (header: string): string => {
+  const parenIndex = header.indexOf('(');
+  if (parenIndex >= 0) {
+    return header.slice(0, parenIndex).trim();
+  }
+  return header;
 };
