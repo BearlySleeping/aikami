@@ -1,6 +1,16 @@
 // packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts
 
-import { Container, GpuProgram, Mesh, MeshGeometry, Shader, type Texture } from 'pixi.js';
+import {
+  Buffer,
+  BufferUsage,
+  Container,
+  GpuProgram,
+  Mesh,
+  MeshGeometry,
+  Shader,
+  type Texture,
+  UniformGroup,
+} from 'pixi.js';
 import type { TilemapData, TilemapTileset } from '../assets/map_loader.ts';
 
 // ---------------------------------------------------------------------------
@@ -149,6 +159,10 @@ export type TilemapChunkRenderResult = {
   container: Container;
   /** Number of chunks created. */
   chunkCount: number;
+  /** Global uniform group for animation time. */
+  globalUniforms: UniformGroup;
+  /** Storage buffer for animation tables. */
+  animStorageBuffer: Buffer;
 };
 
 // ---------------------------------------------------------------------------
@@ -192,6 +206,18 @@ export const buildTilemapChunks = (
   // Build tileset frame lookup (GID → UV rectangle)
   const tilesetEntries = _buildTilesetEntries(tilemap.tilesets);
 
+  // Global Uniforms for time
+  const globalUniforms = new UniformGroup({
+    uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
+    uTime: { value: 0, type: 'f32' },
+  });
+
+  // Storage buffer for animation tables (MAX_TILE_TYPES=256, 4 floats per entry = 4096 bytes)
+  const animStorageBuffer = new Buffer({
+    data: new Float32Array(256 * 4),
+    usage: BufferUsage.STORAGE | BufferUsage.COPY_DST,
+  });
+
   // Shared GpuProgram — created once, used by all chunks
   const gpuProgram = _getSharedGpuProgram();
 
@@ -219,6 +245,8 @@ export const buildTilemapChunks = (
           tilePixelW,
           tilePixelH,
           gpuProgram,
+          globalUniforms,
+          animStorageBuffer,
         });
 
         if (chunk) {
@@ -229,7 +257,7 @@ export const buildTilemapChunks = (
     }
   }
 
-  return { container, chunkCount };
+  return { container, chunkCount, globalUniforms, animStorageBuffer };
 };
 
 // ---------------------------------------------------------------------------
@@ -382,6 +410,10 @@ type BuildChunkOptions = {
   tilePixelH: number;
   /** Shared GpuProgram for all chunks. */
   gpuProgram: GpuProgram;
+  /** Global uniform group for time. */
+  globalUniforms: UniformGroup;
+  /** Storage buffer for animation tables. */
+  animStorageBuffer: Buffer;
 };
 
 /**
@@ -408,6 +440,8 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     tilePixelW,
     tilePixelH,
     gpuProgram,
+    globalUniforms,
+    animStorageBuffer,
   } = options;
 
   // Compute tile range for this chunk
@@ -441,6 +475,7 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
   const vertexCount = activeTileCount * VERTS_PER_TILE;
   const positions = new Float32Array(vertexCount * POS_COMPONENTS);
   const uvs = new Float32Array(vertexCount * UV_COMPONENTS);
+  const textureLayers = new Float32Array(vertexCount); // (C-177: 1 float per vertex)
   const indices = new Uint32Array(activeTileCount * INDICES_PER_TILE);
 
   // Fill buffers
@@ -475,24 +510,28 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
       positions[posOffset + 1] = py;
       uvs[uvOffset] = uv.u0;
       uvs[uvOffset + 1] = uv.v0;
+      textureLayers[vi] = 0;
 
       // Top-right
       positions[posOffset + 2] = px + tilePixelW;
       positions[posOffset + 3] = py;
       uvs[uvOffset + 2] = uv.u1;
       uvs[uvOffset + 3] = uv.v0;
+      textureLayers[vi + 1] = 0;
 
       // Bottom-right
       positions[posOffset + 4] = px + tilePixelW;
       positions[posOffset + 5] = py + tilePixelH;
       uvs[uvOffset + 4] = uv.u1;
       uvs[uvOffset + 5] = uv.v1;
+      textureLayers[vi + 2] = 0;
 
       // Bottom-left
       positions[posOffset + 6] = px;
       positions[posOffset + 7] = py + tilePixelH;
       uvs[uvOffset + 6] = uv.u0;
       uvs[uvOffset + 7] = uv.v1;
+      textureLayers[vi + 3] = 0;
 
       // Write 6 indices (2 triangles)
       const baseVertex = vi;
@@ -509,12 +548,14 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
   }
 
   // Create MeshGeometry with raw typed arrays.
-  // PixiJS v8 internally creates Buffer objects for these.
   const geometry = new MeshGeometry({
     positions,
     uvs,
     indices,
   });
+
+  // (C-177) Add custom attribute aTextureLayer
+  geometry.addAttribute('aTextureLayer', textureLayers);
 
   // ── C-171 AC-3: GC Mitigation ──
   // Prevent the PixiJS v8 silent unbinding bug when chunks are
@@ -532,17 +573,22 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     uvBuffer.autoGarbageCollect = false;
   }
 
+  const textureLayerBuffer = geometry.getBuffer('aTextureLayer');
+  if (textureLayerBuffer) {
+    textureLayerBuffer.autoGarbageCollect = false;
+  }
+
   if (geometry.indexBuffer) {
     geometry.indexBuffer.autoGarbageCollect = false;
   }
 
-  // Create a Shader per chunk — binds this chunk's tileset texture
-  // to the shared GpuProgram. The resources object maps the WGSL
-  // uniform names to PixiJS TextureSource/TextureStyle objects.
+  // Create a Shader per chunk — binds globalUniforms, animation table, texture
   const shader = new Shader({
     gpuProgram,
     resources: {
-      uTexture: tilesetTexture.source,
+      globals: globalUniforms,
+      animTable: animStorageBuffer,
+      uTextures: tilesetTexture.source,
       uSampler: tilesetTexture.source.style,
     },
   });

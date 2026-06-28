@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/game_world.ts
 import type { Application, Spritesheet } from 'pixi.js';
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import {
   extractCollisionGrid,
   extractSpawnPointEntities,
@@ -282,6 +282,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Current camera zoom received from the worker (1.0–1.5). */
   private _cameraZoom = 1.0;
 
+  /** Global uniform group for animation time (C-177). */
+  private _tilemapUniforms: UniformGroup | undefined;
+
   // -- Render state (main thread) ------------------------------------------
 
   /** Map of entity ID → render entry (display object + tint). */
@@ -365,6 +368,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._tickerCallback = (): void => {
       if (!this._running || !this._app || !this._activeRenderView) {
         return;
+      }
+
+      // ── C-177: Update uTime for GPU tile animation ──
+      if (this._tilemapUniforms) {
+        this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
       }
 
       this._updateRenderFromBuffer(this._activeRenderView, stage);
@@ -1278,6 +1286,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // Place at z-index 0 — behind all entity sprites
       this._worldContainer.addChildAt(result.container, 0);
       this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
+
+      // Store animation resources (C-177)
+      this._tilemapUniforms = result.globalUniforms;
     }
 
     // 5b. Render transition zone debug overlays so portals are visible.
