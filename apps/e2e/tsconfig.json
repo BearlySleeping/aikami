@@ -16,6 +16,6 @@
       "@aikami/types/*": ["../../packages/shared/types/src/lib/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist", "tests"]
 }

@@ -148,6 +148,16 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         baseURL: GAME_BASE_URL,
+        // WebGL rendering in headless Chromium for canvas screenshot tests.
+        launchOptions: {
+          args: [
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--enable-webgl',
+            '--ignore-gpu-blocklist',
+            '--enable-features=Vulkan,UseSkiaRenderer',
+          ],
+        },
       },
       // Game tests don't need authentication — no setup dependency.
     },

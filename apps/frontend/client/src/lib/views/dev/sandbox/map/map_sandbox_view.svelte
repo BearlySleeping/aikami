@@ -4,7 +4,7 @@
   // Thin Svelte view for the Map & Zoning sandbox.
   // Binds a canvas to the ViewModel and renders floating Dev UI buttons.
   //
-  // Contract: C-139 Task 2
+  // Contracts: C-139 Task 2, C-178
 
   import { onMount } from 'svelte';
   import BaseViewModelContainer from '$components/base_view_model_container.svelte';
@@ -121,12 +121,12 @@
     >
       <button
         class="btn btn-sm gap-1"
-        class:btn-primary={viewModel.currentMap?.includes('zone_a')}
-        class:btn-outline={!viewModel.currentMap?.includes('zone_a')}
+        class:btn-primary={viewModel.currentMap?.includes('debug_map')}
+        class:btn-outline={!viewModel.currentMap?.includes('debug_map')}
         onclick={() => viewModel.loadZoneA()}
         disabled={!viewModel.engineReady}
       >
-        Zone A
+        Debug JTON
       </button>
       <button
         class="btn btn-sm gap-1"
@@ -135,7 +135,7 @@
         onclick={() => viewModel.loadZoneB()}
         disabled={!viewModel.engineReady}
       >
-        Zone B
+        Zone B (legacy)
       </button>
 
       {#if !viewModel.engineReady}
