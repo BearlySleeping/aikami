@@ -145,8 +145,15 @@ export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer
 
 // Rendering
 
-export type { JtonParseResult, JtonSpawnPoint, JtonTransitionZone } from './assets/jton_parser.ts';
-export { jtonToTilemapData, parseJtonMap } from './assets/jton_parser.ts';
+export type { JtonParseResult } from './assets/jton_parser.ts';
+export {
+  jtonToTilemapData,
+  MAX_JTON_SPAWNS,
+  MAX_JTON_TRANSITIONS,
+  parseJtonMap,
+  SPAWN_STRIDE,
+  TRANSITION_STRIDE,
+} from './assets/jton_parser.ts';
 // Entity spawner (C-136)
 export { resolveNpcTexture, resolvePropTexture } from './assets/lpc_asset_catalog.ts';
 // Tilemap & collision (C-135)
@@ -166,8 +173,6 @@ export {
   extractSpawnPointEntities,
   extractSpawnPoints,
   extractTransitionZones,
-  jtonSpawnsToLegacy,
-  jtonTransitionsToLegacy,
   loadJtonMap,
   loadTilemap,
 } from './assets/map_loader.ts';
