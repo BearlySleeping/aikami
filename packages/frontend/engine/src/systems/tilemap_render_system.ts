@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
-import { Assets, Container, Texture } from 'pixi.js';
+import { Assets, Buffer, BufferUsage, Container, Texture, UniformGroup } from 'pixi.js';
 import type { TilemapData } from '../assets/map_loader.ts';
 import { buildTilemapChunks, frustumCullChunks } from '../rendering/tilemap_chunk_renderer.ts';
 
@@ -47,6 +47,10 @@ export type TilemapRenderResult = {
   layerCount: number;
   /** Number of mesh chunks created. */
   chunkCount: number;
+  /** Global uniform group for animation time. */
+  globalUniforms: UniformGroup;
+  /** Storage buffer for animation tables. */
+  animStorageBuffer: Buffer;
 };
 
 /**
@@ -147,9 +151,33 @@ export const renderTilemap = async (
 
     layerCount += 1;
     totalChunks += result.chunkCount;
+
+    // Return the shared uniforms/buffer from the last layer
+    if (layer === tilemap.layers[tilemap.layers.length - 1]) {
+      return {
+        container,
+        layerCount,
+        chunkCount: totalChunks,
+        globalUniforms: result.globalUniforms,
+        animStorageBuffer: result.animStorageBuffer,
+      };
+    }
   }
 
-  return { container, layerCount, chunkCount: totalChunks };
+  // Fallback (empty map)
+  return {
+    container,
+    layerCount,
+    chunkCount: totalChunks,
+    globalUniforms: new UniformGroup({
+      uTransformMatrix: { value: new Float32Array(9), type: 'mat3x3<f32>' },
+      uTime: { value: 0, type: 'f32' },
+    }),
+    animStorageBuffer: new Buffer({
+      data: new Float32Array(0),
+      usage: BufferUsage.STORAGE | BufferUsage.COPY_DST,
+    }),
+  };
 };
 
 // ---------------------------------------------------------------------------
