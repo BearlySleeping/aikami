@@ -42,6 +42,7 @@ import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { registerVisualObservers } from '../components/visual.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
+import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
@@ -1062,6 +1063,7 @@ self.onmessage = (event: MessageEvent): void => {
           // Clear all existing entities
           const allEids = getAllEntities(world);
           for (const eid of allEids) {
+            incrementEntityGeneration(eid);
             removeEntity(world, eid);
           }
           playerEntityId = 0;
@@ -1226,6 +1228,7 @@ self.onmessage = (event: MessageEvent): void => {
           const allEids = getAllEntities(world);
           for (const eid of allEids) {
             if (eid !== playerEntityId) {
+              incrementEntityGeneration(eid);
               removeEntity(world, eid);
             }
           }

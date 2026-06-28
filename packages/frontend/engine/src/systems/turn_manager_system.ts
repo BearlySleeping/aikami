@@ -7,6 +7,7 @@ import { Enemy } from '../components/enemy.ts';
 import { Position } from '../components/position.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
+import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { getCombatantScreenStates } from './combat_stage_system.ts';
 
@@ -605,6 +606,7 @@ const _handleEnemyDefeated = (
   const spawnId = Enemy.spawnId[enemyId] ?? '';
 
   // Remove the entity from the world
+  incrementEntityGeneration(enemyId);
   removeEntity(world, enemyId);
 
   // End combat with victory, including the spawn ID for persistence
