@@ -11,11 +11,19 @@
     "skipLibCheck": true,
     "paths": {
       "@aikami/constants": ["../../packages/shared/constants/src/index.ts"],
-      "@aikami/constants/*": ["../../packages/shared/constants/src/lib/*"],
+      "@aikami/constants/*": ["../../packages/shared/constants/src/*"],
+      "@aikami/mocks": ["../../packages/shared/mocks/src/index.ts"],
+      "@aikami/mocks/*": ["../../packages/shared/mocks/src/*"],
+      "@aikami/schemas": ["../../packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../packages/shared/schemas/src/*"],
       "@aikami/types": ["../../packages/shared/types/src/index.ts"],
-      "@aikami/types/*": ["../../packages/shared/types/src/lib/*"]
+      "@aikami/types/*": ["../../packages/shared/types/src/*"],
+      "@aikami/utils": ["../../packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../packages/shared/utils/src/*"],
+      "$logger": ["../../packages/shared/logger/src/index.ts"],
+      "$lib/*": ["./src/lib/*"]
     }
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],
+  "exclude": ["node_modules", "dist"]
 }

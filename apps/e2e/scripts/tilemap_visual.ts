@@ -25,7 +25,6 @@ const NIX_CHROMIUM =
 
 // ── Paths ────────────────────────────────────────────────
 
-const _REPO_ROOT = resolve(import.meta.dirname, '../../..');
 const E2E_DIR = resolve(import.meta.dirname, '..');
 const SCREENSHOT_DIR = join(E2E_DIR, 'test-results', 'tilemap-visual');
 const SCREENSHOT_FILE = 'tilemap-10x10.png';
@@ -284,8 +283,10 @@ if (!captureOnly) {
     });
 
     console.log(`   Score: ${result.score}/100`);
-    console.log(`   Grid visible: ${result.gridVisible}`);
-    console.log(`   No seam bleeding: ${result.noSeamBleeding}`);
+    console.log(`   Grid visible: ${(result as Record<string, unknown>).gridVisible ?? 'N/A'}`);
+    console.log(
+      `   No seam bleeding: ${(result as Record<string, unknown>).noSeamBleeding ?? 'N/A'}`,
+    );
     console.log(`   Notes: ${result.notes}`);
     if (result.issues && result.issues.length > 0) {
       console.log('   Issues:');

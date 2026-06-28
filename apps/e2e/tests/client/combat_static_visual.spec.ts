@@ -123,8 +123,7 @@ test('AC3 — damage flash CSS class applied on hit', async ({ page }) => {
   // (the animation is 350ms + 400ms timeout = ~750ms, and we waited 600ms)
   // At this point the flash should either be active or just completed
   // We verify the portrait container exists and the stage is intact
-  const _enemyPortraitContainer = stage.locator('.animate-damage-flash');
-  // The class may or may not be present depending on timing — at minimum
+  // The flash class may or may not be present depending on timing — at minimum
   // the portrait stage must not be broken after a combat action
   await expect(stage).toBeVisible();
 });

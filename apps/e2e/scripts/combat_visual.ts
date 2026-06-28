@@ -15,7 +15,7 @@
 //
 // Requires OPENROUTER_API_KEY env var for AI evaluation.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { $ } from 'bun';
 import { evaluateScreenshot } from './shared/ai_eval';
