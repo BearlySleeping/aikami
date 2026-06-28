@@ -6,6 +6,7 @@ import {
   extractSpawnPointEntities,
   extractSpawnPoints,
   extractTransitionZones,
+  loadJtonMap,
   loadTilemap,
 } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
@@ -1243,97 +1244,114 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   ): Promise<void> {
     this.debug('loadMap', { mapUrl, targetX, targetY });
 
-    // 1. Pause the engine
-    this._running = false;
-    this.setInputLocked(true);
+    try {
+      // 1. Pause the engine
+      this._running = false;
+      this.setInputLocked(true);
 
-    // 2. Clear all existing render entries (old map display objects)
-    for (const entry of this._renderEntries.values()) {
-      entry.displayObject.destroy({ children: true });
-    }
-    this._renderEntries.clear();
-    this._npcMeta.clear();
-    this._playerEntityId = 0;
-
-    // 3. Remove old tilemap from the world container.
-    //    Destroy with texture:true to free map-specific RenderTextures
-    //    and GPU memory (C-155 AC-3: PixiJS Asset Cleanup).
-    //    PixiJS v8 ref-counts BaseTextures, so cached Assets textures
-    //    (Texture.from) shared across maps are NOT prematurely freed.
-    if (this._worldContainer) {
-      const oldTilemap = this._worldContainer.getChildByLabel('tilemap-chunks');
-      if (oldTilemap) {
-        this._worldContainer.removeChild(oldTilemap);
-        oldTilemap.destroy({ children: true, texture: true });
+      // 2. Clear all existing render entries (old map display objects)
+      for (const entry of this._renderEntries.values()) {
+        entry.displayObject.destroy({ children: true });
       }
-    }
+      this._renderEntries.clear();
+      this._npcMeta.clear();
+      this._playerEntityId = 0;
 
-    // 4. Load and parse the new tilemap
-    const tilemap = await loadTilemap({ url: mapUrl });
-    const collisionGridData = extractCollisionGrid(tilemap);
-    const spawnPoints = extractSpawnPoints(tilemap);
-    const transitionZones = extractTransitionZones(tilemap);
-    const spawnPointEntities = extractSpawnPointEntities(tilemap);
+      // 3. Remove old tilemap from the world container.
+      //    Destroy with texture:true to free map-specific RenderTextures
+      //    and GPU memory (C-155 AC-3: PixiJS Asset Cleanup).
+      //    PixiJS v8 ref-counts BaseTextures, so cached Assets textures
+      //    (Texture.from) shared across maps are NOT prematurely freed.
+      if (this._worldContainer) {
+        const oldTilemap = this._worldContainer.getChildByLabel('tilemap-chunks');
+        if (oldTilemap) {
+          this._worldContainer.removeChild(oldTilemap);
+          oldTilemap.destroy({ children: true, texture: true });
+        }
+      }
 
-    const mapPixelWidth = tilemap.width * tilemap.tilewidth;
-    const mapPixelHeight = tilemap.height * tilemap.tileheight;
+      // 4. Load and parse the new tilemap
+      const isJton = mapUrl.endsWith('.jton');
+      const tilemap = isJton
+        ? await loadJtonMap({ url: mapUrl })
+        : await loadTilemap({ url: mapUrl });
+      const collisionGridData = extractCollisionGrid(tilemap);
+      const spawnPoints = extractSpawnPoints(tilemap);
+      const transitionZones = extractTransitionZones(tilemap);
+      const spawnPointEntities = extractSpawnPointEntities(tilemap);
 
-    // 5. Render the new tilemap background
-    if (this._app && this._worldContainer) {
-      const result = await renderTilemap({
-        tilemap,
+      const mapPixelWidth = tilemap.width * tilemap.tilewidth;
+      const mapPixelHeight = tilemap.height * tilemap.tileheight;
+
+      // 5. Render the new tilemap background
+      if (this._app && this._worldContainer) {
+        const result = await renderTilemap({
+          tilemap,
+        });
+        // Place at z-index 0 — behind all entity sprites
+        this._worldContainer.addChildAt(result.container, 0);
+        this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
+
+        // Store animation resources (C-177)
+        this._tilemapUniforms = result.globalUniforms;
+      }
+
+      // 5b. Render transition zone debug overlays so portals are visible.
+      //     Transition zones are invisible ECS triggers — without visual
+      //     indicators, the player cannot find where to walk.
+      this._renderTransitionZoneOverlays(transitionZones);
+
+      // 5c. Redraw the debug grid to match the new map's dimensions.
+      //     Different maps may have different tile counts.
+      this._drawDebugGrid({
+        width: tilemap.width,
+        height: tilemap.height,
+        tileSize: tilemap.tilewidth,
       });
-      // Place at z-index 0 — behind all entity sprites
-      this._worldContainer.addChildAt(result.container, 0);
-      this.debug('loadMap:tilemap-rendered', { layers: result.layerCount });
 
-      // Store animation resources (C-177)
-      this._tilemapUniforms = result.globalUniforms;
+      // 6. Post LOAD_MAP to worker and wait for completion
+      await this._postLoadMap({
+        spawnPoints,
+        transitionZones,
+        collisionGrid: collisionGridData
+          ? {
+              width: tilemap.width,
+              height: tilemap.height,
+              tileSize: tilemap.tilewidth,
+              grid: collisionGridData,
+            }
+          : undefined,
+        mapPixelWidth,
+        mapPixelHeight,
+        targetX,
+        targetY,
+        defeatedEnemies,
+        targetSpawnHash,
+        spawnPointEntities,
+      });
+
+      // 7. Resume the engine
+      this._running = true;
+      this.setInputLocked(false);
+
+      // Signal the UI layer that the map transition is complete so
+      // the fade-to-black overlay can be dismissed.
+      this._bridge.emit({ type: 'MAP_LOADED' });
+
+      this.debug('loadMap:complete');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.error('loadMap:failed', { mapUrl, error: message });
+
+      // Restore engine state so it does not remain soft-locked
+      this._running = true;
+      this.setInputLocked(false);
+
+      // Emit so the ViewModel can surface the error to the UI
+      this._bridge.emit({ type: 'GAME_ERROR', message: `Map load failed: ${message}` });
+
+      throw error;
     }
-
-    // 5b. Render transition zone debug overlays so portals are visible.
-    //     Transition zones are invisible ECS triggers — without visual
-    //     indicators, the player cannot find where to walk.
-    this._renderTransitionZoneOverlays(transitionZones);
-
-    // 5c. Redraw the debug grid to match the new map's dimensions.
-    //     Different maps may have different tile counts.
-    this._drawDebugGrid({
-      width: tilemap.width,
-      height: tilemap.height,
-      tileSize: tilemap.tilewidth,
-    });
-
-    // 6. Post LOAD_MAP to worker and wait for completion
-    await this._postLoadMap({
-      spawnPoints,
-      transitionZones,
-      collisionGrid: collisionGridData
-        ? {
-            width: tilemap.width,
-            height: tilemap.height,
-            tileSize: tilemap.tilewidth,
-            grid: collisionGridData,
-          }
-        : undefined,
-      mapPixelWidth,
-      mapPixelHeight,
-      targetX,
-      targetY,
-      defeatedEnemies,
-      targetSpawnHash,
-      spawnPointEntities,
-    });
-
-    // 7. Resume the engine
-    this._running = true;
-    this.setInputLocked(false);
-
-    // Signal the UI layer that the map transition is complete so
-    // the fade-to-black overlay can be dismissed.
-    this._bridge.emit({ type: 'MAP_LOADED' });
-
-    this.debug('loadMap:complete');
   }
 
   /**
@@ -1540,6 +1558,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const offset = eid * COMPONENT_STRIDE;
       const x = renderView[offset];
       const y = renderView[offset + 1];
+
+      // C-180: Expose player world coordinates for E2E collision testing.
+      // Playwright reads window.__AIKAMI_DEBUG__.playerPosition to verify
+      // that the spatial grid bitmask collision clamps movement at walls.
+      if (eid === this._playerEntityId && typeof window !== 'undefined') {
+        (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ = {
+          playerX: x,
+          playerY: y,
+        };
+      }
 
       if (x === undefined || y === undefined) {
         continue;

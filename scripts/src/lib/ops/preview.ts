@@ -350,8 +350,6 @@ const launchChromium = async (mode: AikamiMode): Promise<void> => {
     '--disable-background-networking',
     '--disable-sync',
     '--no-pings',
-    '--enable-unsafe-webgpu',
-    '--enable-features=Vulkan',
     '--ozone-platform=x11',
     '--disable-gcm',
     '--disable-push-notifications',

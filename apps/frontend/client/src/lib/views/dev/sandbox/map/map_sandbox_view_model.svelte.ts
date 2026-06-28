@@ -1,10 +1,11 @@
 // apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts
 //
 // ViewModel for the isolated Map & Zoning sandbox route.
-// Creates a GameWorld bound to a canvas and loads test tilemap assets
-// with dev UI buttons to switch between sandbox_zone_a and sandbox_zone_b.
+// Creates a GameWorld bound to a canvas and loads the debug JTON
+// tilemap for visual pipeline validation (C-178). Zone B falls back
+// to the legacy sandbox_zone_b.json.
 //
-// Contract: C-139 Task 2
+// Contracts: C-139 Task 2, C-178
 
 import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
@@ -50,10 +51,10 @@ export type MapSandboxViewModelInterface = BaseViewModelInterface & {
   readonly isStreaming: boolean;
   /** Initializes the game engine, binding it to the given canvas. */
   initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
-  /** Loads sandbox_zone_a.json via the engine's loadMap. */
-  loadZoneA: () => Promise<void>;
-  /** Loads sandbox_zone_b.json via the engine's loadMap. */
-  loadZoneB: () => Promise<void>;
+  /** Loads debug_map.jton via the engine's loadMap. Optional spawn coords. */
+  loadZoneA: (spawnX?: number, spawnY?: number) => Promise<void>;
+  /** Loads sandbox_zone_b.json via the engine's loadMap (legacy fallback). */
+  loadZoneB: (spawnX?: number, spawnY?: number) => Promise<void>;
   /** Closes the NPC dialog overlay and resumes the game. */
   dismissDialog: () => void;
   /** Destroys the engine, releasing WebGL and worker resources. */
@@ -117,16 +118,27 @@ class MapSandboxViewModel
         }
         this._initialMapLoaded = true;
 
-        // Read ?zone=a|b query parameter for direct zone control
+        // Read ?zone=a|b and ?position_x=&position_y= query parameters
         if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
           const zone = params.get('zone');
+
+          // Parse optional spawn coordinates (C-180 corner testing).
+          // Passed as pixel coordinates; collision system clamps OOB values.
+          const rawX = params.get('position_x');
+          const rawY = params.get('position_y');
+          const spawnX = rawX !== null ? Number.parseInt(rawX, 10) : undefined;
+          const spawnY = rawY !== null ? Number.parseInt(rawY, 10) : undefined;
+
           if (zone === 'b') {
-            void this.loadZoneB();
+            void this.loadZoneB(spawnX, spawnY);
             return;
           }
+
+          void this.loadZoneA(spawnX, spawnY);
+          return;
         }
-        // Default: auto-load sandbox_zone_a
+        // Default: auto-load debug_map.jton for visual pipeline validation
         void this.loadZoneA();
       });
 
@@ -215,38 +227,53 @@ class MapSandboxViewModel
   }
 
   /**
-   * Loads sandbox_zone_a.json — green outdoor area with NPC merchant and
-   * transition to zone_b.
+   * Loads debug_map.jton — 10x10 colour-coded collision test map with
+   * grass, water boundary, grey house, and brown door.
+   *
+   * Contract: C-178 Visual Pipeline Validation
+   * Contract: C-180 — accepts optional spawn coordinates via query params
+   *
+   * @param spawnX - Optional pixel X spawn coordinate (default: 160).
+   * @param spawnY - Optional pixel Y spawn coordinate (default: 192).
    */
-  async loadZoneA(): Promise<void> {
+  async loadZoneA(spawnX?: number, spawnY?: number): Promise<void> {
     const gw = this._gameWorld;
     if (!gw) {
       return;
     }
 
+    const x = spawnX ?? 160;
+    const y = spawnY ?? 192;
+
     try {
-      this.debug('map-sandbox:loadZoneA');
-      await gw.loadMap('/assets/maps/sandbox_zone_a.json', 160, 192);
-      this.currentMap = '/assets/maps/sandbox_zone_a.json';
-      this.debug('map-sandbox:loadZoneA:complete');
+      this.debug('map-sandbox:loadDebugJton', { spawnX: x, spawnY: y });
+      await gw.loadMap('/assets/maps/debug_map.jton', x, y);
+      this.currentMap = '/assets/maps/debug_map.jton';
+      this.debug('map-sandbox:loadDebugJton:complete');
     } catch (err) {
-      this.debug('map-sandbox:loadZoneA:error', { error: String(err) });
+      this.debug('map-sandbox:loadDebugJton:error', { error: String(err) });
     }
   }
 
   /**
    * Loads sandbox_zone_b.json — tan indoor chamber with water feature and
    * transition back to zone_a.
+   *
+   * @param spawnX - Optional pixel X spawn coordinate (default: 128).
+   * @param spawnY - Optional pixel Y spawn coordinate (default: 128).
    */
-  async loadZoneB(): Promise<void> {
+  async loadZoneB(spawnX?: number, spawnY?: number): Promise<void> {
     const gw = this._gameWorld;
     if (!gw) {
       return;
     }
 
+    const x = spawnX ?? 128;
+    const y = spawnY ?? 128;
+
     try {
-      this.debug('map-sandbox:loadZoneB');
-      await gw.loadMap('/assets/maps/sandbox_zone_b.json', 128, 128);
+      this.debug('map-sandbox:loadZoneB', { spawnX: x, spawnY: y });
+      await gw.loadMap('/assets/maps/sandbox_zone_b.json', x, y);
       this.currentMap = '/assets/maps/sandbox_zone_b.json';
       this.debug('map-sandbox:loadZoneB:complete');
     } catch (err) {
