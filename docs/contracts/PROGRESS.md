@@ -35,6 +35,8 @@
 | C-173 | ECS Spatial Hash Grid | ✅ completed |
 | C-174 | ECS Bresenham Line of Sight | ✅ completed |
 | C-175 | LLM JTON Map Pipeline | ✅ completed |
+| C-178 | Visual Pipeline Validation | ✅ completed |
+| C-179 | GLSL Fallback Shader | ✅ completed |
 | C-144 | Combat Encounter Integration | ✅ completed |
 | C-145 | Turn-Based Combat Loop & Dice RNG | ✅ completed |
 | C-146 | Freeform AI Combat Actions | ✅ completed |
@@ -145,6 +147,33 @@
 | C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
 | C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
 | C-126 | Headless App Shell & Initialization | ✅ completed |
+
+### C-178: Visual Pipeline Validation
+
+**Status**: ✅ completed
+
+**Files created**:
+- `apps/frontend/client/static/assets/maps/debug_map.jton` — 10×10 JTON debug map (917 bytes). 10×10 grid with 32px tiles using the `debug` tileset. Grass (GID 1) interior, water (GID 2) border for perimeter collision, grey house (GID 3) at (2,2)-(4,3) with brown door (GID 4) at (3,3), 40 collision-blocked cells, player spawn at (160,192) with `town_spawn` spawnId.
+
+**Files modified**:
+- `packages/frontend/engine/src/game_world.ts` — Added `loadJtonMap` import; `loadMap()` now detects `.jton` extension and calls `loadJtonMap` instead of `loadTilemap` for JTON maps
+- `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts` — `loadZoneA()` now loads `debug_map.jton` with spawn at (160, 192); updated JSDoc comments and logging
+- `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view.svelte` — Button labels updated: "Debug JTON" / "Zone B (legacy)"; active class check uses `debug_map` string match
+
+**Deviations**:
+1. **JTON spawn points not converted to ObjectLayers**: The JTON parser stores spawn/transition data in flat TypedArrays with DJB2 hashes, not original strings. Converting these to Tiled-compatible ObjectLayers requires reverse-lookup of string keys from hashes, which is not possible. The debug map is sparsely populated (one player spawn) — the player position is set via `targetX`/`targetY` in the `loadMap` call, which already works without spawn points.
+2. **No NPCs or transitions in the debug map**: The contract only requires a house, water boundary, and player spawn. NPC spawning and zone transitions from JTON are future work (requires hash→string reverse mapping or direct JTON buffer handling in the worker).
+3. **`loadZoneB` kept as legacy fallback**: The Zone B button still loads `sandbox_zone_b.json` for comparison. The contract only specified updating the primary map load, not removing other functionality.
+
+**Design decisions**:
+1. **Extension-based routing in loadMap**: `mapUrl.endsWith('.jton')` gates between `loadJtonMap` and `loadTilemap`. Simple, zero-config, and backward-compatible — all existing `.json` map loads are unaffected.
+2. **Direct GID values in JTON**: The JTON file uses actual GIDs (1=grass, 2=water, 3=wall, 4=door) matching the tileset's `firstgid: 1`. The contract's conceptual example used 0-based indices — the implementation uses correct GIDs for renderer compatibility.
+3. **All 100 tiles explicitly listed**: No implicit fill — every cell is explicitly in the JTON file for visual verification. The parser fills omitted cells with GID 0 (transparent), but explicit listing prevents ambiguity.
+
+**Verification**:
+- `parseJtonMap` smoke test confirms: width=10, height=10, 2 layers (ground + collision), 1 tileset, 1 spawn, 40 collision-blocked cells
+- House area verified: (2,2) GID 3 blocked, (3,2) GID 3 NOT blocked (contract spec), (4,2) GID 3 blocked, (2,3) GID 3 blocked, (3,3) GID 4 NOT blocked (door walkable), (4,3) GID 3 blocked
+- Fix + typecheck + build + test passed on both affected projects (client, frontend-engine)
 
 ### C-150: Low-Latency Audio Engine & Service Worker
 
@@ -2320,3 +2349,83 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - The spatial grid is a module-level singleton (`_spatialGrid`) — only one grid is active at a time. Multi-map or split-screen scenarios would need multi-grid support.
 - `GridPosition` is not auto-synced with `Position` — the spatial grid registration must be manually triggered after entity creation.
 - No unit tests for `insertIntoSpatialGrid`, `removeFromSpatialGrid`, or `isCellBlocked` — these require the spatial grid to be initialized with specific dimensions.
+
+---
+
+### C-180: Engine Stability Harness
+
+**Status**: ✅ completed
+
+**Files created**:
+- `packages/frontend/engine/src/__tests__/spatial_grid.test.ts` — 36 unit tests (AC-1): `isCellBlocked` boundary returns true for OOB coords (negative x/y, ≥width, ≥height), `isWalkable` boundary returns false for OOB pixels, `insertIntoSpatialGrid`/`removeFromSpatialGrid`/`moveInSpatialGrid` no-throw at all edges, `initializeSpatialGrid` dimension verification, `setCollisionGrid` spatial grid wiring, wall entity collision mask matching
+- `apps/e2e/tests/game/collision_e2e.spec.ts` — 4 E2E keyboard simulation tests (AC-3): player clamped at top water boundary (ArrowUp → playerY ≥ 0), left boundary (ArrowLeft → playerX ≥ 0), bottom boundary (ArrowDown → playerY < 320), right boundary (ArrowRight → playerX < 320). Reads position from `window.__AIKAMI_DEBUG__.playerPosition` exposed by GameWorld every tick
+
+**Files modified**:
+- `packages/frontend/engine/src/game_world.ts` — `_updateRenderFromBuffer` now sets `window.__AIKAMI_DEBUG__ = { playerX, playerY }` each frame for the player entity (C-180 AC-3)
+- `apps/e2e/tests/game/map_rendering_visual.spec.ts` — Added C-180 AC-2 test: navigates to `/dev/sandbox/map`, waits for canvas + network idle, asserts `expect(canvas).toHaveScreenshot('debug-map-baseline.png', { maxDiffPixelRatio: 0.01 })`
+- `apps/e2e/playwright.config.ts` — Added WebGL launch args (`--use-gl=angle`, `--use-angle=swiftshader`, `--enable-webgl`, `--ignore-gpu-blocklist`) to `game` project for pixel-accurate canvas screenshots
+
+**Deviations**:
+1. **`window.__AIKAMI_DEBUG__` exposed from GameWorld, not GameViewModel**: The contract suggests exposing in `game_view_model.svelte.ts`, but the E2E test uses the map sandbox (`/dev/sandbox/map`) which uses `MapSandboxViewModel` + `GameWorld`. Exposing from `_updateRenderFromBuffer` in `game_world.ts` makes the position available for ALL game instances (map sandbox, game view, any future canvas), not just one ViewModel. The position updates every ticker frame (~60fps) with zero overhead beyond a property assignment guard.
+2. **Visual regression test added to existing file**: Contract says "update `map_rendering_visual.spec.ts`" — added as a third test in the existing file rather than replacing the existing C-135 tests.
+3. **Screenshot baseline must be generated on first run**: `toHaveScreenshot('debug-map-baseline.png')` will fail on first CI run unless `--update-snapshots` is passed. Snapshot is stored relative to the test file in Playwright's default snapshot directory.
+
+**Design decisions**:
+1. **Each boundary direction tested independently**: Four separate E2E tests (up/left/down/right) rather than one combined test. Isolates failures — if only one direction breaks, the specific broken test is clear.
+2. **2.5s hold for full-map traversal, 1.5s for half-map**: Longer hold times ensure the player reaches the boundary regardless of initial position. At 150 px/s, 2.5s covers 375 px (exceeds 320 px map size).
+3. **`playerX`/`playerY` not `x`/`y` on debug object**: Avoids ambiguity with DOM `window.x`/`window.y` properties. Explicit `playerX`/`playerY` naming self-documents the purpose.
+4. **E2E test uses hardcoded `BASE_URL` matching existing convention**: All `tests/game/` tests use `const BASE_URL = 'http://localhost:5274'` (PWA port) since map sandbox is a PWA route. Consistent with `map_rendering_visual.spec.ts` and `map_transitions.spec.ts`.
+5. **36 unit tests with one line of production code**: The `_updateRenderFromBuffer` change is a single `if (eid === this._playerEntityId)` guard — negligible perf impact. All collision boundary logic already existed; the tests validate it.
+
+**Verification**:
+- `bun test` in `packages/frontend/engine`: 480 pass, 0 fail (includes 36 new spatial_grid tests)
+- `moon run frontend-engine:fix` → 1 file fixed, no warnings
+- `moon run frontend-engine:typecheck` → ✅ passed
+- `moon run client:fix` → 109 files fixed
+- `moon run client:typecheck` → ✅ 0 errors, 0 warnings
+- `npx playwright test --project=game -g "collision_e2e"` → **8 passed** (4 keyboard boundary + 4 spawn clamp corners)
+
+**Screenshots taken**:
+- `.pi/.screenshots/pwa-1782650439468.png` — top-left (0,0) clamped to grass
+- `.pi/.screenshots/pwa-1782650406234.png` — top-right (320,0) clamped to grass
+- `.pi/.screenshots/pwa-1782650406239.png` — bottom-left (0,320) clamped to grass
+- `.pi/.screenshots/pwa-1782650406238.png` — bottom-right (320,320) clamped to grass
+
+**Known limitations**:
+- Visual regression baseline (`debug-map-baseline.png`) must be generated on first CI run with `--update-snapshots`
+- E2E collision tests require the PWA dev server running on port 5274
+- `window.__AIKAMI_DEBUG__` is set every frame even when the player hasn't moved — negligible overhead (<1µs property assignment)
+- The debug position object is reset each frame (single mutable reference) — multiple rapid `page.evaluate()` calls could race. Tests single-read after key release to avoid this.
+- Spiral search for walkable tile is bounded at 20-tile radius — extremely large maps may need larger bounds
+- The `appearance-changed` / `lpc-loaded` events are emitted in the worker; their debug messages are NOT forwarded to the main-thread console (worker logs have separate console scope)
+
+### Visual Testing Skill
+
+**Status**: ✅ completed
+
+Updated `.pi/skills/project-commands/SKILL.md` with a **Visual Testing** section documenting:
+- The two-phase capture → AI eval → report pattern
+- Shared utilities (`screenshot.ts`, `ai_eval.ts`)
+- Existing visual test scripts and their purposes
+- How to create new visual test scripts
+- Map sandbox corner testing with `position_x`/`position_y` query params
+- 🔴 Critical rule: use `apps/e2e/scripts/` for visual testing, NEVER `browser_screenshot`
+
+### map_sandbox_eval.ts Rewrite
+
+**Status**: ✅ completed
+
+Rewrote `apps/e2e/scripts/map_sandbox_eval.ts` with the full two-phase AI evaluation pattern:
+- Phase 1 (Zone checks): Kept existing canvas/engine/LPC/rectangle checks for zone a/b
+- Phase 2 (Corner evaluation): NEW — captures screenshots at all 4 map corners via `?position_x=&position_y=` query params, then runs AI visual evaluation (`evaluateScreenshot()`) to verify character is on green grass, not blue water
+- CLI flags: `--capture-only`, `--eval-only`, `--zone-only`, `--corner-only`
+- Fixed `waitForZone` → `waitForMapLoaded` to match C-178 UI changes (buttons show "Debug JTON" / "Zone B (legacy)")
+- Generates `report.json` with average score, per-corner results, and pass/fail threshold (70)
+
+**Verification of corner clamping**:
+```
+Top-left (0,0) → clamped to (32, 32) tile (1,1) ✅ on grass
+Top-right (320,0) → clamped to (256, 32) tile (8,1) ✅ on grass
+Bottom-left (0,320) → clamped to (32, 256) tile (1,8) ✅ on grass
+Bottom-right (320,320) → clamped to (256, 256) tile (8,8) ✅ on grass
+```

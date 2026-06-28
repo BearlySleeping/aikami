@@ -4,6 +4,7 @@ import {
   Buffer,
   BufferUsage,
   Container,
+  GlProgram,
   GpuProgram,
   Mesh,
   MeshGeometry,
@@ -95,6 +96,69 @@ const _getSharedGpuProgram = (): GpuProgram => {
     });
   }
   return _cachedGpuProgram;
+};
+
+// ---------------------------------------------------------------------------
+// GLSL fallback shader for WebGL2 (C-179)
+//
+// When WebGPU is unavailable, PixiJS falls back to WebGL2. The WGSL
+// shader above has no glProgram — causing a "Mesh shader has no
+// glProgram" warning per frame and blank rendering. This GLSL fallback
+// renders the tileset as a static 2D texture (no texture-array or
+// animation support — acceptable degradation).
+// ---------------------------------------------------------------------------
+
+const TILEMAP_CHUNK_GLSL_VERTEX = /* glsl */ `#version 300 es
+
+  in vec2 aPosition;
+  in vec2 aUV;
+
+  out vec2 vUV;
+
+  uniform mat3 uProjectionMatrix;
+  uniform mat3 uWorldTransformMatrix;
+  uniform mat3 uTransformMatrix;
+
+  void main(void) {
+    mat3 mvp = uProjectionMatrix * uWorldTransformMatrix * uTransformMatrix;
+    gl_Position = vec4((mvp * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
+    vUV = aUV;
+  }
+`;
+
+const TILEMAP_CHUNK_GLSL_FRAGMENT = /* glsl */ `#version 300 es
+  precision highp float;
+
+  in vec2 vUV;
+
+  uniform sampler2D uTexture;
+
+  out vec4 fragColor;
+
+  void main(void) {
+    fragColor = texture(uTexture, vUV);
+  }
+`;
+
+/** Cached GlProgram instance — created once and reused by all chunks. */
+let _cachedGlProgram: GlProgram | undefined;
+
+/**
+ * Returns a shared GlProgram for all tilemap chunks.
+ *
+ * Created lazily on first call and cached. All chunks share the same
+ * GLSL source — only geometry and texture differ. This is the WebGL2
+ * fallback for the WGSL shader above.
+ */
+const _getSharedGlProgram = (): GlProgram => {
+  if (!_cachedGlProgram) {
+    _cachedGlProgram = GlProgram.from({
+      vertex: TILEMAP_CHUNK_GLSL_VERTEX,
+      fragment: TILEMAP_CHUNK_GLSL_FRAGMENT,
+      name: 'tilemap-gl-fallback',
+    });
+  }
+  return _cachedGlProgram;
 };
 
 /** Tiles per chunk side (32×32 = 1024 tiles per chunk). */
@@ -582,9 +646,12 @@ const _buildChunk = (options: BuildChunkOptions): TilemapChunk | undefined => {
     geometry.indexBuffer.autoGarbageCollect = false;
   }
 
-  // Create a Shader per chunk — binds globalUniforms, animation table, texture
+  // Create a Shader per chunk — binds globalUniforms, animation table, texture.
+  // Passes both gpuProgram (WGSL for WebGPU) and glProgram (GLSL for WebGL2
+  // fallback) so the shader works on both backends without console spam.
   const shader = new Shader({
     gpuProgram,
+    glProgram: _getSharedGlProgram(),
     resources: {
       globals: globalUniforms,
       animTable: animStorageBuffer,

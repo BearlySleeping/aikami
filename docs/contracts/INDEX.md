@@ -33,6 +33,8 @@ P2 (Polish — after P1):
 | C-002 | [Establish Knowledge Directory](C-002-establish-knowledge-dir.md) | Create knowledge/ with architecture, contracts, decisions, guides, intro subdirectories | C-001 |
 | C-003 | [Establish .pi Setup](C-003-establish-pi-setup.md) | Create .pi/ with extensions, skills, agents, prompts, settings.json, mcp.json | C-001, C-002 |
 | C-004 | [Migrate Skills to .pi/skills](C-004-migrate-skills.md) | Move .agents/skills → .pi/skills, copy engineering skills from aikami | C-001, C-003 |
+| C-178 | [Visual Pipeline Validation](C-178-visual-pipeline-validation.md) ✅ | Debug JTON map + tileset for visually validating the WebGPU chunk pipeline, spatial hash grid, and JTON parser | C-175 |
+| C-179 | [GLSL Fallback Shader](C-179-glsl-fallback-shader.md) ✅ | WebGL2 fallback GLSL shader for tilemap chunk renderer — prevents "Mesh shader has no glProgram" crash/spam | C-177 |
 
 ### 🟡 P1 — Structure & Configuration (Foundation)
 
@@ -115,6 +117,7 @@ P2 (Polish — after P1):
 | C-159 | [Demo Happy Path E2E](C-159-demo-happy-path-e2e.md) ✅ | Master Playwright E2E test covering Start Menu → Character Creation → Game Canvas → Dialogue Skill Check → Combat → Save Game with mocked AI backends | C-157, C-158 |
 | C-160 | [Engine Polish](C-160-engine-polish.md) ✅ | Fix LPC shader alpha blending, rewrite movement for wall sliding, dynamic camera scale | C-137, C-140 |
 | C-161 | [Spatial UI Camera](C-161-spatial-ui-camera.md) ✅ | Spatial Svelte dialogue bubbles over NPCs, cinematic 1.5× camera zoom on interaction | C-128, C-137 |
+| C-180 | [Engine Stability Harness](C-180-engine-stability-harness.md) ✅ | Spatial grid boundary unit tests, WebGPU visual regression baseline, E2E keyboard collision enforcement | C-178, C-179 |
 
 ## Contract Format
 

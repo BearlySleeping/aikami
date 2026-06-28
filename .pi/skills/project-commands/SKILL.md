@@ -478,6 +478,131 @@ The AI enforces: 2 failed attempts → diagnostic script. Never ask user to "try
 
 ---
 
+## Visual Testing (E2E Visual Smoke Scripts)
+
+### 🔴 Critical: Use `apps/e2e/scripts/`, NOT `browser_screenshot`
+
+When the user asks for visual testing, visual verification, or screenshots of the
+canvas/game:
+
+| ❌ NEVER | ✅ ALWAYS |
+|----------|-----------|
+| `browser_screenshot` tool | `apps/e2e/scripts/*_visual.ts` scripts |
+| `.pi/.screenshots/` | `apps/e2e/test-results/<suite>/` |
+
+`browser_screenshot` is a **debugging tool** for quick UI checks. Visual testing
+means setting up proper e2e smoke scripts with capture + optional AI evaluation.
+
+### Pattern: Two-Phase Capture → AI Eval → Report
+
+All visual test scripts follow a standard two-phase pattern:
+
+```bash
+# Full run (capture + AI evaluation)
+bun run apps/e2e/scripts/sandbox_visual.ts
+
+# Capture only (no OpenRouter API call)
+bun run apps/e2e/scripts/sandbox_visual.ts --capture-only
+
+# AI evaluation only (requires previously captured screenshots)
+bun run apps/e2e/scripts/sandbox_visual.ts --eval-only
+```
+
+### Shared Utilities
+
+All scripts import from `apps/e2e/scripts/shared/`:
+
+| Module | Purpose |
+|--------|---------|
+| `screenshot.ts` | `captureCanvas()`, `waitForPixiLoaded()`, `toBase64DataUri()`, `optimizePng()` |
+| `ai_eval.ts` | `evaluateScreenshot()` — sends image to OpenRouter (Gemini Flash), returns structured `VisualEvalResult` |
+
+### AI Evaluation
+
+`evaluateScreenshot()` sends a base64 PNG to OpenRouter with a custom evaluation
+prompt. The AI returns structured JSON:
+
+```typescript
+type VisualEvalResult = {
+  score: number;            // 0-100
+  characterVisible: boolean;
+  notes: string;
+  issues?: string[];
+};
+```
+
+Requires `OPENROUTER_API_KEY` env var. Default model: `google/gemini-2.5-flash`.
+
+### Existing Visual Test Scripts
+
+| Script | What it tests |
+|--------|---------------|
+| `sandbox_visual.ts` | `/dev/sandbox` — LPC character visible on canvas |
+| `tilemap_visual.ts` | Self-contained 10×10 tilemap — no seam bleeding |
+| `combat_visual.ts` | Combat dev page — HP bars, log, victory/defeat states |
+| `map_sandbox_eval.ts` | `/dev/sandbox/map` — engine, LPC textures, corner clamping |
+| `lpc_smoke.ts` | LPC sprite rendering — multi-layer compositing |
+| `lpc_man_eval.ts` | LPC male character — AI visual quality assessment |
+
+### Creating a New Visual Test Script
+
+```typescript
+// apps/e2e/scripts/my_visual.ts
+import { existsSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { $ } from 'bun';
+import { evaluateScreenshot } from './shared/ai_eval';
+import { toBase64DataUri } from './shared/screenshot';
+
+// 1. Nix Chromium path for WebGL
+const NIX_CHROMIUM = '/nix/store/...playwright-browsers/chromium-1217/chrome-linux64/chrome';
+if (existsSync(NIX_CHROMIUM)) {
+  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = NIX_CHROMIUM;
+}
+
+// 2. Config
+const E2E_DIR = resolve(import.meta.dirname, '..');
+const SCREENSHOT_DIR = join(E2E_DIR, 'test-results', 'my-visual');
+const REPORT_PATH = join(SCREENSHOT_DIR, 'report.json');
+
+// 3. CLI flags
+const args = process.argv.slice(2);
+const captureOnly = args.includes('--capture-only');
+const evalOnly = args.includes('--eval-only');
+
+// 4. Phase 1: Capture via Playwright
+if (!evalOnly) {
+  const result = await $`bunx playwright test --project=client-visual --grep my_test`
+    .cwd(E2E_DIR).nothrow();
+}
+
+// 5. Phase 2: AI evaluation
+if (!captureOnly) {
+  const dataUri = toBase64DataUri(join(SCREENSHOT_DIR, 'file.png'));
+  const result = await evaluateScreenshot({
+    imageDataUri: dataUri,
+    prompt: 'Custom evaluation criteria...',
+  });
+  writeFileSync(REPORT_PATH, JSON.stringify(result, null, 2));
+}
+```
+
+### Map Sandbox Corner Testing
+
+The map sandbox supports query parameters for spawn position control:
+
+```
+/dev/sandbox/map?position_x=0&position_y=0       # Top-left corner
+/dev/sandbox/map?position_x=320&position_y=0     # Top-right corner
+/dev/sandbox/map?position_x=0&position_y=320     # Bottom-left corner
+/dev/sandbox/map?position_x=320&position_y=320   # Bottom-right corner
+```
+
+The worker clamps OOB spawns to the nearest walkable (grass) tile. Visual
+tests verify the character is on green interior, not blue water border.
+
+---
+
 ## Running Dev Servers in Tmux
 
 All tmux sessions use a unified naming convention: `aikami-{mode}-{service}`.
