@@ -57,7 +57,7 @@
   let displaySprite: Sprite | undefined = $state(undefined);
 
   // Per-layer Spritesheet cache — one parsed sheet per URL.
-  let layerSpritesheets: Map<string, Spritesheet> = new Map();
+  let layerSpritesheets: Map<string, Spritesheet> = $state(new Map());
 
   /**
    * Loads LPC layer textures and creates cached Spritesheets for
@@ -117,7 +117,7 @@
                 layerSpritesheets.set(url, spritesheet);
 
                 // Set initial frame (idle = frame 0, down direction)
-                const idleFrame = spritesheet.textures['walk_2_0'];
+                const idleFrame = spritesheet.textures.walk_2_0;
                 if (idleFrame && !displaySprite) {
                   const sprite = new Sprite(idleFrame);
                   sprite.eventMode = 'none';
