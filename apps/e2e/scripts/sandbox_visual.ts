@@ -26,13 +26,11 @@ if (existsSync(NIX_CHROMIUM)) {
 
 // ── Configuration ─────────────────────────────────────────────
 
-const _REPO_ROOT = resolve(import.meta.dirname, '../../..');
 const E2E_DIR = resolve(import.meta.dirname, '..');
 const SCREENSHOT_DIR = join(E2E_DIR, 'test-results', 'sandbox-visual');
 const SCREENSHOT_FILE = 'sandbox-character.png';
 const SCREENSHOT_PATH = join(SCREENSHOT_DIR, SCREENSHOT_FILE);
 const REPORT_PATH = join(SCREENSHOT_DIR, 'report.json');
-const _PWA_PORT = 5274;
 
 const args = process.argv.slice(2);
 const captureOnly = args.includes('--capture-only');

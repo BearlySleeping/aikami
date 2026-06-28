@@ -6,7 +6,7 @@
 | **Target** | `packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts` (or wherever the `GpuProgram` is created) |
 | **Priority** | P0 — Fixes endless loop crashing and blank canvas in WebGL2 fallback environments |
 | **Dependencies** | C-177 |
-| **Status** | completed |
+| **Status** | **completed** |
 | **Contract version** | 1.0.0 |
 
 ## Overview
