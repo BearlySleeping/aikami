@@ -4,12 +4,23 @@
 // Public game engine exports
 // ---------------------------------------------------------------------------
 
+// Core
+
 // Base engine class (extend for engine-layer classes)
 export {
   BaseEngineClass,
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
+export {
+  createSafeRef,
+  EntityGeneration,
+  extractEidFromRef,
+  extractGenerationFromRef,
+  incrementEntityGeneration,
+  resetEntityGenerations,
+  resolveSafeRef,
+} from './core/entity_reference.ts';
 export {
   endDialogueZoom,
   getActiveNpcScreenPosition,
