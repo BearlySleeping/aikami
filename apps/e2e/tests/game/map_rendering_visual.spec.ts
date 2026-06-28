@@ -1,13 +1,15 @@
 // apps/e2e/tests/game/map_rendering_visual.spec.ts
-// Visual Regression Test — verifies PixiJS tilemap rendering from Tiled JSON
+// Visual Regression Tests — PixiJS tilemap rendering verification
 //
 // Contract: C-135 Tilemap & Environment Parsing
+// Contract: C-180 AC-2 WebGPU Visual Consistency
 //
-// Loads a small 10×10 test map (walls + floor) via the map_loader in a
-// canvas-backed page and captures a Playwright screenshot to confirm no
-// seam bleeding between adjacent tiles.
+// C-135: Loads a small 10×10 test map via the map_loader and captures
+// a Playwright screenshot to confirm no seam bleeding between tiles.
 //
-// Uses the client-visual Playwright project.
+// C-180: Navigates to /dev/sandbox/map and asserts that the WebGPU/
+// WebGL2 chunk-rendered debug JTON map matches a stored baseline within
+// a 1% pixel variance threshold.
 
 import { expect, test } from '@playwright/test';
 
@@ -114,4 +116,27 @@ test('tilemap collision layer is parsed correctly', async ({ page }) => {
 
   // Visual test passes if the page loads without errors
   expect(true).toBe(true);
+});
+
+// ── C-180 AC-2: WebGPU Visual Consistency ──────────────────────
+
+test('debug JTON map matches visual baseline', async ({ page }) => {
+  // Navigate to the isolated map sandbox which auto-loads debug_map.jton
+  await page.goto(`${BASE_URL}/dev/sandbox/map`, { waitUntil: 'domcontentloaded' });
+
+  // Wait for the PixiJS canvas to be present in the DOM
+  const canvas = page.locator('canvas');
+  await expect(canvas).toBeVisible({ timeout: 15_000 });
+
+  // Wait for network idle so all tileset images have loaded
+  await page.waitForLoadState('networkidle');
+
+  // Allow the renderer to paint several frames (tilemap loading + camera settle)
+  await page.waitForTimeout(2000);
+
+  // Pixel-accurate visual regression assertion against stored baseline.
+  // First run requires --update-snapshots to generate the baseline image.
+  await expect(canvas).toHaveScreenshot('debug-map-baseline.png', {
+    maxDiffPixelRatio: 0.01, // 1% pixel variance threshold per contract
+  });
 });

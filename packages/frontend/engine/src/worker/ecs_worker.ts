@@ -61,7 +61,7 @@ import {
   setScreenSize,
   updateCameraSystem,
 } from '../systems/camera_system.ts';
-import { type CollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
+import { type CollisionGrid, isWalkable, setCollisionGrid } from '../systems/collision_system.ts';
 import {
   isCombatStageActive,
   setupCombatStage,
@@ -1261,6 +1261,51 @@ self.onmessage = (event: MessageEvent): void => {
 
           // 6. Set the new collision grid
           setCollisionGrid(collisionGrid as CollisionGrid);
+
+          // 6a. C-180: Clamp player spawn position to a walkable tile.
+          //     Query params like ?position_x=0&position_y=0 may land on
+          //     water or outside the map — adjust to interior grass.
+          if (playerEntityId > 0) {
+            const pos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
+            if (pos && !isWalkable(pos.x, pos.y)) {
+              // Scan outward from the target toward the map center to find
+              // the nearest walkable tile. Fall back to center if none found.
+              const centerX = (mapPixelWidth as number) / 2;
+              const centerY = (mapPixelHeight as number) / 2;
+              const tileSize = 32;
+              let clampedX = pos.x;
+              let clampedY = pos.y;
+              let found = false;
+
+              for (let radius = 0; radius < 20 && !found; radius++) {
+                for (let dy = -radius; dy <= radius && !found; dy++) {
+                  for (let dx = -radius; dx <= radius && !found; dx++) {
+                    if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) {
+                      continue;
+                    }
+                    const tx = pos.x + dx * tileSize;
+                    const ty = pos.y + dy * tileSize;
+                    if (isWalkable(tx, ty)) {
+                      clampedX = tx;
+                      clampedY = ty;
+                      found = true;
+                    }
+                  }
+                }
+              }
+
+              if (!found) {
+                clampedX = centerX;
+                clampedY = centerY;
+              }
+
+              logger.debug(
+                'LOAD_MAP',
+                `clamped spawn from (${pos.x},${pos.y}) to (${clampedX},${clampedY})`,
+              );
+              addComponent(world, playerEntityId, set(Position, { x: clampedX, y: clampedY }));
+            }
+          }
 
           // 7. Set camera map bounds and reset tracking for snap
           setMapBounds({ width: mapPixelWidth as number, height: mapPixelHeight as number });
