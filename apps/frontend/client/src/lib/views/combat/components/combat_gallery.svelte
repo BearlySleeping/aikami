@@ -40,7 +40,7 @@
 
   <!-- Fullscreen expand modal -->
   {#if expandedUrl}
-    <!-- svelte-ignore a11y/noStaticElementInteractions -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onclick={() => (expandedUrl = null)}
