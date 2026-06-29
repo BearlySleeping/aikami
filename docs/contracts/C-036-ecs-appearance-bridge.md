@@ -1,7 +1,8 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-036 ECS Appearance Bridge
 
 ## Metadata
-| Source | Target | Priority | Dependencies | Status | Version |
+| Source | Target | Priority | Dependencies | Status | completed |
 |--------|--------|----------|--------------|--------|---------|
 | Engine Architecture | Game Client View | High | C-034, C-035 | completed | 1.0.0 |
 

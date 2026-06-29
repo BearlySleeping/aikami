@@ -1,7 +1,8 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-035 Viewport Layer Integration
 
 ## Metadata
-| Source | Target | Priority | Dependencies | Status | Version |
+| Source | Target | Priority | Dependencies | Status | completed |
 |--------|--------|----------|--------------|--------|---------|
 | Engine Architecture | Game Client View | High | C-034 | completed | 1.0.0 |
 

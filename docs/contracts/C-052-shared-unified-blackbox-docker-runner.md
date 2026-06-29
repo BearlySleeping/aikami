@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Metadata
 | Field | Value |
 | --- | --- |
@@ -5,7 +6,7 @@
 | Target | apps/e2e, scripts |
 | Priority | P0 |
 | Dependencies | None |
-| Status | not_started |
+| Status | completed |
 | Contract Version | 1.0.0 |
 
 <!-- completed: 2026-06-06 -->

@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field                | Value                                                                                                              |
@@ -6,7 +7,7 @@
 | **Target**           | `packages/frontend/engine/src/core/entity_reference.ts`, `systems/combat_system.ts`, `systems/ai_vision_system.ts` |
 | **Priority**         | P1 — Prevents fatal ABA memory corruption and dangling pointers during mass map unloading                          |
 | **Dependencies**     | C-172                                                                                                              |
-| **Status**           | not_started                                                                                                        |
+| **Status**           | **completed**                                                                                                         |
 | **Contract version** | 1.0.0                                                                                                              |
 
 ## Overview

@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-065 — Dev UI Tailwind Refactor & Text Sandbox
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | Target | Pi |
 | Priority | High |
 | Dependencies | C-064 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0 |
 
 ## Overview

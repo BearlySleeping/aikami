@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract C-105: Chat System MVVM & Dev Sandbox
 
 ## Context

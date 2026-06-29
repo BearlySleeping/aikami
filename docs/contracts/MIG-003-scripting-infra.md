@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `scripts/src/lib/` — reorganize into domain folders matching Aikami hierarchy |
 | **Priority** | P0 — structural prerequisite for future deploy/setup scripts |
 | **Dependencies** | None |
-| **Status** | completed |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

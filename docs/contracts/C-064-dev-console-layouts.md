@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-064 — Dev Console & View-Model Layout Integration
 
 | Field | Value |

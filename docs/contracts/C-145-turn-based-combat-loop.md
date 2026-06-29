@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-145 Turn-Based Combat Loop & Dice RNG
 
 ## Goal

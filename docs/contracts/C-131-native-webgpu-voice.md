@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-131 Native WebGPU Voice via Kokoro
 
 ## Metadata

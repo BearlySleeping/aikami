@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | New `packages/backend/ai/` — AiServiceInterface, BaseAiService, OpenAiService, GeminiService; `packages/shared/mocks/` — MockAiService; `apps/backend/functions/` — refactor existing AI functions to use the abstraction |
 | **Priority** | P1 — Core service abstraction; prevents vendor lock-in for AI (OpenAI, Gemini, Anthropic, etc.) |
 | **Dependencies** | C-005 (packages/shared structure already done), C-014 (database abstraction — same tier, follows same interface-first pattern) |
-| **Status** | **—** |
+| **Status** | **completed** ** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

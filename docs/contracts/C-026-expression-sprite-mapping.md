@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-026 Expression & Sprite State Mapping
 
 ## Design References

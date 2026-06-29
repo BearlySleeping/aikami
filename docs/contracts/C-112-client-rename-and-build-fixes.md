@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract C-112: App Rename & Build Fixes (Purist Approach)
 
 ## Context

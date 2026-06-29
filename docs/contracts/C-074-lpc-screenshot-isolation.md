@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-074 — LPC Screenshot Isolation and Element Bounding Box Target
 
 ## Metadata

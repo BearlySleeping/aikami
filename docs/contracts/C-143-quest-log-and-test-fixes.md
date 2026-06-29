@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-143 Quest Log Sync & Technical Debt
 
 ## Goal

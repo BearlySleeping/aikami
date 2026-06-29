@@ -1,86 +1,130 @@
 /**
- * Syncs the contract statuses from docs/contracts/PROGRESS.md
- * to the individual docs/contracts/C-*.md metadata tables.
+ * Syncs the contract statuses by reading individual contract files
+ * (docs/contracts/C-*.md, docs/contracts/MIG-*.md) and generating
+ * a fresh PROGRESS.md dashboard table.
+ *
+ * Each contract file is the source of truth — it carries its own
+ * execution report at the bottom and a `<!-- completed: YYYY-MM-DD -->`
+ * marker at the top when finished.
+ *
+ * PROGRESS.md is strictly a dashboard table — no execution logs.
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 
-export function syncContracts() {
-  const progressPath = join(REPO_ROOT, 'docs/contracts/PROGRESS.md');
-  const contractsDir = join(REPO_ROOT, 'docs/contracts');
+function slugToName(filename: string): string {
+  // C-001-remove-ai-vendor-dirs.md → "Remove AI Vendor Directories"
+  // MIG-001-knowledge-splitting.md → "Knowledge Splitting"
+  const stem = filename.replace(/\.md$/, '');
+  // Drop the ID prefix: C-001- or MIG-001-
+  const namePart = stem.replace(/^(C|MIG)-\d+-/, '');
+  if (!namePart) {
+    return stem;
+  }
+  return namePart
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
-  console.log('📄 Syncing contract statuses from PROGRESS.md...');
+function extractStatus(content: string): string {
+  // 1. Check for completed marker (most reliable)
+  if (/^<!--\s*completed:/.test(content)) {
+    return 'completed';
+  }
+
+  // 2. Fall back to **Status** metadata field (handles both `completed` and `**completed**`)
+  const statusMatch = content.match(/\|\s*\*\*Status\*\*\s*\|\s*\*{0,2}([^*|]+?)\*{0,2}\s*\|/i);
+  if (statusMatch) {
+    return statusMatch[1].trim();
+  }
+
+  return 'not_started';
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  completed: '✅ completed',
+  // biome-ignore lint/style/useNamingConvention: keys match contract status strings
+  not_started: '⏳ not_started',
+  // biome-ignore lint/style/useNamingConvention: keys match contract status strings
+  in_progress: '🔄 in_progress',
+  blocked: '❌ blocked',
+};
+
+export function syncContracts() {
+  const contractsDir = join(REPO_ROOT, 'docs/contracts');
+  const progressPath = join(REPO_ROOT, 'docs/contracts/PROGRESS.md');
+
+  console.log('📄 Syncing PROGRESS.md from individual contract files...');
 
   try {
-    const progressContent = readFileSync(progressPath, 'utf8');
-    const statusMap = new Map<string, string>();
-
-    // Parse the PROGRESS.md table
-    // Looks for lines containing | C-001 | ... | ✅ completed |
-    const lines = progressContent.split('\n');
-    for (const line of lines) {
-      if (!line.includes('|')) {
-        continue;
-      }
-
-      // Extract the C-XXX identifier
-      const cMatch = line.match(/(C-\d{3})/);
-      if (!cMatch) {
-        continue;
-      }
-      const id = cMatch[1];
-
-      // Extract the last column (which is the status)
-      const columns = line
-        .split('|')
-        .map((col) => col.trim())
-        .filter(Boolean);
-      if (columns.length < 3) {
-        continue;
-      }
-
-      const rawStatus = columns[columns.length - 1];
-
-      // Clean up the status (removes emojis, markdown bold, etc.)
-      const cleanStatus = rawStatus.replace(/[✅⏳🔄❌**_]/gu, '').trim();
-
-      if (cleanStatus) {
-        statusMap.set(id, cleanStatus);
-      }
-    }
-
     // Read all contract files
-    const files = readdirSync(contractsDir).filter((f) => f.startsWith('C-') && f.endsWith('.md'));
-    let updatedCount = 0;
+    const files = readdirSync(contractsDir).filter(
+      (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'),
+    );
+
+    // Extract contract info
+    type ContractInfo = {
+      id: string;
+      name: string;
+      status: string;
+    };
+
+    const contracts: ContractInfo[] = [];
 
     for (const file of files) {
-      const idMatch = file.match(/^(C-\d{3})/);
+      const idMatch = file.match(/^((?:C|MIG)-\d+)/);
       if (!idMatch) {
         continue;
       }
 
       const id = idMatch[1];
-      const newStatus = statusMap.get(id);
+      const content = readFileSync(join(contractsDir, file), 'utf8');
+      const status = extractStatus(content);
+      const name = slugToName(file);
 
-      if (newStatus) {
-        const filePath = join(contractsDir, file);
-        let content = readFileSync(filePath, 'utf8');
-
-        // Regex to find and replace the Status row in the contract's metadata table
-        // Matches: | **Status** | not_started |
-        const statusRegex = /(\|\s*\*\*Status\*\*\s*\|\s*)([^|]+?)(\s*\|)/i;
-
-        if (statusRegex.test(content)) {
-          content = content.replace(statusRegex, `$1**${newStatus}**$3`);
-          writeFileSync(filePath, content);
-          updatedCount++;
-        }
-      }
+      contracts.push({ id, name, status });
     }
 
-    console.log(`✅ Synced ${updatedCount} contracts to match PROGRESS.md`);
+    // Sort: C contracts first by numeric ID, then MIG contracts by numeric ID
+    contracts.sort((a, b) => {
+      const aIsMig = a.id.startsWith('MIG');
+      const bIsMig = b.id.startsWith('MIG');
+      if (aIsMig !== bIsMig) {
+        return aIsMig ? 1 : -1;
+      }
+      const aNum = Number.parseInt(a.id.replace(/^(C|MIG)-/, ''), 10);
+      const bNum = Number.parseInt(b.id.replace(/^(C|MIG)-/, ''), 10);
+      return aNum - bNum;
+    });
+
+    // Generate PROGRESS.md
+    const now = new Date().toISOString().split('T')[0];
+    const lines: string[] = [
+      '# Contract Implementation Progress',
+      '',
+      `## Status Summary (Auto-generated: ${now})`,
+      '',
+      '| Contract | Name | Status |',
+      '|----------|------|--------|',
+    ];
+
+    for (const c of contracts) {
+      const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
+      lines.push(`| ${c.id} | ${c.name} | ${label} |`);
+    }
+
+    lines.push('');
+
+    const output = `${lines.join('\n')}\n`;
+    writeFileSync(progressPath, output);
+
+    console.log(
+      `✅ Generated PROGRESS.md with ${contracts.length} contracts ` +
+        `(${contracts.filter((c) => c.status === 'completed').length} completed)`,
+    );
   } catch (error) {
     console.error('❌ Failed to sync contracts:', error);
     process.exit(1);
