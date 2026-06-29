@@ -29,7 +29,7 @@
   const logParam = params.get('log') ?? undefined;
   const logEntries = logParam ? logParam.split('|').filter(Boolean) : undefined;
   const useRealAiParam = params.get('useRealAi');
-  const useRealAiDefault = useRealAiParam === 'false' ? false : true;
+  const useRealAiDefault = useRealAiParam !== 'false';
 
   const viewModel = getCombatDevViewModel({
     className: 'CombatDevViewModel',
