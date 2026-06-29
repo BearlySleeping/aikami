@@ -172,11 +172,11 @@ We are replacing the imperative, one-off visual evaluation scripts (like `map_sa
 
 - `e2e:fix` — 0 errors
 - `e2e:typecheck` — 0 errors
-- The runner compiles and can be invoked via `bun run src/visual/runner.ts` (requires running PWA dev server + `OPENROUTER_API_KEY`)
+- The runner compiles and can be invoked via `bun run src/visual/runner.ts` (requires running Client dev server + `OPENROUTER_API_KEY`)
 
 ### Known Limitations
 
-- The runner requires the PWA dev server to be running on `EMULATOR_PORTS.client` (5274).
+- The runner requires the Client dev server to be running on `EMULATOR_PORTS.client` (5274).
 - AI evaluation requires `OPENROUTER_API_KEY` environment variable.
 - No unit tests for the core modules — they are thin wrappers around Playwright/OpenRouter APIs and would require extensive mocking.
 - The cache file grows unbounded — no eviction policy for stale entries.

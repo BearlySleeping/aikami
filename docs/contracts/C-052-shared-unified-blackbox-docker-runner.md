@@ -11,7 +11,7 @@
 <!-- completed: 2026-06-06 -->
 
 # Overview
-This contract refactors the Aikami blackbox testing architecture to match the unified, deterministic pattern established in modern enterprise monorepos. It consolidates fragmented Playwright configurations from the PWA and Game directories into a standalone `apps/e2e` package. Crucially, it introduces a `DockerManager` into the testing orchestrator to support upcoming containerized AI microservices (Image, Voice, and Text generation) and ensures these containers can securely route traffic back to the host-bound Firebase Emulator suite.
+This contract refactors the Aikami blackbox testing architecture to match the unified, deterministic pattern established in modern enterprise monorepos. It consolidates fragmented Playwright configurations from the Client and Game directories into a standalone `apps/e2e` package. Crucially, it introduces a `DockerManager` into the testing orchestrator to support upcoming containerized AI microservices (Image, Voice, and Text generation) and ensures these containers can securely route traffic back to the host-bound Firebase Emulator suite.
 
 # Design Reference
 - The Nordclaw E2E unification strategy (`apps/e2e` consolidation).
@@ -38,7 +38,7 @@ The `DockerManager` will require a configuration map for future AI services:
 
 # Acceptance Criteria
 ### AC-1: E2E Package Consolidation
-- Given the fragmented Playwright tests in the PWA and Game directories
+- Given the fragmented Playwright tests in the Client and Game directories
 - When the refactor is complete
 - Then the `apps/e2e` package must serve as the sole entry point for all browser automation, containing a unified `playwright.config.ts` with distinct projects.
 - Test Hook: Verify `moon run e2e:test` successfully executes without relying on app-specific configs.

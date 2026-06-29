@@ -7,14 +7,14 @@ tags: ["tauri", "desktop", "rust", "sveltekit", "ipc"]
 
 # Tauri v2 — Desktop Patterns
 
-Tauri v2 wraps SvelteKit PWA inside a native Rust-powered webview for cross-platform desktop exports. The Rust backend lives in `src-tauri/` at the SvelteKit project root; the JS bridge is `@tauri-apps/api` v2.
+Tauri v2 wraps the SvelteKit Client (PWA) inside a native Rust-powered webview for cross-platform desktop exports. The Rust backend lives in `src-tauri/` at the SvelteKit project root; the JS bridge is `@tauri-apps/api` v2.
 
 ---
 
 ## 1. Project Structure
 
 ```
-apps/frontend/pwa/
+apps/frontend/client/
 ├── src-tauri/
 │   ├── Cargo.toml          # Rust dependencies (tauri, serde, etc.)
 │   ├── src/

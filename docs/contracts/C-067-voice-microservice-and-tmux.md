@@ -53,7 +53,7 @@ The `Bun.serve` implementation in the Voice microservice should conceptually loo
 - **AC2: Tmux Scripts Refactored**
   - Given the tmux CLI commands
   - When executing `bun run scripts/src/index.ts tmux:start voice,client`
-  - Then the orchestrator successfully creates the tmux session, splits the windows, and boots both the PWA and the new Voice microservice.
+  - Then the orchestrator successfully creates the tmux session, splits the windows, and boots both the Client and the new Voice microservice.
   - Test Hook: Review `start.ts` and `session.ts` to verify `game` is removed and the startup command for `voice` is mapped to `moon run voice:dev`.
 
 - **AC3: Voice Microservice Bootstrapper**
@@ -72,8 +72,8 @@ The `Bun.serve` implementation in the Voice microservice should conceptually loo
 2. Refactor the tmux scripts in `scripts/src/lib/tmux/`. The available services should now conceptually be `emulator`, `client`, `voice`, `all`.
 3. Scaffold `apps/backend/voice`. Use a standard `package.json`, `tsconfig.json`, and `moon.yml` mimicking our existing backend patterns. 
 4. In `apps/backend/voice/src/main.ts`, instantiate the TTS handler and boot the Bun server.
-5. In your PWA's Voice Sandbox (`VoiceViewModel`), ensure the WebSocket URL is actually pointing to the new Voice service port (e.g., `ws://127.0.0.1:8081/ws`).
+5. In the Client's Voice Sandbox (`VoiceViewModel`), ensure the WebSocket URL is actually pointing to the new Voice service port (e.g., `ws://127.0.0.1:8081/ws`).
 
 ## Edge Cases & Gotchas
 - **Tmux Session Naming**: If you encounter `exited with code 1` from the `tmux:start` script, it might be due to dangling tmux sessions in the background. Use the `--force` flag in your testing.
-- **WebSocket Routing**: Ensure the PWA knows how to reach the Voice backend. You may need to inject the Voice port into the PWA's Vite environment config or hardcode it in the dev sandbox for now.
+- **WebSocket Routing**: Ensure the Client knows how to reach the Voice backend. You may need to inject the Voice port into the Client's Vite environment config or hardcode it in the dev sandbox for now.

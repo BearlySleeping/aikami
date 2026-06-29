@@ -92,7 +92,7 @@ Create an in-memory implementation for TDD:
 - Implements `BaseDatabaseService` exactly
 - Provides seed helpers: `seedCollection(name, docs)` for test fixture setup
 - Provides reset helper: `reset()` to clear all data between tests
-- Used by frontend unit tests (PWA) and backend unit tests (functions) when no emulator is needed
+- Used by frontend unit tests (Client) and backend unit tests (functions) when no emulator is needed
 
 ### 5. Coding Standards Enforced
 
@@ -226,7 +226,7 @@ Per the active memory architectural mandate, this contract's implementation MUST
 - `bun test --emulator` passes (integration tests against Data Connect emulator)
 - `firebase emulators:start --only dataconnect` starts successfully
 - TypeScript compiles: `bun run typecheck` across all affected packages
-- `MockDatabaseService` can be imported by `packages/frontend/repositories/` for PWA unit tests
+- `MockDatabaseService` can be imported by `packages/frontend/repositories/` for Client unit tests
 
 ## Edge Cases & Gotchas
 

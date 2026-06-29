@@ -4,7 +4,7 @@
 ## Design References
 - ST/RisuAI API connections and Instruct formatting.
 - Aikami AI Core: `packages/frontend/api-core/src/ai/`
-- Aikami PWA Settings: `apps/frontend/client/src/lib/views/settings/`
+- Aikami Client Settings: `apps/frontend/client/src/lib/views/settings/`
 - Svelte 5 runes for deep reactivity.
 
 ## Detailed Changes

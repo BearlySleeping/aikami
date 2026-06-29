@@ -123,4 +123,4 @@ Key structural elements:
 ## Edge Cases & Gotchas
 
 - **Firestore Sync Conflict**: Handle cases where local state and remote state drift, prioritizing remote state on initial load but respecting local unsaved changes.
-- **Service Detection CORS**: Ensure local service detection doesn't fail silently due to CORS issues when polling local ports from the PWA. Use appropriate preflight or no-cors fetch modes if necessary.
+- **Service Detection CORS**: Ensure local service detection doesn't fail silently due to CORS issues when polling local ports from the Client. Use appropriate preflight or no-cors fetch modes if necessary.

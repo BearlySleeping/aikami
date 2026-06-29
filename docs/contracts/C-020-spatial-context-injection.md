@@ -13,7 +13,7 @@
 
 1. **ECS System**: Create `apps/frontend/game/src/engine/systems/context_system.ts`. This system will query the `Position` of the `Player` against all entities with a `NpcDialog` or `Interactable` component using a simple AABB or distance check.
 2. **Engine Bridge Integration**: Update `engine_bridge.ts` to emit `context_entered(entity_id, payload)` and `context_exited(entity_id)` events when proximity thresholds are crossed.
-3. **PWA State Binding**: Modify `apps/frontend/client/src/lib/client/services/game/game_state_service.ts` to include an `$state` array called `active_contexts`. Bind this to the bridge events.
+3. **Client State Binding**: Modify `apps/frontend/client/src/lib/client/services/game/game_state_service.ts` to include an `$state` array called `active_contexts`. Bind this to the bridge events.
 4. **Prompt Builder**: Update the AI prompt generation layer (e.g., `apps/frontend/client/src/lib/client/utils/ai_prompt.ts`) to dynamically map the `active_contexts` array into the system prompt (injecting character lore or item data).
 
 ## Acceptance Criteria

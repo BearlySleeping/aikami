@@ -96,5 +96,5 @@ packages/frontend/configs/
 ## Edge Cases & Gotchas
 
 - **Existing backend/configs**: Do NOT modify `packages/backend/configs/` — frontend configs is a separate concern
-- **Firebase config**: If aikami currently has Firebase config scattered across the PWA, consolidate into this package
+- **Firebase config**: If aikami currently has Firebase config scattered across the Client, consolidate into this package
 - **config/tsconfig/ directory**: Verify `tsconfig.frontend.json` and `tsconfig.base.json` exist in `config/tsconfig/` — create if missing (copy from aikami)

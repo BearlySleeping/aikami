@@ -11,7 +11,7 @@
 
 ## Overview
 
-Initialize Tauri v2 within the existing SvelteKit PWA app to enable cross-platform desktop exports. Install PixiJS v8 and bitECS as the core game engine stack. Provide the AI coding agent (pi) with strict contextual knowledge for Tauri and PixiJS via MCP server configuration and/or dedicated `.pi/skills/`, so it can assist with development without hallucinating API details. Update the monorepo moon task configuration to support Tauri dev and build workflows alongside existing Vite-based tasks.
+Initialize Tauri v2 within the existing SvelteKit Client app to enable cross-platform desktop exports. Install PixiJS v8 and bitECS as the core game engine stack. Provide the AI coding agent (pi) with strict contextual knowledge for Tauri and PixiJS via MCP server configuration and/or dedicated `.pi/skills/`, so it can assist with development without hallucinating API details. Update the monorepo moon task configuration to support Tauri dev and build workflows alongside existing Vite-based tasks.
 
 ## Design Reference
 
@@ -19,7 +19,7 @@ Initialize Tauri v2 within the existing SvelteKit PWA app to enable cross-platfo
 
 **Tauri v2 + SvelteKit pattern**:
 - Tauri v2 uses `@tauri-apps/cli` for project scaffolding and build
-- `src-tauri/` directory at the app root (not inside PWA's src/)
+- `src-tauri/` directory at the app root (not inside Client's src/)
 - `tauri.conf.json` defines window, bundle, and allowlist configuration
 - `@tauri-apps/api` provides the JS bridge for desktop features
 - SvelteKit adapter-static or adapter-node for Tauri's embedded webview
@@ -28,15 +28,15 @@ Initialize Tauri v2 within the existing SvelteKit PWA app to enable cross-platfo
 - PixiJS v8 is the rendering engine (WebGL/WebGPU)
 - bitECS is a lightweight ECS (Entity Component System) for game logic
 - Both are runtime dependencies, not build-time tooling
-- Should be installed in the PWA (or gamejs) project, not as shared packages initially
+- Should be installed in the Client (or gamejs) project, not as shared packages initially
 
 ## Changes Detail
 
-### 1. Tauri v2 Initialization in PWA
+### 1. Tauri v2 Initialization in Client
 
 Add Tauri v2 scaffolding to `apps/frontend/client/`:
 - `src-tauri/` directory with `Cargo.toml`, `src/main.rs`, `tauri.conf.json`, `capabilities/`, `icons/`
-- `@tauri-apps/cli` as devDependency, `@tauri-apps/api` as dependency in PWA `package.json`
+- `@tauri-apps/cli` as devDependency, `@tauri-apps/api` as dependency in Client `package.json`
 - New `package.json` scripts: `"tauri": "tauri"`, `"tauri:dev": "tauri dev"`, `"tauri:build": "tauri build"`
 - Tauri configuration:
   - Window title: "Aikami"
@@ -46,7 +46,7 @@ Add Tauri v2 scaffolding to `apps/frontend/client/`:
 
 ### 2. PixiJS v8 + bitECS Installation
 
-Add game engine dependencies to PWA:
+Add game engine dependencies to Client:
 - `pixi.js` (v8.x) as dependency
 - `bitecs` as dependency
 - No game code yet — this contract only installs the packages
@@ -70,7 +70,7 @@ Update `apps/frontend/client/moon.yml`:
 ## Acceptance Criteria
 
 ### AC-1: Tauri v2 Scaffolding Created
-**Given** the PWA is a SvelteKit app at `apps/frontend/client/`
+**Given** the Client is a SvelteKit app at `apps/frontend/client/`
 **When** Tauri v2 is initialized
 **Then** `apps/frontend/client/src-tauri/` exists with `Cargo.toml`, `src/main.rs`, `tauri.conf.json`, and `capabilities/default.json`
 
@@ -84,7 +84,7 @@ Update `apps/frontend/client/moon.yml`:
 - `tauri.conf.json` must reference the correct dev URL (Vite port 5173)
 
 ### AC-2: Tauri Package Scripts Added
-**Given** the PWA `package.json`
+**Given** the Client `package.json`
 **When** Tauri CLI is installed
 **Then** `package.json` has `"tauri:dev"` and `"tauri:build"` scripts, and `@tauri-apps/cli` and `@tauri-apps/api` are in devDependencies/dependencies
 
@@ -98,7 +98,7 @@ Update `apps/frontend/client/moon.yml`:
 - Verify `bun install` resolves Tauri packages without errors
 
 ### AC-3: PixiJS v8 and bitECS Installed
-**Given** the PWA project
+**Given** the Client project
 **When** game engine dependencies are added
 **Then** `pixi.js` (v8.x) and `bitecs` are in `package.json` dependencies and `node_modules/` contains them
 
@@ -129,7 +129,7 @@ Update `apps/frontend/client/moon.yml`:
 - Include a "Gotchas" section with known pitfalls (e.g., Tauri's CSP restrictions, PixiJS async texture loading)
 
 ### AC-5: Moon Tasks for Tauri
-**Given** the PWA moon.yml
+**Given** the Client moon.yml
 **When** Tauri tasks are added
 **Then** `moon run client:tauri-dev` starts Tauri dev mode and `moon run client:tauri-build` produces a desktop binary
 

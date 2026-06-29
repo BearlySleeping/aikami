@@ -4,21 +4,21 @@ This document outlines some of the planned features and improvements for the Aik
 
 ## Short-Term Goals
 
-- [ ] **Character Creation Flow:** Implement the full character creation and customization flow in the PWA.
+- [ ] **Character Creation Flow:** Implement the full character creation and customization flow in the Client.
 - [x] **AI Dialogue System v1:** Integrate the first version of the AI-powered dialogue system with a few key NPCs. (In Progress)
-- [ ] **Real-time Chat:** Add a real-time chat feature to the PWA for players to communicate.
+- [ ] **Real-time Chat:** Add a real-time chat feature to the Client for players to communicate.
 - [ ] Architecture: Integrate OpenViking for hierarchical lore retrieval.
 - [ ] DevOps: Add `rtk bun moon run services:viking` to the dev workflow.
 - [ ] Testing: Setup PromptFoo for NPC personality regression testing.
 
-## PWA Next Phase Tasks
+## Client Next Phase Tasks
 
 - [ ] **Advanced Context Management:** Implement a LorebookService to inject relevant world data into the AI's context based on activation keywords.
 - [ ] **Chat Interaction Overhaul:** Add Regenerate/Swipe options, Message Editing, and Branching capabilities.
 - [ ] **Character Expressions & Visuals:** Enhance CharacterImporter for multiple expressions and update ChatView to dynamically switch avatars.
 - [ ] **Author's Notes & Prompt Orchestration:** Create a template system for formatting character data and injecting high-priority behavioral instructions.
 - [ ] **RPG Mechanics Integration:** Implement Stat Sheets, chat commands (e.g., /roll d20 + 3), and NPC skill check challenges.
-- [ ] **UI/UX Polishing & PWA Features:** Add Svelte transitions, Dark/Light modes, custom color themes, and improve offline capabilities.
+- [ ] **UI/UX Polishing & Client Features:** Add Svelte transitions, Dark/Light modes, custom color themes, and improve offline capabilities.
 - [ ] **Enhanced Onboarding:** Create a guided walkthrough for first-time users and a library of Starter Characters.
 
 ## Medium-Term Goals
@@ -34,7 +34,7 @@ This document outlines some of the planned features and improvements for the Aik
 - [ ] **Generative Quests:** Explore using AI to generate dynamic and emergent quests based on player actions and world events.
 - [ ] **Procedural World Generation:** Investigate using AI to procedurally generate parts of the game world.
 - [ ] **Multiplayer Interaction:** Add features to allow players to interact with each other in the game world.
-- [ ] **Mobile App:** Package the PWA as a native mobile app for iOS and Android.
+- [ ] **Mobile App:** Package the Client as a native mobile app for iOS and Android.
 
 ## How to Contribute
 

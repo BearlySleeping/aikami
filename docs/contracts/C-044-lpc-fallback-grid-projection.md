@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | Source | Code Review / Visual Alignment Sync |
-| Target | PWA Rendering Layer / Mock Pipeline |
+| Target | Client Rendering Layer / Mock Pipeline |
 | Priority | P1 |
 | Dependencies | C-042, C-043 |
 | Status | completed |

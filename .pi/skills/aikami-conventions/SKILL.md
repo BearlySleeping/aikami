@@ -42,7 +42,7 @@ There is no SvelteKit server running in production. All rendering and data
 fetching is client-side only. `adapter-static` is the only adapter.
 
 **🔴 PROHIBITED** — these files must **never** exist anywhere in
-`apps/frontend/pwa/src/routes/`:
+`apps/frontend/client/src/routes/`:
 
 | Forbidden File Pattern | Why                                      |
 | ---------------------- | ---------------------------------------- |
@@ -68,7 +68,7 @@ localStorage.getItem("session-key");
 ```
 
 **Enforcement**: CI rejects any PR containing `+server.ts`, `+page.server.ts`,
-or `+layout.server.ts` under `apps/frontend/pwa/src/routes/`.
+or `+layout.server.ts` under `apps/frontend/client/src/routes/`.
 
 ### Pillar 2: Monorepo Boundaries — Shared Packages Only
 
@@ -82,11 +82,11 @@ in `packages/shared/` and are consumed via `@aikami/*` imports.
 | `const agentSchema = z.object({...})`   | `import { agentSchema } from "@aikami/schemas"` |
 | `const MAX_RETRIES = 3`                 | `import { MAX_RETRIES } from "@aikami/constants"` |
 | TypeBox schema in `apps/backend/**`     | `import { Type } from "@sinclair/typebox"` in `packages/shared/schemas/` |
-| `apps/frontend/pwa/src/lib/types/`      | `packages/shared/types/src/lib/` |
+| `apps/frontend/client/src/lib/types/`      | `packages/shared/types/src/lib/` |
 
 ```typescript
 // ❌ WRONG — domain type defined in app-level code
-// apps/frontend/pwa/src/lib/types/agent.ts
+// apps/frontend/client/src/lib/types/agent.ts
 export type Agent = { id: string; name: string; role: string };
 
 // ❌ WRONG — schema defined in backend code
@@ -136,9 +136,9 @@ import { logger } from "@aikami/logger";
 
 | Environment             | `$logger` resolves to                       |
 | ----------------------- | ------------------------------------------- |
-| SvelteKit (PWA)         | `shared/logger/src/lib/svelte_kit.ts`       |
+| SvelteKit (Client)         | `shared/logger/src/lib/svelte_kit.ts`       |
 | Firebase Functions      | `shared/logger/src/lib/logger_functions.ts` |
-| Browser (game, site) | `shared/logger/src/lib/logger_browser.ts`   |
+| Browser (client, site) | `shared/logger/src/lib/logger_browser.ts`   |
 | AWS / Node.js           | `shared/logger/src/lib/logger_aws.ts`       |
 
 **Why**: Each environment configures `$logger` in its own `tsconfig.json` `paths`
@@ -172,12 +172,12 @@ instance of **Pillar 2 (Monorepo Boundaries)** — see above for the full rule.
 
 ```typescript
 // ❌ WRONG — type/schema defined in a service file
-// apps/frontend/pwa/src/lib/client/services/game/game_state_service.ts
+// apps/frontend/client/src/lib/client/services/game/game_state_service.ts
 export type ActiveContextEntry = { entityId: string; ... };
 export const ActiveSessionSchema = z.object({ ... });
 
 // ✅ CORRECT — import from the schema/type layer
-// apps/frontend/pwa/src/lib/client/services/game/game_state_service.ts
+// apps/frontend/client/src/lib/client/services/game/game_state_service.ts
 import type { ActiveContextEntry } from "$types/game.ts";
 import { ActiveSessionSchema } from "@aikami/schemas";
 ```
@@ -425,7 +425,7 @@ import { ChatService } from "@aikami/backend-chat";
 
 This applies to:
 
-- `apps/frontend/pwa/svelte.config.js` — Vite/SvelteKit aliases
+- `apps/frontend/client/svelte.config.js` — Vite/SvelteKit aliases
 - `apps/backend/firebase/tsconfig.json` — Functions tsconfig paths
 - All `import` statements referencing these packages
 
@@ -514,7 +514,7 @@ export type User = Static<typeof userSchema>;
 ```
 
 TypeBox schemas provide runtime validation + static type inference. They work
-on both server (Firebase Functions) and client (PWA) — no separate validation
+on both server (Firebase Functions) and client — no separate validation
 library needed.
 
 ---
@@ -524,10 +524,10 @@ library needed.
 ```
 aikami/
   apps/
-    frontend/pwa/          — SvelteKit PWA
+    frontend/client/          — SvelteKit Client
     frontend/site/ — Public site (Astro)
     frontend/docs/         — Documentation site (Astro)
-    frontend/game/         — PixiJS v8 + bitECS game engine
+    frontend/game/         — PixiJS v8 + bitECS (merged into client)
     backend/firebase/      — Firebase Cloud Functions v2
   packages/
     shared/                — constants, logger, mocks, schemas, types, utils, parser
@@ -543,9 +543,9 @@ aikami/
 Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected` before tests.
 
 ```bash
-bun moon run pwa:dev              # Start PWA dev server (defaults to emulator mode)
-bun moon run pwa:dev:staging   # Start PWA in staging mode
-bun moon run pwa:dev:production    # Start PWA in production mode
+bun moon run client:dev              # Start Client dev server (defaults to emulator mode)
+bun moon run client:dev:staging   # Start Client in staging mode
+bun moon run client:dev:production    # Start Client in production mode
 bun moon run :typecheck            # Type-check all projects
 bun moon run :lint                 # Lint all projects
 bun moon run :fix                  # Auto-fix lint issues
@@ -559,24 +559,24 @@ bun moon run :validate             # Full CI validation
 
 ### 🔴 CRITICAL: Mode-Aware Dev Server Commands
 
-**`bun run dev` and `moon run pwa:dev` now default to emulator mode.**
+**`bun run dev` and `moon run client:dev` now default to emulator mode.**
 Emulator is the primary development environment (90% of dev time).
 Use explicit mode scripts when you need a different backend.
 
 ```bash
 # ✅ Default — emulator mode (primary dev environment)
-cd apps/frontend/pwa && bun run dev
-bun moon run pwa:dev
-bun run tmux:start pwa
+cd apps/frontend/client && bun run dev
+bun moon run client:dev
+bun run tmux:start client
 
 # ✅ Explicit mode override when needed
-cd apps/frontend/pwa && bun run dev:staging
-cd apps/frontend/pwa && bun run dev:production
+cd apps/frontend/client && bun run dev:staging
+cd apps/frontend/client && bun run dev:production
 
 # ❌ None — dev now defaults to emulator, no footgun
 ```
 
-**How to check** (from the PWA package.json):
+**How to check** (from the Client package.json):
 
 ```json
 {
@@ -647,7 +647,7 @@ comment at the very top of the file.
 **TypeScript / Svelte `.ts` files** — line 1, before any imports:
 
 ```typescript
-// apps/frontend/pwa/src/lib/views/feature/view_model.svelte.ts
+// apps/frontend/client/src/lib/views/feature/view_model.svelte.ts
 import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
 ```
 
@@ -655,7 +655,7 @@ import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
 
 ```svelte
 <script lang="ts">
-  // apps/frontend/pwa/src/lib/views/feature/view.svelte
+  // apps/frontend/client/src/lib/views/feature/view.svelte
   import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
 </script>
 ```
@@ -712,7 +712,7 @@ or call API/firebase functions directly. That belongs in services.
 #### ViewModel Template
 
 ```typescript
-// apps/frontend/pwa/src/lib/views/feature/feature_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -799,9 +799,9 @@ Exception: heavy computations (translation, mapping) stay in `$derived(...)`.
 
 | Alias       | Resolves to                                                   |
 | ----------- | ------------------------------------------------------------- |
-| `$lib`      | `apps/frontend/pwa/src/lib`                                   |
-| `$types`    | `apps/frontend/pwa/src/lib/types` (app-local types)           |
-| `$services` | `apps/frontend/pwa/src/lib/client/services/index.ts` (barrel) |
+| `$lib`      | `apps/frontend/client/src/lib`                                   |
+| `$types`    | `apps/frontend/client/src/lib/types` (app-local types)           |
+| `$services` | `apps/frontend/client/src/lib/client/services/index.ts` (barrel) |
 | `$logger`   | Environment-specific logger                                   |
 | `$views`    | `$lib/views`                                                  |
 

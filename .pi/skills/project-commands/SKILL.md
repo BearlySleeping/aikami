@@ -5,7 +5,7 @@ description: Aikami monorepo commands reference — moon tasks, validation, depl
 
 # Project Commands
 
-> **See `aikami-conventions` for**: direnv environment, mode switching, PWA dev server defaults, logger alias.
+> **See `aikami-conventions` for**: direnv environment, mode switching, Client dev server defaults, logger alias.
 >
 > This skill covers moon configs, root scripts, commit directives, and tmux.
 
@@ -18,7 +18,7 @@ These rules govern how AI agents spawn commands for this project.
 ### 1. Long-Running Processes → Tmux
 
 **Always prefer `bun run tmux:start <service>` for processes that stay alive**
-(dev servers, emulators, watchers). Never use `moon_run_task client:dev` or
+(dev servers, firebase, watchers). Never use `moon_run_task client:dev` or
 `moon_run_task image:dev` — these start foreground processes that block the
 agent indefinitely.
 
@@ -44,7 +44,7 @@ unless you have a concrete reason to expect a different duration.
 ```bash
 # ✅ CORRECT — timeout provided
 bash("npm test 2>&1", timeout=300)
-moon_run_task("pwa:build", timeout=600)   # longer for build
+moon_run_task("client:build", timeout=600)   # longer for build
 
 # ❌ WRONG — no timeout, may hang forever
 bash("npm test 2>&1")
@@ -251,7 +251,7 @@ The root `package.json` provides shortcuts for common operations:
 
 | Script    | Command                                  | Purpose                                                  |
 | --------- | ---------------------------------------- | -------------------------------------------------------- |
-| `dev`     | `moon run $APP:dev`                      | Start dev server for $APP (defaults to emulator for PWA) |
+| `dev`     | `moon run $APP:dev`                      | Start dev server for $APP (defaults to emulator for Client) |
 | `dev:all` | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in tmux (mode from $AIKAMI_MODE)        |
 
 | Tmux Script     | Command                                    | Purpose                                                     |
@@ -303,8 +303,8 @@ The root `package.json` provides shortcuts for common operations:
 | --------------------- | ---------------------------------------------- | ------------------ |
 | `logs:functions`      | `bun run scripts/ops/logs.ts functions`        | View function logs |
 | `logs:functions:tail` | `bun run scripts/ops/logs.ts functions --tail` | Tail function logs |
-| `logs:pwa`            | `bun run scripts/ops/logs.ts pwa`              | View PWA logs      |
-| `logs:pwa:tail`       | `bun run scripts/ops/logs.ts pwa --tail`       | Tail PWA logs      |
+| `logs:client`            | `bun run scripts/ops/logs.ts client`              | View Client logs      |
+| `logs:client:tail`       | `bun run scripts/ops/logs.ts client --tail`       | Tail Client logs      |
 | `logs:landing`        | `bun run scripts/ops/logs.ts landing`          | View landing logs  |
 | `logs:landing:tail`   | `bun run scripts/ops/logs.ts landing --tail`   | Tail landing logs  |
 
@@ -426,29 +426,29 @@ bun run tmux:start voice             # Voice synthesis (Kokoro TTS Docker)
 bun run tmux:start all               # Full stack (firebase + client + image + text + voice)
 
 # Override mode
-bun run tmux:start emulators --mode staging
+bun run tmux:start firebase --mode staging
 
 # Force recreate
 bun run tmux:start all --force
 
 # Join / watch
-bun run tmux:join emulators          # Attach to emulators session
+bun run tmux:join firebase          # Attach to firebase session
 bun run tmux:join all                # Attach to full stack session
 
 # Manage
 bun run tmux:status                  # List all aikami sessions
-bun run tmux:stop pwa                # Stop PWA session
+bun run tmux:stop client                # Stop Client session
 bun run tmux:stop-all                # Stop everything
 
 # Direct tmux commands also work
-tmux attach -t aikami-emulator-all
-tmux kill-session -t aikami-emulator-emulators
+tmux attach -t aikami-emulator
+tmux kill-session -t aikami-emulator
 ```
 
 ### Blackbox testing
 
 Blackbox tests automatically use the unified tmux manager. Sessions are named
-`aikami-emulator-{service}`.
+`aikami-{mode}` (windows named by service).
 
 ```bash
 # Normal run — reuses existing sessions if already running in emulator mode

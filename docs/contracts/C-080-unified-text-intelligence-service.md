@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Source:** Architectural Consolidation Review
-- **Target:** PWA Client Core Services
+- **Target:** Client Core Services
 - **Priority:** P1
 - **Dependencies:** C-077, C-079
 - **Status:** not_started

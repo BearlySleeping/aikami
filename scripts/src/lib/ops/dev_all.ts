@@ -5,7 +5,7 @@
  *
  * Creates a tmux session "aikami-{mode}" with windows for:
  *   - Firebase emulators (bun run emulate)
- *   - PWA dev server
+ *   - Client dev server
  *   - Game dev server
  *
  * Usage:
@@ -46,7 +46,7 @@ async function main() {
 
   // Start all three services in the mode session
   await startServices({
-    services: ['emulators', 'client'],
+    services: ['firebase', 'client'],
     mode,
     force: false,
     join: !detach,

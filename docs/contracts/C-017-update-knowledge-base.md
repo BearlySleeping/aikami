@@ -40,7 +40,7 @@ Formal refactoring of the `knowledge/` documentation folder to align with the Ma
 
 **Add:**
 - **New game engine section**: PixiJS v8 rendering + bitECS 0.4.0 ECS, running inside `apps/frontend/client/src/lib/game/` (per C-016).
-- **Tauri v2 desktop export**: SvelteKit PWA wrapped as native app via Tauri v2.
+- **Tauri v2 desktop export**: SvelteKit Client wrapped as native app via Tauri v2.
 - **Engine boundary architecture diagram** showing:
   - **SvelteKit UI Layer** (ChatView, HUDView, GameViewModel — `$state()` runes)
   - **EngineBridge** (typed message channel — `GameCommand` →, `GameEvent` ←)
@@ -57,7 +57,7 @@ Formal refactoring of the `knowledge/` documentation folder to align with the Ma
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Aikami Platform                             │
 ├──────────────────┬──────────────────────┬────────────────────────┤
-│   PWA + Tauri    │   Game Engine        │   Landing + Docs       │
+│   Client + Tauri │   Game Engine        │   Landing + Docs       │
 │ (SvelteKit 2)    │ (PixiJS v8 + bitECS) │   (Astro)              │
 ├──────────────────┴──────────────────────┴────────────────────────┤
 │                     Firebase Backend                              │
@@ -129,8 +129,8 @@ Add a second diagram showing the **Engine Boundary Pattern** (from C-016):
 | Runtime | Bun | Package manager, test runner, scripts |
 | Language | TypeScript 6.0 | Strict mode across all projects |
 | Monorepo | Moon 2.2 | Task orchestration, caching, code generation |
-| **Frontend Framework** | SvelteKit 2 + Svelte 5 Runes | PWA with ViewModel pattern |
-| **Desktop Export** | Tauri v2 | Native app from SvelteKit PWA |
+| **Frontend Framework** | SvelteKit 2 + Svelte 5 Runes | Client with ViewModel pattern |
+| **Desktop Export** | Tauri v2 | Native app from SvelteKit Client |
 | **Game Rendering** | PixiJS v8 (WebGPU) | 2D rendering engine, imperative canvas |
 | **Game Logic** | bitECS 0.4.0 | Entity Component System, data-oriented |
 | Static Sites | Astro | Landing page, documentation |
@@ -258,7 +258,7 @@ AI service abstraction (C-015), database abstraction (C-014), and engine boundar
 
 **Replace the "What is Aikami?" section** with updated project description:
 
-- Add "Tauri v2 desktop app" alongside PWA
+- Add "Tauri v2 desktop app" alongside Client
 - Add "PixiJS v8 + bitECS game engine" as a platform component
 - Add "Firebase Data Connect (PostgreSQL)" replacing "Firestore"
 - Add "PowerSync real-time SQLite sync"
@@ -271,7 +271,7 @@ AI service abstraction (C-015), database abstraction (C-014), and engine boundar
 ### 7. Update `knowledge/CONTEXT.md`
 
 **Update the "What We're Building" table:**
-- Replace "GodotJS game (TypeScript)" → "PixiJS v8 + bitECS game engine in PWA"
+- Replace "GodotJS game (TypeScript)" → "PixiJS v8 + bitECS game engine in Client"
 - Replace "Firestore" → "Data Connect (PostgreSQL)"
 - Add Tauri v2 desktop export
 - Add TanStack DB + PowerSync client sync
@@ -408,7 +408,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 **Test Hooks:**
 - Integration: `bun run typecheck` exits with code 0
 - Integration: Grep stderr for "error TS" — must be zero NEW errors (pre-existing errors documented in limitations.md are acceptable)
-- Integration: `moon_run_task({ target: "client:typecheck" })` passes — PWA remains clean
+- Integration: `moon_run_task({ target: "client:typecheck" })` passes — Client remains clean
 - Integration: `moon_run_task({ target: "functions:typecheck" })` passes — Functions remain clean
 
 **Watch Points:**
@@ -446,7 +446,7 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 7. Update `CONTEXT.md` — comprehensive AI briefing refresh (depends on all above)
 8. Regenerate `llms.txt` — final step
 9. Run `bun run typecheck` — verify no regressions
-10. Run `moon_run_task({ target: "client:typecheck" })` — spot-check PWA
+10. Run `moon_run_task({ target: "client:typecheck" })` — spot-check Client
 
 ### Verification
 - `bun run typecheck` — zero new errors
@@ -463,6 +463,6 @@ After all documentation changes are complete, run `bun run scripts -- generate_l
 - **`knowledge/CONTEXT.md` and `knowledge/llms.txt` duplication:** CONTEXT.md is manually maintained; llms.txt is auto-generated. They serve different purposes (AI briefing vs file index). Both must be consistent but not identical.
 - **TypeScript code blocks in markdown:** Ensure code blocks in CODING_STANDARDS.md and architecture.md use ` ```typescript ` fences — never ` ```ts ` — to avoid confusion with file extensions.
 - **PowerSync vs TanStack DB naming:** TanStack DB is the query layer; PowerSync is the sync engine. In documentation, use "TanStack DB + PowerSync" as the combined term.
-- **Valibot vs Zod coexistence:** Zod remains for server-side validation (Firebase Functions), Valibot is for client-side (PWA). The STACK.md table must show both — not replace one with the other.
+- **Valibot vs Zod coexistence:** Zod remains for server-side validation (Firebase Functions), Valibot is for client-side (Client). The STACK.md table must show both — not replace one with the other.
 - **bitECS version:** The version "0.4.0" is approximate. The STACK.md should say "bitECS 0.4.x" or just "bitECS" to avoid pinning to a minor version in docs. The actual pinned version lives in `package.json`.
 - **C-016 status:** At time of writing, C-016 is `not_started`. The docs describe the TARGET architecture — mark game engine sections as "planned" or "target" where appropriate to avoid implying implementation exists.

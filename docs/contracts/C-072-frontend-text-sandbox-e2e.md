@@ -25,7 +25,7 @@ Key structural elements:
 ## Changes Detail
 
 1. Append `PUBLIC_VOICE_URL` to `apps/frontend/client/.env.emulator` mapping to `http://localhost:8089` (matching our active voice microservice allocation).
-2. Wire environment verification logic inside the PWA voice client handler to pull from the shared environment context safely.
+2. Wire environment verification logic inside the Client voice client handler to pull from the shared environment context safely.
 3. Add a streaming parameter check inside the dev text evaluation page view model: when an explicit search param like `?instant=true&text=hello` is passed, trigger an immediate background pipeline request on mounting.
 4. Draft a custom end-to-end spec suite inside `apps/e2e/tests/` to run through our centralized blackbox runner, testing container validation lifecycles and pipeline text deliveries.
 
@@ -57,7 +57,7 @@ Key structural elements:
 
 ## Implementation Notes
 
-1. Append the missing background destination parameters to the PWA emulator runtime properties map.
+1. Append the missing background destination parameters to the Client emulator runtime properties map.
 2. Refactor the interface engine controller setups to feed accurately from central variable setups.
 3. Modify the presentation layout loop to intercept search attributes gracefully and pipe variables into active generation prompts during initialization cycles.
 4. Establish an automated script mapping inside the verification bundle, leveraging current page components to assert that target frames refresh dynamically.

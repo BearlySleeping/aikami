@@ -71,7 +71,7 @@ tags: ["client", "frontend", "application"]
 
 project:
     name: "client"
-    description: "Aikami PWA."
+    description: "Aikami Client."
     channel: "#frontend"
     owner: "Frontend Team"
 
