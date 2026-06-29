@@ -158,6 +158,26 @@
       }
     },
     {
+      "includes": ["apps/e2e/src/auth.setup.ts", "apps/e2e/src/global_setup.ts", "apps/e2e/src/global_teardown.ts", "apps/e2e/src/emulator_helper.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/e2e/src/visual/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/astro.config.ts"],
       "linter": {
         "rules": {

@@ -147,6 +147,9 @@
 | C-124 | Game Engine Initialization & Overlay Base | ✅ completed |
 | C-125 | Game UI Overlay Architecture & State Sync | ✅ completed |
 | C-126 | Headless App Shell & Initialization | ✅ completed |
+| C-181 | AI Visual Testing Framework | ✅ completed |
+| C-182 | Visual Framework Polish & Cleanup | ✅ completed |
+| C-183 | E2E Worker Isolation & POM Enforcement | ✅ completed |
 
 ### C-178: Visual Pipeline Validation
 

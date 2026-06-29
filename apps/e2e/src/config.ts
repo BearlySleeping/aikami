@@ -21,5 +21,20 @@ export const EMULATOR_PORTS = {
   voice: 8089,
 } as const;
 
-/** Emulator GCP project ID. */
+/** Emulator GCP project ID (base, worker-agnostic). */
 export const EMULATOR_PROJECT_ID = 'demo-aikami-emulator' as const;
+
+/** Number of max parallel workers for multi-project teardown. */
+export const MAX_WORKERS = 8;
+
+/**
+ * Returns a worker-specific emulator project ID for data isolation.
+ *
+ * Playwright sets `TEST_WORKER_INDEX` per worker (0, 1, 2, ...).
+ * Using different project IDs ensures parallel workers don't mutate
+ * each other's Firestore/Auth emulator state.
+ */
+export const getWorkerProjectId = (workerIndex?: string | number): string => {
+  const idx = workerIndex ?? process.env.TEST_WORKER_INDEX ?? '0';
+  return `demo-aikami-worker-${idx}`;
+};

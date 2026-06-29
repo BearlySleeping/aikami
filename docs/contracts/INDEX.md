@@ -118,6 +118,9 @@ P2 (Polish — after P1):
 | C-160 | [Engine Polish](C-160-engine-polish.md) ✅ | Fix LPC shader alpha blending, rewrite movement for wall sliding, dynamic camera scale | C-137, C-140 |
 | C-161 | [Spatial UI Camera](C-161-spatial-ui-camera.md) ✅ | Spatial Svelte dialogue bubbles over NPCs, cinematic 1.5× camera zoom on interaction | C-128, C-137 |
 | C-180 | [Engine Stability Harness](C-180-engine-stability-harness.md) ✅ | Spatial grid boundary unit tests, WebGPU visual regression baseline, E2E keyboard collision enforcement | C-178, C-179 |
+| C-181 | [AI Visual Testing Framework](C-181-ai-visual-testing-framework.md) ✅ | Unified declarative AI visual assessment — Playwright capture + OpenRouter TypeBox evaluation + SHA-256 cache + static HTML report | — |
+| C-182 | [Visual Framework Polish & Cleanup](C-182-visual-framework-polish.md) ✅ | Concurrency limits, setupHook+requiresAuth, cache committed to Git, migrate all visual specs to suites, delete legacy scripts, remove client-visual project | C-181 |
+| C-183 | [E2E Worker Isolation & POM Enforcement](C-183-e2e-worker-isolation.md) ✅ | Per-worker Firebase project IDs, multi-project teardown, per-worker auth states, CombatPage + InventoryPage POMs, refactor all combat/inventory specs | C-182 |
 
 ## Contract Format
 
