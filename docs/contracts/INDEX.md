@@ -82,7 +82,7 @@ P2 (Polish — after P1):
 | C-173 | [ECS Spatial Hash Grid](C-173-ecs-spatial-hash-grid.md) ✅ | Dense 1D Uint32Array spatial grid with intrusive linked list, bitmask CollisionData layer/mask, MoveIntent scaffold, dual isCellBlocked+isWalkable collision | C-172 |
 | C-174 | [ECS Bresenham Line of Sight](C-174-ecs-bresenham-line-of-sight.md) ✅ | Zero-allocation Bresenham raycaster, bitmask occlusion, NPC/encounter/context vision gating | C-173 |
 | C-175 | [LLM JTON Map Pipeline](C-175-llm-jton-map-pipeline.md) ✅ | Tiled JTON exporter plugin, Zen Grid parser, JTON→TilemapData conversion, token-optimized map format | C-171, C-172 |
-| C-145 | [Turn-Based Combat Loop](C-145-turn-based-combat-loop.md) ✅ | d20 dice RNG combat, hit/damage/loot, COMBAT_ACTION bridge, unit tests | C-144 |
+| C-191 | [GOAP Bitmask Scheduler](C-191-goap-bitmask-scheduler.md) ✅ | Zero-allocation GOAP engine — dual-mask bitwise planning, faction relations, emergent crime reactions | C-190 |
 | C-031 | [SvelteKit Adapter Static & Firebase Hosting](C-031-adapter-static-and-hosting.md) ✅ | adapter-static SPA mode, Firebase Hosting emulator, SPA rewrites | — |
 | C-010 | [Setup Script](C-010-setup-script.md) ✅ | Interactive developer onboarding script | C-007, C-008 |
 | C-011 | [Blackbox Testing Infrastructure](C-011-blackbox-testing.md) ✅ | E2E testing with Playwright, Firebase emulators, visual regression | C-007, C-009 |

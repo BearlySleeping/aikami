@@ -76,6 +76,8 @@ export {
 } from './components/collision_data.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
+export type { CrimeEventData } from './components/crime_event.ts';
+export { CrimeEvent, registerCrimeEventObservers } from './components/crime_event.ts';
 export { Enemy, registerEnemyObservers } from './components/enemy.ts';
 export type { EngineStateData } from './components/engine_state.ts';
 export {
@@ -88,6 +90,10 @@ export {
   SimulationState,
   setSimulationState,
 } from './components/engine_state.ts';
+export type { FactionMemberData } from './components/faction_member.ts';
+export { FactionMember, registerFactionMemberObservers } from './components/faction_member.ts';
+export type { GoapAgentData } from './components/goap_agent.ts';
+export { GoapAgent, registerGoapAgentObservers } from './components/goap_agent.ts';
 export type { GridPositionData } from './components/grid_position.ts';
 export { GridPosition, registerGridPositionObservers } from './components/grid_position.ts';
 export type { InteractableData, InteractableType } from './components/interactable.ts';
@@ -121,6 +127,14 @@ export type { TurnOrderData } from './components/turn_order.ts';
 export { registerTurnOrderObservers, TurnOrder } from './components/turn_order.ts';
 export type { VelocityData } from './components/velocity.ts';
 export { registerVelocityObservers, Velocity } from './components/velocity.ts';
+export type { VisionObserverData } from './components/vision_observer.ts';
+export {
+  ObserverState,
+  registerVisionObserverObservers,
+  VisionObserver,
+} from './components/vision_observer.ts';
+export type { VisionVisibleData } from './components/vision_visible.ts';
+export { registerVisionVisibleObservers, VisionVisible } from './components/vision_visible.ts';
 export type { VisualData } from './components/visual.ts';
 export {
   AssetAlias,
@@ -188,6 +202,22 @@ export {
   loadTilemap,
 } from './assets/map_loader.ts';
 export { checkLineOfSight, clearBresenhamGrid, setBresenhamGrid } from './math/bresenham.ts';
+export type { StaticActionDefinition } from './math/goap/action_registry.ts';
+// GOAP (C-191)
+export {
+  applyEffects,
+  clearActionRegistry,
+  evaluatePreconditions,
+  findSatisfiedActions,
+  getActionByIndex,
+  getActionRegistry,
+  initializeActionRegistry,
+  selectBestAction,
+} from './math/goap/action_registry.ts';
+export { Faction, IsHostileTo, IsMemberOf, IsProtectorOf } from './math/goap/faction_relations.ts';
+export { WORLD_STATE_BIT_COUNT, WorldStateBit } from './math/goap/world_state_bits.ts';
+export { castDdaVisionCone } from './math/vision/dda_raycaster.ts';
+export { castShadowcastingFov } from './math/vision/shadowcasting.ts';
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
 export {
@@ -237,6 +267,12 @@ export {
   spawnSpawnPointEntities,
   spawnTransitionEntities,
 } from './systems/entity_spawner.ts';
+// GOAP (C-191)
+export {
+  resetGoapState,
+  setFactionProtection,
+  updateGoapScheduler,
+} from './systems/goap_scheduler_system.ts';
 export { handleInteract } from './systems/interaction_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
@@ -256,6 +292,13 @@ export {
   updateRender,
   updateRenderFromBuffer,
 } from './systems/render_system.ts';
+// Vision (C-190)
+export {
+  clearVisionGrid,
+  resetVisibilityMasks,
+  setVisionGrid,
+  updateSpatialVision,
+} from './systems/spatial_vision_system.ts';
 export type { TilemapRenderOptions, TilemapRenderResult } from './systems/tilemap_render_system.ts';
 export { renderTilemap } from './systems/tilemap_render_system.ts';
 export { updateZoningSystem } from './systems/zoning_system.ts';
