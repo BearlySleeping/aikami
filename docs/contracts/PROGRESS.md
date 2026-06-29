@@ -170,6 +170,8 @@
 | C-190 | Ecs Spatial Vision Systems | ✅ completed |
 | C-191 | Goap Bitmask Scheduler | ✅ completed |
 | C-192 | Ecs Time Sliced Jps Pathfinder | ✅ completed |
+| C-193 | Client Tool Streaming Orchestrator | ✅ completed |
+| C-194 | Ecs Offscreen Macro Simulation | ⏳ not_started |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
