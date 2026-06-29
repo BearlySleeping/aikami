@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Active memory: "PixiJS v8 and bitECS for the game engine." PWA uses Svelte 5 View-ViewModel pattern with `$state` runes. C-013 installs PixiJS/bitECS deps; this contract implements the engine boundary |
+| **Source** | Active memory: "PixiJS v8 and bitECS for the game engine." Client uses Svelte 5 View-ViewModel pattern with `$state` runes. C-013 installs PixiJS/bitECS deps; this contract implements the engine boundary |
 | **Target** | `apps/frontend/client/src/lib/game/` — EngineBridge, GameWorld, PixiJS canvas; `packages/frontend/services/` — shared game service types |
 | **Priority** | P1 — Core game engine boundary; enables UI↔Game communication without reactivity thrashing |
 | **Dependencies** | C-013 (PixiJS v8 + bitECS dependencies installed), C-015 (AI service abstraction for NPC dialogue integration) |
@@ -11,7 +11,7 @@
 
 ## Overview
 
-Integrate PixiJS v8 (renderer) and bitECS (game logic) into the SvelteKit PWA through a strict boundary that isolates the high-frequency game loop from Svelte 5's reactive `$state` runes. Define an `EngineBridge` interface that acts as the sole communication channel between the SvelteKit UI layer (menus, chat, HUD) and the PixiJS canvas (rendering, game loop, entity updates). Implement a TDD test suite verifying that bitECS entity mutations correctly trigger bridge events visible to the UI layer. Instantiate an MVP that renders a single textured sprite to the canvas when Tauri loads — proving the full stack works end-to-end.
+Integrate PixiJS v8 (renderer) and bitECS (game logic) into the SvelteKit Client through a strict boundary that isolates the high-frequency game loop from Svelte 5's reactive `$state` runes. Define an `EngineBridge` interface that acts as the sole communication channel between the SvelteKit UI layer (menus, chat, HUD) and the PixiJS canvas (rendering, game loop, entity updates). Implement a TDD test suite verifying that bitECS entity mutations correctly trigger bridge events visible to the UI layer. Instantiate an MVP that renders a single textured sprite to the canvas when Tauri loads — proving the full stack works end-to-end.
 
 ### Why this boundary matters
 
@@ -292,7 +292,7 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 - All payloads are plain serializable objects (strings, numbers, booleans, arrays) — no functions, no class instances
 
 ### AC-2: Game Engine Directory Created with Svelte-Free Code
-**Given** the PWA project structure
+**Given** the Client project structure
 **When** the game engine directory is created
 **Then** `apps/frontend/client/src/lib/game/` exists with `components/`, `systems/`, `entities/` subdirectories, and zero files in this tree import from `svelte`, `$state`, `$derived`, `$effect`, or `@aikami/frontend/services`
 
@@ -449,7 +449,7 @@ Tests run in a browser-like environment (Playwright or jsdom with canvas mock):
 - `vite dev` → navigate to `/game` → canvas visible with moving sprite
 - Browser devtools Performance tab: record 5 seconds → no Svelte component re-render markers during game loop
 - Grep confirms zero `$state` imports in `lib/game/` and zero `requestAnimationFrame` in `lib/views/`
-- TypeScript compiles: `bun run typecheck` across PWA without errors
+- TypeScript compiles: `bun run typecheck` across Client without errors
 
 ## Edge Cases & Gotchas
 

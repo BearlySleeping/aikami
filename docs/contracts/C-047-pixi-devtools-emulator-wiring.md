@@ -5,7 +5,7 @@
 | Field        | Value                                             |
 | ------------ | ------------------------------------------------- |
 | Source       | Environment Audit / Sidebar Diagnostics Stall     |
-| Target       | PWA Rendering Layer / Engine Initialization Setup |
+| Target       | Client Rendering Layer / Engine Initialization Setup |
 | Priority     | P1                                                |
 | Dependencies | C-013, C-035, C-042, C-046                        |
 | Status       | completed                                          |

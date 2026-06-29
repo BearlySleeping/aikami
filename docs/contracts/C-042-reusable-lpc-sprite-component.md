@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Source | User Request |
-| Target | PWA Rendering Layer / Engine Component Boundary |
+| Target | Client Rendering Layer / Engine Component Boundary |
 | Priority | P1 (Foundation Workflow) |
 | Dependencies | C-034, C-035, C-036, C-038, C-039, C-040 |
 | Status | completed |

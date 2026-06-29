@@ -4,9 +4,9 @@
 
 ## What is Aikami?
 
-Aikami is a modern monorepo application platform with a web-native game engine. It provides a Progressive Web App (PWA) with real-time features, a PixiJS v8 + bitECS 2D game engine, desktop export via Tauri v2, and a relational PostgreSQL backend via Firebase Data Connect.
+Aikami is a modern monorepo application platform with a web-native game engine. It provides a Progressive Web App (Client) with real-time features, a PixiJS v8 + bitECS 2D game engine, desktop export via Tauri v2, and a relational PostgreSQL backend via Firebase Data Connect.
 
-- **SvelteKit PWA + Tauri v2** — Cross-platform progressive web app exported as native desktop app
+- **SvelteKit Client + Tauri v2** — Cross-platform progressive web app exported as native desktop app
 - **PixiJS v8 + bitECS Game Engine** — WebGPU-accelerated 2D rendering with data-oriented ECS architecture
 - **Firebase Data Connect (PostgreSQL)** — Managed relational database with pgvector and recursive CTEs
 - **PowerSync Real-Time Sync** — WAL-streamed SQLite on the client via TanStack DB

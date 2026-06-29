@@ -11,7 +11,7 @@
 
 ## Overview
 
-This contract marks the culmination of the MVP. We will configure and build the final Tauri desktop executable (`.exe` / `.app` / `.dmg`). The focus is on finalizing `tauri.conf.json`, ensuring the production build pipeline successfully compiles the SvelteKit frontend and Rust backend, and verifying that our Service Worker/PWA interceptors and local Ollama pings function correctly inside the Tauri WebView environment.
+This contract marks the culmination of the MVP. We will configure and build the final Tauri desktop executable (`.exe` / `.app` / `.dmg`). The focus is on finalizing `tauri.conf.json`, ensuring the production build pipeline successfully compiles the SvelteKit frontend and Rust backend, and verifying that our Service Worker/client interceptors and local Ollama pings function correctly inside the Tauri WebView environment.
 
 ## Design Reference
 

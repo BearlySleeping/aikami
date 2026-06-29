@@ -7,7 +7,7 @@ Testing approach for the Aikami monorepo.
 ```
 ┌──────────────────────────────────┐
 │    Blackbox (E2E)                │  scripts/src/test_blackbox/
-│    Emulators + PWA + Playwright  │
+│    Firebase + Client + Playwright  │
 ├──────────────────────────────────┤
 │    Integration                   │  Per-app tests/
 │    Firestore rules, API routes   │
@@ -59,7 +59,7 @@ bun run test:rules
 scripts/src/test_blackbox/
 ├── run.ts                     # Entry point
 ├── emulator_manager.ts        # Firestack emulator lifecycle
-├── dev_server_manager.ts      # PWA dev server lifecycle
+├── dev_server_manager.ts      # Client dev server lifecycle
 ├── test_runner.ts             # Suite execution
 ├── reporter.ts                # Terminal + JSON reports
 └── suites/
@@ -68,9 +68,9 @@ scripts/src/test_blackbox/
     └── client.e2e.ts             # Playwright browser tests
 ```
 
-**PWA Playwright Tests** (`apps/frontend/client/tests/`):
+**Client Playwright Tests** (`apps/frontend/client/tests/`):
 - `emulator-login.spec.ts` — auth flow with emulator
-- `basic.spec.ts` — core PWA functionality
+- `basic.spec.ts` — core Client functionality
 - `chat.spec.ts`, `chat-sending.spec.ts`, `chat-store.spec.ts` — chat features
 - `onboarding.spec.ts` — new user flow
 - `i18n.spec.ts` — internationalization
@@ -80,7 +80,7 @@ scripts/src/test_blackbox/
 ```bash
 bun run test:blackbox                    # All suites
 bun run test:blackbox schema-check       # Just schemas
-bun run test:blackbox client                # Just PWA
+bun run test:blackbox client                # Just Client
 bun run test:blackbox --no-cross-service # Skip cross-service
 ```
 
@@ -96,16 +96,16 @@ CI=true bun run test:blackbox
 | Unit (schemas) | 15+ test files | ✅ Active |
 | Unit (gamejs) | 5 test files | ⚠️ Deprecated — Legacy GodotJS client |
 | Unit (functions) | 1 test file | ⚠️ Minimal |
-| Unit (PWA) | None | ❌ Missing |
+| Unit (Client) | None | ❌ Missing |
 | Unit (game engine) | None | ❌ Missing — Target: client/src/lib/game/ (C-016) |
 | Integration (Firestore rules) | Configured | ✅ Active |
 | Blackbox (schema-check) | Working | ✅ Active |
 | Blackbox (functions) | Health probe | ⚠️ Basic |
-| Blackbox (PWA Playwright) | 8 spec files | ✅ Active |
+| Blackbox (Client Playwright) | 8 spec files | ✅ Active |
 
 ## Known Test Issues
 
 1. **Schema test type errors**: Pre-existing TS errors in test files (unused vars, strict null checks). Tests pass at runtime but `tsc` reports errors.
-2. **PWA svelte-check warnings**: Accessibility warnings in PWA components, pre-existing.
-3. **No PWA unit tests**: ViewModels and services lack unit test coverage.
+2. **Client svelte-check warnings**: Accessibility warnings in Client components, pre-existing.
+3. **No Client unit tests**: ViewModels and services lack unit test coverage.
 4. **Functions test coverage**: Only 1 test file for 5 controllers.

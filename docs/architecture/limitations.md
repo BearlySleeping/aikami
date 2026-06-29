@@ -23,7 +23,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 1. **No CI/CD pipeline** — No GitHub Actions workflow. All testing and deployment is local.
 2. **No separate staging environment** — The development project (`aikami-dev`) serves as both local dev target and deployed staging. Production is `aikami-prod`.
 3. **Pre-existing TS errors in schema tests** — `packages/shared/schemas` test files have 7 TypeScript errors (unused vars, strict null checks). Tests pass at runtime but `tsgo --noEmit` fails.
-4. **PWA accessibility warnings** — svelte-check reports 7 errors + 9 warnings, mostly a11y violations in chat components.
+4. **Client accessibility warnings** — svelte-check reports 7 errors + 9 warnings, mostly a11y violations in chat components.
 5. **Firebase config hardcoded** — `.env` template uses placeholder values; no automated Firebase project creation.
 6. **No automated dependency updates** — Dependabot/Renovate not configured.
 7. **Data Connect emulator cold start** — PostgreSQL instance starts from scratch on first `emulators:start`, may take 30-60 seconds. Port 5432 may conflict with local PostgreSQL instances.
@@ -46,7 +46,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 | Character Relationships             | Dynamic relationship tracking     | Schema exists, no logic                |
 | Knowledge Graphs                    | Connected world knowledge         | Schema stubbed                         |
 | Lorebook Integration                | World lore in chat context        | Schema exists, not wired               |
-| Voice Synthesis (TTS)               | ElevenLabs integration            | gamejs tests exist, no PWA integration |
+| Voice Synthesis (TTS)               | ElevenLabs integration            | gamejs tests exist, no Client integration |
 | Image Generation                    | AI avatar creation                | Callable function exists, no UI flow   |
 | NPC Forking                         | Copy/remix public NPCs            | Schema field exists, no UI             |
 | NPC Expressions                     | Multiple avatar images per NPC    | Schema field exists, no UI             |
@@ -70,7 +70,7 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 
 ## Test Coverage Gaps
 
-- **No PWA unit tests** — ViewModels, services, and components have zero unit test coverage
+- **No Client unit tests** — ViewModels, services, and components have zero unit test coverage
 - **Functions tests minimal** — Only 1 test file covering 5 controllers
 - **No visual regression** — Playwright screenshot comparison not configured
 - **No performance tests** — No load or stress testing
@@ -90,14 +90,14 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 3. Implement C-015: AI Service Abstraction
 4. Set up Tauri v2 desktop export (C-013)
 5. Fix schema test TypeScript errors
-6. Add PWA view model unit tests
+6. Add Client view model unit tests
 7. Set up GitHub Actions CI pipeline
 
 ## TODO (Nice to Have)
 
 1. Visual regression testing setup
 2. Automated Firebase project bootstrap in setup script
-3. PWA Storybook integration
+3. Client Storybook integration
 4. API documentation generation
 5. Performance benchmarks
 6. PowerSync + TanStack DB client integration

@@ -1,6 +1,6 @@
-# PWA Feature Roadmap
+# Client Feature Roadmap
 
-Based on research of leading AI roleplay platforms (RisuAI, SillyTavern), this document outlines features to implement for the Aikami PWA with a DND/JRPG focus.
+Based on research of leading AI roleplay platforms (RisuAI, SillyTavern), this document outlines features to implement for the Aikami Client with a DND/JRPG focus.
 
 ## Core Chat Features
 
@@ -125,7 +125,7 @@ Based on research of leading AI roleplay platforms (RisuAI, SillyTavern), this d
 - [ ] **Theme Support** - Light/dark themes
 - [ ] **Custom CSS** - User-defined styling
 - [ ] **Mobile Responsive** - Works on phones/tablets
-- [ ] **PWA Install** - Install as native app
+- [ ] **Client Install** - Install as native app
 - [ ] **Keyboard Shortcuts** - Quick actions
 
 ### Data Management

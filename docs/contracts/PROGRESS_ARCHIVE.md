@@ -74,7 +74,7 @@ Refactored the unified `apps/e2e` package with Playwright enterprise patterns fr
 - `@aikami/constants` imports replaced with local `src/config.ts` — Playwright's ESM loader cannot resolve CJS monorepo packages. Port constants duplicated in `config.ts` with update-at-sync directive.
 - `data-hydrated` hydration detection removed — PWA does not set `data-hydrated="true"` on `<html>`. Replaced with `waitForLoadState('domcontentloaded')`.
 - Game tests use `guestUser` with project-default baseURL (port 5276) rather than forced PWA_BASE_URL — fixes cross-project domain isolation.
-- E2E test suite boots and executes deterministically through the refactored pipeline. 24 of 60 tests pass (infrastructure verified). Remaining failures are pre-existing content/assertion mismatches in the PWA app (unrelated to refactoring).
+- E2E test suite boots and executes deterministically through the refactored pipeline. 24 of 60 tests pass (infrastructure verified). Remaining failures are pre-existing content/assertion mismatches in the Client app (unrelated to refactoring).
 
 ---
 
@@ -1407,7 +1407,7 @@ packages/backend/image/
 - `packages/shared/types/src/index.ts` — exported image endpoint types
 
 ### Deviations from Contract
-- No callable controller (`apps/backend/firebase/src/controllers/callable/image.ts`) created yet — deferred until the full image generation endpoint is wired up to the PWA frontend. The package infrastructure is ready for it.
+- No callable controller (`apps/backend/firebase/src/controllers/callable/image.ts`) created yet — deferred until the full image generation endpoint is wired up to the Client frontend. The package infrastructure is ready for it.
 - `WIP`
 
 ### Test Results
@@ -1435,7 +1435,7 @@ apps/frontend/client/src/lib/client/services/media/
 
 ### AC Status
 - [x] **AC-1: Unified Lifecycle & Abort Management** — `StreamOrchestrator.generateDialogue()` creates a single `AbortController` and passes its signal to all three network layers (Text SSE, Audio WS, Image WS). `cancelGeneration()` aborts the signal (terminating SSE), calls `close()` on both WebSocket connections, stops audio playback, and clears the injected texture. The previous generation is implicitly cancelled when a new one starts. Mocked network interfaces verify: signal propagation to all 3 layers, abort triggers close on all connections, idle cancel is a no-op, consecutive calls tear down previous connections. 7/7 tests pass.
-- [x] **AC-2: Progressive Text Consumption** — The orchestrator exposes reactive `currentText`, `isGenerating`, `currentSpeakerId`, and `currentAudioQueueSize` state properties. As SSE text chunks arrive via the `onChunk` callback, text is accumulated into `currentText`. New dialogue starts clear previous text. Cancel resets all state. The `.svelte.ts` extension enables Svelte 5 `$state` reactivity in the PWA; test assertions verify state transitions directly. 3/3 tests pass.
+- [x] **AC-2: Progressive Text Consumption** — The orchestrator exposes reactive `currentText`, `isGenerating`, `currentSpeakerId`, and `currentAudioQueueSize` state properties. As SSE text chunks arrive via the `onChunk` callback, text is accumulated into `currentText`. New dialogue starts clear previous text. Cancel resets all state. The `.svelte.ts` extension enables Svelte 5 `$state` reactivity in the Client; test assertions verify state transitions directly. 3/3 tests pass.
 - [x] **AC-3: Seamless Audio Queueing** — `AudioQueuePlayer` decodes raw PCM/WAV ArrayBuffers via `AudioContext.decodeAudioData()` and schedules them for gapless sequential playback using `audioContext.currentTime`. Each chunk is scheduled to start precisely when the previous chunk finishes (`nextStartTime + chunkDuration`). Out-of-order decoding doesn't affect scheduling order. Stop/reset lifecycle, graceful decode failure handling, and queue size tracking all verified. 10/10 tests pass.
 - [x] **AC-4: PixiJS Dynamic Texture Injection** — `PixiTextureInjector` converts binary image buffers (ArrayBuffer → Blob → createImageBitmap → PixiJS Texture) and applies them to a target Sprite/Mesh. The old texture is **explicitly destroyed** via `texture.destroy(true)` before assignment to prevent WebGPU VRAM leaks. `Texture.WHITE` (global singleton) is never destroyed. `onViewUpdate()` is called after swap for PixiJS v8 UV recalculation. ImageBitmap is closed after GPU upload to free CPU-side pixel data. 11/11 tests pass.
 
@@ -1451,7 +1451,7 @@ apps/frontend/client/src/lib/client/services/media/
 - `apps/frontend/client/src/lib/client/services/index.ts` — Added exports for all new media services (audio_context_manager, audio_queue_player, pixi_texture_injector, stream_orchestrator)
 
 ### Deviations from Contract
-- Stream Orchestrator placed in `apps/frontend/client/src/lib/client/services/media/` instead of `apps/frontend/game/src/lib/core/` — the orchestrator manages services (TTS, image generation) that live in the PWA services layer, and the game package has no `@aikami/frontend/services` import chain.
+- Stream Orchestrator placed in `apps/frontend/client/src/lib/client/services/media/` instead of `apps/frontend/game/src/lib/core/` — the orchestrator manages services (TTS, image generation) that live in the Client services layer, and the game package has no `@aikami/frontend/services` import chain.
 - `$state` runes not usable in bun test environment (no Svelte compiler) — replaced with regular class properties in the source file. The `.svelte.ts` extension is retained for SvelteKit reactivity when consumed in the actual PWA.
 - `requestAnimationFrame` not available in bun test — implemented runtime fallback to `setTimeout(fn, 16)` when `rAF` is not on `globalThis`.
 - Stream Orchestrator extends `BaseClass` from `@aikami/utils` instead of `BaseFrontendClass` — avoids the broken `$state` import chain through `dialog.svelte.ts` in `packages/frontend/services/`. The orchestrator doesn't need analytics/dialog UI features.
@@ -1466,7 +1466,7 @@ apps/frontend/client/src/lib/client/services/media/
 ## C-060 — Dialogue System Integration — ✅ completed
 
 ### Summary
-Connected the Client-Side Stream Sync orchestration layer (C-059) to the game's ECS interaction system and vanilla DOM dialogue overlay. Fixed a pre-existing `$state` test failure in the PWA package, implemented an Interaction Bridge that converts ECS interaction events into Stream Orchestrator `generateDialogue` calls, extended the DialogueController with streaming progressive text support and abort button wiring, and built a Target Resolver that maps NPC string IDs to PixiJS DisplayObject references for the Texture Injector.
+Connected the Client-Side Stream Sync orchestration layer (C-059) to the game's ECS interaction system and vanilla DOM dialogue overlay. Fixed a pre-existing `$state` test failure in the Client package, implemented an Interaction Bridge that converts ECS interaction events into Stream Orchestrator `generateDialogue` calls, extended the DialogueController with streaming progressive text support and abort button wiring, and built a Target Resolver that maps NPC string IDs to PixiJS DisplayObject references for the Texture Injector.
 
 ### AC Status
 - [x] **AC-1: Test Suite Repair** — Fixed `game_state_service.test.ts` by polyfilling Svelte 5 `$state`/`$derived` runes as global identity functions and mocking `@aikami/frontend/services` to avoid the `dialog.svelte.ts` → `$state` import chain. All 8 game state tests pass (was 0 pass, 1 error).
@@ -1524,7 +1524,7 @@ InteractionBridge.handleInteractEnd()
 ## C-061 — Frontend App Consolidation — ✅ completed
 
 ### Summary
-Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit PWA. All game source code now lives at `apps/frontend/client/src/lib/client/game/`. Created dedicated SvelteKit routes for `/game` and `/dev/sandbox` with proper `ssr = false` enforcement and PixiJS lifecycle hooks (`onMount`/`onDestroy`). Removed the game project from the moon workspace and cleaned up all infrastructure references.
+Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit Client. All game source code now lives at `apps/frontend/client/src/lib/client/game/`. Created dedicated SvelteKit routes for `/game` and `/dev/sandbox` with proper `ssr = false` enforcement and PixiJS lifecycle hooks (`onMount`/`onDestroy`). Removed the game project from the moon workspace and cleaned up all infrastructure references.
 
 ### AC Status
 - [x] **AC-1: Code Relocation & Import Fixing** — 26 source files moved from `apps/frontend/game/src/lib/` to `apps/frontend/client/src/lib/client/game/`. All `$lib/...` imports updated to `$lib/client/game/...`. File path comments updated. `svelte-check` passes with 0 errors.
@@ -1599,7 +1599,7 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 - `apps/frontend/client/src/lib/client/services/media/stream_orchestrator.test.ts` — Added 11 new tests (4 AC2, 4 AC3, 3 AC4), updated mock helpers for new start() signature
 
 ### Deviations from contract
-- Conversation Repository Adapter defined as an interface (not a concrete Firestore repository). The contract said to "add to packages/frontend/repositories" — the interface lives in PWA services because it's a client-side orchestration contract. The concrete Firestore implementation (reading/writing the Chat document's embedded `messages` array) will be wired when the interaction system is connected to the PWA's DI container.
+- Conversation Repository Adapter defined as an interface (not a concrete Firestore repository). The contract said to "add to packages/frontend/repositories" — the interface lives in PWA services because it's a client-side orchestration contract. The concrete Firestore implementation (reading/writing the Chat document's embedded `messages` array) will be wired when the interaction system is connected to the Client's DI container.
 - No `npcId` filtering in context builder — the contract says "query by explicit npcId", but the context builder is a pure function that operates on already-fetched messages. The filtering by npcId/playerId is delegated to the caller (the interaction bridge, which fetches messages from the repository before invoking the context builder).
 - Message payload uses `ConversationMessage` (local type) rather than `MessageData` from `@aikami/types` — the `ConversationMessage` is a lightweight projection (role + content) sufficient for LLM context, while `MessageData` carries Firestore-specific fields (timestamps, attachments, metadata). The repository adapter can convert between the two when persisting.
 
@@ -1876,7 +1876,7 @@ Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the 
 ### Deviations from contract
 - Voice port 8089 used instead of suggested 8081 (8081 is already allocated to Firestore emulator).
 - VoiceViewModel bridges WebSocket audio chunks to the existing `ttsService` streaming API (`startStream`/`enqueueChunk`/`endStream`) rather than implementing new AudioContext playback from scratch.
-- PWA fix step reformatted 70 files (existing pre-commit formatting drift in the PWA project).
+- PWA fix step reformatted 70 files (existing pre-commit formatting drift in the Client project).
 - Validate build/test step shows pre-existing failures (scripts has no test task, e2e has dummy build) — not caused by C-067.
 
 ### AC Status
@@ -1926,7 +1926,7 @@ and updated moon.yml to route `voice:dev` through the container.
 ### Summary
 Eliminated the Bun/Hono WebSocket proxy layer from the voice microservice, reducing it to a pure
 infrastructure container (`hwdsl2/kokoro-server:latest`). Relocated sentence boundary chunking into
-the PWA frontend so SvelteKit orchestrates TTS via direct HTTP REST calls to the Kokoro endpoint
+the Client frontend so SvelteKit orchestrates TTS via direct HTTP REST calls to the Kokoro endpoint
 (`POST /v1/audio/speech`). Deleted the entire `packages/backend/audio` package.
 
 ### Files Changed
@@ -2029,7 +2029,7 @@ Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the
 ## C-072 — Frontend Text Sandbox & E2E Validation — ✅ completed
 
 ### Summary
-Wired the PWA voice/TTS client to use `PUBLIC_VOICE_URL` environment variable instead of hardcoded localhost URLs. Added instant auto-generation support to the dev text sandbox page via `?instant=true&text=...` query parameters. Created a dedicated E2E test suite validating the streaming pipeline end-to-end.
+Wired the Client voice/TTS client to use `PUBLIC_VOICE_URL` environment variable instead of hardcoded localhost URLs. Added instant auto-generation support to the dev text sandbox page via `?instant=true&text=...` query parameters. Created a dedicated E2E test suite validating the streaming pipeline end-to-end.
 
 ### Findings
 - **Environment variable mapping**: `PUBLIC_VOICE_URL=http://localhost:8089` added to `.env.emulator`, matching the voice microservice port from `development_ports.ts`. Variable flows through the central `environment.ts` schema in `@aikami/frontend/configs` with optional TypeBox validation. `stream_orchestrator.svelte.ts`, `tts.svelte.ts`, and `voice_view_model.svelte.ts` resolve via `import.meta.env.PUBLIC_VOICE_URL` (Vite-injected) with `http://localhost:8089` fallback for safety.
@@ -2058,7 +2058,7 @@ Wired the PWA voice/TTS client to use `PUBLIC_VOICE_URL` environment variable in
 ### Deviations from contract
 - `import.meta.env` used instead of `$env/static/public` — `svelte-check` cannot resolve `$env/static/public` for `.svelte.ts` files in the `services/` directory. `import.meta.env` is the Vite-native mechanism and resolves correctly during both typecheck and runtime.
 - `VoiceViewModel` uses HTTP POST instead of WebSocket — the Kokoro container (`hwdsl2/docker-kokoro`) only serves a REST API at `/v1/audio/speech`. WebSocket connections to the container are rejected with 403. Audio is fetched as a complete WAV response and played via `ttsService`.
-- E2E tests use `authUser` fixture (pre-authenticated) rather than guest context — the dev routes require authentication via the PWA middleware. Guest context would redirect to login. Test-mode headers on `authUser` bypass Firebase Auth verification.
+- E2E tests use `authUser` fixture (pre-authenticated) rather than guest context — the dev routes require authentication via the Client middleware. Guest context would redirect to login. Test-mode headers on `authUser` bypass Firebase Auth verification.
 
 ---
 
@@ -2071,7 +2071,7 @@ Established a dedicated end-to-end visual smoke-testing pipeline for the LPC spr
 ### Findings
 - **Test already relocated**: `lpc_visual.spec.ts` existed at `apps/e2e/tests/client/lpc_visual.spec.ts` (pre-migrated during C-054 refactor). Imports already used `../../src/fixtures` with `guestUser` fixture correctly.
 - **Vite overlay suppression**: Added `#vite-error-overlay, vite-error-overlay { display: none !important; }` in `beforeEach` via `addStyleTag`, matching the C-055 pattern from `game_menu_page.ts`. Both ID and tag name selectors used for robustness.
-- **visual-testing param**: Added `params.set('visual-testing', 'true')` to `buildLpcUrl()` so the PWA can disable animations and debug overlays during capture.
+- **visual-testing param**: Added `params.set('visual-testing', 'true')` to `buildLpcUrl()` so the Client can disable animations and debug overlays during capture.
 - **Evaluation script output directory**: `SCREENSHOT_DIR` changed from `test-results/lpc-visual` (relative to scripts/) to `apps/e2e/test-results/lpc-visual` (monorepo-root-relative via `resolve`).
 - **Prompt schema enforcement**: `buildLpcPrompt()` now includes `recipeId`, `componentSlot`, `variantAssetId` in the expected JSON response. The schema uses `passed` (boolean) instead of `is_acceptable` and `detectedAnomalies` instead of `issues_detected`. Parser is backwards-compatible with legacy field names.
 - **Moon task architecture**: `test-visual` runs `npx playwright test --project=client --grep "LPC Visual"` for capture-only. `lpc-smoke` delegates to `scripts/lpc_smoke.sh` which chains capture + evaluation since moon `command` doesn't support shell operators.
@@ -2453,7 +2453,7 @@ Moved domain-model `Character`/`CharacterCardV2`/`CharacterCardV1` types from `a
 ## C-102 — Tauri SPA Enforcement — ✅ completed
 
 ### Summary
-Stripped all server-side code from the SvelteKit PWA to enforce static SPA compilation for Tauri v2 desktop builds. Deleted `+server.ts` and `+page.server.ts` files, locked `+layout.ts` to `ssr = false` + `prerender = true`, and commented out frontend fetch calls that hit the now-deleted routes with TODO markers for future C-107 microservice migration.
+Stripped all server-side code from the SvelteKit Client to enforce static SPA compilation for Tauri v2 desktop builds. Deleted `+server.ts` and `+page.server.ts` files, locked `+layout.ts` to `ssr = false` + `prerender = true`, and commented out frontend fetch calls that hit the now-deleted routes with TODO markers for future C-107 microservice migration.
 
 ### AC Status
 - [x] AC-1: `api/text/+server.ts` deleted

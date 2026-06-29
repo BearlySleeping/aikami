@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Source** | Aikami blackbox test runner — `architecture/blackbox-test-runner.md`, `contracts/pwa-admin-ai--llm-provider-management.md` |
+| **Source** | Aikami blackbox test runner — `architecture/blackbox-test-runner.md`, `contracts/client-admin-ai--llm-provider-management.md` |
 | **Target** | `/aikami/tests/blackbox/` + test infrastructure |
 | **Priority** | P2 — Important for regression safety but not blocking initial refactor |
 | **Dependencies** | C-007 (scripts project), C-009 (standardized configs) |
@@ -11,7 +11,7 @@
 
 ## Overview
 
-Establish a blackbox (end-to-end) testing infrastructure for aikami. Currently aikami uses Playwright for the PWA, but there's no structured blackbox test runner with fixtures, reporting, and CI integration. Follow the aikami pattern of a universal blackbox test runner that can test the full stack (Firebase emulators + PWA + API routes).
+Establish a blackbox (end-to-end) testing infrastructure for aikami. Currently aikami uses Playwright for the Client, but there's no structured blackbox test runner with fixtures, reporting, and CI integration. Follow the aikami pattern of a universal blackbox test runner that can test the full stack (Firebase emulators + Client + API routes).
 
 ## Design Reference
 
@@ -35,7 +35,7 @@ tests/
 │   │   └── api.fixture.ts      # API route test helpers
 │   ├── specs/
 │   │   ├── auth/               # Auth flow tests
-│   │   ├── client/                # PWA-specific tests
+│   │   ├── client/                # client-specific tests
 │   │   └── api/                # API route tests
 │   ├── helpers/
 │   │   ├── emulator.ts         # Firebase emulator management
@@ -68,16 +68,16 @@ Create `scripts/src/lib/test_runner.ts`:
 - Unit: `test -d tests/blackbox/fixtures`
 
 ### AC-2: Playwright Configuration
-**Given** the PWA needs browser testing
+**Given** the Client needs browser testing
 **When** playwright.config.ts is configured
 **Then** it targets the local dev server, supports Firefox and Chromium, and has screenshot-on-failure
 
 **Test Hooks**:
-- Unit: `playwright.config.ts` configures `webServer` to start the PWA dev server
+- Unit: `playwright.config.ts` configures `webServer` to start the Client dev server
 - Unit: `playwright.config.ts` includes `screenshot: 'only-on-failure'`
 
 ### AC-3: Auth Fixture
-**Given** the PWA requires Firebase authentication
+**Given** the Client requires Firebase authentication
 **When** tests need an authenticated user
 **Then** auth.fixture.ts provides helper to create/sign-in test users
 
@@ -115,7 +115,7 @@ Create `scripts/src/lib/test_runner.ts`:
 
 ## Implementation Notes
 
-1. **Reuse existing Playwright setup**: Aikami's PWA already has Playwright — extend rather than replacing
+1. **Reuse existing Playwright setup**: Aikami's Client already has Playwright — extend rather than replacing
 2. **Firebase emulator config**: Add `firebase.json` emulator configuration if not already present
 3. **Test runner script**: Place in `scripts/src/lib/test_runner.ts`, add `"test:blackbox"` to root package.json
 4. **Fixtures as Playwright fixtures**: Use Playwright's built-in fixture system, not custom abstractions

@@ -18,7 +18,7 @@ To simplify our architecture and unify our state management, we are deprecating 
 
 ## Architecture Directives
 - **Code Migration**: Move all game-specific source code from `apps/frontend/game/src/lib/` to `apps/frontend/client/src/lib/client/game/`.
-- **Import Resolution**: Refactor all relative imports in the migrated files to use the PWA's `$lib` aliases.
+- **Import Resolution**: Refactor all relative imports in the migrated files to use the Client's `$lib` aliases.
 - **Route Integration**: Create the necessary SvelteKit routes to host the game canvas. We need a `(dev)/dev/sandbox` route for isolated engine testing and update the main `(authenticated)/game` route for the actual player experience.
 - **SSR Safety**: PixiJS relies on DOM APIs (`window`, `document`) that do not exist during Server-Side Rendering. You must ensure the game engine only instantiates on the client by disabling SSR on the game routes and booting the Pixi application inside an `onMount` lifecycle hook.
 - **Workspace Cleanup**: Completely remove the `apps/frontend/game` package from the repository and detach it from the Moonrepo workspace configuration.
@@ -51,7 +51,7 @@ In the `+page.svelte` component holding the canvas:
   - Given the `apps/frontend/game` directory
   - When the migration script/manual move is complete
   - Then all game logic resides in `apps/frontend/client/src/lib/client/game/` and all imports correctly resolve via `$lib/client/game/...` without TypeScript errors.
-  - Test Hook: Run `bun run typecheck` inside the PWA package to ensure 0 errors.
+  - Test Hook: Run `bun run typecheck` inside the Client package to ensure 0 errors.
 
 - **AC2: SvelteKit SSR Enforcement**
   - Given the new game routes (`/dev/sandbox` and `/game`)
@@ -74,11 +74,11 @@ In the `+page.svelte` component holding the canvas:
 ## Implementation Notes
 1. Start by moving the code from `apps/frontend/game/src/lib` to `apps/frontend/client/src/lib/client/game`.
 2. Do a mass search-and-replace for imports if necessary to align with the SvelteKit `$lib` structure.
-3. Move the tests over as well and ensure they run under the PWA's test runner.
+3. Move the tests over as well and ensure they run under the Client's test runner.
 4. Set up the `+page.ts` and `+page.svelte` wrappers for `/dev/sandbox` and `/game` (you may need to replace the existing `/game` placeholder).
 5. Ensure the PixiJS `onMount` and `onDestroy` lifecycle methods are strictly observed so we don't leak WebGPU contexts during route navigation.
 6. Finally, delete the old `apps/frontend/game` folder and remove it from `.moon/workspace.yml`.
 
 ## Edge Cases & Gotchas
-- **Static Assets**: If the game package had static assets (like placeholder sprites or tilesets) in its `public` or `static` folder, those MUST be moved to the PWA's `static` directory so PixiJS can fetch them.
-- **Vite Config Conflicts**: Ensure any special Vite configurations from the game package (e.g., specific asset loaders or WebGPU flags) are ported over to the PWA's `vite.config.ts` if they don't already exist.
+- **Static Assets**: If the game package had static assets (like placeholder sprites or tilesets) in its `public` or `static` folder, those MUST be moved to the Client's `static` directory so PixiJS can fetch them.
+- **Vite Config Conflicts**: Ensure any special Vite configurations from the game package (e.g., specific asset loaders or WebGPU flags) are ported over to the Client's `vite.config.ts` if they don't already exist.

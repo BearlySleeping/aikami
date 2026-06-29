@@ -11,7 +11,7 @@
 | Version | 1.0.0 |
 
 ## Overview
-Stand up `apps/backend/image` as a standalone ComfyUI microservice using the `yanwk/comfyui-boot` Docker image. Integrate it into the shared `tmux` orchestrator so it can be managed alongside `client`, `voice`, and `emulators`. Allocate development ports for the image service and create a test script to verify API health.
+Stand up `apps/backend/image` as a standalone ComfyUI microservice using the `yanwk/comfyui-boot` Docker image. Integrate it into the shared `tmux` orchestrator so it can be managed alongside `client`, `voice`, and `firebase`. Allocate development ports for the image service and create a test script to verify API health.
 
 ## Design Reference
 - `apps/backend/voice/` (Container setup, package.json `dev:docker` script, test script)

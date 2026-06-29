@@ -17,7 +17,7 @@ List the absolute requirements.
 - [ ] Requirement 2: [Specific, measurable, verifiable condition]
 
 ## 3. Technical Constraints
-* **Architecture:** Must fit within the monorepo structure (SvelteKit PWA, Firebase Functions, or game engine boundary).
+* **Architecture:** Must fit within the monorepo structure (SvelteKit Client, Firebase Functions, or game engine boundary).
 * **Security:** No raw API keys. Credentials from Firebase configs or encrypted environment variables.
 * **Imports:** Use path aliases. Biome enforces snake_case file naming.
 

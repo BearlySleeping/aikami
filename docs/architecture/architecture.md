@@ -4,7 +4,7 @@ This document provides a high-level overview of the technical architecture of th
 
 ## Guiding Principles
 
-- **Scalability:** Serverless Firebase backend, Data Connect (PostgreSQL) with operations-based pricing, PowerSync real-time WAL streaming to client SQLite, PWA + Tauri v2 for cross-platform reach
+- **Scalability:** Serverless Firebase backend, Data Connect (PostgreSQL) with operations-based pricing, PowerSync real-time WAL streaming to client SQLite, Client + Tauri v2 for cross-platform reach
 - **Maintainability:** Moon monorepo with shared packages, strict TypeScript, Biome linting, vendor-agnostic service abstractions
 - **Performance:** Bun runtime, SvelteKit 2 with Svelte 5 runes, PixiJS v8 (WebGPU) + bitECS for the game engine, Valibot for lightweight client validation
 
@@ -14,7 +14,7 @@ This document provides a high-level overview of the technical architecture of th
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Aikami Platform                             │
 ├──────────────────┬──────────────────────┬────────────────────────┤
-│   PWA + Tauri    │   Game Engine        │   Landing + Docs       │
+│   Client + Tauri │   Game Engine        │   Landing + Docs       │
 │ (SvelteKit 2)    │ (PixiJS v8 + bitECS) │   (Astro)              │
 ├──────────────────┴──────────────────────┴────────────────────────┤
 │                     Firebase Backend                              │
@@ -34,7 +34,7 @@ This document provides a high-level overview of the technical architecture of th
 
 ## Engine Boundary Pattern
 
-The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit PWA through a strict architectural boundary. This decoupling prevents the 60fps game loop from triggering Svelte 5 reactivity and crashing the microtask queue (`ERR_SVELTE_TOO_MANY_UPDATES`).
+The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit Client through a strict architectural boundary. This decoupling prevents the 60fps game loop from triggering Svelte 5 reactivity and crashing the microtask queue (`ERR_SVELTE_TOO_MANY_UPDATES`).
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -97,7 +97,7 @@ PowerSync streams PostgreSQL Write-Ahead Logs (WAL) to an embedded SQLite databa
 
 Client-side perimeter validation uses Valibot instead of Zod:
 
-- **Bundle size**: ~1.5KB vs Zod's ~12KB — critical for PWA/Tauri load times.
+- **Bundle size**: ~1.5KB vs Zod's ~12KB — critical for client/Tauri load times.
 - **Parsing speed**: ~16× faster than Zod for incoming streamed JSON payloads.
 - **Server stays on Zod**: Zod remains for Firebase Functions API boundary validation where bundle size is irrelevant.
 
@@ -105,7 +105,7 @@ Client-side perimeter validation uses Valibot instead of Zod:
 
 ### 1. Frontend Applications
 
-**PWA (SvelteKit 2, Svelte 5 Runes)**
+**Client (SvelteKit 2, Svelte 5 Runes, PWA)**
 - Main user-facing application for account management, character creation, AI chat, and the game client
 - ViewModel pattern: each view has a `{name}-view-model.svelte.ts` with `$state` runes
 - Routes: login, register, dashboard, chat, personas, NPCs, settings, game
@@ -207,8 +207,8 @@ Client-side perimeter validation uses Valibot instead of Zod:
 
 ```bash
 bun run setup            # First-time onboarding
-bun run dev              # PWA dev server
-bun run dev:all          # Emulators + PWA (tmux session)
+bun run dev              # Client dev server
+bun run dev:all          # Firebase + Client (tmux session)
 bun run typecheck        # Typecheck all projects
 bun run fix              # Auto-fix lint/format
 bun run validate         # lint + format + typecheck

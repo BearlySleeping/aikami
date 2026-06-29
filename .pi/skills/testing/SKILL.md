@@ -16,7 +16,7 @@ Complete guide to testing in the Aikami monorepo. Covers the two testing systems
 | **AI Visual Runner** | Bun | Screenshot capture + AI evaluation | `apps/e2e/src/visual/` | `cd apps/e2e && bun run test:visual` |
 | **Playwright** | Node.js | Behavioral/functional E2E | `apps/e2e/tests/` | `cd apps/e2e && bun run test` |
 
-**Rule**: Playwright has `setup`, `client`, `game` projects. No `client-visual`.
+**Rule**: Playwright has `setup` and `client` projects. No `client-visual`. Game tests now run within the client project.
 Visual tests live in `suites/*.visual.ts`, not `tests/*.visual.spec.ts`.
 
 ---
@@ -40,7 +40,7 @@ bun run test:visual
 bun run src/visual/runner.ts --suite=map --capture-only
 ```
 
-Requires the PWA dev server running on port 5274. For AI evaluation, set `OPENROUTER_API_KEY`.
+Requires the Client dev server running on port 5274. For AI evaluation, set `OPENROUTER_API_KEY`.
 
 ### Creating a Visual Suite
 
@@ -125,13 +125,13 @@ Evaluations chunked into groups of 5 to avoid OpenRouter 429 rate limits. Captur
 
 ## Playwright Functional Tests
 
-Behavioral tests for PWA client and game engine. Three projects: `setup` (auth), `client`, `game`.
+Behavioral tests for client app and game engine. Three projects: `setup` (auth), `client`, `game` (game now runs within client).
 
 ### Project Structure
 
 ```
 apps/e2e/
-├── playwright.config.ts    # setup, client, game projects
+├── playwright.config.ts    # setup, client projects
 ├── src/
 │   ├── auth.setup.ts       # Per-worker auth state generation
 │   ├── config.ts           # EMULATOR_PORTS, getWorkerProjectId()
@@ -147,8 +147,8 @@ apps/e2e/
 │       ├── client_navigation.ts
 │       └── game_menu_page.ts
 └── tests/
-    ├── client/             # PWA functional tests (*.spec.ts)
-    ├── game/               # Game engine tests (*.spec.ts)
+    ├── client/             # Client functional tests (*.spec.ts)
+    ├── game/               # Game engine tests (*.spec.ts, run within client)
     └── ai-services/        # AI microservice tests
 ```
 
@@ -159,7 +159,7 @@ cd apps/e2e
 
 bun run test              # All Playwright tests
 bun run test:client       # Client-only
-bun run test:game         # Game-only (needs dev server + engine)
+bun run test:game         # Game-only (runs within client dev server)
 ```
 
 ### Creating E2E Tests

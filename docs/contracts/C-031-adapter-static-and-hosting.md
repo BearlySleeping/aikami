@@ -3,7 +3,7 @@
 ## Design References
 
 - Monorepo Boundaries: `.moon/workspace.yml`
-- PWA Configuration: `apps/frontend/client/svelte.config.js` and `apps/frontend/client/vite.config.ts`
+- Client Configuration: `apps/frontend/client/svelte.config.js` and `apps/frontend/client/vite.config.ts`
 - Firebase Configurations: `firebase.json` and `apps/backend/firebase/firestack.config.ts`
 
 ## Detailed Changes
@@ -23,7 +23,7 @@
 
 ## Acceptance Criteria
 
-- **Given** the PWA has been compiled with adapter-static.
+- **Given** the Client has been compiled with adapter-static.
 - **When** executing `moon run client:build`.
 - **Then** the output contains no server dependencies and outputs cleanly to `apps/frontend/client/build/index.html`.
 - **Given** the local emulator environment is active.

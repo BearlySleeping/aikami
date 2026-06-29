@@ -25,15 +25,15 @@ This contract resolves the technical debt incurred during the E2E Page Object Mo
 No new data models are introduced.
 
 # Acceptance Criteria
-### AC-1: PWA Authentication Flow Integrity
+### AC-1: Client Authentication Flow Integrity
 - Given the unified E2E runner
-- When executing the PWA authentication test suite
+- When executing the Client authentication test suite
 - Then the POM must successfully locate the login/register forms, inputs, and submit buttons, resulting in successful test passes.
 - Test Hook: `moon run e2e:test -- -g "auth"` (or equivalent grep) passes.
 
-### AC-2: PWA Chat & Dashboard Integrity
+### AC-2: Client Chat & Dashboard Integrity
 - Given the unified E2E runner
-- When executing the PWA chat capabilities suite
+- When executing the Client chat capabilities suite
 - Then the POM must correctly identify streaming state changes, message bubbles, and virtualized list nodes.
 - Test Hook: `moon run e2e:test -- -g "chat"` passes.
 

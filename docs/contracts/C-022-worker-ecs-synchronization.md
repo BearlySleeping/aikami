@@ -29,7 +29,7 @@ Running bitECS systems (movement, context, dialog triggers) on the main thread c
 
 ### AC-3: Security Headers for Cross-Origin Isolation
 - **Tauri**: `app.security.headers` includes `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. `app.security.useHttpsScheme` is `true`.
-- **Vite (PWA + Game)**: `server.headers` includes COOP and COEP so local dev mimics the secure context.
+- **Vite (Client + Game)**: `server.headers` includes COOP and COEP so local dev mimics the secure context.
 
 ### AC-4: Worker Tick Loop Posts STATE_UPDATE
 - The worker runs a `setInterval`-based tick loop at the configured frame rate.

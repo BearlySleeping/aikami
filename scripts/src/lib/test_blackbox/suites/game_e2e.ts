@@ -4,6 +4,7 @@
  *
  * Validates Firebase emulators (Auth, Firestore, Storage, Functions)
  * and optionally runs Playwright tests from the unified apps/e2e package.
+ * Note: The game engine now runs within the client app (formerly apps/frontend/game).
  */
 
 import { resolve } from 'node:path';
@@ -80,15 +81,15 @@ export const gameE2eSuite: TestSuite = {
     console.log('  Checking emulator health...');
     await waitForEmulators(90_000);
 
-    // ── 2. Verify game dev server is reachable ──────────────
-    console.log('  Checking game dev server...');
+    // ── 2. Verify client dev server is reachable ──────────────
+    console.log('  Checking client dev server...');
     const gameReady = await probePort(GAME_DEV_PORT, 10_000);
     if (!gameReady) {
-      throw new Error(`Game dev server not reachable on :${GAME_DEV_PORT}`);
+      throw new Error(`Client dev server not reachable on :${GAME_DEV_PORT}`);
     }
 
-    // ── 3. Verify game page loads ──────────────────────────
-    console.log('  Loading game page...');
+    // ── 3. Verify game page loads via client ───────────────
+    console.log('  Loading game page via client...');
     const pageResponse = await fetch(GAME_URL);
     if (!pageResponse.ok && pageResponse.status >= 500) {
       throw new Error(`Game page returned ${pageResponse.status}`);

@@ -108,7 +108,7 @@ With visual testing extracted, the remaining Playwright functional tests run muc
 1. **Shared test user across workers**: The Auth emulator creates one test user (`user@example.com`) shared across all workers. Per-worker isolation comes from separate `storageState` files, not separate Firebase accounts. Full Auth isolation (different users per worker) would require unique emails per worker.
 2. **POM enforcement partial**: Only the high-raw-interaction files (combat_sandbox=37, combat_immersion=30, combat_static_visual=11, inventory_pickup=13 raw calls) were fully refactored. Remaining specs (`demo_happy_path`, `lpc_man`, `progression_persistence`, `sandboxes`) have low raw interaction counts and were left as-is — they use Playwright fixtures/helpers.
 3. **Worker count hardcoded at 4**: `MAX_WORKERS` is set to 4 in both `config.ts` and `auth.setup.ts`. CI typically runs 1 worker. For local multi-worker runs, this covers up to 4 parallel workers.
-4. **Firestore isolation theoretical**: The PWA client uses a fixed project ID (`aikami-dev`), so client-side Firestore requests always hit the same namespace. Worker isolation is primarily for Auth state and teardown cleanup. Full Firestore isolation would require the PWA to accept a dynamic project ID (out of scope).
+4. **Firestore isolation theoretical**: The Client uses a fixed project ID (`aikami-dev`), so client-side Firestore requests always hit the same namespace. Worker isolation is primarily for Auth state and teardown cleanup. Full Firestore isolation would require the Client to accept a dynamic project ID (out of scope).
 
 ### Design Decisions
 

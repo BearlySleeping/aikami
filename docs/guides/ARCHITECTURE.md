@@ -12,7 +12,7 @@ This document provides a high-level overview of the technical architecture of th
 
 The Aikami ecosystem is composed of three primary layers: the Frontend Client, the Cloud Backend, and the Local AI Microservices.
 
-### 1. Frontend Client (PWA & Desktop)
+### 1. Frontend Client (PWA + Tauri Desktop)
 
 -   **SvelteKit 2 & Tauri v2:** The primary interface is a Progressive Web App that can also be compiled as a native desktop application using Tauri v2. It handles UI overlays, AI chat components, and character management using Svelte 5 runes (`ViewModel` patterns).
 -   **Game Engine (PixiJS v8 + bitECS):** Embedded directly inside the SvelteKit client (`packages/frontend/engine`). It eschews standard monolithic game engines (like our legacy Godot implementations) in favor of a lightweight, ECS-driven 2D web engine.

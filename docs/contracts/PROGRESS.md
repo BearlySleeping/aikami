@@ -937,7 +937,7 @@
 4. **Retro-terminal aesthetic with pure DaisyUI**: No custom CSS beyond animation keyframes. Uses `bg-neutral-950`, `font-mono`, `text-success`/`text-error`, traffic-light window chrome dots (`bg-error/80`, `bg-warning/80`, `bg-success/80`), and DaisyUI `tooltip` for the disabled button.
 
 **Known limitations**:
-- Visual regression tests require the PWA dev server running on port 5274 (client-visual project).
+- Visual regression tests require the Client dev server running on port 5274 (client-visual project).
 - In browser dev mode, `@tauri-apps/plugin-http` import will fail — providers always show "offline" since CORS blocks localhost pings. Diagnostics only works correctly in the Tauri desktop app.
 - No graceful degradation for non-Tauri environments — the diagnostics screen is always shown, even when running in a regular browser where providers can never be pinged. A future enhancement could detect `!window.__TAURI__` and skip diagnostics.
 - The `comfyStatus` is currently unused by any downstream game code — the game only checks for text providers (Ollama). Image AI gating is ready for future contracts.
@@ -1898,7 +1898,7 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 - OpenRouter mock responses are statically typed `Record<string, unknown>` — a failed schema validation will throw inside `extractStructure` and the test will see an error message instead of character data.
 - The test has a 120-second timeout but realistically requires ~60-90 seconds for all LLM mock interactions + UI transitions.
 - Golden screenshot must be generated locally before CI can pass `toHaveScreenshot`.
-- No Firebase emulator dependency — the test uses the PWA dev server (`localhost:5274`) only.
+- No Firebase emulator dependency — the test uses the Client dev server (`localhost:5274`) only.
 
 ### C-160: Engine Polish — Shader, Movement, and Camera
 
@@ -2396,7 +2396,7 @@ wrapper (`logger.debug/info/warn/error`) instead of raw `console.*` or
 
 **Known limitations**:
 - Visual regression baseline (`debug-map-baseline.png`) must be generated on first CI run with `--update-snapshots`
-- E2E collision tests require the PWA dev server running on port 5274
+- E2E collision tests require the Client dev server running on port 5274
 - `window.__AIKAMI_DEBUG__` is set every frame even when the player hasn't moved — negligible overhead (<1µs property assignment)
 - The debug position object is reset each frame (single mutable reference) — multiple rapid `page.evaluate()` calls could race. Tests single-read after key release to avoid this.
 - Spiral search for walkable tile is bounded at 20-tile radius — extremely large maps may need larger bounds

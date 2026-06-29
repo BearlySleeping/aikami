@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | Source | Technical Audit / Visual Execution Gap |
-| Target | PWA Rendering Layer / Mocking Infrastructure |
+| Target | Client Rendering Layer / Mocking Infrastructure |
 | Priority | P0 (Blocking Visualization) |
 | Dependencies | C-048 |
 | Status | completed |
