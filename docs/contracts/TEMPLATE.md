@@ -17,6 +17,8 @@
 
 {Existing patterns in the repo to follow. Reference specific files, packages, or previous contracts.}
 
+For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Visual Runner** handles AI visual assessment (`src/visual/suites/*.visual.ts`). Do NOT create `*_visual.spec.ts` files or use the old `scripts/*_visual.ts` pattern. See `.pi/skills/testing/SKILL.md` for conventions.
+
 ## Architecture Directives
 
 {Use domain-level names and logical paths. Let Pi decide exact file placement based on its aikami-conventions skill.}
@@ -40,7 +42,9 @@
 **Test Hooks**:
 - Moon Task: {specific `moon_run_task` command to validate this}
 - Integration: {what integration test or manual browser check to run}
-- E2E / Visual: {If visual: Specify the Playwright spec file, the exact screenshot states to capture (e.g., initial, low_hp, victory), and the OpenRouter AI evaluation prompt/criteria required to pass (e.g., "Score 90+: Two LPC sprites visible, facing correct directions"). If not visual, state "N/A".}
+- E2E / Visual:
+    - **Functional**: {If functional E2E: Specify the Playwright spec file (e.g., `tests/client/feature.spec.ts`), the test cases, and any POMs needed. If not functional, state "N/A".}
+    - **Visual**: {If visual: Specify the suite file (`suites/feature.visual.ts`), the declarative test cases (name, route, searchParams), the TypeBox schema shape, and the OpenRouter AI evaluation prompt/criteria (e.g., "Score 90+: Two LPC sprites visible, facing correct directions"). Use `defineConfig` + `export default` pattern. If not visual, state "N/A".}
 
 **Watch Points**:
 - {edge case or gotcha specific to this AC}
