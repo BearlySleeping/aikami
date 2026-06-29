@@ -104,8 +104,12 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   get showBootDiagnostics() {
     const { url } = page;
     const { pathname, searchParams } = url;
+
+    // Skip boot diagnostics on settings, dev routes, or when skip-onboarding is set.
+    // These routes must work without the boot gate to avoid a deadlock
+    // (user needs /settings to configure providers).
     if (
-      !pathname.startsWith('/settings') ||
+      pathname.startsWith('/settings') ||
       pathname.startsWith('/dev') ||
       searchParams.get('skip-onboarding') !== null
     ) {

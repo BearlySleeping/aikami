@@ -478,128 +478,242 @@ The AI enforces: 2 failed attempts → diagnostic script. Never ask user to "try
 
 ---
 
-## Visual Testing (E2E Visual Smoke Scripts)
+## Visual Testing (AI Visual Assessment Framework)
 
-### 🔴 Critical: Use `apps/e2e/scripts/`, NOT `browser_screenshot`
+### 🔴 Architecture: Bun Runner (visual) vs Playwright (functional)
 
-When the user asks for visual testing, visual verification, or screenshots of the
-canvas/game:
+Two separate testing systems — do NOT mix them:
 
-| ❌ NEVER | ✅ ALWAYS |
-|----------|-----------|
-| `browser_screenshot` tool | `apps/e2e/scripts/*_visual.ts` scripts |
-| `.pi/.screenshots/` | `apps/e2e/test-results/<suite>/` |
+| System | Runtime | Purpose | Location |
+|--------|---------|---------|----------|
+| **AI Visual Runner** | Bun | Screenshot capture + AI evaluation | `apps/e2e/src/visual/` |
+| **Playwright** | Node.js | Behavioral/functional E2E tests | `apps/e2e/tests/` |
 
-`browser_screenshot` is a **debugging tool** for quick UI checks. Visual testing
-means setting up proper e2e smoke scripts with capture + optional AI evaluation.
+**Rule**: Playwright has `setup`, `client`, `game` projects. No `client-visual`.
+Visual tests live in `suites/*.visual.ts`, not `tests/*.visual.spec.ts`.
 
-### Pattern: Two-Phase Capture → AI Eval → Report
-
-All visual test scripts follow a standard two-phase pattern:
+### AI Visual Runner Quick Start
 
 ```bash
-# Full run (capture + AI evaluation)
-bun run apps/e2e/scripts/sandbox_visual.ts
+# Capture + evaluate all suites (requires OPENROUTER_API_KEY for eval)
+cd apps/e2e && bun run test:visual
 
-# Capture only (no OpenRouter API call)
-bun run apps/e2e/scripts/sandbox_visual.ts --capture-only
+# Capture only (no API calls, just screenshots)
+cd apps/e2e && bun run src/visual/runner.ts --capture-only
 
-# AI evaluation only (requires previously captured screenshots)
-bun run apps/e2e/scripts/sandbox_visual.ts --eval-only
+# Evaluate only (requires existing screenshots in test-results/visual/)
+cd apps/e2e && bun run src/visual/runner.ts --eval-only
+
+# Run a specific suite
+cd apps/e2e && bun run src/visual/runner.ts --suite=map
 ```
 
-### Shared Utilities
+### Creating a New Visual Test Suite
 
-All scripts import from `apps/e2e/scripts/shared/`:
-
-| Module | Purpose |
-|--------|---------|
-| `screenshot.ts` | `captureCanvas()`, `waitForPixiLoaded()`, `toBase64DataUri()`, `optimizePng()` |
-| `ai_eval.ts` | `evaluateScreenshot()` — sends image to OpenRouter (Gemini Flash), returns structured `VisualEvalResult` |
-
-### AI Evaluation
-
-`evaluateScreenshot()` sends a base64 PNG to OpenRouter with a custom evaluation
-prompt. The AI returns structured JSON:
+Use `defineConfig` + `export default` pattern. Place in `apps/e2e/src/visual/suites/`:
 
 ```typescript
-type VisualEvalResult = {
-  score: number;            // 0-100
-  characterVisible: boolean;
-  notes: string;
-  issues?: string[];
-};
+// apps/e2e/src/visual/suites/my_feature.visual.ts
+import { Type } from 'typebox';
+import { defineConfig } from '$visual/core/config';
+
+const MySchema = Type.Object({
+  score: Type.Number({ description: '0-100 score' }),
+  elementVisible: Type.Boolean(),
+  issues: Type.Array(Type.String()),
+});
+
+export default defineConfig({
+  id: 'my-feature',
+  route: '/dev/my-sandbox',                    // SvelteKit route
+  waitCondition: 'game_ready',                  // 'pixi_loaded' | 'game_ready'
+  requiresAuth: false,                          // inject .auth/user.json if true
+  cases: [
+    {
+      name: 'Default State',
+      searchParams: { state: 'default' },       // appended as ?state=default
+      prompt: 'Describe what the AI should evaluate...',
+      schema: MySchema,
+      canvasSelector: 'canvas',                 // CSS selector for clip region
+      clipSize: 256,                            // clip region size in px
+      setupHook: async (page) => {              // optional Playwright interaction
+        await page.locator('button').click();
+      },
+    },
+  ],
+});
 ```
 
-Requires `OPENROUTER_API_KEY` env var. Default model: `google/gemini-2.5-flash`.
+### Suite Properties Reference
 
-### Existing Visual Test Scripts
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `id` | `string` | ✅ | Unique suite ID, used for `--suite=` filter |
+| `route` | `string` | ✅ | SvelteKit route path (e.g. `/dev/sandbox/map`) |
+| `waitCondition` | `'pixi_loaded' \| 'game_ready'` | ✅ | How to detect page readiness |
+| `requiresAuth` | `boolean` | — | Inject Playwright auth state (default: false) |
+| `cases[].name` | `string` | ✅ | Human-readable case name |
+| `cases[].prompt` | `string` | ✅ | AI evaluation prompt |
+| `cases[].schema` | `TSchema` | ✅ | TypeBox schema for validation |
+| `cases[].searchParams` | `Record<string,string>` | — | URL query parameters |
+| `cases[].canvasSelector` | `string` | — | CSS selector for clip (default: 'canvas') |
+| `cases[].clipSize` | `number` | — | Clip region size (default: 256) |
+| `cases[].setupHook` | `(page: Page) => Promise<void>` | — | Interactive Playwright setup before capture |
 
-| Script | What it tests |
-|--------|---------------|
-| `sandbox_visual.ts` | `/dev/sandbox` — LPC character visible on canvas |
-| `tilemap_visual.ts` | Self-contained 10×10 tilemap — no seam bleeding |
-| `combat_visual.ts` | Combat dev page — HP bars, log, victory/defeat states |
-| `map_sandbox_eval.ts` | `/dev/sandbox/map` — engine, LPC textures, corner clamping |
-| `lpc_smoke.ts` | LPC sprite rendering — multi-layer compositing |
-| `lpc_man_eval.ts` | LPC male character — AI visual quality assessment |
+### Framework Architecture
 
-### Creating a New Visual Test Script
+```
+apps/e2e/src/visual/
+├── runner.ts              # CLI entry — load suites → capture → evaluate → report
+├── core/
+│   ├── config.ts          # defineConfig() helper
+│   ├── capture.ts         # Playwright orchestration (sequential, WebGL-safe)
+│   ├── evaluate.ts        # OpenRouter + TypeBox Value.Check()
+│   ├── cache.ts           # SHA-256 hash cache (.visual-cache.json)
+│   └── report.ts          # Static HTML report generation
+└── suites/
+    ├── boot_diagnostics.visual.ts
+    ├── combat.visual.ts
+    ├── lpc.visual.ts
+    ├── map.visual.ts
+    └── sandbox.visual.ts
+```
+
+### Cache
+
+Cache lives at `apps/e2e/.visual-cache.json` (committed to Git). Key = SHA-256
+of (base64Image + prompt + stringified schema). Cache hits skip OpenRouter entirely.
+Only stores hash→JSON result — no base64 image data.
+
+### Concurrency
+
+Evaluations are chunked into groups of 5 to avoid OpenRouter 429 rate limits.
+Capture is always sequential to protect the WebGL rendering context.
+
+### Path Aliases
+
+| Alias | Maps to |
+|-------|---------|
+| `$visual/*` | `apps/e2e/src/visual/*` |
+| `$pom` | `apps/e2e/src/pom/index.ts` |
+| `$pom/*` | `apps/e2e/src/pom/*` |
+| `$utils/*` | `apps/e2e/tests/utils/*` |
+
+---
+
+## E2E Testing (Playwright Functional)
+
+### Project Structure
+
+```
+apps/e2e/
+├── playwright.config.ts    # 3 projects: setup, client, game
+├── src/
+│   ├── auth.setup.ts       # Per-worker auth state generation
+│   ├── config.ts           # EMULATOR_PORTS, getWorkerProjectId()
+│   ├── emulator_helper.ts  # clearAllWorkerProjects()
+│   ├── fixtures.ts         # Shared test fixtures (guestUser, etc.)
+│   ├── global_setup.ts     # Pre-suite emulator purge (all workers)
+│   ├── global_teardown.ts  # Post-suite emulator purge (all workers)
+│   └── pom/                # Page Object Models
+│       ├── index.ts        # Barrel exports
+│       ├── combat_page.ts  # Combat UI interactions
+│       ├── inventory_page.ts # Inventory overlay
+│       ├── client_auth_page.ts
+│       ├── client_chat_page.ts
+│       ├── client_navigation.ts
+│       └── game_menu_page.ts
+└── tests/
+    ├── client/             # PWA functional tests (*.spec.ts)
+    ├── game/               # Game engine tests (*.spec.ts)
+    └── ai-services/        # AI microservice tests
+```
+
+### Creating E2E Tests
+
+**Use POMs — no inline `page.locator()` calls.** Import from `$pom`:
 
 ```typescript
-// apps/e2e/scripts/my_visual.ts
-import { existsSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { $ } from 'bun';
-import { evaluateScreenshot } from './shared/ai_eval';
-import { toBase64DataUri } from './shared/screenshot';
+// apps/e2e/tests/client/my_feature.spec.ts
+import { test } from '@playwright/test';
+import { CombatPage } from '$pom';
 
-// 1. Nix Chromium path for WebGL
-const NIX_CHROMIUM = '/nix/store/...playwright-browsers/chromium-1217/chrome-linux64/chrome';
-if (existsSync(NIX_CHROMIUM)) {
-  process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = NIX_CHROMIUM;
-}
+test.describe('My Feature', () => {
+  let combat: CombatPage;
 
-// 2. Config
-const E2E_DIR = resolve(import.meta.dirname, '..');
-const SCREENSHOT_DIR = join(E2E_DIR, 'test-results', 'my-visual');
-const REPORT_PATH = join(SCREENSHOT_DIR, 'report.json');
-
-// 3. CLI flags
-const args = process.argv.slice(2);
-const captureOnly = args.includes('--capture-only');
-const evalOnly = args.includes('--eval-only');
-
-// 4. Phase 1: Capture via Playwright
-if (!evalOnly) {
-  const result = await $`bunx playwright test --project=client-visual --grep my_test`
-    .cwd(E2E_DIR).nothrow();
-}
-
-// 5. Phase 2: AI evaluation
-if (!captureOnly) {
-  const dataUri = toBase64DataUri(join(SCREENSHOT_DIR, 'file.png'));
-  const result = await evaluateScreenshot({
-    imageDataUri: dataUri,
-    prompt: 'Custom evaluation criteria...',
+  test.beforeEach(async ({ page }) => {
+    combat = new CombatPage(page);
+    await combat.gotoDev();
   });
-  writeFileSync(REPORT_PATH, JSON.stringify(result, null, 2));
+
+  test('should do something', async () => {
+    await combat.clickAttack();
+    await combat.expectLogContains('hits for');
+  });
+});
+```
+
+### New POM
+
+When creating a new POM, follow this pattern:
+
+```typescript
+// apps/e2e/src/pom/my_page.ts
+import type { Page } from '@playwright/test';
+
+export class MyPage {
+  readonly page: Page;
+
+  constructor(page: Page) {
+    this.page = page;
+  }
+
+  // ── Navigation ──
+  async goto(): Promise<void> { /* ... */ }
+
+  // ── Locators (getters, not stored) ──
+  get myElement() { return this.page.locator('[data-testid="my-element"]'); }
+
+  // ── Actions ──
+  async clickSomething(): Promise<void> { await this.myElement.click(); }
+
+  // ── Assertions (lazy import expect to keep POM test-framework-agnostic) ──
+  async expectVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.myElement).toBeVisible();
+  }
 }
 ```
 
-### Map Sandbox Corner Testing
+Then add to `apps/e2e/src/pom/index.ts` barrel export.
 
-The map sandbox supports query parameters for spawn position control:
+### Running
 
+```bash
+# Run all Playwright tests
+cd apps/e2e && bun run test
+
+# Run client-only
+cd apps/e2e && bun run test:client
+
+# Run game-only (requires client dev server + game engine)
+cd apps/e2e && bun run test:game
+
+# Run visual (AI framework)
+cd apps/e2e && bun run test:visual
+
+# Generate auth states (needed before client tests)
+# Auth states are cached in .auth/user-worker-{N}.json
+# Run auth setup via moon:
+bun moon run e2e:test  # setup runs automatically as dep of client project
 ```
-/dev/sandbox/map?position_x=0&position_y=0       # Top-left corner
-/dev/sandbox/map?position_x=320&position_y=0     # Top-right corner
-/dev/sandbox/map?position_x=0&position_y=320     # Bottom-left corner
-/dev/sandbox/map?position_x=320&position_y=320   # Bottom-right corner
-```
 
-The worker clamps OOB spawns to the nearest walkable (grass) tile. Visual
-tests verify the character is on green interior, not blue water border.
+### Worker Isolation (C-183)
+
+- Each Playwright worker uses a distinct Firebase project ID: `demo-aikami-worker-{0..3}`
+- Auth states are per-worker: `.auth/user-worker-{0..3}.json`
+- Global setup/teardown purges ALL worker projects via emulator REST API
+- `MAX_WORKERS = 4` in `config.ts` — increase if running more parallel workers
 
 ---
 
