@@ -3,7 +3,7 @@
 //
 // Routes by action:
 //   action=logs (default):
-//     cloud-run (pwa)       → scripts/ops/logs.ts → gcloud logging
+//     cloud-run (client)       → scripts/ops/logs.ts → gcloud logging
 //     firebase-hosting       → scripts/ops/logs.ts → gcloud logging
 //     firebase-functions     → bun moon run functions:logs → firestack → gcloud
 //
@@ -19,7 +19,7 @@ import { Type } from "typebox"
 import { smartTruncate } from "./lib/output-filter"
 
 const APP_CONFIG: Record<string, { serviceType: string }> = {
-  pwa: { serviceType: "cloud-run" },
+  client: { serviceType: "cloud-run" },
   functions: { serviceType: "firebase-functions" },
   site: { serviceType: "firebase-hosting" },
 }
@@ -38,17 +38,17 @@ export default function (pi: ExtensionAPI) {
     label: "Logs: View Service Logs",
     description:
       "View logs for Aikami services. "
-      + "Apps: pwa, admin, site, functions. "
+      + "Apps: client, site, functions. "
       + "Log actions: tail, line limits, time filters, function name filters. "
       + "For emulator Firestore data inspection, use firestore_query.",
     promptSnippet:
       "Use service_logs to view Cloud Run / Firebase logs. All logs are streamed to Cloud Run stdout — not stored in Firestore.",
     promptGuidelines: [
-      "Use service_logs when user says 'the PWA crashed in dev' → app=pwa, mode=staging.",
+      "Use service_logs when user says 'the client crashed in dev' → app=client, mode=staging.",
       "Use service_logs when user says 'check function logs for pollGmail' → app=functions, only=pollGmail.",
       "Use service_logs when user says 'tail the logs' → tail=true.",
       "For functions, route via firestack (handles --only, --type, --since, --tail, --mode natively).",
-      "For Cloud Run (pwa, admin) and Hosting (site), route via gcloud logging script.",
+      "For Cloud Run (client) and Hosting (site), route via gcloud logging script.",
     ],
     parameters: Type.Object({
       action: Type.Optional(

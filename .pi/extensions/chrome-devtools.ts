@@ -2,7 +2,7 @@
 //
 // Chrome DevTools Protocol (CDP) integration for Aikami.
 // Launches headless Chromium (from Nix devShell) and connects via CDP
-// to inspect the PWA or Game dev server running in tmux.
+// to inspect the Client dev server running in tmux.
 //
 // Provides tools for:
 //   - browser_inspect:    DOM snapshot, console logs, computed styles
@@ -47,8 +47,8 @@ function getAppUrl(app: string): string {
     const port = (modePorts as Record<string, number>)[app]
     return `http://localhost:${port}`
   }
-  // Fallback: use emulator pwa
-  return `http://localhost:${PORTS.emulator.pwa}`
+  // Fallback: use emulator client
+  return `http://localhost:${PORTS.emulator.client}`
 }
 
 /** Check if Chromium is already running with remote debugging. */
@@ -207,12 +207,12 @@ export default function (pi: ExtensionAPI) {
     name: "browser_inspect",
     label: "Browser: Inspect Page",
     description:
-      "Launch headless Chromium, navigate to the PWA or Game dev server, "
+      "Launch headless Chromium, navigate to the Client dev server, "
       + "and return the DOM tree, console logs, and page metadata. "
       + "Use this to debug rendering issues, check element state, "
       + "or verify that a component rendered correctly.",
     promptSnippet:
-      "Use browser_inspect to see the live DOM of the running PWA or Game app.",
+      "Use browser_inspect to see the live DOM of the running Client app.",
     promptGuidelines: [
       "Use browser_inspect when the user reports a UI bug, blank page, or unexpected rendering.",
       "Use ONCE — do not repeatedly inspect the same page without navigating or triggering new state.",
@@ -223,9 +223,9 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       app: Type.Optional(
         Type.String({
-          description: "App to inspect: 'pwa' or 'game'",
-          enum: ["pwa", "game"],
-          default: "pwa",
+          description: "App to inspect: 'client'",
+          enum: ["client"],
+          default: "client",
         })
       ),
       url: Type.Optional(
@@ -242,7 +242,7 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const app = params.app ?? "pwa"
+      const app = params.app ?? "client"
 
       // Ensure browser is running
       const launch = await ensureBrowser(app)
@@ -303,7 +303,7 @@ export default function (pi: ExtensionAPI) {
     name: "browser_screenshot",
     label: "Browser: Screenshot",
     description:
-      "Capture a screenshot of the running PWA or Game. "
+      "Capture a screenshot of the running Client. "
       + "Returns a base64-encoded PNG saved to .pi/.screenshots/. "
       + "Use for visual regression checks or showing the user what the app looks like.",
     promptSnippet:
@@ -316,9 +316,9 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       app: Type.Optional(
         Type.String({
-          description: "App to screenshot: 'pwa' or 'game'",
-          enum: ["pwa", "game"],
-          default: "pwa",
+          description: "App to screenshot: 'client'",
+          enum: ["client"],
+          default: "client",
         })
       ),
       url: Type.Optional(
@@ -329,7 +329,7 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const app = params.app ?? "pwa"
+      const app = params.app ?? "client"
       const launch = await ensureBrowser(app)
       if (!launch.ok) {
         return {
@@ -401,7 +401,7 @@ export default function (pi: ExtensionAPI) {
     label: "Browser: Console Logs",
     description:
       "Read the browser console output (errors, warnings, logs) from the " +
-      "running PWA or Game. Intercepts console.* calls and uncaught errors " +
+      "running Client. Intercepts console.* calls and uncaught errors " +
       "to surface what the app is actually logging. Prefer this over terminal " +
       "logs only when you have a specific reason to believe JS errors are " +
       "occurring in the browser.",
@@ -416,9 +416,9 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       app: Type.Optional(
         Type.String({
-          description: "App to read console from: 'pwa' or 'game'",
-          enum: ["pwa", "game"],
-          default: "pwa",
+          description: "App to read console from: 'client'",
+          enum: ["client"],
+          default: "client",
         })
       ),
       level: Type.Optional(
@@ -430,7 +430,7 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const app = params.app ?? "pwa"
+      const app = params.app ?? "client"
       const level = params.level ?? "all"
       const launch = await ensureBrowser(app)
       if (!launch.ok) {
@@ -688,9 +688,9 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       app: Type.Optional(
         Type.String({
-          description: "App to monitor: 'pwa' or 'game'",
-          enum: ["pwa", "game"],
-          default: "pwa",
+          description: "App to monitor: 'client'",
+          enum: ["client"],
+          default: "client",
         })
       ),
       durationMs: Type.Optional(
@@ -701,7 +701,7 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const app = params.app ?? "pwa"
+      const app = params.app ?? "client"
       const launch = await ensureBrowser(app)
       if (!launch.ok) {
         return {
@@ -775,9 +775,9 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       app: Type.Optional(
         Type.String({
-          description: "App to audit: 'pwa' or 'game'",
-          enum: ["pwa", "game"],
-          default: "pwa",
+          description: "App to audit: 'client'",
+          enum: ["client"],
+          default: "client",
         })
       ),
       url: Type.Optional(
@@ -785,7 +785,7 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const app = params.app ?? "pwa"
+      const app = params.app ?? "client"
       const launch = await ensureBrowser(app)
       if (!launch.ok) {
         return {

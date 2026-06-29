@@ -7,7 +7,7 @@
 //   Windows are matched by name, not fixed indices.
 //
 //   Tab layout:
-//     emulators  → bun run emulate
+//     firebase  → bun run emulate
 //     client     → bun run dev
 //     voice      → bun run dev
 //     image      → bun run dev
@@ -18,7 +18,7 @@
 //   3. root package.json scripts (tmux:start, tmux:stop, etc.)
 //
 // CLI:
-//   bun tmux:start emulator          # emulators tab
+//   bun tmux:start firebase          # firebase tab
 //   bun tmux:start client            # add client tab
 //   bun tmux:start voice             # add voice tab
 //   bun tmux:start all --join        # all three + attach
@@ -35,7 +35,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 export type AikamiMode = 'emulator' | 'staging' | 'production';
 
 /** Canonical service names (used internally). */
-export type DevService = 'emulators' | 'client' | 'voice' | 'image' | 'text';
+export type DevService = 'firebase' | 'client' | 'voice' | 'image' | 'text';
 
 /** Accepted CLI values (includes singular aliases and 'all'). */
 export type ServiceInput = DevService | 'emulator' | 'all';
@@ -78,8 +78,8 @@ export type SessionInfo = {
 // ── Service definitions ────────────────────────────────────
 
 const SERVICE_DEFS: Record<DevService, ServiceDef> = {
-  emulators: {
-    name: 'emulators',
+  firebase: {
+    name: 'firebase',
     command: 'bun run emulate',
     cwd: (root) => resolve(root, 'apps/backend/firebase'),
     readyPort: EMULATOR_PORTS.auth,
@@ -110,13 +110,13 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   },
 };
 
-const ALL_SERVICES: DevService[] = ['emulators', 'client', 'voice', 'image', 'text'];
+const ALL_SERVICES: DevService[] = ['firebase', 'client', 'voice', 'image', 'text'];
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
   const alias: Record<string, DevService | 'all'> = {
-    emulator: 'emulators',
-    emulators: 'emulators',
+    emulator: 'firebase',
+    emulators: 'firebase',
     client: 'client',
     voice: 'voice',
     image: 'image',
@@ -126,7 +126,7 @@ export const normalizeService = (input: string): DevService | 'all' => {
   const result = alias[input];
   if (!result) {
     throw new Error(
-      `Unknown service: "${input}". Valid: emulator(s), client, voice, image, text, all`,
+      `Unknown service: "${input}". Valid: firebase, client, voice, image, text, all`,
     );
   }
   return result;
@@ -137,7 +137,7 @@ export const expandServices = (inputs: ServiceInput[]): DevService[] => {
   if (inputs.includes('all')) {
     return [...ALL_SERVICES];
   }
-  const normalized = inputs.map((s) => (s === 'emulator' ? 'emulators' : s)) as DevService[];
+  const normalized = inputs.map((s) => (s === 'emulator' ? 'firebase' : s)) as DevService[];
   return [...new Set(normalized)];
 };
 
@@ -234,7 +234,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   const sessionName = buildSessionName(mode);
 
   if (services.length === 0) {
-    throw new Error('No services specified. Use: emulator(s), client, voice, all');
+    throw new Error('No services specified. Use: firebase, client, voice, all');
   }
 
   // ── Mode mismatch guard ──────────────────────────────

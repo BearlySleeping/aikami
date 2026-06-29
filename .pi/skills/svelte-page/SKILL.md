@@ -19,9 +19,9 @@ Three files per page:
 
 | # | File | Location |
 |---|------|----------|
-| 1 | ViewModel | `apps/frontend/pwa/src/lib/views/<name>/<name>_view_model.svelte.ts` |
-| 2 | View | `apps/frontend/pwa/src/lib/views/<name>/<name>_view.svelte` |
-| 3 | Route page | `apps/frontend/pwa/src/routes/<route>/+page.svelte` |
+| 1 | ViewModel | `apps/frontend/client/src/lib/views/<name>/<name>_view_model.svelte.ts` |
+| 2 | View | `apps/frontend/client/src/lib/views/<name>/<name>_view.svelte` |
+| 3 | Route page | `apps/frontend/client/src/routes/<route>/+page.svelte` |
 
 ---
 
@@ -46,7 +46,7 @@ Follow the template in `svelte-conventions` → View Template.
 
 ```svelte
 <script lang="ts">
-  // apps/frontend/pwa/src/routes/<route>/+page.svelte
+  // apps/frontend/client/src/routes/<route>/+page.svelte
   import <Name>View from '$views/<name>/<name>_view.svelte';
   import { get<Name>ViewModel } from '$views/<name>/<name>_view_model.svelte.ts';
 

@@ -24,7 +24,7 @@ interface ServiceDef {
   key: string
   command: string
   cwd: string
-  /** Port getter — computed from mode so PWA uses the right port per environment. */
+  /** Port getter — computed from mode so client uses the right port per environment. */
   getReadyPort: (mode: AikamiMode) => number
   readyPath?: string
 }

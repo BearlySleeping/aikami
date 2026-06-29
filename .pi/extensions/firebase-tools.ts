@@ -193,7 +193,7 @@ export default function (pi: ExtensionAPI) {
           // Only emulator window (or none) — safe to kill session
           await pi.exec("bash", ["-c", "tmux kill-session -t aikami-dev 2>/dev/null; true"], { signal, timeout: TMUX_TIMEOUT })
         } else {
-          // Other services running (pwa, vm-controller) — only kill window 1
+          // Other services running (client, vm-controller) — only kill window 1
           await pi.exec("bash", ["-c", "tmux kill-window -t aikami-dev:1 2>/dev/null; true"], { signal, timeout: TMUX_TIMEOUT })
         }
         // Also stop any orphaned emulator processes

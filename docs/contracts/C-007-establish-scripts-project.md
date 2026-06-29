@@ -41,7 +41,7 @@ scripts/
 | Script | Purpose |
 |--------|---------|
 | `src/lib/setup.ts` | Developer onboarding — install deps, sync moon, generate configs |
-| `src/lib/dev_all.ts` | Start all dev services (Firebase emulators, PWA dev server) |
+| `src/lib/dev_all.ts` | Start all dev services (Firebase emulators, Client dev server) |
 | `src/lib/generate_llms_txt.ts` | Generate `knowledge/llms.txt` from knowledge directory |
 | `src/lib/generate_context.ts` | Generate `knowledge/CONTEXT.md` from project metadata |
 | `src/lib/cleanup_vendor_dirs.ts` | Run C-001 cleanup (remove AI vendor dirs) |
@@ -89,11 +89,11 @@ scripts/
 ### AC-5: dev_all.ts Starts Services
 **Given** Firebase project is configured
 **When** running `bun run scripts/src/lib/dev_all.ts`
-**Then** Firebase emulators start, PWA dev server starts
+**Then** Firebase emulators start, Client dev server starts
 
 **Test Hooks**:
 - Integration: Script starts without errors
-- Integration: PWA is accessible at localhost
+- Integration: Client is accessible at localhost
 
 ## Implementation Notes
 

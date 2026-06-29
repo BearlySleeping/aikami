@@ -17,7 +17,7 @@ During the Phase 2 overhaul, we built isolated MVVM dev sandboxes for Character,
 ## Implementation Notes
 1. Place the new test file in your existing `apps/e2e/tests/client/` directory.
 2. The tests should be fast. You do not need to test every single edge case, just verify that the Dev Tools panel successfully manipulates the ViewModel and the View reacts.
-3. If necessary, update the underlying Svelte components in the PWA to include `data-testid` attributes to make Playwright targeting more reliable.
+3. If necessary, update the underlying Svelte components in the Client to include `data-testid` attributes to make Playwright targeting more reliable.
 
 ## Edge Cases
 - Ensure Playwright is configured to wait for Svelte 5 `$effect` DOM updates after clicking the Dev Tool buttons.

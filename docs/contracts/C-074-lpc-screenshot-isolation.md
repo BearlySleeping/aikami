@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Source: PWA Frontend Component Quality Audit
+- Source: Client Frontend Component Quality Audit
 - Target: apps/e2e
 - Priority: P1 (Foundation Automation)
 - Dependencies: C-073

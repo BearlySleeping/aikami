@@ -14,7 +14,7 @@
 
 ## Main Repo
 
-Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
+Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrator.
 
 ## architecture/
 
@@ -54,7 +54,7 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [Contract: C-025 TTS Audio Streaming & Synchronization](contracts/C-025-tts-audio-sync.md)
 - [Contract: C-026 Expression & Sprite State Mapping](contracts/C-026-expression-sprite-mapping.md)
 - [Contract: C-027 Provider Configuration & Secrets Engine](contracts/C-027-provider-configuration.md)
-- [Contract C-028: Game Firebase REST Integration & PWA Auth Handoff](contracts/C-028-game-firebase-auth-testing.md)
+- [Contract C-028: Game Firebase REST Integration & Client Auth Handoff](contracts/C-028-game-firebase-auth-testing.md)
 - [Contract C-029: Menu Auth Wiring & Vanilla PixiJS Character Creation](contracts/C-029-dynamic-character-creation.md)
 - [Contract C-030: Persistent NPC Interactivity & Spatial Triggers](contracts/C-030-persistent-npc-interaction.md)
 - [Contract: C-031 SvelteKit Adapter Static Conversion & Firebase Hosting Setup](contracts/C-031-adapter-static-and-hosting.md)
@@ -213,12 +213,12 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
 - [Architecture Overview](guides/ARCHITECTURE.md)
 - [CI/CD Pipeline](guides/CI_CD.md)
+- [Client Feature Roadmap](guides/CLIENT_FEATURES.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
 - [Developer Workflow](guides/dev-workflow.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
 - [Godot Client](guides/GODOT.md)
 - [Playwright Tests](guides/PLAYWRIGHT.md)
-- [PWA Feature Roadmap](guides/PWA_FEATURES.md)
 - [Guides](guides/README.md)
 - [Technology Stack](guides/STACK.md)
 - [Structure](guides/STRUCTURE.md)

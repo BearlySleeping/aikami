@@ -11,7 +11,7 @@
 
 ## Overview
 
-Establish the `.pi/` directory at the monorepo root with project-specific extensions, skills, agents, and prompts. Copy the foundational setup from aikami and adapt for aikami's stack (SvelteKit PWA, Firebase, Bun, moon). The `.pi/` directory extends the global `~/.pi/` setup with project-specific tooling.
+Establish the `.pi/` directory at the monorepo root with project-specific extensions, skills, agents, and prompts. Copy the foundational setup from aikami and adapt for aikami's stack (SvelteKit Client, Firebase, Bun, moon). The `.pi/` directory extends the global `~/.pi/` setup with project-specific tooling.
 
 ## Design Reference
 

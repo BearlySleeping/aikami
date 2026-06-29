@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | Source | User Visual Audit / Pipeline Implementation Gap |
-| Target | PWA Rendering Layer / Dev Tools View & Component |
+| Target | Client Rendering Layer / Dev Tools View & Component |
 | Priority | P1 |
 | Dependencies | C-044, C-045, C-047 |
 | Status | completed |

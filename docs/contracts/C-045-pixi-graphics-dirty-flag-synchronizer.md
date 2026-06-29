@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | Source | Client Runtime Visual Debugging |
-| Target | PWA Rendering Layer / Component Sync |
+| Target | Client Rendering Layer / Component Sync |
 | Priority | P0 (Blocking Visualization) |
 | Dependencies | C-044 |
 | Status | not_started |

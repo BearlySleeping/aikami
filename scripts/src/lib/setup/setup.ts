@@ -272,9 +272,9 @@ async function verifySetup(): Promise<boolean> {
 function printNextSteps() {
   header('Setup Complete!');
   console.log(`${BOLD}Getting started:${RESET}\n`);
-  console.log(`  ${CYAN}bun run dev${RESET}              Start PWA dev server`);
-  console.log(`  ${CYAN}bun run dev:all${RESET}           Start all services (emulators + PWA)`);
-  console.log(`  ${CYAN}bun run test${RESET}             Run all tests (requires emulators)`);
+  console.log(`  ${CYAN}bun run dev${RESET}              Start Client dev server`);
+  console.log(`  ${CYAN}bun run dev:all${RESET}           Start all services (firebase + client)`);
+  console.log(`  ${CYAN}bun run test${RESET}             Run all tests (requires firebase)`);
   console.log(`  ${CYAN}bun run fix${RESET}              Auto-fix lint/format issues`);
   console.log(`  ${CYAN}bun run typecheck${RESET}        Typecheck all projects`);
   console.log(

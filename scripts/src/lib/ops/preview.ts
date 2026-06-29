@@ -153,8 +153,8 @@ const ensureDevServer = async (mode: AikamiMode): Promise<void> => {
 
   if (!(await sessionExists(sessionName))) {
     info(`Starting ${mode} tmux session with client…`);
-    await startServices({ mode, services: ['emulators', 'client'] });
-    await waitForReady({ services: ['emulators'], mode }, 60_000);
+    await startServices({ mode, services: ['firebase', 'client'] });
+    await waitForReady({ services: ['firebase'], mode }, 60_000);
   } else {
     // Ensure client window exists
     await startServices({ mode, services: ['client'] });

@@ -501,7 +501,7 @@ Choose the right implementation:
 
 | Environment             | Implementation file                         |
 | ----------------------- | ------------------------------------------- |
-| SvelteKit (PWA)         | `shared/logger/src/lib/svelte_kit.ts`       |
+| SvelteKit (Client)         | `shared/logger/src/lib/svelte_kit.ts`       |
 | Firebase Functions      | `shared/logger/src/lib/logger_functions.ts` |
 | Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts`   |
 | AWS / Node.js           | `shared/logger/src/lib/logger_aws.ts`       |
@@ -606,7 +606,7 @@ One-line summary of what this package does.
 
 ## Where It's Used
 
-Which apps/packages depend on this. E.g. "Used by `apps/frontend/pwa` and any frontend code that needs X."
+Which apps/packages depend on this. E.g. "Used by `apps/frontend/client` and any frontend code that needs X."
 
 ## Installation
 
