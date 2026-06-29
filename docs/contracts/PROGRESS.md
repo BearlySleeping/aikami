@@ -167,6 +167,9 @@
 | C-181 | Ai Visual Testing Framework | ✅ completed |
 | C-182 | Visual Framework Polish | ✅ completed |
 | C-183 | E2e Worker Isolation | ✅ completed |
+| C-190 | Ecs Spatial Vision Systems | ✅ completed |
+| C-191 | Goap Bitmask Scheduler | ✅ completed |
+| C-192 | Ecs Time Sliced Jps Pathfinder | ⏳ not_started |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

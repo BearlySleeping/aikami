@@ -211,6 +211,16 @@
       }
     },
     {
+      "includes": ["**/math/goap/**/*.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "apps/frontend/client/**",
         "scripts/src/lib/test_blackbox/**",
