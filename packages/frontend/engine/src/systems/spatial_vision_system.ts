@@ -7,6 +7,7 @@ import { ObserverState, VisionObserver } from '../components/vision_observer.ts'
 import { VisionVisible } from '../components/vision_visible.ts';
 import { castDdaVisionCone } from '../math/vision/dda_raycaster.ts';
 import { castShadowcastingFov } from '../math/vision/shadowcasting.ts';
+import { isEntityOffscreen } from './macro_simulation_system.ts';
 
 // ---------------------------------------------------------------------------
 // SpatialVisionSystem — bitECS perception tick
@@ -110,6 +111,11 @@ export const updateSpatialVision = (world: World): void => {
   // Use bitECS query for correct entity existence — this handles
   // removed entities whose SoA arrays still have stale values.
   for (const observerEid of query(world, [VisionObserver, GridPosition])) {
+    // ── C-194 AC-1: Skip observers in inactive zones ──
+    if (isEntityOffscreen(observerEid)) {
+      continue;
+    }
+
     const fovRadius = VisionObserver.fovRadius[observerEid];
     if (fovRadius === undefined || fovRadius <= 0) {
       continue;
