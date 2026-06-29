@@ -25,7 +25,7 @@ import {
 const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 const E2E_DIR = resolve(import.meta.dirname, '..');
 const MODE = 'emulator' as const;
-const SERVICES: DevService[] = expandServices(['emulators', 'client'] as const);
+const SERVICES: DevService[] = expandServices(['emulator', 'client'] as const);
 const SMOKE_SCRIPT = resolve(E2E_DIR, 'scripts/lpc_smoke.ts');
 const MAX_WAIT_S = 120;
 const SESSION_NAME = buildSessionName(MODE);
