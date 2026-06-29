@@ -3,13 +3,16 @@ import type { World } from 'bitecs';
 import { getComponent, query, removeEntity } from 'bitecs';
 import type { CombatStatsData } from '../components/combat_stats.ts';
 import { CombatStats } from '../components/combat_stats.ts';
+import { CombatTactics } from '../components/combat_tactics.ts';
 import { Enemy } from '../components/enemy.ts';
-import { Position } from '../components/position.ts';
+import { Position, type PositionData } from '../components/position.ts';
 import type { TurnOrderData } from '../components/turn_order.ts';
 import { TurnOrder } from '../components/turn_order.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { isWalkable } from './collision_system.ts';
 import { getCombatantScreenStates } from './combat_stage_system.ts';
+import { resolveTacticalAction } from './goap_combat_tactics_system.ts';
 
 // ---------------------------------------------------------------------------
 // TurnManagerSystem — turn-based combat sequencing + dice combat math
@@ -482,9 +485,14 @@ const _processPlayerAttack = (params: ProcessPlayerAttackParams): void => {
 // ---------------------------------------------------------------------------
 
 /**
- * Processes the enemy's turn (counter-attack after player action).
+ * Processes the enemy's turn using tactical AI (C-197).
  *
- * Uses the same d20 hit check + d6 damage roll against the player.
+ * Instead of a fixed counter-attack, the enemy evaluates all valid targets
+ * via {@link resolveTacticalAction}, determines whether to attack, move
+ * toward the target, retreat, or hold position. Attacks use the same d20
+ * hit check + d6 damage roll. Repositioning skips the attack phase and
+ * simulates the enemy closing distance.
+ *
  * Emits COMBAT_LOG and COMBAT_STATE_UPDATE.
  */
 const _processEnemyTurn = (
@@ -498,12 +506,193 @@ const _processEnemyTurn = (
     return;
   }
 
+  const enemyStats = getComponent(world, enemyId, CombatStats) as CombatStatsData | undefined;
+  if (!enemyStats) {
+    return;
+  }
+
+  // ── C-197 AC-1: Resolve tactical target and action ──
+  //
+  // If positions are available (world-space coordinates), use the full
+  // tactical AI pipeline: target scoring, range checking, repositioning.
+  // When positions are absent (unit tests, legacy combat), fall back to
+  // the classic counter-attack against the player.
+  const enemyPos = getComponent(world, enemyId, Position) as PositionData | undefined;
+  const playerPos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
+
+  if (!enemyPos || !playerPos) {
+    // ── Legacy fallback: direct counter-attack against the player ──
+    _processLegacyEnemyAttack(world, enemyId, playerEntityId, bridge, roller, enemyStats);
+    return;
+  }
+
+  const validTargets = _getAliveTargets(world, enemyId);
+  const selectedTarget = resolveTacticalAction(world, enemyId, validTargets);
+
+  if (selectedTarget <= 0) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: 'Enemy scans for targets but finds none — holding position.',
+      sourceId: enemyId,
+      targetId: 0,
+      targetRemainingHp: 0,
+      targetMaxHp: 0,
+    });
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  const targetStats = getComponent(world, selectedTarget, CombatStats) as
+    | CombatStatsData
+    | undefined;
+  if (!targetStats) {
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  // ── Distance check ──
+  const estimatedDistance = _estimateGridDist(world, enemyId, selectedTarget);
+  const prefRange = _getPreferredRange(enemyId);
+  const isInRange = estimatedDistance <= prefRange;
+
+  // ── Low health → retreat (C-197 AC-2) ──
+  const enemyHpRatio = enemyStats.maxHealth > 0 ? enemyStats.health / enemyStats.maxHealth : 0;
+  if (enemyHpRatio <= 0.25) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Enemy is critically wounded and retreats! (HP: ${enemyStats.health}/${enemyStats.maxHealth})`,
+      sourceId: enemyId,
+      targetId: selectedTarget,
+      targetRemainingHp: targetStats.health,
+      targetMaxHp: targetStats.maxHealth,
+    });
+    CombatStats.health[enemyId] = 0;
+    _emitCombatStateUpdate(world, bridge);
+    TurnOrder.isActive[enemyId] = false;
+    return;
+  }
+
+  if (!isInRange) {
+    // ── Reposition: move toward target ──
+    const enemyPos = getComponent(world, enemyId, Position) as PositionData | undefined;
+    const targetPos = getComponent(world, selectedTarget, Position) as PositionData | undefined;
+
+    let moveMsg = `Enemy advances toward its target! (distance: ${estimatedDistance}, preferred: ${prefRange})`;
+    if (enemyPos && targetPos) {
+      const dx = targetPos.x - enemyPos.x;
+      const dy = targetPos.y - enemyPos.y;
+      const dir =
+        Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'east' : 'west') : dy > 0 ? 'south' : 'north';
+      moveMsg = `Enemy advances ${dir} toward its target! (distance: ${estimatedDistance}, preferred: ${prefRange})`;
+      const step = 32;
+      const norm = Math.sqrt(dx * dx + dy * dy) || 1;
+      Position.x[enemyId] = enemyPos.x + (dx / norm) * step;
+      Position.y[enemyId] = enemyPos.y + (dy / norm) * step;
+    }
+
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: moveMsg,
+      sourceId: enemyId,
+      targetId: selectedTarget,
+      targetRemainingHp: targetStats.health,
+      targetMaxHp: targetStats.maxHealth,
+    });
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  // ── In range: attack ──
+  const attackRoll = roller(20);
+  const hitTotal = attackRoll + (enemyStats.accuracy ?? 0);
+  const hitThreshold = targetStats.evasion ?? 0;
+
+  if (hitTotal < hitThreshold) {
+    bridge.emit({
+      type: 'COMBAT_LOG',
+      message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) vs Evasion ${hitThreshold} — Miss!`,
+      sourceId: enemyId,
+      targetId: selectedTarget,
+      targetRemainingHp: targetStats.health,
+      targetMaxHp: targetStats.maxHealth,
+    });
+    _emitCombatStateUpdate(world, bridge);
+    return;
+  }
+
+  // ── Damage roll ──
+  const damageRoll = roller(6);
+  const rawDamage = damageRoll + (enemyStats.attack ?? 0);
+  const damage = Math.max(1, rawDamage - (targetStats.defense ?? 0));
+
+  CombatStats.health[selectedTarget] = Math.max(0, targetStats.health - damage);
+  const remainingHp = CombatStats.health[selectedTarget];
+
+  bridge.emit({
+    type: 'COMBAT_LOG',
+    message: `Enemy rolls ${attackRoll} (+${enemyStats.accuracy ?? 0} = ${hitTotal}) to hit ${_getEntityName(world, selectedTarget)}. Deals ${damage} damage! (${_getEntityName(world, selectedTarget)} HP: ${remainingHp}/${targetStats.maxHealth})`,
+    sourceId: enemyId,
+    targetId: selectedTarget,
+    targetRemainingHp: remainingHp,
+    targetMaxHp: targetStats.maxHealth,
+  });
+
+  // ── Visceral feedback ──
+  const targetScreenX = Position.x[selectedTarget] ?? 0;
+  const targetScreenY = Position.y[selectedTarget] ?? 0;
+  bridge.emit({
+    type: 'DAMAGE_DEALT',
+    entityId: selectedTarget,
+    amount: damage,
+    isCritical: false,
+    screenX: targetScreenX,
+    screenY: targetScreenY,
+  });
+
+  _emitCombatStateUpdate(world, bridge);
+
+  // ── Check if target is defeated ──
+  if (remainingHp <= 0) {
+    if (selectedTarget === playerEntityId) {
+      bridge.emit({ type: 'COMBAT_ENDED', victory: false });
+      turnOrderList = [];
+      currentTurnIndex = -1;
+    } else {
+      bridge.emit({
+        type: 'COMBAT_LOG',
+        message: `${_getEntityName(world, selectedTarget)} has fallen!`,
+        sourceId: enemyId,
+        targetId: selectedTarget,
+        targetRemainingHp: 0,
+        targetMaxHp: targetStats.maxHealth,
+      });
+    }
+    return;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Internal — legacy enemy attack (counter-attack, pre C-197)
+// ---------------------------------------------------------------------------
+
+/**
+ * Legacy enemy attack: direct counter-attack against the player.
+ * Used as fallback when Position components are not available (unit
+ * tests and situations where spatial awareness is not needed).
+ */
+const _processLegacyEnemyAttack = (
+  world: World,
+  enemyId: number,
+  playerEntityId: number,
+  bridge: EngineBridge,
+  roller: (sides: number) => number,
+  enemyStats: CombatStatsData,
+): void => {
   const playerStats = getComponent(world, playerEntityId, CombatStats) as
     | CombatStatsData
     | undefined;
-  const enemyStats = getComponent(world, enemyId, CombatStats) as CombatStatsData | undefined;
 
-  if (!playerStats || !enemyStats) {
+  if (!playerStats) {
     return;
   }
 
@@ -530,7 +719,6 @@ const _processEnemyTurn = (
   const rawDamage = damageRoll + (enemyStats.attack ?? 0);
   const damage = Math.max(1, rawDamage - (playerStats.defense ?? 0));
 
-  // Apply damage
   CombatStats.health[playerEntityId] = Math.max(0, playerStats.health - damage);
   const remainingHp = CombatStats.health[playerEntityId];
 
@@ -543,7 +731,7 @@ const _processEnemyTurn = (
     targetMaxHp: playerStats.maxHealth,
   });
 
-  // ── Visceral feedback: floating damage text + screen shake on player hit (C-163) ──
+  // ── Visceral feedback ──
   const playerScreenX = Position.x[playerEntityId] ?? 0;
   const playerScreenY = Position.y[playerEntityId] ?? 0;
   bridge.emit({
@@ -562,7 +750,6 @@ const _processEnemyTurn = (
     bridge.emit({ type: 'COMBAT_ENDED', victory: false });
     turnOrderList = [];
     currentTurnIndex = -1;
-    return;
   }
 };
 
@@ -739,6 +926,92 @@ const _getHp = (world: World, eid: number): number => {
 const _getMaxHp = (world: World, eid: number): number => {
   const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
   return stats?.maxHealth ?? 0;
+};
+
+/**
+ * Gets the preferred combat range for an entity (default: 3 cells).
+ * Reads from CombatTactics component if available, with a fallback default.
+ */
+const _getPreferredRange = (eid: number): number => {
+  return CombatTactics.preferredRange[eid] ?? 3;
+};
+
+/**
+ * Estimates grid distance between two entities in tile cells (C-197 AC-2).
+ * Uses taxicab distance with obstacle penalty for obstructed paths.
+ */
+const _estimateGridDist = (world: World, fromEid: number, toEid: number): number => {
+  const fromPos = getComponent(world, fromEid, Position) as PositionData | undefined;
+  const toPos = getComponent(world, toEid, Position) as PositionData | undefined;
+
+  if (!fromPos || !toPos) {
+    return 999;
+  }
+
+  const tileSize = 32;
+  const fx = Math.floor(fromPos.x / tileSize);
+  const fy = Math.floor(fromPos.y / tileSize);
+  const tx = Math.floor(toPos.x / tileSize);
+  const ty = Math.floor(toPos.y / tileSize);
+
+  const dx = Math.abs(tx - fx);
+  const dy = Math.abs(ty - fy);
+  let dist = dx + dy;
+
+  // Obstruction penalty: midpoint check
+  const midX = Math.floor((fx + tx) / 2) * tileSize + tileSize / 2;
+  const midY = Math.floor((fy + ty) / 2) * tileSize + tileSize / 2;
+  if (!_checkWalkable(midX, midY)) {
+    dist = Math.floor(dist * 2.0);
+  }
+
+  return dist;
+};
+
+/**
+ * Checks if a pixel position is walkable using the collision system.
+ */
+const _checkWalkable = (x: number, y: number): boolean => {
+  return isWalkable(x, y);
+};
+
+/**
+ * Gets a human-readable name for an entity (for combat log messages).
+ */
+const _getEntityName = (_world: World, eid: number): string => {
+  if (eid === 1) {
+    return 'Player';
+  }
+  return `Entity #${eid}`;
+};
+
+/**
+ * Gets all alive target entities for the given attacker.
+ * Filters dead entities and excludes the attacker itself.
+ */
+const _getAliveTargets = (world: World, attackerEid: number): number[] => {
+  const alive: number[] = [];
+  for (const eid of turnOrderList) {
+    if (eid === attackerEid) {
+      continue;
+    }
+    const stats = getComponent(world, eid, CombatStats) as CombatStatsData | undefined;
+    if (stats && stats.health > 0) {
+      alive.push(eid);
+    }
+  }
+  // Also include any entity in the world with CombatStats
+  const statsCount = CombatStats.health.length;
+  for (let eid = 0; eid < statsCount; eid++) {
+    if (eid === attackerEid || alive.includes(eid)) {
+      continue;
+    }
+    const health = CombatStats.health[eid];
+    if (health !== undefined && health > 0) {
+      alive.push(eid);
+    }
+  }
+  return alive;
 };
 
 /**

@@ -63,7 +63,12 @@ import {
   setScreenSize,
   updateCameraSystem,
 } from '../systems/camera_system.ts';
-import { type CollisionGrid, isWalkable, setCollisionGrid } from '../systems/collision_system.ts';
+import {
+  type CollisionGrid,
+  isWalkable,
+  resolveMoveIntents,
+  setCollisionGrid,
+} from '../systems/collision_system.ts';
 import {
   isCombatStageActive,
   setupCombatStage,
@@ -79,7 +84,10 @@ import {
   spawnTransitionEntities,
 } from '../systems/entity_spawner.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
+import { updateGoapCombatTactics } from '../systems/goap_combat_tactics_system.ts';
+import { updateGoapScheduler } from '../systems/goap_scheduler_system.ts';
 import { handleInteract } from '../systems/interaction_system.ts';
+import { initJpsPathfinder, tickJpsPathfinder } from '../systems/jps_pathfinder_system.ts';
 import {
   dehydrateZone,
   hydrateZone,
@@ -91,6 +99,7 @@ import {
   LpcBatchManager,
   syncAppearanceSystem,
 } from '../systems/render_worker.ts';
+import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
 import { handleCombatAction } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
@@ -121,6 +130,9 @@ let spatialGrid: SpatialHashGrid | undefined;
 
 /** Entity ID of the currently active zone (C-194). */
 let _activeZoneEntityId = 0;
+
+/** Timestamp of the last macro simulation tick (C-196 time-gate). */
+let _lastMacroTickMs = 0;
 
 /** Pre-allocated position buffer for grid population. */
 let positionBuffer: Float32Array | undefined;
@@ -465,6 +477,24 @@ const initializeEngine = (
   // 1. Set the collision grid before any entities or systems start
   if (collisionGrid) {
     setCollisionGrid(collisionGrid);
+
+    // C-196: Initialize JPS pathfinder for time-sliced navigation
+    const jpsIsWalkable = (gx: number, gy: number): boolean => {
+      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
+        return false;
+      }
+      return !collisionGrid.grid[gy * collisionGrid.width + gx];
+    };
+    initJpsPathfinder(collisionGrid.width, collisionGrid.height, jpsIsWalkable);
+
+    // C-196: Initialize spatial vision grid for perception sweeps
+    const visionWallCheck = (gx: number, gy: number): boolean => {
+      if (gx < 0 || gx >= collisionGrid.width || gy < 0 || gy >= collisionGrid.height) {
+        return true;
+      }
+      return collisionGrid.grid[gy * collisionGrid.width + gx];
+    };
+    setVisionGrid(visionWallCheck, collisionGrid.width, collisionGrid.height);
   }
 
   // 2. Create the bitECS world
@@ -619,9 +649,23 @@ const initializeEngine = (
 /** Timestamp of the previous tick for computing delta time. */
 let lastTickTime = performance.now();
 
+/** Macro simulation tick interval in milliseconds (C-196). */
+const MACRO_TICK_INTERVAL_MS = 500;
+
 /**
- * Runs one simulation frame: movement → dialog triggers → context →
- * serialize entity states → post STATE_UPDATE.
+ * Runs one simulation frame following the Emergent World 6-step pipeline:
+ *
+ *   1. Ingestion  — process streaming payloads from tool orchestrator
+ *   2. Macro Sim  — time-gated coarse simulation for inactive zones
+ *   3. Perception — spatial hash visibility sweeps (vision cones/FOV)
+ *   4. Cognition  — GOAP bitmask evaluations + crime event reactions
+ *   5. Navigation — time-sliced JPS pathfinding under budget ceiling
+ *   6. Resolution — movement + bitmask collision + kinematic settlement
+ *
+ * Post-resolution: camera, encounters, combat stage, dialog triggers,
+ * zoning, context sniffing, animation, LPC sync, and state serialization.
+ *
+ * Contract: C-196 Emergent World Integration
  */
 const tickLoop = (): void => {
   if (!world || !running || !activeWriteView) {
@@ -633,17 +677,81 @@ const tickLoop = (): void => {
   const deltaMs = now - lastTickTime;
   lastTickTime = now;
 
-  // Populate the spatial hash grid with entity positions for this tick
-  if (spatialGrid && positionBuffer) {
-    populateSpatialGrid(world, spatialGrid, positionBuffer);
+  // ────────────────────────────────────────────────────────────────────────
+  // Step 1: Ingestion — process streaming payloads from tool orchestrator
+  //
+  // Drains the macro queue (expression changes, state mask updates) that
+  // arrived via the bridge since the last tick. These must be applied
+  // BEFORE perception so new expression states are visible this frame.
+  // ────────────────────────────────────────────────────────────────────────
+  updateExpressions(world, workerBridge);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Step 2: Macro Sim — time-gated coarse simulation for inactive zones
+  //
+  // Macro simulation runs independently on a 500ms setInterval (C-194).
+  // This gate tracks the last macro tick for the pipeline sequence — the
+  // actual macro stepping is handled by the interval timer to avoid
+  // per-frame overhead (C-196 Watch Point: Step Multiplier Overlaps).
+  // ────────────────────────────────────────────────────────────────────────
+  if (now - _lastMacroTickMs >= MACRO_TICK_INTERVAL_MS) {
+    _lastMacroTickMs = now;
+    // Macro simulation ticks independently via startMacroSimulation() —
+    // no per-frame call needed. The time-gate solely tracks alignment.
   }
 
-  // Run game systems
-  updateExpressions(world, workerBridge);
+  // ────────────────────────────────────────────────────────────────────────
+  // Step 3: Perception — spatial hash visibility sweeps
+  //
+  // For each VisionObserver entity, casts DDA ray cones (idle/patrol)
+  // or recursive shadowcasting (suspicious/alert) and writes visibility
+  // bitmasks into VisionVisible.visibleByMask on target entities.
+  // ────────────────────────────────────────────────────────────────────────
+  updateSpatialVision(world);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Step 4: Cognition — GOAP bitmask evaluations + crime event reactions
+  //
+  // For each GoapAgent, validates/selects/applies actions toward goals
+  // via bitwise precondition/effect evaluation. Processes CrimeEvent
+  // entities for emergent reactions: witnesses go hostile, cache
+  // perpetrator targets, and drop stale behavioral loops.
+  //
+  // C-197: Also runs tactical combat evaluations for enemy combatants —
+  // scores targets using JPS distance weighting, selects optimal
+  // tactical actions (attack/move/retreat/hold) in sub-ms time.
+  // ────────────────────────────────────────────────────────────────────────
+  updateGoapScheduler(world);
+  updateGoapCombatTactics(world, playerEntityId);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Step 5: Navigation — time-sliced JPS pathfinding
+  //
+  // Cooperative JPS search with generational O(1) reset and flat
+  // min-heap. Steps one time-budgeted iteration per frame — path
+  // completion may span multiple ticks under the 2.0ms ceiling.
+  // ────────────────────────────────────────────────────────────────────────
+  tickJpsPathfinder();
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Step 6: Resolution — movement + collision
+  //
+  // Axis-independent continuous movement with bitmask collision via
+  // the dense spatial grid (isCellBlocked) and legacy boolean grid
+  // fallback (isWalkable). MoveIntents are resolved against spatial
+  // grid occupancy after velocities settle.
+  // ────────────────────────────────────────────────────────────────────────
   updateMovement(world, deltaMs);
+  resolveMoveIntents(world);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Post-resolution systems (do not mutate core state)
+  // ────────────────────────────────────────────────────────────────────────
+
+  // Camera: track CameraFocus entity, lerp toward target
   updateCameraSystem(world, deltaMs);
 
-  // Run encounter system after movement — positions are finalized
+  // Encounters: check proximity-based combat triggers
   updateEncounterSystem({ world, playerEntityId, bridge: workerBridge });
 
   // ── Combat stage setup / teardown (C-166) ──
@@ -654,9 +762,16 @@ const tickLoop = (): void => {
     teardownCombatStage(world);
   }
 
+  // Dialog triggers: proximity-based NPC dialogue activation
   updateDialogTriggers(world, playerEntityId, workerBridge);
+
+  // Zoning: portal trigger overlap detection
   updateZoningSystem(world, playerEntityId, workerBridge);
 
+  // Context: populate spatial hash grid for proximity queries
+  if (spatialGrid && positionBuffer) {
+    populateSpatialGrid(world, spatialGrid, positionBuffer);
+  }
   if (spatialGrid) {
     updateContextSystem({
       world,
@@ -1282,6 +1397,34 @@ self.onmessage = (event: MessageEvent): void => {
 
           // 6. Set the new collision grid
           setCollisionGrid(collisionGrid as CollisionGrid);
+
+          // 6b. C-196: Initialize JPS pathfinder for time-sliced navigation.
+          //     The collision grid boolean array (true = solid) serves as
+          //     the walkability oracle for JPS jump-point expansion.
+          if (collisionGrid) {
+            const cg = collisionGrid as CollisionGrid;
+            const jpsIsWalkable = (gx: number, gy: number): boolean => {
+              if (gx < 0 || gx >= cg.width || gy < 0 || gy >= cg.height) {
+                return false;
+              }
+              return !cg.grid[gy * cg.width + gx];
+            };
+            initJpsPathfinder(cg.width, cg.height, jpsIsWalkable);
+          }
+
+          // 6c. C-196: Initialize spatial vision grid for perception sweeps.
+          //     Uses the same collision boolean array as the occlusion oracle.
+          //     Solid tiles block DDA ray cones and shadowcasting FOV.
+          if (collisionGrid) {
+            const cg = collisionGrid as CollisionGrid;
+            const visionWallCheck = (gx: number, gy: number): boolean => {
+              if (gx < 0 || gx >= cg.width || gy < 0 || gy >= cg.height) {
+                return true;
+              }
+              return cg.grid[gy * cg.width + gx];
+            };
+            setVisionGrid(visionWallCheck, cg.width, cg.height);
+          }
 
           // 6a. C-180: Clamp player spawn position to a walkable tile.
           //     Query params like ?position_x=0&position_y=0 may land on
