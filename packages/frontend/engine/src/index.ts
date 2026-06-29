@@ -76,6 +76,8 @@ export {
 } from './components/collision_data.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
+export type { CombatTacticsData } from './components/combat_tactics.ts';
+export { CombatTactics, registerCombatTacticsObservers } from './components/combat_tactics.ts';
 export type { CrimeEventData } from './components/crime_event.ts';
 export { CrimeEvent, registerCrimeEventObservers } from './components/crime_event.ts';
 export { Enemy, registerEnemyObservers } from './components/enemy.ts';
@@ -320,6 +322,12 @@ export {
   spawnSpawnPointEntities,
   spawnTransitionEntities,
 } from './systems/entity_spawner.ts';
+// Combat Tactics (C-197)
+export {
+  resolveTacticalAction,
+  scoreTarget,
+  updateGoapCombatTactics,
+} from './systems/goap_combat_tactics_system.ts';
 // GOAP (C-191)
 export {
   resetGoapState,
