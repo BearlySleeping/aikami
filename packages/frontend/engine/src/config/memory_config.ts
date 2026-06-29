@@ -21,6 +21,24 @@ export const COMPONENT_STRIDE = 3;
 /** Byte size of the full entity state buffer. */
 export const BUFFER_SIZE = MAX_ENTITIES * COMPONENT_STRIDE * Float32Array.BYTES_PER_ELEMENT;
 
+// ---------------------------------------------------------------------------
+// String registry capacity (Contract C-195)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of unique strings that can be registered in the
+ * StringRegistryService. This is a soft ceiling — the Map grows
+ * dynamically, but pre-sizing the capacity hint avoids rehashes.
+ */
+export const MAX_REGISTRY_STRINGS = 50000;
+
+/**
+ * Initial capacity hint for the StringRegistryService internal Map.
+ * Set to 2048 to cover the typical NPC names + dialogue block count
+ * without triggering early Map rehashes.
+ */
+export const REGISTRY_INITIAL_CAPACITY = 2048;
+
 /**
  * Number of buffers to allocate for the N-buffer fallback when
  * SharedArrayBuffer is unavailable.
