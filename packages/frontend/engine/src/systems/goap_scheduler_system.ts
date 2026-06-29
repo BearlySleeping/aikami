@@ -132,6 +132,52 @@ const _buildDefaultActions = (): StaticActionDefinition[] => {
       effectClearMask: WorldStateBit.HasWitnessedCrime,
       effectSetMask: WorldStateBit.TaskComplete,
     },
+
+    // ── C-197: Combat — Attack (needs InCombat + IsInRange + HasTarget) ──
+    {
+      actionId: 9,
+      cost: 1,
+      preconditionUsageMask:
+        WorldStateBit.InCombat | WorldStateBit.IsInRange | WorldStateBit.HasTarget,
+      preconditionValueMask:
+        WorldStateBit.InCombat | WorldStateBit.IsInRange | WorldStateBit.HasTarget,
+      effectClearMask: 0,
+      effectSetMask: 0, // Attacking is continuous — turn manager handles damage
+    },
+
+    // ── C-197: Combat — Move to range (needs InCombat + HasTarget, NOT IsInRange) ──
+    {
+      actionId: 10,
+      cost: 3,
+      preconditionUsageMask: WorldStateBit.InCombat | WorldStateBit.HasTarget,
+      preconditionValueMask: WorldStateBit.InCombat | WorldStateBit.HasTarget,
+      effectClearMask: 0,
+      effectSetMask: WorldStateBit.IsInRange,
+    },
+
+    // ── C-197: Combat — Retreat (needs InCombat + LowHealth) ──
+    {
+      actionId: 11,
+      cost: 1,
+      preconditionUsageMask: WorldStateBit.InCombat | WorldStateBit.LowHealth,
+      preconditionValueMask: WorldStateBit.InCombat | WorldStateBit.LowHealth,
+      effectClearMask:
+        WorldStateBit.InCombat |
+        WorldStateBit.IsInRange |
+        WorldStateBit.HasTarget |
+        WorldStateBit.HasAdvantage,
+      effectSetMask: WorldStateBit.IsFleeing,
+    },
+
+    // ── C-197: Combat — Hold position (needs InCombat + IsInRange) ──
+    {
+      actionId: 12,
+      cost: 2,
+      preconditionUsageMask: WorldStateBit.InCombat | WorldStateBit.IsInRange,
+      preconditionValueMask: WorldStateBit.InCombat | WorldStateBit.IsInRange,
+      effectClearMask: 0,
+      effectSetMask: WorldStateBit.IsHolding,
+    },
   ];
 };
 

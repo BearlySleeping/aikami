@@ -44,6 +44,18 @@ export const WorldStateBit = {
   HasEaten: 1 << 13,
   /** Agent has completed their current task. */
   TaskComplete: 1 << 14,
+  /** Agent is in an active combat encounter. */
+  InCombat: 1 << 15,
+  /** Agent is within preferred attack range of the target. */
+  IsInRange: 1 << 16,
+  /** Agent health is below a critical threshold. */
+  LowHealth: 1 << 17,
+  /** Agent has a positional tactical advantage (flanking, high ground). */
+  HasAdvantage: 1 << 18,
+  /** Agent's current target has low remaining HP. */
+  TargetIsWeak: 1 << 19,
+  /** Agent is holding a defensive position (guard stance). */
+  IsHolding: 1 << 20,
 } as const;
 
 /** Type for world state bit values. */
