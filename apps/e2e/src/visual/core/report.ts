@@ -45,7 +45,7 @@ export type ReportSummary = {
 
 // ── Path resolution ──────────────────────────────────────────
 
-const E2E_DIR = resolve(import.meta.dirname, '../../../..');
+const E2E_DIR = resolve(import.meta.dirname, '../../..');
 const REPORT_DIR = resolve(E2E_DIR, 'test-results', 'visual');
 // ── HTML generation ──────────────────────────────────────────
 

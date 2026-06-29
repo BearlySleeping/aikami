@@ -48,7 +48,8 @@ import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
-import { createTestSprite } from '../entities/create_test_sprite.ts';
+import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
+
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import { deserializeWorld, serializeWorld } from '../serialization/ecs_serializer.ts';
 import { getEngineGameMode, setEngineGameMode } from '../state/game_mode.ts';
@@ -569,10 +570,11 @@ const initializeEngine = (
     }
   } else {
     playerEntityId = createPlayer(world, playerData);
-    let testSpriteId = 0;
-    if (canvasWidth && canvasHeight) {
-      testSpriteId = createTestSprite(world, canvasWidth, canvasHeight);
-    }
+
+    // ── C-198: Override player Appearance with full 6-layer sandbox recipe ──
+    // createPlayer sets [1, 1, 1, 1, 1, 95] — replace with body, hair,
+    // torso, legs, feet, head so all layers render without gaps.
+    createDefaultSandboxAvatar(world, playerEntityId);
 
     // Player (green tint)
     postMessage({
@@ -580,16 +582,6 @@ const initializeEngine = (
       eid: playerEntityId,
       tint: 0x00ff88,
     });
-
-    // Test sprite (pink tint) — must be sent so GameWorld creates a display object
-    // bitECS allocates sequential IDs, so testSpriteId = playerEntityId + 1
-    if (testSpriteId > 0) {
-      postMessage({
-        type: 'ENTITY_CREATED',
-        eid: testSpriteId,
-        tint: 0xff6688,
-      });
-    }
   }
 
   queueMicrotask(() => {

@@ -39,15 +39,10 @@ const createNPC = (world: World, data: NPCSpawnData): number => {
     }),
   );
 
-  // Set default Appearance for NPCs (Guide)
-  // We'll use specific IDs to be mapped by the client:
-  // 10 = standard body
-  // 11 = guide hair
-  // 12 = robe
-  // 13 = pants
-  // 14 = shoes
+  // Set default Appearance for NPCs — 6-layer stack
+  // 10 = body, 11 = hair, 14 = torso, 12 = legs, 15 = feet, 13 = head
   addComponent(world, entityId, Appearance);
-  setAppearanceLayers(world, entityId, [10, 11, 12, 13, 14]);
+  setAppearanceLayers(world, entityId, [10, 11, 14, 12, 15, 13]);
 
   addComponent(world, entityId, NPCDialog);
   addComponent(
