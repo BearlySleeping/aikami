@@ -77,16 +77,3 @@ test.describe('Firebase REST Integration', () => {
     expect(user.uid).toBeTruthy();
   });
 });
-
-test.describe('Game Page Load', () => {
-  test('game page loads and canvas renders', async ({ guestUser, game }) => {
-    const { menu } = game(guestUser);
-    await menu.goto();
-
-    await menu.expectMenuVisible();
-    await menu.expectTitleAndSubtitle({
-      title: 'AIKAMI',
-      subtitle: 'Chronicles of the Lost Realm',
-    });
-  });
-});

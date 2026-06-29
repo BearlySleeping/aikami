@@ -10,7 +10,7 @@
 
 import { test as base, type Page } from '@playwright/test';
 import { EMULATOR_PORTS } from './config';
-import { ClientAuthPage, ClientChatPage, ClientNavigation, GameMenuPage } from './pom/index';
+import { ClientChatPage, ClientNavigation } from './pom/index';
 
 // ── Configuration ───────────────────────────────────────────
 
@@ -23,7 +23,6 @@ const AUTH_STATE_FILE = './.auth/user.json';
  * Creates PWA Page Object Models bound to a specific Playwright Page.
  */
 export type ClientPomFactory = (page: Page) => {
-  auth: ClientAuthPage;
   chat: ClientChatPage;
   nav: ClientNavigation;
 };
@@ -31,9 +30,7 @@ export type ClientPomFactory = (page: Page) => {
 /**
  * Creates Game Page Object Models bound to a specific Playwright Page.
  */
-export type GamePomFactory = (page: Page) => {
-  menu: GameMenuPage;
-};
+export type GamePomFactory = (page: Page) => Record<string, never>;
 
 // ── Fixture type definitions ────────────────────────────────
 
@@ -99,7 +96,6 @@ export const test = base.extend<E2EFixtures>({
   client: async ({ page: _page }, use) => {
     void _page;
     const factory: ClientPomFactory = (page: Page) => ({
-      auth: new ClientAuthPage(page),
       chat: new ClientChatPage(page),
       nav: new ClientNavigation(page),
     });
@@ -109,9 +105,7 @@ export const test = base.extend<E2EFixtures>({
   // ── Game POM Factory ────────────────────────────────────
   game: async ({ page: _page2 }, use) => {
     void _page2;
-    const factory: GamePomFactory = (page: Page) => ({
-      menu: new GameMenuPage(page),
-    });
+    const factory: GamePomFactory = (_page: Page) => ({});
     await use(factory);
   },
 });

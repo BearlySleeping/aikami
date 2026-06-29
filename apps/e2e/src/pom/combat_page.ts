@@ -3,10 +3,9 @@
 //
 // Encapsulates locators and interaction primitives for the Combat overlay
 // and /dev/combat sandbox. Handles attack/defend/flee actions, custom AI
-// action input, combat log inspection, and state verification (HP bars,
-// victory/defeat banners).
+// action input, combat log inspection, and state verification.
 //
-// Contract: C-145, C-146, C-148, C-149
+// DOM reference: apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
 
 import type { Page } from '@playwright/test';
 
@@ -21,7 +20,10 @@ export class CombatPage {
 
   /** Navigate to the combat dev sandbox. */
   async gotoDev(): Promise<void> {
-    await this.page.goto('http://localhost:5274/dev/combat', { waitUntil: 'domcontentloaded' });
+    // useRealAi=false ensures mock resolution for fast, deterministic tests
+    await this.page.goto('http://localhost:5274/dev/combat?useRealAi=false', {
+      waitUntil: 'domcontentloaded',
+    });
     await this.waitReady();
   }
 
@@ -81,8 +83,9 @@ export class CombatPage {
 
   // ── Combat Log ────────────────────────────────────────────
 
+  /** Combat log container — the scrollable area with log entries. */
   get combatLog() {
-    return this.page.locator('[data-testid="combat-log"]');
+    return this.page.locator('.flex-1.overflow-y-auto.min-h-0').first();
   }
 
   async expectLogContains(text: string): Promise<void> {
@@ -95,14 +98,18 @@ export class CombatPage {
     await expect(this.combatLog).toBeVisible();
   }
 
-  // ── HP Bars ───────────────────────────────────────────────
+  // ── Tab Navigation ────────────────────────────────────────
 
-  get playerHpBar() {
-    return this.page.locator('[data-testid="combat-player-hp"]');
+  /** Switch to the Gallery tab where the Generate Scene button lives. */
+  async switchToGalleryTab(): Promise<void> {
+    await this.page.locator('.tab').filter({ hasText: 'Gallery' }).click();
+    await this.page.waitForTimeout(300);
   }
 
-  get enemyHpBar() {
-    return this.page.locator('[data-testid="combat-enemy-hp"]');
+  /** Switch to the Log tab. */
+  async switchToLogTab(): Promise<void> {
+    await this.page.locator('.tab').filter({ hasText: 'Log' }).click();
+    await this.page.waitForTimeout(300);
   }
 
   // ── Dice UI ───────────────────────────────────────────────
@@ -133,7 +140,7 @@ export class CombatPage {
     return this.page.locator('[data-testid="combat-generate-scene-btn"]');
   }
 
-  // ── Portrait Stage (C-167 DOM-based combat UI) ───────────
+  // ── Portrait Stage (DOM-based combat UI) ──────────────────
 
   get portraitStage() {
     return this.page.locator('[data-testid="combat-portrait-stage"]');
