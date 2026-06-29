@@ -55,7 +55,7 @@ bun run scripts -- generate_llms
 
 | Name                  | Description                                            |
 | --------------------- | ------------------------------------------------------ |
-| `dev_all`             | Start all dev servers (PWA, game, docs, emulators)     |
+| `dev_all`             | Start all dev servers (client, docs, firebase)     |
 | `validate_all`        | Run full monorepo validation (lint + typecheck + test) |
 | `generate_llms`       | Generate llms.txt context file                         |
 | `generate_context`    | Generate AI context from project knowledge             |

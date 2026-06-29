@@ -15,8 +15,8 @@ This document details the primary technologies, frameworks, and services used in
 | Runtime | Bun | Package manager, test runner, scripts |
 | Language | TypeScript 6.0 | Strict mode across all 22+ projects |
 | Monorepo | Moon 2.2 | Task orchestration, caching, code generation |
-| **Frontend Framework** | SvelteKit 2 + Svelte 5 Runes | PWA with ViewModel pattern |
-| **Desktop Export** | Tauri v2 | Native app from SvelteKit PWA |
+| **Frontend Framework** | SvelteKit 2 + Svelte 5 Runes | Client with ViewModel pattern |
+| **Desktop Export** | Tauri v2 | Native app from SvelteKit Client |
 | **Game Rendering** | PixiJS v8 (WebGPU) | 2D rendering engine, imperative canvas |
 | **Game Logic** | bitECS | Entity Component System, data-oriented design |
 | Static Sites | Astro | Landing page, documentation |
@@ -38,7 +38,7 @@ This document details the primary technologies, frameworks, and services used in
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Aikami Platform                             │
 ├──────────────────┬──────────────────────┬────────────────────────┤
-│   PWA + Tauri    │   Game Engine        │   Landing + Docs       │
+│   Client + Tauri    │   Game Engine        │   Landing + Docs       │
 │ (SvelteKit 2)    │ (PixiJS v8 + bitECS) │   (Astro)              │
 ├──────────────────┴──────────────────────┴────────────────────────┤
 │                     Firebase Backend                              │
@@ -60,5 +60,5 @@ This document details the primary technologies, frameworks, and services used in
 
 - **Firestore NoSQL** → Replaced by **Firebase Data Connect (PostgreSQL)** for operations-based pricing and relational query support (pgvector, recursive CTEs).
 - **Genkit** → Replaced by vendor-agnostic **AiServiceInterface** (C-015) supporting OpenAI and Gemini providers.
-- **Godot Engine** → Replaced by **PixiJS v8 + bitECS** game engine running inside the SvelteKit PWA (C-016). Exported to desktop via Tauri v2.
+- **Godot Engine** → Replaced by **PixiJS v8 + bitECS** game engine running inside the SvelteKit Client (C-016). Exported to desktop via Tauri v2.
 - **Client-side Zod** → Replaced by **Valibot** for perimeter validation (1.5KB vs ~12KB bundle saving, 16× faster parsing).

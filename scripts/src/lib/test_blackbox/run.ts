@@ -43,15 +43,15 @@ Options:
 Suites:
   schema-check      Validate Zod schemas + TypeScript types
   functions         Firebase Functions tests (requires emulators)
-  client            Client browser tests (requires PWA dev server)
-  game-e2e          Game Firebase REST integration (requires emulators + game dev server)
+  client            Client browser tests (requires Client dev server)
+  game-e2e          Game Firebase REST integration (requires firebase + client dev server)
   cross-service     Multi-service flow tests
 
 Examples:
   bun run test:blackbox                         # All suites
   bun run test:blackbox game-e2e                # Game only
   bun run test:blackbox schema-check            # Schema only
-  bun run test:blackbox client functions           # PWA + Functions
+  bun run test:blackbox client functions           # Client + Functions
   bun run test:blackbox --no-cross-service      # Skip cross-service
   `);
   process.exit(0);
@@ -131,7 +131,7 @@ async function main() {
     if (tmuxAvailable) {
       const only: string[] = [];
       if (needsEmulator) {
-        only.push('emulators');
+        only.push('firebase');
       }
       if (needsGame) {
         only.push('game');
@@ -166,7 +166,7 @@ async function main() {
       if (needsClient) {
         services.push(
           startDevServer('client').catch((e) => {
-            console.error('  ⚠ PWA dev server failed:', e instanceof Error ? e.message : e);
+            console.error('  ⚠ Client dev server failed:', e instanceof Error ? e.message : e);
           }),
         );
       }

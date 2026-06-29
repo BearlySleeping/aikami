@@ -1,5 +1,5 @@
 // scripts/src/lib/test_blackbox/suites/client.e2e.ts
-// PWA browser tests via Playwright against the local dev server.
+// Client browser tests via Playwright against the local dev server.
 // Runs from the unified apps/e2e package.
 
 import { execSync } from 'node:child_process';
@@ -13,7 +13,7 @@ export const pwaSuite: TestSuite = {
   name: 'client',
   category: 'service',
   run: async () => {
-    console.log('  Running PWA Playwright tests from apps/e2e...');
+    console.log('  Running Client Playwright tests from apps/e2e...');
 
     try {
       execSync('npx playwright test --project=client --reporter=list', {
@@ -25,9 +25,9 @@ export const pwaSuite: TestSuite = {
           CI: process.env.CI || 'true',
         },
       });
-      console.log('  ✓ PWA tests passed');
+      console.log('  ✓ Client tests passed');
     } catch {
-      throw new Error('PWA Playwright tests failed');
+      throw new Error('Client Playwright tests failed');
     }
   },
 };

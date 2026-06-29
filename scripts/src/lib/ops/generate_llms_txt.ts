@@ -74,7 +74,7 @@ function generate(): string {
   lines.push('');
   lines.push('## Main Repo');
   lines.push('');
-  lines.push('Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.');
+  lines.push('Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrator.');
   lines.push('');
 
   // Category index

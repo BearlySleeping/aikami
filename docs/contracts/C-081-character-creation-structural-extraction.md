@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Source:** Architectural Consolidation Review
-- **Target:** PWA Character Creation Workflow
+- **Target:** Client Character Creation Workflow
 - **Priority:** P1
 - **Dependencies:** C-078, C-080
 - **Status:** not_started

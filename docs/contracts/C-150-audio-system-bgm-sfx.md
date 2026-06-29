@@ -19,7 +19,7 @@ Implement a centralized, high-performance Audio Service using the Web Audio API.
   - `sfx_pickup.wav`
 
 ## Task 2: Service Worker Range Interceptor (iOS Fix)
-**File:** `apps/frontend/client/src/service-worker.js` (or integrate into existing Vite PWA config)
+**File:** `apps/frontend/client/src/service-worker.js` (or integrate into existing Vite Client config)
 - Implement a `fetch` event listener in the Service Worker that intercepts requests to `/assets/audio/`.
 - If the request includes a `Range` header, retrieve the asset from the Cache API (or fetch and cache it), read the `ArrayBuffer`, and slice it.
 - Return a `206 Partial Content` response with the correct `Content-Range` and `Content-Length` headers so iOS Safari does not block playback.

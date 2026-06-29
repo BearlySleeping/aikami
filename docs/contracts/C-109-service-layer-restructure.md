@@ -1,7 +1,7 @@
 # Contract C-109: Service Layer Restructure & Client Flattening
 
 ## Context
-Since the PWA is strictly a Tauri SPA, the `src/lib/client/` directory is redundant. Furthermore, the `client/services/` folder has become a "junk drawer" organized by technology (`api/`, `database/`, `media/`) rather than by feature. We need to flatten the folder structure and reorganize the services into cohesive, feature-based modules.
+Since the Client is strictly a Tauri SPA, the `src/lib/client/` directory is redundant. Furthermore, the `client/services/` folder has become a "junk drawer" organized by technology (`api/`, `database/`, `media/`) rather than by feature. We need to flatten the folder structure and reorganize the services into cohesive, feature-based modules.
 
 ## Scope
 - `apps/frontend/client/src/lib/client/*` -> `apps/frontend/client/src/lib/*`

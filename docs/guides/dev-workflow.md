@@ -15,8 +15,8 @@ The setup script checks prerequisites, installs deps, creates `.env`, and verifi
 ## Daily Commands
 
 ```bash
-bun run dev              # Start PWA dev server (http://localhost:5173)
-bun run dev:all           # Start emulators + PWA in tmux session
+bun run dev              # Start Client dev server (http://localhost:5173)
+bun run dev:all           # Start firebase + Client in tmux session
 bun run typecheck         # Typecheck all 22 projects
 bun run fix               # Auto-fix lint/format issues (Biome)
 bun run lint              # Check lint/format without writing
@@ -27,8 +27,8 @@ bun run validate          # lint + format + typecheck
 
 ```bash
 bun run test              # Run all tests (unit + E2E via moon)
-bun run test:blackbox     # Full blackbox suite (schema → functions → PWA Playwright)
-bun run test:blackbox client # Just PWA tests
+bun run test:blackbox     # Full blackbox suite (schema → functions → Client Playwright)
+bun run test:blackbox client # Just Client tests
 bun run test:blackbox --no-emulator  # Skip emulator startup
 ```
 
@@ -52,7 +52,7 @@ Emulator ports:
 ## Adding a Feature
 
 1. **Write a contract** in `docs/contracts/` using the [TEMPLATE](contracts/TEMPLATE.md)
-2. **Implement** following the ViewModel pattern for PWA, Zod schemas for data, repository pattern for Firestore
+2. **Implement** following the ViewModel pattern for Client, Zod schemas for data, repository pattern for Firestore
 3. **Verify** with `bun run validate` then `bun run test:blackbox`
 4. **Update knowledge** — run `bun run scripts -- generate_llms`
 
@@ -63,7 +63,7 @@ Emulator ports:
 - SvelteKit routes: `+page.svelte`, `+layout.svelte`, `+server.ts`
 - Route directories: mirror URL structure
 
-### Code Pattern (PWA)
+### Code Pattern (Client)
 ```typescript
 // apps/frontend/client/src/lib/views/my-feature/my-feature-view-model.svelte.ts
 export interface MyFeatureViewModel { ... }

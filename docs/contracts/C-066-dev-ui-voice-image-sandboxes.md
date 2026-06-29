@@ -51,7 +51,7 @@ For the `VoiceViewModel`:
 ## Acceptance Criteria
 
 - **AC1: Test Suite Repair**
-  - Given the PWA test suite
+  - Given the Client test suite
   - When executing `bun test`
   - Then `dev_layout_view_model.test.ts` passes successfully, and the entire suite returns 0 failures.
   - Test Hook: Run `bun test apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts`.

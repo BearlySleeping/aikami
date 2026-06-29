@@ -60,7 +60,7 @@ validate({ test: true })  # fix+typecheck+build+test on affected projects
 
 ### ALWAYS use moon for task execution
 ```
-moon_run_task({ target: "pwa:typecheck" })  # NOT cd apps/frontend/pwa && bun run typecheck
+moon_run_task({ target: "client:typecheck" })  # NOT cd apps/frontend/client && bun run typecheck
 ```
 
 ### NEVER push without explicit instruction
@@ -81,7 +81,7 @@ Follow the 4-layer typed pattern:
 
 ### Contract → Route mapping
 ```
-pwa-* contracts      → apps/frontend/pwa/src/routes/(authenticated)/{path}/
+client-* contracts      → apps/frontend/client/src/routes/(authenticated)/{path}/
 landing-* contracts  → apps/frontend/landing/src/pages/{path}.astro
 shared-* contracts   → packages/shared/{types,schemas}/
                        packages/backend/{ai,database,utils}/

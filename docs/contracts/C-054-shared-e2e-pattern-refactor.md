@@ -9,7 +9,7 @@
 | Contract Version | 1.0.0 |
 
 # Overview
-This contract refactors the recently consolidated `apps/e2e` package to utilize enterprise-grade Playwright abstraction patterns. Migrated E2E E2E tests currently rely on raw locators and repetitive login flows. This refactor implements Authentication State Caching, Page Object Models (POM), Custom Fixtures, and Emulator Helpers to drastically reduce E2E execution time, eliminate E2E flakiness, and improve E2E maintainability across the PWA and Game testing domains.
+This contract refactors the recently consolidated `apps/e2e` package to utilize enterprise-grade Playwright abstraction patterns. Migrated E2E E2E tests currently rely on raw locators and repetitive login flows. This refactor implements Authentication State Caching, Page Object Models (POM), Custom Fixtures, and Emulator Helpers to drastically reduce E2E execution time, eliminate E2E flakiness, and improve E2E maintainability across the Client and Game testing domains.
 
 # Design Reference
 - Playwright Project Dependencies (for E2E auth caching).
@@ -37,13 +37,13 @@ The E2E framework will rely on a strictly typed custom fixture payload:
 - Given the unified Playwright configuration
 - When the E2E test suite initializes
 - Then a dedicated setup project must run first, authenticate a test identity, and successfully write the session state to `.auth/user.json`.
-- Test Hook: Verify E2E suites targeting the PWA dashboard can navigate directly to protected routes without manually filling in E2E login forms.
+- Test Hook: Verify E2E suites targeting the Client dashboard can navigate directly to protected routes without manually filling in E2E login forms.
 
 ### AC-2: Custom E2E Fixtures and POM Injection
 - Given a newly executing E2E test block
 - When the E2E test destructures the provided arguments
 - Then it must receive fully initialized E2E POM instances and the appropriately scoped E2E browser context (authenticated vs. unauthenticated).
-- Test Hook: Refactor at least one PWA E2E test and one Game E2E test to successfully execute using the new custom E2E fixtures.
+- Test Hook: Refactor at least one Client E2E test and one Game E2E test to successfully execute using the new custom E2E fixtures.
 
 ### AC-3: Centralized E2E State Purging
 - Given the `apps/e2e` global E2E test lifecycle
@@ -55,9 +55,9 @@ The E2E framework will rely on a strictly typed custom fixture payload:
 1. Create the `apps/e2e/src/` directory to house `auth.setup.ts`, `fixtures.ts`, and `emulator_helper.ts`.
 2. Create the `apps/e2e/src/pom/` directory and begin abstracting the raw locators from the 12 migrated E2E tests into E2E class models.
 3. Update `playwright.config.ts` to include the `setup` project and define the `.auth` storage state paths. Add `.auth` to `.gitignore`.
-4. Refactor the existing `.spec.ts` files in the PWA and Game E2E folders to utilize the new E2E fixtures and POMs.
+4. Refactor the existing `.spec.ts` files in the Client and Game E2E folders to utilize the new E2E fixtures and POMs.
 5. Ensure ESM and CommonJS interoperability when importing Firebase Admin SDKs within the E2E Playwright Node environment.
 
 # Edge Cases & Gotchas
-- **SvelteKit E2E Hydration**: When building PWA POMs, implement a deterministic E2E wait strategy (e.g., waiting for an `onMount` data attribute on the HTML tag) rather than arbitrary timeouts to prevent interactions with unhydrated E2E components.
-- **Firebase Auth E2E Emulators**: If the PWA utilizes Firebase Auth via IndexedDB, the `auth.setup.ts` script must explicitly inject the serialized auth tokens into the E2E browser's IndexedDB context, as standard E2E cookie persistence will not capture client-side Firebase Auth states.
+- **SvelteKit E2E Hydration**: When building Client POMs, implement a deterministic E2E wait strategy (e.g., waiting for an `onMount` data attribute on the HTML tag) rather than arbitrary timeouts to prevent interactions with unhydrated E2E components.
+- **Firebase Auth E2E Emulators**: If the Client utilizes Firebase Auth via IndexedDB, the `auth.setup.ts` script must explicitly inject the serialized auth tokens into the E2E browser's IndexedDB context, as standard E2E cookie persistence will not capture client-side Firebase Auth states.

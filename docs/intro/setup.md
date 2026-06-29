@@ -49,8 +49,8 @@ bun run validate
 ## Daily Development
 
 ```bash
-bun run dev        # Start PWA dev server
-bun run dev:all    # Start all services (emulators + PWA)
+bun run dev        # Start Client dev server
+bun run dev:all    # Start all services (firebase + Client)
 bun run test       # Run tests
 bun run typecheck  # Typecheck all projects
 bun run fix        # Auto-fix lint/format issues

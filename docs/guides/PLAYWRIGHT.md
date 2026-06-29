@@ -1,10 +1,10 @@
 # Playwright Tests
 
-This document provides an overview of the Playwright tests for the PWA.
+This document provides an overview of the Playwright tests for the Client.
 
 ## Overview
 
-Playwright is a Node.js library that provides a high-level API for controlling a browser. We use Playwright to write end-to-end (E2E) tests for the PWA. These tests simulate user interactions and verify that the application is working correctly.
+Playwright is a Node.js library that provides a high-level API for controlling a browser. We use Playwright to write end-to-end (E2E) tests for the Client. These tests simulate user interactions and verify that the application is working correctly.
 
 ## Installation
 
@@ -63,7 +63,7 @@ For more information on assertions, please refer to the [Playwright documentatio
 
 ## Test Cases
 
-The following is a list of the test cases that we should write for the PWA:
+The following is a list of the test cases that we should write for the Client:
 
 ### Authentication
 
@@ -95,4 +95,4 @@ The following is a list of the test cases that we should write for the PWA:
 
 ## Conclusion
 
-By writing these Playwright tests, we can ensure that the PWA is working correctly and that it is free of bugs. If you have any questions or suggestions, please feel free to open an issue or a pull request.
+By writing these Playwright tests, we can ensure that the Client is working correctly and that it is free of bugs. If you have any questions or suggestions, please feel free to open an issue or a pull request.

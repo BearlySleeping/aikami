@@ -3,7 +3,7 @@ name: pixijs-v8
 description: >-
   Aikami-specific PixiJS v8 patterns — bitECS integration for ECS game architecture,
   the SvelteKit ↔ game engine architectural boundary, and project conventions for
-  combining PixiJS, bitECS, and Svelte 5 in the Aikami PWA. For general PixiJS v8
+  combining PixiJS, bitECS, and Svelte 5 in the Aikami Client. For general PixiJS v8
   API usage (Application, Container, Sprite, Graphics, Text, Assets, Ticker, Events,
   Filters, etc.), see the official skills in .pi/skills-pixijs/.
 version: 2.0.0
@@ -22,7 +22,7 @@ Events, Filters, etc.), use the official skills installed in
 
 ## 1. Display Object Hierarchy
 
-The high-level scene graph structure used in the Aikami PWA:
+The high-level scene graph structure used in the Aikami Client:
 
 ```
 Application
@@ -88,7 +88,7 @@ const spriteMap = new Map<number, Sprite>();
 
 ## 3. SvelteKit ↔ Game Engine Boundary
 
-The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit PWA through a
+The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit Client through a
 strict architectural boundary. This decoupling prevents the 60fps game loop
 from triggering Svelte 5 reactivity and crashing the browser microtask queue.
 
@@ -127,7 +127,7 @@ from triggering Svelte 5 reactivity and crashing the browser microtask queue.
 
 #### 3.1 No `$state` in Game Code
 
-Game code in `apps/frontend/pwa/src/lib/game/` runs at 60fps via
+Game code in `apps/frontend/client/src/lib/game/` runs at 60fps via
 `requestAnimationFrame`. Any `$state` variable touched in the game loop
 triggers a full DOM re-render every frame — catastrophic performance impact.
 The game directory is a **pure imperative TypeScript zone** with zero Svelte
@@ -135,17 +135,17 @@ imports.
 
 ```typescript
 // ❌ Forbidden — $state in game code
-// apps/frontend/pwa/src/lib/game/systems/movement.ts
+// apps/frontend/client/src/lib/game/systems/movement.ts
 let playerX = $state(0); // Crashes Svelte microtask queue!
 
 // ✅ Correct — plain variable updated by the ticker
-// apps/frontend/pwa/src/lib/game/systems/movement.ts
+// apps/frontend/client/src/lib/game/systems/movement.ts
 let playerX = 0;
 ```
 
 #### 3.2 Svelte UI Handles Low-Frequency State
 
-ViewModels in `apps/frontend/pwa/src/lib/views/` handle UI-relevant state only:
+ViewModels in `apps/frontend/client/src/lib/views/` handle UI-relevant state only:
 
 - **Menus** — open/closed, selected item
 - **Chat wrappers** — message lists, input text, loading flags

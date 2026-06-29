@@ -5,7 +5,7 @@
 | Field        | Value                                   |
 | ------------ | --------------------------------------- |
 | Source       | Technical Audit / Visual Pipeline Stall |
-| Target       | PWA Rendering Layer / Dev Tools View    |
+| Target       | Client Rendering Layer / Dev Tools View    |
 | Priority     | P1                                      |
 | Dependencies | C-042                                   |
 | Status       | completed                                |

@@ -1,7 +1,7 @@
 # Contract: C-073 — LPC Visual Smoke Harness and AI Evaluation Pipeline
 
 ## Metadata
-- Source: PWA Frontend Component Quality Audit
+- Source: Client Frontend Component Quality Audit
 - Target: apps/e2e, scripts
 - Priority: P1 (Foundation Automation)
 - Dependencies: C-050, C-051, C-052
@@ -17,8 +17,8 @@ The LPC sprite composition pipeline is highly sensitive to layer ordering, grid 
 - `apps/e2e/playwright.config.ts`: Unified E2E test isolation project structure from C-052.
 
 ## Architecture Directives
-- **LPC Smoke Test Suite Migration**: Migrate the existing `lpc_visual.spec.ts` from the PWA into the `apps/e2e` unified test runner package.
-- **AI Visual Quality Evaluator Update**: Ensure the evaluation script reads the generated PNGs from `apps/e2e/test-results/` instead of the old PWA directory, optimizes them, and hits the multimodal LLM gateway.
+- **LPC Smoke Test Suite Migration**: Migrate the existing `lpc_visual.spec.ts` from the Client into the `apps/e2e` unified test runner package.
+- **AI Visual Quality Evaluator Update**: Ensure the evaluation script reads the generated PNGs from `apps/e2e/test-results/` instead of the old Client directory, optimizes them, and hits the multimodal LLM gateway.
 - **Automated Quality Gate Task**: A Moon task mapping under the `e2e` or `scripts` project that orchestrates the headless browser run followed immediately by the AI grading evaluation loop.
 
 ## State & Data Models

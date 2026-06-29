@@ -10,7 +10,7 @@
 | Version | 1.0 |
 
 ## Overview
-We need to connect our newly built Client-Side Stream Sync orchestration layer directly into the game's ECS and Dialogue UI. When a player interacts with an NPC, the system must trigger the Stream Orchestrator, feed the progressive text into the existing Svelte dialogue components, and provide the PixiJS Texture Injector with the correct target display object. Additionally, we must fix a pre-existing failing test in the PWA package to ensure our CI pipeline remains green.
+We need to connect our newly built Client-Side Stream Sync orchestration layer directly into the game's ECS and Dialogue UI. When a player interacts with an NPC, the system must trigger the Stream Orchestrator, feed the progressive text into the existing Svelte dialogue components, and provide the PixiJS Texture Injector with the correct target display object. Additionally, we must fix a pre-existing failing test in the Client package to ensure our CI pipeline remains green.
 
 ## Design Reference
 - Review `apps/frontend/game/src/lib/systems/interaction_system.ts` for how interactions are currently handled.
@@ -36,7 +36,7 @@ The bridge needs to map the ECS entity data to the Orchestrator's expected paylo
 ## Acceptance Criteria
 
 - **AC1: Test Suite Repair**
-  - Given the PWA test suite
+  - Given the Client test suite
   - When running the `game_state_service.test.ts`
   - Then it passes successfully without `$state` related errors.
   - Test Hook: Run the specific test file and ensure a 0 exit code.
