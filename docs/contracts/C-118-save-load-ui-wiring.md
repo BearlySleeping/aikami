@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-118 — Save/Load UI & Engine Boundary
 
 | Metadata | Value |

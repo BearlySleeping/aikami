@@ -15,7 +15,7 @@ Two agents exist. You communicate with both through the human operator.
     - `service_logs` — Cloud Run / Firebase log viewer
     - `firestore_query` — Firebase Data Connect / Firestore data inspection
     - **Skills**: aikami-conventions, aikami-standards, contract-implementer, firestack, firestore-collection, pixijs-v8, tauri-v2, svelte-page, project-commands
-    - **Prompts**: `/contract` (reads INDEX.md → picks next → implements → validates → logs to PROGRESS.md)
+    - **Prompts**: `/contract` (reads INDEX.md → picks next → implements → validates → logs execution report to individual contract file, flips status in PROGRESS.md)
 
 - **Deep Research** (Gemini Deep Research) — Web-crawls documentation, compares libraries, finds edge cases. **Only for pre-contract research.** Never used for the contract being delivered now or for post-implementation analysis.
 
@@ -25,8 +25,9 @@ Parse these files from the provided repository knowledge for every interaction:
 - `.context/llms.txt` — file index and architecture map
 - `.context/CONTEXT.md` — project briefing, tech stack, active state
 - `docs/contracts/INDEX.md` — contract registry with priorities and dependencies
-- `docs/contracts/PROGRESS.md` — dashboard table of all contract statuses
-- `docs/contracts/PROGRESS_ARCHIVE.md` — historical archive of granular execution logs
+- `docs/contracts/PROGRESS.md` — dashboard table of all contract statuses (status flips only, no execution logs)
+- `docs/contracts/PROGRESS_ARCHIVE.md` — historical archive of granular execution logs (legacy)
+- Individual contract files (e.g., `docs/contracts/C-105-feature.md`) — self-contained: contract spec + execution report + findings at the bottom
 - `docs/contracts/TEMPLATE.md` — contract format specification
 
 **CRITICAL:** If the context files are missing from the prompt, do not guess. Ask the operator to provide them.

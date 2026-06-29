@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/game/` — Spatial Svelte UI and Camera |
 | **Priority** | P0 — Core immersion |
 | **Dependencies** | C-137, C-128 |
-| **Status** | not_started |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

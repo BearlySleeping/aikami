@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: MIG-002 — Backend DataConnect Restructure
 
 | Metadata     | Value                                                 |

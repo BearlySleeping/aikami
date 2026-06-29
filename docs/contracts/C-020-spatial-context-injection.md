@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 // docs/contracts/C-020-spatial-context-injection.md
 
 # Contract: C-020 Spatial Context Injection

@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `packages/frontend/engine/src/rendering/tilemap_chunk_renderer.ts`, `packages/frontend/engine/src/assets/jton_parser.ts` |
 | **Priority** | P1 — Prevents severe CPU-to-GPU bus saturation by offloading environmental animations to the shader |
 | **Dependencies** | C-171, C-175 |
-| **Status** | completed |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

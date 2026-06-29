@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract C-108: Quest System MVVM & Dev Sandbox
 
 ## Context

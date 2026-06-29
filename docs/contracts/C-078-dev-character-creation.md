@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-078 — Dev Character Creation Sandbox
 
 ## Metadata
@@ -7,7 +8,7 @@
 | Target | `apps/frontend/client/src/lib/views/dev/character/` |
 | Priority | P2 |
 | Dependencies | C-076, C-077 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0 |
 
 ## Overview

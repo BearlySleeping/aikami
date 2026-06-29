@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/combat/components/` — Combat Log & Imagery |
 | **Priority** | P1 — Narrative Immersion |
 | **Dependencies** | C-164 |
-| **Status** | ✅ completed |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract C-081: Character Creation Structural Extraction Pipeline
 
 ## Metadata

@@ -3,7 +3,7 @@ name: contract-implementer
 description: >-
   Implements Aikami features from contract specifications in the docs/ repo (cloned inside main repo, gitignored).
   Steps: read contract then implement code then run fix+typecheck then write tests then verify then log findings then archive contract.
-  Use when implementing features defined in docs/contracts/*.md. Tracks progress in docs/contracts/PROGRESS.md.
+  Use when implementing features defined in docs/contracts/*.md. Status flips go in PROGRESS.md (auto-generated via `bun knowledge:sync`). Execution reports live in individual contract files.
 ---
 
 # Contract Implementer
@@ -19,7 +19,7 @@ Implements Aikami features from the `docs/` repo (cloned inside main repo at `do
 3. Pick the next available contract (lowest rank number, not completed or in-progress)
 4. Read the contract fully
 5. Run `moon_detect_affected` to understand what packages are currently changed
-6. Log initial analysis in PROGRESS.md
+6. Log initial analysis in the individual contract file (append under an `## Execution Report` section, not in PROGRESS.md)
 
 ### Phase 2: Implement
 
@@ -38,13 +38,11 @@ After implementation:
 
 ### Phase 4: Log & Archive
 
-1. Update `docs/contracts/PROGRESS.md`:
-   - Mark contract as `completed` in the Status Summary table ONLY.
-   - **NEVER append granular execution logs to `PROGRESS.md`.** `PROGRESS.md` is strictly a dashboard table.
-2. Append your granular Execution Report (Summary, AC Status, Files created/modified, Deviations, Test Results) **to the BOTTOM of the individual contract markdown file itself** (e.g., `C-105-feature.md`). This keeps the contract self-contained.
-3. Add `<!-- completed: YYYY-MM-DD -->` comment at top of the contract file
-4. Update `docs/contracts/INDEX.md` status from `not_started` → `completed`
-5. Run `cd docs && bun run scripts/generate_llms_txt.ts` to update the index
+1. Add `<!-- completed: YYYY-MM-DD -->` comment at top of the contract file.
+2. Update the `**Status**` field in the contract's metadata table to `completed`.
+3. Append your granular Execution Report (Summary, AC Status, Files created/modified, Deviations, Test Results) **to the BOTTOM of the individual contract markdown file itself** (e.g., `C-105-feature.md`). This keeps the contract self-contained.
+4. Update `docs/contracts/INDEX.md` status from `not_started` → `completed`.
+5. Run `bun knowledge:sync` to regenerate PROGRESS.md from the contract files. (PROGRESS.md is auto-generated — never manually append execution logs to it.)
 
 ### Phase 5: Continue
 

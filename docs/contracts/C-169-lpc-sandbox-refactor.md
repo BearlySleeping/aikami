@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-169 LPC Sandbox Refactor & Polish
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | Target | apps/frontend/client/src/lib/views/dev/lpc/, apps/frontend/client/src/lib/data/lpc_models.ts |
 | Priority | High |
 | Dependencies | C-168 |
-| Status | not_started |
+| Status | completed |
 | Contract version | 1.0 |
 
 ## Overview

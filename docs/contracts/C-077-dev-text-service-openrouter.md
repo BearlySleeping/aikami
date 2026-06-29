@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-077 — Dev UI Text Sandbox Refactor & OpenRouter Toggle
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | Target | Pi |
 | Priority | P2 |
 | Dependencies | C-065, C-072 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0 |
 
 ## Overview

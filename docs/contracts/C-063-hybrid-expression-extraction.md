@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-063 — Hybrid Expression Extraction & Caching
 
 | Field | Value |

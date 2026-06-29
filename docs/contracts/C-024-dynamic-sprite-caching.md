@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 // docs/contracts/C-024-dynamic-sprite-caching.md
 # Contract: C-024 Dynamic Sprite Caching & Composition
 

@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-117 — ECS Snapshot Serializer
 
 | Metadata | Value |
