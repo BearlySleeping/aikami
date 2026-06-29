@@ -119,6 +119,8 @@ export {
   registerSpawnPointObservers,
   SpawnPoint as SpawnPointComp,
 } from './components/spawn_point.ts';
+export type { TextIdentityData } from './components/text_identity.ts';
+export { registerTextIdentityObservers, TextIdentity } from './components/text_identity.ts';
 export type { TileVisualData } from './components/tile_visual.ts';
 export { MAX_TILES, registerTileVisualObservers, TileVisual } from './components/tile_visual.ts';
 export type { TransitionData } from './components/transition.ts';
@@ -150,6 +152,8 @@ export {
   createEngineBuffer,
   FALLBACK_BUFFER_COUNT,
   MAX_ENTITIES,
+  MAX_REGISTRY_STRINGS,
+  REGISTRY_INITIAL_CAPACITY,
 } from './config/memory_config.ts';
 // EngineBridge (OOP contract — the sole UI↔Game boundary)
 export type { EngineBridge } from './engine_bridge.ts';
@@ -239,6 +243,12 @@ export {
 export { MinHeap } from './math/jps/min_heap.ts';
 export { castDdaVisionCone } from './math/vision/dda_raycaster.ts';
 export { castShadowcastingFov } from './math/vision/shadowcasting.ts';
+// Turso hydration bridge (C-195)
+export type {
+  TursoRegistryHydrationOptions,
+  TursoStringRow,
+} from './persistence/turso_registry_hydration.ts';
+export { TursoRegistryHydration } from './persistence/turso_registry_hydration.ts';
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
 export {
@@ -262,6 +272,7 @@ export type {
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
+
 // Streaming orchestrator (C-193)
 export type {
   ActionMutationPayload,
@@ -269,8 +280,22 @@ export type {
   StreamingOrchestratorOptions,
 } from './services/streaming_orchestrator.ts';
 export { StreamingOrchestratorService } from './services/streaming_orchestrator.ts';
+// String registry (C-195)
+export type {
+  RegistryHandle,
+  RegistryRow,
+  StringRegistryServiceOptions,
+} from './services/string_registry_service.ts';
+export { StringRegistryService } from './services/string_registry_service.ts';
 // State (engine-level mode gate)
 export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
+// Firebase SQL Connect sync (C-195)
+export type {
+  FirebaseSqlConnectSyncOptions,
+  SqlConnectDelta,
+  SqlConnectDeltaType,
+} from './sync/firebase_sql_connect_sync.ts';
+export { FirebaseSqlConnectSync } from './sync/firebase_sql_connect_sync.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export {
   initializeSpatialGrid,
