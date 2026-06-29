@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-025 TTS Audio Streaming & Synchronization
 
 ## Design References

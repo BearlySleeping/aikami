@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/e2e/tests/game/map_rendering_visual.spec.ts`, `apps/e2e/tests/game/collision_e2e.spec.ts`, `packages/frontend/engine/src/__tests__/spatial_grid.test.ts` |
 | **Priority** | P0 — Locks in engine stability via strict visual and behavioral automated testing |
 | **Dependencies** | C-178, C-179 |
-| **Status** | ✅ completed |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

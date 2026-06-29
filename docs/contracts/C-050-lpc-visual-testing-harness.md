@@ -1,10 +1,11 @@
+<!-- completed: 2026-06-29 -->
 | Metadata | Value |
 | --- | --- |
 | Source | User |
 | Target | apps/frontend/client |
 | Priority | High |
 | Dependencies | C-034, C-042 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0 |
 
 # Overview

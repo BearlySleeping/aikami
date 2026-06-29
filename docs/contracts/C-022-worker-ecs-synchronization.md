@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # C-022: Web Worker ECS Synchronization
 
 **Status**: in_progress

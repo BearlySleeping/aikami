@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-150 Low-Latency Audio Engine & Service Worker
 
 ## Goal

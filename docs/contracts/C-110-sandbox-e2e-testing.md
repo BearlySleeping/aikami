@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract C-110: Sandbox E2E Playwright Harness
 
 ## Context

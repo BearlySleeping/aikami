@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract C-107: Inventory System MVVM & Dev Sandbox
 
 ## Context

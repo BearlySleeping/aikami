@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-069 — Direct Kokoro Orchestration
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | Target | Pi |
 | Priority | High |
 | Dependencies | C-068 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0 |
 
 ## Overview

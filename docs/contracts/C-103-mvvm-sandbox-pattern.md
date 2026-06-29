@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract C-103: MVVM Dev Sandbox Pattern (Character)
 
 ## Context

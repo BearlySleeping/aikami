@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-130 In-Game AI Diagnostics & Onboarding
 
 ## Metadata

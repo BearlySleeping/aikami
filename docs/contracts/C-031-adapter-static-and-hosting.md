@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-031 SvelteKit Adapter Static Conversion & Firebase Hosting Setup
 
 ## Design References

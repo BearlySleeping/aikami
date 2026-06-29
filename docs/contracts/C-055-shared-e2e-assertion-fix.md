@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Metadata
 | Field | Value |
 | --- | --- |
@@ -5,7 +6,7 @@
 | Target | apps/e2e, apps/frontend/client, apps/frontend/game |
 | Priority | P0 |
 | Dependencies | C-054 |
-| Status | not_started |
+| Status | completed |
 | Contract Version | 1.0.0 |
 
 # Overview

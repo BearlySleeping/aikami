@@ -1,8 +1,9 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-040 Grid Movement Transform Pipeline
 <!-- completed: 2026-06-02 -->
 
 ## Metadata
-| Source | Target | Priority | Dependencies | Status | Version |
+| Source | Target | Priority | Dependencies | Status | completed |
 |--------|--------|----------|--------------|--------|---------|
 | Engine Architecture | Game Client View | High | C-036, C-039 | completed | 1.0.0 |
 

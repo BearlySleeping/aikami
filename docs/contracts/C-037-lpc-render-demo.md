@@ -1,7 +1,8 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-037 LPC Render Demo
 
 ## Metadata
-| Source | Target | Priority | Dependencies | Status | Version |
+| Source | Target | Priority | Dependencies | Status | completed |
 |--------|--------|----------|--------------|--------|---------|
 | Engine Architecture | Client Dev Tooling | Medium | C-035, C-036 | completed | 1.0.0 |
 

@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-120 View Folder Restructure & ViewModel Inheritance
 
 ## Goal

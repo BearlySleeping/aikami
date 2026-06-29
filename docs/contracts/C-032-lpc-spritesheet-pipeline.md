@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Execution Contract: C-032 - LPC Spritesheet Shader and Pipeline Integration
 
 ## 1. Design References

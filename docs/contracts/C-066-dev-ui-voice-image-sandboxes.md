@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-066 — Dev UI Voice & Image Sandboxes
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | Target | Pi |
 | Priority | High |
 | Dependencies | C-065 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0 |
 
 ## Overview

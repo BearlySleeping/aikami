@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-148 Combat Immersion (Dice UI, Images & Voice)
 
 ## Goal

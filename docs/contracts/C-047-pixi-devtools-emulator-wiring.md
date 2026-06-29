@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract — C-047 Pixi DevTools Emulator Wiring
 
 ## Metadata

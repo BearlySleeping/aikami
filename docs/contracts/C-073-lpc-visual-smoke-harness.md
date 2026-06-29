@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-073 — LPC Visual Smoke Harness and AI Evaluation Pipeline
 
 ## Metadata

@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/frontend/client/src/lib/game/` — EngineBridge, GameWorld, PixiJS canvas; `packages/frontend/services/` — shared game service types |
 | **Priority** | P1 — Core game engine boundary; enables UI↔Game communication without reactivity thrashing |
 | **Dependencies** | C-013 (PixiJS v8 + bitECS dependencies installed), C-015 (AI service abstraction for NPC dialogue integration) |
-| **Status** | **not_started** |
+| **Status** | **completed** ** |
 | **Contract version** | 1.0.0 |
 
 ## Overview

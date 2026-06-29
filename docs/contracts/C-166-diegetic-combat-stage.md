@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `packages/frontend/engine/src/` and Diegetic UI components |
 | **Priority** | P0 — Visual Combat Representation |
 | **Dependencies** | C-161, C-164 |
-| **Status** | ✅ completed |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

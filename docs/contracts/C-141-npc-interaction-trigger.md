@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-141 NPC Interaction & Dialogue Trigger
 
 ## Goal
