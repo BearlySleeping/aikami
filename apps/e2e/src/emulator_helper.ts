@@ -4,7 +4,7 @@
 //
 // C-054 AC-3: Extracted from global_setup.ts / global_teardown.ts.
 
-import { EMULATOR_PORTS, EMULATOR_PROJECT_ID } from './config';
+import { EMULATOR_PORTS, EMULATOR_PROJECT_ID, getWorkerProjectId, MAX_WORKERS } from './config';
 
 /** Firestore emulator host without protocol prefix (for Admin SDK). */
 export const FIRESTORE_EMULATOR_HOST = `127.0.0.1:${EMULATOR_PORTS.firestore}` as const;
@@ -25,7 +25,6 @@ const AUTH_REST_BASE = `http://${AUTH_EMULATOR_HOST}` as const;
  * Non-2xx responses are logged as warnings (emulator may be down).
  */
 const _purgeEndpoint = async (url: string, label: string): Promise<void> => {
-  // biome-ignore lint/suspicious/noConsole: lifecycle logging for emulator purge
   console.log(`  Purging ${label}: ${url}`);
   try {
     const resp = await fetch(url, {
@@ -33,14 +32,11 @@ const _purgeEndpoint = async (url: string, label: string): Promise<void> => {
       signal: AbortSignal.timeout(15_000),
     });
     if (!resp.ok && resp.status !== 404) {
-      // biome-ignore lint/suspicious/noConsole: lifecycle warning
       console.warn(`  ⚠ ${label} purge returned ${resp.status}: ${resp.statusText}`);
     } else {
-      // biome-ignore lint/suspicious/noConsole: lifecycle logging
       console.log(`  ✓ ${label} purged`);
     }
   } catch (e) {
-    // biome-ignore lint/suspicious/noConsole: lifecycle warning
     console.warn(`  ⚠ ${label} purge failed: ${e instanceof Error ? e.message : String(e)}`);
   }
 };
@@ -48,40 +44,57 @@ const _purgeEndpoint = async (url: string, label: string): Promise<void> => {
 // ── Public API ───────────────────────────────────────────────
 
 /**
- * Clear all Firestore documents via the emulator REST API.
+ * Clear Firestore documents for a specific emulator project.
  */
-export const clearFirestoreEmulatorData = async (): Promise<void> => {
-  const url = `${FIRESTORE_REST_BASE}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
-  await _purgeEndpoint(url, 'Firestore');
+export const clearFirestoreEmulatorData = async (projectId: string): Promise<void> => {
+  const url = `${FIRESTORE_REST_BASE}/emulator/v1/projects/${projectId}/databases/(default)/documents`;
+  await _purgeEndpoint(url, `Firestore (${projectId})`);
 };
 
 /**
- * Clear all Auth emulator users via the REST API.
+ * Clear Auth emulator accounts for a specific project.
  */
-export const clearAuthEmulatorData = async (): Promise<void> => {
-  const url = `${AUTH_REST_BASE}/emulator/v1/projects/${EMULATOR_PROJECT_ID}/accounts`;
-  await _purgeEndpoint(url, 'Auth');
+export const clearAuthEmulatorData = async (projectId: string): Promise<void> => {
+  const url = `${AUTH_REST_BASE}/emulator/v1/projects/${projectId}/accounts`;
+  await _purgeEndpoint(url, `Auth (${projectId})`);
 };
 
 /**
- * Clear ALL emulator data (Firestore + Auth).
- * Called from global setup and teardown hooks.
+ * Clear ALL emulator data (Firestore + Auth) for a single project.
  */
-export const clearAllEmulatorData = async (): Promise<void> => {
-  // biome-ignore lint/suspicious/noConsole: lifecycle logging
-  console.log('[e2e:lifecycle] Purging all emulator data');
+export const clearAllEmulatorData = async (projectId?: string): Promise<void> => {
+  const pid = projectId ?? EMULATOR_PROJECT_ID;
+  console.log(`[e2e:lifecycle] Purging emulator data for project: ${pid}`);
 
-  const results = await Promise.allSettled([clearFirestoreEmulatorData(), clearAuthEmulatorData()]);
+  const results = await Promise.allSettled([
+    clearFirestoreEmulatorData(pid),
+    clearAuthEmulatorData(pid),
+  ]);
 
   const failed = results.filter((r) => r.status === 'rejected');
   if (failed.length > 0) {
-    // biome-ignore lint/suspicious/noConsole: lifecycle warning
     console.warn(
       `[e2e:lifecycle] ${failed.length} purge operation(s) failed:`,
       failed.map((r) => (r as PromiseRejectedResult).reason),
     );
   } else {
-    // biome-ignore lint/suspicious/noConsole: lifecycle logging
-    console.log('[e2e:lifecycle] All emulator data purged successfully');
+    console.log(`[e2e:lifecycle] Project ${pid} emulator data purged successfully`);
   }
+};
+
+/**
+ * Purge emulator data for ALL worker projects.
+ *
+ * Iterates through MAX_WORKERS project IDs (demo-aikami-worker-0 through
+ * demo-aikami-worker-N) and purges each. Called from global setup/teardown
+ * to ensure no stale data from previous runs interferes with the current run.
+ */
+export const clearAllWorkerProjects = async (): Promise<void> => {
+  console.log('[e2e:lifecycle] Purging all worker emulator projects');
+
+  for (let i = 0; i < MAX_WORKERS; i++) {
+    const pid = getWorkerProjectId(i);
+    await clearAllEmulatorData(pid);
+  }
+  console.log('[e2e:lifecycle] All worker projects purged successfully');
 };

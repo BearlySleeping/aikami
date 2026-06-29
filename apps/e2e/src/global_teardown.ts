@@ -4,17 +4,15 @@
 //
 // C-054 AC-3: Uses shared emulator_helper for REST API purging.
 
-import { clearAllEmulatorData } from './emulator_helper';
+import { clearAllWorkerProjects } from './emulator_helper';
 
 /**
  * Playwright global teardown hook.
- * Resets emulator state after all suites finish.
+ * Resets emulator state for ALL worker projects after all suites finish.
  */
 const globalTeardown = async (): Promise<void> => {
-  // biome-ignore lint/suspicious/noConsole: lifecycle logging
-  console.log('\n🧹 Global Teardown: Purging Firebase emulator data...');
-  await clearAllEmulatorData();
-  // biome-ignore lint/suspicious/noConsole: lifecycle logging
+  console.log('\n🧹 Global Teardown: Purging all worker emulator projects...');
+  await clearAllWorkerProjects();
   console.log('✓ Global teardown complete\n');
 };
 

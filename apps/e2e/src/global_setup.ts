@@ -4,17 +4,16 @@
 //
 // C-054 AC-3: Uses shared emulator_helper for REST API purging.
 
-import { clearAllEmulatorData } from './emulator_helper';
+import { clearAllWorkerProjects } from './emulator_helper';
 
 /**
  * Playwright global setup hook.
- * Purges emulator state so tests start with deterministic, empty databases.
+ * Purges emulator state for ALL worker projects so tests start
+ * with deterministic, empty databases for every worker.
  */
 const globalSetup = async (): Promise<void> => {
-  // biome-ignore lint/suspicious/noConsole: lifecycle logging
-  console.log('\n🧹 Global Setup: Purging Firebase emulator data...');
-  await clearAllEmulatorData();
-  // biome-ignore lint/suspicious/noConsole: lifecycle logging
+  console.log('\n🧹 Global Setup: Purging all worker emulator projects...');
+  await clearAllWorkerProjects();
   console.log('✓ Global setup complete\n');
 };
 

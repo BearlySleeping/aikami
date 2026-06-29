@@ -51,10 +51,9 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
-  test-visual:
-    command: 'bunx playwright test --project=client-visual'
+  run-visual-tests:
+    command: 'bun run src/visual/runner.ts'
     inputs:
-      - '@group(tests)'
       - '@group(sources)'
   lpc-smoke:
     command: 'bun run scripts/lpc_smoke.ts'

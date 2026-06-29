@@ -21,7 +21,11 @@
       "@aikami/utils": ["../../packages/shared/utils/src/index.ts"],
       "@aikami/utils/*": ["../../packages/shared/utils/src/*"],
       "$logger": ["../../packages/shared/logger/src/index.ts"],
-      "$lib/*": ["./src/lib/*"]
+      "$lib/*": ["./src/lib/*"],
+      "$visual/*": ["./src/visual/*"],
+      "$pom": ["./src/pom/index.ts"],
+      "$pom/*": ["./src/pom/*"],
+      "$utils/*": ["./tests/utils/*"]
     }
   },
   "include": ["src/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],

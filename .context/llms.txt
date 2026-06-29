@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-28
-> Files: 198 across 11 categories
+> Generated: 2026-06-29
+> Files: 201 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -187,6 +187,9 @@ Monorepo: SvelteKit PWA × Firebase backend × Bun runtime × Moon orchestrator.
 - [C 178 visual pipeline validation](contracts/C-178-visual-pipeline-validation.md)
 - [C 179 glsl fallback shader](contracts/C-179-glsl-fallback-shader.md)
 - [C 180 engine stability harness](contracts/C-180-engine-stability-harness.md)
+- [C 181 ai visual testing framework](contracts/C-181-ai-visual-testing-framework.md)
+- [C 182 visual framework polish](contracts/C-182-visual-framework-polish.md)
+- [C 183 e2e worker isolation](contracts/C-183-e2e-worker-isolation.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
