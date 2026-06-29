@@ -9,6 +9,7 @@ import type { VelocityData } from '../components/velocity.ts';
 import { Velocity } from '../components/velocity.ts';
 import { getEngineGameMode } from '../state/game_mode.ts';
 import { isCellBlocked, isWalkable } from './collision_system.ts';
+import { isEntityOffscreen } from './macro_simulation_system.ts';
 
 // ---------------------------------------------------------------------------
 // MovementSystem — axis-independent continuous collision detection
@@ -76,6 +77,11 @@ const updateMovement = (world: World, deltaMs: number): void => {
   const entities = query(world, MOVEMENT_QUERY_TERMS);
 
   for (const eid of entities) {
+    // ── C-194 AC-1: Skip entities in inactive zones ──
+    if (isEntityOffscreen(eid)) {
+      continue;
+    }
+
     const vel = getComponent(world, eid, Velocity) as VelocityData | undefined;
     if (!vel || (vel.x === 0 && vel.y === 0)) {
       continue;

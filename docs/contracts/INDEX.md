@@ -84,6 +84,7 @@ P2 (Polish — after P1):
 | C-175 | [LLM JTON Map Pipeline](C-175-llm-jton-map-pipeline.md) ✅ | Tiled JTON exporter plugin, Zen Grid parser, JTON→TilemapData conversion, token-optimized map format | C-171, C-172 |
 | C-192 | [ECS Time-Sliced JPS Pathfinder](C-192-ecs-time-sliced-jps-pathfinder.md) ✅ | Cooperative JPS pathfinding — generational O(1) reset, flat min-heap, time-budget yielding | C-190 |
 | C-193 | [Client Tool Streaming Orchestrator](C-193-client-tool-streaming-orchestrator.md) ✅ | Web Streams reader, jsonchunk partial parser, direct ECS array injection, rAF + $state.raw view projection | C-191 |
+| C-194 | [ECS Offscreen Macro Simulation](C-194-ecs-offscreen-macro-simulation.md) ✅ | Two-tier active/inactive simulation: MapLocation+ZoneStatus components, GOAP macro stepping, hydration/dehydration pipeline | C-192, C-193 |
 | C-031 | [SvelteKit Adapter Static & Firebase Hosting](C-031-adapter-static-and-hosting.md) ✅ | adapter-static SPA mode, Firebase Hosting emulator, SPA rewrites | — |
 | C-010 | [Setup Script](C-010-setup-script.md) ✅ | Interactive developer onboarding script | C-007, C-008 |
 | C-011 | [Blackbox Testing Infrastructure](C-011-blackbox-testing.md) ✅ | E2E testing with Playwright, Firebase emulators, visual regression | C-007, C-009 |
