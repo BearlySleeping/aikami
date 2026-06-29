@@ -216,6 +216,27 @@ export {
 } from './math/goap/action_registry.ts';
 export { Faction, IsHostileTo, IsMemberOf, IsProtectorOf } from './math/goap/faction_relations.ts';
 export { WORLD_STATE_BIT_COUNT, WorldStateBit } from './math/goap/world_state_bits.ts';
+export type { PathfinderMemoryBuffers } from './math/jps/generational_table.ts';
+// JPS Pathfinding (C-192)
+export {
+  allocatePathfinderBuffers,
+  freePathfinderBuffers,
+  fromNodeId,
+  getGlobalGeneration,
+  incrementGeneration,
+  isNodeVisited,
+  markNodeVisited,
+  resetNode,
+  toNodeId,
+} from './math/jps/generational_table.ts';
+export type { JpsSearchConfig, JpsSearchResult } from './math/jps/jps_search.ts';
+export {
+  cancelJpsSearch,
+  isSearchActive,
+  startJpsSearch,
+  stepJpsSearch,
+} from './math/jps/jps_search.ts';
+export { MinHeap } from './math/jps/min_heap.ts';
 export { castDdaVisionCone } from './math/vision/dda_raycaster.ts';
 export { castShadowcastingFov } from './math/vision/shadowcasting.ts';
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
@@ -274,6 +295,14 @@ export {
   updateGoapScheduler,
 } from './systems/goap_scheduler_system.ts';
 export { handleInteract } from './systems/interaction_system.ts';
+// JPS Pathfinding (C-192)
+export {
+  cancelPathfinding,
+  initJpsPathfinder,
+  isPathfinding,
+  requestPath,
+  tickJpsPathfinder,
+} from './systems/jps_pathfinder_system.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   animateEntitySystem,

@@ -169,7 +169,7 @@
 | C-183 | E2e Worker Isolation | ✅ completed |
 | C-190 | Ecs Spatial Vision Systems | ✅ completed |
 | C-191 | Goap Bitmask Scheduler | ✅ completed |
-| C-192 | Ecs Time Sliced Jps Pathfinder | ⏳ not_started |
+| C-192 | Ecs Time Sliced Jps Pathfinder | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
