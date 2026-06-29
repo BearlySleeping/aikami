@@ -6,6 +6,7 @@
   // URL params:
   //   ?state=initial|log-filled|low-hp|victory|defeat (visual test presets)
   //   ?ally-hp=N&enemy-hp=N&enemy-name=X&log=entry1|entry2
+  //   ?useRealAi=false (disable real AI for fast mock resolution)
   //
   // Merged from C-164 combat-split + C-166 visual testing.
 
@@ -27,11 +28,13 @@
   const enemyName = params.get('enemy-name') ?? undefined;
   const logParam = params.get('log') ?? undefined;
   const logEntries = logParam ? logParam.split('|').filter(Boolean) : undefined;
+  const useRealAiParam = params.get('useRealAi');
+  const useRealAiDefault = useRealAiParam === 'false' ? false : true;
 
   const viewModel = getCombatDevViewModel({
     className: 'CombatDevViewModel',
-    useRealAi: true,
-    useRealMusic: true,
+    useRealAi: useRealAiDefault,
+    useRealMusic: useRealAiDefault,
     initialState:
       allyHp || enemyHp || enemyName || logEntries || stateParam
         ? { allyHp, enemyHp, enemyName, logEntries, state: stateParam }
@@ -47,8 +50,8 @@
   });
 
   // ── Toggles ──
-  let useRealAi = $state(true);
-  let useRealMusic = $state(true);
+  let useRealAi = $state(useRealAiDefault);
+  let useRealMusic = $state(useRealAiDefault);
 
   // ── Music test ──
   const MOODS = [
