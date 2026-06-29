@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 // docs/contracts/C-027-provider-configuration.md
 # Contract: C-027 Provider Configuration & Secrets Engine
 

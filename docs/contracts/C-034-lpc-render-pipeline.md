@@ -1,7 +1,8 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-034 LPC Render Pipeline
 
 ## Metadata
-| Source | Target | Priority | Dependencies | Status | Version |
+| Source | Target | Priority | Dependencies | Status | completed |
 |--------|--------|----------|--------------|--------|---------|
 | Engine Architecture | Game Client View | High | C-033 | completed | 1.0.0 |
 

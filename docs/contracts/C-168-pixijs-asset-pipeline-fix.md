@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-168 PixiJS v8 Asset Pipeline Refactor
 
 | Field | Value |

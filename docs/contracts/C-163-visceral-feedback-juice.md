@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/` and `packages/frontend/engine/src/` — Visual/Audio Juice |
 | **Priority** | P1 — Game feel |
 | **Dependencies** | C-145, C-153 |
-| **Status** | not_started |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

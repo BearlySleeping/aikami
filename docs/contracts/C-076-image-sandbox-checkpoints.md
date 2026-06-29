@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # C-076: Dev UI Image Sandbox Checkpoint Selection
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | Target | apps/frontend/client |
 | Priority | P2 |
 | Dependencies | C-066 |
-| Status | not_started |
+| Status | completed |
 | Version | 1.0.0 |
 
 ## Overview

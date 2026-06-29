@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 // docs/contracts/C-029-dynamic-character-creation.md
 # Contract C-029: Menu Auth Wiring & Vanilla PixiJS Character Creation
 

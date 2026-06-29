@@ -2,7 +2,7 @@
 # Contract: C-039 LPC Animation Controller
 
 ## Metadata
-| Source | Target | Priority | Dependencies | Status | Version |
+| Source | Target | Priority | Dependencies | Status | completed |
 |--------|--------|----------|--------------|--------|---------|
 | Engine Architecture | Game Client View | High | C-036, C-038 | completed | 1.0.0 |
 

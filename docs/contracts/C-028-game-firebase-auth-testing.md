@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 // docs/contracts/C-028-game-firebase-auth-testing.md
 # Contract C-028: Game Firebase REST Integration & Client Auth Handoff
 

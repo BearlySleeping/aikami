@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/` — Action Context Menu & Dice |
 | **Priority** | P0 — Latency masking and gameplay loop |
 | **Dependencies** | C-148, C-161 |
-| **Status** | completed |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

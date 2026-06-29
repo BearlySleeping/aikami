@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/combat/` — Core Layout & Action Bar |
 | **Priority** | P0 — Foundation for the new combat UX |
 | **Dependencies** | C-145 |
-| **Status** | ✅ completed |
+| **Status** | **completed**  |
 | **Contract version** | 1.0.0 |
 
 ## Overview

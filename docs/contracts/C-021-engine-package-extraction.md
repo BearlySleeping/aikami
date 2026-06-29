@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 // docs/contracts/C-021-engine-package-extraction.md
 # Contract: C-021 Engine Package Extraction
 

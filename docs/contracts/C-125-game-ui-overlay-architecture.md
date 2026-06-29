@@ -1,3 +1,4 @@
+<!-- completed: 2026-06-29 -->
 # Contract: C-125 Game UI Overlay Architecture & State Sync
 
 ## Goal
