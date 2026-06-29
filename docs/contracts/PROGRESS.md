@@ -175,6 +175,7 @@
 | C-195 | Ecs String Registry Hydration | ✅ completed |
 | C-196 | Ecs Emergent World Integration | ✅ completed |
 | C-197 | Ecs Goap Combat Tactics | ✅ completed |
+| C-198 | Dev Sandbox Polish And Zoning | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

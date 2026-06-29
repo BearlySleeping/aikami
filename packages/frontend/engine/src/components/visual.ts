@@ -54,8 +54,6 @@ export const AssetAlias = {
   // biome-ignore lint/style/useNamingConvention: enum-like constant names
   ENEMY: 4,
   // biome-ignore lint/style/useNamingConvention: enum-like constant names
-  TEST_SPRITE: 5,
-  // biome-ignore lint/style/useNamingConvention: enum-like constant names
   ITEM: 6,
 } as const;
 
@@ -81,8 +79,7 @@ export const resolveAssetPath = (alias: number): string => {
       return '/lpc/props/chest_01.png';
     case AssetAlias.ENEMY:
       return 'enemy';
-    case AssetAlias.TEST_SPRITE:
-      return 'test_sprite';
+
     case AssetAlias.ITEM:
       return 'item';
     default:

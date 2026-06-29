@@ -72,6 +72,30 @@ export type EvaluateResult = {
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'google/gemini-2.5-flash';
 
+/** Minimum score for a visual test to be considered passing. */
+const PASS_SCORE_THRESHOLD = 80;
+
+/**
+ * Determines pass/fail from a validated result object.
+ *
+ * A case passes when the score meets the threshold AND, for
+ * corner-specific schemas, both onGreenGrass and inCorrectCorner
+ * are explicitly true.
+ */
+const _computePassed = (result: Record<string, unknown>): boolean => {
+  const score = typeof result.score === 'number' ? result.score : 0;
+  if (score < PASS_SCORE_THRESHOLD) {
+    return false;
+  }
+  if (typeof result.inCorrectCorner === 'boolean' && result.inCorrectCorner !== true) {
+    return false;
+  }
+  if (typeof result.onGreenGrass === 'boolean' && result.onGreenGrass !== true) {
+    return false;
+  }
+  return true;
+};
+
 // ── Public API ────────────────────────────────────────────────
 
 /**
@@ -104,11 +128,12 @@ export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateR
     const cached = getCachedResult(cacheKey);
 
     if (cached !== undefined) {
-      const score = (cached as Record<string, unknown>).score as number | undefined;
+      const result = cached as Record<string, unknown>;
+      const score = typeof result.score === 'number' ? result.score : 0;
 
       return {
         caseName: '(from cache)',
-        passed: true,
+        passed: _computePassed(result),
         result: cached,
         fromCache: true,
         score,
@@ -220,7 +245,7 @@ export const evaluateImage = async (options: EvaluateOptions): Promise<EvaluateR
 
       return {
         caseName: '(eval)',
-        passed: true,
+        passed: _computePassed(result),
         result: parsed,
         fromCache: false,
         score,

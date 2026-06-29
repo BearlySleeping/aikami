@@ -216,6 +216,8 @@ const main = async (): Promise<void> => {
             if (evaluate.passed) {
               const cacheLabel = evaluate.fromCache ? ' (📦 cached)' : '';
               console.log(`[runner]     ✅ ${evaluate.score ?? '?'}/100${cacheLabel}`);
+            } else if (evaluate.score !== undefined) {
+              console.log(`[runner]     ❌ ${evaluate.score}/100 (below threshold)`);
             } else {
               console.log(`[runner]     ❌ ${evaluate.error ?? 'Unknown error'}`);
             }
