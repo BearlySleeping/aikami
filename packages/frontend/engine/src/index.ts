@@ -21,6 +21,19 @@ export {
   resetEntityGenerations,
   resolveSafeRef,
 } from './core/entity_reference.ts';
+// Entity factories
+export {
+  createDefaultSandboxAvatar,
+  SANDBOX_LAYER_BEARD,
+  SANDBOX_LAYER_BODY,
+  SANDBOX_LAYER_FEET,
+  SANDBOX_LAYER_HAIR,
+  SANDBOX_LAYER_HEAD,
+  SANDBOX_LAYER_LEGS,
+  SANDBOX_LAYER_TORSO,
+  SANDBOX_NPC_LAYERS,
+  SANDBOX_PLAYER_LAYERS,
+} from './entities/create_sandbox_avatar.ts';
 export {
   endDialogueZoom,
   getActiveNpcScreenPosition,

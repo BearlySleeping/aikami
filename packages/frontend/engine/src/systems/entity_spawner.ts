@@ -68,8 +68,8 @@ const DEFAULT_DIALOG = 'Hello, traveler!';
 /** Default tint for props (white = no tint). */
 const PROP_TINT = 0xffffff;
 
-/** Default Appearance layer IDs for NPCs (standard body + guide hair + robe + pants + shoes). */
-const NPC_APPEARANCE_LAYERS: [number, number, number, number, number] = [10, 11, 12, 13, 14];
+/** Default Appearance layer IDs for NPCs — 6-layer stack (body, hair, torso, legs, feet, head). */
+const NPC_APPEARANCE_LAYERS: readonly number[] = [10, 11, 14, 12, 15, 13];
 
 // ---------------------------------------------------------------------------
 // Public API

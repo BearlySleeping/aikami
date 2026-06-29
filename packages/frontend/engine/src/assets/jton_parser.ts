@@ -52,6 +52,32 @@ export const TRANSITION_STRIDE = 6;
 export const MAX_JTON_TRANSITIONS = 64;
 
 /**
+ * A single spawn entry with original string fields preserved for
+ * ObjectLayer conversion.
+ */
+export type JtonSpawnEntry = {
+  x: number;
+  y: number;
+  type: string;
+  spawnId: string;
+  npcId?: string;
+  isVendor?: boolean;
+  vendorInventory?: string;
+};
+
+/**
+ * A single transition entry with original target map string preserved.
+ */
+export type JtonTransitionEntry = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  targetMap: string;
+  targetSpawnId?: string;
+};
+
+/**
  * Result of parsing a JTON map string.
  */
 export type JtonParseResult = {
@@ -78,6 +104,13 @@ export type JtonParseResult = {
   transitionCount: number;
   /** Pre-allocated Float64Array for transition data (interleaved fields). */
   transitionBuffer: Float64Array;
+
+  // ── String-preserving entries for ObjectLayer conversion (C-198) ──
+
+  /** Original spawn entries with string fields preserved. */
+  spawnEntries: JtonSpawnEntry[];
+  /** Original transition entries with target map string preserved. */
+  transitionEntries: JtonTransitionEntry[];
 };
 
 // ---------------------------------------------------------------------------
@@ -110,8 +143,10 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
   // ── Zero-allocation spawn/transition buffers ──
   const spawnBuffer = new Float64Array(MAX_JTON_SPAWNS * SPAWN_STRIDE);
   let spawnCount = 0;
+  const spawnEntries: JtonSpawnEntry[] = [];
   const transitionBuffer = new Float64Array(MAX_JTON_TRANSITIONS * TRANSITION_STRIDE);
   let transitionCount = 0;
+  const transitionEntries: JtonTransitionEntry[] = [];
 
   // Temporary state for accumulating a tile layer
   let currentLayerName = '';
@@ -235,15 +270,29 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
       // Write directly to flat Float64Array (zero-allocation)
       if (spawnCount < MAX_JTON_SPAWNS) {
         const offset = spawnCount * SPAWN_STRIDE;
+        const npcId = parts[4] || '';
+        const isVendor = Number(parts[5] || 0);
+        const vendorInv = parts[6] || '';
         spawnBuffer[offset] = x;
         spawnBuffer[offset + 1] = y;
         spawnBuffer[offset + 2] = _fastHash(type);
         spawnBuffer[offset + 3] = _fastHash(spawnId);
-        spawnBuffer[offset + 4] = type === 'npc' ? _fastHash(parts[4] || '') : 0; // npcId hash
-        spawnBuffer[offset + 5] = type === 'npc' ? _fastHash(parts[4] || '') : 0; // dialogue hash
-        spawnBuffer[offset + 6] = type === 'npc' ? Number(parts[5] || 0) : 0; // isVendor
-        spawnBuffer[offset + 7] = type === 'npc' ? _fastHash(parts[6] || '') : 0; // vendorInventory hash
+        spawnBuffer[offset + 4] = type === 'npc' ? _fastHash(npcId) : 0; // npcId hash
+        spawnBuffer[offset + 5] = type === 'npc' ? _fastHash(npcId) : 0; // dialogue hash
+        spawnBuffer[offset + 6] = type === 'npc' ? isVendor : 0; // isVendor
+        spawnBuffer[offset + 7] = type === 'npc' ? _fastHash(vendorInv) : 0; // vendorInventory hash
         spawnCount += 1;
+
+        // Preserve original strings for ObjectLayer conversion (C-198)
+        spawnEntries.push({
+          x,
+          y,
+          type,
+          spawnId,
+          ...(type === 'npc'
+            ? { npcId, isVendor: isVendor !== 0, vendorInventory: vendorInv }
+            : {}),
+        });
       }
       continue;
     }
@@ -257,14 +306,26 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
       }
 
       if (transitionCount < MAX_JTON_TRANSITIONS) {
+        const targetMap = parts[4] || '';
+        const targetSpawnId = parts[5] || '';
         const offset = transitionCount * TRANSITION_STRIDE;
         transitionBuffer[offset] = Number(parts[0]); // x
         transitionBuffer[offset + 1] = Number(parts[1]); // y
         transitionBuffer[offset + 2] = Number(parts[2]); // w
         transitionBuffer[offset + 3] = Number(parts[3]); // h
-        transitionBuffer[offset + 4] = _fastHash(parts[4] || ''); // targetMap hash
-        transitionBuffer[offset + 5] = _fastHash(parts[5] || ''); // targetSpawnId hash
+        transitionBuffer[offset + 4] = _fastHash(targetMap); // targetMap hash
+        transitionBuffer[offset + 5] = _fastHash(targetSpawnId); // targetSpawnId hash
         transitionCount += 1;
+
+        // Preserve original strings for ObjectLayer conversion (C-198)
+        transitionEntries.push({
+          x: Number(parts[0]),
+          y: Number(parts[1]),
+          width: Number(parts[2]),
+          height: Number(parts[3]),
+          targetMap,
+          ...(targetSpawnId ? { targetSpawnId } : {}),
+        });
       }
       continue;
     }
@@ -329,6 +390,8 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
     spawnBuffer,
     transitionCount,
     transitionBuffer,
+    spawnEntries,
+    transitionEntries,
   };
 };
 
@@ -340,10 +403,85 @@ export const parseJtonMap = (source: string, sourceUrl: string): JtonParseResult
  * Converts a JTON parse result into the standard {@link TilemapData}
  * format used by the existing map loading pipeline (C-135, C-171).
  *
+ * Also converts the zero-allocation spawn/transition flat arrays into
+ * {@link ObjectLayer} entries so {@link extractSpawnPoints} and
+ * {@link extractTransitionZones} can process them like Tiled JSON maps.
+ *
  * @param parsed - The parsed JTON map data.
  * @returns A TilemapData struct compatible with loadTilemap output.
  */
 export const jtonToTilemapData = (parsed: JtonParseResult): TilemapData => {
+  // Convert spawn buffer to ObjectLayer entries
+  const objectLayers: import('./map_loader.ts').ObjectLayer[] = [];
+
+  // Spawns → object group
+  if (parsed.spawnEntries && parsed.spawnEntries.length > 0) {
+    const spawnObjects: Record<string, unknown>[] = [];
+    for (let i = 0; i < parsed.spawnEntries.length; i++) {
+      const entry = parsed.spawnEntries[i];
+      const properties: { name: string; type: string; value: unknown }[] = [
+        { name: 'spawnId', type: 'string', value: entry.spawnId || `spawn_${i}` },
+      ];
+      if (entry.npcId) {
+        properties.push({ name: 'npcId', type: 'string', value: entry.npcId });
+      }
+      if (entry.isVendor) {
+        properties.push({ name: 'isVendor', type: 'bool', value: true });
+        if (entry.vendorInventory) {
+          properties.push({
+            name: 'vendorInventory',
+            type: 'string',
+            value: entry.vendorInventory,
+          });
+        }
+      }
+      spawnObjects.push({
+        id: `jton_spawn_${i}`,
+        type: entry.type || 'npc',
+        x: entry.x,
+        y: entry.y,
+        properties,
+      });
+    }
+    objectLayers.push({ name: 'objects', objects: spawnObjects });
+  }
+
+  // Transitions → object group (merged with spawns)
+  if (parsed.transitionEntries && parsed.transitionEntries.length > 0) {
+    const transitionObjects: Record<string, unknown>[] = [];
+    for (let i = 0; i < parsed.transitionEntries.length; i++) {
+      const entry = parsed.transitionEntries[i];
+
+      if (!entry.targetMap) {
+        continue;
+      }
+
+      transitionObjects.push({
+        id: `jton_transition_${i}`,
+        type: 'transition',
+        x: entry.x,
+        y: entry.y,
+        width: entry.width || 32,
+        height: entry.height || 32,
+        properties: [
+          { name: 'targetMap', type: 'string', value: entry.targetMap },
+          { name: 'targetX', type: 'float', value: entry.x },
+          { name: 'targetY', type: 'float', value: entry.y },
+          ...(entry.targetSpawnId
+            ? [{ name: 'targetSpawnId', type: 'string', value: entry.targetSpawnId }]
+            : []),
+        ],
+      });
+    }
+    // Append to or create object layer
+    const existing = objectLayers[0];
+    if (existing) {
+      existing.objects.push(...transitionObjects);
+    } else {
+      objectLayers.push({ name: 'objects', objects: transitionObjects });
+    }
+  }
+
   return {
     width: parsed.mapWidth,
     height: parsed.mapHeight,
@@ -351,6 +489,7 @@ export const jtonToTilemapData = (parsed: JtonParseResult): TilemapData => {
     tileheight: parsed.tileHeight,
     tilesets: parsed.tilesets,
     layers: parsed.layers,
+    ...(objectLayers.length > 0 ? { objectLayers } : {}),
   };
 };
 
