@@ -173,6 +173,8 @@
 | C-193 | Client Tool Streaming Orchestrator | ✅ completed |
 | C-194 | Ecs Offscreen Macro Simulation | ✅ completed |
 | C-195 | Ecs String Registry Hydration | ✅ completed |
+| C-196 | Ecs Emergent World Integration | ✅ completed |
+| C-197 | Ecs Goap Combat Tactics | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
