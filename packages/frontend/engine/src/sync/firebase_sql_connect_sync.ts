@@ -19,8 +19,7 @@ import type { StringRegistryService } from '../services/string_registry_service.
 //    is updated atomically (Map.set is single-operation in V8) so active
 //    frame reads never see partial state.
 //
-// Firebase Data Connect (SQL Connect) is an optional dependency. When
-// unavailable, the bridge operates in stub mode and logs a warning.
+// Firebase Data Connect is provided via @aikami/frontend-dataconnect.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -193,10 +192,9 @@ export class FirebaseSqlConnectSync extends BaseEngineClass<FirebaseSqlConnectSy
   private async _subscribeToLiveQuery(): Promise<void> {
     this.debug('_subscribeToLiveQuery:start');
 
-    // Dynamic import — Firebase Data Connect SDK is an optional peer dependency
-    // The import validates package resolvability; actual subscription API
-    // will be wired when the Firebase Data Connect SDK stabilizes.
-    void (await import('@firebase/data-connect'));
+    // Dynamic import validates @aikami/frontend-dataconnect resolves.
+    // Actual subscription API will be wired when the SDK stabilizes.
+    void (await import('@aikami/frontend/dataconnect'));
 
     // Placeholder: the actual subscription setup depends on the Firebase
     // Data Connect SDK API, which is still evolving. When the SDK stabilizes,
