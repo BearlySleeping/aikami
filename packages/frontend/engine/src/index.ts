@@ -262,6 +262,13 @@ export type {
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
+// Streaming orchestrator (C-193)
+export type {
+  ActionMutationPayload,
+  MutationResult,
+  StreamingOrchestratorOptions,
+} from './services/streaming_orchestrator.ts';
+export { StreamingOrchestratorService } from './services/streaming_orchestrator.ts';
 // State (engine-level mode gate)
 export { getEngineGameMode, setEngineGameMode } from './state/game_mode.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
