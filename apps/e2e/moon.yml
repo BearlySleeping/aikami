@@ -37,17 +37,17 @@ tasks:
   build:
     command: 'echo "e2e has no build — use moon run e2e:test"'
   test:
-    command: 'npx playwright test'
+    command: 'bun run test'
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-client:
-    command: 'npx playwright test --project=client'
+    command: 'bun run test:client'
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-game:
-    command: 'npx playwright test --project=game'
+    command: 'bun run test:game'
     inputs:
       - '@group(tests)'
       - '@group(sources)'

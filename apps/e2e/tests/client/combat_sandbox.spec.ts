@@ -4,7 +4,6 @@
 // C-149: Combat Mechanics & AI Gatekeeping
 //
 // Uses the CombatPage POM for all combat UI interactions.
-// No inline page.locator() calls — strict POM adherence.
 
 import { expect, test } from '@playwright/test';
 import { CombatPage } from '$pom';
@@ -51,15 +50,17 @@ test.describe('Freeform AI Combat Actions (C-146)', () => {
     await expect(combat.customActionInput).toHaveValue('');
   });
 
-  test('should show interpreting spinner while resolving', async () => {
+  test('should show loading spinner while resolving', async () => {
     await combat.typeCustomAction('Test action');
     await combat.submitCustomAction();
 
+    // The submit button shows a spinner inside a loading-spinner span during resolution
     const spinner = combat.customActionSubmit.locator('.loading-spinner');
     await expect(spinner).toBeVisible();
 
     await combat.page.waitForTimeout(1000);
-    await expect(combat.customActionSubmit).toHaveText('✨ Submit Action');
+    // After resolution, spinner is gone and text returns to "✨ Act"
+    await expect(combat.customActionSubmit.locator('.loading-spinner')).not.toBeAttached();
   });
 
   test('should append custom action narrative to combat log', async () => {

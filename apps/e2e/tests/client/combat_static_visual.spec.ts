@@ -16,6 +16,8 @@ const gotoCombatState = async (
   params: Record<string, string> = {},
 ): Promise<void> => {
   const url = new URL('http://localhost:5274/dev/combat');
+  // Always disable real AI for fast mock resolution
+  url.searchParams.set('useRealAi', 'false');
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
