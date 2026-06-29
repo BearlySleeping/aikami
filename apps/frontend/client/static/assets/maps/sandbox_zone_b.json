@@ -120,7 +120,7 @@
             {
               "name": "targetMap",
               "type": "string",
-              "value": "/assets/maps/sandbox_zone_a.json"
+              "value": "/assets/maps/debug_map.jton"
             },
             {
               "name": "targetX",

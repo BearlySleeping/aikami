@@ -897,7 +897,7 @@ describe('extractCollisionGrid', () => {
           name: 'ground',
           width: 4,
           height: 3,
-          data: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+          data: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
           visible: true,
         },
         {
@@ -961,7 +961,7 @@ describe('extractCollisionGrid', () => {
           name: 'ground',
           width: 2,
           height: 2,
-          data: [1, 1, 1, 1],
+          data: [2, 2, 2, 2],
           visible: true,
         },
       ],

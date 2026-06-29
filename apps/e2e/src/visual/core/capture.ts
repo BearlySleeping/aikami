@@ -28,6 +28,12 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
   schema: T;
   /** CSS selector for the canvas element. Defaults to 'canvas'. */
   canvasSelector?: string;
+  /**
+   * When set, clips the screenshot to this element's bounding box
+   * instead of the default 256×256 center-crop around the canvas.
+   * Use 'canvas' to capture only the rendered game surface.
+   */
+  screenshotSelector?: string;
   /** Size of the clip region in pixels. Default: 256. */
   clipSize?: number;
   /**
@@ -75,7 +81,7 @@ export type CaptureResult = {
 
 // ── Path resolution ──────────────────────────────────────────
 
-const E2E_DIR = resolve(import.meta.dirname, '../../../..');
+const E2E_DIR = resolve(import.meta.dirname, '../../..');
 const SCREENSHOT_DIR = resolve(E2E_DIR, 'test-results', 'visual');
 
 // ── Nix Chromium path ────────────────────────────────────────
@@ -282,31 +288,48 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
 
           const canvasSelector = testCase.canvasSelector ?? 'canvas';
           const clipSize = testCase.clipSize ?? 256;
+          const screenshotSelector = testCase.screenshotSelector;
 
-          // Try bounding-box clip, fall back to full page if no canvas found.
-          // DOM-only pages (boot screen, settings, etc.) have no canvas element.
+          // Try bounding-box clip, fall back to full page if no element found.
           let usedClip = false;
           try {
-            const canvas = page.locator(canvasSelector).first();
-            const box = await canvas.boundingBox({ timeout: 3000 });
+            // When screenshotSelector is set, clip to that element's exact bounds.
+            // Otherwise clip a 256×256 region centered on the canvas element.
+            const targetSelector = screenshotSelector ?? canvasSelector;
+            const target = page.locator(targetSelector).first();
+            const box = await target.boundingBox({ timeout: 3000 });
 
             if (box && box.width > 0 && box.height > 0) {
-              const cx = box.x + box.width / 2;
-              const cy = box.y + box.height / 2;
+              if (screenshotSelector) {
+                // Clip to the target element's exact bounding box
+                await page.screenshot({
+                  path: filepath,
+                  clip: {
+                    x: Math.max(0, Math.floor(box.x)),
+                    y: Math.max(0, Math.floor(box.y)),
+                    width: Math.floor(box.width),
+                    height: Math.floor(box.height),
+                  },
+                });
+              } else {
+                // Default: 256×256 center-crop around the canvas
+                const cx = box.x + box.width / 2;
+                const cy = box.y + box.height / 2;
 
-              await page.screenshot({
-                path: filepath,
-                clip: {
-                  x: Math.max(0, Math.floor(cx - clipSize / 2)),
-                  y: Math.max(0, Math.floor(cy - clipSize / 2)),
-                  width: clipSize,
-                  height: clipSize,
-                },
-              });
+                await page.screenshot({
+                  path: filepath,
+                  clip: {
+                    x: Math.max(0, Math.floor(cx - clipSize / 2)),
+                    y: Math.max(0, Math.floor(cy - clipSize / 2)),
+                    width: clipSize,
+                    height: clipSize,
+                  },
+                });
+              }
               usedClip = true;
             }
           } catch {
-            // Canvas not found or not visible — fall through to full page
+            // Element not found or not visible — fall through to full page
           }
 
           if (!usedClip) {

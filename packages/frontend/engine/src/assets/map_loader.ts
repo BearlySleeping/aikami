@@ -643,28 +643,75 @@ export const extractSpawnPointEntities = (tilemap: TilemapData): SpawnPointEntit
 };
 
 /**
- * Extracts the collision layer from a parsed tilemap.
+ * Extracts the collision layer from a parsed tilemap, merging water
+ * tiles from the ground layer into the collision grid.
  *
  * The collision layer is identified by name (default: "collision").
  * Non-zero tile IDs in this layer are treated as solid obstacles.
  *
+ * Additionally, any tile layer whose GID matches {@link waterGids}
+ * has those tiles marked as solid — even if they are not in the
+ * explicit collision layer. This prevents characters from walking
+ * across water cells painted in decorative ground layers.
+ *
  * @param tilemap - The parsed tilemap data.
- * @param options - Optional layer name override.
+ * @param options - Optional overrides for layer name and water GIDs.
+ * @param options.layerName - Collision layer name (default: "collision").
+ * @param options.waterGids - Set of GIDs that represent water tiles
+ *   (default: `new Set([1])` — the first tile in the debug tileset).
  * @returns A flat boolean array (true = solid) in row-major order,
- *   or `undefined` if no collision layer is found.
+ *   or `undefined` if no collision layer is found AND no water tiles exist.
  */
 export const extractCollisionGrid = (
   tilemap: TilemapData,
-  options?: { layerName?: string },
+  options?: { layerName?: string; waterGids?: Set<number> },
 ): boolean[] | undefined => {
   const layerName = options?.layerName ?? 'collision';
-  const layer = tilemap.layers.find((l) => l.name === layerName);
+  // Water GIDs default to tile index 0 (first tile in tileset, typically water/blue).
+  // Merging these into the collision grid prevents wading through oceans.
+  // Set to empty Set to disable if the map uses water GIDs as walkable floor.
+  const waterGids = options?.waterGids ?? new Set([1]);
 
-  if (!layer) {
+  const totalCells = tilemap.width * tilemap.height;
+
+  // Start with an empty grid (all false = walkable)
+  const grid = new Array<boolean>(totalCells).fill(false) as boolean[];
+  let hasAnyBlocked = false;
+
+  // 1. Explicit collision layer
+  const collisionLayer = tilemap.layers.find((l) => l.name === layerName);
+  if (collisionLayer) {
+    for (let i = 0; i < totalCells; i++) {
+      if (collisionLayer.data[i] !== 0) {
+        grid[i] = true;
+        hasAnyBlocked = true;
+      }
+    }
+  }
+
+  // 2. Merge water tiles from tile layers (cross-reference against tile IDs)
+  //    Contract C-198 AC-3: prevent wading through oceans
+  for (const layer of tilemap.layers) {
+    // Skip the collision layer itself and objectgroup layers (which have no data)
+    if (layer.name === layerName || !Array.isArray(layer.data)) {
+      continue;
+    }
+    for (let i = 0; i < totalCells; i++) {
+      const gid = layer.data[i] ?? 0;
+      if (waterGids.has(gid)) {
+        grid[i] = true;
+        hasAnyBlocked = true;
+      }
+    }
+  }
+
+  // Return undefined only if no layer contributed any blocked cells.
+  // Differentiate from a collision layer of all zeros (empty but present).
+  if (!hasAnyBlocked && !collisionLayer) {
     return undefined;
   }
 
-  return layer.data.map((gid) => gid !== 0);
+  return grid;
 };
 
 /**

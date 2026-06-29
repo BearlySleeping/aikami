@@ -30,7 +30,7 @@ type CacheFile = {
 
 // ── Path resolution ──────────────────────────────────────────
 
-const E2E_DIR = resolve(import.meta.dirname, '../../../..');
+const E2E_DIR = resolve(import.meta.dirname, '../../..');
 const CACHE_PATH = resolve(E2E_DIR, '.visual-cache.json');
 
 // ── Public API ────────────────────────────────────────────────

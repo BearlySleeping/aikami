@@ -126,6 +126,7 @@ P2 (Polish — after P1):
 | C-195 | [ECS String Registry Hydration](C-195-ecs-string-registry-hydration.md) ✅ | Zero-allocation uint32 string registry, TextIdentity ECS component, Turso hydration bridge, Firebase SQL Connect delta sync | C-194 |
 | C-196 | [ECS Emergent World Integration](C-196-ecs-emergent-world-integration.md) ✅ | 6-step pipeline consolidation in ecs_worker.ts — ingestion → macro sim → perception → cognition → navigation → resolution; zone handshaking; visual + E2E tests | C-190, C-191, C-192, C-193, C-194, C-195 |
 | C-197 | [ECS GOAP Combat Tactics](C-197-ecs-goap-combat-tactics.md) ✅ | Tactical combat AI — bitmask GOAP tactical actions, JPS distance-weighted targeting, faction aggro shifts | C-196 |
+| C-198 | [Dev Sandbox Polish & Zoning](C-198-dev-sandbox-polish-and-zoning.md) ✅ | Dev sandbox polish, LPC avatar, water containment, doorway portal | C-196 |
 
 ## Contract Format
 
