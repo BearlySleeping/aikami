@@ -167,8 +167,14 @@ export class TursoRegistryHydration extends BaseEngineClass<TursoRegistryHydrati
 
       const result = await client.execute('SELECT id, value FROM string_registry ORDER BY id ASC');
 
-      this.debug('_queryTurso:complete', { rowCount: result.rows.length });
-      return result.rows;
+      // @libsql/client Row is a column-value dict; cast to typed shape
+      const rows: TursoStringRow[] = result.rows.map((row) => ({
+        id: row['id'] as number,
+        value: row['value'] as string,
+      }));
+
+      this.debug('_queryTurso:complete', { rowCount: rows.length });
+      return rows;
     } catch {
       throw new Error(
         'TursoRegistryHydration: @libsql/client is not installed. ' +

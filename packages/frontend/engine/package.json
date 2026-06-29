@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@aikami/frontend-api-core": "workspace:*",
+    "@aikami/frontend-dataconnect": "workspace:*",
+    "@libsql/client": "^0.15.0",
     "@aikami/frontend/configs": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/frontend-utils": "workspace:*",
