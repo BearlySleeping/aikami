@@ -31,6 +31,7 @@ import {
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import { registerInventoryObservers } from '../components/inventory.ts';
+import { registerMapLocationObservers } from '../components/map_location.ts';
 import { registerMoveIntentObservers } from '../components/move_intent.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import type { PositionData } from '../components/position.ts';
@@ -41,6 +42,7 @@ import { registerTransitionObservers } from '../components/transition.ts';
 import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { registerVisualObservers } from '../components/visual.ts';
+import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -78,6 +80,11 @@ import {
 } from '../systems/entity_spawner.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { handleInteract } from '../systems/interaction_system.ts';
+import {
+  dehydrateZone,
+  hydrateZone,
+  startMacroSimulation,
+} from '../systems/macro_simulation_system.ts';
 import { updateMovement } from '../systems/movement_system.ts';
 import {
   animateEntitySystem,
@@ -111,6 +118,9 @@ let running = false;
 
 /** Spatial hash grid for O(1) proximity queries. */
 let spatialGrid: SpatialHashGrid | undefined;
+
+/** Entity ID of the currently active zone (C-194). */
+let _activeZoneEntityId = 0;
 
 /** Pre-allocated position buffer for grid population. */
 let positionBuffer: Float32Array | undefined;
@@ -488,6 +498,8 @@ const initializeEngine = (
   registerGridPositionObservers(world);
   registerMoveIntentObservers(world);
   registerSpatialLinkObservers(world);
+  registerMapLocationObservers(world);
+  registerZoneStatusObservers(world);
 
   // 4b. Create the EngineState singleton entity (C-172)
   createEngineStateEntity(world);
@@ -498,6 +510,10 @@ const initializeEngine = (
 
   // 6. Start the tick loop (~60fps = 16ms interval)
   running = true;
+
+  // 6a. Start the macro simulation tick loop (C-194)
+  //     Runs at 500ms interval for offline agent stepping.
+  startMacroSimulation();
 
   // 7. Initialize spatial hash grid (cellSize 50, capacity = MAX_ENTITIES * 2)
   spatialGrid = new SpatialHashGrid({
@@ -1223,6 +1239,11 @@ self.onmessage = (event: MessageEvent): void => {
             }
           }
 
+          // ── C-194: Dehydrate the departing zone before entity cleanup ──
+          if (_activeZoneEntityId > 0) {
+            dehydrateZone(world, _activeZoneEntityId);
+          }
+
           // 1. Clear non-player entities (NPCs, props, transitions, spawn points).
           //    Preserve the player entity and the EngineState singleton.
           const allEids = getAllEntities(world);
@@ -1394,6 +1415,18 @@ self.onmessage = (event: MessageEvent): void => {
               ],
             });
           }
+
+          // ── C-194: Hydrate the new active zone ──
+          // Derive a zone entity ID from the map pixel dimensions
+          // (deterministic hash for the active sector).
+          const newZoneEid =
+            ((mapPixelWidth as number) * 31 + (mapPixelHeight as number) * 17) & 0x7fffffff;
+          _activeZoneEntityId = newZoneEid;
+          hydrateZone(world, newZoneEid, {
+            zonePixelOriginX: 0,
+            zonePixelOriginY: 0,
+            gridCellSize: 64,
+          });
 
           // ── C-172: Restore engine state to ACTIVE ──
           setSimulationState(world, SimulationState.active);
