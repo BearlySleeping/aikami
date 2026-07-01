@@ -358,6 +358,12 @@ export {
   requestPath,
   tickJpsPathfinder,
 } from './systems/jps_pathfinder_system.ts';
+// Keybinding config (shared between settings UI and engine)
+export {
+  DEFAULT_KEYBINDINGS,
+  KEYBINDING_STORAGE_KEY,
+  type KeybindingMap,
+} from './systems/keybinding_config.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {
   animateEntitySystem,
