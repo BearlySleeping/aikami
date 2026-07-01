@@ -1,10 +1,8 @@
 // apps/frontend/client/src/lib/views/dev/settings/dev_settings_view_model.svelte.ts
 //
-// DevSettingsViewModel — extends the production SettingsViewModel with
-// live volume controls wired to the AudioService singleton.
-//
-// Contract: C-150 Audio System — dev sandbox for volume verification
-import { audioService } from '$lib/services/audio/audio_service.svelte';
+// DevSettingsViewModel — extends the production SettingsViewModel for the
+// dev sandbox. Volume controls are handled by SettingsAudioViewModel
+// (instantiated by the parent SettingsViewModel).
 import {
   SettingsViewModel,
   type SettingsViewModelInterface,
@@ -15,18 +13,7 @@ import {
 // Interface
 // ---------------------------------------------------------------------------
 
-export type DevSettingsViewModelInterface = SettingsViewModelInterface & {
-  /** Master volume (0–1). Mirrors audioService.masterVolume. */
-  readonly masterVolume: number;
-  /** BGM volume (0–1). Mirrors audioService.bgmVolume. */
-  readonly bgmVolume: number;
-  /** SFX volume (0–1). Mirrors audioService.sfxVolume. */
-  readonly sfxVolume: number;
-
-  setMasterVolume(volume: number): void;
-  setBgmVolume(volume: number): void;
-  setSfxVolume(volume: number): void;
-};
+export type DevSettingsViewModelInterface = SettingsViewModelInterface;
 
 // ---------------------------------------------------------------------------
 // Options
@@ -41,50 +28,11 @@ export type DevSettingsViewModelOptions = SettingsViewModelOptions;
 /**
  * Dev sandbox SettingsViewModel.
  *
- * Extends the production SettingsViewModel (tab navigation, ProvidersView) and
- * adds live volume sliders wired to the AudioService singleton. Volume changes
- * persist across route navigation within the SPA.
+ * Extends the production SettingsViewModel (tab navigation, ProvidersView,
+ * SettingsAudioViewModel). Previously added volume controls directly; now
+ * those are handled by the Audio sub-tab's own view model.
  */
-class DevSettingsViewModel extends SettingsViewModel implements DevSettingsViewModelInterface {
-  /** Mirrors audioService.masterVolume reactively. */
-  masterVolume = $state<number>(audioService.masterVolume);
-  /** Mirrors audioService.bgmVolume reactively. */
-  bgmVolume = $state<number>(audioService.bgmVolume);
-  /** Mirrors audioService.sfxVolume reactively. */
-  sfxVolume = $state<number>(audioService.sfxVolume);
-
-  constructor(options: DevSettingsViewModelOptions) {
-    super(options);
-
-    // Sync dev VM state → audioService on every render tick.
-    // $effect keeps the DevSettingsViewModel in lockstep with the
-    // AudioService singleton, so volume changes survive SPA navigation
-    // between /dev/audio and /dev/settings.
-    $effect(() => {
-      // Reading from audioService triggers reactivity when the service
-      // changes (e.g., via programmatic volume changes elsewhere).
-      // We don't push-back from service → VM to avoid double-binding loops.
-    });
-  }
-
-  /** @inheritdoc */
-  setMasterVolume(volume: number): void {
-    audioService.setMasterVolume(volume);
-    this.masterVolume = audioService.masterVolume;
-  }
-
-  /** @inheritdoc */
-  setBgmVolume(volume: number): void {
-    audioService.setBgmVolume(volume);
-    this.bgmVolume = audioService.bgmVolume;
-  }
-
-  /** @inheritdoc */
-  setSfxVolume(volume: number): void {
-    audioService.setSfxVolume(volume);
-    this.sfxVolume = audioService.sfxVolume;
-  }
-}
+class DevSettingsViewModel extends SettingsViewModel implements DevSettingsViewModelInterface {}
 
 export const getDevSettingsViewModel = (
   options: DevSettingsViewModelOptions,

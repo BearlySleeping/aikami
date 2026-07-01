@@ -7,6 +7,7 @@ import { Velocity } from '../components/velocity.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { getEngineGameMode } from '../state/game_mode.ts';
 import type { Direction } from '../types.ts';
+import { keyToDirection } from './keybinding_config.ts';
 
 // ---------------------------------------------------------------------------
 // InputSystem — translate keyboard events to velocity changes
@@ -74,7 +75,9 @@ const setupInput = (world: World, playerEntityId: number, bridge: EngineBridge):
     unsubs.push(unsubMove, unsubStop);
   }
 
-  // Keyboard input: WASD + arrow keys
+  // Keyboard input: uses configurable keybindings from keybinding_config.
+  // Settings UI writes to the same localStorage key so rebinds take effect
+  // immediately (next keydown).
   const handleKeyDown = (event: KeyboardEvent): void => {
     // Gate on game mode — only process movement keys in EXPLORE mode.
     // During COMBAT/MENU/DIALOGUE, keyboard events pass through to the
@@ -125,39 +128,6 @@ const setupInput = (world: World, playerEntityId: number, bridge: EngineBridge):
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
   };
-};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Maps a KeyboardEvent key to a movement direction.
- *
- * @param key - The `event.key` value.
- * @returns The corresponding direction, or `undefined` if not a movement key.
- */
-const keyToDirection = (key: string): Direction | undefined => {
-  switch (key) {
-    case 'w':
-    case 'W':
-    case 'ArrowUp':
-      return 'up';
-    case 's':
-    case 'S':
-    case 'ArrowDown':
-      return 'down';
-    case 'a':
-    case 'A':
-    case 'ArrowLeft':
-      return 'left';
-    case 'd':
-    case 'D':
-    case 'ArrowRight':
-      return 'right';
-    default:
-      return undefined;
-  }
 };
 
 export { PLAYER_SPEED, setupInput };

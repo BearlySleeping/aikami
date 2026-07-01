@@ -5,6 +5,9 @@
   // Controls) and AI Engine (Text, Image, Voice). The Text sub-tab hosts the
   // full ProvidersView for AI provider configuration.
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import SettingsAudioView from './audio/settings_audio_view.svelte';
+  import SettingsControlsView from './controls/settings_controls_view.svelte';
+  import SettingsDisplayView from './display/settings_display_view.svelte';
   import ProvidersView from './providers/providers_view.svelte';
   import type { SettingsViewModelInterface } from './settings_view_model.svelte';
 
@@ -24,12 +27,6 @@
     { id: 'display' as const, label: 'Display' },
     { id: 'audio' as const, label: 'Audio' },
     { id: 'controls' as const, label: 'Controls' },
-  ];
-
-  const AI_ENGINE_SUB_TABS = [
-    { id: 'text' as const, label: 'Text' },
-    { id: 'image' as const, label: 'Image' },
-    { id: 'voice' as const, label: 'Voice' },
   ];
 </script>
 
@@ -90,183 +87,17 @@
     <!-- Game Sub-tab Content -->
     <div class="px-6 py-4 max-w-2xl">
       {#if viewModel.gameSubTab === 'display'}
-        <div class="card bg-base-100 shadow">
-          <div class="card-body">
-            <h2 class="card-title">Display Settings</h2>
-            <p class="text-base-content/60">Resolution, fullscreen, and display options.</p>
-            <div class="divider"></div>
-            <div class="space-y-4 opacity-50">
-              <div class="form-control">
-                <label class="label" for="settings-display-resolution">
-                  <span class="label-text">Resolution</span>
-                </label>
-                <select
-                  id="settings-display-resolution"
-                  class="select select-bordered w-full max-w-xs"
-                  disabled
-                >
-                  <option>1920 × 1080</option>
-                </select>
-              </div>
-              <div class="form-control">
-                <label class="label cursor-pointer">
-                  <span class="label-text">Fullscreen</span>
-                  <input type="checkbox" class="toggle" disabled>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SettingsDisplayView viewModel={viewModel.displayViewModel} />
       {:else if viewModel.gameSubTab === 'audio'}
-        {@const hasVolume = viewModel.masterVolume !== undefined && viewModel.setMasterVolume !== undefined}
-        <div class="card bg-base-100 shadow">
-          <div class="card-body">
-            <h2 class="card-title">Audio Settings</h2>
-            <p class="text-base-content/60">Master volume, sound effects, and music.</p>
-            <div class="divider"></div>
-            <div class={hasVolume ? 'space-y-4' : 'space-y-4 opacity-50'}>
-              <!-- Master Volume -->
-              <div class="form-control">
-                <label class="label" for="settings-audio-master">
-                  <span class="label-text">Master Volume</span>
-                  <span class="label-text-alt">
-                    {hasVolume ? Math.round((viewModel.masterVolume ?? 0.8) * 100) : 80}%
-                  </span>
-                </label>
-                <input
-                  id="settings-audio-master"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={hasVolume ? Math.round((viewModel.masterVolume ?? 0.8) * 100) : 80}
-                  class="range"
-                  disabled={!hasVolume}
-                  oninput={(e) => {
-                    if (viewModel.setMasterVolume) {
-                      viewModel.setMasterVolume(Number(e.currentTarget.value) / 100);
-                    }
-                  }}
-                >
-              </div>
-              <!-- BGM Volume -->
-              <div class="form-control">
-                <label class="label" for="settings-audio-bgm">
-                  <span class="label-text">Music</span>
-                  <span class="label-text-alt">
-                    {hasVolume ? Math.round((viewModel.bgmVolume ?? 0.8) * 100) : 80}%
-                  </span>
-                </label>
-                <input
-                  id="settings-audio-bgm"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={hasVolume ? Math.round((viewModel.bgmVolume ?? 0.8) * 100) : 80}
-                  class="range"
-                  disabled={!hasVolume}
-                  oninput={(e) => {
-                    if (viewModel.setBgmVolume) {
-                      viewModel.setBgmVolume(Number(e.currentTarget.value) / 100);
-                    }
-                  }}
-                >
-              </div>
-              <!-- SFX Volume -->
-              <div class="form-control">
-                <label class="label" for="settings-audio-sfx">
-                  <span class="label-text">Sound Effects</span>
-                  <span class="label-text-alt">
-                    {hasVolume ? Math.round((viewModel.sfxVolume ?? 1) * 100) : 80}%
-                  </span>
-                </label>
-                <input
-                  id="settings-audio-sfx"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={hasVolume ? Math.round((viewModel.sfxVolume ?? 1) * 100) : 80}
-                  class="range"
-                  disabled={!hasVolume}
-                  oninput={(e) => {
-                    if (viewModel.setSfxVolume) {
-                      viewModel.setSfxVolume(Number(e.currentTarget.value) / 100);
-                    }
-                  }}
-                >
-              </div>
-            </div>
-          </div>
-        </div>
+        <SettingsAudioView viewModel={viewModel.audioViewModel} />
       {:else if viewModel.gameSubTab === 'controls'}
-        <div class="card bg-base-100 shadow">
-          <div class="card-body">
-            <h2 class="card-title">Control Settings</h2>
-            <p class="text-base-content/60">Keybindings and input configuration.</p>
-            <div class="divider"></div>
-            <div class="space-y-3 opacity-50">
-              {#each ['Move Up', 'Move Down', 'Move Left', 'Move Right', 'Interact', 'Open Menu'] as action}
-                <div class="flex items-center justify-between py-2 px-4 bg-base-200 rounded-lg">
-                  <span>{action}</span>
-                  <kbd class="kbd kbd-sm">---</kbd>
-                </div>
-              {/each}
-            </div>
-          </div>
-        </div>
+        <SettingsControlsView viewModel={viewModel.controlsViewModel} />
       {/if}
     </div>
   <!-- ═══════════════════════════════════════════════════════════════════
        AI Engine Category
        ═══════════════════════════════════════════════════════════════════ -->
   {:else if viewModel.activeCategory === 'ai_engine'}
-    <!-- AI Engine Sub-tabs -->
-    <div class="tabs tabs-bordered px-6">
-      {#each AI_ENGINE_SUB_TABS as sub}
-        <button
-          class="tab"
-          class:tab-active={viewModel.aiEngineSubTab === sub.id}
-          onclick={() => viewModel.setAiEngineSubTab(sub.id)}
-        >
-          {sub.label}
-        </button>
-      {/each}
-    </div>
-
-    <!-- AI Engine Sub-tab Content -->
-    <div class="px-6 py-4">
-      {#if viewModel.aiEngineSubTab === 'text'}
-        <ProvidersView viewModel={viewModel.providersViewModel} />
-      {:else if viewModel.aiEngineSubTab === 'image'}
-        <div class="card bg-base-100 shadow max-w-2xl">
-          <div class="card-body">
-            <h2 class="card-title">Image Generation</h2>
-            <p class="text-base-content/60">
-              Configure your image generation provider and settings.
-            </p>
-            <div class="divider"></div>
-            <div class="py-8 text-center text-base-content/40">
-              <p class="text-lg font-semibold">Coming Soon</p>
-              <p class="text-sm mt-1">
-                Image generation configuration will be available in a future update.
-              </p>
-            </div>
-          </div>
-        </div>
-      {:else if viewModel.aiEngineSubTab === 'voice'}
-        <div class="card bg-base-100 shadow max-w-2xl">
-          <div class="card-body">
-            <h2 class="card-title">Voice &amp; TTS</h2>
-            <p class="text-base-content/60">
-              Configure your text-to-speech provider and voice settings.
-            </p>
-            <div class="divider"></div>
-            <div class="py-8 text-center text-base-content/40">
-              <p class="text-lg font-semibold">Coming Soon</p>
-              <p class="text-sm mt-1">Voice configuration will be available in a future update.</p>
-            </div>
-          </div>
-        </div>
-      {/if}
-    </div>
+    <ProvidersView viewModel={viewModel.providersViewModel} />
   {/if}
 </BaseViewModelContainer>
