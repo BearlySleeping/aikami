@@ -115,16 +115,21 @@ _aikami_load_mode() {
 
 _aikami_load_mode
 
-# ── 4. Delegate secrets to Bun ─────────────────────────────────────────
+# ── 4. Pi-Hypa configuration (additive mode — keeps custom tools active) ─
+export HYPA_PI_MODE="additive"
+export HYPA_PI_REWRITE_TIMEOUT_MS="10000"
+export HYPA_PI_ASK_NON_INTERACTIVE="deny"
+
+# ── 5. Delegate secrets to Bun ─────────────────────────────────────────
 
 echo "━━━ Secret Manager ━━━"
 eval "$(bun run "$AIKAMI_ROOT/scripts/src/lib/env/secrets.ts" 2>&2)"
 
-# ── 5. Delegate runtime validation to Bun ──────────────────────────────
+# ── 6. Delegate runtime validation to Bun ──────────────────────────────
 
 bun run "$AIKAMI_ROOT/scripts/src/lib/env/check.ts" 2>&2
 
-# ── 6. Shell aliases + workflow functions (bash/zsh only) ───────────────
+# ── 7. Shell aliases + workflow functions (bash/zsh only) ───────────────
 
 _aikami_is_bash_or_zsh() {
   case "${SHELL:-}" in
