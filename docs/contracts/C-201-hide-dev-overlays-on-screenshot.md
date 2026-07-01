@@ -1,3 +1,5 @@
+<!-- completed: 2026-07-01 -->
+
 ## Metadata
 
 | Field | Value |
@@ -9,7 +11,30 @@
 | **Status** | not_started |
 | **Contract version** | 1.1.0 |
 
-## Overview
+### Execution Report — 2026-07-01
+
+**Summary**: Created `BaseDevViewModel` in `packages/frontend/services`, updated `MapSandboxViewModel` to inherit from it, and wrapped all dev overlays in conditional blocks across three layout/view files. All overlays unmount cleanly when `?screenshot=true` is present.
+
+**AC Status**:
+- AC-1 (Baseline DevViewModel Extraction): ✅ — `BaseDevViewModel` provides `isScreenshot` and `hideOverlays` as reactive `$state` fields; subclasses inherit without duplicate parsing logic. Static `BaseDevViewModel.isScreenshot()` available for use in layouts/views without a full ViewModel instance.
+- AC-2 (Total Overlay Suppression): ✅ — All dev overlays (status bar, map indicator, error display, interaction hint, NPC dialog, floating map buttons, `<ModeIndicator />`, dev layout navbar/sidebar) unmount when `?screenshot=true` is passed. Only the raw canvas container renders.
+- AC-3 (Safe Human Iteration Mode): ✅ — Without `?screenshot`, all utility panels, floating map-switchers, and status bars remain visible and interactive.
+
+**Files Created**:
+- `packages/frontend/services/src/lib/base/base_dev_view_model.svelte.ts` — New abstract class extending `BaseViewModel` with `isScreenshot`/`hideOverlays` reactive flags
+
+**Files Modified**:
+- `packages/frontend/services/src/index.ts` — Barrel export for `BaseDevViewModel`
+- `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts` — Swapped `extends BaseViewModel` → `extends BaseDevViewModel`
+- `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view.svelte` — Wrapped all overlay divs in `{#if !viewModel.isScreenshot}`
+- `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/+layout.svelte` — Wrapped `<ModeIndicator />` in `{#if !isScreenshot}` using static helper
+- `apps/frontend/client/src/routes/(dev)/+layout.svelte` — Bypasses `<DevView>` wrapper (navbar + sidebar) in screenshot mode, renders children directly
+
+**Deviations**: None.
+
+**Test Results**: `validate({ test: true })` — 4/4 passed (fix, typecheck, build, test on client + frontend-services).
+
+
 
 This contract implements a clean separation between development-only UI components and production canvas views during automated visual smoke testing execution loops. By introducing a reusable `BaseDevViewModel` parent class, any sandbox route gains instant, reactive knowledge of whether it is running inside an end-to-end screen capture harness. When a `?screenshot=true` search parameter is passed to the browser viewport, layout shells, overlay buttons, text labels, and floating panels dynamically unmount to provide clean canvas screenshots for VLM visual grounding pipelines.
 
