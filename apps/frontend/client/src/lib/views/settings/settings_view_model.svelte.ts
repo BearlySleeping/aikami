@@ -10,6 +10,18 @@ import {
 } from '@aikami/frontend/services';
 import { routerService } from '$services';
 import {
+  getSettingsAudioViewModel,
+  type SettingsAudioViewModelInterface,
+} from './audio/settings_audio_view_model.svelte';
+import {
+  getSettingsControlsViewModel,
+  type SettingsControlsViewModelInterface,
+} from './controls/settings_controls_view_model.svelte';
+import {
+  getSettingsDisplayViewModel,
+  type SettingsDisplayViewModelInterface,
+} from './display/settings_display_view_model.svelte';
+import {
   getProvidersViewModel,
   type ProvidersViewModelInterface,
 } from './providers/providers_view_model.svelte';
@@ -22,8 +34,6 @@ export type SettingsCategory = 'game' | 'ai_engine';
 
 export type GameSubTab = 'display' | 'audio' | 'controls';
 
-export type AiEngineSubTab = 'text' | 'image' | 'voice';
-
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
@@ -33,14 +43,17 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly activeCategory: SettingsCategory;
   /** Currently selected sub-tab under the Game category. */
   readonly gameSubTab: GameSubTab;
-  /** Currently selected sub-tab under the AI Engine category. */
-  readonly aiEngineSubTab: AiEngineSubTab;
   /** The C-120 ProvidersViewModel for AI provider configuration. */
   readonly providersViewModel: ProvidersViewModelInterface;
+  /** Audio settings view model wired to AudioService. */
+  readonly audioViewModel: SettingsAudioViewModelInterface;
+  /** Display settings view model wired to Tauri window API. */
+  readonly displayViewModel: SettingsDisplayViewModelInterface;
+  /** Controls settings view model with localStorage keybindings. */
+  readonly controlsViewModel: SettingsControlsViewModelInterface;
 
   setActiveCategory(category: SettingsCategory): void;
   setGameSubTab(tab: GameSubTab): void;
-  setAiEngineSubTab(tab: AiEngineSubTab): void;
   /**
    * Closes settings and navigates back to the originating page.
    * Reads the `from` query parameter to determine the destination:
@@ -49,17 +62,6 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
    *   - No parameter → defaults to `/`
    */
   closeSettings(): Promise<void>;
-
-  // ── Volume controls (wired by DevSettingsViewModel) ──
-  /** Master volume (0–1). */
-  readonly masterVolume?: number;
-  /** BGM volume (0–1). */
-  readonly bgmVolume?: number;
-  /** SFX volume (0–1). */
-  readonly sfxVolume?: number;
-  setMasterVolume?(volume: number): void;
-  setBgmVolume?(volume: number): void;
-  setSfxVolume?(volume: number): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -78,13 +80,19 @@ export class SettingsViewModel
 {
   activeCategory: SettingsCategory = $state('game');
   gameSubTab: GameSubTab = $state('display');
-  aiEngineSubTab: AiEngineSubTab = $state('text');
-
   readonly providersViewModel: ProvidersViewModelInterface;
+  readonly audioViewModel: SettingsAudioViewModelInterface;
+  readonly displayViewModel: SettingsDisplayViewModelInterface;
+  readonly controlsViewModel: SettingsControlsViewModelInterface;
 
   constructor(options: SettingsViewModelOptions) {
     super(options);
     this.providersViewModel = getProvidersViewModel({ className: 'ProvidersViewModel' });
+    this.audioViewModel = getSettingsAudioViewModel({ className: 'SettingsAudioViewModel' });
+    this.displayViewModel = getSettingsDisplayViewModel({ className: 'SettingsDisplayViewModel' });
+    this.controlsViewModel = getSettingsControlsViewModel({
+      className: 'SettingsControlsViewModel',
+    });
   }
 
   override async initialize(): Promise<void> {
@@ -100,10 +108,6 @@ export class SettingsViewModel
 
   setGameSubTab(tab: GameSubTab): void {
     this.gameSubTab = tab;
-  }
-
-  setAiEngineSubTab(tab: AiEngineSubTab): void {
-    this.aiEngineSubTab = tab;
   }
 
   async closeSettings(): Promise<void> {
