@@ -142,9 +142,12 @@
   const _transitionTo = async (mapUrl: string): Promise<void> => {
     const spawn = MAP_SPAWNS[mapUrl] ?? { x: 160, y: 192 };
     _addLog(`Transition → ${mapUrl.split('/').pop()}`);
-    await gameViewModel.loadMap(mapUrl, spawn.x, spawn.y, [
-      ...(gameStateService.defeatedEnemies as string[]),
-    ]);
+    await gameViewModel.loadMap({
+      mapUrl,
+      targetX: spawn.x,
+      targetY: spawn.y,
+      defeatedEnemies: [...(gameStateService.defeatedEnemies as string[])],
+    });
     _refreshMemory();
   };
 

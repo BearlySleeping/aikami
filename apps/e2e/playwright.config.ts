@@ -155,15 +155,27 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         baseURL: CLIENT_BASE_URL,
-        // WebGL rendering in headless Chromium for canvas screenshot tests.
+        // C-200: Rendering determinism — Mesa software rasterization + font
+        // subpixel deactivation for identical grayscale anti-aliasing across
+        // headless CI machines with no dedicated GPU.
         launchOptions: {
           args: [
             '--use-gl=angle',
-            '--use-angle=swiftshader',
+            '--use-angle=gl',
             '--enable-webgl',
             '--ignore-gpu-blocklist',
             '--enable-features=Vulkan,UseSkiaRenderer',
+            // C-200 AC-1: Deterministic font rendering
+            '--disable-lcd-text',
+            '--font-render-hinting=none',
+            '--disable-font-subpixel-positioning',
+            '--force-color-profile=srgb',
           ],
+          // C-200 AC-1: Mesa software rasterization
+          env: {
+            // biome-ignore lint/style/useNamingConvention: process env variable
+            LIBGL_ALWAYS_SOFTWARE: '1',
+          },
         },
       },
       // Game tests don't need authentication — no setup dependency.

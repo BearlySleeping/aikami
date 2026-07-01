@@ -302,7 +302,11 @@ class CameraSandboxViewModel
 
     try {
       this._addLog('LOAD_MAP', '/assets/maps/sandbox_zone_a.json');
-      await this._gameWorld.loadMap('/assets/maps/sandbox_zone_a.json', 160, 192);
+      await this._gameWorld.loadMap({
+        mapUrl: '/assets/maps/sandbox_zone_a.json',
+        targetX: 160,
+        targetY: 192,
+      });
       this.currentMap = 'sandbox_zone_a.json';
     } catch (err) {
       this._addLog('MAP_ERR', String(err));

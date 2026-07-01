@@ -147,10 +147,11 @@ export default defineConfig({
 
     // ── Corner: Top-Left — spawn on grass at row 0, col 0 ──
     //    Grass perimeter: pixel center (16, 16) = tile (0, 0)
+    //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Top-Left',
       // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
-      searchParams: { position_x: '16', position_y: '16' },
+      searchParams: { position_x: '16', position_y: '16', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('top-left', 'tile (0,0)'),
       schema: CornerVisualSchema,
@@ -158,10 +159,11 @@ export default defineConfig({
 
     // ── Corner: Top-Right — spawn on grass at row 0, col 9 ─
     //    Grass perimeter: pixel center (304, 16) = tile (9, 0)
+    //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Top-Right',
       // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
-      searchParams: { position_x: '304', position_y: '16' },
+      searchParams: { position_x: '304', position_y: '16', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('top-right', 'tile (9,0)'),
       schema: CornerVisualSchema,
@@ -169,10 +171,11 @@ export default defineConfig({
 
     // ── Corner: Bottom-Left — spawn on grass at row 9, col 0 ─
     //    Grass perimeter: pixel center (16, 304) = tile (0, 9)
+    //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Bottom-Left',
       // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
-      searchParams: { position_x: '16', position_y: '304' },
+      searchParams: { position_x: '16', position_y: '304', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('bottom-left', 'tile (0,9)'),
       schema: CornerVisualSchema,
@@ -180,10 +183,11 @@ export default defineConfig({
 
     // ── Corner: Bottom-Right — spawn on grass at row 9, col 9 ─
     //    Grass perimeter: pixel center (304, 304) = tile (9, 9)
+    //    C-199: disable_clamping=true so camera centers on player, not map midpoint.
     {
       name: 'Corner — Bottom-Right',
       // biome-ignore lint/style/useNamingConvention: URL query parameter names use snake_case
-      searchParams: { position_x: '304', position_y: '304' },
+      searchParams: { position_x: '304', position_y: '304', disable_clamping: 'true' },
       screenshotSelector: 'canvas',
       prompt: cornerPrompt('bottom-right', 'tile (9,9)'),
       schema: CornerVisualSchema,

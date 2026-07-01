@@ -1,51 +1,30 @@
 {
   "entries": {
-    "91df0e8e335d9f111889d01d5ef229ea5da0f213e55fad947ab8c66753ee286d": {
-      "hash": "91df0e8e335d9f111889d01d5ef229ea5da0f213e55fad947ab8c66753ee286d",
-      "timestamp": "2026-06-29T21:46:01.689Z",
+    "bd754b9db9e9db9db843f9cccf72e1dec3b9e0f4d91d6b1454b277ac56e6a242": {
+      "hash": "bd754b9db9e9db9db843f9cccf72e1dec3b9e0f4d91d6b1454b277ac56e6a242",
+      "timestamp": "2026-06-30T00:11:01.475Z",
       "result": {
-        "score": 98,
+        "score": 95,
         "characterVisible": true,
         "onGreenGrass": true,
         "onBlueWater": false,
         "inCorrectCorner": true,
-        "cornerLabel": "topRight",
+        "cornerLabel": "topLeft",
         "issues": []
       }
     },
-    "a8ffb7090fe141a7e4a4dbf8fd38ccff8e7b82fb09b348be46c9239ea880f041": {
-      "hash": "a8ffb7090fe141a7e4a4dbf8fd38ccff8e7b82fb09b348be46c9239ea880f041",
-      "timestamp": "2026-06-29T21:46:02.224Z",
+    "8ded4e5d5012c014240916cb4b3c6a9fc81a25e0e4c17611d8a7d26ef77d3214": {
+      "hash": "8ded4e5d5012c014240916cb4b3c6a9fc81a25e0e4c17611d8a7d26ef77d3214",
+      "timestamp": "2026-06-30T00:11:15.554Z",
       "result": {
-        "score": 50,
+        "score": 95,
         "characterVisible": true,
-        "onGreenGrass": false,
-        "onBlueWater": false,
-        "inCorrectCorner": false,
-        "cornerLabel": "center",
-        "issues": [
-          "Player is not on a green grass tile.",
-          "The camera is not following the player, the player is not in the center of the image.",
-          "The character is not in the expected bottom-right corner. The tiles around the character are only partially visible and do not clearly indicate a corner."
-        ]
+        "issues": []
       }
     },
-    "e0a4f3448314e8ef1a26123b81056656390ddb3be31082ff41e154de035052fc": {
-      "hash": "e0a4f3448314e8ef1a26123b81056656390ddb3be31082ff41e154de035052fc",
-      "timestamp": "2026-06-29T21:46:02.225Z",
-      "result": {
-        "score": 50,
-        "characterVisible": true,
-        "issues": [
-          "Character layers not clearly distinguishable (e.g., skin tones, hair, clothing not natural colors).",
-          "Map background (green grass perimeter, blue water interior) is not rendered; solid brown and grey colors are present instead.",
-          "Grey house structure and brown door are not visible as described."
-        ]
-      }
-    },
-    "8329abe54be3e283723153792b79bb5a13de3315722183f893f8bb02124d3341": {
-      "hash": "8329abe54be3e283723153792b79bb5a13de3315722183f893f8bb02124d3341",
-      "timestamp": "2026-06-29T21:46:02.225Z",
+    "6bbcdbff22ba77d94815e8bb96815a3a6f9a874683fab32690387e413a8ef767": {
+      "hash": "6bbcdbff22ba77d94815e8bb96815a3a6f9a874683fab32690387e413a8ef767",
+      "timestamp": "2026-06-30T00:11:16.580Z",
       "result": {
         "score": 95,
         "characterVisible": true,
@@ -56,34 +35,39 @@
         "issues": []
       }
     },
-    "ea0af7f01e1a3a975889404aac1fe697e56679dbe20e00f458d16f06b60106b8": {
-      "hash": "ea0af7f01e1a3a975889404aac1fe697e56679dbe20e00f458d16f06b60106b8",
-      "timestamp": "2026-06-29T21:46:02.225Z",
+    "ef87ec12ebbee32baacc124d16c03c82d99593d4836cc3999dd90cbb7e1321d3": {
+      "hash": "ef87ec12ebbee32baacc124d16c03c82d99593d4836cc3999dd90cbb7e1321d3",
+      "timestamp": "2026-06-30T00:11:30.940Z",
       "result": {
-        "score": 50,
+        "score": 95,
         "characterVisible": true,
-        "onGreenGrass": false,
-        "onBlueWater": false,
-        "inCorrectCorner": false,
-        "cornerLabel": "center",
-        "issues": [
-          "Character is on a grey tile, not green grass as expected.",
-          "The surrounding tiles do not match the expected top-left corner pattern. The character is near blue water on the left and top, and green grass on the right and bottom, which would indicate it is near the top-left section of the overall map, but the immediate tiles below the character also seem to be grey, indicating a house wall or similar, not green grass."
-        ]
+        "issues": []
       }
     },
-    "8fd2d2f75dfa39befc9f575b5e5b6f63583330ef3b65c870d28bc876220b6187": {
-      "hash": "8fd2d2f75dfa39befc9f575b5e5b6f63583330ef3b65c870d28bc876220b6187",
-      "timestamp": "2026-06-29T21:46:02.531Z",
+    "c39b0edea8692f607db40a9209c08f982330f15a8dcd10a1afd4da893ac2f004": {
+      "hash": "c39b0edea8692f607db40a9209c08f982330f15a8dcd10a1afd4da893ac2f004",
+      "timestamp": "2026-06-30T00:11:45.817Z",
       "result": {
-        "score": 80,
+        "score": 95,
         "characterVisible": true,
-        "issues": [
-          "The green grass tiles are not only on the outermost perimeter; there is a wide block of green covering the left side of the map. The vertical bridge of grass at column 3 is not fully rendered, only partially visible (first 2-3 columns).",
-          "The blue water interior is not fully visible; it appears as a single vertical strip in the middle.",
-          "The grey house structure is not visible.",
-          "The brown house door is not visible."
-        ]
+        "onGreenGrass": true,
+        "onBlueWater": false,
+        "inCorrectCorner": true,
+        "cornerLabel": "topRight",
+        "issues": []
+      }
+    },
+    "c3db3d11cd2b7164dca4402b0c5f962e44b5b5264acd351347099c29a2589404": {
+      "hash": "c3db3d11cd2b7164dca4402b0c5f962e44b5b5264acd351347099c29a2589404",
+      "timestamp": "2026-06-30T00:15:45.367Z",
+      "result": {
+        "score": 95,
+        "characterVisible": true,
+        "onGreenGrass": true,
+        "onBlueWater": false,
+        "inCorrectCorner": true,
+        "cornerLabel": "bottomRight",
+        "issues": []
       }
     }
   }
