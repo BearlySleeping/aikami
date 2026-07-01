@@ -52,9 +52,9 @@ export type MapSandboxViewModelInterface = BaseViewModelInterface & {
   /** Initializes the game engine, binding it to the given canvas. */
   initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
   /** Loads debug_map.jton via the engine's loadMap. Optional spawn coords. */
-  loadZoneA: (spawnX?: number, spawnY?: number) => Promise<void>;
+  loadZoneA: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;
   /** Loads sandbox_zone_b.json via the engine's loadMap (legacy fallback). */
-  loadZoneB: (spawnX?: number, spawnY?: number) => Promise<void>;
+  loadZoneB: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;
   /** Closes the NPC dialog overlay and resumes the game. */
   dismissDialog: () => void;
   /** Destroys the engine, releasing WebGL and worker resources. */
@@ -130,12 +130,17 @@ class MapSandboxViewModel
           const spawnX = rawX !== null ? Number.parseInt(rawX, 10) : undefined;
           const spawnY = rawY !== null ? Number.parseInt(rawY, 10) : undefined;
 
+          // C-199: Camera clamping bypass for visual testing.
+          // When `true`, the camera can track the player to map corners
+          // without the viewport being forced to the map center.
+          const disableClamping = params.get('disable_clamping') === 'true';
+
           if (zone === 'b') {
-            void this.loadZoneB(spawnX, spawnY);
+            void this.loadZoneB(spawnX, spawnY, disableClamping);
             return;
           }
 
-          void this.loadZoneA(spawnX, spawnY);
+          void this.loadZoneA(spawnX, spawnY, disableClamping);
           return;
         }
         // Default: auto-load debug_map.jton for visual pipeline validation
@@ -239,10 +244,11 @@ class MapSandboxViewModel
    * Contract: C-178 Visual Pipeline Validation
    * Contract: C-180 — accepts optional spawn coordinates via query params
    *
-   * @param spawnX - Optional pixel X spawn coordinate (default: 160).
-   * @param spawnY - Optional pixel Y spawn coordinate (default: 192).
+   * @param spawnX - Optional pixel X spawn coordinate (default: 288).
+   * @param spawnY - Optional pixel Y spawn coordinate (default: 160).
+   * @param disableClamping - Bypass camera viewport clamping (C-199).
    */
-  async loadZoneA(spawnX?: number, spawnY?: number): Promise<void> {
+  async loadZoneA(spawnX?: number, spawnY?: number, disableClamping?: boolean): Promise<void> {
     const gw = this._gameWorld;
     if (!gw) {
       return;
@@ -252,8 +258,13 @@ class MapSandboxViewModel
     const y = spawnY ?? 160;
 
     try {
-      this.debug('map-sandbox:loadDebugJton', { spawnX: x, spawnY: y });
-      await gw.loadMap('/assets/maps/debug_map.jton', x, y);
+      this.debug('map-sandbox:loadDebugJton', { spawnX: x, spawnY: y, disableClamping });
+      await gw.loadMap({
+        mapUrl: '/assets/maps/debug_map.jton',
+        targetX: x,
+        targetY: y,
+        disableClamping,
+      });
       this.currentMap = '/assets/maps/debug_map.jton';
       this.debug('map-sandbox:loadDebugJton:complete');
     } catch (err) {
@@ -267,8 +278,9 @@ class MapSandboxViewModel
    *
    * @param spawnX - Optional pixel X spawn coordinate (default: 128).
    * @param spawnY - Optional pixel Y spawn coordinate (default: 128).
+   * @param disableClamping - Bypass camera viewport clamping (C-199).
    */
-  async loadZoneB(spawnX?: number, spawnY?: number): Promise<void> {
+  async loadZoneB(spawnX?: number, spawnY?: number, disableClamping?: boolean): Promise<void> {
     const gw = this._gameWorld;
     if (!gw) {
       return;
@@ -278,8 +290,13 @@ class MapSandboxViewModel
     const y = spawnY ?? 128;
 
     try {
-      this.debug('map-sandbox:loadZoneB', { spawnX: x, spawnY: y });
-      await gw.loadMap('/assets/maps/sandbox_zone_b.json', x, y);
+      this.debug('map-sandbox:loadZoneB', { spawnX: x, spawnY: y, disableClamping });
+      await gw.loadMap({
+        mapUrl: '/assets/maps/sandbox_zone_b.json',
+        targetX: x,
+        targetY: y,
+        disableClamping,
+      });
       this.currentMap = '/assets/maps/sandbox_zone_b.json';
       this.debug('map-sandbox:loadZoneB:complete');
     } catch (err) {

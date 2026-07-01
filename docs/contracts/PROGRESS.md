@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-06-29)
+## Status Summary (Auto-generated: 2026-07-01)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -176,6 +176,9 @@
 | C-196 | Ecs Emergent World Integration | ✅ completed |
 | C-197 | Ecs Goap Combat Tactics | ✅ completed |
 | C-198 | Dev Sandbox Polish And Zoning | ✅ completed |
+| C-199 | Visual Camera Alignment | ✅ completed |
+| C-200 | Visual Pipeline Optimization | ✅ completed |
+| C-201 | Hide Dev Overlays On Screenshot | ⏳ not_started |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

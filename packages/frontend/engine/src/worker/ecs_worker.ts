@@ -1327,6 +1327,7 @@ self.onmessage = (event: MessageEvent): void => {
             targetSpawnHash,
             defeatedEnemies,
             spawnPointEntities,
+            disableClamping,
           } = message;
 
           // ── C-172: Resolve spawn coordinates ──
@@ -1464,7 +1465,12 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           // 7. Set camera map bounds and reset tracking for snap
-          setMapBounds({ width: mapPixelWidth as number, height: mapPixelHeight as number });
+          //    C-199: Support optional clamping bypass for visual testing.
+          setMapBounds({
+            width: mapPixelWidth as number,
+            height: mapPixelHeight as number,
+            disableClamping: disableClamping as boolean | undefined,
+          });
           resetCameraTracking();
 
           // 8. Notify main thread about the player entity (position updated)

@@ -63,6 +63,17 @@ let screenHeight = 0;
 /** Whether the camera has been initialized (tracking started). */
 let initialized = false;
 
+/** When `true`, viewport boundary clamping is bypassed entirely.
+ *
+ * Enabled via {@link setMapBounds} options or URL query parameter
+ * `disable_clamping` for visual testing sandboxes and small debug
+ * maps where standard boundary enforcement pushes corner-spawned
+ * characters toward the viewport edges, breaking VLM assertions.
+ *
+ * Contract: C-199 Visual Camera Alignment
+ */
+let disableClamping = false;
+
 // -- Zoom & dialogue midpoint state (C-161) --------------------------------
 
 /** Current zoom factor (lerps smoothly toward {@link targetZoom}). */
@@ -99,11 +110,27 @@ const CAMERA_QUERY_TERMS = [CameraFocus, Position];
  * the viewport within `[0, 0]` → `[mapWidth, mapHeight]` in world pixels.
  * When zero, clamping is disabled (free camera).
  *
- * @param options - Map dimensions in world-space pixels.
+ * When `disableClamping` is `true`, viewport boundary clamping is
+ * bypassed entirely — the camera can track the player to any coordinate,
+ * including map corners. This is used during visual testing and small
+ * debug map sandboxes where standard clamping would center the viewport
+ * on the map midpoint, pushing corner-spawned characters toward the
+ * screen edges and invalidating VLM centering assertions.
+ *
+ * @param options - Map dimensions in world-space pixels + optional clamp toggle.
+ *
+ * Contract: C-199 Visual Camera Alignment
  */
-export const setMapBounds = (options: { width: number; height: number }): void => {
+export const setMapBounds = (options: {
+  width: number;
+  height: number;
+  disableClamping?: boolean;
+}): void => {
   mapPixelWidth = options.width;
   mapPixelHeight = options.height;
+  if (options.disableClamping !== undefined) {
+    disableClamping = options.disableClamping;
+  }
 };
 
 /**
@@ -245,6 +272,7 @@ export const resetCameraTracking = (): void => {
   dialoguePlayerX = 0;
   dialoguePlayerY = 0;
   isDialogueZooming = false;
+  disableClamping = false;
 };
 
 // -- System update ---------------------------------------------------------
@@ -284,8 +312,8 @@ export const updateCameraSystem = (world: World, deltaMs: number): void => {
     cameraY = pos.y;
     initialized = true;
 
-    // Clamp to map boundaries on initial snap too.
-    if (mapPixelWidth > 0 && mapPixelHeight > 0) {
+    // Clamp to map boundaries on initial snap too (C-199: skip when bypassed).
+    if (!disableClamping && mapPixelWidth > 0 && mapPixelHeight > 0) {
       cameraX = _clampCamera(cameraX, screenWidth, mapPixelWidth);
       cameraY = _clampCamera(cameraY, screenHeight, mapPixelHeight);
     }
@@ -316,8 +344,8 @@ export const updateCameraSystem = (world: World, deltaMs: number): void => {
   cameraX += (targetX - cameraX) * t;
   cameraY += (targetY - cameraY) * t;
 
-  // Clamp to map boundaries when map dimensions are set.
-  if (mapPixelWidth > 0 && mapPixelHeight > 0) {
+  // Clamp to map boundaries when map dimensions are set (C-199: skip when bypassed).
+  if (!disableClamping && mapPixelWidth > 0 && mapPixelHeight > 0) {
     cameraX = _clampCamera(cameraX, screenWidth, mapPixelWidth);
     cameraY = _clampCamera(cameraY, screenHeight, mapPixelHeight);
   }

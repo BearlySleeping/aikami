@@ -208,7 +208,11 @@ class CombatSandboxViewModel
       this._registerBridgeListeners();
 
       // Load the combat sandbox map
-      await this._gameWorld.loadMap(COMBAT_MAP_URL, PLAYER_SPAWN_X, PLAYER_SPAWN_Y);
+      await this._gameWorld.loadMap({
+        mapUrl: COMBAT_MAP_URL,
+        targetX: PLAYER_SPAWN_X,
+        targetY: PLAYER_SPAWN_Y,
+      });
       this.mapLoaded = true;
       this.engineReady = true;
     } catch (error) {
@@ -377,12 +381,12 @@ class CombatSandboxViewModel
     this._gameWorld?.setInputLocked(false);
 
     // Reload the combat sandbox map — defeated enemies are filtered
-    await this._gameWorld?.loadMap(
-      COMBAT_MAP_URL,
-      PLAYER_SPAWN_X,
-      PLAYER_SPAWN_Y,
-      this.defeatedEnemyIds,
-    );
+    await this._gameWorld?.loadMap({
+      mapUrl: COMBAT_MAP_URL,
+      targetX: PLAYER_SPAWN_X,
+      targetY: PLAYER_SPAWN_Y,
+      defeatedEnemies: this.defeatedEnemyIds,
+    });
     this.mapLoaded = true;
     this.engineReady = true;
   }
