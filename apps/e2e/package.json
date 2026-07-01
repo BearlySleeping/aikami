@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
-    "@aikami/types": "workspace:*"
+    "@aikami/types": "workspace:*",
+    "sharp": "^0.33.0"
   }
 }
