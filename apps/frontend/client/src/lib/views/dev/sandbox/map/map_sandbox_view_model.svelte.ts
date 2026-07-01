@@ -10,9 +10,9 @@
 import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
 import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
+  BaseDevViewModel,
+  type BaseDevViewModelInterface,
+  type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 
@@ -32,7 +32,7 @@ const _resolveEcsWorker = async (): Promise<new () => Worker> => {
 // Types
 // ---------------------------------------------------------------------------
 
-export type MapSandboxViewModelInterface = BaseViewModelInterface & {
+export type MapSandboxViewModelInterface = BaseDevViewModelInterface & {
   /** Whether the game engine is initialized and running. */
   readonly engineReady: boolean;
   /** Engine initialization error, surfaced to the user. */
@@ -61,14 +61,14 @@ export type MapSandboxViewModelInterface = BaseViewModelInterface & {
   destroyEngine: () => void;
 };
 
-export type MapSandboxViewModelOptions = BaseViewModelOptions & {};
+export type MapSandboxViewModelOptions = BaseDevViewModelOptions & {};
 
 // ---------------------------------------------------------------------------
 // ViewModel
 // ---------------------------------------------------------------------------
 
 class MapSandboxViewModel
-  extends BaseViewModel<MapSandboxViewModelOptions>
+  extends BaseDevViewModel<MapSandboxViewModelOptions>
   implements MapSandboxViewModelInterface
 {
   engineReady = $state<boolean>(false);

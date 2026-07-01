@@ -14,7 +14,7 @@ Contracts are ordered by dependency chain — execute in this order:
 ```
 P0 (Blocking — must do first):
   C-001 → C-002 → C-003 → C-004
-  C-178 → C-179 → C-199 → C-200
+  C-178 → C-179 → C-199 → C-200 → C-201
 
 P1 (Foundation — after P0):
   C-005 → C-006 → C-007 → C-008 → C-009
@@ -38,6 +38,7 @@ P2 (Polish — after P1):
 | C-179 | [GLSL Fallback Shader](C-179-glsl-fallback-shader.md) ✅ | WebGL2 fallback GLSL shader for tilemap chunk renderer — prevents "Mesh shader has no glProgram" crash/spam | C-177 |
 | C-199 | [Visual Camera Alignment](C-199-visual-camera-alignment.md) ✅ | Disable camera viewport clamping for visual testing sandboxes — fix desync between clamping system and VLM corner-test assertions | — |
 | C-200 | [Visual Pipeline Optimization](C-200-visual-pipeline-optimization.md) ✅ | Rendering determinism flags, Lanczos resampling to 2016×2016, VLM provider switcher (Ollama/OpenRouter), &lt;think&gt; tag removal | C-199 |
+| C-201 | [Hide Dev Overlays On Screenshot](C-201-hide-dev-overlays-on-screenshot.md) ✅ | Hide dev panels/menus/status overlays in visual screenshot capture mode via `BaseDevViewModel.isScreenshot` | C-200 |
 
 ### 🟡 P1 — Structure & Configuration (Foundation)
 

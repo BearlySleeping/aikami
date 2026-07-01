@@ -178,7 +178,7 @@
 | C-198 | Dev Sandbox Polish And Zoning | ✅ completed |
 | C-199 | Visual Camera Alignment | ✅ completed |
 | C-200 | Visual Pipeline Optimization | ✅ completed |
-| C-201 | Hide Dev Overlays On Screenshot | ⏳ not_started |
+| C-201 | Hide Dev Overlays On Screenshot | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
