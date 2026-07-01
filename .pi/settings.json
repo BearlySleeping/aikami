@@ -9,7 +9,8 @@
   },
   "packages": [
     "npm:context-mode",
-    "npm:pi-mcp-adapter"
+    "npm:pi-mcp-adapter",
+    "npm:@hypabolic/pi-hypa"
   ],
   "extensions": ["./.pi/extensions"],
   "skills": ["./.pi/skills", "./.pi/skills-pixijs"],
