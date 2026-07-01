@@ -1,5 +1,6 @@
 /// <reference types="./env.d.ts" />
 
+export * from './lib/base/base_dev_view_model.svelte.ts';
 export * from './lib/base/base_form_model.svelte.ts';
 export * from './lib/base/base_frontend_class.ts';
 export * from './lib/base/base_view_model.svelte.ts';
