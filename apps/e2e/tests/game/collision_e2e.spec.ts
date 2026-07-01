@@ -9,11 +9,13 @@
 // collision clamped the player's position — no wall passthrough or
 // typed-array out-of-bounds errors.
 //
-// Player starts at pixel (288, 160) in the debug JTON map (C-178).
+// Player starts at pixel (160, 160) in the debug JTON map (C-178) — the
+// center of the map, which is walkable grass (tile 5,5).
 // Map: 320×320 px (10×10 tiles at 32 px).
-// Grass (GID 2): perimeter rows 0,9 and cols 0,9 + column 3 bridge.
-// Water (GID 1): interior rows 1-8, cols 1-8 except house/bridge.
-// House: tiles (2,2)-(4,3). Door at (3,3).
+// Grass (GID 1, walkable): interior tiles (rows/cols 1-8) except house.
+// Water (GID 2, blocked): perimeter ring (rows 0,9 and cols 0,9).
+// House: tiles (2,2)-(4,3), door at (3,3). A grass walkway extends
+// straight down from the door through column 3.
 
 import { expect, test } from '@playwright/test';
 
@@ -115,8 +117,10 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
 
     const startPos = await _readPlayerPosition(page);
 
-    // Move LEFT — water (GID 1) at col 8 blocks movement immediately.
-    // Player spawns on grass col 9, immediate neighbour is water.
+    // Move LEFT — the player spawns at the centre (col 5). The water
+    // perimeter at column 0 blocks leftward movement. With the 32×32
+    // bounding box the entity stops when its left edge reaches the
+    // tile-0 boundary (posX ≈ 48).
     await page.keyboard.down('ArrowLeft');
     await page.waitForTimeout(1500);
     await page.keyboard.up('ArrowLeft');
@@ -124,8 +128,11 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
 
     const endPos = await _readPlayerPosition(page);
 
-    // Player must NOT move left into water — position nearly unchanged
-    expect(endPos.playerX).toBeGreaterThanOrEqual(startPos.playerX - 5);
+    // Player moved a significant distance left from centre.
+    expect(endPos.playerX).toBeLessThan(startPos.playerX);
+    // Player must NOT enter the water perimeter (column 0).
+    expect(Math.floor(endPos.playerX / 32)).toBeGreaterThanOrEqual(1);
+    expect(endPos.playerX).toBeGreaterThanOrEqual(0);
     expect(endPos.playerX).toBeLessThan(MAP_PIXEL_W);
     // Y position should remain within bounds
     expect(endPos.playerY).toBeGreaterThanOrEqual(0);
@@ -231,14 +238,15 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
     expect(pos.playerY).toBeGreaterThanOrEqual(0);
     expect(pos.playerY).toBeLessThan(MAP_PIXEL_H);
 
-    // Player must be on grass (GID 2), not water (GID 1 interior).
-    // Grass occupies row 0, col 0 — corner spawn at (0,0) lands on
-    // the top-left grass tile.
+    // Player must be on interior grass (GID 1), not the water ring (GID 2).
+    // The (0,0) corner is water, so the spawn clamp pushes the player
+    // inward to the nearest walkable grass tile (1,1).
     const tileSize = 32;
     const tileX = Math.floor(pos.playerX / tileSize);
     const tileY = Math.floor(pos.playerY / tileSize);
-    expect(tileX).toBe(0);
-    expect(tileY).toBe(0);
+    // Top-left OOB/water spawn → clamped inward to nearest interior grass (1,1).
+    expect(tileX).toBe(1);
+    expect(tileY).toBe(1);
   });
 
   test('spawn clamp: top-right corner (320,0) clamped to grass', async ({ page }) => {
@@ -270,9 +278,9 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
 
     const tileX = Math.floor(pos.playerX / 32);
     const tileY = Math.floor(pos.playerY / 32);
-    // Top-right → clamped to grass at row 0, col 9
-    expect(tileX).toBe(9);
-    expect(tileY).toBe(0);
+    // Top-right OOB/water spawn → clamped inward to nearest interior grass (8,1).
+    expect(tileX).toBe(8);
+    expect(tileY).toBe(1);
   });
 
   test('spawn clamp: bottom-left corner (0,320) clamped to grass', async ({ page }) => {
@@ -304,9 +312,9 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
 
     const tileX = Math.floor(pos.playerX / 32);
     const tileY = Math.floor(pos.playerY / 32);
-    // Bottom-left → clamped to grass at row 9, col 0
-    expect(tileX).toBe(0);
-    expect(tileY).toBe(9);
+    // Bottom-left OOB/water spawn → clamped inward to nearest interior grass (1,8).
+    expect(tileX).toBe(1);
+    expect(tileY).toBe(8);
   });
 
   test('spawn clamp: bottom-right corner (320,320) clamped to grass', async ({ page }) => {
@@ -338,8 +346,8 @@ test.describe('Collision Enforcement — Spatial Grid', () => {
 
     const tileX = Math.floor(pos.playerX / 32);
     const tileY = Math.floor(pos.playerY / 32);
-    // Bottom-right → clamped to grass at row 9, col 9
-    expect(tileX).toBe(9);
-    expect(tileY).toBe(9);
+    // Bottom-right OOB/water spawn → clamped inward to nearest interior grass (8,8).
+    expect(tileX).toBe(8);
+    expect(tileY).toBe(8);
   });
 });
