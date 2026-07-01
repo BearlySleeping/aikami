@@ -69,6 +69,76 @@
         "cornerLabel": "bottomRight",
         "issues": []
       }
+    },
+    "442e6fd4c93bf647a3393887ac457ce79b5a8b6c9727de12cf1a22838c525c13": {
+      "hash": "442e6fd4c93bf647a3393887ac457ce79b5a8b6c9727de12cf1a22838c525c13",
+      "timestamp": "2026-07-01T20:52:11.474Z",
+      "result": {
+        "score": 95,
+        "characterVisible": true,
+        "issues": []
+      }
+    },
+    "ba8eb15b430eeb046996269881f02b0c641f211ba61a45af846d7ef82f981ff8": {
+      "hash": "ba8eb15b430eeb046996269881f02b0c641f211ba61a45af846d7ef82f981ff8",
+      "timestamp": "2026-07-01T20:52:13.472Z",
+      "result": {
+        "score": 95,
+        "characterVisible": true,
+        "onGreenGrass": true,
+        "onBlueWater": false,
+        "inCorrectCorner": true,
+        "cornerLabel": "topLeft",
+        "issues": []
+      }
+    },
+    "6370319e042d1fdd7b8bfd905d04047ac3d28a075cc96c8a27aa5d98c5f6fe50": {
+      "hash": "6370319e042d1fdd7b8bfd905d04047ac3d28a075cc96c8a27aa5d98c5f6fe50",
+      "timestamp": "2026-07-01T20:52:15.457Z",
+      "result": {
+        "score": 95,
+        "characterVisible": true,
+        "onGreenGrass": true,
+        "onBlueWater": false,
+        "inCorrectCorner": true,
+        "cornerLabel": "bottomLeft",
+        "issues": []
+      }
+    },
+    "abc61e717cb16f8649c4983dafa515ecac389690c70f94e6e4cf1a4b64bad023": {
+      "hash": "abc61e717cb16f8649c4983dafa515ecac389690c70f94e6e4cf1a4b64bad023",
+      "timestamp": "2026-07-01T20:52:16.743Z",
+      "result": {
+        "score": 95,
+        "characterVisible": true,
+        "issues": []
+      }
+    },
+    "52be4dcb6fa36c6339f3dd9312629e065648617b4db0fb8cdabbdbc48ff85c9d": {
+      "hash": "52be4dcb6fa36c6339f3dd9312629e065648617b4db0fb8cdabbdbc48ff85c9d",
+      "timestamp": "2026-07-01T20:52:18.653Z",
+      "result": {
+        "score": 95,
+        "characterVisible": true,
+        "onGreenGrass": true,
+        "onBlueWater": false,
+        "inCorrectCorner": true,
+        "cornerLabel": "topRight",
+        "issues": []
+      }
+    },
+    "8932f1e3faa45d046d909a4df3f1dd0dde3fb5948f6c10cca79137f80f7f959c": {
+      "hash": "8932f1e3faa45d046d909a4df3f1dd0dde3fb5948f6c10cca79137f80f7f959c",
+      "timestamp": "2026-07-01T20:57:02.574Z",
+      "result": {
+        "score": 95,
+        "characterVisible": true,
+        "onGreenGrass": true,
+        "onBlueWater": false,
+        "inCorrectCorner": true,
+        "cornerLabel": "bottomRight",
+        "issues": []
+      }
     }
   }
 }

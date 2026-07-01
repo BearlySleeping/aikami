@@ -313,10 +313,12 @@ export type {
 export { FirebaseSqlConnectSync } from './sync/firebase_sql_connect_sync.ts';
 export type { CollisionGrid } from './systems/collision_system.ts';
 export {
+  getMapPixelBounds,
   initializeSpatialGrid,
   insertIntoSpatialGrid,
   isCellBlocked,
   isWalkable,
+  isWithinMapBounds,
   moveInSpatialGrid,
   removeFromSpatialGrid,
   resetCollisionGrid,

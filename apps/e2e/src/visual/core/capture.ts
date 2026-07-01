@@ -233,17 +233,23 @@ const _toBase64DataUri = (filepath: string): string => {
 /**
  * Builds the full URL for a suite route using EMULATOR_PORTS.
  *
- * Appends searchParams from the test case to the URL query string.
+ * Always includes `screenshot=true` as a default query param.
+ * Case-level `searchParams` are merged on top and can override defaults.
  */
 const _buildUrl = (suites: { route: string; searchParams?: Record<string, string> }): string => {
   const base = `http://localhost:${EMULATOR_PORTS.client}${suites.route}`;
 
-  if (!suites.searchParams || Object.keys(suites.searchParams).length === 0) {
-    return base;
+  // Default: always request screenshot mode so the page suppresses
+  // overlays, HUD, and extraneous UI that would contaminate visual diffs.
+  const merged = new URLSearchParams({ screenshot: 'true' });
+
+  if (suites.searchParams) {
+    for (const [key, value] of Object.entries(suites.searchParams)) {
+      merged.set(key, value);
+    }
   }
 
-  const params = new URLSearchParams(suites.searchParams);
-  return `${base}?${params.toString()}`;
+  return `${base}?${merged.toString()}`;
 };
 
 // ── Public API ────────────────────────────────────────────────

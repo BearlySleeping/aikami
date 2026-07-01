@@ -667,10 +667,12 @@ export const extractCollisionGrid = (
   options?: { layerName?: string; waterGids?: Set<number> },
 ): boolean[] | undefined => {
   const layerName = options?.layerName ?? 'collision';
-  // Water GIDs default to tile index 0 (first tile in tileset, typically water/blue).
-  // Merging these into the collision grid prevents wading through oceans.
-  // Set to empty Set to disable if the map uses water GIDs as walkable floor.
-  const waterGids = options?.waterGids ?? new Set([1]);
+  // Water GIDs default to the debug tileset's water tile (C-178: firstgid=1,
+  // so index 0 = grass → GID 1, index 1 = water → GID 2). Merging water GIDs
+  // into the collision grid prevents wading through oceans while keeping the
+  // grass interior (GID 1) walkable. Set to an empty Set to disable when a
+  // map uses these GIDs as walkable floor.
+  const waterGids = options?.waterGids ?? new Set([2]);
 
   const totalCells = tilemap.width * tilemap.height;
 
