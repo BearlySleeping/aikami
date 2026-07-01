@@ -897,7 +897,9 @@ describe('extractCollisionGrid', () => {
           name: 'ground',
           width: 4,
           height: 3,
-          data: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+          // GID 1 = grass (walkable). Avoids the default water-GID (2) merge
+          // so this test exercises the explicit collision layer only.
+          data: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
           visible: true,
         },
         {
@@ -949,6 +951,39 @@ describe('extractCollisionGrid', () => {
     expect(grid[11]).toBe(true);
   });
 
+  it('merges water tiles (GID 2) from a ground layer as blocked, keeping grass (GID 1) walkable', () => {
+    // C-178 debug tileset (firstgid=1): GID 1 = grass (walkable),
+    // GID 2 = water (blocked). The default waterGids merge must block
+    // water while leaving grass walkable — regression guard for the
+    // inverted-collision spawn-in-water bug.
+    const tilemap: TilemapData = {
+      width: 3,
+      height: 1,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [
+        {
+          name: 'ground',
+          width: 3,
+          height: 1,
+          data: [1, 2, 1], // grass, water, grass
+          visible: true,
+        },
+      ],
+    };
+
+    const grid = extractCollisionGrid(tilemap);
+
+    expect(grid).toBeDefined();
+    if (!grid) {
+      throw new Error('grid should be defined');
+    }
+    expect(grid[0]).toBe(false); // grass — walkable
+    expect(grid[1]).toBe(true); // water — blocked
+    expect(grid[2]).toBe(false); // grass — walkable
+  });
+
   it('returns undefined when no collision layer exists', () => {
     const tilemap: TilemapData = {
       width: 2,
@@ -961,7 +996,9 @@ describe('extractCollisionGrid', () => {
           name: 'ground',
           width: 2,
           height: 2,
-          data: [2, 2, 2, 2],
+          // GID 1 = grass (walkable). Must not trigger the water-GID (2) merge,
+          // otherwise a map with no collision layer would still report blocked.
+          data: [1, 1, 1, 1],
           visible: true,
         },
       ],

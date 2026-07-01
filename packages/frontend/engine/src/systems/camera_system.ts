@@ -366,7 +366,13 @@ export const updateCameraSystem = (world: World, deltaMs: number): void => {
  * @returns The clamped camera coordinate.
  */
 const _clampCamera = (cameraCoord: number, screenSize: number, mapSize: number): number => {
-  const halfScreenWorld = screenSize / (2 * currentWorldScale);
+  // The on-screen world scale is the container scale multiplied by the
+  // active zoom factor (both are applied by the main-thread renderer in
+  // _updateRenderFromBuffer as `4 * cameraZoom`). Folding zoom in here keeps
+  // the viewport clamp — and therefore the debug grid alignment — exactly
+  // matched to what is drawn at any zoom level.
+  const effectiveScale = currentWorldScale * currentZoom;
+  const halfScreenWorld = screenSize / (2 * effectiveScale);
 
   // If the map is smaller than the viewport, center on the map.
   if (mapSize <= halfScreenWorld * 2) {

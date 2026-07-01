@@ -39,6 +39,21 @@ export type CollisionGrid = {
 /** The currently active boolean collision grid. */
 let _activeGrid: CollisionGrid | undefined;
 
+/**
+ * Absolute map width in pixels (`grid.width * grid.tileSize`).
+ *
+ * `0` means no map bounds are active (bounds enforcement disabled).
+ * Set by {@link setCollisionGrid}, cleared by {@link resetCollisionGrid}.
+ */
+let _mapPixelWidth = 0;
+
+/**
+ * Absolute map height in pixels (`grid.height * grid.tileSize`).
+ *
+ * `0` means no map bounds are active (bounds enforcement disabled).
+ */
+let _mapPixelHeight = 0;
+
 // ---------------------------------------------------------------------------
 // Spatial Grid (C-173) — dense 1D array with intrusive linked list
 // ---------------------------------------------------------------------------
@@ -77,6 +92,11 @@ export const setCollisionGrid = (grid: CollisionGrid, world?: World): void => {
 
   // Initialize the spatial grid to match collision grid dimensions
   if (grid) {
+    // Cache the absolute pixel bounds so movement + walkability checks can
+    // treat any coordinate outside [0, mapPixel) as strictly blocked.
+    _mapPixelWidth = grid.width * grid.tileSize;
+    _mapPixelHeight = grid.height * grid.tileSize;
+
     initializeSpatialGrid(grid.width, grid.height);
 
     // Populate the spatial grid with wall markers for solid tiles
@@ -94,7 +114,43 @@ export const resetCollisionGrid = (): void => {
   _spatialGrid = undefined;
   _gridWidth = 0;
   _gridHeight = 0;
+  _mapPixelWidth = 0;
+  _mapPixelHeight = 0;
   clearBresenhamGrid();
+};
+
+/**
+ * Returns the absolute map bounds in world-space pixels.
+ *
+ * Both values are `0` when no collision grid is active — callers should
+ * treat that as "bounds disabled" and skip enforcement.
+ *
+ * @returns The map width and height in pixels.
+ */
+export const getMapPixelBounds = (): { width: number; height: number } => {
+  return { width: _mapPixelWidth, height: _mapPixelHeight };
+};
+
+/**
+ * Checks whether a pixel coordinate lies within the absolute map bounds.
+ *
+ * A coordinate is in-bounds when `0 <= pixel < mapPixelSize` on both axes.
+ * When no map bounds are active (`_mapPixelWidth === 0`), every coordinate
+ * is considered in-bounds so free-camera / no-grid scenes are unaffected.
+ *
+ * This is the single source of truth for the hard map boundary used by
+ * the movement system's continuous collision pipeline.
+ *
+ * @param pixelX - X position in world-space pixels.
+ * @param pixelY - Y position in world-space pixels.
+ * @returns `true` when the coordinate is inside the map, `false` otherwise.
+ */
+export const isWithinMapBounds = (pixelX: number, pixelY: number): boolean => {
+  // No active bounds → nothing to enforce.
+  if (_mapPixelWidth <= 0 || _mapPixelHeight <= 0) {
+    return true;
+  }
+  return pixelX >= 0 && pixelX < _mapPixelWidth && pixelY >= 0 && pixelY < _mapPixelHeight;
 };
 
 /**
@@ -110,6 +166,13 @@ export const resetCollisionGrid = (): void => {
 export const isWalkable = (pixelX: number, pixelY: number): boolean => {
   if (!_activeGrid) {
     return true;
+  }
+
+  // Absolute pixel-space bounds — any coordinate outside the map is blocked.
+  // This guards against tileSize rounding letting an entity drift onto the
+  // far pixel edge of the last valid tile row/column.
+  if (!isWithinMapBounds(pixelX, pixelY)) {
+    return false;
   }
 
   const tileX = Math.floor(pixelX / _activeGrid.tileSize);
@@ -340,13 +403,24 @@ export const resolveMoveIntents = (_world: World): void => {
  * @returns `true` if movement is blocked (collision detected).
  */
 export const isCellBlocked = (destX: number, destY: number, moverMask: number): boolean => {
+  // ── Absolute map tile boundary — checked FIRST, before any spatial grid ──
+  // Even when the spatial grid is not initialized, OOB tile coordinates are
+  // strictly blocked if a collision grid has been set. Uses the boolean
+  // grid dimensions which are always available when a map is loaded,
+  // regardless of spatial-grid lifecycle state.
+  if (_activeGrid) {
+    if (destX < 0 || destX >= _activeGrid.width || destY < 0 || destY >= _activeGrid.height) {
+      return true;
+    }
+  }
+
   if (!_spatialGrid) {
     return false;
   }
 
   const index = _gridIndex(destX, destY);
   if (index < 0) {
-    return true; // Out of bounds = blocked
+    return true; // Out of bounds = blocked (defence in depth)
   }
 
   const headEid = _spatialGrid[index];
