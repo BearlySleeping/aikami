@@ -257,26 +257,22 @@ describe('movement_system — axis-independent wall sliding', () => {
     });
 
     it('slides along Y when moving left into a wall on negative axis', () => {
-      // Block tile (2, 5) at pixel (64, 160) → (95, 191)
-      // Entity at 100, 170 moving left+down (-50, +50) => nextX=50, nextY=220
-      // (50, 170) → tile (1, 5) walkable → X advances to 50
-      // (50, 220) → tile (1, 6) walkable → Y advances
-      // Not blocked. Let me adjust.
-      // Entity at 96, 170 moving left+down (-30, +50) => nextX=66, nextY=220
-      // (66, 170) → tile (2, 5) BLOCKED → X stays at 96
-      // (96, 220) → tile (3, 6) walkable → Y = 220
+      // Block tile (2, 5) at pixel (64, 160) → (95, 191).
+      // 32×32 box at X-candidate (82, 170) overlaps tile (2,5) → X blocked.
+      // Y-candidate box at (112, 220) has boxLeft = 96 (tile 3) → no overlap
+      // with blocked column 2 → Y slides freely.
       setCollisionGrid(singleBlockGrid(2, 5));
 
       const eid = addEntity(world);
       addComponent(world, eid, Position);
-      addComponent(world, eid, set(Position, { x: 96, y: 170 }));
+      addComponent(world, eid, set(Position, { x: 112, y: 170 }));
       addComponent(world, eid, Velocity);
       addComponent(world, eid, set(Velocity, { x: -30, y: 50 }));
 
       updateMovement(world, 1000);
 
       const pos = getComponent(world, eid, Position);
-      expect(pos.x).toBe(96); // X blocked
+      expect(pos.x).toBe(112); // X blocked by wall
       expect(pos.y).toBe(220); // Y slides
     });
 
@@ -292,6 +288,58 @@ describe('movement_system — axis-independent wall sliding', () => {
 
       const pos = getComponent(world, eid, Position);
       expect(pos.x).toBe(100);
+      expect(pos.y).toBe(100);
+    });
+
+    it('blocks movement past the absolute map boundary (right/bottom edge)', () => {
+      // 10×10 @ 32px → map is 320×320 px. An all-walkable grid should still
+      // never let an entity leave [0, 320) on either axis.
+      setCollisionGrid(ALL_WALKABLE);
+      const eid = addEntity(world);
+      addComponent(world, eid, Position);
+      // Start inside the last valid column/row and drive hard into the edge.
+      addComponent(world, eid, set(Position, { x: 300, y: 300 }));
+      addComponent(world, eid, Velocity);
+      addComponent(world, eid, set(Velocity, { x: 150, y: 150 }));
+
+      updateMovement(world, 1000); // would reach 450,450 without bounds
+
+      const pos = getComponent(world, eid, Position);
+      // Both axes blocked at the map edge — entity stays put (no OOB drift).
+      expect(pos.x).toBe(300);
+      expect(pos.y).toBe(300);
+    });
+
+    it('blocks movement past the absolute map boundary (left/top edge)', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      const eid = addEntity(world);
+      addComponent(world, eid, Position);
+      addComponent(world, eid, set(Position, { x: 10, y: 10 }));
+      addComponent(world, eid, Velocity);
+      addComponent(world, eid, set(Velocity, { x: -150, y: -150 }));
+
+      updateMovement(world, 1000); // would reach -140,-140 without bounds
+
+      const pos = getComponent(world, eid, Position);
+      // Negative candidate coordinates are out of bounds → blocked.
+      expect(pos.x).toBe(10);
+      expect(pos.y).toBe(10);
+    });
+
+    it('slides along the in-bounds axis when only one axis leaves the map', () => {
+      setCollisionGrid(ALL_WALKABLE);
+      const eid = addEntity(world);
+      addComponent(world, eid, Position);
+      // Against the right wall, moving right (OOB) + up (in-bounds).
+      addComponent(world, eid, set(Position, { x: 300, y: 200 }));
+      addComponent(world, eid, Velocity);
+      addComponent(world, eid, set(Velocity, { x: 150, y: -100 }));
+
+      updateMovement(world, 1000);
+
+      const pos = getComponent(world, eid, Position);
+      // X blocked at boundary, Y slides freely upward.
+      expect(pos.x).toBe(300);
       expect(pos.y).toBe(100);
     });
 

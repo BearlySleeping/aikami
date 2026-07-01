@@ -748,7 +748,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Draw a debug colored square using the worker's tint so entities are
     // visible even before LPC textures load. Uses Sprite(Texture.WHITE)
     // because PixiJS v8 Graphics has compat issues in headless WebGL.
-    // Centered 32×32 world units → 128×128 screen pixels at 4× scale.
+    // Anchored bottom-center (0.5, 1.0) so the position represents the
+    // character's feet — consistent with the LPC layer sprite anchor.
+    // 32×32 world units → 128×128 screen pixels at 4× scale.
     const parsedTint =
       typeof tint === 'string' ? Number.parseInt(String(tint).replace('0x', ''), 16) : tint;
     const safeTint =
@@ -756,7 +758,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const sprite = new Sprite(Texture.WHITE);
     sprite.width = 32;
     sprite.height = 32;
-    sprite.anchor.set(0.5);
+    sprite.anchor.set(0.5, 1.0);
     sprite.tint = safeTint;
     container.addChild(sprite);
 
@@ -1722,6 +1724,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
         const sprite = new Sprite(Texture.WHITE);
         sprite.eventMode = 'none';
+        // Anchor bottom-center (0.5, 1.0) — the entity position represents
+        // the character's feet. This aligns LPC sprites with the debug
+        // square and keeps the visual character above the collision point
+        // instead of offset 64×64 px to the bottom-right (default top-left anchor).
+        sprite.anchor.set(0.5, 1.0);
 
         container.addChild(sprite);
         layerSprites.push({ sprite, recipe, texture, spritesheet });

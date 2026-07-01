@@ -84,6 +84,7 @@ class MapSandboxViewModel
   private _gameWorld: GameWorld | undefined;
   private _readyCleanup: (() => void) | undefined;
   private _dialogEndCleanup: (() => void) | undefined;
+  private _zoneCleanup: (() => void) | undefined;
   private _initialMapLoaded = false;
 
   /**
@@ -173,6 +174,29 @@ class MapSandboxViewModel
         this.showDialog = true;
       });
 
+      // Map transition zones — when the player walks into a portal,
+      // the ZoningSystem fires ZONE_TRIGGERED with the target map,
+      // spawn coordinates, and spawn-hash for the destination.
+      this._zoneCleanup = this._engineBridge.on('ZONE_TRIGGERED', (event) => {
+        this.debug('map-sandbox:event:ZONE_TRIGGERED', {
+          targetMap: event.targetMap,
+          targetSpawnHash: event.targetSpawnHash,
+        });
+
+        // Route to the correct zone loader based on the target map filename.
+        if (event.targetMap.includes('sandbox_zone_b')) {
+          void this.loadZoneB(
+            event.targetX !== undefined ? event.targetX : undefined,
+            event.targetY !== undefined ? event.targetY : undefined,
+          );
+        } else if (event.targetMap.includes('debug_map')) {
+          void this.loadZoneA(
+            event.targetX !== undefined ? event.targetX : undefined,
+            event.targetY !== undefined ? event.targetY : undefined,
+          );
+        }
+      });
+
       const EcsWorker = await _resolveEcsWorker();
       const tm = new TextureManager();
       const paletteBytes = new Uint8Array(1024);
@@ -244,8 +268,8 @@ class MapSandboxViewModel
    * Contract: C-178 Visual Pipeline Validation
    * Contract: C-180 — accepts optional spawn coordinates via query params
    *
-   * @param spawnX - Optional pixel X spawn coordinate (default: 288).
-   * @param spawnY - Optional pixel Y spawn coordinate (default: 160).
+   * @param spawnX - Optional pixel X spawn coordinate (default: 160 — map center).
+   * @param spawnY - Optional pixel Y spawn coordinate (default: 160 — map center).
    * @param disableClamping - Bypass camera viewport clamping (C-199).
    */
   async loadZoneA(spawnX?: number, spawnY?: number, disableClamping?: boolean): Promise<void> {
@@ -254,7 +278,10 @@ class MapSandboxViewModel
       return;
     }
 
-    const x = spawnX ?? 288;
+    // Default spawn = center of the 10×10 / 32px debug map (tile 5,5 = grass).
+    // The previous default (288,160) landed on tile (9,5) — the water border
+    // ring — spawning the player out of bounds in the water.
+    const x = spawnX ?? 160;
     const y = spawnY ?? 160;
 
     try {
@@ -315,6 +342,10 @@ class MapSandboxViewModel
     if (this._dialogEndCleanup) {
       this._dialogEndCleanup();
       this._dialogEndCleanup = undefined;
+    }
+    if (this._zoneCleanup) {
+      this._zoneCleanup();
+      this._zoneCleanup = undefined;
     }
 
     if (this._gameWorld) {
