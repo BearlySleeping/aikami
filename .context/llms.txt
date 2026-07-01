@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-06-29
-> Files: 210 across 11 categories
+> Generated: 2026-07-01
+> Files: 213 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -199,6 +199,9 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 196 ecs emergent world integration](contracts/C-196-ecs-emergent-world-integration.md)
 - [Execution Report — C-197](contracts/C-197-ecs-goap-combat-tactics.md)
 - [C 198 dev sandbox polish and zoning](contracts/C-198-dev-sandbox-polish-and-zoning.md)
+- [C 199 visual camera alignment](contracts/C-199-visual-camera-alignment.md)
+- [C 200 visual pipeline optimization](contracts/C-200-visual-pipeline-optimization.md)
+- [C 201 hide dev overlays on screenshot](contracts/C-201-hide-dev-overlays-on-screenshot.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

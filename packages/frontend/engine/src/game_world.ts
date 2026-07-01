@@ -1226,23 +1226,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * Called from the {@link EngineBridge} ZONE_TRIGGERED listener.
    *
-   * @param mapUrl - URL to the new Tiled JSON tilemap.
-   * @param targetX - X pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
-   * @param targetY - Y pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
-   * @param defeatedEnemies - Array of defeated enemy spawn IDs to filter during spawn.
-   * @param targetSpawnHash - Numeric hash of the target spawn point ID (C-172).
+   * @param options.mapUrl - URL to the new Tiled JSON tilemap.
+   * @param options.targetX - X pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
+   * @param options.targetY - Y pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
+   * @param options.defeatedEnemies - Array of defeated enemy spawn IDs to filter during spawn.
+   * @param options.targetSpawnHash - Numeric hash of the target spawn point ID (C-172).
+   * @param options.disableClamping - Bypass viewport boundary clamping for visual testing (C-199).
    * @throws If the worker is not running or the map fails to load.
    *
-   * Contract: C-138 Map Transitions, C-172 Staging World Transitions
+   * Contract: C-138 Map Transitions, C-172 Staging World Transitions, C-199
    */
-  async loadMap(
-    mapUrl: string,
-    targetX: number,
-    targetY: number,
-    defeatedEnemies?: string[],
-    targetSpawnHash?: number,
-  ): Promise<void> {
-    this.debug('loadMap', { mapUrl, targetX, targetY });
+  async loadMap(options: {
+    mapUrl: string;
+    targetX: number;
+    targetY: number;
+    defeatedEnemies?: string[];
+    targetSpawnHash?: number;
+    disableClamping?: boolean;
+  }): Promise<void> {
+    const { mapUrl, targetX, targetY, defeatedEnemies, targetSpawnHash, disableClamping } = options;
+    this.debug('loadMap', { mapUrl, targetX, targetY, disableClamping });
 
     try {
       // 1. Pause the engine
@@ -1328,6 +1331,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         defeatedEnemies,
         targetSpawnHash,
         spawnPointEntities,
+        disableClamping,
       });
 
       // 7. Resume the engine
@@ -1369,6 +1373,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     defeatedEnemies?: string[];
     targetSpawnHash?: number;
     spawnPointEntities?: import('./assets/map_loader.ts').SpawnPointEntity[];
+    disableClamping?: boolean;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this._worker) {
@@ -1421,6 +1426,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         defeatedEnemies: options.defeatedEnemies,
         targetSpawnHash: options.targetSpawnHash,
         spawnPointEntities: options.spawnPointEntities,
+        disableClamping: options.disableClamping,
       });
     });
   }

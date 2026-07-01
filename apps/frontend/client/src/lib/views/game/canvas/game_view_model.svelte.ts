@@ -126,15 +126,16 @@ export type GameViewModelInterface = BaseViewModelInterface & {
    * Accepts an optional list of defeated enemy spawn IDs to filter out,
    * and an optional targetSpawnHash for C-172 spawn point resolution.
    *
-   * Contract: C-147 Progression & Persistence, C-172 Staging World Transitions
+   * Contract: C-147 Progression & Persistence, C-172 Staging World Transitions, C-199
    */
-  loadMap(
-    mapUrl: string,
-    targetX: number,
-    targetY: number,
-    defeatedEnemies?: string[],
-    targetSpawnHash?: number,
-  ): Promise<void>;
+  loadMap(options: {
+    mapUrl: string;
+    targetX: number;
+    targetY: number;
+    defeatedEnemies?: string[];
+    targetSpawnHash?: number;
+    disableClamping?: boolean;
+  }): Promise<void>;
 
   /**
    * Restores the game world from a saved ECS snapshot payload.
@@ -591,7 +592,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
       // TODO(C-139): track mapId in save metadata so loaded games restore to
       //              the correct room instead of always loading the default.
       const DEFAULT_STARTING_MAP = '/assets/maps/sandbox_zone_a.json';
-      await this._gameWorld.loadMap(DEFAULT_STARTING_MAP, 160, 192);
+      await this._gameWorld.loadMap({ mapUrl: DEFAULT_STARTING_MAP, targetX: 160, targetY: 192 });
 
       // Register window resize handler — keep the PixiJS canvas filling its container.
       // Uses canvas client dimensions so it works correctly in split-screen combat
@@ -635,15 +636,16 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   /** @inheritdoc */
-  async loadMap(
-    mapUrl: string,
-    targetX: number,
-    targetY: number,
-    defeatedEnemies?: string[],
-    targetSpawnHash?: number,
-  ): Promise<void> {
+  async loadMap(options: {
+    mapUrl: string;
+    targetX: number;
+    targetY: number;
+    defeatedEnemies?: string[];
+    targetSpawnHash?: number;
+    disableClamping?: boolean;
+  }): Promise<void> {
     if (this._gameWorld) {
-      await this._gameWorld.loadMap(mapUrl, targetX, targetY, defeatedEnemies, targetSpawnHash);
+      await this._gameWorld.loadMap(options);
     }
   }
 

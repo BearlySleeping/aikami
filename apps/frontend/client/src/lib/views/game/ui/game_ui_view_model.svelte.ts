@@ -304,14 +304,14 @@ class GameUIViewModel
         this.isTransitioning = true;
         // Stop old map's BGM before transition (AC-4: Audio Buffer Cleanup)
         audioService.stopAll();
-        void this._gameViewModel.loadMap(
-          event.targetMap,
-          event.targetX,
-          event.targetY,
+        void this._gameViewModel.loadMap({
+          mapUrl: event.targetMap,
+          targetX: event.targetX,
+          targetY: event.targetY,
           // Spread to plain array — $state proxies can't be postMessage'd
-          [...(gameStateService.defeatedEnemies as string[])],
-          event.targetSpawnHash,
-        );
+          defeatedEnemies: [...(gameStateService.defeatedEnemies as string[])],
+          targetSpawnHash: event.targetSpawnHash,
+        });
       });
 
       // Listen for GAME_READY — fires once on engine initialization
@@ -771,9 +771,12 @@ class GameUIViewModel
     // Transition BGM back to exploration track (C-150)
     void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
     this._gameViewModel.resumeEngine();
-    await this._gameViewModel.loadMap('/assets/maps/sandbox_zone_a.json', 160, 192, [
-      ...(gameStateService.defeatedEnemies as string[]),
-    ]);
+    await this._gameViewModel.loadMap({
+      mapUrl: '/assets/maps/sandbox_zone_a.json',
+      targetX: 160,
+      targetY: 192,
+      defeatedEnemies: [...(gameStateService.defeatedEnemies as string[])],
+    });
   }
 
   /** @inheritdoc */
