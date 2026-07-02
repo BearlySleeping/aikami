@@ -120,3 +120,18 @@ interface TilemapData {
 - `moon_run_task client:fix` — 121 files fixed (0 errors)
 - `moon_run_task client:typecheck` — 0 errors, 0 warnings
 - `validate({ test: true })` — ✅ 4 passed (frontend-engine affected)
+
+### Merge Note — Texture Tilemap Integration Overlap
+
+A subsequent merge-candidate contract ("Texture-backed Tilemap Renderer," P1, deps C-135 + C-171) was analyzed and found to be **100% overlapping** with already-implemented scope:
+
+| Overlap Point | Existing Implementation |
+|---|---|
+| `Assets.load()` tileset textures | `tilemap_render_system.ts` L94 |
+| UV coordinate per tile (`getUvRect`) | `tilemap_chunk_renderer.ts` L409-423 |
+| Interleaved position+UV buffers | `_buildChunk()` L568-598 |
+| WGSL texture bindings (`uTexture`, `uSampler`) | L652-660, L66-71 |
+| Visual test (textured output, 90+ score) | `map.visual.ts` (6 cases) |
+| Deferred semantic atlas TODO | TODO.md (LPC bundling section) |
+
+**One fix applied**: Half-pixel UV inset added to `getUvRect()` (now `(px + 0.5) / imagewidth` instead of `px / imagewidth`) to prevent texture bleeding at tile boundaries on all WebGPU backends. This was the merge contract's only actionable "Watch Point" not already addressed.
