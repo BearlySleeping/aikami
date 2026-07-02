@@ -28,6 +28,24 @@ export type AudioServiceInterface = BaseClassInterface & {
   readonly isCrossfading: boolean;
 
   /**
+   * The master GainNode at the root of the audio graph.
+   *
+   * External audio sources (e.g., TTS streaming pipeline) connect
+   * into this node for unified volume control. Do NOT disconnect or
+   * modify this node — only connect new sources into it.
+   */
+  readonly masterGainNode: GainNode;
+
+  /**
+   * The master DynamicsCompressorNode for limiter protection.
+   *
+   * Sits between masterGainNode and destination. The TTS streaming
+   * pipeline connects its PannerNode here to leverage brick-wall
+   * limiting and eliminate digital clipping.
+   */
+  readonly masterCompressorNode: DynamicsCompressorNode;
+
+  /**
    * Sets the master volume.
    * Updates the master GainNode immediately.
    */
@@ -77,13 +95,19 @@ export type AudioServiceInterface = BaseClassInterface & {
  * BGM uses dual GainNodes for seamless crossfade:
  * ```
  * source → gainActive ─┐
- *                       ├→ gainBgm → gainMaster → destination
+ *                       ├→ gainBgm → gainMaster → compressor → destination
  * source → gainNext   ─┘
  * ```
  *
  * SFX uses a separate gain chain:
  * ```
- * source → gainSfx → gainMaster → destination
+ * source → gainSfx → gainMaster → compressor → destination
+ * ```
+ *
+ * TTS streaming (C-211) connects into the compressor directly
+ * (after PannerNode) to leverage limiter protection:
+ * ```
+ * AudioWorkletNode → PannerNode → compressor → destination
  * ```
  *
  * All GainNode values are reactive `$state` properties — changing them
@@ -98,6 +122,7 @@ export class AudioService extends BaseClass<AudioServiceOptions> implements Audi
 
   // ── Web Audio nodes ──
   private _masterGain: GainNode | undefined;
+  private _masterCompressor: DynamicsCompressorNode | undefined;
   private _bgmGain: GainNode | undefined;
   private _sfxGain: GainNode | undefined;
   private _activeGain: GainNode | undefined;
@@ -132,7 +157,17 @@ export class AudioService extends BaseClass<AudioServiceOptions> implements Audi
 
     this._masterGain = ctx.createGain();
     this._masterGain.gain.value = this.masterVolume;
-    this._masterGain.connect(ctx.destination);
+
+    this._masterCompressor = ctx.createDynamicsCompressor();
+    this._masterCompressor.threshold.value = -24;
+    this._masterCompressor.knee.value = 30;
+    this._masterCompressor.ratio.value = 12;
+    this._masterCompressor.attack.value = 0.003;
+    this._masterCompressor.release.value = 0.25;
+
+    // Graph: masterGain → masterCompressor → destination
+    this._masterGain.connect(this._masterCompressor);
+    this._masterCompressor.connect(ctx.destination);
 
     this._bgmGain = ctx.createGain();
     this._bgmGain.gain.value = this.bgmVolume;
@@ -152,6 +187,37 @@ export class AudioService extends BaseClass<AudioServiceOptions> implements Audi
   }
 
   // ── Public API ──
+
+  /**
+   * The master GainNode at the root of the audio graph.
+   *
+   * External audio sources (e.g., TTS streaming pipeline via C-211)
+   * connect into this node for unified master volume control.
+   */
+  get masterGainNode(): GainNode {
+    this._ensureGraph();
+    const node = this._masterGain;
+    if (!node) {
+      throw new Error('AudioService: masterGainNode not initialized');
+    }
+    return node;
+  }
+
+  /**
+   * The master DynamicsCompressorNode for limiter protection.
+   *
+   * Sits between masterGainNode and destination. The TTS streaming
+   * pipeline connects its PannerNode here to leverage brick-wall
+   * limiting and eliminate digital clipping.
+   */
+  get masterCompressorNode(): DynamicsCompressorNode {
+    this._ensureGraph();
+    const node = this._masterCompressor;
+    if (!node) {
+      throw new Error('AudioService: masterCompressorNode not initialized');
+    }
+    return node;
+  }
 
   /** @inheritdoc */
   setMasterVolume(volume: number): void {
