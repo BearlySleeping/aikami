@@ -128,9 +128,9 @@ describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
   beforeEach(async () => {
     setupMockFetch();
     mockConfigState = {
+      text: { apiKeys: {}, provider: 'openrouter' },
       preferredModel: 'test-model',
       models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-      apiKeys: {},
     };
     await setConfigState(mockConfigState);
   });
@@ -141,7 +141,11 @@ describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
 
   test('should throw when no text provider is configured', async () => {
     // Clear config so getActiveTextProvider() throws
-    await setConfigState({ preferredModel: '', models: [], apiKeys: {} });
+    await setConfigState({
+      text: { apiKeys: {}, provider: 'openrouter' },
+      preferredModel: '',
+      models: [],
+    });
 
     const service = await loadService();
     sseChunks = [buildSSEChunk('Hello'), SSE_DONE];
@@ -156,9 +160,9 @@ describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
 
   test('should use preferred model from configService', async () => {
     mockConfigState = {
+      text: { apiKeys: { openai: 'sk-test-key' }, provider: 'openai' },
       preferredModel: 'gpt-4o',
       models: [{ model: 'gpt-4o', provider: 'openai', endpoint: '' }],
-      apiKeys: { openai: 'sk-test-key' },
     };
     await setConfigState(mockConfigState);
 
@@ -180,9 +184,9 @@ describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
 
   test('should expose routing via __text_service_resolved_routing', async () => {
     mockConfigState = {
+      text: { apiKeys: { anthropic: 'ant-key' }, provider: 'anthropic' },
       preferredModel: 'claude-3',
       models: [{ model: 'claude-3', provider: 'anthropic', endpoint: 'https://api.anthropic.com' }],
-      apiKeys: { anthropic: 'ant-key' },
     };
     await setConfigState(mockConfigState);
 
@@ -205,12 +209,12 @@ describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
 
   test('should respect explicit model override', async () => {
     mockConfigState = {
+      text: { apiKeys: { openai: 'oai-key', deepseek: 'ds-key' }, provider: 'openai' },
       preferredModel: 'gpt-4o',
       models: [
         { model: 'gpt-4o', provider: 'openai', endpoint: '' },
         { model: 'deepseek-chat', provider: 'deepseek', endpoint: '' },
       ],
-      apiKeys: { openai: 'oai-key', deepseek: 'ds-key' },
     };
     await setConfigState(mockConfigState);
 
@@ -229,9 +233,9 @@ describe('TextGenerationService — AC-1: Dynamic Provider Resolution', () => {
 
   test('should fallback to first model config when no preferred model', async () => {
     mockConfigState = {
+      text: { apiKeys: { openrouter: 'or-key' }, provider: 'openrouter' },
       preferredModel: '',
       models: [{ model: 'llama-3-70b', provider: 'openrouter', endpoint: '' }],
-      apiKeys: { openrouter: 'or-key' },
     };
     await setConfigState(mockConfigState);
 
@@ -268,9 +272,9 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
   beforeEach(async () => {
     setupMockFetch();
     mockConfigState = {
+      text: { apiKeys: {}, provider: 'openrouter' },
       preferredModel: 'test-model',
       models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-      apiKeys: {},
     };
     await setConfigState(mockConfigState);
   });
@@ -407,9 +411,9 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
   beforeEach(async () => {
     setupMockFetch();
     mockConfigState = {
+      text: { apiKeys: {}, provider: 'openrouter' },
       preferredModel: 'test-model',
       models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-      apiKeys: {},
     };
     await setConfigState(mockConfigState);
   });
@@ -560,9 +564,9 @@ describe('TextGenerationService — cancelAll', () => {
   beforeEach(async () => {
     setupMockFetch();
     mockConfigState = {
+      text: { apiKeys: {}, provider: 'openrouter' },
       preferredModel: 'test-model',
       models: [{ model: 'test-model', provider: 'openrouter', endpoint: '' }],
-      apiKeys: {},
     };
     await setConfigState(mockConfigState);
   });

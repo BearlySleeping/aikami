@@ -260,7 +260,7 @@
         >
       </div>
       <div class="form-control">
-        <div class="label py-1" />
+        <div class="label py-1"></div>
         <div class="flex items-center gap-2 h-12">
           <input
             type="checkbox"
