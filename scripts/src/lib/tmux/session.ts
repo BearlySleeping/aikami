@@ -114,22 +114,12 @@ const ALL_SERVICES: DevService[] = ['firebase', 'client', 'voice', 'image', 'tex
 
 /** Map CLI aliases to canonical names. */
 export const normalizeService = (input: string): DevService | 'all' => {
-  const alias: Record<string, DevService | 'all'> = {
-    emulator: 'firebase',
-    emulators: 'firebase',
-    client: 'client',
-    voice: 'voice',
-    image: 'image',
-    text: 'text',
-    all: 'all',
-  };
-  const result = alias[input];
-  if (!result) {
+  if (![...ALL_SERVICES, 'all'].includes(input)) {
     throw new Error(
       `Unknown service: "${input}". Valid: firebase, client, voice, image, text, all`,
     );
   }
-  return result;
+  return input as DevService | 'all';
 };
 
 /** Expand 'all' to the full list of canonical services. */
