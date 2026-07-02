@@ -17,7 +17,22 @@ const CONFIG_SERVICE_PATH =
   '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/config_service.svelte.ts';
 
 const getDefaultConfig = () => ({
+  advancedOverrides: { thinkingLevel: 0 },
   apiKeys: {},
+  auxiliaryModels: {
+    embedding: undefined,
+    summarization: undefined,
+    vision: undefined,
+  },
+  generationParams: {
+    contextSize: 4096,
+    maxTokens: 1024,
+    presencePenalty: 0,
+    repetitionPenalty: 1.1,
+    temperature: 0.7,
+    topK: 40,
+    topP: 0.9,
+  },
   image: {
     backend: 'comfyui',
     cfgScale: 7.5,
@@ -26,6 +41,7 @@ const getDefaultConfig = () => ({
     steps: 30,
     width: 1024,
   },
+  instructTemplate: 'chatml',
   memory: {
     contextWindow: 8192,
     longTermMemory: false,
@@ -38,6 +54,7 @@ const getDefaultConfig = () => ({
     engine: 'kokoro',
     pitch: 0,
     speed: 1.0,
+    voiceArchetypes: [],
     voiceId: 'af_heart',
   },
 });
@@ -69,7 +86,24 @@ mock.module(CONFIG_SERVICE_PATH, () => ({
     updateModel: mock(() => {}),
     setMemoryConfig: mock(() => {}),
     setVoiceConfig: mock(() => {}),
-    setImageConfig: mock(() => {}),
+    setImageConfig: mock((v: unknown) => {
+      const cfg = v as Partial<Record<string, unknown>>;
+      const imageState = mockConfigState.image as Record<string, unknown>;
+      Object.assign(imageState, cfg);
+    }),
+    setAuxiliaryModels: mock((v: unknown) => {
+      const cfg = v as Partial<Record<string, unknown>>;
+      const auxState = mockConfigState.auxiliaryModels as Record<string, unknown>;
+      Object.assign(auxState, cfg);
+    }),
+    setGenerationParams: mock((v: unknown) => {
+      const cfg = v as Partial<Record<string, unknown>>;
+      const genState = mockConfigState.generationParams as Record<string, unknown>;
+      Object.assign(genState, cfg);
+    }),
+    setInstructTemplate: mock((v: unknown) => {
+      mockConfigState.instructTemplate = v;
+    }),
   },
   ConfigService: class {},
   __esModule: true,
@@ -148,9 +182,9 @@ describe('ProvidersViewModel — C-079', () => {
       expect(vm.activeTab).toBe('api-keys');
     });
 
-    test('should have 5 tabs defined', async () => {
+    test('should have 6 tabs defined', async () => {
       const vm = await getViewModel();
-      expect(vm.tabs.length).toBe(5);
+      expect(vm.tabs.length).toBe(6);
     });
 
     test('should have correct tab labels', async () => {
@@ -158,6 +192,7 @@ describe('ProvidersViewModel — C-079', () => {
       const labels = vm.tabs.map((t) => t.label);
       expect(labels).toContain('API Keys');
       expect(labels).toContain('Models');
+      expect(labels).toContain('Generation');
       expect(labels).toContain('Voice');
       expect(labels).toContain('Image');
       expect(labels).toContain('Memory');
@@ -171,7 +206,7 @@ describe('ProvidersViewModel — C-079', () => {
 
     test('setActiveTab should accept all valid tabs', async () => {
       const vm = await getViewModel();
-      const tabs: ConfigTab[] = ['api-keys', 'models', 'voice', 'image', 'memory'];
+      const tabs: ConfigTab[] = ['api-keys', 'models', 'generation', 'voice', 'image', 'memory'];
 
       for (const tab of tabs) {
         vm.setActiveTab(tab);
@@ -349,6 +384,83 @@ describe('ProvidersViewModel — C-079', () => {
       const vm = await getViewModel();
 
       expect(vm.config.models).toEqual([]);
+    });
+
+    test('should expose auxiliaryModels with defaults', async () => {
+      const vm = await getViewModel();
+
+      expect(vm.auxiliaryModels.summarization).toBeUndefined();
+      expect(vm.auxiliaryModels.vision).toBeUndefined();
+      expect(vm.auxiliaryModels.embedding).toBeUndefined();
+    });
+
+    test('should expose generationParams with defaults', async () => {
+      const vm = await getViewModel();
+
+      expect(vm.generationParams.temperature).toBe(0.7);
+      expect(vm.generationParams.topP).toBe(0.9);
+      expect(vm.generationParams.topK).toBe(40);
+      expect(vm.generationParams.repetitionPenalty).toBe(1.1);
+      expect(vm.generationParams.presencePenalty).toBe(0);
+    });
+
+    test('should expose instructTemplates list', async () => {
+      const vm = await getViewModel();
+
+      expect(vm.instructTemplates.length).toBeGreaterThan(0);
+      expect(vm.instructTemplates).toContain('chatml');
+    });
+
+    test('setAuxiliaryModel should update auxiliary model', async () => {
+      const vm = await getViewModel();
+      await vm.initialize();
+
+      vm.setAuxiliaryModel('summarization', 'openai/gpt-4o-mini');
+      expect(vm.auxiliaryModels.summarization).toBe('openai/gpt-4o-mini');
+    });
+
+    test('setAuxiliaryModel should clear auxiliary model with undefined', async () => {
+      const vm = await getViewModel();
+      await vm.initialize();
+
+      vm.setAuxiliaryModel('summarization', 'openai/gpt-4o-mini');
+      vm.setAuxiliaryModel('summarization', undefined);
+      expect(vm.auxiliaryModels.summarization).toBeUndefined();
+    });
+
+    test('setGenerationParam should update a generation param', async () => {
+      const vm = await getViewModel();
+      await vm.initialize();
+
+      vm.setGenerationParam('temperature', 1.5);
+      expect(vm.generationParams.temperature).toBe(1.5);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AC-5: Model fetching state
+  // ═══════════════════════════════════════════════════════════════════════
+
+  describe('AC-5: Model fetching', () => {
+    test('should initialize with empty availableOpenRouterModels', async () => {
+      const vm = await getViewModel();
+      expect(vm.availableOpenRouterModels).toEqual([]);
+    });
+
+    test('should initialize with empty modelSearchQuery', async () => {
+      const vm = await getViewModel();
+      expect(vm.modelSearchQuery).toBe('');
+    });
+
+    test('should initialize with isFetchingModels false', async () => {
+      const vm = await getViewModel();
+      expect(vm.isFetchingModels).toBe(false);
+    });
+
+    test('setModelSearchQuery should update query', async () => {
+      const vm = await getViewModel();
+      vm.setModelSearchQuery('gpt');
+      expect(vm.modelSearchQuery).toBe('gpt');
     });
   });
 });

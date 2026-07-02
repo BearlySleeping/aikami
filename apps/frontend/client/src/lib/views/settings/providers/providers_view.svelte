@@ -1,8 +1,11 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import type { AuxiliaryModels } from '$lib/services/config/config_service.svelte';
   import { KOKORO_VOICES } from '$lib/services/config/config_service.svelte';
-  import type { ConfigTab, ProvidersViewModelInterface } from './providers_view_model.svelte';
+  import ProvidersGenerationParams from './providers_generation_params.svelte';
+  import ProvidersModelSelector from './providers_model_selector.svelte';
+  import type { ProvidersViewModelInterface } from './providers_view_model.svelte';
 
   type Props = {
     viewModel: ProvidersViewModelInterface;
@@ -19,6 +22,12 @@
   };
 
   const isKeyVisible = (provider: string): boolean => visibleKeys[provider] === true;
+
+  // ── Derived ───────────────────────────────────────────────────────────
+
+  const hasOpenRouterKey = $derived((viewModel.config.apiKeys.openrouter?.length ?? 0) > 0);
+
+  const isOpenRouterKeyVerified = $derived(viewModel.verificationStatus.openrouter === 'valid');
 </script>
 
 <svelte:head>
@@ -279,27 +288,84 @@
       <!-- ── Models Tab ──────────────────────────────────────────────── -->
       {:else if viewModel.activeTab === 'models'}
         <div class="grid gap-6">
-          <!-- Preferred model -->
+          <!-- Preferred model (searchable dropdown) -->
           <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
             <h2
               class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4"
             >
-              Preferred Model
+              Primary Model
             </h2>
-            <div class="form-control">
-              <div class="label py-1">
-                <span
-                  class="font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#c9c4d8]"
-                  >Model ID</span
-                >
-              </div>
-              <input
-                type="text"
-                class="input input-bordered w-full font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff] focus:shadow-[0_0_10px_rgba(202,190,255,0.15)]"
-                placeholder="e.g. claude-3-opus-20240229"
-                value={viewModel.config.preferredModel}
-                oninput={(e: Event) => viewModel.setPreferredModel((e.target as HTMLInputElement).value)}
-              >
+            <p class="text-sm text-[#938ea1] mb-6 font-['Inter']">
+              Select the primary text generation model. Models are fetched from OpenRouter when an
+              API key is verified.
+            </p>
+
+            <ProvidersModelSelector
+              models={viewModel.availableOpenRouterModels}
+              selectedModel={viewModel.config.preferredModel}
+              searchQuery={viewModel.modelSearchQuery}
+              isFetching={viewModel.isFetchingModels}
+              hasApiKey={hasOpenRouterKey}
+              isKeyVerified={isOpenRouterKeyVerified}
+              onfetch={() => viewModel.fetchModels()}
+              onselect={(modelId: string) => viewModel.setPreferredModel(modelId)}
+              onsearch={(query: string) => viewModel.setModelSearchQuery(query)}
+            />
+          </div>
+
+          <!-- Auxiliary Models -->
+          <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
+            <h2
+              class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4"
+            >
+              Auxiliary Models
+            </h2>
+            <p class="text-sm text-[#938ea1] mb-6 font-['Inter']">
+              Assign specialised models for distinct AI tasks. Leave blank to use the primary model.
+            </p>
+
+            <div class="grid grid-cols-2 gap-4">
+              {#each [
+                { key: 'summarization' as keyof AuxiliaryModels, label: 'Summarization' },
+                { key: 'vision' as keyof AuxiliaryModels, label: 'Vision / Image Analysis' },
+                { key: 'embedding' as keyof AuxiliaryModels, label: 'Embedding' },
+              ] as aux}
+                <div class="form-control">
+                  <div class="label py-1">
+                    <span
+                      class="font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#c9c4d8]"
+                    >
+                      {aux.label}
+                    </span>
+                  </div>
+                  {#if viewModel.availableOpenRouterModels.length > 0}
+                    <select
+                      class="select select-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+                      value={viewModel.auxiliaryModels[aux.key] ?? ''}
+                      onchange={(e: Event) => {
+                        const val = (e.target as HTMLSelectElement).value;
+                        viewModel.setAuxiliaryModel(aux.key, val || undefined);
+                      }}
+                    >
+                      <option value="">— Use Primary Model —</option>
+                      {#each viewModel.availableOpenRouterModels as m}
+                        <option value={m.id}>{m.name}</option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <input
+                      type="text"
+                      class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+                      placeholder="Model ID (e.g. openai/gpt-4o-mini)"
+                      value={viewModel.auxiliaryModels[aux.key] ?? ''}
+                      oninput={(e: Event) => {
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        viewModel.setAuxiliaryModel(aux.key, val || undefined);
+                      }}
+                    >
+                  {/if}
+                </div>
+              {/each}
             </div>
           </div>
 
@@ -337,7 +403,12 @@
                           type="text"
                           class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
                           value={modelConfig.provider}
-                          oninput={(e: Event) => viewModel.setModelField(i, 'provider', (e.target as HTMLInputElement).value)}
+                          oninput={(e: Event) =>
+                            viewModel.setModelField(
+                              i,
+                              'provider',
+                              (e.target as HTMLInputElement).value,
+                            )}
                         >
                       </div>
                       <div class="form-control">
@@ -351,7 +422,12 @@
                           type="text"
                           class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
                           value={modelConfig.model}
-                          oninput={(e: Event) => viewModel.setModelField(i, 'model', (e.target as HTMLInputElement).value)}
+                          oninput={(e: Event) =>
+                            viewModel.setModelField(
+                              i,
+                              'model',
+                              (e.target as HTMLInputElement).value,
+                            )}
                         >
                       </div>
                       <div class="form-control">
@@ -365,7 +441,12 @@
                           type="text"
                           class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
                           value={modelConfig.endpoint}
-                          oninput={(e: Event) => viewModel.setModelField(i, 'endpoint', (e.target as HTMLInputElement).value)}
+                          oninput={(e: Event) =>
+                            viewModel.setModelField(
+                              i,
+                              'endpoint',
+                              (e.target as HTMLInputElement).value,
+                            )}
                         >
                       </div>
                     </div>
@@ -375,6 +456,17 @@
             {/if}
           </div>
         </div>
+      <!-- ── Generation Tab ───────────────────────────────────────────── -->
+      {:else if viewModel.activeTab === 'generation'}
+        <ProvidersGenerationParams
+          params={viewModel.generationParams}
+          instructTemplate={viewModel.instructTemplate}
+          instructTemplates={viewModel.instructTemplates}
+          onsetParam={(field, value) =>
+            viewModel.setGenerationParam(field, value)}
+          onsetTemplate={(template) =>
+            viewModel.setInstructTemplate(template)}
+        />
       <!-- ── Voice Tab ────────────────────────────────────────────────── -->
       {:else if viewModel.activeTab === 'voice'}
         <div class="grid gap-6">

@@ -193,12 +193,26 @@ export type GenerationParams = {
   temperature: number;
   /** Nucleus sampling threshold (0–1). */
   topP: number;
+  /** Top-k sampling limit. */
+  topK: number;
   /** Repetition penalty (1–2). */
   repetitionPenalty: number;
+  /** Presence penalty (-2–2). */
+  presencePenalty: number;
   /** Maximum tokens to generate. */
   maxTokens: number;
   /** Maximum context window size in tokens. */
   contextSize: number;
+};
+
+/** Auxiliary model assignments for specialised AI tasks. */
+export type AuxiliaryModels = {
+  /** Model used for conversation summarization. */
+  summarization: string | undefined;
+  /** Model used for vision/image analysis. */
+  vision: string | undefined;
+  /** Model used for embedding generation. */
+  embedding: string | undefined;
 };
 
 /** Advanced overrides for specific providers. */
@@ -239,6 +253,8 @@ export type ConfigState = {
   instructTemplate: InstructTemplate;
   /** Advanced provider-specific overrides. */
   advancedOverrides: AdvancedOverrides;
+  /** Auxiliary model assignments for specialised tasks. */
+  auxiliaryModels: AuxiliaryModels;
 };
 
 // ---------------------------------------------------------------------------
@@ -280,6 +296,8 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   setInstructTemplate(template: InstructTemplate): void;
   /** Updates advanced overrides (partial merge). */
   setAdvancedOverrides(overrides: Partial<AdvancedOverrides>): void;
+  /** Updates auxiliary model assignments (partial merge). */
+  setAuxiliaryModels(models: Partial<AuxiliaryModels>): void;
 
   /**
    * Resolves the active text generation provider from the current
@@ -326,8 +344,10 @@ const DEFAULT_IMAGE_CONFIG: ImageConfig = {
 const DEFAULT_GENERATION_PARAMS: GenerationParams = {
   contextSize: 4096,
   maxTokens: 1024,
+  presencePenalty: 0,
   repetitionPenalty: 1.1,
   temperature: 0.7,
+  topK: 40,
   topP: 0.9,
 };
 
@@ -335,11 +355,18 @@ const DEFAULT_ADVANCED_OVERRIDES: AdvancedOverrides = {
   thinkingLevel: 0,
 };
 
+const DEFAULT_AUXILIARY_MODELS: AuxiliaryModels = {
+  embedding: undefined,
+  summarization: undefined,
+  vision: undefined,
+};
+
 const DEFAULT_TEMPLATE: InstructTemplate = 'chatml';
 
 const DEFAULT_STATE: ConfigState = {
   advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
   apiKeys: { ...DEFAULT_API_KEYS },
+  auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
   instructTemplate: DEFAULT_TEMPLATE,
@@ -424,6 +451,12 @@ class ConfigService
             ...(parsed.advancedOverrides as Partial<AdvancedOverrides>),
           };
         }
+        if (parsed.auxiliaryModels) {
+          this.state.auxiliaryModels = {
+            ...DEFAULT_AUXILIARY_MODELS,
+            ...(parsed.auxiliaryModels as Partial<AuxiliaryModels>),
+          };
+        }
       } catch {
         this.warn('load: failed to parse plain config');
       }
@@ -445,6 +478,7 @@ class ConfigService
     // Plain config (non-sensitive)
     const plain: Record<string, unknown> = {
       advancedOverrides: this.state.advancedOverrides,
+      auxiliaryModels: this.state.auxiliaryModels,
       generationParams: this.state.generationParams,
       image: this.state.image,
       instructTemplate: this.state.instructTemplate,
@@ -506,6 +540,10 @@ class ConfigService
 
   setAdvancedOverrides(overrides: Partial<AdvancedOverrides>): void {
     this.state.advancedOverrides = { ...this.state.advancedOverrides, ...overrides };
+  }
+
+  setAuxiliaryModels(models: Partial<AuxiliaryModels>): void {
+    this.state.auxiliaryModels = { ...this.state.auxiliaryModels, ...models };
   }
 
   // ── Text provider resolution ─────────────────────────────────────────
