@@ -1,3 +1,5 @@
+<!-- completed: 2026-07-02 -->
+
 ## Metadata
 
 | Field | Value |
@@ -6,7 +8,7 @@
 | **Target** | `packages/frontend/engine/src/persistence/` & `packages/backend/database/` |
 | **Priority** | P1 — Foundational for offline capabilities and Tauri performance |
 | **Dependencies** | Firebase Configs, Engine ECS |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview
@@ -99,3 +101,39 @@ For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Vi
 
 - **Browser Eviction**: Browsers can clear OPFS if storage is low. The startup sequence MUST request `navigator.storage.persist()` and warn the user if denied.
 - **Vite/Rollup Externalization**: `@libsql/client` might try to bundle native Node/Rust bindings in the Web build. Ensure Vite config explicitly externalizes or properly routes the web vs. desktop module resolutions based on the Tauri environment variables.
+
+---
+
+## Execution Report
+
+### Summary
+Switched Turso hydration from `@libsql/client` to `@tursodatabase/database` (Rust-native libSQL). Created `StorageAdapter` interface, `TursoStorageAdapter` implementation, and `OpfsAssetCache` for offline-first architecture.
+
+### AC Status
+| AC | Description | Status |
+|----|-------------|--------|
+| AC-1 | Local SQLite Initialization | ✅ Implemented — `TursoStorageAdapter` with `connect()` + schema DDL constants |
+| AC-2 | Offline Read/Write of Game State | ✅ Implemented — `LocalDatabaseInterface.query()/execute()/transaction()` |
+| AC-3 | Asset Cold Storage via OPFS | ✅ Implemented — `OpfsAssetCache` with `fetch()/get()/put()` + persistence request |
+| AC-4 | Cloud Sync Recovery | ✅ Implemented — `sync()` method with graceful degradation |
+
+### Files Created
+- `packages/frontend/repositories/src/lib/storage_adapter.ts` — `LocalDatabaseInterface` + `AIKAMI_SCHEMA_DDL`
+- `packages/frontend/repositories/src/lib/turso_storage_adapter.ts` — `TursoStorageAdapter` (native `@tursodatabase/database`)
+- `packages/frontend/repositories/src/lib/opfs_asset_cache.ts` — `OpfsAssetCache` (browser OPFS)
+
+### Files Modified
+- `packages/frontend/engine/src/persistence/turso_registry_hydration.ts` — Switched to `@tursodatabase/database` API (`connect()` → `prepare()` → `all()`), field renames (`tursoUrl`→`databasePath`, `tursoAuthToken`→`authToken`)
+- `packages/frontend/engine/package.json` — Replaced `@libsql/client` with `@tursodatabase/database`
+- `packages/frontend/repositories/package.json` — Added `@tursodatabase/database` dependency
+- `packages/frontend/repositories/src/index.ts` — Added exports for `storage_adapter`, `turso_storage_adapter`, `opfs_asset_cache`
+
+### Deviations
+- **Library**: User explicitly requested `@tursodatabase/database` (Rust-native libSQL) instead of contract's `@libsql/client`. API is async throughout (`prepare`, `all`, `run` are all Promise-based).
+- **Web path**: `@tursodatabase/database` is Node-native; web OPFS path will use `@libsql/client/web` (WASM) separately — `StorageAdapter` interface abstracts over both.
+
+### Test Results
+- `frontend-engine:typecheck` ✅
+- `frontend-repositories:typecheck` ✅
+- `client:typecheck` ✅ (0 errors)
+- Engine tests: passed (no regression)

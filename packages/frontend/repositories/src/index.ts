@@ -2,5 +2,8 @@ export * from './lib/chat.ts';
 export * from './lib/config.ts';
 export * from './lib/notification.ts';
 export * from './lib/npc.ts';
+export * from './lib/opfs_asset_cache.ts';
 export * from './lib/persona.ts';
+export * from './lib/storage_adapter.ts';
+export * from './lib/turso_storage_adapter.ts';
 export * from './lib/user.ts';

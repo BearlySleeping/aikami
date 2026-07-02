@@ -16,13 +16,21 @@ import {
   type ConfigState,
   configService,
   DEFAULT_VOICE_ARCHETYPES,
+  EMBEDDING_MODELS,
+  EMOTION_METHODS,
+  type EmotionConfig,
   type GenerationParams,
+  IMAGE_PROVIDERS,
   type ImageConfig,
   INSTRUCT_TEMPLATES,
   type InstructTemplate,
   KOKORO_VOICES,
+  MEMORY_TYPES,
   type MemoryConfig,
+  TEXT_PROVIDERS,
+  type TextProvider,
   VOICE_ENGINES,
+  VOICE_PROVIDERS,
   type VoiceArchetype,
   type VoiceConfig,
   type VoiceOption,
@@ -44,9 +52,16 @@ import {
 } from '$lib/services/config/provider_endpoints';
 import { type CheckpointInfo, imageGenerationService } from '$services';
 
-export type { GenerationParams } from '$lib/services/config/config_service.svelte';
-export type { CheckpointInfo, ProviderEndpoint };
-export { PROVIDER_ENDPOINTS };
+export type { CheckpointInfo, EmotionConfig, ProviderEndpoint };
+export {
+  EMBEDDING_MODELS,
+  EMOTION_METHODS,
+  IMAGE_PROVIDERS,
+  MEMORY_TYPES,
+  PROVIDER_ENDPOINTS,
+  TEXT_PROVIDERS,
+  VOICE_PROVIDERS,
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,12 +69,10 @@ export { PROVIDER_ENDPOINTS };
 
 /** Configuration tab identifiers. */
 export const CONFIG_TABS = [
-  'api-keys',
-  'models',
-  'generation',
+  'text',
   'voice',
   'image',
-  'memory',
+  'advanced',
 ] as const;
 
 export type ConfigTab = (typeof CONFIG_TABS)[number];
@@ -127,6 +140,18 @@ export type ProvidersViewModelInterface = BaseViewModelInterface & {
   readonly auxiliaryModels: AuxiliaryModels;
   /** Available instruct templates for the dropdown. */
   readonly instructTemplates: readonly string[];
+  /** Available image providers for the dropdown. */
+  readonly imageProviders: ReadonlyArray<{ id: string; label: string; description: string }>;
+  /** Available voice providers for the dropdown. */
+  readonly voiceProviders: ReadonlyArray<{ id: string; label: string; description: string }>;
+  /** Available memory types for the dropdown. */
+  readonly memoryTypes: readonly string[];
+  /** Available embedding models for the dropdown. */
+  readonly embeddingModels: ReadonlyArray<{ id: string; label: string }>;
+  /** Available emotion methods for the dropdown. */
+  readonly emotionMethods: readonly string[];
+  /** Emotion config (proxied). */
+  readonly emotion: EmotionConfig;
 
   /** Switches the active tab. */
   setActiveTab(tab: ConfigTab): void;
@@ -142,14 +167,18 @@ export type ProvidersViewModelInterface = BaseViewModelInterface & {
   detectService(key: keyof LocalServiceStatus): Promise<void>;
   /** Schedules a debounced save after a config field change. */
   scheduleSave(): void;
-  /** Updates a single config field (memory/voice/image sections). */
+  /** Updates a single config field (memory/voice/image/emotion sections). */
   setField(
-    section: 'memory' | 'voice' | 'image',
+    section: 'memory' | 'voice' | 'image' | 'emotion',
     field: string,
     value: string | number | boolean,
   ): void;
-  /** Updates a single API key for a given provider. */
-  setApiKey(provider: string, value: string): void;
+  /** Set the text provider from dropdown. */
+  setTextProvider(provider: string): void;
+  /** Set the API key for a given text provider. */
+  setTextApiKey(provider: string, key: string): void;
+  /** Set the custom URL for the text provider. */
+  setTextUrl(url: string): void;
   /** Updates the preferred model. */
   setPreferredModel(model: string): void;
   /** Updates a single model config field by index. */
@@ -193,12 +222,10 @@ export type ProvidersViewModelOptions = BaseViewModelOptions & {};
 // ---------------------------------------------------------------------------
 
 const TAB_META: readonly ConfigTabMeta[] = [
-  { key: 'api-keys', label: 'API Keys' },
-  { key: 'models', label: 'Models' },
-  { key: 'generation', label: 'Generation' },
+  { key: 'text', label: 'Text' },
   { key: 'voice', label: 'Voice' },
   { key: 'image', label: 'Image' },
-  { key: 'memory', label: 'Memory' },
+  { key: 'advanced', label: 'Advanced' },
 ] as const;
 
 /** Debounce delay in milliseconds before auto-saving after a field change. */
@@ -212,7 +239,7 @@ export class ProvidersViewModel
   extends BaseViewModel<ProvidersViewModelOptions>
   implements ProvidersViewModelInterface
 {
-  activeTab: ConfigTab = $state('api-keys');
+  activeTab: ConfigTab = $state('text');
   isDetecting = $state(false);
   isSaving = $state(false);
   lastSaved = $state('');
@@ -303,6 +330,30 @@ export class ProvidersViewModel
     return INSTRUCT_TEMPLATES;
   }
 
+  get imageProviders(): ReadonlyArray<{ id: string; label: string; description: string }> {
+    return IMAGE_PROVIDERS;
+  }
+
+  get voiceProviders(): ReadonlyArray<{ id: string; label: string; description: string }> {
+    return VOICE_PROVIDERS;
+  }
+
+  get memoryTypes(): readonly string[] {
+    return MEMORY_TYPES;
+  }
+
+  get embeddingModels(): ReadonlyArray<{ id: string; label: string }> {
+    return EMBEDDING_MODELS;
+  }
+
+  get emotionMethods(): readonly string[] {
+    return EMOTION_METHODS;
+  }
+
+  get emotion(): EmotionConfig {
+    return configService.state.emotion;
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -390,7 +441,7 @@ export class ProvidersViewModel
    * @param value - Raw value from the input event
    */
   setField(
-    section: 'memory' | 'voice' | 'image',
+    section: 'memory' | 'voice' | 'image' | 'emotion',
     field: string,
     value: string | number | boolean,
   ): void {
@@ -400,12 +451,24 @@ export class ProvidersViewModel
       configService.setVoiceConfig({ [field]: value } as Partial<VoiceConfig>);
     } else if (section === 'image') {
       configService.setImageConfig({ [field]: value } as Partial<ImageConfig>);
+    } else if (section === 'emotion') {
+      configService.setEmotionConfig({ [field]: value } as Partial<EmotionConfig>);
     }
     this.scheduleSave();
   }
 
-  setApiKey(provider: string, value: string): void {
-    configService.setApiKeys({ [provider]: value } as Record<string, string>);
+  setTextProvider(provider: string): void {
+    configService.setTextProvider(provider as TextProvider);
+    this.scheduleSave();
+  }
+
+  setTextApiKey(provider: string, key: string): void {
+    configService.setTextApiKey(provider, key);
+    this.scheduleSave();
+  }
+
+  setTextUrl(url: string): void {
+    configService.setTextUrl(url);
     this.scheduleSave();
   }
 
@@ -425,8 +488,8 @@ export class ProvidersViewModel
       return;
     }
 
-    const apiKey =
-      configService.state.apiKeys[provider as keyof typeof configService.state.apiKeys];
+    const apiKey: string | undefined =
+      configService.state.text.apiKeys[provider];
     if (!apiKey) {
       this.verificationStatus = { ...this.verificationStatus, [provider]: 'invalid' };
       return;
@@ -551,7 +614,7 @@ export class ProvidersViewModel
 
   async fetchModels(): Promise<void> {
     this.debug('fetchModels');
-    const apiKey = configService.state.apiKeys.openrouter;
+    const apiKey = configService.state.text.apiKeys.openrouter;
     if (!apiKey) {
       this.warn('fetchModels: no OpenRouter API key configured');
       return;
@@ -600,7 +663,7 @@ export class ProvidersViewModel
    * to manually click "Verify" on the API Keys tab.
    */
   private _verifyExistingOpenRouterKey(): void {
-    const apiKey = configService.state.apiKeys.openrouter;
+    const apiKey = configService.state.text.apiKeys.openrouter;
     if (apiKey && apiKey.length > 0) {
       this.debug('_verifyExistingOpenRouterKey: found key, auto-verifying');
       void this.verifyApiKey('openrouter');
