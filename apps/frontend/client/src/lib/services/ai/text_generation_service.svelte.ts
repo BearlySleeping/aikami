@@ -178,7 +178,7 @@ class TextGenerationService
 
   /** Reads the API key for the given provider from ConfigService. */
   private _getApiKey(provider: string): string | undefined {
-    const keys = configService.state.apiKeys;
+    const keys = configService.state.text.apiKeys;
     return keys[provider as keyof typeof keys];
   }
 

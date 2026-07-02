@@ -119,10 +119,10 @@ class AISettingsService
     await configService.load();
 
     // Sync provider configs from the central config state
-    if (configService.state.apiKeys.openrouter) {
+    if (configService.state.text.apiKeys.openrouter) {
       this.textProvider = {
         ...this.textProvider,
-        apiKey: configService.state.apiKeys.openrouter,
+        apiKey: configService.state.text.apiKeys.openrouter,
       };
     }
     if (configService.state.preferredModel) {
@@ -136,7 +136,7 @@ class AISettingsService
   async saveToVault(_pin?: string): Promise<void> {
     // Sync provider API keys back to central config
     if (this.textProvider.apiKey) {
-      configService.setApiKeys({ openrouter: this.textProvider.apiKey });
+      configService.setTextApiKey('openrouter', this.textProvider.apiKey);
     }
     if (this.textProvider.model) {
       configService.setPreferredModel(this.textProvider.model);

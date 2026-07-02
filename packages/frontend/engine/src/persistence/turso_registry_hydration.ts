@@ -4,11 +4,11 @@ import { BaseEngineClass, type BaseEngineClassOptions } from '../base_engine_cla
 import type { RegistryRow, StringRegistryService } from '../services/string_registry_service.ts';
 
 // ---------------------------------------------------------------------------
-// TursoRegistryHydration — offline Turso (libsql) → registry bridge
+// TursoRegistryHydration — offline Turso (libSQL) → registry bridge
 //
-// Contract C-195 AC-2: Ingests row records from the local Turso SQLite
-// database container during game boot and assigns sequential handle indices
-// into the engine's unproxied StringRegistryService.
+// Contract C-195 AC-2 (updated C-203): Ingests row records from the local
+// Turso SQLite database container during game boot and assigns sequential
+// handle indices into the engine's unproxied StringRegistryService.
 //
 // Architecture:
 // 1. At boot, the GameWorld initialization pipeline calls hydrate().
@@ -17,8 +17,14 @@ import type { RegistryRow, StringRegistryService } from '../services/string_regi
 // 4. Registration completes before active simulation starts — no runtime
 //    allocations during gameplay.
 //
-// The Turso client library (@libsql/client) is an optional dependency.
-// When unavailable, the bridge operates in stub mode and logs a warning.
+// Uses @tursodatabase/database (Rust-based libSQL client) as the primary
+// client library. When unavailable, the bridge operates in stub mode and
+// logs a warning.
+//
+// C-203 update: Switched from @libsql/client to @tursodatabase/database
+// for the new Rust-based embedded SQLite setup. The API uses connect()
+// with path-based file URIs (e.g. 'file:aikami.db') and the familiar
+// prepare → bind → all / run pattern.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -41,10 +47,12 @@ export type TursoStringRow = {
 export type TursoRegistryHydrationOptions = BaseEngineClassOptions & {
   /** Reference to the active StringRegistryService instance. */
   registry: StringRegistryService;
-  /** Optional Turso database URL. When omitted, operates in stub mode. */
-  tursoUrl?: string;
-  /** Optional Turso auth token. */
-  tursoAuthToken?: string;
+  /** Path to the local SQLite database file (e.g. 'file:aikami.db'). When omitted, operates in stub mode. */
+  databasePath?: string;
+  /** Optional remote Turso sync URL for cloud replication. */
+  syncUrl?: string;
+  /** Optional Turso auth token for sync URL authentication. */
+  authToken?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -65,11 +73,14 @@ export class TursoRegistryHydration extends BaseEngineClass<TursoRegistryHydrati
   /** Reference to the active string registry. */
   private readonly _registry: StringRegistryService;
 
-  /** Optional Turso database URL for live mode. */
-  private readonly _tursoUrl?: string;
+  /** Path to the local SQLite database file for live mode. */
+  private readonly _databasePath?: string;
 
-  /** Optional Turso auth token. */
-  private readonly _tursoAuthToken?: string;
+  /** Optional remote Turso sync URL (reserved for C-203 AC-4). */
+  private readonly _syncUrl?: string;
+
+  /** Optional Turso auth token (reserved for C-203 AC-4). */
+  private readonly _authToken?: string;
 
   /**
    * Do NOT use `new TursoRegistryHydration()`. Use
@@ -78,8 +89,9 @@ export class TursoRegistryHydration extends BaseEngineClass<TursoRegistryHydrati
   constructor(options: TursoRegistryHydrationOptions) {
     super(options);
     this._registry = options.registry;
-    this._tursoUrl = options.tursoUrl;
-    this._tursoAuthToken = options.tursoAuthToken;
+    this._databasePath = options.databasePath;
+    this._syncUrl = options.syncUrl;
+    this._authToken = options.authToken;
   }
 
   // -----------------------------------------------------------------------
@@ -89,19 +101,23 @@ export class TursoRegistryHydration extends BaseEngineClass<TursoRegistryHydrati
   /**
    * Hydrates the string registry from Turso rows.
    *
-   * In live mode (tursoUrl + tursoAuthToken provided): executes a SELECT
-   * query against the local Turso database, converts rows to RegistryRow
-   * entries, and bulk-registers them.
+   * In live mode (databasePath provided): executes a SELECT query against
+   * the local Turso database, converts rows to RegistryRow entries, and
+   * bulk-registers them.
    *
-   * In stub mode (no Turso credentials): returns an empty result set and
-   * logs a warning. The game proceeds with lazy registration.
+   * In stub mode (no database path): returns an empty result set and logs
+   * a warning. The game proceeds with lazy registration.
    *
    * @returns The number of rows ingested into the registry.
    */
   async hydrate(): Promise<number> {
-    if (!this._tursoUrl || !this._tursoAuthToken) {
+    // Reference sync fields to satisfy TS noUnusedLocals; wired in C-203 AC-4
+    void this._syncUrl;
+    void this._authToken;
+
+    if (!this._databasePath) {
       this.debug('hydrate:stub-mode', {
-        message: 'Turso not configured — registry will use lazy registration',
+        message: 'Turso database path not configured — registry will use lazy registration',
       });
       return 0;
     }
@@ -143,42 +159,38 @@ export class TursoRegistryHydration extends BaseEngineClass<TursoRegistryHydrati
   /**
    * Queries the local Turso database for string registry records.
    *
-   * Uses dynamic import for @libsql/client to avoid a hard dependency.
-   * When the package is unavailable, throws with a descriptive message.
+   * Uses dynamic import for @tursodatabase/database (Rust-based libSQL
+   * client) to avoid a hard native dependency at bundle time. When the
+   * package is unavailable (e.g. in pure browser contexts where WASM is
+   * the fallback), throws with a descriptive message.
    */
   private async _queryTurso(): Promise<TursoStringRow[]> {
-    this.debug('_queryTurso:start', { url: this._tursoUrl });
+    this.debug('_queryTurso:start', { path: this._databasePath });
 
-    // Dynamic import — @libsql/client is an optional peer dependency
-    const url = this._tursoUrl;
-    const authToken = this._tursoAuthToken;
+    const databasePath = this._databasePath;
 
-    if (!url || !authToken) {
+    if (!databasePath) {
       throw new Error(
-        'TursoRegistryHydration: missing url or authToken. ' +
-          'Provide credentials or operate in stub mode.',
+        'TursoRegistryHydration: missing databasePath. ' +
+          'Provide a file path or operate in stub mode.',
       );
     }
 
     try {
-      const libsql = await import('@libsql/client');
+      const turso = await import('@tursodatabase/database');
 
-      const client = libsql.createClient({ url, authToken });
+      const db = await turso.connect(databasePath);
 
-      const result = await client.execute('SELECT id, value FROM string_registry ORDER BY id ASC');
-
-      // @libsql/client Row is a column-value dict; cast to typed shape
-      const rows: TursoStringRow[] = result.rows.map((row) => ({
-        id: row['id'] as number,
-        value: row['value'] as string,
-      }));
+      // prepare → bind → all pattern with @tursodatabase/database
+      const stmt = await db.prepare('SELECT id, value FROM string_registry ORDER BY id ASC');
+      const rows = (await stmt.all()) as TursoStringRow[];
 
       this.debug('_queryTurso:complete', { rowCount: rows.length });
       return rows;
     } catch {
       throw new Error(
-        'TursoRegistryHydration: @libsql/client is not installed. ' +
-          'Install it with `bun add @libsql/client` or operate in stub mode.',
+        'TursoRegistryHydration: @tursodatabase/database is not installed. ' +
+          'Install it with `bun add @tursodatabase/database` or operate in stub mode.',
       );
     }
   }
