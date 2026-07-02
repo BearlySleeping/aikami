@@ -93,10 +93,10 @@
         {
           "id": 3,
           "type": "transition",
-          "x": 160,
-          "y": 384,
-          "width": 64,
-          "height": 8,
+          "x": 128,
+          "y": 352,
+          "width": 128,
+          "height": 32,
           "properties": [
             { "name": "targetMap", "type": "string", "value": "/assets/maps/debug_map.jton" },
             { "name": "targetX", "type": "float", "value": 160 },
