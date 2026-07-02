@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/dev/settings/dev_settings_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/dev/settings/settings_view_model.dev.svelte.ts
 //
 // DevSettingsViewModel — extends the production SettingsViewModel for the
 // dev sandbox. Volume controls are handled by SettingsAudioViewModel

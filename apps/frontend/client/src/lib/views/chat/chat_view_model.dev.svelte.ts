@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/chat/chat_dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/chat/chat_view_model.dev.svelte.ts
 //
 // Dev sandbox override — injects mock chat data without hitting the AI backend.
 // NEVER import this file from production code or non-(dev) routes.

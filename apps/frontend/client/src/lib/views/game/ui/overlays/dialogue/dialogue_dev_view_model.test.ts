@@ -1,10 +1,10 @@
-// apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_dev_view_model.test.ts
+// apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.test.ts
 //
 // Unit tests for DialogueDevViewModel (C-162 dev sandbox controls).
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
-//     src/lib/views/game/ui/overlays/dialogue/dialogue_dev_view_model.test.ts
+//     src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
@@ -163,7 +163,7 @@ const flushTimeouts = (): void => {
 // Import (after mocks registered)
 // ---------------------------------------------------------------------------
 
-import { type DevNpcPreset, DialogueDevViewModel } from './dialogue_dev_view_model.svelte';
+import { type DevNpcPreset, DialogueDevViewModel } from './dialogue_overlay_view_model.dev.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers

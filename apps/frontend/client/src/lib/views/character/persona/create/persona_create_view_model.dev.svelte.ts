@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/character/create/character_dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.dev.svelte.ts
 //
 // Dev sandbox override — injects mock data without hitting the AI backend.
 // NEVER import this file from production code or non-(dev) routes.
@@ -6,9 +6,9 @@
 import type { PersonaData } from '@aikami/types';
 import { characterCreationService } from '$services';
 import {
-  CharacterViewModel,
-  type CharacterViewModelOptions,
-} from './character_view_model.svelte.ts';
+  PersonaCreateViewModel,
+  type PersonaCreateViewModelOptions,
+} from './persona_create_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -104,7 +104,7 @@ const MOCK_MESSAGES = [
 // Implementation
 // ---------------------------------------------------------------------------
 
-export class CharacterDevViewModel extends CharacterViewModel {
+export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -115,12 +115,12 @@ export class CharacterDevViewModel extends CharacterViewModel {
 
   // ── Dev: real AI-powered generation ─────────────────────────────────
 
-  /** Triggers real AI-powered character generation (delegates to parent). */
+  /** Triggers real AI-powered persona generation (delegates to parent). */
   async dev(): Promise<void> {
     await super.generateCharacter();
   }
 
-  /** Triggers mock character generation — bypasses AI entirely. */
+  /** Triggers mock persona generation — bypasses AI entirely. */
   async mockGenerateCharacter(): Promise<void> {
     this.phase = 'GENERATING';
 
@@ -182,11 +182,11 @@ export class CharacterDevViewModel extends CharacterViewModel {
 }
 
 /**
- * Factory function — returns a CharacterDevViewModel with mock data.
+ * Factory function — returns a PersonaCreateDevViewModel with mock data.
  * Only use in (dev) routes or tests.
  */
-export const getCharacterDevViewModel = (
-  options: CharacterViewModelOptions,
-): CharacterDevViewModel => {
-  return new CharacterDevViewModel(options);
+export const getPersonaCreateDevViewModel = (
+  options: PersonaCreateViewModelOptions,
+): PersonaCreateDevViewModel => {
+  return new PersonaCreateDevViewModel(options);
 };

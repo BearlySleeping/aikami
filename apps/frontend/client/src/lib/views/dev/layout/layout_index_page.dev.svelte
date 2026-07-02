@@ -1,6 +1,6 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/layout/dev_layout_index_page.svelte
-  import { NAV_ITEMS } from './dev_layout_view_model.svelte';
+  // apps/frontend/client/src/lib/views/dev/layout/layout_index_page.dev.svelte
+  import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
 </script>
 
 <div class="p-6">

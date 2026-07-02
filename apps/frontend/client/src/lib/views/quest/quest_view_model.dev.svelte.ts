@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/quest/quest_dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/quest/quest_view_model.dev.svelte.ts
 //
 // Dev sandbox override — injects mock quest data via GameStateService.
 // NEVER import this file from production code or non-(dev) routes.

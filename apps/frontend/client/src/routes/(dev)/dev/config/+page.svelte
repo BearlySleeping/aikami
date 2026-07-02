@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getDevProvidersViewModel } from '$views/dev/config/dev_providers_view_model.svelte';
+  import { getDevProvidersViewModel } from '$views/dev/config/providers_view_model.dev.svelte.ts';
   // apps/frontend/client/src/routes/(dev)/dev/config/+page.svelte
   import ProvidersView from '$views/settings/providers/providers_view.svelte';
 
