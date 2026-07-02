@@ -132,6 +132,7 @@ P2 (Polish — after P1):
 | C-196 | [ECS Emergent World Integration](C-196-ecs-emergent-world-integration.md) ✅ | 6-step pipeline consolidation in ecs_worker.ts — ingestion → macro sim → perception → cognition → navigation → resolution; zone handshaking; visual + E2E tests | C-190, C-191, C-192, C-193, C-194, C-195 |
 | C-197 | [ECS GOAP Combat Tactics](C-197-ecs-goap-combat-tactics.md) ✅ | Tactical combat AI — bitmask GOAP tactical actions, JPS distance-weighted targeting, faction aggro shifts | C-196 |
 | C-198 | [Dev Sandbox Polish & Zoning](C-198-dev-sandbox-polish-and-zoning.md) ✅ | Dev sandbox polish, LPC avatar, water containment, doorway portal | C-196 |
+| C-210 | [WebGPU Tilemap Integration](C-210-webgpu-tilemap-integration.md) ✅ | WebGPU tilemap renderer integration — Mesh-backed chunked pipeline, Tiled JSON parsing, PixiJS Assets loading, visual test suite | C-016 |
 
 ## Contract Format
 

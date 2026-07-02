@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-02
-> Files: 216 across 11 categories
+> Files: 217 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -205,6 +205,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 202 provider settings ux overhaul](contracts/C-202-provider-settings-ux-overhaul.md)
 - [C 203 local first turso sync](contracts/C-203-local-first-turso-sync.md)
 - [C 204 auxiliary systems config](contracts/C-204-auxiliary-systems-config.md)
+- [C 210 webgpu tilemap integration](contracts/C-210-webgpu-tilemap-integration.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
