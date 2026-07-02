@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/dev/config/dev_providers_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/dev/config/providers_view_model.dev.svelte.ts
 //
 // Dev sandbox override — extends the production ProvidersViewModel to inject
 // mock API responses and toggle dev-only UI flags. NEVER import this file

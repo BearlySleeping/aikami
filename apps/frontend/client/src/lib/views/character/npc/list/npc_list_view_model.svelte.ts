@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/npc/list/npc-list-view-model.svelte.ts
+// apps/frontend/client/src/lib/views/character/npc/list/npc_list_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,

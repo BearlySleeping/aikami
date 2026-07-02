@@ -18,7 +18,7 @@
     DialogueDevViewModel,
     type DialogueDevViewModelInterface,
     type DiceOutcome,
-  } from '$lib/views/game/ui/overlays/dialogue/dialogue_dev_view_model.svelte';
+  } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
   import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
 
   /** Navigate back to sandbox index on End Chat / combat transition. */

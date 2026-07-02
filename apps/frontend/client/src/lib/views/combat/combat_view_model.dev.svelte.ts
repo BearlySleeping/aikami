@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/combat/combat_dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts
 //
 // Dev sandbox override — injects mock combat state for sandbox testing.
 // NEVER import this file from production code or non-(dev) routes.

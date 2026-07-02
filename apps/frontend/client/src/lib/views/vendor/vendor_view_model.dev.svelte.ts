@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/vendor/vendor_dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/vendor/vendor_view_model.dev.svelte.ts
 //
 // Dev sandbox override — injects mock vendor state for sandbox testing.
 // NEVER import this file from production code or non-(dev) routes.

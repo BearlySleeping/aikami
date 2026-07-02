@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/dev/audio/dev_audio_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/dev/audio/audio_view_model.dev.svelte.ts
 //
 // DevAudioViewModel — dev sandbox for testing BGM transitions and SFX
 // playback via the AudioService singleton.

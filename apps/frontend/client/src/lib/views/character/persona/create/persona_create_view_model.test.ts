@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/character/create/character_view_model.test.ts
+// apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.test.ts
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
@@ -31,6 +31,10 @@ let extractionError: Error | undefined;
 let resetCalls = 0;
 let enterWorldRouteCalls: Array<{ route: string }> = [];
 
+// storageService tracking
+let uploadAvatarCalls: Array<{ file: File; uid: string }> = [];
+let uploadAvatarResult: string | undefined;
+
 // ---------------------------------------------------------------------------
 // Setup: install test-specific overrides on the preload barrel stubs
 // ---------------------------------------------------------------------------
@@ -54,8 +58,8 @@ const _createServiceStub = () => {
 };
 
 const _setupServiceOverrides = (): void => {
-  // Re-mock the barrel with test-specific overrides on the three services
-  // the CharacterViewModel uses directly. All other services get Proxy
+  // Re-mock the barrel with test-specific overrides on the services
+  // the PersonaCreateViewModel uses directly. All other services get Proxy
   // stubs that auto-create mock functions on property access.
   mock.module(_MOCK_SVC, () => ({
     // Test-specific service overrides
@@ -132,6 +136,12 @@ const _setupServiceOverrides = (): void => {
       isReady: true,
       isDemoMode: () => false,
     },
+    storageService: {
+      uploadAvatar: mock(async (options: { file: Blob | File; uid: string }) => {
+        uploadAvatarCalls.push({ file: options.file as File, uid: options.uid });
+        return uploadAvatarResult;
+      }),
+    },
     // All other services get Proxy stubs
     aiService: _createServiceStub(),
     AIService: class {},
@@ -190,7 +200,6 @@ const _setupServiceOverrides = (): void => {
     },
     aiSettingsService: _createServiceStub(),
     AISettingsService: class {},
-    storageService: _createServiceStub(),
     StorageService: class {},
     userService: _createServiceStub(),
     UserService: class {},
@@ -211,19 +220,19 @@ _setupServiceOverrides();
 // ViewModel loader
 // ---------------------------------------------------------------------------
 
-type CharacterViewModelInterface =
-  import('./character_view_model.svelte.ts').CharacterViewModelInterface;
+type PersonaCreateViewModelInterface =
+  import('./persona_create_view_model.svelte.ts').PersonaCreateViewModelInterface;
 
-async function loadVm(): Promise<CharacterViewModelInterface> {
-  const mod = await import('./character_view_model.svelte.ts');
-  return mod.getCharacterViewModel({ className: 'CharacterViewModel' });
+async function loadVm(): Promise<PersonaCreateViewModelInterface> {
+  const mod = await import('./persona_create_view_model.svelte.ts');
+  return mod.getPersonaCreateViewModel({ className: 'PersonaCreateViewModel' });
 }
 
 // ---------------------------------------------------------------------------
-// Tests: C-078 — Dev Character Creation Sandbox
+// Tests: C-078 — Dev Persona Creation Sandbox
 // ---------------------------------------------------------------------------
 
-describe('CharacterViewModel — C-078', () => {
+describe('PersonaCreateViewModel — C-078', () => {
   beforeEach(() => {
     personaCalls = [];
     personaResult = undefined;
@@ -239,6 +248,8 @@ describe('CharacterViewModel — C-078', () => {
     extractionError = undefined;
     resetCalls = 0;
     enterWorldRouteCalls = [];
+    uploadAvatarCalls = [];
+    uploadAvatarResult = undefined;
     _setupServiceOverrides();
   });
 
@@ -273,6 +284,11 @@ describe('CharacterViewModel — C-078', () => {
     test('isStreaming should default to false', async () => {
       const vm = await loadVm();
       expect(vm.isStreaming).toBe(false);
+    });
+
+    test('isUploading should default to false', async () => {
+      const vm = await loadVm();
+      expect(vm.isUploading).toBe(false);
     });
   });
 
@@ -603,7 +619,7 @@ describe('CharacterViewModel — C-078', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // C-081: Character Creation Structural Extraction Pipeline
+  // C-081: Persona Creation Structural Extraction Pipeline
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('C-081: Schema Compilation', () => {
@@ -867,6 +883,54 @@ describe('CharacterViewModel — C-078', () => {
 
       expect(vm.phase).toBe('CHAT');
       expect(vm.errorMessage).toBe('Character generation was cancelled.');
+    });
+  });
+
+  // ── Avatar Upload ──────────────────────────────────────────────────
+
+  describe('uploadAvatar', () => {
+    test('should call storageService.uploadAvatar with file and uid', async () => {
+      const vm = await loadVm();
+
+      // Mock authService uid
+      const { authService } = await import(
+        '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts'
+      );
+      (authService as Record<string, unknown>).uid = 'test-user-123';
+
+      uploadAvatarResult = 'https://storage.example.com/avatars/test.png';
+      const file = new File(['test'], 'avatar.png', { type: 'image/png' });
+
+      await vm.uploadAvatar(file);
+
+      expect(uploadAvatarCalls.length).toBe(1);
+      expect(uploadAvatarCalls[0].uid).toBe('test-user-123');
+    });
+
+    test('should set avatarUrl after successful upload', async () => {
+      const vm = await loadVm();
+
+      const { authService } = await import(
+        '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts'
+      );
+      (authService as Record<string, unknown>).uid = 'test-user-123';
+
+      uploadAvatarResult = 'https://storage.example.com/avatars/test.png';
+      const file = new File(['test'], 'avatar.png', { type: 'image/png' });
+
+      await vm.uploadAvatar(file);
+
+      expect(vm.avatarUrl).toBe('https://storage.example.com/avatars/test.png');
+    });
+
+    test('should not upload when isUploading is true', async () => {
+      const vm = await loadVm();
+      (vm as { isUploading: boolean }).isUploading = true;
+
+      const file = new File(['test'], 'avatar.png', { type: 'image/png' });
+      await vm.uploadAvatar(file);
+
+      expect(uploadAvatarCalls.length).toBe(0);
     });
   });
 
