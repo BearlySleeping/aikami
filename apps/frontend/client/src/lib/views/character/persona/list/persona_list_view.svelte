@@ -25,7 +25,12 @@
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          />
         </svg>
         Back
       </button>
@@ -103,7 +108,9 @@
                           class="w-full h-full object-cover"
                         >
                       {:else}
-                        <div class="w-full h-full flex items-center justify-center text-3xl">🐉</div>
+                        <div class="w-full h-full flex items-center justify-center text-3xl">
+                          🐉
+                        </div>
                       {/if}
                     </div>
 

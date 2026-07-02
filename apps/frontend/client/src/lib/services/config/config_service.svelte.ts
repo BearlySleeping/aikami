@@ -23,21 +23,114 @@ import { logger } from '$logger';
 
 /** Text generation provider descriptors. */
 export const TEXT_PROVIDERS = [
-  { id: 'openrouter', label: 'OpenRouter', description: 'Multi-model aggregator', needsKey: true, isLocal: false },
-  { id: 'openai', label: 'OpenAI', description: 'GPT models via OpenAI API', needsKey: true, isLocal: false },
-  { id: 'anthropic', label: 'Anthropic', description: 'Claude models', needsKey: true, isLocal: false },
-  { id: 'google', label: 'Google (Gemini)', description: 'Gemini models via Google AI', needsKey: true, isLocal: false },
-  { id: 'deepseek', label: 'DeepSeek', description: 'DeepSeek V3/R1 models', needsKey: true, isLocal: false },
-  { id: 'mistral', label: 'Mistral AI', description: 'Mistral models via La Plateforme', needsKey: true, isLocal: false },
-  { id: 'cohere', label: 'Cohere', description: 'Command R models', needsKey: true, isLocal: false },
-  { id: 'deepinfra', label: 'DeepInfra', description: 'Open-source model hosting', needsKey: true, isLocal: false },
-  { id: 'nanogpt', label: 'NanoGPT', description: 'Pay-per-token model access', needsKey: true, isLocal: false },
-  { id: 'novelai', label: 'NovelAI', description: 'Kayra / Clio story models', needsKey: true, isLocal: false },
-  { id: 'aws', label: 'AWS Bedrock', description: 'Claude via AWS', needsKey: true, isLocal: false },
-  { id: 'horde', label: 'AI Horde', description: 'Volunteer compute cluster', needsKey: false, isLocal: false },
-  { id: 'ollama', label: 'Ollama (local)', description: 'Local LLM server', needsKey: false, needsUrl: true, isLocal: true },
-  { id: 'ooba', label: 'TextGen WebUI', description: 'Local Oobabooga server', needsKey: false, needsUrl: true, isLocal: true },
-  { id: 'custom', label: 'Custom API', description: 'OpenAI-compatible endpoint', needsKey: false, needsUrl: true, isLocal: false },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    description: 'Multi-model aggregator',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    description: 'GPT models via OpenAI API',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'anthropic',
+    label: 'Anthropic',
+    description: 'Claude models',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'google',
+    label: 'Google (Gemini)',
+    description: 'Gemini models via Google AI',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    description: 'DeepSeek V3/R1 models',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'mistral',
+    label: 'Mistral AI',
+    description: 'Mistral models via La Plateforme',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'cohere',
+    label: 'Cohere',
+    description: 'Command R models',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'deepinfra',
+    label: 'DeepInfra',
+    description: 'Open-source model hosting',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'nanogpt',
+    label: 'NanoGPT',
+    description: 'Pay-per-token model access',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'novelai',
+    label: 'NovelAI',
+    description: 'Kayra / Clio story models',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'aws',
+    label: 'AWS Bedrock',
+    description: 'Claude via AWS',
+    needsKey: true,
+    isLocal: false,
+  },
+  {
+    id: 'horde',
+    label: 'AI Horde',
+    description: 'Volunteer compute cluster',
+    needsKey: false,
+    isLocal: false,
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama (local)',
+    description: 'Local LLM server',
+    needsKey: false,
+    needsUrl: true,
+    isLocal: true,
+  },
+  {
+    id: 'ooba',
+    label: 'TextGen WebUI',
+    description: 'Local Oobabooga server',
+    needsKey: false,
+    needsUrl: true,
+    isLocal: true,
+  },
+  {
+    id: 'custom',
+    label: 'Custom API',
+    description: 'OpenAI-compatible endpoint',
+    needsKey: false,
+    needsUrl: true,
+    isLocal: false,
+  },
 ] as const satisfies ReadonlyArray<{
   id: string;
   label: string;
@@ -559,7 +652,11 @@ class ConfigService
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
         if (vault.apiKeys && typeof vault.apiKeys === 'object') {
-          this.state.text = { ...DEFAULT_TEXT_CONFIG, apiKeys: { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) }, provider: this.state.text.provider };
+          this.state.text = {
+            ...DEFAULT_TEXT_CONFIG,
+            apiKeys: { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) },
+            provider: this.state.text.provider,
+          };
         }
       } catch {
         this.warn('load: failed to parse vault JSON');

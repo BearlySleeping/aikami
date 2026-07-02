@@ -68,12 +68,7 @@ export {
 // ---------------------------------------------------------------------------
 
 /** Configuration tab identifiers. */
-export const CONFIG_TABS = [
-  'text',
-  'voice',
-  'image',
-  'advanced',
-] as const;
+export const CONFIG_TABS = ['text', 'voice', 'image', 'advanced'] as const;
 
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 
@@ -488,8 +483,7 @@ export class ProvidersViewModel
       return;
     }
 
-    const apiKey: string | undefined =
-      configService.state.text.apiKeys[provider];
+    const apiKey: string | undefined = configService.state.text.apiKeys[provider];
     if (!apiKey) {
       this.verificationStatus = { ...this.verificationStatus, [provider]: 'invalid' };
       return;

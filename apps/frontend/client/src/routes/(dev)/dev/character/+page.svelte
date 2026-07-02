@@ -1,8 +1,8 @@
 <script lang="ts">
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+  import PersonaCreateView from '$views/character/persona/create/persona_create_view.svelte';
   // apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte
   import { getPersonaCreateDevViewModel } from '$views/character/persona/create/persona_create_view_model.dev.svelte.ts';
-  import PersonaCreateView from '$views/character/persona/create/persona_create_view.svelte';
 
   const viewModel = getPersonaCreateDevViewModel({
     className: 'PersonaCreateDevViewModel',

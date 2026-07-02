@@ -12,6 +12,7 @@
   // Contract: C-162 BG3 Action Menu & Dice
 
   import { browser } from '$app/environment';
+  import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
   import {
     type DevInteractionMode,
     type DevNpcPreset,
@@ -19,7 +20,6 @@
     type DialogueDevViewModelInterface,
     type DiceOutcome,
   } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
-  import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
 
   /** Navigate back to sandbox index on End Chat / combat transition. */
   const goBack = () => {
