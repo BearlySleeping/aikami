@@ -1,3 +1,5 @@
+<!-- completed: 2026-07-02 -->
+
 ## Metadata
 
 | Field | Value |
@@ -6,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/settings/providers/` & `src/lib/services/config/` |
 | **Priority** | P2 — Essential for power-user customization of auxiliary AI systems |
 | **Dependencies** | ConfigService, ProvidersViewModel |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview
@@ -128,3 +130,36 @@ For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`). Do NOT c
 
 - **Shared API Keys**: RisuAI sometimes falls back to a global OpenAI key if a specific one isn't provided. Consider if `apiKey` fields should show placeholder text indicating it will use the main provider key if left blank.
 - **Data Migration**: Existing users will have the old `ImageConfig` shape. Ensure `ConfigService` initialization safely merges new default keys so the app doesn't crash when trying to read `provider` from an older save state.
+
+---
+
+## Execution Report
+
+### Summary
+Expanded `ConfigService` types with new provider selection for Image (7 providers), Voice (5 providers), Memory (4 types + 6 embedding models), and Emotion (2 methods). Extracted tab bodies into dedicated Svelte components with conditional provider rendering. Added debounced saving for all new fields.
+
+### AC Status
+| AC | Description | Status |
+|----|-------------|--------|
+| AC-1 | Image Provider Toggling | ✅ Implemented — `ImageTab.svelte` with conditional provider blocks (ComfyUI, NovelAI, WebUI, cloud API keys) |
+| AC-2 | TTS Custom URLs | ✅ Implemented — `VoiceTab.svelte` with URL field for voicevox/fish-speech/kokoro providers |
+| AC-3 | Memory Embedding Selection | ✅ Implemented — `MemoryTab.svelte` with embedding model dropdown + custom URL/Key fields |
+
+### Files Created
+- `apps/frontend/client/src/lib/views/settings/providers/tabs/image_tab.svelte` — Image provider selector + conditional settings
+- `apps/frontend/client/src/lib/views/settings/providers/tabs/voice_tab.svelte` — Voice provider selector + URL/apiKey/autoSpeech
+- `apps/frontend/client/src/lib/views/settings/providers/tabs/memory_tab.svelte` — Memory type, embedding model, context window config
+- `apps/frontend/client/src/lib/views/settings/providers/tabs/emotion_tab.svelte` — Emotion resolution method (submodel/embedding)
+
+### Files Modified
+- `apps/frontend/client/src/lib/services/config/config_service.svelte.ts` — Expanded types: `ImageConfig` (+7 fields), `VoiceConfig` (+4 fields), `MemoryConfig` (+5 fields), new `EmotionConfig`. Added `IMAGE_PROVIDERS`, `VOICE_PROVIDERS`, `MEMORY_TYPES`, `EMBEDDING_MODELS`, `EMOTION_METHODS` constants. Added `setEmotionConfig` mutator. Updated defaults, load/save, and `ConfigServiceInterface`.
+- `apps/frontend/client/src/lib/views/settings/providers/providers_view_model.svelte.ts` — Added `emotion` tab to `CONFIG_TABS`/`TAB_META`. Added getters: `imageProviders`, `voiceProviders`, `memoryTypes`, `embeddingModels`, `emotionMethods`, `emotion`. Extended `setField` to handle `'emotion'` section.
+- `apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte` — Replaced inline voice/image/memory tab content with `<VoiceTab>`, `<ImageTab>`, `<MemoryTab>`, `<EmotionTab>` components.
+
+### Deviations
+- None significant. The `config_service.svelte.ts` file needed 11 separate edits to expand all types, defaults, interfaces, and mutators. Some edits from the initial batch silently failed and were re-applied individually.
+
+### Test Results
+- `client:typecheck` ✅ (0 errors, 2 pre-existing a11y warnings)
+- `client:fix` applied formatting to 115 files (pre-existing style issues)
+- No regression in existing tests

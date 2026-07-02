@@ -18,7 +18,10 @@ const CONFIG_SERVICE_PATH =
 
 const getDefaultConfig = () => ({
   advancedOverrides: { thinkingLevel: 0 },
-  apiKeys: {},
+  text: {
+    apiKeys: {},
+    provider: 'openrouter',
+  },
   auxiliaryModels: {
     embedding: undefined,
     summarization: undefined,
@@ -80,7 +83,9 @@ mock.module(CONFIG_SERVICE_PATH, () => ({
       mockConfigState = getDefaultConfig();
       mockIsLoaded = false;
     }),
-    setApiKeys: mock(() => {}),
+    setTextApiKey: mock(() => {}),
+    setTextProvider: mock(() => {}),
+    setTextUrl: mock(() => {}),
     setPreferredModel: mock(() => {}),
     setModels: mock(() => {}),
     updateModel: mock(() => {}),
@@ -177,9 +182,9 @@ describe('ProvidersViewModel — C-079', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('AC-1: Tab navigation', () => {
-    test('should initialize with api-keys as active tab', async () => {
+    test('should initialize with text as active tab', async () => {
       const vm = await getViewModel();
-      expect(vm.activeTab).toBe('api-keys');
+      expect(vm.activeTab).toBe('text');
     });
 
     test('should have 6 tabs defined', async () => {
@@ -206,7 +211,7 @@ describe('ProvidersViewModel — C-079', () => {
 
     test('setActiveTab should accept all valid tabs', async () => {
       const vm = await getViewModel();
-      const tabs: ConfigTab[] = ['api-keys', 'models', 'generation', 'voice', 'image', 'memory'];
+      const tabs: ConfigTab[] = ['text', 'voice', 'image', 'advanced'];
 
       for (const tab of tabs) {
         vm.setActiveTab(tab);
@@ -377,7 +382,7 @@ describe('ProvidersViewModel — C-079', () => {
     test('should expose apiKeys as empty by default', async () => {
       const vm = await getViewModel();
 
-      expect(vm.config.apiKeys).toEqual({});
+      expect(vm.config.text.apiKeys).toEqual({});
     });
 
     test('should expose models as empty array by default', async () => {
