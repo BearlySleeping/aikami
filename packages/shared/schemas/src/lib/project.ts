@@ -11,6 +11,7 @@ export const ModeSchema = Type.Union([
   Type.Literal('staging'),
   Type.Literal('production'),
   Type.Literal('emulator'),
+  Type.Literal('testing'),
 ]);
 
 /**

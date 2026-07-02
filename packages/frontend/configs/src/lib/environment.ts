@@ -127,7 +127,8 @@ const validateEnv = (): MasterEnv => {
  */
 export const publicEnv = validateEnv();
 
-export const isEmulatorModePublic = () => publicEnv.PUBLIC_MODE === 'emulator';
+export const isEmulatorModePublic = () =>
+  publicEnv.PUBLIC_MODE === 'emulator' || publicEnv.PUBLIC_MODE === 'testing';
 export const isDevelopmentModePublic = () => publicEnv.PUBLIC_MODE !== 'production';
 export const getPublicMode = () => publicEnv.PUBLIC_MODE;
 

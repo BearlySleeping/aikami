@@ -90,7 +90,7 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
 
       expect(service.state.preferredModel).toBe('');
-      expect(service.state.apiKeys).toEqual({});
+      expect(service.state.text.apiKeys).toEqual({});
       expect(service.state.models).toEqual([]);
       expect(service.state.memory.contextWindow).toBe(8192);
       expect(service.state.voice.engine).toBe('kokoro');
@@ -112,39 +112,40 @@ describe('ConfigService — C-079', () => {
   describe('AC-2: API key mutations', () => {
     test('setApiKeys should merge keys into state', async () => {
       const service = await createService();
-      service.setApiKeys({ openrouter: 'sk-or-abc123' });
+      service.setTextApiKey('openrouter', 'sk-or-abc123');
 
-      expect(service.state.apiKeys.openrouter).toBe('sk-or-abc123');
+      expect(service.state.text.apiKeys.openrouter).toBe('sk-or-abc123');
     });
 
     test('setApiKeys should preserve existing keys on partial update', async () => {
       const service = await createService();
-      service.setApiKeys({ openrouter: 'sk-or-abc', openai: 'sk-oa-xyz' });
-      service.setApiKeys({ gemini: 'gm-123' });
+      service.setTextApiKey('openrouter', 'sk-or-abc');
+      service.setTextApiKey('openai', 'sk-oa-xyz');
+      service.setTextApiKey('gemini', 'gm-123');
 
-      expect(service.state.apiKeys.openrouter).toBe('sk-or-abc');
-      expect(service.state.apiKeys.openai).toBe('sk-oa-xyz');
-      expect(service.state.apiKeys.gemini).toBe('gm-123');
+      expect(service.state.text.apiKeys.openrouter).toBe('sk-or-abc');
+      expect(service.state.text.apiKeys.openai).toBe('sk-oa-xyz');
+      expect(service.state.text.apiKeys.gemini).toBe('gm-123');
     });
 
     test('setApiKeys should overwrite existing key', async () => {
       const service = await createService();
-      service.setApiKeys({ openrouter: 'old' });
-      service.setApiKeys({ openrouter: 'new' });
+      service.setTextApiKey('openrouter', 'old');
+      service.setTextApiKey('openrouter', 'new');
 
-      expect(service.state.apiKeys.openrouter).toBe('new');
+      expect(service.state.text.apiKeys.openrouter).toBe('new');
     });
 
     test('setApiKeys with undefined provider should keep it undefined', async () => {
       const service = await createService();
-      expect(service.state.apiKeys.anthropic).toBeUndefined();
+      expect(service.state.text.apiKeys.anthropic).toBeUndefined();
     });
   });
 
   describe('AC-2: save encrypts API keys', () => {
     test('save should call encrypt with vault payload', async () => {
       const service = await createService();
-      service.setApiKeys({ openrouter: 'sk-secret' });
+      service.setTextApiKey('openrouter', 'sk-secret');
 
       await service.save();
 
@@ -171,7 +172,7 @@ describe('ConfigService — C-079', () => {
 
     test('save should NOT include API keys in plain localStorage', async () => {
       const service = await createService();
-      service.setApiKeys({ openrouter: 'sk-secret' });
+      service.setTextApiKey('openrouter', 'sk-secret');
 
       await service.save();
 
@@ -181,7 +182,7 @@ describe('ConfigService — C-079', () => {
         throw new Error('Expected plain config to be defined');
       }
       const parsed = JSON.parse(plain);
-      expect(parsed.apiKeys).toBeUndefined();
+      expect(parsed.text?.apiKeys).toBeUndefined();
     });
   });
 
@@ -199,7 +200,7 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
       await service.load();
 
-      expect(service.state.apiKeys.openrouter).toBe('sk-restored');
+      expect(service.state.text.apiKeys.openrouter).toBe('sk-restored');
     });
 
     test('load should restore plain config from localStorage', async () => {
@@ -240,13 +241,14 @@ describe('ConfigService — C-079', () => {
     });
 
     test('load should handle malformed vault gracefully', async () => {
-      vaultStore.set('__vault', 'not-json');
-
       const service = await createService();
+      await service.reset();
+
+      vaultStore.set('__vault', 'not-json');
       await service.load();
 
       expect(service.isLoaded).toBe(true);
-      expect(service.state.apiKeys).toEqual({});
+      expect(Object.keys(service.state.text.apiKeys)).toHaveLength(0);
     });
 
     test('load should handle malformed plain config gracefully', async () => {
@@ -263,13 +265,13 @@ describe('ConfigService — C-079', () => {
   describe('AC-2: reset', () => {
     test('reset should clear all state', async () => {
       const service = await createService();
-      service.setApiKeys({ openrouter: 'sk-secret' });
+      service.setTextApiKey('openrouter', 'sk-secret');
       service.setPreferredModel('claude-3');
 
       await service.reset();
 
       expect(service.state.preferredModel).toBe('');
-      expect(service.state.apiKeys).toEqual({});
+      expect(Object.keys(service.state.text.apiKeys)).toHaveLength(0);
     });
 
     test('reset should call clearVault', async () => {

@@ -882,7 +882,7 @@ describe('PersonaCreateViewModel — C-078', () => {
       await vm.generateCharacter();
 
       expect(vm.phase).toBe('CHAT');
-      expect(vm.errorMessage).toBe('Character generation was cancelled.');
+      expect(vm.errorMessage).toBe('Persona generation was cancelled.');
     });
   });
 

@@ -187,20 +187,18 @@ describe('ProvidersViewModel — C-079', () => {
       expect(vm.activeTab).toBe('text');
     });
 
-    test('should have 6 tabs defined', async () => {
+    test('should have 4 tabs defined', async () => {
       const vm = await getViewModel();
-      expect(vm.tabs.length).toBe(6);
+      expect(vm.tabs.length).toBe(4);
     });
 
     test('should have correct tab labels', async () => {
       const vm = await getViewModel();
       const labels = vm.tabs.map((t) => t.label);
-      expect(labels).toContain('API Keys');
-      expect(labels).toContain('Models');
-      expect(labels).toContain('Generation');
+      expect(labels).toContain('Text');
       expect(labels).toContain('Voice');
       expect(labels).toContain('Image');
-      expect(labels).toContain('Memory');
+      expect(labels).toContain('Advanced');
     });
 
     test('setActiveTab should change active tab', async () => {
