@@ -2,9 +2,12 @@
  * The supported language codes on the public client and flutter app.
  * https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
  */
-export const supportedLocales = ['en'] as const;
+const _supportedLocales = ['en'] as const;
 
-export type SupportedLocale = (typeof supportedLocales)[number];
+export type SupportedLocale = (typeof _supportedLocales)[number];
+
+export const supportedLocales: ReadonlyArray<string> & typeof _supportedLocales =
+  _supportedLocales;
 
 /**
  * Check if a value is a supported locale.
@@ -13,7 +16,7 @@ export type SupportedLocale = (typeof supportedLocales)[number];
  * @returns True if the locale is supported, false otherwise.
  */
 export const isSupportedLocale = (locale: unknown): locale is SupportedLocale =>
-  typeof locale === 'string' && supportedLocales.includes(locale as SupportedLocale);
+  typeof locale === 'string' && supportedLocales.includes(locale);
 
 /**
  * Get a supported locale from a value, with an optional fallback.
