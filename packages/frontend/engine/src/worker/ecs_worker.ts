@@ -216,6 +216,33 @@ const workerBridge: EngineBridge = {
 // -- Command handling -------------------------------------------------------
 
 /**
+ * Applies a SET_ENTITY_VELOCITY command to a specific entity by its ECS entity ID.
+ *
+ * Sets the Velocity component on the entity so the movement_system processes
+ * it on the next tick. The entity must have a Position component (checked).
+ *
+ * Contract: C-212 Party Follow System
+ */
+const handleSetEntityVelocity = (entityId: number, velocity: { x: number; y: number }): void => {
+  if (!world || entityId === undefined) {
+    return;
+  }
+
+  // Gate: only apply velocity in EXPLORE mode
+  if (getEngineGameMode() !== 'EXPLORE') {
+    return;
+  }
+
+  // Check the entity exists (has Position component)
+  const positionStore = getComponent(world, entityId, Position);
+  if (!positionStore) {
+    return;
+  }
+
+  addComponent(world, entityId, set(Velocity, velocity));
+};
+
+/**
  * Applies a SET_PLAYER_VELOCITY command to the player entity's velocity.
  *
  * Gates on the current engine game mode — velocity is ignored when the
@@ -267,6 +294,10 @@ const handleBridgeCommand = (command: GameCommand): void => {
   switch (command.type) {
     case 'SET_PLAYER_VELOCITY': {
       handleSetPlayerVelocity(command.velocity);
+      break;
+    }
+    case 'SET_ENTITY_VELOCITY': {
+      handleSetEntityVelocity(command.entityId, command.velocity);
       break;
     }
     case 'SPAWN_NPC': {
