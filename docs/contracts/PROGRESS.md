@@ -184,6 +184,7 @@
 | C-204 | Auxiliary Systems Config | ✅ completed |
 | C-210 | Webgpu Tilemap Integration | ✅ completed |
 | C-211 | Realtime Tts Streaming Pipeline | ✅ completed |
+| C-212 | Party Follow System | ⏳ not_started |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

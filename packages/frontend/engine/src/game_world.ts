@@ -243,6 +243,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** NPC metadata keyed by entity ID (populated from NPC spawn events). */
   private _npcMeta = new Map<number, NpcMetaEntry>();
 
+  /** Public read-only access to NPC metadata for sandbox ViewModels. */
+  get npcMeta(): ReadonlyMap<number, NpcMetaEntry> {
+    return this._npcMeta;
+  }
+
   /** Global input lock — set true when dialogue/UI is active. */
   private _inputLocked = false;
 
@@ -821,6 +826,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         command: {
           type: 'SPAWN_NPC',
           npcData: (cmd as { npcData: unknown }).npcData,
+        },
+      });
+    });
+
+    // Forward SET_ENTITY_VELOCITY commands (C-212)
+    bridgeWithCommands.onCommand('SET_ENTITY_VELOCITY', (cmd: unknown) => {
+      const vCmd = cmd as { entityId: number; velocity: { x: number; y: number } };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'SET_ENTITY_VELOCITY',
+          entityId: vCmd.entityId,
+          velocity: vCmd.velocity,
         },
       });
     });
