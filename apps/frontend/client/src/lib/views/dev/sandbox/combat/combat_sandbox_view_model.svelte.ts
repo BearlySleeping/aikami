@@ -19,7 +19,7 @@ import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import {
   CombatDevViewModel,
   type CombatDevViewModelOptions,
-} from '$lib/views/combat/combat_dev_view_model.svelte';
+} from '$lib/views/combat/combat_view_model.dev.svelte.ts';
 import { gameStateService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */

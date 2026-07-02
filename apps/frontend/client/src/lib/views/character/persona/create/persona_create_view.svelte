@@ -1,10 +1,10 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/character/create/character_view.svelte
+  // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { CharacterViewModelInterface } from './character_view_model.svelte.ts';
+  import type { PersonaCreateViewModelInterface } from './persona_create_view_model.svelte.ts';
 
   type Props = {
-    viewModel: CharacterViewModelInterface;
+    viewModel: PersonaCreateViewModelInterface;
   };
 
   const { viewModel }: Props = $props();
@@ -21,43 +21,27 @@
       });
     }
   });
+
+  function handleAvatarUpload(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) {
+      viewModel.uploadAvatar(file);
+    }
+  }
 </script>
 
 <svelte:head>
-  <title>Character Creation - Dev Console</title>
+  <title>Persona Creation</title>
 </svelte:head>
 
 <BaseViewModelContainer {viewModel}>
   <div class="flex flex-col items-center min-h-full p-4 md:p-8 gap-6">
     <div class="w-full max-w-3xl">
-      <h1 class="mb-2 text-2xl font-bold">Character Creation</h1>
+      <h1 class="mb-2 text-2xl font-bold">Persona Creation</h1>
       <p class="mb-2 text-base-content/60">
-        Chat with the DM to create your D&D character, then tweak stats and generate an avatar.
+        Chat with the DM to create your persona, then tweak stats and customize the avatar.
       </p>
-
-      <!-- Debug panel -->
-      <div class="collapse collapse-arrow bg-base-300 mb-4">
-        <input type="checkbox" bind:checked={viewModel.debugOpen}>
-        <div class="collapse-title text-xs font-mono opacity-60">
-          Debug: phase={viewModel.phase}
-          | msgs={viewModel.messages.length}
-          | streaming={viewModel.isStreaming}
-          | loading={viewModel.showLoadingView}
-          | avatar={viewModel.avatarUrl ? '✓' : '✗'}
-          | persona={viewModel.persona ? '✓' : '✗'}
-        </div>
-        <div class="collapse-content text-xs font-mono opacity-60">
-          <pre>{JSON.stringify({
-            phase: viewModel.phase,
-            messageCount: viewModel.messages.length,
-            isStreaming: viewModel.isStreaming,
-            showLoadingView: viewModel.showLoadingView,
-            hasAvatar: !!viewModel.avatarUrl,
-            hasPersona: !!viewModel.persona,
-            errorMessage: viewModel.errorMessage ?? 'none',
-          }, null, 2)}</pre>
-        </div>
-      </div>
 
       <!-- ═══ CHAT Phase ═══ -->
       {#if viewModel.phase === 'CHAT'}
@@ -72,7 +56,7 @@
                 <div class="flex items-center justify-center h-64 text-base-content/40 text-sm">
                   <div class="text-center">
                     <p class="mb-2 text-lg">⚔️</p>
-                    <p>Describe your character to the Dungeon Master.</p>
+                    <p>Describe your persona to the Dungeon Master.</p>
                     <p class="text-xs mt-1">
                       Example: "I want to play a chaotic neutral goblin rogue"
                     </p>
@@ -111,7 +95,7 @@
             <div class="flex gap-3 items-end">
               <textarea
                 class="textarea textarea-bordered flex-1 min-h-16"
-                placeholder="Describe your character..."
+                placeholder="Describe your persona..."
                 bind:value={viewModel.chatInput}
                 disabled={viewModel.isStreaming}
                 onkeydown={(e) => viewModel.handleKeydown(e)}
@@ -150,10 +134,10 @@
         <div class="card bg-base-200 shadow">
           <div class="card-body items-center py-16 gap-6">
             <span class="loading loading-spinner loading-lg text-primary"></span>
-            <h2 class="text-xl font-semibold">Generating Your Character</h2>
+            <h2 class="text-xl font-semibold">Generating Your Persona</h2>
             <p class="text-base-content/60 text-sm text-center max-w-md">
-              The AI is analyzing your conversation and creating a D&D character sheet. This usually
-              takes a few seconds...
+              The AI is analyzing your conversation and creating a persona sheet. This usually takes
+              a few seconds...
             </p>
           </div>
         </div>
@@ -165,14 +149,14 @@
           <!-- Avatar card -->
           <div class="card bg-base-200 shadow">
             <div class="card-body items-center gap-4">
-              <h2 class="card-title text-lg">Character Avatar</h2>
+              <h2 class="card-title text-lg">Persona Avatar</h2>
               <div
                 class="w-48 h-48 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden"
               >
                 {#if viewModel.avatarUrl}
                   <img
                     src={viewModel.avatarUrl}
-                    alt="Character avatar"
+                    alt="Persona avatar"
                     class="object-cover w-full h-full"
                   >
                 {:else if viewModel.isImageGenReady}
@@ -190,24 +174,43 @@
                   </div>
                 {/if}
               </div>
-              {#if !viewModel.avatarUrl && viewModel.isImageGenReady}
-                <p class="text-xs text-base-content/40">Generating avatar...</p>
-              {:else if !viewModel.isImageGenReady}
-                <p class="text-xs text-warning">
-                  ComfyUI not detected. Set up image generation in Config.
-                </p>
-              {/if}
 
-              <!-- Regenerate button -->
-              {#if viewModel.avatarUrl && viewModel.isImageGenReady}
-                <button
-                  class="btn btn-xs btn-ghost text-[#cabeff] mt-1"
-                  onclick={() => viewModel.toggleRegenerationPanel()}
-                  disabled={viewModel.isRegenerating}
-                >
-                  {viewModel.isRegenerating ? 'Generating...' : '🔄 Regenerate'}
-                </button>
-              {/if}
+              <!-- Avatar actions -->
+              <div class="flex flex-wrap gap-2 justify-center">
+                <!-- Upload avatar -->
+                <div class="flex flex-col items-center gap-1">
+                  <input
+                    type="file"
+                    id="avatar-upload"
+                    accept="image/*"
+                    class="file-input file-input-bordered file-input-xs w-full max-w-48"
+                    onchange={handleAvatarUpload}
+                    disabled={viewModel.isUploading}
+                  >
+                  {#if viewModel.isUploading}
+                    <span class="loading loading-spinner loading-xs"></span>
+                  {:else}
+                    <span class="text-[10px] text-base-content/40">Upload an image or AI card</span>
+                  {/if}
+                </div>
+
+                {#if !viewModel.avatarUrl && !viewModel.isImageGenReady}
+                  <p class="text-xs text-warning w-full text-center mt-1">
+                    ComfyUI not detected. Set up image generation in Config.
+                  </p>
+                {/if}
+
+                <!-- Regenerate button -->
+                {#if viewModel.avatarUrl && viewModel.isImageGenReady}
+                  <button
+                    class="btn btn-xs btn-ghost text-[#cabeff] mt-1"
+                    onclick={() => viewModel.toggleRegenerationPanel()}
+                    disabled={viewModel.isRegenerating}
+                  >
+                    {viewModel.isRegenerating ? 'Generating...' : '🔄 Regenerate'}
+                  </button>
+                {/if}
+              </div>
 
               <!-- LPC Sprite Preview -->
               {#if viewModel.lpcPreviewUrl}
@@ -228,7 +231,7 @@
           <!-- Basic info card -->
           <div class="card bg-base-200 shadow">
             <div class="card-body gap-4">
-              <h2 class="card-title text-lg">Character Details</h2>
+              <h2 class="card-title text-lg">Persona Details</h2>
 
               <!-- Name -->
               <label class="form-control w-full">
@@ -239,7 +242,7 @@
                   type="text"
                   class="input input-bordered w-full"
                   bind:value={viewModel.persona.name}
-                  placeholder="Character name"
+                  placeholder="Persona name"
                 >
               </label>
 
@@ -315,7 +318,7 @@
                 <textarea
                   class="textarea textarea-bordered w-full min-h-16 text-sm"
                   bind:value={viewModel.persona.background}
-                  placeholder="Character background story..."
+                  placeholder="Persona background story..."
                   rows="3"
                 ></textarea>
               </label>
@@ -505,7 +508,7 @@
                 </div>
               {:else}
                 <p class="text-sm text-base-content/40 italic">
-                  Ability scores not provided by generation. Edit the character details to refine.
+                  Ability scores not provided by generation. Edit the persona details to refine.
                 </p>
               {/if}
             </div>
@@ -515,7 +518,7 @@
           <div class="flex justify-center gap-4 lg:col-span-2">
             <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>← Back to Chat</button>
             <button class="btn btn-outline" onclick={() => viewModel.saveCharacter()}>
-              💾 Save Character
+              💾 Save Persona
             </button>
             <button class="btn btn-primary" onclick={() => viewModel.enterWorld()}>
               ⚔️ Enter World

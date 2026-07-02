@@ -1,5 +1,5 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/npc/list/NpcListView.svelte
+  // apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
 
   import type { NpcData } from '@aikami/types';
   import t from '$i18n';
