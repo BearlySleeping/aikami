@@ -2,7 +2,8 @@
 //
 // ViewModel for the provider configuration dashboard. Bridges ConfigService (local
 // persistence) and LocalServiceDetector (port polling) to the view layer.
-// Manages tab navigation, debounced saves, and service detection.
+// Manages tab navigation, debounced saves, service detection, model fetching,
+// and generation parameter configuration.
 
 import {
   BaseViewModel,
@@ -11,11 +12,13 @@ import {
 } from '@aikami/frontend/services';
 import {
   type AdvancedOverrides,
+  type AuxiliaryModels,
   type ConfigState,
   configService,
   DEFAULT_VOICE_ARCHETYPES,
   type GenerationParams,
   type ImageConfig,
+  INSTRUCT_TEMPLATES,
   type InstructTemplate,
   KOKORO_VOICES,
   type MemoryConfig,
@@ -30,6 +33,10 @@ import {
   type LocalServiceStatus,
 } from '$lib/services/config/local_service_detector.svelte';
 import {
+  fetchOpenRouterModels,
+  type OpenRouterModel,
+} from '$lib/services/config/openrouter_models';
+import {
   buildVerifyHeaders,
   buildVerifyUrl,
   PROVIDER_ENDPOINTS,
@@ -37,6 +44,7 @@ import {
 } from '$lib/services/config/provider_endpoints';
 import { type CheckpointInfo, imageGenerationService } from '$services';
 
+export type { GenerationParams } from '$lib/services/config/config_service.svelte';
 export type { CheckpointInfo, ProviderEndpoint };
 export { PROVIDER_ENDPOINTS };
 
@@ -45,7 +53,14 @@ export { PROVIDER_ENDPOINTS };
 // ---------------------------------------------------------------------------
 
 /** Configuration tab identifiers. */
-export const CONFIG_TABS = ['api-keys', 'models', 'voice', 'image', 'memory'] as const;
+export const CONFIG_TABS = [
+  'api-keys',
+  'models',
+  'generation',
+  'voice',
+  'image',
+  'memory',
+] as const;
 
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 
@@ -102,6 +117,16 @@ export type ProvidersViewModelInterface = BaseViewModelInterface & {
   readonly voiceArchetypes: readonly VoiceArchetype[];
   /** Default voice archetypes (for reset reference). */
   readonly defaultVoiceArchetypes: readonly VoiceArchetype[];
+  /** Available OpenRouter models (fetched from API). */
+  readonly availableOpenRouterModels: readonly OpenRouterModel[];
+  /** Whether an OpenRouter model fetch is in progress. */
+  readonly isFetchingModels: boolean;
+  /** Filter query for the model search dropdown. */
+  readonly modelSearchQuery: string;
+  /** Auxiliary model assignments (proxied). */
+  readonly auxiliaryModels: AuxiliaryModels;
+  /** Available instruct templates for the dropdown. */
+  readonly instructTemplates: readonly string[];
 
   /** Switches the active tab. */
   setActiveTab(tab: ConfigTab): void;
@@ -145,6 +170,16 @@ export type ProvidersViewModelInterface = BaseViewModelInterface & {
   addArchetype(): void;
   /** Removes a voice archetype mapping by ID. */
   removeArchetype(archetypeId: string): void;
+  /** Fetches available models from OpenRouter. */
+  fetchModels(): Promise<void>;
+  /** Sets the model search/filter query. */
+  setModelSearchQuery(query: string): void;
+  /** Updates an auxiliary model assignment. */
+  setAuxiliaryModel(task: keyof AuxiliaryModels, modelId: string | undefined): void;
+  /** Updates a single generation parameter. */
+  setGenerationParam(field: keyof GenerationParams, value: number): void;
+  /** Sets the instruct template format. */
+  setInstructTemplate(template: InstructTemplate): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -160,6 +195,7 @@ export type ProvidersViewModelOptions = BaseViewModelOptions & {};
 const TAB_META: readonly ConfigTabMeta[] = [
   { key: 'api-keys', label: 'API Keys' },
   { key: 'models', label: 'Models' },
+  { key: 'generation', label: 'Generation' },
   { key: 'voice', label: 'Voice' },
   { key: 'image', label: 'Image' },
   { key: 'memory', label: 'Memory' },
@@ -182,6 +218,9 @@ export class ProvidersViewModel
   lastSaved = $state('');
   isDetectingCheckpoints = $state(false);
   isTestingVoice = $state(false);
+  isFetchingModels = $state(false);
+  modelSearchQuery = $state('');
+  availableOpenRouterModels: OpenRouterModel[] = $state([]);
   verificationStatus: Record<string, 'idle' | 'checking' | 'valid' | 'invalid'> = $state({});
 
   private readonly _detector: LocalServiceDetectorInterface;
@@ -256,6 +295,14 @@ export class ProvidersViewModel
     return [];
   }
 
+  get auxiliaryModels(): AuxiliaryModels {
+    return configService.state.auxiliaryModels;
+  }
+
+  get instructTemplates(): readonly string[] {
+    return INSTRUCT_TEMPLATES;
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -268,6 +315,7 @@ export class ProvidersViewModel
       imageGenerationService.selectedCheckpoint = savedCheckpoint;
     }
 
+    this._verifyExistingOpenRouterKey();
     this._detectServicesInBackground();
     await super.initialize();
   }
@@ -499,7 +547,65 @@ export class ProvidersViewModel
     this.scheduleSave();
   }
 
+  // ── OpenRouter model fetching ────────────────────────────────────────
+
+  async fetchModels(): Promise<void> {
+    this.debug('fetchModels');
+    const apiKey = configService.state.apiKeys.openrouter;
+    if (!apiKey) {
+      this.warn('fetchModels: no OpenRouter API key configured');
+      return;
+    }
+
+    this.isFetchingModels = true;
+
+    try {
+      const models = await fetchOpenRouterModels(apiKey);
+      this.availableOpenRouterModels = models;
+    } finally {
+      this.isFetchingModels = false;
+    }
+  }
+
+  setModelSearchQuery(query: string): void {
+    this.modelSearchQuery = query;
+  }
+
+  // ── Auxiliary models ─────────────────────────────────────────────────
+
+  setAuxiliaryModel(task: keyof AuxiliaryModels, modelId: string | undefined): void {
+    configService.setAuxiliaryModels({ [task]: modelId || undefined });
+    this.scheduleSave();
+  }
+
+  // ── Generation parameters ────────────────────────────────────────────
+
+  setGenerationParam(field: keyof GenerationParams, value: number): void {
+    configService.setGenerationParams({ [field]: value });
+    this.scheduleSave();
+  }
+
+  // ── Instruct template ────────────────────────────────────────────────
+
+  setInstructTemplate(template: InstructTemplate): void {
+    configService.setInstructTemplate(template);
+    this.scheduleSave();
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────
+
+  /**
+   * Auto-verifies the OpenRouter API key if one is configured, so the
+   * verification status survives page reloads without requiring the user
+   * to manually click "Verify" on the API Keys tab.
+   */
+  private _verifyExistingOpenRouterKey(): void {
+    const apiKey = configService.state.apiKeys.openrouter;
+    if (apiKey && apiKey.length > 0) {
+      this.debug('_verifyExistingOpenRouterKey: found key, auto-verifying');
+      void this.verifyApiKey('openrouter');
+    }
+  }
 
   private _detectServicesInBackground(): void {
     void this.detectServices();
