@@ -5,7 +5,7 @@
   // NEVER import production ViewModels or services here.
 
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import { getInventoryDevViewModel } from '$views/inventory/inventory_dev_view_model.svelte';
+  import { getInventoryDevViewModel } from '$views/inventory/inventory_view_model.dev.svelte.ts';
   import InventoryView from '$views/inventory/inventory_view.svelte';
 
   const viewModel = getInventoryDevViewModel({

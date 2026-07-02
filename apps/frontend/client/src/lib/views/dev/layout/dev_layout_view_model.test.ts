@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/dev/layout/dev_layout_view_model.test.ts
+// apps/frontend/client/src/lib/views/dev/layout/layout_view_model.dev.test.ts
 import { describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
@@ -12,10 +12,10 @@ mock.module('$app/state', () => {
   };
 });
 
-import type { DevViewModelInterface } from './dev_layout_view_model.svelte.ts';
+import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
 
 const getDevViewModel = async (): Promise<DevViewModelInterface> => {
-  const mod = await import('./dev_layout_view_model.svelte.ts');
+  const mod = await import('./layout_view_model.dev.svelte.ts');
   return mod.getDevViewModel({ className: 'DevViewModel' });
 };
 

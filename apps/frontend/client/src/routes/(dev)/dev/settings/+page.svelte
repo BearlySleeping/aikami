@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getDevSettingsViewModel } from '$lib/views/dev/settings/dev_settings_view_model.svelte';
+  import { getDevSettingsViewModel } from '$lib/views/dev/settings/settings_view_model.dev.svelte.ts';
   // apps/frontend/client/src/routes/(dev)/dev/settings/+page.svelte
   //
   // Dev sandbox for settings — extends the production SettingsView with

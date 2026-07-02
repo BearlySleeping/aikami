@@ -1,9 +1,9 @@
 <script lang="ts">
   // apps/frontend/client/src/routes/characters/+page.svelte
-  import CharactersView from '$lib/views/characters/characters_view.svelte';
-  import { getCharactersViewModel } from '$lib/views/characters/characters_view_model.svelte';
+  import PersonaListView from '$lib/views/character/persona/list/persona_list_view.svelte';
+  import { getPersonaListViewModel } from '$lib/views/character/persona/list/persona_list_view_model.svelte';
 
-  const viewModel = getCharactersViewModel({ className: 'CharactersViewModel' });
+  const viewModel = getPersonaListViewModel({ className: 'PersonaListViewModel' });
 </script>
 
-<CharactersView {viewModel} />
+<PersonaListView {viewModel} />

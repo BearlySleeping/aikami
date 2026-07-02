@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/dev/dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/dev/layout/layout_view_model.dev.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,

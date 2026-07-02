@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/character/create/character_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -18,6 +18,7 @@ import {
   gameStateService,
   imageGenerationService,
   routerService,
+  storageService,
   textGenerationService,
 } from '$services';
 
@@ -37,7 +38,7 @@ for (let i = 0; i < GENERATED_LPC_SLOTS.length; i++) {
 // Types
 // ---------------------------------------------------------------------------
 
-/** The character creation phase. */
+/** The persona creation phase. */
 export type CreationPhase = 'CHAT' | 'GENERATING' | 'TWEAK';
 
 /** A single message in the DM chat history. */
@@ -57,7 +58,7 @@ export type ScoreLabel = {
 // Interface
 // ---------------------------------------------------------------------------
 
-export type CharacterViewModelInterface = BaseViewModelInterface & {
+export type PersonaCreateViewModelInterface = BaseViewModelInterface & {
   readonly phase: CreationPhase;
   readonly messages: readonly ChatMessage[];
   readonly persona: PersonaData | undefined;
@@ -76,6 +77,8 @@ export type CharacterViewModelInterface = BaseViewModelInterface & {
   readonly lpcRecipe: Record<string, string> | null;
   /** LPC dev page URL for previewing the character's sprite. */
   readonly lpcPreviewUrl: string | null;
+  /** Whether an avatar file upload is in progress. */
+  readonly isUploading: boolean;
 
   // ── Regeneration ────────────────────────────────────────────────────
   /** Current regeneration mode. */
@@ -94,10 +97,12 @@ export type CharacterViewModelInterface = BaseViewModelInterface & {
   setRegenerationMode(mode: 'appearance' | 'direct' | 'edit'): void;
   /** Regenerates the avatar based on the selected mode. */
   regenerateAvatar(): Promise<void>;
-  /** Saves the character locally and optionally to Firebase. */
+  /** Saves the persona locally and optionally to Firebase. */
   saveCharacter(): Promise<void>;
-  /** Saves the character and navigates to /game to start playing. */
+  /** Saves the persona and navigates to /game to start playing. */
   enterWorld(): Promise<void>;
+  /** Uploads an avatar image file for the persona. */
+  uploadAvatar(file: File): Promise<void>;
 
   sendChatMessage(text: string): Promise<void>;
   generateCharacter(): Promise<void>;
@@ -115,20 +120,21 @@ export type CharacterViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type CharacterViewModelOptions = BaseViewModelOptions & {};
+export type PersonaCreateViewModelOptions = BaseViewModelOptions & {};
 
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
-export class CharacterViewModel
-  extends BaseViewModel<CharacterViewModelOptions>
-  implements CharacterViewModelInterface
+export class PersonaCreateViewModel
+  extends BaseViewModel<PersonaCreateViewModelOptions>
+  implements PersonaCreateViewModelInterface
 {
   phase: CreationPhase = $state('CHAT');
   messages: ChatMessage[] = $state([]);
   chatInput = $state('');
   debugOpen = $state(false);
+  isUploading = $state(false);
 
   // Regeneration state
   regenerationMode: 'appearance' | 'direct' | 'edit' = $state('appearance');
@@ -162,7 +168,7 @@ export class CharacterViewModel
   }
 
   get scoreLabels(): readonly ScoreLabel[] {
-    return CharacterViewModel._SCORE_LABELS;
+    return PersonaCreateViewModel._SCORE_LABELS;
   }
 
   get isImageGenReady(): boolean {
@@ -356,6 +362,33 @@ export class CharacterViewModel
     this.persona.appearance.physicalDescription = value;
   }
 
+  // ── Avatar Upload ───────────────────────────────────────────────────
+
+  async uploadAvatar(file: File): Promise<void> {
+    if (this.isUploading) {
+      return;
+    }
+
+    this.isUploading = true;
+
+    try {
+      const uid = (authService as { uid?: string }).uid;
+      if (!uid) {
+        this.warn('uploadAvatar: not authenticated');
+        return;
+      }
+
+      const url = await storageService.uploadAvatar({ file, uid });
+      if (url) {
+        characterCreationService.avatarUrl = url;
+      }
+    } catch (error) {
+      this.error('uploadAvatar', error);
+    } finally {
+      this.isUploading = false;
+    }
+  }
+
   // ── Regeneration ────────────────────────────────────────────────────
 
   toggleRegenerationPanel(): void {
@@ -413,12 +446,12 @@ export class CharacterViewModel
     }
   }
 
-  // ── Save Character ──────────────────────────────────────────────────
+  // ── Save Persona ────────────────────────────────────────────────────
 
   async saveCharacter(): Promise<void> {
     await this._persistCharacter();
-    // Redirect to character list (dev sandbox path)
-    window.location.href = '/dev/characters';
+    // Redirect to persona list
+    window.location.href = '/personas';
   }
 
   async enterWorld(): Promise<void> {
@@ -754,7 +787,7 @@ export class CharacterViewModel
       const err = error as Error & { name: string };
       this.error('_extractCharacter', err);
       if (err.name === 'AbortError') {
-        this.errorMessage = 'Character generation was cancelled.';
+        this.errorMessage = 'Persona generation was cancelled.';
       }
       return null;
     }
@@ -804,8 +837,8 @@ export class CharacterViewModel
   }
 }
 
-export const getCharacterViewModel = (
-  options: CharacterViewModelOptions,
-): CharacterViewModelInterface => {
-  return new CharacterViewModel(options);
+export const getPersonaCreateViewModel = (
+  options: PersonaCreateViewModelOptions,
+): PersonaCreateViewModelInterface => {
+  return new PersonaCreateViewModel(options);
 };

@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_dev_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts
 //
 // Dev sandbox override — injects devtools controls for the C-162
 // Action Context Menu & Interactive Dice.

@@ -1,8 +1,8 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/layout/dev_layout_view.svelte
+  // apps/frontend/client/src/lib/views/dev/layout/layout_view.dev.svelte
   import type { Snippet } from 'svelte';
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { DevViewModelInterface } from './dev_layout_view_model.svelte.ts';
+  import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
 
   type Props = {
     viewModel: DevViewModelInterface;
