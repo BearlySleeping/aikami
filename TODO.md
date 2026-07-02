@@ -63,6 +63,16 @@ Finalize the LPC (Liberated Pixel Cup) spritesheet injection into your PixiJS re
 The Vertical Slice (Core Game Loop)
 Stop building systems in isolation and combine movement, interaction, chat, questing, and combat into a single, unbroken 5-minute playable prototype.
 
+## Deferred: LPC Semantic Bundling
+
+- **Status**: Deferred for upstream LPC compatibility.
+- **Why**: LPC character assets must remain as loose files in their native folder
+  structure to stay compatible with upstream LPC generator tools and sprite editors.
+  Semantic bundling (packing LPC sprites into atlases or texture arrays) would break
+  the drag-and-drop workflow for artists and designers.
+- **Contract**: C-210 WebGPU Tilemap Integration — tilemaps use WebGPU chunked Mesh
+  rendering; LPC characters remain unbundled.
+
 ## Links
 
 https://github.com/SpicyMarinara/SillyTavern-Spotify-Music-Extension
