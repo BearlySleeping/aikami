@@ -136,7 +136,7 @@
           onclick={() => viewModel.loadZoneB()}
           disabled={!viewModel.engineReady}
         >
-          Zone B (legacy)
+          Interior House
         </button>
         <button
           class="btn btn-sm gap-1"
