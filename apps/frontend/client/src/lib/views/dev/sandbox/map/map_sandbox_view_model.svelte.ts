@@ -55,6 +55,8 @@ export type MapSandboxViewModelInterface = BaseDevViewModelInterface & {
   loadZoneA: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;
   /** Loads sandbox_zone_b.json via the engine's loadMap (legacy fallback). */
   loadZoneB: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;
+  /** Loads sandbox_textured.jton — example tileset with real grass + brick textures. */
+  loadZoneC: (spawnX?: number, spawnY?: number, disableClamping?: boolean) => Promise<void>;
   /** Closes the NPC dialog overlay and resumes the game. */
   dismissDialog: () => void;
   /** Destroys the engine, releasing WebGL and worker resources. */
@@ -141,6 +143,11 @@ class MapSandboxViewModel
             return;
           }
 
+          if (zone === 'c') {
+            void this.loadZoneC(spawnX, spawnY, disableClamping);
+            return;
+          }
+
           void this.loadZoneA(spawnX, spawnY, disableClamping);
           return;
         }
@@ -186,6 +193,11 @@ class MapSandboxViewModel
         // Route to the correct zone loader based on the target map filename.
         if (event.targetMap.includes('sandbox_zone_b')) {
           void this.loadZoneB(
+            event.targetX !== undefined ? event.targetX : undefined,
+            event.targetY !== undefined ? event.targetY : undefined,
+          );
+        } else if (event.targetMap.includes('sandbox_textured')) {
+          void this.loadZoneC(
             event.targetX !== undefined ? event.targetX : undefined,
             event.targetY !== undefined ? event.targetY : undefined,
           );
@@ -328,6 +340,40 @@ class MapSandboxViewModel
       this.debug('map-sandbox:loadZoneB:complete');
     } catch (err) {
       this.debug('map-sandbox:loadZoneB:error', { error: String(err) });
+    }
+  }
+
+  /**
+   * Loads sandbox_textured.jton — 10×10 map using the example tileset
+   * (real grass, brick floor, brick wall, tough door textures) as a WebP
+   * tileset strip. Visually validates the WebGPU texture sampling pipeline
+   * with real pixel-art assets instead of debug color blocks.
+   *
+   * @param spawnX - Optional pixel X spawn coordinate (default: 160 — map center).
+   * @param spawnY - Optional pixel Y spawn coordinate (default: 160 — map center).
+   * @param disableClamping - Bypass camera viewport clamping (C-199).
+   */
+  async loadZoneC(spawnX?: number, spawnY?: number, disableClamping?: boolean): Promise<void> {
+    const gw = this._gameWorld;
+    if (!gw) {
+      return;
+    }
+
+    const x = spawnX ?? 160;
+    const y = spawnY ?? 160;
+
+    try {
+      this.debug('map-sandbox:loadZoneC', { spawnX: x, spawnY: y, disableClamping });
+      await gw.loadMap({
+        mapUrl: '/assets/maps/sandbox_textured.jton',
+        targetX: x,
+        targetY: y,
+        disableClamping,
+      });
+      this.currentMap = '/assets/maps/sandbox_textured.jton';
+      this.debug('map-sandbox:loadZoneC:complete');
+    } catch (err) {
+      this.debug('map-sandbox:loadZoneC:error', { error: String(err) });
     }
   }
 
