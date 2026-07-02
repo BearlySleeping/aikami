@@ -13,15 +13,14 @@
 
   const textConfig = $derived(viewModel.config.text);
   const selectedProvider = $derived(
-    (TEXT_PROVIDERS.find((p) => p.id === textConfig.provider) ?? TEXT_PROVIDERS[0]) as (typeof TEXT_PROVIDERS)[number],
+    (TEXT_PROVIDERS.find((p) => p.id === textConfig.provider) ??
+      TEXT_PROVIDERS[0]) as (typeof TEXT_PROVIDERS)[number],
   );
   const savedKey = $derived(textConfig.apiKeys[textConfig.provider] ?? '');
   const savedKeys = $derived(textConfig.apiKeys);
 
   const hasOpenRouterKey = $derived((textConfig.apiKeys.openrouter?.length ?? 0) > 0);
-  const isOpenRouterKeyVerified = $derived(
-    viewModel.verificationStatus.openrouter === 'valid',
-  );
+  const isOpenRouterKeyVerified = $derived(viewModel.verificationStatus.openrouter === 'valid');
 
   // ── Key visibility ─────────────────────────────────────────────────
 
@@ -46,8 +45,7 @@
         class="select select-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
         value={textConfig.provider}
         onchange={(e: Event) =>
-          viewModel.setTextProvider((e.target as HTMLSelectElement).value)
-        }
+          viewModel.setTextProvider((e.target as HTMLSelectElement).value)}
       >
         {#each TEXT_PROVIDERS as prov}
           <option value={prov.id}>{prov.label}</option>
@@ -83,22 +81,48 @@
               viewModel.setTextApiKey(
                 textConfig.provider,
                 (e.target as HTMLInputElement).value,
-              )
-            }
-          />
+              )}
+          >
           <button
             class="btn btn-ghost join-item"
             onclick={toggleKeyVisibility}
             title={keyVisible ? 'Hide key' : 'Show key'}
           >
             {#if keyVisible}
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M15 12a3 3 0 01-3 3m0 0l6.364-6.364M21 12c0 1.5-.4 2.9-1.1 4.1" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M15 12a3 3 0 01-3 3m0 0l6.364-6.364M21 12c0 1.5-.4 2.9-1.1 4.1"
+                />
               </svg>
             {:else}
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                />
               </svg>
             {/if}
           </button>
@@ -106,7 +130,8 @@
         <div class="label py-1">
           <span class="text-xs text-[#938ea1]">
             {#if savedKeys[textConfig.provider].length > 0}
-              Key is encrypted at rest and cached per provider. Switching providers preserves your keys.
+              Key is encrypted at rest and cached per provider. Switching providers preserves your
+              keys.
             {:else}
               Enter your API key for {selectedProvider.label}. Keys are encrypted at rest.
             {/if}
@@ -132,9 +157,8 @@
               : 'https://api.example.com/v1'}
           value={textConfig.url ?? ''}
           oninput={(e: Event) =>
-            viewModel.setTextUrl((e.target as HTMLInputElement).value)
-          }
-        />
+            viewModel.setTextUrl((e.target as HTMLInputElement).value)}
+        >
       </div>
     {/if}
 
@@ -148,7 +172,9 @@
         </span>
         <div class="flex flex-wrap gap-1.5 mt-2">
           {#each Object.keys(savedKeys).filter((k) => savedKeys[k]?.length > 0) as provider}
-            <span class="badge badge-sm font-['JetBrains_Mono'] text-[10px] bg-white/[0.06] border-white/[0.08] text-[#c9c4d8]">
+            <span
+              class="badge badge-sm font-['JetBrains_Mono'] text-[10px] bg-white/[0.06] border-white/[0.08] text-[#c9c4d8]"
+            >
               {TEXT_PROVIDERS.find((p) => p.id === provider)?.label ?? provider}
             </span>
           {/each}
@@ -165,8 +191,8 @@
       Primary Model
     </h2>
     <p class="text-sm text-[#938ea1] mb-6 font-['Inter']">
-      Select the primary text generation model. Models are fetched from OpenRouter when an
-      API key is verified.
+      Select the primary text generation model. Models are fetched from OpenRouter when an API key
+      is verified.
     </p>
 
     <ProvidersModelSelector
@@ -229,7 +255,7 @@
                 const val = (e.target as HTMLInputElement).value.trim();
                 viewModel.setAuxiliaryModel(aux.key, val || undefined);
               }}
-            />
+            >
           {/if}
         </div>
       {/each}
@@ -244,12 +270,13 @@
       Model Configurations
     </h2>
     <p class="text-sm text-[#938ea1] mb-6 font-['Inter']">
-      Configure provider endpoints and model identifiers. Add entries for any
-      OpenAI-compatible API.
+      Configure provider endpoints and model identifiers. Add entries for any OpenAI-compatible API.
     </p>
 
     {#if viewModel.config.models.length === 0}
-      <div class="text-center py-8 text-[#938ea1] font-['JetBrains_Mono'] text-sm border border-dashed border-white/[0.06] rounded-lg">
+      <div
+        class="text-center py-8 text-[#938ea1] font-['JetBrains_Mono'] text-sm border border-dashed border-white/[0.06] rounded-lg"
+      >
         No models configured
       </div>
     {:else}
@@ -259,7 +286,9 @@
             <div class="grid grid-cols-3 gap-4">
               <div class="form-control">
                 <div class="label py-0.5">
-                  <span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]">
+                  <span
+                    class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]"
+                  >
                     Provider
                   </span>
                 </div>
@@ -268,13 +297,14 @@
                   class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
                   value={modelConfig.provider}
                   oninput={(e: Event) =>
-                    viewModel.setModelField(i, 'provider', (e.target as HTMLInputElement).value)
-                  }
-                />
+                    viewModel.setModelField(i, 'provider', (e.target as HTMLInputElement).value)}
+                >
               </div>
               <div class="form-control">
                 <div class="label py-0.5">
-                  <span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]">
+                  <span
+                    class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]"
+                  >
                     Model
                   </span>
                 </div>
@@ -283,13 +313,14 @@
                   class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
                   value={modelConfig.model}
                   oninput={(e: Event) =>
-                    viewModel.setModelField(i, 'model', (e.target as HTMLInputElement).value)
-                  }
-                />
+                    viewModel.setModelField(i, 'model', (e.target as HTMLInputElement).value)}
+                >
               </div>
               <div class="form-control">
                 <div class="label py-0.5">
-                  <span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]">
+                  <span
+                    class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]"
+                  >
                     Endpoint
                   </span>
                 </div>
@@ -298,9 +329,8 @@
                   class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
                   value={modelConfig.endpoint}
                   oninput={(e: Event) =>
-                    viewModel.setModelField(i, 'endpoint', (e.target as HTMLInputElement).value)
-                  }
-                />
+                    viewModel.setModelField(i, 'endpoint', (e.target as HTMLInputElement).value)}
+                >
               </div>
             </div>
           </div>

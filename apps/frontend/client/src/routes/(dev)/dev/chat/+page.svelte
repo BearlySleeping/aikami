@@ -5,8 +5,8 @@
   // NEVER import production ViewModels or services here.
 
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import { getChatDevViewModel } from '$views/chat/chat_view_model.dev.svelte.ts';
   import ChatView from '$views/chat/chat_view.svelte';
+  import { getChatDevViewModel } from '$views/chat/chat_view_model.dev.svelte.ts';
 
   const viewModel = getChatDevViewModel({
     className: 'ChatDevViewModel',

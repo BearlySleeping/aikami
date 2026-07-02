@@ -13,8 +13,8 @@
   import { onMount } from 'svelte';
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
   import { gameStateService } from '$services';
-  import { getCombatDevViewModel } from '$views/combat/combat_view_model.dev.svelte.ts';
   import CombatSidebar from '$views/combat/combat_sidebar.svelte';
+  import { getCombatDevViewModel } from '$views/combat/combat_view_model.dev.svelte.ts';
   import CombatPortraitStage from '$views/combat/components/combat_portrait_stage.svelte';
 
   // ── URL params ──
