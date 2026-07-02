@@ -369,6 +369,7 @@ class MapSandboxViewModel
         targetX: x,
         targetY: y,
         disableClamping,
+        waterGids: new Set(),
       });
       this.currentMap = '/assets/maps/sandbox_textured.jton';
       this.debug('map-sandbox:loadZoneC:complete');
