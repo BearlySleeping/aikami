@@ -411,11 +411,14 @@ const _buildTilesetEntries = (tilesets: readonly TilemapTileset[]): TilesetEntry
       const row = Math.floor(localId / columns);
       const px = margin + col * (tilewidth + spacing);
       const py = margin + row * (tileheight + spacing);
+      // Half-pixel inset prevents texture bleeding at tile boundaries.
+      // Without this, UVs land exactly on texel edges where nearest-neighbor
+      // behavior is implementation-defined across WebGPU backends.
       return {
-        u0: px / imagewidth,
-        v0: py / imageheight,
-        u1: (px + tilewidth) / imagewidth,
-        v1: (py + tileheight) / imageheight,
+        u0: (px + 0.5) / imagewidth,
+        v0: (py + 0.5) / imageheight,
+        u1: (px + tilewidth - 0.5) / imagewidth,
+        v1: (py + tileheight - 0.5) / imageheight,
       };
     };
 
