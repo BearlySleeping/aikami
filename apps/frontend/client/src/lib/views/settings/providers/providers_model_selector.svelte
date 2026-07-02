@@ -101,6 +101,7 @@
       <div
         class="dropdown-content rounded-lg border border-white/[0.12] bg-[#12172f] shadow-2xl w-80 max-h-80 overflow-y-auto"
         role="listbox"
+        tabindex="0"
         onclick={(e: MouseEvent) => e.stopPropagation()}
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'Escape') {

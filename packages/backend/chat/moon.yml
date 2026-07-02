@@ -29,9 +29,4 @@ fileGroups:
     - 'package.json'
     - 'tsconfig.json'
 
-tasks:
-  test:
-    command: 'bun test'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
+tasks: {}

@@ -1,6 +1,6 @@
 // packages/shared/constants/src/lib/project.ts
 
-export const modes = ['staging', 'production', 'emulator'] as const;
+export const modes = ['staging', 'production', 'emulator', 'testing'] as const;
 
 export const defaultMode = 'staging' as const satisfies (typeof modes)[number];
 
@@ -40,6 +40,7 @@ export const MODE_PROJECT_MAP = {
   staging: 'aikami-dev',
   production: 'aikami-prod',
   emulator: 'demo-aikami-emulator',
+  testing: 'demo-aikami-emulator',
 } as const satisfies Record<(typeof modes)[number], string>;
 
 /**

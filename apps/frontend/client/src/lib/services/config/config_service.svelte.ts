@@ -749,7 +749,7 @@ class ConfigService
 
   async reset(): Promise<void> {
     logger.debug('ConfigService.reset');
-    this.state = { ...DEFAULT_STATE };
+    this.state = this._makeDefaultState();
     await clearVault();
     localStorage.removeItem(PLAIN_CONFIG_KEY);
   }
@@ -860,6 +860,23 @@ class ConfigService
 
   // ── Private: env helpers ─────────────────────────────────────────────
 
+  /** Returns a fresh deep copy of the default state (no shared references). */
+  private _makeDefaultState(): ConfigState {
+    return {
+      advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
+      auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
+      emotion: { ...DEFAULT_EMOTION_CONFIG },
+      generationParams: { ...DEFAULT_GENERATION_PARAMS },
+      image: { ...DEFAULT_IMAGE_CONFIG },
+      instructTemplate: DEFAULT_TEMPLATE,
+      memory: { ...DEFAULT_MEMORY_CONFIG },
+      models: [],
+      preferredModel: '',
+      text: { apiKeys: {}, provider: 'openrouter' },
+      voice: { ...DEFAULT_VOICE_CONFIG },
+    };
+  }
+
   /**
    * Injects defaults from environment variables. The preferred model is
    * only injected when no user configuration exists in localStorage, but
@@ -875,7 +892,10 @@ class ConfigService
     }
 
     if (envKey && !this.state.text.apiKeys.openrouter) {
-      this.state.text.apiKeys = { ...this.state.text.apiKeys, openrouter: envKey };
+      this.state.text = {
+        ...this.state.text,
+        apiKeys: { ...this.state.text.apiKeys, openrouter: envKey },
+      };
     }
   }
 
