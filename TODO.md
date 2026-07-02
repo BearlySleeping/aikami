@@ -62,3 +62,7 @@ Finalize the LPC (Liberated Pixel Cup) spritesheet injection into your PixiJS re
 
 The Vertical Slice (Core Game Loop)
 Stop building systems in isolation and combine movement, interaction, chat, questing, and combat into a single, unbroken 5-minute playable prototype.
+
+## Links
+
+https://github.com/SpicyMarinara/SillyTavern-Spotify-Music-Extension

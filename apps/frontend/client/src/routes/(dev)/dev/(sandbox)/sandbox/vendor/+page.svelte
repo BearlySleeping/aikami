@@ -7,8 +7,8 @@
   //
   // Contract: C-154 AI Vendors Economy
 
-  import { VendorDevViewModel } from '$lib/views/vendor/vendor_view_model.dev.svelte.ts';
   import VendorView from '$lib/views/vendor/vendor_view.svelte';
+  import { VendorDevViewModel } from '$lib/views/vendor/vendor_view_model.dev.svelte.ts';
   import type { VendorViewModelInterface } from '$lib/views/vendor/vendor_view_model.svelte';
   import { gameStateService } from '$services';
 

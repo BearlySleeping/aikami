@@ -1,25 +1,49 @@
 /**
- * update_skills.ts — installs the official PixiJS v8 skills from
- * https://github.com/pixijs/pixijs-skills into .pi/skills-pixijs/.
+ * update_skills.ts — installs official agent skills from their upstream repos
+ * into .pi/generated-skills/.
  *
- * The pixijs-skills repo is shallow-cloned into a temp directory and its
- * skills/ folder is copied into the target.  Existing skills are fully
+ * Each repo is shallow-cloned into a temp directory, then the relevant
+ * subdirectory is copied into the target.  Existing skills are fully
  * replaced so the update is idempotent.
  *
- * Also ensures .pi/skills-pixijs is listed in .pi/settings.json → skills[].
+ * Also ensures each skill path is listed in .pi/settings.json → skills[].
  */
 
 import { $ } from "bun";
-import { mkdir, rm, cp, readFile, writeFile } from "node:fs/promises";
+import { rm, cp, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PI_DIR = join(__dirname, "..");
-const TARGET = join(PI_DIR, "skills-pixijs");
-const REPO_URL = "https://github.com/pixijs/pixijs-skills.git";
 const SETTINGS_PATH = join(PI_DIR, "settings.json");
+
+interface SkillSource {
+  /** Human-readable label for logging */
+  name: string;
+  /** Git repo URL (shallow-cloned) */
+  repoUrl: string;
+  /** Subdirectory within the cloned repo that contains the skill(s) */
+  sourceSubdir: string;
+  /** Target directory under .pi/generated-skills/ */
+  targetSubdir: string;
+}
+
+const SKILL_SOURCES: SkillSource[] = [
+  {
+    name: "PixiJS",
+    repoUrl: "https://github.com/pixijs/pixijs-skills.git",
+    sourceSubdir: "skills",
+    targetSubdir: "pixijs",
+  },
+  {
+    name: "daisyUI",
+    repoUrl: "https://github.com/saadeghi/daisyui.git",
+    sourceSubdir: "skills/daisyui",
+    targetSubdir: "daisyui",
+  },
+];
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -31,44 +55,67 @@ async function sh(command: TemplateStringsArray, ...args: unknown[]) {
   return result;
 }
 
-// ── main ─────────────────────────────────────────────────────────────
+// ── install one skill source ─────────────────────────────────────────
 
-async function main() {
-  const tmp = join(PI_DIR, ".tmp-pixijs-skills");
+async function installSkillSource(source: SkillSource): Promise<void> {
+  const target = join(PI_DIR, "generated-skills", source.targetSubdir);
+  const tmp = join(PI_DIR, `.tmp-${source.targetSubdir}-skills`);
 
-  // 1. Clean up any leftovers
+  // 1. Clean up any leftover temp dir
   if (existsSync(tmp)) await rm(tmp, { recursive: true });
 
-  // 2. Shallow-clone the official repo
-  console.log("Cloning pixijs-skills (shallow)...");
-  await sh`git clone --depth 1 ${REPO_URL} ${tmp}`;
+  // 2. Shallow-clone the repo
+  console.log(`\n── ${source.name} ──`);
+  console.log(`Cloning ${source.repoUrl} (shallow)...`);
+  await sh`git clone --depth 1 ${source.repoUrl} ${tmp}`;
 
-  // 3. Replace the target skills folder
-  const src = join(tmp, "skills");
-  if (!existsSync(src)) throw new Error("Repo missing skills/ directory");
+  // 3. Locate and copy the source subdirectory
+  const src = join(tmp, source.sourceSubdir);
+  if (!existsSync(src)) {
+    throw new Error(
+      `${source.name}: repo missing "${source.sourceSubdir}" directory`,
+    );
+  }
 
-  if (existsSync(TARGET)) await rm(TARGET, { recursive: true });
-  await cp(src, TARGET, { recursive: true });
-  console.log(`Copied skills → ${TARGET}`);
+  if (existsSync(target)) await rm(target, { recursive: true });
+  await cp(src, target, { recursive: true });
+  console.log(`Copied ${source.sourceSubdir} → ${target}`);
 
   // 4. Clean up temp clone
   await rm(tmp, { recursive: true });
   console.log("Cleaned up temp clone.");
+}
 
-  // 5. Ensure .pi/skills-pixijs is in settings.json
-  const settingsRaw = await readFile(SETTINGS_PATH, "utf-8");
-  const settings = JSON.parse(settingsRaw);
+// ── main ─────────────────────────────────────────────────────────────
 
-  const skillsPath = "./.pi/skills-pixijs";
-  if (!settings.skills.includes(skillsPath)) {
-    settings.skills.push(skillsPath);
-    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
-    console.log(`Added "${skillsPath}" to settings.json → skills[]`);
-  } else {
-    console.log(`"${skillsPath}" already in settings.json → skills[]`);
+async function main() {
+  // 1. Install each skill source
+  for (const source of SKILL_SOURCES) {
+    await installSkillSource(source);
   }
 
-  console.log("\nDone! PixiJS skills installed to .pi/skills-pixijs/");
+  // 2. Ensure all skill paths are in settings.json
+  const settingsRaw = await readFile(SETTINGS_PATH, "utf-8");
+  const settings = JSON.parse(settingsRaw);
+  let modified = false;
+
+  for (const source of SKILL_SOURCES) {
+    const skillsPath = `./.pi/generated-skills/${source.targetSubdir}`;
+    if (!settings.skills.includes(skillsPath)) {
+      settings.skills.push(skillsPath);
+      console.log(`Added "${skillsPath}" to settings.json → skills[]`);
+      modified = true;
+    } else {
+      console.log(`"${skillsPath}" already in settings.json → skills[]`);
+    }
+  }
+
+  if (modified) {
+    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+  }
+
+  const names = SKILL_SOURCES.map((s) => s.name).join(" + ");
+  console.log(`\nDone! ${names} skills installed to .pi/generated-skills/`);
 }
 
 main().catch((err) => {
