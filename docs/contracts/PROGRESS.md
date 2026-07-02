@@ -180,8 +180,8 @@
 | C-200 | Visual Pipeline Optimization | ✅ completed |
 | C-201 | Hide Dev Overlays On Screenshot | ✅ completed |
 | C-202 | Provider Settings Ux Overhaul | ✅ completed |
-| C-203 | Local First Turso Sync | ⏳ not_started |
-| C-204 | Auxiliary Systems Config | ⏳ not_started |
+| C-203 | Local First Turso Sync | ✅ completed |
+| C-204 | Auxiliary Systems Config | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

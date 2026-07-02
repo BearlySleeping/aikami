@@ -17,22 +17,55 @@ import { logger } from '$logger';
 // Types
 // ---------------------------------------------------------------------------
 
-/** Supported API key provider identifiers. */
-export const API_KEY_PROVIDERS = [
-  'openrouter',
-  'gemini',
-  'anthropic',
-  'openai',
-  'deepseek',
-] as const;
+// ---------------------------------------------------------------------------
+// Text AI providers (C-204 expanded: all RisuAI providers)
+// ---------------------------------------------------------------------------
 
-export type ApiKeyProvider = (typeof API_KEY_PROVIDERS)[number];
+/** Text generation provider descriptors. */
+export const TEXT_PROVIDERS = [
+  { id: 'openrouter', label: 'OpenRouter', description: 'Multi-model aggregator', needsKey: true, isLocal: false },
+  { id: 'openai', label: 'OpenAI', description: 'GPT models via OpenAI API', needsKey: true, isLocal: false },
+  { id: 'anthropic', label: 'Anthropic', description: 'Claude models', needsKey: true, isLocal: false },
+  { id: 'google', label: 'Google (Gemini)', description: 'Gemini models via Google AI', needsKey: true, isLocal: false },
+  { id: 'deepseek', label: 'DeepSeek', description: 'DeepSeek V3/R1 models', needsKey: true, isLocal: false },
+  { id: 'mistral', label: 'Mistral AI', description: 'Mistral models via La Plateforme', needsKey: true, isLocal: false },
+  { id: 'cohere', label: 'Cohere', description: 'Command R models', needsKey: true, isLocal: false },
+  { id: 'deepinfra', label: 'DeepInfra', description: 'Open-source model hosting', needsKey: true, isLocal: false },
+  { id: 'nanogpt', label: 'NanoGPT', description: 'Pay-per-token model access', needsKey: true, isLocal: false },
+  { id: 'novelai', label: 'NovelAI', description: 'Kayra / Clio story models', needsKey: true, isLocal: false },
+  { id: 'aws', label: 'AWS Bedrock', description: 'Claude via AWS', needsKey: true, isLocal: false },
+  { id: 'horde', label: 'AI Horde', description: 'Volunteer compute cluster', needsKey: false, isLocal: false },
+  { id: 'ollama', label: 'Ollama (local)', description: 'Local LLM server', needsKey: false, needsUrl: true, isLocal: true },
+  { id: 'ooba', label: 'TextGen WebUI', description: 'Local Oobabooga server', needsKey: false, needsUrl: true, isLocal: true },
+  { id: 'custom', label: 'Custom API', description: 'OpenAI-compatible endpoint', needsKey: false, needsUrl: true, isLocal: false },
+] as const satisfies ReadonlyArray<{
+  id: string;
+  label: string;
+  description: string;
+  needsKey: boolean;
+  needsUrl?: boolean;
+  isLocal: boolean;
+}>;
+
+export type TextProvider = (typeof TEXT_PROVIDERS)[number]['id'];
 
 /** Map of provider → API key string. */
-export type ApiKeys = Partial<Record<ApiKeyProvider, string>>;
+export type ApiKeys = Record<string, string>;
+
+/** Text generation subsystem configuration. */
+export type TextConfig = {
+  /** Selected text generation provider. */
+  provider: TextProvider;
+  /** API keys per provider (encrypted at rest). */
+  apiKeys: ApiKeys;
+  /** Custom endpoint URL (for ollama, ooba, custom). */
+  url?: string;
+};
 
 /** Memory subsystem configuration. */
 export type MemoryConfig = {
+  /** Memory type (algorithm). */
+  type: MemoryType;
   /** Maximum context window size in tokens. */
   contextWindow: number;
   /** Maximum number of conversation turns to retain. */
@@ -41,7 +74,35 @@ export type MemoryConfig = {
   summarizationThreshold: number;
   /** Whether long-term memory (vector store) is enabled. */
   longTermMemory: boolean;
+  /** Embedding model provider for vector search. */
+  embeddingModel: EmbeddingModel;
+  /** Custom embedding API endpoint (when embeddingModel is 'custom'). */
+  embeddingUrl?: string;
+  /** API key for custom embedding provider. */
+  embeddingKey?: string;
+  /** Text chunk size for embedding ingestion. */
+  chunkSize: number;
 };
+
+// ---------------------------------------------------------------------------
+// Memory subsystem (C-204: expanded with embedding provider selection)
+// ---------------------------------------------------------------------------
+
+/** Memory subsystem type. */
+export const MEMORY_TYPES = ['none', 'basic', 'hypa-style', 'hanurai'] as const;
+export type MemoryType = (typeof MEMORY_TYPES)[number];
+
+/** Embedding model providers. */
+export const EMBEDDING_MODELS = [
+  { id: 'minilm', label: 'MiniLM (local)' },
+  { id: 'nomic', label: 'Nomic Embed' },
+  { id: 'bge', label: 'BGE (BAAI)' },
+  { id: 'openai', label: 'OpenAI Embeddings' },
+  { id: 'voyage', label: 'Voyage AI' },
+  { id: 'custom', label: 'Custom API' },
+] as const;
+
+export type EmbeddingModel = (typeof EMBEDDING_MODELS)[number]['id'];
 
 // ---------------------------------------------------------------------------
 // Voice engine selection
@@ -99,17 +160,40 @@ export const KOKORO_VOICES: readonly VoiceOption[] = [
   { id: 'bm_fable', label: 'bm_fable — Expressive' },
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Voice TTS providers (C-204: expanded provider selection)
+// ---------------------------------------------------------------------------
+
+/** Available TTS provider identifiers. */
+export const VOICE_PROVIDERS = [
+  { id: 'kokoro', label: 'Kokoro (local)', description: 'Local Kokoro TTS via Docker' },
+  { id: 'elevenlabs', label: 'ElevenLabs', description: 'Cloud-based TTS' },
+  { id: 'voicevox', label: 'VOICEVOX', description: 'Local Japanese TTS engine' },
+  { id: 'openai', label: 'OpenAI TTS', description: 'OpenAI cloud TTS' },
+  { id: 'fish-speech', label: 'Fish Speech', description: 'Open-source TTS' },
+] as const;
+
+export type VoiceProvider = (typeof VOICE_PROVIDERS)[number]['id'];
+
 /** Voice / TTS subsystem configuration. */
 export type VoiceConfig = {
-  /** Selected TTS engine (e.g. 'kokoro', 'elevenlabs'). */
+  /** Selected TTS provider (e.g. 'kokoro', 'elevenlabs'). */
+  provider: VoiceProvider;
+  /** Selected TTS engine (legacy — kept for migration, mirrors provider). */
   engine: string;
+  /** Custom server URL for local providers (voicevox, etc.). */
+  url?: string;
+  /** API key for cloud providers. */
+  apiKey?: string;
   /** Voice style or speaker ID. */
   voiceId: string;
   /** Speech rate multiplier (0.5–2.0). */
   speed: number;
   /** Pitch adjustment (-20–20). */
   pitch: number;
-  /** User-editable voice archetype → Kokoro ID mappings. */
+  /** Auto-speech: automatically generate TTS for NPC dialogue. */
+  autoSpeech: boolean;
+  /** User-editable voice archetype → voice ID mappings. */
   voiceArchetypes: VoiceArchetype[];
 };
 
@@ -146,10 +230,33 @@ export const DEFAULT_VOICE_ARCHETYPES: readonly VoiceArchetype[] = [
   { id: 'male-calm', label: 'Male — Calm (UK)', voiceId: 'bm_daniel' },
 ] as const;
 
+// ---------------------------------------------------------------------------
+// Image generation providers (C-204: expanded provider selection)
+// ---------------------------------------------------------------------------
+
+/** Available image generation provider identifiers. */
+export const IMAGE_PROVIDERS = [
+  { id: 'comfyui', label: 'ComfyUI (local)', description: 'Local ComfyUI via Docker' },
+  { id: 'webui', label: 'AUTOMATIC1111 WebUI', description: 'Local Stable Diffusion WebUI' },
+  { id: 'novelai', label: 'NovelAI', description: 'Cloud-based anime/SD' },
+  { id: 'dalle', label: 'DALL·E', description: 'OpenAI DALL·E' },
+  { id: 'stability', label: 'Stability AI', description: 'Stability API' },
+  { id: 'fal', label: 'fal.ai', description: 'Serverless generative media' },
+  { id: 'openai-compat', label: 'OpenAI Compatible', description: 'OpenAI-compatible image API' },
+] as const;
+
+export type ImageProvider = (typeof IMAGE_PROVIDERS)[number]['id'];
+
 /** Image generation subsystem configuration. */
 export type ImageConfig = {
-  /** Selected image generation backend. */
+  /** Selected image generation provider. */
+  provider: ImageProvider;
+  /** Selected image generation backend (legacy — kept for migration, mirrors provider). */
   backend: string;
+  /** Custom server URL for local providers. */
+  url?: string;
+  /** API key for cloud providers. */
+  apiKey?: string;
   /** Default checkpoint / model ID. */
   checkpoint: string;
   /** Image width in pixels. */
@@ -160,6 +267,14 @@ export type ImageConfig = {
   steps: number;
   /** CFG guidance scale. */
   cfgScale: number;
+  /** Sampler name (e.g. 'euler_a', 'dpmpp_2m'). */
+  sampler?: string;
+  /** Whether img2img mode is enabled by default. */
+  enableI2I?: boolean;
+  /** ComfyUI workflow JSON string (provider-specific). */
+  comfyWorkflow?: string;
+  /** NovelAI noise schedule override (provider-specific). */
+  novelAiNoiseSchedule?: string;
 };
 
 /** Generic model configuration for a single provider. */
@@ -170,6 +285,20 @@ export type ModelConfig = {
   provider: string;
   /** Base URL for the API endpoint. */
   endpoint: string;
+};
+
+// ── Emotion config (C-204) ───────────────────────────────────
+
+/** Emotion resolution methods. */
+export const EMOTION_METHODS = ['submodel', 'embedding'] as const;
+export type EmotionMethod = (typeof EMOTION_METHODS)[number];
+
+/** Emotion resolution configuration. */
+export type EmotionConfig = {
+  /** How character emotions are resolved. */
+  method: EmotionMethod;
+  /** Target model for emotion extraction (when method is 'submodel'). */
+  targetModel?: string;
 };
 
 // ── AI Generation Settings (absorbed from ai_settings.svelte.ts) ────────
@@ -235,8 +364,8 @@ export type ResolvedTextProvider = {
 
 /** Top-level configuration state. */
 export type ConfigState = {
-  /** Encrypted API keys per provider. */
-  apiKeys: ApiKeys;
+  /** Text generation settings (provider, API keys, URL). */
+  text: TextConfig;
   /** Preferred text generation model. */
   preferredModel: string;
   /** Model configurations (provider-agnostic). */
@@ -247,6 +376,8 @@ export type ConfigState = {
   voice: VoiceConfig;
   /** Image generation settings. */
   image: ImageConfig;
+  /** Emotion resolution settings. */
+  emotion: EmotionConfig;
   /** AI generation parameter overrides. */
   generationParams: GenerationParams;
   /** Selected instruct template format. */
@@ -276,8 +407,12 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   /** Clears all stored config. */
   reset(): Promise<void>;
 
-  /** Updates API keys. */
-  setApiKeys(keys: Partial<ApiKeys>): void;
+  /** Updates the text provider selection. */
+  setTextProvider(provider: TextProvider): void;
+  /** Updates the API key for the given text provider. */
+  setTextApiKey(provider: string, key: string): void;
+  /** Updates the custom URL for the text provider. */
+  setTextUrl(url: string): void;
   /** Sets the preferred model identifier. */
   setPreferredModel(model: string): void;
   /** Replaces the full models array. */
@@ -290,6 +425,8 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   setVoiceConfig(config: Partial<VoiceConfig>): void;
   /** Updates image config (partial merge). */
   setImageConfig(config: Partial<ImageConfig>): void;
+  /** Updates emotion config (partial merge). */
+  setEmotionConfig(config: Partial<EmotionConfig>): void;
   /** Updates generation parameters (partial merge). */
   setGenerationParams(params: Partial<GenerationParams>): void;
   /** Sets the instruct template. */
@@ -315,18 +452,28 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
 
 const DEFAULT_API_KEYS: ApiKeys = {};
 
+const DEFAULT_TEXT_CONFIG: TextConfig = {
+  apiKeys: {},
+  provider: 'openrouter',
+};
+
 const DEFAULT_MODEL_CONFIGS: ModelConfig[] = [];
 
 const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
+  chunkSize: 512,
   contextWindow: 8192,
+  embeddingModel: 'minilm',
   longTermMemory: false,
   maxTurns: 50,
   summarizationThreshold: 20,
+  type: 'basic',
 };
 
 const DEFAULT_VOICE_CONFIG: VoiceConfig = {
+  autoSpeech: false,
   engine: 'kokoro',
   pitch: 0,
+  provider: 'kokoro',
   speed: 1.0,
   voiceArchetypes: [...DEFAULT_VOICE_ARCHETYPES],
   voiceId: 'af_heart',
@@ -337,6 +484,7 @@ const DEFAULT_IMAGE_CONFIG: ImageConfig = {
   cfgScale: 7.5,
   checkpoint: 'sd_xl_base_1.0',
   height: 1024,
+  provider: 'comfyui',
   steps: 30,
   width: 1024,
 };
@@ -361,18 +509,23 @@ const DEFAULT_AUXILIARY_MODELS: AuxiliaryModels = {
   vision: undefined,
 };
 
+const DEFAULT_EMOTION_CONFIG: EmotionConfig = {
+  method: 'submodel',
+};
+
 const DEFAULT_TEMPLATE: InstructTemplate = 'chatml';
 
 const DEFAULT_STATE: ConfigState = {
   advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
-  apiKeys: { ...DEFAULT_API_KEYS },
   auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
+  emotion: { ...DEFAULT_EMOTION_CONFIG },
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
   instructTemplate: DEFAULT_TEMPLATE,
   memory: { ...DEFAULT_MEMORY_CONFIG },
   models: [...DEFAULT_MODEL_CONFIGS],
   preferredModel: '',
+  text: { ...DEFAULT_TEXT_CONFIG },
   voice: { ...DEFAULT_VOICE_CONFIG },
 };
 
@@ -406,7 +559,7 @@ class ConfigService
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
         if (vault.apiKeys && typeof vault.apiKeys === 'object') {
-          this.state.apiKeys = { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) };
+          this.state.text = { ...DEFAULT_TEXT_CONFIG, apiKeys: { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) }, provider: this.state.text.provider };
         }
       } catch {
         this.warn('load: failed to parse vault JSON');
@@ -432,6 +585,9 @@ class ConfigService
         }
         if (parsed.image) {
           this.state.image = { ...DEFAULT_IMAGE_CONFIG, ...parsed.image };
+        }
+        if (parsed.emotion) {
+          this.state.emotion = { ...DEFAULT_EMOTION_CONFIG, ...parsed.emotion };
         }
         if (parsed.generationParams) {
           this.state.generationParams = {
@@ -471,14 +627,18 @@ class ConfigService
   async save(): Promise<void> {
     logger.debug('ConfigService.save');
 
-    // Encrypt API keys
-    const vaultPayload = JSON.stringify({ apiKeys: this.state.apiKeys });
+    // Encrypt API keys (part of text config)
+    const vaultPayload = JSON.stringify({
+      apiKeys: this.state.text.apiKeys,
+      textProvider: this.state.text.provider,
+    });
     await encrypt({ text: vaultPayload });
 
     // Plain config (non-sensitive)
     const plain: Record<string, unknown> = {
       advancedOverrides: this.state.advancedOverrides,
       auxiliaryModels: this.state.auxiliaryModels,
+      emotion: this.state.emotion,
       generationParams: this.state.generationParams,
       image: this.state.image,
       instructTemplate: this.state.instructTemplate,
@@ -499,8 +659,16 @@ class ConfigService
 
   // ── Mutators ──────────────────────────────────────────────────────────
 
-  setApiKeys(keys: Partial<ApiKeys>): void {
-    this.state.apiKeys = { ...this.state.apiKeys, ...keys };
+  setTextProvider(provider: TextProvider): void {
+    this.state.text.provider = provider;
+  }
+
+  setTextApiKey(provider: string, key: string): void {
+    this.state.text.apiKeys = { ...this.state.text.apiKeys, [provider]: key };
+  }
+
+  setTextUrl(url: string): void {
+    this.state.text.url = url;
   }
 
   setPreferredModel(model: string): void {
@@ -528,6 +696,10 @@ class ConfigService
 
   setImageConfig(config: Partial<ImageConfig>): void {
     this.state.image = { ...this.state.image, ...config };
+  }
+
+  setEmotionConfig(config: Partial<EmotionConfig>): void {
+    this.state.emotion = { ...this.state.emotion, ...config };
   }
 
   setGenerationParams(params: Partial<GenerationParams>): void {
@@ -585,7 +757,7 @@ class ConfigService
       model,
       provider,
       endpoint,
-      apiKey: this.state.apiKeys[provider as ApiKeyProvider],
+      apiKey: this.state.text.apiKeys[this.state.text.provider],
     };
   }
 
@@ -601,14 +773,12 @@ class ConfigService
     const envModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
     const envKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
 
-    // Only inject the model from env when no user config has been saved.
     if (!this.state.preferredModel && this.state.models.length === 0 && envModel) {
       this.state.preferredModel = envModel;
     }
 
-    // Always inject the API key from env when available and not already set.
-    if (envKey && !this.state.apiKeys.openrouter) {
-      this.state.apiKeys = { ...this.state.apiKeys, openrouter: envKey };
+    if (envKey && !this.state.text.apiKeys.openrouter) {
+      this.state.text.apiKeys = { ...this.state.text.apiKeys, openrouter: envKey };
     }
   }
 
