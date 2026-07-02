@@ -69,4 +69,5 @@ export const PORTS = {
   emulator: EMULATOR_PORTS,
   staging: STAGING_PORTS,
   production: PRODUCTION_PORTS,
+  testing: EMULATOR_PORTS,
 } as const;

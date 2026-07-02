@@ -264,7 +264,7 @@ mock.module('$app/state', () => ({
 // ── Vite env vars required by @aikami/frontend/configs/environment.ts ─────
 
 process.env.PUBLIC_APP_ID = 'client';
-process.env.PUBLIC_MODE = 'emulator';
+process.env.PUBLIC_MODE = 'testing';
 process.env.PUBLIC_FIREBASE_API_KEY = 'mock-api-key';
 process.env.PUBLIC_FIREBASE_AUTH_DOMAIN = 'mock.firebaseapp.com';
 process.env.PUBLIC_FIREBASE_STORAGE_BUCKET = 'mock.appspot.com';
@@ -272,3 +272,10 @@ process.env.PUBLIC_FIREBASE_APP_ID = 'mock-app-id';
 process.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID = 'mock-sender-id';
 process.env.PUBLIC_FIREBASE_MEASUREMENT_ID = 'mock-measurement-id';
 process.env.PUBLIC_IMAGE_URL = 'http://localhost:8188';
+
+// Ensure no OpenRouter API keys leak from the direnv environment.
+// Testing mode should have no external API keys so ConfigService
+// tests can assert empty apiKeys state.
+delete process.env.PUBLIC_OPENROUTER_API_KEY;
+delete process.env.PUBLIC_OPENROUTER_MODEL;
+delete process.env.OPENROUTER_API_KEY;

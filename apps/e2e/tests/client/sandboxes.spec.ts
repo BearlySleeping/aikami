@@ -32,7 +32,7 @@ test.describe('Character Sandbox (/dev/character)', () => {
     await expect(authUser.locator('[data-testid="dev-action-force-error-state"]')).toBeVisible();
 
     // Character view container should render
-    await expect(authUser.locator('[data-testid="CharacterDevViewModel"]')).toBeVisible();
+    await expect(authUser.locator('[data-testid="PersonaCreateDevViewModel"]')).toBeVisible();
   });
 
   test('should react to Force Error State action', async ({ authUser }) => {
@@ -42,8 +42,8 @@ test.describe('Character Sandbox (/dev/character)', () => {
     // Click Force Error State — resets phase to CHAT, clears persona
     await clickDevAction(authUser, 'force-error-state');
 
-    // After force error, the CharacterDevViewModel container should still be mounted
-    await expect(authUser.locator('[data-testid="CharacterDevViewModel"]')).toBeVisible();
+    // After force error, the PersonaCreateDevViewModel container should still be mounted
+    await expect(authUser.locator('[data-testid="PersonaCreateDevViewModel"]')).toBeVisible();
 
     // The chat phase UI should be visible (chat messages from mock init)
     const chatBubble = authUser.locator('.chat-bubble').first();

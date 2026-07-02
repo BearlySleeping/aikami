@@ -225,13 +225,13 @@ export const getMode = (): Mode => {
  */
 export const isEmulatorMode = (): boolean => {
   const mode = backendEnv.VITE_MODE ?? backendEnv.NODE_ENV ?? '';
-  if (mode === 'emulator') {
+  if (mode === 'emulator' || mode === 'testing') {
     return true;
   }
 
   const appMode = getMode();
 
-  return !!backendEnv.FIRESTORE_EMULATOR_HOST || appMode === 'emulator';
+  return !!backendEnv.FIRESTORE_EMULATOR_HOST || appMode === 'emulator' || appMode === 'testing';
 };
 
 /**
