@@ -335,6 +335,7 @@ class MapSandboxViewModel
         targetX: x,
         targetY: y,
         disableClamping,
+        waterGids: new Set(),
       });
       this.currentMap = '/assets/maps/sandbox_zone_b.json';
       this.debug('map-sandbox:loadZoneB:complete');
