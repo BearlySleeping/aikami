@@ -44,6 +44,20 @@ export type GameCommand =
       velocity: { x: number; y: number };
     }
   | {
+      /**
+       * Sets the 2D velocity for an arbitrary entity by its ECS entity ID.
+       * The movement system will apply this velocity with collision detection
+       * on the next tick. Set to {x: 0, y: 0} to stop movement.
+       *
+       * Contract: C-212 Party Follow System
+       */
+      type: 'SET_ENTITY_VELOCITY';
+      /** The entity ID in the bitECS world (must have Position component). */
+      entityId: number;
+      /** Velocity vector in pixels per second. */
+      velocity: { x: number; y: number };
+    }
+  | {
       type: 'INTERACT';
       targetEntityId: string;
     }
