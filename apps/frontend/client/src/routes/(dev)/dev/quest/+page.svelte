@@ -5,8 +5,8 @@
   // NEVER import production ViewModels or services here.
 
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import { getQuestDevViewModel } from '$views/quest/quest_view_model.dev.svelte.ts';
   import QuestView from '$views/quest/quest_view.svelte';
+  import { getQuestDevViewModel } from '$views/quest/quest_view_model.dev.svelte.ts';
 
   const viewModel = getQuestDevViewModel({
     className: 'QuestDevViewModel',

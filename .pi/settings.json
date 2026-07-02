@@ -13,6 +13,6 @@
     "npm:@hypabolic/pi-hypa"
   ],
   "extensions": ["./.pi/extensions"],
-  "skills": ["./.pi/skills", "./.pi/skills-pixijs"],
+  "skills": ["./.pi/skills", "./.pi/generated-skills/pixijs", "./.pi/generated-skills/daisyui"],
   "prompts": ["./.pi/prompts"]
 }
