@@ -138,6 +138,15 @@
         >
           Zone B (legacy)
         </button>
+        <button
+          class="btn btn-sm gap-1"
+          class:btn-accent={viewModel.currentMap?.includes('textured')}
+          class:btn-outline={!viewModel.currentMap?.includes('textured')}
+          onclick={() => viewModel.loadZoneC()}
+          disabled={!viewModel.engineReady}
+        >
+          Textured
+        </button>
 
         {#if !viewModel.engineReady}
           <span class="self-center text-xs text-neutral-content/60">— Engine not ready</span>

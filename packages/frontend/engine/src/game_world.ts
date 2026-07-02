@@ -1245,8 +1245,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     defeatedEnemies?: string[];
     targetSpawnHash?: number;
     disableClamping?: boolean;
+    /** GIDs to treat as water (blocked). Defaults to [2] for debug maps. Pass empty Set for maps without water. */
+    waterGids?: Set<number>;
   }): Promise<void> {
-    const { mapUrl, targetX, targetY, defeatedEnemies, targetSpawnHash, disableClamping } = options;
+    const {
+      mapUrl,
+      targetX,
+      targetY,
+      defeatedEnemies,
+      targetSpawnHash,
+      disableClamping,
+      waterGids,
+    } = options;
     this.debug('loadMap', { mapUrl, targetX, targetY, disableClamping });
 
     try {
@@ -1280,7 +1290,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const tilemap = isJton
         ? await loadJtonMap({ url: mapUrl })
         : await loadTilemap({ url: mapUrl });
-      const collisionGridData = extractCollisionGrid(tilemap);
+      const collisionGridData = extractCollisionGrid(tilemap, { waterGids });
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
