@@ -15,3 +15,8 @@ export {
   preparePaletteLUT,
   TextureManager,
 } from './texture_manager.ts';
+export type {
+  TilemapChunkRendererOptions,
+  TilemapChunkRenderResult,
+} from './tilemap_chunk_renderer.ts';
+export { buildTilemapChunks, frustumCullChunks } from './tilemap_chunk_renderer.ts';
