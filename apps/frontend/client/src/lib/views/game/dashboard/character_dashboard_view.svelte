@@ -1,12 +1,12 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view.svelte
-  import type { CharacterDashboardViewModelInterface } from './character_dashboard_view_model.svelte';
+    import type { CharacterDashboardViewModelInterface } from './character_dashboard_view_model.svelte';
 
-  type Props = {
-    viewModel: CharacterDashboardViewModelInterface;
-  };
+    type Props = {
+      viewModel: CharacterDashboardViewModelInterface;
+    };
 
-  const { viewModel }: Props = $props();
+    const { viewModel }: Props = $props();
 </script>
 
 <!-- biome-ignore lint/a11y/useSemanticElements: fullscreen backdrop must be div -->
