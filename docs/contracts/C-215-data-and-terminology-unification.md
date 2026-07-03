@@ -1,3 +1,4 @@
+<!-- completed: 2026-07-03 -->
 # C-215: Data and Terminology Unification
 
 ## Context
@@ -35,3 +36,26 @@ Additionally, we need to clean up the frontend's `data` vs `constants` directori
 
 ## Technical Notes
 - Be careful with `packages/backend/firebase`. Changing the schemas in `shared` might require you to update the Firestore rules or Data Connect queries if they explicitly reference the old terminology. Keep the database changes additive or carefully mapped if possible to avoid breaking existing emulator data.
+
+---
+
+## Execution Report — 2026-07-03
+
+### Summary
+Enforced Character → Persona/NPC terminology. `CharacterCreationService` → `PersonaCreationService`, `CharacterTextStreamService` → `PersonaCreationTextStreamService`. Both moved to services/persona/. Data/constants audit: structure already correct.
+
+### Files Created
+- `services/persona/persona_creation_service.svelte.ts`
+- `services/persona/persona_creation_text_stream.svelte.ts`
+
+### Files Deleted
+- `services/character/character_service.svelte.ts`
+- `services/character/character_text_stream.svelte.ts`
+
+### Files Modified
+- `services/index.ts`, `persona_create_view_model.svelte.ts`, `.test.ts`, `.dev.svelte.ts`, `test_preload.ts`, `image_view_model.test.ts`
+
+### Test Results
+- Typecheck: 0 errors, 0 warnings
+- Validate: passed (client + types)
+- Visual test: ✅ captured successfully (persona_list suite, 1/1 pass, 101KB screenshot)

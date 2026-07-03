@@ -133,6 +133,12 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
         return true;
       }
 
+      // Persona list / character selection view (C-215)
+      const personaList = document.querySelector('[data-testid="persona-list"]');
+      if (personaList) {
+        return true;
+      }
+
       for (const span of document.querySelectorAll('span, h2')) {
         const text = span.textContent ?? '';
         if (

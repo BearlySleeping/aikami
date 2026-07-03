@@ -137,6 +137,7 @@ P2 (Polish — after P1):
 | C-212 | [Party Follow System](C-212-party-follow-system.md) ✅ | SET_ENTITY_VELOCITY bridge command, NPC companion following via ECS velocity + collision, party follow sandbox with LPC characters | C-196, C-137, C-141 |
 | C-213 | [Environment Time System](C-213-environment-time-system.md) ✅ | Time simulation clock, day/night colour cycles, procedural weather overlays (rain/fog), DaisyUI clock HUD | C-210, C-211 |
 | C-214 | [Engine & API Core Consolidation](C-214-engine-and-api-consolidation.md) ✅ | Eliminate legacy `lib/game`, merge `api-core` into engine, repoint all imports | — |
+| C-215 | [Data & Terminology Unification](C-215-data-and-terminology-unification.md) ✅ | Enforce Character/Persona/NPC hierarchy, consolidate data/constants directories | — |
 
 ## Contract Format
 

@@ -63,7 +63,7 @@ const _setupServiceOverrides = (): void => {
   // stubs that auto-create mock functions on property access.
   mock.module(_MOCK_SVC, () => ({
     // Test-specific service overrides
-    characterCreationService: {
+    personaCreationService: {
       get persona() {
         return mockPersona;
       },
@@ -160,10 +160,10 @@ const _setupServiceOverrides = (): void => {
     TtsService: class {},
     authService: _createServiceStub(),
     AuthService: class {},
-    CharacterCreationService: class {},
+    PersonaCreationService: class {},
     characterService: _createServiceStub(),
     CharacterService: class {},
-    characterTextStreamService: _createServiceStub(),
+    personaCreationTextStreamService: _createServiceStub(),
     CharacterTextStreamService: class {},
     chatService: _createServiceStub(),
     contextBuilder: _createServiceStub(),
@@ -609,7 +609,7 @@ describe('PersonaCreateViewModel — C-078', () => {
       expect(vm.phase).toBe('CHAT');
     });
 
-    test('cancel should call characterCreationService.cancel', async () => {
+    test('cancel should call personaCreationService.cancel', async () => {
       const vm = await loadVm();
 
       vm.cancel();
@@ -743,7 +743,7 @@ describe('PersonaCreateViewModel — C-078', () => {
       expect(extractionCalls[0].systemPrompt).toBeDefined();
     });
 
-    test('should store extracted persona in characterCreationService', async () => {
+    test('should store extracted persona in personaCreationService', async () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Dwarf warrior');
 
