@@ -15,6 +15,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import type { LpcAnimationState } from '$lib/data/lpc_models';
 
 // ---------------------------------------------------------------------------
 // Lazily-resolved ECS worker constructor (SSR-safe dynamic import)
@@ -117,11 +118,7 @@ class EnvironmentSandboxViewModel
         recipeResolver: (layerIds) =>
           layerIds.map((id) => SANDBOX_RECIPES[id]).filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(
-            slot,
-            assetId,
-            state as unknown as import('$lib/data/lpc_models').LpcAnimationState,
-          ),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         textureManager: this._textureManager,
       };
 

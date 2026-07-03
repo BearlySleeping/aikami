@@ -1,3 +1,4 @@
+// apps/frontend/client/src/env.d.ts
 import type { LogLevel, Mode } from '@nordclaw/types';
 
 declare module '*?worker&type=module' {

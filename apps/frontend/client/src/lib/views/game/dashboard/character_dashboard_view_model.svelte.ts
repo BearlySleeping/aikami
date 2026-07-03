@@ -11,14 +11,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import {
-  type EquipmentSlot,
-  gameStateService,
-  getItemDefinition,
-  type ItemDefinition,
-} from '$services';
+import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
+import { gameStateService, getItemDefinition } from '$services';
 
-// ── Re-exports for view convenience ────────────────────────────────────
 export type { EquipmentSlot, ItemDefinition };
 
 // ── Interface ──────────────────────────────────────────────────────────

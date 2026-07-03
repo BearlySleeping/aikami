@@ -15,7 +15,52 @@ import { mock } from 'bun:test';
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────
 
 (globalThis as Record<string, unknown>).$state = (value: unknown) => value;
+(globalThis as Record<string, unknown>).$state.raw = (value: unknown) => value;
+(globalThis as Record<string, unknown>).$state.snapshot = (value: unknown) => value;
 (globalThis as Record<string, unknown>).$derived = (value: unknown) => value;
+
+// ── Browser API polyfills (required by services in test env) ────────────────
+
+if (typeof KeyboardEvent === 'undefined') {
+  (globalThis as Record<string, unknown>).KeyboardEvent = class {
+    key: string;
+    constructor(_type: string, options?: { key?: string }) {
+      this.key = options?.key ?? '';
+    }
+    preventDefault = mock(() => {});
+    stopPropagation = mock(() => {});
+  };
+}
+
+if (typeof window === 'undefined') {
+  (globalThis as Record<string, unknown>).window = {
+    AudioContext: class {
+      state = 'suspended';
+      resume = mock(async () => {});
+      close = mock(async () => {});
+      createGain = mock(() => ({ connect: mock(() => {}), gain: { value: 1 } }));
+      createBufferSource = mock(() => ({
+        connect: mock(() => {}),
+        start: mock(() => {}),
+        stop: mock(() => {}),
+      }));
+      createDynamicsCompressor = mock(() => ({
+        connect: mock(() => {}),
+        threshold: { value: -24 },
+        knee: { value: 30 },
+        ratio: { value: 12 },
+        attack: { value: 0.003 },
+        release: { value: 0.25 },
+      }));
+      decodeAudioData = mock(async () => ({ duration: 1 }));
+      destination = {};
+    },
+    innerWidth: 1920,
+    innerHeight: 1080,
+    addEventListener: mock(() => {}),
+    removeEventListener: mock(() => {}),
+  };
+}
 
 const effectPolyfill = ((fn: () => void) => {
   fn();
@@ -236,6 +281,10 @@ const _localServicesMock = () => ({
   UserService: class {},
   routerService: _createServiceStub(),
   pixiTextureInjector: _createServiceStub(),
+  gameOverlayService: _createServiceStub(),
+  GameOverlayService: class {},
+  gameEngineService: _createServiceStub(),
+  GameEngineService: class {},
   __esModule: true,
 });
 

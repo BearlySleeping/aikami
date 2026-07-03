@@ -10,7 +10,11 @@
 
   const viewModel = getQuestDevViewModel({
     className: 'QuestDevViewModel',
-  });
+  }) as ReturnType<typeof getQuestDevViewModel> & {
+    injectMockQuests(): void;
+    progressObjective(): void;
+    failRandomQuest(): void;
+  };
 
   /** Dev tools actions wired to QuestDevViewModel sandbox methods. */
   const devActions = [

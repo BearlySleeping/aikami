@@ -7,6 +7,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import { logger } from '$logger';
+import { hydrateAllServices, serializeAllServices } from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // GameSaveService — IndexedDB save/load persistence for ECS snapshots
@@ -158,7 +159,9 @@ class GameSaveService
     this.isSaving = true;
 
     try {
-      const payload = await this._getBridge().createSnapshot();
+      const ecsSnapshot = await this._getBridge().createSnapshot();
+      const serviceSnapshots = serializeAllServices();
+      const payload = JSON.stringify({ ecsSnapshot, serviceSnapshots });
 
       const doc: SaveDocument = {
         id: `${KEY_PREFIX}${slotId}`,
@@ -204,7 +207,11 @@ class GameSaveService
         throw new Error(`Save not found: ${slotId}`);
       }
 
-      await this._getBridge().restoreSnapshot(doc.payload);
+      const { ecsSnapshot, serviceSnapshots } = this._parsePayload(doc.payload);
+      await this._getBridge().restoreSnapshot(ecsSnapshot);
+      if (serviceSnapshots) {
+        hydrateAllServices(serviceSnapshots);
+      }
     } finally {
       this.isLoading = false;
     }
@@ -230,10 +237,33 @@ class GameSaveService
       if (!doc) {
         throw new Error(`Save not found: ${slotId}`);
       }
-      return doc.payload;
+      const { ecsSnapshot } = this._parsePayload(doc.payload);
+      return ecsSnapshot;
     } finally {
       db.close();
     }
+  }
+
+  /**
+   * Parses a save payload — handles both legacy plain ECS snapshots
+   * and the new JSON envelope with service snapshots.
+   */
+  private _parsePayload(raw: string): {
+    ecsSnapshot: string;
+    serviceSnapshots?: import('./serializable_service').ServiceSnapshot[];
+  } {
+    try {
+      const envelope = JSON.parse(raw) as {
+        ecsSnapshot: string;
+        serviceSnapshots?: import('./serializable_service').ServiceSnapshot[];
+      };
+      if (envelope.ecsSnapshot) {
+        return envelope;
+      }
+    } catch {
+      // Not valid JSON — treat as legacy plain ECS snapshot
+    }
+    return { ecsSnapshot: raw };
   }
 
   // -----------------------------------------------------------------------

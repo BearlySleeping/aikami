@@ -8,26 +8,19 @@
   // Contract: C-154 AI Vendors Economy
 
   import VendorView from '$lib/views/vendor/vendor_view.svelte';
-  import { VendorDevViewModel } from '$lib/views/vendor/vendor_view_model.dev.svelte.ts';
+  import { getVendorDevViewModel } from '$lib/views/vendor/vendor_view_model.dev.svelte.ts';
   import type { VendorViewModelInterface } from '$lib/views/vendor/vendor_view_model.svelte';
   import { gameStateService } from '$services';
 
   // Seed starting gold for the sandbox so purchases can be tested.
   gameStateService.addGold({ amount: 400 });
 
-  // Navigate back on close — uses history.back() which is an SPA navigation
-  // and preserves the GameStateService singleton (inventory + gold).
-  const wrappedOnClose = () => {
-    window.history.back();
-  };
-
-  const viewModel: VendorViewModelInterface = new VendorDevViewModel({
+  const viewModel: VendorViewModelInterface = getVendorDevViewModel({
     className: 'VendorSandboxVM',
     vendorId: 'sandbox-vendor',
     vendorName: "Grimbold's Forge",
     vendorInventory:
       'rusty_sword,iron_sword,steel_sword,wooden_shield,leather_armor,iron_armor,health_potion,mana_potion',
-    onClose: wrappedOnClose,
   });
 </script>
 

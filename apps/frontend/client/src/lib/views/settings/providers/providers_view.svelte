@@ -5,29 +5,17 @@
   import AdvancedTab from './tabs/advanced_tab.svelte';
   import ImageTab from './tabs/image_tab.svelte';
   import TextTab from './tabs/text_tab.svelte';
+  import { getTextTabViewModel } from './tabs/text_tab_view_model.svelte';
   import VoiceTab from './tabs/voice_tab.svelte';
 
   type Props = {
     viewModel: ProvidersViewModelInterface;
   };
 
-  let { viewModel }: Props = $props();
+  const { viewModel }: Props = $props();
 
-  // ── API key visibility toggles ────────────────────────────────────────
-
-  const visibleKeys = $state<Record<string, boolean>>({});
-
-  const toggleKeyVisibility = (provider: string): void => {
-    visibleKeys[provider] = !visibleKeys[provider];
-  };
-
-  const isKeyVisible = (provider: string): boolean => visibleKeys[provider] === true;
-
-  // ── Derived ───────────────────────────────────────────────────────────
-
-  const hasOpenRouterKey = $derived((viewModel.config.text.apiKeys.openrouter?.length ?? 0) > 0);
-
-  const isOpenRouterKeyVerified = $derived(viewModel.verificationStatus.openrouter === 'valid');
+  /** Per-tab ViewModel for text configuration. */
+  const textTabViewModel = getTextTabViewModel({ className: 'TextTabViewModel' });
 </script>
 
 <svelte:head>
@@ -163,7 +151,7 @@
     <main class="max-w-7xl mx-auto px-6 py-8">
       <!-- ── Text Tab ────────────────────────────────────────────────── -->
       {#if viewModel.activeTab === 'text'}
-        <TextTab {viewModel} />
+        <TextTab viewModel={textTabViewModel} />
       <!-- ── Voice Tab ────────────────────────────────────────────────── -->
       {:else if viewModel.activeTab === 'voice'}
         <VoiceTab {viewModel} />

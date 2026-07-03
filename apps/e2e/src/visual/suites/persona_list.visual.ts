@@ -125,7 +125,10 @@ const setupPersonaList = async (page: import('playwright').Page): Promise<void> 
   }, MOCK_PERSONAS);
 
   // Navigate — skip-onboarding bypasses the boot diagnostics gate
-  await page.goto('http://localhost:5274/characters?skip-onboarding', { waitUntil: 'domcontentloaded', timeout: 15_000 });
+  await page.goto('http://localhost:5274/characters?skip-onboarding', {
+    waitUntil: 'domcontentloaded',
+    timeout: 15_000,
+  });
 
   // Wait for the persona list to render
   await page.waitForSelector('[data-testid="persona-list"]', { timeout: 10_000 });

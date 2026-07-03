@@ -1,3 +1,4 @@
+// apps/frontend/client/src/vite-worker.d.ts
 // Type declarations for Vite's worker import syntax.
 // `import W from './worker.ts?worker'` creates a Worker constructor.
 declare module '*?worker' {

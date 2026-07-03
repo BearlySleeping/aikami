@@ -13,8 +13,9 @@
 
   import { browser } from '$app/environment';
   import GameView from '$lib/views/game/canvas/game_view.svelte';
-  import { GameViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
-  import { GameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
+  import { getGameViewViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
+  import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
+  import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
   import { gameStateService } from '$services';
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -78,11 +79,8 @@
     }
   }
 
-  const gameViewModel = new GameViewModel({ className: 'GameViewModel' });
-  const gameUIViewModel = new GameUIViewModel({
-    className: 'GameUIViewModel',
-    gameViewModel,
-  });
+  const gameViewModel = getGameViewViewModel({ className: 'GameViewViewModel' });
+  const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Reactive dev panel state
@@ -246,10 +244,11 @@
     { label: '📦 Inspect Last Save', onClick: () => void _verifySave(), group: 'Save/Load' },
     {
       label: '📦 Force Auto-Save',
-      onClick: () => {
-        // Directly trigger the auto-save mechanism exposed on the VM
-        const uiVm = gameUIViewModel as unknown as { _triggerAutoSave: () => Promise<void> };
-        void uiVm._triggerAutoSave();
+      onClick: async () => {
+        // Directly trigger the auto-save via the overlay service
+        const { gameOverlayService } = await import('$services');
+        const svc = gameOverlayService as unknown as { _triggerAutoSave: () => Promise<void> };
+        void svc._triggerAutoSave();
         _addLog('🔄 Manual auto-save triggered');
       },
       group: 'Save/Load',
@@ -299,7 +298,8 @@
 <div class="fixed inset-0 flex">
   <!-- Game canvas (left 70%) -->
   <div class="flex-1 relative">
-    <GameView viewModel={gameViewModel} {gameUIViewModel} />
+    <GameView viewModel={gameViewModel} />
+    <GameUIView viewModel={gameUIViewModel} />
   </div>
 
   <!-- Dev panel (right 30%) — scrollable overlay -->

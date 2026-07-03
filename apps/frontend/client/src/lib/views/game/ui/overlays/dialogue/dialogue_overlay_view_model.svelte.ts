@@ -5,49 +5,28 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import {
   DIALOG_ACTION_SYSTEM_PROMPT,
   type DialogActionIntent,
   DialogActionSchema,
 } from '$lib/data/ai_prompts/dialog_action_schema';
+import {
+  FALLBACK_AVATAR_URL,
+  FALLBACK_PERSONA_ID,
+  PERSONA_PROMPTS,
+} from '$lib/data/dialogue_personas';
 import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
+import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
   diceService,
+  gameStateService,
   SentenceBoundaryChunker,
   type TextChatMessage,
   textGenerationService,
   ttsService,
 } from '$services';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
-
-// ── LPC fallback constants ────────────────────────────────────────────
-
-/** Default LPC spritesheet URL used as fallback NPC avatar when image generation is disabled. */
-const FALLBACK_AVATAR_URL = '/lpc/body/male/walk.png' as const;
-
-// ── Persona prompt templates ───────────────────────────────────────
-
-/** Known NPC persona archetypes with their role-playing descriptions. */
-const PERSONA_PROMPTS: Record<string, string> = {
-  default: 'You are a helpful and knowledgeable non-player character in a fantasy world.',
-  blacksmith:
-    'You are an old, grumpy blacksmith who has worked the forge for forty years. You speak in short, gruff sentences and complain about your aching back. You take pride in your craft but are suspicious of strangers.',
-  innkeeper:
-    'You are a warm, gossipy innkeeper who knows everyone in town. You love sharing rumors and making travelers feel welcome. You speak in a friendly, chatty manner and often offer unsolicited advice.',
-  guard:
-    'You are a disciplined town guard who takes your duty seriously. You speak formally and are suspicious of troublemakers. You follow orders but have a hidden soft spot for honest folk.',
-  merchant:
-    'You are a charismatic traveling merchant always looking for a good deal. You speak enthusiastically about your wares and use flowery language. Everything is "the finest in the land" according to you.',
-  sage: 'You are a wise, ancient sage who speaks in riddles and cryptic warnings. You know secrets about the world but reveal them only to those who prove worthy. Your speech is measured and mysterious.',
-  bandit:
-    'You are a rough-edged bandit hiding in the hills. You speak with a coarse accent and make veiled threats. Deep down you have a code of honor, but you would never admit it.',
-  healer:
-    'You are a gentle, compassionate healer dedicated to helping the injured and sick. You speak softly and always put others before yourself. You have a deep knowledge of herbs and medicine.',
-  guild_master:
-    'You are a shrewd guild master who runs the local trade organization with an iron fist. You speak in calculated terms and weigh every word. You are always looking to expand your influence.',
-} as const;
-
-const FALLBACK_PERSONA_ID = 'default' as const;
 
 // ---------------------------------------------------------------------------
 // DialogueOverlayViewModel — orchestrates AI chat with an NPC
@@ -62,44 +41,6 @@ const FALLBACK_PERSONA_ID = 'default' as const;
 //
 // Contract: C-128 (origin), C-129 (polish)
 // ---------------------------------------------------------------------------
-
-/** A single chat message rendered in the dialogue history. */
-export type DialogueMessage = {
-  /** Unique identifier for the message (used as Svelte {#each} key). */
-  id: string;
-  /** The role of the speaker. */
-  role: 'player' | 'npc';
-  /** The message content text. */
-  content: string;
-};
-
-// ── Action Context Menu Types (C-162) ────────────────────────────────
-
-/**
- * A pre-written action option shown in the BG3-style action context menu.
- *
- * Contract: C-162 BG3 Action Menu & Dice
- */
-export type ActionOption = {
-  /** Unique action identifier. */
-  id: string;
-  /** Display label shown on the action button. */
-  label: string;
-  /** The type of action — determines the resolution flow. */
-  type: 'skill_check' | 'direct_combat' | 'custom';
-  /** The skill being tested, if this is a skill_check action. */
-  skill?: string;
-};
-
-/**
- * Phases of the dialogue interaction loop.
- *
- * - `MENU`: Action context menu is visible.
- * - `CUSTOM_INPUT`: Freeform text input is visible (triggered by [Custom]).
- * - `DICE`: Interactive d20 is visible, awaiting player click.
- * - `CHAT`: Standard chat flow (after dice resolution or during streaming).
- */
-export type DialoguePhase = 'MENU' | 'CUSTOM_INPUT' | 'DICE' | 'CHAT';
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
   /** NPC data from the ECS interaction event. */
@@ -188,6 +129,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
     readonly isSuccess: boolean | null;
   } | null;
 
+  /** Unified dice state for the shared GameDice component. */
+  readonly diceState: DiceState | null;
+
   /** Whether the AI is resolving a structured skill check (disables all inputs). */
   readonly isResolvingSkillCheck: boolean;
 
@@ -213,6 +157,12 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * is sending CAMERA_ZOOM_UPDATE events.
    */
   hasNpcScreenPosition: boolean;
+
+  /** Scrollable message container — bound by View via bind:this. */
+  messageContainerElement: HTMLDivElement | undefined;
+
+  /** Textarea input — bound by View via bind:this for autofocus. */
+  inputElement: HTMLTextAreaElement | undefined;
 
   /**
    * Selects an action from the context menu.
@@ -311,6 +261,23 @@ class DialogueOverlayViewModel
   /** Whether the AI is resolving a structured skill check. */
   isResolvingSkillCheck = $state(false);
 
+  /** Unified dice state mapping for the shared GameDice component. */
+  get diceState(): DiceState | null {
+    const s = this.skillCheckState;
+    if (!s) {
+      return null;
+    }
+    return {
+      phase: s.phase === 'awaiting_click' ? 'interactive' : s.phase,
+      value: s.rollValue,
+      isSuccess: s.isSuccess,
+      checkInfo: { type: s.checkType, dc: s.difficultyClass },
+      onRoll: () => {
+        void this.rollDice();
+      },
+    };
+  }
+
   /** @inheritdoc */
   npcScreenX = $state<number>(0);
 
@@ -319,6 +286,12 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   hasNpcScreenPosition = $state<boolean>(false);
+
+  /** Scrollable message container — set by View via bind:this. */
+  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
+
+  /** Textarea input — set by View via bind:this for autofocus. */
+  inputElement = $state.raw<HTMLTextAreaElement | undefined>(undefined);
 
   private readonly _npcData: DialogueNpcData;
 
@@ -381,6 +354,26 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
+    // Register reactive effects for DOM interactions
+    this.registerEffectRoot(() => {
+      // Autofocus the textarea when dialogue mode is active
+      $effect(() => {
+        // gameStateService is imported at module level
+        if (gameStateService.currentMode === 'DIALOGUE' && this.inputElement) {
+          this.inputElement.focus();
+        }
+      });
+
+      // Auto-scroll to bottom when new messages arrive or AI is streaming
+      $effect(() => {
+        void this.messages.length;
+        void this.isStreaming;
+        if (this.messageContainerElement) {
+          this.messageContainerElement.scrollTop = this.messageContainerElement.scrollHeight;
+        }
+      });
+    });
+
     // Initialize native Kokoro TTS if not already done
     if (!this._ttsInitialized) {
       this._ttsInitialized = true;

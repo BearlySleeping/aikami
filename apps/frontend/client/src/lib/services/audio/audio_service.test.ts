@@ -199,6 +199,30 @@ const createMockAudioContext = (): AudioContext => {
       return Promise.resolve(createStubAudioBuffer());
     }),
 
+    createDynamicsCompressor: mock((): DynamicsCompressorNode => {
+      // Minimal stub — returns a mock with AudioParam-like gain props
+      const paramStub = { value: 0 } as unknown as AudioParam;
+      const stub: unknown = {
+        threshold: paramStub,
+        knee: paramStub,
+        ratio: paramStub,
+        attack: paramStub,
+        release: paramStub,
+        connect: mock(() => ({})),
+        disconnect: mock(() => {}),
+        context: {} as BaseAudioContext,
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        channelCount: 2,
+        channelCountMode: 'max',
+        channelInterpretation: 'speakers',
+        addEventListener: mock(() => {}),
+        removeEventListener: mock(() => {}),
+        dispatchEvent: mock(() => true),
+      };
+      return stub as DynamicsCompressorNode;
+    }),
+
     resume: mock(() => Promise.resolve()),
     close: mock(() => Promise.resolve()),
     state: 'running',

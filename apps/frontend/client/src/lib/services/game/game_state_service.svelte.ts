@@ -6,7 +6,14 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { ActiveSessionData, WorldEvent, WorldLocation, WorldState } from '@aikami/types';
+import type {
+  ActiveSessionData,
+  EquipmentSlot,
+  ItemDefinition,
+  WorldEvent,
+  WorldLocation,
+  WorldState,
+} from '@aikami/types';
 import type {
   ActiveContextEntry,
   GameMode,
@@ -15,27 +22,12 @@ import type {
 } from '$types/game.ts';
 
 // ---------------------------------------------------------------------------
-// Item definition catalog — maps itemId strings to stat bonuses and metadata
+// Item catalog — maps itemId strings to stat bonuses and metadata
 //
 // Contract: C-153 Character Dashboard & Equipment
+//
+// ItemDefinition and EquipmentSlot types are defined in @aikami/schemas + @aikami/types
 // ---------------------------------------------------------------------------
-
-/** Equipment slot type for distinguishing weapon vs armor. */
-export type EquipmentSlot = 'weapon' | 'armor';
-
-/** Definition for a single item type in the game. */
-export type ItemDefinition = {
-  /** Display label shown in the UI. */
-  readonly label: string;
-  /** Attack bonus when equipped (0 for non-weapons). */
-  readonly attackBonus: number;
-  /** Defense bonus when equipped (0 for non-armor). */
-  readonly defenseBonus: number;
-  /** Whether the item can be equipped at all. */
-  readonly equippable: boolean;
-  /** Which slot the item occupies when equipped (only relevant when equippable). */
-  readonly slot: EquipmentSlot | undefined;
-};
 
 /**
  * Hardcoded item catalog for MVP equipment system.
