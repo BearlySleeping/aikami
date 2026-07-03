@@ -220,6 +220,19 @@ export {
   loadJtonMap,
   loadTilemap,
 } from './assets/map_loader.ts';
+export {
+  COLOR_DAWN,
+  COLOR_DUSK,
+  COLOR_MIDNIGHT,
+  COLOR_NOON,
+  copyEnvironmentUBO,
+  createEnvironmentUBO,
+  DIURNAL_KEYFRAMES,
+  ENV_UBO_OFFSETS,
+  ENVIRONMENT_SHADER_STRUCT,
+  ENVIRONMENT_UBO_BYTES,
+  ENVIRONMENT_UBO_SIZE,
+} from './environment/environment_ubo.ts';
 export { checkLineOfSight, clearBresenhamGrid, setBresenhamGrid } from './math/bresenham.ts';
 export type { StaticActionDefinition } from './math/goap/action_registry.ts';
 // GOAP (C-191)
@@ -287,7 +300,8 @@ export type {
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
-
+export type { WeatherOverlayOptions } from './rendering/weather_overlay.ts';
+export { WeatherOverlay } from './rendering/weather_overlay.ts';
 // Streaming orchestrator (C-193)
 export type {
   ActionMutationPayload,
@@ -337,6 +351,17 @@ export {
   spawnSpawnPointEntities,
   spawnTransitionEntities,
 } from './systems/entity_spawner.ts';
+// Environment (C-213)
+export type {
+  EnvironmentState,
+  SetEnvironmentConfigOptions,
+} from './systems/environment_system.ts';
+export {
+  getEnvironmentState,
+  resetEnvironmentTracking,
+  setEnvironmentConfig,
+  stepEnvironment,
+} from './systems/environment_system.ts';
 // Combat Tactics (C-197)
 export {
   resolveTacticalAction,
@@ -392,7 +417,6 @@ export {
 export type { TilemapRenderOptions, TilemapRenderResult } from './systems/tilemap_render_system.ts';
 export { renderTilemap } from './systems/tilemap_render_system.ts';
 export { updateZoningSystem } from './systems/zoning_system.ts';
-
 // Types (plain serializable — safe for UI consumption)
 export type {
   GameCommand,

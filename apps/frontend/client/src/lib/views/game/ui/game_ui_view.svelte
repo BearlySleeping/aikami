@@ -1,8 +1,9 @@
 <script lang="ts">
+  // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
+  import ClockHud from '$lib/components/game/clock_hud.svelte';
   import InventoryView from '../../inventory/inventory_view.svelte';
   import QuestView from '../../quest/quest_view.svelte';
   import VendorView from '../../vendor/vendor_view.svelte';
-  // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
   import CharacterDashboardView from '../dashboard/character_dashboard_view.svelte';
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
@@ -19,6 +20,16 @@
 
 <!-- biome-ignore lint/a11y/noStaticElementInteractions: svelte:window is a valid global key handler -->
 <svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
+
+<!-- Clock HUD — always visible when no full-screen overlay is active (C-213) -->
+{#if viewModel.activeOverlay !== 'PAUSE_MENU' && viewModel.activeOverlay !== 'GAME_OVER'}
+  <ClockHud
+    gameHour={viewModel.gameHour}
+    gameMinute={viewModel.gameMinute}
+    windVelocity={viewModel.windVelocity}
+    rainIntensity={viewModel.rainIntensity}
+  />
+{/if}
 
 {#if viewModel.activeOverlay === 'PAUSE_MENU'}
   <PauseMenuOverlay
