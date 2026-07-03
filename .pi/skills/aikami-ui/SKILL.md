@@ -54,7 +54,47 @@ When you need a complex component that doesn't exist yet: add it to
 
 ---
 
-## Rule 2: Typography — `font-mono` and `font-sans` ONLY
+## Rule 2: Component Purity — Dumb Components Only
+
+**🔴 `@aikami/frontend-components` must remain 100% pure and stateless.
+Never import business logic, ViewModels, or services into the component library.**
+
+| ❌ NEVER in `@aikami/frontend-components` | ✅ MUST pattern                          |
+| ----------------------------------------- | ---------------------------------------- |
+| `extends BaseViewModel` or `extends BaseClass` | Extend nothing (pure Svelte component) |
+| `import { ... } from '$services'`         | Accept everything via `$props()`         |
+| `$state()` / `$derived()` / `$effect()` for business state | `$props()` only; Svelte runes for internal UI state (open/closed) OK |
+| Direct Firebase SDK, repository, or service calls | Callbacks: `onchange`, `onclose`, etc. |
+| `onMount()` with data fetching            | Consumer ViewModel fetches, passes via props |
+
+Components in this library are the "Shadcn layer" — pure template wrappers
+around DaisyUI HTML structures. They accept `$props()`, manage **internal UI
+state only** (e.g., is a dropdown open?), and communicate back via callbacks.
+
+```svelte
+<!-- ✅ CORRECT — pure component: $props() + callbacks only -->
+<script lang="ts">
+  type Props = {
+    value: string;
+    options: SelectOption[];
+    onchange?: (value: string) => void;
+  };
+  let { value = $bindable(), options, onchange }: Props = $props();
+</script>
+
+<!-- ❌ WRONG — component importing services or extending BaseClass -->
+<script lang="ts">
+  import { myService } from '$services/my_service';
+  import { BaseClass } from '@aikami/utils';
+</script>
+```
+
+If you need reactive business state: that belongs in a **ViewModel**
+(`_view_model.svelte.ts`), not in the component.
+
+---
+
+## Rule 3: Typography — `font-mono` and `font-sans` ONLY
 
 **🔴 NEVER use arbitrary font-family utilities or inline font declarations.**
 
@@ -88,7 +128,7 @@ never inline it.
 
 ---
 
-## Rule 3: Semantic Colors — DaisyUI Tokens, Never Hex
+## Rule 4: Semantic Colors — DaisyUI Tokens, Never Hex
 
 **🔴 NEVER use hardcoded hex colors (`#fff`, `text-[#1a1a1a]`, etc.).**
 
@@ -129,7 +169,7 @@ For opacity adjustments, use Tailwind opacity modifiers: `bg-primary/50`,
 
 ---
 
-## Rule 4: Global CSS — `app.css` is the Single Source
+## Rule 5: Global CSS — `app.css` is the Single Source
 
 **🔴 All global CSS changes (fonts, theme variables, scrollbar styles, animations)
 go in `apps/frontend/client/src/app.css` — nowhere else.**
@@ -141,7 +181,7 @@ go in `apps/frontend/client/src/app.css` — nowhere else.**
 
 ---
 
-## Rule 5: DaisyUI Plugin Positioning
+## Rule 6: DaisyUI Plugin Positioning
 
 The `@plugin "daisyui"` import **must precede** the `@theme` block in `app.css`
 so DaisyUI theme variables cascade correctly:
