@@ -8,14 +8,14 @@
 // ImageGenerationService (ComfyUI). When disabled (default), all AI calls
 // are mocked locally for fast iteration.
 
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,
   CombatActionSchema,
-} from '../../game/core/ai/prompts/combat_action_schema.ts';
+} from '$lib/data/ai_prompts/combat_action_schema';
+import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import { CombatViewModel, type CombatViewModelOptions } from './combat_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------

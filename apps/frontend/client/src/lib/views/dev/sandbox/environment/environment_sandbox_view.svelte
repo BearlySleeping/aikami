@@ -82,10 +82,10 @@
       <div class="flex flex-col gap-3">
         <!-- Time Scale -->
         <div class="flex flex-col gap-1">
-          <label class="flex justify-between text-xs text-base-content/70">
+          <div class="flex justify-between text-xs text-base-content/70">
             <span>Time Scale</span>
             <span class="font-mono tabular-nums">1× (normal)</span>
-          </label>
+          </div>
           <div class="flex gap-2">
             <button class="btn btn-xs btn-outline flex-1" onclick={() => viewModel.setTimeScale(1)}>
               1×
@@ -113,10 +113,10 @@
 
         <!-- Start Hour -->
         <div class="flex flex-col gap-1">
-          <label class="flex justify-between text-xs text-base-content/70">
+          <div class="flex justify-between text-xs text-base-content/70">
             <span>Jump to Hour</span>
             <span class="font-mono tabular-nums">{viewModel.gameHour}:00</span>
-          </label>
+          </div>
           <div class="flex gap-2">
             <button class="btn btn-xs btn-outline flex-1" onclick={() => viewModel.setStartHour(0)}>
               🌙 00
@@ -141,10 +141,10 @@
 
         <!-- Rain Intensity -->
         <div class="flex flex-col gap-1">
-          <label class="flex justify-between text-xs text-base-content/70">
+          <div class="flex justify-between text-xs text-base-content/70">
             <span>Rain Intensity</span>
             <span class="font-mono tabular-nums">{Math.round(viewModel.rainIntensity * 100)}%</span>
-          </label>
+          </div>
           <input
             type="range"
             min="0"
@@ -184,10 +184,10 @@
 
         <!-- Wind Velocity -->
         <div class="flex flex-col gap-1">
-          <label class="flex justify-between text-xs text-base-content/70">
+          <div class="flex justify-between text-xs text-base-content/70">
             <span>Wind</span>
             <span class="font-mono tabular-nums">{viewModel.windVelocity.toFixed(2)}</span>
-          </label>
+          </div>
           <input
             type="range"
             min="-1"

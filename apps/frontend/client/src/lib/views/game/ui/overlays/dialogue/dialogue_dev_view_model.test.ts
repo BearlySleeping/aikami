@@ -86,7 +86,7 @@ mock.module('$services', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock: @aikami/frontend/api-core (OllamaClient)
+// Mock: $lib/services/ai/clients (OllamaClient)
 // ---------------------------------------------------------------------------
 
 const createMockOllamaClient = (): Record<string, unknown> => {
@@ -121,7 +121,7 @@ const createMockOllamaClient = (): Record<string, unknown> => {
   };
 };
 
-mock.module('@aikami/frontend/api-core', () => createMockOllamaClient());
+mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
 
 // ---------------------------------------------------------------------------
 // Mock: URL and setTimeout globals (not available in Bun)
@@ -213,7 +213,7 @@ describe('DialogueDevViewModel', () => {
   });
 
   afterEach(() => {
-    mock.module('@aikami/frontend/api-core', () => createMockOllamaClient());
+    mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
   });
 
   // ── Initial state ────────────────────────────────────────────────────

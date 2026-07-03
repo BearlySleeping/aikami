@@ -158,8 +158,16 @@ const _interpolateDiurnal = (
 
   // Find bracketing keyframes
   const keyframes = DIURNAL_KEYFRAMES;
-  let lower: (typeof keyframes)[number] = keyframes[0] ?? { hour: 0, ambient: COLOR_MIDNIGHT, shadow: [0, 0, 0.02, 1] };
-  let upper: (typeof keyframes)[number] = keyframes[keyframes.length - 1] ?? { hour: 24, ambient: COLOR_MIDNIGHT, shadow: [0, 0, 0.02, 1] };
+  let lower: (typeof keyframes)[number] = keyframes[0] ?? {
+    hour: 0,
+    ambient: COLOR_MIDNIGHT,
+    shadow: [0, 0, 0.02, 1],
+  };
+  let upper: (typeof keyframes)[number] = keyframes[keyframes.length - 1] ?? {
+    hour: 24,
+    ambient: COLOR_MIDNIGHT,
+    shadow: [0, 0, 0.02, 1],
+  };
 
   for (let i = 0; i < keyframes.length - 1; i++) {
     const current = keyframes[i];

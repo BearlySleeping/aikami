@@ -14,13 +14,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { audioService, gameStateService, getItemDefinition, type ItemDefinition } from '$services';
 import {
   VENDOR_ACTION_SYSTEM_PROMPT,
   type VendorActionIntent,
   VendorActionSchema,
-} from '../../game/core/ai/prompts/vendor_action_schema.ts';
+} from '$lib/data/ai_prompts/vendor_action_schema';
+import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { audioService, gameStateService, getItemDefinition, type ItemDefinition } from '$services';
 
 // ---------------------------------------------------------------------------
 // Vendor item pricing

@@ -1,11 +1,16 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts
 
-import type { OllamaClient } from '@aikami/frontend/api-core';
+import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import {
+  DIALOG_ACTION_SYSTEM_PROMPT,
+  type DialogActionIntent,
+  DialogActionSchema,
+} from '$lib/data/ai_prompts/dialog_action_schema';
 import {
   diceService,
   SentenceBoundaryChunker,
@@ -13,11 +18,6 @@ import {
   textGenerationService,
   ttsService,
 } from '$services';
-import {
-  DIALOG_ACTION_SYSTEM_PROMPT,
-  type DialogActionIntent,
-  DialogActionSchema,
-} from '../../../../../game/core/ai/prompts/dialog_action_schema.ts';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ── LPC fallback constants ────────────────────────────────────────────

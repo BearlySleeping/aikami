@@ -624,7 +624,7 @@ describe('PersonaCreateViewModel — C-078', () => {
 
   describe('C-081: Schema Compilation', () => {
     test('CharacterExtractionSchema should compile to valid JSON schema', async () => {
-      const mod = await import('$lib/game/core/ai/prompts/character_extraction_schema.ts');
+      const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
 
       // TypeBox schemas are plain objects with a type property
@@ -641,7 +641,7 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('appearance sub-schema should enforce additionalProperties: false', async () => {
-      const mod = await import('$lib/game/core/ai/prompts/character_extraction_schema.ts');
+      const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
       const properties = schema.properties as Record<string, unknown>;
       const appearance = properties.appearance as Record<string, unknown>;
@@ -659,7 +659,7 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('abilityScores sub-schema should enforce additionalProperties: false', async () => {
-      const mod = await import('$lib/game/core/ai/prompts/character_extraction_schema.ts');
+      const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
       const properties = schema.properties as Record<string, unknown>;
       const scores = properties.abilityScores as Record<string, unknown>;

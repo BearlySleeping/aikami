@@ -1,6 +1,6 @@
 // apps/frontend/game/src/engine/services/api_service.ts
 
-import type { GameApiClientInterface } from '@aikami/frontend/api-core';
+import type { GameApiClientInterface } from '@aikami/types';
 
 /**
  * Data that the game engine needs about an NPC from the backend.

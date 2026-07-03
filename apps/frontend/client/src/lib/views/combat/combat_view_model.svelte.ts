@@ -6,15 +6,15 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-import { gameStateService } from '$services';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,
   CombatActionSchema,
-} from '../../game/core/ai/prompts/combat_action_schema.ts';
+} from '$lib/data/ai_prompts/combat_action_schema';
+import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import { gameStateService } from '$services';
 
 // ---------------------------------------------------------------------------
 // CombatViewModel — Svelte 5 ViewModel for the combat / turn-based battle UI

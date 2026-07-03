@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts
 
-import { OllamaClient } from '@aikami/frontend/api-core';
 import type { EngineBridge } from '@aikami/frontend/engine';
+import { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

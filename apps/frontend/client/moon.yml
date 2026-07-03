@@ -18,7 +18,6 @@ dependsOn:
   - 'parser'
   - 'frontend-utils'
   - 'frontend-services'
-  - 'frontend-api-core'
   - 'schemas'
   - 'types'
   - 'constants'

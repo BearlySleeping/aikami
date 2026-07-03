@@ -72,7 +72,6 @@
               "@aikami/backend-database": "Use @aikami/backend/database instead",
               "@aikami/backend-svelte-kit": "Use @aikami/backend/svelte-kit instead",
               "@aikami/backend-utils": "Use @aikami/backend/utils instead",
-              "@aikami/frontend-api-core": "Use @aikami/frontend/api-core instead",
               "@aikami/frontend-configs": "Use @aikami/frontend/configs instead",
               "@aikami/frontend-dataconnect": "Use @aikami/frontend/dataconnect instead",
               "@aikami/frontend-engine": "Use @aikami/frontend/engine instead",
