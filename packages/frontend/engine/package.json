@@ -9,7 +9,6 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "dependencies": {
-    "@aikami/frontend-api-core": "workspace:*",
     "@aikami/frontend-dataconnect": "workspace:*",
     "@tursodatabase/database": "0.6.1",
     "@aikami/frontend/configs": "workspace:*",

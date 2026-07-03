@@ -176,7 +176,6 @@ export { createEngineBridge, MockEngineBridge } from './engine_bridge.ts';
 // GameWorld (lifecycle manager)
 export type { GameWorldInitializeOptions, GameWorldOptions, PlayerInitData } from './game_world.ts';
 export { GameWorld } from './game_world.ts';
-export { createConfiguredAiClient, getConfiguredProvider } from './services/ai_config.ts';
 export type { ItemData } from './services/ai_service.ts';
 export { GameAiService } from './services/ai_service.ts';
 export type { ActionResult, GameState, NpcData, PlayerAction } from './services/api_service.ts';

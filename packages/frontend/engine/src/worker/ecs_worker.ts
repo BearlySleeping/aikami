@@ -84,8 +84,7 @@ import {
   spawnSpawnPointEntities,
   spawnTransitionEntities,
 } from '../systems/entity_spawner.ts';
-import { stepEnvironment } from '../systems/environment_system.ts';
-import { setEnvironmentConfig } from '../systems/environment_system.ts';
+import { setEnvironmentConfig, stepEnvironment } from '../systems/environment_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateGoapCombatTactics } from '../systems/goap_combat_tactics_system.ts';
 import { updateGoapScheduler } from '../systems/goap_scheduler_system.ts';

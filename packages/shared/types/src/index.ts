@@ -38,6 +38,7 @@ export * from './lib/endpoints/request_functions.ts';
 export * from './lib/error.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/helpers.ts';
+export * from './lib/ai/index.js';
 export * from './lib/logger.ts';
 export * from './lib/project.ts';
 export * from './lib/repository/utils.ts';

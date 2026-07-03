@@ -24,7 +24,8 @@ const EnvironmentSchema = Type.Object({
     description: 'Whether the clock HUD (HH:MM with sun/moon icon) is visible in the top-right',
   }),
   gameSceneIntact: Type.Boolean({
-    description: 'Whether the game tilemap and character sprites are still visible beneath the weather',
+    description:
+      'Whether the game tilemap and character sprites are still visible beneath the weather',
   }),
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });

@@ -5,12 +5,12 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import {
   CHARACTER_EXTRACTION_SYSTEM_PROMPT,
   CharacterExtractionSchema,
-} from '$lib/game/core/ai/prompts/character_extraction_schema';
-import { DND_CREATION_SYSTEM_PROMPT } from '$lib/game/core/ai/prompts/dnd_creation';
+} from '$lib/data/ai_prompts/character_extraction_schema';
+import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
+import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import {
   aiSettingsService,
   authService,

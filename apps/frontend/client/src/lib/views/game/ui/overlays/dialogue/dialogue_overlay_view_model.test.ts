@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 
 // ---------------------------------------------------------------------------
-// Mock: OllamaClient from @aikami/frontend/api-core
+// Mock: OllamaClient from $lib/services/ai/clients
 // ---------------------------------------------------------------------------
 
 type StreamChunk = string;
@@ -59,7 +59,7 @@ const createMockOllamaClient = (): Record<string, unknown> => {
   };
 };
 
-mock.module('@aikami/frontend/api-core', () => {
+mock.module('$lib/services/ai/clients/index.ts', () => {
   const m = createMockOllamaClient();
   return m;
 });
@@ -162,7 +162,7 @@ describe('DialogueOverlayViewModel', () => {
 
   afterEach(() => {
     // Re-create mocks to reset streamChat spy state
-    mock.module('@aikami/frontend/api-core', () => createMockOllamaClient());
+    mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
   });
 
   // ── Initialization ───────────────────────────────────────────────────
@@ -399,7 +399,7 @@ describe('DialogueOverlayViewModel', () => {
     // Re-register mock with fresh spy
     const ollamaMock = createMockOllamaClient();
     mockStreamChunks = ['Hello', ' traveller'];
-    mock.module('@aikami/frontend/api-core', () => ollamaMock);
+    mock.module('$lib/services/ai/clients/index.ts', () => ollamaMock);
 
     const { OllamaClient: OllamaClientClass } = ollamaMock;
     const ollamaInstance = new (OllamaClientClass as new () => Record<string, unknown>)();
