@@ -5,3 +5,8 @@
     light --default,
     dark --prefersdark;
 }
+
+@theme {
+  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Inter", sans-serif;
+}

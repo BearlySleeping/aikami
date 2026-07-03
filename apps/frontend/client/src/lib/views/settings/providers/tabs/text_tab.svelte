@@ -1,7 +1,7 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/text_tab.svelte -->
 <script lang="ts">
+  import { Select } from '@aikami/frontend-components';
   import type { AuxiliaryModels } from '$lib/services/config/config_service.svelte';
-  import { TEXT_PROVIDERS } from '$lib/services/config/config_service.svelte';
   import ProvidersModelSelector from '../providers_model_selector.svelte';
   import type { TextTabViewModelInterface } from './text_tab_view_model.svelte';
 
@@ -15,26 +15,18 @@
 <div class="space-y-6">
   <!-- Provider Selector -->
   <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
-    <h2 class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">
-      Text Provider
-    </h2>
+    <h2 class="font-mono text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">Text Provider</h2>
     <div class="form-control mb-4">
-      <select
-        class="select select-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+      <Select
         value={viewModel.textProvider}
-        onchange={(e: Event) =>
-          viewModel.setTextProvider((e.target as HTMLSelectElement).value)}
-      >
-        {#each TEXT_PROVIDERS as prov}
-          <option value={prov.id}>{prov.label}</option>
-        {/each}
-      </select>
+        options={viewModel.textProviders.map((p) => ({ value: p.id, label: p.label }))}
+        onchange={(v: string) => viewModel.setTextProvider(v)}
+        class="font-mono text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+      />
       <div class="label py-1">
         <span class="text-xs text-[#938ea1]">{viewModel.selectedProviderDescription}</span>
         {#if viewModel.savedKeys[viewModel.textProvider]?.length > 0}
-          <span class="font-['JetBrains_Mono'] text-[10px] text-green-400/70 ml-2"
-            >✓ Key saved</span
-          >
+          <span class="font-mono text-[10px] text-green-400/70 ml-2">✓ Key saved</span>
         {/if}
       </div>
     </div>
@@ -42,14 +34,12 @@
     {#if viewModel.selectedProviderNeedsKey}
       <div class="form-control">
         <div class="label py-1">
-          <span class="font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#c9c4d8]"
-            >API Key</span
-          >
+          <span class="font-mono text-xs uppercase tracking-wider text-[#c9c4d8]">API Key</span>
         </div>
         <div class="join w-full">
           <input
             type={viewModel.keyVisible ? 'text' : 'password'}
-            class="input input-bordered join-item w-full font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+            class="input input-bordered join-item w-full font-mono text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
             placeholder="sk-..."
             value={viewModel.textApiKey}
             oninput={(e: Event) =>
@@ -105,13 +95,11 @@
     {#if viewModel.selectedProviderNeedsUrl}
       <div class="form-control">
         <div class="label py-1">
-          <span class="font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#c9c4d8]"
-            >Server URL</span
-          >
+          <span class="font-mono text-xs uppercase tracking-wider text-[#c9c4d8]">Server URL</span>
         </div>
         <input
           type="text"
-          class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+          class="input input-bordered font-mono text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
           placeholder="http://localhost:11434"
           value={viewModel.textUrl}
           oninput={(e: Event) => viewModel.setTextUrl((e.target as HTMLInputElement).value)}
@@ -121,15 +109,15 @@
 
     {#if Object.keys(viewModel.savedKeys).filter((k) => viewModel.savedKeys[k]?.length > 0).length > 0}
       <div class="mt-4 pt-4 border-t border-white/[0.06]">
-        <span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-[#938ea1]"
+        <span class="font-mono text-[10px] uppercase tracking-widest text-[#938ea1]"
           >Saved keys:</span
         >
         <div class="flex flex-wrap gap-1.5 mt-2">
           {#each Object.keys(viewModel.savedKeys).filter((k) => viewModel.savedKeys[k]?.length > 0) as provider}
             <span
-              class="badge badge-sm font-['JetBrains_Mono'] text-[10px] bg-white/[0.06] border-white/[0.08] text-[#c9c4d8]"
+              class="badge badge-sm font-mono text-[10px] bg-white/[0.06] border-white/[0.08] text-[#c9c4d8]"
             >
-              {TEXT_PROVIDERS.find((p) => p.id === provider)?.label ?? provider}
+              {viewModel.textProviders.find((p) => p.id === provider)?.label ?? provider}
             </span>
           {/each}
         </div>
@@ -139,10 +127,8 @@
 
   <!-- Primary Model -->
   <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
-    <h2 class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">
-      Primary Model
-    </h2>
-    <p class="text-sm text-[#938ea1] mb-6 font-['Inter']">
+    <h2 class="font-mono text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">Primary Model</h2>
+    <p class="text-sm text-[#938ea1] mb-6 font-sans">
       Select the primary text generation model. Models are fetched from OpenRouter when an API key
       is verified.
     </p>
@@ -161,10 +147,10 @@
 
   <!-- Auxiliary Models -->
   <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
-    <h2 class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">
+    <h2 class="font-mono text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">
       Auxiliary Models
     </h2>
-    <p class="text-sm text-[#938ea1] mb-6 font-['Inter']">
+    <p class="text-sm text-[#938ea1] mb-6 font-sans">
       Assign specialised models for distinct AI tasks. Leave blank to use the primary model.
     </p>
     <div class="grid grid-cols-2 gap-4">
@@ -175,25 +161,27 @@
       ] as aux}
         <div class="form-control">
           <div class="label py-1">
-            <span class="font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#c9c4d8]"
+            <span class="font-mono text-xs uppercase tracking-wider text-[#c9c4d8]"
               >{aux.label}</span
             >
           </div>
           {#if viewModel.availableOpenRouterModels.length > 0}
-            <select
-              class="select select-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+            <Select
               value={viewModel.auxiliaryModels[aux.key] ?? ''}
-              onchange={(e: Event) => viewModel.setAuxiliaryModel(aux.key, (e.target as HTMLSelectElement).value || undefined)}
-            >
-              <option value="">— Use Primary Model —</option>
-              {#each viewModel.availableOpenRouterModels as m}
-                <option value={m.id}>{m.name}</option>
-              {/each}
-            </select>
+              options={[
+                { value: '', label: '— Use Primary Model —' },
+                ...viewModel.availableOpenRouterModels.map((m) => ({
+                  value: m.id,
+                  label: m.name,
+                })),
+              ]}
+              onchange={(v: string) => viewModel.setAuxiliaryModel(aux.key, v || undefined)}
+              class="font-mono text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+            />
           {:else}
             <input
               type="text"
-              class="input input-bordered font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
+              class="input input-bordered font-mono text-sm bg-white/[0.06] border-white/[0.08] focus:border-[#cabeff]"
               placeholder="Model ID (e.g. openai/gpt-4o-mini)"
               value={viewModel.auxiliaryModels[aux.key] ?? ''}
               oninput={(e: Event) => viewModel.setAuxiliaryModel(aux.key, (e.target as HTMLInputElement).value.trim() || undefined)}
@@ -206,15 +194,15 @@
 
   <!-- Model Configurations -->
   <div class="rounded-lg border border-white/[0.06] bg-white/[0.03] backdrop-blur-xl p-6">
-    <h2 class="font-['JetBrains_Mono'] text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">
+    <h2 class="font-mono text-xs uppercase tracking-[0.1em] text-[#cabeff] mb-4">
       Model Configurations
     </h2>
-    <p class="text-sm text-[#938ea1] mb-6 font-['Inter']">
+    <p class="text-sm text-[#938ea1] mb-6 font-sans">
       Configure provider endpoints and model identifiers. Add entries for any OpenAI-compatible API.
     </p>
     {#if viewModel.config.models.length === 0}
       <div
-        class="text-center py-8 text-[#938ea1] font-['JetBrains_Mono'] text-sm border border-dashed border-white/[0.06] rounded-lg"
+        class="text-center py-8 text-[#938ea1] font-mono text-sm border border-dashed border-white/[0.06] rounded-lg"
       >
         No models configured
       </div>
@@ -225,42 +213,39 @@
             <div class="grid grid-cols-3 gap-4">
               <div class="form-control">
                 <div class="label py-0.5">
-                  <span
-                    class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]"
+                  <span class="font-mono text-[10px] uppercase tracking-wider text-[#938ea1]"
                     >Provider</span
                   >
                 </div>
                 <input
                   type="text"
-                  class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
+                  class="input input-bordered input-sm font-mono text-sm bg-white/[0.06] border-white/[0.08]"
                   value={modelConfig.provider}
                   oninput={(e: Event) => viewModel.setModelField(i, 'provider', (e.target as HTMLInputElement).value)}
                 >
               </div>
               <div class="form-control">
                 <div class="label py-0.5">
-                  <span
-                    class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]"
+                  <span class="font-mono text-[10px] uppercase tracking-wider text-[#938ea1]"
                     >Model</span
                   >
                 </div>
                 <input
                   type="text"
-                  class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
+                  class="input input-bordered input-sm font-mono text-sm bg-white/[0.06] border-white/[0.08]"
                   value={modelConfig.model}
                   oninput={(e: Event) => viewModel.setModelField(i, 'model', (e.target as HTMLInputElement).value)}
                 >
               </div>
               <div class="form-control">
                 <div class="label py-0.5">
-                  <span
-                    class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-wider text-[#938ea1]"
+                  <span class="font-mono text-[10px] uppercase tracking-wider text-[#938ea1]"
                     >Endpoint</span
                   >
                 </div>
                 <input
                   type="text"
-                  class="input input-bordered input-sm font-['JetBrains_Mono'] text-sm bg-white/[0.06] border-white/[0.08]"
+                  class="input input-bordered input-sm font-mono text-sm bg-white/[0.06] border-white/[0.08]"
                   value={modelConfig.endpoint}
                   oninput={(e: Event) => viewModel.setModelField(i, 'endpoint', (e.target as HTMLInputElement).value)}
                 >

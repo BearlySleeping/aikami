@@ -85,7 +85,18 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** OpenRouter chat completions endpoint. */
+/** Resolves the chat completions URL from routing info. */
+function resolveChatUrl(routing: ResolvedRouting): string {
+  if (routing.endpoint) {
+    // Strip trailing slash then append /chat/completions
+    const base = routing.endpoint.replace(/\/$/, '');
+    return `${base}/chat/completions`;
+  }
+  // Default to OpenRouter
+  return 'https://openrouter.ai/api/v1/chat/completions';
+}
+
+/** Chat completions URL for backwards-compatible fallback. */
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** Timeout for the entire fetch+stream operation (90 seconds). */
@@ -233,12 +244,14 @@ class TextGenerationService
         stream: true,
       };
 
-      const response = await fetch(OPENROUTER_CHAT_URL, {
+      const chatUrl = resolveChatUrl(routing);
+
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-          ...OPENROUTER_HEADERS,
+          ...(routing.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
         },
         body: JSON.stringify(body),
         signal: abortController.signal,
@@ -349,12 +362,14 @@ class TextGenerationService
         },
       };
 
-      const response = await fetch(OPENROUTER_CHAT_URL, {
+      const chatUrl = resolveChatUrl(routing);
+
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-          ...OPENROUTER_HEADERS,
+          ...(routing.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
         },
         body: JSON.stringify(body),
         signal: abortController.signal,

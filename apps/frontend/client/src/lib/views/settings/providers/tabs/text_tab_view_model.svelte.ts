@@ -46,6 +46,7 @@ export type TextTabViewModelInterface = BaseViewModelInterface & {
   readonly modelSearchQuery: string;
   readonly auxiliaryModels: AuxiliaryModels;
   readonly instructTemplates: readonly string[];
+  readonly textProviders: typeof TEXT_PROVIDERS;
 
   toggleKeyVisibility(): void;
   setTextProvider(provider: string): void;
@@ -81,6 +82,10 @@ class TextTabViewModel
 
   get instructTemplates(): readonly string[] {
     return INSTRUCT_TEMPLATES;
+  }
+
+  get textProviders(): typeof TEXT_PROVIDERS {
+    return TEXT_PROVIDERS;
   }
 
   // ── Computed text provider values (was $derived in the view) ──
@@ -132,18 +137,36 @@ class TextTabViewModel
   async initialize(): Promise<void> {
     await configService.load();
 
-    // Auto-detect Ollama: if it's running locally, default to ollama provider
+    // Auto-detect Ollama: if it's running locally, default to ollama provider.
+    // Runs even when provider is already ollama to fill in missing URL/model.
     const keys = configService.state.text.apiKeys;
     const hasNoKeys = Object.values(keys).every((k) => !k);
-    if (hasNoKeys) {
+    const isOllamaProvider = configService.state.text.provider === 'ollama';
+    if (hasNoKeys || isOllamaProvider) {
       try {
         const res = await fetch('http://localhost:11434/api/tags', {
           signal: AbortSignal.timeout(2000),
         });
-        if (res.ok && configService.state.text.provider !== 'ollama') {
-          configService.setTextProvider('ollama');
-          configService.setTextUrl('http://localhost:11434/v1');
-          configService.setPreferredModel('llama3.2');
+        if (res.ok) {
+          let needsSave = false;
+          if (!isOllamaProvider) {
+            configService.setTextProvider('ollama');
+            needsSave = true;
+          }
+          if (!configService.state.text.url) {
+            configService.setTextUrl('http://localhost:11434/v1');
+            needsSave = true;
+          }
+          if (
+            !configService.state.preferredModel ||
+            configService.state.preferredModel.startsWith('openrouter/')
+          ) {
+            configService.setPreferredModel('llama3.2');
+            needsSave = true;
+          }
+          if (needsSave) {
+            await configService.save();
+          }
         }
       } catch {
         // Ollama not running — keep defaults
@@ -233,9 +256,9 @@ class TextTabViewModel
     this.onSaveRequested();
   }
 
-  /** Notifies the parent to schedule a debounced save. */
+  /** Persists text config changes immediately to the encrypted vault. */
   onSaveRequested(): void {
-    // The parent ProvidersViewModel handles the actual save
+    configService.save();
   }
 }
 

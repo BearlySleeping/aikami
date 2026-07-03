@@ -646,18 +646,27 @@ class ConfigService
   async load(pin?: string): Promise<void> {
     logger.debug('ConfigService.load');
 
-    // 1. Load API keys from encrypted vault
+    // 1. Load API keys + text provider from encrypted vault
     const raw = await decrypt({ pin });
     if (raw) {
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
-        if (vault.apiKeys && typeof vault.apiKeys === 'object') {
-          this.state.text = {
-            ...DEFAULT_TEXT_CONFIG,
-            apiKeys: { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) },
-            provider: this.state.text.provider,
-          };
-        }
+        const apiKeys: ApiKeys =
+          vault.apiKeys && typeof vault.apiKeys === 'object'
+            ? { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) }
+            : { ...DEFAULT_API_KEYS };
+        const provider: TextProvider =
+          typeof vault.textProvider === 'string'
+            ? (vault.textProvider as TextProvider)
+            : this.state.text.provider;
+        const url: string | undefined =
+          typeof vault.textUrl === 'string' ? vault.textUrl : this.state.text.url;
+        this.state.text = {
+          ...DEFAULT_TEXT_CONFIG,
+          apiKeys,
+          provider,
+          url,
+        };
       } catch {
         this.warn('load: failed to parse vault JSON');
       }
@@ -724,10 +733,11 @@ class ConfigService
   async save(): Promise<void> {
     logger.debug('ConfigService.save');
 
-    // Encrypt API keys (part of text config)
+    // Encrypt sensitive text config (apiKeys, provider, url)
     const vaultPayload = JSON.stringify({
       apiKeys: this.state.text.apiKeys,
       textProvider: this.state.text.provider,
+      textUrl: this.state.text.url,
     });
     await encrypt({ text: vaultPayload });
 
@@ -825,36 +835,67 @@ class ConfigService
       this._injectEnvDefaults();
     }
 
-    const { preferredModel, models } = this.state;
+    const { text, preferredModel, models } = this.state;
+    const provider = text.provider;
 
+    // Endpoint: user-configured URL → models array → provider defaults
+    let endpoint = text.url ?? '';
+
+    // Model: preferredModel → models array → provider defaults
     let model = preferredModel;
-    let provider = 'openrouter';
-    let endpoint = '';
 
-    if (model && models.length > 0) {
+    if (!model && models.length > 0) {
+      // Look for a model matching the current provider first
+      const match = models.find((m) => m.provider === provider);
+      if (match) {
+        model = match.model;
+        endpoint = endpoint || match.endpoint || '';
+      } else {
+        model = models[0].model;
+        endpoint = endpoint || models[0].endpoint || '';
+      }
+    }
+
+    // If we have a model, enrich endpoint from models array if not yet set
+    if (model && !endpoint && models.length > 0) {
       const match = models.find((m) => m.model === model);
       if (match) {
-        provider = match.provider || 'openrouter';
         endpoint = match.endpoint || '';
       }
-    } else if (models.length > 0) {
-      model = models[0].model;
-      provider = models[0].provider || 'openrouter';
-      endpoint = models[0].endpoint || '';
+    }
+
+    // Provider-specific defaults for local providers with no saved config
+    if (!endpoint) {
+      if (provider === 'ollama') {
+        endpoint = 'http://localhost:11434/v1';
+      } else if (provider === 'ooba') {
+        endpoint = 'http://localhost:5000/v1';
+      }
     }
 
     if (!model) {
-      throw new Error(
-        'No text generation provider configured. ' +
-          'Open the Config dashboard or set PUBLIC_OPENROUTER_MODEL in your .env file.',
-      );
+      // Use provider-appropriate defaults when no preferred model is set
+      if (provider === 'ollama') {
+        model = 'llama3.2';
+      } else if (provider === 'openai') {
+        model = 'gpt-4o-mini';
+      } else if (provider === 'anthropic') {
+        model = 'claude-3-haiku-20240307';
+      } else if (provider === 'deepseek') {
+        model = 'deepseek-chat';
+      } else {
+        throw new Error(
+          'No text generation provider configured. ' +
+            'Open the Config dashboard or set PUBLIC_OPENROUTER_MODEL in your .env file.',
+        );
+      }
     }
 
     return {
       model,
       provider,
       endpoint,
-      apiKey: this.state.text.apiKeys[this.state.text.provider],
+      apiKey: text.apiKeys[provider],
     };
   }
 

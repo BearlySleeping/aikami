@@ -73,6 +73,7 @@
       "name": "@aikami/client",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/frontend-components": "workspace:*",
         "@aikami/frontend-services": "workspace:*",
         "@aikami/frontend-utils": "workspace:*",
         "@aikami/frontend/engine": "workspace:*",
