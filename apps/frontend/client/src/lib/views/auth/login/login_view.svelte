@@ -1,15 +1,15 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/auth/login/LoginView.svelte
-    import t from '$i18n';
-    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-    import ForgotPasswordDialog from './forgot-password/forgot_password_dialog.svelte';
-    import type { LoginViewModelInterface } from './login_view_model.svelte.ts';
+  import t from '$i18n';
+  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import ForgotPasswordDialog from './forgot-password/forgot_password_dialog.svelte';
+  import type { LoginViewModelInterface } from './login_view_model.svelte.ts';
 
-    type Props = {
-      viewModel: LoginViewModelInterface;
-    };
+  type Props = {
+    viewModel: LoginViewModelInterface;
+  };
 
-    let { viewModel }: Props = $props();
+  let { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer

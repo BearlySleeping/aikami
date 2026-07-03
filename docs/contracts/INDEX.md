@@ -141,6 +141,7 @@ P2 (Polish — after P1):
 | C-216 | [Documentation Overhaul](C-216-documentation-overhaul.md) ✅ | Rewrite README, consolidate arch docs, update .context files | — |
 | C-217 | [E2E Suite Stabilisation](C-217-e2e-stabilisation.md) ✅ | Engine E2E test mode, Playwright GPU stability, visual test masking, combat VRT 3-run stability | — |
 | C-218 | [E2E Logic & UI Bug Resolution](C-218-e2e-logic-ui-resolution.md) ✅ | Run full E2E suite, fix bugs, inventory visual test, 100% pass rate | — |
+| C-219 | [UI Component System Refactor](C-219-ui-component-system-refactor.md) ✅ | New Select component, global typography @theme, text_tab refactor | — |
 
 ## Contract Format
 

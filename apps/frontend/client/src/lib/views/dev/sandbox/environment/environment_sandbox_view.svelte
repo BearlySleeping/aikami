@@ -1,26 +1,26 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view.svelte
-    //
-    // View for the Environment Time/Weather sandbox.
-    // Renders the game canvas with weather overlay, clock HUD, and dev
-    // control panel for rain intensity, wind velocity, and time scale.
+  //
+  // View for the Environment Time/Weather sandbox.
+  // Renders the game canvas with weather overlay, clock HUD, and dev
+  // control panel for rain intensity, wind velocity, and time scale.
 
-    import ClockHud from '$lib/components/game/clock_hud.svelte';
-    import type { EnvironmentSandboxViewModelInterface } from './environment_sandbox_view_model.svelte.ts';
+  import ClockHud from '$lib/components/game/clock_hud.svelte';
+  import type { EnvironmentSandboxViewModelInterface } from './environment_sandbox_view_model.svelte.ts';
 
-    type Props = {
-      viewModel: EnvironmentSandboxViewModelInterface;
-    };
+  type Props = {
+    viewModel: EnvironmentSandboxViewModelInterface;
+  };
 
-    const { viewModel }: Props = $props();
+  const { viewModel }: Props = $props();
 
-    let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+  let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
 
-    $effect(() => {
-      if (canvasElement) {
-        void viewModel.initializeEngine(canvasElement);
-      }
-    });
+  $effect(() => {
+    if (canvasElement) {
+      void viewModel.initializeEngine(canvasElement);
+    }
+  });
 </script>
 
 <div class="relative h-screen w-screen overflow-hidden bg-black">
