@@ -14,9 +14,9 @@ import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import {
   aiSettingsService,
   authService,
-  characterCreationService,
   gameStateService,
   imageGenerationService,
+  personaCreationService,
   routerService,
   storageService,
   textGenerationService,
@@ -156,15 +156,15 @@ export class PersonaCreateViewModel
   ] as const;
 
   get persona(): PersonaData | undefined {
-    return characterCreationService.persona;
+    return personaCreationService.persona;
   }
 
   get avatarUrl(): string {
-    return characterCreationService.avatarUrl;
+    return personaCreationService.avatarUrl;
   }
 
   get isStreaming(): boolean {
-    return characterCreationService.isStreaming;
+    return personaCreationService.isStreaming;
   }
 
   get scoreLabels(): readonly ScoreLabel[] {
@@ -249,7 +249,7 @@ export class PersonaCreateViewModel
 
     // Then get the AI response
     try {
-      this.messages = await characterCreationService.sendMessage({
+      this.messages = await personaCreationService.sendMessage({
         text,
         messages: this.messages,
       });
@@ -273,7 +273,7 @@ export class PersonaCreateViewModel
       // If extraction is already done, go straight to TWEAK
       const persona = await extractionPromise;
       if (persona) {
-        characterCreationService.persona = persona;
+        personaCreationService.persona = persona;
         this._startAvatarIfReady();
         this.phase = 'TWEAK';
       } else {
@@ -321,7 +321,7 @@ export class PersonaCreateViewModel
 
     const persona = await this._extractCharacter();
     if (persona) {
-      characterCreationService.persona = persona;
+      personaCreationService.persona = persona;
       this._startAvatarIfReady();
       this.phase = 'TWEAK';
     } else {
@@ -334,7 +334,7 @@ export class PersonaCreateViewModel
   }
 
   cancel(): void {
-    characterCreationService.cancel();
+    personaCreationService.cancel();
     this.phase = 'CHAT';
   }
 
@@ -380,7 +380,7 @@ export class PersonaCreateViewModel
 
       const url = await storageService.uploadAvatar({ file, uid });
       if (url) {
-        characterCreationService.avatarUrl = url;
+        personaCreationService.avatarUrl = url;
       }
     } catch (error) {
       this.error('uploadAvatar', error);
@@ -419,20 +419,20 @@ export class PersonaCreateViewModel
         }
         const prompt = this._enhanceForComfyUI(appearance);
         const result = await imageGenerationService.generateImage({ prompt });
-        characterCreationService.avatarUrl = result.url;
+        personaCreationService.avatarUrl = result.url;
       } else if (this.regenerationMode === 'direct') {
         const prompt = this.directPrompt.trim();
         if (!prompt) {
           return;
         }
         const result = await imageGenerationService.generateImage({ prompt });
-        characterCreationService.avatarUrl = result.url;
+        personaCreationService.avatarUrl = result.url;
       } else if (this.regenerationMode === 'edit') {
         const instruction = this.editInstruction.trim();
         if (!instruction) {
           return;
         }
-        const currentUrl = characterCreationService.avatarUrl;
+        const currentUrl = personaCreationService.avatarUrl;
         if (!currentUrl) {
           return;
         }
@@ -494,7 +494,7 @@ export class PersonaCreateViewModel
     }
 
     // Convert blob URL to data URL so it survives page refresh
-    let persistentAvatarUrl = characterCreationService.avatarUrl;
+    let persistentAvatarUrl = personaCreationService.avatarUrl;
     if (persistentAvatarUrl?.startsWith('blob:')) {
       try {
         const blobResponse = await fetch(persistentAvatarUrl);
@@ -539,7 +539,7 @@ export class PersonaCreateViewModel
     if (uid) {
       try {
         // Upload avatar to Firebase Storage first, then save persona to Firestore
-        let firestoreAvatarUrl = characterCreationService.avatarUrl;
+        let firestoreAvatarUrl = personaCreationService.avatarUrl;
 
         if (firestoreAvatarUrl?.startsWith('blob:')) {
           // Convert blob URL to a file and upload
@@ -681,7 +681,7 @@ export class PersonaCreateViewModel
         const viewUrl = `/api/image/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder ?? '')}&type=output`;
         const blobResponse = await fetch(viewUrl);
         const newBlob = await blobResponse.blob();
-        characterCreationService.avatarUrl = URL.createObjectURL(newBlob);
+        personaCreationService.avatarUrl = URL.createObjectURL(newBlob);
         return;
       }
     }
@@ -798,7 +798,7 @@ export class PersonaCreateViewModel
     if (!this.isImageGenReady) {
       return;
     }
-    const p = characterCreationService.persona;
+    const p = personaCreationService.persona;
     if (!p) {
       return;
     }
@@ -807,7 +807,7 @@ export class PersonaCreateViewModel
       (p?.race && p?.class
         ? `${p.race} ${p.class}, fantasy character portrait`
         : p?.name || 'fantasy character');
-    characterCreationService.startAvatarGeneration({ prompt: imagePrompt });
+    personaCreationService.startAvatarGeneration({ prompt: imagePrompt });
   }
 
   private _compileChatHistory(): string {
