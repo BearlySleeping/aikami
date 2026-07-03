@@ -1,9 +1,11 @@
-// apps/frontend/client/src/lib/services/character/character_service.svelte.ts
+// apps/frontend/client/src/lib/services/persona/persona_creation_service.svelte.ts
 //
-// Character creation service — orchestrates the character creation flow:
-// 1. DM chat via characterTextStreamService
+// Persona creation service — orchestrates the persona creation flow:
+// 1. DM chat via personaCreationTextStreamService
 // 2. Persona extraction via aiService.createPersona()
 // 3. Avatar generation via imageGenerationService.generateImage()
+//
+// Contract: C-215 — renamed from CharacterCreationService to PersonaCreationService
 
 import {
   BaseFrontendClass,
@@ -12,7 +14,7 @@ import {
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
 import { aiService, imageGenerationService } from '$services';
-import { characterTextStreamService } from './character_text_stream.svelte.ts';
+import { personaCreationTextStreamService } from './persona_creation_text_stream.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,7 +25,7 @@ type ChatMessage = {
   content: string;
 };
 
-export type CharacterCreationServiceInterface = BaseFrontendClassInterface & {
+export type PersonaCreationServiceInterface = BaseFrontendClassInterface & {
   /** The extracted persona data. */
   persona: PersonaData | undefined;
   /** The generated avatar URL. */
@@ -41,21 +43,21 @@ export type CharacterCreationServiceInterface = BaseFrontendClassInterface & {
   cancel(): void;
 };
 
-export type CharacterCreationServiceOptions = BaseFrontendClassOptions;
+export type PersonaCreationServiceOptions = BaseFrontendClassOptions;
 
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
-class CharacterCreationService
-  extends BaseFrontendClass<CharacterCreationServiceOptions>
-  implements CharacterCreationServiceInterface
+class PersonaCreationService
+  extends BaseFrontendClass<PersonaCreationServiceOptions>
+  implements PersonaCreationServiceInterface
 {
   persona: PersonaData | undefined = $state(undefined);
   avatarUrl = $state('');
 
   get isStreaming(): boolean {
-    return characterTextStreamService.isGenerating;
+    return personaCreationTextStreamService.isGenerating;
   }
 
   // ── Public API ────────────────────────────────────────────────────────
@@ -77,8 +79,8 @@ class CharacterCreationService
     });
 
     try {
-      await characterTextStreamService.generate({ prompt: compiledPrompt });
-      const response = characterTextStreamService.output;
+      await personaCreationTextStreamService.generate({ prompt: compiledPrompt });
+      const response = personaCreationTextStreamService.output;
       if (response) {
         this.info('sendMessage:response', { responseLength: response.length });
         return [...updated, { role: 'assistant', content: response }];
@@ -130,7 +132,7 @@ class CharacterCreationService
 
   cancel(): void {
     this.info('cancel');
-    characterTextStreamService.cancel();
+    personaCreationTextStreamService.cancel();
   }
 
   // ── Private helpers ───────────────────────────────────────────────────
@@ -158,7 +160,7 @@ class CharacterCreationService
   }
 }
 
-export const characterCreationService: CharacterCreationServiceInterface =
-  CharacterCreationService.create({
-    className: 'CharacterCreationService',
+export const personaCreationService: PersonaCreationServiceInterface =
+  PersonaCreationService.create({
+    className: 'PersonaCreationService',
   });

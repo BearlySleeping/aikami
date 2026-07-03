@@ -1,11 +1,12 @@
-// apps/frontend/client/src/lib/services/character/character_text_stream.svelte.ts
+// apps/frontend/client/src/lib/services/persona/persona_creation_text_stream.svelte.ts
 //
-// Singleton service for streaming text generation used by the character
+// Singleton service for streaming text generation used by the persona
 // creation wizard. Delegates all SSE streaming and provider resolution to
 // the unified TextGenerationService.
 //
 // Refactored for C-080: removed raw fetch logic, replaced with
 // textGenerationService.streamChat().
+// Contract: C-215 — renamed from CharacterTextStreamService to PersonaCreationTextStreamService
 
 import {
   BaseFrontendClass,
@@ -18,7 +19,7 @@ import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 // Types
 // ---------------------------------------------------------------------------
 
-export type CharacterTextStreamInterface = BaseFrontendClassInterface & {
+export type PersonaCreationTextStreamInterface = BaseFrontendClassInterface & {
   /** The accumulated output text from the SSE stream. */
   readonly output: string;
   /** Whether a generation is currently in progress. */
@@ -33,9 +34,9 @@ export type CharacterTextStreamInterface = BaseFrontendClassInterface & {
 // Implementation
 // ---------------------------------------------------------------------------
 
-export class CharacterTextStreamService
+export class PersonaCreationTextStreamService
   extends BaseFrontendClass<BaseFrontendClassOptions>
-  implements CharacterTextStreamInterface
+  implements PersonaCreationTextStreamInterface
 {
   output = $state('');
   isGenerating = $state(false);
@@ -110,7 +111,7 @@ export class CharacterTextStreamService
   }
 }
 
-export const characterTextStreamService: CharacterTextStreamInterface =
-  CharacterTextStreamService.create({
-    className: 'CharacterTextStreamService',
+export const personaCreationTextStreamService: PersonaCreationTextStreamInterface =
+  PersonaCreationTextStreamService.create({
+    className: 'PersonaCreationTextStreamService',
   });

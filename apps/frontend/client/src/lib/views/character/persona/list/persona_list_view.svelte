@@ -10,7 +10,7 @@
 </script>
 
 <BaseViewModelContainer {viewModel}>
-  <div class="flex flex-col items-center min-h-screen bg-base-200">
+  <div class="flex flex-col items-center min-h-screen bg-base-200" data-testid="persona-list">
     <!-- ═══════════════════════════════════════════════════════════════════
          Header with Back button
          ═══════════════════════════════════════════════════════════════════ -->

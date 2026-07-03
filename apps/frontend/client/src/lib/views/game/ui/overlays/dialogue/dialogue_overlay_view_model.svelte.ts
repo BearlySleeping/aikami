@@ -1,6 +1,5 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts
 
-import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -11,6 +10,7 @@ import {
   type DialogActionIntent,
   DialogActionSchema,
 } from '$lib/data/ai_prompts/dialog_action_schema';
+import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import {
   diceService,
   SentenceBoundaryChunker,

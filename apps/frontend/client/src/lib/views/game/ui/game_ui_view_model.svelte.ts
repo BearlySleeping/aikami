@@ -1,12 +1,12 @@
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts
 
 import type { EngineBridge } from '@aikami/frontend/engine';
-import { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import { audioService } from '$lib/services/audio/audio_service.svelte';
 import { aiSettingsService } from '$lib/services/settings/ai_settings.svelte';
 import {
