@@ -20,6 +20,9 @@ For framework-specific patterns, also load:
 
 | Skill                  | Covers                                                    |
 | ---------------------- | --------------------------------------------------------- |
+| `aikami-ui`            | UI styling rules: DaisyUI primitives vs components,       |
+|                        | typography (`font-mono`/`font-sans`), semantic colors,    |
+|                        | and global CSS routing (`app.css`)                        |
 | `pixijs-v8`            | PixiJS v8 + bitECS, game engine boundary, ECS patterns    |
 | `tauri-v2`             | Tauri v2 desktop patterns and constraints                 |
 | `firestore-collection` | Scaffolding Firestore collections                         |

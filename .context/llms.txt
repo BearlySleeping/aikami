@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-07-02
-> Files: 219 across 11 categories
+> Generated: 2026-07-03
+> Files: 225 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -208,6 +208,14 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 210 webgpu tilemap integration](contracts/C-210-webgpu-tilemap-integration.md)
 - [C 211 realtime tts streaming pipeline](contracts/C-211-realtime-tts-streaming-pipeline.md)
 - [C 212 party follow system](contracts/C-212-party-follow-system.md)
+- [Contract: C-213 Environment, Time, and Weather Core System](contracts/C-213-environment-time-system.md)
+- [C-214: Engine and API Core Consolidation](contracts/C-214-engine-and-api-consolidation.md)
+- [C-215: Data and Terminology Unification](contracts/C-215-data-and-terminology-unification.md)
+- [C-216: Documentation and Architecture Overhaul](contracts/C-216-documentation-overhaul.md)
+- [C-217: E2E Suite Stabilisation for Hybrid Canvas/DOM](contracts/C-217-e2e-stabilisation.md)
+- [C-218: E2E Logic and UI Bug Resolution](contracts/C-218-e2e-logic-ui-resolution.md)
+- [C 219 ui component system refactor](contracts/C-219-ui-component-system-refactor.md)
+- [C 220 ui skills and theming](contracts/C-220-ui-skills-and-theming.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)
@@ -229,13 +237,11 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 ## guides/
 
 - [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
-- [Architecture Overview](guides/ARCHITECTURE.md)
 - [CI/CD Pipeline](guides/CI_CD.md)
 - [Client Feature Roadmap](guides/CLIENT_FEATURES.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
 - [Developer Workflow](guides/dev-workflow.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
-- [Godot Client](guides/GODOT.md)
 - [Playwright Tests](guides/PLAYWRIGHT.md)
 - [Guides](guides/README.md)
 - [Technology Stack](guides/STACK.md)
