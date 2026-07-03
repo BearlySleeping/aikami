@@ -6,8 +6,7 @@ const _supportedLocales = ['en'] as const;
 
 export type SupportedLocale = (typeof _supportedLocales)[number];
 
-export const supportedLocales: ReadonlyArray<string> & typeof _supportedLocales =
-  _supportedLocales;
+export const supportedLocales: ReadonlyArray<string> & typeof _supportedLocales = _supportedLocales;
 
 /**
  * Check if a value is a supported locale.

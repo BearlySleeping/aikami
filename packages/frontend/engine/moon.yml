@@ -15,7 +15,6 @@ project:
   owner: 'Frontend Team'
 
 dependsOn:
-  - 'frontend-api-core'
   - 'frontend-configs'
   - 'frontend-dataconnect'
 

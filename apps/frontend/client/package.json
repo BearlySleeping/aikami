@@ -50,7 +50,6 @@
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@aikami/constants": "workspace:*",
-    "@aikami/frontend-api-core": "workspace:*",
     "@aikami/frontend-services": "workspace:*",
     "@aikami/frontend-utils": "workspace:*",
     "@aikami/frontend/engine": "workspace:*",
