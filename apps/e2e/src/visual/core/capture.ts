@@ -168,6 +168,12 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
         return true;
       }
 
+      // Inventory sandbox (C-218) — DOM-based overlay, no PixiJS canvas
+      const invHeader = document.querySelector('h2');
+      if (invHeader && invHeader.textContent?.trim() === 'Inventory') {
+        return true;
+      }
+
       for (const span of document.querySelectorAll('span, h2')) {
         const text = span.textContent ?? '';
         if (
