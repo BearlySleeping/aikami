@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-03
-> Files: 225 across 11 categories
+> Files: 226 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -216,6 +216,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C-218: E2E Logic and UI Bug Resolution](contracts/C-218-e2e-logic-ui-resolution.md)
 - [C 219 ui component system refactor](contracts/C-219-ui-component-system-refactor.md)
 - [C 220 ui skills and theming](contracts/C-220-ui-skills-and-theming.md)
+- [C 221 modal dialog encapsulation](contracts/C-221-modal-dialog-encapsulation.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

@@ -10,7 +10,7 @@
  */
 
 import { $ } from "bun";
-import { rm, cp, readFile, writeFile } from "node:fs/promises";
+import { rm, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,11 @@ interface SkillSource {
   sourceSubdir: string;
   /** Target directory under .pi/generated-skills/ */
   targetSubdir: string;
+  /**
+   * Optional: specific files to copy from sourceSubdir (relative to sourceSubdir).
+   * When omitted, the entire sourceSubdir is copied recursively.
+   */
+  files?: string[];
 }
 
 const SKILL_SOURCES: SkillSource[] = [
@@ -42,6 +47,13 @@ const SKILL_SOURCES: SkillSource[] = [
     repoUrl: "https://github.com/saadeghi/daisyui.git",
     sourceSubdir: "skills/daisyui",
     targetSubdir: "daisyui",
+  },
+  {
+    name: "Herdr",
+    repoUrl: "https://github.com/ogulcancelik/herdr.git",
+    sourceSubdir: ".",
+    targetSubdir: "herdr",
+    files: ["SKILL.md"],
   },
 ];
 
@@ -69,7 +81,7 @@ async function installSkillSource(source: SkillSource): Promise<void> {
   console.log(`Cloning ${source.repoUrl} (shallow)...`);
   await sh`git clone --depth 1 ${source.repoUrl} ${tmp}`;
 
-  // 3. Locate and copy the source subdirectory
+  // 3. Locate and copy the source subdirectory (or specific files)
   const src = join(tmp, source.sourceSubdir);
   if (!existsSync(src)) {
     throw new Error(
@@ -78,8 +90,26 @@ async function installSkillSource(source: SkillSource): Promise<void> {
   }
 
   if (existsSync(target)) await rm(target, { recursive: true });
-  await cp(src, target, { recursive: true });
-  console.log(`Copied ${source.sourceSubdir} → ${target}`);
+
+  if (source.files && source.files.length > 0) {
+    // Copy only the specified files into the target directory
+    for (const file of source.files) {
+      const srcFile = join(src, file);
+      const dstFile = join(target, file);
+      if (!existsSync(srcFile)) {
+        throw new Error(
+          `${source.name}: repo missing file "${source.sourceSubdir}/${file}"`,
+        );
+      }
+      // Ensure the target subdirectory exists
+      await mkdir(dirname(dstFile), { recursive: true });
+      await cp(srcFile, dstFile);
+      console.log(`Copied ${source.sourceSubdir}/${file} → ${dstFile}`);
+    }
+  } else {
+    await cp(src, target, { recursive: true });
+    console.log(`Copied ${source.sourceSubdir} → ${target}`);
+  }
 
   // 4. Clean up temp clone
   await rm(tmp, { recursive: true });
@@ -94,24 +124,16 @@ async function main() {
     await installSkillSource(source);
   }
 
-  // 2. Ensure all skill paths are in settings.json
+  // 2. Ensure the generated-skills parent path is in settings.json
   const settingsRaw = await readFile(SETTINGS_PATH, "utf-8");
   const settings = JSON.parse(settingsRaw);
-  let modified = false;
 
-  for (const source of SKILL_SOURCES) {
-    const skillsPath = `./.pi/generated-skills/${source.targetSubdir}`;
-    if (!settings.skills.includes(skillsPath)) {
-      settings.skills.push(skillsPath);
-      console.log(`Added "${skillsPath}" to settings.json → skills[]`);
-      modified = true;
-    } else {
-      console.log(`"${skillsPath}" already in settings.json → skills[]`);
-    }
-  }
-
-  if (modified) {
+  if (!settings.skills.includes("./.pi/generated-skills")) {
+    settings.skills.push("./.pi/generated-skills");
     await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+    console.log('Added "./.pi/generated-skills" to settings.json → skills[]');
+  } else {
+    console.log('"./.pi/generated-skills" already in settings.json → skills[]');
   }
 
   const names = SKILL_SOURCES.map((s) => s.name).join(" + ");
