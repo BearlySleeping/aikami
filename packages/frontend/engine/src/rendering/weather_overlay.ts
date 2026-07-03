@@ -189,6 +189,130 @@ const RAIN_FRAGMENT_WGSL = /* wgsl */ `
 `;
 
 // ---------------------------------------------------------------------------
+// GLSL fallback shaders (WebGL2)
+//
+// Contract C-213: Environment system must work with both WebGPU and
+// WebGL2 render preferences. These GLSL shaders provide identical
+// behaviour to the WGSL versions above.
+// ---------------------------------------------------------------------------
+
+/** GLSL vertex shader for the full-screen weather quad. */
+const WEATHER_VERTEX_GLSL = /* glsl */ `#version 300 es
+
+  in vec2 aPosition;
+  in vec2 aUV;
+
+  out vec2 vUV;
+
+  void main() {
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+    vUV = aUV;
+  }
+`;
+
+/** GLSL fragment shader for procedural rain streaks. */
+const WEATHER_FRAGMENT_GLSL = /* glsl */ `#version 300 es
+  precision highp float;
+
+  in vec2 vUV;
+  out vec4 outColor;
+
+  // ── Environment uniforms (matching EnvUniforms layout) ──
+  uniform vec4 uAmbientColor;
+  uniform vec4 uShadowColor;
+  uniform float uAmbientIntensity;
+  uniform float uLocalTime;
+  uniform float uWindVelocity;
+  uniform float uRainIntensity;
+
+  vec2 hash2(vec2 p) {
+    vec2 h = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return fract(sin(h) * 43758.5453);
+  }
+
+  void main() {
+    float intensity = uRainIntensity;
+    float wind = uWindVelocity;
+
+    if (intensity <= 0.01) {
+      outColor = vec4(0.0, 0.0, 0.0, 0.0);
+      return;
+    }
+
+    float time = uLocalTime * 0.5;
+
+    // ── Primary rain layer (large drops, fast) ──
+    vec2 cell = floor(vec2(vUV.x * 30.0, vUV.y * 30.0));
+    vec2 cellHash = hash2(cell);
+
+    float dropThreshold = 1.0 - intensity * 0.6;
+    if (cellHash.x > dropThreshold) {
+      float scroll = mod(time * (1.0 + cellHash.y * 2.0), 1.0);
+
+      vec2 subUV = fract(vec2(
+        vUV.x * 30.0 + wind * scroll * 0.3,
+        vUV.y * 30.0 - scroll
+      ));
+
+      float streakWidth = 0.08;
+      float streakHeight = 0.3;
+
+      bool inStreak = abs(subUV.x - 0.5) < streakWidth &&
+                      subUV.y > 0.0 &&
+                      subUV.y < streakHeight;
+
+      if (inStreak) {
+        float fade = smoothstep(0.0, 0.05, subUV.y) *
+                     (1.0 - smoothstep(streakHeight - 0.05, streakHeight, subUV.y));
+        float alpha = fade * intensity * 0.35;
+        outColor = vec4(0.55, 0.65, 0.85, alpha);
+        return;
+      }
+    }
+
+    // ── Secondary rain layer (smaller drops, slower) ──
+    vec2 fineCell = floor(vec2(vUV.x * 60.0, vUV.y * 60.0));
+    vec2 fineHash = hash2(fineCell);
+
+    float fineThreshold = 1.0 - intensity * 0.4;
+    if (fineHash.x > fineThreshold) {
+      float fineScroll = mod(time * (0.6 + fineHash.y * 1.0), 1.0);
+
+      vec2 fineSubUV = fract(vec2(
+        vUV.x * 60.0 + wind * fineScroll * 0.2,
+        vUV.y * 60.0 - fineScroll
+      ));
+
+      float fineWidth = 0.04;
+      float fineHeight = 0.15;
+
+      bool inFineStreak = abs(fineSubUV.x - 0.5) < fineWidth &&
+                          fineSubUV.y > 0.0 &&
+                          fineSubUV.y < fineHeight;
+
+      if (inFineStreak) {
+        float fineFade = smoothstep(0.0, 0.02, fineSubUV.y) *
+                         (1.0 - smoothstep(fineHeight - 0.02, fineHeight, fineSubUV.y));
+        float alpha = fineFade * intensity * 0.2;
+        outColor = vec4(0.5, 0.6, 0.8, alpha);
+        return;
+      }
+    }
+
+    // ── Fog effect ──
+    float fogFactor = intensity * 0.08;
+    if (fogFactor > 0.0) {
+      vec2 fogNoise = hash2(vec2(vUV.x * 10.0 + time * 0.02, vUV.y * 10.0));
+      float fog = fogFactor * (0.5 + fogNoise.x * 0.5);
+      outColor = vec4(0.2, 0.22, 0.28, fog);
+      return;
+    }
+
+    outColor = vec4(0.0, 0.0, 0.0, 0.0);
+  }
+`;
+
+// ---------------------------------------------------------------------------
 // WeatherOverlay class
 // ---------------------------------------------------------------------------
 
@@ -240,7 +364,7 @@ export class WeatherOverlay {
       indices: QUAD_INDICES,
     });
 
-    // Build the shader using GpuProgram options (PixiJS v8 API)
+    // Build the shader with both WGSL (WebGPU) and GLSL (WebGL2 fallback)
     const shader = Shader.from({
       gpu: {
         vertex: {
@@ -251,6 +375,10 @@ export class WeatherOverlay {
           source: RAIN_FRAGMENT_WGSL,
           entryPoint: 'main',
         },
+      },
+      gl: {
+        vertex: WEATHER_VERTEX_GLSL,
+        fragment: WEATHER_FRAGMENT_GLSL,
       },
     });
 
