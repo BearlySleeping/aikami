@@ -36,9 +36,12 @@ const MOCK_VENDOR_RESPONSES = [
 
 let mockResponseIndex = 0;
 
-export const getVendorDevViewModel = (
-  options: { className: string; vendorId: string; vendorName: string; vendorInventory: string },
-): VendorViewModelInterface => {
+export const getVendorDevViewModel = (options: {
+  className: string;
+  vendorId: string;
+  vendorName: string;
+  vendorInventory: string;
+}): VendorViewModelInterface => {
   const vm = getVendorViewModel(options) as VendorViewModelInterface & {
     isHaggling: boolean;
     refusesToSell: boolean;

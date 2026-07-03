@@ -1,13 +1,13 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu_overlay.svelte
-    import { gameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
+  import { gameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
 
-    type Props = {
-      isSaving?: boolean;
-      saveMessage?: string;
-    };
+  type Props = {
+    isSaving?: boolean;
+    saveMessage?: string;
+  };
 
-    const { isSaving = false, saveMessage }: Props = $props();
+  const { isSaving = false, saveMessage }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
