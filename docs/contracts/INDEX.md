@@ -138,6 +138,7 @@ P2 (Polish — after P1):
 | C-213 | [Environment Time System](C-213-environment-time-system.md) ✅ | Time simulation clock, day/night colour cycles, procedural weather overlays (rain/fog), DaisyUI clock HUD | C-210, C-211 |
 | C-214 | [Engine & API Core Consolidation](C-214-engine-and-api-consolidation.md) ✅ | Eliminate legacy `lib/game`, merge `api-core` into engine, repoint all imports | — |
 | C-215 | [Data & Terminology Unification](C-215-data-and-terminology-unification.md) ✅ | Enforce Character/Persona/NPC hierarchy, consolidate data/constants directories | — |
+| C-216 | [Documentation Overhaul](C-216-documentation-overhaul.md) ✅ | Rewrite README, consolidate arch docs, update .context files | — |
 
 ## Contract Format
 
