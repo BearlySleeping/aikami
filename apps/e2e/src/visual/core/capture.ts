@@ -43,6 +43,15 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
    * buttons, filling forms, dragging items, etc.
    */
   setupHook?: (page: Page) => Promise<void>;
+  /**
+   * CSS selectors for DOM elements that should be masked before
+   * screenshot capture. Elements matching these selectors are covered
+   * with a solid #000 rectangle to hide non-deterministic content
+   * (streaming text, AI typing indicators, particle overlays).
+   *
+   * Contract: C-217 — E2E visual test stabilisation
+   */
+  mask?: string[];
 };
 
 /** A suite of related visual test cases targeting the same route. */
@@ -136,6 +145,26 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
       // Persona list / character selection view (C-215)
       const personaList = document.querySelector('[data-testid="persona-list"]');
       if (personaList) {
+        return true;
+      }
+
+      // E2E test mode — engine state exposed on window (C-217)
+      const engineState = (window as unknown as Record<string, unknown>)
+        .__AIKAMI_ENGINE_STATE__ as Record<string, unknown> | undefined;
+      if (engineState?.frozen === true) {
+        return true;
+      }
+
+      // Canvas-based pages (game sandboxes, combat, map) — wait for
+      // a visible canvas element as fallback
+      const canvas = document.querySelector('canvas');
+      if (canvas && canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+        return true;
+      }
+
+      // Combat sandbox (C-217) — DOM-based portrait stage, no PixiJS canvas
+      const combatStage = document.querySelector('[data-testid="combat-portrait-stage"]');
+      if (combatStage) {
         return true;
       }
 
@@ -346,6 +375,15 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           const clipSize = testCase.clipSize ?? 256;
           const screenshotSelector = testCase.screenshotSelector;
 
+          // ── C-217: Apply DOM element masking for non-deterministic UI ──
+          // Cover elements matching the mask selectors with solid black
+          // rectangles so streaming text, AI indicators, and particles
+          // don't cause pixel-diff noise between runs.
+          let maskLocators: import('playwright').Locator[] | undefined;
+          if (testCase.mask && testCase.mask.length > 0) {
+            maskLocators = testCase.mask.map((sel) => page.locator(sel));
+          }
+
           // Try bounding-box clip, fall back to full page if no element found.
           let usedClip = false;
           try {
@@ -366,6 +404,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
                     width: Math.floor(box.width),
                     height: Math.floor(box.height),
                   },
+                  mask: maskLocators,
                 });
               } else {
                 // Default: 256×256 center-crop around the canvas
@@ -380,6 +419,7 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
                     width: clipSize,
                     height: clipSize,
                   },
+                  mask: maskLocators,
                 });
               }
               usedClip = true;

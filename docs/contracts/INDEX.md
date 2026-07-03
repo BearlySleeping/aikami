@@ -139,6 +139,7 @@ P2 (Polish — after P1):
 | C-214 | [Engine & API Core Consolidation](C-214-engine-and-api-consolidation.md) ✅ | Eliminate legacy `lib/game`, merge `api-core` into engine, repoint all imports | — |
 | C-215 | [Data & Terminology Unification](C-215-data-and-terminology-unification.md) ✅ | Enforce Character/Persona/NPC hierarchy, consolidate data/constants directories | — |
 | C-216 | [Documentation Overhaul](C-216-documentation-overhaul.md) ✅ | Rewrite README, consolidate arch docs, update .context files | — |
+| C-217 | [E2E Suite Stabilisation](C-217-e2e-stabilisation.md) ✅ | Engine E2E test mode, Playwright GPU stability, visual test masking, combat VRT 3-run stability | — |
 
 ## Contract Format
 
