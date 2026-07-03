@@ -411,6 +411,25 @@ export type GameEvent =
       screenX: number;
       /** Screen-space Y coordinate for floating text placement. */
       screenY: number;
+    }
+  | {
+      /**
+       * Emitted every tick with the current environment state (time, weather).
+       * The clock HUD and weather overlay consume this for reactive updates.
+       *
+       * Contract: C-213 Environment, Time, and Weather Core System
+       */
+      type: 'ENVIRONMENT_UPDATED';
+      /** Game hour (0–24). */
+      gameHour: number;
+      /** Game minute (0–59). */
+      gameMinute: number;
+      /** Game time in seconds since epoch. */
+      gameTimeSeconds: number;
+      /** Wind velocity (−1.0 to 1.0). */
+      windVelocity: number;
+      /** Rain intensity (0.0 to 1.0). */
+      rainIntensity: number;
     };
 
 // ---------------------------------------------------------------------------
