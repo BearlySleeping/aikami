@@ -44,7 +44,7 @@ Aikami is an AI-powered 2D JRPG and monorepo application platform spanning a PWA
 | `apps/backend/image`   | Local ComfyUI Docker microservice                |
 | `apps/backend/text`    | Local Ollama Docker microservice                 |
 | `apps/backend/voice`   | Local Kokoro TTS Docker microservice             |
-| `packages/frontend/*`  | Frontend packages (`api-core`, `engine`, `services`, `utils`) |
+| `packages/frontend/*`  | Frontend packages (`engine`, `services`, `utils`, `configs`, `repositories`, `dataconnect`) |
 | `packages/shared/*`    | Shared logic (`types`, `schemas`, `constants`, `logger`) |
 
 ## Project Conventions
@@ -54,6 +54,7 @@ See `docs/intro/README.md` for full developer guidelines.
 ### File Naming & Code Patterns
 - **Svelte 5 ViewModel pattern**: `+page.svelte` is pure template, `*_view_model.svelte.ts` holds logic.
 - **Game Engine**: PixiJS v8 handles rendering, bitECS handles game logic.
+- **Domain Model**: Strict hierarchy — `Character` (abstract base) extended by `Persona` (player-created) and `NPC` (AI-driven). Schemas in `packages/shared/schemas/`, types in `packages/shared/types/`.
 - **Firebase**: Managed via the `@aikami/firestack` package.
 - **Local AI**: Running `bun tmux:start <service>` spins up localized models for dev and desktop runtime.
 
@@ -65,5 +66,5 @@ See `docs/intro/README.md` for full developer guidelines.
 | `docs/guides/ARCHITECTURE.md` | System architecture                   |
 | `docs/contracts/INDEX.md`     | All active contracts                  |
 
-> Generated: 2026-06-27
+> Generated: 2026-07-03
 > Run `bun run scripts -- generate_context` to regenerate.
