@@ -42,7 +42,7 @@
 
 <select
   class="select select-{size} {bordered ? 'select-bordered' : ''} {className}"
-  value={value}
+  {value}
   onchange={handleChange}
 >
   {#each options as option (option.value)}
