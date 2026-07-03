@@ -1,3 +1,4 @@
+<!-- completed: 2026-07-03 -->
 # C-216: Documentation and Architecture Overhaul
 
 ## Context
@@ -34,3 +35,23 @@ We need a comprehensive sweep of our documentation and `.context` files to ensur
             |                        |
             v                        v
     [ Firebase Backend ]    [ Local Docker AI (ComfyUI/Kokoro) ]
+
+---
+
+## Execution Report — 2026-07-03
+
+### Summary
+Swept all documentation for outdated references. Rewrote README with accurate stack (no Godot). Consolidated duplicate architecture docs. Updated .context files for C-214/C-215. Deleted deprecated Godot guide.
+
+### Files Modified
+- `README.md` — complete rewrite (accurate stack, project structure, ascii diagram)
+- `docs/architecture/architecture.md` — updated engine description, migration status, package listing
+- `.context/CONTEXT.md` — removed api-core, added Persona/NPC hierarchy, updated date
+- `.context/index.md` — fixed architecture doc reference
+
+### Files Deleted
+- `docs/guides/ARCHITECTURE.md` — redundant; consolidated into `docs/architecture/architecture.md`
+- `docs/guides/GODOT.md` — deprecated; Godot removed from stack
+
+### Test Results
+- Validate: no affected projects (docs only)
