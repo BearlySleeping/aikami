@@ -6,10 +6,9 @@ import Type from 'typebox';
 
 // ── Equipment Slot ──────────────────────────────────────────────────────
 
-export const EquipmentSlotSchema = Type.Union(
-  [Type.Literal('weapon'), Type.Literal('armor')],
-  { description: 'Equipment slot type' },
-);
+export const EquipmentSlotSchema = Type.Union([Type.Literal('weapon'), Type.Literal('armor')], {
+  description: 'Equipment slot type',
+});
 
 export type EquipmentSlotData = Type.Static<typeof EquipmentSlotSchema>;
 
