@@ -26,10 +26,3 @@
   <BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
   <AppDialogsView />
 {/if}
-
-<style>
-  /* Hide the default Firebase emulator warning banner injected by the SDK — replaced by our custom ModeIndicator component. */
-  :global(.firebase-emulator-warning) {
-    display: none;
-  }
-</style>
