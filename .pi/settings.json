@@ -12,7 +12,14 @@
     "npm:pi-mcp-adapter",
     "npm:@hypabolic/pi-hypa"
   ],
-  "extensions": ["./.pi/extensions"],
-  "skills": ["./.pi/skills", "./.pi/generated-skills"],
-  "prompts": ["./.pi/prompts"]
+  "extensions": [
+    "./.pi/extensions"
+  ],
+  "skills": [
+    "./.pi/skills",
+    "./.pi/generated-skills"
+  ],
+  "prompts": [
+    "./.pi/prompts"
+  ]
 }
