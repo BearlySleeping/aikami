@@ -364,7 +364,9 @@ export class WeatherOverlay {
       indices: QUAD_INDICES,
     });
 
-    // Build the shader with both WGSL (WebGPU) and GLSL (WebGL2 fallback)
+    // Build the shader with both WGSL (WebGPU) and GLSL (WebGL2 fallback).
+    // Pass the environment UniformGroup as a resource so it maps to
+    // @group(0) @binding(0) in WGSL and the named uniforms in GLSL.
     const shader = Shader.from({
       gpu: {
         vertex: {
@@ -379,6 +381,9 @@ export class WeatherOverlay {
       gl: {
         vertex: WEATHER_VERTEX_GLSL,
         fragment: WEATHER_FRAGMENT_GLSL,
+      },
+      resources: {
+        env: this._uniformGroup,
       },
     });
 
