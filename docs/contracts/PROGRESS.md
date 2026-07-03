@@ -189,6 +189,7 @@
 | C-214 | Engine And Api Consolidation | ✅ completed |
 | C-215 | Data And Terminology Unification | ✅ completed |
 | C-216 | Documentation Overhaul | ✅ completed |
+| C-217 | E2e Stabilisation | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

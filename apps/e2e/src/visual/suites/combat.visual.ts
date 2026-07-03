@@ -60,6 +60,18 @@ const STATE_PROMPTS: Record<string, string> = {
 
 // ── Suite ────────────────────────────────────────────────────
 
+/**
+ * Dynamic UI selectors to mask — streaming text indicators, AI
+ * typing spinners, and particle overlays that are non-deterministic
+ * and cause pixel-diff noise between test runs.
+ */
+const COMBAT_MASK_SELECTORS = [
+  '.ai-typing-indicator',
+  '.animate-pulse',
+  '.loading',
+  '[data-testid="streaming-text"]',
+];
+
 export default defineConfig({
   id: 'combat',
   route: '/dev/combat',
@@ -70,30 +82,35 @@ export default defineConfig({
       searchParams: { state: 'initial' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.initial].join('\n'),
       schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
     },
     {
       name: 'Combat — Log Filled',
       searchParams: { state: 'log-filled' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS['log-filled']].join('\n'),
       schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
     },
     {
       name: 'Combat — Low HP',
       searchParams: { state: 'low-hp' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS['low-hp']].join('\n'),
       schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
     },
     {
       name: 'Combat — Victory',
       searchParams: { state: 'victory' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.victory].join('\n'),
       schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
     },
     {
       name: 'Combat — Defeat',
       searchParams: { state: 'defeat' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.defeat].join('\n'),
       schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
     },
   ],
 });

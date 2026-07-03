@@ -370,7 +370,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // ---- 1b. Create weather overlay (C-213) ------------------------
     // Attached to the stage above the world container so rain renders
     // over the game scene. Initially transparent (rain intensity = 0).
-    this._weatherOverlay = WeatherOverlay.create({ parent: this._app.stage });
+    // Skipped in E2E test mode — weather particles are non-deterministic.
+    if (!this._isE2ETestMode()) {
+      this._weatherOverlay = WeatherOverlay.create({ parent: this._app.stage });
+    }
 
     // ---- 2. Allocate shared memory buffers ----------------------------
     this._allocateBuffers();
@@ -405,6 +408,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     this._app.ticker.add(this._tickerCallback);
     this._running = true;
+
+    // ── C-217: E2E test mode — freeze ticker after first render ──
+    // When running in deterministic E2E mode, let exactly one ticker
+    // frame render, then pause the ticker and expose engine state
+    // on window for Playwright assertions.
+    if (this._isE2ETestMode()) {
+      this._app.ticker.addOnce(() => {
+        this._running = false;
+        this._exposeEngineState();
+      });
+    }
   }
 
   /**
@@ -507,6 +521,48 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   // -----------------------------------------------------------------------
   // Internal: Buffer allocation
   // -----------------------------------------------------------------------
+
+  // ── C-217: E2E test mode helpers ──────────────────────────────────
+
+  /**
+   * Detects whether the engine is running in E2E visual test mode.
+   *
+   * Checks URL search params (`?e2e=true`) and a global window flag
+   * (`window.__AIKAMI_E2E_TEST_MODE__`) set by Playwright before
+   * page navigation.
+   */
+  private _isE2ETestMode(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('e2e') === 'true') {
+        return true;
+      }
+    } catch {
+      // window.location may be unavailable (SSR)
+    }
+    return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__;
+  }
+
+  /**
+   * Exposes engine state on `window.__AIKAMI_ENGINE_STATE__` so Playwright
+   * can await specific bitECS conditions before capturing screenshots.
+   */
+  private _exposeEngineState(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const state = {
+      frozen: !this._running,
+      entityCount: this._renderEntries.size,
+      playerEntityId: this._playerEntityId,
+      cameraX: this._cameraX,
+      cameraY: this._cameraY,
+    } as const;
+    (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ = state;
+  }
 
   /**
    * Allocates the shared memory buffers for entity state exchange.
