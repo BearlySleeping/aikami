@@ -84,6 +84,7 @@ import {
   spawnSpawnPointEntities,
   spawnTransitionEntities,
 } from '../systems/entity_spawner.ts';
+import { stepEnvironment } from '../systems/environment_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateGoapCombatTactics } from '../systems/goap_combat_tactics_system.ts';
 import { updateGoapScheduler } from '../systems/goap_scheduler_system.ts';
@@ -700,6 +701,11 @@ const tickLoop = (): void => {
   const deltaMs = now - lastTickTime;
   lastTickTime = now;
 
+  // ── Environment: time-of-day, diurnal colours, weather ──
+  // Contract C-213: Step environment before all other systems so
+  // diurnal and weather UBO data is fresh for this frame.
+  const environment = stepEnvironment({ deltaMs });
+
   // ────────────────────────────────────────────────────────────────────────
   // Step 1: Ingestion — process streaming payloads from tool orchestrator
   //
@@ -841,6 +847,14 @@ const tickLoop = (): void => {
       cameraX: camera.x,
       cameraY: camera.y,
       zoom,
+      environment: {
+        gameHour: environment.gameHour,
+        gameMinute: environment.gameMinute,
+        gameTimeSeconds: environment.gameTimeSeconds,
+        windVelocity: environment.windVelocity,
+        rainIntensity: environment.rainIntensity,
+        ubo: environment.ubo,
+      },
     };
     if (screenPos.x !== undefined) {
       message.npcScreenX = screenPos.x;
@@ -917,6 +931,14 @@ const tickLoop = (): void => {
       cameraX: camera.x,
       cameraY: camera.y,
       zoom,
+      environment: {
+        gameHour: environment.gameHour,
+        gameMinute: environment.gameMinute,
+        gameTimeSeconds: environment.gameTimeSeconds,
+        windVelocity: environment.windVelocity,
+        rainIntensity: environment.rainIntensity,
+        ubo: environment.ubo,
+      },
     };
     if (screenPos.x !== undefined) {
       message.npcScreenX = screenPos.x;

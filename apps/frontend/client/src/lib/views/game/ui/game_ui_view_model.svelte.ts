@@ -146,6 +146,17 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   /** Auto-save status for the toast notification. */
   readonly autoSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
 
+  // ── Environment / Clock HUD (C-213) ──
+
+  /** Game hour (0–24) for the clock HUD. */
+  readonly gameHour: number;
+  /** Game minute (0–59) for the clock HUD. */
+  readonly gameMinute: number;
+  /** Wind velocity (−1.0 to 1.0) for weather icons. */
+  readonly windVelocity: number;
+  /** Rain intensity (0.0 to 1.0) for weather icons. */
+  readonly rainIntensity: number;
+
   /** Respawns the player after defeat (reloads current map). */
   respawnPlayer(): Promise<void>;
 
@@ -203,6 +214,12 @@ class GameUIViewModel
   private _previousInventoryCount = 0;
   /** Whether the initial map has loaded — first MAP_LOADED is skipped for auto-save. */
   private _firstMapLoaded = false;
+
+  // ── Environment state (C-213) ──
+  gameHour = $state(12);
+  gameMinute = $state(0);
+  windVelocity = $state(0);
+  rainIntensity = $state(0);
 
   constructor(options: GameUIViewModelOptions) {
     super(options);
@@ -296,6 +313,14 @@ class GameUIViewModel
         if (this.activeOverlay === 'DIALOGUE') {
           this.endDialogue();
         }
+      });
+
+      // ── Environment / Clock HUD updates (C-213) ──
+      bridge.on('ENVIRONMENT_UPDATED', (event) => {
+        this.gameHour = event.gameHour;
+        this.gameMinute = event.gameMinute;
+        this.windVelocity = event.windVelocity;
+        this.rainIntensity = event.rainIntensity;
       });
 
       // Listen for ZONE_TRIGGERED events to show the transition overlay

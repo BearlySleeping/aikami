@@ -1,6 +1,13 @@
 <script lang="ts">
   // apps/frontend/chat/src/routes/+layout.svelte
   import '../app.css';
+
+  // Contract C-213: Required side-effect import for dynamic shader
+  // compilation under strict CSP. Must evaluate before any PixiJS
+  // renderer is created to avoid runtime failures on high-security
+  // hosts where unsafe-eval is blocked by default.
+  import 'pixi.js/unsafe-eval';
+
   import { untrack } from 'svelte';
   import AppView from '$lib/views/app/app_view.svelte';
   import { getAppViewModel } from '$lib/views/app/app_view_model.svelte.ts';

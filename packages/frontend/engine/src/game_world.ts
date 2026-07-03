@@ -23,6 +23,7 @@ import { createPixiApp } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
+import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
@@ -221,6 +222,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Texture manager instance. */
   private readonly _textureManager?: TextureManager;
 
+  /** Weather overlay quad for procedural rain/fog (C-213). */
+  private _weatherOverlay: WeatherOverlay | undefined;
+
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
 
@@ -350,8 +354,23 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     this._app.stage.addChild(this._worldContainer);
 
+    // ── C-213 AC-3: Hardcode filterArea and boundsArea on the world
+    // container to prevent PixiJS from recursively traversing thousands
+    // of tilemap chunk vertices every frame when post-processing filters
+    // or scene effects are evaluated.
+    if (this._app.screen) {
+      this._worldContainer.filterArea = this._app.screen;
+      this._app.stage.filterArea = this._app.screen;
+      this._app.stage.boundsArea = this._app.screen;
+    }
+
     // Draw a debug floor grid for spatial orientation
     this._drawDebugGrid();
+
+    // ---- 1b. Create weather overlay (C-213) ------------------------
+    // Attached to the stage above the world container so rain renders
+    // over the game scene. Initially transparent (rain intensity = 0).
+    this._weatherOverlay = WeatherOverlay.create({ parent: this._app.stage });
 
     // ---- 2. Allocate shared memory buffers ----------------------------
     this._allocateBuffers();
@@ -474,6 +493,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (this._app) {
       this._app.destroy(true, { children: true });
       this._app = undefined;
+    }
+
+    // Destroy weather overlay (C-213)
+    if (this._weatherOverlay) {
+      this._weatherOverlay.destroy();
+      this._weatherOverlay = undefined;
     }
 
     this._worldContainer = undefined;
@@ -699,6 +724,28 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         }
         this._bridge.emit(gameEvent);
       }
+    }
+
+    // ── Environment state forwarding (C-213) ──
+    // Extract the environment UBO data from the STATE_UPDATE message
+    // and emit it as an ENVIRONMENT_UPDATED event for the clock HUD
+    // and weather overlay.
+    const envData = message.environment as Record<string, unknown> | undefined;
+    if (envData) {
+      // Update the weather overlay with the fresh UBO data (C-213)
+      const ubo = envData.ubo as Float32Array | undefined;
+      if (ubo && this._weatherOverlay) {
+        this._weatherOverlay.update(ubo);
+      }
+
+      this._bridge.emit({
+        type: 'ENVIRONMENT_UPDATED',
+        gameHour: envData.gameHour as number,
+        gameMinute: envData.gameMinute as number,
+        gameTimeSeconds: envData.gameTimeSeconds as number,
+        windVelocity: envData.windVelocity as number,
+        rainIntensity: envData.rainIntensity as number,
+      });
     }
   }
 
