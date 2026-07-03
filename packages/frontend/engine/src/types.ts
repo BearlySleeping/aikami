@@ -140,6 +140,23 @@ export type GameCommand =
       weapon?: string;
       /** Item ID of the equipped armor, or undefined if none. */
       armor?: string;
+    }
+  | {
+      /**
+       * Configures the environment system at runtime (time scale, weather).
+       * Used by dev sandboxes to test diurnal cycles and weather overlays.
+       *
+       * Contract: C-213 Environment, Time, and Weather Core System
+       */
+      type: 'SET_ENVIRONMENT_CONFIG';
+      /** Time scale: game seconds per real second. */
+      timeScale?: number;
+      /** Wind velocity (−1.0 to 1.0). */
+      windVelocity?: number;
+      /** Rain intensity (0.0 to 1.0). */
+      rainIntensity?: number;
+      /** Starting game hour (0–24). */
+      startHour?: number;
     };
 
 // ---------------------------------------------------------------------------
