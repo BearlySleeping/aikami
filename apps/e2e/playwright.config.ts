@@ -170,6 +170,9 @@ export default defineConfig({
             '--font-render-hinting=none',
             '--disable-font-subpixel-positioning',
             '--force-color-profile=srgb',
+            // C-217: GPU rasterization stability
+            '--disable-gpu-rasterization',
+            '--disable-accelerated-2d-canvas',
           ],
           // C-200 AC-1: Mesa software rasterization
           env: {
