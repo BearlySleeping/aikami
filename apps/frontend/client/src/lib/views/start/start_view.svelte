@@ -64,12 +64,11 @@
 </div>
 
 <!-- Missing Providers Dialog -->
-{#if viewModel.showMissingProvidersDialog}
-  <MissingProvidersDialog
-    onGoToSettings={() => viewModel.goToSettingsForProviderSetup()}
-    onClose={() => viewModel.closeMissingProvidersDialog()}
-  />
-{/if}
+<MissingProvidersDialog
+  bind:open={viewModel.showMissingProvidersDialog}
+  onGoToSettings={() => viewModel.goToSettingsForProviderSetup()}
+  onClose={() => viewModel.closeMissingProvidersDialog()}
+/>
 
 <!-- Credits Modal -->
 {#if viewModel.showCredits}
