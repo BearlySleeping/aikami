@@ -9,10 +9,21 @@
   const { viewModel }: Props = $props();
 </script>
 
+<!-- biome-ignore lint/a11y/useSemanticElements: fullscreen backdrop must be div -->
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  role="button"
+  tabindex="0"
+  aria-label="Close dialog"
+  onclick={() => viewModel.closeDashboard()}
+  onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeDashboard()}
 >
-  <div class="card w-full max-w-lg bg-base-100 shadow-2xl">
+  <!-- biome-ignore lint/a11y/noStaticElementInteractions: prevent backdrop close when clicking card -->
+  <!-- biome-ignore lint/a11y/useKeyWithClickEvents: card stops propagation only -->
+  <div
+    class="card w-full max-w-lg bg-base-100 shadow-2xl"
+    onclick={(e: MouseEvent) => e.stopPropagation()}
+  >
     <div class="card-body p-6 gap-4">
       <!-- Header -->
       <div class="flex items-center justify-between">

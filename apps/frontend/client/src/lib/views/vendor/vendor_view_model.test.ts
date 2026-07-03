@@ -11,24 +11,30 @@ import { describe, expect, test } from 'bun:test';
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 // $services barrel is mocked globally via test_preload.ts
 
-import { VendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
+import { getVendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 let onCloseCalled = false;
 
-const createViewModel = (options?: { vendorInventory?: string }): VendorViewModel => {
+const createViewModel = (options?: {
+  vendorInventory?: string;
+}): ReturnType<typeof getVendorViewModel> => {
   onCloseCalled = false;
   const vmOptions: VendorViewModelOptions = {
     className: 'VendorViewModelTest',
     vendorId: 'test-vendor-1',
     vendorName: 'Test Vendor',
     vendorInventory: options?.vendorInventory ?? 'rusty_sword,health_potion,iron_sword',
-    onClose: () => {
-      onCloseCalled = true;
-    },
   };
-  return new VendorViewModel(vmOptions);
+  const vm = getVendorViewModel(vmOptions);
+  // Monkey-patch closeVendor to track calls
+  const originalClose = vm.closeVendor.bind(vm);
+  vm.closeVendor = () => {
+    onCloseCalled = true;
+    originalClose();
+  };
+  return vm;
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────

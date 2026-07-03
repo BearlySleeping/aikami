@@ -2,23 +2,10 @@
 //
 // Dev sandbox override — injects mock vendor state for sandbox testing.
 // NEVER import this file from production code or non-(dev) routes.
-//
-// Overrides haggle() with mock AI responses so the sandbox works without
-// a configured LLM provider.
-//
-// Contract: C-154 AI Vendors Economy
 
-import { VendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
+import { getVendorViewModel, type VendorViewModelInterface } from './vendor_view_model.svelte';
 
-// ---------------------------------------------------------------------------
-// Mock data
-// ---------------------------------------------------------------------------
-
-const MOCK_VENDOR_RESPONSES: Array<{
-  narrative: string;
-  priceMultiplier: number;
-  refusesToSell: boolean;
-}> = [
+const MOCK_VENDOR_RESPONSES = [
   {
     narrative: 'A discount? Hmph. I suppose I can knock off 10% for a fellow adventurer.',
     priceMultiplier: 0.9,
@@ -49,34 +36,36 @@ const MOCK_VENDOR_RESPONSES: Array<{
 
 let mockResponseIndex = 0;
 
-// ---------------------------------------------------------------------------
-// Dev ViewModel
-// ---------------------------------------------------------------------------
+export const getVendorDevViewModel = (
+  options: { className: string; vendorId: string; vendorName: string; vendorInventory: string },
+): VendorViewModelInterface => {
+  const vm = getVendorViewModel(options) as VendorViewModelInterface & {
+    isHaggling: boolean;
+    refusesToSell: boolean;
+    messages: Array<{ id: string; role: 'player' | 'vendor'; content: string }>;
+    priceMultiplier: number;
+  };
 
-export type VendorDevViewModelOptions = VendorViewModelOptions & {};
+  const _originalHaggle = vm.haggle.bind(vm);
+  vm.haggle = async (message: string) => {
+    const self = vm as unknown as {
+      isHaggling: boolean;
+      refusesToSell: boolean;
+      messages: Array<{ id: string; role: 'player' | 'vendor'; content: string }>;
+      priceMultiplier: number;
+    };
 
-export class VendorDevViewModel extends VendorViewModel {
-  /** @inheritdoc */
-  async haggle(message: string): Promise<void> {
-    if (this.isHaggling || this.refusesToSell || !message.trim()) {
+    if (self.isHaggling || self.refusesToSell || !message.trim()) {
       return;
     }
 
-    this.isHaggling = true;
+    self.isHaggling = true;
 
     try {
-      const self = this as unknown as {
-        messages: Array<{ id: string; role: 'player' | 'vendor'; content: string }>;
-        priceMultiplier: number;
-        refusesToSell: boolean;
-      };
-
       self.messages = [
         ...self.messages,
         { id: crypto.randomUUID(), role: 'player', content: message },
       ];
-
-      // Simulate AI delay
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const response = MOCK_VENDOR_RESPONSES[mockResponseIndex % MOCK_VENDOR_RESPONSES.length];
@@ -84,13 +73,14 @@ export class VendorDevViewModel extends VendorViewModel {
 
       self.priceMultiplier = response.priceMultiplier;
       self.refusesToSell = response.refusesToSell;
-
       self.messages = [
         ...self.messages,
         { id: crypto.randomUUID(), role: 'vendor', content: response.narrative },
       ];
     } finally {
-      this.isHaggling = false;
+      self.isHaggling = false;
     }
-  }
-}
+  };
+
+  return vm;
+};

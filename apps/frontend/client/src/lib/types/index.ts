@@ -9,7 +9,7 @@ export type {
   GameStateOptions,
 } from './game.ts';
 
-export type PWAHookData = {
+export type ClientHookData = {
   device?: DeviceData;
   userSession?: UserSessionData;
   currentRoute?: RouteName;

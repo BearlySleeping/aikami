@@ -149,8 +149,9 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
       }
 
       // E2E test mode — engine state exposed on window (C-217)
-      const engineState = (window as unknown as Record<string, unknown>)
-        .__AIKAMI_ENGINE_STATE__ as Record<string, unknown> | undefined;
+      const engineState = (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ as
+        | Record<string, unknown>
+        | undefined;
       if (engineState?.frozen === true) {
         return true;
       }

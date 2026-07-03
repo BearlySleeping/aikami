@@ -19,10 +19,10 @@ import {
   onboardingService,
   routerService,
 } from '$services';
-import type { PWAHookData } from '$types';
+import type { ClientHookData } from '$types';
 
 export type AppViewModelOptions = BaseViewModelOptions & {
-  data: PWAHookData;
+  data: ClientHookData;
 };
 
 export type AppViewModelInterface = BaseViewModelInterface & {

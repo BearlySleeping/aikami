@@ -1,5 +1,5 @@
 <script lang="ts">
-  // apps/frontend/chat/src/routes/+layout.svelte
+  // apps/frontend/client/src/routes/+layout.svelte
   import '../app.css';
 
   // Contract C-213: Required side-effect import for dynamic shader
@@ -15,7 +15,6 @@
 
   let { data, children }: LayoutProps = $props();
 
-  // Layout data is static per SvelteKit mount — read non-reactively.
   const viewModel = untrack(() =>
     getAppViewModel({
       className: 'AppViewModel',

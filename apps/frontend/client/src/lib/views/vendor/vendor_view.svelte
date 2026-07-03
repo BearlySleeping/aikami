@@ -149,9 +149,10 @@
   };
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+  onclick={() => viewModel.closeVendor()}
   role="dialog"
   tabindex="-1"
   aria-label="Trading with {viewModel.vendorName}"
@@ -159,6 +160,8 @@
 >
   <div
     class="flex w-full max-w-5xl h-[80vh] rounded-xl border border-base-300 bg-base-200 shadow-2xl overflow-hidden"
+    onclick={(e: MouseEvent) => e.stopPropagation()}
+    role="none"
   >
     <!-- ── Left pane: AI Chat ── -->
     <div class="flex flex-col w-3/5 border-r border-base-300">
