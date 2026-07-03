@@ -134,6 +134,7 @@ P2 (Polish — after P1):
 | C-198 | [Dev Sandbox Polish & Zoning](C-198-dev-sandbox-polish-and-zoning.md) ✅ | Dev sandbox polish, LPC avatar, water containment, doorway portal | C-196 |
 | C-210 | [WebGPU Tilemap Integration](C-210-webgpu-tilemap-integration.md) ✅ | WebGPU tilemap renderer integration — Mesh-backed chunked pipeline, Tiled JSON parsing, PixiJS Assets loading, visual test suite | C-016 |
 | C-211 | [Realtime TTS Streaming Pipeline](C-211-realtime-tts-streaming-pipeline.md) ✅ | Kokoro TTS streaming via Web Worker + AudioWorkletProcessor + SharedArrayBuffer ring buffer, spatialized PannerNode into AudioService master gain | C-131, C-148, C-150 |
+| C-212 | [Party Follow System](C-212-party-follow-system.md) ✅ | SET_ENTITY_VELOCITY bridge command, NPC companion following via ECS velocity + collision, party follow sandbox with LPC characters | C-196, C-137, C-141 |
 | C-213 | [Environment Time System](C-213-environment-time-system.md) ✅ | Time simulation clock, day/night colour cycles, procedural weather overlays (rain/fog), DaisyUI clock HUD | C-210, C-211 |
 
 ## Contract Format
