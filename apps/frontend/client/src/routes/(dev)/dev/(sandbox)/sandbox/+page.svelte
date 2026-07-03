@@ -7,8 +7,9 @@
   import { browser } from '$app/environment';
   import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
   import GameView from '$lib/views/game/canvas/game_view.svelte';
-  import { GameViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
-  import { GameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
+  import { getGameViewViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
+  import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
+  import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
   import { gameStateService } from '$services';
   import type { DevAction } from '$types';
 
@@ -165,11 +166,8 @@
     }
   }
 
-  const viewModel = new GameViewModel({ className: 'GameViewModel' });
-  const gameUIViewModel = new GameUIViewModel({
-    className: 'GameUIViewModel',
-    gameViewModel: viewModel,
-  });
+  const viewModel = getGameViewViewModel({ className: 'GameViewViewModel' });
+  const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
 
   const devActions = [
     // ── Inventory ─────────────────────────────────────────────────
@@ -313,6 +311,9 @@
   ] satisfies DevAction[];
 </script>
 
-<GameView {viewModel} {gameUIViewModel} />
+<div class="w-screen h-screen overflow-hidden relative">
+  <GameView {viewModel} />
+  <GameUIView viewModel={gameUIViewModel} />
+</div>
 
 <DevToolsPanel actions={devActions} />

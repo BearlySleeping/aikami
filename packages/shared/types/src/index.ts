@@ -19,6 +19,7 @@ export * from './lib/database/character_card.ts';
 export * from './lib/database/chat.ts';
 export * from './lib/database/config.ts';
 export * from './lib/database/core.ts';
+export * from './lib/database/item.ts';
 export * from './lib/database/message.ts';
 export * from './lib/database/notification.ts';
 export * from './lib/database/npc.ts';

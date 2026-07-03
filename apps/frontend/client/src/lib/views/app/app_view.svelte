@@ -5,6 +5,7 @@
   import type { AppViewModelInterface } from './app_view_model.svelte.ts';
   import BootDiagnosticsView from './boot/boot_diagnostics_view.svelte';
   import { getBootDiagnosticsViewModel } from './boot/boot_diagnostics_view_model.svelte';
+  import AppDialogsView from './dialogs/app_dialogs_view.svelte';
 
   type Props = {
     viewModel: AppViewModelInterface;
@@ -23,6 +24,7 @@
   <BootDiagnosticsView viewModel={bootDiagnosticsViewModel} />
 {:else}
   <BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
+  <AppDialogsView />
 {/if}
 
 <style>

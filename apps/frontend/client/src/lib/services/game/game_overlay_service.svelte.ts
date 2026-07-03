@@ -1,0 +1,495 @@
+// apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts
+
+import type { EngineBridge } from '@aikami/frontend/engine';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+  routerService,
+} from '@aikami/frontend/services';
+import { audioService } from '$lib/services/audio/audio_service.svelte';
+import { logger } from '$logger';
+import { GameSaveService } from '$services/game/game_save_service.svelte';
+import { gameStateService } from '$services/game/game_state_service.svelte';
+import { setupBridgeListeners } from './bridge_listeners';
+import { combatService } from './combat_service.svelte';
+import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
+
+// ---------------------------------------------------------------------------
+// GameOverlayService — overlay router for the game UI layer
+// ---------------------------------------------------------------------------
+
+export type GameOverlayType =
+  | 'NONE'
+  | 'PAUSE_MENU'
+  | 'DIALOGUE'
+  | 'COMBAT'
+  | 'INVENTORY'
+  | 'QUEST_LOG'
+  | 'GAME_OVER'
+  | 'CHARACTER_DASHBOARD'
+  | 'VENDOR';
+
+export type DialogueNpcData = {
+  npcId: string;
+  npcName: string;
+  dialog: string;
+  personaId?: string;
+};
+
+export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+export type OverlayEventHandlers = {
+  onDialogueStart(npcData: DialogueNpcData): void;
+  onDialogueEnd(): void;
+  onCombatStart(event: {
+    enemyName: string;
+    enemyHp: number;
+    enemyMaxHp: number;
+    participantIds: number[];
+    firstTurnEntityId: number;
+  }): void;
+  onCombatEnd(options: { victory: boolean }): void;
+  onInventoryOpen(): void;
+  onInventoryClose(): void;
+  onQuestLogOpen(): void;
+  onQuestLogClose(): void;
+  onDashboardOpen(): void;
+  onDashboardClose(): void;
+  onVendorOpen(options: { vendorId: string; vendorName: string; vendorInventory: string }): void;
+  onVendorClose(): void;
+  onCameraZoomUpdate(event: { npcScreenX?: number; npcScreenY?: number }): void;
+};
+
+export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
+  readonly activeOverlay: GameOverlayType;
+  readonly dialogueNpc: DialogueNpcData | undefined;
+  readonly isSaving: boolean;
+  readonly saveMessage: string | undefined;
+  readonly isTransitioning: boolean;
+  readonly autoSaveStatus: AutoSaveStatus;
+  readonly useOllama: boolean;
+  readonly textProvider: { endpoint: string } | undefined;
+
+  initialize(): Promise<void>;
+  setEngineService(
+    service: import('./game_engine_service.svelte').GameEngineServiceInterface,
+  ): void;
+
+  handleKeyDown(event: KeyboardEvent): void;
+  resumeGame(): void;
+  goToSettings(): Promise<void>;
+  quitToMainMenu(): Promise<void>;
+  endDialogue(): void;
+  saveGame(): Promise<void>;
+  respawnPlayer(): Promise<void>;
+  loadLastSave(): Promise<void>;
+  openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void;
+  closeVendor(): void;
+  openInventory(): void;
+  closeInventory(): void;
+  openQuestLog(): void;
+  closeQuestLog(): void;
+  openCharacterDashboard(): void;
+  closeCharacterDashboard(): void;
+  startCombat(options: { enemyName: string }): void;
+
+  /** Intent-driven methods for bridge_listeners (not for general use). */
+  setBridge(bridge: EngineBridge): void;
+  setActive(type: GameOverlayType): void;
+  clearActive(): void;
+  setTransitioning(value: boolean): void;
+  getDefeatedEnemies(): string[];
+  setCameraZoom(options: { npcScreenX?: number; npcScreenY?: number }): void;
+  onInventoryCountChange(newCount: number): void;
+  onMapLoaded(): void;
+
+  /** Internal camera zoom state (read by GameUIViewModel for dialogue spatial UI). */
+  readonly _cameraZoomNpcScreenX: number | undefined;
+  readonly _cameraZoomNpcScreenY: number | undefined;
+  readonly vendorSessionOptions:
+    | { vendorId: string; vendorName: string; vendorInventory: string }
+    | undefined;
+};
+
+export type GameOverlayServiceOptions = BaseFrontendClassOptions;
+
+export class GameOverlayService
+  extends BaseFrontendClass<GameOverlayServiceOptions>
+  implements GameOverlayServiceInterface
+{
+  activeOverlay = $state<GameOverlayType>('NONE');
+  dialogueNpc = $state<DialogueNpcData | undefined>(undefined);
+  isSaving = $state<boolean>(false);
+  saveMessage = $state<string | undefined>(undefined);
+  isTransitioning = $state<boolean>(false);
+  autoSaveStatus = $state<AutoSaveStatus>('idle');
+
+  get useOllama(): boolean {
+    if (!this._settingsLoaded) {
+      void this._initSettings();
+    }
+    return this._useOllama;
+  }
+
+  get textProvider(): { endpoint: string } | undefined {
+    if (!this._settingsLoaded) {
+      void this._initSettings();
+    }
+    return { endpoint: this._textProviderEndpoint };
+  }
+
+  private _textProviderEndpoint = '';
+  private _useOllama = false;
+  private _settingsLoaded = false;
+  private _bridge: EngineBridge | undefined;
+  private _saveService: GameSaveServiceInterface | undefined;
+  private _initialized = false;
+  private _engineService:
+    | import('./game_engine_service.svelte').GameEngineServiceInterface
+    | undefined;
+  private _handlers: OverlayEventHandlers | undefined;
+
+  async initialize(): Promise<void> {
+    if (this._initialized) {
+      return;
+    }
+    this._initialized = true;
+    await this._initSettings();
+    await setupBridgeListeners();
+  }
+
+  /** Sets the engine bridge for save operations. Called by setupBridgeListeners. */
+  setBridge(bridge: EngineBridge): void {
+    this._bridge = bridge;
+  }
+
+  /** Intent-driven overlay activation — called by bridge listeners only. */
+  setActive(type: GameOverlayType): void {
+    this.activeOverlay = type;
+  }
+
+  /** Resets overlay to NONE. */
+  clearActive(): void {
+    this.activeOverlay = 'NONE';
+  }
+
+  /** Intent-driven transition state. */
+  setTransitioning(value: boolean): void {
+    this.isTransitioning = value;
+  }
+
+  /** Returns the current defeated enemies list. */
+  getDefeatedEnemies(): string[] {
+    return [...(gameStateService.defeatedEnemies as string[])];
+  }
+
+  /** Sets camera zoom data for dialogue spatial UI. */
+  setCameraZoom(options: { npcScreenX?: number; npcScreenY?: number }): void {
+    this._cameraZoomNpcScreenX = options.npcScreenX;
+    this._cameraZoomNpcScreenY = options.npcScreenY;
+  }
+
+  /** Stores the last vendor session options for VM creation. */
+  vendorSessionOptions = $state<
+    { vendorId: string; vendorName: string; vendorInventory: string } | undefined
+  >(undefined);
+
+  /** Plays pickup SFX when inventory count increases. */
+  onInventoryCountChange(newCount: number): void {
+    if (newCount > this._previousInventoryCount) {
+      void audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
+    }
+    this._previousInventoryCount = newCount;
+  }
+
+  /** Called by bridge_listeners when a map has finished loading. */
+  onMapLoaded(): void {
+    if (this._firstMapLoaded) {
+      void this._triggerAutoSave();
+    }
+    this._firstMapLoaded = true;
+  }
+
+  // Internal state (accessed via methods above, not directly)
+  _previousInventoryCount = 0;
+  _cameraZoomNpcScreenX: number | undefined;
+  _cameraZoomNpcScreenY: number | undefined;
+  private _firstMapLoaded = false;
+
+  private async _triggerAutoSave(): Promise<void> {
+    this.autoSaveStatus = 'saving';
+    try {
+      if (!this._saveService) {
+        if (!this._bridge) {
+          this.autoSaveStatus = 'error';
+          return;
+        }
+        this._saveService = new GameSaveService({
+          className: 'GameSaveService',
+          bridge: this._bridge,
+        });
+      }
+      await this._saveService.saveGame('auto-save');
+      this.autoSaveStatus = 'saved';
+      this.showSnackbar({ text: 'Auto-saved', type: 'success' });
+      setTimeout(() => {
+        if (this.autoSaveStatus === 'saved') {
+          this.autoSaveStatus = 'idle';
+        }
+      }, 2000);
+    } catch (_error) {
+      this.autoSaveStatus = 'error';
+      this.showSnackbar({ text: 'Auto-save failed', type: 'error' });
+      setTimeout(() => {
+        if (this.autoSaveStatus === 'error') {
+          this.autoSaveStatus = 'idle';
+        }
+      }, 3000);
+    }
+  }
+
+  setEngineService(
+    service: import('./game_engine_service.svelte').GameEngineServiceInterface,
+  ): void {
+    this._engineService = service;
+  }
+
+  registerHandlers(handlers: OverlayEventHandlers): void {
+    this._handlers = handlers;
+  }
+
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (this.activeOverlay === 'DIALOGUE') {
+        this.endDialogue();
+        return;
+      }
+      if (this.activeOverlay === 'INVENTORY') {
+        this.closeInventory();
+        return;
+      }
+      if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
+        this.closeCharacterDashboard();
+        return;
+      }
+      if (this.activeOverlay === 'VENDOR') {
+        this.closeVendor();
+        return;
+      }
+      if (this.activeOverlay === 'QUEST_LOG') {
+        this.closeQuestLog();
+        return;
+      }
+      this._togglePauseMenu();
+      return;
+    }
+
+    if (event.key === 'i' || event.key === 'I') {
+      if (this.activeOverlay === 'INVENTORY') {
+        event.preventDefault();
+        this.closeInventory();
+        return;
+      }
+      if (this.activeOverlay === 'NONE') {
+        event.preventDefault();
+        this.openInventory();
+        return;
+      }
+      return;
+    }
+
+    if (event.key === 'q' || event.key === 'Q') {
+      if (this.activeOverlay === 'QUEST_LOG') {
+        event.preventDefault();
+        this.closeQuestLog();
+        return;
+      }
+      if (this.activeOverlay === 'NONE') {
+        event.preventDefault();
+        this.openQuestLog();
+        return;
+      }
+      return;
+    }
+
+    if (event.key === 'c' || event.key === 'C') {
+      if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
+        event.preventDefault();
+        this.closeCharacterDashboard();
+        return;
+      }
+      if (this.activeOverlay === 'NONE') {
+        event.preventDefault();
+        this.openCharacterDashboard();
+        return;
+      }
+    }
+  }
+
+  resumeGame(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
+  }
+
+  async goToSettings(): Promise<void> {
+    await routerService.goToRoute('settings', {
+      queryParameters: { from: 'game' },
+      pathParameters: undefined,
+    });
+  }
+
+  async quitToMainMenu(): Promise<void> {
+    await routerService.navigateToApp();
+  }
+
+  endDialogue(): void {
+    this.activeOverlay = 'NONE';
+    this.dialogueNpc = undefined;
+    gameStateService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
+    this._handlers?.onDialogueEnd();
+  }
+
+  async saveGame(): Promise<void> {
+    if (this.isSaving) {
+      return;
+    }
+    this.isSaving = true;
+    this.saveMessage = undefined;
+    try {
+      if (!this._saveService) {
+        if (!this._bridge) {
+          throw new Error('Engine bridge not available for save');
+        }
+        this._saveService = new GameSaveService({
+          className: 'GameSaveService',
+          bridge: this._bridge,
+        });
+      }
+      await this._saveService.saveGame('manual-1');
+      this.saveMessage = 'Game Saved!';
+    } catch (error) {
+      logger.debug('GameOverlayService:saveGame:error', { error: String(error) });
+      this.saveMessage = 'Save failed';
+    } finally {
+      this.isSaving = false;
+    }
+  }
+
+  async respawnPlayer(): Promise<void> {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
+    this._engineService?.resumeEngine();
+    await this._engineService?.loadMap({
+      mapUrl: '/assets/maps/sandbox_zone_a.json',
+      targetX: 160,
+      targetY: 192,
+      defeatedEnemies: [...(gameStateService.defeatedEnemies as string[])],
+    });
+  }
+
+  async loadLastSave(): Promise<void> {
+    await routerService.navigateToApp();
+  }
+
+  openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
+    this.activeOverlay = 'VENDOR';
+    gameStateService.setMode('MENU');
+    this._engineService?.pauseEngine();
+    this.vendorSessionOptions = options;
+  }
+
+  closeVendor(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
+    this._handlers?.onVendorClose();
+  }
+
+  openInventory(): void {
+    this.activeOverlay = 'INVENTORY';
+    gameStateService.setMode('MENU');
+    this._engineService?.pauseEngine();
+    this._handlers?.onInventoryOpen();
+  }
+
+  closeInventory(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
+    this._handlers?.onInventoryClose();
+  }
+
+  openQuestLog(): void {
+    this.activeOverlay = 'QUEST_LOG';
+    gameStateService.setMode('MENU');
+    this._engineService?.pauseEngine();
+    this._handlers?.onQuestLogOpen();
+  }
+
+  closeQuestLog(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
+    this._handlers?.onQuestLogClose();
+  }
+
+  openCharacterDashboard(): void {
+    this.activeOverlay = 'CHARACTER_DASHBOARD';
+    gameStateService.setMode('MENU');
+    this._engineService?.pauseEngine();
+    this._handlers?.onDashboardOpen();
+  }
+
+  closeCharacterDashboard(): void {
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
+    this._handlers?.onDashboardClose();
+  }
+
+  startCombat(options: { enemyName: string }): void {
+    combatService.startCombat({
+      enemyName: options.enemyName,
+      enemyHp: 60,
+      enemyMaxHp: 60,
+      participantIds: [1, 2],
+      firstTurnEntityId: 1,
+      setActive: (overlay) => {
+        this.setActive(overlay);
+      },
+    });
+  }
+
+  private _togglePauseMenu(): void {
+    if (this.activeOverlay === 'PAUSE_MENU') {
+      this.resumeGame();
+    } else if (this.activeOverlay === 'NONE') {
+      this.activeOverlay = 'PAUSE_MENU';
+      gameStateService.setMode('MENU');
+      this._engineService?.pauseEngine();
+    }
+  }
+
+  private async _initSettings(): Promise<void> {
+    if (this._settingsLoaded) {
+      return;
+    }
+    try {
+      const { aiSettingsService } = await import('$lib/services/settings/ai_settings.svelte');
+      this._textProviderEndpoint = aiSettingsService.textProvider?.endpoint ?? '';
+      this._useOllama = this._textProviderEndpoint.includes('localhost');
+    } catch {
+      // Settings not available — keep defaults
+    }
+    this._settingsLoaded = true;
+  }
+}
+
+export const gameOverlayService: GameOverlayServiceInterface = GameOverlayService.create({
+  className: 'GameOverlayService',
+}) as GameOverlayServiceInterface;

@@ -165,6 +165,78 @@ import type { CommandNode } from "@aikami/schemas/lib/parser";
 detail. Tree-shaking removes unused exports. Importing from `lib/` bypasses
 barrel exports and can miss re-exports or renamed symbols.
 
+### 2b. Always Import Types at the Top of the File, Never Inline `import()`
+
+```typescript
+// ✅ CORRECT — import type at top of file
+import type { ItemDefinition } from '@aikami/types';
+
+export type MyInterface = {
+  getItem(id: string): ItemDefinition;
+};
+
+class MyClass {
+  getItem(id: string): ItemDefinition {
+    return {} as ItemDefinition;
+  }
+}
+
+// ❌ WRONG — inline import() type reference
+import type { ItemDefinition } from '@aikami/types';
+
+export type MyInterface = {
+  getItem(id: string): import('@aikami/types').ItemDefinition;
+};
+
+class MyClass {
+  getItem(id: string): import('@aikami/types').ItemDefinition {
+    return {} as import('@aikami/types').ItemDefinition;
+  }
+}
+```
+
+**Exception**: Dynamic runtime imports (`await import('...')`) for SSR-incompatible
+modules (PixiJS, engine code) are allowed — this rule only applies to **type-level**
+`import()` expressions.
+
+### 2c. Always Import Services from `$services` Barrel, Never Direct Paths
+
+```typescript
+// ✅ CORRECT — import from $services barrel
+import { vendorService, audioService, gameStateService } from '$services';
+
+// ❌ WRONG — never import from $lib/services/... directly
+import { vendorService } from '$lib/services/game/vendor_service.svelte';
+```
+
+**Why**: The barrel (`$services/index.ts`) is the single entry point. Direct imports
+bypass re-exports, cause duplicate module instances, and create circular dependency
+risks when the imported module itself imports from `$services`.
+
+### 2d. Export ViewModels via Factory Function, Never Raw Class
+
+```typescript
+// ✅ CORRECT — factory with create() returns interface
+class MyViewModel extends BaseViewModel<MyOptions> implements MyViewModelInterface {
+  // ...
+}
+
+export const getMyViewModel = (options: MyOptions): MyViewModelInterface =>
+  MyViewModel.create(options);
+
+// ❌ WRONG — never export class directly, never use `new`
+export class MyViewModel { ... }
+
+export { MyViewModel };
+
+const vm = new MyViewModel(options);
+```
+
+**Why**: `BaseViewModel.create()` wraps the instance in a proxy that auto-logs
+every public method call. Raw `new` bypasses this proxy — no logging, no diagnostics.
+The factory returns the Interface type so consumers depend on the contract, not
+the implementation.
+
 ### 3. Never Export Types or Schemas from Service Files
 
 Types and schemas are data shapes, not business logic. This is a specific

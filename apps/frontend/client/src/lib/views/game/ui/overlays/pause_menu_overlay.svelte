@@ -1,16 +1,13 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu_overlay.svelte
+  import { gameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
 
   type Props = {
-    onResume: () => void;
-    onSettings: () => void;
-    onQuit: () => void;
-    onSave: () => void;
     isSaving?: boolean;
     saveMessage?: string;
   };
 
-  const { onResume, onSettings, onQuit, onSave, isSaving = false, saveMessage }: Props = $props();
+  const { isSaving = false, saveMessage }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -23,9 +20,15 @@
     <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
 
     <div class="mt-6 space-y-3">
-      <button class="btn btn-primary btn-block" onclick={onResume}>Resume Game</button>
+      <button class="btn btn-primary btn-block" onclick={() => gameOverlayService.resumeGame()}>
+        Resume Game
+      </button>
 
-      <button class="btn btn-outline btn-block" disabled={isSaving} onclick={onSave}>
+      <button
+        class="btn btn-outline btn-block"
+        disabled={isSaving}
+        onclick={() => gameOverlayService.saveGame()}
+      >
         {#if isSaving}
           <span class="loading loading-spinner loading-xs"></span>
           Saving...
@@ -44,9 +47,16 @@
         </p>
       {/if}
 
-      <button class="btn btn-outline btn-block" onclick={onSettings}>Settings</button>
+      <button class="btn btn-outline btn-block" onclick={() => gameOverlayService.goToSettings()}>
+        Settings
+      </button>
 
-      <button class="btn btn-ghost btn-block text-error" onclick={onQuit}>Quit to Main Menu</button>
+      <button
+        class="btn btn-ghost btn-block text-error"
+        onclick={() => gameOverlayService.quitToMainMenu()}
+      >
+        Quit to Main Menu
+      </button>
     </div>
 
     <p class="mt-4 text-center text-xs text-base-content/50">Press Escape to resume</p>
