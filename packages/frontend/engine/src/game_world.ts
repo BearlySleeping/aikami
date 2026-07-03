@@ -953,6 +953,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         },
       });
     });
+
+    // Forward SET_ENVIRONMENT_CONFIG commands (C-213)
+    bridgeWithCommands.onCommand('SET_ENVIRONMENT_CONFIG', (cmd: unknown) => {
+      const envCmd = cmd as {
+        timeScale?: number;
+        windVelocity?: number;
+        rainIntensity?: number;
+        startHour?: number;
+      };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'SET_ENVIRONMENT_CONFIG',
+          timeScale: envCmd.timeScale,
+          windVelocity: envCmd.windVelocity,
+          rainIntensity: envCmd.rainIntensity,
+          startHour: envCmd.startHour,
+        },
+      });
+    });
   }
 
   /**
