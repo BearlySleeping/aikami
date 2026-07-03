@@ -193,6 +193,7 @@
 | C-218 | E2e Logic Ui Resolution | ✅ completed |
 | C-219 | Ui Component System Refactor | ✅ completed |
 | C-220 | Ui Skills And Theming | ✅ completed |
+| C-221 | Modal Dialog Encapsulation | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

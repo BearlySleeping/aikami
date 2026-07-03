@@ -48,6 +48,8 @@ reinvented DaisyUI primitives.
 **Current `@aikami/frontend-components` exports:**
 - `Select` — DaisyUI `<select>` wrapper with `$bindable()` value, JSDoc props,
   `SelectOption[]` options, and `size`/`bordered` DaisyUI modifiers.
+- `Modal` — Native `<dialog>` wrapper with `$bindable()` open, title/children/actions
+  snippets, `size` variants, backdrop click dismissal, and `onclose` callback.
 
 When you need a complex component that doesn't exist yet: add it to
 `@aikami/frontend-components`, never inline a one-off in the consuming app.
