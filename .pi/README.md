@@ -95,6 +95,8 @@ See individual skill files for details.
 
 | Convention                                                                                        | Enforced By                   |
 | ------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Always use `hypa_shell` for shell commands, not `bash` — `bash` wraps through hypa which may fail  | pi-hypa extension             |
+| Always use `hypa_read` / `hypa_grep` / `hypa_find` / `hypa_ls` for file ops, not raw equivalents  | pi-hypa extension             |
 | Always use `moon_run_task` for build/test/typecheck                                               | moon-integration.ts           |
 | Always use `validate()` instead of raw moon commands                                              | moon-integration.ts           |
 | Use `ctx_execute` for analysis, not raw file reads                                                | context-mode                  |
