@@ -34,6 +34,27 @@ Fragments OK. Every word must earn its place.
 
 ---
 
+## Tool Selection (Mandatory)
+
+**🔴 ALWAYS prefer Hypa-backed tools over raw equivalents.** The `bash`, `read`,
+`grep`, `find`, and `ls` tools are transparently intercepted by the pi-hypa
+extension which rewrites them through `hypa -c`. In the Nix environment, the
+`hypa` binary is not on PATH for rewrapped commands, producing spurious
+`hypa: command not found` errors. Use these instead:
+
+| Instead of | Use |
+|---|---|
+| `bash` | `hypa_shell` |
+| `read` | `hypa_read` |
+| `grep` / `rg` via bash | `hypa_grep` |
+| `find` via bash | `hypa_find` |
+| `ls` via bash | `hypa_ls` |
+
+Exception: `bash` is still fine for short commands (`git`, `mkdir`, `rm`,
+`mv`, `cd`, `bun install`) where hypa's compression adds no value.
+
+---
+
 ## Context-Mode Routing (Mandatory)
 
 We use the Context Mode MCP to protect the context window. One unrouted command
