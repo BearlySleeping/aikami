@@ -97,7 +97,7 @@ function resolveChatUrl(routing: ResolvedRouting): string {
 }
 
 /** Chat completions URL for backwards-compatible fallback. */
-const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const _OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** Timeout for the entire fetch+stream operation (90 seconds). */
 const FETCH_TIMEOUT_MS = 90_000;

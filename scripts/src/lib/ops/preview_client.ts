@@ -1,4 +1,4 @@
-// scripts/src/lib/ops/preview.ts
+// scripts/src/lib/ops/preview_client.ts
 //
 // Aikami Client Preview & Launch — build, dev server, Tauri, or Chromium
 // with PixiJS DevTools extension loaded and persistent auth profile.
@@ -10,14 +10,14 @@
 //   bun run scripts -- preview --mode staging            # staging mode
 //   bun run scripts -- preview --no-devtools             # skip devtools
 //   bun run scripts -- preview --update-devtools         # force devtools re-download
-//   bun run scripts -- preview --no-dev                  # skip tmux dev server
+//   bun run scripts -- preview --no-dev                  # skip herdr dev server
 //
 // CLI flags:
 //   --build               Build client + vite preview server
 //   --tauri               Build client + cargo + run Tauri desktop
 //   --mode <mode>         emulator (default), staging, production
-//   --dev                 (default) Ensure client running in tmux
-//   --no-dev              Skip tmux dev server (use with --build)
+//   --dev                 (default) Ensure client running in herdr
+//   --no-dev              Skip herdr dev server (use with --build)
 //   --devtools            (default, non-tauri) Launch Chromium with PixiJS DevTools
 //   --no-devtools         Skip Chromium/devtools launch
 //   --update-devtools     Force re-download PixiJS DevTools extension
@@ -26,7 +26,12 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { EMULATOR_PORTS, PORTS } from '@aikami/constants';
-import { buildSessionName, sessionExists, startServices, waitForReady } from '../tmux/session.ts';
+import {
+  buildSessionName,
+  startServices,
+  waitForReady,
+  workspaceExists,
+} from '../herdr/session.ts';
 import { ensureDevtools, getDevtoolsPath, updateDevtools } from './pixi_devtools.ts';
 
 // ── CLI colors ─────────────────────────────────────────────────────────────
@@ -146,17 +151,17 @@ const parseOptions = (args: string[]): PreviewOptions => {
   return { build, tauri, mode, dev, devtools, updateDevtools: updateDevtoolsFlag, force };
 };
 
-// ── Tmux dev server ────────────────────────────────────────────────────────
+// ── Herdr dev server ────────────────────────────────────────────────────────
 
 const ensureDevServer = async (mode: AikamiMode): Promise<void> => {
-  const sessionName = buildSessionName(mode);
+  const wsName = buildSessionName(mode);
 
-  if (!(await sessionExists(sessionName))) {
-    info(`Starting ${mode} tmux session with client…`);
+  if (!(await workspaceExists(wsName))) {
+    info(`Starting ${mode} herdr workspace with client…`);
     await startServices({ mode, services: ['firebase', 'client'] });
     await waitForReady({ services: ['firebase'], mode }, 60_000);
   } else {
-    // Ensure client window exists
+    // Ensure client tab exists
     await startServices({ mode, services: ['client'] });
   }
 
@@ -403,14 +408,14 @@ if (opts.updateDevtools) {
 
 // ── Tauri path ────────────────────────────────────
 if (opts.tauri) {
-  // In Tauri mode, dev server runs embedded — no tmux or chromium needed
+  // In Tauri mode, dev server runs embedded — no herdr or chromium needed
   // --dev flag controls whether to open at /dev/sandbox route
   await launchTauri(opts.mode, opts.force, opts.dev);
   ok('Tauri exited.');
   process.exit(0);
 }
 
-// ── Dev server (tmux) ─────────────────────────────
+// ── Dev server (herdr) ─────────────────────────────
 if (opts.dev) {
   await ensureDevServer(opts.mode);
 }

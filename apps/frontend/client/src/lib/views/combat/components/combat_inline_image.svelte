@@ -25,7 +25,7 @@
   let isExpanded = $state(false);
 
   /** Whether the hover overlay is visible. */
-  let isHovered = $state(false);
+  let _isHovered = $state(false);
 </script>
 
 {#if isGenerating && !imageUrl}

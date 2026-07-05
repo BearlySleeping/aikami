@@ -1,0 +1,58 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'tool'
+tags:
+  - 'pi'
+  - 'tools'
+  - 'agent'
+
+project:
+  name: 'pi'
+  description: 'Pi coding agent configuration, skills, extensions, and scripts.'
+  channel: '#general'
+  owner: 'Core Team'
+
+fileGroups:
+  sources:
+    - 'scripts/**/*.ts'
+    - 'skills/**/*.md'
+    - 'skills/**/*.ts'
+    - 'extensions/**/*.ts'
+    - 'generated-skills/**/*.{md,ts}'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'moon.yml'
+    - 'mcp.json'
+    - 'settings.json'
+  entry:
+    - 'scripts/update_skills.ts'
+
+tasks:
+  typecheck:
+    command: 'bun run typecheck'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(entry)'
+    options:
+      mergeArgs: 'replace'
+
+  lint:
+    command: 'bun run lint'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(entry)'
+    options:
+      mergeArgs: 'replace'
+
+  fix:
+    command: 'bun run fix'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(entry)'
+    options:
+      mergeArgs: 'replace'

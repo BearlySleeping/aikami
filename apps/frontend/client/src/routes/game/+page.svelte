@@ -18,7 +18,6 @@
   - Explore mode: canvas fills entire viewport
   - GameUIView overlays the canvas (pointer-events careful layering)
 -->
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: svelte:window is a valid global key handler -->
 <svelte:window onkeydown={(e) => gameUIViewModel.handleKeyDown(e)} />
 
 <div

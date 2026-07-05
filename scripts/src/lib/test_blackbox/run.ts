@@ -2,18 +2,18 @@
 
 // scripts/src/lib/test_blackbox/run.ts
 // Entry point for blackbox tests. Starts emulators + dev servers, runs suites, reports.
-// Primary service lifecycle: tmux (bypasses Nix posix_spawn PATH loss).
-// Fallback: process spawn (when tmux unavailable).
+// Primary service lifecycle: herdr (bypasses Nix posix_spawn PATH loss).
+// Fallback: process spawn (when herdr unavailable).
 
 import { resolve } from 'node:path';
 import { startDevServer, stopAllDevServers } from './dev_server_manager.ts';
 import type { DockerServiceConfig } from './docker_manager.ts';
 import { DockerManager } from './docker_manager.ts';
 import { startEmulators, stopEmulators } from './emulator_manager.ts';
+import { startServices, stopServices } from './herdr_manager.ts';
 import { printTerminalReport, writeJsonReport } from './reporter.ts';
 import { COMFYUI_DOCKER_CONFIG } from './suites/comfyui.ts';
 import { runSuites } from './test_runner.ts';
-import { startServices, stopServices } from './tmux_manager.ts';
 import type { SuiteResult, TestSuites } from './types.ts';
 
 const args = process.argv.slice(2);
@@ -126,9 +126,9 @@ async function main() {
   }
 
   if (!noEmulator) {
-    const tmuxAvailable = await checkTmuxAvailable();
+    const herdrAvailable = await checkHerdrAvailable();
 
-    if (tmuxAvailable) {
+    if (herdrAvailable) {
       const only: string[] = [];
       if (needsEmulator) {
         only.push('firebase');
@@ -142,13 +142,13 @@ async function main() {
 
       if (only.length > 0) {
         const startupDesc = force
-          ? `🚀 Force-starting services via tmux (${only.join(', ')})...`
-          : `🚀 Starting services via tmux (${only.join(', ')})...`;
+          ? `🚀 Force-starting services via herdr (${only.join(', ')})...`
+          : `🚀 Starting services via herdr (${only.join(', ')})...`;
         console.log(startupDesc);
         try {
           await startServices({ only, force });
         } catch (e) {
-          console.error('  ⚠ Tmux startup failed:', e instanceof Error ? e.message : e);
+          console.error('  ⚠ Herdr startup failed:', e instanceof Error ? e.message : e);
         }
       }
     } else {
@@ -199,11 +199,11 @@ async function main() {
   process.exit(results.filter((r) => r.status === 'fail').length > 0 ? 1 : 0);
 }
 
-/** Checks if tmux is available on the system. */
-async function checkTmuxAvailable(): Promise<boolean> {
+/** Checks if herdr is available on the system. */
+async function checkHerdrAvailable(): Promise<boolean> {
   const { spawn } = await import('node:child_process');
   return new Promise((resolve) => {
-    const proc = spawn('tmux', ['-V'], { stdio: 'ignore' });
+    const proc = spawn('herdr', ['--version'], { stdio: 'ignore' });
     proc.on('close', (code) => resolve(code === 0));
     proc.on('error', () => resolve(false));
   });

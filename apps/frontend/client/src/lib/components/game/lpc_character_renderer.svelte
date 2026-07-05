@@ -6,6 +6,7 @@
   // texture loading. Shows an invisible placeholder while textures load
   // via Assets.load() + Spritesheet.parse(), then swaps in the correctly
   // cropped frame once the GPU texture is ready.
+  // biome-ignore lint/correctness/noUnusedImports: Spritesheet type used in Svelte template
   import { Assets, Sprite, type Spritesheet, Texture } from 'pixi.js';
   import { getContext, onDestroy } from 'svelte';
   import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
@@ -41,14 +42,14 @@
     showSprites: _showSprites,
     showGrid: _showGrid,
     zoom: _zoom,
-    compositionFailed,
+    compositionFailed: _compositionFailed,
     textureManager,
     assetUrlResolver,
   }: Props = $props();
 
   // Context injection (used by parent LPC dev view for UBO data mgmt).
-  const batchManager = getContext<LpcBatchManager>(LPC_BATCH_MANAGER_KEY);
-  const stageContainer = getContext(LPC_STAGE_CONTAINER_KEY);
+  const _batchManager = getContext<LpcBatchManager>(LPC_BATCH_MANAGER_KEY);
+  const _stageContainer = getContext(LPC_STAGE_CONTAINER_KEY);
 
   // Loading state — true while Assets.load + Spritesheet.parse are in flight.
   let loading = $state(true);

@@ -31,8 +31,8 @@
     characterClass,
     level,
     personalityTraits,
-    background,
-    notes,
+    background: _background,
+    notes: _notes,
     greeting,
   }: Props = $props();
 </script>

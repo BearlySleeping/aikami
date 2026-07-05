@@ -1,15 +1,15 @@
-// scripts/src/lib/test_blackbox/tmux_manager.ts
-// Start/stop services via the unified tmux session library.
-// Uses the aikami-{mode} naming convention from scripts/src/lib/tmux/session.ts.
+// scripts/src/lib/test_blackbox/herdr_manager.ts
+// Start/stop services via the unified herdr workspace library.
+// Uses the aikami-{mode} naming convention from scripts/src/lib/herdr/session.ts.
 //
 // Pattern ported from nordclaw's blackbox test infrastructure.
 
-import type { AikamiMode, DevService } from '../tmux/session.ts';
+import type { AikamiMode, DevService } from '../herdr/session.ts';
 import {
-  startServices as startTmuxServices,
+  startServices as startHerdrServices,
   stopAllSessions,
   waitForReady,
-} from '../tmux/session.ts';
+} from '../herdr/session.ts';
 
 const MODE: AikamiMode = 'emulator'; // Blackbox tests always run in emulator mode
 
@@ -29,9 +29,9 @@ export const startServices = async (
 
   const services = toCanonicalServices(only);
 
-  console.log(`Starting services in tmux (${only.join(', ')})${force ? ' [force]' : ''}...`);
+  console.log(`Starting services in herdr (${only.join(', ')})${force ? ' [force]' : ''}...`);
 
-  await startTmuxServices({
+  await startHerdrServices({
     services,
     mode: MODE,
     force,

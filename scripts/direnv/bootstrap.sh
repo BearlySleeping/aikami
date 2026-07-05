@@ -222,44 +222,37 @@ if _aikami_is_bash_or_zsh; then
     fi
   }
 
-  # ── aikami_dev: start full local dev in tmux ────────────────────────
+  # ── aikami_dev: start full local dev in herdr ────────────────────────
 
   aikami_dev() {
     echo "🎴 Starting Aikami local dev environment..."
     echo "   Mode: ${AIKAMI_MODE:-emulator}"
     echo ""
-    bun run scripts/src/lib/tmux/start.ts all
+    bun run scripts/src/lib/herdr/start.ts all
     echo ""
-    aikami_tmux_join all 2>/dev/null || true
+    aikami_herdr_join all 2>/dev/null || true
   }
 
   aikami_emulate() {
     echo "🔥 Starting backend emulators..."
-    bun run scripts/src/lib/tmux/start.ts emulators
+    bun run scripts/src/lib/herdr/start.ts firebase
     echo ""
-    aikami_tmux_join emulators 2>/dev/null || true
+    aikami_herdr_join firebase 2>/dev/null || true
   }
 
-  aikami_game_emulate() {
-    echo "🎮 Starting game in emulator mode..."
-    bun run scripts/src/lib/tmux/start.ts game
-    echo ""
-    aikami_tmux_join game 2>/dev/null || true
-  }
+  # ── Herdr shortcuts ──────────────────────────────────────────────────
 
-  # ── Tmux shortcuts ──────────────────────────────────────────────────
+  aikami_herdr_start()   { bun run scripts/src/lib/herdr/start.ts "$@"; }
+  aikami_herdr_join()    { bun run scripts/src/lib/herdr/join.ts "$@"; }
+  aikami_herdr_stop()    { bun run scripts/src/lib/herdr/stop.ts "$@"; }
+  aikami_herdr_stop_all() { bun run scripts/src/lib/herdr/stop_all.ts; }
+  aikami_herdr_status()  { bun run scripts/src/lib/herdr/status.ts; }
 
-  aikami_tmux_start()   { bun run scripts/src/lib/tmux/start.ts "$@"; }
-  aikami_tmux_join()    { bun run scripts/src/lib/tmux/join.ts "$@"; }
-  aikami_tmux_stop()    { bun run scripts/src/lib/tmux/stop.ts "$@"; }
-  aikami_tmux_stop_all() { bun run scripts/src/lib/tmux/stop_all.ts; }
-  aikami_tmux_status()  { bun run scripts/src/lib/tmux/status.ts; }
-
-  alias atstart='aikami_tmux_start'
-  alias atjoin='aikami_tmux_join'
-  alias atstop='aikami_tmux_stop'
-  alias atstopall='aikami_tmux_stop_all'
-  alias atstatus='aikami_tmux_status'
+  alias ahstart='aikami_herdr_start'
+  alias ahjoin='aikami_herdr_join'
+  alias ahstop='aikami_herdr_stop'
+  alias ahstopall='aikami_herdr_stop_all'
+  alias ahstatus='aikami_herdr_status'
 
   # ── aikami_validate ─────────────────────────────────────────────────
 
@@ -340,18 +333,17 @@ if _aikami_is_bash_or_zsh; then
     ma [task]        Run all affected tasks
 
   WORKFLOWS
-    aikami_dev              Start full stack in tmux
-    aikami_emulate          Start backend emulators in tmux
-    aikami_game_emulate     Start game in emulator mode
+    aikami_dev              Start full stack in herdr
+    aikami_emulate          Start backend emulators in herdr
     aikami_validate         Fix → typecheck (add --test for build+test)
     aikami_affected         Show which projects changed
     aikami_graph            Open project dependency graph
 
-  TMUX SESSIONS
-    aikami_tmux_start <svc> Start tmux (emulators|client|game|all)
-    aikami_tmux_join <svc>  Attach to tmux session
-    aikami_tmux_stop <svc>  Stop tmux session
-    atstart/atjoin/atstop   Short aliases
+  HERDR SESSIONS
+    aikami_herdr_start <svc> Start herdr (firebase|client|voice|image|text|all)
+    aikami_herdr_join <svc>  Attach to herdr workspace
+    aikami_herdr_stop <svc>  Stop herdr workspace
+    ahstart/ahjoin/ahstop   Short aliases
 
   ENVIRONMENT
     aikami_switch <mode>     Switch mode
