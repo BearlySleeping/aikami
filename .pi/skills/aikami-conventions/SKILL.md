@@ -240,28 +240,59 @@ every public method call. Raw `new` bypasses this proxy — no logging, no diagn
 The factory returns the Interface type so consumers depend on the contract, not
 the implementation.
 
-### 3. Never Export Types or Schemas from Service Files
+### 3. Never Export Data, Types, or Schemas from Service Files
 
-Types and schemas are data shapes, not business logic. This is a specific
-instance of **Pillar 2 (Monorepo Boundaries)** — see above for the full rule.
+Services are for **business logic and state management only**. Data, types, and
+schemas are **data shapes** — they belong in dedicated packages. This is a
+specific instance of **Pillar 2 (Monorepo Boundaries)** — see above for the
+full rule.
+
+#### What Goes Where
+
+| Category | Location | Example |
+|----------|----------|---------|
+| **Shared constants/data** | `packages/shared/constants/` | `TEXT_PROVIDERS`, `DEFAULT_*`, provider registries |
+| **Shared types** | `packages/shared/types/` (derived from `@aikami/schemas`) | Cross-project domain types |
+| **Shared schemas** | `packages/shared/schemas/` (TypeBox) | Data validation shapes |
+| **Client-local data** | `apps/frontend/client/src/lib/data/` | Provider endpoint configs |
+| **Client-local types** | `apps/frontend/client/src/lib/types/` | `Connection`, `ConnectionTestResult` |
 
 ```typescript
+// ❌ WRONG — data/type/schema defined in a service file
+// apps/frontend/client/src/lib/services/config/config_service.svelte.ts
+export const TEXT_PROVIDERS = [{ id: 'openrouter', ... }] as const;
+export type Connection = { id: string; name: string; ... };
+
 // ❌ WRONG — type/schema defined in a service file
 // apps/frontend/client/src/lib/client/services/game/game_state_service.ts
 export type ActiveContextEntry = { entityId: string; ... };
 export const ActiveSessionSchema = z.object({ ... });
 
-// ✅ CORRECT — import from the schema/type layer
-// apps/frontend/client/src/lib/client/services/game/game_state_service.ts
+// ✅ CORRECT — data from @aikami/constants
+// apps/frontend/client/src/lib/services/config/config_service.svelte.ts
+import { TEXT_PROVIDERS } from '@aikami/constants';
+
+// ✅ CORRECT — client-local type from $types
+import type { Connection, ConnectionId } from '$types/connection';
+
+// ✅ CORRECT — schema from shared package
 import type { ActiveContextEntry } from "$types/game.ts";
 import { ActiveSessionSchema } from "@aikami/schemas";
 ```
 
-The ONLY exception: the service's own **interface and options type**:
+**🔴 NEVER create and export data, types, or schemas from service files.** The
+ONLY exception: the service's own **interface and options type**:
 
 ```typescript
 export type MyServiceInterface = BaseClassInterface & { ... };
 export type MyServiceOptions = { ... };
+```
+
+Re-exporting from the correct source is acceptable for backward compatibility:
+
+```typescript
+// ✅ OK — re-export from the proper source (not defining locally)
+export { TEXT_PROVIDERS, type TextProvider } from '@aikami/constants';
 ```
 
 ### 4. File Naming: snake_case ONLY
@@ -815,21 +846,61 @@ export class FeatureViewModel
 
 export const getFeatureViewModel = (
   options: FeatureViewModelOptions,
-): FeatureViewModel => {
-  return new FeatureViewModel(options);
-};
+): FeatureViewModelInterface => FeatureViewModel.create(options);
 ```
 
 #### ViewModel Rules
 
 - Export `type ...Interface` with **all properties `readonly`**
 - Export `type ...Options` alongside the class
-- Export a `getFeatureViewModel` factory function
+- Export a `getFeatureViewModel` factory function using `ClassName.create()` — **never `new ClassName()`**
 - Always extend `BaseViewModel` and `implements *Interface`
 - ViewModel files: `{name}_view_model.svelte.ts` (NOT `vm` shorthand)
 - Call `super.initialize()` **at the end** of `initialize()`
 - Use `registerEffectRoot()` for reactive side effects (NEVER raw `$effect` in views)
 - Views access data only through the ViewModel
+- **Sub-view components** should accept optional `viewModel` via `$props()` with a default factory — never create ViewModels in the parent's `<script>` block and pass them down
+
+#### Optional ViewModel Prop Pattern
+
+Sub-view components (reusable UI panels, editor modals) should self-instantiate
+their ViewModel via default `$props()`:
+
+```svelte
+<!-- ✅ CORRECT — optional viewModel with default factory -->
+<script lang="ts">
+  import { getMyViewModel, type MyViewModelInterface } from './my_view_model.svelte';
+
+  type Props = {
+    viewModel?: MyViewModelInterface;
+  };
+
+  const {
+    viewModel = getMyViewModel({ className: 'MyViewModel' }),
+  }: Props = $props();
+</script>
+
+<!-- ❌ WRONG — creating ViewModel in parent's <script> -->
+<script lang="ts">
+  // parent_view.svelte
+  const childVm = getChildViewModel({ ... });
+</script>
+<ChildView viewModel={childVm} />
+```
+
+**Zero-logic views**: Views must contain NO data transformation, mapping,
+formatting, or computed values. Every expression in the template must be a
+direct property access on the ViewModel:
+
+```svelte
+<!-- ✅ CORRECT — direct property access -->
+<span>{viewModel.formattedParams.temperature}</span>
+
+<!-- ❌ WRONG — inline transformation/logic in view -->
+<span>{viewModel.params.temperature.toFixed(2)}</span>
+<span>{providers.find(p => p.id === id)?.label}</span>
+const getLabel = (id: string) => providers.find(...)?.label;
+```
 
 ### Services Architecture
 

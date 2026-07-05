@@ -1,6 +1,7 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
   import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import ConnectionsListView from '$views/settings/connection/connections_list_view.svelte';
   import type { ProvidersViewModelInterface } from './providers_view_model.svelte';
   import AdvancedTab from './tabs/advanced_tab.svelte';
   import ImageTab from './tabs/image_tab.svelte';
@@ -161,6 +162,9 @@
       <!-- ── Advanced Tab ─────────────────────────────────────────────── -->
       {:else if viewModel.activeTab === 'advanced'}
         <AdvancedTab {viewModel} />
+      <!-- ── Connections Tab (C-230) ───────────────────────────────────── -->
+      {:else if viewModel.activeTab === 'connections'}
+        <ConnectionsListView />
       {/if}
 
       <!-- ═══════════════════════════════════════════════════════════════

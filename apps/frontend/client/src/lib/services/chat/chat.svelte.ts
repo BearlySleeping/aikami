@@ -101,6 +101,12 @@ export type ChatServiceInterface = BaseFrontendClassInterface & {
    * Clears all chat state to initial values.
    */
   clear(): void;
+
+  /** Connection ID for per-chat provider override (C-230). */
+  readonly connectionId: string | undefined;
+
+  /** Sets the connection override for this chat. */
+  setConnectionId(connectionId: string | undefined): void;
 };
 
 class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatServiceInterface {
@@ -109,6 +115,7 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
   isSending = $state(false);
   isTyping = $state(false);
   errorMessage: string | undefined = $state(undefined);
+  connectionId: string | undefined = $state(undefined);
 
   setLoading(loading: boolean): void {
     this.isLoading = loading;
@@ -188,6 +195,11 @@ class ChatService extends BaseFrontendClass<ChatServiceOptions> implements ChatS
     this.isSending = false;
     this.isTyping = false;
     this.errorMessage = undefined;
+    this.connectionId = undefined;
+  }
+
+  setConnectionId(connectionId: string | undefined): void {
+    this.connectionId = connectionId;
   }
 }
 
