@@ -14,9 +14,12 @@ import {
   type ChatMessage,
   chatService,
   diceService,
+  draftStore,
   imageGenerationService,
+  messageBranchStore,
   npcChatService,
   npcService,
+  SentenceBoundaryChunker,
   ttsService,
 } from '$services';
 
@@ -46,11 +49,40 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   readonly isGeneratingImage: boolean;
   readonly isPlayingTts: boolean;
   readonly backgroundImageUrl: string | undefined;
+  /** Current text in the chat input field (draft-aware). */
+  inputText: string;
+  /** Whether streaming TTS is enabled for this chat. */
+  readonly streamingTtsEnabled: boolean;
+  /** Toast notification message (e.g. 'Copied!'). */
+  readonly toastMessage: string;
   loadChatHistory(chat: ChatData): Promise<void>;
   sendMessage(text: string): Promise<void>;
   editMessage(messageId: string, newText: string): Promise<void>;
   deleteMessage(messageId: string): Promise<void>;
   regenerateMessage(messageId: string): Promise<void>;
+  /** Swipe between alternative AI responses for a message. */
+  swipeAlternative(messageId: string, direction: 'left' | 'right'): void;
+  /** Copy message text to clipboard with toast feedback. */
+  copyMessage(text: string): Promise<void>;
+  /** Fork a new chat from the given message (placeholder). */
+  branchFromMessage(messageId: string): void;
+  /** Saves the current input to the per-chat draft store. */
+  onInputChange(text: string): void;
+  /** Shows a toast notification that auto-dismisses. */
+  showToast(message: string): void;
+  /** Toggles streaming TTS on/off for this chat. */
+  toggleStreamingTts(): void;
+  /** Sends current input text as a user message (convenience). */
+  handleSend(): void;
+  /** Handles keydown events on the chat input (Enter to send). */
+  handleKeyDown(event: KeyboardEvent): void;
+  /** Dispatches a message-level action from the inline action bar. */
+  handleMessageAction(
+    messageId: string,
+    action: 'copy' | 'retry' | 'edit' | 'delete' | 'branch' | 'speak',
+  ): void;
+  /** Scrollable message container — bound by View via bind:this. */
+  messageContainerElement: HTMLDivElement | undefined;
   generateImage(prompt: string): Promise<string>;
   playTts(messageId: string): Promise<void>;
   stopTts(): void;
@@ -81,6 +113,18 @@ export class ChatViewModel
   isGeneratingImage = $state(false);
   isPlayingTts = $state(false);
   backgroundImageUrl = $state<string | undefined>();
+  /** Current input text (draft-aware, bound to textarea). */
+  inputText = $state('');
+  /** Whether streaming TTS is enabled for this chat. */
+  streamingTtsEnabled = $state(false);
+  /** Toast notification message — auto-clears after display. */
+  toastMessage = $state('');
+
+  /** Sentence boundary chunker for streaming TTS. */
+  private readonly _chunker = new SentenceBoundaryChunker();
+
+  /** Internal flag: whether TTS has been initialised for this chat session. */
+  private _ttsInitialised = false;
 
   /** The NPC's entity ID in the game engine, for expression macro routing. */
   private gameEntityId: number | undefined;
@@ -107,7 +151,52 @@ export class ChatViewModel
     this.gameEntityId = options.gameEntityId;
   }
 
+  /** Scrollable message container — bound by View via bind:this. */
+  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
+
   override async initialize(): Promise<void> {
+    // Restore per-chat input draft from IndexedDB
+    const draft = await draftStore.loadDraft({ chatId: this._chatId });
+    if (draft) {
+      this.inputText = draft;
+    }
+
+    // Wire streaming TTS — chunker feeds sentences to ttsService
+    if (!this._ttsInitialised) {
+      this._ttsInitialised = true;
+      this._chunker.onSentence(({ sentence }) => {
+        if (this.streamingTtsEnabled) {
+          ttsService.speak({ text: sentence });
+        }
+      });
+      // Fire-and-forget TTS worker init
+      void ttsService.initialize();
+    }
+    // Register reactive effects for DOM interactions
+    this.registerEffectRoot(() => {
+      // Auto-scroll to bottom when new messages arrive
+      $effect(() => {
+        void this.messages.length;
+        if (this.messageContainerElement) {
+          this.messageContainerElement.scrollTop = this.messageContainerElement.scrollHeight;
+        }
+      });
+
+      // Auto-save input draft on each keystroke (bind:value bypasses onInputChange)
+      $effect(() => {
+        const text = this.inputText;
+        if (text.length > 0) {
+          void draftStore.saveDraft({ chatId: this._chatId, text });
+        }
+      });
+    });
+
+    // If NPC and chat already set by a dev subclass, skip real database lookup
+    if (this.npc && this.chat) {
+      await this.loadChatHistory(this.chat);
+      return super.initialize();
+    }
+
     const chatDataLookup = await npcChatService.getChatById({ chatId: this._chatId });
     if (!chatDataLookup) {
       this.error('Chat not found', { chatId: this._chatId });
@@ -156,28 +245,20 @@ export class ChatViewModel
   get chatError() {
     return this.errorMessage ?? chatService.errorMessage;
   }
+  /**
+   * Enhanced message list with alternative tracking.
+   * Reads from the reactive chatService.messages so that additions
+   * (e.g. from dev sandbox overrides) are immediately reflected.
+   */
   get messages(): ChatMessage[] {
-    const msgs = this.chat?.messages ?? [];
-    return msgs.map((msg) => {
-      const createdAt = msg.createdAt as unknown;
-      let timestamp: Date;
-      if (
-        typeof createdAt === 'object' &&
-        createdAt !== null &&
-        'toDate' in createdAt &&
-        typeof (createdAt as { toDate: () => Date }).toDate === 'function'
-      ) {
-        timestamp = (createdAt as { toDate: () => Date }).toDate();
-      } else if (createdAt instanceof Date) {
-        timestamp = createdAt;
-      } else {
-        timestamp = new Date();
-      }
+    return chatService.messages.map((msg) => {
+      const messageId = msg.id || crypto.randomUUID();
+      const activeAlt = messageBranchStore.getActiveAlternative(messageId);
       return {
-        id: msg.id || crypto.randomUUID(),
-        text: msg.text,
+        id: messageId,
+        text: activeAlt ?? msg.text,
         sender: msg.sender,
-        timestamp,
+        timestamp: msg.timestamp,
       };
     });
   }
@@ -191,6 +272,62 @@ export class ChatViewModel
     this.backgroundImageUrl = chat.backgroundImageUrl;
     chatService.setMessages(chat.messages as unknown as MessageData[]);
     this.showGreeting = (chat.messages?.length ?? 0) === 0;
+  }
+
+  /**
+   * Sends the current input text as a user message.
+   * Convenience overload — delegates to the text-parameter
+   * version. Used by the View's send button / Enter handler.
+   */
+  handleSend(): void {
+    const text = this.inputText.trim();
+    if (!text || this.isSending) {
+      return;
+    }
+    void this.sendMessage(text);
+  }
+
+  /**
+   * Handles keydown events on the chat input.
+   * Enter submits; Shift+Enter inserts newline.
+   */
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.handleSend();
+    }
+  }
+
+  /**
+   * Dispatches a message-level action from the inline action bar
+   * to the appropriate ViewModel method.
+   */
+  handleMessageAction(
+    messageId: string,
+    action: 'copy' | 'retry' | 'edit' | 'delete' | 'branch' | 'speak',
+  ): void {
+    switch (action) {
+      case 'copy': {
+        const msg = chatService.messages.find((m) => m.id === messageId);
+        if (msg) {
+          void this.copyMessage(msg.text);
+        }
+        break;
+      }
+      case 'retry':
+        void this.regenerateMessage(messageId);
+        break;
+      case 'delete':
+        void this.deleteMessage(messageId);
+        break;
+      case 'branch':
+        this.branchFromMessage(messageId);
+        break;
+      case 'speak':
+        void this.playTts(messageId);
+        break;
+      // edit is handled inline by the View, not dispatched here
+    }
   }
 
   async sendMessage(text: string): Promise<void> {
@@ -234,6 +371,10 @@ export class ChatViewModel
     chatService.addMessage(userMessage);
     await this.saveMessage(text, 'user');
 
+    // Clear the per-chat draft since the message was sent
+    void draftStore.clearDraft({ chatId: this._chatId });
+    this.inputText = '';
+
     // Stream buffer for incremental macro parsing (future streaming use)
     const streamBuf: StreamBuffer = createStreamBuffer();
 
@@ -254,9 +395,16 @@ export class ChatViewModel
           bridge.triggerMacro(macro.name, macro.args, this.gameEntityId);
         }
 
+        const displayText = chunkResult.displayText;
         // Show clean text (macros stripped) in the UI
-        chatService.appendAIMessage(chunkResult.displayText);
-        await this.saveMessage(chunkResult.displayText, 'ai');
+        chatService.appendAIMessage(displayText);
+        await this.saveMessage(displayText, 'ai');
+
+        // Feed through sentence boundary chunker for streaming TTS
+        if (this.streamingTtsEnabled) {
+          this._chunker.feed(displayText);
+          this._chunker.close();
+        }
       }
     } catch {
       chatService.setError('Failed to get response from AI');
@@ -283,6 +431,62 @@ export class ChatViewModel
     );
     chatService.setMessages(msgs);
     await this.persistMessages(msgs);
+    // Clean up any alternatives for the deleted message
+    messageBranchStore.clearAlternatives(messageId);
+  }
+
+  swipeAlternative(messageId: string, direction: 'left' | 'right'): void {
+    messageBranchStore.swipeAlternative({ messageId, direction });
+  }
+
+  async copyMessage(text: string): Promise<void> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for insecure contexts
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      this.showToast('Copied!');
+    } catch {
+      this.showToast('Copy failed');
+    }
+  }
+
+  branchFromMessage(_messageId: string): void {
+    // Placeholder: creates a new chat fork.
+    // Full fork semantics are out of scope for C-231.
+    this.showToast('Branch created!');
+  }
+
+  onInputChange(text: string): void {
+    this.inputText = text;
+    // Debounced save — fire-and-forget so input feels instant
+    void draftStore.saveDraft({ chatId: this._chatId, text });
+  }
+
+  showToast(message: string): void {
+    this.toastMessage = message;
+    // Auto-clear after 2 seconds
+    setTimeout(() => {
+      if (this.toastMessage === message) {
+        this.toastMessage = '';
+      }
+    }, 2000);
+  }
+
+  toggleStreamingTts(): void {
+    this.streamingTtsEnabled = !this.streamingTtsEnabled;
+    if (!this.streamingTtsEnabled) {
+      ttsService.stop();
+    }
   }
 
   async regenerateMessage(messageId: string): Promise<void> {
@@ -302,9 +506,21 @@ export class ChatViewModel
         this.npc,
       );
       if (response) {
+        // Store the current response as an alternative before replacing
+        messageBranchStore.addAlternative({
+          messageId,
+          currentText: msgs[idx].text,
+          newText: response,
+        });
         msgs[idx] = { ...msgs[idx], text: response };
         chatService.setMessages(msgs);
         await this.persistMessages(msgs);
+
+        // Feed through chunker for streaming TTS
+        if (this.streamingTtsEnabled) {
+          this._chunker.feed(response);
+          this._chunker.close();
+        }
       }
     } catch {
       chatService.setError('Failed to regenerate message');
@@ -408,6 +624,12 @@ export class ChatViewModel
   clearChat(): void {
     chatService.clear();
     this.showGreeting = true;
+    this.inputText = '';
+    void draftStore.clearDraft({ chatId: this._chatId });
+
+    // TTS cleanup
+    ttsService.stop();
+    this._chunker.reset();
   }
 
   private async saveMessage(text: string, sender: 'user' | 'ai'): Promise<void> {
@@ -446,4 +668,4 @@ export class ChatViewModel
 }
 
 export const getChatViewModel = (options: ChatViewModelOptions): ChatViewModelInterface =>
-  new ChatViewModel(options);
+  ChatViewModel.create(options);

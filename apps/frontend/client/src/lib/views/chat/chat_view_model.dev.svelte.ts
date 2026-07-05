@@ -4,7 +4,12 @@
 // NEVER import this file from production code or non-(dev) routes.
 
 import type { NpcData } from '@aikami/types';
-import { type ChatMessage, chatService } from '$services';
+import {
+  type ChatMessage,
+  chatService,
+  type TextChatMessage,
+  textGenerationService,
+} from '$services';
 import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
@@ -129,6 +134,19 @@ export class ChatDevViewModel extends ChatViewModel {
     this.showGreeting = false;
 
     await super.initialize();
+
+    // Auto-send debug: ?auto=test triggers a test message on load
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const autoMsg = params.get('auto');
+      if (autoMsg) {
+        this.debug('auto-send triggered', { autoMsg });
+        // Small delay so the UI is mounted
+        setTimeout(() => {
+          void this.sendMessage(autoMsg);
+        }, 500);
+      }
+    }
   }
 
   // ── Send (dev override) ───────────────────────────────────────────────
@@ -140,14 +158,14 @@ export class ChatDevViewModel extends ChatViewModel {
       return;
     }
 
+    // Bypass the Cloud-Functions-bound aiService.sendMessageToAI().
+    // Firebase emulators may not be running; streamChat() hits
+    // Ollama / OpenRouter directly via fetch.
     chatService.setSending(true);
+    chatService.setTyping(true);
+    chatService.setError(undefined);
 
-    // Apply artificial latency when toggle is on
-    if (this.simulateLatency) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-
-    // Append user message locally (bypasses backend persistence)
+    // Add user message
     chatService.addMessage({
       id: crypto.randomUUID(),
       text,
@@ -155,13 +173,159 @@ export class ChatDevViewModel extends ChatViewModel {
       timestamp: new Date(),
     });
 
-    chatService.setSending(false);
+    // Build minimal system prompt from the mock NPC
+    const systemPrompt = [
+      `You are ${MOCK_NPC.name}, a ${MOCK_NPC.race} ${MOCK_NPC.class}.`,
+      `Personality: ${MOCK_NPC.personalityTraits}`,
+      `Background: ${MOCK_NPC.background}`,
+      'Stay in character at all times. Respond in 1–3 sentences.',
+    ].join('\n');
 
-    // Note: the bot does NOT auto-reply in dev sandbox.
-    // Use the "Simulate Bot Reply" action to inject a response.
+    const messages: TextChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      // Include recent history for context
+      ...chatService.messages
+        .slice(-8)
+        .filter((m) => m.sender !== 'ai' || m.text !== '...')
+        .map((m) => ({
+          role: (m.sender === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: m.text,
+        })),
+    ];
+
+    try {
+      let accumulated = '';
+
+      // Resolve Ollama config from env for direct routing.
+      const env = import.meta.env as Record<string, string | undefined>;
+      const ollamaModel = env.PUBLIC_OLLAMA_MODEL;
+      let ollamaUrl = env.PUBLIC_OLLAMA_BASE_URL;
+
+      // Normalize: ensure the URL ends with /v1 (Ollama's API prefix)
+      if (ollamaUrl) {
+        ollamaUrl = ollamaUrl.replace(/\/$/, '');
+        if (!ollamaUrl.endsWith('/v1')) {
+          ollamaUrl = `${ollamaUrl}/v1`;
+        }
+      }
+
+      if (ollamaModel && ollamaUrl) {
+        // Direct Ollama call — bypasses the config service routing entirely
+        await this._streamOllamaDirect({
+          messages,
+          model: ollamaModel,
+          baseUrl: ollamaUrl,
+          onChunk: (chunk: string) => {
+            accumulated += chunk;
+            chatService.updateLastAIMessage(accumulated);
+          },
+        });
+      } else {
+        // Fallback to textGenerationService (config-based routing)
+        await textGenerationService.streamChat({
+          messages,
+          onChunk: (chunk: string) => {
+            accumulated += chunk;
+            chatService.updateLastAIMessage(accumulated);
+          },
+        });
+      }
+
+      if (!accumulated) {
+        chatService.appendAIMessage('*No response*');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.error('dev:streamChat failed', { message });
+      chatService.setError(`AI error: ${message}`);
+      chatService.appendAIMessage('*Error generating response*');
+    } finally {
+      chatService.setSending(false);
+      chatService.setTyping(false);
+    }
   }
 
-  // ── Dev-only methods ──────────────────────────────────────────────────
+  // ── Private: Direct Ollama streaming ────────────────────────────────
+
+  /**
+   * Streams a chat completion directly from Ollama's OpenAI-compatible
+   * `/v1/chat/completions` endpoint, bypassing the config service routing.
+   * Uses SSE parsing identical to textGenerationService.
+   */
+  private async _streamOllamaDirect(options: {
+    messages: TextChatMessage[];
+    model: string;
+    baseUrl: string;
+    onChunk: (chunk: string) => void;
+  }): Promise<void> {
+    const { messages, model, baseUrl, onChunk } = options;
+    const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+
+    this.debug('_streamOllamaDirect', { url, model, messageCount: messages.length });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Ollama HTTP ${response.status}: ${errorText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('No response body from Ollama');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed?.startsWith('data: ')) {
+            continue;
+          }
+
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') {
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(data) as {
+              choices?: Array<{ delta?: { content?: string } }>;
+            };
+            const token = parsed.choices?.[0]?.delta?.content;
+            if (token) {
+              onChunk(token);
+            }
+          } catch {
+            // Skip unparseable lines
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
 
   /**
    * Injects a mock AI response with a simulated streaming delay.
