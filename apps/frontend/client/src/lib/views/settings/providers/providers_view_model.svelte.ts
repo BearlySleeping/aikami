@@ -68,7 +68,7 @@ export {
 // ---------------------------------------------------------------------------
 
 /** Configuration tab identifiers. */
-export const CONFIG_TABS = ['text', 'voice', 'image', 'advanced'] as const;
+export const CONFIG_TABS = ['text', 'voice', 'image', 'advanced', 'connections'] as const;
 
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 
@@ -221,6 +221,7 @@ const TAB_META: readonly ConfigTabMeta[] = [
   { key: 'voice', label: 'Voice' },
   { key: 'image', label: 'Image' },
   { key: 'advanced', label: 'Advanced' },
+  { key: 'connections', label: 'Connections' },
 ] as const;
 
 /** Debounce delay in milliseconds before auto-saving after a field change. */
