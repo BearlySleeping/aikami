@@ -69,6 +69,7 @@ P2 (Polish — after P1):
 | C-129 | [Dialogue AI Integration & Polish](C-129-dialogue-ai-integration-polish.md) ✅ | Ollama `/api/generate` streaming client, ViewModel dual-backend (Ollama + OpenRouter), polished DaisyUI overlay, unit/E2E/visual tests | C-128 |
 | C-130 | [In-Game AI Diagnostics & Onboarding](C-130-in-game-ai-diagnostics.md) ✅ | Retro-terminal boot diagnostics dashboard replacing Missing Providers — pings Ollama (11434) + ComfyUI (8188) via Tauri HTTP, gates game entry until both online | C-122, C-126 |
 | C-202 | [Provider Settings UX Overhaul](C-202-provider-settings-ux-overhaul.md) ✅ | Dynamic OpenRouter model fetching, auxiliary model selectors, generation parameter sliders, instruct template dropdown | C-079 |
+| C-230 | [Provider Connection Config](C-230-provider-connection-config.md) ✅ | Connection CRUD, testing, gen param presets, per-chat assignment — saved provider+model+parameter profiles | C-202 |
 
 ### 🔵 P2 — Quality of Life & Tooling
 
