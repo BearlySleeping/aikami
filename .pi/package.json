@@ -8,6 +8,9 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
+    "lint": "biome check .",
+    "format": "biome format .",
+    "fix": "biome check --write . --error-on-warnings",
     "update-skills": "bun run scripts/update_skills.ts",
     "update-packages": "cd npm && bun update --latest"
   }

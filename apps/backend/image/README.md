@@ -11,7 +11,7 @@ Headless ComfyUI image generation microservice using the `yanwk/comfyui-boot:cu1
 ## Where It's Used
 
 - Image generation workflows in the PWA and backend functions
-- Managed by the tmux orchestrator alongside voice, emulators, and client
+- Managed by the herdr orchestrator alongside voice, emulators, and client
 
 ## Installation
 
@@ -42,8 +42,8 @@ None — container-only microservice.
 ## Usage
 
 ```bash
-# Start the container via tmux
-bun tmux:start image
+# Start the container via herdr
+bun herdr:start image
 
 # Download a model for image generation
 bun run models:download "https://..."
@@ -55,7 +55,7 @@ bun run test:image
 bun run generate:avatar "an elven ranger, pixel art"
 
 # Stop
-bun tmux:stop image
+bun herdr:stop image
 ```
 
 ## Directory Layout
@@ -95,7 +95,7 @@ and models are mounted from local directories.
 | `--security-opt label=disable` | Disable SELinux label enforcement (required for bind mounts on some systems) |
 | `-p 8188:8188` | Expose ComfyUI on host port 8188 |
 | `--rm` | Auto-remove container on stop (no stale state) |
-| `--name aikami-image-dev` | Fixed container name for tmux orchestration |
+| `--name aikami-image-dev` | Fixed container name for herdr orchestration |
 
 ### Volume Mounts
 

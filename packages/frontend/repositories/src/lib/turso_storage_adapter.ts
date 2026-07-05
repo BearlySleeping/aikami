@@ -116,7 +116,11 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     logger.debug('TursoStorageAdapter.query', { sql: options.sql });
 
     // @tursodatabase/database: prepare and all are async
-    const stmt = await this._db!.prepare(options.sql);
+    const db = this._db;
+    if (!db) {
+      throw new Error('TursoStorageAdapter: not open');
+    }
+    const stmt = await db.prepare(options.sql);
     if (options.args.length > 0) {
       stmt.bind(...options.args);
     }
@@ -131,7 +135,11 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     logger.debug('TursoStorageAdapter.execute', { sql: options.sql });
 
     // @tursodatabase/database: prepare and run are async
-    const stmt = await this._db!.prepare(options.sql);
+    const db = this._db;
+    if (!db) {
+      throw new Error('TursoStorageAdapter: not open');
+    }
+    const stmt = await db.prepare(options.sql);
     if (options.args.length > 0) {
       stmt.bind(...options.args);
     }
@@ -145,7 +153,11 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     logger.debug('TursoStorageAdapter.transaction', { count: queries.length });
 
     for (const query of queries) {
-      const stmt = await this._db!.prepare(query.sql);
+      const db = this._db;
+      if (!db) {
+        throw new Error('TursoStorageAdapter: not open');
+      }
+      const stmt = await db.prepare(query.sql);
       if (query.args.length > 0) {
         stmt.bind(...query.args);
       }
@@ -171,9 +183,9 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
       // @tursodatabase/database sync API uses the sync() method on the
       // database handle. If the library version doesn't support it, this
       // degrades gracefully.
-      const db = this._db! as unknown as Record<string, unknown>;
-      if (typeof db['sync'] === 'function') {
-        await (db['sync'] as () => Promise<void>)();
+      const db = this._db as unknown as Record<string, unknown>;
+      if (typeof db.sync === 'function') {
+        await (db.sync as () => Promise<void>)();
       } else {
         logger.warn('TursoStorageAdapter.sync:unsupported', {
           message: '@tursodatabase/database sync() not available in this version',

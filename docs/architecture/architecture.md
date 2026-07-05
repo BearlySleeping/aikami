@@ -206,7 +206,7 @@ Client-side perimeter validation uses Valibot instead of Zod:
 ```bash
 bun run setup            # First-time onboarding
 bun run dev              # Client dev server
-bun run dev:all          # Firebase + Client (tmux session)
+bun run dev:all          # Firebase + Client (herdr workspace)
 bun run typecheck        # Typecheck all projects
 bun run fix              # Auto-fix lint/format
 bun run validate         # lint + format + typecheck

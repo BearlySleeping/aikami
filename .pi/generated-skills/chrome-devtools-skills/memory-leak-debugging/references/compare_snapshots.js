@@ -31,11 +31,7 @@ function parseSnapshot(filePath) {
     const size = nodes[i + sizeOffset];
 
     // Ignore native primitives/arrays that clutter the output unless specifically looking for them
-    if (
-      typeName === 'string' ||
-      typeName === 'number' ||
-      typeName === 'array'
-    ) {
+    if (typeName === 'string' || typeName === 'number' || typeName === 'array') {
       continue;
     }
 
@@ -43,14 +39,12 @@ function parseSnapshot(filePath) {
     counts[key] = (counts[key] || 0) + 1;
     sizes[key] = (sizes[key] || 0) + size;
   }
-  return {counts, sizes};
+  return { counts, sizes };
 }
 
 const [, , file1, file2] = process.argv;
 if (!file1 || !file2) {
-  console.error(
-    'Usage: node compare_snapshots.js <baseline.heapsnapshot> <target.heapsnapshot>',
-  );
+  console.error('Usage: node compare_snapshots.js <baseline.heapsnapshot> <target.heapsnapshot>');
   process.exit(1);
 }
 
@@ -77,13 +71,13 @@ try {
   diffs.sort((a, b) => b.sizeDiff - a.sizeDiff);
 
   console.log('\n--- Top 10 growing objects by size ---');
-  diffs.slice(0, 10).forEach(d => {
+  diffs.slice(0, 10).forEach((d) => {
     console.log(`${d.key}: +${d.countDiff} objects, +${d.sizeDiff} bytes`);
   });
 
   // Look for common leak indicators
   const commonLeaks = diffs.filter(
-    d =>
+    (d) =>
       d.key.toLowerCase().includes('detached') ||
       d.key.toLowerCase().includes('html') ||
       d.key.toLowerCase().includes('eventlistener') ||
@@ -97,13 +91,11 @@ try {
   if (commonLeaks.length === 0) {
     console.log('No common DOM or Closure leaks detected.');
   } else {
-    commonLeaks.slice(0, 3).forEach(d => {
+    commonLeaks.slice(0, 3).forEach((d) => {
       console.log(`${d.key}: +${d.countDiff} objects, +${d.sizeDiff} bytes`);
     });
   }
 } catch (error) {
-  console.error(
-    'Error parsing snapshots. They might be too large for JSON.parse or invalid.',
-  );
+  console.error('Error parsing snapshots. They might be too large for JSON.parse or invalid.');
   console.error(error.message);
 }

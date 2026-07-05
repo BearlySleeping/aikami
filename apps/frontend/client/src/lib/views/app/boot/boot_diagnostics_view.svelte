@@ -8,11 +8,7 @@
   //
   // Contract: C-130 (origin), C-133 (flexible provider onboarding)
 
-  import type {
-    ActiveImageProvider,
-    ActiveTextProvider,
-    BootDiagnosticsViewModelInterface,
-  } from './boot_diagnostics_view_model.svelte';
+  import type { BootDiagnosticsViewModelInterface } from './boot_diagnostics_view_model.svelte';
 
   let { viewModel }: { viewModel: BootDiagnosticsViewModelInterface } = $props();
 

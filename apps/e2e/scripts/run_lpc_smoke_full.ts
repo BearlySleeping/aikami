@@ -1,12 +1,12 @@
 // apps/e2e/scripts/run_lpc_smoke_full.ts
-// C-073: Full pipeline — starts emulator + PWA in tmux, waits for readiness,
-// runs the capture+evaluation pipeline, then tears down tmux.
+// C-073: Full pipeline — starts emulator + PWA in herdr, waits for readiness,
+// runs the capture+evaluation pipeline, then tears down herdr.
 //
 // Usage (single command):
 //   bun run apps/e2e/scripts/run_lpc_smoke_full.ts
 //
-// Relies on the existing tmux session infrastructure (scripts/src/lib/tmux/session.ts)
-// for reliable direnv-aware service startup, port polling, and session teardown.
+// Relies on the existing herdr workspace infrastructure (scripts/src/lib/herdr/session.ts)
+// for reliable direnv-aware service startup, port polling, and workspace teardown.
 
 import { resolve } from 'node:path';
 import { $ } from 'bun';
@@ -18,14 +18,14 @@ import {
   type SessionConfig,
   startServices,
   stopServices,
-} from '../../../scripts/src/lib/tmux/session.ts';
+} from '../../../scripts/src/lib/herdr/session.ts';
 
 // ── Configuration ──────────────────────────────────────────
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 const E2E_DIR = resolve(import.meta.dirname, '..');
 const MODE = 'emulator' as const;
-const SERVICES: DevService[] = expandServices(['emulator', 'client'] as const);
+const SERVICES: DevService[] = expandServices(['firebase', 'client'] as const);
 const SMOKE_SCRIPT = resolve(E2E_DIR, 'scripts/lpc_smoke.ts');
 const MAX_WAIT_S = 120;
 const SESSION_NAME = buildSessionName(MODE);
@@ -60,13 +60,13 @@ const pollPort = async (options: {
 
 // ── Main ───────────────────────────────────────────────────
 
-console.log(`🚀 Starting emulator + PWA in tmux session '${SESSION_NAME}'...\n`);
+console.log(`🚀 Starting emulator + PWA in herdr workspace '${SESSION_NAME}'...\n`);
 
 let emulatorReady = false;
 let pwaReady = false;
 
 try {
-  // Step 1: Start services via the existing tmux infrastructure
+  // Step 1: Start services via the existing herdr infrastructure
   const config: SessionConfig = {
     mode: MODE,
     services: SERVICES,
@@ -98,7 +98,7 @@ try {
 
   if (!pwaReady) {
     console.error('❌ PWA dev server failed to start within timeout.');
-    console.error('   Check:  tmux attach -t aikami-emulator');
+    console.error('   Check:  herdr session attach default');
     process.exit(1);
   }
 
@@ -119,7 +119,7 @@ try {
   const smokeResult = await $`bun run ${SMOKE_SCRIPT}`.cwd(REPO_ROOT).nothrow();
 
   // Step 4: Tear down
-  console.log('\n🧹 Tearing down tmux services...\n');
+  console.log('\n🧹 Tearing down herdr services...\n');
   await stopServices({ mode: MODE, services: SERVICES });
 
   if (smokeResult.exitCode !== 0) {
