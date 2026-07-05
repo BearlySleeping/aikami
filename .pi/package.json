@@ -13,5 +13,8 @@
     "fix": "biome check --write . --error-on-warnings",
     "update-skills": "bun run scripts/update_skills.ts",
     "update-packages": "cd npm && bun update --latest"
+  },
+  "dependencies": {
+    "@hypabolic/hypa": "^0.1.7"
   }
 }

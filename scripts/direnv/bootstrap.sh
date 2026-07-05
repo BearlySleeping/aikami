@@ -115,7 +115,12 @@ _aikami_load_mode() {
 
 _aikami_load_mode
 
-# ── 4. Pi-Hypa configuration (additive mode — keeps custom tools active) ─
+# ── 4. Pi-Hypa binary + configuration (additive mode — keeps custom tools active) ─
+_path_hypa_bin="$AIKAMI_ROOT/.pi/node_modules/.bin"
+if [ -d "$_path_hypa_bin" ]; then
+  export PATH="$_path_hypa_bin:$PATH"
+fi
+unset _path_hypa_bin
 export HYPA_PI_MODE="additive"
 export HYPA_PI_REWRITE_TIMEOUT_MS="10000"
 export HYPA_PI_ASK_NON_INTERACTIVE="deny"

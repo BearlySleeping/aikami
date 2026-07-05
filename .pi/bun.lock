@@ -4,9 +4,12 @@
   "workspaces": {
     "": {
       "name": "pi",
+      "dependencies": {
+        "@hypabolic/hypa": "^0.1.7",
+      },
       "devDependencies": {
-        "@mariozechner/pi-coding-agent": "latest",
-        "@types/bun": "latest",
+        "@mariozechner/pi-coding-agent": "^0.73.1",
+        "@types/bun": "^1.3.14",
       },
     },
   },
@@ -68,6 +71,20 @@
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
     "@google/genai": ["@google/genai@1.52.0", "", { "dependencies": { "google-auth-library": "^10.3.0", "p-retry": "^4.6.2", "protobufjs": "^7.5.4", "ws": "^8.18.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.25.2" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q=="],
+
+    "@hypabolic/hypa": ["@hypabolic/hypa@0.1.7", "", { "optionalDependencies": { "@hypabolic/hypa-darwin-arm64": "0.1.7", "@hypabolic/hypa-darwin-x64": "0.1.7", "@hypabolic/hypa-linux-arm64": "0.1.7", "@hypabolic/hypa-linux-x64": "0.1.7", "@hypabolic/hypa-win32-arm64": "0.1.7", "@hypabolic/hypa-win32-x64": "0.1.7" }, "bin": { "hypa": "bin.js" } }, "sha512-+LVIROvFQDvm02+ynrFLPIiLDn37yETe8ujGR6jUn19jRqelgLAKbBE5DkgfsvMTzyKUzVY3oExQApdqwkLBcg=="],
+
+    "@hypabolic/hypa-darwin-arm64": ["@hypabolic/hypa-darwin-arm64@0.1.7", "", { "os": "darwin", "cpu": "arm64" }, "sha512-AzN7EKrTXKAhk7+F7JP7ej+d8UWXf3MrYqqXB7U3T2AN1Il9vsfiu1UxcnJiY3fViT0VVYwfrirwdCNGoY7dBw=="],
+
+    "@hypabolic/hypa-darwin-x64": ["@hypabolic/hypa-darwin-x64@0.1.7", "", { "os": "darwin", "cpu": "x64" }, "sha512-yX6rf7/ta6Y09+MbmQhdQIeo1309s09ze2sLctiCMVin91/mS37mPck3lWRTPfDxEYrnCmQSqL1ezZgBQZ4uBQ=="],
+
+    "@hypabolic/hypa-linux-arm64": ["@hypabolic/hypa-linux-arm64@0.1.7", "", { "os": "linux", "cpu": "arm64" }, "sha512-LaX0nDJymhreDkAwsVwVo5sncm6q1f/6y5njC8qfEY4zeZTJtVUVexk0pcs9w1cRH/Q9ej9h5WSeyEcCKfn2RA=="],
+
+    "@hypabolic/hypa-linux-x64": ["@hypabolic/hypa-linux-x64@0.1.7", "", { "os": "linux", "cpu": "x64" }, "sha512-BenPogf6k1mm0bbteBmyULxnVj30OBaVOO6nYRqFsiJZd80nJi4n4ydxgI/v+7WEI36inTZf7aifOCofGY18Og=="],
+
+    "@hypabolic/hypa-win32-arm64": ["@hypabolic/hypa-win32-arm64@0.1.7", "", { "os": "win32", "cpu": "arm64" }, "sha512-WYjdNWxRF6i2BRiFMcoEDxsvECHqNCHOP1Extx9hPaj+46Q+id53hv3sHYo0+mo7UEaLB4UMqoSrWcq4lcCynA=="],
+
+    "@hypabolic/hypa-win32-x64": ["@hypabolic/hypa-win32-x64@0.1.7", "", { "os": "win32", "cpu": "x64" }, "sha512-7gpFbYMlmugpeUg5u4nvsyw1QLjieVp8PG16rN6QDpnUhsyy4FDjoDv4USyO1yyhl1wCk6dBrMPIkxjPYjDn5g=="],
 
     "@mariozechner/clipboard": ["@mariozechner/clipboard@0.3.9", "", { "optionalDependencies": { "@mariozechner/clipboard-darwin-arm64": "0.3.9", "@mariozechner/clipboard-darwin-universal": "0.3.9", "@mariozechner/clipboard-darwin-x64": "0.3.9", "@mariozechner/clipboard-linux-arm64-gnu": "0.3.9", "@mariozechner/clipboard-linux-arm64-musl": "0.3.9", "@mariozechner/clipboard-linux-riscv64-gnu": "0.3.9", "@mariozechner/clipboard-linux-x64-gnu": "0.3.9", "@mariozechner/clipboard-linux-x64-musl": "0.3.9", "@mariozechner/clipboard-win32-arm64-msvc": "0.3.9", "@mariozechner/clipboard-win32-x64-msvc": "0.3.9" } }, "sha512-ABnA53mdfkGZwOFUdZNv2S0CWGO/EIuPj8Vv9xmBFmSYg/qFc7ihO6q5FcQjvoE67kZpWkEc4AhD6B/os04yuA=="],
 
