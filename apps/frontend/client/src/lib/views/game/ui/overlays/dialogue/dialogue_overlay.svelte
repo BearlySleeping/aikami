@@ -1,6 +1,7 @@
 <script lang="ts">
-  import GameDice from '$lib/components/game/game_dice.svelte';
   // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte
+  import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
+  import GameDice from '$lib/components/game/game_dice.svelte';
   import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
 
   type Props = {
@@ -82,6 +83,13 @@
       {/if}
     </div>
 
+    <!-- C-231: Toast notification -->
+    {#if viewModel.toastMessage}
+      <div class="absolute top-2 right-2 z-50">
+        <div class="alert alert-success text-sm">{viewModel.toastMessage}</div>
+      </div>
+    {/if}
+
     <!-- Input area -->
     <div class="border-t border-base-300 px-4 py-3">
       {#if viewModel.dialoguePhase === 'MENU'}
@@ -109,16 +117,16 @@
         </div>
       {:else if viewModel.dialoguePhase === 'CUSTOM_INPUT'}
         <div class="flex items-end gap-2">
-          <textarea
-            bind:this={viewModel.inputElement}
-            class="textarea textarea-bordered textarea-sm flex-1 resize-none text-sm"
-            rows="2"
-            placeholder="Type your message..."
-            value={viewModel.inputText}
-            oninput={(e) => viewModel.setInput(e.currentTarget.value)}
-            onkeydown={(e) => viewModel.handleKeyDown(e)}
-            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-          ></textarea>
+          <div class="flex-1">
+            <AutoResizeTextarea
+              value={viewModel.inputText}
+              onchange={(text) => viewModel.setInput(text)}
+              onkeydown={(e) => viewModel.handleKeyDown(e)}
+              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+              placeholder="Type your message..."
+              class="w-full"
+            />
+          </div>
           <button
             class="btn btn-primary btn-sm"
             onclick={() => viewModel.sendMessage()}
@@ -131,21 +139,33 @@
             {/if}
           </button>
         </div>
-        <button class="btn btn-ghost btn-xs mt-2" onclick={() => viewModel.goToMenu()}>
-          ← Back to actions
-        </button>
+        <div class="mt-2 flex items-center justify-between">
+          <button class="btn btn-ghost btn-xs" onclick={() => viewModel.goToMenu()}>
+            ← Back to actions
+          </button>
+          <!-- Streaming TTS toggle -->
+          <div class="flex items-center gap-1">
+            <span class="text-xs text-base-content/50">TTS</span>
+            <input
+              type="checkbox"
+              class="toggle toggle-xs"
+              checked={viewModel.streamingTtsEnabled}
+              onclick={() => viewModel.toggleStreamingTts()}
+            >
+          </div>
+        </div>
       {:else}
         <div class="flex items-end gap-2">
-          <textarea
-            bind:this={viewModel.inputElement}
-            class="textarea textarea-bordered textarea-sm flex-1 resize-none text-sm"
-            rows="2"
-            placeholder="Type your message..."
-            value={viewModel.inputText}
-            oninput={(e) => viewModel.setInput(e.currentTarget.value)}
-            onkeydown={(e) => viewModel.handleKeyDown(e)}
-            disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-          ></textarea>
+          <div class="flex-1">
+            <AutoResizeTextarea
+              value={viewModel.inputText}
+              onchange={(text) => viewModel.setInput(text)}
+              onkeydown={(e) => viewModel.handleKeyDown(e)}
+              disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+              placeholder="Type your message..."
+              class="w-full"
+            />
+          </div>
           <button
             class="btn btn-primary btn-sm"
             onclick={() => viewModel.sendMessage()}

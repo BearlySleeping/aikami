@@ -25,6 +25,8 @@ export * from './character/character.svelte.ts';
 export * from './chat/chat.svelte.ts';
 export * from './chat/context_builder';
 export * from './chat/conversation_repository.svelte.ts';
+export * from './chat/draft_store';
+export * from './chat/message_branch_store.svelte.ts';
 export * from './chat/npc_chat_repository.svelte.ts';
 export * from './config/config_service.svelte.ts';
 export * from './dice/dice_service.svelte.ts';

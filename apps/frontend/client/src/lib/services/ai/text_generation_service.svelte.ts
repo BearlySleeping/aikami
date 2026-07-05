@@ -266,7 +266,7 @@ class TextGenerationService
       }
 
       if (!response.body) {
-        throw new Error('No response body from OpenRouter');
+        throw new Error(`No response body from ${chatUrl}`);
       }
 
       await this._readOpenRouterSSEStream({

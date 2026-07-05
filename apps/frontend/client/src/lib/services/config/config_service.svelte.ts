@@ -782,17 +782,40 @@ class ConfigService
       this._injectEnvDefaults();
     }
 
-    const { text, preferredModel, models } = this.state;
+    const { text, connections = [], defaultConnectionId } = this.state;
+
+    // ── Priority 1: Default connection (C-230) ──────────────────────
+    if (defaultConnectionId) {
+      const conn = connections.find((c) => c.id === defaultConnectionId);
+      if (conn) {
+        return {
+          model: conn.model,
+          provider: conn.provider,
+          endpoint: conn.baseUrl || '',
+          apiKey: conn.apiKey || text.apiKeys[conn.provider] || '',
+        };
+      }
+    }
+
+    // ── Priority 2: First available connection ──────────────────────
+    if (connections.length > 0) {
+      const conn = connections[0];
+      return {
+        model: conn.model,
+        provider: conn.provider,
+        endpoint: conn.baseUrl || '',
+        apiKey: conn.apiKey || text.apiKeys[conn.provider] || '',
+      };
+    }
+
+    // ── Priority 3: Legacy provider config (no connections created) ──
     const provider = text.provider;
+    const { preferredModel, models } = this.state;
 
-    // Endpoint: user-configured URL → models array → provider defaults
     let endpoint = text.url ?? '';
-
-    // Model: preferredModel → models array → provider defaults
     let model = preferredModel;
 
     if (!model && models.length > 0) {
-      // Look for a model matching the current provider first
       const match = models.find((m) => m.provider === provider);
       if (match) {
         model = match.model;
@@ -803,7 +826,6 @@ class ConfigService
       }
     }
 
-    // If we have a model, enrich endpoint from models array if not yet set
     if (model && !endpoint && models.length > 0) {
       const match = models.find((m) => m.model === model);
       if (match) {
@@ -811,7 +833,6 @@ class ConfigService
       }
     }
 
-    // Provider-specific defaults for local providers with no saved config
     if (!endpoint) {
       if (provider === 'ollama') {
         endpoint = 'http://localhost:11434/v1';
@@ -821,7 +842,6 @@ class ConfigService
     }
 
     if (!model) {
-      // Use provider-appropriate defaults when no preferred model is set
       if (provider === 'ollama') {
         model = 'llama3.2';
       } else if (provider === 'openai') {
@@ -833,7 +853,7 @@ class ConfigService
       } else {
         throw new Error(
           'No text generation provider configured. ' +
-            'Open the Config dashboard or set PUBLIC_OPENROUTER_MODEL in your .env file.',
+            'Create a Connection in Settings or set PUBLIC_OPENROUTER_MODEL in your .env file.',
         );
       }
     }
@@ -844,6 +864,84 @@ class ConfigService
       endpoint,
       apiKey: text.apiKeys[provider],
     };
+  }
+
+  // ── Private: connection seeding from env ──────────────────────────
+
+  /**
+   * Seeds connections from environment variables when no connections
+   * have been created yet. This provides a zero-config onboarding path
+   * while keeping Connections as the primary configuration surface.
+   */
+  private _seedConnectionsFromEnv(): void {
+    if (this.state.connections && this.state.connections.length > 0) {
+      return;
+    }
+
+    // Ensure connections array exists
+    if (!this.state.connections) {
+      this.state.connections = [];
+    }
+
+    const ollamaModel = this._readEnv('PUBLIC_OLLAMA_MODEL');
+    const ollamaUrl = this._readEnv('PUBLIC_OLLAMA_BASE_URL');
+    const openrouterModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
+    const openrouterKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
+    const now = new Date().toISOString();
+    const seeded: Connection[] = [];
+
+    // Seed Ollama connection from env
+    if (ollamaModel) {
+      seeded.push({
+        id: crypto.randomUUID(),
+        name: 'Ollama (local)',
+        provider: 'ollama',
+        apiKey: '',
+        baseUrl: ollamaUrl || 'http://localhost:11434/v1',
+        model: ollamaModel,
+        generationParams: {
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          repetitionPenalty: 1,
+          presencePenalty: 0,
+          maxTokens: 1024,
+          contextSize: 4096,
+        },
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    // Seed OpenRouter connection from env (only if no Ollama connection seeded)
+    if (openrouterModel && seeded.length === 0) {
+      seeded.push({
+        id: crypto.randomUUID(),
+        name: 'OpenRouter',
+        provider: 'openrouter',
+        apiKey: openrouterKey || '',
+        baseUrl: '',
+        model: openrouterModel,
+        generationParams: {
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          repetitionPenalty: 1,
+          presencePenalty: 0,
+          maxTokens: 1024,
+          contextSize: 4096,
+        },
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (seeded.length > 0) {
+      this.state.connections = seeded;
+      this.state.defaultConnectionId = seeded[0].id;
+    }
   }
 
   // ── Private: env helpers ─────────────────────────────────────────────
@@ -875,13 +973,11 @@ class ConfigService
    * set — this ensures the key survives stale vaults and model-only saves.
    */
   private _injectEnvDefaults(): void {
-    const envModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
+    // Seed connections from env vars when none exist (zero-config onboarding)
+    this._seedConnectionsFromEnv();
+
+    // Inject OpenRouter API key from env (always available as fallback)
     const envKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
-
-    if (!this.state.preferredModel && this.state.models.length === 0 && envModel) {
-      this.state.preferredModel = envModel;
-    }
-
     if (envKey && !this.state.text.apiKeys.openrouter) {
       this.state.text = {
         ...this.state.text,

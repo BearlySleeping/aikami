@@ -8,6 +8,14 @@ export type {
   GameStateListener,
   GameStateOptions,
 } from './game.ts';
+export type {
+  ChatInputDraft,
+  EnhancedChatMessage,
+  EnhancedMessage,
+  MessageAction,
+  MessageAlternatives,
+  StreamingTtsConfig,
+} from './rich_chat.ts';
 
 export type ClientHookData = {
   device?: DeviceData;

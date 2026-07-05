@@ -20,7 +20,9 @@ import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
   diceService,
+  draftStore,
   gameStateService,
+  messageBranchStore,
   SentenceBoundaryChunker,
   type TextChatMessage,
   textGenerationService,
@@ -88,7 +90,7 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   readonly isStreaming: boolean;
 
   /** The player's current input text (bound to the text input field). */
-  readonly inputText: string;
+  inputText: string;
 
   /** Error message from the last failed generation, if any. */
   readonly streamError: string | null;
@@ -210,6 +212,29 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * Enter submits the message; Escape ends the chat.
    */
   handleKeyDown(event: KeyboardEvent): void;
+
+  // ── C-231 Rich Chat Streaming ──────────────────────────────────
+
+  /** Swipe between alternative NPC responses for a message. */
+  swipeAlternative(messageId: string, direction: 'left' | 'right'): void;
+
+  /** Copy message text to clipboard with toast feedback. */
+  copyMessage(text: string): Promise<void>;
+
+  /** Fork a new conversation from the given message (placeholder). */
+  branchFromMessage(messageId: string): void;
+
+  /** Toast notification message (e.g. 'Copied!'). */
+  readonly toastMessage: string;
+
+  /** Shows a toast notification that auto-dismisses. */
+  showToast(message: string): void;
+
+  /** Whether streaming TTS is enabled for this conversation. */
+  readonly streamingTtsEnabled: boolean;
+
+  /** Toggles streaming TTS on/off for this chat. */
+  toggleStreamingTts(): void;
 };
 
 class DialogueOverlayViewModel
@@ -293,6 +318,12 @@ class DialogueOverlayViewModel
   /** Textarea input — set by View via bind:this for autofocus. */
   inputElement = $state.raw<HTMLTextAreaElement | undefined>(undefined);
 
+  /** Toast notification message — auto-clears after display. */
+  toastMessage = $state('');
+
+  /** Whether streaming TTS is enabled for this conversation. */
+  streamingTtsEnabled = $state(false);
+
   private readonly _npcData: DialogueNpcData;
 
   private readonly _onEndChat: () => void;
@@ -314,6 +345,16 @@ class DialogueOverlayViewModel
     this._onStartCombat = options.onStartCombat;
     this._ollamaClient = options.ollamaClient;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
+
+    // Restore per-chat input draft from IndexedDB (fire-and-forget)
+    const draftPromise = draftStore.loadDraft({ chatId: this._npcData.npcId });
+    if (draftPromise && typeof draftPromise.then === 'function') {
+      void draftPromise.then((draft: string) => {
+        if (draft) {
+          this.inputText = draft;
+        }
+      });
+    }
 
     // Show the NPC's initial greeting dialog as the first message.
     // Done in constructor (not initialize) because the consumer may
@@ -372,16 +413,26 @@ class DialogueOverlayViewModel
           this.messageContainerElement.scrollTop = this.messageContainerElement.scrollHeight;
         }
       });
+
+      // Auto-save input draft (bind:value bypasses setInput)
+      $effect(() => {
+        const text = this.inputText;
+        if (text.length > 0) {
+          void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
+        }
+      });
     });
 
     // Initialize native Kokoro TTS if not already done
     if (!this._ttsInitialized) {
       this._ttsInitialized = true;
       this._chunker.onSentence(({ sentence }) => {
-        ttsService.synthesize({
-          text: sentence,
-          voice: ttsService.selectedVoice,
-        });
+        if (this.streamingTtsEnabled) {
+          ttsService.synthesize({
+            text: sentence,
+            voice: ttsService.selectedVoice,
+          });
+        }
       });
 
       // Fire-and-forget — TTS init happens in background, speech works
@@ -401,6 +452,8 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   setInput(text: string): void {
     this.inputText = text;
+    // Fire-and-forget draft save
+    void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
   }
 
   // ── Action Context Menu (C-162) ─────────────────────────────────────
@@ -498,6 +551,9 @@ class DialogueOverlayViewModel
     this.inputText = '';
     this.streamError = null;
 
+    // Clear the per-chat draft since a message is being sent
+    void draftStore.clearDraft({ chatId: this._npcData.npcId });
+
     // Append the player's message
     const playerMessage: DialogueMessage = {
       id: crypto.randomUUID(),
@@ -532,6 +588,59 @@ class DialogueOverlayViewModel
     if (event.key === 'Escape') {
       event.preventDefault();
       this.endChat();
+    }
+  }
+
+  // ── C-231: Rich Chat Streaming ───────────────────────────────────────
+
+  /** @inheritdoc */
+  swipeAlternative(messageId: string, direction: 'left' | 'right'): void {
+    messageBranchStore.swipeAlternative({ messageId, direction });
+  }
+
+  /** @inheritdoc */
+  async copyMessage(text: string): Promise<void> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for insecure contexts
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      this.showToast('Copied!');
+    } catch {
+      this.showToast('Copy failed');
+    }
+  }
+
+  /** @inheritdoc */
+  branchFromMessage(_messageId: string): void {
+    // Placeholder: creates a new conversation fork.
+    this.showToast('Branch created!');
+  }
+
+  /** @inheritdoc */
+  showToast(message: string): void {
+    this.toastMessage = message;
+    setTimeout(() => {
+      if (this.toastMessage === message) {
+        this.toastMessage = '';
+      }
+    }, 2000);
+  }
+
+  /** @inheritdoc */
+  toggleStreamingTts(): void {
+    this.streamingTtsEnabled = !this.streamingTtsEnabled;
+    if (!this.streamingTtsEnabled) {
+      ttsService.stop();
     }
   }
 

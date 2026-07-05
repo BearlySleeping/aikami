@@ -229,7 +229,7 @@
             class="text-xs font-mono {viewModel.draftModelTestResult.ok ? 'text-success' : 'text-error'}"
           >
             Model:
-            {viewModel.draftModelTestResult.ok ? '✓ Responded' : '✗ ' + (viewModel.draftModelTestResult.error ?? 'Failed')}
+            {viewModel.draftModelTestResult.ok ? '✓ Responded' : `✗ ${viewModel.draftModelTestResult.error ?? 'Failed'}`}
             ({viewModel.draftModelTestResult.latencyMs}ms)
           </div>
         {/if}
