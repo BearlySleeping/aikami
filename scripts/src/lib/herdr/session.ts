@@ -279,6 +279,30 @@ export const isPortReady = async (port: number): Promise<boolean> => {
 export const wrapCommand = (command: string): string =>
   `direnv exec . bash -c '${command}; echo; echo "=== Stopped. Press Enter to close ==="; read'`;
 
+/** Shell process names that indicate an idle pane with no active command. */
+const SHELL_NAMES = new Set(['fish', 'bash', 'zsh', 'sh', 'dash']);
+
+/**
+ * Check if a herdr pane is idle — only a shell running, no active command process.
+ * Uses `herdr pane process-info` to inspect foreground processes.
+ */
+const isPaneIdle = async (paneId: string): Promise<boolean> => {
+  const r = await herdrJson<{
+    result: {
+      process_info: {
+        foreground_processes: { name: string }[];
+      };
+    };
+  }>(['pane', 'process-info', '--pane', paneId]);
+
+  if (!r?.result?.process_info?.foreground_processes) {
+    return true;
+  }
+
+  const procs = r.result.process_info.foreground_processes;
+  return procs.every((p) => SHELL_NAMES.has(p.name));
+};
+
 // ── Tab management ─────────────────────────────────────────
 
 type TabListEntry = {
@@ -289,6 +313,18 @@ type TabListEntry = {
 type TabListResult = {
   result: {
     tabs: TabListEntry[];
+  };
+};
+
+type PaneListEntry = {
+  pane_id: string;
+  tab_id: string;
+  workspace_id: string;
+};
+
+type PaneListResult = {
+  result: {
+    panes: PaneListEntry[];
   };
 };
 
@@ -324,6 +360,18 @@ const findTab = async (workspaceId: string, label: string): Promise<string | nul
   }
   const tab = r.result.tabs.find((t) => t.label === label);
   return tab?.tab_id ?? null;
+};
+
+/**
+ * Get all panes for a workspace with their tab assignments.
+ * Returns an array of { pane_id, tab_id, workspace_id }.
+ */
+const getWorkspacePanes = async (workspaceId: string): Promise<PaneListEntry[]> => {
+  const r = await herdrJson<PaneListResult>(['pane', 'list', '--workspace', workspaceId]);
+  if (!r?.result?.panes) {
+    return [];
+  }
+  return r.result.panes;
 };
 
 // ── Start services ─────────────────────────────────────────
@@ -407,10 +455,21 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   } else {
     // ── Workspace exists — add missing tabs ────────────
     const existing = await getWorkspaceTabNames(workspaceId);
+    const existingPanes = await getWorkspacePanes(workspaceId);
 
     for (const service of services) {
       const svc = SERVICE_DEFS[service];
       if (existing.includes(svc.name)) {
+        // Tab exists — verify the pane actually has the command running
+        const tabId = await findTab(workspaceId, svc.name);
+        if (tabId) {
+          const servicePane = existingPanes.find((p) => p.tab_id === tabId);
+          if (servicePane && (await isPaneIdle(servicePane.pane_id))) {
+            console.log(`  ↻ Tab: ${svc.name} idle, restarting...`);
+            await herdr(['pane', 'run', servicePane.pane_id, wrapCommand(svc.command)]);
+            continue;
+          }
+        }
         console.log(`  ○ Tab: ${svc.name} already running, skipping`);
         continue;
       }
