@@ -195,7 +195,7 @@
 | C-220 | Ui Skills And Theming | ✅ completed |
 | C-221 | Modal Dialog Encapsulation | ✅ completed |
 | C-230 | Provider Connection Config | ✅ completed |
-| C-231 | Rich Chat Streaming | ⏳ not_started |
+| C-231 | Rich Chat Streaming | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/settings/connection/connection_manager_view_model.svelte.ts
 //
 // ViewModel for the Connection Manager — CRUD, testing, preset management,
-// and per-chat assignment for provider connection profiles (C-230).
+// model fetching, provider caching, and per-chat assignment (C-230).
 
 import { TEXT_PROVIDERS } from '@aikami/constants';
 import {
@@ -13,7 +13,10 @@ import { configService } from '$lib/services/config/config_service.svelte';
 import {
   buildVerifyHeaders,
   buildVerifyUrl,
+  type FetchedModel,
+  fetchModelsFromProvider,
   PROVIDER_ENDPOINTS,
+  PROVIDER_MODEL_FETCH,
 } from '$lib/services/config/provider_endpoints';
 import type { Connection, ConnectionId, ConnectionTestResult } from '$types/connection';
 
@@ -22,39 +25,30 @@ import type { Connection, ConnectionId, ConnectionTestResult } from '$types/conn
 // ---------------------------------------------------------------------------
 
 export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
-  /** All saved connections. */
   readonly connections: readonly Connection[];
-  /** Currently active connection being edited (or undefined if none). */
   readonly editingConnectionId: ConnectionId | undefined;
-  /** Draft connection fields during creation/editing. */
   readonly draft: Partial<Connection>;
-  /** Test results per connection ID. */
   readonly testResults: Record<ConnectionId, ConnectionTestResult>;
-  /** Which connections are currently being tested. */
   readonly testingIds: Set<ConnectionId>;
-  /** ID of the default connection, or null. */
   readonly defaultConnectionId: ConnectionId | null;
-  /** Whether the create/edit form is open. */
   readonly isEditorOpen: boolean;
-  /** Whether we are editing an existing connection (not creating). */
   readonly isEditing: boolean;
-  /** Whether the API key field is visible. */
   readonly showApiKey: boolean;
-  /** Current preset name input value. */
   readonly presetName: string;
-  /** Provider label map for display. */
+  readonly isTestingDraft: boolean;
+  readonly draftTestResult: ConnectionTestResult | undefined;
+  readonly isTestingDraftModel: boolean;
+  readonly draftModelTestResult: ConnectionTestResult | undefined;
+  readonly isFetchingModels: boolean;
+  readonly modelOptions: readonly FetchedModel[];
+  readonly canFetchModels: boolean;
+  readonly isModelCustom: boolean;
   readonly providerLabels: Record<string, string>;
-  /** Provider options for the dropdown (id + label). */
   readonly providerOptions: ReadonlyArray<{ id: string; label: string }>;
-  /** Whether the current provider needs an API key. */
   readonly needsApiKey: boolean;
-  /** Whether the current provider needs a custom URL. */
   readonly needsUrl: boolean;
-  /** Generation params from the current draft. */
   readonly draftParams: Connection['generationParams'];
-  /** Presets for the dropdown (built-in + user-defined). */
   readonly presetOptions: ReadonlyArray<{ id: string; name: string }>;
-  /** Formatted param strings for the slider labels. */
   readonly formattedParams: {
     temperature: string;
     topP: string;
@@ -63,36 +57,26 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
     maxTokens: string;
   };
 
-  /** Opens the editor to create a new connection. */
   openCreate(): void;
-  /** Opens the editor to edit an existing connection. */
   openEdit(id: ConnectionId): void;
-  /** Cancels editing without saving. */
   cancelEdit(): void;
-  /** Updates a single draft field. */
   setDraftField(field: keyof Connection, value: unknown): void;
-  /** Saves the current draft (creates or updates). */
+  /** Sets the provider, swapping cached apiKey/model and clearing the model. */
+  setProvider(provider: string): void;
   saveDraft(): void;
-  /** Deletes a connection. */
   deleteConnection(id: ConnectionId): void;
-  /** Duplicates a connection. */
   duplicateConnection(id: ConnectionId): void;
-  /** Sets a connection as the default. */
   setDefault(id: ConnectionId): void;
-  /** Tests a connection by pinging the provider's verify endpoint. */
   testConnection(id: ConnectionId): Promise<void>;
-  /** Applies a preset's generation params to the current draft. */
   applyPreset(presetId: string): void;
-  /** Saves the draft's generation params as a new preset. */
   savePreset(name: string): void;
-  /** Deletes a user-defined preset. */
   deletePreset(id: string): void;
-  /** Toggles API key field visibility. */
   toggleApiKeyVisibility(): void;
-  /** Sets the preset name input value. */
   setPresetName(value: string): void;
-  /** Saves the draft's generation params as a new preset and clears the input. */
   savePresetFromInput(): void;
+  testDraftConnection(): Promise<void>;
+  testDraftModel(): Promise<void>;
+  fetchModels(): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -105,10 +89,7 @@ export type ConnectionManagerViewModelOptions = BaseViewModelOptions & {};
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Connection test timeout in milliseconds. */
 const TEST_TIMEOUT_MS = 15_000;
-
-/** Ollama tags endpoint for local connection testing. */
 const OLLAMA_TAGS_URL = 'http://localhost:11434/api/tags';
 
 // ---------------------------------------------------------------------------
@@ -126,6 +107,13 @@ class ConnectionManagerViewModel
   testResults: Record<ConnectionId, ConnectionTestResult> = $state({});
   testingIds: Set<ConnectionId> = $state(new Set());
   draft: Partial<Connection> = $state({});
+  isTestingDraft = $state(false);
+  draftTestResult: ConnectionTestResult | undefined = $state(undefined);
+  isTestingDraftModel = $state(false);
+  draftModelTestResult: ConnectionTestResult | undefined = $state(undefined);
+  isFetchingModels = $state(false);
+  private _availableModels: FetchedModel[] = $state([]);
+  private _providerCache: Record<string, { apiKey: string; model: string }> = {};
 
   // ── Proxied state ─────────────────────────────────────────────────────
 
@@ -182,6 +170,19 @@ class ConnectionManagerViewModel
     };
   }
 
+  get modelOptions(): readonly FetchedModel[] {
+    return this._availableModels;
+  }
+
+  get canFetchModels(): boolean {
+    return (this.draft.provider ?? 'openrouter') in PROVIDER_MODEL_FETCH;
+  }
+
+  /** True when the user selected "— Custom —" in the model dropdown. */
+  get isModelCustom(): boolean {
+    return this.draft.model === '__custom__';
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -194,6 +195,10 @@ class ConnectionManagerViewModel
 
   openCreate(): void {
     this.debug('openCreate');
+    this._providerCache = {};
+    this._availableModels = [];
+    this.draftTestResult = undefined;
+    this.draftModelTestResult = undefined;
     this.editingConnectionId = undefined;
     this.isEditorOpen = true;
     this.draft = {
@@ -213,6 +218,12 @@ class ConnectionManagerViewModel
     if (!connection) {
       return;
     }
+    this._providerCache = {
+      [connection.provider]: { apiKey: connection.apiKey, model: connection.model },
+    };
+    this._availableModels = [];
+    this.draftTestResult = undefined;
+    this.draftModelTestResult = undefined;
     this.editingConnectionId = id;
     this.isEditorOpen = true;
     this.draft = { ...connection };
@@ -222,11 +233,39 @@ class ConnectionManagerViewModel
     this.debug('cancelEdit');
     this.isEditorOpen = false;
     this.editingConnectionId = undefined;
-    this.draft = {};
+    this._providerCache = {};
+    this._availableModels = [];
+    this.draftTestResult = undefined;
+    this.draftModelTestResult = undefined;
   }
 
   setDraftField(field: keyof Connection, value: unknown): void {
     this.draft = { ...this.draft, [field]: value };
+  }
+
+  /** Sets the provider, swapping cached apiKey/model and clearing fetched models. */
+  setProvider(provider: string): void {
+    const oldProvider = this.draft.provider;
+    const oldApiKey = this.draft.apiKey;
+    const oldModel = this.draft.model;
+
+    // Save current values to cache
+    if (oldProvider && (oldApiKey || oldModel)) {
+      this._providerCache[oldProvider] = { apiKey: oldApiKey ?? '', model: oldModel ?? '' };
+    }
+
+    // Load cached values for new provider
+    const cached = this._providerCache[provider];
+    this._availableModels = [];
+    this.draftTestResult = undefined;
+    this.draftModelTestResult = undefined;
+
+    this.draft = {
+      ...this.draft,
+      apiKey: cached?.apiKey ?? configService.state.text.apiKeys[provider] ?? '',
+      model: '',
+      provider,
+    };
   }
 
   saveDraft(): void {
@@ -236,22 +275,27 @@ class ConnectionManagerViewModel
       return;
     }
 
-    const now = new Date().toISOString();
+    const model = this.isModelCustom ? '' : (this.draft.model ?? '');
 
     if (this.editingConnectionId) {
       configService.updateConnection(this.editingConnectionId, {
         ...this.draft,
-        updatedAt: now,
+        model,
+        updatedAt: new Date().toISOString(),
       });
     } else {
       configService.addConnection({
         ...(this.draft as Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>),
+        model,
       });
     }
 
     this.isEditorOpen = false;
     this.editingConnectionId = undefined;
-    this.draft = {};
+    this._providerCache = {};
+    this._availableModels = [];
+    this.draftTestResult = undefined;
+    this.draftModelTestResult = undefined;
     void configService.save();
   }
 
@@ -284,7 +328,6 @@ class ConnectionManagerViewModel
     this.debug('testConnection', { id });
     const connection = configService.getConnection(id);
     if (!connection) {
-      this.warn('testConnection: connection not found', { id });
       return;
     }
 
@@ -301,10 +344,9 @@ class ConnectionManagerViewModel
         await this._testProvider(id, connection, startMs);
       }
     } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
       this.testResults = {
         ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: String(err) },
+        [id]: { ok: false, latencyMs: Math.round(performance.now() - startMs), error: String(err) },
       };
     } finally {
       const newIds = new Set(this.testingIds);
@@ -316,7 +358,6 @@ class ConnectionManagerViewModel
   // ── Presets ─────────────────────────────────────────────────────────
 
   applyPreset(presetId: string): void {
-    this.debug('applyPreset', { presetId });
     const preset = configService.state.presets.find((p) => p.id === presetId);
     if (!preset) {
       return;
@@ -325,7 +366,6 @@ class ConnectionManagerViewModel
   }
 
   savePreset(name: string): void {
-    this.debug('savePreset', { name });
     if (!name.trim()) {
       return;
     }
@@ -335,7 +375,6 @@ class ConnectionManagerViewModel
   }
 
   deletePreset(id: string): void {
-    this.debug('deletePreset', { id });
     configService.deletePreset(id);
     void configService.save();
   }
@@ -356,7 +395,153 @@ class ConnectionManagerViewModel
     this.presetName = '';
   }
 
-  // ── Private helpers ──────────────────────────────────────────────────
+  /** Tests provider auth by pinging the verify endpoint. */
+  async testDraftConnection(): Promise<void> {
+    this.debug('testDraftConnection');
+    this.isTestingDraft = true;
+    this.draftTestResult = undefined;
+
+    const startMs = performance.now();
+    const provider = this.draft.provider ?? 'openrouter';
+
+    try {
+      if (provider === 'ollama') {
+        await this._testDraftOllama(startMs);
+      } else {
+        await this._testDraftProvider(provider, startMs);
+      }
+    } catch (err) {
+      this.draftTestResult = {
+        ok: false,
+        latencyMs: Math.round(performance.now() - startMs),
+        error: String(err),
+      };
+    } finally {
+      this.isTestingDraft = false;
+    }
+  }
+
+  /** Tests the selected model by sending a simple "hi" chat completion. */
+  async testDraftModel(): Promise<void> {
+    this.debug('testDraftModel');
+    const provider = this.draft.provider ?? 'openrouter';
+    const config = PROVIDER_MODEL_FETCH[provider];
+    if (!config?.chatTestUrl) {
+      this.draftModelTestResult = {
+        ok: false,
+        latencyMs: 0,
+        error: 'Model testing not supported for this provider',
+      };
+      return;
+    }
+
+    const model = this.isModelCustom ? undefined : this.draft.model;
+    if (!model && !this.isModelCustom) {
+      this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No model selected' };
+      return;
+    }
+
+    const apiKey = this.draft.apiKey || configService.state.text.apiKeys[provider];
+    if (config.auth.location === 'header' && config.auth.name && !apiKey) {
+      this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No API key configured' };
+      return;
+    }
+
+    this.isTestingDraftModel = true;
+    this.draftModelTestResult = undefined;
+
+    const startMs = performance.now();
+
+    try {
+      const headers: Record<string, string> = { ...config.extraHeaders };
+
+      if (config.auth.location === 'header' && apiKey) {
+        const prefix = config.auth.prefix ?? '';
+        headers[config.auth.name] = `${prefix}${apiKey}`;
+      }
+
+      let body: string;
+      if (config.chatTestOpenAiCompat) {
+        body = JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 5,
+        });
+      } else {
+        // Ollama native /api/chat format
+        body = JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: 'hi' }],
+          stream: false,
+        });
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(config.chatTestUrl, {
+          body,
+          headers: { 'Content-Type': 'application/json', ...headers },
+          method: 'POST',
+          signal: controller.signal,
+        });
+        const elapsed = Math.round(performance.now() - startMs);
+
+        if (!response.ok) {
+          const errorBody = await response.text().catch(() => '');
+          this.draftModelTestResult = {
+            ok: false,
+            latencyMs: elapsed,
+            error: `HTTP ${response.status}${errorBody ? `: ${errorBody.slice(0, 200)}` : ''}`,
+          };
+        } else {
+          this.draftModelTestResult = { ok: true, latencyMs: elapsed };
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startMs);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        this.draftModelTestResult = {
+          ok: false,
+          latencyMs: elapsed,
+          error: 'Connection timed out',
+        };
+      } else {
+        this.draftModelTestResult = { ok: false, latencyMs: elapsed, error: String(err) };
+      }
+    } finally {
+      this.isTestingDraftModel = false;
+    }
+  }
+
+  /** Fetches available models for the current provider via the generic registry. */
+  async fetchModels(): Promise<void> {
+    this.debug('fetchModels');
+    const provider = this.draft.provider ?? 'openrouter';
+    const config = PROVIDER_MODEL_FETCH[provider];
+    if (!config) {
+      return;
+    }
+
+    const apiKey = this.draft.apiKey || configService.state.text.apiKeys[provider];
+
+    this.isFetchingModels = true;
+
+    try {
+      this._availableModels = await fetchModelsFromProvider({
+        config,
+        apiKey,
+        timeoutMs: TEST_TIMEOUT_MS,
+      });
+    } finally {
+      this.isFetchingModels = false;
+    }
+  }
+
+  // ── Private: saved-connection test helpers ────────────────────────────
 
   private async _testOllama(id: ConnectionId, startMs: number): Promise<void> {
     const controller = new AbortController();
@@ -376,24 +561,20 @@ class ConnectionManagerViewModel
 
       const data = (await response.json()) as { models?: unknown[] };
       const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
-
       this.testResults = {
         ...this.testResults,
         [id]: { ok: true, latencyMs: elapsed, modelCount },
       };
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: 'Connection timed out' },
-        };
-      } else {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: String(err) },
-        };
-      }
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Connection timed out'
+          : String(err);
+      this.testResults = {
+        ...this.testResults,
+        [id]: { ok: false, latencyMs: elapsed, error: message },
+      };
     } finally {
       clearTimeout(timeoutId);
     }
@@ -415,10 +596,13 @@ class ConnectionManagerViewModel
     }
 
     if (!connection.apiKey) {
-      const elapsed = Math.round(performance.now() - startMs);
       this.testResults = {
         ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: 'No API key configured' },
+        [id]: {
+          ok: false,
+          latencyMs: Math.round(performance.now() - startMs),
+          error: 'No API key configured',
+        },
       };
       return;
     }
@@ -453,7 +637,7 @@ class ConnectionManagerViewModel
           modelCount = data.models.length;
         }
       } catch {
-        // Response may not be JSON
+        /* not JSON */
       }
 
       this.testResults = {
@@ -462,17 +646,108 @@ class ConnectionManagerViewModel
       };
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: 'Connection timed out' },
-        };
-      } else {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: String(err) },
-        };
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Connection timed out'
+          : String(err);
+      this.testResults = {
+        ...this.testResults,
+        [id]: { ok: false, latencyMs: elapsed, error: message },
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // ── Private: draft connection test helpers ────────────────────────────
+
+  private async _testDraftOllama(startMs: number): Promise<void> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(OLLAMA_TAGS_URL, { signal: controller.signal });
+      const elapsed = Math.round(performance.now() - startMs);
+
+      if (!response.ok) {
+        this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
+        return;
       }
+
+      const data = (await response.json()) as { models?: unknown[] };
+      const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
+      this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startMs);
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Connection timed out'
+          : String(err);
+      this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async _testDraftProvider(provider: string, startMs: number): Promise<void> {
+    const endpoint = PROVIDER_ENDPOINTS[provider];
+    if (!endpoint) {
+      this.draftTestResult = {
+        ok: false,
+        latencyMs: Math.round(performance.now() - startMs),
+        error: `Unknown provider: ${provider}`,
+      };
+      return;
+    }
+
+    const apiKey = this.draft.apiKey;
+    if (!apiKey) {
+      this.draftTestResult = {
+        ok: false,
+        latencyMs: Math.round(performance.now() - startMs),
+        error: 'No API key configured',
+      };
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+    try {
+      const url = buildVerifyUrl(endpoint, apiKey);
+      const headers = buildVerifyHeaders(endpoint, apiKey);
+      const response = await fetch(url, {
+        headers,
+        method: endpoint.method,
+        signal: controller.signal,
+      });
+      const elapsed = Math.round(performance.now() - startMs);
+
+      if (!response.ok) {
+        this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
+        return;
+      }
+
+      let modelCount: number | undefined;
+      try {
+        const data = (await response.clone().json()) as Record<string, unknown>;
+        if (Array.isArray(data.data)) {
+          modelCount = data.data.length;
+        } else if (Array.isArray(data.models)) {
+          modelCount = data.models.length;
+        }
+      } catch {
+        /* not JSON */
+      }
+
+      this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startMs);
+      const message =
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Connection timed out'
+          : String(err);
+      this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
     } finally {
       clearTimeout(timeoutId);
     }

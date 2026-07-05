@@ -70,7 +70,7 @@
             id="conn-provider"
             class="select select-bordered select-sm font-mono text-sm"
             value={viewModel.draft.provider ?? 'openrouter'}
-            onchange={(e) => viewModel.setDraftField('provider', (e.target as HTMLSelectElement).value)}
+            onchange={(e) => viewModel.setProvider((e.target as HTMLSelectElement).value)}
           >
             {#each viewModel.providerOptions as opt}
               <option value={opt.id}>{opt.label}</option>
@@ -126,20 +126,113 @@
 
         <!-- Model -->
         <div class="form-control">
-          <label class="label py-1" for="conn-model">
+          <div class="flex items-center justify-between mb-1">
             <span class="label-text font-mono text-xs uppercase tracking-wider text-[#938ea1]"
               >Model</span
             >
-          </label>
-          <input
-            id="conn-model"
-            type="text"
-            class="input input-bordered input-sm font-mono text-sm"
-            placeholder="anthropic/claude-3-opus"
-            value={viewModel.draft.model ?? ''}
-            oninput={(e) => viewModel.setDraftField('model', (e.target as HTMLInputElement).value)}
-          >
+            {#if viewModel.canFetchModels}
+              <button
+                class="btn btn-xs btn-ghost font-mono text-[10px] text-[#00e3fd]"
+                disabled={viewModel.isFetchingModels}
+                onclick={() => viewModel.fetchModels()}
+              >
+                {#if viewModel.isFetchingModels}
+                  <span class="loading loading-spinner loading-xs"></span>
+                {:else}
+                  Fetch Models
+                {/if}
+              </button>
+            {/if}
+          </div>
+          {#if viewModel.modelOptions.length > 0}
+            <select
+              id="conn-model"
+              class="select select-bordered select-sm font-mono text-sm"
+              value={viewModel.isModelCustom ? '__custom__' : (viewModel.draft.model ?? '')}
+              onchange={(e) => {
+                const value = (e.target as HTMLSelectElement).value;
+                viewModel.setDraftField('model', value || '');
+              }}
+            >
+              <option value="">{!viewModel.draft.model ? 'Select a model...' : '— Clear —'}</option>
+              <option value="__custom__">— Custom —</option>
+              {#each viewModel.modelOptions as opt}
+                <option value={opt.id}>{opt.name}</option>
+              {/each}
+            </select>
+          {:else}
+            <input
+              id="conn-model"
+              type="text"
+              class="input input-bordered input-sm font-mono text-sm"
+              placeholder="anthropic/claude-3-opus"
+              value={viewModel.draft.model ?? ''}
+              oninput={(e) => viewModel.setDraftField('model', (e.target as HTMLInputElement).value)}
+            >
+          {/if}
+          {#if viewModel.isModelCustom}
+            <input
+              id="conn-model-custom"
+              type="text"
+              class="input input-bordered input-sm font-mono text-sm mt-2"
+              placeholder="Enter custom model ID..."
+              value={viewModel.draft.model === '__custom__' ? '' : (viewModel.draft.model ?? '')}
+              oninput={(e) => viewModel.setDraftField('model', (e.target as HTMLInputElement).value)}
+            >
+          {/if}
         </div>
+
+        <!-- Test Connection + Test Model -->
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            class="btn btn-sm btn-outline font-mono text-xs border-[#00e3fd]/30 text-[#00e3fd] hover:bg-[#00e3fd]/10"
+            disabled={viewModel.isTestingDraft}
+            onclick={() => viewModel.testDraftConnection()}
+          >
+            {#if viewModel.isTestingDraft}
+              <span class="loading loading-spinner loading-xs"></span>
+              Testing Provider...
+            {:else}
+              Test Provider
+            {/if}
+          </button>
+          {#if viewModel.draft.model || viewModel.isModelCustom}
+            <button
+              class="btn btn-sm btn-outline font-mono text-xs border-[#cabeff]/30 text-[#cabeff] hover:bg-[#cabeff]/10"
+              disabled={viewModel.isTestingDraftModel}
+              onclick={() => viewModel.testDraftModel()}
+            >
+              {#if viewModel.isTestingDraftModel}
+                <span class="loading loading-spinner loading-xs"></span>
+                Testing Model...
+              {:else}
+                Test Model
+              {/if}
+            </button>
+          {/if}
+        </div>
+        {#if viewModel.draftTestResult}
+          <div
+            class="text-xs font-mono {viewModel.draftTestResult.ok ? 'text-success' : 'text-error'}"
+          >
+            Provider: {viewModel.draftTestResult.ok ? '✓' : '✗'}
+            {viewModel.draftTestResult.ok ? 'Connected' : viewModel.draftTestResult.error ?? 'Failed'}
+            ({viewModel.draftTestResult.latencyMs}ms
+            {#if viewModel.draftTestResult.modelCount !== undefined}
+              · {viewModel.draftTestResult.modelCount} models
+            {/if}
+            )
+          </div>
+        {/if}
+        {#if viewModel.draftModelTestResult}
+          <div
+            class="text-xs font-mono {viewModel.draftModelTestResult.ok ? 'text-success' : 'text-error'}"
+          >
+            Model:
+            {viewModel.draftModelTestResult.ok ? '✓ Responded' : '✗ ' + (viewModel.draftModelTestResult.error ?? 'Failed')}
+            ({viewModel.draftModelTestResult.latencyMs}ms)
+          </div>
+        {/if}
 
         <!-- Generation Parameters -->
         <div>
