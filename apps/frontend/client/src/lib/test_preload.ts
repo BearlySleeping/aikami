@@ -19,6 +19,70 @@ import { mock } from 'bun:test';
 (globalThis as Record<string, unknown>).$state.snapshot = (value: unknown) => value;
 (globalThis as Record<string, unknown>).$derived = (value: unknown) => value;
 
+// ── IndexedDB polyfill (required by DraftStore in test env) ────────────────
+
+const _indexedStore = new Map<string, Map<string, unknown>>();
+
+/** Creates a request-like object that fires onsuccess on next microtask. */
+const _createRequest = <T>(result: T) => {
+  const request = {
+    onsuccess: undefined as (() => void) | undefined,
+    onerror: undefined as (() => void) | undefined,
+    result,
+    error: null as DOMException | null,
+  };
+  queueMicrotask(() => request.onsuccess?.());
+  return request;
+};
+
+(globalThis as Record<string, unknown>).indexedDB = {
+  open: (_name: string, _version?: number) => {
+    if (!_indexedStore.has('drafts')) {
+      _indexedStore.set('drafts', new Map());
+    }
+    const db = {
+      objectStoreNames: {
+        contains: () => _indexedStore.has('drafts'),
+      },
+      createObjectStore: (storeName: string, _options?: unknown) => {
+        if (!_indexedStore.has(storeName)) {
+          _indexedStore.set(storeName, new Map());
+        }
+        return {};
+      },
+      transaction: (storeName: string, _mode: string) => {
+        const store = _indexedStore.get(storeName) ?? new Map();
+        return {
+          objectStore: () => ({
+            get: (key: string) => _createRequest(store.get(key)),
+            put: (value: Record<string, unknown>) => {
+              const key = (value as { chatId?: string }).chatId ?? '';
+              store.set(key, value);
+              return _createRequest(key);
+            },
+            delete: (key: string) => {
+              store.delete(key);
+              return _createRequest(undefined);
+            },
+            getAll: () => _createRequest(Array.from(store.values())),
+          }),
+        };
+      },
+      onclose: null as (() => void) | null,
+      close: () => {},
+    };
+    const openRequest = {
+      onupgradeneeded: undefined as ((event: unknown) => void) | undefined,
+      onsuccess: undefined as ((event: unknown) => void) | undefined,
+      onerror: undefined as ((event: unknown) => void) | undefined,
+      result: db,
+      error: null as DOMException | null,
+    };
+    queueMicrotask(() => openRequest.onsuccess?.({ target: openRequest } as unknown));
+    return openRequest;
+  },
+};
+
 // ── Browser API polyfills (required by services in test env) ────────────────
 
 if (typeof KeyboardEvent === 'undefined') {
@@ -244,6 +308,10 @@ const _localServicesMock = () => ({
   ConfigService: class {},
   diceService: _createServiceStub(),
   DiceService: class {},
+  draftStore: _createServiceStub(),
+  DraftStore: class {},
+  messageBranchStore: _createServiceStub(),
+  MessageBranchStore: class {},
   ExpressionAssetResolver: class {},
   setPendingGameLoad: _createCallableStub(),
   consumePendingGameLoad: _createCallableStub(),
@@ -328,3 +396,4 @@ process.env.PUBLIC_IMAGE_URL = 'http://localhost:8188';
 delete process.env.PUBLIC_OPENROUTER_API_KEY;
 delete process.env.PUBLIC_OPENROUTER_MODEL;
 delete process.env.OPENROUTER_API_KEY;
+delete process.env.PUBLIC_OLLAMA_MODEL;
