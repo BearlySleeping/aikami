@@ -28,7 +28,7 @@ An AI-driven platform for creating and experiencing immersive 2D JRPG adventures
 ```bash
 bun run setup          # First-time onboarding
 bun run dev            # PWA dev server (emulator mode)
-bun run dev:all        # Firebase emulators + PWA (tmux)
+bun run dev:all        # Firebase emulators + PWA (herdr)
 bun run test:blackbox  # Full integration suite
 ```
 

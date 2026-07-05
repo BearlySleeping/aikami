@@ -37,7 +37,7 @@ const checkHealth = async (): Promise<void> => {
       console.error(
         `✗ Ollama container is not running on port ${OLLAMA_PORT}.`,
       );
-      console.error('  Start it with: bun tmux:start text');
+      console.error('  Start it with: bun herdr:start text');
     } else {
       console.error(`✗ Health check failed: ${err.message}`);
     }

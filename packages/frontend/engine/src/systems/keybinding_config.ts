@@ -17,10 +17,14 @@ export const MOVEMENT_ACTION_IDS = ['move_up', 'move_down', 'move_left', 'move_r
 
 /** Maps action IDs to engine Direction values. */
 const ACTION_TO_DIRECTION: Record<string, Direction> = {
-  ['move_up']: 'up',
-  ['move_down']: 'down',
-  ['move_left']: 'left',
-  ['move_right']: 'right',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_up: 'up',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_down: 'down',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_left: 'left',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_right: 'right',
 };
 
 // ---------------------------------------------------------------------------
@@ -36,12 +40,17 @@ export type KeybindingMap = Record<string, string>;
 
 /** Default keybindings used when localStorage is empty. */
 export const DEFAULT_KEYBINDINGS: KeybindingMap = {
-  ['move_up']: 'w',
-  ['move_down']: 's',
-  ['move_left']: 'a',
-  ['move_right']: 'd',
-  ['interact']: 'e',
-  ['open_menu']: 'Escape',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_up: 'w',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_down: 's',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_left: 'a',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  move_right: 'd',
+  interact: 'e',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  open_menu: 'Escape',
 };
 
 // ---------------------------------------------------------------------------

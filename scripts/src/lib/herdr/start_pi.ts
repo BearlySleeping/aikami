@@ -41,7 +41,6 @@ const PI_COMMAND = 'pi';
 
 // ── Helpers ────────────────────────────────────────────────
 
-const _info = (m: string) => console.log(`  ℹ ${m}`);
 const ok = (m: string) => console.log(`  ✓ ${m}`);
 
 // ── Main ───────────────────────────────────────────────────
@@ -51,9 +50,11 @@ const doJoin = args.includes('--join') || args.includes('-j');
 
 await ensureServer();
 
+let wsId: string | null = null;
 const existingWsId = await findWorkspace(PI_WORKSPACE);
 
 if (existingWsId) {
+  wsId = existingWsId;
   const tabNames = await getWorkspaceTabNames(existingWsId);
 
   if (tabNames.includes(PI_TAB)) {
@@ -99,14 +100,19 @@ if (existingWsId) {
     process.exit(1);
   }
 
+  wsId = createR.result.workspace.workspace_id;
   const rootPaneId = createR.result.root_pane.pane_id;
-  await herdr(['tab', 'rename', `${createR.result.workspace.workspace_id}:1`, PI_TAB]);
+  await herdr(['tab', 'rename', `${wsId}:1`, PI_TAB]);
   await herdr(['pane', 'run', rootPaneId, wrapCommand(PI_COMMAND)]);
   ok(`pi running in ${PI_WORKSPACE}`);
 }
 
 // ── Attach if requested ────────────────────────────────────
 if (doJoin) {
+  // Focus the pi workspace so herdr session attach shows it instead of a different workspace
+  if (wsId) {
+    await herdr(['workspace', 'focus', wsId]);
+  }
   console.log(`🖥  Attaching to ${PI_WORKSPACE}…`);
   const proc = spawn('herdr', ['session', 'attach', 'default'], { stdio: 'inherit' });
   await new Promise<number>((resolveJ) => proc.on('exit', resolveJ));

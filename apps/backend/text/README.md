@@ -11,7 +11,7 @@ Local LLM text generation microservice using the official `ollama/ollama` Docker
 ## Where It's Used
 
 - Text generation workflows in the PWA and backend functions
-- Managed by the tmux orchestrator alongside voice, imagem, emulators, and client
+- Managed by the herdr orchestrator alongside voice, image, emulators, and client
 
 ## Installation
 
@@ -41,8 +41,8 @@ None — container-only microservice.
 ## Usage
 
 ```bash
-# Start the container via tmux
-bun tmux:start text
+# Start the container via herdr
+bun herdr:start text
 
 # Check health
 bun run test:text
@@ -52,7 +52,7 @@ bun run test:generate "Hello!"
 bun run test:generate --model llama3.2:3b "Write a haiku"
 
 # Stop
-bun tmux:stop text
+bun herdr:stop text
 ```
 
 ## Directory Layout
@@ -85,7 +85,7 @@ apps/backend/text/
 | `--security-opt label=disable` | Disable SELinux label enforcement (required for bind mounts on some systems) |
 | `-p 11434:11434` | Expose Ollama on host port 11434 |
 | `--rm` | Auto-remove container on stop (no stale state) |
-| `--name aikami-text-dev` | Fixed container name for tmux orchestration |
+| `--name aikami-text-dev` | Fixed container name for herdr orchestration |
 
 ### Volume Mounts
 

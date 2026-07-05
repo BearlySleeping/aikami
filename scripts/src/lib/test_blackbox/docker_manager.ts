@@ -1,7 +1,7 @@
 // scripts/src/lib/test_blackbox/docker_manager.ts
 // Docker container lifecycle manager for blackbox tests.
 // Builds, runs, polls, and tears down Docker containers for AI backend services.
-// Mirrors the TmuxManager interface so it can plug into run.ts seamlessly.
+// Mirrors the HerdrManager interface so it can plug into run.ts seamlessly.
 //
 // Key features:
 //   - --add-host=host.docker.internal:host-gateway for cross-platform networking

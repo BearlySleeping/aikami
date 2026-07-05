@@ -59,7 +59,7 @@ export default defineConfig(({ mode }) => {
               const ts = new Date().toISOString();
               const label = parsed.label || 'api';
               const payload = parsed.payload;
-              // biome-ignore lint/suspicious/noConsole: /api/logs server-side endpoint — writes to tmux stdout
+              // biome-ignore lint/suspicious/noConsole: /api/logs server-side endpoint — writes to herdr stdout
               console.log(`[api-logs] ${ts} [${label}]`, JSON.stringify(payload));
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ ok: true }));

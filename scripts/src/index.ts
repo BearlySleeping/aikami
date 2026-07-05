@@ -39,17 +39,19 @@ const SCRIPT_MAP: Record<string, string> = {
   test_bb: 'test_blackbox/run.ts',
   bb: 'test_blackbox/run.ts',
 
-  // Tmux session management
-  'tmux:start': 'tmux/start.ts',
-  tstart: 'tmux/start.ts',
-  'tmux:join': 'tmux/join.ts',
-  tjoin: 'tmux/join.ts',
-  'tmux:stop': 'tmux/stop.ts',
-  tstop: 'tmux/stop.ts',
-  'tmux:stop-all': 'tmux/stop_all.ts',
-  tstopall: 'tmux/stop_all.ts',
-  'tmux:status': 'tmux/status.ts',
-  tstatus: 'tmux/status.ts',
+  // Herdr session management
+  'herdr:start': 'herdr/start.ts',
+  hstart: 'herdr/start.ts',
+  'herdr:join': 'herdr/join.ts',
+  hjoin: 'herdr/join.ts',
+  'herdr:stop': 'herdr/stop.ts',
+  hstop: 'herdr/stop.ts',
+  'herdr:stop-all': 'herdr/stop_all.ts',
+  hstopall: 'herdr/stop_all.ts',
+  'herdr:status': 'herdr/status.ts',
+  hstatus: 'herdr/status.ts',
+  'herdr:list': 'herdr/list.ts',
+  hlist: 'herdr/list.ts',
 };
 
 const SCRIPT_DIR = join(import.meta.dir, 'lib');

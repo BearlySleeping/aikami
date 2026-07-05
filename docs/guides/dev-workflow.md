@@ -16,7 +16,7 @@ The setup script checks prerequisites, installs deps, creates `.env`, and verifi
 
 ```bash
 bun run dev              # Start Client dev server (http://localhost:5173)
-bun run dev:all           # Start firebase + Client in tmux session
+bun run dev:all           # Start firebase + Client in herdr workspace
 bun run typecheck         # Typecheck all 22 projects
 bun run fix               # Auto-fix lint/format issues (Biome)
 bun run lint              # Check lint/format without writing

@@ -31,7 +31,7 @@ const checkHealth = async (): Promise<void> => {
       console.error(
         `✗ ComfyUI container is not running on port ${COMFYUI_PORT}.`,
       );
-      console.error('  Start it with: bun tmux:start image');
+      console.error('  Start it with: bun herdr:start image');
     } else {
       console.error(`✗ Health check failed: ${err.message}`);
     }

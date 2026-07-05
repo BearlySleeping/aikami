@@ -8,8 +8,6 @@
   //
   // Contract: C-167 Svelte Native Combat UI MVP
 
-  import diegeticHealthBar from './diegetic_health_bar.svelte';
-
   type Props = {
     /** Display state for the player combatant. */
     playerName: string;

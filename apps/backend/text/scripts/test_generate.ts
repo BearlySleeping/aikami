@@ -182,7 +182,7 @@ const main = async (): Promise<void> => {
     console.error(
       `\n✗ Ollama is not running on port ${OLLAMA_PORT}.`,
     );
-    console.error('  Start it with: bun tmux:start text');
+    console.error('  Start it with: bun herdr:start text');
     process.exit(1);
   }
 

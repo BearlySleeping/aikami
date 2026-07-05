@@ -63,7 +63,7 @@
   });
 
   /** Returns a weather description string. */
-  const weatherLabel = $derived.by(() => {
+  const _weatherLabel = $derived.by(() => {
     if (rainIntensity > 0.6) {
       return 'Storm';
     }

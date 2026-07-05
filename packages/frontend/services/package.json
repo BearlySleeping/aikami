@@ -23,7 +23,7 @@
     "idb-keyval": "6.2.6"
   },
   "devDependencies": {
-    "@sveltejs/kit": "2.69.0",
+    "@sveltejs/kit": "2.69.1",
     "svelte": "5.56.4",
     "vite": "8.1.3"
   }

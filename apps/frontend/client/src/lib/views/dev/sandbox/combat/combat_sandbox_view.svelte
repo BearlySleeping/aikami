@@ -40,8 +40,6 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: svelte:window is a valid global key handler -->
 <svelte:window
   onkeydown={(e) => {
     if (e.key === 'Escape' && viewModel.combatViewModel) {

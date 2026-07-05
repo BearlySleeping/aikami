@@ -12,6 +12,8 @@
       "apps/**",
       "packages/**",
       "scripts/**",
+      ".pi/**",
+      "!.pi/generated-skills/**",
       "!**/temp/*",
       "!**/tmp/*",
       "!**/dist/*",
@@ -215,6 +217,23 @@
         "rules": {
           "style": {
             "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        ".pi/extensions/**",
+        ".pi/scripts/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": "off",
+            "useNamingConvention": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
           }
         }
       }

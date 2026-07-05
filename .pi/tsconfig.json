@@ -20,5 +20,6 @@
 
     "noUnusedLocals": true,
     "noUnusedParameters": true
-  }
+  },
+  "exclude": ["generated-skills"]
 }
