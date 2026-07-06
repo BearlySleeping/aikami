@@ -13,9 +13,11 @@ const CONTAINER_PORT = '8880';
 await $`docker rm -f ${CONTAINER_NAME} 2>/dev/null`.nothrow();
 
 // Start Kokoro TTS server
+// KOKORO_API_KEY unset disables API key auth (local dev only)
 await $`podman run --rm \
   --name ${CONTAINER_NAME} \
   -p ${HOST_PORT}:${CONTAINER_PORT} \
   --network bridge \
   -v aikami-kokoro-cache:/root/.cache/huggingface \
+  -e KOKORO_API_KEY= \
   ${IMAGE}`;
