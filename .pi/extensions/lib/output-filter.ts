@@ -11,6 +11,8 @@
 export type LightProject = {
   id: string;
   layer: string;
+  /** Filesystem path relative to repo root (from moon's `source` field) */
+  source: string;
   tags: string[];
   deps: string[];
   desc?: string;
@@ -46,6 +48,7 @@ export function parseMoonProjects(raw: string): LightProject[] | null {
       return {
         id: String(p.id ?? '?'),
         layer: String(config.layer ?? '?'),
+        source: String(p.source ?? '?'),
         tags: (config.tags as string[]) ?? [],
         deps,
         desc: String(projectMeta?.description ?? ''),
@@ -57,7 +60,7 @@ export function parseMoonProjects(raw: string): LightProject[] | null {
 }
 
 /**
- * Formats a lightweight project list as a compact string.
+ * Formats a lightweight project list as a compact string with filesystem paths.
  */
 export function formatProjectList(projects: LightProject[]): string {
   if (projects.length === 0) {
@@ -68,15 +71,17 @@ export function formatProjectList(projects: LightProject[]): string {
   const libs = projects.filter((p) => p.layer === 'library');
   const other = projects.filter((p) => p.layer !== 'application' && p.layer !== 'library');
 
+  const fmt = (p: LightProject) => (p.source && p.source !== '?' ? `${p.id} (${p.source})` : p.id);
+
   const parts: string[] = [];
   if (apps.length > 0) {
-    parts.push(`**Apps (${apps.length})**: ${apps.map((p) => p.id).join(', ')}`);
+    parts.push(`**Apps (${apps.length})**: ${apps.map(fmt).join(', ')}`);
   }
   if (libs.length > 0) {
-    parts.push(`**Libs (${libs.length})**: ${libs.map((p) => p.id).join(', ')}`);
+    parts.push(`**Libs (${libs.length})**: ${libs.map(fmt).join(', ')}`);
   }
   if (other.length > 0) {
-    parts.push(`**Other (${other.length})**: ${other.map((p) => p.id).join(', ')}`);
+    parts.push(`**Other (${other.length})**: ${other.map(fmt).join(', ')}`);
   }
   parts.push(`Total: ${projects.length} projects`);
   return parts.join('\n');

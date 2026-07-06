@@ -10,8 +10,10 @@ import {
 
 /** Fallback workspace summary — used if moon query fails. Update when projects change. */
 const FALLBACK_SUMMARY = `Workspace: aikami projects (moon)
-Apps:  client, site, docs, firebase
-Libs:  constants, schemas, types, logger, utils, mocks, backend-*, frontend-*`;
+Apps:  client (apps/frontend/client), site (apps/frontend/site), docs (apps/frontend/docs), firebase (apps/backend/firebase), image (apps/backend/image), text (apps/backend/text), voice (apps/backend/voice), e2e (apps/e2e), scripts (scripts)
+Libs:  constants, schemas, types, logger, utils, mocks (packages/shared/), frontend-* (packages/frontend/), backend-* (packages/backend/)
+
+🔴 Path prefix key: apps/frontend/ = client, site, docs | apps/backend/ = firebase, image, text, voice | packages/shared/ = constants, schemas, types, logger, utils, mocks, parser | packages/frontend/ = configs, dataconnect, engine, repositories, services, utils | packages/backend/ = ai, auth, chat, configs, database, image, svelte-kit, utils`;
 
 export default function (pi: ExtensionAPI) {
   let workspaceSummary = FALLBACK_SUMMARY;
@@ -445,10 +447,15 @@ export default function (pi: ExtensionAPI) {
         '  project=' +
         (process.env.AIKAMI_PROJECT_ID || '?')
       : '';
+
+    // The path prefix key is always shown so Pi never hallucinates flat paths.
+    const pathPrefixKey =
+      '\n🔴 Path prefix key: apps/frontend/ = client, site, docs | apps/backend/ = firebase, image, text, voice | packages/shared/ = constants, schemas, types, logger, utils, mocks, parser | packages/frontend/ = configs, dataconnect, engine, repositories, services, utils | packages/backend/ = ai, auth, chat, configs, database, image, svelte-kit, utils';
+
     const devServerRule =
       '\n🔴 NEVER call moon_run_task for :dev or :preview targets — these are long-running servers that hang forever. Use tmux_session start <service> instead. Registered tmux services: firebase, client, image, text, voice.';
     return {
-      systemPrompt: `${event.systemPrompt}\n${workspaceSummary}${modeInfo}${devServerRule}`,
+      systemPrompt: `${event.systemPrompt}\n${workspaceSummary}${pathPrefixKey}${modeInfo}${devServerRule}`,
     };
   });
 }
