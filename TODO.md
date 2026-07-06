@@ -111,7 +111,7 @@
 - **Complexity**: Low-Medium — SSE is straightforward; message branching requires DB schema tweak
 - **Impact**: Critical — chat is the primary UX surface; this defines the game feel
 
-#### C-ME-003: Character Sheet & Traits System
+#### C-ME-003: Character Sheet & Traits System — [📋 Contract C-232](docs/contracts/C-232-character-sheet-traits.md)
 
 - **Marinara Reference**: `docs/GAME_MODE.md` (party cards, game-specific character sheets), `docs/ROLEPLAY.md` (HUD widgets), `docs/FRONTEND.md` (RPGStatsConfig)
 - **What Marinara Does**: Party member cards show stats, levels, abilities, class, strengths, and weaknesses. World-gen creates game-specific character sheets with class, abilities, strengths, and weaknesses for every party member. The Roleplay HUD tracks player stats (HP, mana, custom), inventory, and quests.

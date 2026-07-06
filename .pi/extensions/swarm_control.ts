@@ -27,86 +27,6 @@ type LedgerReportEnvelope = {
   }>;
 };
 
-// ── Constants ──────────────────────────────────────────────
-
-const SCRATCHPAD_DB_PATH = '.pi/agent_scratchpad.db';
-
-// ── SQLite access via pi.exec (pi runs in Node.js, not Bun) ──
-
-const _queryLedger = async (
-  pi: ExtensionAPI,
-  cwd: string,
-): Promise<LedgerReportEnvelope | null> => {
-  /** Inline Bun script that reads the scratchpad heartbeat table and outputs JSON. */
-  const inlineScript = `
-    import { Database } from 'bun:sqlite';
-    const dbPath = '${SCRATCHPAD_DB_PATH}';
-    let db;
-    try {
-      db = new Database(dbPath, { readonly: true });
-    } catch {
-      console.log('null');
-      return;
-    }
-
-    const tables = db.query('SELECT name FROM sqlite_master WHERE type = ?').all('table');
-    const hasHeartbeat = tables.some(function(t) { return t.name === 'swarm_heartbeat'; });
-
-    if (!hasHeartbeat) {
-      console.log(JSON.stringify({
-        activeTaskId: 'none',
-        globalLockActive: false,
-        workerStates: [
-          { agentKey: 'architect', status: 'idle', lastSyncTimestamp: 0 },
-          { agentKey: 'coder', status: 'idle', lastSyncTimestamp: 0 },
-          { agentKey: 'qa', status: 'idle', lastSyncTimestamp: 0 },
-          { agentKey: 'git', status: 'idle', lastSyncTimestamp: 0 },
-        ],
-      }));
-      db.close();
-      return;
-    }
-
-    const rows = db.query(
-      'SELECT task_id, agent_key, agent_status, last_heartbeat_timestamp FROM swarm_heartbeat ORDER BY last_heartbeat_timestamp DESC LIMIT 20'
-    ).all();
-
-    var workerMap = {};
-    for (var i = 0; i < rows.length; i++) {
-      var r = rows[i];
-      workerMap[r.agent_key] = {
-        agentKey: r.agent_key,
-        status: r.agent_status,
-        lastSyncTimestamp: r.last_heartbeat_timestamp,
-      };
-    }
-    ['architect','coder','qa','git'].forEach(function(k) {
-      if (!workerMap[k]) workerMap[k] = { agentKey: k, status: 'idle', lastSyncTimestamp: 0 };
-    });
-
-    var activeId = rows.length > 0 ? rows[0].task_id : 'none';
-    var locked = Object.values(workerMap).some(function(w) { return w.status === 'working' || w.status === 'blocked'; });
-
-    console.log(JSON.stringify({
-      activeTaskId: activeId,
-      globalLockActive: locked,
-      workerStates: Object.values(workerMap),
-    }));
-
-    db.close();
-  `;
-
-  try {
-    const result = await pi.exec('bun', ['-e', inlineScript], { cwd } as any);
-    if (result.code !== 0 || !result.stdout) {
-      return null;
-    }
-    return JSON.parse(result.stdout.trim()) as LedgerReportEnvelope;
-  } catch {
-    return null;
-  }
-};
-
 // ── Extension registration ─────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -187,18 +107,68 @@ export default function (pi: ExtensionAPI) {
       const tmpFile = `${cwd}/.pi/pipeline_payload_${params.taskId}.json`;
       writeFileSync(tmpFile, JSON.stringify(payload, null, 2));
 
-      // Launch swarm director via herdr in background
+      // ── Discover director pane ID ──────────────────────
+      // The aikami-agents workspace has up to 5 tabs: architect, coder, qa, git, director.
+      // Find the director tab and map it to its root pane.
+      const discoverWs = await pi.exec('herdr', ['workspace', 'list']);
+
+      let directorPaneId = ''; // will be discovered
+      try {
+        const wsData = JSON.parse(discoverWs.stdout || '{}');
+        const ws = wsData?.result?.workspaces?.find(
+          (w: { label: string }) => w.label === 'aikami-agents',
+        );
+        if (!ws) {
+          // biome-ignore lint/suspicious/noConsole: extension error logging
+          console.error('[swarm:trigger] workspace aikami-agents not found — run bun swarm:init');
+        } else {
+          // Find the director tab and derive its pane ID
+          const tabsResult = await pi.exec('herdr', [
+            'tab',
+            'list',
+            '--workspace',
+            ws.workspace_id,
+          ]);
+          const tabsData = JSON.parse(tabsResult.stdout || '{}');
+          const directorTab = tabsData?.result?.tabs?.find(
+            (t: { label: string }) => t.label === 'director',
+          );
+          if (directorTab) {
+            directorPaneId = `${ws.workspace_id}:p${directorTab.number}`;
+          } else {
+            // Director tab not found — fallback to first tab's first pane
+            directorPaneId = `${ws.workspace_id}:p1`;
+            // biome-ignore lint/suspicious/noConsole: extension error logging
+            console.error(
+              '[swarm:trigger] director tab not found, falling back to first pane:',
+              directorPaneId,
+            );
+          }
+        }
+      } catch (err) {
+        // biome-ignore lint/suspicious/noConsole: extension error logging
+        console.error('[swarm:trigger] failed to discover pane:', err);
+      }
+
+      if (!directorPaneId) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '❌ Could not discover swarm director pane. Run `bun swarm:init` first.',
+            },
+          ],
+          details: { error: 'no-director-pane' },
+        };
+      }
+
+      // biome-ignore lint/suspicious/noConsole: extension debug logging
+      console.error('[swarm:trigger] director pane:', directorPaneId);
+
+      // Launch swarm director via herdr in the director pane
       const command = `direnv exec . bash -c 'bun run scripts/src/lib/agents/swarm_start.ts ${tmpFile}; echo; echo "=== Swarm pipeline complete ==="; read'`;
 
-      const result = await pi.exec('herdr', [
-        'pane',
-        'run',
-        '--workspace',
-        'aikami-agents',
-        '--cwd',
-        cwd,
-        command,
-      ]);
+      const result = await pi.exec('herdr', ['pane', 'run', directorPaneId, command]);
 
       const sessionId = `swarm_${params.taskId}_${Date.now()}`;
 
@@ -242,7 +212,38 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
 
-      const ledger = await _queryLedger(pi, cwd);
+      // Execute the ledger query script via Bun (bypasses extension caching issues)
+      const result = await pi.exec('bun', [
+        'run',
+        `${cwd}/scripts/src/lib/agents/swarm_ledger_query.ts`,
+      ]);
+
+      if (result.code !== 0 || !result.stdout) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '⚠️ Failed to read scratchpad database. Ensure the swarm has been initialized (`bun swarm:init`).',
+            },
+          ],
+          details: { error: 'ledger-query-failed', exitCode: result.code },
+        };
+      }
+
+      let ledger: LedgerReportEnvelope | null = null;
+      try {
+        ledger = JSON.parse(result.stdout.trim()) as LedgerReportEnvelope;
+      } catch {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '⚠️ Invalid ledger output. Scratchpad database may be corrupt.',
+            },
+          ],
+          details: { error: 'invalid-json' },
+        };
+      }
 
       if (!ledger) {
         return {

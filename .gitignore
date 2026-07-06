@@ -281,3 +281,12 @@ scripts/lpc/.lpc_manifest.json
 apps/frontend/client/src/lib/assets/lpc/
 apps/backend/packages/
 apps/frontend/client/static/lpc/**/*
+.pi/agent_scratchpad.db-shm
+.pi/agent_scratchpad.db-wal
+.pi/swarm/agent_scratchpad.db*
+.pi/swarm/markers/
+.pi/pipeline_payload_*.json
+.pi/MARKER_*
+.pi/architect_plan_*.md
+.pi/swarm/payloads/
+.pi/swarm/architect_plan_*.md

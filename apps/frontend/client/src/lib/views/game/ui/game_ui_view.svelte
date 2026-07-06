@@ -2,7 +2,7 @@
   import InventoryView from '../../inventory/inventory_view.svelte';
   import QuestView from '../../quest/quest_view.svelte';
   import VendorView from '../../vendor/vendor_view.svelte';
-  import CharacterDashboardView from '../dashboard/character_dashboard_view.svelte';
+  import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
   import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
   // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
   import ClockHud from './overlays/clock_hud/clock_hud.svelte';
@@ -55,7 +55,7 @@
       </div>
     </div>
   {:else if viewModel.activeOverlay === 'CHARACTER_DASHBOARD' && viewModel.dashboardViewModel}
-    <CharacterDashboardView viewModel={viewModel.dashboardViewModel} />
+    <CharacterSheetView viewModel={viewModel.dashboardViewModel} />
   {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
     <VendorView viewModel={viewModel.vendorViewModel} />
   {/if}
