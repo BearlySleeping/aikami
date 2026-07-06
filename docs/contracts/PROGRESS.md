@@ -207,4 +207,6 @@
 | C-304 | AST-Aware Behavioral Code Reviewer | ✅ completed |
 | C-305 | Auto-Sandbox Agent Scaffolding | ✅ completed |
 | C-306 | Swarm Hardening & Cache Sync Refactor | ✅ completed |
+| C-307 | Autonomous Scope Explorer | ✅ completed |
+| C-308 | Swarm Post-Mortem Skill Optimizer | ✅ completed |
 

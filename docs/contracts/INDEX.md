@@ -150,6 +150,8 @@ P2 (Polish — after P1):
 | C-304 | [AST-Aware Behavioral Code Reviewer](C-304-ast-aware-behavioral-code-reviewer-and-convention-gate.md) ✅ | Two-tier compliance gate — Biome/Tree-sitter Tier 1 + LLM Tier 2 | C-009, C-120, C-300 |
 | C-305 | [Auto-Sandbox Agent Scaffolding](C-305-auto-sandbox-agent-scaffolding-lifecycle.md) ✅ | Automated dev sandbox route generator, mock ViewModel factories, orphan cleanup | C-120, C-139, C-300, C-302, C-303 |
 | C-306 | [Swarm Hardening & Cache Sync](C-306-swarm-hardening-and-cache-synchronization-refactor.md) ✅ | Non-blocking stream pipes, heartbeat resiliency, AST outline cache, exponential backoff, Bun Worker integration | C-300, C-301, C-302, C-303, C-304 |
+| C-307 | [Autonomous Scope Explorer](C-307-autonomous-scope-explorer-and-semantic-dependency-traverser.md) ✅ | TS Compiler API import tracing, monorepo boundary discovery, cross-package graph halting | C-300, C-301, C-302 |
+| C-308 | [Swarm Post-Mortem Skill Optimizer](C-308-swarm-post-mortem-and-meta-reflective-skill-optimizer.md) ✅ | Failure log ingestion, root-cause deduction, autonomous skill/rule updates with version control, immutable pillar validation | C-300, C-302, C-304 |
 
 ## Contract Format
 
