@@ -2,6 +2,23 @@
 
 This repository contains structured architectural context layouts and domain-specific knowledge matrices optimized for code agents.
 
+## 📂 Directory Layout
+
+Monorepo with nested app categories. 🔴 Moon project IDs ≠ filesystem paths.
+
+| Path prefix | Contents |
+|---|---|
+| `apps/frontend/` | client (SvelteKit+PixiJS+Tauri), site (Astro landing), docs (Astro Starlight) |
+| `apps/backend/` | firebase (Cloud Functions+DataConnect), image (ComfyUI), text (Ollama), voice (Kokoro) |
+| `apps/e2e/` | E2E test suite |
+| `packages/shared/` | constants, schemas, types, logger, utils, mocks, parser |
+| `packages/frontend/` | configs, dataconnect, engine, repositories, services, utils |
+| `packages/backend/` | ai, auth, chat, configs, database, image, svelte-kit, utils |
+| `scripts/` | Build/infra scripts |
+| `.pi/` | Pi agent extensions, skills, prompts |
+
+🔴 **Critical:** The client source lives at `apps/frontend/client/` — **not** `apps/client/`. All moon project IDs are flat names; their filesystem sources are nested under `apps/frontend/`, `apps/backend/`, `packages/shared/`, etc.
+
 ---
 
 ## 🛑 Architectural Execution Rules
