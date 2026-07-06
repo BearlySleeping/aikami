@@ -1,5 +1,5 @@
 // .pi/extensions/firebase-tools.ts
-import type { ExtensionAPI } from '@mariozechner/pi-coding-agent';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
 // Direnv env vars (set by .envrc / scripts/direnv/) — always available:
