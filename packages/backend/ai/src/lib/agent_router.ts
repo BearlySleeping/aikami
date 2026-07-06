@@ -341,9 +341,113 @@ export const extractTypeFootprint = (options: {
   };
 };
 
+// ── C-306: Cache-aware footprint extraction ────────────────
+
+/** Scratchpad interface subset needed for AST outline caching. */
+export type AstCacheProvider = {
+  getAstOutlineCache: (
+    filePathKey: string,
+  ) => { contentHash: string; compressedAstFootprint: string } | null;
+  setAstOutlineCache: (record: {
+    filePathKey: string;
+    contentHash: string;
+    conventionsVersion: string;
+    compressedAstFootprint: string;
+  }) => void;
+};
+
 /**
- * Detect the primary language/edit intent from the task description
- * and map it to a tier. Falls back to "flash" for simple tasks.
+ * Extract type footprints with scratchpad-backed cache optimization.
+ *
+ * AC-2: AST Outline Cache Synchronization
+ * - Computes content_hash per file
+ * - Checks scratchpad cache before full TS compilation
+ * - Caches newly compiled footprints for subsequent turns
+ * - Preserves tool definitions frozen to maintain OpenRouter cache match
+ */
+export const extractTypeFootprintWithCache = (options: {
+  sourceFilePaths: string[];
+  compilerOptions?: ts.CompilerOptions;
+  cache?: AstCacheProvider;
+  conventionsVersion?: string;
+}): FootprintResult & { cacheHits: number } => {
+  const { sourceFilePaths, compilerOptions, cache, conventionsVersion = '1.0.0' } = options;
+
+  const defaultOptions: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    strict: true,
+    noEmit: true,
+    allowImportingTsExtensions: true,
+    ...compilerOptions,
+  };
+
+  const host = _createCompilerHost(sourceFilePaths, defaultOptions);
+  const program = ts.createProgram(sourceFilePaths, defaultOptions, host);
+
+  const footprints: string[] = [];
+  let totalOriginalLines = 0;
+  let cacheHits = 0;
+
+  for (const filePath of sourceFilePaths) {
+    const sourceFile = program.getSourceFile(filePath);
+    if (!sourceFile) {
+      continue;
+    }
+
+    const originalText = sourceFile.getFullText();
+    const originalLines = originalText.split('\n').length;
+    totalOriginalLines += originalLines;
+
+    const contentHash = createHash('sha256').update(originalText).digest('hex');
+
+    // ── Check scratchpad cache ──────────────────────────
+    if (cache) {
+      const cached = cache.getAstOutlineCache(filePath);
+      if (cached && cached.contentHash === contentHash) {
+        // Cache hit — use frozen footprint to preserve OpenRouter prefix match
+        footprints.push(`// [FOOTPRINT-CACHED] ${filePath}\n${cached.compressedAstFootprint}`);
+        cacheHits++;
+        continue;
+      }
+    }
+
+    // ── Compile fresh footprint ─────────────────────────
+    const stripped = _stripSourceFile(sourceFile);
+    const header = `// [FOOTPRINT] ${filePath}\n`;
+    const footprintBlock = header + stripped;
+
+    footprints.push(footprintBlock);
+
+    // ── Store in cache ───────────────────────────────────
+    if (cache) {
+      cache.setAstOutlineCache({
+        filePathKey: filePath,
+        contentHash,
+        conventionsVersion,
+        compressedAstFootprint: stripped,
+      });
+    }
+  }
+
+  const footprintText = footprints.join('\n\n');
+  const footprintLines = footprintText.split('\n').length;
+  const reductionRatio = totalOriginalLines > 0 ? 1 - footprintLines / totalOriginalLines : 0;
+
+  return {
+    footprint: footprintText,
+    originalLines: totalOriginalLines,
+    footprintLines,
+    reductionRatio,
+    cacheHits,
+  };
+};
+
+// ── Tier classification ───────────────────────────────────
+
+/**
+ * Classify task description to determine pro vs flash model tier.
  */
 const _classifyTier = (taskDescription: string): 'pro' | 'flash' => {
   const proPatterns = [

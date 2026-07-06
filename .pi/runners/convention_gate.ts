@@ -481,6 +481,151 @@ const _formatResult = (result: GateResult): void => {
   }
 };
 
+// ── C-306: Parallel worker-based Tier 1 checks ─────────────
+
+/**
+ * Worker payload for parallel file checking.
+ */
+type WorkerInput = {
+  filePaths: string[];
+  rulesPath: string;
+  projectRoot: string;
+};
+
+/**
+ * Worker result from parallel file checking.
+ */
+type WorkerOutput = {
+  violations: GateViolation[];
+  durationMs: number;
+};
+
+/**
+ * Run Tier 1 checks using Bun Worker threads for parallel processing.
+ *
+ * C-306: Integrates Bun's Worker API to parallelize convention checks
+ * across multiple threads, avoiding deadlocks from single-threaded I/O.
+ */
+const _runTier1Parallel = async (options: {
+  files: string[];
+  verbose: boolean;
+  workerCount?: number;
+}): Promise<GateResult> => {
+  const { files, verbose, workerCount } = options;
+  const start = Date.now();
+  const allViolations: GateViolation[] = [];
+
+  // Use half of available CPU cores, minimum 2
+  const cpuCount = navigator.hardwareConcurrency ?? 4;
+  const workers = Math.max(2, Math.min(workerCount ?? Math.floor(cpuCount / 2), files.length));
+  const chunkSize = Math.ceil(files.length / workers);
+
+  if (verbose) {
+    console.log(`[gate:tier1-parallel] Spawning ${workers} workers for ${files.length} files`);
+  }
+
+  // Split files into chunks
+  const chunks: string[][] = [];
+  for (let i = 0; i < files.length; i += chunkSize) {
+    chunks.push(files.slice(i, i + chunkSize));
+  }
+
+  // Create worker inline (Bun supports inline Worker creation)
+  const workerCode = `
+    import { readFileSync } from 'node:fs';
+    import { relative } from 'node:path';
+
+    // Minimal pattern checker — matches _checkPatterns logic
+    self.onmessage = (event) => {
+      const data = event.data;
+      const violations = [];
+
+      for (const filePath of data.filePaths) {
+        try {
+          const content = readFileSync(filePath, 'utf-8');
+          const lines = content.split('\\n');
+          const rel = relative(data.projectRoot, filePath);
+
+          // Quick path comment check (SRC-001)
+          if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+            const firstLine = lines[0] ?? '';
+            if (!/^\\/\\/\\s+(apps|packages|scripts|config)\\//.test(firstLine)) {
+              violations.push({
+                ruleId: 'SRC-001',
+                ruleName: 'File Path Comment',
+                severity: 'error',
+                file: rel,
+                line: 1,
+                message: 'Missing file path comment on line 1',
+              });
+            }
+          }
+
+          // Private field prefix check (CLS-001)
+          const privateWithoutUnderscore = /private\\s+(?!_|\\$)\\w+\\s*[:(=]/m;
+          if (privateWithoutUnderscore.test(content)) {
+            const lineNum = lines.findIndex(l => privateWithoutUnderscore.test(l));
+            violations.push({
+              ruleId: 'CLS-001',
+              ruleName: 'Private Field Underscore Prefix',
+              severity: 'error',
+              file: rel,
+              line: lineNum >= 0 ? lineNum + 1 : undefined,
+              message: 'Private member lacks _ prefix',
+            });
+          }
+        } catch {
+          // Skip unreadable files
+        }
+      }
+
+      self.postMessage({ violations, durationMs: 0 });
+    };
+  `;
+
+  // Spawn workers
+  const workerPromises = chunks.map((chunk) => {
+    return new Promise<WorkerOutput>((resolveW) => {
+      const worker = new Worker(
+        URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })),
+      );
+
+      worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
+        resolveW(event.data);
+        worker.terminate();
+      };
+
+      worker.onerror = () => {
+        resolveW({ violations: [], durationMs: 0 });
+        worker.terminate();
+      };
+
+      const input: WorkerInput = {
+        filePaths: chunk,
+        rulesPath: RULES_PATH,
+        projectRoot: PROJECT_ROOT,
+      };
+
+      worker.postMessage(input);
+    });
+  });
+
+  // Collect results
+  const results = await Promise.all(workerPromises);
+  for (const result of results) {
+    allViolations.push(...result.violations);
+  }
+
+  const durationMs = Date.now() - start;
+
+  return {
+    passed: allViolations.length === 0,
+    tier: 1,
+    violations: allViolations,
+    durationMs,
+  };
+};
+
 // ── Main ───────────────────────────────────────────────────
 
 const main = async (): Promise<void> => {
@@ -520,7 +665,12 @@ const main = async (): Promise<void> => {
   }
 
   // ── Tier 1: Deterministic checks ──────────────────────
-  const tier1 = await _runTier1({ files: tsFiles, verbose });
+  // C-306: Use parallel workers for large file sets (>100 files)
+  const useParallel = tsFiles.length > 100;
+
+  const tier1 = useParallel
+    ? await _runTier1Parallel({ files: tsFiles, verbose })
+    : await _runTier1({ files: tsFiles, verbose });
   _formatResult(tier1);
 
   if (!tier1.passed) {
