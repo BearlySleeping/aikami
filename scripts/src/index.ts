@@ -60,6 +60,7 @@ const SCRIPT_MAP: Record<string, string> = {
   scaffold: 'agents/sandbox_scaffolder.ts',
   'scope:explore': 'agents/scope_explorer.ts',
   'skill:optimize': 'agents/skill_optimizer.ts',
+  'contract:generate': 'agents/contract_generator.ts',
 };
 
 const SCRIPT_DIR = join(import.meta.dir, 'lib');
