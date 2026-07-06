@@ -209,4 +209,6 @@
 | C-306 | Swarm Hardening & Cache Sync Refactor | ✅ completed |
 | C-307 | Autonomous Scope Explorer | ✅ completed |
 | C-308 | Swarm Post-Mortem Skill Optimizer | ✅ completed |
+| C-309 | Swarm Control Pi Extension | ✅ completed |
+| C-310 | Automated Backlog Contract Generator | ✅ completed |
 

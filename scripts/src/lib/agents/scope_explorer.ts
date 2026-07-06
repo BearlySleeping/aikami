@@ -288,7 +288,6 @@ const _matchQueryToBoundaries = (
   const symbolPattern =
     /\b(vendor|economy|wallet|gold|haggl|shop|trade|npc|inventory|item|quest|dialogue|combat|character|persona|save|load|cache|scratchpad|router|token|agent|swarm|director)\w*\b/gi;
   let symMatch: RegExpExecArray | null;
-  // biome-ignore lint: regex exec pattern for symbol extraction
   while (true) {
     symMatch = symbolPattern.exec(lower);
     if (symMatch === null) {
