@@ -205,4 +205,6 @@
 | C-302 | Ephemeral SQLite-WAL Scratchpad Engine | ✅ completed |
 | C-303 | Self-Healing Visual Test Harness | ✅ completed |
 | C-304 | AST-Aware Behavioral Code Reviewer | ✅ completed |
+| C-305 | Auto-Sandbox Agent Scaffolding | ✅ completed |
+| C-306 | Swarm Hardening & Cache Sync Refactor | ✅ completed |
 

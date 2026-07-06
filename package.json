@@ -48,7 +48,8 @@
     "preview": "bun run scripts/src/lib/ops/preview_client.ts",
     "herdr:preview": "bun run scripts/src/lib/ops/preview_client.ts",
     "swarm:init": "bun run scripts/src/lib/agents/swarm_init.ts",
-    "swarm:start": "bun run scripts/src/lib/agents/swarm_start.ts"
+    "swarm:start": "bun run scripts/src/lib/agents/swarm_start.ts",
+    "sandbox:scaffold": "bun run scripts/src/lib/agents/sandbox_scaffolder.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",

@@ -3,13 +3,25 @@
  * Swarm director module barrel.
  */
 
-export { executeTask, initializeSwarm, snapshotState, verifyAgentMapping } from './swarm_director';
+export {
+  backoffDelay,
+  detectStalledAgents,
+  executeStepResilient,
+  executeTask,
+  initializeSwarm,
+  readPaneNonBlocking,
+  retryWithBackoff,
+  snapshotState,
+  verifyAgentMapping,
+} from './swarm_director';
 
 export type {
   AgentRecord,
   AgentRole,
   AgentStatus,
+  BackoffConfig,
   PollingConfig,
+  StreamTimeoutConfig,
   SwarmState,
   SwarmStep,
   TaskPayload,

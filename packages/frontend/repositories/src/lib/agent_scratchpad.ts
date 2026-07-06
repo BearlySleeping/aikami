@@ -85,6 +85,42 @@ export type ScratchpadOptions = {
   walCheckpointIntervalMs?: number;
 };
 
+// ── C-306: Swarm hardening types ───────────────────────────
+
+/** Swarm agent state row stored in the SQLite heartbeat table. */
+export type SwarmStateRow = {
+  taskId: string;
+  workspaceId: string;
+  agentKey: string;
+  agentStatus: 'idle' | 'working' | 'blocked' | 'done' | 'unknown';
+  lastContextHash: string | null;
+  lastHeartbeatTimestamp: number;
+};
+
+/** AST outline cache entry for token router prefix stability. */
+export type AstOutlineCacheRecord = {
+  filePathKey: string;
+  contentHash: string;
+  conventionsVersion: string;
+  compressedAstFootprint: string;
+};
+
+/** Exponential backoff configuration for OCC write retries. */
+export type BackoffConfig = {
+  /** Base delay in ms */
+  baseDelayMs: number;
+  /** Maximum delay cap in ms */
+  maxDelayMs: number;
+  /** Maximum number of retry attempts */
+  maxRetries: number;
+};
+
+export const DEFAULT_BACKOFF_CONFIG: BackoffConfig = {
+  baseDelayMs: 50,
+  maxDelayMs: 2000,
+  maxRetries: 5,
+} as const;
+
 /** Error thrown on stale write (OCC violation). */
 export class ConflictError extends Error {
   readonly key: string;
@@ -139,6 +175,27 @@ const SCHEMA_SQL = `
   );
 
   INSERT OR IGNORE INTO scratchpad_config (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}');
+
+  -- C-306: AST outline cache for token router prefix stability
+  CREATE TABLE IF NOT EXISTS ast_outline_cache (
+    file_path_key TEXT PRIMARY KEY,
+    content_hash TEXT NOT NULL,
+    conventions_version TEXT NOT NULL,
+    compressed_ast_footprint TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  -- C-306: Swarm agent heartbeat tracking
+  CREATE TABLE IF NOT EXISTS swarm_heartbeat (
+    task_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    agent_key TEXT NOT NULL,
+    agent_status TEXT NOT NULL DEFAULT 'idle'
+      CHECK (agent_status IN ('idle', 'working', 'blocked', 'done', 'unknown')),
+    last_context_hash TEXT,
+    last_heartbeat_timestamp INTEGER NOT NULL,
+    PRIMARY KEY (task_id, agent_key)
+  );
 `;
 
 // ── Engine class ───────────────────────────────────────────
@@ -453,6 +510,159 @@ export class AgentScratchpad {
       .get();
 
     return row?.value ?? 'unknown';
+  }
+
+  // ── C-306: AST outline cache ─────────────────────────
+
+  /**
+   * Look up a cached AST outline footprint by file path key.
+   *
+   * AC-2: AST Outline Cache Synchronization
+   * - Checks content_hash stability before returning cached footprint
+   * - Skips redundant Tree-sitter parsing for unchanged files
+   */
+  getAstOutlineCache(filePathKey: string): AstOutlineCacheRecord | null {
+    this._assertOpen();
+
+    const row = this._db
+      .query<
+        {
+          file_path_key: string;
+          content_hash: string;
+          conventions_version: string;
+          compressed_ast_footprint: string;
+        },
+        [string]
+      >('SELECT * FROM ast_outline_cache WHERE file_path_key = ?')
+      .get(filePathKey);
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      filePathKey: row.file_path_key,
+      contentHash: row.content_hash,
+      conventionsVersion: row.conventions_version,
+      compressedAstFootprint: row.compressed_ast_footprint,
+    };
+  }
+
+  /**
+   * Store an AST outline footprint in the cache.
+   * Uses INSERT OR REPLACE to overwrite stale entries.
+   */
+  setAstOutlineCache(record: AstOutlineCacheRecord): void {
+    this._assertOpen();
+
+    this._db.run(
+      `INSERT OR REPLACE INTO ast_outline_cache
+       (file_path_key, content_hash, conventions_version, compressed_ast_footprint, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        record.filePathKey,
+        record.contentHash,
+        record.conventionsVersion,
+        record.compressedAstFootprint,
+        Date.now(),
+      ],
+    );
+  }
+
+  /** Clear all stale cache entries that don't match the current conventions version. */
+  invalidateStaleAstCache(currentConventionsVersion: string): number {
+    this._assertOpen();
+
+    const result = this._db.run('DELETE FROM ast_outline_cache WHERE conventions_version != ?', [
+      currentConventionsVersion,
+    ]);
+
+    return result.changes;
+  }
+
+  // ── C-306: Swarm heartbeat ────────────────────────────
+
+  /**
+   * Update or insert a heartbeat entry for a swarm agent.
+   */
+  upsertHeartbeat(row: SwarmStateRow): void {
+    this._assertOpen();
+
+    this._db.run(
+      `INSERT OR REPLACE INTO swarm_heartbeat
+       (task_id, workspace_id, agent_key, agent_status, last_context_hash, last_heartbeat_timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        row.taskId,
+        row.workspaceId,
+        row.agentKey,
+        row.agentStatus,
+        row.lastContextHash,
+        row.lastHeartbeatTimestamp,
+      ],
+    );
+  }
+
+  /** Get heartbeat status for all agents in a task. */
+  getHeartbeats(taskId: string): SwarmStateRow[] {
+    this._assertOpen();
+
+    const rows = this._db
+      .query<
+        {
+          task_id: string;
+          workspace_id: string;
+          agent_key: string;
+          agent_status: string;
+          last_context_hash: string | null;
+          last_heartbeat_timestamp: number;
+        },
+        [string]
+      >('SELECT * FROM swarm_heartbeat WHERE task_id = ? ORDER BY agent_key')
+      .all(taskId);
+
+    return rows.map((r) => ({
+      taskId: r.task_id,
+      workspaceId: r.workspace_id,
+      agentKey: r.agent_key,
+      agentStatus: r.agent_status as SwarmStateRow['agentStatus'],
+      lastContextHash: r.last_context_hash,
+      lastHeartbeatTimestamp: r.last_heartbeat_timestamp,
+    }));
+  }
+
+  /**
+   * Detect stalled agents — those whose last heartbeat is older than the timeout.
+   * Returns list of agent keys that appear stalled.
+   */
+  detectStalledAgents(taskId: string, heartbeatTimeoutMs: number): string[] {
+    this._assertOpen();
+
+    const cutoff = Date.now() - heartbeatTimeoutMs;
+
+    const rows = this._db
+      .query<{ agent_key: string }, [string, number]>(
+        `SELECT agent_key FROM swarm_heartbeat
+         WHERE task_id = ? AND agent_status IN ('working', 'blocked')
+         AND last_heartbeat_timestamp < ?`,
+      )
+      .all(taskId, cutoff);
+
+    return rows.map((r) => r.agent_key);
+  }
+
+  // ── C-306: Exponential backoff helper ─────────────────
+
+  /**
+   * Compute exponential backoff delay with jitter.
+   *
+   * Formula: min(cap, base * 2^attempt) + random_jitter
+   * Jitter prevents thundering herd on concurrent write retries.
+   */
+  static backoffDelay(attempt: number, config: BackoffConfig = DEFAULT_BACKOFF_CONFIG): number {
+    const exponential = Math.min(config.maxDelayMs, config.baseDelayMs * 2 ** attempt);
+    const jitter = Math.random() * config.baseDelayMs;
+    return exponential + jitter;
   }
 
   // ── Lifecycle ─────────────────────────────────────────

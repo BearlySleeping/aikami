@@ -1,3 +1,4 @@
+<!-- completed: 2026-07-06 -->
 # Contract C-305: Auto-Sandbox Agent Scaffolding Lifecycle
 
 ## Metadata
@@ -77,3 +78,30 @@ interface ScaffoldRegisterLog {
 
 ## Edge Cases & Gotchas
 - **Orphaned Test Paths**: Frequent scaffolding steps leave empty folders over time. The script must query the central SQLite scratchpad to garbage-collect and remove old, untracked playground structures upon successful task merges.
+
+---
+
+## Execution Report — 2026-07-06
+
+### Summary
+Created automated sandbox scaffolder at `scripts/src/lib/agents/sandbox_scaffolder.ts`. Generates isolated dev sandbox routes with logicless Svelte views, mock ViewModel factories, ViewModel stubs, and healing context integration.
+
+### AC Status
+| AC | Status |
+|----|--------|
+| AC-1: Automated Isolated Route Provisioning | ✅ Implemented |
+| AC-2: Visual Runner Integration Loop | ✅ Implemented |
+
+### Files
+| File | Change |
+|------|--------|
+| `scripts/src/lib/agents/sandbox_scaffolder.ts` | Created — Route scaffold generator, template emission, orphan cleanup |
+| `scripts/src/index.ts` | Modified — Added sandbox:scaffold + scaffold aliases |
+| `package.json` (root) | Modified — Added sandbox:scaffold script |
+
+### Tests
+```
+✅ scripts:fix        — Clean (52 files)
+✅ scripts:typecheck  — 0 errors
+```
+

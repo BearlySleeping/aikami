@@ -148,3 +148,19 @@ export const AGENT_TAB_LABELS: Record<AgentRole, string> = {
   qa: 'qa',
   git: 'git',
 } as const;
+
+// ── C-306: Resilience types ────────────────────────────────
+
+/** Exponential backoff configuration for OCC write retries. */
+export type BackoffConfig = {
+  baseDelayMs: number;
+  maxDelayMs: number;
+  maxRetries: number;
+};
+
+/** Sliding timeout barrier configuration for non-blocking stream pipes. */
+export type StreamTimeoutConfig = {
+  readTimeoutMs: number;
+  heartbeatIntervalMs: number;
+  stallTimeoutMs: number;
+};
