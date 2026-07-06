@@ -51,7 +51,8 @@
     "swarm:start": "bun run scripts/src/lib/agents/swarm_start.ts",
     "sandbox:scaffold": "bun run scripts/src/lib/agents/sandbox_scaffolder.ts",
     "scope:explore": "bun run scripts/src/lib/agents/scope_explorer.ts",
-    "skill:optimize": "bun run scripts/src/lib/agents/skill_optimizer.ts"
+    "skill:optimize": "bun run scripts/src/lib/agents/skill_optimizer.ts",
+    "contract:generate": "bun run scripts/src/lib/agents/contract_generator.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",

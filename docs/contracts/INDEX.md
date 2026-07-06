@@ -152,6 +152,8 @@ P2 (Polish — after P1):
 | C-306 | [Swarm Hardening & Cache Sync](C-306-swarm-hardening-and-cache-synchronization-refactor.md) ✅ | Non-blocking stream pipes, heartbeat resiliency, AST outline cache, exponential backoff, Bun Worker integration | C-300, C-301, C-302, C-303, C-304 |
 | C-307 | [Autonomous Scope Explorer](C-307-autonomous-scope-explorer-and-semantic-dependency-traverser.md) ✅ | TS Compiler API import tracing, monorepo boundary discovery, cross-package graph halting | C-300, C-301, C-302 |
 | C-308 | [Swarm Post-Mortem Skill Optimizer](C-308-swarm-post-mortem-and-meta-reflective-skill-optimizer.md) ✅ | Failure log ingestion, root-cause deduction, autonomous skill/rule updates with version control, immutable pillar validation | C-300, C-302, C-304 |
+| C-309 | [Swarm Control Pi Extension](C-309-swarm-control-pi-extension-and-command-surface-wrapper.md) ✅ | Pi extension tools: swarm_trigger_pipeline, swarm_get_ledger_status with TypeBox schemas | C-300, C-306 |
+| C-310 | [Automated Backlog Contract Generator](C-310-automated-backlog-contract-generator.md) ✅ | TODO.md parser, TEMPLATE.md filler, INDEX.md auto-updater with dependency inference | C-002, C-007, C-309 |
 
 ## Contract Format
 
