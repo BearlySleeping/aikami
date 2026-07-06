@@ -11,7 +11,6 @@
  *   swarm_get_ledger_status  — Query SQLite scratchpad for live worker statuses
  */
 
-import { Database } from 'bun:sqlite';
 import { writeFileSync } from 'node:fs';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
@@ -31,94 +30,80 @@ type LedgerReportEnvelope = {
 // ── Constants ──────────────────────────────────────────────
 
 const SCRATCHPAD_DB_PATH = '.pi/agent_scratchpad.db';
-const AGENT_KEYS = ['architect', 'coder', 'qa', 'git'] as const;
 
-// ── SQLite access ──────────────────────────────────────────
+// ── SQLite access via pi.exec (pi runs in Node.js, not Bun) ──
 
-const _queryLedger = (): LedgerReportEnvelope | null => {
-  let db: Database | null = null;
-  try {
-    db = new Database(SCRATCHPAD_DB_PATH, { readonly: true });
+const _queryLedger = async (
+  pi: ExtensionAPI,
+  cwd: string,
+): Promise<LedgerReportEnvelope | null> => {
+  /** Inline Bun script that reads the scratchpad heartbeat table and outputs JSON. */
+  const inlineScript = `
+    import { Database } from 'bun:sqlite';
+    const dbPath = '${SCRATCHPAD_DB_PATH}';
+    let db;
+    try {
+      db = new Database(dbPath, { readonly: true });
+    } catch {
+      console.log('null');
+      return;
+    }
 
-    // Check if tables exist
-    const tables = db
-      .query<{ name: string }, [string]>('SELECT name FROM sqlite_master WHERE type = ?')
-      .all('table');
-
-    const hasHeartbeat = tables.some((t) => t.name === 'swarm_heartbeat');
+    const tables = db.query('SELECT name FROM sqlite_master WHERE type = ?').all('table');
+    const hasHeartbeat = tables.some(function(t) { return t.name === 'swarm_heartbeat'; });
 
     if (!hasHeartbeat) {
-      return {
+      console.log(JSON.stringify({
         activeTaskId: 'none',
         globalLockActive: false,
-        workerStates: AGENT_KEYS.map((key) => ({
-          agentKey: key,
-          status: 'idle',
-          lastSyncTimestamp: 0,
-        })),
+        workerStates: [
+          { agentKey: 'architect', status: 'idle', lastSyncTimestamp: 0 },
+          { agentKey: 'coder', status: 'idle', lastSyncTimestamp: 0 },
+          { agentKey: 'qa', status: 'idle', lastSyncTimestamp: 0 },
+          { agentKey: 'git', status: 'idle', lastSyncTimestamp: 0 },
+        ],
+      }));
+      db.close();
+      return;
+    }
+
+    const rows = db.query(
+      'SELECT task_id, agent_key, agent_status, last_heartbeat_timestamp FROM swarm_heartbeat ORDER BY last_heartbeat_timestamp DESC LIMIT 20'
+    ).all();
+
+    var workerMap = {};
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      workerMap[r.agent_key] = {
+        agentKey: r.agent_key,
+        status: r.agent_status,
+        lastSyncTimestamp: r.last_heartbeat_timestamp,
       };
     }
+    ['architect','coder','qa','git'].forEach(function(k) {
+      if (!workerMap[k]) workerMap[k] = { agentKey: k, status: 'idle', lastSyncTimestamp: 0 };
+    });
 
-    // Query active heartbeats
-    const rows = db
-      .query<
-        {
-          task_id: string;
-          agent_key: string;
-          agent_status: string;
-          last_heartbeat_timestamp: number;
-        },
-        []
-      >(
-        `SELECT task_id, agent_key, agent_status, last_heartbeat_timestamp
-         FROM swarm_heartbeat
-         ORDER BY last_heartbeat_timestamp DESC
-         LIMIT 20`,
-      )
-      .all();
+    var activeId = rows.length > 0 ? rows[0].task_id : 'none';
+    var locked = Object.values(workerMap).some(function(w) { return w.status === 'working' || w.status === 'blocked'; });
 
-    const workerStatesMap = new Map<string, LedgerReportEnvelope['workerStates'][number]>();
+    console.log(JSON.stringify({
+      activeTaskId: activeId,
+      globalLockActive: locked,
+      workerStates: Object.values(workerMap),
+    }));
 
-    for (const row of rows) {
-      workerStatesMap.set(row.agent_key, {
-        agentKey: row.agent_key,
-        status: row.agent_status,
-        lastSyncTimestamp: row.last_heartbeat_timestamp,
-      });
+    db.close();
+  `;
+
+  try {
+    const result = await pi.exec('bun', ['-e', inlineScript], { cwd } as any);
+    if (result.code !== 0 || !result.stdout) {
+      return null;
     }
-
-    // Fill missing agents as idle
-    for (const key of AGENT_KEYS) {
-      if (!workerStatesMap.has(key)) {
-        workerStatesMap.set(key, {
-          agentKey: key,
-          status: 'idle',
-          lastSyncTimestamp: 0,
-        });
-      }
-    }
-
-    const firstRow = rows[0];
-    const activeTaskId = firstRow ? firstRow.task_id : 'none';
-    const globalLockActive = [...workerStatesMap.values()].some(
-      (w) => w.status === 'working' || w.status === 'blocked',
-    );
-
-    return {
-      activeTaskId,
-      globalLockActive,
-      workerStates: [...workerStatesMap.values()],
-    };
+    return JSON.parse(result.stdout.trim()) as LedgerReportEnvelope;
   } catch {
     return null;
-  } finally {
-    if (db) {
-      try {
-        db.close();
-      } catch {
-        // ignore
-      }
-    }
   }
 };
 
@@ -256,23 +241,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
-      const originalDir = process.cwd();
 
-      // Ensure we're in the project root for relative path resolution
-      try {
-        process.chdir(cwd);
-      } catch {
-        // fall through
-      }
-
-      const ledger = _queryLedger();
-
-      // Restore original dir
-      try {
-        process.chdir(originalDir);
-      } catch {
-        // fall through
-      }
+      const ledger = await _queryLedger(pi, cwd);
 
       if (!ledger) {
         return {
