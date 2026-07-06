@@ -1,0 +1,13 @@
+{
+  "default": "flash",
+  "models": {
+    "deepseek-v4-pro": {
+      "model": "deepseek/deepseek-chat",
+      "roles": ["architect", "coder", "qa"]
+    },
+    "deepseek-v4-flash": {
+      "model": "deepseek/deepseek-chat",
+      "roles": ["git"]
+    }
+  }
+}

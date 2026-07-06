@@ -60,6 +60,10 @@ export type SwarmState = {
 /**
  * A single step in the swarm execution pipeline.
  * Each step targets a specific agent and carries a command payload.
+ *
+ * Compliance can be detected via scrollback regex OR a marker file.
+ * If `markerFile` is set, the step is considered done when the file exists.
+ * Otherwise, `complianceSignature` is used for scrollback matching.
  */
 export type SwarmStep = {
   /** Order index (0-based) */
@@ -72,6 +76,8 @@ export type SwarmStep = {
   complianceSignature: RegExp;
   /** Optional timeout in ms before step is considered stalled */
   timeoutMs?: number;
+  /** File path — if set, step completes when this file exists (more reliable than scrollback) */
+  markerFile?: string;
 };
 
 /** Task payload fed to the swarm director. */
@@ -94,9 +100,9 @@ export type PollingConfig = {
 };
 
 export const DEFAULT_POLLING_CONFIG: PollingConfig = {
-  pollIntervalMs: 2000,
-  maxPolls: 60,
-  scrollbackLines: 100,
+  pollIntervalMs: 5000,
+  maxPolls: 120,
+  scrollbackLines: 150,
 } as const;
 
 // ── Herdr JSON response shapes (subset) ─────────────────────
@@ -140,6 +146,9 @@ export type HerdrJsonResponse<T> = {
 
 /** Workspace label for the swarm agent workspace. */
 export const SWARM_WORKSPACE_LABEL = 'aikami-agents';
+
+/** Tab label for the director orchestrator (runs swarm_start.ts). */
+export const DIRECTOR_TAB_LABEL = 'director';
 
 /** Tab labels for each agent role. */
 export const AGENT_TAB_LABELS: Record<AgentRole, string> = {

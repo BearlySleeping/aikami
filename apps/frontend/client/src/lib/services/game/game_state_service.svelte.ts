@@ -14,6 +14,9 @@ import type {
   WorldLocation,
   WorldState,
 } from '@aikami/types';
+import { serializeForAi } from '$lib/data/character_sheet_helpers';
+import type { NarrativeTraits } from '$lib/data/character_sheet_types';
+import { type CharacterSheet, createDefaultSheet } from '$lib/data/character_sheet_types';
 import type {
   ActiveContextEntry,
   GameMode,
@@ -148,6 +151,11 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
    * Contract: C-154 AI Vendors Economy
    */
   readonly gold: number;
+  /** Narrative traits (likes, temptations, keys) for AI context injection (C-232). */
+  readonly narrativeTraits: NarrativeTraits;
+  /** Compact AI-ready summary of the character sheet (C-232). */
+  readonly characterSheetSummary: string;
+
   /** Adds the given amount to the player's gold balance. */
   addGold(options: { amount: number }): void;
   /**
@@ -258,6 +266,9 @@ export class GameStateService
   equippedWeapon = $state<string | undefined>(undefined);
   equippedArmor = $state<string | undefined>(undefined);
 
+  // ── Narrative traits (C-232 Character Sheet) ──
+  narrativeTraits = $state<NarrativeTraits>({ likes: [], temptations: [], keys: [] });
+
   // ── Computed stat getters ──
 
   /** Total attack = base + weapon bonus. */
@@ -268,6 +279,21 @@ export class GameStateService
   /** Total defense = base + armor bonus. */
   get playerTotalDefense(): number {
     return this.playerBaseDefense + this._equipmentDefenseBonus;
+  }
+
+  /** Compact AI-ready character sheet summary for prompt injection (C-232). */
+  get characterSheetSummary(): string {
+    const sheet: CharacterSheet = {
+      ...createDefaultSheet(),
+      level: this.playerLevel,
+      xp: this.playerXp,
+      hp: this.playerHp,
+      maxHp: this.playerMaxHp,
+      attack: this.playerTotalAttack,
+      defense: this.playerTotalDefense,
+      narrativeTraits: this.narrativeTraits,
+    };
+    return serializeForAi(sheet);
   }
 
   /** Attack bonus from currently equipped weapon. */

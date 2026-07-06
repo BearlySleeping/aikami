@@ -162,6 +162,28 @@ export const BondsSchema = Type.Optional(Type.String({ description: 'Bonds' }));
 
 export const FlawsSchema = Type.Optional(Type.String({ description: 'Flaws' }));
 
+// ── Narrative Traits (Marinara-inspired) ─════════════════════════════════
+
+export const NarrativeTraitsSchema = Type.Optional(
+  Type.Object(
+    {
+      likes: Type.Array(Type.String(), {
+        description: 'Things the character likes (e.g., Gold, Ancient Lore)',
+        default: [],
+      }),
+      temptations: Type.Array(Type.String(), {
+        description: 'Temptations that draw the character (e.g., Power, Revenge)',
+        default: [],
+      }),
+      keys: Type.Array(Type.String(), {
+        description: 'Plot hook keys (e.g., Lost Sister, The Crown of Aldren)',
+        default: [],
+      }),
+    },
+    { description: 'Narrative traits that influence AI behavior and plot hooks' },
+  ),
+);
+
 // ── Background ──────────────────────────────────────────────────────────
 
 export const BackgroundSchema = Type.Optional(
@@ -221,6 +243,8 @@ export const BaseCharacterSheetSchema = Type.Object(
 
     appearance: Type.Optional(AppearanceSchema),
     notes: NotesSchema,
+
+    narrativeTraits: NarrativeTraitsSchema,
   },
   { description: 'D&D Character Sheet' },
 );

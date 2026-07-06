@@ -19,6 +19,7 @@ import type {
   AgentRecord,
   AgentRole,
   AgentStatus,
+  HerdrTabCreateResult,
   PollingConfig,
   SwarmState,
   SwarmStep,
@@ -28,6 +29,7 @@ import {
   AGENT_ROLES,
   AGENT_TAB_LABELS,
   DEFAULT_POLLING_CONFIG,
+  DIRECTOR_TAB_LABEL,
   SWARM_WORKSPACE_LABEL,
 } from './types';
 
@@ -93,6 +95,126 @@ const ensureServer = async (): Promise<void> => {
     // ignore
   }
   throw new Error('herdr server did not start within timeout');
+};
+
+// ── Scratchpad database ────────────────────────────────────
+
+/** Path to the SQLite WAL scratchpad database for agent heartbeat tracking. */
+const SCRATCHPAD_DB_PATH = '.pi/swarm/agent_scratchpad.db';
+
+/** Cached Database constructor — resolved lazily (bun:sqlite only available in Bun runtime). */
+let _DatabaseCtor: new (path: string) => unknown;
+let _dbInitAttempted = false;
+
+const _getDatabase = (): (new (path: string) => unknown) => {
+  if (_dbInitAttempted) {
+    return _DatabaseCtor;
+  }
+  _dbInitAttempted = true;
+
+  try {
+    // Dynamic require — bun:sqlite is only available in the Bun runtime
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _DatabaseCtor = require('bun:sqlite').Database as new (path: string) => unknown;
+  } catch {
+    // Running under Node.js — heartbeat tracking disabled
+  }
+  return _DatabaseCtor;
+};
+
+/** Open scratchpad DB. Returns null if Bun SQLite unavailable. */
+const _openScratchpad = (projectRoot: string): { db: unknown; path: string } | null => {
+  const Db = _getDatabase();
+  if (!Db) {
+    return null;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { join } = require('node:path');
+  const dbPath = join(projectRoot, SCRATCHPAD_DB_PATH);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  const db = new Db(dbPath);
+  return { db, path: dbPath };
+};
+
+/**
+ * Initialize the scratchpad SQLite database with the swarm_heartbeat table.
+ * Creates the DB at `.pi/agent_scratchpad.db`. Idempotent.
+ *
+ * Schema: (task_id, agent_key, agent_status, last_heartbeat_timestamp)
+ * with UNIQUE(task_id, agent_key) for upsert support.
+ */
+const initScratchpad = (projectRoot: string): void => {
+  const handle = _openScratchpad(projectRoot);
+  if (!handle) {
+    console.warn('[swarm:scratchpad] Bun SQLite not available — heartbeat tracking disabled');
+    return;
+  }
+
+  const { db } = handle;
+  const dbAny = db as {
+    exec: (sql: string) => void;
+    query: (sql: string) => { all: () => unknown[]; get: () => unknown };
+    close: () => void;
+  };
+
+  // Enable WAL mode for concurrent reads
+  dbAny.exec('PRAGMA journal_mode=WAL');
+
+  // Create heartbeat table with upsert-ready unique constraint
+  dbAny.exec(`
+    CREATE TABLE IF NOT EXISTS swarm_heartbeat (
+      task_id TEXT NOT NULL,
+      agent_key TEXT NOT NULL,
+      agent_status TEXT NOT NULL DEFAULT 'idle',
+      last_heartbeat_timestamp INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(task_id, agent_key)
+    )
+  `);
+
+  // Seed idle rows if table empty
+  const row = dbAny.query('SELECT COUNT(*) as cnt FROM swarm_heartbeat').get() as
+    | { cnt: number }
+    | undefined;
+  if (!row || row.cnt === 0) {
+    const now = Date.now();
+    for (const role of AGENT_ROLES) {
+      dbAny.exec(
+        `INSERT OR IGNORE INTO swarm_heartbeat (task_id, agent_key, agent_status, last_heartbeat_timestamp) VALUES ('none', '${role}', 'idle', ${now})`,
+      );
+    }
+    console.debug('[swarm:scratchpad] seeded initial heartbeat rows');
+  }
+
+  dbAny.close();
+  console.debug('[swarm:scratchpad] initialized', { dbPath: handle.path });
+};
+
+/**
+ * Write a heartbeat update for a single agent during pipeline execution.
+ * Uses INSERT OR REPLACE with the UNIQUE(task_id, agent_key) constraint.
+ */
+export const writeHeartbeat = (
+  projectRoot: string,
+  taskId: string,
+  agentKey: string,
+  status: string,
+): void => {
+  const handle = _openScratchpad(projectRoot);
+  if (!handle) {
+    return;
+  }
+
+  const { db } = handle;
+  const dbAny = db as { exec: (sql: string) => void; close: () => void };
+  const now = Date.now();
+
+  // Upsert via INSERT OR REPLACE (requires UNIQUE constraint)
+  dbAny.exec(`
+    INSERT OR REPLACE INTO swarm_heartbeat (task_id, agent_key, agent_status, last_heartbeat_timestamp)
+    VALUES ('${taskId}', '${agentKey}', '${status}', ${now})
+  `);
+
+  dbAny.close();
 };
 
 // ── Hash utility ────────────────────────────────────────────
@@ -197,23 +319,11 @@ const getPanes = async (workspaceId: string): Promise<PaneListEntry[]> => {
 
 // ── Scrollback polling ──────────────────────────────────────
 
-type PaneReadResult = {
-  result: {
-    content: string;
-  };
-};
-
-/** Read scrollback content from a pane. */
+/** Read scrollback content from a pane. Returns raw text. */
 const readPaneScrollback = async (paneId: string, lines: number): Promise<string> => {
-  const r = await herdrJson<PaneReadResult>([
-    'pane',
-    'read',
-    '--pane',
-    paneId,
-    '--lines',
-    String(lines),
-  ]);
-  return r?.result?.content ?? '';
+  // Use --source visible as default source (recent) returns empty for fresh panes
+  const r = await herdr(['pane', 'read', paneId, '--source', 'visible', '--lines', String(lines)]);
+  return r.code === 0 ? r.stdout : '';
 };
 
 /** Check if scrollback content matches a compliance signature. */
@@ -224,9 +334,8 @@ const checkCompliance = (scrollback: string, signature: RegExp): boolean =>
 
 /** Run a command in a target pane via herdr. */
 const runInPane = async (paneId: string, command: string): Promise<void> => {
-  // Wrap command with direnv for Nix environment
-  const wrapped = `direnv exec . bash -c '${command.replace(/'/g, "'\\''")}'`;
-  await herdr(['pane', 'run', paneId, wrapped]);
+  // Pane shell already has direnv loaded — send command directly
+  await herdr(['pane', 'run', paneId, command]);
 };
 
 // ── Workspace provisioning (AC-1) ───────────────────────────
@@ -249,6 +358,9 @@ export const initializeSwarm = async (options: { projectRoot?: string }): Promis
 
   await ensureServer();
 
+  // ── Initialize scratchpad database ────────────────────
+  initScratchpad(projectRoot);
+
   // ── Check/restore workspace ────────────────────────────
   let workspaceId = await findWorkspace(SWARM_WORKSPACE_LABEL);
 
@@ -261,6 +373,39 @@ export const initializeSwarm = async (options: { projectRoot?: string }): Promis
 
     const state = createInitialState(workspaceId);
 
+    // ── Ensure director tab exists ────────────────────────
+    if (!existingLabels.includes(DIRECTOR_TAB_LABEL)) {
+      console.debug('[swarm:initialize:provisioning-director]');
+      // Rename the first tab if it has a default name, otherwise create new
+      const tabResult = await herdrJson<HerdrTabCreateResult>([
+        'tab',
+        'create',
+        '--workspace',
+        workspaceId,
+        '--cwd',
+        projectRoot,
+        '--label',
+        DIRECTOR_TAB_LABEL,
+        '--no-focus',
+      ]);
+      if (tabResult?.result) {
+        console.debug('[swarm:tab:provisioned]', {
+          role: 'director',
+          tabId: tabResult.result.tab.tab_id,
+          paneId: tabResult.result.root_pane.pane_id,
+        });
+      }
+      // Re-fetch panes after creating director tab
+      const updatedPanes = await getPanes(workspaceId);
+      // Find director pane (newest pane)
+      const existingPaneIds = new Set(panes.map((p) => p.pane_id));
+      const directorPane = updatedPanes.find((p) => !existingPaneIds.has(p.pane_id));
+      if (directorPane) {
+        console.debug('[swarm:initialize:director-pane]', { paneId: directorPane.pane_id });
+      }
+    }
+
+    // ── Map agent tabs ────────────────────────────────────
     for (const role of AGENT_ROLES) {
       const label = AGENT_TAB_LABELS[role];
 
@@ -293,9 +438,6 @@ export const initializeSwarm = async (options: { projectRoot?: string }): Promis
   // ── Create new workspace ───────────────────────────────
   console.debug('[swarm:initialize:creating-workspace]', { label: SWARM_WORKSPACE_LABEL });
 
-  const firstRole = AGENT_ROLES[0];
-  const firstLabel = AGENT_TAB_LABELS[firstRole];
-
   type WorkspaceCreateResult = {
     result: {
       workspace: { workspace_id: string };
@@ -320,21 +462,17 @@ export const initializeSwarm = async (options: { projectRoot?: string }): Promis
 
   workspaceId = createResult.result.workspace.workspace_id;
 
-  // Rename first tab and set it as the initial agent tab
-  await herdr(['tab', 'rename', `${workspaceId}:1`, firstLabel]);
-
-  const state = createInitialState(workspaceId);
-  state.agents[firstRole] = {
+  // Rename first tab to director — this is where swarm_start.ts runs
+  await herdr(['tab', 'rename', `${workspaceId}:1`, DIRECTOR_TAB_LABEL]);
+  console.debug('[swarm:initialize:director-tab-created]', {
     tabId: createResult.result.tab.id,
     paneId: createResult.result.root_pane.pane_id,
-    status: 'idle',
-    lastHash: null,
-  };
+  });
 
-  console.debug('[swarm:initialize:first-tab-created]', { role: firstRole });
+  const state = createInitialState(workspaceId);
 
-  // Create remaining role tabs
-  for (let i = 1; i < AGENT_ROLES.length; i++) {
+  // ── Create agent role tabs ────────────────────────────
+  for (let i = 0; i < AGENT_ROLES.length; i++) {
     const role = AGENT_ROLES[i];
     const provisioned = await _provisionTab(workspaceId, role, projectRoot);
     state.agents[role] = provisioned;
@@ -427,30 +565,65 @@ const executeStep = async (options: {
   agent.status = 'working';
   state.lastUpdated = new Date().toISOString();
 
+  // ── Write heartbeat to scratchpad ─────────────────────
+  writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'working');
+
   // ── Send command to target pane ────────────────────────
   await runInPane(agent.paneId, step.command);
   console.debug('[swarm:step:command-sent]', { agent: step.agent });
 
-  // Give the shell a moment to start processing
+  // Give the shell a moment to echo the command
   await new Promise((r) => setTimeout(r, 500));
 
-  // ── Poll scrollback ────────────────────────────────────
+  // ── Baseline: capture scrollback AFTER command echo ──
+  // This prevents the compliance check from matching the command text itself.
+  const baseline = await readPaneScrollback(agent.paneId, config.scrollbackLines);
+  agent.lastHash = hashContent(baseline);
+  console.debug('[swarm:step:baseline-captured]', {
+    agent: step.agent,
+    baselineLen: baseline.length,
+  });
+
+  // ── Poll combined: marker file + scrollback ──────────
+  const { existsSync } = require('node:fs');
+
   for (let poll = 0; poll < config.maxPolls; poll++) {
     await new Promise((r) => setTimeout(r, config.pollIntervalMs));
 
-    const scrollback = await readPaneScrollback(agent.paneId, config.scrollbackLines);
-    const currentHash = hashContent(scrollback);
-
-    // ── Check compliance ─────────────────────────────────
-    if (checkCompliance(scrollback, step.complianceSignature)) {
+    // ── Marker file check (preferred, deterministic) ──
+    if (step.markerFile && existsSync(step.markerFile)) {
       agent.status = 'done';
-      agent.lastHash = currentHash;
       state.lastUpdated = new Date().toISOString();
+      writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'done');
 
-      console.log('[swarm:step:done]', {
+      console.log('[swarm:step:done:marker]', {
         stepIndex: step.stepIndex,
         agent: step.agent,
         polls: poll + 1,
+        markerFile: step.markerFile,
+      });
+      return;
+    }
+
+    // ── Scrollback compliance check (fallback) ─────────
+    const scrollback = await readPaneScrollback(agent.paneId, config.scrollbackLines);
+    const currentHash = hashContent(scrollback);
+
+    const baselineIndex = scrollback.indexOf(baseline);
+    const newContent =
+      baselineIndex >= 0 ? scrollback.slice(baselineIndex + baseline.length) : scrollback;
+
+    if (checkCompliance(newContent, step.complianceSignature)) {
+      agent.status = 'done';
+      agent.lastHash = currentHash;
+      state.lastUpdated = new Date().toISOString();
+      writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'done');
+
+      console.log('[swarm:step:done:scrollback]', {
+        stepIndex: step.stepIndex,
+        agent: step.agent,
+        polls: poll + 1,
+        newContentLen: newContent.length,
       });
       return;
     }
@@ -461,6 +634,7 @@ const executeStep = async (options: {
         stepIndex: step.stepIndex,
         agent: step.agent,
         poll,
+        newContentLen: newContent.length,
       });
     }
 
@@ -470,6 +644,7 @@ const executeStep = async (options: {
   // ── Timeout ────────────────────────────────────────────
   agent.status = 'blocked';
   state.lastUpdated = new Date().toISOString();
+  writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'blocked');
 
   throw new Error(
     `Step ${step.stepIndex} (${step.agent}) timed out after ${config.maxPolls} polls`,
@@ -490,6 +665,22 @@ export const executeTask = async (options: {
   config?: PollingConfig;
 }): Promise<SwarmState> => {
   const { payload, state, config } = options;
+
+  // ── Active session guard ─────────────────────────────
+  if (state.activeTaskId) {
+    console.warn('[swarm:task:active-session]', {
+      existingTask: state.activeTaskId,
+      newTask: payload.taskId,
+    });
+    // Clear stale agent states — if any agent is working/blocked from a previous run
+    for (const role of AGENT_ROLES) {
+      const agent = state.agents[role];
+      if (agent.status === 'working' || agent.status === 'blocked') {
+        agent.status = 'idle';
+        console.debug('[swarm:task:reset-agent]', { role, prevStatus: agent.status });
+      }
+    }
+  }
 
   console.log('[swarm:task:start]', {
     taskId: payload.taskId,
