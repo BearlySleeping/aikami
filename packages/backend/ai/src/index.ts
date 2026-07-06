@@ -1,6 +1,7 @@
 // packages/backend/ai/src/index.ts
 
 export type {
+  AstCacheProvider,
   FootprintResult,
   MessagePayload,
   OpenRouterPayload as AgentRouterPayload,
@@ -10,6 +11,7 @@ export type {
 export {
   buildRouterPayload,
   extractTypeFootprint,
+  extractTypeFootprintWithCache,
   prepareAgentPayload,
 } from './lib/agent_router.ts';
 export type { AiServiceInterface } from './lib/ai_service_interface.ts';

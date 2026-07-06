@@ -148,6 +148,8 @@ P2 (Polish — after P1):
 | C-302 | [Ephemeral SQLite-WAL Scratchpad](C-302-coherent-ephemeral-sqlite-wal-scratchpad-engine.md) ✅ | SQLite WAL scratchpad with OCC, CAS commits, delivery log, epoch-fenced lease sweep | C-005, C-014 |
 | C-303 | [Self-Healing Visual Test Harness](C-303-self-healing-visual-test-harness.md) ✅ | Autonomous visual test runner, stream interception, two-strike anti-loop, healing context | C-011, C-181, C-182, C-300 |
 | C-304 | [AST-Aware Behavioral Code Reviewer](C-304-ast-aware-behavioral-code-reviewer-and-convention-gate.md) ✅ | Two-tier compliance gate — Biome/Tree-sitter Tier 1 + LLM Tier 2 | C-009, C-120, C-300 |
+| C-305 | [Auto-Sandbox Agent Scaffolding](C-305-auto-sandbox-agent-scaffolding-lifecycle.md) ✅ | Automated dev sandbox route generator, mock ViewModel factories, orphan cleanup | C-120, C-139, C-300, C-302, C-303 |
+| C-306 | [Swarm Hardening & Cache Sync](C-306-swarm-hardening-and-cache-synchronization-refactor.md) ✅ | Non-blocking stream pipes, heartbeat resiliency, AST outline cache, exponential backoff, Bun Worker integration | C-300, C-301, C-302, C-303, C-304 |
 
 ## Contract Format
 

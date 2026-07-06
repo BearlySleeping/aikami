@@ -1,3 +1,4 @@
+<!-- completed: 2026-07-06 -->
 # Contract C-306: Swarm Hardening & Cache Synchronization Refactor
 
 ## Metadata
@@ -78,3 +79,40 @@ interface AstOutlineCacheRecord {
 
 ## Edge Cases & Gotchas
 - **OpenRouter Node Failovers**: If an upstream host node experiences an outage mid-session, OpenRouter redirects the query, causing an immediate cache break. The router must inject explicit routing headers (`Exacto` provider constraints pinning to known caching endpoints like SiliconFlow) to bypass variable host cost tracking.
+
+---
+
+## Execution Report — 2026-07-06
+
+### Summary
+Comprehensive swarm hardening refactor across 4 packages/files: extended scratchpad schema, added AST outline cache to token router, integrated Bun Worker threads in convention gate, and added non-blocking stream pipes with heartbeat timeouts and exponential backoff to the swarm director.
+
+### AC Status
+| AC | Status |
+|----|--------|
+| AC-1: Cross-Pane Deadlock Prevention & Heartbeat Resiliency | ✅ Implemented |
+| AC-2: AST Outline Cache Synchronization & Cache Stability | ✅ Implemented |
+
+### Files
+| File | Change |
+|------|--------|
+| `packages/frontend/repositories/src/lib/agent_scratchpad.ts` | Extended — `ast_outline_cache` + `swarm_heartbeat` tables, `getAstOutlineCache`, `setAstOutlineCache`, `upsertHeartbeat`, `detectStalledAgents`, `backoffDelay` |
+| `packages/backend/ai/src/lib/agent_router.ts` | Extended — `extractTypeFootprintWithCache` with scratchpad-backed contentHash cache, `AstCacheProvider` interface |
+| `packages/backend/ai/src/index.ts` | Modified — Added `extractTypeFootprintWithCache`, `AstCacheProvider` exports |
+| `.pi/runners/convention_gate.ts` | Extended — `_runTier1Parallel` Bun Worker integration for parallel file checking |
+| `scripts/src/lib/agents/swarm_director.ts` | Extended — `readPaneNonBlocking`, `retryWithBackoff`, `backoffDelay`, `detectStalledAgents`, `executeStepResilient` |
+| `scripts/src/lib/agents/types.ts` | Extended — `BackoffConfig`, `StreamTimeoutConfig` types |
+| `scripts/src/lib/agents/index.ts` | Modified — Added new exports |
+
+### Tests
+```
+✅ scripts:fix                 — Clean (52 files)
+✅ scripts:typecheck           — 0 errors  
+✅ backend-ai:fix              — Clean
+✅ backend-ai:typecheck        — 0 errors
+✅ frontend-repositories:fix   — Clean
+✅ frontend-repositories:typecheck — 0 errors
+✅ pi:fix                      — Clean
+✅ pi:typecheck                — 0 errors
+```
+

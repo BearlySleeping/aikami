@@ -555,3 +555,273 @@ export const verifyAgentMapping = (state: SwarmState): boolean =>
     const agent = state.agents[role];
     return agent.paneId !== '' && agent.tabId !== '';
   });
+
+// ── C-306: Non-blocking stream pipes ──────────────────────
+
+/**
+ * Sliding timeout barrier configuration for non-blocking pane reads.
+ */
+export type StreamTimeoutConfig = {
+  /** Maximum time to wait for pane read (ms) */
+  readTimeoutMs: number;
+  /** Heartbeat interval for agent status updates (ms) */
+  heartbeatIntervalMs: number;
+  /** Maximum time an agent can be in 'working' state before being flagged stale (ms) */
+  stallTimeoutMs: number;
+};
+
+export const DEFAULT_STREAM_CONFIG: StreamTimeoutConfig = {
+  readTimeoutMs: 15_000,
+  heartbeatIntervalMs: 5_000,
+  stallTimeoutMs: 60_000,
+} as const;
+
+/**
+ * Non-blocking pane read with aggressive temporal window timeout.
+ *
+ * C-306 AC-1: Cross-Pane Deadlock Prevention
+ * - Wraps herdr pane read with a Promise.race timeout
+ * - Returns partial content on timeout instead of hanging
+ * - Never blocks the director thread indefinitely
+ */
+export const readPaneNonBlocking = async (options: {
+  paneId: string;
+  lines: number;
+  timeoutMs?: number;
+}): Promise<{ content: string; timedOut: boolean }> => {
+  const { paneId, lines, timeoutMs = DEFAULT_STREAM_CONFIG.readTimeoutMs } = options;
+
+  const readPromise = readPaneScrollback(paneId, lines);
+
+  const timeoutPromise = new Promise<{ content: string; timedOut: boolean }>((resolveT) =>
+    setTimeout(() => resolveT({ content: '', timedOut: true }), timeoutMs),
+  );
+
+  const result = await Promise.race([
+    readPromise.then((content) => ({ content, timedOut: false })),
+    timeoutPromise,
+  ]);
+
+  return result;
+};
+
+// ── C-306: Exponential backoff for OCC retries ─────────────
+
+/**
+ * Configuration for exponential backoff with jitter.
+ */
+export type BackoffConfig = {
+  baseDelayMs: number;
+  maxDelayMs: number;
+  maxRetries: number;
+};
+
+export const DEFAULT_BACKOFF: BackoffConfig = {
+  baseDelayMs: 50,
+  maxDelayMs: 2000,
+  maxRetries: 5,
+} as const;
+
+/**
+ * Compute exponential backoff delay with random jitter.
+ *
+ * Prevents thundering herd on concurrent write retries during
+ * optimistic concurrency conflict resolution.
+ */
+export const backoffDelay = (attempt: number, config: BackoffConfig = DEFAULT_BACKOFF): number => {
+  const exponential = Math.min(config.maxDelayMs, config.baseDelayMs * 2 ** attempt);
+  const jitter = Math.random() * config.baseDelayMs;
+  return exponential + jitter;
+};
+
+/**
+ * Retry an async operation with exponential backoff on error.
+ *
+ * Watch point: All retry loops handling OCC conflicts must use backoff jitter
+ * to minimize write collisions across rapid execution cycles.
+ */
+export const retryWithBackoff = async <T>(
+  operation: () => Promise<T>,
+  config: BackoffConfig = DEFAULT_BACKOFF,
+  shouldRetry?: (error: unknown) => boolean,
+): Promise<T> => {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === config.maxRetries) {
+        break;
+      }
+
+      if (shouldRetry && !shouldRetry(error)) {
+        throw error;
+      }
+
+      const delay = backoffDelay(attempt, config);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  throw lastError;
+};
+
+// ── C-306: Stalled agent detection ────────────────────────
+
+/**
+ * Check for stalled agents based on heartbeat recency.
+ *
+ * AC-1: Cross-Pane Deadlock Prevention and Heartbeat Resiliency
+ * - Enforces a strict sliding timeout barrier
+ * - Flags agents as 'blocked' or 'unknown' if heartbeat is stale
+ * - Safely unlocks adjacent pipeline operations
+ */
+export const detectStalledAgents = (
+  state: SwarmState,
+  heartbeatTimestamps: Record<AgentRole, number>,
+  stallTimeoutMs: number = DEFAULT_STREAM_CONFIG.stallTimeoutMs,
+): AgentRole[] => {
+  const stalled: AgentRole[] = [];
+  const now = Date.now();
+
+  for (const role of AGENT_ROLES) {
+    const agent = state.agents[role];
+    if (agent.status !== 'working' && agent.status !== 'blocked') {
+      continue;
+    }
+
+    const lastBeat = heartbeatTimestamps[role] ?? 0;
+    if (now - lastBeat > stallTimeoutMs) {
+      stalled.push(role);
+    }
+  }
+
+  return stalled;
+};
+
+// ── C-306: Resilience-enhanced step execution ─────────────
+
+/**
+ * Execute a single swarm step with non-blocking reads and heartbeat tracking.
+ *
+ * Enhanced version of executeStep with:
+ * - Non-blocking pane reads (Promise.race with timeout)
+ * - Heartbeat timestamp updates for stall detection
+ * - Automatic agent status transition to 'blocked' on stall
+ */
+export const executeStepResilient = async (options: {
+  step: SwarmStep;
+  state: SwarmState;
+  config?: PollingConfig;
+  streamConfig?: StreamTimeoutConfig;
+  heartbeatTimestamps?: Record<AgentRole, number>;
+}): Promise<void> => {
+  const {
+    step,
+    state,
+    config = DEFAULT_POLLING_CONFIG,
+    streamConfig = DEFAULT_STREAM_CONFIG,
+    heartbeatTimestamps,
+  } = options;
+
+  const agent = state.agents[step.agent];
+
+  if (!agent || agent.paneId === '') {
+    throw new Error(`Agent ${step.agent} has no mapped pane`);
+  }
+
+  console.debug('[swarm:step:resilient:start]', {
+    stepIndex: step.stepIndex,
+    agent: step.agent,
+    paneId: agent.paneId,
+  });
+
+  // ── Mark agent as working ──────────────────────────────
+  agent.status = 'working';
+  state.lastUpdated = new Date().toISOString();
+
+  if (heartbeatTimestamps) {
+    heartbeatTimestamps[step.agent] = Date.now();
+  }
+
+  // ── Send command to target pane ────────────────────────
+  await runInPane(agent.paneId, step.command);
+
+  await new Promise((r) => setTimeout(r, 500));
+
+  // ── Non-blocking poll loop ────────────────────────────
+  for (let poll = 0; poll < config.maxPolls; poll++) {
+    // ── Heartbeat update ────────────────────────────────
+    if (heartbeatTimestamps) {
+      heartbeatTimestamps[step.agent] = Date.now();
+    }
+
+    await new Promise((r) => setTimeout(r, config.pollIntervalMs));
+
+    const { content: scrollback, timedOut } = await readPaneNonBlocking({
+      paneId: agent.paneId,
+      lines: config.scrollbackLines,
+      timeoutMs: streamConfig.readTimeoutMs,
+    });
+
+    if (timedOut) {
+      console.debug('[swarm:step:read-timeout]', {
+        stepIndex: step.stepIndex,
+        agent: step.agent,
+        poll,
+      });
+
+      // Check if agent is stalled
+      if (heartbeatTimestamps) {
+        const stalled = detectStalledAgents(
+          state,
+          heartbeatTimestamps,
+          streamConfig.stallTimeoutMs,
+        );
+        if (stalled.includes(step.agent)) {
+          agent.status = 'blocked';
+          state.lastUpdated = new Date().toISOString();
+          throw new Error(
+            `Agent ${step.agent} stalled — no heartbeat for ${streamConfig.stallTimeoutMs}ms`,
+          );
+        }
+      }
+      continue;
+    }
+
+    const currentHash = hashContent(scrollback);
+
+    if (checkCompliance(scrollback, step.complianceSignature)) {
+      agent.status = 'done';
+      agent.lastHash = currentHash;
+      state.lastUpdated = new Date().toISOString();
+      console.log('[swarm:step:done]', {
+        stepIndex: step.stepIndex,
+        agent: step.agent,
+        polls: poll + 1,
+      });
+      return;
+    }
+
+    if (agent.lastHash !== null && currentHash !== agent.lastHash) {
+      console.debug('[swarm:step:progress]', {
+        stepIndex: step.stepIndex,
+        agent: step.agent,
+        poll,
+      });
+    }
+
+    agent.lastHash = currentHash;
+  }
+
+  // ── Timeout — mark as blocked ─────────────────────────
+  agent.status = 'blocked';
+  state.lastUpdated = new Date().toISOString();
+
+  throw new Error(
+    `Step ${step.stepIndex} (${step.agent}) timed out after ${config.maxPolls} polls`,
+  );
+};

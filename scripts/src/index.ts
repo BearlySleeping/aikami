@@ -56,6 +56,8 @@ const SCRIPT_MAP: Record<string, string> = {
   // Swarm director
   'swarm:init': 'agents/swarm_init.ts',
   'swarm:start': 'agents/swarm_start.ts',
+  'sandbox:scaffold': 'agents/sandbox_scaffolder.ts',
+  scaffold: 'agents/sandbox_scaffolder.ts',
 };
 
 const SCRIPT_DIR = join(import.meta.dir, 'lib');
