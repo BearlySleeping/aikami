@@ -46,7 +46,9 @@
     "deps:sync": "syncpack fix --dependency-types prod,dev",
     "deps:check": "syncpack lint --dependency-types prod,dev",
     "preview": "bun run scripts/src/lib/ops/preview_client.ts",
-    "herdr:preview": "bun run scripts/src/lib/ops/preview_client.ts"
+    "herdr:preview": "bun run scripts/src/lib/ops/preview_client.ts",
+    "swarm:init": "bun run scripts/src/lib/agents/swarm_init.ts",
+    "swarm:start": "bun run scripts/src/lib/agents/swarm_start.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",

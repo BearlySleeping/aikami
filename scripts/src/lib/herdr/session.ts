@@ -215,12 +215,13 @@ export const ensureServer = async (): Promise<void> => {
     stdio: 'ignore',
     env: process.env,
   });
+  proc.unref(); // detach — don't keep parent event loop alive
 
   // Wait for the server to come up
   for (let i = 0; i < 15; i++) {
     await new Promise((r) => setTimeout(r, 500));
     if (await serverRunning()) {
-      return; // server is up, proc keeps running in background
+      return; // server is up, daemon keeps running independently
     }
   }
 

@@ -200,4 +200,9 @@
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
 | MIG-004 | Frontend Configs | ✅ completed |
+| C-300 | Swarm Director & Workspace Provisioning | ✅ completed |
+| C-301 | Algorithmic Token Router & AST Footprint | ✅ completed |
+| C-302 | Ephemeral SQLite-WAL Scratchpad Engine | ✅ completed |
+| C-303 | Self-Healing Visual Test Harness | ✅ completed |
+| C-304 | AST-Aware Behavioral Code Reviewer | ✅ completed |
 

@@ -159,6 +159,21 @@
       }
     },
     {
+      "includes": [".pi/runners/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          },
+          "style": {
+            "useNamingConvention": "off",
+            "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [".pi/skills/aikami-conventions/lint_rules.json"],
       "includes": ["apps/e2e/src/auth.setup.ts", "apps/e2e/src/global_setup.ts", "apps/e2e/src/global_teardown.ts", "apps/e2e/src/emulator_helper.ts"],
       "linter": {
         "rules": {
@@ -243,6 +258,9 @@
         "apps/frontend/client/**",
         "scripts/src/lib/test_blackbox/**",
         "scripts/src/lib/herdr/**",
+        "scripts/src/lib/agents/**",
+        "packages/backend/ai/src/lib/agent_router.ts",
+        "packages/frontend/repositories/src/lib/agent_scratchpad.ts",
         "scripts/src/index.ts",
         "scripts/src/lib/deploy/deployment_config.ts"
       ],
