@@ -52,6 +52,10 @@ const SCRIPT_MAP: Record<string, string> = {
   hstatus: 'herdr/status.ts',
   'herdr:list': 'herdr/list.ts',
   hlist: 'herdr/list.ts',
+
+  // Swarm director
+  'swarm:init': 'agents/swarm_init.ts',
+  'swarm:start': 'agents/swarm_start.ts',
 };
 
 const SCRIPT_DIR = join(import.meta.dir, 'lib');

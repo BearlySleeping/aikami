@@ -143,6 +143,11 @@ P2 (Polish — after P1):
 | C-217 | [E2E Suite Stabilisation](C-217-e2e-stabilisation.md) ✅ | Engine E2E test mode, Playwright GPU stability, visual test masking, combat VRT 3-run stability | — |
 | C-218 | [E2E Logic & UI Bug Resolution](C-218-e2e-logic-ui-resolution.md) ✅ | Run full E2E suite, fix bugs, inventory visual test, 100% pass rate | — |
 | C-219 | [UI Component System Refactor](C-219-ui-component-system-refactor.md) ✅ | New Select component, global typography @theme, text_tab refactor | — |
+| C-300 | [Swarm Director & Workspace Provisioning](C-300-swarm-director-and-workspace-provisioning-lifecycle.md) ✅ | Herdr workspace/tab provisioning, agent lifecycle tracking, scrollback compliance checks | C-003, C-007, C-013 |
+| C-301 | [Algorithmic Token Router & AST Footprint](C-301-algorithmic-token-router-and-ast-footprint-extractor.md) ✅ | TypeScript Compiler API type footprint extractor, OpenRouter payload builder, SHA-256 session pinning | C-005, C-015 |
+| C-302 | [Ephemeral SQLite-WAL Scratchpad](C-302-coherent-ephemeral-sqlite-wal-scratchpad-engine.md) ✅ | SQLite WAL scratchpad with OCC, CAS commits, delivery log, epoch-fenced lease sweep | C-005, C-014 |
+| C-303 | [Self-Healing Visual Test Harness](C-303-self-healing-visual-test-harness.md) ✅ | Autonomous visual test runner, stream interception, two-strike anti-loop, healing context | C-011, C-181, C-182, C-300 |
+| C-304 | [AST-Aware Behavioral Code Reviewer](C-304-ast-aware-behavioral-code-reviewer-and-convention-gate.md) ✅ | Two-tier compliance gate — Biome/Tree-sitter Tier 1 + LLM Tier 2 | C-009, C-120, C-300 |
 
 ## Contract Format
 

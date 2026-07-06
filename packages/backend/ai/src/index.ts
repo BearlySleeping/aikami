@@ -1,4 +1,17 @@
 // packages/backend/ai/src/index.ts
+
+export type {
+  FootprintResult,
+  MessagePayload,
+  OpenRouterPayload as AgentRouterPayload,
+  RouterInput,
+} from './lib/agent_router.ts';
+// ── Agent Router (C-301) ───────────────────────────────────
+export {
+  buildRouterPayload,
+  extractTypeFootprint,
+  prepareAgentPayload,
+} from './lib/agent_router.ts';
 export type { AiServiceInterface } from './lib/ai_service_interface.ts';
 export { handleAIEndpoint } from './lib/api_handler.ts';
 export { BaseAiService } from './lib/base_ai_service.ts';
