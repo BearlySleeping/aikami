@@ -17,6 +17,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import type { HerdrSocketClient } from '../herdr/socket_client';
 import { createAgentScratchpad, type SwarmStateRow } from './agent_scratchpad';
 import type {
   AgentRecord,
@@ -645,17 +646,6 @@ export const executeTask = async (options: {
     steps: payload.steps.length,
   });
 
-  // ── Clean up existing pi sessions from previous pipeline runs ──────
-  // Keeps output visible in scrollback, starts clean for new pipeline.
-  console.debug('[swarm:task:quitting-sessions]');
-  for (const role of AGENT_ROLES) {
-    const agentPane = state.agents[role];
-    if (agentPane.paneId) {
-      await runInPane(agentPane.paneId, '/quit');
-    }
-  }
-  await new Promise((r) => setTimeout(r, 2000));
-
   // ── Clean up stale markers from previous runs ──────
   const markersDir = join(process.cwd(), '.pi/swarm/markers');
   mkdirSync(markersDir, { recursive: true });
@@ -1009,4 +999,78 @@ export const executeStepResilient = async (options: {
   throw new Error(
     `Step ${step.stepIndex} (${step.agent}) timed out after ${config.maxPolls} polls`,
   );
+};
+
+// ── C-311: Socket-based task execution ────────────────────
+
+/**
+ * Execute a full task pipeline via the event-driven socket client (C-311).
+ * Thin wrapper around executeTaskPipeline that handles session guard + metrics.
+ */
+export const executeTaskSocket = async (options: {
+  payload: TaskPayload;
+  state: SwarmState;
+  socketClient: HerdrSocketClient;
+  model?: string;
+  tier?: string;
+}): Promise<SwarmState> => {
+  const {
+    payload,
+    state,
+    socketClient,
+    model = 'deepseek/deepseek-v4-flash',
+    tier = 'flash',
+  } = options;
+
+  const taskId = payload.taskId;
+  const startTime = Date.now();
+  const workspaceLabel = getSwarmWorkspaceLabel(taskId);
+
+  console.debug('[swarm:task:socket]', { workspaceLabel, taskId });
+
+  // ── Active session guard ─────────────────────────────
+  if (state.activeTaskId) {
+    console.warn('[swarm:task:active-session]', {
+      existingTask: state.activeTaskId,
+      newTask: taskId,
+    });
+    for (const role of AGENT_ROLES) {
+      const agent = state.agents[role];
+      if (agent.status === 'working' || agent.status === 'blocked') {
+        agent.status = 'idle';
+      }
+    }
+  }
+
+  console.log('[swarm:task:start]', {
+    taskId,
+    steps: payload.steps.length,
+    mode: 'socket',
+  });
+
+  // ── Delegate to step_executor pipeline ────────────────
+  const { executeTaskPipeline } = await import('./step_executor');
+
+  await executeTaskPipeline({
+    taskId,
+    steps: payload.steps,
+    state,
+    socketClient,
+    scratchpad: _pad,
+    projectRoot: process.cwd(),
+    model,
+    tier,
+  });
+
+  // ── Collect metrics (non-LLM) ───────────────────────
+  const { collectAndWriteMetrics } = await import('./metrics_collector');
+  collectAndWriteMetrics({
+    taskId,
+    startTime,
+    trivialPath: state.agents.qa.status === 'done',
+    documentationGenerated: false,
+  });
+
+  console.log('[swarm:task:complete]', { taskId, mode: 'socket' });
+  return state;
 };

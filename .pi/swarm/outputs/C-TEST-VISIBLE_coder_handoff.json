@@ -1,0 +1,11 @@
+{
+  "taskId": "C-TEST-VISIBLE",
+  "role": "coder",
+  "status": "success",
+  "complexity": "standard",
+  "domain": "fullstack",
+  "requiresDocs": false,
+  "filesTouched": ["src/app.ts", "src/test.ts"],
+  "nextCommands": ["moon run :test"],
+  "summary": "Coder implemented feature with tests"
+}

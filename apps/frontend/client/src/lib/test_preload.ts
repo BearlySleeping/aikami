@@ -317,7 +317,16 @@ const _localServicesMock = () => ({
   consumePendingGameLoad: _createCallableStub(),
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
-  gameStateService: _createServiceStub(),
+  gameStateService: Object.assign(_createServiceStub(), {
+    worldGenOutput: {
+      worldName: 'The Realm',
+      worldDescription: 'A world of adventure awaits.',
+      npcs: [],
+      locations: ['Town Square'],
+      partyArcs: [],
+      hudWidgets: [],
+    },
+  }),
   GameStateService: class {},
   getItemDefinition: mock((itemId: string) => ({
     label: itemId,

@@ -11,6 +11,7 @@ import type {
   EquipmentSlot,
   ItemDefinition,
   WorldEvent,
+  WorldGenOutput,
   WorldLocation,
   WorldState,
 } from '@aikami/types';
@@ -23,6 +24,7 @@ import type {
   GameStateEvent,
   GameStateListener,
 } from '$types/game.ts';
+import { registerSerializable } from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // Item catalog — maps itemId strings to stat bonuses and metadata
@@ -156,6 +158,14 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   /** Compact AI-ready summary of the character sheet (C-232). */
   readonly characterSheetSummary: string;
 
+  // ── World Generation (C-233) ──
+
+  /** Generated world output, or a minimal default for legacy saves. */
+  readonly worldGenOutput: WorldGenOutput;
+
+  /** Sets the generated world output after wizard completion. */
+  setWorldGenOutput(output: WorldGenOutput): void;
+
   /** Adds the given amount to the player's gold balance. */
   addGold(options: { amount: number }): void;
   /**
@@ -226,6 +236,12 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   getActiveSession(): ActiveSessionData | undefined;
   setMode(mode: GameMode): void;
 
+  /** Serializes world-gen state for save persistence. */
+  serializeWorldGen(): WorldGenOutput | undefined;
+
+  /** Hydrates world-gen state from a saved payload. */
+  hydrateWorldGen(data: WorldGenOutput | undefined): void;
+
   /**
    * Resets all mutable game state arrays (inventory, defeatedEnemies, quests,
    * equipment, player stats).
@@ -268,6 +284,9 @@ export class GameStateService
 
   // ── Narrative traits (C-232 Character Sheet) ──
   narrativeTraits = $state<NarrativeTraits>({ likes: [], temptations: [], keys: [] });
+
+  // ── World Generation (C-233) ──
+  _worldGenOutput = $state<WorldGenOutput | undefined>(undefined);
 
   // ── Computed stat getters ──
 
@@ -316,8 +335,47 @@ export class GameStateService
     return this.currentWorld?.variables ?? {};
   }
 
+  /** @inheritdoc */
+  get worldGenOutput(): WorldGenOutput {
+    return this._worldGenOutput ?? this._getDefaultWorldGenOutput();
+  }
+
+  /** @inheritdoc */
+  setWorldGenOutput(output: WorldGenOutput): void {
+    this._worldGenOutput = output;
+    this.debug('setWorldGenOutput', { worldName: output.worldName });
+  }
+
   get isConnected(): boolean {
     return this.currentWorld !== undefined;
+  }
+
+  /**
+   * Returns a minimal default WorldGenOutput for backward compatibility
+   * with pre-wizard saves.
+   */
+  private _getDefaultWorldGenOutput(): WorldGenOutput {
+    return {
+      worldName: 'The Realm',
+      worldDescription: 'A world of adventure awaits.',
+      npcs: [],
+      locations: ['Town Square'],
+      partyArcs: [],
+      hudWidgets: [],
+    };
+  }
+
+  /** @inheritdoc */
+  serializeWorldGen(): WorldGenOutput | undefined {
+    return this._worldGenOutput;
+  }
+
+  /** @inheritdoc */
+  hydrateWorldGen(data: WorldGenOutput | undefined): void {
+    if (data) {
+      this._worldGenOutput = data;
+      this.debug('hydrateWorldGen', { worldName: data.worldName });
+    }
   }
 
   private readonly uid: string;
@@ -327,6 +385,18 @@ export class GameStateService
   constructor(options: GameStateServiceOptions) {
     super(options);
     this.uid = options.uid;
+
+    // Register for save/load serialization (C-233)
+    registerSerializable('gameState', {
+      serialize: () => ({ worldGenOutput: this._worldGenOutput }),
+      hydrate: (data: unknown) => {
+        const payload = data as { worldGenOutput?: WorldGenOutput };
+        if (payload.worldGenOutput) {
+          this._worldGenOutput = payload.worldGenOutput;
+        }
+      },
+    });
+
     void this._listenForInventoryUpdates();
     void this._listenForQuestUpdates();
     void this._listenForCombatEnded();
@@ -562,6 +632,7 @@ export class GameStateService
     this.playerMaxHp = 100;
     this.playerBaseAttack = 5;
     this.playerBaseDefense = 12;
+    this._worldGenOutput = undefined;
     this.debug('reset:cleared');
   }
 
