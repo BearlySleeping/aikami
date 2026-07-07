@@ -1,19 +1,19 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/combat/combat_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-  import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
-  import CombatDiceUi from './components/combat_dice_ui.svelte';
-  import CombatPortraitStage from './components/combat_portrait_stage.svelte';
+    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+    import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+    import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
+    import CombatDiceUi from './components/combat_dice_ui.svelte';
+    import CombatPortraitStage from './components/combat_portrait_stage.svelte';
 
-  type Props = {
-    viewModel: CombatViewModelInterface;
-  };
+    type Props = {
+      viewModel: CombatViewModelInterface;
+    };
 
-  const { viewModel }: Props = $props();
+    const { viewModel }: Props = $props();
 
-  /** Temporary input value for the freeform custom action text field. */
-  let customActionInput = $state('');
+    /** Temporary input value for the freeform custom action text field. */
+    let customActionInput = $state('');
 </script>
 
 <div
