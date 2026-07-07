@@ -84,9 +84,7 @@ export class CharacterSheetPage {
   // ── Skills ────────────────────────────────────
 
   skillRow(name: string) {
-    return this.card
-      .locator('.flex.items-center.justify-between')
-      .filter({ hasText: name });
+    return this.card.locator('.flex.items-center.justify-between').filter({ hasText: name });
   }
 
   skillProficiencyCheckbox(name: string) {
@@ -137,11 +135,7 @@ export class CharacterSheetPage {
   async expectTabActive(tab: 'abilities' | 'skills' | 'traits'): Promise<void> {
     const { expect } = await import('@playwright/test');
     const tabEl =
-      tab === 'abilities'
-        ? this.tabAbilities
-        : tab === 'skills'
-          ? this.tabSkills
-          : this.tabTraits;
+      tab === 'abilities' ? this.tabAbilities : tab === 'skills' ? this.tabSkills : this.tabTraits;
     await expect(tabEl).toHaveClass(/tab-active/, { timeout: 3_000 });
   }
 

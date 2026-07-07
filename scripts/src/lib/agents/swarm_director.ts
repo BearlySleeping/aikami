@@ -15,6 +15,8 @@
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import type {
   AgentRecord,
   AgentRole,
@@ -167,9 +169,17 @@ const initScratchpad = (projectRoot: string): void => {
       agent_key TEXT NOT NULL,
       agent_status TEXT NOT NULL DEFAULT 'idle',
       last_heartbeat_timestamp INTEGER NOT NULL DEFAULT 0,
+      agent_output TEXT DEFAULT '',
       UNIQUE(task_id, agent_key)
     )
   `);
+
+  // Migration: add agent_output column if it doesn't exist (pre-existing DBs)
+  const cols = dbAny.query("PRAGMA table_info('swarm_heartbeat')").all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'agent_output')) {
+    dbAny.exec("ALTER TABLE swarm_heartbeat ADD COLUMN agent_output TEXT DEFAULT ''");
+    console.debug('[swarm:scratchpad] migrated: added agent_output column');
+  }
 
   // Seed idle rows if table empty
   const row = dbAny.query('SELECT COUNT(*) as cnt FROM swarm_heartbeat').get() as
@@ -198,6 +208,7 @@ export const writeHeartbeat = (
   taskId: string,
   agentKey: string,
   status: string,
+  output?: string,
 ): void => {
   const handle = _openScratchpad(projectRoot);
   if (!handle) {
@@ -207,11 +218,12 @@ export const writeHeartbeat = (
   const { db } = handle;
   const dbAny = db as { exec: (sql: string) => void; close: () => void };
   const now = Date.now();
+  const escapedOutput = (output ?? '').replace(/'/g, "''");
 
   // Upsert via INSERT OR REPLACE (requires UNIQUE constraint)
   dbAny.exec(`
-    INSERT OR REPLACE INTO swarm_heartbeat (task_id, agent_key, agent_status, last_heartbeat_timestamp)
-    VALUES ('${taskId}', '${agentKey}', '${status}', ${now})
+    INSERT OR REPLACE INTO swarm_heartbeat (task_id, agent_key, agent_status, last_heartbeat_timestamp, agent_output)
+    VALUES ('${taskId}', '${agentKey}', '${status}', ${now}, '${escapedOutput}')
   `);
 
   dbAny.close();
@@ -221,6 +233,19 @@ export const writeHeartbeat = (
 
 /** Compute a SHA-256 hash of content for scrollback change detection. */
 const hashContent = (content: string): string => createHash('sha256').update(content).digest('hex');
+
+/**
+ * Read an agent's summary file from the outputs directory.
+ * Returns empty string if no summary was written.
+ */
+const _readAgentSummary = (taskId: string, agent: string): string => {
+  const summaryPath = join(process.cwd(), '.pi/swarm/outputs', `${taskId}_${agent}.md`);
+  try {
+    return readFileSync(summaryPath, 'utf-8').slice(0, 4096);
+  } catch {
+    return '';
+  }
+};
 
 // ── State helpers ───────────────────────────────────────────
 
@@ -327,8 +352,8 @@ const readPaneScrollback = async (paneId: string, lines: number): Promise<string
 };
 
 /** Check if scrollback content matches a compliance signature. */
-const checkCompliance = (scrollback: string, signature: RegExp): boolean =>
-  signature.test(scrollback);
+const checkCompliance = (scrollback: string, signature?: RegExp): boolean =>
+  signature ? signature.test(scrollback) : false;
 
 // ── Pane command execution ──────────────────────────────────
 
@@ -535,120 +560,116 @@ const _provisionTab = async (
 
 /**
  * Execute a single swarm step: send command to target agent pane,
- * poll scrollback until compliance signature is detected or timeout.
+ * wait for agent completion via herdr native detection, read summary.
  *
- * AC-2: Asynchronous Step Execution and Scrollback Compliance Checks
- * - Updates logical status to `working`
- * - Polls console scrollbacks incrementally via herdr pane read
- * - Scans for distinct compliance signatures
- * - Blocks downstream steps until preceding actions resolve
+ * Replaces the old marker-file + scrollback polling approach with
+ * herdr's native agent-status detection and wait_agent CLI.
  */
-const executeStep = async (options: {
+const _executeStepOnce = async (options: {
   step: SwarmStep;
   state: SwarmState;
-  config?: PollingConfig;
+  agent: AgentRecord;
+  attempt: number;
+  maxRetries: number;
 }): Promise<void> => {
-  const { step, state, config = DEFAULT_POLLING_CONFIG } = options;
-  const agent = state.agents[step.agent];
-
-  if (!agent || agent.paneId === '') {
-    throw new Error(`Agent ${step.agent} has no mapped pane`);
-  }
+  const { step, state, agent, attempt } = options;
 
   console.debug('[swarm:step:start]', {
     stepIndex: step.stepIndex,
     agent: step.agent,
     paneId: agent.paneId,
+    attempt,
   });
 
-  // ── Mark agent as working ──────────────────────────────
+  // Mark working
   agent.status = 'working';
   state.lastUpdated = new Date().toISOString();
-
-  // ── Write heartbeat to scratchpad ─────────────────────
   writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'working');
 
-  // ── Send command to target pane ────────────────────────
+  // Clear stale buffer, send command
+  await herdr(['pane', 'send-keys', agent.paneId, 'C-c']);
+  await new Promise((r) => setTimeout(r, 200));
   await runInPane(agent.paneId, step.command);
   console.debug('[swarm:step:command-sent]', { agent: step.agent });
 
-  // Give the shell a moment to echo the command
-  await new Promise((r) => setTimeout(r, 500));
+  // Wait for pi to start
+  await new Promise((r) => setTimeout(r, 2000));
 
-  // ── Baseline: capture scrollback AFTER command echo ──
-  // This prevents the compliance check from matching the command text itself.
-  const baseline = await readPaneScrollback(agent.paneId, config.scrollbackLines);
-  agent.lastHash = hashContent(baseline);
-  console.debug('[swarm:step:baseline-captured]', {
-    agent: step.agent,
-    baselineLen: baseline.length,
-  });
+  // Wait for agent to reach done/idle
+  const timeoutMs = step.timeoutMs ?? 300_000;
+  console.debug('[swarm:step:waiting-agent]', { agent: step.agent, timeoutMs });
 
-  // ── Poll combined: marker file + scrollback ──────────
-  const { existsSync } = require('node:fs');
+  const waitResult = await herdr([
+    'wait',
+    'agent-status',
+    agent.paneId,
+    '--status',
+    'done',
+    '--timeout',
+    String(timeoutMs),
+  ]);
 
-  for (let poll = 0; poll < config.maxPolls; poll++) {
-    await new Promise((r) => setTimeout(r, config.pollIntervalMs));
-
-    // ── Marker file check (preferred, deterministic) ──
-    if (step.markerFile && existsSync(step.markerFile)) {
-      agent.status = 'done';
-      state.lastUpdated = new Date().toISOString();
-      writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'done');
-
-      console.log('[swarm:step:done:marker]', {
-        stepIndex: step.stepIndex,
-        agent: step.agent,
-        polls: poll + 1,
-        markerFile: step.markerFile,
-      });
-      return;
+  if (waitResult.code !== 0) {
+    // Fallback: try idle status
+    const idleResult = await herdr([
+      'wait',
+      'agent-status',
+      agent.paneId,
+      '--status',
+      'idle',
+      '--timeout',
+      '10000',
+    ]);
+    if (idleResult.code !== 0) {
+      throw new Error(`Agent ${step.agent} did not complete within ${timeoutMs}ms`);
     }
-
-    // ── Scrollback compliance check (fallback) ─────────
-    const scrollback = await readPaneScrollback(agent.paneId, config.scrollbackLines);
-    const currentHash = hashContent(scrollback);
-
-    const baselineIndex = scrollback.indexOf(baseline);
-    const newContent =
-      baselineIndex >= 0 ? scrollback.slice(baselineIndex + baseline.length) : scrollback;
-
-    if (checkCompliance(newContent, step.complianceSignature)) {
-      agent.status = 'done';
-      agent.lastHash = currentHash;
-      state.lastUpdated = new Date().toISOString();
-      writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'done');
-
-      console.log('[swarm:step:done:scrollback]', {
-        stepIndex: step.stepIndex,
-        agent: step.agent,
-        polls: poll + 1,
-        newContentLen: newContent.length,
-      });
-      return;
-    }
-
-    // ── Progress detection ───────────────────────────────
-    if (agent.lastHash !== null && currentHash !== agent.lastHash) {
-      console.debug('[swarm:step:progress]', {
-        stepIndex: step.stepIndex,
-        agent: step.agent,
-        poll,
-        newContentLen: newContent.length,
-      });
-    }
-
-    agent.lastHash = currentHash;
   }
 
-  // ── Timeout ────────────────────────────────────────────
-  agent.status = 'blocked';
-  state.lastUpdated = new Date().toISOString();
-  writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'blocked');
+  // Quit the pi session with cancel-first pattern
+  await herdr(['pane', 'send-keys', agent.paneId, 'C-c']);
+  await new Promise((r) => setTimeout(r, 500));
+  await runInPane(agent.paneId, '/quit');
+  await new Promise((r) => setTimeout(r, 1000));
 
-  throw new Error(
-    `Step ${step.stepIndex} (${step.agent}) timed out after ${config.maxPolls} polls`,
-  );
+  // Read summary
+  const summary = _readAgentSummary(state.activeTaskId ?? '', step.agent);
+  agent.status = 'done';
+  state.lastUpdated = new Date().toISOString();
+  writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'done', summary);
+
+  console.log('[swarm:step:done]', {
+    stepIndex: step.stepIndex,
+    agent: step.agent,
+    summaryLen: summary.length,
+    attempt,
+  });
+};
+const executeStep = async (options: { step: SwarmStep; state: SwarmState }): Promise<void> => {
+  const { step, state } = options;
+  const agent = state.agents[step.agent];
+  const maxRetries = step.maxRetries ?? 1;
+
+  if (!agent || agent.paneId === '') {
+    throw new Error(`Agent ${step.agent} has no mapped pane`);
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await _executeStepOnce({ step, state, agent, attempt, maxRetries });
+      return;
+    } catch (error) {
+      if (attempt >= maxRetries) {
+        agent.status = 'blocked';
+        state.lastUpdated = new Date().toISOString();
+        writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'blocked');
+        throw error;
+      }
+      console.warn(
+        `[swarm:step:retry] ${step.agent} attempt ${attempt}/${maxRetries} failed: ${error}`,
+      );
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 };
 
 // ── Full task pipeline ──────────────────────────────────────
@@ -662,9 +683,8 @@ const executeStep = async (options: {
 export const executeTask = async (options: {
   payload: TaskPayload;
   state: SwarmState;
-  config?: PollingConfig;
 }): Promise<SwarmState> => {
-  const { payload, state, config } = options;
+  const { payload, state } = options;
 
   // ── Active session guard ─────────────────────────────
   if (state.activeTaskId) {
@@ -687,10 +707,30 @@ export const executeTask = async (options: {
     steps: payload.steps.length,
   });
 
+  // ── Clean up stale markers from previous runs ──────
+  const markersDir = join(process.cwd(), '.pi/swarm/markers');
+  mkdirSync(markersDir, { recursive: true });
+
+  // Ensure outputs directory exists for agent summaries
+  const outputsDir = join(process.cwd(), '.pi/swarm/outputs');
+  mkdirSync(outputsDir, { recursive: true });
+
+  const taskPrefix = payload.taskId;
+  try {
+    for (const entry of readdirSync(markersDir)) {
+      if (entry.startsWith(taskPrefix)) {
+        unlinkSync(join(markersDir, entry));
+        console.debug('[swarm:task:cleanup]', { marker: entry });
+      }
+    }
+  } catch {
+    // directory might not exist yet — fine
+  }
+
   state.activeTaskId = payload.taskId;
 
   for (const step of payload.steps) {
-    await executeStep({ step, state, config });
+    await executeStep({ step, state });
   }
 
   state.activeTaskId = null;
@@ -939,6 +979,10 @@ export const executeStepResilient = async (options: {
   }
 
   // ── Send command to target pane ────────────────────────
+  // Clear stale input buffer to prevent command concatenation
+  await herdr(['pane', 'send-keys', agent.paneId, 'C-c']);
+  await new Promise((r) => setTimeout(r, 200));
+
   await runInPane(agent.paneId, step.command);
 
   await new Promise((r) => setTimeout(r, 500));

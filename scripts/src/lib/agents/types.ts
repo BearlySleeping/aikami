@@ -72,11 +72,13 @@ export type SwarmStep = {
   agent: AgentRole;
   /** Command to execute in the target pane */
   command: string;
-  /** Regex pattern that, when matched in scrollback, marks this step as done */
-  complianceSignature: RegExp;
-  /** Optional timeout in ms before step is considered stalled */
+  /** Regex pattern for scrollback compliance (legacy, not used with wait-agent) */
+  complianceSignature?: RegExp;
+  /** Timeout in ms before step is considered stalled (default 300000) */
   timeoutMs?: number;
-  /** File path — if set, step completes when this file exists (more reliable than scrollback) */
+  /** Max retries on failure (default 1) */
+  maxRetries?: number;
+  /** File path — legacy marker file support */
   markerFile?: string;
 };
 

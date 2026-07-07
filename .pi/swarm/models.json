@@ -1,13 +1,21 @@
 {
   "default": "flash",
   "models": {
-    "deepseek-v4-pro": {
-      "model": "deepseek/deepseek-chat",
+    "pro": {
+      "model": "deepseek/deepseek-v4-pro",
       "roles": ["architect", "coder", "qa"]
     },
-    "deepseek-v4-flash": {
-      "model": "deepseek/deepseek-chat",
+    "flash": {
+      "model": "deepseek/deepseek-v4-flash",
       "roles": ["git"]
+    },
+    "openrouter-free": {
+      "model": "openrouter/free",
+      "roles": []
+    },
+    "opencode-free": {
+      "model": "opencode/big-pickle",
+      "roles": []
     }
   }
 }

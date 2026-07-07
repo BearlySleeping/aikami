@@ -24,8 +24,18 @@ type LedgerReportEnvelope = {
     agentKey: string;
     status: string;
     lastSyncTimestamp: number;
+    agentOutput: string;
   }>;
 };
+
+// ── Model mapping ───────────────────────────────────────────
+
+const TIER_MODEL_MAP: Record<string, string> = {
+  pro: 'deepseek/deepseek-v4-pro',
+  flash: 'deepseek/deepseek-v4-flash',
+};
+
+// ── Helpers ──────────────────────────────────────────────────
 
 // ── Extension registration ─────────────────────────────────
 
@@ -47,7 +57,7 @@ export default function (pi: ExtensionAPI) {
       'Use for complex multi-step tasks requiring architect/coder/qa/git coordination.',
       'Returns a session ID — track progress with swarm_get_ledger_status.',
       'The pipeline runs out-of-process; pi is not blocked.',
-      'Model tier "pro" uses reasoning models (gpt-4o), "flash" uses fast models (gpt-4o-mini).',
+      'Model tier "pro" uses deepseek-v4-pro, "flash" uses deepseek-v4-flash.',
     ],
     parameters: Type.Object({
       taskId: Type.String({
@@ -56,6 +66,12 @@ export default function (pi: ExtensionAPI) {
       initialTaskDescription: Type.String({
         description: 'Natural-language description of what the task should accomplish',
       }),
+      contractPath: Type.Optional(
+        Type.String({
+          description:
+            'Path to the contract file (e.g. docs/contracts/C-305.md). If omitted, derives from taskId.',
+        }),
+      ),
       forceModelTierSelection: Type.Optional(
         Type.String({
           description: 'Model tier override: pro (reasoning) or flash (fast). Default: auto.',
@@ -67,38 +83,41 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
 
-      // Build the payload JSON for swarm_start.ts
-      const tier =
-        params.forceModelTierSelection === 'default' ? 'flash' : params.forceModelTierSelection;
+      const tier: string =
+        params.forceModelTierSelection === 'default' || !params.forceModelTierSelection
+          ? 'flash'
+          : params.forceModelTierSelection;
+
+      const model = TIER_MODEL_MAP[tier] ?? TIER_MODEL_MAP.flash;
+      const taskId = params.taskId;
+      const contractPath = params.contractPath ?? `docs/contracts/${taskId}.md`;
+
+      const architectPlanPath = `.pi/swarm/architect_plan_${taskId}.md`;
 
       const payload = {
-        taskId: params.taskId,
+        taskId,
         description: params.initialTaskDescription,
         tier,
         steps: [
           {
             stepIndex: 0,
             agent: 'architect',
-            command: `echo "[architect] Analyzing task: ${params.taskId}"`,
-            complianceSignature: 'analyzed',
+            command: `pi --model ${model} --system-prompt .pi/prompts/architect.md '${contractPath}'`,
           },
           {
             stepIndex: 1,
             agent: 'coder',
-            command: `echo "[coder] Implementing: ${params.initialTaskDescription.slice(0, 60)}"`,
-            complianceSignature: 'implementing',
+            command: `pi --model ${model} --system-prompt .pi/prompts/coder.md '${architectPlanPath}'`,
           },
           {
             stepIndex: 2,
             agent: 'qa',
-            command: `echo "[qa] Validating: ${params.taskId}"`,
-            complianceSignature: 'validated',
+            command: `pi --model ${model} --system-prompt .pi/prompts/qa.md '${architectPlanPath}'`,
           },
           {
             stepIndex: 3,
             agent: 'git',
-            command: `echo "[git] Committing: ${params.taskId}"`,
-            complianceSignature: 'committed',
+            command: `pi --model ${model} --system-prompt .pi/prompts/git.md '${architectPlanPath}'`,
           },
         ],
       };
@@ -272,7 +291,15 @@ export default function (pi: ExtensionAPI) {
           w.lastSyncTimestamp > 0
             ? `${Math.round((Date.now() - w.lastSyncTimestamp) / 1000)}s ago`
             : 'never';
-        return `${icon} **${w.agentKey}** — ${w.status} (${ago})`;
+        let line = `${icon} **${w.agentKey}** — ${w.status} (${ago})`;
+        if (w.agentOutput?.trim()) {
+          // Show first line of summary as a hint
+          const firstLine = w.agentOutput.trim().split('\n')[0]?.slice(0, 120) ?? '';
+          if (firstLine) {
+            line += ` — ${firstLine}`;
+          }
+        }
+        return line;
       });
 
       const lockIcon = ledger.globalLockActive ? '🔒' : '🔓';
