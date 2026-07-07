@@ -134,15 +134,20 @@ export default function (pi: ExtensionAPI) {
       let directorPaneId = '';
       try {
         const wsData = JSON.parse(discoverWs.stdout || '{}');
-        const wss = wsData?.result?.workspaces as Array<{ workspace_id: string; label: string }> | undefined;
+        const wss = wsData?.result?.workspaces as
+          | Array<{ workspace_id: string; label: string }>
+          | undefined;
         let ws = wss?.find((w) => w.label === wsLabel);
 
         if (!ws) {
           // Create new contract workspace
           const createR = await pi.exec('herdr', [
-            'workspace', 'create',
-            '--cwd', cwd,
-            '--label', wsLabel,
+            'workspace',
+            'create',
+            '--cwd',
+            cwd,
+            '--label',
+            wsLabel,
             '--no-focus',
           ]);
           const createData = JSON.parse(createR.stdout || '{}');
@@ -155,7 +160,9 @@ export default function (pi: ExtensionAPI) {
         // Find director tab (tab 1) — initializeSwarm renames it to 'director'
         const tabsResult = await pi.exec('herdr', ['tab', 'list', '--workspace', ws.workspace_id]);
         const tabsData = JSON.parse(tabsResult.stdout || '{}');
-        const firstTab = tabsData?.result?.tabs?.[0] as { tab_id: string; number: number } | undefined;
+        const firstTab = tabsData?.result?.tabs?.[0] as
+          | { tab_id: string; number: number }
+          | undefined;
 
         if (firstTab) {
           // Pane ID convention: workspace:p1 for first tab's first pane
