@@ -1,1 +1,1 @@
-C-TEST-001: isSwarmReady already implemented — source and test exist in utils.ts/utils.test.ts; all verification commands (fix, typecheck, test) pass.
+C-TEST-001: isSwarmReady utility — already implemented at packages/shared/utils/src/lib/common/utils.ts:553 (export const isSwarmReady = (): boolean => true) with companion test at utils.test.ts:222. Zero data model changes. No new files needed. Verification: moon run utils:fix, utils:typecheck, utils:test.
