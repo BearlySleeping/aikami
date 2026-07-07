@@ -268,7 +268,7 @@ examples/**/*.wav
 examples/**/*.ttf
 examples/**/*.svg
 examples/godot-examples/
-examples/web/
+examples
 game/addons/godot_whisper/bin/
 game/addons/godot_whisper/models/
 game/assets/audio/

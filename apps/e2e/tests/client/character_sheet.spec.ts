@@ -35,7 +35,7 @@ test.describe('Character Sheet — Dev Sandbox', () => {
     await sheet.expectModifier('CHA', '-1');
   });
 
-  test('should edit an ability score and recompute modifier', async ({ page }) => {
+  test('should edit an ability score and recompute modifier', async ({ page: _page }) => {
     await sheet.tabAbilities.click();
 
     const strInput = sheet.abilityInput('STR');
@@ -76,10 +76,9 @@ test.describe('Character Sheet — Dev Sandbox', () => {
 
     // Verify personality traits textarea has mock data
     const personalityText = sheet.page.locator('textarea').first();
-    await expect(personalityText).toHaveValue(
-      'I always keep my word. I face problems head-on.',
-      { timeout: 3_000 },
-    );
+    await expect(personalityText).toHaveValue('I always keep my word. I face problems head-on.', {
+      timeout: 3_000,
+    });
   });
 
   test('should add and remove narrative trait chips', async () => {
