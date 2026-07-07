@@ -78,6 +78,7 @@ const main = async (): Promise<void> => {
   // Initialize workspace
   const state = await initializeSwarm({
     projectRoot: process.cwd(),
+    taskId: payload.taskId,
   });
 
   // Execute the task pipeline

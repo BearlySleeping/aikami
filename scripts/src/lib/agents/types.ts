@@ -146,7 +146,10 @@ export type HerdrJsonResponse<T> = {
 
 // ── Constants ───────────────────────────────────────────────
 
-/** Workspace label for the swarm agent workspace. */
+/** Workspace label for the swarm agent workspace. Default: 'aikami-agents'. Contract-specific: 'aikami-agents-{taskId}'. */
+export const getSwarmWorkspaceLabel = (taskId?: string): string =>
+  taskId ? `aikami-agents-${taskId}` : 'aikami-agents';
+
 export const SWARM_WORKSPACE_LABEL = 'aikami-agents';
 
 /** Tab label for the director orchestrator (runs swarm_start.ts). */
