@@ -17,7 +17,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { createAgentScratchpad, type SwarmStateRow } from '../agent_scratchpad';
+import { createAgentScratchpad, type SwarmStateRow } from './agent_scratchpad';
 import type {
   AgentRecord,
   AgentRole,

@@ -52,7 +52,6 @@ const VALIDATE_SCHEMA = {
       items: { type: 'string' },
       description: 'List of specific visual issues or discrepancies detected',
     },
-    // biome-ignore lint/style/useNamingConvention: JSON Schema field
     expectationMet: {
       type: 'boolean',
       description: 'Whether the expectation is fully met (score >= 80 implies true)',
@@ -235,7 +234,13 @@ export default function (pi: ExtensionAPI) {
           };
         }
 
-        const data = result.result!;
+        const data = result.result;
+        if (!data) {
+          return {
+            content: [{ type: 'text', text: '❌ AI validation failed: no result data' }],
+            details: { success: false, error: 'no result data' },
+          };
+        }
         const score = data.score ?? 0;
         const passed = score >= 80;
         const icon = passed ? '✅' : '❌';

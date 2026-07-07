@@ -1,4 +1,4 @@
-// scripts/src/lib/agent_scratchpad.ts
+// scripts/src/lib/agents/agent_scratchpad.ts
 /**
  * Coherent Ephemeral SQLite-WAL Scratchpad Engine.
  *

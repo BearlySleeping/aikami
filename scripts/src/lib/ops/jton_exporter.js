@@ -1,4 +1,4 @@
-// scripts/tiled/jton_exporter.js
+// scripts/src/lib/ops/jton_exporter.js
 //
 // JTON (JSON Tabular Object Notation) / Zen Grid exporter for Tiled maps.
 //
