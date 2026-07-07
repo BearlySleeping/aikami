@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "$schema": "node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -13,7 +13,7 @@
       "packages/**",
       "scripts/**",
       ".pi/**",
-      "!.pi/generated-skills/**",
+      "!.pi/generated-skills",
       "!**/temp/*",
       "!**/tmp/*",
       "!**/dist/*",
@@ -34,7 +34,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noThenProperty": "error",
         "noExplicitAny": "error",
@@ -149,42 +149,11 @@
       }
     },
     {
-      "includes": ["**/scripts/**/*.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [".pi/runners/**"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off"
-          },
-          "style": {
-            "useNamingConvention": "off",
-            "useFilenamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [".pi/skills/aikami-conventions/lint_rules.json"],
-      "includes": ["apps/e2e/src/auth.setup.ts", "apps/e2e/src/global_setup.ts", "apps/e2e/src/global_teardown.ts", "apps/e2e/src/emulator_helper.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["apps/e2e/src/visual/**/*.ts"],
+      "includes": [
+        "apps/e2e/**",
+        "**/scripts/**",
+        ".pi/**"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
@@ -237,10 +206,7 @@
       }
     },
     {
-      "includes": [
-        ".pi/extensions/**",
-        ".pi/scripts/**"
-      ],
+      "includes": [".pi/**"],
       "linter": {
         "rules": {
           "style": {
@@ -259,6 +225,7 @@
         "scripts/src/lib/test_blackbox/**",
         "scripts/src/lib/herdr/**",
         "scripts/src/lib/agents/**",
+        "scripts/src/lib/agent_scratchpad.ts",
         "packages/backend/ai/src/lib/agent_router.ts",
         "packages/frontend/repositories/src/lib/agent_scratchpad.ts",
         "scripts/src/index.ts",

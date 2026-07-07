@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
-// scripts/convert_audio.ts
+// scripts/src/lib/ops/convert_audio.ts
 //
 // Converts sample audio from the Godot asset directory to the formats
 // required by C-150 (Audio System):
 //   BGM: .ogg (Vorbis) → .webm (Opus, 48kHz stereo)
 //   SFX: .wav/.ogg/.mp3 → .wav (PCM S16LE, 44.1kHz mono)
 //
-// Usage: bun run scripts/convert_audio.ts
+// Usage: bun run scripts/src/lib/ops/convert_audio.ts
 
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';

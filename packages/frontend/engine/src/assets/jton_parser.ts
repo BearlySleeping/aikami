@@ -16,7 +16,7 @@ import type { TilemapData, TilemapLayer, TilemapTileset } from './map_loader.ts'
 //   2. Comma-delimited data rows: 1,0,15 (BPE tokenizer compatible)
 //   3. Zero-allocation: spawn/transition data written to flat arrays
 //
-// Format specification (see scripts/tiled/jton_exporter.js for full):
+// Format specification (see scripts/src/lib/ops/jton_exporter.js for full):
 //   [:map: W H TILE_W TILE_H
 //   :tileset: NAME FIRSTGID IMAGE IW IH TW TH COLS COUNT
 //   :tiles: LAYER_NAME VISIBLE (x, y, tileId)   → COL,ROW,GID per line

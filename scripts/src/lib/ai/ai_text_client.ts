@@ -204,7 +204,7 @@ const _sanitizeJsonResponse = (raw: string): string => {
   // Strip markdown code fences
   const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
-    text = fenceMatch[1].trim();
+    text = (fenceMatch[1] ?? '').trim();
   }
 
   // Find first { or [
@@ -304,6 +304,7 @@ export const streamChat = async (options: StreamChatOptions): Promise<void> => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // biome-ignore lint/style/useNamingConvention: HTTP header
         ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
         ...(provider.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
       },
@@ -391,6 +392,7 @@ export const extractStructure = async (options: ExtractStructureOptions): Promis
     model: provider.model,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
     stream: true,
+    // biome-ignore lint/style/useNamingConvention: OpenAI field
     response_format: {
       type: 'json_schema',
       // biome-ignore lint/style/useNamingConvention: OpenAI field
@@ -406,6 +408,7 @@ export const extractStructure = async (options: ExtractStructureOptions): Promis
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      // biome-ignore lint/style/useNamingConvention: HTTP header
       ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}),
       ...(provider.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
     },
