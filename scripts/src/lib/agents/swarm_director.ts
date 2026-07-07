@@ -485,7 +485,11 @@ const _executeStepOnce = async (options: {
   // Mark working
   agent.status = 'working';
   state.lastUpdated = new Date().toISOString();
-  _writeHeartbeat({ taskId: state.activeTaskId ?? 'unknown', agentKey: step.agent, status: 'working' });
+  _writeHeartbeat({
+    taskId: state.activeTaskId ?? 'unknown',
+    agentKey: step.agent,
+    status: 'working',
+  });
 
   // Send command to target pane (session stays open between steps)
   await runInPane(agent.paneId, step.command);
@@ -556,7 +560,12 @@ const _executeStepOnce = async (options: {
   const summary = _readAgentSummary(state.activeTaskId ?? '', step.agent);
   agent.status = 'done';
   state.lastUpdated = new Date().toISOString();
-  _writeHeartbeat({ taskId: state.activeTaskId ?? 'unknown', agentKey: step.agent, status: 'done', output: summary });
+  _writeHeartbeat({
+    taskId: state.activeTaskId ?? 'unknown',
+    agentKey: step.agent,
+    status: 'done',
+    output: summary,
+  });
 
   console.log('[swarm:step:done]', {
     stepIndex: step.stepIndex,
@@ -582,7 +591,11 @@ const executeStep = async (options: { step: SwarmStep; state: SwarmState }): Pro
       if (attempt >= maxRetries) {
         agent.status = 'blocked';
         state.lastUpdated = new Date().toISOString();
-        _writeHeartbeat({ taskId: state.activeTaskId ?? 'unknown', agentKey: step.agent, status: 'blocked' });
+        _writeHeartbeat({
+          taskId: state.activeTaskId ?? 'unknown',
+          agentKey: step.agent,
+          status: 'blocked',
+        });
         throw error;
       }
       console.warn(

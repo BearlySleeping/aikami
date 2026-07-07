@@ -402,7 +402,10 @@ const MODEL_FALLBACK_CHAIN = [
  * Starts with the configured primary, then alternates provider or model
  * on each failure until the fallback chain is exhausted.
  */
-const _buildFallbackChain = (primaryProvider: VlmProviderType, primaryModel: string): Array<{ provider: VlmProviderType; model: string }> => {
+const _buildFallbackChain = (
+  primaryProvider: VlmProviderType,
+  primaryModel: string,
+): Array<{ provider: VlmProviderType; model: string }> => {
   const chain: Array<{ provider: VlmProviderType; model: string }> = [
     { provider: primaryProvider, model: primaryModel },
   ];
@@ -525,7 +528,12 @@ export const evaluateImage = async <T = Record<string, unknown>>(
         : undefined;
 
       const rawContent = isLocal
-        ? await _callOllama({ imageDataUri, prompt, model: entry.model, temperature: config.temperature })
+        ? await _callOllama({
+            imageDataUri,
+            prompt,
+            model: entry.model,
+            temperature: config.temperature,
+          })
         : await _callOpenRouter({ imageDataUri, prompt, model: entry.model, responseFormat });
 
       // Parse JSON from content
@@ -611,7 +619,12 @@ export const describeImage = async (options: VlmDescribeOptions): Promise<VlmDes
       const isLocal = entry.provider === 'local_ollama' || entry.provider === 'local_llamaccp';
 
       const rawContent = isLocal
-        ? await _callOllama({ imageDataUri, prompt, model: entry.model, temperature: config.temperature })
+        ? await _callOllama({
+            imageDataUri,
+            prompt,
+            model: entry.model,
+            temperature: config.temperature,
+          })
         : await _callOpenRouter({
             imageDataUri,
             prompt: `${prompt}\n\nDescribe the image in detail. Return ONLY plain text — no JSON, no markdown.`,

@@ -238,9 +238,9 @@ export class AgentScratchpad {
     this._db.exec(SCHEMA_SQL);
 
     // Migration: add agent_output column if missing (pre-existing DBs from swarm v1)
-    const cols = this._db
-      .query("PRAGMA table_info('swarm_heartbeat')")
-      .all() as Array<{ name: string }>;
+    const cols = this._db.query("PRAGMA table_info('swarm_heartbeat')").all() as Array<{
+      name: string;
+    }>;
     if (!cols.some((c) => c.name === 'agent_output')) {
       this._db.exec("ALTER TABLE swarm_heartbeat ADD COLUMN agent_output TEXT DEFAULT ''");
     }

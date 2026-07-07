@@ -22,8 +22,8 @@ import type { QuestViewModelInterface } from '../../quest/quest_view_model.svelt
 import { getQuestViewModel } from '../../quest/quest_view_model.svelte.ts';
 import type { VendorViewModelInterface } from '../../vendor/vendor_view_model.svelte';
 import { getVendorViewModel } from '../../vendor/vendor_view_model.svelte';
-import { getCharacterSheetViewModel } from '../dashboard/character_sheet_view_model.svelte';
 import type { CharacterSheetViewModelInterface } from '../dashboard/character_sheet_view_model.svelte';
+import { getCharacterSheetViewModel } from '../dashboard/character_sheet_view_model.svelte';
 import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
 import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
 import { getGameOverViewModel } from './overlays/game_over/game_over_view_model.svelte';

@@ -1,12 +1,12 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte
-  import type { PauseMenuViewModelInterface } from './pause_menu_view_model.svelte';
+    import type { PauseMenuViewModelInterface } from './pause_menu_view_model.svelte';
 
-  type Props = {
-    viewModel: PauseMenuViewModelInterface;
-  };
+    type Props = {
+      viewModel: PauseMenuViewModelInterface;
+    };
 
-  const { viewModel }: Props = $props();
+    const { viewModel }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
