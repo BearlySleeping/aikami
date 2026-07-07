@@ -1,89 +1,89 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
 
-    import type { NpcData } from '@aikami/types';
-    import t from '$i18n';
-    import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-    import type { NpcListViewModelInterface, NpcTab } from './npc_list_view_model.svelte.ts';
+  import type { NpcData } from '@aikami/types';
+  import t from '$i18n';
+  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import type { NpcListViewModelInterface, NpcTab } from './npc_list_view_model.svelte.ts';
 
-    type Props = {
-      viewModel: NpcListViewModelInterface;
-    };
-    const { viewModel }: Props = $props();
+  type Props = {
+    viewModel: NpcListViewModelInterface;
+  };
+  const { viewModel }: Props = $props();
 
-    let fileInput: HTMLInputElement;
-    let urlInput = $state('');
-    let showUrlModal = $state(false);
-    let showCreateModal = $state(false);
+  let fileInput: HTMLInputElement;
+  let urlInput = $state('');
+  let showUrlModal = $state(false);
+  let showCreateModal = $state(false);
 
-    // Edit modal state
-    let editName = $state('');
-    let editRace = $state('');
-    let editClass = $state('');
-    let editLevel = $state(1);
-    let editOccupation = $state('');
-    let editPersonality = $state('');
-    let editNotes = $state('');
-    let editVisibility = $state<'private' | 'public'>('private');
-    let isSaving = $state(false);
+  // Edit modal state
+  let editName = $state('');
+  let editRace = $state('');
+  let editClass = $state('');
+  let editLevel = $state(1);
+  let editOccupation = $state('');
+  let editPersonality = $state('');
+  let editNotes = $state('');
+  let editVisibility = $state<'private' | 'public'>('private');
+  let isSaving = $state(false);
 
-    async function saveField(field: string, value: unknown) {
-      if (isSaving) {
-        return;
-      }
-      isSaving = true;
-      try {
-        await viewModel.saveNpc({ data: { [field]: value } });
-      } finally {
-        isSaving = false;
-      }
+  async function saveField(field: string, value: unknown) {
+    if (isSaving) {
+      return;
     }
-
-    function openEditForm(npc: NpcData) {
-      editName = npc.name || '';
-      editRace = npc.race || '';
-      editClass = npc.class || '';
-      editLevel = npc.level || 1;
-      editOccupation = npc.occupation || '';
-      editPersonality = npc.personality || '';
-      editNotes = npc.notes || '';
-      editVisibility = npc.visibility || 'private';
-      viewModel.openEditModal({ npc });
+    isSaving = true;
+    try {
+      await viewModel.saveNpc({ data: { [field]: value } });
+    } finally {
+      isSaving = false;
     }
+  }
 
-    const tabs: { key: NpcTab; label: string }[] = [
-      { key: 'all', label: 'All' },
-      { key: 'mine', label: 'My NPCs' },
-      { key: 'public', label: 'Public' },
-      { key: 'system', label: 'System' },
-    ];
+  function openEditForm(npc: NpcData) {
+    editName = npc.name || '';
+    editRace = npc.race || '';
+    editClass = npc.class || '';
+    editLevel = npc.level || 1;
+    editOccupation = npc.occupation || '';
+    editPersonality = npc.personality || '';
+    editNotes = npc.notes || '';
+    editVisibility = npc.visibility || 'private';
+    viewModel.openEditModal({ npc });
+  }
 
-    function getTabCount(tab: NpcTab): number {
-      switch (tab) {
-        case 'all':
-          return viewModel.systemNpcs.length + viewModel.userNpcs.length;
-        case 'mine':
-          return viewModel.userNpcs.length;
-        case 'public':
-          return viewModel.publicNpcs.length;
-        case 'system':
-          return viewModel.systemNpcs.length;
-        default:
-          return 0;
-      }
+  const tabs: { key: NpcTab; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'mine', label: 'My NPCs' },
+    { key: 'public', label: 'Public' },
+    { key: 'system', label: 'System' },
+  ];
+
+  function getTabCount(tab: NpcTab): number {
+    switch (tab) {
+      case 'all':
+        return viewModel.systemNpcs.length + viewModel.userNpcs.length;
+      case 'mine':
+        return viewModel.userNpcs.length;
+      case 'public':
+        return viewModel.publicNpcs.length;
+      case 'system':
+        return viewModel.systemNpcs.length;
+      default:
+        return 0;
     }
+  }
 
-    function handleFileChange(event: Event) {
-      viewModel.handleFileImport({ event });
-    }
+  function handleFileChange(event: Event) {
+    viewModel.handleFileImport({ event });
+  }
 
-    function handleUrlSubmit() {
-      if (urlInput.trim()) {
-        viewModel.handleUrlImport({ url: urlInput.trim() });
-        urlInput = '';
-        showUrlModal = false;
-      }
+  function handleUrlSubmit() {
+    if (urlInput.trim()) {
+      viewModel.handleUrlImport({ url: urlInput.trim() });
+      urlInput = '';
+      showUrlModal = false;
     }
+  }
 </script>
 
 <BaseViewModelContainer {viewModel}>
