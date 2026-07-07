@@ -15,6 +15,7 @@ import { textGenerationService } from '$lib/services/ai/text_generation_service.
 import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import { gameStateService } from '$services';
+import { worldGenSeedingService } from '$views/worldgen/world_gen_seeding_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // CombatViewModel — Svelte 5 ViewModel for the combat / turn-based battle UI
@@ -970,7 +971,7 @@ export class CombatViewModel
         ? inventory.map((item) => `  - ${item.itemId} x${item.quantity}`).join('\n')
         : '  (empty)';
 
-    return [
+    const lines = [
       '--- Player Character Sheet ---',
       `Level: ${this.playerLevel}`,
       `HP: ${this.playerHp}/${this.playerMaxHp}`,
@@ -979,7 +980,19 @@ export class CombatViewModel
       'Inventory:',
       inventoryLines,
       '--- End Character Sheet ---',
-    ].join('\n');
+    ];
+
+    // Inject world generation context (C-233)
+    const worldGen = gameStateService.worldGenOutput;
+    if (worldGen && Array.isArray(worldGen.npcs) && worldGen.npcs.length > 0) {
+      const gmPrompt = worldGenSeedingService.assembleGmPrompt({
+        output: worldGen,
+        playerGoals: `Explore the world of ${worldGen.worldName}.`,
+      });
+      lines.push('', '--- World Context ---', gmPrompt, '--- End World Context ---');
+    }
+
+    return lines.join('\n');
   }
 
   // -----------------------------------------------------------------------

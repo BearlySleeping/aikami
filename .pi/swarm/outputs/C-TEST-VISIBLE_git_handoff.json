@@ -1,0 +1,11 @@
+{
+  "taskId": "C-TEST-VISIBLE",
+  "role": "git",
+  "status": "success",
+  "complexity": "standard",
+  "domain": "fullstack",
+  "requiresDocs": false,
+  "filesTouched": ["src/app.ts", "src/test.ts", "plan.md"],
+  "nextCommands": [],
+  "summary": "Commit: feat(core): add visible pipeline demo"
+}

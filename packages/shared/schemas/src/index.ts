@@ -35,5 +35,6 @@ export * from './lib/image_generation.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/parser.ts';
 export * from './lib/project.ts';
+export * from './lib/swarm_handoff.ts';
 export { type ParseLevel, validateWithLevel } from './lib/validate.ts';
 export type { Persona } from './persona.schema.ts';

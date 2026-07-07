@@ -1,0 +1,11 @@
+{
+  "taskId": "C-TEST-004",
+  "role": "coder",
+  "status": "success",
+  "complexity": "trivial",
+  "domain": "frontend",
+  "requiresDocs": false,
+  "filesTouched": ["utils.ts"],
+  "nextCommands": ["moon run utils:test"],
+  "summary": "Coder step done"
+}

@@ -28,6 +28,7 @@ import {
   textGenerationService,
   ttsService,
 } from '$services';
+import { worldGenSeedingService } from '$views/worldgen/world_gen_seeding_service.svelte.ts';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -676,6 +677,16 @@ class DialogueOverlayViewModel
     const sheetSummary = gameStateService.characterSheetSummary;
     if (sheetSummary) {
       lines.push('', '[CHARACTER SHEET]', sheetSummary, '[/CHARACTER SHEET]');
+    }
+
+    // Inject world generation context (C-233)
+    const worldGen = gameStateService.worldGenOutput;
+    if (worldGen && Array.isArray(worldGen.npcs) && worldGen.npcs.length > 0) {
+      const gmPrompt = worldGenSeedingService.assembleGmPrompt({
+        output: worldGen,
+        playerGoals: `Explore the world of ${worldGen.worldName}.`,
+      });
+      lines.push('', '[WORLD CONTEXT]', gmPrompt, '[/WORLD CONTEXT]');
     }
 
     return lines.join('\n');

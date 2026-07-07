@@ -14,6 +14,7 @@
 import { writeFileSync } from 'node:fs';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { getModelForTier } from '../../.pi/swarm/models';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -28,12 +29,7 @@ type LedgerReportEnvelope = {
   }>;
 };
 
-// ── Model mapping ───────────────────────────────────────────
-
-const TIER_MODEL_MAP: Record<string, string> = {
-  pro: 'deepseek/deepseek-v4-pro',
-  flash: 'deepseek/deepseek-v4-flash',
-};
+// ── Model mapping (from .pi/swarm/models.ts) ───────────────
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -88,11 +84,11 @@ export default function (pi: ExtensionAPI) {
           ? 'flash'
           : params.forceModelTierSelection;
 
-      const model = TIER_MODEL_MAP[tier] ?? TIER_MODEL_MAP.flash;
+      const model = getModelForTier(tier);
       const taskId = params.taskId;
       const contractPath = params.contractPath ?? `docs/contracts/${taskId}.md`;
 
-      const architectPlanPath = `.pi/swarm/architect_plan_${taskId}.md`;
+      const architectPlanPath = `.pi/swarm/plans/architect_plan_${taskId}.md`;
 
       const payload = {
         taskId,
@@ -135,7 +131,7 @@ export default function (pi: ExtensionAPI) {
       try {
         const wsData = JSON.parse(discoverWs.stdout || '{}');
         const wss = wsData?.result?.workspaces as
-          | Array<{ workspace_id: string; label: string }>
+          | Array<{ workspace_id: string; label: string; number: number }>
           | undefined;
         let ws = wss?.find((w) => w.label === wsLabel);
 
@@ -165,8 +161,8 @@ export default function (pi: ExtensionAPI) {
           | undefined;
 
         if (firstTab) {
-          // Pane ID convention: workspace:p1 for first tab's first pane
-          directorPaneId = `${ws.workspace_id}:p1`;
+          // Pane ID: herdr CLI uses <workspace_number>-<pane_number>
+          directorPaneId = `${ws.number}-1`;
         } else {
           throw new Error('No tabs in workspace');
         }

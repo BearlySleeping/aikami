@@ -41,3 +41,5 @@ export * from './lib/helpers.ts';
 export * from './lib/logger.ts';
 export * from './lib/project.ts';
 export * from './lib/repository/utils.ts';
+export * from './lib/swarm_handoff.ts';
+export * from './lib/world_gen.ts';

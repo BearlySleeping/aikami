@@ -1,0 +1,41 @@
+{
+  "taskId": "C-TEST-004",
+  "completedAt": "2026-07-07T13:57:37.472Z",
+  "totalDurationMs": 823,
+  "agents": [
+    {
+      "role": "architect",
+      "status": "success",
+      "durationMs": 0,
+      "filesTouched": 1,
+      "estimatedTokensOutput": 313,
+      "summaryPreview": "Trivial smoke test"
+    },
+    {
+      "role": "coder",
+      "status": "success",
+      "durationMs": 0,
+      "filesTouched": 1,
+      "estimatedTokensOutput": 310,
+      "summaryPreview": "Coder step done"
+    },
+    {
+      "role": "qa",
+      "status": "unknown",
+      "durationMs": 0,
+      "filesTouched": 0,
+      "estimatedTokensOutput": 0,
+      "summaryPreview": "(no output)"
+    },
+    {
+      "role": "git",
+      "status": "success",
+      "durationMs": 0,
+      "filesTouched": 1,
+      "estimatedTokensOutput": 323,
+      "summaryPreview": "Commit: test(smoke): verify C-311"
+    }
+  ],
+  "trivialPath": false,
+  "documentationGenerated": false
+}

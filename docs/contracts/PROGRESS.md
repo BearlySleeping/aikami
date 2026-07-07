@@ -197,6 +197,7 @@
 | C-230 | Provider Connection Config | ✅ completed |
 | C-231 | Rich Chat Streaming | ✅ completed |
 | C-232 | Character Sheet Traits | ⏳ not_started |
+| C-233 | World Generation Wizard | ✅ completed |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
 | C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |
 | C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ✅ completed |
@@ -208,6 +209,7 @@
 | C-308 | Swarm Post Mortem And Meta Reflective Skill Optimizer | ✅ completed |
 | C-309 | Swarm Control Pi Extension And Command Surface Wrapper | ✅ completed |
 | C-310 | Automated Backlog Contract Generator | ✅ completed |
+| C-311 | Swarm Socket Orchestration | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
