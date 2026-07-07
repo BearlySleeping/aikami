@@ -1,1 +1,1 @@
-C-TEST-001: isSwarmReady() already implemented at utils.ts:553 with test at utils.test.ts:222 — zero code changes needed. Verification: moon run utils:fix && moon run utils:typecheck && moon run utils:test.
+C-TEST-001: Add `isSwarmReady()` returning `true` in `packages/shared/utils/src/lib/common/utils.ts` with unit test. Already implemented and passing (67 tests, 0 failures). Verification: `moon run utils:fix && moon run utils:typecheck && moon run utils:test`.

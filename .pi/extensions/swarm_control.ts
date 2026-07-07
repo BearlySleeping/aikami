@@ -126,47 +126,45 @@ export default function (pi: ExtensionAPI) {
       const tmpFile = `${cwd}/.pi/pipeline_payload_${params.taskId}.json`;
       writeFileSync(tmpFile, JSON.stringify(payload, null, 2));
 
-      // ── Discover director pane ID ──────────────────────
-      // The aikami-agents workspace has up to 5 tabs: architect, coder, qa, git, director.
-      // Find the director tab and map it to its root pane.
+      // ── Discover or create contract workspace ──────────────
+      // Workspace label derived from taskId: aikami-agents-C-191, etc.
+      const wsLabel = `aikami-agents-${params.taskId}`;
       const discoverWs = await pi.exec('herdr', ['workspace', 'list']);
 
-      let directorPaneId = ''; // will be discovered
+      let directorPaneId = '';
       try {
         const wsData = JSON.parse(discoverWs.stdout || '{}');
-        const ws = wsData?.result?.workspaces?.find(
-          (w: { label: string }) => w.label === 'aikami-agents',
-        );
+        const wss = wsData?.result?.workspaces as Array<{ workspace_id: string; label: string }> | undefined;
+        let ws = wss?.find((w) => w.label === wsLabel);
+
         if (!ws) {
-          // biome-ignore lint/suspicious/noConsole: extension error logging
-          console.error('[swarm:trigger] workspace aikami-agents not found — run bun swarm:init');
-        } else {
-          // Find the director tab and derive its pane ID
-          const tabsResult = await pi.exec('herdr', [
-            'tab',
-            'list',
-            '--workspace',
-            ws.workspace_id,
+          // Create new contract workspace
+          const createR = await pi.exec('herdr', [
+            'workspace', 'create',
+            '--cwd', cwd,
+            '--label', wsLabel,
+            '--no-focus',
           ]);
-          const tabsData = JSON.parse(tabsResult.stdout || '{}');
-          const directorTab = tabsData?.result?.tabs?.find(
-            (t: { label: string }) => t.label === 'director',
-          );
-          if (directorTab) {
-            directorPaneId = `${ws.workspace_id}:p${directorTab.number}`;
-          } else {
-            // Director tab not found — fallback to first tab's first pane
-            directorPaneId = `${ws.workspace_id}:p1`;
-            // biome-ignore lint/suspicious/noConsole: extension error logging
-            console.error(
-              '[swarm:trigger] director tab not found, falling back to first pane:',
-              directorPaneId,
-            );
+          const createData = JSON.parse(createR.stdout || '{}');
+          ws = createData?.result?.workspace;
+          if (!ws) {
+            throw new Error('Workspace creation failed');
           }
         }
+
+        // Find director tab (tab 1) — initializeSwarm renames it to 'director'
+        const tabsResult = await pi.exec('herdr', ['tab', 'list', '--workspace', ws.workspace_id]);
+        const tabsData = JSON.parse(tabsResult.stdout || '{}');
+        const firstTab = tabsData?.result?.tabs?.[0] as { tab_id: string; number: number } | undefined;
+
+        if (firstTab) {
+          // Pane ID convention: workspace:p1 for first tab's first pane
+          directorPaneId = `${ws.workspace_id}:p1`;
+        } else {
+          throw new Error('No tabs in workspace');
+        }
       } catch (err) {
-        // biome-ignore lint/suspicious/noConsole: extension error logging
-        console.error('[swarm:trigger] failed to discover pane:', err);
+        console.error('[swarm:trigger] failed to discover/create workspace:', err);
       }
 
       if (!directorPaneId) {
@@ -174,15 +172,14 @@ export default function (pi: ExtensionAPI) {
           content: [
             {
               type: 'text',
-              text: '❌ Could not discover swarm director pane. Run `bun swarm:init` first.',
+              text: `❌ Could not create swarm workspace '${wsLabel}'.`,
             },
           ],
           details: { error: 'no-director-pane' },
         };
       }
 
-      // biome-ignore lint/suspicious/noConsole: extension debug logging
-      console.error('[swarm:trigger] director pane:', directorPaneId);
+      console.error('[swarm:trigger] director pane:', directorPaneId, 'workspace:', wsLabel);
 
       // Launch swarm director via herdr in the director pane
       const command = `direnv exec . bash -c 'bun run scripts/src/lib/agents/swarm_start.ts ${tmpFile}; echo; echo "=== Swarm pipeline complete ==="; read'`;
