@@ -1,0 +1,1 @@
+C-TEST-001: isSwarmReady already implemented — source and test exist in utils.ts/utils.test.ts; all verification commands (fix, typecheck, test) pass.

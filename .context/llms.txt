@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-07-06
-> Files: 228 across 11 categories
+> Generated: 2026-07-07
+> Files: 240 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -219,6 +219,18 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 221 modal dialog encapsulation](contracts/C-221-modal-dialog-encapsulation.md)
 - [C 230 provider connection config](contracts/C-230-provider-connection-config.md)
 - [C 231 rich chat streaming](contracts/C-231-rich-chat-streaming.md)
+- [C 232 character sheet traits](contracts/C-232-character-sheet-traits.md)
+- [Contract C-300: Swarm Director & Workspace Provisioning Lifecycle](contracts/C-300-swarm-director-and-workspace-provisioning-lifecycle.md)
+- [Contract C-301: Algorithmic Token Router & AST Footprint Extractor](contracts/C-301-algorithmic-token-router-and-ast-footprint-extractor.md)
+- [Contract C-302: Coherent Ephemeral SQLite-WAL Scratchpad Engine](contracts/C-302-coherent-ephemeral-sqlite-wal-scratchpad-engine.md)
+- [Contract C-303: Self-Healing Visual Test Harness](contracts/C-303-self-healing-visual-test-harness.md)
+- [Contract C-304: AST-Aware Behavioral Code Reviewer & Convention Gate](contracts/C-304-ast-aware-behavioral-code-reviewer-and-convention-gate.md)
+- [Contract C-305: Auto-Sandbox Agent Scaffolding Lifecycle](contracts/C-305-auto-sandbox-agent-scaffolding-lifecycle.md)
+- [Contract C-306: Swarm Hardening & Cache Synchronization Refactor](contracts/C-306-swarm-hardening-and-cache-synchronization-refactor.md)
+- [Contract C-307: Autonomous Scope Explorer & Semantic Dependency Traverser](contracts/C-307-autonomous-scope-explorer-and-semantic-dependency-traverser.md)
+- [Contract C-308: Swarm Post-Mortem & Meta-Reflective Skill Optimizer](contracts/C-308-swarm-post-mortem-and-meta-reflective-skill-optimizer.md)
+- [Contract C-309: Swarm Control Pi Extension & Command Surface Wrapper](contracts/C-309-swarm-control-pi-extension-and-command-surface-wrapper.md)
+- [Contract C-310: Automated Backlog Contract Generator](contracts/C-310-automated-backlog-contract-generator.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

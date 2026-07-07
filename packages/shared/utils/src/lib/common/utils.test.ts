@@ -10,6 +10,7 @@ import {
   isEmptyObject,
   isEqualArray,
   isEqualObject,
+  isSwarmReady,
   shuffle,
   toDisplayUsername,
   toFixedNumber,
@@ -215,6 +216,12 @@ describe('getDateFromUnixTime', () => {
   test('should convert unix timestamp to Date', () => {
     const date = getDateFromUnixTime(0);
     expect(date.toISOString()).toBe('1970-01-01T00:00:00.000Z');
+  });
+});
+
+describe('isSwarmReady', () => {
+  test('should return true', () => {
+    expect(isSwarmReady()).toBe(true);
   });
 });
 
