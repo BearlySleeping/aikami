@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-06)
+## Status Summary (Auto-generated: 2026-07-07)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -196,19 +196,20 @@
 | C-221 | Modal Dialog Encapsulation | ✅ completed |
 | C-230 | Provider Connection Config | ✅ completed |
 | C-231 | Rich Chat Streaming | ✅ completed |
+| C-232 | Character Sheet Traits | ⏳ not_started |
+| C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
+| C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |
+| C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ✅ completed |
+| C-303 | Self Healing Visual Test Harness | ✅ completed |
+| C-304 | Ast Aware Behavioral Code Reviewer And Convention Gate | ✅ completed |
+| C-305 | Auto Sandbox Agent Scaffolding Lifecycle | ✅ completed |
+| C-306 | Swarm Hardening And Cache Synchronization Refactor | ✅ completed |
+| C-307 | Autonomous Scope Explorer And Semantic Dependency Traverser | ✅ completed |
+| C-308 | Swarm Post Mortem And Meta Reflective Skill Optimizer | ✅ completed |
+| C-309 | Swarm Control Pi Extension And Command Surface Wrapper | ✅ completed |
+| C-310 | Automated Backlog Contract Generator | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
 | MIG-004 | Frontend Configs | ✅ completed |
-| C-300 | Swarm Director & Workspace Provisioning | ✅ completed |
-| C-301 | Algorithmic Token Router & AST Footprint | ✅ completed |
-| C-302 | Ephemeral SQLite-WAL Scratchpad Engine | ✅ completed |
-| C-303 | Self-Healing Visual Test Harness | ✅ completed |
-| C-304 | AST-Aware Behavioral Code Reviewer | ✅ completed |
-| C-305 | Auto-Sandbox Agent Scaffolding | ✅ completed |
-| C-306 | Swarm Hardening & Cache Sync Refactor | ✅ completed |
-| C-307 | Autonomous Scope Explorer | ✅ completed |
-| C-308 | Swarm Post-Mortem Skill Optimizer | ✅ completed |
-| C-309 | Swarm Control Pi Extension | ✅ completed |
-| C-310 | Automated Backlog Contract Generator | ✅ completed |
 
