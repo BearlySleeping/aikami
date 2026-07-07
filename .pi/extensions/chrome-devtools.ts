@@ -24,6 +24,7 @@ import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { PORTS } from '../../packages/shared/constants/src/lib/development_ports';
+import { optimizeImage } from '../../scripts/src/lib/ai/image_optimizer';
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -379,6 +380,9 @@ export default function (pi: ExtensionAPI) {
       const filename = `${app}-${Date.now()}.png`;
       const filepath = path.join(screenshotsDir, filename);
       fs.writeFileSync(filepath, Buffer.from(screenshot.data, 'base64'));
+
+      // Optimise the screenshot for AI consumption (shared pipeline)
+      await optimizeImage({ filepath });
 
       return {
         content: [

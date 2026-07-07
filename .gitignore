@@ -290,3 +290,4 @@ apps/frontend/client/static/lpc/**/*
 .pi/architect_plan_*.md
 .pi/swarm/payloads/
 .pi/swarm/architect_plan_*.md
+tmp/

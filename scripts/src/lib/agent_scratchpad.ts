@@ -1,4 +1,4 @@
-// packages/frontend/repositories/src/lib/agent_scratchpad.ts
+// scripts/src/lib/agent_scratchpad.ts
 /**
  * Coherent Ephemeral SQLite-WAL Scratchpad Engine.
  *
@@ -95,6 +95,7 @@ export type SwarmStateRow = {
   agentStatus: 'idle' | 'working' | 'blocked' | 'done' | 'unknown';
   lastContextHash: string | null;
   lastHeartbeatTimestamp: number;
+  agentOutput: string;
 };
 
 /** AST outline cache entry for token router prefix stability. */
@@ -194,6 +195,7 @@ const SCHEMA_SQL = `
       CHECK (agent_status IN ('idle', 'working', 'blocked', 'done', 'unknown')),
     last_context_hash TEXT,
     last_heartbeat_timestamp INTEGER NOT NULL,
+    agent_output TEXT DEFAULT '',
     PRIMARY KEY (task_id, agent_key)
   );
 `;
@@ -234,6 +236,14 @@ export class AgentScratchpad {
 
     // Enable WAL mode before anything else
     this._db.exec(SCHEMA_SQL);
+
+    // Migration: add agent_output column if missing (pre-existing DBs from swarm v1)
+    const cols = this._db
+      .query("PRAGMA table_info('swarm_heartbeat')")
+      .all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === 'agent_output')) {
+      this._db.exec("ALTER TABLE swarm_heartbeat ADD COLUMN agent_output TEXT DEFAULT ''");
+    }
 
     // Set up periodic WAL checkpoint if requested
     if (options.walCheckpointIntervalMs && options.walCheckpointIntervalMs > 0) {
@@ -590,8 +600,8 @@ export class AgentScratchpad {
 
     this._db.run(
       `INSERT OR REPLACE INTO swarm_heartbeat
-       (task_id, workspace_id, agent_key, agent_status, last_context_hash, last_heartbeat_timestamp)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       (task_id, workspace_id, agent_key, agent_status, last_context_hash, last_heartbeat_timestamp, agent_output)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         row.taskId,
         row.workspaceId,
@@ -599,6 +609,7 @@ export class AgentScratchpad {
         row.agentStatus,
         row.lastContextHash,
         row.lastHeartbeatTimestamp,
+        row.agentOutput ?? '',
       ],
     );
   }
@@ -616,6 +627,7 @@ export class AgentScratchpad {
           agent_status: string;
           last_context_hash: string | null;
           last_heartbeat_timestamp: number;
+          agent_output: string;
         },
         [string]
       >('SELECT * FROM swarm_heartbeat WHERE task_id = ? ORDER BY agent_key')
@@ -628,6 +640,7 @@ export class AgentScratchpad {
       agentStatus: r.agent_status as SwarmStateRow['agentStatus'],
       lastContextHash: r.last_context_hash,
       lastHeartbeatTimestamp: r.last_heartbeat_timestamp,
+      agentOutput: r.agent_output ?? '',
     }));
   }
 

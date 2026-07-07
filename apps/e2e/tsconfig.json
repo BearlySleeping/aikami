@@ -20,6 +20,7 @@
       "@aikami/types/*": ["../../packages/shared/types/src/*"],
       "@aikami/utils": ["../../packages/shared/utils/src/index.ts"],
       "@aikami/utils/*": ["../../packages/shared/utils/src/*"],
+      "@scripts/ai": ["../../scripts/src/lib/ai/index.ts"],
       "$logger": ["../../packages/shared/logger/src/index.ts"],
       "$lib/*": ["./src/lib/*"],
       "$visual/*": ["./src/visual/*"],

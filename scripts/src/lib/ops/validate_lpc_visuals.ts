@@ -29,30 +29,19 @@
 // biome-ignore-all lint/style/useNamingConvention: contract C-050/C-073 JSON output format
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { $ } from 'bun';
+import { convertToWebp, evaluateImage, toBase64DataUri } from '../ai';
 
 // ── Configuration ──────────────────────────────────────────────────────
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY?.trim();
-if (!OPENROUTER_API_KEY?.startsWith('sk-or-v1-')) {
-  console.error('❌ OPENROUTER_API_KEY environment variable is missing or invalid.');
-  process.exit(1);
-}
-
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'google/gemini-2.5-flash';
+const MODEL = process.env.VLM_MODEL || 'google/gemini-2.5-flash';
 
 /** Directory containing Playwright LPC screenshots (relative to monorepo root). */
 const SCREENSHOT_DIR = resolve(join('apps', 'e2e', 'test-results', 'lpc-visual'));
 
 /** Minimum confidence score for a passing configuration (0-100). */
 const PASSING_SCORE = 70;
-
-/** ImageMagick optimization: max dimension, WebP quality. */
-const MAX_DIMENSION = 800;
-const WEBP_QUALITY = 80;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -160,60 +149,8 @@ const loadCache = (): Map<string, LpcVisualResult> => {
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 
-// ── Image optimization (ImageMagick) ───────────────────────────────────
-
-/**
- * Optimize a PNG screenshot for API submission using ImageMagick.
- *
- * Resizes to max 800px (maintaining aspect ratio), converts to WebP at 80%
- * quality. Caches the optimized file — skips re-encoding if the source
- * timestamp hasn't changed.
- *
- * @param pngPath - Absolute path to the source PNG.
- * @returns Absolute path to the optimized WebP file.
- */
-const optimizeImage = async (pngPath: string): Promise<string> => {
-  const webpPath = pngPath.replace(/\.png$/i, '.webp');
-  const pngStat = statSync(pngPath);
-
-  // Cache: skip if WebP exists and is newer than PNG
-  if (existsSync(webpPath)) {
-    const webpStat = statSync(webpPath);
-    if (webpStat.mtimeMs >= pngStat.mtimeMs) {
-      return webpPath;
-    }
-  }
-
-  try {
-    await $`convert ${pngPath} -resize "${MAX_DIMENSION}x${MAX_DIMENSION}>" -quality ${WEBP_QUALITY} ${webpPath}`.quiet();
-  } catch {
-    // If ImageMagick fails, fall back to raw PNG
-    console.warn(`   ⚠ ImageMagick failed for ${pngPath}, using raw PNG`);
-    return pngPath;
-  }
-
-  const webpStat = existsSync(webpPath) ? statSync(webpPath) : null;
-  const originalKb = Math.round(pngStat.size / 1024);
-  const optimizedKb = webpStat ? Math.round(webpStat.size / 1024) : originalKb;
-  const savings = originalKb - optimizedKb;
-
-  if (savings > 0) {
-    console.log(`   📐 Optimized: ${originalKb}KB → ${optimizedKb}KB (saved ${savings}KB)`);
-  }
-
-  return webpPath;
-};
-
-/**
- * Read an image file and return a base64 data URI.
- */
-const imageToBase64DataUri = async (imagePath: string): Promise<string> => {
-  const file = Bun.file(imagePath);
-  const buffer = await file.arrayBuffer();
-  const base64 = Buffer.from(buffer).toString('base64');
-  const ext = imagePath.endsWith('.webp') ? 'webp' : 'png';
-  return `data:image/${ext};base64,${base64}`;
-};
+// ── Image optimization ──────────────────────────────────────────────────
+// Delegated to @aikami/utils shared pipeline (convertToWebp / toBase64DataUri).
 
 // ── OpenRouter prompt builder ──────────────────────────────────────────
 
@@ -284,60 +221,33 @@ Respond with ONLY a JSON object in this EXACT schema (no markdown code blocks, n
 `.trim();
 };
 
-// ── OpenRouter API call ────────────────────────────────────────────────
+// ── AI evaluation ──────────────────────────────────────────────────────
 
+/**
+ * Evaluates a single LPC screenshot via the shared VLM client.
+ *
+ * Delegates provider routing, API call, and JSON extraction to
+ * {@link evaluateImage} from @aikami/utils. Post-processes the
+ * result into the LpcVisualResult shape.
+ */
 const evaluateScreenshot = async (
   configId: string,
   imageDataUri: string,
 ): Promise<LpcVisualResult> => {
   const prompt = buildLpcPrompt(configId);
 
-  const requestBody = {
+  const result = await evaluateImage<Record<string, unknown>>({
+    imageDataUri,
+    prompt,
     model: MODEL,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageDataUri } },
-        ],
-      },
-    ],
-  };
-
-  const response = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://aikami.dev',
-      'X-Title': 'Aikami LPC Visual Validation',
-    },
-    body: JSON.stringify(requestBody),
+    useCache: false, // LPC uses its own checksum cache
   });
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown Error');
-    throw new Error(`OpenRouter API failed (${response.status}): ${errorText}`);
+  if (result.error) {
+    throw new Error(result.error);
   }
 
-  const jsonResponse = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const rawText: string = jsonResponse.choices?.[0]?.message?.content ?? '';
-
-  const cleaned = rawText
-    .replace(/```json/g, '')
-    .replace(/```/g, '')
-    .trim();
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-
-  if (!jsonMatch) {
-    throw new Error(`Could not parse JSON from OpenRouter response: ${cleaned.slice(0, 200)}`);
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-
+  const parsed = result.result ?? {};
   const score = typeof parsed.score === 'number' ? Math.max(0, Math.min(100, parsed.score)) : 0;
   const passed = typeof parsed.passed === 'boolean' ? parsed.passed : score >= PASSING_SCORE;
   const detectedAnomalies: string[] = Array.isArray(parsed.detectedAnomalies)
@@ -354,7 +264,7 @@ const evaluateScreenshot = async (
     score,
     passed,
     detectedAnomalies,
-    checksum: '', // filled in by caller after computing file digest
+    checksum: '',
   };
 };
 
@@ -585,9 +495,9 @@ const main = async (): Promise<void> => {
     console.log(`${progress} Evaluating: ${entry.name}...`);
 
     try {
-      // Optimize PNG → WebP before sending to save tokens/bandwidth
-      const optimizedPath = await optimizeImage(entry.path);
-      const dataUri = await imageToBase64DataUri(optimizedPath);
+      // Optimize PNG → WebP before sending (shared pipeline)
+      const optimizedPath = await convertToWebp({ pngPath: entry.path });
+      const dataUri = toBase64DataUri(optimizedPath);
       const result = await evaluateScreenshot(entry.name, dataUri);
 
       const statusIcon = result.passed ? '✅' : '❌';
@@ -639,7 +549,7 @@ const main = async (): Promise<void> => {
   for (const entry of screenshots) {
     const webpPath = entry.path.replace(/\.png$/i, '.webp');
     const imgPath = existsSync(webpPath) ? webpPath : entry.path;
-    images.set(entry.name, await imageToBase64DataUri(imgPath));
+    images.set(entry.name, toBase64DataUri(imgPath));
   }
 
   // Write JSON report

@@ -8,11 +8,11 @@
 // Capture is always sequential — parallel capture risks corrupting
 // the single WebGL context shared by Chromium headless.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EMULATOR_PORTS } from '@aikami/constants';
+import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
 import { chromium, type Page } from 'playwright';
-import sharp from 'sharp';
 import type { TSchema } from 'typebox';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -202,73 +202,8 @@ const _waitForCanvas = async (page: Page, timeout = 20_000): Promise<void> => {
 };
 
 // ── Image optimization ────────────────────────────────────────
-
-/**
- * Target dimensions for Lanczos-resampled visual test images.
- *
- * 672×672 = 21×32 = grid-aligned multiple of 32, which preserves
- * tile-boundary alignment in downsampled sprites. Chosen as a
- * practical size for local Ollama vision models (7B class) that
- * have limited context windows and VRAM budgets. 2016×2016 is the
- * design maximum; reduce further if context overflow persists.
- *
- * Contract: C-200 AC-1 Visual Pipeline Optimization
- */
-const LANCZOS_TARGET_SIZE = 672;
-
-/**
- * Resamples a PNG screenshot to 2016×2016 using Lanczos-3 kernel.
- *
- * Performs square stretching (not padding) — the image is resized
- * to exactly LANCZOS_TARGET_SIZE × LANCZOS_TARGET_SIZE regardless
- * of the original aspect ratio. This ensures consistent input
- * dimensions for cross-platform visual diffing and VLM comparison.
- *
- * The output is always PNG (lossless) — never JPEG or WebP, which
- * introduce compression artifacts that degrade fine edge feature
- * tracking for small 2D pixel-art sprites.
- *
- * Contract: C-200 AC-1
- */
-const _resizeLanczos = async (filepath: string): Promise<void> => {
-  try {
-    const input = readFileSync(filepath);
-    const resized = await sharp(input)
-      .resize(LANCZOS_TARGET_SIZE, LANCZOS_TARGET_SIZE, {
-        fit: 'fill',
-        kernel: 'lanczos3',
-      })
-      .png()
-      .toBuffer();
-    writeFileSync(filepath, resized);
-  } catch {
-    // sharp not available or resize failed — skip, original PNG is usable
-  }
-};
-
-/**
- * Optimizes a PNG screenshot using ImageMagick.
- *
- * Strips metadata and reduces to 256-color palette PNG for smaller
- * payloads when sending to AI vision APIs.
- */
-const _optimizePng = async (filepath: string): Promise<void> => {
-  try {
-    const { $ } = await import('bun');
-    await $`convert ${filepath} -strip -colors 256 PNG8:${filepath}`.quiet().nothrow();
-  } catch {
-    // ImageMagick not available — skip optimization
-  }
-};
-
-/**
- * Reads a PNG file and returns its base64-encoded data URI.
- */
-const _toBase64DataUri = (filepath: string): string => {
-  const buf = readFileSync(filepath);
-  const b64 = buf.toString('base64');
-  return `data:image/png;base64,${b64}`;
-};
+// Delegated to @aikami/utils shared pipeline (C-200 AC-1).
+// See packages/shared/utils/src/lib/ai/image_optimizer.ts.
 
 // ── URL builder ───────────────────────────────────────────────
 
@@ -439,12 +374,11 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             await page.screenshot({ path: filepath, fullPage: true });
           }
 
-          await _optimizePng(filepath);
+          // C-200 AC-1: Optimise + Lanczos resample via shared pipeline
+          await optimizePng({ filepath });
+          await resizeLanczos({ filepath, width: DEFAULT_LANCZOS_SIZE });
 
-          // C-200 AC-1: Lanczos resample to 2016×2016 for deterministic VLM input
-          await _resizeLanczos(filepath);
-
-          const base64DataUri = _toBase64DataUri(filepath);
+          const base64DataUri = toBase64DataUri(filepath);
 
           results.push({
             name: testCase.name,

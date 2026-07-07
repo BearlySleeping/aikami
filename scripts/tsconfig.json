@@ -14,7 +14,11 @@
       "@aikami/types": ["../packages/shared/types/src/index.ts"],
       "@aikami/types/*": ["../packages/shared/types/src/lib/*"],
       "@aikami/schemas": ["../packages/shared/schemas/src/index.ts"],
-      "@aikami/schemas/*": ["../packages/shared/schemas/src/lib/*"]
+      "@aikami/schemas/*": ["../packages/shared/schemas/src/lib/*"],
+      "@aikami/utils": ["../packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../packages/shared/utils/src/lib/*"],
+      "$logger": ["../packages/shared/logger/src/index.ts"],
+      "$logger/*": ["../packages/shared/logger/src/lib/*"]
     }
   },
   "include": ["src/**/*.ts"],

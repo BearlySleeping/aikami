@@ -17,6 +17,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
+import { createAgentScratchpad, type SwarmStateRow } from '../agent_scratchpad';
 import type {
   AgentRecord,
   AgentRole,
@@ -32,6 +33,7 @@ import {
   AGENT_TAB_LABELS,
   DEFAULT_POLLING_CONFIG,
   DIRECTOR_TAB_LABEL,
+  getSwarmWorkspaceLabel,
   SWARM_WORKSPACE_LABEL,
 } from './types';
 
@@ -99,134 +101,29 @@ const ensureServer = async (): Promise<void> => {
   throw new Error('herdr server did not start within timeout');
 };
 
-// ── Scratchpad database ────────────────────────────────────
+// ── Scratchpad (from agent_scratchpad module) ─────────────
 
-/** Path to the SQLite WAL scratchpad database for agent heartbeat tracking. */
-const SCRATCHPAD_DB_PATH = '.pi/swarm/agent_scratchpad.db';
+/** Singleton scratchpad instance — created once per process. */
+const _pad = createAgentScratchpad({
+  dbPath: join(process.cwd(), '.pi/swarm/agent_scratchpad.db'),
+  agentId: 'swarm-director',
+});
 
-/** Cached Database constructor — resolved lazily (bun:sqlite only available in Bun runtime). */
-let _DatabaseCtor: new (path: string) => unknown;
-let _dbInitAttempted = false;
-
-const _getDatabase = (): (new (path: string) => unknown) => {
-  if (_dbInitAttempted) {
-    return _DatabaseCtor;
-  }
-  _dbInitAttempted = true;
-
-  try {
-    // Dynamic require — bun:sqlite is only available in the Bun runtime
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _DatabaseCtor = require('bun:sqlite').Database as new (path: string) => unknown;
-  } catch {
-    // Running under Node.js — heartbeat tracking disabled
-  }
-  return _DatabaseCtor;
-};
-
-/** Open scratchpad DB. Returns null if Bun SQLite unavailable. */
-const _openScratchpad = (projectRoot: string): { db: unknown; path: string } | null => {
-  const Db = _getDatabase();
-  if (!Db) {
-    return null;
-  }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { join } = require('node:path');
-  const dbPath = join(projectRoot, SCRATCHPAD_DB_PATH);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-  const db = new Db(dbPath);
-  return { db, path: dbPath };
-};
-
-/**
- * Initialize the scratchpad SQLite database with the swarm_heartbeat table.
- * Creates the DB at `.pi/agent_scratchpad.db`. Idempotent.
- *
- * Schema: (task_id, agent_key, agent_status, last_heartbeat_timestamp)
- * with UNIQUE(task_id, agent_key) for upsert support.
- */
-const initScratchpad = (projectRoot: string): void => {
-  const handle = _openScratchpad(projectRoot);
-  if (!handle) {
-    console.warn('[swarm:scratchpad] Bun SQLite not available — heartbeat tracking disabled');
-    return;
-  }
-
-  const { db } = handle;
-  const dbAny = db as {
-    exec: (sql: string) => void;
-    query: (sql: string) => { all: () => unknown[]; get: () => unknown };
-    close: () => void;
-  };
-
-  // Enable WAL mode for concurrent reads
-  dbAny.exec('PRAGMA journal_mode=WAL');
-
-  // Create heartbeat table with upsert-ready unique constraint
-  dbAny.exec(`
-    CREATE TABLE IF NOT EXISTS swarm_heartbeat (
-      task_id TEXT NOT NULL,
-      agent_key TEXT NOT NULL,
-      agent_status TEXT NOT NULL DEFAULT 'idle',
-      last_heartbeat_timestamp INTEGER NOT NULL DEFAULT 0,
-      agent_output TEXT DEFAULT '',
-      UNIQUE(task_id, agent_key)
-    )
-  `);
-
-  // Migration: add agent_output column if it doesn't exist (pre-existing DBs)
-  const cols = dbAny.query("PRAGMA table_info('swarm_heartbeat')").all() as Array<{ name: string }>;
-  if (!cols.some((c) => c.name === 'agent_output')) {
-    dbAny.exec("ALTER TABLE swarm_heartbeat ADD COLUMN agent_output TEXT DEFAULT ''");
-    console.debug('[swarm:scratchpad] migrated: added agent_output column');
-  }
-
-  // Seed idle rows if table empty
-  const row = dbAny.query('SELECT COUNT(*) as cnt FROM swarm_heartbeat').get() as
-    | { cnt: number }
-    | undefined;
-  if (!row || row.cnt === 0) {
-    const now = Date.now();
-    for (const role of AGENT_ROLES) {
-      dbAny.exec(
-        `INSERT OR IGNORE INTO swarm_heartbeat (task_id, agent_key, agent_status, last_heartbeat_timestamp) VALUES ('none', '${role}', 'idle', ${now})`,
-      );
-    }
-    console.debug('[swarm:scratchpad] seeded initial heartbeat rows');
-  }
-
-  dbAny.close();
-  console.debug('[swarm:scratchpad] initialized', { dbPath: handle.path });
-};
-
-/**
- * Write a heartbeat update for a single agent during pipeline execution.
- * Uses INSERT OR REPLACE with the UNIQUE(task_id, agent_key) constraint.
- */
-export const writeHeartbeat = (
-  projectRoot: string,
-  taskId: string,
-  agentKey: string,
-  status: string,
-  output?: string,
-): void => {
-  const handle = _openScratchpad(projectRoot);
-  if (!handle) {
-    return;
-  }
-
-  const { db } = handle;
-  const dbAny = db as { exec: (sql: string) => void; close: () => void };
-  const now = Date.now();
-  const escapedOutput = (output ?? '').replace(/'/g, "''");
-
-  // Upsert via INSERT OR REPLACE (requires UNIQUE constraint)
-  dbAny.exec(`
-    INSERT OR REPLACE INTO swarm_heartbeat (task_id, agent_key, agent_status, last_heartbeat_timestamp, agent_output)
-    VALUES ('${taskId}', '${agentKey}', '${status}', ${now}, '${escapedOutput}')
-  `);
-
-  dbAny.close();
+const _writeHeartbeat = (options: {
+  taskId: string;
+  agentKey: string;
+  status: string;
+  output?: string;
+}): void => {
+  _pad.upsertHeartbeat({
+    taskId: options.taskId,
+    workspaceId: 'default',
+    agentKey: options.agentKey,
+    agentStatus: options.status as SwarmStateRow['agentStatus'],
+    lastContextHash: null,
+    lastHeartbeatTimestamp: Date.now(),
+    agentOutput: options.output ?? '',
+  });
 };
 
 // ── Hash utility ────────────────────────────────────────────
@@ -376,18 +273,22 @@ const runInPane = async (paneId: string, command: string): Promise<void> => {
  *
  * @returns Populated SwarmState with mapped pane identifiers.
  */
-export const initializeSwarm = async (options: { projectRoot?: string }): Promise<SwarmState> => {
-  const { projectRoot = process.cwd() } = options;
+export const initializeSwarm = async (options: {
+  projectRoot?: string;
+  taskId?: string;
+}): Promise<SwarmState> => {
+  const { projectRoot = process.cwd(), taskId } = options;
+  const workspaceLabel = getSwarmWorkspaceLabel(taskId);
 
-  console.debug('[swarm:initialize:start]', { projectRoot });
+  console.debug('[swarm:initialize:start]', { projectRoot, workspaceLabel });
 
   await ensureServer();
 
   // ── Initialize scratchpad database ────────────────────
-  initScratchpad(projectRoot);
+  console.debug('[swarm:scratchpad] using AgentScratchpad');
 
   // ── Check/restore workspace ────────────────────────────
-  let workspaceId = await findWorkspace(SWARM_WORKSPACE_LABEL);
+  let workspaceId = await findWorkspace(workspaceLabel);
 
   if (workspaceId) {
     console.debug('[swarm:initialize:workspace-found]', { workspaceId });
@@ -461,7 +362,7 @@ export const initializeSwarm = async (options: { projectRoot?: string }): Promis
   }
 
   // ── Create new workspace ───────────────────────────────
-  console.debug('[swarm:initialize:creating-workspace]', { label: SWARM_WORKSPACE_LABEL });
+  console.debug('[swarm:initialize:creating-workspace]', { label: workspaceLabel });
 
   type WorkspaceCreateResult = {
     result: {
@@ -477,12 +378,12 @@ export const initializeSwarm = async (options: { projectRoot?: string }): Promis
     '--cwd',
     projectRoot,
     '--label',
-    SWARM_WORKSPACE_LABEL,
+    workspaceLabel,
     '--no-focus',
   ]);
 
   if (!createResult?.result) {
-    throw new Error(`Failed to create workspace: ${SWARM_WORKSPACE_LABEL}`);
+    throw new Error(`Failed to create workspace: ${workspaceLabel}`);
   }
 
   workspaceId = createResult.result.workspace.workspace_id;
@@ -584,11 +485,9 @@ const _executeStepOnce = async (options: {
   // Mark working
   agent.status = 'working';
   state.lastUpdated = new Date().toISOString();
-  writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'working');
+  _writeHeartbeat({ taskId: state.activeTaskId ?? 'unknown', agentKey: step.agent, status: 'working' });
 
-  // Clear stale buffer, send command
-  await herdr(['pane', 'send-keys', agent.paneId, 'C-c']);
-  await new Promise((r) => setTimeout(r, 200));
+  // Send command to target pane (session stays open between steps)
   await runInPane(agent.paneId, step.command);
   console.debug('[swarm:step:command-sent]', { agent: step.agent });
 
@@ -596,8 +495,9 @@ const _executeStepOnce = async (options: {
   await new Promise((r) => setTimeout(r, 2000));
 
   // Wait for agent to reach done/idle
-  const timeoutMs = step.timeoutMs ?? 300_000;
-  console.debug('[swarm:step:waiting-agent]', { agent: step.agent, timeoutMs });
+  // Reasonable timeout — scrollback fallback catches real completion
+  const agentTimeoutMs = 120_000;
+  console.debug('[swarm:step:waiting-agent]', { agent: step.agent });
 
   const waitResult = await herdr([
     'wait',
@@ -606,7 +506,7 @@ const _executeStepOnce = async (options: {
     '--status',
     'done',
     '--timeout',
-    String(timeoutMs),
+    String(agentTimeoutMs),
   ]);
 
   if (waitResult.code !== 0) {
@@ -621,21 +521,42 @@ const _executeStepOnce = async (options: {
       '10000',
     ]);
     if (idleResult.code !== 0) {
-      throw new Error(`Agent ${step.agent} did not complete within ${timeoutMs}ms`);
+      // Fallback 2: scan scrollback for completion marker
+      const markers: Record<string, string> = {
+        architect: '\\[architect\\]\\s+plan\\s+complete',
+        coder: 'COMPLIANCE_CODER_DONE',
+        qa: '\\[qa\\]\\s+all\\s+tests\\s+passed',
+        git: '\\[git\\]\\s+committed',
+      };
+      const marker = markers[step.agent];
+      if (marker) {
+        console.debug('[swarm:step:fallback-scrollback]', { agent: step.agent });
+        const outputResult = await herdr([
+          'wait',
+          'output',
+          agent.paneId,
+          '--match',
+          marker,
+          '--regex',
+          '--source',
+          'visible',
+          '--timeout',
+          '60000',
+        ]);
+        if (outputResult.code !== 0) {
+          throw new Error(`Agent ${step.agent} did not complete`);
+        }
+      } else {
+        throw new Error(`Agent ${step.agent} did not complete`);
+      }
     }
   }
 
-  // Quit the pi session with cancel-first pattern
-  await herdr(['pane', 'send-keys', agent.paneId, 'C-c']);
-  await new Promise((r) => setTimeout(r, 500));
-  await runInPane(agent.paneId, '/quit');
-  await new Promise((r) => setTimeout(r, 1000));
-
-  // Read summary
+  // Read summary (session stays open — user can inspect output)
   const summary = _readAgentSummary(state.activeTaskId ?? '', step.agent);
   agent.status = 'done';
   state.lastUpdated = new Date().toISOString();
-  writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'done', summary);
+  _writeHeartbeat({ taskId: state.activeTaskId ?? 'unknown', agentKey: step.agent, status: 'done', output: summary });
 
   console.log('[swarm:step:done]', {
     stepIndex: step.stepIndex,
@@ -661,7 +582,7 @@ const executeStep = async (options: { step: SwarmStep; state: SwarmState }): Pro
       if (attempt >= maxRetries) {
         agent.status = 'blocked';
         state.lastUpdated = new Date().toISOString();
-        writeHeartbeat(process.cwd(), state.activeTaskId ?? 'unknown', step.agent, 'blocked');
+        _writeHeartbeat({ taskId: state.activeTaskId ?? 'unknown', agentKey: step.agent, status: 'blocked' });
         throw error;
       }
       console.warn(
@@ -686,6 +607,10 @@ export const executeTask = async (options: {
 }): Promise<SwarmState> => {
   const { payload, state } = options;
 
+  // ── Derive contract workspace for cleanup ─────────────
+  const workspaceLabel = getSwarmWorkspaceLabel(payload.taskId);
+  console.debug('[swarm:task:workspace]', { workspaceLabel });
+
   // ── Active session guard ─────────────────────────────
   if (state.activeTaskId) {
     console.warn('[swarm:task:active-session]', {
@@ -706,6 +631,17 @@ export const executeTask = async (options: {
     taskId: payload.taskId,
     steps: payload.steps.length,
   });
+
+  // ── Clean up existing pi sessions from previous pipeline runs ──────
+  // Keeps output visible in scrollback, starts clean for new pipeline.
+  console.debug('[swarm:task:quitting-sessions]');
+  for (const role of AGENT_ROLES) {
+    const agentPane = state.agents[role];
+    if (agentPane.paneId) {
+      await runInPane(agentPane.paneId, '/quit');
+    }
+  }
+  await new Promise((r) => setTimeout(r, 2000));
 
   // ── Clean up stale markers from previous runs ──────
   const markersDir = join(process.cwd(), '.pi/swarm/markers');
@@ -747,10 +683,11 @@ export const executeTask = async (options: {
  * Take a snapshot of the current swarm state by re-scanning
  * workspace tabs and panes from herdr.
  */
-export const snapshotState = async (): Promise<SwarmState> => {
+export const snapshotState = async (taskId?: string): Promise<SwarmState> => {
   await ensureServer();
 
-  const workspaceId = await findWorkspace(SWARM_WORKSPACE_LABEL);
+  const workspaceLabel = taskId ? getSwarmWorkspaceLabel(taskId) : SWARM_WORKSPACE_LABEL;
+  const workspaceId = await findWorkspace(workspaceLabel);
   if (!workspaceId) {
     return createInitialState(null);
   }

@@ -22,7 +22,8 @@ import type { QuestViewModelInterface } from '../../quest/quest_view_model.svelt
 import { getQuestViewModel } from '../../quest/quest_view_model.svelte.ts';
 import type { VendorViewModelInterface } from '../../vendor/vendor_view_model.svelte';
 import { getVendorViewModel } from '../../vendor/vendor_view_model.svelte';
-import { CharacterSheetViewModel } from '../dashboard/character_sheet_view_model.svelte';
+import { getCharacterSheetViewModel } from '../dashboard/character_sheet_view_model.svelte';
+import type { CharacterSheetViewModelInterface } from '../dashboard/character_sheet_view_model.svelte';
 import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
 import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
 import { getGameOverViewModel } from './overlays/game_over/game_over_view_model.svelte';
@@ -59,7 +60,7 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly dialogueViewModel: DialogueOverlayViewModel | undefined;
   readonly inventoryViewModel: InventoryViewModelInterface | undefined;
   readonly questViewModel: QuestViewModelInterface | undefined;
-  readonly dashboardViewModel: CharacterSheetViewModel | undefined;
+  readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
   readonly combatViewModel: CombatViewModel | undefined;
   readonly vendorViewModel: VendorViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
@@ -82,7 +83,7 @@ class GameUIViewModel
   dialogueViewModel = $state<DialogueOverlayViewModel | undefined>(undefined);
   inventoryViewModel = $state<InventoryViewModelInterface | undefined>(undefined);
   questViewModel = $state<QuestViewModelInterface | undefined>(undefined);
-  dashboardViewModel = $state<CharacterSheetViewModel | undefined>(undefined);
+  dashboardViewModel = $state<CharacterSheetViewModelInterface | undefined>(undefined);
   combatViewModel = $state<CombatViewModel | undefined>(undefined);
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
@@ -212,7 +213,7 @@ class GameUIViewModel
         if (gameOverlayService.activeOverlay !== 'CHARACTER_DASHBOARD') {
           return;
         }
-        const vm = new CharacterSheetViewModel({
+        const vm = getCharacterSheetViewModel({
           className: 'CharacterSheetViewModel',
           onClose: () => gameOverlayService.closeCharacterDashboard(),
         });

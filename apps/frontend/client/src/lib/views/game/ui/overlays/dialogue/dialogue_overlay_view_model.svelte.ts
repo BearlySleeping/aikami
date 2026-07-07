@@ -672,6 +672,12 @@ class DialogueOverlayViewModel
       'Do not break character. Do not mention being an AI.',
     );
 
+    // Inject character sheet summary for AI context awareness
+    const sheetSummary = gameStateService.characterSheetSummary;
+    if (sheetSummary) {
+      lines.push('', '[CHARACTER SHEET]', sheetSummary, '[/CHARACTER SHEET]');
+    }
+
     return lines.join('\n');
   }
 

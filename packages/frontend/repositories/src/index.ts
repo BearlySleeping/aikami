@@ -1,4 +1,3 @@
-export * from './lib/agent_scratchpad.ts';
 export * from './lib/chat.ts';
 export * from './lib/config.ts';
 export * from './lib/notification.ts';
