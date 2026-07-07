@@ -1,0 +1,41 @@
+{
+  "taskId": "C-TEST-003",
+  "completedAt": "2026-07-07T13:54:37.819Z",
+  "totalDurationMs": 519,
+  "agents": [
+    {
+      "role": "architect",
+      "status": "unknown",
+      "durationMs": 0,
+      "filesTouched": 0,
+      "estimatedTokensOutput": 0,
+      "summaryPreview": "(no output)"
+    },
+    {
+      "role": "coder",
+      "status": "unknown",
+      "durationMs": 0,
+      "filesTouched": 0,
+      "estimatedTokensOutput": 0,
+      "summaryPreview": "(no output)"
+    },
+    {
+      "role": "qa",
+      "status": "unknown",
+      "durationMs": 0,
+      "filesTouched": 0,
+      "estimatedTokensOutput": 0,
+      "summaryPreview": "(no output)"
+    },
+    {
+      "role": "git",
+      "status": "unknown",
+      "durationMs": 0,
+      "filesTouched": 0,
+      "estimatedTokensOutput": 0,
+      "summaryPreview": "(no output)"
+    }
+  ],
+  "trivialPath": false,
+  "documentationGenerated": false
+}

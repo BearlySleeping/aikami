@@ -9,7 +9,7 @@
 // ── Agent identity ──────────────────────────────────────────
 
 /** The four semantic agent roles in the swarm workspace. */
-export type AgentRole = 'architect' | 'coder' | 'qa' | 'git';
+export type AgentRole = 'architect' | 'coder' | 'qa' | 'git' | 'review';
 
 /** All agent roles as a readonly array for iteration. */
 export const AGENT_ROLES: readonly AgentRole[] = ['architect', 'coder', 'qa', 'git'] as const;
@@ -161,6 +161,7 @@ export const AGENT_TAB_LABELS: Record<AgentRole, string> = {
   coder: 'coder',
   qa: 'qa',
   git: 'git',
+  review: 'review',
 } as const;
 
 // ── C-306: Resilience types ────────────────────────────────
