@@ -253,7 +253,6 @@ const _callOpenRouter = async (options: {
   };
 
   if (responseFormat) {
-    // biome-ignore lint/style/useNamingConvention: OpenAI field
     body.response_format = responseFormat;
   }
 
