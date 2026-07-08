@@ -402,35 +402,41 @@ export const executeTaskSocket = async (options: {
 
   console.log('[swarm:task:start]', { taskId, mode: 'socket', contractPath, skipReview });
 
-  // Delegate to state machine pipeline
-  const { executeTaskPipeline } = await import('./step_executor');
-
   // Use singleton scratchpad instance
   const scratchpad = createAgentScratchpad({
     dbPath: join(process.cwd(), '.pi/swarm/agent_scratchpad.db'),
     agentId: 'swarm-director',
   });
 
-  await executeTaskPipeline({
-    taskId,
-    state,
-    socketClient,
-    scratchpad,
-    projectRoot: process.cwd(),
-    contractPath,
-    tier,
-    skipReview,
-    resume,
-  });
+  try {
+    // Delegate to state machine pipeline
+    const { executeTaskPipeline } = await import('./step_executor');
 
-  // Collect metrics
-  const { collectAndWriteMetrics } = await import('./metrics_collector');
-  collectAndWriteMetrics({
-    taskId,
-    startTime,
-    trivialPath: state.agents.qa.status === 'done' && state.agents.coder.status === 'done',
-    documentationGenerated: false,
-  });
+    await executeTaskPipeline({
+      taskId,
+      state,
+      socketClient,
+      scratchpad,
+      projectRoot: process.cwd(),
+      contractPath,
+      tier,
+      skipReview,
+      resume,
+    });
+
+    // Collect metrics
+    const { collectAndWriteMetrics } = await import('./metrics_collector');
+    collectAndWriteMetrics({
+      taskId,
+      startTime,
+      trivialPath: state.agents.qa.status === 'done' && state.agents.coder.status === 'done',
+      documentationGenerated: false, // set by metrics collector from agentDurations sidecar
+    });
+  } finally {
+    // ── Ledger lifecycle: clear task heartbeat rows, checkpoint WAL ──
+    scratchpad.finalizeTask(taskId);
+    scratchpad.close();
+  }
 
   console.log('[swarm:task:complete]', { taskId, mode: 'socket' });
   return state;

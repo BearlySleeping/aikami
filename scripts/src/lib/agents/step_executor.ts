@@ -22,7 +22,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, unlinkSync, watch, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { SwarmHandoffSchema } from '@aikami/schemas';
 import type { SwarmHandoff } from '@aikami/types';
 import { Value } from 'typebox/value';
@@ -39,19 +39,47 @@ const MAX_FEEDBACK_ITERATIONS = 3;
 /** Max time for the review gate script to start and write awaiting_approval. */
 const GATE_STARTUP_TIMEOUT_MS = 30_000;
 
-/**
- * Maximum time to wait for any agent step to produce a handoff (30 min).
- *
- * No per-role differentiation — a pi session that's actively producing output
- * shouldn't be killed just because it's slower than expected. The director
- * can be Ctrl+C'd at any time; resume picks up where it left off.
- *
- * Only exception: GATE_STARTUP_TIMEOUT_MS (30s) — if the review gate script
- * can't even start, something is broken.
- */
-const AGENT_TIMEOUT_MS = 1_800_000; // 30 min
+// ── Per-role timeouts (reference — not currently wired per-step)
+// Architect: 10 min | Coder/QA: 30 min | Git commit script: 5 min
+const AGENT_TIMEOUT_MS = 1_800_000; // default fallback (30 min)
+
+/** Git commit script is deterministic — short timeout. */
+const GIT_SCRIPT_TIMEOUT_MS = 300_000; // 5 min
 
 // ── Helpers ────────────────────────────────────────────────
+
+/**
+ * Build a combined system prompt by prepending the shared preamble.
+ * The preamble is byte-identical across roles → DeepSeek "common prefix detection"
+ * persists it as a KV-cache unit. Role-specific content follows after.
+ *
+ * Writes to .pi/swarm/outputs/_sysprompt_<role>.md and returns the absolute path.
+ */
+const buildSystemPrompt = (cwd: string, role: string): string => {
+  const preamblePath = join(cwd, '.pi/prompts/_swarm_preamble.md');
+  const rolePromptPath = join(cwd, '.pi/prompts', `${role}.md`);
+
+  let preamble: string;
+  try {
+    preamble = readFileSync(preamblePath, 'utf-8');
+  } catch {
+    preamble = '';
+  }
+
+  let rolePrompt: string;
+  try {
+    rolePrompt = readFileSync(rolePromptPath, 'utf-8');
+  } catch {
+    rolePrompt = `SWARM AGENT: ${role}.`;
+  }
+
+  const combined = `${preamble}\n\n---\n\n${rolePrompt}`;
+
+  mkdirSync(join(cwd, '.pi/swarm/outputs'), { recursive: true });
+  const outPath = join(cwd, '.pi/swarm/outputs', `_sysprompt_${role}.md`);
+  writeFileSync(outPath, combined);
+  return outPath;
+};
 
 const handoffPath = (taskId: string, role: string, cwd: string): string =>
   join(cwd, '.pi/swarm/outputs', `${taskId}_${role}_handoff.json`);
@@ -205,6 +233,16 @@ export const detectResumeState = (taskId: string, cwd: string): ResumePlan => {
 
   if (review?.status === 'approved') {
     completed.push('qa');
+
+    // Check if docs is needed and not yet done
+    const docs = readHandoff(taskId, 'docs', cwd);
+    if (arch.requiresDocs && !docs) {
+      return { start: 'docs', completed, reason: 'review approved, docs pending' };
+    }
+    if (docs) {
+      completed.push('docs');
+    }
+
     if (git?.status === 'success') {
       completed.push('git');
       return { start: 'done', completed, reason: 'task already committed' };
@@ -241,27 +279,47 @@ type StateContext = {
   iteration: number;
   architectComplexity?: string;
   architectDomain?: string;
+  architectRequiresDocs?: boolean;
+  /** Per-agent start timestamps for metrics */
+  agentStartTimes: Record<string, number>;
+  /** Per-agent durations (filled on completion) */
+  agentDurations: Record<string, number>;
   /** Set when any state escalates — pipeline result reporting */
   escalated?: boolean;
 };
 
-/** Resolve model for a role, with --tier override and complexity-driven coder upgrade. */
+/** Resolve model for a role, with --tier override and complexity-driven adjustments. */
 const getModel = (ctx: StateContext, role: AgentRole): string => {
-  const tierOverride = getModelForTier(ctx.tier);
-  const defaultTier = ROLE_MODEL_TIER[role] ?? 'flash';
-  const defaultModel = getModelForTier(defaultTier);
-
-  // If user passed --tier pro, everything gets pro
+  // --tier pro → force pro everywhere
   if (ctx.tier === 'pro') {
-    return tierOverride;
+    return getModelForTier('pro');
   }
 
-  // Coder: downgrade to flash if architect flagged trivial
+  // --tier flash → force flash everywhere (fixed: previously silently meant "defaults")
+  if (ctx.tier === 'flash') {
+    return getModelForTier('flash');
+  }
+
+  // Per-role defaults with complexity adjustments
+  const defaultTier = ROLE_MODEL_TIER[role] ?? 'flash';
+
+  // Git + review: deterministic, no LLM (should never reach here but safe-guard)
+  if (role === 'git' || role === 'review') {
+    return getModelForTier('flash');
+  }
+
+  // Coder: flash if architect flagged trivial
   if (role === 'coder' && ctx.architectComplexity === 'trivial') {
     return getModelForTier('flash');
   }
 
-  return defaultModel;
+  // QA: pro if architect flagged complex (QA LLM only spawns on test failures and
+  // failure diagnosis is reasoning-heavy)
+  if (role === 'qa' && ctx.architectComplexity === 'complex') {
+    return getModelForTier('pro');
+  }
+
+  return getModelForTier(defaultTier);
 };
 
 // ── Heartbeat helpers ──────────────────────────────────────
@@ -345,6 +403,9 @@ const runStep = async (
 ): Promise<SwarmHandoff | null> => {
   markWorking(ctx, role);
 
+  // Track start time for metrics
+  ctx.agentStartTimes[role] = Date.now();
+
   // Unlink stale handoff so waitForHandoff sees only the new one
   try {
     unlinkSync(handoffPath(ctx.taskId, role, ctx.cwd));
@@ -368,7 +429,9 @@ const runStep = async (
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  await ctx.socketClient.paneRun(paneId, command);
+  // Always prefix with cd to project root — prevents pane cwd pollution
+  const safeCommand = `cd '${ctx.cwd}' && ${command}`;
+  await ctx.socketClient.paneRun(paneId, safeCommand);
   console.debug('[swarm:state:command-sent]', { role });
 
   await new Promise((r) => setTimeout(r, PI_STARTUP_GRACE_MS));
@@ -377,6 +440,7 @@ const runStep = async (
 
   if (handoff) {
     markDone(ctx, role, handoff.summary);
+    ctx.agentDurations[role] = Date.now() - (ctx.agentStartTimes[role] ?? Date.now());
   }
 
   return handoff;
@@ -386,7 +450,8 @@ const runStep = async (
 
 const runArchitect = async (ctx: StateContext): Promise<PipelineState> => {
   const model = getModel(ctx, 'architect');
-  const command = `pi --model ${model} --system-prompt .pi/prompts/architect.md '${ctx.contractPath}'`;
+  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'architect');
+  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' '${ctx.contractPath}'`;
 
   const handoff = await runStep(ctx, 'architect', command, ctx.state.agents.architect.paneId);
   if (!handoff) {
@@ -396,6 +461,7 @@ const runArchitect = async (ctx: StateContext): Promise<PipelineState> => {
 
   ctx.architectComplexity = handoff.complexity;
   ctx.architectDomain = handoff.domain;
+  ctx.architectRequiresDocs = handoff.requiresDocs;
 
   console.log('[swarm:state:architect] complete', {
     complexity: handoff.complexity,
@@ -408,7 +474,8 @@ const runArchitect = async (ctx: StateContext): Promise<PipelineState> => {
 
 const runCoder = async (ctx: StateContext): Promise<PipelineState> => {
   const model = getModel(ctx, 'coder');
-  const planPathVal = `.pi/swarm/plans/architect_plan_${ctx.taskId}.md`;
+  const planPathVal = join(ctx.cwd, '.pi/swarm/plans', `architect_plan_${ctx.taskId}.md`);
+  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'coder');
 
   let userMessage = `'${planPathVal}'`;
 
@@ -417,7 +484,7 @@ const runCoder = async (ctx: StateContext): Promise<PipelineState> => {
     userMessage = `'${planPathVal} — REVISION ${ctx.iteration}/${MAX_FEEDBACK_ITERATIONS}: apply the user feedback in ${fp} to the existing implementation. Do NOT re-implement from scratch — fix only what the feedback asks for.'`;
   }
 
-  const command = `pi --model ${model} --system-prompt .pi/prompts/coder.md ${userMessage}`;
+  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' ${userMessage}`;
 
   const handoff = await runStep(ctx, 'coder', command, ctx.state.agents.coder.paneId);
   if (!handoff) {
@@ -473,7 +540,12 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
     const failures: Array<{ cmd: string; exitCode: number; tail: string }> = [];
     const tested = new Set<string>();
 
-    for (const cmd of commands) {
+    for (const rawCmd of commands) {
+      // ── Strip leading `cd <dir> && ` to extract the real command + cwd ──
+      const cdMatch = rawCmd.match(/^cd\s+(\S+)\s+&&\s+(.+)$/);
+      const cmd = cdMatch ? cdMatch[2] : rawCmd;
+      const cmdCwd = cdMatch ? resolve(ctx.cwd, cdMatch[1]) : ctx.cwd;
+
       // Only run test/lint/fix/typecheck commands deterministically
       const isTestCmd =
         cmd.startsWith('moon run') ||
@@ -484,20 +556,18 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
         cmd.startsWith('npx tsc');
 
       if (!isTestCmd) {
-        // Non-test commands — run in pane but don't count toward pass/fail
-        try {
-          await ctx.socketClient.paneRun(ctx.state.agents.qa.paneId, cmd);
-        } catch {
-          // best-effort
-        }
+        // Non-test commands — ignore with a warning. Never pane-run into agent
+        // panes: that pollutes cwd and can break relative-path dispatch.
+        console.warn('[swarm:state:qa] skipping non-allowlisted command in nextCommands:', rawCmd);
+        console.warn('[swarm:state:qa] coder should only emit test/lint/fix/typecheck commands.');
         continue;
       }
 
       tested.add(cmd);
-      console.debug('[swarm:state:qa:spawn]', { cmd });
+      console.debug('[swarm:state:qa:spawn]', { cmd, cwd: cmdCwd });
 
       const r = spawnSync('sh', ['-c', cmd], {
-        cwd: ctx.cwd,
+        cwd: cmdCwd,
         stdio: 'pipe',
         timeout: 600_000,
         env: process.env,
@@ -535,14 +605,16 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
 
   // ── Spawn QA LLM (on failure or if no deterministic commands) ──
   const model = getModel(ctx, 'qa');
-  const planPathVal = `.pi/swarm/plans/architect_plan_${ctx.taskId}.md`;
+  const planPathVal = join(ctx.cwd, '.pi/swarm/plans', `architect_plan_${ctx.taskId}.md`);
+  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'qa');
+  const failFileRel = `.pi/swarm/outputs/${ctx.taskId}_qa_failures.md`;
 
   // Include failure details in the user message if the deterministic pass failed
   const userMessage = hadFailures
-    ? `'${planPathVal} — QA failures were detected. Read the failure details in .pi/swarm/outputs/${ctx.taskId}_qa_failures.md and provide fixes.'`
+    ? `'${planPathVal} — QA failures were detected. Read the failure details in ${failFileRel} and provide fixes.'`
     : `'${planPathVal}'`;
 
-  const command = `pi --model ${model} --system-prompt .pi/prompts/qa.md ${userMessage}`;
+  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' ${userMessage}`;
 
   const handoff = await runStep(ctx, 'qa', command, ctx.state.agents.qa.paneId);
 
@@ -658,9 +730,14 @@ const runReview = async (ctx: StateContext): Promise<PipelineState> => {
 export const decideReviewOutcome = (ctx: StateContext, handoff: SwarmHandoff): PipelineState => {
   switch (handoff.status) {
     case 'approved': {
-      console.log('[swarm:state:review] ✅ approved → git');
-      markDone(ctx, 'review', 'Approved. Proceeding to commit & push.');
-      return 'git';
+      const next = ctx.architectRequiresDocs ? 'docs' : 'git';
+      console.log(`[swarm:state:review] ✅ approved → ${next}`);
+      markDone(
+        ctx,
+        'review',
+        `Approved. Proceeding to ${next === 'docs' ? 'docs' : 'commit & push'}.`,
+      );
+      return next;
     }
     case 'rejected': {
       console.log('[swarm:state:review] ❌ rejected → done');
@@ -701,38 +778,65 @@ export const decideReviewOutcome = (ctx: StateContext, handoff: SwarmHandoff): P
   }
 };
 
+/**
+ * Documentation agent — generates feature docs for contracts that flag requiresDocs.
+ * Runs between review-approved and git. Uses free-tier model with fallback.
+ */
+const runDocs = async (ctx: StateContext): Promise<PipelineState> => {
+  const model = getModel(ctx, 'docs');
+  const planPathVal = join(ctx.cwd, '.pi/swarm/plans', `architect_plan_${ctx.taskId}.md`);
+  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'docs');
+  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' '${planPathVal}'`;
+
+  const handoff = await runStep(
+    ctx,
+    'docs',
+    command,
+    ctx.state.agents.docs?.paneId ?? ctx.state.agents.qa.paneId,
+  );
+
+  if (!handoff) {
+    // docs failure is non-blocking — warn and proceed to git
+    console.warn('[swarm:state:docs] timed out or no handoff — proceeding without docs');
+    markDone(ctx, 'docs', 'Docs generation timed out (non-blocking).');
+    return 'git';
+  }
+
+  console.log('[swarm:state:docs] complete', { files: handoff.filesTouched.length });
+  return 'git';
+};
+
 const runGit = async (ctx: StateContext): Promise<PipelineState> => {
-  // ── Phase 1: LLM validation (free tier) ──
-  // The LLM reads all handoffs, checks review approval, determines files to
-  // commit, generates a conventional commit message, and updates the contract.
-  // It writes a git_handoff.json with the validated plan.
-  const model = getModel(ctx, 'git');
-  const planPathVal = `.pi/swarm/plans/architect_plan_${ctx.taskId}.md`;
-  const validateCommand = `pi --model ${model} --system-prompt .pi/prompts/git.md '${planPathVal}'`;
-
-  const validationHandoff = await runStep(ctx, 'git', validateCommand, ctx.state.agents.git.paneId);
-
-  if (!validationHandoff || validationHandoff.status === 'awaiting_approval') {
-    const reason = validationHandoff?.summary ?? 'LLM did not produce handoff';
-    console.error('[swarm:state:git] review not approved or validation failed');
-    markEscalated(ctx, 'git', reason);
+  // ── Phase 1: Deterministic plan generation (no LLM) ──
+  // git_planner.ts reads all handoffs, checks review approval, determines files,
+  // generates a conventional commit message, updates the contract status.
+  // Writes <task>_git_plan.json — a pure data artifact, never unlinked mid-flight.
+  try {
+    const { planGitCommit } = await import('./git_planner');
+    planGitCommit({
+      taskId: ctx.taskId,
+      cwd: ctx.cwd,
+      contractPath: ctx.contractPath,
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    markEscalated(ctx, 'git', `plan generation failed: ${reason}`);
     return 'done';
   }
 
-  console.log('[swarm:state:git:validated]', {
-    files: validationHandoff.filesTouched.length,
-    summary: validationHandoff.summary.slice(0, 80),
-  });
+  console.log('[swarm:state:git:planned] plan written to git_plan.json');
 
   // ── Phase 2: Deterministic commit script ──
-  // Executes the plan: stages files from the LLM's handoff, commits with the
-  // LLM's message, pushes, updates contract status. No hallucination risk.
+  // Reads <task>_git_plan.json, stages files, commits, pushes.
+  // Writes <task>_git_handoff.json with the result. Every exit path writes a handoff.
   markWorking(ctx, 'git');
 
   const gitPaneId = ctx.state.agents.git.paneId;
-  const command = `bun run .pi/swarm/scripts/git_commit.ts ${ctx.taskId} '${ctx.contractPath}'`;
+  const absCwd = ctx.cwd;
+  const gitCommitScript = join(absCwd, '.pi/swarm/scripts/git_commit.ts');
+  const command = `cd '${absCwd}' && bun run '${gitCommitScript}' ${ctx.taskId} '${ctx.contractPath}'`;
 
-  // Unlink stale git handoff so the script writes a fresh "success" one
+  // Unlink stale git handoff so script writes a fresh one
   try {
     unlinkSync(handoffPath(ctx.taskId, 'git', ctx.cwd));
   } catch {
@@ -741,15 +845,46 @@ const runGit = async (ctx: StateContext): Promise<PipelineState> => {
 
   await ctx.socketClient.paneRun(gitPaneId, command);
 
-  const handoff = await waitForHandoff(ctx.taskId, 'git', ctx.cwd, AGENT_TIMEOUT_MS);
+  const handoff = await waitForHandoff(ctx.taskId, 'git', ctx.cwd, GIT_SCRIPT_TIMEOUT_MS);
 
-  if (handoff) {
-    markDone(ctx, 'git', handoff.summary);
-    console.log('[swarm:state:git] committed', { summary: handoff.summary.slice(0, 80) });
-  } else {
-    markEscalated(ctx, 'git', 'commit script did not produce handoff');
+  if (!handoff) {
+    markEscalated(ctx, 'git', 'commit script did not produce handoff (timed out)');
+    return 'done';
   }
 
+  if (handoff.status === 'failed') {
+    // Commit failed (pre-commit hook, merge conflict, etc.) — route to feedback loop
+    if (ctx.iteration < MAX_FEEDBACK_ITERATIONS) {
+      const entry: FeedbackEntry = {
+        iteration: ctx.iteration + 1,
+        feedback: `Git commit failed: ${handoff.summary}. Fix and retry.`,
+        timestamp: new Date().toISOString(),
+      };
+      ctx.feedbackHistory.push(entry);
+      ctx.iteration++;
+
+      mkdirSync(join(ctx.cwd, '.pi/swarm/outputs'), { recursive: true });
+      writeFileSync(
+        feedbackPath(ctx.taskId, ctx.iteration, ctx.cwd),
+        `# Git Commit Failure (Iteration ${ctx.iteration}/${MAX_FEEDBACK_ITERATIONS})\n\n${handoff.summary}\n`,
+      );
+
+      console.log(
+        `[swarm:state:git] commit failed → feedback loop (iteration ${ctx.iteration}/${MAX_FEEDBACK_ITERATIONS})`,
+      );
+      return 'coder';
+    }
+
+    markEscalated(
+      ctx,
+      'git',
+      `commit failed after ${MAX_FEEDBACK_ITERATIONS} iterations: ${handoff.summary}`,
+    );
+    return 'done';
+  }
+
+  markDone(ctx, 'git', handoff.summary);
+  console.log('[swarm:state:git] committed', { summary: handoff.summary.slice(0, 80) });
   return 'done';
 };
 
@@ -760,6 +895,7 @@ const STATE_HANDLERS: Record<PipelineState, (ctx: StateContext) => Promise<Pipel
   coder: runCoder,
   qa: runQa,
   review: runReview,
+  docs: runDocs,
   git: runGit,
   done: async () => 'done',
 };
@@ -813,6 +949,8 @@ export const executeTaskPipeline = async (options: TaskPipelineOptions): Promise
     skipReview,
     feedbackHistory: [],
     iteration: 0,
+    agentStartTimes: {},
+    agentDurations: {},
   };
 
   // ── Task-scoped ledger: wipe this task's stale heartbeat rows ──
@@ -832,6 +970,7 @@ export const executeTaskPipeline = async (options: TaskPipelineOptions): Promise
       const arch = readHandoff(taskId, 'architect', projectRoot);
       ctx.architectComplexity = arch?.complexity;
       ctx.architectDomain = arch?.domain;
+      ctx.architectRequiresDocs = arch?.requiresDocs;
 
       // Seed ledger so completed roles show ✅ instead of stale/idle
       for (const role of plan.completed) {
@@ -904,6 +1043,13 @@ export const executeTaskPipeline = async (options: TaskPipelineOptions): Promise
 
   state.activeTaskId = null;
   state.lastUpdated = new Date().toISOString();
+
+  // Write agent durations sidecar for metrics collector
+  mkdirSync(join(projectRoot, '.pi/swarm/outputs'), { recursive: true });
+  writeFileSync(
+    join(projectRoot, '.pi/swarm/outputs', `${taskId}_durations.json`),
+    JSON.stringify(ctx.agentDurations),
+  );
 
   console.log('[swarm:pipeline:complete]', {
     taskId,

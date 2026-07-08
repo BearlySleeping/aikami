@@ -1,4 +1,4 @@
-// .pi/extensions/log-viewer.ts
+// .pi/extensions/log_viewer.ts
 // Unified log viewer across all Aikami services.
 //
 // Routes by action:
