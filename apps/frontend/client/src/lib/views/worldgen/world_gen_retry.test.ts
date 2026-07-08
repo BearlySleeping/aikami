@@ -6,7 +6,7 @@
 //
 // The production VM's _callLlm uses textGenerationService.extractStructure().
 // The test_preload stubs $services, so extractStructure returns undefined,
-// which triggers "LLM returned empty response" → auto-retry → error state.
+// which triggers "LLM response missing required fields" → auto-retry → error state.
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
@@ -65,7 +65,7 @@ describe('WorldGenWizardViewModel — retry logic (C-233)', () => {
 
       // After all auto-retries exhausted
       expect(vm.isGenerating).toBe(false);
-      expect(vm.generationError).toBe('LLM returned empty response');
+      expect(vm.generationError).toBe('LLM response missing required fields');
       expect(vm.retriesRemaining).toBe(0);
       // Should stay on generating step (no world to preview)
       expect(vm.currentStep).toBe('generating');
@@ -94,7 +94,7 @@ describe('WorldGenWizardViewModel — retry logic (C-233)', () => {
       // State unchanged
       expect(vm.retriesRemaining).toBe(0);
       expect(vm.isGenerating).toBe(false);
-      expect(vm.generationError).toBe('LLM returned empty response');
+      expect(vm.generationError).toBe('LLM response missing required fields');
     });
   });
 

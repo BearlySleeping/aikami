@@ -8,7 +8,7 @@
 // - Enriched log entry
 // - Full sandbox layout
 
-import { Type } from '@sinclair/typebox';
+import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 
 const CombatEnhancementsSchema = Type.Object({

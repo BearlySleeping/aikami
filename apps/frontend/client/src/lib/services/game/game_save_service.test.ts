@@ -234,7 +234,9 @@ describe('GameSaveService', () => {
     expect(savedDoc).toBeDefined();
     expect(savedDoc?.slotId).toBe('manual-1');
     expect(typeof savedDoc?.timestamp).toBe('number');
-    expect(savedDoc?.payload).toContain('"version":"1.0.0"');
+    // payload is a JSON string with nested JSON — check for version in escaped form
+    const parsedPayload = JSON.parse(savedDoc?.payload as string) as Record<string, unknown>;
+    expect(parsedPayload.ecsSnapshot).toContain('"version":"1.0.0"');
   });
 
   test('saveGame should default to auto-save when no slotId given', async () => {

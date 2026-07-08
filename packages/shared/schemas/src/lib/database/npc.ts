@@ -9,7 +9,7 @@ const _visibilityUnion = Type.Union([Type.Literal('private'), Type.Literal('publ
 export const NpcSheetSchema = Composite(
   BaseCharacterSheetSchema,
   Type.Object({
-    isFriendly: Type.Boolean({ description: 'Is the NPC friendly?', default: true }),
+    isFriendly: Type.Optional(Type.Boolean({ description: 'Is the NPC friendly?', default: true })),
     faction: Type.Optional(Type.String({ description: 'NPC faction or affiliation' })),
     occupation: Type.Optional(Type.String({ description: 'NPC occupation or job' })),
     personality: Type.Optional(
@@ -21,10 +21,12 @@ export const NpcSheetSchema = Composite(
       Type.String({ description: 'First message the NPC sends in chat' }),
     ),
     creatorUid: Type.Optional(Type.String({ description: 'ID of the user who created this NPC' })),
-    visibility: Object.assign(_visibilityUnion, {
-      description: 'Visibility of the NPC',
-      default: 'private',
-    }),
+    visibility: Type.Optional(
+      Object.assign(_visibilityUnion, {
+        description: 'Visibility of the NPC',
+        default: 'private',
+      }),
+    ),
     forkedFromNpcId: Type.Optional(
       Type.String({ description: 'ID of the original NPC this was forked from' }),
     ),

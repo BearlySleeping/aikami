@@ -3,20 +3,21 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { MockAiService } from '@aikami/mocks';
 import type { AiServiceInterface } from '@aikami/types';
 import Type from 'typebox';
+import { Value } from 'typebox/value';
 
 // ─── Zod schemas for extraction tests ────────────────────────────────────────
 
 const PersonSchema = Type.Object({
-  name: Type.String(),
-  age: Type.Number(),
-  email: Type.String().email(),
+  name: Type.String({ default: '' }),
+  age: Type.Number({ default: 0 }),
+  email: Type.String({ format: 'email', default: 'test@example.com' }),
 });
 
 const ProductSchema = Type.Object({
-  id: Type.String(),
-  title: Type.String(),
-  price: Type.Number().positive(),
-  inStock: Type.Boolean(),
+  id: Type.String({ default: '' }),
+  title: Type.String({ default: '' }),
+  price: Type.Number({ exclusiveMinimum: 0, default: 1 }),
+  inStock: Type.Boolean({ default: false }),
 });
 
 // ─── Shared mock factory ────────────────────────────────────────────────────
@@ -159,7 +160,7 @@ describe('AiServiceInterface contract (MockAiService)', () => {
         );
 
         // This should not throw — data must satisfy the schema
-        const parsed = ProductSchema.parse(result);
+        const parsed = Value.Parse(ProductSchema, result);
         expect(parsed.id).toBeString();
         expect(parsed.title).toBeString();
         expect(parsed.price).toBeGreaterThan(0);

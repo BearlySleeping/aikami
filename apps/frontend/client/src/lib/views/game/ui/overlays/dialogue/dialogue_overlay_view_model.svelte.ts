@@ -17,6 +17,7 @@ import {
   PERSONA_PROMPTS,
 } from '$lib/data/dialogue_personas';
 import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
+import { gmPromptService } from '$lib/services/gm/gm_prompt_service.svelte.ts';
 import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
   diceService,
@@ -28,7 +29,6 @@ import {
   textGenerationService,
   ttsService,
 } from '$services';
-import { worldGenSeedingService } from '$views/worldgen/world_gen_seeding_service.svelte.ts';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -649,16 +649,23 @@ class DialogueOverlayViewModel
 
   /**
    * Builds the system prompt that defines the NPC's personality and
-   * response style. Uses the NPC name and greeting for context.
+   * response style. Uses the GM Prompt Service for world/state context
+   * and overlays NPC-specific personality on top.
    */
   private _buildSystemPrompt(): string {
     const { npcName, dialog, personaId } = this._npcData;
 
-    // Start with the persona-specific archetype description
+    // Start with the GM prompt assembler for world/state context
+    const basePrompt = gmPromptService.assemblePrompt('scene');
+
+    // Overlay NPC-specific personality
     const personaPrompt =
       PERSONA_PROMPTS[personaId ?? FALLBACK_PERSONA_ID] ?? PERSONA_PROMPTS[FALLBACK_PERSONA_ID];
 
     const lines = [
+      basePrompt,
+      '',
+      '[NPC CONTEXT]',
       personaPrompt,
       `Your name is ${npcName}.`,
       `Stay in character at all times. Respond as ${npcName} would.`,
@@ -677,16 +684,6 @@ class DialogueOverlayViewModel
     const sheetSummary = gameStateService.characterSheetSummary;
     if (sheetSummary) {
       lines.push('', '[CHARACTER SHEET]', sheetSummary, '[/CHARACTER SHEET]');
-    }
-
-    // Inject world generation context (C-233)
-    const worldGen = gameStateService.worldGenOutput;
-    if (worldGen && Array.isArray(worldGen.npcs) && worldGen.npcs.length > 0) {
-      const gmPrompt = worldGenSeedingService.assembleGmPrompt({
-        output: worldGen,
-        playerGoals: `Explore the world of ${worldGen.worldName}.`,
-      });
-      lines.push('', '[WORLD CONTEXT]', gmPrompt, '[/WORLD CONTEXT]');
     }
 
     return lines.join('\n');

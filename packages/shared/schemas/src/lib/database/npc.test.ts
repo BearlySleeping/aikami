@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
 import { NpcCreateSchema, NpcSchema, NpcSheetSchema, NpcUpdateSchema } from './npc.ts';
 
 describe('NpcSheetSchema', () => {
@@ -28,7 +29,7 @@ describe('NpcSheetSchema', () => {
       inventory: ['Gold coins'],
       isFriendly: false,
     };
-    const result = NpcSheetSchema.parse(validData);
+    const result = Value.Parse(NpcSheetSchema, validData);
     expect(result.name).toBe('Goblin King');
     expect(result.isFriendly).toBe(false);
   });
@@ -58,7 +59,7 @@ describe('NpcSheetSchema', () => {
       equipment: [],
       inventory: [],
     };
-    const result = NpcSheetSchema.parse(validData);
+    const result = Value.Default(NpcSheetSchema, validData);
     expect(result.isFriendly).toBe(true);
   });
 });
@@ -93,14 +94,14 @@ describe('NpcSchema', () => {
   };
 
   test('should parse valid NPC data', () => {
-    const result = NpcSchema.parse(validNpcData);
+    const result = Value.Parse(NpcSchema, validNpcData);
     expect(result.id).toBe('npc-123');
     expect(result.avatarUrl).toBe('https://example.com/goblin.png');
   });
 
   test('should parse with optional avatarUrl', () => {
     const { avatarUrl, ...rest } = validNpcData;
-    const result = NpcSchema.parse(rest);
+    const result = Value.Parse(NpcSchema, rest);
     expect(result.avatarUrl).toBeUndefined();
   });
 });
@@ -132,7 +133,7 @@ describe('NpcCreateSchema', () => {
       inventory: [],
       isFriendly: true,
     };
-    const result = NpcCreateSchema.parse(validData);
+    const result = Value.Parse(NpcCreateSchema, validData);
     expect(result.name).toBe('New NPC');
   });
 });
@@ -165,7 +166,7 @@ describe('NpcUpdateSchema', () => {
       inventory: ['Gold coins'],
       isFriendly: false,
     };
-    const result = NpcUpdateSchema.parse(validData);
+    const result = Value.Parse(NpcUpdateSchema, validData);
     expect(result.name).toBe('Updated NPC Name');
     expect(result.level).toBe(5);
   });

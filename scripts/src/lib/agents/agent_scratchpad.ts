@@ -614,6 +614,15 @@ export class AgentScratchpad {
     );
   }
 
+  /**
+   * Delete all heartbeat rows for a task — called at pipeline start so the
+   * ledger is task-scoped and never mixes rows from previous runs.
+   */
+  clearTaskHeartbeats(taskId: string): void {
+    this._assertOpen();
+    this._db.run('DELETE FROM swarm_heartbeat WHERE task_id = ?', [taskId]);
+  }
+
   /** Get heartbeat status for all agents in a task. */
   getHeartbeats(taskId: string): SwarmStateRow[] {
     this._assertOpen();

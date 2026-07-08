@@ -16,6 +16,6 @@
     "dayjs": "1.11.21",
     "detect-browser": "5.3.0",
     "firebase": "12.15.0",
-    "isbot": "5.1.44"
+    "isbot": "5.2.0"
   }
 }

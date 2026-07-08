@@ -44,7 +44,11 @@ export * from './game/pixi_texture_injector';
 export * from './game/quest_service.svelte';
 export * from './game/serializable_service';
 export * from './game/time_service.svelte';
-export * from './game/vendor_service.svelte';
+export * from './game/vendor_service.svelte.ts';
+// ── GM Narrative Director ────────────────────────────────────────────
+// NOTE: GM services are NOT re-exported from here to avoid Bun's `export * from`
+// limitation with .svelte.ts re-exports in test runner. Consumers import directly
+// from './gm/gm_prompt_service.svelte.ts' etc.
 export * from './image/image_generation_service.svelte.ts';
 export * from './notification/notification_repository.svelte.ts';
 export * from './npc/npc_repository.svelte.ts';

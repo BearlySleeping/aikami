@@ -28,7 +28,7 @@
     "@storybook/svelte": "10.4.6",
     "@storybook/svelte-vite": "10.4.6",
     "@storybook/test-runner": "0.24.4",
-    "@sveltejs/vite-plugin-svelte": "7.1.2",
+    "@sveltejs/vite-plugin-svelte": "7.2.0",
     "autoprefixer": "10.5.2",
     "postcss": "8.5.16",
     "storybook": "10.4.6",

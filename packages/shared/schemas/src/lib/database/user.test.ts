@@ -96,6 +96,7 @@ describe('UserCreateSchema', () => {
       currentSignInProvider: 'google',
       createdAt: { seconds: 1700000000, nanoseconds: 0 },
       firstName: 'John',
+      agreedAt: { seconds: 1700000000, nanoseconds: 0 },
     };
     const result = Value.Parse(UserCreateSchema, validData);
     expect(result.firstName).toBe('John');
@@ -104,6 +105,7 @@ describe('UserCreateSchema', () => {
   test('should parse with only optional fields', () => {
     const data = {
       displayName: 'John Doe',
+      agreedAt: { seconds: 1700000000, nanoseconds: 0 },
     };
     const result = Value.Parse(UserCreateSchema, data);
     expect(result.displayName).toBe('John Doe');

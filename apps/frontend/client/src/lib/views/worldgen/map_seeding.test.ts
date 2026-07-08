@@ -10,7 +10,26 @@
 //
 // Contract: C-233
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
+
+// Mock $services with minimal stubs for seeding operations
+mock.module('$services', () => ({
+  authService: { uid: undefined },
+  gameStateService: {
+    get inventory() {
+      return [];
+    },
+    worldGenOutput: undefined,
+    addNpc() {},
+    addLocation() {},
+    addPartyArc() {},
+    setHudWidget() {},
+    setVariable() {},
+    recordEvent() {},
+  },
+  npcService: {},
+}));
+
 import { worldGenSeedingService } from './world_gen_seeding_service.svelte.ts';
 
 // ---------------------------------------------------------------------------

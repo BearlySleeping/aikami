@@ -17,10 +17,12 @@ export const PersonaSchema = Composite(
       Type.String({ description: 'ID of the voice configuration for TTS' }),
     ),
     uid: Type.Optional(Type.String({ description: 'ID of the creator' })),
-    isActive: Type.Boolean({
-      description: 'Is this the active character for the current run',
-      default: false,
-    }),
+    isActive: Type.Optional(
+      Type.Boolean({
+        description: 'Is this the active character for the current run',
+        default: false,
+      }),
+    ),
   }),
 );
 

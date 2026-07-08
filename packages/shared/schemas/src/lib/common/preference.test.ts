@@ -26,8 +26,10 @@ describe('LocaleDataSchema', () => {
     expect(result.en).toBeUndefined();
   });
 
-  test('should reject unsupported locale key', () => {
+  test('should allow unsupported locale keys (open record in TypeBox v1)', () => {
     const invalidData = { fr: 'French' };
-    expect(() => Value.Parse(LocaleDataSchema, invalidData)).toThrow();
+    // TypeBox v1 records are open by default — extra keys pass through
+    const result = Value.Parse(LocaleDataSchema, invalidData);
+    expect(result.fr).toBe('French');
   });
 });

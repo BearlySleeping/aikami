@@ -87,11 +87,23 @@ const main = (): void => {
       return;
     }
 
+    // ── Task-scoped: find the active task (most recent heartbeat), then
+    // only report rows belonging to THAT task. Never mix runs.
+    const latest = db
+      .query('SELECT task_id FROM swarm_heartbeat ORDER BY last_heartbeat_timestamp DESC LIMIT 1')
+      .get() as { task_id: string } | null;
+
+    if (!latest) {
+      console.log(JSON.stringify(DEFAULT_IDLE_ENVELOPE));
+      db.close();
+      return;
+    }
+
     const rows = db
       .query(
-        "SELECT task_id, agent_key, agent_status, last_heartbeat_timestamp, COALESCE(agent_output, '') as agent_output FROM swarm_heartbeat ORDER BY last_heartbeat_timestamp DESC LIMIT 20",
+        "SELECT task_id, agent_key, agent_status, last_heartbeat_timestamp, COALESCE(agent_output, '') as agent_output FROM swarm_heartbeat WHERE task_id = ? ORDER BY last_heartbeat_timestamp DESC",
       )
-      .all() as Array<{
+      .all(latest.task_id) as Array<{
       task_id: string;
       agent_key: string;
       agent_status: string;
@@ -99,7 +111,7 @@ const main = (): void => {
       agent_output: string;
     }>;
 
-    // Build worker map from latest rows
+    // Build worker map (one row per agent — PK is (task_id, agent_key))
     const workerMap: Record<string, WorkerState> = {};
     for (const r of rows) {
       if (!workerMap[r.agent_key]) {
@@ -119,7 +131,7 @@ const main = (): void => {
       }
     }
 
-    const activeId = rows.length > 0 ? rows[0].task_id : 'none';
+    const activeId = latest.task_id;
     const locked = Object.values(workerMap).some(
       (w) => w.status === 'working' || w.status === 'blocked',
     );

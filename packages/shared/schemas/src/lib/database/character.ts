@@ -204,37 +204,41 @@ export const BaseCharacterSheetSchema = Type.Object(
     class: ClassSchema,
     subclass: SubclassSchema,
     level: LevelSchema,
-    experiencePoints: ExperiencePointsSchema,
+    experiencePoints: Type.Optional(ExperiencePointsSchema),
 
     abilityScores: Type.Optional(AbilityScoresSchema),
 
-    hitPoints: HitPointsSchema,
+    hitPoints: Type.Optional(HitPointsSchema),
     hitPointsMax: HitPointsMaxSchema,
-    temporaryHitPoints: TemporaryHitPointsSchema,
-    armorClass: ArmorClassSchema,
-    speed: SpeedSchema,
+    temporaryHitPoints: Type.Optional(TemporaryHitPointsSchema),
+    armorClass: Type.Optional(ArmorClassSchema),
+    speed: Type.Optional(SpeedSchema),
     initiative: InitiativeSchema,
 
     proficiencyBonus: ProficiencyBonusSchema,
 
-    savingThrows: Type.Array(SavingThrowSchema, {
-      description: 'Saving throw proficiencies',
-      default: DEFAULT_SAVING_THROWS,
-    }),
+    savingThrows: Type.Optional(
+      Type.Array(SavingThrowSchema, {
+        description: 'Saving throw proficiencies',
+        default: DEFAULT_SAVING_THROWS,
+      }),
+    ),
 
-    skills: Type.Array(SkillSchema, {
-      description: 'Skill proficiencies',
-      default: DEFAULT_SKILLS,
-    }),
+    skills: Type.Optional(
+      Type.Array(SkillSchema, {
+        description: 'Skill proficiencies',
+        default: DEFAULT_SKILLS,
+      }),
+    ),
 
     alignment: AlignmentSchema,
     background: BackgroundSchema,
 
-    proficiencies: ProficienciesSchema,
-    languages: LanguagesSchema,
+    proficiencies: Type.Optional(ProficienciesSchema),
+    languages: Type.Optional(LanguagesSchema),
 
-    equipment: EquipmentSchema,
-    inventory: InventorySchema,
+    equipment: Type.Optional(EquipmentSchema),
+    inventory: Type.Optional(InventorySchema),
 
     personalityTraits: PersonalityTraitsSchema,
     ideals: IdealsSchema,

@@ -9,9 +9,28 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/combat/combat_view_model.test.ts
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
+
+mock.module('$services', () => ({
+  diceService: {
+    rollWithModifier: () => ({ roll: 17, modifier: 4, total: 21, success: true }),
+    async rollDice() {
+      return { roll: 17, modifier: 4, total: 21, success: true };
+    },
+  },
+  gameStateService: {
+    inventory: [],
+    worldGenOutput: undefined,
+  },
+  audioService: {
+    playBgm: () => {},
+    crossFadeBgm: () => {},
+    stopAll: () => {},
+  },
+  vendorService: undefined,
+}));
 
 import { CombatViewModel, type CombatViewModelOptions } from './combat_view_model.svelte.ts';
 

@@ -14,6 +14,7 @@ export const SwarmRoleSchema = Type.Union([
   Type.Literal('coder'),
   Type.Literal('qa'),
   Type.Literal('git'),
+  Type.Literal('review'),
   Type.Literal('document'),
 ]);
 export type SwarmRole = Static<typeof SwarmRoleSchema>;

@@ -4,9 +4,16 @@ SWARM AGENT: qa. Read the architect plan path in the user message.
    - .pi/swarm/outputs/<taskId>_architect_handoff.json
    - .pi/swarm/outputs/<taskId>_coder_handoff.json
 
-2. **Start required services before running tests.** The architect plan lists test commands. If any test requires emulators or dev servers, start them first:
-   - Use `herdr_session start firebase` for Firebase emulators
-   - Use `herdr_session start client` for the client dev server
+2. **Start and restart services before running tests.** The architect plan lists test commands.
+   Check the coder handoff `filesTouched` — if any new routes or page files were created,
+   you MUST restart the client for Vite to pick them up:
+
+   🔴 **New routes created?** → `herdr_session restart client` (stop + fresh start)
+      Without this, E2E tests hitting new routes will fail with 404.
+
+   Start emulators if needed for backend tests:
+   - `herdr_session start firebase` for Firebase emulators
+   - `herdr_session start client` for the client dev server (if not already running)
    - These are PI tools — call them directly, not via shell
 
 3. Run the exact test commands from the architect plan. Fix failures — max 3 iterations.

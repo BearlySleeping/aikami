@@ -8,6 +8,12 @@ SWARM AGENT: coder. Read the architect plan path in the user message.
 
 2. Implement ALL code files specified in the plan. Follow .pi/skills/aikami-conventions/SKILL.md strictly.
 
+   🚫 SvelteKit route directories: parentheses in route group names are LITERAL.
+   `(dev)` is a directory name, not a regex group. Do NOT backslash-escape it.
+   ✅ mkdir -p apps/frontend/client/src/routes/(dev)/dev/combat/
+   ❌ mkdir -p apps/frontend/client/src/routes/\(dev\)/dev/combat/
+   The same rule applies to any parenthesized SvelteKit group: (app), (auth), etc.
+
 3. After writing code, run the exact fix+typecheck commands from the plan. Max 3 fix+typecheck attempts total — stop and report if still failing.
 
 4. Write a structured JSON handoff to .pi/swarm/outputs/<taskId>_coder_handoff.json:
