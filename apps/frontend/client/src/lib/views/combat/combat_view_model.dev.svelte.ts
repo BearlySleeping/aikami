@@ -17,6 +17,7 @@ import { textGenerationService } from '$lib/services/ai/text_generation_service.
 import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import { CombatViewModel, type CombatViewModelOptions } from './combat_view_model.svelte.ts';
+import type { DiceNotation } from './types/combat_enhancements.ts';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -170,6 +171,40 @@ export class CombatDevViewModel extends CombatViewModel {
     this.enemyEntityId = 2002;
     this.combatResult = null;
     this.enemyName = 'Goblin'; // default mock enemy
+
+    // C-234: Build mock initiative entries
+    const playerInit = Math.floor(Math.random() * 20) + 1;
+    const enemyInit = Math.floor(Math.random() * 20) + 1;
+    this.initiativeEntries = [
+      {
+        entityId: 1001,
+        name: this.playerName,
+        initiative: playerInit,
+        currentHp: this.playerHp,
+        maxHp: this.playerMaxHp,
+        isCurrentTurn: playerInit >= enemyInit,
+        isDefeated: false,
+      },
+      {
+        entityId: 2002,
+        name: this.enemyName,
+        initiative: enemyInit,
+        currentHp: this.enemyHp,
+        maxHp: this.enemyMaxHp,
+        isCurrentTurn: enemyInit > playerInit,
+        isDefeated: false,
+      },
+    ];
+
+    // C-234: Initialize turn state
+    const firstIsPlayer = playerInit >= enemyInit;
+    this.turnState = {
+      currentEntityId: firstIsPlayer ? 1001 : 2002,
+      currentEntityName: firstIsPlayer ? this.playerName : this.enemyName,
+      isPlayerTurn: firstIsPlayer,
+      actionEconomy: { action: false, bonusAction: false, reaction: false },
+      turnNumber: 1,
+    };
 
     // ── Apply URL search param overrides for visual testing ──
     const init = (this as unknown as { _initialState?: CombatDevViewModelOptions['initialState'] })
@@ -418,6 +453,84 @@ export class CombatDevViewModel extends CombatViewModel {
       );
   }
 
+  // C-234: Dice & Initiative — dev mocks
+  // -----------------------------------------------------------------------
+
+  /** @inheritdoc */
+  override queueRoll(options: { notation: DiceNotation; label?: string }): void {
+    this.debug('queueRoll (dev)', { notation: options.notation, label: options.label });
+    const roll = {
+      id: `queued-${this._counterNext}`,
+      notation: options.notation,
+      label: options.label ?? options.notation.label,
+      timestamp: Date.now(),
+    };
+    this.queuedRolls = [...this.queuedRolls, roll];
+  }
+
+  /** @inheritdoc */
+  override removeQueuedRoll(rollId: string): void {
+    this.debug('removeQueuedRoll (dev)', { rollId });
+    this.queuedRolls = this.queuedRolls.filter((r) => r.id !== rollId);
+  }
+
+  /** @inheritdoc */
+  override resolveAllRolls(): void {
+    this.debug('resolveAllRolls (dev)', { count: this.queuedRolls.length });
+    if (this.queuedRolls.length === 0) {
+      return;
+    }
+
+    const results: string[] = [];
+    for (const roll of this.queuedRolls) {
+      const total = this._mockDiceRollValue(roll.notation);
+      const rollLabel =
+        roll.label !== roll.notation.label
+          ? `${roll.label} (${roll.notation.label})`
+          : roll.notation.label;
+      results.push(`🎲 ${rollLabel}: ${total}`);
+    }
+
+    this.queuedRolls = [];
+    this._addLogEntry(`🎲 Dice Roll — ${results.join(' | ')}`);
+  }
+
+  /** @inheritdoc */
+  override endTurn(): void {
+    this.debug('endTurn (dev)');
+    if (this.combatResult) {
+      return;
+    }
+    // Simulate enemy turn on end turn
+    this.simulateEnemyTurn();
+
+    // Update turn state
+    if (this.turnState) {
+      this.turnState = {
+        currentEntityId: 1,
+        currentEntityName: this.playerName,
+        isPlayerTurn: true,
+        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        turnNumber: (this.turnState?.turnNumber ?? 0) + 1,
+      };
+      this.initiativeEntries = this.initiativeEntries.map((e) => ({
+        ...e,
+        isCurrentTurn: e.entityId === 1,
+      }));
+    }
+  }
+
+  /**
+   * Simulates a dice roll value for the given notation.
+   */
+  private _mockDiceRollValue(notation: DiceNotation): number {
+    let total = 0;
+    for (let i = 0; i < notation.count; i++) {
+      total += Math.floor(Math.random() * notation.sides) + 1;
+    }
+    return total;
+  }
+
   /**
    * Checks whether a player action should be gatekept (rejected) because
    * they're trying to use items they don't have.
@@ -594,6 +707,9 @@ export class CombatDevViewModel extends CombatViewModel {
     this.activeEntities = [1001, 2002];
     this.currentTurnEntity = 1001;
     this.totalParticipants = 2;
+    this.queuedRolls = [];
+    this.initiativeEntries = [];
+    this.turnState = null;
     this._attackIndex = 0;
   }
 

@@ -2,7 +2,13 @@
   // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte
   import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
   import GameDice from '$lib/components/game/game_dice.svelte';
+  import DiceQuickMenu from '$views/combat/components/dice_quick_menu.svelte';
+  import type { QueuedRoll } from '$views/combat/types/combat_enhancements.ts';
   import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
+
+  // C-234: Quick-dice popover state
+  let showDicePopover = $state(false);
+  let queuedDice: QueuedRoll[] = $state([]);
 
   type Props = {
     viewModel: DialogueOverlayViewModelInterface;
@@ -138,6 +144,42 @@
               Send
             {/if}
           </button>
+          <!-- C-234: Quick-dice button → popover -->
+          {#if showDicePopover}
+            <div class="absolute bottom-20 right-4 z-50 w-64">
+              <DiceQuickMenu
+                queuedRolls={queuedDice}
+                onQueueRoll={(opts) => {
+                  const id = `qd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                  queuedDice = [...queuedDice, { id, notation: opts.notation, label: opts.label, timestamp: Date.now() }];
+                }}
+                onRemoveQueuedRoll={(id) => {
+                  queuedDice = queuedDice.filter((r) => r.id !== id);
+                }}
+                onRollAll={() => {
+                  const results = queuedDice.map((r) => {
+                    let total = 0;
+                    for (let i = 0; i < r.notation.count; i++) {
+                      total += Math.floor(Math.random() * r.notation.sides) + 1;
+                    }
+                    const label = r.label !== r.notation.label ? `${r.label} (${r.notation.label})` : r.notation.label;
+                    return `${label}: ${total}`;
+                  });
+                  queuedDice = [];
+                  showDicePopover = false;
+                  viewModel.setInput(`🎲 Dice Roll — ${results.join(' | ')}`);
+                }}
+                isRolling={false}
+              />
+            </div>
+          {/if}
+          <button
+            class="btn btn-ghost btn-xs"
+            onclick={() => (showDicePopover = !showDicePopover)}
+            title="Quick Dice Roll"
+          >
+            🎲
+          </button>
         </div>
         <div class="mt-2 flex items-center justify-between">
           <button class="btn btn-ghost btn-xs" onclick={() => viewModel.goToMenu()}>
@@ -176,6 +218,42 @@
             {:else}
               Send
             {/if}
+          </button>
+          <!-- C-234: Quick-dice button → popover -->
+          {#if showDicePopover}
+            <div class="absolute bottom-20 right-4 z-50 w-64">
+              <DiceQuickMenu
+                queuedRolls={queuedDice}
+                onQueueRoll={(opts) => {
+                  const id = `qd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                  queuedDice = [...queuedDice, { id, notation: opts.notation, label: opts.label, timestamp: Date.now() }];
+                }}
+                onRemoveQueuedRoll={(id) => {
+                  queuedDice = queuedDice.filter((r) => r.id !== id);
+                }}
+                onRollAll={() => {
+                  const results = queuedDice.map((r) => {
+                    let total = 0;
+                    for (let i = 0; i < r.notation.count; i++) {
+                      total += Math.floor(Math.random() * r.notation.sides) + 1;
+                    }
+                    const label = r.label !== r.notation.label ? `${r.label} (${r.notation.label})` : r.notation.label;
+                    return `${label}: ${total}`;
+                  });
+                  queuedDice = [];
+                  showDicePopover = false;
+                  viewModel.setInput(`🎲 Dice Roll — ${results.join(' | ')}`);
+                }}
+                isRolling={false}
+              />
+            </div>
+          {/if}
+          <button
+            class="btn btn-ghost btn-xs"
+            onclick={() => (showDicePopover = !showDicePopover)}
+            title="Quick Dice Roll"
+          >
+            🎲
           </button>
         </div>
       {/if}

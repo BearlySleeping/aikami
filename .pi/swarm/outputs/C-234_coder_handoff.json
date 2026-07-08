@@ -1,0 +1,18 @@
+{
+  "taskId": "C-234",
+  "role": "coder",
+  "status": "success",
+  "complexity": "standard",
+  "domain": "frontend",
+  "requiresDocs": false,
+  "filesTouched": [
+    "apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts",
+    "apps/frontend/client/src/lib/services/dice/dice_service.test.ts",
+    "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts"
+  ],
+  "nextCommands": [
+    "moon run client:fix && moon run client:typecheck",
+    "moon run client:test"
+  ],
+  "summary": "Implemented 3 remaining gap items from architect plan: (1) Added rollNotation(options) method to DiceService interface and class — rolls count×sides dice, pushes combined total to history, returns sum. (2) Added 5 rollNotation tests covering d20 range, 2d6 range, d100 range, 4d6 range, and history push verification — all 9 dice_service tests pass. (3) Updated CombatViewModel: imported diceService from $services barrel, replaced private _simulateDiceRoll() call with diceService.rollNotation() in resolveAllRolls(), removed the private _simulateDiceRoll() method. Dev sandbox page at /dev/combat-enhancements and E2E POM navigation already existed from prior coder. fix+typecheck: 0 errors. 7 pre-existing test failures in combat_log_enrichment.test.ts (parseDiceFromLog/parseDamageFromLog regex bugs) — unrelated to these changes."
+}

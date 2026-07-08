@@ -27,6 +27,14 @@ export class CombatPage {
     await this.waitReady();
   }
 
+  /** Navigate to the combat-enhancements dev sandbox (C-234 Dice & Initiative). */
+  async gotoCombatEnhancementsDev(): Promise<void> {
+    await this.page.goto('http://localhost:5274/dev/combat-enhancements', {
+      waitUntil: 'domcontentloaded',
+    });
+    await this.page.waitForSelector('h1', { timeout: 10_000 });
+  }
+
   /** Navigate to game combat (requires game engine + active encounter). */
   async gotoGame(): Promise<void> {
     await this.page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
@@ -150,7 +158,58 @@ export class CombatPage {
     return this.portraitStage.locator('img');
   }
 
-  // ── Combat State ──────────────────────────────────────────
+  // C-234 ── Dice Quick Menu ────────────────────────────────
+
+  /** Dice quick menu container. */
+  get diceQuickMenu() {
+    return this.page.locator('.dice-quick-menu');
+  }
+
+  /** Custom dice notation input field. */
+  get diceCustomInput() {
+    return this.diceQuickMenu.locator('input[placeholder*="e.g."]');
+  }
+
+  /** Custom dice add button. */
+  get diceCustomAddButton() {
+    return this.diceQuickMenu.locator('button:has-text("+Add")');
+  }
+
+  /** Roll All button (visible when dice are queued). */
+  get diceRollAllButton() {
+    return this.diceQuickMenu.locator('button:has-text("Roll All")');
+  }
+
+  /** Queued dice roll badges. */
+  get diceQueuedBadges() {
+    return this.diceQuickMenu.locator('.badge');
+  }
+
+  /** Queue a specific dice preset by label. */
+  async queueDicePreset(label: string): Promise<void> {
+    await this.diceQuickMenu.locator(`button:has-text("${label}")`).click();
+  }
+
+  // C-234 ── Initiative Tracker ──────────────────────────────
+
+  /** Initiative tracker container. */
+  get initiativeTracker() {
+    return this.page.locator('.initiative-tracker');
+  }
+
+  /** Initiative tracker header button (for collapse toggle). */
+  get initiativeTrackerHeader() {
+    return this.initiativeTracker.locator('button').first();
+  }
+
+  // C-234 ── Turn Tracker Header ────────────────────────────
+
+  /** Turn tracker header container. */
+  get turnTrackerHeader() {
+    return this.page.locator('.turn-tracker-header');
+  }
+
+  // C-234 ── Combat State ────────────────────────────────────
 
   /** Wait for combat to end (attack button becomes visible again after resolution). */
   async waitForActionReady(): Promise<void> {

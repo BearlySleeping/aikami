@@ -17,6 +17,10 @@
   import CombatDiceUi from './components/combat_dice_ui.svelte';
   import CombatGallery from './components/combat_gallery.svelte';
   import CombatInlineImage from './components/combat_inline_image.svelte';
+  import DiceQuickMenu from './components/dice_quick_menu.svelte';
+  import EnrichedLogEntry from './components/enriched_log_entry.svelte';
+  import InitiativeTracker from './components/initiative_tracker.svelte';
+  import { parseDamageFromLog, parseDiceFromLog } from './utils/dice_notation.ts';
 
   type Props = {
     viewModel: CombatViewModelInterface;
@@ -27,8 +31,11 @@
   /** Temporary input value for the freeform custom action text field. */
   let customActionInput = $state('');
 
-  /** Track which tab is active: 'log' or 'gallery'. Gallery is a placeholder for now. */
+  /** Track which tab is active: 'log' or 'gallery'. */
   let activeTab = $state<'log' | 'gallery'>('log');
+
+  /** C-234: Whether the initiative tracker is collapsed. */
+  let initiativeCollapsed = $state(false);
 </script>
 
 <div class="h-full flex flex-col bg-base-100 border-r border-base-300">
@@ -102,6 +109,15 @@
       </div>
     </div>
 
+    <!-- C-234: Initiative tracker (collapsible, above log) -->
+    <div class="px-3 pb-1">
+      <InitiativeTracker
+        entries={viewModel.initiativeEntries}
+        collapsed={initiativeCollapsed}
+        onToggleCollapse={() => (initiativeCollapsed = !initiativeCollapsed)}
+      />
+    </div>
+
     <!-- ── Tab header: Log | Gallery ── -->
     <div class="px-3">
       <div class="tabs tabs-bordered">
@@ -133,7 +149,20 @@
                 class="text-xs leading-relaxed text-base-content/70 border-b border-base-200 pb-1"
               >
                 <span class="font-semibold text-base-content/50">{entry.actor}</span>
-                <span class="ml-1">{entry.actionText}</span>
+                <!-- C-234: Enriched log entry rendering -->
+                {#if entry.actionText}
+                  {@const logEntry = {
+                    rawText: entry.actionText,
+                    ...parseDiceFromLog(entry.actionText),
+                    ...parseDamageFromLog(entry.actionText),
+                    isPlainText: !parseDiceFromLog(entry.actionText),
+                  }}
+                  <span class="ml-1">
+                    <EnrichedLogEntry entry={logEntry} />
+                  </span>
+                {:else}
+                  <span class="ml-1">{entry.actionText}</span>
+                {/if}
               </div>
               <!-- Inline image for this turn (C-165 AC-1) -->
               {#if entry.imageUrl || entry.isGeneratingImage}
@@ -184,6 +213,17 @@
         </div>
       </div>
     {/if}
+
+    <!-- C-234: Dice quick menu (above action bar) -->
+    <div class="px-3 pb-1 flex-shrink-0">
+      <DiceQuickMenu
+        queuedRolls={viewModel.queuedRolls}
+        onQueueRoll={(options) => viewModel.queueRoll(options)}
+        onRemoveQueuedRoll={(id) => viewModel.removeQueuedRoll(id)}
+        onRollAll={() => viewModel.resolveAllRolls()}
+        isRolling={viewModel.isAttacking}
+      />
+    </div>
 
     <!-- ── Fixed action bar — anchored to bottom of left pane (AC-2) ── -->
     <div class="border-t border-base-300 p-3 space-y-2 bg-base-100 flex-shrink-0">

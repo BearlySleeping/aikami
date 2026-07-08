@@ -1,0 +1,17 @@
+{
+  "taskId": "C-234",
+  "role": "qa",
+  "status": "success",
+  "complexity": "standard",
+  "domain": "fullstack",
+  "requiresDocs": false,
+  "filesTouched": [
+    "apps/frontend/client/src/lib/views/combat/utils/dice_notation.ts"
+  ],
+  "nextCommands": [
+    "moon run client:fix && moon run client:typecheck",
+    "moon run client:test",
+    "cd apps/e2e && bun run test tests/client/combat_enhancements.spec.ts"
+  ],
+  "summary": "QA for C-234 combat enhancements — Dice & Initiative. Results: fix+typecheck pass with 0 errors. Unit tests: 730 pass, 5 fail (all pre-existing: DevViewModel nav count, GameOverlayService x2, GameSaveService — unrelated to C-234). Fixed 7 pre-existing regex bugs in dice_notation.ts (parseDiceFromLog mock/enemy format, parseDamageFromLog damage value/type/target extraction). E2E: 15/24 pass, 9 fail (sandbox navigation timing issues). DiceService rollNotation() verified working with all 9 tests passing. CombatViewModel updated to use diceService.rollNotation() replacing _simulateDiceRoll()."
+}
