@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/combat/` — Combat UX Enhancement: multi-dice UI, initiative tracker, turn tracking, enriched combat log |
 | **Priority** | P1 — Combat is the core D&D mechanic; dice are the most visceral feedback loop in the game |
 | **Dependencies** | C-145 (Turn-Based Combat Loop — COMPLETED), C-148 (Combat Immersion — COMPLETED), C-162 (BG3 Action Menu & Dice — COMPLETED), C-164 (Combat Split-Screen — COMPLETED), `CombatViewModel` (1182 lines — EXISTS), `GameDice` component (C-148/C-162 — EXISTS), `diceService` (EXISTS), `combat_dice_ui.svelte` (31 lines — EXISTS), C-232 (Character Sheet — COMPLETED for skill/save modifiers) |
-| **Status** | not_started |
+| **Status** | done |
 | **Contract version** | 1.0.0 |
 
 ## Overview

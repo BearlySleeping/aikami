@@ -9,8 +9,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ItemDefinition } from '@aikami/types';
+import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$services';
-import { vendorService } from '$services';
 
 // Re-export for consumers
 export type VendorSessionOptions = _VendorSessionOptions;

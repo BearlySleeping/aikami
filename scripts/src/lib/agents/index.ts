@@ -1,16 +1,12 @@
 // scripts/src/lib/agents/index.ts
 /**
- * Swarm director module barrel.
+ * Swarm director module barrel (v2 — state machine).
  */
 
+export { executeTaskPipeline } from './step_executor';
 export {
-  backoffDelay,
-  detectStalledAgents,
-  executeStepResilient,
-  executeTask,
+  executeTaskSocket,
   initializeSwarm,
-  readPaneNonBlocking,
-  retryWithBackoff,
   snapshotState,
   verifyAgentMapping,
 } from './swarm_director';
@@ -19,9 +15,8 @@ export type {
   AgentRecord,
   AgentRole,
   AgentStatus,
-  BackoffConfig,
-  PollingConfig,
-  StreamTimeoutConfig,
+  FeedbackEntry,
+  PipelineState,
   SwarmState,
   SwarmStep,
   TaskPayload,

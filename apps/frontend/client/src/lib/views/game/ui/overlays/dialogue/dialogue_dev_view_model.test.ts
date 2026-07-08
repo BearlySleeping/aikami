@@ -62,6 +62,26 @@ const textGenStreamChat = async (options: { onChunk: (text: string) => void }) =
   }
 };
 
+// Mock game service files BEFORE $services so that barrel evaluation
+// can resolve GM service imports (gm_prompt_service imports these directly).
+const COMBAT_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
+mock.module(COMBAT_PATH, () => ({
+  combatService: { enemyName: 'Unknown Enemy', enemyHp: 0, enemyMaxHp: 0 },
+}));
+
+const GAME_STATE_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
+mock.module(GAME_STATE_PATH, () => ({
+  gameStateService: { worldGenOutput: undefined, quests: [], characterSheetSummary: undefined },
+}));
+
+const TIME_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/time_service.svelte.ts';
+mock.module(TIME_PATH, () => ({
+  timeService: { gameHour: 12, gameMinute: 0, rainIntensity: 0 },
+}));
+
 mock.module('$services', () => ({
   textGenerationService: {
     streamChat: textGenStreamChat,
@@ -82,6 +102,36 @@ mock.module('$services', () => ({
     initialize: mock(async () => {}),
     selectedVoice: 'af_bella',
     status: 'uninitialized',
+  },
+  gmPromptService: {
+    assemblePrompt: mock(() => 'Mock GM system prompt for testing'),
+  },
+  narrativeDirectorService: {
+    isRunning: false,
+    start: mock(() => {}),
+    stop: mock(() => {}),
+    pushStory: mock(async () => {}),
+  },
+  sessionSummaryService: {
+    currentSummary: null,
+    isGenerating: false,
+    generateSummary: mock(async () => ({})),
+    clearSummary: mock(() => {}),
+  },
+  combatService: {
+    enemyName: 'Unknown Enemy',
+    enemyHp: 0,
+    enemyMaxHp: 0,
+  },
+  gameStateService: {
+    worldGenOutput: undefined,
+    quests: [],
+    characterSheetSummary: undefined,
+  },
+  timeService: {
+    gameHour: 12,
+    gameMinute: 0,
+    rainIntensity: 0,
   },
 }));
 

@@ -145,7 +145,7 @@
 - **Complexity**: High — structured JSON generation is demanding; requires top-tier model; retry logic for malformed output
 - **Impact**: Very High — transforms the game from a static map into a living world
 
-#### C-ME-005: Combat Enhancement — Dice UI, Initiative, Turn Tracking
+#### C-ME-005: Combat Enhancement — Dice UI, Initiative, Turn Tracking — [📋 Contract C-234](docs/contracts/C-234-combat-enhancement-dice-initiative.md)
 
 - **Marinara Reference**: `docs/GAME_MODE.md` (dice rolling, combat encounters), `docs/ROLEPLAY.md` (combat encounters)
 - **What Marinara Does**: Dice roller with 8 preset notations (d20, d6, 2d6, d10, d100, d4, d8, d12) + custom notation like `3d8+2`. Rolls are queued, resolved server-side, and appended to message as `[dice: 2d6 = 9 (4,5)]`. GM treats results as canonical. Combat runs as turn-based encounters with initiative, HP tracking, status effects, and an encounter store.
@@ -158,7 +158,7 @@
 - **Complexity**: Medium — dice animation is the bulk; initiative tracking is straightforward state machine
 - **Impact**: Very High — combat is a core D&D mechanic; dice are the most visceral feedback
 
-#### C-ME-006: AI Game Master / Narrative Director
+#### C-ME-006: AI Game Master / Narrative Director — [📋 Contract C-235](docs/contracts/C-235-gm-narrative-director.md)
 
 - **Marinara Reference**: `docs/GAME_MODE.md` (GM system, standalone vs character GM), `docs/ROLEPLAY.md` (Narrative Director, Secret Plot)
 - **What Marinara Does**: Two GM modes — Standalone (synthetic GM persona) or Character (existing character card as GM). The Narrative Director agent maintains private plot memory: long-term arc memory plus short-term scene directions injected before replies. Secret Plot feature provides hidden arc tracking, scene direction steering, momentum-shift hints. The GM receives full game state per turn: map, party position, NPCs, session summaries, character cards, time, weather, encounter hints, player notes, HUD state.
