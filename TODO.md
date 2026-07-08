@@ -170,7 +170,7 @@
 - **Complexity**: High — prompt assembly is nuanced; session summarization requires reliable structured output; Narrative Director adds a parallel agent
 - **Impact**: Very High — the GM is the heart of the D&D experience; this makes the world feel alive and reactive
 
-#### C-ME-007: Agent Pipeline System
+#### C-ME-007: Agent Pipeline System — [📋 Contract C-236](docs/contracts/C-236-agent-pipeline-system.md)
 
 - **Marinara Reference**: `docs/FRONTEND.md` (Agent System — 21 built-in agents, three phases), `docs/GAME_MODE.md` (automated agents), `docs/ROLEPLAY.md` (agents menu)
 - **What Marinara Does**: 21 built-in agents running in three phases — Pre-generation (context injection, knowledge retrieval), Parallel (alongside main generation), Post-processing (rewriting, state extraction, expression selection). Per-chat agent toggles. Agent thought bubbles showing real-time reasoning. Failed-agent retry UI. Agent memory endpoints for per-chat persistent state.
