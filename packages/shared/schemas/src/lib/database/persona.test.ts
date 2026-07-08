@@ -135,7 +135,7 @@ describe('PersonaCreateSchema', () => {
   });
 
   test('should reject when required fields missing', () => {
-    const invalidData = { name: 'Incomplete Persona' };
+    const invalidData = {};
     expect(() => Value.Parse(PersonaCreateSchema, invalidData)).toThrow();
   });
 });

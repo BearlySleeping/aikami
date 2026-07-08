@@ -31,7 +31,8 @@
 
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { EMULATOR_PORTS } from '@aikami/constants';
+// need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
+import { EMULATOR_PORTS } from '../../../../packages/shared/constants/src/index';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ export type SessionInfo = {
 
 // ── Service definitions ────────────────────────────────────
 
-const SERVICE_DEFS: Record<DevService, ServiceDef> = {
+export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   firebase: {
     name: 'firebase',
     command: 'bun run emulate',
@@ -114,7 +115,7 @@ const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   },
 };
 
-const ALL_SERVICES: DevService[] = [
+export const ALL_SERVICES: DevService[] = [
   'firebase',
   'client',
   'voice',
@@ -409,6 +410,9 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   // ── Create workspace if needed ──────────────────────────
   if (!workspaceId) {
     const first = services[0];
+    if (!first) {
+      throw new Error('No services available');
+    }
     const svc = SERVICE_DEFS[first];
     const cwd = svc.cwd(projectRoot);
 
@@ -435,8 +439,8 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     console.log(`  ✓ Tab: ${svc.name}`);
 
     // Add remaining services as new tabs
-    for (let i = 1; i < services.length; i++) {
-      const s = SERVICE_DEFS[services[i]];
+    for (const service of services.slice(1)) {
+      const s = SERVICE_DEFS[service];
       const tabR = await herdrJson<TabCreateResult>([
         'tab',
         'create',
@@ -550,6 +554,40 @@ export const stopServices = async (config: {
       console.log(`  ○ ${name} not running`);
     }
   }
+};
+
+// ── Restart services ────────────────────────────────────────
+
+/**
+ * Restart a dev service: stop (if running) → brief cooldown → start fresh.
+ *
+ * Critical: after the coder creates new SvelteKit routes, the client dev
+ * server must be restarted for Vite to pick up the new files. The QA agent
+ * must call `herdr_session restart client` before running tests that hit
+ * new routes.
+ */
+export const restartServices = async (config: SessionConfig): Promise<string> => {
+  const { mode, services, projectRoot } = config;
+  const workspaceLabel = buildSessionName(mode);
+
+  const svcNames = services.map((s) => SERVICE_DEFS[s].name).join(', ');
+  console.log(`🔄 Restarting ${svcNames}...`);
+
+  // Stop if running
+  const workspaceId = await findWorkspace(workspaceLabel);
+  if (workspaceId) {
+    const tabNames = await getWorkspaceTabNames(workspaceId);
+    const running = services.filter((s) => tabNames.includes(SERVICE_DEFS[s].name));
+    if (running.length > 0) {
+      await stopServices({ mode, services: running });
+    }
+  }
+
+  // Brief cooldown — let the OS release the port
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // Start fresh
+  return startServices({ mode, services, projectRoot });
 };
 
 /**

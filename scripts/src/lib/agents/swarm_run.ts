@@ -6,42 +6,28 @@
  *   bun swarm:run C-233
  *   bun swarm:run C-233 --tier pro
  *   bun swarm:run C-233 --no-review   (skip review step)
- *   bun swarm:run C-233 --fresh        (delete stale handoffs)
+ *   bun swarm:run C-233 --fresh        (discard previous progress, start over)
  *   bun swarm:run C-233 --join         (attach to herdr to watch)
+ *
+ * Resume-by-default: if handoffs from a previous (crashed/interrupted) run
+ * exist on disk, the pipeline resumes from the first incomplete role.
+ * Use --fresh to discard progress and start from the architect.
+ *
+ * The payload is a flat config blob — the state machine in step_executor.ts
+ * owns all command construction and model selection.
  */
 
-import { execSync } from 'node:child_process';
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-// ── Model (mirrors .pi/swarm/models.ts) ────────────────────
-
-const SWARM_MODELS = {
-  default: 'flash',
-  models: {
-    pro: { model: 'deepseek/deepseek-v4-pro' },
-    flash: { model: 'deepseek/deepseek-v4-flash' },
-    'openrouter-free': { model: 'openrouter/free' },
-    'opencode-free': { model: 'opencode/big-pickle' },
-  },
-} as const;
-
-const getModelForTier = (tier: string): string => {
-  const m = SWARM_MODELS.models as Record<string, { model: string }>;
-  return m[tier]?.model ?? m.flash.model;
-};
-
-const getDefaultTier = (): string => SWARM_MODELS.default;
+import { execSync, spawn } from 'node:child_process';
+import { mkdirSync, openSync, readdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 // ── Parse args ──────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const contractId = args.find((a) => /^C-\d+$/i.test(a));
-const tier = args.includes('--tier')
-  ? (args[args.indexOf('--tier') + 1] ?? getDefaultTier())
-  : getDefaultTier();
+const tier = args.includes('--tier') ? (args[args.indexOf('--tier') + 1] ?? 'flash') : 'flash';
 const skipReview = args.includes('--no-review');
-const fresh = args.includes('--fresh');
+const fresh = args.includes('--fresh') || args.includes('--force') || args.includes('--clean');
 const doJoin = args.includes('--join') || args.includes('-j');
 
 if (!contractId) {
@@ -49,14 +35,12 @@ if (!contractId) {
   console.error('');
   console.error('  contract-id    e.g. C-233, C-311');
   console.error('  --tier <tier>  pro | flash (default: flash)');
-  console.error('  --no-review    skip the review approval step');
-  console.error('  --fresh        delete stale handoffs for a fresh re-run');
+  console.error('  --no-review    skip the review approval step (auto-approve git)');
+  console.error('  --fresh        discard previous progress, start over (alias: --force, --clean)');
   console.error('  --join         attach to herdr session to watch');
   console.error('');
-  console.error('Examples:');
-  console.error('  bun swarm:run C-233');
-  console.error('  bun swarm:run C-233 --tier pro --join');
-  console.error('  bun swarm:run C-233 --fresh --no-review');
+  console.error('Default behavior: resumes from existing handoffs if a previous run');
+  console.error('was interrupted (e.g. continues at coder if the architect finished).');
   process.exit(1);
 }
 
@@ -74,89 +58,66 @@ if (!contractFile) {
   process.exit(1);
 }
 
-const contractPath = join(contractsDir, contractFile);
+const contractPath = resolve(contractsDir, contractFile);
 console.log(`📄 Contract: ${contractPath}`);
-
-// ── Model (mirrors .pi/swarm/models.ts) ────────────────────
-
-const model = getModelForTier(tier);
-console.log(`🤖 Model: ${model} (${tier})`);
+console.log(`🤖 Tier: ${tier}`);
+console.log(`🔍 Review: ${skipReview ? 'skipped (auto-approve)' : 'enabled'}`);
 
 // ── Clean stale handoffs if --fresh ────────────────────────
 
 const outputsDir = join(process.cwd(), '.pi', 'swarm', 'outputs');
 mkdirSync(outputsDir, { recursive: true });
 
+const payloadDir = join(process.cwd(), '.pi', 'swarm', 'payloads');
+mkdirSync(payloadDir, { recursive: true });
+
 if (fresh) {
+  const { unlinkSync, existsSync } = await import('node:fs');
+  // Outputs: handoffs, feedback files, qa failures, pipeline log
   for (const f of readdirSync(outputsDir)) {
     if (f.startsWith(contractId)) {
-      const { unlinkSync } = await import('node:fs');
       unlinkSync(join(outputsDir, f));
       console.log(`  🧹 Cleaned: ${f}`);
     }
   }
+  // Plan file — resume detection treats plan+handoff as architect completion
+  const planFile = join(process.cwd(), '.pi', 'swarm', 'plans', `architect_plan_${contractId}.md`);
+  if (existsSync(planFile)) {
+    unlinkSync(planFile);
+    console.log(`  🧹 Cleaned: architect_plan_${contractId}.md`);
+  }
+} else {
+  // Resume preview — tell the user what will be reused
+  const { existsSync } = await import('node:fs');
+  const existingRoles = ['architect', 'coder', 'qa', 'review', 'git'].filter((role) =>
+    existsSync(join(outputsDir, `${contractId}_${role}_handoff.json`)),
+  );
+  if (existingRoles.length > 0) {
+    console.log(`♻️  Resume: found handoffs for [${existingRoles.join(', ')}]`);
+    console.log('   Pipeline will continue from the first incomplete role.');
+    console.log('   Use --fresh to discard progress and start over.');
+  }
 }
 
-// ── Generate payload ───────────────────────────────────────
-
-const architectPlanPath = `.pi/swarm/plans/architect_plan_${contractId}.md`;
-
-const steps: Array<{
-  stepIndex: number;
-  agent: string;
-  command: string;
-  complianceSignature: string;
-}> = [
-  {
-    stepIndex: 0,
-    agent: 'architect',
-    command: `pi --model ${model} --system-prompt .pi/prompts/architect.md '${contractPath}'`,
-    complianceSignature: `SWARM_DONE:architect:${contractId}`,
-  },
-  {
-    stepIndex: 1,
-    agent: 'coder',
-    command: `pi --model ${model} --system-prompt .pi/prompts/coder.md '${architectPlanPath}'`,
-    complianceSignature: `SWARM_DONE:coder:${contractId}`,
-  },
-  {
-    stepIndex: 2,
-    agent: 'qa',
-    command: `pi --model ${model} --system-prompt .pi/prompts/qa.md '${architectPlanPath}'`,
-    complianceSignature: `SWARM_DONE:qa:${contractId}`,
-  },
-];
-
-if (!skipReview) {
-  steps.push({
-    stepIndex: 3,
-    agent: 'review',
-    command: `bun run .pi/swarm/scripts/review_gate.ts ${contractId} && echo -n "> " && read input && bun run .pi/swarm/scripts/process_approval.ts ${contractId} "$input"`,
-    complianceSignature: `SWARM_DONE:approval:${contractId}`,
-  });
-}
-
-steps.push({
-  stepIndex: skipReview ? 3 : 4,
-  agent: 'git',
-  command: `pi --model ${model} --system-prompt .pi/prompts/git.md '${architectPlanPath}'`,
-  complianceSignature: `SWARM_DONE:git:${contractId}`,
-});
+// ── Generate payload (flat config — state machine owns commands) ──
 
 const payload = {
   taskId: contractId,
   description: `Contract: ${contractFile}`,
+  contractPath,
   tier,
-  steps,
+  skipReview,
+  // resume is informational here — after --fresh cleanup there is nothing to
+  // resume from, so the executor's detection naturally starts at architect.
+  resume: !fresh,
+  // steps is vestigial — kept for swarm_start.ts backward compat, never read by executor
+  steps: [],
 };
 
-const payloadDir = join(process.cwd(), '.pi', 'swarm', 'payloads');
-mkdirSync(payloadDir, { recursive: true });
 const payloadPath = join(payloadDir, `payload_${contractId}.json`);
 writeFileSync(payloadPath, JSON.stringify(payload, null, 2));
 
 console.log(`📦 Payload: ${payloadPath}`);
-console.log(`   Steps: ${steps.map((s) => s.agent).join(' → ')}`);
 console.log('');
 
 // ── Ensure herdr is running ────────────────────────────────
@@ -189,8 +150,6 @@ const main = async (): Promise<void> => {
     console.log('✅ Herdr running');
   }
 
-  // ── Run pipeline ─────────────────────────────────────────
-
   console.log('');
   console.log('╔══════════════════════════════════════════╗');
   console.log('║         SWARM PIPELINE STARTING          ║');
@@ -198,30 +157,42 @@ const main = async (): Promise<void> => {
   console.log('╚══════════════════════════════════════════╝');
   console.log('');
 
-  const startScript = join(process.cwd(), 'scripts', 'src', 'lib', 'agents', 'swarm_start.ts');
-  const cmd = `bun run ${startScript} ${payloadPath} --socket`;
+  const startScript = resolve(process.cwd(), 'scripts', 'src', 'lib', 'agents', 'swarm_start.ts');
+  const cmd = `bun run ${startScript} ${payloadPath}`;
 
   try {
     if (doJoin) {
-      // Run pipeline in background, then attach to herdr
-      console.log('  Pipeline running in background — attaching to herdr...');
-      console.log('');
-      execSync(`${cmd} &`, { stdio: 'ignore' });
+      // Spawn the pipeline in its OWN process group (detached) so Ctrl+C in
+      // this terminal (e.g. detaching from herdr attach) cannot kill it.
+      // Previous version used execSync(`cmd &`) — non-interactive sh has no
+      // job control, so the pipeline shared our process group and died on
+      // the first SIGINT, silently (stdio was ignored).
+      const logPath = join(outputsDir, `${contractId}_pipeline.log`);
+      const logFd = openSync(logPath, 'a');
+      const child = spawn('bun', ['run', startScript, payloadPath], {
+        detached: true,
+        stdio: ['ignore', logFd, logFd],
+      });
+      child.unref();
+
+      console.log(`  Pipeline running detached — PID ${child.pid}`);
+      console.log(`  Log: ${logPath}`);
+      console.log('  Attaching to herdr (Ctrl+C here will NOT kill the pipeline)...\n');
+
       await new Promise((r) => setTimeout(r, 2000));
       execSync('herdr session attach default', { stdio: 'inherit' });
     } else {
-      console.log('  Open herdr to watch: herdr session attach default');
-      console.log('');
+      console.log('  Open herdr to watch: herdr session attach default\n');
       execSync(cmd, {
         encoding: 'utf-8',
         stdio: 'inherit',
-        timeout: 600_000,
+        timeout: 3_600_000,
       });
     }
   } catch (error) {
     const e = error as { status?: number };
     if (doJoin) {
-      return; // User detached from herdr
+      return;
     }
     if (e.status === null) {
       console.log('\n⏱️  Pipeline timed out or was interrupted');
@@ -232,7 +203,7 @@ const main = async (): Promise<void> => {
   }
 
   if (doJoin) {
-    return; // Don't show completion when in join mode
+    return;
   }
 
   console.log('');

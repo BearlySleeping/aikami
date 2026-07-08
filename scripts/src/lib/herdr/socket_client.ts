@@ -67,6 +67,15 @@ export type PaneListEntry = {
   tab_id: string;
 };
 
+export type PaneInfo = {
+  pane_id: string;
+  tab_id: string;
+  workspace_id: string;
+  /** Present when a recognized coding agent (pi, claude, ...) runs in the pane */
+  agent?: string;
+  agent_status: 'idle' | 'working' | 'blocked' | 'done' | 'unknown';
+};
+
 export type WorkspaceListEntry = {
   workspace_id: string;
   label: string;
@@ -187,6 +196,17 @@ export class HerdrSocketClient {
 
     const typed = result as PaneReadResult;
     return typed?.read?.text ?? '';
+  }
+
+  /** Get pane info including live agent detection. */
+  async paneGet(paneId: string): Promise<PaneInfo | null> {
+    try {
+      const result = await this._sendRequest('pane.get', { pane_id: paneId });
+      const typed = result as { type: string; pane: PaneInfo };
+      return typed?.pane ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** Send text + Enter to a pane (like `herdr pane run`). */

@@ -5,6 +5,10 @@
   import CharacterCard from '$lib/components/chat/character_card.svelte';
   import EnhancedChatMessage from '$lib/components/chat/enhanced_chat_message.svelte';
   import TypingIndicator from '$lib/components/chat/typing_indicator.svelte';
+  import AddressModeToggleView from '$views/gm/address_mode_toggle_view.svelte';
+  import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_view_model.svelte.ts';
+  import PushStoryButtonView from '$views/gm/push_story_button_view.svelte';
+  import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_view_model.svelte.ts';
   import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
 
   type Props = {
@@ -12,6 +16,15 @@
   };
 
   const { viewModel }: Props = $props();
+
+  // GM system sub-ViewModels (optional — default factories)
+  const addressModeViewModel = getAddressModeTogggleViewModel({
+    className: 'AddressModeToggleViewModel',
+    initialMode: 'scene',
+  });
+  const pushStoryViewModel = getPushStoryButtonViewModel({
+    className: 'PushStoryButtonViewModel',
+  });
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -121,6 +134,12 @@
               checked={viewModel.streamingTtsEnabled}
               onclick={() => viewModel.toggleStreamingTts()}
             >
+          </div>
+
+          <!-- GM Controls (visible in GM mode) -->
+          <div class="mt-3 pt-3 border-t border-base-300 flex items-center justify-between">
+            <AddressModeToggleView viewModel={addressModeViewModel} />
+            <PushStoryButtonView viewModel={pushStoryViewModel} />
           </div>
         </div>
       {/if}

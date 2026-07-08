@@ -1,20 +1,18 @@
 // .pi/extensions/swarm_control.ts
 /**
- * Swarm Control Pi Extension & Command Surface Wrapper (C-309).
+ * Swarm Control Pi Extension (C-309 v2).
  *
- * Registers custom pi tools that wrap the swarm_director.ts execution engine,
- * allowing developers to conversationalize pipeline dispatching, monitor active
- * worker locks, and fetch scratchpad statuses directly within the terminal agent loop.
+ * Registers custom pi tools for swarm pipeline dispatch and status querying.
+ * All payload construction is delegated to swarm_run.ts — single source of truth.
  *
  * Tools:
- *   swarm_trigger_pipeline  — Launch swarm director background execution
+ *   swarm_trigger_pipeline  — Spawns `bun swarm:run <taskId>` in background
  *   swarm_get_ledger_status  — Query SQLite scratchpad for live worker statuses
  */
 
-import { writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { getModelForTier } from '../../.pi/swarm/models';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -29,10 +27,6 @@ type LedgerReportEnvelope = {
   }>;
 };
 
-// ── Model mapping (from .pi/swarm/models.ts) ───────────────
-
-// ── Helpers ──────────────────────────────────────────────────
-
 // ── Extension registration ─────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -45,8 +39,7 @@ export default function (pi: ExtensionAPI) {
     label: 'Swarm: Trigger Pipeline',
     description:
       'Launch a swarm director pipeline execution in a background herdr tab. ' +
-      'Assembles the swarm workspace, dispatches the task to architect→coder→qa→git agents, ' +
-      'and returns a session identifier for status tracking.',
+      'Delegates to `bun swarm:run` for payload construction — single source of truth.',
     promptSnippet:
       'Use swarm_trigger_pipeline to dispatch multi-agent tasks to the swarm director.',
     promptGuidelines: [
@@ -70,7 +63,7 @@ export default function (pi: ExtensionAPI) {
       ),
       forceModelTierSelection: Type.Optional(
         Type.String({
-          description: 'Model tier override: pro (reasoning) or flash (fast). Default: auto.',
+          description: 'Model tier override: pro (reasoning) or flash (fast). Default: flash.',
           enum: ['pro', 'flash', 'default'],
           default: 'default',
         }),
@@ -78,132 +71,37 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
-
-      const tier: string =
+      const taskId = params.taskId;
+      const tier =
         params.forceModelTierSelection === 'default' || !params.forceModelTierSelection
           ? 'flash'
           : params.forceModelTierSelection;
 
-      const model = getModelForTier(tier);
-      const taskId = params.taskId;
-      const contractPath = params.contractPath ?? `docs/contracts/${taskId}.md`;
+      // Delegate to swarm_run.ts — single source of truth for payload construction
+      // Write pipeline output to a log file so failures are debuggable
+      const { mkdirSync, openSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const logDir = join(cwd, '.pi/swarm/outputs');
+      mkdirSync(logDir, { recursive: true });
+      const logFd = openSync(join(logDir, `${taskId}_pipeline.log`), 'a');
 
-      const architectPlanPath = `.pi/swarm/plans/architect_plan_${taskId}.md`;
+      const child = spawn('bun', ['swarm:run', taskId, '--tier', tier], {
+        cwd,
+        stdio: ['ignore', logFd, logFd],
+        detached: true,
+      });
+      child.unref();
 
-      const payload = {
-        taskId,
-        description: params.initialTaskDescription,
-        tier,
-        steps: [
-          {
-            stepIndex: 0,
-            agent: 'architect',
-            command: `pi --model ${model} --system-prompt .pi/prompts/architect.md '${contractPath}'`,
-          },
-          {
-            stepIndex: 1,
-            agent: 'coder',
-            command: `pi --model ${model} --system-prompt .pi/prompts/coder.md '${architectPlanPath}'`,
-          },
-          {
-            stepIndex: 2,
-            agent: 'qa',
-            command: `pi --model ${model} --system-prompt .pi/prompts/qa.md '${architectPlanPath}'`,
-          },
-          {
-            stepIndex: 3,
-            agent: 'git',
-            command: `pi --model ${model} --system-prompt .pi/prompts/git.md '${architectPlanPath}'`,
-          },
-        ],
-      };
-
-      // Write payload to temp file
-      const tmpFile = `${cwd}/.pi/pipeline_payload_${params.taskId}.json`;
-      writeFileSync(tmpFile, JSON.stringify(payload, null, 2));
-
-      // ── Discover or create contract workspace ──────────────
-      // Workspace label derived from taskId: aikami-agents-C-191, etc.
-      const wsLabel = `aikami-agents-${params.taskId}`;
-      const discoverWs = await pi.exec('herdr', ['workspace', 'list']);
-
-      let directorPaneId = '';
-      try {
-        const wsData = JSON.parse(discoverWs.stdout || '{}');
-        const wss = wsData?.result?.workspaces as
-          | Array<{ workspace_id: string; label: string; number: number }>
-          | undefined;
-        let ws = wss?.find((w) => w.label === wsLabel);
-
-        if (!ws) {
-          // Create new contract workspace
-          const createR = await pi.exec('herdr', [
-            'workspace',
-            'create',
-            '--cwd',
-            cwd,
-            '--label',
-            wsLabel,
-            '--no-focus',
-          ]);
-          const createData = JSON.parse(createR.stdout || '{}');
-          ws = createData?.result?.workspace;
-          if (!ws) {
-            throw new Error('Workspace creation failed');
-          }
-        }
-
-        // Find director tab (tab 1) — initializeSwarm renames it to 'director'
-        const tabsResult = await pi.exec('herdr', ['tab', 'list', '--workspace', ws.workspace_id]);
-        const tabsData = JSON.parse(tabsResult.stdout || '{}');
-        const firstTab = tabsData?.result?.tabs?.[0] as
-          | { tab_id: string; number: number }
-          | undefined;
-
-        if (firstTab) {
-          // Pane ID: herdr CLI uses <workspace_number>-<pane_number>
-          directorPaneId = `${ws.number}-1`;
-        } else {
-          throw new Error('No tabs in workspace');
-        }
-      } catch (err) {
-        console.error('[swarm:trigger] failed to discover/create workspace:', err);
-      }
-
-      if (!directorPaneId) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Could not create swarm workspace '${wsLabel}'.`,
-            },
-          ],
-          details: { error: 'no-director-pane' },
-        };
-      }
-
-      console.error('[swarm:trigger] director pane:', directorPaneId, 'workspace:', wsLabel);
-
-      // Launch swarm director via herdr in the director pane
-      const command = `direnv exec . bash -c 'bun run scripts/src/lib/agents/swarm_start.ts ${tmpFile}; echo; echo "=== Swarm pipeline complete ==="; read'`;
-
-      const result = await pi.exec('herdr', ['pane', 'run', directorPaneId, command]);
-
-      const sessionId = `swarm_${params.taskId}_${Date.now()}`;
+      const pid = child.pid ?? 'unknown';
 
       return {
         content: [
           {
             type: 'text',
-            text: `🚀 Pipeline dispatched: ${params.taskId}\nSession: ${sessionId}\nTier: ${tier}\nAttach: \`herdr session attach default\`\nStatus: \`swarm_get_ledger_status\``,
+            text: `🚀 Pipeline dispatched: ${taskId}\nPID: ${pid}\nTier: ${tier}\nStatus: \`swarm_get_ledger_status\``,
           },
         ],
-        details: {
-          sessionId,
-          taskId: params.taskId,
-          tier,
-          exitCode: result.code,
-        },
+        details: { taskId, pid, tier },
       };
     },
   });
@@ -231,7 +129,6 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
 
-      // Execute the ledger query script via Bun (bypasses extension caching issues)
       const result = await pi.exec('bun', [
         'run',
         `${cwd}/scripts/src/lib/agents/swarm_ledger_query.ts`,
@@ -242,7 +139,7 @@ export default function (pi: ExtensionAPI) {
           content: [
             {
               type: 'text',
-              text: '⚠️ Failed to read scratchpad database. Ensure the swarm has been initialized (`bun swarm:init`).',
+              text: '⚠️ Failed to read scratchpad database. Ensure the swarm has been initialized.',
             },
           ],
           details: { error: 'ledger-query-failed', exitCode: result.code },
@@ -254,12 +151,7 @@ export default function (pi: ExtensionAPI) {
         ledger = JSON.parse(result.stdout.trim()) as LedgerReportEnvelope;
       } catch {
         return {
-          content: [
-            {
-              type: 'text',
-              text: '⚠️ Invalid ledger output. Scratchpad database may be corrupt.',
-            },
-          ],
+          content: [{ type: 'text', text: '⚠️ Invalid ledger output.' }],
           details: { error: 'invalid-json' },
         };
       }
@@ -269,14 +161,13 @@ export default function (pi: ExtensionAPI) {
           content: [
             {
               type: 'text',
-              text: '⚠️ Scratchpad database not found. No swarm agents have been initialized.\nRun `swarm_trigger_pipeline` first, or initialize with `bun swarm:init`.',
+              text: '⚠️ Scratchpad database not found. Run `swarm_trigger_pipeline` first.',
             },
           ],
           details: { error: 'db-not-found' },
         };
       }
 
-      // Build status report
       const icons: Record<string, string> = {
         idle: '⏸️',
         working: '🟢',
@@ -293,7 +184,6 @@ export default function (pi: ExtensionAPI) {
             : 'never';
         let line = `${icon} **${w.agentKey}** — ${w.status} (${ago})`;
         if (w.agentOutput?.trim()) {
-          // Show first line of summary as a hint
           const firstLine = w.agentOutput.trim().split('\n')[0]?.slice(0, 120) ?? '';
           if (firstLine) {
             line += ` — ${firstLine}`;

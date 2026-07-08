@@ -3,11 +3,8 @@
 // Consolidated herdr extension for pi — pane orchestration, agent wait, dev
 // service management, and swarm slash commands.
 //
-// Merged from:
-//   examples/pi-herdr.ts (upstream pi docs) — full pane orchestration
-//   herdr-orchestrator.ts (aikami)                — dev service lifecycle
-//
-// Uses bare `typebox` import (aikami convention).
+// Dev service lifecycle delegates to scripts/src/lib/herdr/session.ts
+// (single source of truth shared with CLI scripts and blackbox tests).
 //
 // ═══════════════════════════════════════════════════════════════════════════
 // TOOLS
@@ -21,6 +18,19 @@
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import {
+  type AikamiMode,
+  ALL_SERVICES,
+  type DevService,
+  findWorkspace,
+  getWorkspaceTabNames,
+  isPortReady,
+  listServices,
+  restartServices,
+  SERVICE_DEFS,
+  startServices,
+  stopServices,
+} from '../../scripts/src/lib/herdr/session.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -187,15 +197,27 @@ const getWorkspacePanes = async (
   pi: ExtensionAPI,
   workspaceId: string,
   signal?: AbortSignal,
-): Promise<PaneInfo[]> =>
-  execHerdrJson<PaneInfo[]>(pi, ['pane', 'list', '--workspace', workspaceId], signal);
+): Promise<PaneInfo[]> => {
+  const result = await execHerdrJson<{ panes: PaneInfo[] }>(
+    pi,
+    ['pane', 'list', '--workspace', workspaceId],
+    signal,
+  );
+  return result.panes ?? [];
+};
 
 const getWorkspaceTabs = async (
   pi: ExtensionAPI,
   workspaceId: string,
   signal?: AbortSignal,
-): Promise<TabInfo[]> =>
-  execHerdrJson<TabInfo[]>(pi, ['tab', 'list', '--workspace', workspaceId], signal);
+): Promise<TabInfo[]> => {
+  const result = await execHerdrJson<{ tabs: TabInfo[] }>(
+    pi,
+    ['tab', 'list', '--workspace', workspaceId],
+    signal,
+  );
+  return result.tabs ?? [];
+};
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -256,88 +278,19 @@ const waitAgent = async (
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DEV SERVICE MANAGEMENT
-// ═══════════════════════════════════════════════════════════════════════════
-
-type AikamiMode = 'emulator' | 'staging' | 'production';
-
-type ServiceDef = {
-  name: string;
-  key: string;
-  command: string;
-  cwd: string;
-  getReadyPort?: (mode: AikamiMode) => number;
-  readyPath?: string;
-};
-
-const makeServices = (): Record<string, ServiceDef> => ({
-  firebase: {
-    name: 'firebase',
-    key: 'firebase',
-    command: 'bun run emulate',
-    cwd: 'apps/backend/firebase',
-    getReadyPort: () => 9098,
-  },
-  client: {
-    name: 'client',
-    key: 'client',
-    command: 'bun run dev',
-    cwd: 'apps/frontend/client',
-    getReadyPort: () => 5274,
-    readyPath: '/',
-  },
-  image: {
-    name: 'image',
-    key: 'image',
-    command: 'bun run dev:docker',
-    cwd: 'apps/backend/image',
-    getReadyPort: () => 8188,
-    readyPath: '/',
-  },
-  text: {
-    name: 'text',
-    key: 'text',
-    command: 'bun run dev:docker',
-    cwd: 'apps/backend/text',
-    getReadyPort: () => 11434,
-    readyPath: '/',
-  },
-  voice: {
-    name: 'voice',
-    key: 'voice',
-    command: 'bun run dev:docker',
-    cwd: 'apps/backend/voice',
-    getReadyPort: () => 8089,
-    readyPath: '/',
-  },
-  'preview-client': {
-    name: 'preview-client',
-    key: 'preview-client',
-    command: 'bun run scripts/src/lib/ops/preview_client.ts',
-    cwd: '.',
-  },
-});
-
-const SERVICES = makeServices();
-const ALL_SERVICES = Object.keys(SERVICES);
-
-const getMode = (): AikamiMode => {
-  const env = process.env.AIKAMI_MODE as string | undefined;
-  return env === 'staging' || env === 'production' ? env : 'emulator';
-};
-
-const workspaceName = (): string => `aikami-${getMode()}`;
-
-const wrapCommand = (command: string): string =>
-  `direnv exec . bash -c '${command}; echo; echo "=== Stopped. Press Enter to close ==="; read'`;
-
-// ═══════════════════════════════════════════════════════════════════════════
 // EXTENSION
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function (pi: ExtensionAPI) {
   const herdrEnv = process.env.HERDR_ENV;
   const ownPaneId = process.env.HERDR_PANE_ID;
+
+  // ── Runtime mode ────────────────────────────────────────
+  const mode: AikamiMode = (() => {
+    const env = process.env.AIKAMI_MODE as string | undefined;
+    return env === 'staging' || env === 'production' ? env : 'emulator';
+  })();
+  const workspaceLabel = `aikami-${mode}`;
 
   if (herdrEnv && ownPaneId) {
     // ───────────────────────────────────────────────────────────
@@ -426,7 +379,7 @@ export default function (pi: ExtensionAPI) {
           regex,
           status,
           statuses,
-          mode,
+          mode: waitMode,
           timeout,
           lines,
           source,
@@ -670,7 +623,7 @@ export default function (pi: ExtensionAPI) {
             const snapshot = await waitAgent(pi, {
               paneRefs: refs,
               statuses: sts as AgentStatus[],
-              mode: (mode as 'all' | 'any') ?? 'all',
+              mode: (waitMode as 'all' | 'any') ?? 'all',
               timeoutMs: timeout,
               signal,
               workspaceId,
@@ -740,296 +693,304 @@ export default function (pi: ExtensionAPI) {
       'Services survive pi restarts. Workspace naming: aikami-{mode}.',
     promptGuidelines: [
       'Use herdr_session start <service> to start firebase, client, image, text, voice, or preview-client.',
+      'Use herdr_session stop <service> to cleanly stop a service.',
+      'Use herdr_session restart <service> to stop+start (e.g. restart client after the coder added new routes).',
       'Use herdr_session read <service> to capture log output from a running service.',
       'Use herdr_session list to see all managed services and their status.',
-      'Use herdr_session stop <service> to cleanly stop a service.',
     ],
     parameters: Type.Object({
-      action: Type.String({ enum: ['start', 'stop', 'status', 'read', 'list'] }),
-      service: Type.Optional(Type.String({ enum: ALL_SERVICES })),
+      action: Type.String({ enum: ['start', 'stop', 'restart', 'status', 'read', 'list'] }),
+      service: Type.Optional(Type.String({ enum: [...ALL_SERVICES] })),
       lines: Type.Optional(Type.Number({ default: 100 })),
     }),
-    async execute(_id, params, signal, _onUpdate, ctx) {
-      const ws = workspaceName();
-      const mode = getMode();
-      const svc = params.service ? SERVICES[params.service] : undefined;
+    async execute(_id, params, signal, _onUpdate, _ctx) {
+      const svc = params.service ? SERVICE_DEFS[params.service as DevService] : undefined;
 
-      // Helpers
-      const findWs = async (): Promise<string | null> => {
-        try {
-          const list = await execHerdrJson<WorkspaceInfo[]>(pi, ['workspace', 'list'], signal);
-          const w = list.find((w) => w.label === ws);
-          return w?.workspace_id ?? null;
-        } catch {
-          return null;
-        }
-      };
+      // ── Dispatch map ──────────────────────────────────────
 
-      const getTabs = async (wsId: string): Promise<string[]> => {
-        try {
-          const tabs = await execHerdrJson<TabInfo[]>(
-            pi,
-            ['tab', 'list', '--workspace', wsId],
-            signal,
-          );
-          return tabs.map((t) => t.label);
-        } catch {
-          return [];
-        }
-      };
+      const handlers: Record<
+        string,
+        () => Promise<{ content: any[]; details: any; isError?: boolean }>
+      > = {
+        // ── list ──────────────────────────────────────────
+        list: async () => {
+          try {
+            const sessions = await listServices(mode);
+            if (sessions.length === 0) {
+              return {
+                content: [{ type: 'text', text: `No aikami-${mode} workspace running.` }],
+                details: {},
+              };
+            }
 
-      const isReady = async (s: ServiceDef): Promise<boolean> => {
-        if (!s.getReadyPort) {
-          return true;
-        }
-        const path = s.readyPath ?? '/';
-        const port = s.getReadyPort(mode);
-        try {
-          const r = await pi.exec('bash', [
-            '-c',
-            `curl -s -o /dev/null -w '%{http_code}' http://localhost:${port}${path} 2>/dev/null || echo 000`,
-          ]);
-          const code = Number(r.stdout?.trim() ?? '0');
-          return code >= 200 && code < 500;
-        } catch {
-          return false;
-        }
-      };
-
-      // ── list ──────────────────────────────────────────────
-      if (params.action === 'list') {
-        const wsId = await findWs();
-        const tabNames = wsId ? await getTabs(wsId) : [];
-        const parts: string[] = ['**Aikami Dev Services**\n'];
-        for (const s of Object.values(SERVICES)) {
-          if (tabNames.includes(s.name)) {
-            const ready = await isReady(s);
-            const port = s.getReadyPort?.(mode);
-            parts.push(`${ready ? '✅' : '⏳'} **${s.key}** (${ws})${port ? ` — :${port}` : ''}`);
-          } else {
-            parts.push(`⏸️ **${s.key}** — not running`);
+            const lines: string[] = [`**Aikami Dev Services** (${workspaceLabel})\n`];
+            for (const session of sessions) {
+              for (const svcStatus of session.services) {
+                if (svcStatus.running) {
+                  const icon = svcStatus.portOpen ? '✅' : '⏳';
+                  const port = svcStatus.readyPort ? ` — :${svcStatus.readyPort}` : '';
+                  lines.push(`${icon} **${svcStatus.name}**${port}`);
+                } else {
+                  lines.push(`⏸️ **${svcStatus.name}** — not running`);
+                }
+              }
+            }
+            lines.push(`\nAttach: \`herdr session attach default\``);
+            return { content: [{ type: 'text', text: lines.join('\n') }], details: {} };
+          } catch (e) {
+            return {
+              content: [{ type: 'text', text: `Failed to list services: ${(e as Error).message}` }],
+              isError: true,
+              details: {},
+            };
           }
-        }
-        parts.push(`\nAttach: \`herdr session attach default\``);
-        return { content: [{ type: 'text', text: parts.join('\n') }], details: {} };
-      }
+        },
 
-      if (!svc) {
-        return {
-          content: [{ type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` }],
-          isError: true,
-          details: {},
-        };
-      }
+        // ── start ──────────────────────────────────────────
+        start: async () => {
+          if (!svc) {
+            return {
+              content: [
+                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
 
-      // ── start ─────────────────────────────────────────────
-      if (params.action === 'start') {
-        const wsId = await findWs();
-        const tabNames = wsId ? await getTabs(wsId) : [];
+          // Check if already running
+          const wsId = await findWorkspace(workspaceLabel);
+          if (wsId) {
+            const tabNames = await getWorkspaceTabNames(wsId);
+            if (
+              tabNames.includes(svc.name) &&
+              svc.readyPort &&
+              (await isPortReady(svc.readyPort))
+            ) {
+              return {
+                content: [
+                  { type: 'text', text: `✅ ${svc.name} already running (port :${svc.readyPort})` },
+                ],
+                details: {},
+              };
+            }
+          }
 
-        if (tabNames.includes(svc.name) && (await isReady(svc))) {
-          const port = svc.getReadyPort?.(mode);
+          _onUpdate?.({
+            content: [{ type: 'text', text: `Starting ${svc.name}...` }],
+            details: {},
+          });
+
+          try {
+            await startServices({
+              mode,
+              services: [params.service as DevService],
+              projectRoot: process.cwd(),
+            });
+            const port = svc.readyPort;
+            return {
+              content: [
+                { type: 'text', text: `✅ ${svc.name} running${port ? ` (port :${port})` : ''}` },
+              ],
+              details: {},
+            };
+          } catch (e) {
+            return {
+              content: [
+                { type: 'text', text: `⚠️ ${svc.name} failed to start: ${(e as Error).message}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+        },
+
+        // ── restart ────────────────────────────────────────
+        restart: async () => {
+          if (!svc) {
+            return {
+              content: [
+                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          _onUpdate?.({
+            content: [{ type: 'text', text: `Restarting ${svc.name}...` }],
+            details: {},
+          });
+
+          try {
+            await restartServices({
+              mode,
+              services: [params.service as DevService],
+              projectRoot: process.cwd(),
+            });
+            const port = svc.readyPort;
+            return {
+              content: [
+                { type: 'text', text: `✅ ${svc.name} restarted${port ? ` (port :${port})` : ''}` },
+              ],
+              details: {},
+            };
+          } catch (e) {
+            return {
+              content: [
+                { type: 'text', text: `⚠️ ${svc.name} restart failed: ${(e as Error).message}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+        },
+
+        // ── stop ───────────────────────────────────────────
+        stop: async () => {
+          if (!svc) {
+            return {
+              content: [
+                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const wsId = await findWorkspace(workspaceLabel);
+          if (!wsId) {
+            return { content: [{ type: 'text', text: `${svc.name} not running.` }], details: {} };
+          }
+
+          const tabNames = await getWorkspaceTabNames(wsId);
+          if (!tabNames.includes(svc.name)) {
+            return { content: [{ type: 'text', text: `${svc.name} not running.` }], details: {} };
+          }
+
+          try {
+            await stopServices({ mode, services: [params.service as DevService] });
+            return { content: [{ type: 'text', text: `🛑 Stopped ${svc.name}` }], details: {} };
+          } catch (e) {
+            return {
+              content: [
+                { type: 'text', text: `Failed to stop ${svc.name}: ${(e as Error).message}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+        },
+
+        // ── status ─────────────────────────────────────────
+        status: async () => {
+          if (!svc) {
+            return {
+              content: [
+                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const wsId = await findWorkspace(workspaceLabel);
+          if (!wsId) {
+            return {
+              content: [{ type: 'text', text: `⏸️ ${svc.name} — not running` }],
+              details: {},
+            };
+          }
+
+          const tabNames = await getWorkspaceTabNames(wsId);
+          if (!tabNames.includes(svc.name)) {
+            return {
+              content: [{ type: 'text', text: `⏸️ ${svc.name} — not running` }],
+              details: {},
+            };
+          }
+
+          const ready = svc.readyPort ? await isPortReady(svc.readyPort) : true;
+          const port = svc.readyPort;
           return {
             content: [
               {
                 type: 'text',
-                text: `✅ ${svc.name} already running${port ? ` (port :${port})` : ''}`,
+                text: `${ready ? '✅' : '❌'} ${svc.name}${port ? ` :${port} ${ready ? 'responding' : 'NOT responding'}` : ''}`,
               },
             ],
             details: {},
           };
-        }
+        },
 
-        _onUpdate?.({ content: [{ type: 'text', text: `Starting ${svc.name}...` }], details: {} });
+        // ── read ───────────────────────────────────────────
+        read: async () => {
+          if (!svc) {
+            return {
+              content: [
+                { type: 'text', text: `Service required. Valid: ${ALL_SERVICES.join(', ')}` },
+              ],
+              isError: true,
+              details: {},
+            };
+          }
 
-        const svcCwd = `${ctx.cwd}/${svc.cwd}`;
+          const wsId = await findWorkspace(workspaceLabel);
+          if (!wsId) {
+            return {
+              content: [{ type: 'text', text: `Workspace ${workspaceLabel} not running.` }],
+              details: {},
+            };
+          }
 
-        // Recreate tab if exists but not ready
-        if (wsId && tabNames.includes(svc.name)) {
-          const tabs = await execHerdrJson<TabInfo[]>(
-            pi,
-            ['tab', 'list', '--workspace', wsId],
-            signal,
-          );
+          // Pane-level read: use herdr CLI directly
+          const panes = await getWorkspacePanes(pi, wsId, signal);
+          const tabs = await getWorkspaceTabs(pi, wsId, signal);
           const tab = tabs.find((t) => t.label === svc.name);
-          if (tab) {
-            await execHerdr(pi, ['tab', 'close', tab.tab_id], signal);
-            await sleep(500);
+          if (!tab) {
+            return { content: [{ type: 'text', text: `Tab ${svc.name} not found` }], details: {} };
           }
-        }
 
-        if (!wsId) {
-          const create = await execHerdrJson<{ workspace: WorkspaceInfo }>(
-            pi,
-            ['workspace', 'create', '--cwd', svcCwd, '--label', ws, '--no-focus'],
-            signal,
-          );
-          const newWsId = create.workspace.workspace_id;
-          const panes = await getWorkspacePanes(pi, newWsId, signal);
-          const rootPane = panes[0];
-          if (rootPane) {
-            await execHerdr(pi, ['tab', 'rename', `${newWsId}:1`, svc.name], signal);
-            await execHerdr(
-              pi,
-              ['pane', 'run', rootPane.pane_id, wrapCommand(svc.command)],
-              signal,
-            );
+          const pane = panes.find((p) => p.tab_id === tab.tab_id);
+          if (!pane) {
+            return { content: [{ type: 'text', text: `No pane for ${svc.name}` }], details: {} };
           }
-        } else {
-          const tab = await execHerdrJson<TabInfo>(
+
+          const output = await execHerdrText(
             pi,
             [
-              'tab',
-              'create',
-              '--workspace',
-              wsId,
-              '--cwd',
-              svcCwd,
-              '--label',
-              svc.name,
-              '--no-focus',
+              'pane',
+              'read',
+              pane.pane_id,
+              '--source',
+              'recent',
+              '--lines',
+              String(params.lines ?? 100),
             ],
             signal,
           );
-          const panes = await getWorkspacePanes(pi, wsId, signal);
-          const pane = panes.find((p) => p.tab_id === tab.tab_id);
-          if (pane) {
-            await execHerdr(pi, ['pane', 'run', pane.pane_id, wrapCommand(svc.command)], signal);
-          }
-        }
 
-        // Wait for readiness
-        let ready = false;
-        for (let i = 0; i < 30 && !ready; i++) {
-          if (signal?.aborted) {
-            break;
-          }
-          await sleep(2000);
-          ready = await isReady(svc);
-        }
-
-        if (!ready) {
           return {
             content: [
-              { type: 'text', text: `⚠️ ${svc.name} started but not responding after 60s.` },
+              {
+                type: 'text',
+                text: `**${svc.name}** (last ${params.lines ?? 100} lines):\n\n\`\`\`\n${output}\n\`\`\``,
+              },
             ],
-            isError: true,
             details: {},
           };
-        }
-
-        const port = svc.getReadyPort?.(mode);
-        return {
-          content: [
-            { type: 'text', text: `✅ ${svc.name} running${port ? ` (port :${port})` : ''}` },
-          ],
-          details: {},
-        };
-      }
-
-      // ── stop ──────────────────────────────────────────────
-      if (params.action === 'stop') {
-        const wsId = await findWs();
-        if (!wsId) {
-          return { content: [{ type: 'text', text: `Workspace ${ws} not running.` }], details: {} };
-        }
-
-        const tabNames = await getTabs(wsId);
-        if (!tabNames.includes(svc.name)) {
-          return { content: [{ type: 'text', text: `${svc.name} not running.` }], details: {} };
-        }
-
-        if (tabNames.length === 1) {
-          await execHerdr(pi, ['workspace', 'close', wsId], signal);
-        } else {
-          const tabs = await execHerdrJson<TabInfo[]>(
-            pi,
-            ['tab', 'list', '--workspace', wsId],
-            signal,
-          );
-          const tab = tabs.find((t) => t.label === svc.name);
-          if (tab) {
-            await execHerdr(pi, ['tab', 'close', tab.tab_id], signal);
-          }
-        }
-
-        return { content: [{ type: 'text', text: `🛑 Stopped ${svc.name}` }], details: {} };
-      }
-
-      // ── status ────────────────────────────────────────────
-      if (params.action === 'status') {
-        const wsId = await findWs();
-        if (!wsId) {
-          return { content: [{ type: 'text', text: `⏸️ ${svc.name} — not running` }], details: {} };
-        }
-
-        const tabNames = await getTabs(wsId);
-        if (!tabNames.includes(svc.name)) {
-          return { content: [{ type: 'text', text: `⏸️ ${svc.name} — not running` }], details: {} };
-        }
-
-        const ready = await isReady(svc);
-        const port = svc.getReadyPort?.(mode);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `${ready ? '✅' : '❌'} ${svc.name}${port ? ` :${port} ${ready ? 'responding' : 'NOT responding'}` : ''}`,
-            },
-          ],
-          details: {},
-        };
-      }
-
-      // ── read ──────────────────────────────────────────────
-      if (params.action === 'read') {
-        const wsId = await findWs();
-        if (!wsId) {
-          return { content: [{ type: 'text', text: `Workspace ${ws} not running.` }], details: {} };
-        }
-
-        const panes = await getWorkspacePanes(pi, wsId, signal);
-        const tabs = await getWorkspaceTabs(pi, wsId, signal);
-        const tab = tabs.find((t) => t.label === svc.name);
-        if (!tab) {
-          return { content: [{ type: 'text', text: `Tab ${svc.name} not found` }], details: {} };
-        }
-
-        const pane = panes.find((p) => p.tab_id === tab.tab_id);
-        if (!pane) {
-          return { content: [{ type: 'text', text: `No pane for ${svc.name}` }], details: {} };
-        }
-
-        const output = await execHerdrText(
-          pi,
-          [
-            'pane',
-            'read',
-            pane.pane_id,
-            '--source',
-            'recent',
-            '--lines',
-            String(params.lines ?? 100),
-          ],
-          signal,
-        );
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `**${svc.name}** (last ${params.lines ?? 100} lines):\n\n\`\`\`\n${output}\n\`\`\``,
-            },
-          ],
-          details: {},
-        };
-      }
-
-      return {
-        content: [{ type: 'text', text: `Unknown action: ${params.action}` }],
-        isError: true,
-        details: {},
+        },
       };
+
+      const handler = handlers[params.action];
+      if (!handler) {
+        return {
+          content: [{ type: 'text', text: `Unknown action: ${params.action}` }],
+          isError: true,
+          details: {},
+        };
+      }
+      return handler();
     },
   });
 }

@@ -38,7 +38,7 @@ export const makeOptionalFieldsToServerDelete = <Schema extends TObject>(
   const newProperties: Record<string, TSchema> = {};
   for (const [key, value] of Object.entries(rawProperties)) {
     if (!required.has(key)) {
-      newProperties[key] = Type.Union([value as TSchema, FieldValueSchema]);
+      newProperties[key] = Type.Optional(Type.Union([value as TSchema, FieldValueSchema]));
     } else {
       newProperties[key] = value as TSchema;
     }

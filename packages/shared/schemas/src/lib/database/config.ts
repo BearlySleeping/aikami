@@ -20,31 +20,45 @@ export const ConfigSchema = Composite(
   CoreSchema,
   Type.Object({
     uid: Type.String({ description: 'User ID — matches the document ID and Firebase Auth uid' }),
-    theme: Object.assign(_themeUnion, { description: 'UI theme preference', default: 'system' }),
-    locale: Type.String({
-      description: 'ISO 639-1 language code (e.g., en, da, es)',
-      default: 'en',
-    }),
-    notificationsEnabled: Type.Boolean({
-      description: 'Whether push notifications are enabled',
-      default: true,
-    }),
-    soundEnabled: Type.Boolean({
-      description: 'Whether sound effects and audio are enabled',
-      default: true,
-    }),
-    gameDifficulty: Object.assign(_gameDifficultyUnion, {
-      description: 'Game difficulty setting',
-      default: 'normal',
-    }),
-    autoSave: Type.Boolean({
-      description: 'Whether game progress auto-saves to cloud',
-      default: true,
-    }),
-    showTutorial: Type.Boolean({
-      description: 'Whether to show tutorial on next launch',
-      default: true,
-    }),
+    theme: Type.Optional(
+      Object.assign(_themeUnion, { description: 'UI theme preference', default: 'system' }),
+    ),
+    locale: Type.Optional(
+      Type.String({
+        description: 'ISO 639-1 language code (e.g., en, da, es)',
+        default: 'en',
+      }),
+    ),
+    notificationsEnabled: Type.Optional(
+      Type.Boolean({
+        description: 'Whether push notifications are enabled',
+        default: true,
+      }),
+    ),
+    soundEnabled: Type.Optional(
+      Type.Boolean({
+        description: 'Whether sound effects and audio are enabled',
+        default: true,
+      }),
+    ),
+    gameDifficulty: Type.Optional(
+      Object.assign(_gameDifficultyUnion, {
+        description: 'Game difficulty setting',
+        default: 'normal',
+      }),
+    ),
+    autoSave: Type.Optional(
+      Type.Boolean({
+        description: 'Whether game progress auto-saves to cloud',
+        default: true,
+      }),
+    ),
+    showTutorial: Type.Optional(
+      Type.Boolean({
+        description: 'Whether to show tutorial on next launch',
+        default: true,
+      }),
+    ),
   }),
 );
 

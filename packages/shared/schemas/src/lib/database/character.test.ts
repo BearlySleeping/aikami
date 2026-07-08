@@ -52,7 +52,6 @@ describe('BaseCharacterSheetSchema', () => {
 
   test('should reject missing required fields', () => {
     const invalidData = {
-      name: 'Gandalf',
       race: 'Maia',
     };
     expect(() => Value.Parse(BaseCharacterSheetSchema, invalidData)).toThrow();
@@ -92,12 +91,12 @@ describe('BaseCharacterSheetSchema', () => {
   });
 
   test('should have default skills', () => {
-    const result = Value.Parse(BaseCharacterSheetSchema, validCharacterData);
+    const result = Value.Default(BaseCharacterSheetSchema, validCharacterData);
     expect(result.skills).toEqual(DEFAULT_SKILLS);
   });
 
   test('should have default saving throws', () => {
-    const result = Value.Parse(BaseCharacterSheetSchema, validCharacterData);
+    const result = Value.Default(BaseCharacterSheetSchema, validCharacterData);
     expect(result.savingThrows).toEqual(DEFAULT_SAVING_THROWS);
   });
 
@@ -166,7 +165,7 @@ describe('BaseCharacterSheetSchema', () => {
   });
 
   test('should have default temporaryHitPoints', () => {
-    const result = Value.Parse(BaseCharacterSheetSchema, validCharacterData);
+    const result = Value.Default(BaseCharacterSheetSchema, validCharacterData);
     expect(result.temporaryHitPoints).toBe(0);
   });
 });

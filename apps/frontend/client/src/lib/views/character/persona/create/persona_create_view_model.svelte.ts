@@ -766,7 +766,7 @@ export class PersonaCreateViewModel
         persona.proficiencies = extractedObj.proficiencies as string[];
       }
       if (extractedObj.languages) {
-        persona.languages = [...persona.languages, ...(extractedObj.languages as string[])];
+        persona.languages = [...(persona.languages ?? []), ...(extractedObj.languages as string[])];
       }
       if (extractedObj.equipment) {
         persona.equipment = extractedObj.equipment as string[];

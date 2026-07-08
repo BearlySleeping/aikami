@@ -12,6 +12,7 @@ import type {
   EmbeddingOptions,
 } from '@aikami/types';
 import type { TSchema } from 'typebox';
+import { Value } from 'typebox/value';
 
 /**
  * Record of a single method call made to the mock service.
@@ -212,13 +213,18 @@ export class MockAiService implements AiServiceInterface {
     this._recordCall('extractStructuredJSON', [prompt, schema, _input]);
     this._checkFailMode();
 
-    // TypeBox's Value.Create generates default-filled objects from schemas.
-    // For structured extraction mock, return a default value.
+    // TypeBox v1.x: Value.Create generates default-filled objects from schemas.
+    // Requires explicit defaults on formatted/constrained fields.
     try {
-      return {} as T;
+      return Value.Create(schema) as T;
     } catch {
-      // Fallback: return a minimal object that satisfies the schema
-      return {} as T;
+      // Fallback: apply defaults to empty object, then parse
+      try {
+        const withDefaults = Value.Default(schema, {});
+        return withDefaults as T;
+      } catch {
+        return {} as T;
+      }
     }
   }
 
