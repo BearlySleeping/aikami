@@ -1,0 +1,137 @@
+// apps/frontend/client/src/lib/services/agent/built_in_agents.ts
+//
+// Registry of built-in agent configurations for the pipeline.
+// Each entry defines an agent's identity, phase, prompt, and defaults.
+//
+// Contract: C-236 Agent Pipeline System
+
+import type { AgentConfig } from '$types/agent_types';
+
+/**
+ * Built-in agent configurations.
+ *
+ * Pre-agents run before main generation to enrich the system prompt.
+ * Post-agents run after main generation to produce state patches.
+ */
+export const BUILT_IN_AGENTS: readonly AgentConfig[] = [
+  {
+    id: 'narrative-director',
+    name: 'Narrative Director',
+    phase: 'pre',
+    contextKey: 'NARRATIVE_DIRECTOR',
+    systemPrompt: [
+      'You are the Narrative Director agent for a fantasy RPG AI Game Master.',
+      'Your role is to provide narrative scene direction that enriches',
+      "the game master's responses.",
+      '',
+      'Respond with a JSON object:',
+      '{',
+      '  "description": "A 2-4 sentence scene description setting the mood and environment.",',
+      '  "playerGuidance": "Optional hint about what the player might encounter."',
+      '}',
+    ].join('\n'),
+    timeout: 500,
+    enabled: true,
+  },
+  {
+    id: 'world-state',
+    name: 'World State Tracker',
+    phase: 'post',
+    systemPrompt: [
+      'You are the World State Tracker agent for a fantasy RPG.',
+      'Analyze the latest game master response and extract the current',
+      'world state — location, time, weather, and notable changes.',
+      '',
+      'Respond with a JSON object:',
+      '{',
+      '  "locationName": "string",',
+      '  "locationDescription": "string",',
+      '  "timeOfDay": "string",',
+      '  "weather": "string",',
+      '  "notableChanges": ["string"]',
+      '}',
+    ].join('\n'),
+    timeout: 500,
+    enabled: true,
+  },
+  {
+    id: 'quest-tracker',
+    name: 'Quest Tracker',
+    phase: 'post',
+    systemPrompt: [
+      'You are the Quest Tracker agent for a fantasy RPG.',
+      'Analyze the latest game master response and detect quest-relevant',
+      'narrative events. Identify status changes for existing quests and',
+      'propose new quests when appropriate.',
+      '',
+      'Respond with a JSON object:',
+      '{',
+      '  "questUpdates": [',
+      '    {',
+      '      "questId": "string",',
+      '      "questName": "string",',
+      '      "status": "active|completed|failed|updated",',
+      '      "objective": "string (optional)",',
+      '      "reason": "string"',
+      '    }',
+      '  ],',
+      '  "newQuests": [',
+      '    {',
+      '      "name": "string",',
+      '      "description": "string",',
+      '      "objective": "string"',
+      '    }',
+      '  ]',
+      '}',
+    ].join('\n'),
+    timeout: 500,
+    enabled: true,
+  },
+  {
+    id: 'expression',
+    name: 'Expression Evaluator',
+    phase: 'post',
+    systemPrompt: [
+      'You are the Expression Evaluator agent for a fantasy RPG.',
+      'Analyze the latest NPC dialogue or game master response and determine',
+      "the NPC's emotional state. Recommend expression changes.",
+      '',
+      'Respond with a JSON object:',
+      '{',
+      '  "npcName": "string",',
+      '  "currentMood": "neutral|happy|sad|angry|surprised|fearful|disgusted",',
+      '  "intensity": 0.0-1.0,',
+      '  "expressionLabel": "string",',
+      '  "reason": "string"',
+      '}',
+    ].join('\n'),
+    timeout: 500,
+    enabled: true,
+  },
+  {
+    id: 'prose-guardian',
+    name: 'Prose Guardian',
+    phase: 'post',
+    systemPrompt: [
+      'You are the Prose Guardian agent for a fantasy RPG.',
+      'Evaluate the quality of the latest game master response. Check for',
+      'repetition, clichés, pacing issues, voice consistency, and formatting.',
+      '',
+      'Respond with a JSON object:',
+      '{',
+      '  "qualityScore": 0-100,',
+      '  "issues": [',
+      '    {',
+      '      "type": "repetition|cliche|pacing|voice|formatting",',
+      '      "description": "string",',
+      '      "suggestion": "string"',
+      '    }',
+      '  ],',
+      '  "styleNotes": ["string"],',
+      '  "rewriteSuggestion": "string (optional, when qualityScore < 70)"',
+      '}',
+    ].join('\n'),
+    timeout: 500,
+    enabled: true,
+  },
+] as const;

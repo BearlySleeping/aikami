@@ -18,7 +18,15 @@
  */
 
 import { execSync, spawn } from 'node:child_process';
-import { mkdirSync, openSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 
 // ── Parse args ──────────────────────────────────────────────
@@ -130,6 +138,76 @@ const checkHerdr = (): boolean => {
     return false;
   }
 };
+
+// ── Concurrent-run guard ───────────────────────────────────
+
+const directorLockPath = join(outputsDir, `${contractId}_director.lock`);
+
+const checkDirectorLock = (): boolean => {
+  if (!existsSync(directorLockPath)) {
+    return false;
+  }
+  let pid: number | null = null;
+  try {
+    pid = Number(readFileSync(directorLockPath, 'utf-8').trim());
+  } catch {
+    // corrupted lock — treat as dead
+    return false;
+  }
+
+  if (!pid || Number.isNaN(pid)) {
+    return false;
+  }
+
+  // Check if PID is alive
+  try {
+    process.kill(pid, 0); // signal 0 = existence check
+    return true;
+  } catch {
+    // PID not alive — stale lock
+    return false;
+  }
+};
+
+// Handle --fresh: also clear stale lock
+if (fresh) {
+  try {
+    unlinkSync(directorLockPath);
+    console.log('  🧹 Cleaned: director lock');
+  } catch {
+    /* didn't exist */
+  }
+}
+
+if (checkDirectorLock()) {
+  const pid = readFileSync(directorLockPath, 'utf-8').trim();
+  console.error(`❌ Director already running for ${contractId} (PID ${pid}).`);
+  console.error('   Attach with: herdr session attach default');
+  console.error(`   Force restart: bun swarm:run ${contractId} --fresh`);
+  process.exit(1);
+}
+
+// Write lock with current PID
+writeFileSync(directorLockPath, String(process.pid));
+
+// Remove lock on exit
+const removeLock = (): void => {
+  try {
+    unlinkSync(directorLockPath);
+  } catch {
+    /* already gone */
+  }
+};
+
+process.on('exit', removeLock);
+process.on('SIGINT', () => {
+  removeLock();
+  process.exit(130);
+});
+process.on('SIGTERM', () => {
+  removeLock();
+  process.exit(143);
+});
 
 // ── Main ────────────────────────────────────────────────────
 

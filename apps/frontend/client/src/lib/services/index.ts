@@ -9,6 +9,14 @@ export {
   type SaveSlotEntry,
   type SaveSlotMetadata,
 } from '@aikami/frontend/services';
+// ── Agent Pipeline ────────────────────────────────────────────────────
+export {
+  AgentPipelineService,
+  type AgentPipelineServiceInterface,
+  type AgentPipelineServiceOptions,
+  agentPipelineService,
+  BUILT_IN_AGENTS,
+} from './agent/index.ts';
 export * from './ai/ai_service.svelte.ts';
 export * from './ai/sentence_boundary_chunker';
 export * from './ai/stream_orchestrator_service.svelte.ts';
@@ -45,6 +53,7 @@ export * from './game/quest_service.svelte';
 export * from './game/serializable_service';
 export * from './game/time_service.svelte';
 export * from './game/vendor_service.svelte.ts';
+
 // ── GM Narrative Director ────────────────────────────────────────────
 // NOTE: GM services are NOT re-exported from here to avoid Bun's `export * from`
 // limitation with .svelte.ts re-exports in test runner. Consumers import directly

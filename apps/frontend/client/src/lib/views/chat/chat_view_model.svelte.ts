@@ -30,6 +30,8 @@ export type ChatViewModelOptions = BaseViewModelOptions & {
   npcId?: string;
   /** Entity ID of the NPC in the game engine (for expression macros). */
   gameEntityId?: number;
+  /** Optional agent pipeline ViewModel for pre/post agent orchestration (C-236). */
+  agentPipelineViewModel?: import('$views/agent/agent_pipeline_view_model.svelte.ts').AgentPipelineViewModelInterface;
 };
 
 export type ChatViewModelInterface = BaseViewModelInterface & {
@@ -132,6 +134,11 @@ export class ChatViewModel
   /** Cached engine bridge — lazily created on first use. */
   private _engineBridge: EngineBridge | undefined;
 
+  /** Optional agent pipeline ViewModel (C-236). */
+  private _agentPipelineViewModel:
+    | import('$views/agent/agent_pipeline_view_model.svelte.ts').AgentPipelineViewModelInterface
+    | undefined;
+
   /**
    * Lazily initializes and caches the engine bridge.
    * Uses dynamic import so the engine is not statically bundled.
@@ -149,6 +156,7 @@ export class ChatViewModel
     this._chatId = options.chatId;
     this._npcId = options.npcId;
     this.gameEntityId = options.gameEntityId;
+    this._agentPipelineViewModel = options.agentPipelineViewModel;
   }
 
   /** Scrollable message container — bound by View via bind:this. */
@@ -379,7 +387,26 @@ export class ChatViewModel
     const streamBuf: StreamBuffer = createStreamBuffer();
 
     try {
-      const response = await aiService.sendMessageToAI(text, this.npc ?? undefined);
+      // ── Agent Pipeline (C-236): wrap AI call through pre/post agents ──
+      const pipelineVm = this._agentPipelineViewModel;
+      const generateResponse = async (): Promise<string | undefined> => {
+        return aiService.sendMessageToAI(text, this.npc ?? undefined);
+      };
+
+      const rawResponse: string | undefined = pipelineVm
+        ? await pipelineVm.runPipeline({
+            chatId: this._chatId,
+            userMessage: text,
+            systemPrompt: '',
+            mainGenerator: async () => {
+              const resp = await generateResponse();
+              return resp ?? '';
+            },
+            npcId: this._npcId,
+          })
+        : await generateResponse();
+
+      const response = rawResponse || undefined;
       if (response) {
         // Process macros from the AI response
         const chunkResult = parseStreamChunk(response, streamBuf);
