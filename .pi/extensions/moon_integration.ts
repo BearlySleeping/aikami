@@ -1,4 +1,4 @@
-// .pi/extensions/moon-integration.ts
+// .pi/extensions/moon_integration.ts
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import {

@@ -6,15 +6,21 @@
 // ── Agent identity ──────────────────────────────────────────
 
 /** The agent roles in the swarm pipeline. Review runs as a script in the director's pane. */
-export type AgentRole = 'architect' | 'coder' | 'qa' | 'git' | 'review';
+export type AgentRole = 'architect' | 'coder' | 'qa' | 'docs' | 'git' | 'review';
 
 /** All agent roles as a readonly array for iteration. */
-export const AGENT_ROLES: readonly AgentRole[] = ['architect', 'coder', 'qa', 'git'] as const;
+export const AGENT_ROLES: readonly AgentRole[] = [
+  'architect',
+  'coder',
+  'qa',
+  'docs',
+  'git',
+] as const;
 
 // ── Pipeline state machine ──────────────────────────────────
 
 /** States in the swarm pipeline state machine. */
-export type PipelineState = 'architect' | 'coder' | 'qa' | 'review' | 'git' | 'done';
+export type PipelineState = 'architect' | 'coder' | 'qa' | 'review' | 'docs' | 'git' | 'done';
 
 // ── Agent lifecycle states ──────────────────────────────────
 
@@ -111,6 +117,7 @@ export const AGENT_TAB_LABELS: Record<AgentRole, string> = {
   architect: 'architect',
   coder: 'coder',
   qa: 'qa',
+  docs: 'docs',
   git: 'git',
   review: 'review',
 } as const;

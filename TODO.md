@@ -187,7 +187,7 @@
 - **Complexity**: High — pipeline orchestration, per-agent error handling, structured output parsing, token budget management
 - **Impact**: Very High — agents are the engine's modular intelligence; they make complex state tracking possible without bloating the main LLM prompt
 
-#### C-ME-008: Prompt Template & Macro System
+#### C-ME-008: Prompt Template & Macro System — [📋 Contract C-237](docs/contracts/C-237-prompt-template-macro-system.md)
 
 - **Marinara Reference**: `docs/MACROS.md`
 - **What Marinara Does**: Rich macro system used everywhere — presets, character fields, lorebook entries, regex scripts. Macros include: identity (`{{user}}`, `{{char}}`, `{{persona}}`), character fields (`{{description}}`, `{{personality}}`, `{{backstory}}`), context (`{{input}}`, `{{model}}`, `{{chatId}}`), time (`{{date}}`, `{{time}}`), random (`{{random}}`, `{{roll:2d6}}`, weighted random `{{random::A@2::B@0.5}}`), variables (`{{getvar}}`, `{{setvar}}`, `{{incvar}}`), formatting (`{{uppercase}}`, `{{#if}}` conditionals, `{{trim}}`).

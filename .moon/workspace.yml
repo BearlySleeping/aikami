@@ -44,14 +44,10 @@ projects:
   frontend-repositories: "packages/frontend/repositories"
   frontend-configs: "packages/frontend/configs"
 
-defaultProject: "client"
-
 vcs:
-  client: "git"
   provider: "github"
   defaultBranch: "master"
   remoteCandidates: ["origin"]
-  sync: true
   hooks:
     pre-commit:
       - "bunx moon run :fix --affected --status=staged"
@@ -87,7 +83,3 @@ hasher:
     - "**/tsconfig*.json"
 
 telemetry: false
-
-experiments:
-  asyncAffectedTracking: true
-  asyncGraphBuilding: true

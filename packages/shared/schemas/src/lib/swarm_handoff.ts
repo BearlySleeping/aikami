@@ -71,6 +71,10 @@ export const SwarmHandoffSchema = Type.Object({
   filesTouched: Type.Array(Type.String()),
   /** Shell commands for downstream agents to execute */
   nextCommands: Type.Array(Type.String()),
+  /** Files scoped to the coder (from architect handoff) */
+  coderFiles: Type.Optional(Type.Array(Type.String())),
+  /** Files scoped to QA (from architect handoff) */
+  qaFiles: Type.Optional(Type.Array(Type.String())),
   /** Human-readable summary, max 2048 chars */
   summary: Type.String({ maxLength: 2048 }),
 });

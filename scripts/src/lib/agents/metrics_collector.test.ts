@@ -123,7 +123,7 @@ describe('metrics_collector', () => {
 
       expect(parsed.taskId).toBe(TEST_TASK_ID);
       expect(Array.isArray(parsed.agents)).toBe(true);
-      expect(parsed.agents.length).toBe(4);
+      expect(parsed.agents.length).toBe(5);
     } finally {
       cleanup();
     }

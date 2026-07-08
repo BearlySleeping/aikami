@@ -1,4 +1,4 @@
-// .pi/extensions/firebase-tools.ts
+// .pi/extensions/firebase_tools.ts
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 

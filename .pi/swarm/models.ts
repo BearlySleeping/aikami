@@ -4,34 +4,42 @@
  *
  * Per-role defaults:
  *   architect → pro (planning quality compounds downstream)
- *   coder → pro by default, flash if architect flags complexity=trivial
- *   qa → flash (running tests doesn't need reasoning)
- *   git → free (validates before deterministic commit script)
- *   review → N/A (deterministic script, no LLM)
+ *   coder → pro (flash only if architect flags complexity=trivial)
+ *   qa → flash (pro if architect flags complexity=complex — QA LLM only spawns on failures)
+ *   git → N/A (deterministic, no LLM)
+ *   review → N/A (deterministic stdin script)
+ *   docs → free (free_fallback on quota errors)
+ *
+ * --tier override:
+ *   --tier pro    → all roles get pro (fixed from old bug where explicit flash was ignored)
+ *   --tier flash  → all roles get flash (actually forces flash now)
+ *   --tier default / absent → per-role matrix above with complexity adjustments
  */
 
 export type ModelTier = 'pro' | 'flash' | 'free';
 
 export const SWARM_MODELS = {
-  default: 'flash' as const,
   tiers: {
     pro: 'deepseek/deepseek-v4-pro',
     flash: 'deepseek/deepseek-v4-flash',
-    free: 'openrouter/free',
-  } as Record<ModelTier, string>,
-};
-
-export const ROLE_MODEL_TIER: Record<string, ModelTier> = {
-  architect: 'pro',
-  coder: 'pro', // downgraded to 'flash' if architect flags complexity=trivial
-  qa: 'flash',
-  git: 'free', // validates handoffs, generates commit plan
-  review: 'flash', // N/A — deterministic script
+    free: 'opencode/big-pickle',
+    free_fallback: 'openrouter/free',
+  },
 } as const;
 
-/** Get the model slug for a tier. */
-export const getModelForTier = (tier: string): string =>
-  SWARM_MODELS.tiers[tier as ModelTier] ?? SWARM_MODELS.tiers.flash;
+/** Per-role default tiers. git + review: deterministic, no LLM. */
+export const ROLE_MODEL_TIER: Record<string, ModelTier> = {
+  architect: 'pro',
+  coder: 'pro', // flash if complexity=trivial
+  qa: 'flash', // pro if complexity=complex (QA LLM only spawns on test failures)
+  docs: 'free', // free_fallback on quota errors
+} as const;
 
-/** Get the default tier. */
-export const getDefaultTier = (): string => SWARM_MODELS.default;
+/** Get the model slug for a tier. Falls back to flash for unrecognized tiers. */
+export const getModelForTier = (tier: string): string => {
+  const t = tier as ModelTier;
+  return SWARM_MODELS.tiers[t] ?? SWARM_MODELS.tiers.flash;
+};
+
+/** Get the default tier string. */
+export const getDefaultTier = (): string => 'flash';

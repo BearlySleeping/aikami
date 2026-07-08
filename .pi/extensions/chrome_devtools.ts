@@ -1,4 +1,4 @@
-// .pi/extensions/chrome-devtools.ts
+// .pi/extensions/chrome_devtools.ts
 //
 // Chrome DevTools Protocol (CDP) integration for Aikami.
 // Launches headless Chromium (from Nix devShell) and connects via CDP

@@ -623,6 +623,20 @@ export class AgentScratchpad {
     this._db.run('DELETE FROM swarm_heartbeat WHERE task_id = ?', [taskId]);
   }
 
+  /**
+   * Finalize a task — mark any remaining working/blocked agents as done,
+   * so the ledger shows a clean state after pipeline completion.
+   */
+  finalizeTask(taskId: string): void {
+    this._assertOpen();
+    this._db.run(
+      `UPDATE swarm_heartbeat
+       SET agent_status = 'done'
+       WHERE task_id = ? AND agent_status IN ('working', 'blocked')`,
+      [taskId],
+    );
+  }
+
   /** Get heartbeat status for all agents in a task. */
   getHeartbeats(taskId: string): SwarmStateRow[] {
     this._assertOpen();

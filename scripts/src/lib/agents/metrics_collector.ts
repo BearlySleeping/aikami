@@ -121,11 +121,27 @@ export const collectTaskMetrics = (options: {
 }): TaskMetrics => {
   const { taskId, startTime, trivialPath = false, documentationGenerated = false } = options;
 
+  // Read per-agent durations sidecar (written by executeTaskPipeline)
+  let agentDurations: Record<string, number> = {};
+  try {
+    const durationsPath = join(
+      process.cwd(),
+      '.pi',
+      'swarm',
+      'outputs',
+      `${taskId}_durations.json`,
+    );
+    agentDurations = JSON.parse(readFileSync(durationsPath, 'utf-8')) as Record<string, number>;
+  } catch {
+    // sidecar doesn't exist — durations stay 0 (non-blocking)
+  }
+
   const agents: AgentMetrics[] = [];
 
   for (const role of AGENT_ROLES) {
     const handoff = readHandoff(taskId, role);
     const legacySummary = readLegacySummary(taskId, role);
+    const duration = agentDurations[role] ?? 0;
 
     if (handoff) {
       const summaryPreview = handoff.summary.slice(0, 120);
@@ -134,7 +150,7 @@ export const collectTaskMetrics = (options: {
       agents.push({
         role,
         status: handoff.status,
-        durationMs: 0,
+        durationMs: duration,
         filesTouched,
         estimatedTokensOutput: estimateTokens(handoff.summary, filesTouched),
         summaryPreview: summaryPreview || '(no summary)',
@@ -153,7 +169,7 @@ export const collectTaskMetrics = (options: {
       agents.push({
         role,
         status: 'unknown',
-        durationMs: 0,
+        durationMs: duration,
         filesTouched: 0,
         estimatedTokensOutput: estimateTokens(legacySummary, 0),
         summaryPreview: legacySummary.slice(0, 120),
@@ -162,7 +178,7 @@ export const collectTaskMetrics = (options: {
       agents.push({
         role,
         status: trivialPath && role === 'qa' ? 'skipped' : 'unknown',
-        durationMs: 0,
+        durationMs: duration,
         filesTouched: 0,
         estimatedTokensOutput: 0,
         summaryPreview: trivialPath && role === 'qa' ? '(skipped — trivial path)' : '(no output)',

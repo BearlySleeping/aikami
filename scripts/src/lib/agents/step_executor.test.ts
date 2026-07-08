@@ -41,6 +41,7 @@ const fakeState = (): SwarmState => ({
     architect: { tabId: '', paneId: '', status: 'idle', lastHash: null },
     coder: { tabId: '', paneId: '', status: 'idle', lastHash: null },
     qa: { tabId: '', paneId: '', status: 'idle', lastHash: null },
+    docs: { tabId: '', paneId: '', status: 'idle', lastHash: null },
     git: { tabId: '', paneId: '', status: 'idle', lastHash: null },
     review: { tabId: '', paneId: '', status: 'idle', lastHash: null },
   },
@@ -75,6 +76,8 @@ const makeCtx = (overrides: Partial<TestCtx> = {}): TestCtx => ({
   skipReview: false,
   feedbackHistory: [],
   iteration: 0,
+  agentStartTimes: {},
+  agentDurations: {},
   ...overrides,
 });
 
@@ -175,8 +178,9 @@ describe('PipelineState transitions', () => {
       coder: 1,
       qa: 2,
       review: 3,
-      git: 4,
-      done: 5,
+      docs: 4,
+      git: 5,
+      done: 6,
     };
     for (let i = 1; i < sequence.length; i++) {
       expect(stateOrder[sequence[i]]).toBeGreaterThan(stateOrder[sequence[i - 1]]);

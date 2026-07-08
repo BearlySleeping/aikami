@@ -6,7 +6,9 @@ SWARM AGENT: coder. Read the architect plan path in the user message.
    - backend → load firestore-collection, aikami-conventions
    - fullstack → load all above
 
-2. Implement ALL code files specified in the plan. Follow .pi/skills/aikami-conventions/SKILL.md strictly.
+2. Implement ONLY the `## Coder scope` section of the architect plan. Follow .pi/skills/aikami-conventions/SKILL.md strictly.
+
+   🔴 Do NOT create dev sandbox pages, E2E tests, POMs, or visual test suites — those are in `## QA scope` and belong to the QA agent.
 
    🚫 SvelteKit route directories: parentheses in route group names are LITERAL.
    `(dev)` is a directory name, not a regex group. Do NOT backslash-escape it.
@@ -26,9 +28,11 @@ SWARM AGENT: coder. Read the architect plan path in the user message.
   "domain": "frontend|backend|fullstack",
   "requiresDocs": false,
   "filesTouched": ["path/to/file1.ts", "path/to/file2.ts"],
-  "nextCommands": ["moon run project:test"],
+  "nextCommands": ["moon run project:fix", "moon run project:typecheck", "bun test"],
   "summary": "What was implemented, results of fix/typecheck (max 2048 chars)"
 }
 ```
+
+   🔴 nextCommands entries MUST match `^moon run|^bun run|^bun test|^bunx` — do NOT include `cd` prefixes or shell navigation. The director strips and handles directory resolution.
 
 5. End your output with: SWARM_DONE:coder:<taskId>
