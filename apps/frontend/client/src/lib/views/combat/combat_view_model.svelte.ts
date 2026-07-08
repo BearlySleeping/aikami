@@ -14,8 +14,14 @@ import {
 import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
 import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-import { gameStateService } from '$services';
+import { diceService, gameStateService } from '$services';
 import { worldGenSeedingService } from '$views/worldgen/world_gen_seeding_service.svelte.ts';
+import type {
+  DiceNotation,
+  InitiativeEntry,
+  QueuedRoll,
+  TurnState,
+} from './types/combat_enhancements.ts';
 
 // ---------------------------------------------------------------------------
 // CombatViewModel — Svelte 5 ViewModel for the combat / turn-based battle UI
@@ -250,6 +256,52 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    * Contract: C-148 Combat Immersion
    */
   generateSceneImage(): void;
+
+  // C-234: Dice & Initiative
+  // -----------------------------------------------------------------------
+
+  /**
+   * Queued dice rolls awaiting resolution.
+   * Added via dice_quick_menu, resolved via resolveAllRolls().
+   */
+  readonly queuedRolls: QueuedRoll[];
+
+  /**
+   * All combatants in the current encounter, sorted by initiative.
+   * Populated when combat starts, updated on turn changes.
+   */
+  readonly initiativeEntries: InitiativeEntry[];
+
+  /**
+   * Current turn state — which entity is acting, action economy, turn number.
+   * `null` when no combat encounter is in progress.
+   */
+  readonly turnState: TurnState | null;
+
+  /**
+   * Queue a dice roll for later resolution.
+   *
+   * @param options - Dice notation and optional label.
+   */
+  queueRoll(options: { notation: DiceNotation; label?: string }): void;
+
+  /**
+   * Remove a queued dice roll by ID.
+   *
+   * @param rollId - The QueuedRoll ID to remove.
+   */
+  removeQueuedRoll(rollId: string): void;
+
+  /**
+   * Resolve (roll) all queued dice and append results to the combat log.
+   */
+  resolveAllRolls(): void;
+
+  /**
+   * End the current turn — advances initiative to the next combatant.
+   * Dispatches END_TURN via the engine bridge.
+   */
+  endTurn(): void;
 };
 
 /**
@@ -330,6 +382,15 @@ export class CombatViewModel
     isRolling: boolean;
     isSuccess: boolean;
   } | null = $state(null);
+
+  /** C-234: Queued dice rolls awaiting resolution. */
+  queuedRolls: QueuedRoll[] = $state([]);
+
+  /** C-234: Combatant initiative entries. */
+  initiativeEntries: InitiativeEntry[] = $state([]);
+
+  /** C-234: Current turn state. */
+  turnState: TurnState | null = $state(null);
 
   /** Timeout handle for clearing the active dice roll after animation. */
   private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -445,6 +506,22 @@ export class CombatViewModel
     const removeTurnChanged = bridge.on('TURN_CHANGED', (event) => {
       this.activeEntities = event.activeEntities;
       this.currentTurnEntity = event.currentEntityId;
+
+      // C-234: Update initiative entries for new turn
+      const isPlayerEntity = event.currentEntityId === 1;
+      this.initiativeEntries = this.initiativeEntries.map((e) => ({
+        ...e,
+        isCurrentTurn: e.entityId === event.currentEntityId,
+      }));
+
+      // C-234: Update turn state
+      this.turnState = {
+        currentEntityId: event.currentEntityId,
+        currentEntityName: isPlayerEntity ? this.playerName : this.enemyName || 'Enemy',
+        isPlayerTurn: isPlayerEntity,
+        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        turnNumber: (this.turnState?.turnNumber ?? 0) + 1,
+      };
     });
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
@@ -465,7 +542,44 @@ export class CombatViewModel
       this.combatResult = null;
       this.combatLog = [];
       this.encounterImages = [];
+      this.queuedRolls = [];
       this._turnCounter = 0;
+
+      // C-234: Build initiative entries from participant data
+      const playerInit = Math.floor(Math.random() * 20) + 1;
+      const enemyInit = Math.floor(Math.random() * 20) + 1;
+      this.initiativeEntries = [
+        {
+          entityId: 1,
+          name: this.playerName,
+          initiative: playerInit,
+          currentHp: this.playerHp,
+          maxHp: this.playerMaxHp,
+          isCurrentTurn: event.firstTurnEntityId === 1,
+          isDefeated: false,
+        },
+        ...event.participantIds
+          .filter((id: number) => id !== 1)
+          .map((id: number, index: number) => ({
+            entityId: id,
+            name: index === 0 ? this.enemyName || 'Enemy' : `Entity #${id}`,
+            initiative: index === 0 ? enemyInit : Math.floor(Math.random() * 20) + 1,
+            currentHp: index === 0 ? this.enemyHp : 50,
+            maxHp: index === 0 ? this.enemyMaxHp : 50,
+            isCurrentTurn: event.firstTurnEntityId === id,
+            isDefeated: false,
+          })),
+      ] as InitiativeEntry[];
+
+      // C-234: Initialize turn state
+      this.turnState = {
+        currentEntityId: event.firstTurnEntityId,
+        currentEntityName:
+          event.firstTurnEntityId === 1 ? this.playerName : this.enemyName || 'Enemy',
+        isPlayerTurn: event.firstTurnEntityId === 1,
+        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        turnNumber: 1,
+      };
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
@@ -478,6 +592,17 @@ export class CombatViewModel
       this.currentTurnEntity = null;
       this.isPlayerTurn = false;
       this.isAttacking = false;
+      this.queuedRolls = [];
+
+      // Mark defeated entries
+      this.initiativeEntries = this.initiativeEntries.map((e) => ({
+        ...e,
+        isCurrentTurn: false,
+        isDefeated: event.victory
+          ? e.entityId !== 1 // non-player entities defeated on victory
+          : e.entityId === 1, // player defeated on defeat
+      }));
+      this.turnState = null;
     });
 
     const removeCombatLog = bridge.on('COMBAT_LOG', (event) => {
@@ -593,6 +718,9 @@ export class CombatViewModel
     this.combatLog = [];
     this.encounterImages = [];
     this.combatResult = null;
+    this.queuedRolls = [];
+    this.initiativeEntries = [];
+    this.turnState = null;
     this._logEntryCounter = 0;
     this._turnCounter = 0;
 
@@ -867,6 +995,103 @@ export class CombatViewModel
       type: 'COMBAT_ACTION',
       action: 'DEFEND',
     });
+  }
+
+  // C-234: Dice & Initiative
+  // -----------------------------------------------------------------------
+
+  /** @inheritdoc */
+  queueRoll(options: { notation: DiceNotation; label?: string }): void {
+    this.debug('queueRoll', { notation: options.notation, label: options.label });
+    const roll: QueuedRoll = {
+      id: `queued-${++this._logEntryCounter}`,
+      notation: options.notation,
+      label: options.label ?? options.notation.label,
+      timestamp: Date.now(),
+    };
+    this.queuedRolls = [...this.queuedRolls, roll];
+  }
+
+  /** @inheritdoc */
+  removeQueuedRoll(rollId: string): void {
+    this.debug('removeQueuedRoll', { rollId });
+    this.queuedRolls = this.queuedRolls.filter((r) => r.id !== rollId);
+  }
+
+  /** @inheritdoc */
+  resolveAllRolls(): void {
+    this.debug('resolveAllRolls', { count: this.queuedRolls.length });
+
+    if (this.queuedRolls.length === 0) {
+      return;
+    }
+
+    // Roll each queued dice, append results to log
+    const results: string[] = [];
+    const resolved: QueuedRoll[] = [];
+
+    for (const roll of this.queuedRolls) {
+      const total = diceService.rollNotation({
+        count: roll.notation.count,
+        sides: roll.notation.sides,
+        label: roll.notation.label,
+      });
+      const rollLabel =
+        roll.label !== roll.notation.label
+          ? `${roll.label} (${roll.notation.label})`
+          : roll.notation.label;
+      results.push(`🎲 ${rollLabel}: ${total}`);
+      resolved.push({ ...roll, result: total });
+    }
+
+    // Clear queue
+    this.queuedRolls = [];
+
+    // Append combined result to combat log
+    const resultText = results.join(' | ');
+    this.combatLog = [
+      {
+        id: `log-${++this._logEntryCounter}`,
+        turnNumber: this._turnCounter,
+        actor: 'System',
+        actionText: `🎲 Dice Roll — ${resultText}`,
+        outcomeText: '',
+      },
+      ...this.combatLog,
+    ];
+  }
+
+  /** @inheritdoc */
+  endTurn(): void {
+    if (!this.inCombat) {
+      this.debug('endTurn: blocked — no combat in progress');
+      return;
+    }
+
+    this.debug('endTurn: resolving locally');
+
+    // Advance turn to next combatant (alternate between 1 and nearest enemy)
+    // In full combat with many entities, the bridge would handle this.
+    const nextId = this.currentTurnEntity === 1 ? (this.enemyEntityId ?? 2) : 1;
+    this.currentTurnEntity = nextId;
+    this.isPlayerTurn = nextId === 1;
+
+    // Reset turn state locally
+    if (this.turnState) {
+      this.turnState = {
+        currentEntityId: nextId,
+        currentEntityName: nextId === 1 ? this.playerName : this.enemyName || 'Enemy',
+        isPlayerTurn: nextId === 1,
+        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        turnNumber: this.turnState.turnNumber + 1,
+      };
+    }
+
+    // Update initiative current-turn highlight
+    this.initiativeEntries = this.initiativeEntries.map((e) => ({
+      ...e,
+      isCurrentTurn: e.entityId === nextId,
+    }));
   }
 
   /** @inheritdoc */

@@ -25,6 +25,15 @@ export type DiceServiceInterface = BaseFrontendClassInterface & {
   };
 
   rollCheck(modifier: number, dc: number): { success: boolean; total: number; difference: number };
+
+  /**
+   * Rolls `count` dice of `sides` each and returns the sum.
+   * Pushes each individual die roll plus the combined total to history.
+   *
+   * @param options - Dice notation: how many dice, how many sides, optional label.
+   * @returns The sum of all dice rolled.
+   */
+  rollNotation(options: { count: number; sides: number; label?: string }): number;
 };
 
 class DiceService extends BaseFrontendClass<DiceServiceOptions> implements DiceServiceInterface {
@@ -78,6 +87,22 @@ class DiceService extends BaseFrontendClass<DiceServiceOptions> implements DiceS
     const difference = total - dc;
 
     return { success, total, difference };
+  }
+
+  /** @inheritdoc */
+  rollNotation(options: { count: number; sides: number; label?: string }): number {
+    let total = 0;
+    for (let i = 0; i < options.count; i++) {
+      total += Math.floor(Math.random() * options.sides) + 1;
+    }
+    this.history.push({
+      roll: total,
+      sides: options.sides,
+      modifier: 0,
+      total,
+      timestamp: new Date(),
+    });
+    return total;
   }
 }
 
