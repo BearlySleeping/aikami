@@ -1,0 +1,23 @@
+{
+  "taskId": "C-234",
+  "role": "architect",
+  "status": "success",
+  "complexity": "standard",
+  "domain": "frontend",
+  "requiresDocs": false,
+  "filesTouched": [
+    "apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts",
+    "apps/frontend/client/src/lib/services/dice/dice_service.test.ts",
+    "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts",
+    "apps/frontend/client/src/lib/views/combat/combat_enhancements_sandbox_view_model.svelte.ts",
+    "apps/frontend/client/src/routes/(dev)/dev/combat-enhancements/+page.svelte",
+    "apps/e2e/src/pom/combat_page.ts"
+  ],
+  "nextCommands": [
+    "moon run client:fix",
+    "moon run client:typecheck",
+    "moon run client:test",
+    "cd apps/e2e && bun run test tests/client/combat_enhancements.spec.ts"
+  ],
+  "summary": "C-234 Combat Enhancement: Dice & Initiative — ~80% of the contract code is already implemented (types, utils, components, ViewModel with bridge integration, dialogue dice popover, all 4 unit test files, E2E spec with POM locators, visual test suite). Remaining gap work: (1) add rollNotation() method to DiceService for multi-dice support replacing private _simulateDiceRoll(), (2) create dev sandbox page at /dev/combat-enhancements with mock ViewModel showing all 5 features (dice menu, initiative tracker, turn header, enriched log, quick-dice in chat), (3) add sandbox navigation method to E2E POM. No data model changes — additive only. Core combustion engine (ECS) untouched."
+}
