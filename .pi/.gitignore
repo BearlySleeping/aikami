@@ -36,6 +36,6 @@ batch-*.json
 supervisor/
 diagnostics/
 
-# chrome-devtools extension
+# chrome_devtools extension
 .chromium-profile/
 .screenshots/

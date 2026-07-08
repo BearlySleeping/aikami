@@ -11,6 +11,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
@@ -63,7 +64,9 @@ export default function (pi: ExtensionAPI) {
       ),
       forceModelTierSelection: Type.Optional(
         Type.String({
-          description: 'Model tier override: pro (reasoning) or flash (fast). Default: flash.',
+          description:
+            'Model tier override: pro (deepseek-v4-pro), flash (deepseek-v4-flash), or default (per-role matrix). ' +
+            'Pro=reasoning, flash=fast, default=architect+coder get pro, qa gets flash.',
           enum: ['pro', 'flash', 'default'],
           default: 'default',
         }),
@@ -74,7 +77,7 @@ export default function (pi: ExtensionAPI) {
       const taskId = params.taskId;
       const tier =
         params.forceModelTierSelection === 'default' || !params.forceModelTierSelection
-          ? 'flash'
+          ? ''
           : params.forceModelTierSelection;
 
       // Delegate to swarm_run.ts — single source of truth for payload construction
@@ -85,7 +88,8 @@ export default function (pi: ExtensionAPI) {
       mkdirSync(logDir, { recursive: true });
       const logFd = openSync(join(logDir, `${taskId}_pipeline.log`), 'a');
 
-      const child = spawn('bun', ['swarm:run', taskId, '--tier', tier], {
+      const tierArgs = tier ? ['--tier', tier] : [];
+      const child = spawn('bun', ['swarm:run', taskId, ...tierArgs], {
         cwd,
         stdio: ['ignore', logFd, logFd],
         detached: true,
@@ -93,15 +97,16 @@ export default function (pi: ExtensionAPI) {
       child.unref();
 
       const pid = child.pid ?? 'unknown';
+      const tierLabel = tier || 'default (per-role matrix)';
 
       return {
         content: [
           {
             type: 'text',
-            text: `🚀 Pipeline dispatched: ${taskId}\nPID: ${pid}\nTier: ${tier}\nStatus: \`swarm_get_ledger_status\``,
+            text: `🚀 Pipeline dispatched: ${taskId}\nPID: ${pid}\nTier: ${tierLabel}\nStatus: \`swarm_get_ledger_status\``,
           },
         ],
-        details: { taskId, pid, tier },
+        details: { taskId, pid, tier: tierLabel },
       };
     },
   });
@@ -194,9 +199,23 @@ export default function (pi: ExtensionAPI) {
 
       const lockIcon = ledger.globalLockActive ? '🔒' : '🔓';
 
+      // Check for director lockfile
+      const { existsSync: lockExists, readFileSync: lockRead } = await import('node:fs');
+      const activeId = ledger.activeTaskId !== 'none' ? ledger.activeTaskId : 'unknown';
+      const lockPath = join(cwd, '.pi/swarm/outputs', `${activeId}_director.lock`);
+      let lockInfo = '';
+      if (lockExists(lockPath)) {
+        try {
+          const lockPid = lockRead(lockPath, 'utf-8').trim();
+          lockInfo = `\nDirector lock: PID ${lockPid}`;
+        } catch {
+          lockInfo = '\nDirector lock: (stale file)';
+        }
+      }
+
       const report = [
         `**Swarm Ledger Status**`,
-        `Task: \`${ledger.activeTaskId}\` ${lockIcon}`,
+        `Task: \`${ledger.activeTaskId}\` ${lockIcon}${lockInfo}`,
         '',
         ...statusLines,
         '',
