@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-08
-> Files: 245 across 11 categories
+> Files: 246 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -224,6 +224,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 234 combat enhancement dice initiative](contracts/C-234-combat-enhancement-dice-initiative.md)
 - [C 235 gm narrative director](contracts/C-235-gm-narrative-director.md)
 - [C 236 agent pipeline system](contracts/C-236-agent-pipeline-system.md)
+- [C 237 prompt template macro system](contracts/C-237-prompt-template-macro-system.md)
 - [Contract C-300: Swarm Director & Workspace Provisioning Lifecycle](contracts/C-300-swarm-director-and-workspace-provisioning-lifecycle.md)
 - [Contract C-301: Algorithmic Token Router & AST Footprint Extractor](contracts/C-301-algorithmic-token-router-and-ast-footprint-extractor.md)
 - [Contract C-302: Coherent Ephemeral SQLite-WAL Scratchpad Engine](contracts/C-302-coherent-ephemeral-sqlite-wal-scratchpad-engine.md)
