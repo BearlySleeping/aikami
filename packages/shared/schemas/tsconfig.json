@@ -7,7 +7,9 @@
     "outDir": "dist",
     "paths": {
       "@aikami/constants": ["../constants/src/index.ts"],
-      "@aikami/constants/*": ["../constants/src/lib/*"]
+      "@aikami/constants/*": ["../constants/src/lib/*"],
+      "@aikami/types": ["../types/src/index.ts"],
+      "@aikami/types/*": ["../types/src/lib/*"]
     }
   },
   "include": ["src/**/*"],

@@ -5,6 +5,7 @@
 //
 // Contract: C-236 Agent Pipeline System
 
+import { PHASE_LABELS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -46,14 +47,6 @@ export type AgentHudViewModelInterface = BaseViewModelInterface & {
     agentName?: string | null;
     results?: AgentRunResult[];
   }): void;
-};
-
-// ── Phase display labels ─────────────────────────────────────────────────
-
-const PHASE_LABELS: Record<AgentPhase, string> = {
-  pre: 'Pre-processing',
-  main: 'Generating',
-  post: 'Post-processing',
 };
 
 // ── Implementation ───────────────────────────────────────────────────────

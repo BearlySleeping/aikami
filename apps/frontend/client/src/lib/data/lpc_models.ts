@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/data/lpc_models.ts
+// biome-ignore-all lint/style/useNamingConvention: States needs to be in UpperCase until refactor
 
 /**
  * Local mirrors of engine enums from @aikami/frontend/engine.

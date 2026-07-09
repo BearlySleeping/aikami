@@ -19,7 +19,12 @@
     "noImplicitOverride": true,
 
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+
+    "paths": {
+      "@aikami/types": ["../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../packages/shared/types/src/lib/*"]
+    }
   },
   "exclude": ["generated-skills"]
 }

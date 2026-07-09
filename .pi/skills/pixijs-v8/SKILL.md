@@ -209,3 +209,66 @@ bridge.on("EVENT", (event) => {
   heavySynchronousWork(event);
 });
 ```
+
+#### 3.6 ViewModel Ticker Abstraction — Engine Bridge Only
+
+ViewModels in `apps/frontend/client/src/lib/views/` MUST NOT hook into
+`app.ticker` or any per-frame rendering callback. The engine package
+(`packages/frontend/engine/`) is the sole owner of the PixiJS ticker loop.
+
+```typescript
+// ❌ FORBIDDEN — ViewModel hooks into the game ticker locally
+// apps/frontend/client/src/lib/views/hud/hud_view_model.svelte.ts
+class HudViewModel {
+  initialize() {
+    app.ticker.add(() => {
+      this.fps = app.ticker.FPS;
+    });
+  }
+}
+
+// ✅ CORRECT — ViewModel exposes reactive bindings for engine bridge
+// apps/frontend/client/src/lib/views/hud/hud_view_model.svelte.ts
+class HudViewModel {
+  fps = $state(0);
+
+  initialize() {
+    bridge.on("ENGINE_STATS", ({ fps }) => {
+      this.fps = fps; // updated at UI-relevant intervals, not per-frame
+    });
+  }
+}
+```
+
+**The rule**: If a ViewModel needs per-frame or sub-second data, the engine
+bridge pushes **batched state diffs** at UI-relevant intervals (100ms+). The
+engine package (`packages/frontend/engine/`) owns the ticker, computes the
+diffs, and emits them through the bridge. ViewModels stay limited to reactive
+property binding targets — they never import `pixi.js` or touch `app.ticker`
+directly.
+
+**Why**: The 60fps game loop is an imperative zone. Any `$state` mutation
+inside a ticker callback cascades into Svelte's microtask queue 60 times per
+second. The engine bridge throttle layer is the single integration point — it
+coalesces high-frequency game state into low-frequency UI updates before they
+touch the Svelte reactivity system.
+
+## 4. Engine Package Ownership
+
+The `packages/frontend/engine/` package is the **central abstraction layer**
+for all PixiJS lifecycle management:
+
+| Responsibility | Owner |
+|---|---|
+| `app.ticker.add()` callbacks | `packages/frontend/engine/` ONLY |
+| bitECS system scheduling (movement, physics, render) | `packages/frontend/engine/` |
+| EngineBridge message throttling/coalescing | `packages/frontend/engine/` |
+| Scene graph construction (stage layers, containers) | `packages/frontend/engine/` |
+| PixiJS Application init and teardown | `packages/frontend/engine/` |
+| Svelte-side EngineBridge event listening | `apps/frontend/client/src/lib/views/` ViewModels |
+| bitECS component definitions (pure data) | `packages/frontend/engine/` or shared types |
+| UI state reacting to engine events | `apps/frontend/client/src/lib/views/` ViewModels |
+
+**🔴 Violation**: Any file outside `packages/frontend/engine/` calling
+`app.ticker.add()`, `new Application()`, or importing `pixi.js` directly
+(without going through the engine package's public API).

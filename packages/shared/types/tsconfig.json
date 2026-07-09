@@ -9,7 +9,9 @@
       "@aikami/constants": ["../constants/src/index.ts"],
       "@aikami/constants/*": ["../constants/src/lib/*"],
       "@aikami/schemas": ["../schemas/src/index.ts"],
-      "@aikami/schemas/*": ["../schemas/src/lib/*"]
+      "@aikami/schemas/*": ["../schemas/src/lib/*"],
+      "@aikami/types": ["./src/index.ts"],
+      "@aikami/types/*": ["./src/lib/*"]
     }
   },
   "include": ["src/**/*"],

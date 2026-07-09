@@ -176,6 +176,7 @@ const handleSynthesize = async (options: { text: string; voice: string }): Promi
         model: 'tts-1',
         input: text,
         voice,
+        // biome-ignore lint/style/useNamingConvention: voice API uses snake_case
         response_format: 'wav',
       }),
       signal,

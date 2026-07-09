@@ -11,16 +11,16 @@ import {
 } from './wait_free_ring_buffer';
 
 describe('WaitFreeRingBuffer', () => {
-  const CAPACITY = 1024;
+  const Capacity = 1024;
 
-  const makeBuffer = () => createWaitFreeRingBuffer({ sampleCapacity: CAPACITY });
+  const makeBuffer = () => createWaitFreeRingBuffer({ sampleCapacity: Capacity });
 
   // ── Initial state ─────────────────────────────────────────────────────
 
   it('starts empty', () => {
     const buf = makeBuffer();
     expect(ringBufferAvailable(buf)).toBe(0);
-    expect(ringBufferFree(buf)).toBe(CAPACITY);
+    expect(ringBufferFree(buf)).toBe(Capacity);
   });
 
   // ── Push / Pop basic ──────────────────────────────────────────────────
@@ -113,7 +113,7 @@ describe('WaitFreeRingBuffer', () => {
 
     ringBufferClear(buf);
     expect(ringBufferAvailable(buf)).toBe(0);
-    expect(ringBufferFree(buf)).toBe(CAPACITY);
+    expect(ringBufferFree(buf)).toBe(Capacity);
   });
 
   // ── Large capacity ────────────────────────────────────────────────────

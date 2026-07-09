@@ -245,7 +245,7 @@
 - **Complexity**: Medium — structured summarization call is the main complexity; CRUD is standard
 - **Impact**: High — enables long-running campaigns without context window bloat
 
-#### C-ME-012: Chat Modes & Address System
+#### C-ME-012: Chat Modes & Address System — [📋 Contract C-241](docs/contracts/C-241-chat-modes-address-system.md)
 
 - **Marinara Reference**: `docs/GAME_MODE.md` (address modes — Scene/Party/GM, input bar toggle), `docs/CONVERSATION.md` (group chat, character exchanges, manual replies), `docs/ROLEPLAY.md` (impersonation)
 - **What Marinara Does**: Three address modes color-coded in input bar — Scene (normal in-game action), Talk to Party (party members respond), Talk to GM (out-of-character). Group chats with character picker and "Only Reply When Mentioned" toggle. Character exchanges (characters talk to each other). Impersonation (`/impersonate [direction]`) drafts a message as your persona.
