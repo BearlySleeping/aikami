@@ -11,10 +11,12 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { resolveMacros } from '@aikami/parser';
 // Direct imports to avoid barrel mock resolution issues in tests
 import { combatService } from '$lib/services/game/combat_service.svelte.ts';
 import { gameStateService } from '$lib/services/game/game_state_service.svelte.ts';
 import { timeService } from '$lib/services/game/time_service.svelte.ts';
+import { lorebookStore } from '$lib/services/lorebook/lorebook_store.svelte';
 import type { AddressMode, GmCombatContext, GmPromptContext } from './gm_types';
 
 // ---------------------------------------------------------------------------
@@ -29,14 +31,16 @@ export type GmPromptServiceInterface = BaseFrontendClassInterface & {
    * scoped to the given address mode.
    *
    * Combines world state, character info, active quests, nearby NPCs,
-   * time/weather, and combat context into a formatted prompt string.
+   * time/weather, combat context, and lorebook world info into a
+   * formatted prompt string.
    *
    * The output is guaranteed to be under 6 KB (6144 bytes).
    *
-   * @param mode - The address mode controlling narrative perspective.
+   * @param options.mode - The address mode controlling narrative perspective.
+   * @param options.userMessage - Optional user message for lorebook keyword scanning.
    * @returns A formatted system prompt string.
    */
-  assemblePrompt(mode: AddressMode): string;
+  assemblePrompt(options: { mode: AddressMode; userMessage?: string }): string;
 
   /**
    * Gathers the current game state into a structured context object
@@ -61,7 +65,8 @@ class GmPromptService
   implements GmPromptServiceInterface
 {
   /** @inheritdoc */
-  assemblePrompt(mode: AddressMode): string {
+  assemblePrompt(options: { mode: AddressMode; userMessage?: string }): string {
+    const { mode, userMessage } = options;
     const context = this.gatherContext();
     const combatContext = this.gatherCombatContext();
     const lines: string[] = [];
@@ -153,6 +158,22 @@ class GmPromptService
     }
 
     lines.push('[/SYSTEM INSTRUCTIONS]');
+
+    // ── Lorebook World Info (C-238) ─────────────────────────────────
+    if (userMessage) {
+      const matches = lorebookStore.scanActiveEntries({ message: userMessage });
+      if (matches.length > 0) {
+        lines.push('');
+        lines.push('[WORLD INFO]');
+        for (const match of matches) {
+          // Resolve macros in the entry content before injection
+          const resolved = resolveMacros({ template: match.entry.content, context: {} });
+          lines.push(`[${match.matchReason}]`);
+          lines.push(resolved);
+        }
+        lines.push('[/WORLD INFO]');
+      }
+    }
 
     const prompt = lines.join('\n');
 

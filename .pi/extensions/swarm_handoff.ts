@@ -9,9 +9,21 @@
  * Tools:
  *   swarm_handoff          — Agents call this to finish their step (validated write)
  *   swarm_review_respond   — User calls this from main pi session to approve/reject/feedback
+ *
+ * Commands (zero-LLM — instant, no tokens burned):
+ *   /approve  [taskId]        — approve the awaiting review (auto-detects taskId)
+ *   /reject   [taskId]        — reject and stop the pipeline
+ *   /feedback [taskId] <text> — send feedback text back to the coder
  */
 
-import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
@@ -44,6 +56,82 @@ const atomicWrite = (filePath: string, content: string): void => {
   const tmpPath = `${filePath}.tmp`;
   writeFileSync(tmpPath, content);
   renameSync(tmpPath, filePath);
+};
+
+/**
+ * Find the task currently awaiting review (review handoff with
+ * status=awaiting_approval). Returns null if none / ambiguous handling
+ * is left to the caller (most recent mtime wins).
+ */
+const findAwaitingReviewTask = (cwd: string): string | null => {
+  const outputsDir = join(cwd, '.pi/swarm/outputs');
+  try {
+    const candidates = readdirSync(outputsDir)
+      .filter((f) => f.endsWith('_review_handoff.json'))
+      .map((f) => {
+        try {
+          const h = JSON.parse(readFileSync(join(outputsDir, f), 'utf-8')) as {
+            taskId?: string;
+            status?: string;
+          };
+          return h.status === 'awaiting_approval' && h.taskId ? h.taskId : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((t): t is string => t !== null);
+    return candidates[0] ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/** Write a review decision handoff. Shared by tool + commands. */
+const writeReviewDecision = (
+  cwd: string,
+  taskId: string,
+  decision: 'approve' | 'reject' | 'feedback',
+  feedback?: string,
+): void => {
+  const statusMap = { approve: 'approved', reject: 'rejected', feedback: 'feedback' } as const;
+  const summary =
+    decision === 'feedback'
+      ? (feedback ?? '')
+      : decision === 'approve'
+        ? 'User approved. Proceed to commit & push.'
+        : 'User rejected. Pipeline stopped.';
+
+  const payload = {
+    taskId,
+    role: 'review',
+    status: statusMap[decision],
+    complexity: 'standard',
+    domain: 'fullstack',
+    requiresDocs: false,
+    filesTouched: [],
+    nextCommands: [],
+    summary: summary.slice(0, 2048),
+  };
+
+  const outputsDir = join(cwd, '.pi/swarm/outputs');
+  mkdirSync(outputsDir, { recursive: true });
+  const filePath = join(outputsDir, `${taskId}_review_handoff.json`);
+  try {
+    unlinkSync(`${filePath}.tmp`);
+  } catch {
+    /* ok */
+  }
+  atomicWrite(filePath, JSON.stringify(payload, null, 2));
+};
+
+/** Parse `[taskId] [rest...]` from command args. */
+const parseReviewArgs = (args: string, cwd: string): { taskId: string | null; rest: string } => {
+  const trimmed = (args ?? '').trim();
+  const firstWord = trimmed.split(/\s+/)[0] ?? '';
+  if (/^C-[\w-]+$/i.test(firstWord)) {
+    return { taskId: firstWord.toUpperCase(), rest: trimmed.slice(firstWord.length).trim() };
+  }
+  return { taskId: findAwaitingReviewTask(cwd), rest: trimmed };
 };
 
 // ── Extension registration ───────────────────────────────────
@@ -203,59 +291,13 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      const statusMap: Record<string, string> = {
-        approve: 'approved',
-        reject: 'rejected',
-        feedback: 'feedback',
-      };
-
-      const status = statusMap[params.decision];
-      const summary =
-        params.decision === 'feedback'
-          ? (params.feedback ?? '')
-          : params.decision === 'approve'
-            ? 'User approved. Proceed to commit & push.'
-            : 'User rejected. Pipeline stopped.';
-
-      const payload = {
-        taskId: params.taskId,
-        role: 'review',
-        status,
-        complexity: 'standard',
-        domain: 'fullstack',
-        requiresDocs: false,
-        filesTouched: [],
-        nextCommands: [],
-        summary: summary.slice(0, 2048),
-      };
-
-      // Validate
-      const validationError = validateHandoff(payload);
-      if (validationError) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Internal error: review handoff failed validation: ${validationError}`,
-            },
-          ],
-          details: { error: 'internal-validation' },
-        };
-      }
-
-      // Write atomically
-      const outputsDir = join(cwd, '.pi/swarm/outputs');
-      mkdirSync(outputsDir, { recursive: true });
-      const filePath = join(outputsDir, `${params.taskId}_review_handoff.json`);
-
       try {
-        unlinkSync(`${filePath}.tmp`);
-      } catch {
-        /* ok */
-      }
-
-      try {
-        atomicWrite(filePath, JSON.stringify(payload, null, 2));
+        writeReviewDecision(
+          cwd,
+          params.taskId,
+          params.decision as 'approve' | 'reject' | 'feedback',
+          params.feedback,
+        );
       } catch (err) {
         return {
           content: [
@@ -283,6 +325,56 @@ export default function (pi: ExtensionAPI) {
         ],
         details: { taskId: params.taskId, decision: params.decision },
       };
+    },
+  });
+
+  // ─────────────────────────────────────────────────────┐
+  // Commands: /approve /reject /feedback (zero-LLM)        │
+  // ─────────────────────────────────────────────────────┘
+
+  pi.registerCommand('approve', {
+    description: 'Approve the awaiting swarm review → commit & push. Usage: /approve [taskId]',
+    handler: async (args, ctx) => {
+      const { taskId } = parseReviewArgs(args, ctx.cwd);
+      if (!taskId) {
+        ctx.ui.notify('No swarm review awaiting approval. Usage: /approve <taskId>', 'warning');
+        return;
+      }
+      writeReviewDecision(ctx.cwd, taskId, 'approve');
+      ctx.ui.notify(`✅ ${taskId} approved — pipeline proceeding to commit & push.`, 'info');
+    },
+  });
+
+  pi.registerCommand('reject', {
+    description: 'Reject the awaiting swarm review → stop pipeline. Usage: /reject [taskId]',
+    handler: async (args, ctx) => {
+      const { taskId } = parseReviewArgs(args, ctx.cwd);
+      if (!taskId) {
+        ctx.ui.notify('No swarm review awaiting approval. Usage: /reject <taskId>', 'warning');
+        return;
+      }
+      writeReviewDecision(ctx.cwd, taskId, 'reject');
+      ctx.ui.notify(`❌ ${taskId} rejected — pipeline stopped.`, 'info');
+    },
+  });
+
+  pi.registerCommand('feedback', {
+    description: 'Send feedback to the swarm coder for revision. Usage: /feedback [taskId] <text>',
+    handler: async (args, ctx) => {
+      const { taskId, rest } = parseReviewArgs(args, ctx.cwd);
+      if (!taskId) {
+        ctx.ui.notify(
+          'No swarm review awaiting approval. Usage: /feedback <taskId> <text>',
+          'warning',
+        );
+        return;
+      }
+      if (!rest.trim()) {
+        ctx.ui.notify('Feedback text required. Usage: /feedback [taskId] <text>', 'warning');
+        return;
+      }
+      writeReviewDecision(ctx.cwd, taskId, 'feedback', rest.trim());
+      ctx.ui.notify(`🔄 Feedback sent to coder for ${taskId}.`, 'info');
     },
   });
 }

@@ -96,7 +96,12 @@ if (q) {
 
 console.log('');
 console.log('──────────────────────────────────────────');
-console.log('  Type your response and press Enter:');
+console.log('  💡 From your MAIN pi session (preferred):');
+console.log(`     /approve            → commit & push`);
+console.log(`     /reject             → stop pipeline`);
+console.log(`     /feedback <text>    → send to coder`);
+console.log('');
+console.log('  Or type here and press Enter:');
 console.log('  ✅  lgtm / approve  → commit & push');
 console.log('  ❌  reject          → stop pipeline');
 console.log('  💬  anything else   → feedback to coder');

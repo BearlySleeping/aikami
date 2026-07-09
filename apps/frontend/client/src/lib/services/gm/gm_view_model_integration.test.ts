@@ -63,7 +63,7 @@ describe('GM System Integration', () => {
   test('gmPromptService.assemblePrompt does not throw after NarrativeDirector start', () => {
     const nd = NarrativeDirectorService.create({ className: 'TestND' });
     nd.start(300_000);
-    const prompt = gmPromptService.assemblePrompt('scene');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     expect(prompt.length).toBeGreaterThan(0);
     nd.stop();
   });
@@ -71,7 +71,7 @@ describe('GM System Integration', () => {
   test('gmPromptService handles all address modes without error', () => {
     const modes = ['scene', 'party', 'gm'] as const;
     for (const mode of modes) {
-      const prompt = gmPromptService.assemblePrompt(mode);
+      const prompt = gmPromptService.assemblePrompt({ mode });
       expect(prompt).toContain(
         `ADDRESS MODE: ${mode === 'scene' ? 'Scene' : mode === 'party' ? 'Party' : 'GM'}`,
       );

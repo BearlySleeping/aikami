@@ -220,7 +220,7 @@
 - **Complexity**: Medium — keyword scanning is straightforward; editor is standard CRUD
 - **Impact**: High — lorebooks are the primary world-building tool; they let GMs author persistent world knowledge without engineering prompts
 
-#### C-ME-010: Expression & Emotion System
+#### C-ME-010: Expression & Emotion System — [📋 Contract C-239](docs/contracts/C-239-expression-emotion-system.md)
 
 - **Marinara Reference**: `docs/ROLEPLAY.md` (sprite expressions, two-tier system)
 - **What Marinara Does**: 16 default expressions (neutral, happy, sad, angry, surprised, scared, embarrassed, love, thinking, laughing, worried, disgusted, smirk, crying, determined, hurt). Two-tier system: Expression agent (LLM reads message → structured output naming expression) + keyword fallback (regex scans message for emotional keywords). Expressions persisted per-message (swiping restores the expression from that swipe).

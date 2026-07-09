@@ -107,7 +107,48 @@ for (const f of verifiedFiles) {
 }
 console.log('');
 
+// ── Branch guard ──────────────────────────────────────────
+
+const currentBranch = (): string => {
+  try {
+    return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      encoding: 'utf-8',
+    }).trim();
+  } catch {
+    return 'unknown';
+  }
+};
+
+const hasUpstream = (branch: string): boolean => {
+  try {
+    execFileSync('git', ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`], {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const PROTECTED_BRANCHES = ['main', 'master'];
+
+const branch = currentBranch();
+
+if (PROTECTED_BRANCHES.includes(branch)) {
+  writeHandoff(
+    'failed',
+    `Refusing to push to protected branch '${branch}'. The swarm pipeline must never push directly to ${branch}/master — it should only run on feature branches. Switch to a feature branch before dispatching.`,
+    verifiedFiles,
+  );
+  console.error(`🔴 REFUSED: cannot push to protected branch '${branch}'.`);
+  process.exit(1);
+}
+
 // ── Stage, commit, push ───────────────────────────────────
+
+const gitPushCmd = hasUpstream(branch) ? ['push'] : ['push', '-u', 'origin', 'HEAD'];
+const pushLabel = hasUpstream(branch) ? 'push' : 'push -u origin HEAD';
 
 try {
   // Stage only the plan's files
@@ -146,8 +187,8 @@ try {
   console.log('✅ Committed');
 
   try {
-    execFileSync('git', ['push']);
-    console.log('✅ Pushed');
+    execFileSync('git', gitPushCmd);
+    console.log(`✅ Pushed (${pushLabel})`);
   } catch (pushError) {
     const errMsg = pushError instanceof Error ? pushError.message : String(pushError);
     // Commit succeeded, push failed — don't roll back. Partial success.

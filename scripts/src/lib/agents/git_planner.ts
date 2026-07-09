@@ -75,10 +75,12 @@ const updateContractStatus = (contractPath: string): void => {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const statusPattern = /^(\|?\s*\*{0,2}Status\*{0,2}\s*\|?\s*)(.+)$/im;
+  // Match only the value cell of a `| **Status** | <value> |` table row —
+  // idempotent across re-runs (never appends a second trailing pipe).
+  const statusPattern = /^(\|\s*\*{0,2}Status\*{0,2}\s*\|\s*)([^|\n]*)(\|?\s*)$/im;
 
   if (statusPattern.test(content)) {
-    content = content.replace(statusPattern, `$1completed (${today}) |`);
+    content = content.replace(statusPattern, `$1completed (${today}) $3`);
   } else {
     content += `\n\n**Completed:** ${today} via swarm pipeline.\n`;
   }
@@ -139,6 +141,12 @@ export const planGitCommit = (options: {
   const addFile = (f: string): void => {
     const trimmed = f.trim();
     if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+    // Reject hallucinated backslash-escaped route groups (`\(dev\)`) — these
+    // are broken literal directories, never legitimate commit targets.
+    if (/\\\(/.test(trimmed)) {
+      console.warn(`[git_planner] rejecting backslash-escaped path: ${trimmed}`);
       return;
     }
     // Filter forbidden paths
