@@ -232,7 +232,7 @@
 - **Complexity**: Medium-High — needs LPC asset expansion + expression-to-overlay mapping
 - **Impact**: Medium-High — expressions bring static LPC sprites to life; key for visual storytelling
 
-#### C-ME-011: Session Management — Summarization, Recap, Persistence
+#### C-ME-011: Session Management — Summarization, Recap, Persistence — [📋 Contract C-240](docs/contracts/C-240-session-management.md)
 
 - **Marinara Reference**: `docs/GAME_MODE.md` (sessions lifecycle — end session, start new session)
 - **What Marinara Does**: Explicit session lifecycle. End Session: runs a low-temperature LLM call → structured JSON with summary (narrative recap + resumePoint, party dynamics, key discoveries, NPC updates, stat snapshot), campaign progression (storyArc + plotTwist updates), and character card updates (class evolution, new abilities, stat bumps). Start Session: creates a numbered fork, runs a recap call anchored on the previous session's resumePoint.

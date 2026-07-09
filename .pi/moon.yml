@@ -20,6 +20,7 @@ fileGroups:
     - 'skills/**/*.ts'
     - 'extensions/**/*.ts'
     - 'generated-skills/**/*.{md,ts}'
+    - 'runners/**/*.ts'
   configs:
     - 'package.json'
     - 'tsconfig.json'
