@@ -33,6 +33,7 @@ export const ROLE_MODEL_TIER: Record<string, ModelTier> = {
   coder: 'pro', // flash if complexity=trivial
   qa: 'flash', // pro if complexity=complex (QA LLM only spawns on test failures)
   docs: 'free', // free_fallback on quota errors
+  git: 'free',
 } as const;
 
 /** Get the model slug for a tier. Falls back to flash for unrecognized tiers. */
