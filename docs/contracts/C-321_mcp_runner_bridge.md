@@ -186,3 +186,40 @@ Modify `.pi/scripts/update_skills.ts` or the agent bootstrapper to map the `MCPB
 ## 6. Execution Command
 
 `/contract docs/contracts/C-321_mcp_runner_bridge.md`
+
+---
+
+## Execution Report (2026-07-09)
+
+### Summary
+Created the MCP stdio runner bridge in `.pi/runners/mcp_bridge.ts` — a TypeScript adapter that abstracts process spawning, transport connection, capability negotiation, and tool-calling execution for MCP servers. Integrated MCP server registration into `update_skills.ts` for swarm agent tool discovery. Installed `@modelcontextprotocol/sdk` and `zod` as pi project dependencies.
+
+### AC Status
+
+| AC | Description | Status |
+|----|-------------|--------|
+| 5.1 | Syntax & Compilation — `biome check` + `tsgo --noEmit` pass clean | ✅ |
+| 5.2 | Local Transport Testing — update_skills.ts logs registered MCP server (context-mode) | ✅ |
+| 4.3 | Swarm Orchestration — MCP server list injected into update_skills bootstrapper | ✅ |
+
+### Files Created / Modified
+
+| File | Action |
+|------|--------|
+| `.pi/runners/mcp_bridge.ts` | Created — MCP bridge class with connect/listTools/executeTool/disconnect |
+| `.pi/scripts/update_skills.ts` | Modified — added MCP server bootstrapping (reads mcp.json, logs registered servers) |
+| `.pi/moon.yml` | Modified — added `runners/**/*.ts` to sources fileGroup |
+| `.pi/package.json` | Modified — added `@modelcontextprotocol/sdk@1.29.0` and `zod@4.4.3` |
+| `.pi/bun.lock` | Modified — updated lockfile |
+
+### Deviations
+- **Capabilities API change**: The SDK v1.29.0 moved `tools` capability under `sampling` — changed from `{ capabilities: { tools: {} } }` to `{ capabilities: { sampling: { tools: {} } } }`
+- **Return type assertion**: `callTool()` return type has `[x: string]: unknown` index signature causing TS to widen `content` to `unknown`. Added explicit type assertion.
+- **Env sanitization**: Added `_sanitizeEnv()` helper to filter `undefined` values from `process.env` before passing to `StdioClientTransport` (requires `Record<string, string>`)
+- **Import path cleanup**: Removed unused `CallToolResult` type import; added `CallToolResultSchema` for schema validation
+
+### Test Results
+- `pi:fix`: ✅ passed
+- `pi:typecheck`: ✅ passed (0 errors)
+- `pi:build`: ✅ passed
+- `pi:test`: ✅ passed (no test failures)
