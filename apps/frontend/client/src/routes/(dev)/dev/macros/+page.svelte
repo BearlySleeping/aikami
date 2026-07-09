@@ -147,16 +147,17 @@
     {
       label: 'Reset Template',
       onClick: () => {
+        // biome-ignore format: template literal with intentional line breaks
         sandboxViewModel.updateTemplate(`You are roleplaying as {{char}}. {{personality}}
 
-                                                                                                                                          Character: {{description}}
+  Character: {{description}}
 
-                                                                                                                                          Setting: {{scenario}}
+  Setting: {{scenario}}
 
-                                                                                                                                          Previous conversation:
-                                                                                                                                          {{history}}
+  Previous conversation:
+  {{history}}
 
-                                                                                                                                          User ({{user}}): {{message}}`);
+  User ({{user}}): {{message}}`);
       },
     },
   ];
