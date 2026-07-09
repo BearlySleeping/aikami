@@ -89,7 +89,7 @@ describe('Interaction System — Item Pickup', () => {
     createItemEntity(world, {
       x: 120,
       y: 100,
-      itemId: 'health_potion',
+      itemId: 'healthPotion',
       quantity: 1,
     });
 
@@ -221,7 +221,7 @@ describe('Interaction System — Item Pickup', () => {
     createItemEntity(world, {
       x: 100,
       y: 100,
-      itemId: 'mana_potion',
+      itemId: 'manaPotion',
       quantity: 5,
     });
 
@@ -229,7 +229,7 @@ describe('Interaction System — Item Pickup', () => {
 
     expect(receivedInventory).toBeDefined();
     expect(receivedInventory?.length).toBe(1);
-    expect(receivedInventory?.[0]?.itemId).toBe('mana_potion');
+    expect(receivedInventory?.[0]?.itemId).toBe('manaPotion');
     expect(receivedInventory?.[0]?.quantity).toBe(5);
   });
 

@@ -4,7 +4,7 @@
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true,
-    "defaultBranch": "main"
+    "defaultBranch": "master"
   },
   "files": {
     "ignoreUnknown": true,
@@ -46,7 +46,9 @@
         "useFilenamingConvention": {
           "level": "error",
           "options": {
-            "filenameCases": ["snake_case"]
+            "filenameCases": [
+              "snake_case"
+            ]
           }
         },
         "useNumberNamespace": "error",
@@ -72,6 +74,8 @@
               "@aikami/backend-auth": "Use @aikami/backend/auth instead",
               "@aikami/backend-configs": "Use @aikami/backend/configs instead",
               "@aikami/backend-database": "Use @aikami/backend/database instead",
+              "@aikami/backend-chat": "Use @aikami/backend/chat instead",
+              "@aikami/backend-image": "Use @aikami/backend/image instead",
               "@aikami/backend-svelte-kit": "Use @aikami/backend/svelte-kit instead",
               "@aikami/backend-utils": "Use @aikami/backend/utils instead",
               "@aikami/frontend-configs": "Use @aikami/frontend/configs instead",
@@ -79,7 +83,9 @@
               "@aikami/frontend-engine": "Use @aikami/frontend/engine instead",
               "@aikami/frontend-repositories": "Use @aikami/frontend/repositories instead",
               "@aikami/frontend-services": "Use @aikami/frontend/services instead",
-              "@aikami/frontend-utils": "Use @aikami/frontend/utils instead"
+              "@aikami/frontend-utils": "Use @aikami/frontend/utils instead",
+              "@aikami/frontend-components": "Use @aikami/frontend/components instead"
+
             }
           }
         }
@@ -112,7 +118,12 @@
       "attributePosition": "auto",
       "operatorLinebreak": "after"
     },
-    "globals": ["Bun", "process", "fetch", "prompt"]
+    "globals": [
+      "Bun",
+      "process",
+      "fetch",
+      "prompt"
+    ]
   },
   "html": {
     "experimentalFullSupportEnabled": true,
@@ -128,17 +139,9 @@
   },
   "overrides": [
     {
-      "includes": ["**/*.css"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noUnknownAtRules": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/*.d.ts"],
+      "includes": [
+        "**/*.d.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -149,120 +152,15 @@
       }
     },
     {
-      "includes": ["apps/e2e/**", "**/scripts/**", ".pi/**"],
+      "includes": [
+        "apps/e2e/**",
+        "**/scripts/**",
+        ".pi/**"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
             "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/*.svelte", "**/*.astro"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "useButtonType": "off",
-            "noSvgWithoutTitle": "off",
-            "useAnchorContent": "off",
-            "useValidAriaValues": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [".pi/**"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "**/+page.svelte",
-        "**/+layout.svelte",
-        "**/+error.svelte",
-        "**/+page.ts",
-        "**/+layout.ts",
-        "**/+page.server.ts",
-        "**/+layout.server.ts"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "useFilenamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/*.svelte", "**/*.svelte.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/app.html"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "useValidLang": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/service-worker.js"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useFilenamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "scripts/src/lib/agents/**",
-        "scripts/src/lib/herdr/**",
-        "scripts/src/lib/agent_scratchpad.ts",
-        "scripts/src/index.ts",
-        "scripts/src/lib/test_blackbox/**"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "apps/frontend/client/src/lib/services/image/image_generation_service.test.ts",
-        "apps/frontend/client/src/lib/**/*.test.ts",
-        "apps/frontend/client/src/lib/test_preload.ts",
-        "packages/shared/constants/src/lib/world_gen.ts",
-        "packages/backend/ai/src/lib/agent_router.ts",
-        "packages/frontend/engine/src/math/goap/**",
-        ".pi/extensions/herdr_orchestrator.ts",
-        ".pi/runners/convention_gate.ts"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          },
-          "suspicious": {
-            "noControlCharactersInRegex": "off"
           }
         }
       }

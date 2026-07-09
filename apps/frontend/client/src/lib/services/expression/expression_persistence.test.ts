@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/services/expression/expression_persistence.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Object keys are character names (proper nouns) that must use PascalCase
 //
 // Unit tests for expression persistence on EnhancedMessage alternatives.
 // Verifies expressionMap is stored per alternative and restored on swipe.

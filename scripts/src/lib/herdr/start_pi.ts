@@ -6,6 +6,7 @@
 //   bun herdr:pi                    # start pi in aikami-pi workspace
 //   bun herdr:pi --join             # start + attach
 
+// biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
 import {
   ensureServer,

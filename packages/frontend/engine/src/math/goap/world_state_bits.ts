@@ -1,5 +1,6 @@
 // packages/frontend/engine/src/math/goap/world_state_bits.ts
 
+// biome-ignore-all lint/style/useNamingConvention: PascalCase bit flag constants follow the established GOAP enum pattern used throughout the engine
 // ---------------------------------------------------------------------------
 // WorldStateBit — immutable bit allocation for agent world-state conditions
 //

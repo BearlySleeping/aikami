@@ -389,13 +389,15 @@ class GameEngineService
     try {
       const { GameWorld, TextureManager } = await import('@aikami/frontend/engine');
       const { getLpcAssetPath } = await import('$lib/data/lpc_asset_catalog');
-      const { GENERATED_LPC_SLOTS } = await import('$lib/data/lpc_asset_catalog_generated');
+      const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
+        '$lib/data/lpc_asset_catalog_generated'
+      );
 
       const playerData = this._buildPlayerData();
       const textureManager = new TextureManager();
 
       const { recipeResolver, assetUrlResolver } = this._buildLpcPipeline(
-        GENERATED_LPC_SLOTS,
+        generatedLpcSlots,
         (slot, assetId, state) => getLpcAssetPath(slot, assetId, state as unknown as number),
       );
 
@@ -417,8 +419,8 @@ class GameEngineService
         playerData,
       });
 
-      const DEFAULT_STARTING_MAP = '/assets/maps/sandbox_zone_a.json';
-      await this._gameWorld.loadMap({ mapUrl: DEFAULT_STARTING_MAP, targetX: 160, targetY: 192 });
+      const DefaultStartingMap = '/assets/maps/sandbox_zone_a.json';
+      await this._gameWorld.loadMap({ mapUrl: DefaultStartingMap, targetX: 160, targetY: 192 });
 
       this._registerResizeHandler();
     } catch (error) {
@@ -443,19 +445,19 @@ class GameEngineService
       return playerData;
     }
 
-    const { GENERATED_LPC_SLOTS } = this._getLpcCatalogSync();
-    if (!GENERATED_LPC_SLOTS) {
+    const { generatedLpcSlots } = this._getLpcCatalogSync();
+    if (!generatedLpcSlots) {
       return playerData;
     }
 
-    const ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
     const slotIndexMap = new Map<string, number>();
-    for (let i = 0; i < GENERATED_LPC_SLOTS.length; i++) {
-      slotIndexMap.set(GENERATED_LPC_SLOTS[i].slot, i);
+    for (let i = 0; i < generatedLpcSlots.length; i++) {
+      slotIndexMap.set(generatedLpcSlots[i].slot, i);
     }
 
     const appearanceLayers: number[] = [];
-    for (const slotName of ENGINE_SLOTS) {
+    for (const slotName of EngineSlots) {
       const assetId = lpcRecipe[slotName];
       if (!assetId) {
         appearanceLayers.push(1);
@@ -466,7 +468,7 @@ class GameEngineService
         appearanceLayers.push(1);
         continue;
       }
-      const slotDef = GENERATED_LPC_SLOTS[catalogIdx];
+      const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
         appearanceLayers.push(1);
         continue;
@@ -484,14 +486,14 @@ class GameEngineService
    * where we can't await the dynamic import inside a non-async function.
    */
   private _getLpcCatalogSync(): {
-    GENERATED_LPC_SLOTS: readonly { slot: string; variants: readonly { assetId: string }[] }[];
+    generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[];
   } {
     // Import at module level is not possible since it's dynamically resolved.
     // We cache the result after first bootWithCanvas call.
     if (this._cachedLpcSlots) {
-      return { GENERATED_LPC_SLOTS: this._cachedLpcSlots };
+      return { generatedLpcSlots: this._cachedLpcSlots };
     }
-    return { GENERATED_LPC_SLOTS: [] };
+    return { generatedLpcSlots: [] };
   }
 
   private _cachedLpcSlots:
@@ -499,31 +501,31 @@ class GameEngineService
     | undefined;
 
   private _buildLpcPipeline(
-    GENERATED_LPC_SLOTS: readonly { slot: string; variants: readonly { assetId: string }[] }[],
+    generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
     getLpcAssetPath: (_slot: string, assetId: string, state: string) => string,
   ): {
     recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
     assetUrlResolver: (_slot: string, assetId: string, state: string) => string;
   } {
-    this._cachedLpcSlots = GENERATED_LPC_SLOTS;
+    this._cachedLpcSlots = generatedLpcSlots;
 
-    const SLOT_CATALOG_INDEX: Record<string, number> = {};
-    for (let idx = 0; idx < GENERATED_LPC_SLOTS.length; idx++) {
-      SLOT_CATALOG_INDEX[GENERATED_LPC_SLOTS[idx].slot] = idx;
+    const SlotCatalogIndex: Record<string, number> = {};
+    for (let idx = 0; idx < generatedLpcSlots.length; idx++) {
+      SlotCatalogIndex[generatedLpcSlots[idx].slot] = idx;
     }
 
-    const ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
     const recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
       const recipes: LpcLayerRecipe[] = [];
-      for (let i = 0; i < ENGINE_SLOTS.length; i++) {
+      for (let i = 0; i < EngineSlots.length; i++) {
         const rawId = layerIds[i];
-        const slotName = ENGINE_SLOTS[i] ?? `layer_${i}`;
-        const catalogIdx = SLOT_CATALOG_INDEX[slotName];
+        const slotName = EngineSlots[i] ?? `layer_${i}`;
+        const catalogIdx = SlotCatalogIndex[slotName];
         if (catalogIdx === undefined) {
           continue;
         }
-        const slotDef = GENERATED_LPC_SLOTS[catalogIdx];
+        const slotDef = generatedLpcSlots[catalogIdx];
         let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : slotName === 'head' ? 94 : -1;
         if (slotName === 'head' && effectiveIdx < 0) {
           effectiveIdx = 94;

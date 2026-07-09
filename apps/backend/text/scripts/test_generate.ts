@@ -1,4 +1,5 @@
 // apps/backend/text/scripts/test_generate.ts
+// biome-ignore-all lint/style/useNamingConvention: Property names must match Ollama API field names (snake_case)
 // Test generation script for the Ollama text microservice.
 // Sends a prompt to /api/generate and streams the response.
 //

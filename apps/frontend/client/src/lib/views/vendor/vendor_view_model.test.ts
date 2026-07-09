@@ -25,7 +25,7 @@ const createViewModel = (options?: {
     className: 'VendorViewModelTest',
     vendorId: 'test-vendor-1',
     vendorName: 'Test Vendor',
-    vendorInventory: options?.vendorInventory ?? 'rusty_sword,health_potion,iron_sword',
+    vendorInventory: options?.vendorInventory ?? 'rustySword,healthPotion,ironSword',
   };
   const vm = getVendorViewModel(vmOptions);
   // Monkey-patch closeVendor to track calls
@@ -42,17 +42,17 @@ const createViewModel = (options?: {
 describe('VendorViewModel — C-154 AI Vendors Economy', () => {
   describe('item parsing', () => {
     test('parses comma-separated vendor inventory into items', () => {
-      const viewModel = createViewModel({ vendorInventory: 'rusty_sword,health_potion' });
+      const viewModel = createViewModel({ vendorInventory: 'rustySword,healthPotion' });
       expect(viewModel.items.length).toBe(2);
-      expect(viewModel.items[0].itemId).toBe('rusty_sword');
-      expect(viewModel.items[1].itemId).toBe('health_potion');
+      expect(viewModel.items[0].itemId).toBe('rustySword');
+      expect(viewModel.items[1].itemId).toBe('healthPotion');
     });
 
     test('trims whitespace from item IDs', () => {
-      const viewModel = createViewModel({ vendorInventory: ' rusty_sword , iron_sword ' });
+      const viewModel = createViewModel({ vendorInventory: ' rustySword , ironSword ' });
       expect(viewModel.items.length).toBe(2);
-      expect(viewModel.items[0].itemId).toBe('rusty_sword');
-      expect(viewModel.items[1].itemId).toBe('iron_sword');
+      expect(viewModel.items[0].itemId).toBe('rustySword');
+      expect(viewModel.items[1].itemId).toBe('ironSword');
     });
 
     test('handles empty inventory string', () => {
@@ -117,7 +117,7 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
       const vm = viewModel as unknown as { refusesToSell: boolean; isBuying: boolean };
       vm.refusesToSell = true;
 
-      await viewModel.buyItem('rusty_sword');
+      await viewModel.buyItem('rustySword');
       // Should not start buying
       expect(viewModel.isBuying).toBe(false);
     });
@@ -191,15 +191,15 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
 
   describe('getItemDef', () => {
     test('returns definition for known equippable item', () => {
-      const viewModel = createViewModel({ vendorInventory: 'iron_sword' });
-      const def = viewModel.getItemDef('iron_sword');
-      expect(def.label).toBe('iron_sword');
+      const viewModel = createViewModel({ vendorInventory: 'ironSword' });
+      const def = viewModel.getItemDef('ironSword');
+      expect(def.label).toBe('ironSword');
     });
 
     test('returns definition for consumable items', () => {
-      const viewModel = createViewModel({ vendorInventory: 'health_potion' });
-      const def = viewModel.getItemDef('health_potion');
-      expect(def.label).toBe('health_potion');
+      const viewModel = createViewModel({ vendorInventory: 'healthPotion' });
+      const def = viewModel.getItemDef('healthPotion');
+      expect(def.label).toBe('healthPotion');
       expect(def.equippable).toBe(false);
     });
 

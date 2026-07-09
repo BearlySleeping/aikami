@@ -16,12 +16,12 @@
     vendorId: 'sandbox-vendor',
     vendorName: "Grimbold's Forge",
     vendorInventory:
-      'rusty_sword,iron_sword,steel_sword,wooden_shield,leather_armor,health_potion,mana_potion',
+      'rustySword,ironSword,steelSword,woodenShield,leatherArmor,healthPotion,manaPotion',
   }) as ReturnType<typeof getVendorDevViewModel> & { isHaggling: boolean; isBuying: boolean };
 </script>
 
 <div class="p-4 space-y-4">
-  <button class="btn btn-primary" onclick={() => vendorService.toggle()}>
+  <button type="button" class="btn btn-primary" onclick={() => vendorService.toggle()}>
     {vendorService.isOpen ? 'Close Vendor' : 'Open Vendor'}
   </button>
 </div>

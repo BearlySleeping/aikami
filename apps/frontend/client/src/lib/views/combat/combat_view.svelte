@@ -60,7 +60,9 @@
             </ul>
           </div>
         {/if}
-        <button class="btn btn-primary" onclick={() => viewModel.dismissResult()}>Continue</button>
+        <button type="button" class="btn btn-primary" onclick={() => viewModel.dismissResult()}>
+          Continue
+        </button>
       </div>
     {:else if viewModel.inCombat}
       <div class="flex flex-col gap-4 p-4 relative z-10">
@@ -169,6 +171,7 @@
         {#if !viewModel.combatResult}
           <div class="grid grid-cols-3 gap-2">
             <button
+              type="button"
               class="btn btn-success btn-sm"
               onclick={() => viewModel.attack()}
               disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -177,6 +180,7 @@
               {viewModel.isAttacking ? '⚔️ ...' : '⚔️ Attack'}
             </button>
             <button
+              type="button"
               class="btn btn-outline btn-sm"
               onclick={() => viewModel.defend()}
               disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -185,6 +189,7 @@
               🛡️ Defend
             </button>
             <button
+              type="button"
               class="btn btn-ghost btn-sm text-error"
               onclick={() => viewModel.flee()}
               disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -230,6 +235,7 @@
             </form>
             <!-- Manual scene image generation (C-148) -->
             <button
+              type="button"
               class="btn btn-ghost btn-sm"
               onclick={() => viewModel.generateSceneImage()}
               disabled={viewModel.isResolvingAiAction || imageGenerationService.isGenerating}

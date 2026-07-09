@@ -102,6 +102,7 @@
                 rows="2"
               ></textarea>
               <button
+                type="button"
                 class="btn btn-primary"
                 onclick={() => viewModel.handleSend()}
                 disabled={!viewModel.chatInput.trim() || viewModel.isStreaming}
@@ -120,6 +121,7 @@
         <!-- Generate button -->
         <div class="flex justify-center">
           <button
+            type="button"
             class="btn btn-accent btn-wide"
             onclick={() => viewModel.generateCharacter()}
             disabled={viewModel.isStreaming}
@@ -166,6 +168,7 @@
                     <p class="text-3xl mb-2">🖼️</p>
                     <p class="text-xs text-base-content/40">No image generation</p>
                     <button
+                      type="button"
                       class="btn btn-xs btn-ghost mt-2"
                       onclick={() => viewModel.configureImageGen()}
                     >
@@ -203,6 +206,7 @@
                 <!-- Regenerate button -->
                 {#if viewModel.avatarUrl && viewModel.isImageGenReady}
                   <button
+                    type="button"
                     class="btn btn-xs btn-ghost text-[#cabeff] mt-1"
                     onclick={() => viewModel.toggleRegenerationPanel()}
                     disabled={viewModel.isRegenerating}
@@ -484,6 +488,7 @@
                       </div>
                       <div class="flex items-center gap-2">
                         <button
+                          type="button"
                           class="btn btn-sm btn-ghost btn-square"
                           onclick={() => viewModel.decrementStat(stat.key)}
                         >
@@ -497,6 +502,7 @@
                           bind:value={viewModel.persona.abilityScores[stat.key]}
                         >
                         <button
+                          type="button"
                           class="btn btn-sm btn-ghost btn-square"
                           onclick={() => viewModel.incrementStat(stat.key)}
                         >
@@ -516,11 +522,13 @@
 
           <!-- Actions -->
           <div class="flex justify-center gap-4 lg:col-span-2">
-            <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>← Back to Chat</button>
-            <button class="btn btn-outline" onclick={() => viewModel.saveCharacter()}>
+            <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+              ← Back to Chat
+            </button>
+            <button type="button" class="btn btn-outline" onclick={() => viewModel.saveCharacter()}>
               💾 Save Persona
             </button>
-            <button class="btn btn-primary" onclick={() => viewModel.enterWorld()}>
+            <button type="button" class="btn btn-primary" onclick={() => viewModel.enterWorld()}>
               ⚔️ Enter World
             </button>
           </div>
@@ -540,6 +548,7 @@
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-lg font-bold">Regenerate Avatar</h3>
           <button
+            type="button"
             class="btn btn-sm btn-ghost btn-square"
             onclick={() => viewModel.toggleRegenerationPanel()}
           >
@@ -550,6 +559,7 @@
         <!-- Mode selector -->
         <div class="tabs tabs-bordered mb-4">
           <button
+            type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'appearance'
               ? 'tab-active border-[#cabeff] text-[#cabeff]'
               : 'text-[#938ea1]'}"
@@ -558,6 +568,7 @@
             Appearance
           </button>
           <button
+            type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'direct'
               ? 'tab-active border-[#cabeff] text-[#cabeff]'
               : 'text-[#938ea1]'}"
@@ -566,6 +577,7 @@
             Direct
           </button>
           <button
+            type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.regenerationMode === 'edit'
               ? 'tab-active border-[#cabeff] text-[#cabeff]'
               : 'text-[#938ea1]'}"
@@ -610,10 +622,15 @@
         {/if}
 
         <div class="modal-action">
-          <button class="btn btn-ghost btn-sm" onclick={() => viewModel.toggleRegenerationPanel()}>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            onclick={() => viewModel.toggleRegenerationPanel()}
+          >
             Cancel
           </button>
           <button
+            type="button"
             class="btn btn-primary btn-sm"
             onclick={() => viewModel.regenerateAvatar()}
             disabled={viewModel.isRegenerating}

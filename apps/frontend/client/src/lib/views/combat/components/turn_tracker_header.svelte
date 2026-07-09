@@ -69,7 +69,12 @@
 
       <!-- End Turn button (only during player turn) -->
       {#if turnState.isPlayerTurn}
-        <button class="btn btn-outline btn-xs" onclick={onEndTurn} disabled={isEndTurnDisabled}>
+        <button
+          type="button"
+          class="btn btn-outline btn-xs"
+          onclick={onEndTurn}
+          disabled={isEndTurnDisabled}
+        >
           End Turn
         </button>
       {/if}

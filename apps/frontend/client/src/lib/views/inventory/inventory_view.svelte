@@ -29,6 +29,7 @@
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-bold text-base-content">Inventory</h2>
         <button
+          type="button"
           class="btn btn-sm btn-ghost btn-circle"
           onclick={() => viewModel.closeInventory()}
           aria-label="Close inventory"
@@ -62,6 +63,7 @@
                   ATK</span
                 >
                 <button
+                  type="button"
                   class="btn btn-xs btn-ghost text-error"
                   onclick={() => viewModel.unequipItem('weapon')}
                   aria-label="Unequip weapon"
@@ -94,6 +96,7 @@
                   DEF</span
                 >
                 <button
+                  type="button"
                   class="btn btn-xs btn-ghost text-error"
                   onclick={() => viewModel.unequipItem('armor')}
                   aria-label="Unequip armor"
@@ -121,6 +124,7 @@
             stroke="currentColor"
             stroke-width="1.5"
           >
+            <title>icon</title>
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -150,6 +154,7 @@
               {/if}
               {#if definition}
                 <button
+                  type="button"
                   class="btn btn-xs btn-primary btn-outline mt-1"
                   onclick={() => viewModel.equipItem(item.itemId)}
                   aria-label="Equip {item.itemId}"

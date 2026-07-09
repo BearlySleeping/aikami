@@ -87,22 +87,29 @@
             <span class="font-mono tabular-nums">1× (normal)</span>
           </div>
           <div class="flex gap-2">
-            <button class="btn btn-xs btn-outline flex-1" onclick={() => viewModel.setTimeScale(1)}>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline flex-1"
+              onclick={() => viewModel.setTimeScale(1)}
+            >
               1×
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setTimeScale(60)}
             >
               1min/s
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setTimeScale(600)}
             >
               10min/s
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setTimeScale(3600)}
             >
@@ -118,19 +125,29 @@
             <span class="font-mono tabular-nums">{viewModel.gameHour}:00</span>
           </div>
           <div class="flex gap-2">
-            <button class="btn btn-xs btn-outline flex-1" onclick={() => viewModel.setStartHour(0)}>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline flex-1"
+              onclick={() => viewModel.setStartHour(0)}
+            >
               🌙 00
             </button>
-            <button class="btn btn-xs btn-outline flex-1" onclick={() => viewModel.setStartHour(6)}>
+            <button
+              type="button"
+              class="btn btn-xs btn-outline flex-1"
+              onclick={() => viewModel.setStartHour(6)}
+            >
               🌅 06
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setStartHour(12)}
             >
               ☀️ 12
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setStartHour(18)}
             >
@@ -156,24 +173,28 @@
           >
           <div class="flex gap-2">
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setRainIntensity(0)}
             >
               Clear
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setRainIntensity(0.3)}
             >
               Light
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setRainIntensity(0.7)}
             >
               Heavy
             </button>
             <button
+              type="button"
               class="btn btn-xs btn-outline flex-1"
               onclick={() => viewModel.setRainIntensity(1)}
             >

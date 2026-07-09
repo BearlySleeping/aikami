@@ -35,6 +35,7 @@ type KokoroRequest = {
   model: string;
   input: string;
   voice: string;
+  // biome-ignore lint/style/useNamingConvention: API contract field name
   response_format: 'wav';
 };
 
@@ -295,6 +296,7 @@ export class StreamOrchestrator
         model: 'tts-1',
         input: sentence,
         voice: 'af_bella',
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         response_format: 'wav',
       };
 
@@ -429,7 +431,7 @@ export class StreamOrchestrator
   }
 
   private _isPotentialTagPrefix(buffer: string): boolean {
-    const TAG_PREFIX = '<emotion:';
+    const TagPrefix = '<emotion:';
     if (buffer.length === 0) {
       return false;
     }
@@ -438,8 +440,8 @@ export class StreamOrchestrator
     }
 
     for (let i = 1; i < buffer.length; i++) {
-      if (i < TAG_PREFIX.length) {
-        if (buffer[i] !== TAG_PREFIX[i]) {
+      if (i < TagPrefix.length) {
+        if (buffer[i] !== TagPrefix[i]) {
           return false;
         }
       } else {

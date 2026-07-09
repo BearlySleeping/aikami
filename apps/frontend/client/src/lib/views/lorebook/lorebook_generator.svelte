@@ -49,6 +49,7 @@
   <!-- Generate button -->
   <div class="flex gap-2">
     <button
+      type="button"
       class="btn btn-primary btn-sm"
       disabled={isGenerating || !worldNotes.trim()}
       onclick={() => ongenerate(worldNotes)}
@@ -67,7 +68,7 @@
         <h4 class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
           Generated ({generatedEntries.length})
         </h4>
-        <button class="btn btn-ghost btn-xs" onclick={onclear}>Clear</button>
+        <button type="button" class="btn btn-ghost btn-xs" onclick={onclear}>Clear</button>
       </div>
 
       {#each generatedEntries as entry, i}
@@ -85,7 +86,7 @@
         </div>
       {/each}
 
-      <button class="btn btn-success btn-sm" onclick={onsave}>Save All</button>
+      <button type="button" class="btn btn-success btn-sm" onclick={onsave}>Save All</button>
     </div>
   {:else if !isGenerating && worldNotes.trim()}
     <p class="text-xs text-base-content/40 italic">

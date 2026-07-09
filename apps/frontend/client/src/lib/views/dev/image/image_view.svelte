@@ -35,6 +35,7 @@
       <div class="tabs tabs-bordered mb-6">
         {#each viewModel.tabs as tab}
           <button
+            type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.activeTab === tab.key
               ? 'tab-active border-[#cabeff] text-[#cabeff]'
               : 'text-[#938ea1]'}"
@@ -207,9 +208,12 @@
             </label>
             <div class="flex gap-3 mt-4">
               {#if viewModel.isGenerating}
-                <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+                <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+                  ⏹ Cancel
+                </button>
               {:else}
                 <button
+                  type="button"
                   class="btn btn-primary"
                   onclick={() => viewModel.generate()}
                   disabled={!viewModel.prompt.trim()}
@@ -242,6 +246,7 @@
                 <div class="flex-1">
                   <p class="text-xs text-base-content/70 mb-2">{viewModel.inputImageName}</p>
                   <button
+                    type="button"
                     class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                     onclick={() => viewModel.clearInputImage()}
                   >
@@ -284,9 +289,12 @@
         <!-- Generate button -->
         <div class="flex gap-3 mb-6">
           {#if viewModel.isGenerating}
-            <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+            <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+              ⏹ Cancel
+            </button>
           {:else}
             <button
+              type="button"
               class="btn btn-primary"
               onclick={() => viewModel.generateExpressions()}
               disabled={!hasInputImage}
@@ -350,6 +358,7 @@
                 <div class="flex-1">
                   <p class="text-xs text-base-content/70 mb-2">{viewModel.inputImageName}</p>
                   <button
+                    type="button"
                     class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                     onclick={() => viewModel.clearInputImage()}
                   >
@@ -491,9 +500,12 @@
             </label>
             <div class="flex gap-3 mt-4">
               {#if viewModel.isGenerating}
-                <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+                <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+                  ⏹ Cancel
+                </button>
               {:else}
                 <button
+                  type="button"
                   class="btn btn-primary"
                   onclick={() => viewModel.editImage()}
                   disabled={!hasInputImage || !viewModel.editPrompt.trim()}

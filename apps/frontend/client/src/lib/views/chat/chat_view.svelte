@@ -61,7 +61,11 @@
               notes={viewModel.npc.notes}
             />
             {#if viewModel.npc.notes}
-              <button class="btn btn-sm btn-ghost mt-2" onclick={() => viewModel.dismissGreeting()}>
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost mt-2"
+                onclick={() => viewModel.dismissGreeting()}
+              >
                 Start Chat
               </button>
             {/if}
@@ -113,6 +117,7 @@
               />
             </div>
             <button
+              type="button"
               class="btn btn-primary btn-sm"
               onclick={() => viewModel.handleSend()}
               disabled={viewModel.isSending || !viewModel.inputText.trim()}

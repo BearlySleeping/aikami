@@ -20,11 +20,16 @@
     <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
 
     <div class="mt-6 space-y-3">
-      <button class="btn btn-primary btn-block" onclick={() => gameOverlayService.resumeGame()}>
+      <button
+        type="button"
+        class="btn btn-primary btn-block"
+        onclick={() => gameOverlayService.resumeGame()}
+      >
         Resume Game
       </button>
 
       <button
+        type="button"
         class="btn btn-outline btn-block"
         disabled={isSaving}
         onclick={() => gameOverlayService.saveGame()}
@@ -47,11 +52,16 @@
         </p>
       {/if}
 
-      <button class="btn btn-outline btn-block" onclick={() => gameOverlayService.goToSettings()}>
+      <button
+        type="button"
+        class="btn btn-outline btn-block"
+        onclick={() => gameOverlayService.goToSettings()}
+      >
         Settings
       </button>
 
       <button
+        type="button"
         class="btn btn-ghost btn-block text-error"
         onclick={() => gameOverlayService.quitToMainMenu()}
       >

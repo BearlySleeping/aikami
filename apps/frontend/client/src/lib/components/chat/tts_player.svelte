@@ -21,7 +21,7 @@
         {#if isDemo}
           <span class="badge badge-warning badge-xs">Demo</span>
         {/if}
-        <button class="btn btn-xs btn-error" onclick={onStop}>⏹️ Stop</button>
+        <button type="button" class="btn btn-xs btn-error" onclick={onStop}>⏹️ Stop</button>
       </div>
     </div>
   </div>

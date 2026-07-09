@@ -23,7 +23,7 @@
 </script>
 
 <div class="p-4 space-y-4">
-  <button class="btn btn-primary" onclick={() => inventoryService.toggle()}>
+  <button type="button" class="btn btn-primary" onclick={() => inventoryService.toggle()}>
     {inventoryService.isOpen ? 'Close Inventory' : 'Open Inventory'}
   </button>
 </div>

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useFilenamingConvention: Service Worker filename must match the web standard (browsers require 'service-worker.js')
 // apps/frontend/client/static/service-worker.js
 //
 // Service Worker — Audio Range Request Interceptor (C-150)
