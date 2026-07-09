@@ -375,7 +375,7 @@ export const executeTaskSocket = async (options: {
     payload,
     state,
     socketClient,
-    tier = 'flash',
+    tier = '',
     skipReview = false,
     resume = true,
   } = options;
