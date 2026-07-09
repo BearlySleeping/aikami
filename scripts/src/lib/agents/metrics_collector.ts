@@ -1,21 +1,18 @@
 // scripts/src/lib/agents/metrics_collector.ts
 /**
- * Swarm metrics collector (C-311.2.4.3).
+ * Swarm metrics collector.
  *
  * Non-LLM telemetry step — runs synchronously after every task completes.
- * Parses pane output buffers and JSON sidecars to calculate:
- *   - Duration per agent step
- *   - Step count
- *   - Inferred token usage (file-based heuristic)
- *   - Completion status per agent
+ * Reads pi session JSONL files for REAL token counts (input, output, reasoning)
+ * and falls back to the old chars÷1.43 heuristic when session data is unavailable.
  *
  * Writes to .pi/swarm/outputs/<taskId>_metrics.json
  *
  * No LLM API calls are made — this is pure computation.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { SwarmHandoffSchema } from '@aikami/schemas';
 import type { SwarmHandoff } from '@aikami/types';
 import { Value } from 'typebox/value';
@@ -37,7 +34,14 @@ export type AgentMetrics = {
     | 'feedback';
   durationMs: number;
   filesTouched: number;
+  /** Fallback estimate from chars÷1.43 heuristic. */
   estimatedTokensOutput: number;
+  /** Real input tokens from pi session files (0 = unavailable). */
+  tokensInput: number;
+  /** Real output tokens from pi session files (0 = unavailable). */
+  tokensOutput: number;
+  /** Real reasoning/thinking tokens from pi session files (0 = unavailable). */
+  tokensReasoning: number;
   summaryPreview: string;
 };
 
@@ -50,29 +54,121 @@ export type TaskMetrics = {
   documentationGenerated: boolean;
 };
 
-// ── Constants ──────────────────────────────────────────────
+// ── Session file parsing (real token counts) ───────────────
 
-/** Rough token estimation: ~0.7 tokens per character for code output. */
-const CHARS_PER_TOKEN = 1.43;
+const CWD = process.cwd();
 
-/** Heuristic: 1 file = ~300 tokens of output. */
-const TOKENS_PER_FILE = 300;
-
-// ── Helpers ────────────────────────────────────────────────
+/** Get the pi session directory for the current project cwd. */
+const getSessionDir = (): string => {
+  const home = process.env.HOME ?? resolve('/home', process.env.USER ?? '');
+  const encoded = `--${CWD.replace(/\//g, '-')}--`;
+  return join(home, '.pi', 'agent', 'sessions', encoded);
+};
 
 /**
- * Read a handoff JSON file and validate it.
+ * Parse all assistant messages from a pi session JSONL file.
+ * Sums input, output, and reasoning token counts.
  */
-const readHandoff = (taskId: string, role: string): SwarmHandoff | null => {
-  const handoffPath = join(
-    process.cwd(),
-    '.pi',
-    'swarm',
-    'outputs',
-    `${taskId}_${role}_handoff.json`,
-  );
+const parseSessionUsage = (
+  filePath: string,
+): { input: number; output: number; reasoning: number } | null => {
   try {
-    const raw = readFileSync(handoffPath, 'utf-8');
+    const lines = readFileSync(filePath, 'utf-8').split('\n').filter(Boolean);
+    let input = 0;
+    let output = 0;
+    let reasoning = 0;
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line) as { type?: string; message?: Record<string, unknown> };
+        if (entry.type !== 'message') {
+          continue;
+        }
+        const msg = entry.message;
+        if (msg?.role !== 'assistant') {
+          continue;
+        }
+        const usage = msg.usage as Record<string, number> | undefined;
+        if (usage) {
+          input += typeof usage.input === 'number' ? usage.input : 0;
+          output += typeof usage.output === 'number' ? usage.output : 0;
+          reasoning += typeof usage.reasoning === 'number' ? usage.reasoning : 0;
+        }
+      } catch {
+        // malformed line — skip
+      }
+    }
+
+    return input > 0 || output > 0 || reasoning > 0 ? { input, output, reasoning } : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Collect real token usage from swarm pi session files.
+ *
+ * Swarm agents pass `--session-id swarm-<taskId>-<role>`, producing files
+ * named `<timestamp>_swarm-<taskId>-<role>.jsonl`.
+ *
+ * On feedback iterations, multiple files may exist for the same role.
+ * We pick the one with the highest total tokens.
+ */
+const collectSwarmSessionUsage = (
+  taskId: string,
+): Record<string, { input: number; output: number; reasoning: number }> => {
+  const usageMap: Record<string, { input: number; output: number; reasoning: number }> = {};
+
+  try {
+    const dir = getSessionDir();
+    const files = readdirSync(dir);
+    const prefix = `_swarm-${taskId}-`;
+
+    for (const file of files) {
+      if (!file.endsWith('.jsonl') || !file.includes(prefix)) {
+        continue;
+      }
+      // Extract role: <timestamp>_swarm-<taskId>-<role>.jsonl
+      const role = file.slice(file.indexOf(prefix) + prefix.length).replace(/\.jsonl$/, '');
+      if (!role) {
+        continue;
+      }
+
+      const usage = parseSessionUsage(join(dir, file));
+      if (usage) {
+        const existing = usageMap[role];
+        if (
+          !existing ||
+          usage.input + usage.output + usage.reasoning >
+            existing.input + existing.output + existing.reasoning
+        ) {
+          usageMap[role] = usage;
+        }
+      }
+    }
+  } catch {
+    // best-effort
+  }
+
+  return usageMap;
+};
+
+// ── Legacy fallback heuristic ───────────────────────────────
+
+const CHARS_PER_TOKEN = 1.43;
+
+const estimateTokensFallback = (summary: string, filesTouched: number): number => {
+  const charTokens = Math.round(summary.length / CHARS_PER_TOKEN);
+  const fileTokens = filesTouched * 300; // rough: ~300 tokens per source file
+  return charTokens + fileTokens;
+};
+
+// ── Handoff helpers ─────────────────────────────────────────
+
+const readHandoff = (taskId: string, role: string): SwarmHandoff | null => {
+  const p = join(CWD, '.pi', 'swarm', 'outputs', `${taskId}_${role}_handoff.json`);
+  try {
+    const raw = readFileSync(p, 'utf-8');
     const parsed = JSON.parse(raw) as unknown;
     if (Value.Check(SwarmHandoffSchema, parsed)) {
       return parsed as SwarmHandoff;
@@ -83,36 +179,17 @@ const readHandoff = (taskId: string, role: string): SwarmHandoff | null => {
   }
 };
 
-/**
- * Read an agent's legacy markdown summary file.
- */
 const readLegacySummary = (taskId: string, role: string): string => {
-  const summaryPath = join(process.cwd(), '.pi', 'swarm', 'outputs', `${taskId}_${role}.md`);
+  const p = join(CWD, '.pi', 'swarm', 'outputs', `${taskId}_${role}.md`);
   try {
-    return readFileSync(summaryPath, 'utf-8').slice(0, 1024);
+    return readFileSync(p, 'utf-8').slice(0, 1024);
   } catch {
     return '';
   }
 };
 
-/**
- * Estimate tokens from scrollback content.
- * Rough heuristic: characters ÷ CHARS_PER_TOKEN + files × TOKENS_PER_FILE.
- */
-const estimateTokens = (content: string, filesTouched: number): number => {
-  const charTokens = Math.round(content.length / CHARS_PER_TOKEN);
-  const fileTokens = filesTouched * TOKENS_PER_FILE;
-  return charTokens + fileTokens;
-};
+// ── Collector ───────────────────────────────────────────────
 
-// ── Collector ──────────────────────────────────────────────
-
-/**
- * Collect metrics for a completed task.
- *
- * Reads handoff JSON sidecars (primary) with legacy markdown fallback.
- * Computes duration, file count, token estimates.
- */
 export const collectTaskMetrics = (options: {
   taskId: string;
   startTime: number;
@@ -121,20 +198,17 @@ export const collectTaskMetrics = (options: {
 }): TaskMetrics => {
   const { taskId, startTime, trivialPath = false, documentationGenerated = false } = options;
 
-  // Read per-agent durations sidecar (written by executeTaskPipeline)
+  // Per-agent durations (written by executeTaskPipeline)
   let agentDurations: Record<string, number> = {};
   try {
-    const durationsPath = join(
-      process.cwd(),
-      '.pi',
-      'swarm',
-      'outputs',
-      `${taskId}_durations.json`,
-    );
-    agentDurations = JSON.parse(readFileSync(durationsPath, 'utf-8')) as Record<string, number>;
+    const p = join(CWD, '.pi', 'swarm', 'outputs', `${taskId}_durations.json`);
+    agentDurations = JSON.parse(readFileSync(p, 'utf-8')) as Record<string, number>;
   } catch {
-    // sidecar doesn't exist — durations stay 0 (non-blocking)
+    // sidecar doesn't exist — durations stay 0
   }
+
+  // Real token counts from pi session files
+  const sessionUsage = collectSwarmSessionUsage(taskId);
 
   const agents: AgentMetrics[] = [];
 
@@ -142,27 +216,30 @@ export const collectTaskMetrics = (options: {
     const handoff = readHandoff(taskId, role);
     const legacySummary = readLegacySummary(taskId, role);
     const duration = agentDurations[role] ?? 0;
+    const usage = sessionUsage[role];
 
     if (handoff) {
-      const summaryPreview = handoff.summary.slice(0, 120);
-      const filesTouched = handoff.filesTouched.length;
-
       agents.push({
         role,
         status: handoff.status,
         durationMs: duration,
-        filesTouched,
-        estimatedTokensOutput: estimateTokens(handoff.summary, filesTouched),
-        summaryPreview: summaryPreview || '(no summary)',
+        filesTouched: handoff.filesTouched.length,
+        estimatedTokensOutput: estimateTokensFallback(handoff.summary, handoff.filesTouched.length),
+        tokensInput: usage?.input ?? 0,
+        tokensOutput: usage?.output ?? 0,
+        tokensReasoning: usage?.reasoning ?? 0,
+        summaryPreview: handoff.summary.slice(0, 120) || '(no summary)',
       });
     } else if (trivialPath && role === 'qa') {
-      // QA was skipped via trivial path — mark explicitly even if legacy .md exists
       agents.push({
         role,
         status: 'skipped',
         durationMs: 0,
         filesTouched: 0,
         estimatedTokensOutput: 0,
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensReasoning: 0,
         summaryPreview: '(skipped — trivial path)',
       });
     } else if (legacySummary) {
@@ -171,7 +248,10 @@ export const collectTaskMetrics = (options: {
         status: 'unknown',
         durationMs: duration,
         filesTouched: 0,
-        estimatedTokensOutput: estimateTokens(legacySummary, 0),
+        estimatedTokensOutput: estimateTokensFallback(legacySummary, 0),
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensReasoning: 0,
         summaryPreview: legacySummary.slice(0, 120),
       });
     } else {
@@ -181,41 +261,32 @@ export const collectTaskMetrics = (options: {
         durationMs: duration,
         filesTouched: 0,
         estimatedTokensOutput: 0,
+        tokensInput: 0,
+        tokensOutput: 0,
+        tokensReasoning: 0,
         summaryPreview: trivialPath && role === 'qa' ? '(skipped — trivial path)' : '(no output)',
       });
     }
   }
 
-  const totalDurationMs = Date.now() - startTime;
-
-  const metrics: TaskMetrics = {
+  return {
     taskId,
     completedAt: new Date().toISOString(),
-    totalDurationMs,
+    totalDurationMs: Date.now() - startTime,
     agents,
     trivialPath,
     documentationGenerated,
   };
-
-  return metrics;
 };
 
-/**
- * Write metrics to the outputs directory.
- */
 export const writeMetrics = (taskId: string, metrics: TaskMetrics): string => {
-  const outputsDir = join(process.cwd(), '.pi', 'swarm', 'outputs');
-  mkdirSync(outputsDir, { recursive: true });
-
-  const metricsPath = join(outputsDir, `${taskId}_metrics.json`);
-  writeFileSync(metricsPath, JSON.stringify(metrics, null, 2));
-  return metricsPath;
+  const dir = join(CWD, '.pi', 'swarm', 'outputs');
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, `${taskId}_metrics.json`);
+  writeFileSync(p, JSON.stringify(metrics, null, 2));
+  return p;
 };
 
-/**
- * Full metrics pipeline — collect + write.
- * Returns the metrics object for caller inspection.
- */
 export const collectAndWriteMetrics = (options: {
   taskId: string;
   startTime: number;

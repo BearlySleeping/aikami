@@ -110,7 +110,7 @@ class GmSystemSandboxViewModel
   }
 
   get debugPrompt(): string {
-    return gmPromptService.assemblePrompt(this._selectedMode);
+    return gmPromptService.assemblePrompt({ mode: this._selectedMode });
   }
 
   get isNarrativeDirectorRunning(): boolean {

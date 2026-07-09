@@ -46,20 +46,11 @@ export type SwarmState = {
 
 // ── Task payloads ───────────────────────────────────────────
 
-/** A single step in the swarm execution pipeline. */
-export type SwarmStep = {
-  stepIndex: number;
-  agent: AgentRole;
-  command: string;
-  timeoutMs?: number;
-};
-
 /** Task payload fed to the swarm director. */
 export type TaskPayload = {
   taskId: string;
   description?: string;
   tier?: string;
-  steps: SwarmStep[];
 };
 
 // ── Feedback tracking ───────────────────────────────────────
