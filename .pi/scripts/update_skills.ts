@@ -55,6 +55,12 @@ const SKILL_SOURCES: SkillSource[] = [
     targetSubdir: 'herdr',
     files: ['SKILL.md'],
   },
+  {
+    name: 'Firebase',
+    repoUrl: 'https://github.com/firebase/agent-skills.git',
+    sourceSubdir: 'skills',
+    targetSubdir: 'firebase',
+  },
 ];
 
 // ── helpers ──────────────────────────────────────────────────────────

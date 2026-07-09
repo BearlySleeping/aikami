@@ -207,7 +207,7 @@
 
 ---
 
-#### C-ME-009: Lorebook & World Info System
+#### C-ME-009: Lorebook & World Info System — [📋 Contract C-238](docs/contracts/C-238-lorebook-world-info.md)
 
 - **Marinara Reference**: `docs/CONVERSATION.md` (lorebooks in conversation), `docs/ROLEPLAY.md` (lorebooks in roleplay, World Info panel), `docs/GAME_MODE.md` (lorebooks for world-gen)
 - **What Marinara Does**: Lorebooks contain entries with keywords, activation rules, and injection settings. Two types: constant entries (always injected) and keyword-triggered entries (injected when keywords appear in recent messages). World Info panel shows active entries. Lorebook editor with folder organization, recursion settings, position control. AI lorebook maker generates entries from source material.
