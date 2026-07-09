@@ -371,14 +371,7 @@ export const executeTaskSocket = async (options: {
   skipReview?: boolean;
   resume?: boolean;
 }): Promise<SwarmState> => {
-  const {
-    payload,
-    state,
-    socketClient,
-    tier = '',
-    skipReview = false,
-    resume = true,
-  } = options;
+  const { payload, state, socketClient, tier = '', skipReview = false, resume = true } = options;
   const taskId = payload.taskId;
   const contractPath =
     ((payload as Record<string, unknown>).contractPath as string) ?? `docs/contracts/${taskId}.md`;
