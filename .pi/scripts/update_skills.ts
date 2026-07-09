@@ -160,6 +160,26 @@ async function main() {
     }
   }
 
+  // 4. Bootstrap MCP bridge registrations (C-321)
+  const mcpConfigPath = join(PI_DIR, 'mcp.json');
+  if (existsSync(mcpConfigPath)) {
+    const mcpRaw = await readFile(mcpConfigPath, 'utf-8');
+    const mcpConfig = JSON.parse(mcpRaw);
+    const servers = mcpConfig.mcpServers;
+    if (servers && typeof servers === 'object') {
+      const serverNames = Object.keys(servers);
+      console.log(
+        `\nRegistered ${serverNames.length} MCP server(s) for swarm agents: ${serverNames.join(', ')}`,
+      );
+      for (const [name, cfg] of Object.entries(servers) as [
+        string,
+        { command: string; args: string[] },
+      ][]) {
+        console.log(`  MCP Server "${name}": ${cfg.command} ${(cfg.args ?? []).join(' ')}`);
+      }
+    }
+  }
+
   const names = SKILL_SOURCES.map((s) => s.name).join(' + ');
   console.log(`\nDone! ${names} skills installed to .pi/generated-skills/`);
 }
