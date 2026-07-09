@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-09
-> Files: 249 across 11 categories
+> Files: 251 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -227,6 +227,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 237 prompt template macro system](contracts/C-237-prompt-template-macro-system.md)
 - [C 238 lorebook world info](contracts/C-238-lorebook-world-info.md)
 - [C 239 expression emotion system](contracts/C-239-expression-emotion-system.md)
+- [C 240 session management](contracts/C-240-session-management.md)
 - [Contract C-300: Swarm Director & Workspace Provisioning Lifecycle](contracts/C-300-swarm-director-and-workspace-provisioning-lifecycle.md)
 - [Contract C-301: Algorithmic Token Router & AST Footprint Extractor](contracts/C-301-algorithmic-token-router-and-ast-footprint-extractor.md)
 - [Contract C-302: Coherent Ephemeral SQLite-WAL Scratchpad Engine](contracts/C-302-coherent-ephemeral-sqlite-wal-scratchpad-engine.md)
@@ -240,6 +241,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-310: Automated Backlog Contract Generator](contracts/C-310-automated-backlog-contract-generator.md)
 - [C-311: Swarm Socket Orchestration & Structural Handoff Refactor](contracts/C-311-swarm-socket-orchestration.md)
 - [Contract: C-320 - Automated MDC Skill Scraper and Transpiler](contracts/C-320_mdc_skill_scraper.md)
+- [Contract: C-321 - MCP (Model Context Protocol) Stdio Runner Bridge](contracts/C-321_mcp_runner_bridge.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
 - [MIG 001 knowledge splitting](contracts/MIG-001-knowledge-splitting.md)
 - [Contract: MIG-002 — Backend DataConnect Restructure](contracts/MIG-002-backend-dataconnect.md)

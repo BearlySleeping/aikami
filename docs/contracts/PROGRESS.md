@@ -204,6 +204,7 @@
 | C-237 | Prompt Template Macro System | ❓ completed (2026-07-09) |
 | C-238 | Lorebook World Info | ⏳ not_started |
 | C-239 | Expression Emotion System | ⏳ not_started |
+| C-240 | Session Management | ⏳ not_started |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
 | C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |
 | C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ✅ completed |
@@ -216,7 +217,8 @@
 | C-309 | Swarm Control Pi Extension And Command Surface Wrapper | ✅ completed |
 | C-310 | Automated Backlog Contract Generator | ✅ completed |
 | C-311 | Swarm Socket Orchestration | ✅ completed |
-| C-320 | C 320_mdc_skill_scraper | ⏳ not_started |
+| C-320 | C 320_mdc_skill_scraper | ✅ completed |
+| C-321 | C 321_mcp_runner_bridge | ⏳ not_started |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |
