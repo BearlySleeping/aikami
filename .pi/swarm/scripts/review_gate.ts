@@ -4,15 +4,10 @@
  * Self-contained review gate — reads upstream handoffs, presents summary,
  * loops on stdin until the user provides a terminal response.
  *
- * The gate writes two handoff versions:
- *   1. `awaiting_approval` → immediately (pipeline knows review is displayed)
- *   2. Terminal status (approved/rejected/feedback) → after user input
- *
- * Response classification:
- *   "lgtm" / "approve" / "yes" / "y" → approved
- *   "reject" / "no" / "n"           → rejected
- *   empty                            → re-prompt
- *   anything else                    → feedback to coder
+ * Also polls the handoff file every 2s — if an external tool (like
+ * swarm_review_respond from another pi session) writes a decision, the
+ * gate auto-exits. This prevents the gate from consuming git_commit.ts
+ * as stdin when the pipeline advances.
  *
  * Usage: bun run .pi/swarm/scripts/review_gate.ts <taskId>
  */
@@ -40,6 +35,22 @@ const read = (role: string): Handoff | null => {
   }
 };
 
+const handoffFilePath = join('.pi/swarm/outputs', `${taskId}_review_handoff.json`);
+
+/** Check if an external tool wrote a terminal decision. Returns status if found. */
+const checkExternalDecision = (): string | null => {
+  try {
+    const raw = readFileSync(handoffFilePath, 'utf-8');
+    const h = JSON.parse(raw) as { status: string };
+    if (h.status !== 'awaiting_approval') {
+      return h.status;
+    }
+  } catch {
+    /* not written yet */
+  }
+  return null;
+};
+
 const a = read('architect');
 const c = read('coder');
 const q = read('qa');
@@ -49,7 +60,7 @@ const q = read('qa');
 const writeHandoff = (status: string, summary: string, nextCommands: string[] = []) => {
   mkdirSync('.pi/swarm/outputs', { recursive: true });
   writeFileSync(
-    join('.pi/swarm/outputs', `${taskId}_review_handoff.json`),
+    handoffFilePath,
     JSON.stringify({
       taskId,
       role: 'review',
@@ -76,8 +87,8 @@ if (a) {
   console.log(`\n📋 Architect: ${a.summary.slice(0, 120)}`);
 }
 if (c) {
-  const files = (c.filesTouched || []).join(', ') || 'no files';
-  console.log(`\n💻 Coder [${c.status}]: ${files}\n   ${c.summary.slice(0, 120)}`);
+  const files = (c.filesTouched || []).slice(0, 5).join(', ') || 'no files';
+  console.log(`\n💻 Coder [${c.status}]: ${files}...`);
 }
 if (q) {
   console.log(`\n🧪 QA [${q.status}]: ${q.summary.slice(0, 120)}`);
@@ -94,13 +105,12 @@ console.log('──────────────────────�
 // Write awaiting handoff — pipeline now knows review is displayed
 writeHandoff('awaiting_approval', 'Review displayed. Waiting for user input.');
 
-// ── Stdin REPL — loop until terminal status ────────────────
+// ── Classification ─────────────────────────────────────────
 
 const classify = (input: string): { status: string; summary: string; nextCommands: string[] } => {
   const normalized = input.trim().toLowerCase();
 
   if (!normalized) {
-    // Empty input — re-prompt (NEVER auto-approve)
     return { status: '', summary: '', nextCommands: [] };
   }
   if (
@@ -118,32 +128,59 @@ const classify = (input: string): { status: string; summary: string; nextCommand
   if (normalized === 'reject' || normalized === 'no' || normalized === 'n') {
     return { status: 'rejected', summary: 'User rejected. Pipeline stopped.', nextCommands: [] };
   }
-  // Everything else is feedback to coder
   return {
     status: 'feedback',
     summary: `${input.trim()}`,
-    nextCommands: ['route:coder'],
+    nextCommands: [],
   };
 };
 
-// Bun supports async iteration over console (stdin)
-for await (const line of console) {
-  const outcome = classify(line);
+// ── Start polling for external decisions (every 2s) ────────
 
-  if (!outcome.status) {
-    // Empty input — re-prompt
-    console.log('⚠️  Empty input — type "lgtm", "reject", or feedback text:');
-    continue;
+let polling = true;
+const pollInterval = setInterval(() => {
+  if (!polling) {
+    return;
   }
-
-  writeHandoff(outcome.status, outcome.summary, outcome.nextCommands);
-
-  if (outcome.status === 'approved') {
-    console.log('✅ APPROVED — proceeding to git commit & push');
-  } else if (outcome.status === 'rejected') {
-    console.log('❌ REJECTED — pipeline stopped');
-  } else {
-    console.log(`🔄 ROUTING TO CODER with feedback (${outcome.summary.slice(0, 60)}...)`);
+  const ext = checkExternalDecision();
+  if (ext) {
+    polling = false;
+    console.log(`\n📡 External decision detected: ${ext} — exiting.`);
+    // Force exit — the director has already moved on
+    process.exit(0);
   }
-  break;
+}, 2_000);
+
+// ── Stdin REPL — loop until terminal status ────────────────
+
+try {
+  for await (const line of console) {
+    // Stale input guard: if external decision already made, discard
+    if (!polling) {
+      break;
+    }
+
+    const outcome = classify(line);
+
+    if (!outcome.status) {
+      console.log('⚠️  Empty input — type "lgtm", "reject", or feedback text:');
+      continue;
+    }
+
+    polling = false;
+    clearInterval(pollInterval);
+
+    writeHandoff(outcome.status, outcome.summary, outcome.nextCommands);
+
+    if (outcome.status === 'approved') {
+      console.log('✅ APPROVED — proceeding.');
+    } else if (outcome.status === 'rejected') {
+      console.log('❌ REJECTED — pipeline stopped.');
+    } else {
+      console.log(`🔄 FEEDBACK to coder: ${outcome.summary.slice(0, 60)}...`);
+    }
+    break;
+  }
+} finally {
+  clearInterval(pollInterval);
 }

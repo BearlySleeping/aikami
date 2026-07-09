@@ -56,8 +56,8 @@ const GIT_SCRIPT_TIMEOUT_MS = 300_000; // 5 min
  * Writes to .pi/swarm/outputs/_sysprompt_<role>.md and returns the absolute path.
  */
 const buildSystemPrompt = (cwd: string, role: string): string => {
-  const preamblePath = join(cwd, '.pi/prompts/_swarm_preamble.md');
-  const rolePromptPath = join(cwd, '.pi/prompts', `${role}.md`);
+  const preamblePath = join(cwd, '.pi/swarm/prompts/_swarm_preamble.md');
+  const rolePromptPath = join(cwd, '.pi/swarm/prompts', `${role}.md`);
 
   let preamble: string;
   try {
@@ -295,13 +295,16 @@ const getModel = (ctx: StateContext, role: AgentRole): string => {
     return getModelForTier('pro');
   }
 
-  // --tier flash → force flash everywhere (fixed: previously silently meant "defaults")
+  // --tier flash → force flash everywhere
   if (ctx.tier === 'flash') {
     return getModelForTier('flash');
   }
 
-  // Per-role defaults with complexity adjustments
-  const defaultTier = ROLE_MODEL_TIER[role] ?? 'flash';
+  // No --tier specified → per-role matrix with complexity adjustments
+  const defaultTier = ROLE_MODEL_TIER[role];
+  if (!defaultTier) {
+    return getModelForTier('flash');
+  }
 
   // Git + review: deterministic, no LLM (should never reach here but safe-guard)
   if (role === 'git' || role === 'review') {
@@ -416,17 +419,22 @@ const runStep = async (
   // ── Live-agent guard: don't type pi commands into an existing pi session ──
   const paneInfo = await ctx.socketClient.paneGet(paneId);
   if (paneInfo?.agent) {
-    // A previous coding agent session (pi/claude/etc.) is still alive in this
-    // pane. Send Ctrl+C to interrupt, then wait for the shell to stabilize.
-    // Without this guard, `pane.send_text 'pi --model ...'` types into the
-    // interactive pi session — an infuriating nested-pi bug.
     console.debug('[swarm:step:kill-agent]', {
       role,
       agent: paneInfo.agent,
       status: paneInfo.agent_status,
     });
     await ctx.socketClient.paneSendKeys(paneId, 'C-c');
-    await new Promise((r) => setTimeout(r, 500));
+    // Poll until the agent is gone (max 5s) — prevents typing the new command
+    // into a dying pi session that hasn't released the terminal yet.
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const check = await ctx.socketClient.paneGet(paneId);
+      if (!check?.agent) {
+        console.debug('[swarm:step:agent-gone]', { role, attempt: i + 1 });
+        break;
+      }
+    }
   }
 
   // Always prefix with cd to project root — prevents pane cwd pollution
@@ -586,6 +594,23 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
     if (allPassed && tested.size > 0) {
       console.log('[swarm:state:qa] all checks passed (deterministic)');
       markDone(ctx, 'qa', `All QA checks passed (${tested.size} commands).`);
+      // Write QA handoff so downstream steps (review_gate, metrics) see it
+      mkdirSync(join(ctx.cwd, '.pi/swarm/outputs'), { recursive: true });
+      writeFileSync(
+        handoffPath(ctx.taskId, 'qa', ctx.cwd),
+        JSON.stringify({
+          taskId: ctx.taskId,
+          role: 'qa',
+          status: 'success',
+          complexity: ctx.architectComplexity ?? 'standard',
+          domain: ctx.architectDomain ?? 'fullstack',
+          requiresDocs: false,
+          filesTouched: [],
+          nextCommands: [],
+          summary: `All QA checks passed (${tested.size} commands) — deterministic.`,
+        }),
+      );
+      ctx.agentDurations['qa'] = Date.now() - (ctx.agentStartTimes['qa'] ?? Date.now());
       return 'review';
     }
 
@@ -718,6 +743,14 @@ const runReview = async (ctx: StateContext): Promise<PipelineState> => {
   if (!handoff) {
     markEscalated(ctx, 'review', 'user did not respond within timeout');
     return 'done';
+  }
+
+  // ── Kill the gate so it doesn't consume git_commit.ts as stdin ──
+  try {
+    await ctx.socketClient.paneSendKeys(gitPaneId, 'C-c');
+    await new Promise((r) => setTimeout(r, 500));
+  } catch {
+    // best-effort
   }
 
   return decideReviewOutcome(ctx, handoff);

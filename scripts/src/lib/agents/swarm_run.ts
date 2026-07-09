@@ -33,7 +33,7 @@ import { join, resolve } from 'node:path';
 
 const args = process.argv.slice(2);
 const contractId = args.find((a) => /^C-\d+$/i.test(a));
-const tier = args.includes('--tier') ? (args[args.indexOf('--tier') + 1] ?? 'flash') : 'flash';
+const tier = args.includes('--tier') ? (args[args.indexOf('--tier') + 1] ?? '') : '';
 const skipReview = args.includes('--no-review');
 const fresh = args.includes('--fresh') || args.includes('--force') || args.includes('--clean');
 const doJoin = args.includes('--join') || args.includes('-j');
@@ -261,7 +261,11 @@ const main = async (): Promise<void> => {
       execSync('herdr session attach default', { stdio: 'inherit' });
     } else {
       console.log('  Open herdr to watch: herdr session attach default\n');
-      execSync(cmd, {
+      // Use tee to write output to both terminal and the pipeline log (so the
+      // pipeline tab's tail -f shows progress).
+      const logPath = join(outputsDir, `${contractId}_pipeline.log`);
+      const teeCmd = `${cmd} 2>&1 | tee '${logPath}'`;
+      execSync(teeCmd, {
         encoding: 'utf-8',
         stdio: 'inherit',
         timeout: 3_600_000,

@@ -39,7 +39,7 @@ const main = async (): Promise<void> => {
 
   const extra = payload as Record<string, unknown>;
   const taskId = payload.taskId;
-  const tier = (extra.tier as string) ?? 'flash';
+  const tier = (extra.tier as string) ?? '';
   const skipReview = (extra.skipReview as boolean) ?? false;
   const resume = (extra.resume as boolean) ?? true;
 
