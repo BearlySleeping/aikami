@@ -27,6 +27,7 @@
 {#if shouldShow}
   <div class="flex items-center gap-1">
     <button
+      type="button"
       class="btn btn-ghost btn-xs px-1"
       disabled={!canSwipeLeft}
       onclick={(e) => {
@@ -39,6 +40,7 @@
     </button>
     <span class="text-xs font-mono text-base-content/50">{label}</span>
     <button
+      type="button"
       class="btn btn-ghost btn-xs px-1"
       disabled={!canSwipeRight}
       onclick={(e) => {

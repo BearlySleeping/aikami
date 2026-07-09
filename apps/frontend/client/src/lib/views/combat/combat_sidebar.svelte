@@ -66,7 +66,11 @@
           </ul>
         </div>
       {/if}
-      <button class="btn btn-primary btn-sm" onclick={() => viewModel.dismissResult()}>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        onclick={() => viewModel.dismissResult()}
+      >
         Continue
       </button>
     </div>
@@ -122,6 +126,7 @@
     <div class="px-3">
       <div class="tabs tabs-bordered">
         <button
+          type="button"
           class="tab tab-sm"
           class:tab-active={activeTab === 'log'}
           onclick={() => (activeTab = 'log')}
@@ -129,6 +134,7 @@
           Log
         </button>
         <button
+          type="button"
           class="tab tab-sm"
           class:tab-active={activeTab === 'gallery'}
           onclick={() => (activeTab = 'gallery')}
@@ -186,6 +192,7 @@
       <div class="border-t border-base-300 px-3 py-2 bg-base-100 flex-shrink-0">
         <div class="text-center">
           <button
+            type="button"
             class="btn btn-ghost btn-sm"
             onclick={() => viewModel.generateSceneImage()}
             disabled={imageGenerationService.isGenerating}
@@ -230,6 +237,7 @@
       <!-- Quick action buttons -->
       <div class="grid grid-cols-3 gap-2">
         <button
+          type="button"
           class="btn btn-success btn-sm"
           onclick={() => viewModel.attack()}
           disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -238,6 +246,7 @@
           {viewModel.isAttacking ? '⚔️ ...' : '⚔️ Attack'}
         </button>
         <button
+          type="button"
           class="btn btn-outline btn-sm"
           onclick={() => viewModel.defend()}
           disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -246,6 +255,7 @@
           🛡️ Defend
         </button>
         <button
+          type="button"
           class="btn btn-ghost btn-sm text-error"
           onclick={() => viewModel.flee()}
           disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}

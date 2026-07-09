@@ -465,6 +465,7 @@ class ConnectionManagerViewModel
         body = JSON.stringify({
           model,
           messages: [{ role: 'user', content: 'hi' }],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           max_tokens: 5,
         });
       } else {

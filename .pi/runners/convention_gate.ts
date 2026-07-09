@@ -180,14 +180,18 @@ const _matchesGlob = (filePath: string, glob: string): boolean => {
   const rel = relative(PROJECT_ROOT, filePath);
 
   // Convert glob to regex using placeholder tokens to avoid corruption
+  // Sentinel tokens for glob-to-regex conversion (must not appear in paths)
+  const SentinelDir = '\u{E000}';
+  const SentinelGlob = '\u{E001}';
+
   let regexStr = glob
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
     .replace(/\?/g, '.')
-    .replace(/\*\*\/\*/g, '\x00DIR\x00')
-    .replace(/\*\*/g, '\x00GLOB\x00')
+    .replace(/\*\*\/\*/g, SentinelDir)
+    .replace(/\*\*/g, SentinelGlob)
     .replace(/\*/g, '[^/]*')
-    .replace(/\x00DIR\x00/g, '(?:.+/)?')
-    .replace(/\x00GLOB\x00/g, '.*');
+    .replace(new RegExp(SentinelDir, 'g'), '(?:.+/)?')
+    .replace(new RegExp(SentinelGlob, 'g'), '.*');
 
   regexStr = `^${regexStr}$`;
 

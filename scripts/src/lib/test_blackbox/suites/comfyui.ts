@@ -5,6 +5,7 @@
 //
 // Requires --with-docker flag. Uses the existing DockerManager.
 
+// biome-ignore-all lint/style/useNamingConvention: Environment variable names must match ComfyUI convention (CONSTANT_CASE)
 import type { DockerServiceConfig } from '../docker_manager.ts';
 import { DockerManager } from '../docker_manager.ts';
 import type { TestSuite } from '../types.ts';

@@ -29,6 +29,7 @@
 //   bun herdr:stop all                # kill entire workspace
 //   bun herdr:list                    # show workspaces + tabs + ports
 
+// biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases

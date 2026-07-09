@@ -14,7 +14,9 @@
   <div class="flex min-h-screen flex-col px-4 py-8">
     <!-- Header with back button -->
     <div class="flex w-full max-w-2xl items-center gap-4 self-center">
-      <button class="btn btn-ghost btn-sm" onclick={() => viewModel.backToMenu()}>← Back</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => viewModel.backToMenu()}>
+        ← Back
+      </button>
       <h1 class="text-2xl font-bold text-primary">Options</h1>
     </div>
 
@@ -23,6 +25,7 @@
       <div class="tabs tabs-bordered">
         {#each viewModel.tabs as tab}
           <button
+            type="button"
             class="tab"
             class:tab-active={viewModel.activeTab === tab.id}
             onclick={() => viewModel.setActiveTab(tab.id)}

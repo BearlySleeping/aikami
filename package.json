@@ -54,7 +54,10 @@
     "sandbox:scaffold": "bun run scripts/src/lib/agents/sandbox_scaffolder.ts",
     "scope:explore": "bun run scripts/src/lib/agents/scope_explorer.ts",
     "skill:optimize": "bun run scripts/src/lib/agents/skill_optimizer.ts",
-    "contract:generate": "bun run scripts/src/lib/agents/contract_generator.ts"
+    "contract:generate": "bun run scripts/src/lib/agents/contract_generator.ts",
+    "validate:wgsl": "bun run scripts/src/lib/ops/validate_wgsl.ts",
+    "validate:gql": "bun run scripts/src/lib/ops/validate_gql_fields.ts",
+    "validate:shaders": "bun run validate:wgsl && bun run validate:gql"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",

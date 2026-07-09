@@ -2,6 +2,7 @@
 // Client browser tests via Playwright against the local dev server.
 // Runs from the unified apps/e2e package.
 
+// biome-ignore-all lint/style/useNamingConvention: CI environment variable name must match standard CI convention
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { TestSuite } from '../types.ts';

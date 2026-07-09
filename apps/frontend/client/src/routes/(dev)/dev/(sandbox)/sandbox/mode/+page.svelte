@@ -100,18 +100,21 @@
           <div class="flex items-center gap-2">
             <span class="text-xs font-semibold text-base-content/50 mr-1">Mode:</span>
             <button
+              type="button"
               class="btn btn-xs {exploreActive ? 'btn-success' : 'btn-outline'}"
               onclick={() => viewModel.setExploreMode()}
             >
               EXPLORE
             </button>
             <button
+              type="button"
               class="btn btn-xs {dialogueActive ? 'btn-info' : 'btn-outline'}"
               onclick={() => viewModel.setDialogueMode()}
             >
               DIALOGUE
             </button>
             <button
+              type="button"
               class="btn btn-xs {menuActive ? 'btn-ghost' : 'btn-outline'}"
               onclick={() => viewModel.setMenuMode()}
             >

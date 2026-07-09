@@ -89,6 +89,7 @@
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
+          <title>icon</title>
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -127,6 +128,7 @@
         {:else}
           {#each filteredModels as model}
             <button
+              type="button"
               class="w-full text-left px-3 py-2 hover:bg-white/[0.06] transition-colors flex items-center justify-between {model.id === selectedModel
                 ? 'bg-[#00e3fd]/10 border-l-2 border-[#00e3fd]'
                 : 'border-l-2 border-transparent'}"
@@ -151,6 +153,7 @@
 
     <!-- Fetch button -->
     <button
+      type="button"
       class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs gap-1.5 shrink-0"
       onclick={onfetch}
       disabled={isFetching || !hasApiKey || !isKeyVerified}

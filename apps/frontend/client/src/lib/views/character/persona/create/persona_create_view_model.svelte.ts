@@ -615,35 +615,46 @@ export class PersonaCreateViewModel
 
     const workflow = {
       '3': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'KSampler',
         inputs: {
           seed: Math.floor(Math.random() * 2 ** 32),
           steps: 25,
           cfg: 7.0,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           sampler_name: 'euler',
           scheduler: 'normal',
           denoise: 0.5,
           model: ['4', 0],
           positive: ['6', 0],
           negative: ['7', 0],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           latent_image: ['11', 0],
         },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
       '6': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'CLIPTextEncode',
         inputs: { text: `${instruction}, same person, same face, high quality`, clip: ['4', 1] },
       },
       '7': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'CLIPTextEncode',
         inputs: { text: 'deformed, different person, blurry, low quality', clip: ['4', 1] },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
       '9': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'SaveImage',
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         inputs: { filename_prefix: 'aikami-edit', images: ['8', 0] },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '10': { class_type: 'LoadImage', inputs: { image: imageName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
     };
 
@@ -651,6 +662,7 @@ export class PersonaCreateViewModel
     const queueResponse = await fetch('/api/image/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       body: JSON.stringify({ client_id: `aikami-edit-${Date.now()}`, prompt: workflow }),
     });
 
@@ -658,6 +670,7 @@ export class PersonaCreateViewModel
       throw new Error('Failed to queue image edit workflow');
     }
 
+    // biome-ignore lint/style/useNamingConvention: API contract field name
     const { prompt_id: promptId } = (await queueResponse.json()) as { prompt_id: string };
 
     // Poll for result

@@ -32,6 +32,7 @@
           {#each viewModel.actions as action}
             {@const isListening = viewModel.listeningActionId === action.id}
             <button
+              type="button"
               class="w-full flex items-center justify-between py-3 px-4 rounded-lg border transition-colors {isListening
                 ? 'border-warning bg-warning/10 text-warning'
                 : 'border-base-300 bg-base-200 hover:border-primary/40 hover:bg-base-100'}"
@@ -56,6 +57,7 @@
         <!-- Reset -->
         <div class="mt-4 pt-4 border-t border-base-300">
           <button
+            type="button"
             class="btn btn-ghost btn-sm text-base-content/50"
             onclick={() => viewModel.resetDefaults()}
           >

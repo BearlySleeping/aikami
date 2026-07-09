@@ -27,14 +27,26 @@
         </p>
       </div>
       <div class="flex gap-2">
-        <button class="btn btn-sm btn-outline" onclick={() => viewModel.toggleDebugPanel()}>
+        <button
+          type="button"
+          class="btn btn-sm btn-outline"
+          onclick={() => viewModel.toggleDebugPanel()}
+        >
           {viewModel.debugPanelVisible ? 'Hide' : 'Show'}
           Prompt
         </button>
-        <button class="btn btn-sm btn-warning" onclick={() => viewModel.simulateFailure()}>
+        <button
+          type="button"
+          class="btn btn-sm btn-warning"
+          onclick={() => viewModel.simulateFailure()}
+        >
           Simulate Failure
         </button>
-        <button class="btn btn-sm btn-ghost" onclick={() => viewModel.resetFailureSimulation()}>
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost"
+          onclick={() => viewModel.resetFailureSimulation()}
+        >
           Reset Sim
         </button>
       </div>

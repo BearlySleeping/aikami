@@ -1,4 +1,5 @@
 // apps/backend/image/scripts/generate_avatar.ts
+// biome-ignore-all lint/style/useNamingConvention: Property names must match ComfyUI API field names (snake_case and PascalCase)
 // Submit a txt2img prompt to the ComfyUI API and retrieve the output.
 //
 // Usage:

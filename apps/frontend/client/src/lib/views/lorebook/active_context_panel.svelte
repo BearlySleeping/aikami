@@ -44,6 +44,7 @@
   <div class="fixed inset-0 z-50 flex justify-end" tabindex="-1">
     <!-- Backdrop -->
     <button
+      type="button"
       class="fixed inset-0 bg-black/50 w-full border-none cursor-pointer"
       onclick={onclose}
       aria-label="Close panel"
@@ -63,7 +64,7 @@
             {_formatBytes(tokenBudget)}
           </span>
         </div>
-        <button class="btn btn-ghost btn-sm btn-square" onclick={onclose}>✕</button>
+        <button type="button" class="btn btn-ghost btn-sm btn-square" onclick={onclose}>✕</button>
       </div>
 
       <!-- Match list -->

@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/services/chat/message_branch_store.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Object keys are character names (proper nouns) that must use PascalCase
 //
 // Unit tests for MessageBranchStore — alternative tracking for message
 // branching and swiping.

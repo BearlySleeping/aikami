@@ -34,6 +34,7 @@
         }}
       >
       <button
+        type="button"
         class="btn btn-primary btn-sm"
         disabled={!viewModel.lorebookName.trim()}
         onclick={() => viewModel.createLorebook()}
@@ -45,6 +46,7 @@
     <!-- Lorebook list -->
     {#each viewModel.lorebooks as lb}
       <button
+        type="button"
         class="btn btn-sm w-full justify-start text-left {lb.id === viewModel.selectedLorebookId ? 'btn-active' : 'btn-ghost'}"
         onclick={() => viewModel.selectLorebook({ id: lb.id })}
       >
@@ -74,6 +76,7 @@
           onblur={() => viewModel.updateLorebookName()}
         >
         <button
+          type="button"
           class="btn btn-error btn-sm btn-outline"
           onclick={() => viewModel.deleteSelectedLorebook()}
         >
@@ -144,11 +147,19 @@
 
         <!-- Form actions -->
         <div class="flex gap-2">
-          <button class="btn btn-primary btn-sm" onclick={() => viewModel.saveEntry()}>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            onclick={() => viewModel.saveEntry()}
+          >
             {viewModel.editingEntryId ? 'Update' : 'Add Entry'}
           </button>
           {#if viewModel.editingEntryId}
-            <button class="btn btn-ghost btn-sm" onclick={() => viewModel.cancelEditingEntry()}>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              onclick={() => viewModel.cancelEditingEntry()}
+            >
               Cancel
             </button>
           {/if}
@@ -180,12 +191,14 @@
             <!-- Entry actions -->
             <div class="flex gap-1 justify-end">
               <button
+                type="button"
                 class="btn btn-ghost btn-xs"
                 onclick={() => viewModel.startEditingEntry({ entryId: entry.id })}
               >
                 Edit
               </button>
               <button
+                type="button"
                 class="btn btn-ghost btn-xs text-error"
                 onclick={() => viewModel.deleteEntry({ entryId: entry.id })}
               >

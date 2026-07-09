@@ -418,6 +418,7 @@
           <div class="p-2 space-y-1">
             {#each devActions.filter((a) => a.group === group) as action}
               <button
+                type="button"
                 class="btn btn-xs btn-ghost w-full justify-start text-left"
                 class:btn-disabled={cycleRunning && action.label.startsWith('⚡')}
                 onclick={action.onClick}
@@ -437,6 +438,7 @@
             >Event Log</span
           >
           <button
+            type="button"
             class="btn btn-ghost btn-xs text-base-content/30"
             onclick={() => { transitionLog = []; }}
           >

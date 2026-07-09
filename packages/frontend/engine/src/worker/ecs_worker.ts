@@ -397,8 +397,8 @@ const handleBridgeCommand = (command: GameCommand): void => {
  *
  * Maps equipment item IDs to LPC layer variant indices:
  * - Armor: updates layer2 (torso)
- *   - leather_armor → layer 2
- *   - iron_armor   → layer 3
+ *   - leatherArmor → layer 2
+ *   - ironArmor   → layer 3
  *   - no armor     → layer 1 (default)
  *
  * After updating, emits APPEARANCE_CHANGED through the bridge so the
@@ -418,10 +418,10 @@ const _updatePlayerAppearanceFromEquipment = (
   if (equipment.armor) {
     const armorToLayer = (armorId: string): number => {
       switch (armorId) {
-        case 'leather_armor':
-        case 'wooden_shield':
+        case 'leatherArmor':
+        case 'woodenShield':
           return 2;
-        case 'iron_armor':
+        case 'ironArmor':
           return 3;
         default:
           return 2;

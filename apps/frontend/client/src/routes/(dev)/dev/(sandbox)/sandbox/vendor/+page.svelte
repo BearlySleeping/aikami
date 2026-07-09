@@ -20,7 +20,7 @@
     vendorId: 'sandbox-vendor',
     vendorName: "Grimbold's Forge",
     vendorInventory:
-      'rusty_sword,iron_sword,steel_sword,wooden_shield,leather_armor,iron_armor,health_potion,mana_potion',
+      'rustySword,ironSword,steelSword,woodenShield,leatherArmor,ironArmor,healthPotion,manaPotion',
   });
 </script>
 

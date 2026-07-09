@@ -10,6 +10,7 @@
 // 3. Set Vite env vars so @aikami/frontend/configs/environment.ts can
 //    validate without crashing in Bun.
 
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names from @aikami/frontend-services for module mocking
 import { mock } from 'bun:test';
 
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────

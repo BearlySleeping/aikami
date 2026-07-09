@@ -1,6 +1,6 @@
 <script lang="ts">
   // apps/frontend/client/src/lib/views/start/components/missing_providers_dialog.svelte
-  import { Modal } from '@aikami/frontend-components';
+  import { Modal } from '@aikami/frontend/components';
 
   let {
     open = $bindable(),
@@ -23,6 +23,7 @@
         viewBox="0 0 24 24"
         stroke="currentColor"
       >
+        <title>icon</title>
         <path
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -42,7 +43,7 @@
   {/snippet}
 
   {#snippet actions()}
-    <button class="btn btn-ghost" onclick={onClose}>Cancel</button>
-    <button class="btn btn-primary" onclick={onGoToSettings}>Go to Settings</button>
+    <button type="button" class="btn btn-ghost" onclick={onClose}>Cancel</button>
+    <button type="button" class="btn btn-primary" onclick={onGoToSettings}>Go to Settings</button>
   {/snippet}
 </Modal>
