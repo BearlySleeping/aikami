@@ -12,6 +12,8 @@ export {
   INSTRUCT_FORMATTERS,
 } from './lib/instruct.js';
 export { extractMacros, hasUnclosedMacro, stripMacros, tokenizeLine } from './lib/lexer.js';
+export type { MacroContext, VariableScope, WeightedOption } from './lib/macro_resolver.js';
+export { resolveMacros } from './lib/macro_resolver.js';
 export type { StreamBuffer, StreamChunkResult } from './lib/parser.js';
 export {
   buildSystemMessage,

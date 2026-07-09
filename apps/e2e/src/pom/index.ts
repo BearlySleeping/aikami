@@ -5,3 +5,4 @@ export { ClientChatPage } from './client_chat_page';
 export { ClientNavigation } from './client_navigation';
 export { CombatPage } from './combat_page';
 export { InventoryPage } from './inventory_page';
+export { MacroSystemPage } from './macro_system_page';
