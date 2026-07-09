@@ -6,7 +6,7 @@
 | **Target** | `packages/shared/parser/src/lib/macro_resolver.ts` + `apps/frontend/client/src/lib/views/presets/` — Macro resolution engine, template preset system, macro autocomplete, prompt preview |
 | **Priority** | P1 — Macros make prompts dynamic and reusable; reduces prompt engineering overhead across all AI interactions |
 | **Dependencies** | `@aikami/parser` package (EXISTS — `extractMacros`, `parseLine`, `parseStreamChunk`, `MacroNode`), `configService` (character/connection data), `characterSheetService` (C-232 — COMPLETED), `gameStateService` (time/weather/location), `diceService` (dice rolls) |
-| **Status** | not_started |
+| **Status** | completed (2026-07-09) |
 | **Contract version** | 1.0.0 |
 
 ## Overview
