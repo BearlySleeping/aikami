@@ -1,3 +1,4 @@
+<!-- completed: 2026-07-09 -->
 # Contract: C-320 - Automated MDC Skill Scraper and Transpiler
 
 ## 1. Metadata
@@ -160,3 +161,44 @@ Modify `.pi/scripts/update_skills.ts` to ensure it automatically registers the f
 ## 6. Execution Command
 
 `/contract docs/contracts/C-320_mdc_skill_scraper.md`
+
+---
+
+## Execution Report (2026-07-09)
+
+### Summary
+Created the automated MDC skill scraper pipeline and integrated it with the existing skill update system. The pipeline fetches community rule registries, strips preexisting frontmatter, and writes output to two targets: `.cursor/rules/[domain].mdc` (IDE structural prompts) and `.pi/skills/aikami-conventions/[domain].md` (agent swarm skills).
+
+### AC Status
+
+| AC | Description | Status |
+|----|-------------|--------|
+| 5.1 | Compilation Verification — all 3 .mdc + 3 .md files created | ✅ |
+| 5.2 | Lint Verification — pi:fix passes with 0 errors | ✅ |
+| 4.3 | update_skills.ts registers aikami-conventions docs | ✅ |
+
+### Files Created / Modified
+
+| File | Action |
+|------|--------|
+| `.pi/scripts/import_community_rules.ts` | Created — scraper pipeline script |
+| `.pi/scripts/update_skills.ts` | Modified — added aikami-conventions registration step |
+| `.cursor/rules/svelte-five.mdc` | Created — Svelte 5 MDC rule |
+| `.cursor/rules/pixijs-v8.mdc` | Created — PixiJS v8 MDC rule |
+| `.cursor/rules/sql-connect.mdc` | Created — Firebase SQL Connect MDC rule |
+| `.pi/skills/aikami-conventions/svelte-five.md` | Created — Svelte 5 swarm skill |
+| `.pi/skills/aikami-conventions/pixijs-v8.md` | Created — PixiJS v8 swarm skill |
+| `.pi/skills/aikami-conventions/sql-connect.md` | Created — SQL Connect swarm skill |
+
+### Deviations
+- **URL corrections**: All 3 raw URLs in the contract spec were 404. Updated to correct paths:
+  - `svelte-five`: gist raw URL for `svelte-5.mdc` (not `svelte5-runes.md`)
+  - `pixijs-v8`: README.md from pixijs-skills repo (no `v8-rendering.md` exists)
+  - `sql-connect`: `skills/firebase-data-connect-basics/SKILL.md` (not `sql-connect.md`)
+- **Interface → type**: Changed `interface IngestionSource` to `type IngestionSource` per aikami conventions (Biome enforce)
+- **Bun.spawn fix**: Changed `Bun.spawn(['bun', 'run', ...])` to `Bun.spawn(['bun', ...])` — `bun run` is for package.json scripts
+
+### Test Results
+- `pi:fix`: ✅ passed (0 errors after fix)
+- `pi:typecheck`: ✅ passed
+- `client:test`: 8 pre-existing failures (C-154 VendorViewModel + C-152 PersonaCreateViewModel) — unrelated to C-320
