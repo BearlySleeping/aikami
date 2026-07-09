@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/services/media/expression_asset_resolver.test.ts
+// apps/frontend/client/src/lib/services/expression/expression_asset_resolver.test.ts
 import { describe, expect, test } from 'bun:test';
 import {
   type ExpressionAssetEntry,
@@ -162,5 +162,91 @@ describe('ExpressionAssetResolver — predictable path resolution', () => {
 
     const result = resolver.resolve({ npcId: 'any-npc', emotion: 'joy' });
     expect(result).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LPC overlay resolution
+// ---------------------------------------------------------------------------
+
+describe('ExpressionAssetResolver — LPC overlay resolution', () => {
+  let resolver: ExpressionAssetResolverInterface;
+
+  test('should resolve LPC overlays for a known expression', () => {
+    resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+    });
+
+    const overlays = resolver.resolveLpcOverlays('angry');
+    expect(typeof overlays).toBe('object');
+    expect(overlays.eyes).toBeString();
+    expect(overlays.eyebrows).toBeString();
+    expect(overlays.mouth).toBeString();
+  });
+
+  test('should return empty object for neutral (no overlays)', () => {
+    resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+    });
+
+    const overlays = resolver.resolveLpcOverlays('neutral');
+    expect(overlays.eyes).toBeUndefined();
+    expect(overlays.eyebrows).toBeUndefined();
+    expect(overlays.mouth).toBeUndefined();
+  });
+
+  test('should return empty object for unknown expression ID', () => {
+    resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+    });
+
+    const overlays = resolver.resolveLpcOverlays('nonexistent' as unknown as 'neutral');
+    expect(typeof overlays).toBe('object');
+    expect(Object.keys(overlays).length).toBe(0);
+  });
+
+  test('should return partial overlays for expressions with missing assets', () => {
+    resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+    });
+
+    // disgusted only has mouth overlay
+    const overlays = resolver.resolveLpcOverlays('disgusted');
+    expect(overlays.mouth).toBeString();
+    expect(overlays.eyes).toBeUndefined();
+    expect(overlays.eyebrows).toBeUndefined();
+  });
+
+  test('should resolve overlays for all 19 expression IDs', () => {
+    resolver = new ExpressionAssetResolver({
+      className: 'TestResolver',
+    });
+
+    const allIds = [
+      'neutral',
+      'happy',
+      'sad',
+      'angry',
+      'surprised',
+      'fearful',
+      'disgusted',
+      'amused',
+      'annoyed',
+      'blushing',
+      'confused',
+      'determined',
+      'flirty',
+      'innocent',
+      'mischievous',
+      'pained',
+      'relieved',
+      'sleepy',
+      'thoughtful',
+    ];
+
+    for (const id of allIds) {
+      const overlays = resolver.resolveLpcOverlays(id);
+      expect(typeof overlays).toBe('object');
+    }
   });
 });

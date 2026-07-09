@@ -149,25 +149,11 @@
       }
     },
     {
-      "includes": [
-        "apps/e2e/**",
-        "**/scripts/**",
-        ".pi/**"
-      ],
+      "includes": ["apps/e2e/**", "**/scripts/**", ".pi/**"],
       "linter": {
         "rules": {
           "suspicious": {
             "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/astro.config.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "off"
           }
         }
       }
@@ -186,33 +172,9 @@
       }
     },
     {
-      "includes": ["**/tailwind.config.mjs"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/math/goap/**/*.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
       "includes": [".pi/**"],
       "linter": {
         "rules": {
-          "style": {
-            "useFilenamingConvention": "off",
-            "useNamingConvention": "off"
-          },
           "suspicious": {
             "noExplicitAny": "off"
           }
@@ -221,24 +183,86 @@
     },
     {
       "includes": [
-        "apps/frontend/client/**",
-        "scripts/src/lib/test_blackbox/**",
-        "scripts/src/lib/herdr/**",
-        "scripts/src/lib/agents/**",
-        "scripts/src/lib/agent_scratchpad.ts",
-        "packages/backend/ai/src/lib/agent_router.ts",
-        "packages/frontend/repositories/src/lib/agent_scratchpad.ts",
-        "scripts/src/index.ts",
-        "scripts/src/lib/deploy/deployment_config.ts"
+        "**/+page.svelte",
+        "**/+layout.svelte",
+        "**/+error.svelte",
+        "**/+page.ts",
+        "**/+layout.ts",
+        "**/+page.server.ts",
+        "**/+layout.server.ts"
       ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.svelte", "**/*.svelte.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/app.html"],
       "linter": {
         "rules": {
           "a11y": {
             "useValidLang": "off"
-          },
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/service-worker.js"],
+      "linter": {
+        "rules": {
           "style": {
-            "useNamingConvention": "off",
             "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "scripts/src/lib/agents/**",
+        "scripts/src/lib/herdr/**",
+        "scripts/src/lib/agent_scratchpad.ts",
+        "scripts/src/index.ts",
+        "scripts/src/lib/test_blackbox/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/frontend/client/src/lib/services/image/image_generation_service.test.ts",
+        "apps/frontend/client/src/lib/**/*.test.ts",
+        "apps/frontend/client/src/lib/test_preload.ts",
+        "packages/shared/constants/src/lib/world_gen.ts",
+        "packages/backend/ai/src/lib/agent_router.ts",
+        "packages/frontend/engine/src/math/goap/**",
+        ".pi/extensions/herdr_orchestrator.ts",
+        ".pi/runners/convention_gate.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useNamingConvention": "off"
+          },
+          "suspicious": {
+            "noControlCharactersInRegex": "off"
           }
         }
       }

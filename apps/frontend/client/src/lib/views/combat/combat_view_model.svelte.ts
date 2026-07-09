@@ -13,8 +13,10 @@ import {
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
 import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
+import { getExpressionAssetResolver } from '$lib/services/expression/expression_asset_resolver';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
 import { diceService, gameStateService } from '$services';
+import type { ExpressionId } from '$types/expression';
 import { worldGenSeedingService } from '$views/worldgen/world_gen_seeding_service.svelte.ts';
 import type {
   DiceNotation,
@@ -145,6 +147,30 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
 
   /** Whether it's the enemy's active turn (for portrait highlight). */
   readonly isEnemyActiveTurn: boolean;
+
+  /** Current expression for the player character. */
+  readonly playerExpression: ExpressionId;
+
+  /** Current expression for the enemy character. */
+  readonly enemyExpression: ExpressionId;
+
+  /** Player LPC eyes overlay source. */
+  readonly playerEyesSrc: string | undefined;
+
+  /** Player LPC eyebrows overlay source. */
+  readonly playerEyebrowsSrc: string | undefined;
+
+  /** Player LPC mouth overlay source. */
+  readonly playerMouthSrc: string | undefined;
+
+  /** Enemy LPC eyes overlay source. */
+  readonly enemyEyesSrc: string | undefined;
+
+  /** Enemy LPC eyebrows overlay source. */
+  readonly enemyEyebrowsSrc: string | undefined;
+
+  /** Enemy LPC mouth overlay source. */
+  readonly enemyMouthSrc: string | undefined;
 
   /**
    * Ordered combat log entries — most recent first.
@@ -358,6 +384,59 @@ export class CombatViewModel
   /** Portrait image URL for the enemy character. */
   enemyPortraitUrl = $state('/assets/images/combat/enemy_portrait.webp');
 
+  /** Current expression for the player character. */
+  playerExpression: ExpressionId = $state('neutral');
+
+  /** Current expression for the enemy character. */
+  enemyExpression: ExpressionId = $state('neutral');
+
+  /** Lazy-initialized expression asset resolver for LPC overlay paths. */
+  private _expressionResolver = getExpressionAssetResolver({
+    className: 'CombatExpressionResolver',
+  });
+
+  /**
+   * Player LPC eyes overlay source — derived from current player expression.
+   */
+  get playerEyesSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.playerExpression).eyes;
+  }
+
+  /**
+   * Player LPC eyebrows overlay source.
+   */
+  get playerEyebrowsSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.playerExpression).eyebrows;
+  }
+
+  /**
+   * Player LPC mouth overlay source.
+   */
+  get playerMouthSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.playerExpression).mouth;
+  }
+
+  /**
+   * Enemy LPC eyes overlay source — derived from current enemy expression.
+   */
+  get enemyEyesSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.enemyExpression).eyes;
+  }
+
+  /**
+   * Enemy LPC eyebrows overlay source.
+   */
+  get enemyEyebrowsSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.enemyExpression).eyebrows;
+  }
+
+  /**
+   * Enemy LPC mouth overlay source.
+   */
+  get enemyMouthSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.enemyExpression).mouth;
+  }
+
   /** Whether the player is currently taking damage (triggers CSS shake/flash). */
   isPlayerTakingDamage = $state(false);
 
@@ -544,6 +623,8 @@ export class CombatViewModel
       this.encounterImages = [];
       this.queuedRolls = [];
       this._turnCounter = 0;
+      this.playerExpression = 'neutral';
+      this.enemyExpression = 'neutral';
 
       // C-234: Build initiative entries from participant data
       const playerInit = Math.floor(Math.random() * 20) + 1;
@@ -586,8 +667,12 @@ export class CombatViewModel
       this.debug('COMBAT_ENDED received', { victory: event.victory });
       if (event.victory) {
         this.combatResult = 'victory';
+        this.playerExpression = 'happy';
+        this.enemyExpression = 'pained';
       } else {
         this.combatResult = 'defeat';
+        this.playerExpression = 'pained';
+        this.enemyExpression = 'happy';
       }
       this.currentTurnEntity = null;
       this.isPlayerTurn = false;
@@ -638,6 +723,8 @@ export class CombatViewModel
         // Trigger damage flash if player HP decreased
         if (event.targetRemainingHp < prevPlayerHp) {
           this._triggerDamageFlash('player');
+          // Expression trigger: wounded on damage
+          this.playerExpression = 'pained';
         }
       } else {
         const prevEnemyHp = this.enemyHp;
@@ -646,6 +733,26 @@ export class CombatViewModel
         // Trigger damage flash if enemy HP decreased
         if (event.targetRemainingHp < prevEnemyHp) {
           this._triggerDamageFlash('enemy');
+          // Expression trigger: wounded on damage
+          this.enemyExpression = 'pained';
+        }
+      }
+
+      // Expression trigger: enraged on critical hit
+      if (/critical/i.test(event.message)) {
+        if (event.sourceId === 1) {
+          this.playerExpression = 'determined';
+        } else {
+          this.enemyExpression = 'angry';
+        }
+      }
+
+      // Expression trigger: fatal blow — pained on victim
+      if (event.targetRemainingHp <= 0) {
+        if (event.targetId === 1) {
+          this.playerExpression = 'pained';
+        } else {
+          this.enemyExpression = 'pained';
         }
       }
     });
@@ -715,6 +822,8 @@ export class CombatViewModel
     this.isEnemyTakingDamage = false;
     this.playerPortraitUrl = '/assets/images/combat/player_portrait.webp';
     this.enemyPortraitUrl = '/assets/images/combat/enemy_portrait.webp';
+    this.playerExpression = 'neutral';
+    this.enemyExpression = 'neutral';
     this.combatLog = [];
     this.encounterImages = [];
     this.combatResult = null;

@@ -6,7 +6,7 @@ import {
   filterByTaskType,
   formatProjectList,
   parseMoonProjects,
-} from './lib/output-filter';
+} from './lib/output_filter';
 
 /** Fallback workspace summary — used if moon query fails. Update when projects change. */
 const FALLBACK_SUMMARY = `Workspace: aikami projects (moon)

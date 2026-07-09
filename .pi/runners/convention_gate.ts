@@ -179,13 +179,15 @@ const _getChangedFiles = async (baseRef: string): Promise<string[]> => {
 const _matchesGlob = (filePath: string, glob: string): boolean => {
   const rel = relative(PROJECT_ROOT, filePath);
 
-  // Convert glob to regex
+  // Convert glob to regex using placeholder tokens to avoid corruption
   let regexStr = glob
-    .replace(/\./g, '\\.')
-    .replace(/\*\*\/\*/g, '(?:.+/)?')
-    .replace(/\*\*/g, '.*')
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\?/g, '.')
+    .replace(/\*\*\/\*/g, '\x00DIR\x00')
+    .replace(/\*\*/g, '\x00GLOB\x00')
     .replace(/\*/g, '[^/]*')
-    .replace(/\?/g, '.');
+    .replace(/\x00DIR\x00/g, '(?:.+/)?')
+    .replace(/\x00GLOB\x00/g, '.*');
 
   regexStr = `^${regexStr}$`;
 
@@ -488,7 +490,7 @@ const _formatResult = (result: GateResult): void => {
  */
 type WorkerInput = {
   filePaths: string[];
-  rulesPath: string;
+  rules: LintRule[];
   projectRoot: string;
 };
 
@@ -530,15 +532,32 @@ const _runTier1Parallel = async (options: {
     chunks.push(files.slice(i, i + chunkSize));
   }
 
+  // Load rules config
+  const rulesConfig = _loadRules();
+
   // Create worker inline (Bun supports inline Worker creation)
   const workerCode = `
     import { readFileSync } from 'node:fs';
     import { relative } from 'node:path';
 
-    // Minimal pattern checker — matches _checkPatterns logic
+    function matchesGlob(filePath, glob, projectRoot) {
+      const rel = relative(projectRoot, filePath);
+      let regexStr = glob
+        .replace(/[.+^\${}()|[\\]\\\\]/g, '\\\\$&')
+        .replace(/\\?/g, '.')
+        .replace(/\\*\\*\\/\\*/g, '\\x00DIR\\x00')
+        .replace(/\\*\\*/g, '\\x00GLOB\\x00')
+        .replace(/\\*/g, '[^/]*')
+        .replace(/\\x00DIR\\x00/g, '(?:.+/)?')
+        .replace(/\\x00GLOB\\x00/g, '.*');
+      regexStr = '^' + regexStr + '$';
+      return new RegExp(regexStr).test(rel);
+    }
+
     self.onmessage = (event) => {
       const data = event.data;
       const violations = [];
+      const rules = data.rules;
 
       for (const filePath of data.filePaths) {
         try {
@@ -546,33 +565,62 @@ const _runTier1Parallel = async (options: {
           const lines = content.split('\\n');
           const rel = relative(data.projectRoot, filePath);
 
-          // Quick path comment check (SRC-001)
-          if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-            const firstLine = lines[0] ?? '';
-            if (!/^\\/\\/\\s+(apps|packages|scripts|config)\\//.test(firstLine)) {
-              violations.push({
-                ruleId: 'SRC-001',
-                ruleName: 'File Path Comment',
-                severity: 'error',
-                file: rel,
-                line: 1,
-                message: 'Missing file path comment on line 1',
-              });
-            }
-          }
+          for (const rule of rules) {
+            if (!rule.patterns) continue;
+            for (const pattern of rule.patterns) {
+              if (!matchesGlob(filePath, pattern.fileGlob, data.projectRoot)) continue;
 
-          // Private field prefix check (CLS-001)
-          const privateWithoutUnderscore = /private\\s+(?!_|\\$)\\w+\\s*[:(=]/m;
-          if (privateWithoutUnderscore.test(content)) {
-            const lineNum = lines.findIndex(l => privateWithoutUnderscore.test(l));
-            violations.push({
-              ruleId: 'CLS-001',
-              ruleName: 'Private Field Underscore Prefix',
-              severity: 'error',
-              file: rel,
-              line: lineNum >= 0 ? lineNum + 1 : undefined,
-              message: 'Private member lacks _ prefix',
-            });
+              // Exclusion check
+              if (pattern.excludePatterns) {
+                const skip = pattern.excludePatterns.some(function(ex) {
+                  try { return new RegExp(ex).test(content); } catch { return false; }
+                });
+                if (skip) continue;
+              }
+
+              // Forbidden check
+              if (pattern.forbidden) {
+                violations.push({
+                  ruleId: rule.id, ruleName: rule.name, severity: rule.severity,
+                  file: rel, message: pattern.message
+                });
+                continue;
+              }
+
+              // Line-specific check
+              if (pattern.line !== undefined) {
+                const targetLine = lines[pattern.line - 1] ?? '';
+                try {
+                  if (!new RegExp(pattern.regex).test(targetLine)) {
+                    violations.push({
+                      ruleId: rule.id, ruleName: rule.name, severity: rule.severity,
+                      file: rel, line: pattern.line, message: rule.description
+                    });
+                  }
+                } catch {}
+                continue;
+              }
+
+              // Regex match
+              try {
+                const match = new RegExp(pattern.regex, 'm').test(content);
+                if (match) {
+                  if (pattern.requireAlso) {
+                    try {
+                      if (new RegExp(pattern.requireAlso, 'm').test(content)) continue;
+                    } catch {}
+                  }
+                  const lineNum = lines.findIndex(function(l) {
+                    try { return new RegExp(pattern.regex).test(l); } catch { return false; }
+                  });
+                  violations.push({
+                    ruleId: rule.id, ruleName: rule.name, severity: rule.severity,
+                    file: rel, line: lineNum >= 0 ? lineNum + 1 : undefined,
+                    message: pattern.message
+                  });
+                }
+              } catch {}
+            }
           }
         } catch {
           // Skip unreadable files
@@ -602,7 +650,7 @@ const _runTier1Parallel = async (options: {
 
       const input: WorkerInput = {
         filePaths: chunk,
-        rulesPath: RULES_PATH,
+        rules: rulesConfig.rules,
         projectRoot: PROJECT_ROOT,
       };
 

@@ -28,6 +28,12 @@ export type EnhancedMessage = {
   activeAlternativeIndex: number;
   /** For branching: which message ID was this a response to. */
   parentMessageId?: string;
+  /**
+   * Character-to-expression mapping for this message alternative.
+   * Undefined for messages created before this feature was added —
+   * consumers should treat undefined as 'neutral' for all characters.
+   */
+  expressionMap?: Record<string, string>;
 };
 
 // ── Input Draft Store ─────────────────═══════════════════════════════════

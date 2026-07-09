@@ -5,7 +5,7 @@ import { Type } from 'typebox';
 // Direnv env vars (set by .envrc / scripts/direnv/) — always available:
 //   AIKAMI_MODE          — emulator | staging | production
 //   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
-import { smartTruncate } from './lib/output-filter';
+import { smartTruncate } from './lib/output_filter';
 
 const MODES = ['staging', 'production'] as const;
 type Mode = (typeof MODES)[number];

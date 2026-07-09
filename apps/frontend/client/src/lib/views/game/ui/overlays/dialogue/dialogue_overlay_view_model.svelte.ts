@@ -1123,13 +1123,13 @@ class DialogueOverlayViewModel
   /**
    * Returns a difficulty class for the given skill check against this NPC.
    *
-   * Base DC is 12; harder NPC personas (guard, bandit, guild_master) get
+   * Base DC is 12; harder NPC personas (guard, bandit, guildMaster) get
    * +2, softer personas (innkeeper, healer, merchant) get -2.
    *
    * Contract: C-162 BG3 Action Menu & Dice
    */
   private _getDifficultyClass(_skill: string): number {
-    const hardPersonas = ['guard', 'bandit', 'guild_master'] as const;
+    const hardPersonas = ['guard', 'bandit', 'guildMaster'] as const;
     const softPersonas = ['innkeeper', 'healer', 'merchant'] as const;
     const personaId = this._npcData.personaId ?? FALLBACK_PERSONA_ID;
 

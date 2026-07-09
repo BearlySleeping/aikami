@@ -6,16 +6,9 @@
 //
 // Contract: C-236 Agent Pipeline System
 
-// ── Agent Phase ──────────────────────────────────────────────────────────
+import type { AgentPhase } from '@aikami/types';
 
-/**
- * The execution phase of a pipeline agent.
- *
- * - `pre`:  Runs before main generation, injects context into system prompt.
- * - `main`: The primary AI response generation (not an agent, the pipeline stage).
- * - `post`: Runs after main generation, produces state patches.
- */
-export type AgentPhase = 'pre' | 'main' | 'post';
+export type { AgentPhase };
 
 // ── Agent Configuration ──────────────────────────────────────────────────
 

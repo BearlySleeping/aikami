@@ -1,3 +1,5 @@
+export * from './lib/agent.ts';
+export * from './lib/agent.ts';
 export * from './lib/ai/index.js';
 export * from './lib/api/auth.ts';
 export * from './lib/api/fcm.ts';
