@@ -4,7 +4,11 @@
   "extends": "../../../config/tsconfig/tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "..",
-    "outDir": "dist"
+    "outDir": "dist",
+    "paths": {
+      "@aikami/types": ["../types/src/index.ts"],
+      "@aikami/types/*": ["../types/src/lib/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js"]

@@ -171,7 +171,7 @@
       "description": "ViewModels must be exported via a factory function (getXxxViewModel), never as raw classes.",
       "patterns": [
         {
-          "fileGlob": "**/*_view_model.svelte.ts",
+          "fileGlob": "**/**_view_model.svelte.ts",
           "regex": "export\\s+class\\s+\\w+ViewModel",
           "requireAlso": "export\\s+const\\s+get\\w+ViewModel",
           "message": "⚠️ ViewModel exported as raw class — use factory function pattern"
@@ -233,6 +233,125 @@
           "fileGlob": "apps/frontend/client/src/routes/**/*.ts",
           "regex": "export\\s+(async\\s+)?(function|const)\\s+(GET|POST|PUT|DELETE|PATCH)\\b",
           "message": "🔴 Server endpoint in SPA — use client-side data fetching"
+        }
+      ]
+    },
+    {
+      "id": "ARC-002",
+      "name": "No Raw Dictionaries in ViewModels",
+      "category": "architecture",
+      "severity": "error",
+      "description": "ViewModels must not declare raw translation dictionaries or constant lookup tables. These belong in packages/shared/constants/.",
+      "patterns": [
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "(?:const|let)\\s+\\w*(?:PHASE|LABEL|LABELS|DICT|DICTIONARY|TRANSLATION|STRINGS)\\w*\\s*(?::\\s*[^=]+)?=\\s*\\{",
+          "message": "🔴 Raw label dictionary in ViewModel — extract to packages/shared/constants/"
+        },
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "private\\s+static\\s+readonly\\s+_(?:PHASE_|LABEL|LABELS|STRINGS)",
+          "message": "🔴 Static label dictionary in ViewModel — extract to packages/shared/constants/"
+        }
+      ]
+    },
+    {
+      "id": "ARC-003",
+      "name": "No TypeBox Outside Schemas Package",
+      "category": "architecture",
+      "severity": "error",
+      "description": "TypeBox imports and Type.* declarations are forbidden outside packages/shared/schemas/ and test files. Schemas are the single source of truth — they live in one place only.",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "Type\\.(Object|Array|String|Number|Boolean|Union|Intersect|Partial|Omit|Pick|Record|Ref|Optional|Nullable|Enum|Literal|Tuple|Any|Unknown)",
+          "excludePatterns": [
+            "packages/shared/schemas/",
+            "\\.test\\.ts$",
+            "\\.spec\\.ts$",
+            "__tests__/"
+          ],
+          "message": "🔴 TypeBox schema outside packages/shared/schemas/ — move schema to shared package"
+        },
+        {
+          "fileGlob": "**/*.svelte.ts",
+          "regex": "Type\\.(Object|Array|String|Number|Boolean|Union|Intersect|Partial|Omit|Pick|Record|Ref|Optional|Nullable|Enum|Literal|Tuple|Any|Unknown)",
+          "excludePatterns": ["packages/shared/schemas/", "\\.test\\.svelte\\.ts$"],
+          "message": "🔴 TypeBox schema in ViewModel — move to packages/shared/schemas/"
+        },
+        {
+          "fileGlob": "**/*.svelte",
+          "regex": "Type\\.(Object|Array|String|Number|Boolean|Union|Intersect|Partial|Omit|Pick|Record|Ref|Optional|Nullable|Enum|Literal|Tuple|Any|Unknown)",
+          "message": "🔴 TypeBox schema in Svelte view — schemas belong in packages/shared/schemas/"
+        },
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "from\\s+['\"]@sinclair/typebox['\"]",
+          "excludePatterns": [
+            "packages/shared/schemas/",
+            "packages/shared/types/",
+            "\\.test\\.ts$",
+            "\\.spec\\.ts$",
+            "__tests__/"
+          ],
+          "message": "🔴 @sinclair/typebox import outside schemas/types package — schemas belong in packages/shared/schemas/"
+        }
+      ]
+    },
+    {
+      "id": "ARC-004",
+      "name": "No PixiJS Import in ViewModels",
+      "category": "architecture",
+      "severity": "error",
+      "description": "ViewModels must never import pixi.js or hook into the game ticker. Use EngineBridge for all game communication.",
+      "patterns": [
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "from\\s+['\"](?:pixi\\.js|@pixi\\/",
+          "excludePatterns": ["views/dev/lpc/lpc_view_model"],
+          "message": "🔴 pixi.js import in ViewModel — use EngineBridge, never app.ticker directly"
+        },
+        {
+          "fileGlob": "**/*.svelte",
+          "regex": "from\\s+['\"](?:pixi\\.js|@pixi\\/",
+          "excludePatterns": ["views/dev/lpc/"],
+          "message": "🔴 pixi.js import in Svelte view — game rendering belongs in engine package"
+        },
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "app\\.ticker\\.add",
+          "excludePatterns": ["views/dev/lpc/lpc_view_model"],
+          "message": "🔴 app.ticker.add() in ViewModel — ticker ownership belongs to packages/frontend/engine/"
+        }
+      ]
+    },
+    {
+      "id": "ARC-005",
+      "name": "No Duplicate Types from TypeBox Schemas",
+      "category": "architecture",
+      "severity": "error",
+      "description": "Types in packages/shared/types/ must derive from TypeBox schemas via Static<typeof Schema>. Never duplicate interfaces manually.",
+      "patterns": [
+        {
+          "fileGlob": "packages/shared/types/src/**/*.ts",
+          "regex": "export\\s+type\\s+\\w+\\s*=\\s*\\{[^}]+\\}(?!.*Static)",
+          "excludePatterns": ["Static<typeof"],
+          "message": "⚠️ Raw type definition in shared/types — derive from TypeBox schema via Static<typeof Schema> instead"
+        }
+      ]
+    },
+    {
+      "id": "NAM-001",
+      "name": "No Abbreviations in Shared Packages",
+      "category": "naming",
+      "severity": "warning",
+      "description": "Shared packages must use fully-spelled identifiers, never abbreviations. Exceptions: well-known acronyms (URL, API, ID, HTML, CSS, JSON, HTTP).",
+      "patterns": [
+        {
+          "fileGlob": "packages/shared/**/*.ts",
+          "regex": "\\b(?:ctx|opts|pkg|fn|cfg|msg|err|svc|mgr|btn|tbl|req|resp|val|param|args|prev|curr|tmp)\\b(?!['\"`])",
+          "excludePatterns": ["(?:ctx|opts|pkg)['\"`]"],
+          "message": "⚠️ Abbreviation in shared package — use full word (context not ctx, options not opts, function not fn, config not cfg, etc.)"
         }
       ]
     }

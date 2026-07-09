@@ -7,8 +7,6 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { Application } from 'pixi.js';
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { setContext } from 'svelte';
 import { goto } from '$app/navigation';
 import { page } from '$app/state';
@@ -24,6 +22,8 @@ import {
   lpcStateToSearchParams,
   searchParamsToLpcState,
 } from '$lib/data/lpc_url_config';
+import type { Application } from './lpc_pixi_facade';
+import { Container, Graphics, Sprite, Texture } from './lpc_pixi_facade';
 
 // Use the generated catalog directly — all slots with verified webp assets.
 const FILTERED_LPC_SLOTS = GENERATED_LPC_SLOTS;
@@ -459,7 +459,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     }
 
     const promise = (async () => {
-      const { Assets } = await import('pixi.js');
+      const { Assets } = await import('./lpc_pixi_facade');
       try {
         const mod = await import(/* @vite-ignore */ `/src/lib/assets/lpc/${assetId}.webp?url`);
         const url = (mod as { default: string }).default;
@@ -468,7 +468,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         this._sheetTextureCache.set(cacheKey, texture);
         return texture;
       } catch {
-        const { Texture: T } = await import('pixi.js');
+        const { Texture: T } = await import('./lpc_pixi_facade');
         this._sheetTextureCache.set(cacheKey, T.EMPTY);
         return T.EMPTY;
       }
@@ -538,7 +538,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           return;
         }
 
-        const { Rectangle } = await import('pixi.js');
+        const { Rectangle } = await import('./lpc_pixi_facade');
         const frameTexture = new Texture({
           source: texture.source,
           frame: new Rectangle(x, y, 64, 64),

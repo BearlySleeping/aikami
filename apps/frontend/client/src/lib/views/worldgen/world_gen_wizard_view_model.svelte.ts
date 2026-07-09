@@ -7,12 +7,13 @@
 //
 // Contract: C-233
 
+import { STEP_LABELS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { WorldGenInput, WorldGenOutput } from '@aikami/types';
+import type { WizardStep, WorldGenInput, WorldGenOutput } from '@aikami/types';
 import { getRandomPreset } from '@aikami/types';
 import { WorldGenSchema } from '$lib/data/ai_prompts/world_gen_schema';
 import { WORLD_GEN_SYSTEM_PROMPT } from '$lib/data/ai_prompts/world_gen_system_prompt';
@@ -23,16 +24,6 @@ import { worldGenSeedingService } from './world_gen_seeding_service.svelte.ts';
 // Types
 // ---------------------------------------------------------------------------
 
-/** Step in the wizard state machine. */
-export type WizardStep =
-  | 'genre_tone'
-  | 'setting_difficulty'
-  | 'goals'
-  | 'generating'
-  | 'preview'
-  | 'character_creation';
-
-/** Options for constructing the WorldGenWizardViewModel. */
 export type WorldGenWizardViewModelOptions = BaseViewModelOptions & {
   /** Pre-populated inputs for editing (e.g. from a previous session). */
   initialInputs?: WorldGenInput;
@@ -128,16 +119,6 @@ const MAX_RETRIES = 3;
 
 /** Fallback step label if not found. */
 const FALLBACK_LABEL = 'Unknown';
-
-/** Human-readable labels for each step. */
-const STEP_LABELS: Record<WizardStep, string> = {
-  genre_tone: 'Genre & Tone',
-  setting_difficulty: 'Setting & Difficulty',
-  goals: 'Goals',
-  generating: 'Generating...',
-  preview: 'Preview',
-  character_creation: 'Character Creation',
-};
 
 /** All available genre options for chips. */
 export const GENRE_OPTIONS = [

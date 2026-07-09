@@ -16,7 +16,7 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
-import { smartTruncate } from './lib/output-filter';
+import { smartTruncate } from './lib/output_filter';
 
 const APP_CONFIG: Record<string, { serviceType: string }> = {
   client: { serviceType: 'cloud-run' },

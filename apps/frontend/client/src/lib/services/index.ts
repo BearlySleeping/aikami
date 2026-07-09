@@ -40,6 +40,10 @@ export * from './config/config_service.svelte.ts';
 export * from './config/macro_preset_store.svelte.ts';
 export * from './dice/dice_service.svelte.ts';
 export * from './expression/expression_asset_resolver';
+export {
+  type ExpressionServiceInterface,
+  expressionService,
+} from './expression/expression_service.svelte.ts';
 export * from './game/bridge_listeners';
 export * from './game/combat_service.svelte';
 export * from './game/game_engine_service.svelte.ts';

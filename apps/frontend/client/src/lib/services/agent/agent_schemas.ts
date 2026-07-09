@@ -77,26 +77,18 @@ export type QuestUpdateOutput = Static<typeof questUpdateSchema>;
 // ── Expression ───────────────────────────────────────────────────────────
 
 /**
- * Schema for expression agent output — evaluates the NPC's emotional
- * state and recommends expression changes.
+ * Schema for expression agent output — evaluates all characters'
+ * emotional states from dialogue and recommends expression changes.
+ * Multi-character format: returns an array of name/expression pairs.
  */
 export const expressionSchema = Type.Object({
-  npcName: Type.String({ description: 'NPC being evaluated' }),
-  currentMood: Type.Union(
-    [
-      Type.Literal('neutral'),
-      Type.Literal('happy'),
-      Type.Literal('sad'),
-      Type.Literal('angry'),
-      Type.Literal('surprised'),
-      Type.Literal('fearful'),
-      Type.Literal('disgusted'),
-    ],
-    { description: 'Detected current mood' },
+  characters: Type.Array(
+    Type.Object({
+      name: Type.String({ description: 'Character name' }),
+      expression: Type.String({ description: 'Detected expression (e.g. happy, angry, neutral)' }),
+    }),
+    { description: 'List of characters with their detected expressions' },
   ),
-  intensity: Type.Number({ minimum: 0, maximum: 1, description: 'Emotional intensity (0-1)' }),
-  expressionLabel: Type.String({ description: 'Suggested expression label' }),
-  reason: Type.String({ description: 'Justification for this expression' }),
 });
 
 export type ExpressionOutput = Static<typeof expressionSchema>;

@@ -1,9 +1,11 @@
 // apps/frontend/client/src/lib/services/agent/agents/expression_agent.ts
 //
-// Post-agent that evaluates NPC emotional state from dialogue and
+// Post-agent that evaluates character emotional states from dialogue and
 // recommends expression changes for character rendering.
+// Multi-character output format: { characters: [{ name, expression }] }
 //
 // Contract: C-236 Agent Pipeline System
+// Contract: C-239 Expression Emotion System
 
 import { textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types/agent_types';
@@ -12,13 +14,15 @@ import type { ExpressionOutput } from '../agent_schemas.ts';
 /**
  * Executes the expression evaluator post-agent.
  *
- * Analyzes the latest NPC dialogue or GM response to determine the NPC's
+ * Analyzes the latest dialogue or GM response to determine each character's
  * emotional state and recommend expression changes for visual rendering.
+ * Supports multi-character output: identifies all named characters in the
+ * response and assigns expressions to each.
  *
  * @param config - Agent configuration.
  * @param context - Pipeline context with user message and system prompt.
  * @param aiResponse - The GM's response text to analyze.
- * @returns Agent run result with parsed expression data.
+ * @returns Agent run result with parsed expression data (characters array).
  */
 export const runExpressionAgent = async ({
   config,
@@ -38,28 +42,33 @@ export const runExpressionAgent = async ({
       'Latest GM response to analyze:',
       aiResponse.slice(0, 2000),
       '',
-      "Determine the NPC's emotional state and suggest an expression.",
+      'Identify every named character in this response and determine their emotional expression.',
     ].join('\n');
 
     const result = (await textGenerationService.extractStructure({
       schema: {
         type: 'object',
         properties: {
-          npcName: { type: 'string' },
-          currentMood: {
-            type: 'string',
-            enum: ['neutral', 'happy', 'sad', 'angry', 'surprised', 'fearful', 'disgusted'],
+          characters: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                expression: { type: 'string' },
+              },
+              required: ['name', 'expression'],
+              additionalProperties: false,
+            },
           },
-          intensity: { type: 'number', minimum: 0, maximum: 1 },
-          expressionLabel: { type: 'string' },
-          reason: { type: 'string' },
         },
-        required: ['npcName', 'currentMood', 'intensity', 'expressionLabel', 'reason'],
+        required: ['characters'],
         additionalProperties: false,
       },
       schemaName: 'Expression',
       prompt,
-      systemPrompt: 'Evaluate NPC emotional state from dialogue. JSON only.',
+      systemPrompt:
+        'Identify every named character and their emotional expression. Return JSON with characters array.',
     })) as ExpressionOutput;
 
     // extractStructure validates against the provided schema, so the cast is safe

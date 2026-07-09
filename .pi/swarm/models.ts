@@ -25,7 +25,7 @@ export const SWARM_MODELS = {
     pro: 'deepseek/deepseek-v4-pro',
     flash: 'deepseek/deepseek-v4-flash',
     free: 'opencode/big-pickle',
-    free_fallback: 'openrouter/free',
+    freeFallback: 'openrouter/free',
   },
 } as const;
 

@@ -87,6 +87,20 @@ export type MessageBranchStoreInterface = BaseFrontendClassInterface & {
     sender: 'user' | 'ai' | 'system';
     timestamp: Date;
   }): EnhancedChatMessage;
+
+  /**
+   * Stores an expression map for a message.
+   *
+   * @param options.messageId — The message ID.
+   * @param options.expressionMap — Character-to-expression mapping.
+   */
+  setExpressionMap(options: { messageId: string; expressionMap: Record<string, string> }): void;
+
+  /**
+   * Retrieves the expression map for a message.
+   * Returns undefined if no expression map has been set.
+   */
+  getExpressionMap(messageId: string): Record<string, string> | undefined;
 };
 
 // ── Implementation ───────────────────────────────────────────────────────
@@ -100,6 +114,13 @@ class MessageBranchStore
    * Uses a reactive array of entries so Svelte 5 $state tracks changes.
    */
   private _alternativesMap = $state(new Map<string, MessageAlternatives>());
+
+  /**
+   * Reactive map of message ID → character expression map.
+   * Persisted per message (not per alternative index in this iteration
+   * — future enhancement may nest inside MessageAlternatives).
+   */
+  private _expressionMap = $state(new Map<string, Record<string, string>>());
 
   get alternatives(): ReadonlyMap<string, MessageAlternatives> {
     return this._alternativesMap;
@@ -187,6 +208,10 @@ class MessageBranchStore
     const newMap = new Map(this._alternativesMap);
     newMap.delete(messageId);
     this._alternativesMap = newMap;
+
+    const newExprMap = new Map(this._expressionMap);
+    newExprMap.delete(messageId);
+    this._expressionMap = newExprMap;
   }
 
   enrichMessage(options: {
@@ -211,6 +236,18 @@ class MessageBranchStore
       canSwipeRight: count > 1 && activeIndex < count - 1,
       showActions: true,
     };
+  }
+
+  setExpressionMap(options: { messageId: string; expressionMap: Record<string, string> }): void {
+    const { messageId, expressionMap } = options;
+    const newMap = new Map(this._expressionMap);
+    newMap.set(messageId, { ...expressionMap });
+    this._expressionMap = newMap;
+  }
+
+  getExpressionMap(messageId: string): Record<string, string> | undefined {
+    const entry = this._expressionMap.get(messageId);
+    return entry ? { ...entry } : undefined;
   }
 }
 

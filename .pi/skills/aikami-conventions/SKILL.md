@@ -257,6 +257,25 @@ full rule.
 | **Client-local data** | `apps/frontend/client/src/lib/data/` | Provider endpoint configs |
 | **Client-local types** | `apps/frontend/client/src/lib/types/` | `Connection`, `ConnectionTestResult` |
 
+#### 🔴 Domain Structure Allocation Truth Matrix
+
+Every data entity, type, label, and UI state flag has exactly ONE canonical
+location. No duplication across packages. No shortcuts. If you add to the wrong
+location, your code will be rejected.
+
+| Layer | Canonical Location | What Belongs | What Does NOT Belong |
+|---|---|---|---|
+| **1. Constants & Labels** | `packages/shared/constants/src/` | Provider registries, enum-like arrays, default configs, display labels, error codes, routing paths, feature flags | Runtime state, computed values, configs from external APIs (those go in `apps/.../data/`), ViewModel-local UI strings |
+| **2. Type Definitions** | `packages/shared/types/src/` | Cross-project domain types, API request/response shapes, entity interfaces | Single-app-local types (go in `apps/<app>/src/lib/types/`), single-function-internal types (go inline), ViewModel interface types (go in ViewModel file) |
+| **3. Runtime Schemas** | `packages/shared/schemas/src/` (TypeBox) | All cross-boundary data validation shapes (API inputs, Firestore documents, EngineBridge payloads) | Zod schemas (use TypeBox), validation logic for a single function (inline guard), backend-only validation that never crosses to client |
+| **4. UI State Flags** | `apps/frontend/client/src/lib/views/*_view_model.svelte.ts` | Visibility booleans, active modals, selected tab index, loading/error/submit flags, form field values | Domain data (goes in services), computed values used by 2+ views (goes in services), persisted application state (goes in services or shared constants) |
+
+**🔴 Violations**:
+- Labels/translations in ViewModels → extract to `packages/shared/constants/`
+- Types defined in `apps/` that another package needs → move to `packages/shared/types/`
+- Validation in service files → create TypeBox schema in `packages/shared/schemas/`
+- `$state` domain data in ViewModels that services should own → move to the appropriate service
+
 ```typescript
 // ❌ WRONG — data/type/schema defined in a service file
 // apps/frontend/client/src/lib/services/config/config_service.svelte.ts
@@ -584,6 +603,31 @@ export type ChatMessage = Static<typeof ChatMessageSchema>;
 This ensures runtime validation and TypeScript types are always in sync. The
 schema in `@aikami/schemas` is the source of truth; `@aikami/types` re-exports
 the inferred type.
+
+🔴 **TypeBox Static Inference Law**: TypeBox schemas are the **single source of
+truth** for all cross-boundary types. When a TypeBox schema exists for a data
+shape, the corresponding TypeScript type in `packages/shared/types/` MUST be
+inferred via `Static<typeof Schema>` — NEVER recreate the interface manually.
+
+```typescript
+// ✅ CORRECT — infer from schema (single source of truth)
+// packages/shared/types/src/lib/user.ts
+import type { Static } from "@sinclair/typebox";
+import { UserSchema } from "@aikami/schemas";
+export type User = Static<typeof UserSchema>;
+
+// ❌ WRONG — manual interface duplicates the schema
+// packages/shared/types/src/lib/user.ts
+export type User = {
+  id: string;
+  email: string;
+  displayName: string;
+};
+```
+
+**Why**: Manual duplication causes schema-drift — the runtime validator and
+the TypeScript type diverge silently. `Static<typeof Schema>` guarantees they
+stay in lockstep. If you need the type, derive it. Never write it by hand.
 
 **Rule of thumb**: If a type is passed from one project to another, it should
 exist as a TypeBox schema in `@aikami/schemas` and be re-exported as a type from

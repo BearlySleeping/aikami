@@ -18,7 +18,7 @@ export default defineConfig({
   },
   vite: {
     // see https://github.com/tailwindlabs/tailwindcss/issues/18802
-    plugins: [tailwindcss() as any],
+    plugins: [tailwindcss()],
     server: {
       fs: {
         // Allow Vite to serve files from the monorepo root

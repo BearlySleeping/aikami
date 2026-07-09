@@ -200,4 +200,88 @@ describe('MessageBranchStore — AC-1: Message Branching & Swiping', () => {
 
     expect(enriched.alternativeCount).toBe(0);
   });
+
+  // ── Expression Persistence ────────────────────────────────────────
+
+  test('setExpressionMap stores expression map for a message', () => {
+    const expressionMap = { Elara: 'happy' };
+    messageBranchStore.setExpressionMap({ messageId: MESSAGE_ID, expressionMap });
+
+    const retrieved = messageBranchStore.getExpressionMap(MESSAGE_ID);
+    expect(retrieved).toEqual(expressionMap);
+  });
+
+  test('getExpressionMap returns undefined for unknown message', () => {
+    const retrieved = messageBranchStore.getExpressionMap('nonexistent');
+    expect(retrieved).toBeUndefined();
+  });
+
+  test('setExpressionMap updates existing expression map', () => {
+    messageBranchStore.setExpressionMap({
+      messageId: MESSAGE_ID,
+      expressionMap: { Elara: 'happy' },
+    });
+
+    messageBranchStore.setExpressionMap({
+      messageId: MESSAGE_ID,
+      expressionMap: { Elara: 'angry' },
+    });
+
+    const retrieved = messageBranchStore.getExpressionMap(MESSAGE_ID);
+    expect(retrieved).toEqual({ Elara: 'angry' });
+  });
+
+  test('expressionMap is preserved when adding alternatives', () => {
+    const expressionMap = { Elara: 'happy' };
+    messageBranchStore.setExpressionMap({ messageId: MESSAGE_ID, expressionMap });
+
+    messageBranchStore.addAlternative({
+      messageId: MESSAGE_ID,
+      currentText: 'Response 1',
+      newText: 'Response 2',
+    });
+
+    // Expression map should still be retrievable after adding alternatives
+    const retrieved = messageBranchStore.getExpressionMap(MESSAGE_ID);
+    expect(retrieved).toEqual(expressionMap);
+  });
+
+  test('clearAlternatives also clears expression map', () => {
+    messageBranchStore.setExpressionMap({
+      messageId: MESSAGE_ID,
+      expressionMap: { Elara: 'happy' },
+    });
+
+    messageBranchStore.clearAlternatives(MESSAGE_ID);
+
+    // Expression map should also be cleared
+    const retrieved = messageBranchStore.getExpressionMap(MESSAGE_ID);
+    expect(retrieved).toBeUndefined();
+  });
+
+  test('expression map handles multi-character expressions', () => {
+    const expressionMap = {
+      Elara: 'happy',
+      Thorn: 'angry',
+      Lyra: 'surprised',
+    };
+    messageBranchStore.setExpressionMap({ messageId: MESSAGE_ID, expressionMap });
+
+    const retrieved = messageBranchStore.getExpressionMap(MESSAGE_ID);
+    expect(retrieved).toEqual(expressionMap);
+  });
+
+  test('getExpressionMap returns a copy, not a reference', () => {
+    const expressionMap = { Elara: 'happy' };
+    messageBranchStore.setExpressionMap({ messageId: MESSAGE_ID, expressionMap });
+
+    const retrieved = messageBranchStore.getExpressionMap(MESSAGE_ID);
+    if (retrieved) {
+      retrieved.Elara = 'angry';
+    }
+
+    // Original should be unchanged
+    const original = messageBranchStore.getExpressionMap(MESSAGE_ID);
+    expect(original).toEqual({ Elara: 'happy' });
+  });
 });

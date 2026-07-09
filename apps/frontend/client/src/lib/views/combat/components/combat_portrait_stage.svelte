@@ -6,7 +6,11 @@
   // Uses CSS Grid/Flexbox, object-fit portrait scaling, and CSS @keyframes
   // for damage feedback (shake + red flash).
   //
+  // Optional expression overlays (eyes, eyebrows, mouth) are layered over
+  // the base portrait for emotion feedback.
+  //
   // Contract: C-167 Svelte Native Combat UI MVP
+  // Contract: C-239 Expression Emotion System
 
   type Props = {
     /** Display state for the player combatant. */
@@ -17,6 +21,11 @@
     isPlayerTakingDamage: boolean;
     isPlayerActiveTurn: boolean;
 
+    /** Expression overlay sources for the player portrait. */
+    playerEyesSrc?: string;
+    playerEyebrowsSrc?: string;
+    playerMouthSrc?: string;
+
     /** Display state for the enemy combatant. */
     enemyName: string;
     enemyPortraitUrl: string;
@@ -24,6 +33,11 @@
     enemyMaxHealth: number;
     isEnemyTakingDamage: boolean;
     isEnemyActiveTurn: boolean;
+
+    /** Expression overlay sources for the enemy portrait. */
+    enemyEyesSrc?: string;
+    enemyEyebrowsSrc?: string;
+    enemyMouthSrc?: string;
   };
 
   const {
@@ -33,12 +47,18 @@
     playerMaxHealth,
     isPlayerTakingDamage,
     isPlayerActiveTurn,
+    playerEyesSrc,
+    playerEyebrowsSrc,
+    playerMouthSrc,
     enemyName,
     enemyPortraitUrl,
     enemyCurrentHealth,
     enemyMaxHealth,
     isEnemyTakingDamage,
     isEnemyActiveTurn,
+    enemyEyesSrc,
+    enemyEyebrowsSrc,
+    enemyMouthSrc,
   }: Props = $props();
 </script>
 
@@ -62,6 +82,31 @@
         class="w-full h-full object-cover object-top"
         loading="eager"
       >
+      <!-- Expression overlays (layered over base portrait) -->
+      {#if playerEyesSrc}
+        <img
+          src={playerEyesSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if playerEyebrowsSrc}
+        <img
+          src={playerEyebrowsSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if playerMouthSrc}
+        <img
+          src={playerMouthSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
       <!-- Damage flash overlay -->
       {#if isPlayerTakingDamage}
         <div class="absolute inset-0 bg-red-500/40 animate-flash-overlay pointer-events-none"></div>
@@ -106,6 +151,31 @@
         class="w-full h-full object-cover object-top"
         loading="eager"
       >
+      <!-- Expression overlays (layered over base portrait) -->
+      {#if enemyEyesSrc}
+        <img
+          src={enemyEyesSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if enemyEyebrowsSrc}
+        <img
+          src={enemyEyebrowsSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if enemyMouthSrc}
+        <img
+          src={enemyMouthSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
       <!-- Damage flash overlay -->
       {#if isEnemyTakingDamage}
         <div class="absolute inset-0 bg-red-500/40 animate-flash-overlay pointer-events-none"></div>
