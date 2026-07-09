@@ -55,6 +55,7 @@
           fill="none"
           viewBox="0 0 24 24"
         >
+          <title>icon</title>
           <path
             stroke-linecap="round"
             stroke-linejoin="round"

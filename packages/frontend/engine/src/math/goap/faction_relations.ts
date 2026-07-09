@@ -1,5 +1,6 @@
 // packages/frontend/engine/src/math/goap/faction_relations.ts
 
+// biome-ignore-all lint/style/useNamingConvention: PascalCase faction constants follow the established GOAP enum pattern used throughout the engine
 // ---------------------------------------------------------------------------
 // Faction Relations — directed graph via bitECS v0.4.0 relations
 //

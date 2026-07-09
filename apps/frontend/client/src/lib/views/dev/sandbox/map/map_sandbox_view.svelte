@@ -106,6 +106,7 @@
             </div>
             <div class="flex justify-end">
               <button
+                type="button"
                 class="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content transition hover:brightness-110"
                 onclick={() => viewModel.dismissDialog()}
               >
@@ -121,6 +122,7 @@
         class="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 flex gap-2 rounded-xl bg-neutral/90 px-4 py-2 shadow-lg backdrop-blur-sm"
       >
         <button
+          type="button"
           class="btn btn-sm gap-1"
           class:btn-primary={viewModel.currentMap?.includes('debug_map')}
           class:btn-outline={!viewModel.currentMap?.includes('debug_map')}
@@ -130,6 +132,7 @@
           Debug JTON
         </button>
         <button
+          type="button"
           class="btn btn-sm gap-1"
           class:btn-secondary={viewModel.currentMap?.includes('zone_b')}
           class:btn-outline={!viewModel.currentMap?.includes('zone_b')}
@@ -139,6 +142,7 @@
           Interior House
         </button>
         <button
+          type="button"
           class="btn btn-sm gap-1"
           class:btn-accent={viewModel.currentMap?.includes('textured')}
           class:btn-outline={!viewModel.currentMap?.includes('textured')}

@@ -118,6 +118,7 @@
           <!-- Dismiss button -->
           <div class="flex justify-end">
             <button
+              type="button"
               class="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-content transition hover:brightness-110"
               onclick={() => viewModel.dismissDialog()}
             >

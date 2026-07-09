@@ -14,7 +14,9 @@
   <div class="flex min-h-screen flex-col items-center px-4 py-8">
     <!-- Header with back button -->
     <div class="flex w-full max-w-2xl items-center gap-4">
-      <button class="btn btn-ghost btn-sm" onclick={() => viewModel.backToMenu()}>← Back</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => viewModel.backToMenu()}>
+        ← Back
+      </button>
       <h1 class="text-2xl font-bold text-primary">Credits</h1>
     </div>
 

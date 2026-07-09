@@ -102,6 +102,7 @@
                       Saved {new Date(char.savedAt).toLocaleDateString()}
                     </span>
                     <button
+                      type="button"
                       class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                       onclick={() => {
                         const updated = characters.filter((_, j) => j !== i);

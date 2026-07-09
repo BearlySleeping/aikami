@@ -30,6 +30,7 @@
   <div class="columns-2 gap-2 px-2">
     {#each images as url (url)}
       <button
+        type="button"
         class="mb-2 break-inside-avoid rounded-lg overflow-hidden border border-base-300 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all w-full text-left bg-transparent p-0"
         onclick={() => (expandedUrl = url)}
       >
@@ -50,6 +51,7 @@
       tabindex="-1"
     >
       <button
+        type="button"
         class="absolute top-4 right-4 btn btn-sm btn-ghost text-white text-xl"
         onclick={() => (expandedUrl = null)}
       >

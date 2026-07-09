@@ -66,6 +66,7 @@
           <div class="flex flex-wrap gap-2">
             {#each GENRE_OPTIONS as genre}
               <button
+                type="button"
                 class="btn btn-sm {viewModel.genre === genre ? 'btn-primary' : 'btn-outline'}"
                 onclick={() => viewModel.setGenre(genre)}
               >
@@ -79,6 +80,7 @@
           <div class="flex flex-wrap gap-2">
             {#each TONE_OPTIONS as tone}
               <button
+                type="button"
                 class="btn btn-sm {viewModel.tone === tone ? 'btn-primary' : 'btn-outline'}"
                 onclick={() => viewModel.setTone(tone)}
               >
@@ -149,7 +151,11 @@
             <span>{viewModel.generationError}</span>
           </div>
           {#if viewModel.retriesRemaining > 0}
-            <button class="btn btn-warning mt-4" onclick={() => viewModel.retryGeneration()}>
+            <button
+              type="button"
+              class="btn btn-warning mt-4"
+              onclick={() => viewModel.retryGeneration()}
+            >
               Retry ({viewModel.retriesRemaining}
               left)
             </button>
@@ -269,7 +275,11 @@
         <p class="text-base-content/60 mb-6">
           Your world "{viewModel.worldOutput?.worldName}" is ready. Proceed to character creation.
         </p>
-        <button class="btn btn-primary" onclick={() => viewModel.navigateToCharacterCreation()}>
+        <button
+          type="button"
+          class="btn btn-primary"
+          onclick={() => viewModel.navigateToCharacterCreation()}
+        >
           Start Character Creation
         </button>
       </div>
@@ -279,18 +289,28 @@
     <div class="flex justify-between mt-8 pt-4 border-t border-base-300">
       <div>
         {#if !viewModel.isFirstStep && viewModel.currentStep !== 'generating' && viewModel.currentStep !== 'character_creation'}
-          <button class="btn btn-ghost" onclick={() => viewModel.goBack()}>← Back</button>
+          <button type="button" class="btn btn-ghost" onclick={() => viewModel.goBack()}>
+            ← Back
+          </button>
         {/if}
       </div>
       <div class="flex gap-3">
         {#if viewModel.currentStep === 'genre_tone' || viewModel.currentStep === 'setting_difficulty'}
-          <button class="btn btn-outline btn-sm" onclick={() => viewModel.surpriseMe()}>
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            onclick={() => viewModel.surpriseMe()}
+          >
             ✨ Surprise Me!
           </button>
         {/if}
 
         {#if viewModel.currentStep === 'goals'}
-          <button class="btn btn-outline btn-sm" onclick={() => viewModel.surpriseMe()}>
+          <button
+            type="button"
+            class="btn btn-outline btn-sm"
+            onclick={() => viewModel.surpriseMe()}
+          >
             ✨ Surprise Me!
           </button>
         {/if}
@@ -298,6 +318,7 @@
         {#if viewModel.currentStep !== 'generating' && viewModel.currentStep !== 'character_creation'}
           {#if viewModel.currentStep === 'goals'}
             <button
+              type="button"
               class="btn btn-primary"
               disabled={!viewModel.canAdvance}
               onclick={() => viewModel.generateWorld()}
@@ -306,6 +327,7 @@
             </button>
           {:else if viewModel.currentStep === 'preview'}
             <button
+              type="button"
               class="btn btn-primary"
               onclick={() => viewModel.retryGeneration()}
               disabled={viewModel.retriesRemaining <= 0}
@@ -313,6 +335,7 @@
               Regenerate
             </button>
             <button
+              type="button"
               class="btn btn-success"
               onclick={() => viewModel.acceptWorld()}
               disabled={!viewModel.worldOutput}
@@ -321,6 +344,7 @@
             </button>
           {:else}
             <button
+              type="button"
               class="btn btn-primary"
               disabled={!viewModel.canAdvance}
               onclick={() => viewModel.advanceStep()}

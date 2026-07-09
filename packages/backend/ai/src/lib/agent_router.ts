@@ -1,4 +1,5 @@
 // packages/backend/ai/src/lib/agent_router.ts
+// biome-ignore-all lint/style/useNamingConvention: Property names must match OpenRouter API payload format (snake_case)
 /**
  * Algorithmic Token Router & AST Footprint Extractor.
  *

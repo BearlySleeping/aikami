@@ -42,63 +42,63 @@ import { registerSerializable } from './serializable_service';
  * Unknown item IDs default to non-equippable generic items.
  */
 const ITEM_CATALOG: Record<string, ItemDefinition> = {
-  rusty_sword: {
+  rustySword: {
     label: 'Rusty Sword',
     attackBonus: 3,
     defenseBonus: 0,
     equippable: true,
     slot: 'weapon',
   },
-  iron_sword: {
+  ironSword: {
     label: 'Iron Sword',
     attackBonus: 5,
     defenseBonus: 0,
     equippable: true,
     slot: 'weapon',
   },
-  steel_sword: {
+  steelSword: {
     label: 'Steel Sword',
     attackBonus: 8,
     defenseBonus: 0,
     equippable: true,
     slot: 'weapon',
   },
-  wooden_shield: {
+  woodenShield: {
     label: 'Wooden Shield',
     attackBonus: 0,
     defenseBonus: 2,
     equippable: true,
     slot: 'armor',
   },
-  leather_armor: {
+  leatherArmor: {
     label: 'Leather Armor',
     attackBonus: 0,
     defenseBonus: 3,
     equippable: true,
     slot: 'armor',
   },
-  iron_armor: {
+  ironArmor: {
     label: 'Iron Armor',
     attackBonus: 0,
     defenseBonus: 5,
     equippable: true,
     slot: 'armor',
   },
-  health_potion: {
+  healthPotion: {
     label: 'Health Potion',
     attackBonus: 0,
     defenseBonus: 0,
     equippable: false,
     slot: undefined,
   },
-  mana_potion: {
+  manaPotion: {
     label: 'Mana Potion',
     attackBonus: 0,
     defenseBonus: 0,
     equippable: false,
     slot: undefined,
   },
-  gold_coin: {
+  goldCoin: {
     label: 'Gold Coin',
     attackBonus: 0,
     defenseBonus: 0,

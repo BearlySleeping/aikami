@@ -176,6 +176,7 @@
 
     <div class="pt-2">
       <button
+        type="button"
         class="btn btn-sm btn-ghost font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#cabeff]"
         onclick={() => viewModel.testVoice()}
         disabled={viewModel.isTestingVoice}

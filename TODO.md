@@ -265,7 +265,7 @@
 
 ---
 
-#### C-ME-013: Image Generation Pipeline
+#### C-ME-013: Image Generation Pipeline — [📋 Contract C-242](docs/contracts/C-242-image-generation-pipeline.md)
 
 - **Marinara Reference**: `docs/IMAGE_GENERATION.md`, `docs/GAME_MODE.md` (image generation toggle, scene analysis sidecar), `docs/ROLEPLAY.md` (sprites, backgrounds, illustrations)
 - **What Marinara Does**: Centralized style profiles (Anime, Realistic, Cinematic, etc.) with prompt grammar, positive/negative tags, per-image type tags. Prompt cleanup/compilation. Provider support: Stability AI, ComfyUI, AUTOMATIC1111, NovelAI, Draw Things, custom OpenAI-compatible. Review-before-generate toggle. Image generation used for: NPC portraits, location backgrounds, character selfies, scene illustrations, sprite generation.

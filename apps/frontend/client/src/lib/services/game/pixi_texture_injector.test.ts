@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/services/media/pixi_texture_injector.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { type Container, Texture } from 'pixi.js';
 import { PixiTextureInjector, type PixiTextureInjectorInterface } from './pixi_texture_injector';

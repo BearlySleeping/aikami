@@ -26,6 +26,7 @@
     <div class="flex gap-2">
       {#each viewModel.memoryTypes as mtype}
         <button
+          type="button"
           class="btn btn-sm font-['JetBrains_Mono'] text-xs {memoryConfig.type === mtype
             ? 'btn-primary'
             : 'btn-ghost text-[#938ea1]'}"

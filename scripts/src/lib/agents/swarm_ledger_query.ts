@@ -1,4 +1,5 @@
 // scripts/src/lib/agents/swarm_ledger_query.ts
+// biome-ignore-all lint/style/useNamingConvention: SQLite column names and HerDr API field names (snake_case) — must match external contracts
 /**
  * Swarm Ledger Query CLI — reads the scratchpad SQLite database and
  * outputs a JSON envelope to stdout. Used by swarm_get_ledger_status.

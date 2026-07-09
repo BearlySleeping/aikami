@@ -250,6 +250,7 @@ class TextGenerationService
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // biome-ignore lint/style/useNamingConvention: HTTP header field name
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...(routing.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
         },
@@ -352,8 +353,10 @@ class TextGenerationService
         model: routing.model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         stream: true,
+        // biome-ignore lint/style/useNamingConvention: OpenAI API contract field names
         response_format: {
           type: 'json_schema',
+          // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
           json_schema: {
             name: schemaName,
             schema: compiledSchema,
@@ -368,6 +371,7 @@ class TextGenerationService
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // biome-ignore lint/style/useNamingConvention: HTTP header field name
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...(routing.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
         },
@@ -518,6 +522,7 @@ class TextGenerationService
             const parsed = JSON.parse(data) as {
               choices?: Array<{
                 delta?: { content?: string };
+                // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
                 finish_reason?: string | null;
               }>;
             };

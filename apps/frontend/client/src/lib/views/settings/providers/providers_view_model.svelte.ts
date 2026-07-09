@@ -545,6 +545,7 @@ export class ProvidersViewModel
           body: JSON.stringify({
             input: testText,
             model: 'tts-1',
+            // biome-ignore lint/style/useNamingConvention: API contract field name
             response_format: 'mp3',
             speed,
             voice: voiceId,

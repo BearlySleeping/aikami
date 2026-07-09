@@ -30,6 +30,7 @@
     <div class="flex gap-0" role="tablist">
       {#each SUB_TABS as sub}
         <button
+          type="button"
           role="tab"
           aria-selected={activeSubTab === sub.key}
           class="relative px-5 py-2.5 font-['JetBrains_Mono'] text-xs uppercase tracking-widest transition-colors {activeSubTab === sub.key

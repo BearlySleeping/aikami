@@ -143,7 +143,7 @@ class SandboxViewModel
 
       const paletteBytes = new Uint8Array(1024);
 
-      const SANDBOX_RECIPES: Record<number, LpcLayerRecipe> = {
+      const SandboxRecipes: Record<number, LpcLayerRecipe> = {
         // Player — 6-layer stack
         1: { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
         2: { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
@@ -165,7 +165,7 @@ class SandboxViewModel
         bridge: this._engineBridge,
         textureManager: tm,
         recipeResolver: (layerIds) =>
-          layerIds.map((id) => SANDBOX_RECIPES[id]).filter(Boolean) as LpcLayerRecipe[],
+          layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         workerFactory: () => new EcsWorker(),

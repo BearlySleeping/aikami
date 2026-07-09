@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/settings/providers/providers_view_model.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts

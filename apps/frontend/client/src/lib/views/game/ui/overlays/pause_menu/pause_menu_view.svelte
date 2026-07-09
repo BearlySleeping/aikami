@@ -19,11 +19,16 @@
     <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
 
     <div class="mt-6 space-y-3">
-      <button class="btn btn-primary btn-block" onclick={() => viewModel.resumeGame()}>
+      <button
+        type="button"
+        class="btn btn-primary btn-block"
+        onclick={() => viewModel.resumeGame()}
+      >
         Resume Game
       </button>
 
       <button
+        type="button"
         class="btn btn-outline btn-block"
         disabled={viewModel.isSaving}
         onclick={() => viewModel.saveGame()}
@@ -46,11 +51,19 @@
         </p>
       {/if}
 
-      <button class="btn btn-outline btn-block" onclick={() => viewModel.goToSettings()}>
+      <button
+        type="button"
+        class="btn btn-outline btn-block"
+        onclick={() => viewModel.goToSettings()}
+      >
         Settings
       </button>
 
-      <button class="btn btn-ghost btn-block text-error" onclick={() => viewModel.quitToMainMenu()}>
+      <button
+        type="button"
+        class="btn btn-ghost btn-block text-error"
+        onclick={() => viewModel.quitToMainMenu()}
+      >
         Quit to Main Menu
       </button>
     </div>

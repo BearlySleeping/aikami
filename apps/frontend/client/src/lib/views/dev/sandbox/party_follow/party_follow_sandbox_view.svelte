@@ -89,6 +89,7 @@
             </div>
 
             <button
+              type="button"
               class="btn btn-xs {member.active ? 'btn-error btn-outline' : 'btn-success'}"
               onclick={() => viewModel.togglePartyMember(member.id)}
             >

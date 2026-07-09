@@ -174,6 +174,7 @@
           <h3 class="text-sm font-bold text-primary">{viewModel.vendorName}</h3>
         </div>
         <button
+          type="button"
           class="btn btn-ghost btn-xs text-error"
           onclick={() => viewModel.closeVendor()}
           aria-label="Close vendor"
@@ -225,6 +226,7 @@
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
+              <title>icon</title>
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -249,6 +251,7 @@
             disabled={viewModel.isHaggling || viewModel.refusesToSell}
           ></textarea>
           <button
+            type="button"
             class="btn btn-primary btn-sm self-end"
             onclick={() => submitHaggle()}
             disabled={viewModel.isHaggling || viewModel.refusesToSell || !haggleInput.trim()}
@@ -387,6 +390,7 @@
 
                 <!-- Buy button -->
                 <button
+                  type="button"
                   class="btn btn-xs w-full gap-1 {canAfford
                     ? 'btn-primary'
                     : 'btn-ghost'} {viewModel.refusesToSell ? 'btn-disabled' : ''}"

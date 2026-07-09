@@ -8,6 +8,7 @@
 //   - Health-check polling via HTTP endpoint
 //   - Clean teardown on test completion
 
+// biome-ignore-all lint/style/useNamingConvention: Environment variable names must match Firebase emulator convention (CONSTANT_CASE)
 import { execSync, spawn } from 'node:child_process';
 
 /** Configuration for a single Docker-backed service. */

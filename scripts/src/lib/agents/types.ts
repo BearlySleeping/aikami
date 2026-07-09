@@ -1,4 +1,5 @@
 // scripts/src/lib/agents/types.ts
+// biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 /**
  * Shared data model types for the Swarm Director & Workspace Provisioning system.
  */

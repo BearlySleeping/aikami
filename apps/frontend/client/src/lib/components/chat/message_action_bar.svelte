@@ -57,6 +57,7 @@
 >
   {#each actions as action (action)}
     <button
+      type="button"
       class="btn btn-ghost btn-xs tooltip tooltip-top px-1"
       data-tip={LABELS[action]}
       onclick={(e) => {

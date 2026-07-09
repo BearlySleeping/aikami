@@ -27,6 +27,7 @@
       </div>
       {#if !viewModel.uid}
         <button
+          type="button"
           class="btn btn-accent btn-xs"
           disabled={viewModel.isSigningIn}
           onclick={() => viewModel.signInAnonymously()}
@@ -69,6 +70,7 @@
     <!-- Action buttons -->
     <div class="flex gap-2">
       <button
+        type="button"
         class="btn btn-primary btn-sm"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.saveSlot()}
@@ -80,6 +82,7 @@
       </button>
 
       <button
+        type="button"
         class="btn btn-outline btn-sm"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.loadSlot()}
@@ -88,6 +91,7 @@
       </button>
 
       <button
+        type="button"
         class="btn btn-error btn-sm btn-outline"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.deleteSlot()}
@@ -96,6 +100,7 @@
       </button>
 
       <button
+        type="button"
         class="btn btn-ghost btn-sm"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.loadSlots()}

@@ -56,13 +56,18 @@
       class="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
     >
       <button
+        type="button"
         class="btn btn-xs btn-ghost text-white hover:bg-white/20"
         onclick={() => (isExpanded = true)}
       >
         🔍 Expand
       </button>
       {#if onRegenerate}
-        <button class="btn btn-xs btn-ghost text-white hover:bg-white/20" onclick={onRegenerate}>
+        <button
+          type="button"
+          class="btn btn-xs btn-ghost text-white hover:bg-white/20"
+          onclick={onRegenerate}
+        >
           🔄 Regenerate
         </button>
       {/if}
@@ -81,6 +86,7 @@
       tabindex="-1"
     >
       <button
+        type="button"
         class="absolute top-4 right-4 btn btn-sm btn-ghost text-white text-xl"
         onclick={() => (isExpanded = false)}
       >

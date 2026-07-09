@@ -448,6 +448,7 @@ class ImageViewModel
     const queueResponse = await fetch('/api/image/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       body: JSON.stringify({ client_id: `aikami-dev-${Date.now()}`, prompt: workflow }),
       signal,
     });
@@ -457,6 +458,7 @@ class ImageViewModel
       throw new Error(`ComfyUI API error (${queueResponse.status}): ${errText.slice(0, 200)}`);
     }
 
+    // biome-ignore lint/style/useNamingConvention: API contract field name
     const { prompt_id: promptId } = (await queueResponse.json()) as { prompt_id: string };
 
     this.generationStatus = 'Generating...';
@@ -527,25 +529,34 @@ class ImageViewModel
 
     return {
       '3': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'KSampler',
         inputs: {
           seed,
           steps,
           cfg,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           sampler_name: sampler,
           scheduler,
           denoise: 1,
           model: ['4', 0],
           positive: ['6', 0],
           negative: ['7', 0],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           latent_image: ['5', 0],
         },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '5': { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] } },
     };
   }
@@ -578,26 +589,36 @@ class ImageViewModel
 
     return {
       '3': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'KSampler',
         inputs: {
           seed,
           steps,
           cfg,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           sampler_name: sampler,
           scheduler,
           denoise,
           model: ['4', 0],
           positive: ['6', 0],
           negative: ['7', 0],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           latent_image: ['11', 0],
         },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '10': { class_type: 'LoadImage', inputs: { image: imageName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
     };
   }

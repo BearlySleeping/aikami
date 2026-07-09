@@ -183,7 +183,7 @@
   <section class="rounded-lg border border-base-300 bg-base-100 p-4">
     <div class="mb-3 flex items-center justify-between">
       <h2 class="text-sm font-semibold text-base-content/70">2. Initiative Tracker</h2>
-      <button class="btn btn-outline btn-xs" onclick={toggleDefeated}>
+      <button type="button" class="btn btn-outline btn-xs" onclick={toggleDefeated}>
         Toggle Goblin Defeated
       </button>
     </div>
@@ -195,14 +195,26 @@
     <div class="mb-3 flex items-center justify-between">
       <h2 class="text-sm font-semibold text-base-content/70">3. Turn Tracker Header</h2>
       <div class="flex gap-2">
-        <button class="btn btn-outline btn-xs" onclick={cycleTurn}>Cycle Turn</button>
-        <button class="btn btn-outline btn-xs" onclick={() => toggleActionEconomy('action')}>
+        <button type="button" class="btn btn-outline btn-xs" onclick={cycleTurn}>Cycle Turn</button>
+        <button
+          type="button"
+          class="btn btn-outline btn-xs"
+          onclick={() => toggleActionEconomy('action')}
+        >
           Toggle Action
         </button>
-        <button class="btn btn-outline btn-xs" onclick={() => toggleActionEconomy('bonusAction')}>
+        <button
+          type="button"
+          class="btn btn-outline btn-xs"
+          onclick={() => toggleActionEconomy('bonusAction')}
+        >
           Toggle Bonus
         </button>
-        <button class="btn btn-outline btn-xs" onclick={() => toggleActionEconomy('reaction')}>
+        <button
+          type="button"
+          class="btn btn-outline btn-xs"
+          onclick={() => toggleActionEconomy('reaction')}
+        >
           Toggle Reaction
         </button>
       </div>
@@ -238,7 +250,11 @@
       <p class="text-xs font-semibold text-base-content/50">Preset test strings:</p>
       <div class="flex flex-wrap gap-1">
         {#each ['Player rolls 18 for 12 slashing damage', 'Player rolls 5 — Miss!', 'Critical hit! Player deals 30 piercing damage!', 'Enemy attacks with fire breath for 22 fire damage', 'Player rolls 20 with advantage for 15 radiant damage'] as preset}
-          <button class="btn btn-ghost btn-xs font-mono" onclick={() => (testLogText = preset)}>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs font-mono"
+            onclick={() => (testLogText = preset)}
+          >
             {preset.split(' ').slice(0, 3).join(' ')}…
           </button>
         {/each}

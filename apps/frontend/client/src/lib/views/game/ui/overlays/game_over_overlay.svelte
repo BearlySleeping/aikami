@@ -16,8 +16,8 @@
     <h1 class="text-3xl font-bold text-error">Defeated</h1>
     <p class="text-center text-base text-base-content/60">Your journey ends here... for now.</p>
     <div class="flex gap-4">
-      <button class="btn btn-primary" onclick={onRespawn}>Respawn</button>
-      <button class="btn btn-outline" onclick={onLoadLastSave}>Load Last Save</button>
+      <button type="button" class="btn btn-primary" onclick={onRespawn}>Respawn</button>
+      <button type="button" class="btn btn-outline" onclick={onLoadLastSave}>Load Last Save</button>
     </div>
   </div>
 </div>

@@ -22,6 +22,7 @@
         <div class="flex flex-wrap gap-2">
           {#each viewModel.availableAgents as agent (agent.id)}
             <button
+              type="button"
               class="btn btn-sm {viewModel.isAgentEnabled(agent.id) ? 'btn-primary' : 'btn-ghost'}"
               onclick={() => viewModel.toggleAgent(agent.id)}
               disabled={viewModel.isRunning}
@@ -55,6 +56,7 @@
 
     <!-- Run button -->
     <button
+      type="button"
       class="btn btn-primary w-full"
       onclick={() => viewModel.runTestPipeline()}
       disabled={viewModel.isRunning}

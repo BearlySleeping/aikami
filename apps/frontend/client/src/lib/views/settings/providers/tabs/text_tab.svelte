@@ -1,6 +1,6 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/text_tab.svelte -->
 <script lang="ts">
-  import { Select } from '@aikami/frontend-components';
+  import { Select } from '@aikami/frontend/components';
   import type { AuxiliaryModels } from '$lib/services/config/config_service.svelte';
   import ProvidersModelSelector from '../providers_model_selector.svelte';
   import type { TextTabViewModelInterface } from './text_tab_view_model.svelte';
@@ -46,6 +46,7 @@
               viewModel.setTextApiKey(viewModel.textProvider, (e.target as HTMLInputElement).value)}
           >
           <button
+            type="button"
             class="btn btn-ghost join-item"
             onclick={() => viewModel.toggleKeyVisibility()}
             title={viewModel.keyVisible ? 'Hide key' : 'Show key'}
@@ -58,6 +59,7 @@
                 viewBox="0 0 24 24"
                 stroke="currentColor"
               >
+                <title>icon</title>
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -73,6 +75,7 @@
                 viewBox="0 0 24 24"
                 stroke="currentColor"
               >
+                <title>icon</title>
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"

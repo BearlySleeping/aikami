@@ -90,7 +90,7 @@
   <div class="mb-2 flex items-center justify-between">
     <span class="text-xs font-semibold text-base-content/70">🎲 Quick Dice</span>
     {#if queuedRolls.length > 0}
-      <button class="btn btn-primary btn-xs" onclick={onRollAll} disabled={isRolling}>
+      <button type="button" class="btn btn-primary btn-xs" onclick={onRollAll} disabled={isRolling}>
         {#if isRolling}
           <span class="loading loading-spinner loading-xs"></span>
           Rolling...
@@ -105,6 +105,7 @@
   <div class="mb-2 grid grid-cols-4 gap-1">
     {#each DICE_PRESETS as preset}
       <button
+        type="button"
         class="btn btn-outline btn-xs font-mono"
         onclick={() => onQueueRoll({ notation: preset.notation, label: preset.label })}
         disabled={isRolling}
@@ -125,6 +126,7 @@
       disabled={isRolling}
     >
     <button
+      type="button"
       class="btn btn-outline btn-xs"
       onclick={handleCustomQueue}
       disabled={isRolling || customInput.trim().length === 0}
@@ -151,6 +153,7 @@
             <span class="text-base-content/60">{roll.label}</span>
           {/if}
           <button
+            type="button"
             class="btn btn-ghost btn-xs h-4 min-h-0 w-4 px-0 text-base-content/40 hover:text-error"
             onclick={() => onRemoveQueuedRoll(roll.id)}
             disabled={isRolling}

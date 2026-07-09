@@ -13,6 +13,7 @@
   <span class="text-sm font-medium text-base-content/70">Address:</span>
   <div class="join">
     <button
+      type="button"
       class="btn btn-xs join-item"
       class:btn-active={viewModel.currentMode === 'scene'}
       class:btn-success={viewModel.currentMode === 'scene'}
@@ -21,6 +22,7 @@
       Scene
     </button>
     <button
+      type="button"
       class="btn btn-xs join-item"
       class:btn-active={viewModel.currentMode === 'party'}
       class:btn-info={viewModel.currentMode === 'party'}
@@ -30,6 +32,7 @@
       Party
     </button>
     <button
+      type="button"
       class="btn btn-xs join-item"
       class:btn-active={viewModel.currentMode === 'gm'}
       class:btn-secondary={viewModel.currentMode === 'gm'}

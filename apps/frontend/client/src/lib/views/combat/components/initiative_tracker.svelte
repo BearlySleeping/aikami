@@ -35,6 +35,7 @@
 <div class="initiative-tracker rounded-lg border border-base-300 bg-base-200">
   <!-- Collapsible header -->
   <button
+    type="button"
     class="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-base-content/70"
     onclick={onToggleCollapse}
   >

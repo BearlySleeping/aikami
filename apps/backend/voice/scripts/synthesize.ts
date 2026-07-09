@@ -1,4 +1,5 @@
 // apps/backend/voice/scripts/synthesize.ts
+// biome-ignore-all lint/style/useNamingConvention: Property names must match shell environment variable conventions
 // Synthesize speech via the Kokoro TTS container and play with mpv.
 //
 // Usage:

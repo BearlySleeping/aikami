@@ -30,6 +30,7 @@
         disabled={isGenerating}
       >
       <button
+        type="button"
         class="btn btn-sm btn-primary"
         disabled={isGenerating || !prompt.trim()}
         onclick={() => {

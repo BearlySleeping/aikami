@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/services/media/image_generation.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Property names must match ComfyUI API field names (PascalCase and snake_case)
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // Mock configService BEFORE importing ImageGenerationService to avoid

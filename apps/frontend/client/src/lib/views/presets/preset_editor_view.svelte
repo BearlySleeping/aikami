@@ -33,7 +33,11 @@
           <span class="text-xs font-semibold uppercase tracking-wider text-base-content/50">
             Presets
           </span>
-          <button class="btn btn-ghost btn-xs" onclick={() => viewModel.createNewPreset()}>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            onclick={() => viewModel.createNewPreset()}
+          >
             + New
           </button>
         </div>
@@ -41,6 +45,7 @@
         <div class="flex flex-col gap-1">
           {#each viewModel.presets as preset}
             <button
+              type="button"
               class="btn btn-sm justify-start text-left {preset.id === viewModel.selectedPresetId
                 ? 'btn-primary'
                 : 'btn-ghost'}"
@@ -83,10 +88,15 @@
                 >
               </div>
               <div class="flex gap-2">
-                <button class="btn btn-ghost btn-sm" onclick={() => viewModel.duplicatePreset()}>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  onclick={() => viewModel.duplicatePreset()}
+                >
                   Duplicate
                 </button>
                 <button
+                  type="button"
                   class="btn btn-ghost btn-sm text-error"
                   onclick={() => viewModel.deletePreset()}
                   disabled={viewModel.presets.find((p) => p.id === viewModel.selectedPresetId)?.isBuiltIn}
@@ -128,6 +138,7 @@
 
                     <!-- Move up -->
                     <button
+                      type="button"
                       class="btn btn-ghost btn-xs"
                       onclick={() => viewModel.moveSectionUp({ id: section.id })}
                       disabled={idx === 0}
@@ -137,6 +148,7 @@
 
                     <!-- Move down -->
                     <button
+                      type="button"
                       class="btn btn-ghost btn-xs"
                       onclick={() => viewModel.moveSectionDown({ id: section.id })}
                       disabled={idx === viewModel.sections.length - 1}
@@ -146,6 +158,7 @@
 
                     <!-- Remove -->
                     <button
+                      type="button"
                       class="btn btn-ghost btn-xs text-error"
                       onclick={() => viewModel.removeSection({ id: section.id })}
                     >
@@ -182,7 +195,11 @@
                 }
               }}
             >
-            <button class="btn btn-primary btn-sm" onclick={() => viewModel.addSection()}>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              onclick={() => viewModel.addSection()}
+            >
               + Add Section
             </button>
           </div>
@@ -191,13 +208,18 @@
           {#if viewModel.isNewPreset}
             <div class="mt-4 flex gap-2">
               <button
+                type="button"
                 class="btn btn-primary"
                 onclick={() => viewModel.savePreset()}
                 disabled={!viewModel.newPresetName.trim() || viewModel.sections.length === 0}
               >
                 Save Preset
               </button>
-              <button class="btn btn-ghost" onclick={() => viewModel.discardChanges()}>
+              <button
+                type="button"
+                class="btn btn-ghost"
+                onclick={() => viewModel.discardChanges()}
+              >
                 Discard
               </button>
             </div>

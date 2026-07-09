@@ -77,24 +77,30 @@
   <section class="space-y-3">
     <h2 class="text-lg font-semibold">Toast (auto-dismiss 5s)</h2>
     <div class="flex flex-wrap gap-2">
-      <button class="btn btn-success" onclick={() => showToast('success')}>Success</button>
-      <button class="btn btn-error" onclick={() => showToast('error')}>Error</button>
-      <button class="btn btn-warning" onclick={() => showToast('warning')}>Warning</button>
-      <button class="btn btn-info" onclick={() => showToast('info')}>Info</button>
-      <button class="btn" onclick={stackToasts}>Stack 3</button>
+      <button type="button" class="btn btn-success" onclick={() => showToast('success')}>
+        Success
+      </button>
+      <button type="button" class="btn btn-error" onclick={() => showToast('error')}>Error</button>
+      <button type="button" class="btn btn-warning" onclick={() => showToast('warning')}>
+        Warning
+      </button>
+      <button type="button" class="btn btn-info" onclick={() => showToast('info')}>Info</button>
+      <button type="button" class="btn" onclick={stackToasts}>Stack 3</button>
     </div>
   </section>
 
   <!-- Confirm Dialog -->
   <section class="space-y-3">
     <h2 class="text-lg font-semibold">Confirm Dialog</h2>
-    <button class="btn btn-primary" onclick={() => void showConfirm()}>Open Confirm Dialog</button>
+    <button type="button" class="btn btn-primary" onclick={() => void showConfirm()}>
+      Open Confirm Dialog
+    </button>
   </section>
 
   <!-- Loading -->
   <section class="space-y-3">
     <h2 class="text-lg font-semibold">Loading Overlay</h2>
-    <button class="btn" onclick={toggleLoading}>
+    <button type="button" class="btn" onclick={toggleLoading}>
       {dialogService.appLoading ? 'Hide Loading' : 'Show Loading'}
     </button>
   </section>
@@ -105,6 +111,6 @@
     <p class="text-sm text-base-content/60">
       Simulates a background task (e.g. image generation). Check the bottom of the screen.
     </p>
-    <button class="btn" onclick={simulateProgress}>Simulate Progress</button>
+    <button type="button" class="btn" onclick={simulateProgress}>Simulate Progress</button>
   </section>
 </div>

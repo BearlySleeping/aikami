@@ -30,6 +30,7 @@
 <div class="card bg-base-200 shadow-xl">
   <div class="card-body p-4">
     <button
+      type="button"
       class="flex items-center justify-between cursor-pointer w-full"
       onclick={() => onToggle?.()}
     >

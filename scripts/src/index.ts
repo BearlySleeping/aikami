@@ -11,6 +11,8 @@
  *    Lists all available scripts and lets you pick one to run.
  */
 
+// biome-ignore-all lint/style/useNamingConvention: CLI command names are user-facing shortcuts that follow CLI convention
+
 import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { c, error, log, ok } from './lib/cli_utils';

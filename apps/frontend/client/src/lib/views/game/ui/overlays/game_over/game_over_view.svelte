@@ -17,8 +17,10 @@
     <h1 class="text-3xl font-bold text-error">Defeated</h1>
     <p class="text-center text-base text-base-content/60">Your journey ends here... for now.</p>
     <div class="flex gap-4">
-      <button class="btn btn-primary" onclick={() => viewModel.respawnPlayer()}>Respawn</button>
-      <button class="btn btn-outline" onclick={() => viewModel.loadLastSave()}>
+      <button type="button" class="btn btn-primary" onclick={() => viewModel.respawnPlayer()}>
+        Respawn
+      </button>
+      <button type="button" class="btn btn-outline" onclick={() => viewModel.loadLastSave()}>
         Load Last Save
       </button>
     </div>

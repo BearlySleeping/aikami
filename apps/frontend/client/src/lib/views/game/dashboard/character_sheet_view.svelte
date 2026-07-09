@@ -5,7 +5,7 @@
   // character dashboard from C-153. All state lives in the ViewModel.
   //
   // Contract: C-232 Character Sheet & Traits System
-  import { Modal } from '@aikami/frontend-components';
+  import { Modal } from '@aikami/frontend/components';
   import { ABILITY_KEYS } from '$lib/data/character_sheet_types';
   import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
 
@@ -50,6 +50,7 @@
             >
           </label>
           <button
+            type="button"
             class="btn btn-sm btn-ghost btn-circle"
             onclick={() => viewModel.closeSheet()}
             aria-label="Close character sheet"
@@ -86,10 +87,18 @@
               <div class="text-xs text-error font-mono">{viewModel.jsonError}</div>
             {/if}
             <div class="flex gap-2">
-              <button class="btn btn-sm btn-primary" onclick={() => viewModel.saveJsonEdit()}>
+              <button
+                type="button"
+                class="btn btn-sm btn-primary"
+                onclick={() => viewModel.saveJsonEdit()}
+              >
                 Save & Validate
               </button>
-              <button class="btn btn-sm btn-ghost" onclick={() => viewModel.toggleJsonEditing()}>
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost"
+                onclick={() => viewModel.toggleJsonEditing()}
+              >
                 Cancel
               </button>
             </div>
@@ -103,6 +112,7 @@
         <!-- ── Tabs ── -->
         <div role="tablist" class="tabs tabs-bordered">
           <button
+            type="button"
             role="tab"
             class="tab tab-sm {viewModel.activeTab === 'abilities' ? 'tab-active' : ''}"
             onclick={() => viewModel.setActiveTab('abilities')}
@@ -110,6 +120,7 @@
             Abilities
           </button>
           <button
+            type="button"
             role="tab"
             class="tab tab-sm {viewModel.activeTab === 'skills' ? 'tab-active' : ''}"
             onclick={() => viewModel.setActiveTab('skills')}
@@ -117,6 +128,7 @@
             Skills
           </button>
           <button
+            type="button"
             role="tab"
             class="tab tab-sm {viewModel.activeTab === 'traits' ? 'tab-active' : ''}"
             onclick={() => viewModel.setActiveTab('traits')}
@@ -286,6 +298,7 @@
                       <span class="badge badge-sm gap-1">
                         {trait}
                         <button
+                          type="button"
                           class="cursor-pointer text-base-content/40 hover:text-error"
                           onclick={() => viewModel.removeNarrativeTrait(category, trait)}
                           aria-label="Remove {trait}"
@@ -409,7 +422,11 @@
       <!-- Footer -->
       <div class="divider my-0"></div>
       <div class="flex items-center justify-between">
-        <button class="btn btn-xs btn-ghost" onclick={() => viewModel.toggleAiPreview()}>
+        <button
+          type="button"
+          class="btn btn-xs btn-ghost"
+          onclick={() => viewModel.toggleAiPreview()}
+        >
           AI Context Preview
         </button>
         <kbd class="kbd kbd-xs text-[10px] opacity-60">C</kbd>
@@ -429,6 +446,8 @@
     >{viewModel.aiPreviewText}</pre>
   {/snippet}
   {#snippet actions()}
-    <button class="btn btn-sm" onclick={() => viewModel.toggleAiPreview()}>Close</button>
+    <button type="button" class="btn btn-sm" onclick={() => viewModel.toggleAiPreview()}>
+      Close
+    </button>
   {/snippet}
 </Modal>

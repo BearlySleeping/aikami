@@ -31,7 +31,11 @@
       <!-- Header -->
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-bold">Prompt Preview</h3>
-        <button class="btn btn-ghost btn-sm btn-square" onclick={() => viewModel.closePreview()}>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square"
+          onclick={() => viewModel.closePreview()}
+        >
           ✕
         </button>
       </div>
@@ -54,14 +58,16 @@
       <!-- Footer actions -->
       <div class="modal-action mt-4">
         <form method="dialog">
-          <button class="btn btn-ghost" onclick={() => viewModel.closePreview()}>Close</button>
+          <button type="button" class="btn btn-ghost" onclick={() => viewModel.closePreview()}>
+            Close
+          </button>
         </form>
       </div>
     </div>
 
     <!-- Backdrop click to close -->
     <form method="dialog" class="modal-backdrop">
-      <button onclick={() => viewModel.closePreview()}>close</button>
+      <button type="button" onclick={() => viewModel.closePreview()}>close</button>
     </form>
   </dialog>
 </BaseViewModelContainer>

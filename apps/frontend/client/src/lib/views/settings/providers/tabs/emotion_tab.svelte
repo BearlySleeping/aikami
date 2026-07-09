@@ -38,6 +38,7 @@
     <div class="flex gap-2">
       {#each viewModel.emotionMethods as method}
         <button
+          type="button"
           class="btn btn-sm font-['JetBrains_Mono'] text-xs {emotionConfig.method === method
             ? 'btn-primary'
             : 'btn-ghost text-[#938ea1]'}"

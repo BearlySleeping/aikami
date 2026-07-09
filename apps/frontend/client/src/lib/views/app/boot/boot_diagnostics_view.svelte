@@ -136,6 +136,7 @@
           <!-- Provider Toggle: Ollama / OpenRouter -->
           <div class="join w-full" role="radiogroup" aria-label="Text Provider Selection">
             <button
+              type="button"
               class="join-item btn btn-xs flex-1 {viewModel.activeTextProvider === 'ollama'
                 ? 'btn-primary'
                 : 'btn-outline btn-neutral'}"
@@ -144,6 +145,7 @@
               Local (Ollama)
             </button>
             <button
+              type="button"
               class="join-item btn btn-xs flex-1 {viewModel.activeTextProvider === 'openrouter'
                 ? 'btn-primary'
                 : 'btn-outline btn-neutral'}"
@@ -175,6 +177,7 @@
                     oninput={(e) => (viewModel.tempOpenRouterKey = e.currentTarget.value)}
                   >
                   <button
+                    type="button"
                     class="btn btn-primary btn-sm"
                     disabled={!viewModel.tempOpenRouterKey.trim()}
                     onclick={() => viewModel.saveOpenRouterKey()}
@@ -196,6 +199,7 @@
                   oninput={(e) => (viewModel.tempOpenRouterKey = e.currentTarget.value)}
                 >
                 <button
+                  type="button"
                   class="btn btn-primary btn-sm"
                   disabled={!viewModel.tempOpenRouterKey.trim()}
                   onclick={() => viewModel.saveOpenRouterKey()}
@@ -293,7 +297,11 @@
                 configure image generation later in Settings.
               </div>
             {/if}
-            <button class="btn btn-success w-full" onclick={() => viewModel.initializeCore()}>
+            <button
+              type="button"
+              class="btn btn-success w-full"
+              onclick={() => viewModel.initializeCore()}
+            >
               {showImageWarning ? 'Initialize Core (Text Only)' : 'Initialize Core'}
             </button>
           </div>
@@ -302,7 +310,7 @@
             class="tooltip w-full"
             data-tip="A Text AI provider (Local Ollama or Cloud OpenRouter) must be online before you can initialize the core."
           >
-            <button class="btn btn-disabled w-full" disabled>
+            <button type="button" class="btn btn-disabled w-full" disabled>
               <span class="loading loading-spinner loading-xs"></span>
               Awaiting Text Provider…
             </button>

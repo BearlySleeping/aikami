@@ -26,12 +26,16 @@
     <div class="card-body p-4">
       <div class="flex justify-between items-center">
         <h3 class="card-title text-sm">Dice Rolls</h3>
-        <button class="btn btn-xs btn-ghost" onclick={onClose}>✕</button>
+        <button type="button" class="btn btn-xs btn-ghost" onclick={onClose}>✕</button>
       </div>
 
       <div class="flex gap-2 mt-2">
-        <button class="btn btn-sm btn-outline" onclick={onRollPerception}>👁️ Perception</button>
-        <button class="btn btn-sm btn-outline" onclick={onRollPersuasion}>💬 Persuasion</button>
+        <button type="button" class="btn btn-sm btn-outline" onclick={onRollPerception}>
+          👁️ Perception
+        </button>
+        <button type="button" class="btn btn-sm btn-outline" onclick={onRollPersuasion}>
+          💬 Persuasion
+        </button>
       </div>
 
       {#if history.length > 0}

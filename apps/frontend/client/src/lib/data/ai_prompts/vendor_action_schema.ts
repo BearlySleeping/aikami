@@ -50,7 +50,7 @@ export const VendorActionSchema = Type.Object(
 
     /**
      * The itemId the player explicitly agreed to buy in this message
-     * (e.g., "deal", "I'll take the rusty_sword", "sold").
+     * (e.g., "deal", "I'll take the rustySword", "sold").
      *
      * Set to one of the vendor's item IDs when the player commits to
      * a purchase. Leave undefined when the player is just browsing,
@@ -108,10 +108,10 @@ object containing:
 4. **itemToBuy** — Set to the exact itemId from the vendor's inventory when the
    player EXPLICITLY commits to buying a specific item. Examples:
    - "deal" → find the item they were negotiating about
-   - "I'll take the rusty sword" → "rusty_sword"
-   - "sold, give me the iron sword" → "iron_sword"
+   - "I'll take the rusty sword" → "rustySword"
+   - "sold, give me the iron sword" → "ironSword"
    - "I'll buy it" → the item most recently discussed
-   - "yes, I'll take that shield" → "wooden_shield"
+   - "yes, I'll take that shield" → "woodenShield"
    
    Leave undefined when the player is just browsing, asking about prices,
    haggling for a discount, or making small talk. Only set when there's a

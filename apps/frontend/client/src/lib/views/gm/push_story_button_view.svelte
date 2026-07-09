@@ -10,6 +10,7 @@
 </script>
 
 <button
+  type="button"
   class="btn btn-primary btn-sm"
   onclick={() => viewModel.pushStory()}
   disabled={viewModel.isPushing}

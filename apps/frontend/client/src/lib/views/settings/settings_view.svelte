@@ -35,7 +35,11 @@
        Header with Back button
        ═══════════════════════════════════════════════════════════════════ -->
   <div class="flex items-center justify-between px-6 py-4 bg-base-100 border-b border-base-300">
-    <button class="btn btn-ghost btn-sm gap-2" onclick={() => viewModel.closeSettings()}>
+    <button
+      type="button"
+      class="btn btn-ghost btn-sm gap-2"
+      onclick={() => viewModel.closeSettings()}
+    >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         class="h-4 w-4"
@@ -43,6 +47,7 @@
         viewBox="0 0 24 24"
         stroke="currentColor"
       >
+        <title>icon</title>
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
       Close
@@ -58,6 +63,7 @@
   <div class="tabs tabs-boxed bg-base-100 m-6 justify-center">
     {#each CATEGORIES as cat}
       <button
+        type="button"
         class="tab tab-lg"
         class:tab-active={viewModel.activeCategory === cat.id}
         onclick={() => viewModel.setActiveCategory(cat.id)}
@@ -75,6 +81,7 @@
     <div class="tabs tabs-bordered px-6">
       {#each GAME_SUB_TABS as sub}
         <button
+          type="button"
           class="tab"
           class:tab-active={viewModel.gameSubTab === sub.id}
           onclick={() => viewModel.setGameSubTab(sub.id)}

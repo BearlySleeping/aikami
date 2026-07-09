@@ -403,7 +403,7 @@ export default function (pi: ExtensionAPI) {
       const result = await pi.exec('bun', args, { signal, timeout: HeavyTimeout }); // 5 min timeout
 
       // Try to parse JSON report for structured output
-      let parsedReport: any = null;
+      let parsedReport: Record<string, unknown> | null = null;
       try {
         const jsonMatch = (result.stdout || '').match(/\{[\s\S]*"suites"[\s\S]*\}/);
         if (jsonMatch) {
@@ -419,7 +419,12 @@ export default function (pi: ExtensionAPI) {
           `Passed: ${parsedReport.passed} | Failed: ${parsedReport.failed} | Skipped: ${parsedReport.skipped}`,
           '',
         ];
-        for (const s of parsedReport.suites) {
+        for (const s of parsedReport.suites as Array<{
+          status: string;
+          name: string;
+          duration: number;
+          error?: string;
+        }>) {
           const icon = s.status === 'pass' ? '✅' : s.status === 'fail' ? '❌' : '⏭️';
           lines.push(`${icon} **${s.name}** (${s.duration}ms)`);
           if (s.error) {

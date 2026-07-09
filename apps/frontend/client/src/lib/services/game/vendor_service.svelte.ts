@@ -20,15 +20,15 @@ import { audioService, gameStateService, getItemDefinition } from '$services';
 // ── Pricing ─────────────────────────────────────────────────────────────
 
 const VENDOR_ITEM_BASE_PRICES: Record<string, number> = {
-  rusty_sword: 15,
-  iron_sword: 50,
-  steel_sword: 150,
-  wooden_shield: 20,
-  leather_armor: 45,
-  iron_armor: 120,
-  health_potion: 10,
-  mana_potion: 15,
-  gold_coin: 1,
+  rustySword: 15,
+  ironSword: 50,
+  steelSword: 150,
+  woodenShield: 20,
+  leatherArmor: 45,
+  ironArmor: 120,
+  healthPotion: 10,
+  manaPotion: 15,
+  goldCoin: 1,
 } as const satisfies Record<string, number>;
 
 const DEFAULT_BASE_PRICE = 10;

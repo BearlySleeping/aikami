@@ -29,6 +29,7 @@
 >
   <!-- ═══ Header / Collapse toggle ═══ -->
   <button
+    type="button"
     class="btn btn-sm gap-2 bg-neutral text-neutral-content border-none shadow-lg hover:bg-neutral-focus flex-nowrap"
     onclick={() => (collapsed = !collapsed)}
     title={collapsed ? 'Expand Dev Tools' : 'Collapse Dev Tools'}
@@ -53,6 +54,7 @@
           <span class="text-xs font-mono opacity-50 uppercase tracking-wider mb-1">Actions</span>
           {#each actions as action}
             <button
+              type="button"
               data-testid={`dev-action-${action.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
               class="btn btn-sm btn-ghost justify-start text-neutral-content hover:bg-base-300/30"
               onclick={action.onClick}

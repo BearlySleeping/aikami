@@ -25,11 +25,11 @@ const MOCK_ITEM_IDS = [
 class InventoryDevViewModel extends InventoryViewModel {
   override async initialize(): Promise<void> {
     gameStateService.inventory = [
-      { itemId: 'iron_sword', quantity: 1 },
-      { itemId: 'health_potion', quantity: 3 },
-      { itemId: 'wooden_shield', quantity: 1 },
-      { itemId: 'rusty_sword', quantity: 1 },
-      { itemId: 'leather_armor', quantity: 1 },
+      { itemId: 'ironSword', quantity: 1 },
+      { itemId: 'healthPotion', quantity: 3 },
+      { itemId: 'woodenShield', quantity: 1 },
+      { itemId: 'rustySword', quantity: 1 },
+      { itemId: 'leatherArmor', quantity: 1 },
     ];
     return await super.initialize();
   }

@@ -115,6 +115,7 @@
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
         {#each viewModel.catalogEntries as entry}
           <button
+            type="button"
             class="btn btn-sm {viewModel.selectedExpressionId === entry.id ? 'btn-primary' : 'btn-ghost'} justify-start text-left"
             onclick={() => viewModel.selectExpression(entry.id)}
           >

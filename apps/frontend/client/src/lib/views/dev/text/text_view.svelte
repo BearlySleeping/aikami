@@ -52,6 +52,7 @@
       <div class="tabs tabs-bordered mb-6">
         {#each viewModel.tabs as tab}
           <button
+            type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.activeTab === tab.key
               ? 'tab-active border-[#cabeff] text-[#cabeff]'
               : 'text-[#938ea1]'}"
@@ -219,9 +220,12 @@
             </label>
             <div class="flex gap-3 mt-2">
               {#if viewModel.isGenerating}
-                <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+                <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+                  ⏹ Cancel
+                </button>
               {:else}
                 <button
+                  type="button"
                   class="btn btn-primary"
                   onclick={() => viewModel.generate()}
                   disabled={!viewModel.prompt.trim()}
@@ -282,6 +286,7 @@
                 JSON Schema
               </h2>
               <button
+                type="button"
                 class="btn btn-xs btn-ghost text-[#938ea1] hover:text-[#cabeff] font-['JetBrains_Mono'] text-[10px]"
                 onclick={() => { viewModel.schemaDefinition = EXAMPLE_SCHEMA; }}
               >
@@ -333,9 +338,12 @@
             </label>
             <div class="flex gap-3 mt-3">
               {#if viewModel.isGenerating}
-                <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+                <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+                  ⏹ Cancel
+                </button>
               {:else}
                 <button
+                  type="button"
                   class="btn btn-primary"
                   onclick={() => viewModel.validateSchema()}
                   disabled={!viewModel.schemaDefinition.trim() || !viewModel.schemaPrompt.trim()}

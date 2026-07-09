@@ -23,6 +23,7 @@
         {/if}
       </div>
       <button
+        type="button"
         class="btn btn-ghost btn-xs"
         onclick={() => viewModel.toggleDrawer()}
         aria-label="Close agent HUD"
@@ -72,6 +73,7 @@
 
 <!-- Toggle button (always visible) -->
 <button
+  type="button"
   class="fixed bottom-4 right-4 z-50 btn btn-circle btn-sm btn-primary shadow-lg"
   onclick={() => viewModel.toggleDrawer()}
   aria-label="Toggle agent HUD"

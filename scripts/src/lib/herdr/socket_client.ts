@@ -1,4 +1,5 @@
 // scripts/src/lib/herdr/socket_client.ts
+// biome-ignore-all lint/style/useNamingConvention: HerDr API response and protocol field names (snake_case) — must match external API contract
 /**
  * Herdr Socket Client (C-311).
  *

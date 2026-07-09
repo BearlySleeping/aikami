@@ -53,11 +53,15 @@
         <div class="modal-action">
           <form method="dialog">
             {#if !p?.hideDisagreeButton}
-              <button class="btn" onclick={() => viewModel.closeDialog(false)}>
+              <button type="button" class="btn" onclick={() => viewModel.closeDialog(false)}>
                 {p?.disagreeLabel ?? 'Cancel'}
               </button>
             {/if}
-            <button class="btn btn-primary" onclick={() => viewModel.closeDialog(true)}>
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick={() => viewModel.closeDialog(true)}
+            >
               {p?.agreeLabel ?? 'Confirm'}
             </button>
           </form>
@@ -66,7 +70,7 @@
         <p class="py-4 text-base-content/70">Unknown dialog type</p>
         <div class="modal-action">
           <form method="dialog">
-            <button class="btn" onclick={() => viewModel.closeDialog()}>Close</button>
+            <button type="button" class="btn" onclick={() => viewModel.closeDialog()}>Close</button>
           </form>
         </div>
       {/if}
@@ -74,7 +78,7 @@
 
     <!-- Click backdrop to close -->
     <form method="dialog" class="modal-backdrop">
-      <button>close</button>
+      <button type="button">close</button>
     </form>
   {/if}
 </dialog>

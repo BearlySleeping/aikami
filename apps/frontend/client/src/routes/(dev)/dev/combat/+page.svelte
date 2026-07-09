@@ -143,10 +143,15 @@
           <option value={mood}>{mood}</option>
         {/each}
       </select>
-      <button class="btn btn-sm btn-primary" onclick={playTestMusic} disabled={isPlayingMusic}>
+      <button
+        type="button"
+        class="btn btn-sm btn-primary"
+        onclick={playTestMusic}
+        disabled={isPlayingMusic}
+      >
         {isPlayingMusic ? '⏳' : '▶'}
       </button>
-      <button class="btn btn-sm btn-ghost" onclick={stopMusic}>⏹</button>
+      <button type="button" class="btn btn-sm btn-ghost" onclick={stopMusic}>⏹</button>
     </div>
     {#if musicStatus}
       <span

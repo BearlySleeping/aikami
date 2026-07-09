@@ -1,4 +1,5 @@
 // scripts/src/lib/agents/swarm_director.ts
+// biome-ignore-all lint/style/useNamingConvention: HerDr API field names (snake_case) — must match external API contract
 /**
  * Swarm Director & Workspace Provisioning Lifecycle Manager.
  *

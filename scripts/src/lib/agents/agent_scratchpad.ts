@@ -1,4 +1,5 @@
 // scripts/src/lib/agents/agent_scratchpad.ts
+// biome-ignore-all lint/style/useNamingConvention: SQLite column names and HerDr API field names (snake_case) — must match external contracts
 /**
  * Coherent Ephemeral SQLite-WAL Scratchpad Engine.
  *

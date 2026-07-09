@@ -206,6 +206,7 @@
 | C-239 | Expression Emotion System | ⏳ not_started |
 | C-240 | Session Management | ⏳ not_started |
 | C-241 | Chat Modes Address System | ⏳ not_started |
+| C-242 | Image Generation Pipeline | ⏳ not_started |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
 | C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |
 | C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ✅ completed |

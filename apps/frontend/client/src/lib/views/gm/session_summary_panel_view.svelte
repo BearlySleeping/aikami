@@ -41,14 +41,22 @@
         {/if}
 
         <div class="flex gap-2 mt-3">
-          <button class="btn btn-sm btn-ghost" onclick={() => viewModel.dismissSummary()}>
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            onclick={() => viewModel.dismissSummary()}
+          >
             Dismiss
           </button>
         </div>
       </div>
     {:else}
       <p class="text-sm text-base-content/50">No summary generated yet.</p>
-      <button class="btn btn-sm btn-primary mt-2" onclick={() => viewModel.endSession()}>
+      <button
+        type="button"
+        class="btn btn-sm btn-primary mt-2"
+        onclick={() => viewModel.endSession()}
+      >
         End Session & Generate Summary
       </button>
     {/if}

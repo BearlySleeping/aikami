@@ -42,7 +42,11 @@
         <h2 class="text-sm font-semibold uppercase tracking-wider text-base-content/50">
           Keyword Scanner
         </h2>
-        <button class="btn btn-ghost btn-xs" onclick={() => sandboxViewModel.openActiveContext()}>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          onclick={() => sandboxViewModel.openActiveContext()}
+        >
           Open Active Context
         </button>
       </div>

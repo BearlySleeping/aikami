@@ -46,7 +46,11 @@
     <!-- Header: NPC name + End Chat button -->
     <div class="flex items-center justify-between border-b border-base-300 px-4 py-2">
       <h3 class="text-sm font-bold text-primary">{viewModel.npcName}</h3>
-      <button class="btn btn-ghost btn-xs text-error" onclick={() => viewModel.endChat()}>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs text-error"
+        onclick={() => viewModel.endChat()}
+      >
         End Chat
       </button>
     </div>
@@ -102,6 +106,7 @@
         <div class="flex flex-wrap gap-2">
           {#each viewModel.actionOptions as action (action.id)}
             <button
+              type="button"
               class="btn btn-sm {action.type === 'direct_combat' ? 'btn-error' : action.type === 'skill_check' ? 'btn-outline btn-info' : 'btn-ghost'}"
               onclick={() => viewModel.selectAction(action.id)}
               disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
@@ -134,6 +139,7 @@
             />
           </div>
           <button
+            type="button"
             class="btn btn-primary btn-sm"
             onclick={() => viewModel.sendMessage()}
             disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
@@ -174,6 +180,7 @@
             </div>
           {/if}
           <button
+            type="button"
             class="btn btn-ghost btn-xs"
             onclick={() => (showDicePopover = !showDicePopover)}
             title="Quick Dice Roll"
@@ -182,7 +189,7 @@
           </button>
         </div>
         <div class="mt-2 flex items-center justify-between">
-          <button class="btn btn-ghost btn-xs" onclick={() => viewModel.goToMenu()}>
+          <button type="button" class="btn btn-ghost btn-xs" onclick={() => viewModel.goToMenu()}>
             ← Back to actions
           </button>
           <!-- Streaming TTS toggle -->
@@ -209,6 +216,7 @@
             />
           </div>
           <button
+            type="button"
             class="btn btn-primary btn-sm"
             onclick={() => viewModel.sendMessage()}
             disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck || !viewModel.inputText.trim()}
@@ -249,6 +257,7 @@
             </div>
           {/if}
           <button
+            type="button"
             class="btn btn-ghost btn-xs"
             onclick={() => (showDicePopover = !showDicePopover)}
             title="Quick Dice Roll"

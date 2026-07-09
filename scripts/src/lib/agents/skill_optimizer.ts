@@ -1,4 +1,5 @@
 // scripts/src/lib/agents/skill_optimizer.ts
+// biome-ignore-all lint/style/useNamingConvention: HerDr API field names (snake_case) — must match external API contract
 /**
  * Swarm Post-Mortem & Meta-Reflective Skill Optimizer (C-308).
  *

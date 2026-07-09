@@ -177,9 +177,12 @@
 
           <div class="flex gap-3 mt-2">
             {#if viewModel.isPlaying || viewModel.isConnected}
-              <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+              <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+                ⏹ Cancel
+              </button>
             {:else}
               <button
+                type="button"
                 class="btn btn-primary"
                 onclick={() => viewModel.generateAndPlay()}
                 disabled={!viewModel.text.trim()}

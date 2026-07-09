@@ -98,8 +98,8 @@
         rows="3"
       ></textarea>
       <div class="flex gap-2 mt-2">
-        <button class="btn btn-xs btn-primary" onclick={handleSaveEdit}>Save</button>
-        <button class="btn btn-xs btn-ghost" onclick={onCancelEdit}>Cancel</button>
+        <button type="button" class="btn btn-xs btn-primary" onclick={handleSaveEdit}>Save</button>
+        <button type="button" class="btn btn-xs btn-ghost" onclick={onCancelEdit}>Cancel</button>
       </div>
     </div>
   {:else}
@@ -130,18 +130,25 @@
     <div class="chat-footer opacity-50 flex gap-1 mt-1">
       {#if !isAi}
         <button
+          type="button"
           class="btn btn-xs btn-ghost"
           onclick={() => onEdit?.(message.id, message.text)}
           title="Edit"
         >
           ✏️ Edit
         </button>
-        <button class="btn btn-xs btn-ghost" onclick={() => onDelete?.(message.id)} title="Delete">
+        <button
+          type="button"
+          class="btn btn-xs btn-ghost"
+          onclick={() => onDelete?.(message.id)}
+          title="Delete"
+        >
           🗑️ Delete
         </button>
       {/if}
       {#if isAi}
         <button
+          type="button"
           class="btn btn-xs btn-ghost"
           onclick={() => onRegenerate?.(message.id)}
           title="Regenerate"
@@ -149,7 +156,12 @@
           🔄 Regenerate
         </button>
       {/if}
-      <button class="btn btn-xs btn-ghost" onclick={() => onPlayTts?.(message.id)} title="Play TTS">
+      <button
+        type="button"
+        class="btn btn-xs btn-ghost"
+        onclick={() => onPlayTts?.(message.id)}
+        title="Play TTS"
+      >
         🔊
       </button>
     </div>

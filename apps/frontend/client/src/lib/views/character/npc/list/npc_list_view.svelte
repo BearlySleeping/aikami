@@ -90,12 +90,15 @@
   <div class="p-4">
     <header class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">{t.nonPlayerCharacters()}</h1>
-      <button class="btn btn-primary" onclick={() => (showCreateModal = true)}>Create NPC</button>
+      <button type="button" class="btn btn-primary" onclick={() => (showCreateModal = true)}>
+        Create NPC
+      </button>
     </header>
 
     <div class="tabs tabs-boxed mb-4">
       {#each tabs as tab}
         <button
+          type="button"
           class="tab"
           class:tab-active={viewModel.activeTab === tab.key}
           onclick={() => viewModel.setActiveTab(tab.key)}
@@ -107,10 +110,10 @@
     </div>
 
     <div class="mb-4 flex gap-2">
-      <button class="btn btn-outline btn-sm" onclick={() => fileInput.click()}>
+      <button type="button" class="btn btn-outline btn-sm" onclick={() => fileInput.click()}>
         Import PNG/JSON
       </button>
-      <button class="btn btn-outline btn-sm" onclick={() => (showUrlModal = true)}>
+      <button type="button" class="btn btn-outline btn-sm" onclick={() => (showUrlModal = true)}>
         Import from URL
       </button>
       <input
@@ -133,6 +136,7 @@
         {#each viewModel.npcs as npc (npc.id)}
           <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
             <button
+              type="button"
               class="w-full text-left"
               onclick={() => viewModel.navigateToChat({ npcId: npc.id })}
             >
@@ -165,6 +169,7 @@
             {#if !npc.creatorUid}
               <div class="px-3 pb-3 flex gap-2">
                 <button
+                  type="button"
                   class="btn btn-xs btn-outline"
                   onclick={() => viewModel.handleForkNpc({ npcId: npc.id })}
                 >
@@ -173,10 +178,15 @@
               </div>
             {:else}
               <div class="px-3 pb-3 flex gap-2">
-                <button class="btn btn-xs btn-outline" onclick={() => openEditForm(npc)}>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-outline"
+                  onclick={() => openEditForm(npc)}
+                >
                   Edit
                 </button>
                 <button
+                  type="button"
                   class="btn btn-xs btn-outline btn-error"
                   onclick={() => viewModel.handleDeleteNpc({ npcId: npc.id })}
                 >
@@ -209,8 +219,10 @@
           bind:value={urlInput}
         >
         <div class="modal-action">
-          <button class="btn btn-ghost" onclick={() => (showUrlModal = false)}>Cancel</button>
-          <button class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
+          <button type="button" class="btn btn-ghost" onclick={() => (showUrlModal = false)}>
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
         </div>
       </div>
       <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
@@ -232,7 +244,9 @@
         <h3 class="font-bold text-lg">Create New NPC</h3>
         <p class="py-4">NPC creation form coming soon!</p>
         <div class="modal-action">
-          <button class="btn btn-ghost" onclick={() => (showCreateModal = false)}>Close</button>
+          <button type="button" class="btn btn-ghost" onclick={() => (showCreateModal = false)}>
+            Close
+          </button>
         </div>
       </div>
       <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
@@ -331,7 +345,9 @@
           </label>
         </div>
         <div class="modal-action">
-          <button class="btn btn-primary" onclick={() => viewModel.closeEditModal()}>Done</button>
+          <button type="button" class="btn btn-primary" onclick={() => viewModel.closeEditModal()}>
+            Done
+          </button>
         </div>
       </div>
       <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->

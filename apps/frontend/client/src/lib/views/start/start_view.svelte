@@ -17,13 +17,18 @@
       <div class="flex flex-col gap-3 w-64 mx-auto">
         <!-- Continue (only shown when saves exist) -->
         {#if viewModel.hasSaves}
-          <button class="btn btn-primary btn-lg" onclick={() => viewModel.continueGame()}>
+          <button
+            type="button"
+            class="btn btn-primary btn-lg"
+            onclick={() => viewModel.continueGame()}
+          >
             Continue
           </button>
         {/if}
 
         <!-- New Game -->
         <button
+          type="button"
           class="btn {viewModel.hasSaves ? 'btn-outline' : 'btn-primary'} btn-lg"
           onclick={() => viewModel.startNewGame()}
         >
@@ -32,29 +37,41 @@
 
         <!-- Sign In / Sign Out -->
         {#if viewModel.isSigningIn}
-          <button class="btn btn-outline btn-lg" disabled>
+          <button type="button" class="btn btn-outline btn-lg" disabled>
             <span class="loading loading-spinner"></span>
             {viewModel.isLoggedIn ? 'Signing out...' : 'Signing in...'}
           </button>
         {:else if viewModel.isLoggedIn}
-          <button class="btn btn-outline btn-lg" onclick={() => viewModel.signOut()}>
+          <button type="button" class="btn btn-outline btn-lg" onclick={() => viewModel.signOut()}>
             Sign Out ({viewModel.playerDisplayName})
           </button>
         {:else}
-          <button class="btn btn-outline btn-lg" onclick={() => viewModel.loginWithGoogle()}>
+          <button
+            type="button"
+            class="btn btn-outline btn-lg"
+            onclick={() => viewModel.loginWithGoogle()}
+          >
             Sign In with Google
           </button>
         {/if}
 
         <!-- Options -->
-        <button class="btn btn-ghost" onclick={() => viewModel.goToOptions()}>Options</button>
+        <button type="button" class="btn btn-ghost" onclick={() => viewModel.goToOptions()}>
+          Options
+        </button>
 
         <!-- Credits -->
-        <button class="btn btn-ghost" onclick={() => viewModel.showCreditsModal()}>Credits</button>
+        <button type="button" class="btn btn-ghost" onclick={() => viewModel.showCreditsModal()}>
+          Credits
+        </button>
 
         <!-- Quit (Tauri only) -->
         {#if viewModel.isTauri}
-          <button class="btn btn-ghost btn-sm mt-4" onclick={() => viewModel.quitApp()}>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm mt-4"
+            onclick={() => viewModel.quitApp()}
+          >
             Quit
           </button>
         {/if}
@@ -114,7 +131,9 @@
       {/each}
 
       <div class="modal-action">
-        <button class="btn btn-sm" onclick={() => viewModel.hideCreditsModal()}>Close</button>
+        <button type="button" class="btn btn-sm" onclick={() => viewModel.hideCreditsModal()}>
+          Close
+        </button>
       </div>
     </div>
   </div>

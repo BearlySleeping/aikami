@@ -240,7 +240,7 @@ class CameraSandboxViewModel
       const tm = new TextureManager();
       const paletteBytes = new Uint8Array(1024);
 
-      const SANDBOX_RECIPES: LpcLayerRecipe[] = [
+      const SandboxRecipes: LpcLayerRecipe[] = [
         { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
         { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
         { slot: 'torso', assetId: 'torso/armour/plate_male', hexPalette: paletteBytes },
@@ -255,7 +255,7 @@ class CameraSandboxViewModel
         textureManager: tm,
         recipeResolver: (layerIds) =>
           layerIds
-            .map((id, idx) => (id > 0 ? SANDBOX_RECIPES[idx] : null))
+            .map((id, idx) => (id > 0 ? SandboxRecipes[idx] : null))
             .filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),

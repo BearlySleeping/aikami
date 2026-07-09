@@ -96,6 +96,7 @@
                 oninput={(e) => viewModel.setDraftField('apiKey', (e.target as HTMLInputElement).value)}
               >
               <button
+                type="button"
                 class="btn btn-sm btn-ghost join-item font-mono text-[10px]"
                 onclick={() => viewModel.toggleApiKeyVisibility()}
               >
@@ -132,6 +133,7 @@
             >
             {#if viewModel.canFetchModels}
               <button
+                type="button"
                 class="btn btn-xs btn-ghost font-mono text-[10px] text-[#00e3fd]"
                 disabled={viewModel.isFetchingModels}
                 onclick={() => viewModel.fetchModels()}
@@ -185,6 +187,7 @@
         <!-- Test Connection + Test Model -->
         <div class="flex flex-wrap items-center gap-3">
           <button
+            type="button"
             class="btn btn-sm btn-outline font-mono text-xs border-[#00e3fd]/30 text-[#00e3fd] hover:bg-[#00e3fd]/10"
             disabled={viewModel.isTestingDraft}
             onclick={() => viewModel.testDraftConnection()}
@@ -198,6 +201,7 @@
           </button>
           {#if viewModel.draft.model || viewModel.isModelCustom}
             <button
+              type="button"
               class="btn btn-sm btn-outline font-mono text-xs border-[#cabeff]/30 text-[#cabeff] hover:bg-[#cabeff]/10"
               disabled={viewModel.isTestingDraftModel}
               onclick={() => viewModel.testDraftModel()}
@@ -380,6 +384,7 @@
               oninput={(e) => viewModel.setPresetName((e.target as HTMLInputElement).value)}
             >
             <button
+              type="button"
               class="btn btn-xs btn-ghost font-mono text-[10px] text-[#00e3fd]"
               disabled={!viewModel.presetName.trim()}
               onclick={() => {
@@ -406,12 +411,14 @@
       <!-- Actions -->
       <div class="card-actions justify-end mt-6 pt-4 border-t border-white/[0.06]">
         <button
+          type="button"
           class="btn btn-ghost btn-sm font-mono text-xs text-[#938ea1]"
           onclick={() => viewModel.cancelEdit()}
         >
           Cancel
         </button>
         <button
+          type="button"
           class="btn btn-sm font-mono text-xs uppercase tracking-wider border-[#00e3fd]/30 text-[#00e3fd] hover:bg-[#00e3fd]/10"
           disabled={!viewModel.draft.name?.trim()}
           onclick={() => viewModel.saveDraft()}

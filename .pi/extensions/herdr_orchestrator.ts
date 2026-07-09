@@ -16,6 +16,7 @@
 //   herdr_session   — aikami dev service lifecycle (start, stop, status,
 //                     read, list)
 
+// biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import {
@@ -80,7 +81,7 @@ const execHerdr = async (
   args: string[],
   signal?: AbortSignal,
 ): Promise<{ code: number; stdout: string; stderr: string }> => {
-  const result = await pi.exec('herdr', args, { signal } as any);
+  const result = await pi.exec('herdr', args, { signal });
   if (signal?.aborted || result.killed) {
     throw new Error('Aborted');
   }
@@ -594,7 +595,7 @@ export default function (pi: ExtensionAPI) {
             if (lines != null) {
               args.push('--lines', String(lines));
             }
-            const result = await execHerdrJson<any>(pi, args, signal);
+            const result = await execHerdrJson<{ matched_line: string }>(pi, args, signal);
             return {
               content: [{ type: 'text', text: `Matched: ${result.matched_line}` }],
               details: {},
@@ -708,10 +709,7 @@ export default function (pi: ExtensionAPI) {
 
       // ── Dispatch map ──────────────────────────────────────
 
-      const handlers: Record<
-        string,
-        () => Promise<{ content: any[]; details: any; isError?: boolean }>
-      > = {
+      const handlers = {
         // ── list ──────────────────────────────────────────
         list: async () => {
           try {
@@ -982,7 +980,7 @@ export default function (pi: ExtensionAPI) {
         },
       };
 
-      const handler = handlers[params.action];
+      const handler = handlers[params.action as keyof typeof handlers];
       if (!handler) {
         return {
           content: [{ type: 'text', text: `Unknown action: ${params.action}` }],
@@ -990,7 +988,9 @@ export default function (pi: ExtensionAPI) {
           details: {},
         };
       }
-      return handler();
+      return handler() as unknown as import('@earendil-works/pi-agent-core').AgentToolResult<
+        Record<string, unknown>
+      >;
     },
   });
 }

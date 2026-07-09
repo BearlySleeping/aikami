@@ -17,7 +17,7 @@
     <div
       class="w-full flex items-center justify-between px-6 py-4 bg-base-100 border-b border-base-300"
     >
-      <button class="btn btn-ghost btn-sm gap-2" onclick={() => viewModel.goBack()}>
+      <button type="button" class="btn btn-ghost btn-sm gap-2" onclick={() => viewModel.goBack()}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           class="h-4 w-4"
@@ -25,6 +25,7 @@
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
+          <title>icon</title>
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -55,7 +56,11 @@
             persona{viewModel.personas.length !== 1 ? 's' : ''}
             saved
           </p>
-          <button class="btn btn-primary btn-sm" onclick={() => viewModel.createPersona()}>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            onclick={() => viewModel.createPersona()}
+          >
             + New Persona
           </button>
         </div>
@@ -69,7 +74,11 @@
               <p class="text-base-content/60 text-sm text-center max-w-sm">
                 Create your first persona to begin your adventure.
               </p>
-              <button class="btn btn-primary mt-2" onclick={() => viewModel.createPersona()}>
+              <button
+                type="button"
+                class="btn btn-primary mt-2"
+                onclick={() => viewModel.createPersona()}
+              >
                 Create Persona
               </button>
             </div>
@@ -145,6 +154,7 @@
                         <!-- Set Active button -->
                         {#if !p.isActive}
                           <button
+                            type="button"
                             class="btn btn-xs btn-outline btn-primary"
                             onclick={(e) => {
                               e.stopPropagation();
@@ -156,6 +166,7 @@
                         {/if}
                         <!-- Delete button with stopPropagation to prevent card click -->
                         <button
+                          type="button"
                           class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                           onclick={(e) => {
                             e.stopPropagation();

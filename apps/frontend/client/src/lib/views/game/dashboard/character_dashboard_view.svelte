@@ -29,6 +29,7 @@
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-bold text-base-content">Character</h2>
         <button
+          type="button"
           class="btn btn-sm btn-ghost btn-circle"
           onclick={() => viewModel.closeDashboard()}
           aria-label="Close character dashboard"

@@ -50,6 +50,7 @@
         <div class="flex items-center gap-2">
           {#if viewModel.isNarrativeDirectorRunning}
             <button
+              type="button"
               class="btn btn-sm btn-warning"
               onclick={() => viewModel.stopNarrativeDirector()}
             >
@@ -57,6 +58,7 @@
             </button>
           {:else}
             <button
+              type="button"
               class="btn btn-sm btn-success"
               onclick={() => viewModel.startNarrativeDirector()}
             >
@@ -105,7 +107,9 @@
       <div class="card-body p-4">
         <div class="flex items-center justify-between">
           <h2 class="card-title text-sm">Simulation Log</h2>
-          <button class="btn btn-xs btn-ghost" onclick={() => viewModel.clearLogs()}>Clear</button>
+          <button type="button" class="btn btn-xs btn-ghost" onclick={() => viewModel.clearLogs()}>
+            Clear
+          </button>
         </div>
         <div class="bg-base-300 p-3 rounded-lg text-xs font-mono overflow-auto max-h-48">
           {#each viewModel.logs as log}

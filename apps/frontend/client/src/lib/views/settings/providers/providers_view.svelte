@@ -68,6 +68,7 @@
 
           <!-- Detection controls -->
           <button
+            type="button"
             class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs gap-1.5"
             onclick={() => viewModel.detectServices()}
             disabled={viewModel.isDetecting}
@@ -83,6 +84,7 @@
                 viewBox="0 0 24 24"
                 stroke="currentColor"
               >
+                <title>icon</title>
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -127,6 +129,7 @@
         <div class="flex gap-0" role="tablist">
           {#each viewModel.tabs as tab}
             <button
+              type="button"
               role="tab"
               aria-selected={viewModel.activeTab === tab.key}
               class="relative px-5 py-3 font-['JetBrains_Mono'] text-xs uppercase tracking-widest transition-colors {viewModel.activeTab === tab.key
@@ -173,6 +176,7 @@
       <div class="mt-8 pt-6 border-t border-white/[0.06] flex items-center justify-between">
         <div class="flex gap-3">
           <button
+            type="button"
             class="btn btn-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider border-[#cabeff]/30 text-[#cabeff] hover:bg-[#cabeff]/10"
             onclick={() => viewModel.save()}
             disabled={viewModel.isSaving}
@@ -185,6 +189,7 @@
             {/if}
           </button>
           <button
+            type="button"
             class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#938ea1]"
             onclick={() => viewModel.revert()}
           >
@@ -193,6 +198,7 @@
         </div>
 
         <button
+          type="button"
           class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-red-400/60 hover:text-red-400"
           onclick={() => viewModel.reset()}
         >

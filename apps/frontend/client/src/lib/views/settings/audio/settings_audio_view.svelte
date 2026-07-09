@@ -90,20 +90,32 @@
 
         <!-- BGM test buttons -->
         <div class="flex gap-3 mt-2">
-          <button class="btn btn-primary flex-1" onclick={() => viewModel.testExploreBgm()}>
+          <button
+            type="button"
+            class="btn btn-primary flex-1"
+            onclick={() => viewModel.testExploreBgm()}
+          >
             🌲 Explore BGM
           </button>
-          <button class="btn btn-error flex-1" onclick={() => viewModel.testCombatBgm()}>
+          <button
+            type="button"
+            class="btn btn-error flex-1"
+            onclick={() => viewModel.testCombatBgm()}
+          >
             ⚔️ Combat BGM
           </button>
         </div>
 
         <!-- SFX test button -->
         <div class="flex gap-3 mt-3">
-          <button class="btn btn-warning flex-1" onclick={() => viewModel.testHitSfx()}>
+          <button
+            type="button"
+            class="btn btn-warning flex-1"
+            onclick={() => viewModel.testHitSfx()}
+          >
             🔨 Test SFX
           </button>
-          <button class="btn btn-outline btn-sm" onclick={() => viewModel.stopAll()}>
+          <button type="button" class="btn btn-outline btn-sm" onclick={() => viewModel.stopAll()}>
             ⏹ Stop All
           </button>
         </div>

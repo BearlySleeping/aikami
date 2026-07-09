@@ -27,6 +27,7 @@
       </p>
     </div>
     <button
+      type="button"
       class="btn btn-sm font-mono text-xs uppercase tracking-wider border-[#00e3fd]/30 text-[#00e3fd] hover:bg-[#00e3fd]/10"
       onclick={() => viewModel.openCreate()}
     >
@@ -102,6 +103,7 @@
               <div class="flex items-center gap-1 shrink-0">
                 {#if !connection.isDefault}
                   <button
+                    type="button"
                     class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
                     onclick={() => viewModel.setDefault(connection.id)}
                     title="Set as default"
@@ -110,6 +112,7 @@
                   </button>
                 {/if}
                 <button
+                  type="button"
                   class="btn btn-ghost btn-xs font-mono text-[10px] {isTesting
                     ? 'text-[#00e3fd]'
                     : 'text-[#938ea1]'}"
@@ -124,6 +127,7 @@
                   {/if}
                 </button>
                 <button
+                  type="button"
                   class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
                   onclick={() => viewModel.duplicateConnection(connection.id)}
                   title="Duplicate"
@@ -131,6 +135,7 @@
                   Dup
                 </button>
                 <button
+                  type="button"
                   class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
                   onclick={() => viewModel.openEdit(connection.id)}
                   title="Edit"
@@ -138,6 +143,7 @@
                   Edit
                 </button>
                 <button
+                  type="button"
                   class="btn btn-ghost btn-xs font-mono text-[10px] text-error/60 hover:text-error"
                   onclick={() => viewModel.deleteConnection(connection.id)}
                   title="Delete"
