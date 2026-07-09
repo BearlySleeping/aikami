@@ -10,7 +10,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { $ } from 'bun';
@@ -142,6 +142,22 @@ async function main() {
     console.log('Added "./.pi/generated-skills" to settings.json → skills[]');
   } else {
     console.log('"./.pi/generated-skills" already in settings.json → skills[]');
+  }
+
+  // 3. Register aikami-conventions skills (written by import_community_rules.ts)
+  const conventionsDir = join(PI_DIR, 'skills', 'aikami-conventions');
+  if (existsSync(conventionsDir)) {
+    const entries = await readdir(conventionsDir, { withFileTypes: true });
+    const conventionDocs = entries
+      .filter((e) => e.isFile() && e.name.endsWith('.md') && e.name !== 'SKILL.md')
+      .map((e) => e.name);
+    if (conventionDocs.length > 0) {
+      console.log(
+        `\nRegistered ${conventionDocs.length} aikami-conventions doc(s): ${conventionDocs.join(', ')}`,
+      );
+    } else {
+      console.log('\nNo aikami-conventions docs found (run import_community_rules.ts first).');
+    }
   }
 
   const names = SKILL_SOURCES.map((s) => s.name).join(' + ');
