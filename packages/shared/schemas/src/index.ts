@@ -33,6 +33,7 @@ export * from './lib/fields.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/image_generation.ts';
 export * from './lib/logging/index.ts';
+export * from './lib/macro.ts';
 export * from './lib/parser.ts';
 export * from './lib/project.ts';
 export * from './lib/swarm_handoff.ts';

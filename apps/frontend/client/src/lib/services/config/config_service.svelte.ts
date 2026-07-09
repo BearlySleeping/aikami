@@ -459,6 +459,10 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   deletePreset(id: string): void;
   /** Returns all presets (built-in merged with user-defined). */
   getPresets(): GenParamPreset[];
+
+  // ── Macro preset integration (C-237) ──────────────────────────────
+  /** Loads macro presets from localStorage. */
+  loadMacroPresets: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -1113,6 +1117,15 @@ class ConfigService
 
   getPresets(): GenParamPreset[] {
     return this.state.presets;
+  }
+
+  // ── Macro preset integration (C-237) ──────────────────────────────
+
+  loadMacroPresets(): void {
+    import('$lib/services/config/macro_preset_store.svelte').then((mod) => {
+      mod.macroPresetStore.loadPresets();
+      this.debug('loadMacroPresets:loaded', { count: mod.macroPresetStore.presets.length });
+    });
   }
 
   /** Safely reads a Vite PUBLIC_* env var. Returns undefined in tests. */

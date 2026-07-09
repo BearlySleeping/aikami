@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-08)
+## Status Summary (Auto-generated: 2026-07-09)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -201,7 +201,7 @@
 | C-234 | Combat Enhancement Dice Initiative | ❓ done |
 | C-235 | Gm Narrative Director | ❓ done |
 | C-236 | Agent Pipeline System | ✅ completed |
-| C-237 | Prompt Template Macro System | ⏳ not_started |
+| C-237 | Prompt Template Macro System | ❓ completed (2026-07-09) |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
 | C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |
 | C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ✅ completed |
