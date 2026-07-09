@@ -18,7 +18,6 @@ export type {
   FeedbackEntry,
   PipelineState,
   SwarmState,
-  SwarmStep,
   TaskPayload,
 } from './types';
 

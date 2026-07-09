@@ -44,56 +44,56 @@ import { gmPromptService } from './gm_prompt_service.svelte.ts';
 
 describe('GmPromptService — AC-1', () => {
   test('scene mode includes WORLD STATE section', () => {
-    const prompt = gmPromptService.assemblePrompt('scene');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     expect(prompt).toContain('[WORLD STATE]');
     expect(prompt).toContain('[/WORLD STATE]');
   });
 
   test('scene mode includes SYSTEM INSTRUCTIONS section', () => {
-    const prompt = gmPromptService.assemblePrompt('scene');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     expect(prompt).toContain('[SYSTEM INSTRUCTIONS]');
     expect(prompt).toContain('[/SYSTEM INSTRUCTIONS]');
   });
 
   test('scene mode does NOT include [GM ONLY] markers', () => {
-    const prompt = gmPromptService.assemblePrompt('scene');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     expect(prompt).not.toContain('[GM ONLY]');
   });
 
   test('gm mode includes [GM ONLY] markers', () => {
-    const prompt = gmPromptService.assemblePrompt('gm');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'gm' });
     expect(prompt).toContain('[GM ONLY]');
     expect(prompt).toContain('[/GM ONLY]');
   });
 
   test('gm mode includes direct-GM instructions', () => {
-    const prompt = gmPromptService.assemblePrompt('gm');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'gm' });
     expect(prompt).toContain('Direct GM mode');
   });
 
   test('party mode does NOT include [GM ONLY] markers', () => {
-    const prompt = gmPromptService.assemblePrompt('party');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'party' });
     expect(prompt).not.toContain('[GM ONLY]');
   });
 
   test('prompt is under 6 KB (6144 bytes)', () => {
-    const prompt = gmPromptService.assemblePrompt('scene');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     const encoder = new TextEncoder();
     const byteLength = encoder.encode(prompt).length;
     expect(byteLength).toBeLessThanOrEqual(6144);
   });
 
   test('assemblePrompt does not throw with null-ish state', () => {
-    expect(() => gmPromptService.assemblePrompt('scene')).not.toThrow();
+    expect(() => gmPromptService.assemblePrompt({ mode: 'scene' })).not.toThrow();
   });
 
   test('address mode header is present', () => {
-    const scenePrompt = gmPromptService.assemblePrompt('scene');
+    const scenePrompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     expect(scenePrompt).toContain('ADDRESS MODE: Scene');
   });
 
   test('prompt includes PLAYER CHARACTER section', () => {
-    const prompt = gmPromptService.assemblePrompt('scene');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     expect(prompt).toContain('[PLAYER CHARACTER]');
   });
 });

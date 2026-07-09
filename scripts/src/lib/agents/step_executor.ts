@@ -15,18 +15,23 @@
  *   - Real feedback loop: review gate reads stdin in-process, writes terminal handoff
  *   - Predicate-based waitForHandoff prevents stale reads
  *   - Unlink-before-dispatch guarantees fresh handoffs per iteration
- *   - QA runs coder nextCommands via spawnSync in director process (exit codes, not regex)
+ *   - QA runs coder nextCommands via async spawn in director process (exit codes, not regex)
  *   - git is a deterministic script (no LLM)
  *   - Review runs in git pane as a self-contained stdin-looping script
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, unlinkSync, watch, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { SwarmHandoffSchema } from '@aikami/schemas';
 import type { SwarmHandoff } from '@aikami/types';
 import { Value } from 'typebox/value';
-import { getModelForTier, ROLE_MODEL_TIER } from '../../../../.pi/swarm/models';
+import {
+  getModelForTier,
+  ROLE_MODEL_TIER,
+  ROLE_THINKING_LEVEL,
+  type ThinkingLevel,
+} from '../../../../.pi/swarm/models';
 import type { HerdrSocketClient } from '../herdr/socket_client';
 import type { AgentScratchpad } from './agent_scratchpad';
 import type { AgentRole, FeedbackEntry, PipelineState, SwarmState } from './types';
@@ -39,9 +44,11 @@ const MAX_FEEDBACK_ITERATIONS = 3;
 /** Max time for the review gate script to start and write awaiting_approval. */
 const GATE_STARTUP_TIMEOUT_MS = 30_000;
 
-// ── Per-role timeouts (reference — not currently wired per-step)
-// Architect: 10 min | Coder/QA: 30 min | Git commit script: 5 min
+// ── Per-role timeouts ──
+// Architect: 15 min (planning only — no builds) | Coder/QA: 30 min | Docs: 10 min
 const AGENT_TIMEOUT_MS = 1_800_000; // default fallback (30 min)
+const ARCHITECT_TIMEOUT_MS = 900_000; // 15 min
+const DOCS_TIMEOUT_MS = 600_000; // 10 min
 
 /** Git commit script is deterministic — short timeout. */
 const GIT_SCRIPT_TIMEOUT_MS = 300_000; // 5 min
@@ -53,9 +60,10 @@ const GIT_SCRIPT_TIMEOUT_MS = 300_000; // 5 min
  * The preamble is byte-identical across roles → DeepSeek "common prefix detection"
  * persists it as a KV-cache unit. Role-specific content follows after.
  *
- * Writes to .pi/swarm/outputs/_sysprompt_<role>.md and returns the absolute path.
+ * Writes to .pi/swarm/outputs/<taskId>_sysprompt_<role>.md and returns the
+ * absolute path (task-scoped — concurrent tasks never race on the same file).
  */
-const buildSystemPrompt = (cwd: string, role: string): string => {
+const buildSystemPrompt = (cwd: string, role: string, taskId: string): string => {
   const preamblePath = join(cwd, '.pi/swarm/prompts/_swarm_preamble.md');
   const rolePromptPath = join(cwd, '.pi/swarm/prompts', `${role}.md`);
 
@@ -76,7 +84,7 @@ const buildSystemPrompt = (cwd: string, role: string): string => {
   const combined = `${preamble}\n\n---\n\n${rolePrompt}`;
 
   mkdirSync(join(cwd, '.pi/swarm/outputs'), { recursive: true });
-  const outPath = join(cwd, '.pi/swarm/outputs', `_sysprompt_${role}.md`);
+  const outPath = join(cwd, '.pi/swarm/outputs', `${taskId}_sysprompt_${role}.md`);
   writeFileSync(outPath, combined);
   return outPath;
 };
@@ -325,6 +333,42 @@ const getModel = (ctx: StateContext, role: AgentRole): string => {
   return getModelForTier(defaultTier);
 };
 
+/**
+ * Resolve thinking level for a role, with complexity-driven adjustments.
+ * DeepSeek bills thinking tokens as output — mechanical roles run low/minimal.
+ */
+const getThinking = (ctx: StateContext, role: AgentRole): ThinkingLevel => {
+  if (role === 'coder' && ctx.architectComplexity === 'trivial') {
+    return 'low';
+  }
+  if (role === 'qa' && ctx.architectComplexity === 'complex') {
+    return 'medium';
+  }
+  return ROLE_THINKING_LEVEL[role] ?? 'medium';
+};
+
+/**
+ * Build the full `pi` dispatch command for a role.
+ *
+ * - `SWARM_ROLE=<role>` env prefix activates scope enforcement in
+ *   .pi/extensions/swarm_guard.ts (coder blocked from QA-scope paths).
+ * - `--thinking <level>` per-role — saves thinking tokens on mechanical roles.
+ * - `--session-id swarm-<taskId>-<role>` — enables metrics to read real tokens.
+ * - `roleFlags`: extra CLI flags for specific roles (e.g. docs gets --no-skills).
+ */
+const buildPiCommand = (
+  ctx: StateContext,
+  role: AgentRole,
+  userMessage: string,
+  extraFlags: string = '',
+): string => {
+  const model = getModel(ctx, role);
+  const thinking = getThinking(ctx, role);
+  const sysPromptPath = buildSystemPrompt(ctx.cwd, role, ctx.taskId);
+  const sessionId = `swarm-${ctx.taskId}-${role}`;
+  return `SWARM_ROLE=${role} pi --model ${model} --thinking ${thinking} --session-id ${sessionId} --system-prompt '${sysPromptPath}' ${extraFlags} ${userMessage}`.trim();
+};
+
 // ── Heartbeat helpers ──────────────────────────────────────
 
 const markWorking = (ctx: StateContext, role: AgentRole): void => {
@@ -403,6 +447,7 @@ const runStep = async (
   command: string,
   paneId: string,
   predicate: (h: SwarmHandoff) => boolean = () => true,
+  timeoutMs: number = AGENT_TIMEOUT_MS,
 ): Promise<SwarmHandoff | null> => {
   markWorking(ctx, role);
 
@@ -444,7 +489,7 @@ const runStep = async (
 
   await new Promise((r) => setTimeout(r, PI_STARTUP_GRACE_MS));
 
-  const handoff = await waitForHandoff(ctx.taskId, role, ctx.cwd, AGENT_TIMEOUT_MS, predicate);
+  const handoff = await waitForHandoff(ctx.taskId, role, ctx.cwd, timeoutMs, predicate);
 
   if (handoff) {
     markDone(ctx, role, handoff.summary);
@@ -456,12 +501,119 @@ const runStep = async (
 
 // ── Individual state transitions ────────────────────────────
 
-const runArchitect = async (ctx: StateContext): Promise<PipelineState> => {
-  const model = getModel(ctx, 'architect');
-  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'architect');
-  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' '${ctx.contractPath}'`;
+// ── Async spawn helper ────────────────────────────────────
 
-  const handoff = await runStep(ctx, 'architect', command, ctx.state.agents.architect.paneId);
+/** Spawn a shell command, collecting stdout+stderr. Returns code, stdout, stderr. */
+const spawnAsync = (
+  cmd: string,
+  cwd: string,
+  timeoutMs: number,
+): Promise<{ code: number | null; stdout: string; stderr: string }> =>
+  new Promise((resolve) => {
+    const child = spawn('sh', ['-c', cmd], {
+      cwd,
+      stdio: 'pipe',
+      env: process.env,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (d: Buffer) => {
+      stdout += String(d);
+    });
+    child.stderr?.on('data', (d: Buffer) => {
+      stderr += String(d);
+    });
+
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      // Give it 2s to flush, then force-kill
+      setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // already dead
+        }
+      }, 2000);
+    }, timeoutMs);
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ code: null, stdout, stderr: `spawn error: ${err.message}` });
+    });
+  });
+
+// ── Deterministic check runner (shared: QA pass + trivial-path verify) ──
+
+type CheckFailure = { cmd: string; exitCode: number; tail: string };
+
+const CHECK_CMD_RE = /^(moon run|bun test|bun run (lint|fix|typecheck)|npx tsc)/;
+
+/**
+ * Run allowlisted test/lint/typecheck commands asynchronously in the director.
+ * Each command runs sequentially (order matters: fix → typecheck → test),
+ * but the director's event loop stays responsive during execution.
+ * Exit codes, not regex. Non-allowlisted commands are skipped with a warning.
+ */
+const runDeterministicChecks = async (
+  commands: string[],
+  cwd: string,
+): Promise<{ tested: number; failures: CheckFailure[] }> => {
+  const failures: CheckFailure[] = [];
+  let tested = 0;
+
+  for (const rawCmd of commands) {
+    // Strip leading `cd <dir> && ` to extract the real command + cwd
+    const cdMatch = rawCmd.match(/^cd\s+(\S+)\s+&&\s+(.+)$/);
+    const cmd = cdMatch ? cdMatch[2] : rawCmd;
+    const cmdCwd = cdMatch ? resolve(cwd, cdMatch[1]) : cwd;
+
+    if (!CHECK_CMD_RE.test(cmd)) {
+      console.warn('[swarm:checks] skipping non-allowlisted command:', rawCmd);
+      continue;
+    }
+
+    tested++;
+    const start = Date.now();
+    console.debug('[swarm:checks:spawn]', { cmd, cwd: cmdCwd });
+
+    const r = await spawnAsync(cmd, cmdCwd, 600_000);
+
+    console.debug('[swarm:checks:done]', {
+      cmd,
+      code: r.code,
+      elapsedMs: Date.now() - start,
+    });
+
+    if (r.code !== 0) {
+      failures.push({
+        cmd,
+        exitCode: r.code ?? -1,
+        tail: `${r.stdout.slice(-2000)}\n${r.stderr.slice(-2000)}`,
+      });
+    }
+  }
+
+  return { tested, failures };
+};
+
+const runArchitect = async (ctx: StateContext): Promise<PipelineState> => {
+  const command = buildPiCommand(ctx, 'architect', `'${ctx.contractPath}'`);
+
+  const handoff = await runStep(
+    ctx,
+    'architect',
+    command,
+    ctx.state.agents.architect.paneId,
+    () => true,
+    ARCHITECT_TIMEOUT_MS,
+  );
   if (!handoff) {
     markEscalated(ctx, 'architect', 'timed out');
     return 'done';
@@ -481,9 +633,7 @@ const runArchitect = async (ctx: StateContext): Promise<PipelineState> => {
 };
 
 const runCoder = async (ctx: StateContext): Promise<PipelineState> => {
-  const model = getModel(ctx, 'coder');
   const planPathVal = join(ctx.cwd, '.pi/swarm/plans', `architect_plan_${ctx.taskId}.md`);
-  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'coder');
 
   let userMessage = `'${planPathVal}'`;
 
@@ -492,7 +642,7 @@ const runCoder = async (ctx: StateContext): Promise<PipelineState> => {
     userMessage = `'${planPathVal} — REVISION ${ctx.iteration}/${MAX_FEEDBACK_ITERATIONS}: apply the user feedback in ${fp} to the existing implementation. Do NOT re-implement from scratch — fix only what the feedback asks for.'`;
   }
 
-  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' ${userMessage}`;
+  const command = buildPiCommand(ctx, 'coder', userMessage);
 
   const handoff = await runStep(ctx, 'coder', command, ctx.state.agents.coder.paneId);
   if (!handoff) {
@@ -505,20 +655,20 @@ const runCoder = async (ctx: StateContext): Promise<PipelineState> => {
     filesTouched: handoff.filesTouched.length,
   });
 
-  // Trivial path: skip QA if architect flagged complexity=trivial
+  // Trivial path: skip QA LLM if architect flagged complexity=trivial,
+  // but VERIFY the coder's checks deterministically — exit codes, not trust.
   if (ctx.architectComplexity === 'trivial') {
-    console.log('[swarm:state:coder] trivial path — skipping QA');
-    ctx.state.agents.qa.status = 'done';
+    const { tested, failures } = await runDeterministicChecks(handoff.nextCommands ?? [], ctx.cwd);
 
-    if (handoff.nextCommands && handoff.nextCommands.length > 0) {
-      for (const cmd of handoff.nextCommands) {
-        try {
-          await ctx.socketClient.paneRun(ctx.state.agents.git.paneId, cmd);
-        } catch {
-          // best-effort
-        }
-      }
+    if (failures.length > 0) {
+      console.warn('[swarm:state:coder] trivial path checks FAILED — routing to QA', {
+        failCount: failures.length,
+      });
+      return 'qa';
     }
+
+    console.log(`[swarm:state:coder] trivial path — ${tested} checks passed, skipping QA`);
+    ctx.state.agents.qa.status = 'done';
     // Route through review — it handles skipReview (auto-approve) itself
     return 'review';
   }
@@ -544,56 +694,11 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
   if (commands.length > 0) {
     markWorking(ctx, 'qa');
 
-    let allPassed = true;
-    const failures: Array<{ cmd: string; exitCode: number; tail: string }> = [];
-    const tested = new Set<string>();
+    const { tested, failures } = await runDeterministicChecks(commands, ctx.cwd);
 
-    for (const rawCmd of commands) {
-      // ── Strip leading `cd <dir> && ` to extract the real command + cwd ──
-      const cdMatch = rawCmd.match(/^cd\s+(\S+)\s+&&\s+(.+)$/);
-      const cmd = cdMatch ? cdMatch[2] : rawCmd;
-      const cmdCwd = cdMatch ? resolve(ctx.cwd, cdMatch[1]) : ctx.cwd;
-
-      // Only run test/lint/fix/typecheck commands deterministically
-      const isTestCmd =
-        cmd.startsWith('moon run') ||
-        cmd.startsWith('bun test') ||
-        cmd.startsWith('bun run lint') ||
-        cmd.startsWith('bun run fix') ||
-        cmd.startsWith('bun run typecheck') ||
-        cmd.startsWith('npx tsc');
-
-      if (!isTestCmd) {
-        // Non-test commands — ignore with a warning. Never pane-run into agent
-        // panes: that pollutes cwd and can break relative-path dispatch.
-        console.warn('[swarm:state:qa] skipping non-allowlisted command in nextCommands:', rawCmd);
-        console.warn('[swarm:state:qa] coder should only emit test/lint/fix/typecheck commands.');
-        continue;
-      }
-
-      tested.add(cmd);
-      console.debug('[swarm:state:qa:spawn]', { cmd, cwd: cmdCwd });
-
-      const r = spawnSync('sh', ['-c', cmd], {
-        cwd: cmdCwd,
-        stdio: 'pipe',
-        timeout: 600_000,
-        env: process.env,
-      });
-
-      if (r.status !== 0) {
-        allPassed = false;
-        failures.push({
-          cmd,
-          exitCode: r.status ?? -1,
-          tail: `${String(r.stdout).slice(-2000)}\n${String(r.stderr).slice(-2000)}`,
-        });
-      }
-    }
-
-    if (allPassed && tested.size > 0) {
+    if (failures.length === 0 && tested > 0) {
       console.log('[swarm:state:qa] all checks passed (deterministic)');
-      markDone(ctx, 'qa', `All QA checks passed (${tested.size} commands).`);
+      markDone(ctx, 'qa', `All QA checks passed (${tested} commands).`);
       // Write QA handoff so downstream steps (review_gate, metrics) see it
       mkdirSync(join(ctx.cwd, '.pi/swarm/outputs'), { recursive: true });
       writeFileSync(
@@ -607,10 +712,10 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
           requiresDocs: false,
           filesTouched: [],
           nextCommands: [],
-          summary: `All QA checks passed (${tested.size} commands) — deterministic.`,
+          summary: `All QA checks passed (${tested} commands) — deterministic.`,
         }),
       );
-      ctx.agentDurations['qa'] = Date.now() - (ctx.agentStartTimes['qa'] ?? Date.now());
+      ctx.agentDurations.qa = Date.now() - (ctx.agentStartTimes.qa ?? Date.now());
       return 'review';
     }
 
@@ -629,9 +734,7 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
   }
 
   // ── Spawn QA LLM (on failure or if no deterministic commands) ──
-  const model = getModel(ctx, 'qa');
   const planPathVal = join(ctx.cwd, '.pi/swarm/plans', `architect_plan_${ctx.taskId}.md`);
-  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'qa');
   const failFileRel = `.pi/swarm/outputs/${ctx.taskId}_qa_failures.md`;
 
   // Include failure details in the user message if the deterministic pass failed
@@ -639,7 +742,7 @@ const runQa = async (ctx: StateContext): Promise<PipelineState> => {
     ? `'${planPathVal} — QA failures were detected. Read the failure details in ${failFileRel} and provide fixes.'`
     : `'${planPathVal}'`;
 
-  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' ${userMessage}`;
+  const command = buildPiCommand(ctx, 'qa', userMessage);
 
   const handoff = await runStep(ctx, 'qa', command, ctx.state.agents.qa.paneId);
 
@@ -724,7 +827,8 @@ const runReview = async (ctx: StateContext): Promise<PipelineState> => {
     try {
       await ctx.socketClient.showNotification({
         title: `Swarm Review: ${ctx.taskId}`,
-        message: 'Your input needed — lgtm / reject / feedback in the review pane',
+        message:
+          'Your input needed — /approve, /reject, or /feedback <text> from your main pi session (or type in the review pane)',
         level: 'info',
       });
     } catch {
@@ -816,16 +920,18 @@ export const decideReviewOutcome = (ctx: StateContext, handoff: SwarmHandoff): P
  * Runs between review-approved and git. Uses free-tier model with fallback.
  */
 const runDocs = async (ctx: StateContext): Promise<PipelineState> => {
-  const model = getModel(ctx, 'docs');
   const planPathVal = join(ctx.cwd, '.pi/swarm/plans', `architect_plan_${ctx.taskId}.md`);
-  const sysPromptPath = buildSystemPrompt(ctx.cwd, 'docs');
-  const command = `pi --model ${model} --system-prompt '${sysPromptPath}' '${planPathVal}'`;
+  // Docs only writes prose — zero coding skills needed. --no-skills saves
+  // tens of KB of context that would be wasted on Svelte/PixiJS/Firebase skill files.
+  const command = buildPiCommand(ctx, 'docs', `'${planPathVal}'`, '--no-skills');
 
   const handoff = await runStep(
     ctx,
     'docs',
     command,
     ctx.state.agents.docs?.paneId ?? ctx.state.agents.qa.paneId,
+    () => true,
+    DOCS_TIMEOUT_MS,
   );
 
   if (!handoff) {

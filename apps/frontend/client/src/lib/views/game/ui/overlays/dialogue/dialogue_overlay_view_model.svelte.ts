@@ -656,7 +656,7 @@ class DialogueOverlayViewModel
     const { npcName, dialog, personaId } = this._npcData;
 
     // Start with the GM prompt assembler for world/state context
-    const basePrompt = gmPromptService.assemblePrompt('scene');
+    const basePrompt = gmPromptService.assemblePrompt({ mode: 'scene' });
 
     // Overlay NPC-specific personality
     const personaPrompt =

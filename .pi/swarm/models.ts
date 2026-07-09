@@ -18,6 +18,8 @@
 
 export type ModelTier = 'pro' | 'flash' | 'free';
 
+export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export const SWARM_MODELS = {
   tiers: {
     pro: 'deepseek/deepseek-v4-pro',
@@ -34,6 +36,22 @@ export const ROLE_MODEL_TIER: Record<string, ModelTier> = {
   qa: 'flash', // pro if complexity=complex (QA LLM only spawns on test failures)
   docs: 'free', // free_fallback on quota errors
   git: 'free',
+} as const;
+
+/**
+ * Per-role default thinking levels — DeepSeek bills thinking tokens like
+ * output tokens, so lower levels on mechanical roles save real money.
+ *
+ *   architect → high   (planning quality compounds downstream)
+ *   coder → medium     (implementation needs some reasoning; drops to low on trivial)
+ *   qa → low           (test writing is mechanical; raised to medium on complex)
+ *   docs → minimal     (prose generation, no reasoning needed)
+ */
+export const ROLE_THINKING_LEVEL: Record<string, ThinkingLevel> = {
+  architect: 'high',
+  coder: 'medium', // low if complexity=trivial
+  qa: 'low', // medium if complexity=complex
+  docs: 'minimal',
 } as const;
 
 /** Get the model slug for a tier. Falls back to flash for unrecognized tiers. */

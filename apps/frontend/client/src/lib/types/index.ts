@@ -17,6 +17,13 @@ export type {
   GameStateOptions,
 } from './game.ts';
 export type {
+  KeywordMatch,
+  Lorebook,
+  LorebookEntriesArray,
+  LorebookEntry,
+  LorebookEntryInput,
+} from './lorebook';
+export type {
   ChatInputDraft,
   EnhancedChatMessage,
   EnhancedMessage,

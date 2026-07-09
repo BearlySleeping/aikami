@@ -58,24 +58,24 @@ describe('Address Mode — AC-2', () => {
 
   for (const mode of modes) {
     test(`${mode} mode produces a non-empty prompt`, () => {
-      const prompt = gmPromptService.assemblePrompt(mode);
+      const prompt = gmPromptService.assemblePrompt({ mode });
       expect(prompt.length).toBeGreaterThan(0);
     });
   }
 
   test('scene mode uses third-person omniscient instruction', () => {
-    const prompt = gmPromptService.assemblePrompt('scene');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
     expect(prompt).toContain('omniscient');
     expect(prompt).not.toContain('second person');
   });
 
   test('gm mode uses second-person instruction', () => {
-    const prompt = gmPromptService.assemblePrompt('gm');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'gm' });
     expect(prompt).toContain('second person');
   });
 
   test('party mode uses group-focused instruction', () => {
-    const prompt = gmPromptService.assemblePrompt('party');
+    const prompt = gmPromptService.assemblePrompt({ mode: 'party' });
     expect(prompt).toContain('collectively');
   });
 });

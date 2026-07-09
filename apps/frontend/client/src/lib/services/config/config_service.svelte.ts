@@ -14,6 +14,7 @@ import {
 import { clearVault, decrypt, encrypt } from '$lib/utils/crypto_vault';
 import { logger } from '$logger';
 import type { Connection, ConnectionId } from '$types/connection';
+import type { Lorebook, LorebookEntry } from '$types/lorebook';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -377,6 +378,10 @@ export type ConfigState = {
   defaultConnectionId: ConnectionId | null;
   /** Generation parameter presets (built-in + user-defined). */
   presets: GenParamPreset[];
+  /** Lorebooks (world info collections) persisted in localStorage. */
+  lorebooks: Lorebook[];
+  /** IDs of lorebooks assigned to the active chat session. */
+  activeLorebookIds: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -463,6 +468,41 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   // ── Macro preset integration (C-237) ──────────────────────────────
   /** Loads macro presets from localStorage. */
   loadMacroPresets: () => void;
+
+  // ── Lorebook management (C-238) ──────────────────────────────────
+
+  /** Adds a new lorebook and returns its ID. */
+  addLorebook: (options: { name: string; description: string }) => string;
+  /** Updates an existing lorebook by ID. */
+  updateLorebook: (options: {
+    id: string;
+    patch: Partial<Pick<Lorebook, 'name' | 'description'>>;
+  }) => void;
+  /** Deletes a lorebook and all its entries. */
+  deleteLorebook: (options: { id: string }) => void;
+  /** Returns all lorebooks. */
+  getLorebooks: () => Lorebook[];
+  /** Returns a single lorebook by ID, or undefined. */
+  getLorebook: (options: { id: string }) => Lorebook | undefined;
+
+  /** Adds an entry to a lorebook. Returns the entry ID. */
+  addEntry: (options: {
+    lorebookId: string;
+    entry: Omit<LorebookEntry, 'id' | 'createdAt' | 'updatedAt'>;
+  }) => string;
+  /** Updates an entry within a lorebook. */
+  updateEntry: (options: {
+    lorebookId: string;
+    entryId: string;
+    patch: Partial<Omit<LorebookEntry, 'id' | 'createdAt' | 'lorebookId'>>;
+  }) => void;
+  /** Deletes an entry from a lorebook. */
+  deleteEntry: (options: { lorebookId: string; entryId: string }) => void;
+  /** Reorders entries within a lorebook (provides the full new order by entry ID). */
+  reorderEntries: (options: { lorebookId: string; entryIds: string[] }) => void;
+
+  /** Sets the lorebook IDs assigned to the active chat session. */
+  setActiveLorebookIds: (options: { ids: string[] }) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -535,6 +575,7 @@ const DEFAULT_EMOTION_CONFIG: EmotionConfig = {
 const DEFAULT_TEMPLATE: InstructTemplate = 'chatml';
 
 const DEFAULT_STATE: ConfigState = {
+  activeLorebookIds: [],
   advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
   auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
   connections: [],
@@ -543,6 +584,7 @@ const DEFAULT_STATE: ConfigState = {
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
   instructTemplate: DEFAULT_TEMPLATE,
+  lorebooks: [],
   memory: { ...DEFAULT_MEMORY_CONFIG },
   models: [...DEFAULT_MODEL_CONFIGS],
   preferredModel: '',
@@ -666,6 +708,12 @@ class ConfigService
             ...(parsed.auxiliaryModels as Partial<AuxiliaryModels>),
           };
         }
+        if (Array.isArray(parsed.lorebooks)) {
+          this.state.lorebooks = parsed.lorebooks as Lorebook[];
+        }
+        if (Array.isArray(parsed.activeLorebookIds)) {
+          this.state.activeLorebookIds = parsed.activeLorebookIds as string[];
+        }
       } catch {
         this.warn('load: failed to parse plain config');
       }
@@ -694,12 +742,14 @@ class ConfigService
 
     // Plain config (non-sensitive)
     const plain: Record<string, unknown> = {
+      activeLorebookIds: this.state.activeLorebookIds,
       advancedOverrides: this.state.advancedOverrides,
       auxiliaryModels: this.state.auxiliaryModels,
       emotion: this.state.emotion,
       generationParams: this.state.generationParams,
       image: this.state.image,
       instructTemplate: this.state.instructTemplate,
+      lorebooks: this.state.lorebooks,
       memory: this.state.memory,
       models: this.state.models,
       preferredModel: this.state.preferredModel,
@@ -953,6 +1003,7 @@ class ConfigService
   /** Returns a fresh deep copy of the default state (no shared references). */
   private _makeDefaultState(): ConfigState {
     return {
+      activeLorebookIds: [],
       advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
       auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
       connections: [],
@@ -961,6 +1012,7 @@ class ConfigService
       generationParams: { ...DEFAULT_GENERATION_PARAMS },
       image: { ...DEFAULT_IMAGE_CONFIG },
       instructTemplate: DEFAULT_TEMPLATE,
+      lorebooks: [],
       memory: { ...DEFAULT_MEMORY_CONFIG },
       models: [],
       preferredModel: '',
@@ -1126,6 +1178,130 @@ class ConfigService
       mod.macroPresetStore.loadPresets();
       this.debug('loadMacroPresets:loaded', { count: mod.macroPresetStore.presets.length });
     });
+  }
+
+  // ── Lorebook management (C-238) ──────────────────────────────────
+
+  addLorebook(options: { name: string; description: string }): string {
+    const { name, description } = options;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const lorebook: Lorebook = {
+      id,
+      name,
+      description,
+      entries: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.lorebooks = [...this.state.lorebooks, lorebook];
+    return id;
+  }
+
+  updateLorebook(options: {
+    id: string;
+    patch: Partial<Pick<Lorebook, 'name' | 'description'>>;
+  }): void {
+    const { id, patch } = options;
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== id) {
+        return lb;
+      }
+      return { ...lb, ...patch, updatedAt: new Date().toISOString() };
+    });
+  }
+
+  deleteLorebook(options: { id: string }): void {
+    const { id } = options;
+    this.state.lorebooks = this.state.lorebooks.filter((lb) => lb.id !== id);
+  }
+
+  getLorebooks(): Lorebook[] {
+    return this.state.lorebooks;
+  }
+
+  getLorebook(options: { id: string }): Lorebook | undefined {
+    const { id } = options;
+    return this.state.lorebooks.find((lb) => lb.id === id);
+  }
+
+  addEntry(options: {
+    lorebookId: string;
+    entry: Omit<LorebookEntry, 'id' | 'createdAt' | 'updatedAt'>;
+  }): string {
+    const { lorebookId, entry } = options;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const newEntry: LorebookEntry = { ...entry, id, createdAt: now, updatedAt: now };
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      return { ...lb, entries: [...lb.entries, newEntry], updatedAt: now };
+    });
+    return id;
+  }
+
+  updateEntry(options: {
+    lorebookId: string;
+    entryId: string;
+    patch: Partial<Omit<LorebookEntry, 'id' | 'createdAt' | 'lorebookId'>>;
+  }): void {
+    const { lorebookId, entryId, patch } = options;
+    const now = new Date().toISOString();
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      return {
+        ...lb,
+        entries: lb.entries.map((e) => {
+          if (e.id !== entryId) {
+            return e;
+          }
+          return { ...e, ...patch, updatedAt: now };
+        }),
+        updatedAt: now,
+      };
+    });
+  }
+
+  deleteEntry(options: { lorebookId: string; entryId: string }): void {
+    const { lorebookId, entryId } = options;
+    const now = new Date().toISOString();
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      return {
+        ...lb,
+        entries: lb.entries.filter((e) => e.id !== entryId),
+        updatedAt: now,
+      };
+    });
+  }
+
+  reorderEntries(options: { lorebookId: string; entryIds: string[] }): void {
+    const { lorebookId, entryIds } = options;
+    const now = new Date().toISOString();
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      const entryMap = new Map(lb.entries.map((e) => [e.id, e]));
+      const reordered = entryIds
+        .map((id) => entryMap.get(id))
+        .filter((e): e is LorebookEntry => e !== undefined);
+      return { ...lb, entries: reordered, updatedAt: now };
+    });
+  }
+
+  setActiveLorebookIds(options: { ids: string[] }): void {
+    this.state.activeLorebookIds = options.ids;
   }
 
   /** Safely reads a Vite PUBLIC_* env var. Returns undefined in tests. */

@@ -417,7 +417,7 @@ export const executeTaskSocket = async (options: {
       resume,
     });
 
-    // Collect metrics
+    // Collect metrics (with real token counts from swarm session files)
     const { collectAndWriteMetrics } = await import('./metrics_collector');
     collectAndWriteMetrics({
       taskId,
@@ -425,6 +425,17 @@ export const executeTaskSocket = async (options: {
       trivialPath: state.agents.qa.status === 'done' && state.agents.coder.status === 'done',
       documentationGenerated: false, // set by metrics collector from agentDurations sidecar
     });
+
+    // ── Janitor sweep: clean the task's own artifacts + stale old ones ──
+    try {
+      const { janitorSweep } = await import('./swarm_janitor');
+      const removed = janitorSweep(7, taskId);
+      if (removed > 0) {
+        console.log(`[swarm:janitor] cleaned ${removed} stale artifact files`);
+      }
+    } catch {
+      // best-effort
+    }
   } finally {
     // ── Ledger lifecycle: clear task heartbeat rows, checkpoint WAL ──
     scratchpad.finalizeTask(taskId);

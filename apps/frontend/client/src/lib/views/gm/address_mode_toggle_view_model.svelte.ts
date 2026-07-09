@@ -87,7 +87,7 @@ class AddressModeTogggleViewModel
 
   /** @inheritdoc */
   get assembledPrompt(): string {
-    return gmPromptService.assemblePrompt(this._currentMode);
+    return gmPromptService.assemblePrompt({ mode: this._currentMode });
   }
 
   /** @inheritdoc */

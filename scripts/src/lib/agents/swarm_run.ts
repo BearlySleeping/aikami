@@ -42,7 +42,7 @@ if (!contractId) {
   console.error('Usage: bun swarm:run <contract-id> [options]');
   console.error('');
   console.error('  contract-id    e.g. C-233, C-311');
-  console.error('  --tier <tier>  pro | flash (default: flash)');
+  console.error('  --tier <tier>  pro | flash (default: per-role matrix in .pi/swarm/models.ts)');
   console.error('  --no-review    skip the review approval step (auto-approve git)');
   console.error('  --fresh        discard previous progress, start over (alias: --force, --clean)');
   console.error('  --join         attach to herdr session to watch');
@@ -115,11 +115,7 @@ const payload = {
   contractPath,
   tier,
   skipReview,
-  // resume is informational here — after --fresh cleanup there is nothing to
-  // resume from, so the executor's detection naturally starts at architect.
   resume: !fresh,
-  // steps is vestigial — kept for swarm_start.ts backward compat, never read by executor
-  steps: [],
 };
 
 const payloadPath = join(payloadDir, `payload_${contractId}.json`);
