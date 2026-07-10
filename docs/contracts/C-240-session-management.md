@@ -8,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/services/session/` + `apps/frontend/client/src/lib/views/session/` — Session lifecycle UI, browser, auto-summarization, state carry-forward |
 | **Priority** | P2 — Enables long-running campaigns without context window bloat |
 | **Dependencies** | C-235 (GM/Narrative Director — COMPLETED for `SessionSummary` type + `sessionSummaryService`), C-132 (Save/Load — COMPLETED for `gameSaveService`), `gameStateService` (ECS bridge — EXISTS) |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

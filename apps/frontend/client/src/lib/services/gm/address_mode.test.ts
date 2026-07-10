@@ -76,6 +76,6 @@ describe('Address Mode — AC-2', () => {
 
   test('party mode uses group-focused instruction', () => {
     const prompt = gmPromptService.assemblePrompt({ mode: 'party' });
-    expect(prompt).toContain('collectively');
+    expect(prompt).toContain('distinct voice');
   });
 });

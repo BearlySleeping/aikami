@@ -117,6 +117,16 @@ class GmPromptService
       lines.push('[/NEARBY NPCS]');
     }
 
+    // ── Party members (Party mode multi-character voice) ───────────
+    if (mode === 'party' && context.partyMembers.length > 0) {
+      lines.push('');
+      lines.push('[PARTY MEMBERS]');
+      for (const member of context.partyMembers) {
+        lines.push(`- ${member.name}: ${member.personality}`);
+      }
+      lines.push('[/PARTY MEMBERS]');
+    }
+
     // ── Combat context ──────────────────────────────────────────────
     if (combatContext?.isInCombat) {
       lines.push('');
@@ -203,6 +213,7 @@ class GmPromptService
       weather: this._describeWeather(),
       activeQuests: this._gatherActiveQuests(),
       nearbyNpcs: this._gatherNearbyNpcs(),
+      partyMembers: this._gatherPartyMembers(),
       playerCharacter: {
         name: 'Hero', // TODO: wire to actual character name
         class: 'Adventurer',
@@ -245,7 +256,7 @@ class GmPromptService
       case 'scene':
         return '[ADDRESS MODE: Scene — Omniscient Narrator]';
       case 'party':
-        return '[ADDRESS MODE: Party — Group Focus]';
+        return '[ADDRESS MODE: Party — Multi-Character Group]';
       case 'gm':
         return '[ADDRESS MODE: GM — Direct GM-to-Player]';
     }
@@ -259,7 +270,7 @@ class GmPromptService
       case 'scene':
         return 'Describe the world in third person, omniscient. Do not directly address the player.';
       case 'party':
-        return 'Describe the world with the party as the focal point. Address the group collectively.';
+        return 'Each party member speaks in their own distinct voice matching their personality. When a party member speaks, prefix with their name in bold: **Name**: dialogue. Describe the world through their collective perspective.';
       case 'gm':
         return 'Address the player directly in second person. Speak as a human Game Master would.';
     }
@@ -303,6 +314,14 @@ class GmPromptService
    */
   private _gatherNearbyNpcs(): GmPromptContext['nearbyNpcs'] {
     return []; // TODO: wire to actual NPC awareness system
+  }
+
+  /**
+   * Gathers party members for multi-character voice distinction.
+   * Returns an empty array when no party data is available.
+   */
+  private _gatherPartyMembers(): GmPromptContext['partyMembers'] {
+    return []; // TODO: wire to actual party member system
   }
 }
 

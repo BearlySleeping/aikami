@@ -20,6 +20,8 @@ type Props = {
   disabled?: boolean;
   /** CSS class string for additional styling. */
   class?: string;
+  /** Ref callback when the textarea DOM element is mounted. */
+  textareaRef?: (el: HTMLTextAreaElement | null) => void;
 };
 
 const {
@@ -29,6 +31,7 @@ const {
   placeholder = 'Type your message...',
   disabled = false,
   class: classProp = '',
+  textareaRef,
 }: Props = $props();
 
 // ── Row calculation ──────────────────────────────────────────────────
@@ -38,6 +41,14 @@ const MAX_ROWS = 8;
 const computedRows = $derived(Math.min(MAX_ROWS, Math.max(1, value.split('\n').length)));
 
 // ── Event handlers ───────────────────────────────────────────────────
+
+let textareaElement: HTMLTextAreaElement | undefined = $state();
+
+$effect(() => {
+  if (textareaElement) {
+    textareaRef?.(textareaElement);
+  }
+});
 
 const handleInput = (e: Event) => {
   const target = e.target as HTMLTextAreaElement;
@@ -50,6 +61,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 </script>
 
 <textarea
+  bind:this={textareaElement}
   {value}
   oninput={handleInput}
   class="textarea textarea-bordered resize-y text-sm field-sizing-content {classProp}"

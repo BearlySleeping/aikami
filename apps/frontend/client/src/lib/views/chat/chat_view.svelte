@@ -105,17 +105,64 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
             />
           </div>
 
+          <!-- Slash command autocomplete popup -->
+          {#if viewModel.showSlashCompletions}
+            <div class="relative">
+              <ul
+                class="menu menu-sm bg-base-200 rounded-lg shadow-lg border border-base-300 absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto z-40"
+                data-testid="slash-autocomplete-menu"
+              >
+                {#each viewModel.slashCompletions as cmd, i}
+                  <li>
+                    <button
+                      type="button"
+                      class:menu-active={i === viewModel.selectedSlashCompletion}
+                      onmousedown={(e) => {
+                        e.preventDefault();
+                        viewModel.selectAndApplySlashCompletion(i);
+                      }}
+                    >
+                      <span class="font-mono font-bold">/{cmd.name}</span>
+                      <span class="text-xs text-base-content/50">{cmd.description}</span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/if}
+
           <!-- Input area with auto-resize textarea -->
           <div class="mt-4 flex items-end gap-2">
             <div class="flex-1">
               <AutoResizeTextarea
                 value={viewModel.inputText}
                 onchange={(text) => viewModel.onInputChange(text)}
+                onkeydown={(e) => viewModel.handleKeyDown(e)}
                 placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-                disabled={viewModel.isSending}
+                disabled={viewModel.isSending || viewModel.isImpersonationDrafting}
                 class="w-full"
+                textareaRef={(el) => {
+                  if (el) {
+                    viewModel.setFocusTextareaCallback(() => el.focus());
+                  }
+                }}
               />
             </div>
+            {#if viewModel.impersonationConfig.quickButtonEnabled}
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                title="Draft as your persona"
+                onclick={() => viewModel.handleImpersonateDraft()}
+                disabled={viewModel.isSending || viewModel.isImpersonationDrafting}
+              >
+                {#if viewModel.isImpersonationDrafting}
+                  <span class="loading loading-spinner loading-xs"></span>
+                {:else}
+                  🎭
+                {/if}
+              </button>
+            {/if}
             <button
               type="button"
               class="btn btn-primary btn-sm"
@@ -130,15 +177,26 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
             </button>
           </div>
 
-          <!-- Streaming TTS toggle -->
-          <div class="mt-2 flex items-center justify-end gap-2">
-            <span class="text-xs text-base-content/50">Streaming TTS</span>
-            <input
-              type="checkbox"
-              class="toggle toggle-xs"
-              checked={viewModel.streamingTtsEnabled}
-              onclick={() => viewModel.toggleStreamingTts()}
-            >
+          <!-- Chat settings: Streaming TTS + Impersonation toggle -->
+          <div class="mt-2 flex items-center justify-end gap-3">
+            <label class="flex items-center gap-1 cursor-pointer">
+              <span class="text-xs text-base-content/50">Streaming TTS</span>
+              <input
+                type="checkbox"
+                class="toggle toggle-xs"
+                checked={viewModel.streamingTtsEnabled}
+                onclick={() => viewModel.toggleStreamingTts()}
+              >
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer">
+              <span class="text-xs text-base-content/50">🎭 Impersonate</span>
+              <input
+                type="checkbox"
+                class="toggle toggle-xs"
+                checked={viewModel.impersonationConfig.quickButtonEnabled}
+                onclick={() => viewModel.toggleImpersonationQuickButton()}
+              >
+            </label>
           </div>
 
           <!-- GM Controls (visible in GM mode) -->

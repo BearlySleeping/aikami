@@ -43,6 +43,8 @@ export type GmPromptContext = {
     readonly status: string;
   }>;
   readonly nearbyNpcs: ReadonlyArray<GmNpcContext>;
+  /** Party members with names + personalities for multi-character voice. */
+  readonly partyMembers: ReadonlyArray<GmPartyMemberContext>;
   readonly playerCharacter: {
     readonly name: string;
     readonly class: string;
@@ -61,6 +63,17 @@ export type GmNpcContext = {
   readonly persona: string;
   readonly relationship: string;
   readonly currentActivity: string;
+};
+
+/**
+ * Party member context for multi-character voice distinction.
+ * Injected into the Party-mode GM prompt so the LLM can speak
+ * as each party member in their distinct voice.
+ */
+export type GmPartyMemberContext = {
+  readonly id: string;
+  readonly name: string;
+  readonly personality: string;
 };
 
 /**

@@ -1,5 +1,12 @@
 // apps/frontend/client/src/lib/views/chat/chat-view-model.svelte.ts
 
+import {
+  getSlashCompletions,
+  IMPERSONATION_COMMAND,
+  IMPERSONATION_DRAFT_READY_TOAST,
+  NO_PERSONA_TOAST_MESSAGE,
+  type SlashCommandEntry,
+} from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -8,6 +15,7 @@ import {
 } from '@aikami/frontend/services';
 import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
 import type { ChatData, MessageData, NpcData } from '@aikami/types';
+import { impersonationService } from '$lib/services/gm/impersonation_service.svelte.ts';
 import {
   aiService,
   authService,
@@ -19,9 +27,11 @@ import {
   messageBranchStore,
   npcChatService,
   npcService,
+  personaService,
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
+import type { ImpersonationConfig } from '$types';
 
 export type ChatViewModelOptions = BaseViewModelOptions & {
   /** The chat document ID to load. */
@@ -55,6 +65,16 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   inputText: string;
   /** Whether streaming TTS is enabled for this chat. */
   readonly streamingTtsEnabled: boolean;
+  /** Impersonation drafting configuration. */
+  readonly impersonationConfig: ImpersonationConfig;
+  /** Whether an impersonation draft is currently being generated. */
+  readonly isImpersonationDrafting: boolean;
+  /** Slash command autocomplete completions (filtered by current input). */
+  readonly slashCompletions: readonly SlashCommandEntry[];
+  /** Index of the currently selected autocomplete item (-1 = none). */
+  readonly selectedSlashCompletion: number;
+  /** Whether the autocomplete popup should be shown. */
+  readonly showSlashCompletions: boolean;
   /** Toast notification message (e.g. 'Copied!'). */
   readonly toastMessage: string;
   loadChatHistory(chat: ChatData): Promise<void>;
@@ -72,6 +92,18 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   onInputChange(text: string): void;
   /** Shows a toast notification that auto-dismisses. */
   showToast(message: string): void;
+  /** Triggers an impersonation draft (quick button). */
+  handleImpersonateDraft(): Promise<void>;
+  /** Toggles the impersonation quick button visibility. */
+  toggleImpersonationQuickButton(): void;
+  /** Navigate the slash command autocomplete selection up (-1) or down (+1). */
+  navigateSlashCompletion(delta: number): void;
+  /** Select a specific completion by index and apply it. */
+  selectAndApplySlashCompletion(index: number): void;
+  /** Registers a callback to focus the chat textarea (called from the view). */
+  setFocusTextareaCallback(callback: () => void): void;
+  /** Apply the selected slash completion to the input field. */
+  applySlashCompletion(): void;
   /** Toggles streaming TTS on/off for this chat. */
   toggleStreamingTts(): void;
   /** Sends current input text as a user message (convenience). */
@@ -119,6 +151,20 @@ export class ChatViewModel
   inputText = $state('');
   /** Whether streaming TTS is enabled for this chat. */
   streamingTtsEnabled = $state(false);
+  /** Impersonation drafting configuration (per-chat client state). */
+  impersonationConfig = $state<ImpersonationConfig>({
+    quickButtonEnabled: false,
+    promptTemplate: '',
+    skipAgents: false,
+  });
+  /** Whether an impersonation draft is currently being generated. */
+  isImpersonationDrafting = $state(false);
+  /** Slash command completions for current input. */
+  slashCompletions = $state<readonly SlashCommandEntry[]>([]);
+  /** Selected index in the completions list (-1 = nothing selected). */
+  selectedSlashCompletion = $state(-1);
+  /** Whether to show the autocomplete popup. */
+  showSlashCompletions = $state(false);
   /** Toast notification message — auto-clears after display. */
   toastMessage = $state('');
 
@@ -300,6 +346,31 @@ export class ChatViewModel
    * Enter submits; Shift+Enter inserts newline.
    */
   handleKeyDown(event: KeyboardEvent): void {
+    // ── Slash command autocomplete keyboard navigation ──
+    if (this.showSlashCompletions) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.navigateSlashCompletion(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.navigateSlashCompletion(-1);
+        return;
+      }
+      if (event.key === 'Tab' || event.key === 'Enter') {
+        event.preventDefault();
+        this.applySlashCompletion();
+        return;
+      }
+      if (event.key === 'Escape') {
+        this.showSlashCompletions = false;
+        this.slashCompletions = [];
+        this.selectedSlashCompletion = -1;
+        return;
+      }
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       this.handleSend();
@@ -350,6 +421,13 @@ export class ChatViewModel
       if (parsed.command) {
         const { command, args } = parsed.command;
         this.debug('command detected', { command, args });
+
+        // ── Impersonation command — draft, don't send ──
+        if (command === IMPERSONATION_COMMAND) {
+          const direction = args.length > 0 ? args.join(' ') : '';
+          await this._handleImpersonateCommand(direction);
+          return;
+        }
 
         // Dispatch to game engine bridge
         const bridge = await this._getEngineBridge();
@@ -495,6 +573,20 @@ export class ChatViewModel
 
   onInputChange(text: string): void {
     this.inputText = text;
+
+    // ── Slash command autocomplete ──
+    const trimmed = text.trim();
+    if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
+      const matches = getSlashCompletions(trimmed);
+      this.slashCompletions = matches;
+      this.showSlashCompletions = matches.length > 0;
+      this.selectedSlashCompletion = matches.length > 0 ? 0 : -1;
+    } else {
+      this.slashCompletions = [];
+      this.showSlashCompletions = false;
+      this.selectedSlashCompletion = -1;
+    }
+
     // Debounced save — fire-and-forget so input feels instant
     void draftStore.saveDraft({ chatId: this._chatId, text });
   }
@@ -513,6 +605,155 @@ export class ChatViewModel
     this.streamingTtsEnabled = !this.streamingTtsEnabled;
     if (!this.streamingTtsEnabled) {
       ttsService.stop();
+    }
+  }
+
+  /**
+   * Triggers an impersonation draft via the quick button (empty direction).
+   * Generates a purely context-based draft — "what would my character do?"
+   */
+  async handleImpersonateDraft(): Promise<void> {
+    if (this.isImpersonationDrafting) {
+      return;
+    }
+
+    const persona = await personaService.getActivePersona();
+    if (!persona) {
+      this.showToast(NO_PERSONA_TOAST_MESSAGE);
+      return;
+    }
+
+    this.isImpersonationDrafting = true;
+
+    try {
+      const recentMessages = chatService.messages.map((m) => ({
+        sender: m.sender,
+        text: m.text,
+      }));
+
+      const draft = await impersonationService.generateDraft({
+        personaName: persona.name,
+        personaTraits: persona.personalityTraits ?? '',
+        recentMessages,
+      });
+
+      this.inputText = draft;
+      this.showToast(IMPERSONATION_DRAFT_READY_TOAST);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.error('handleImpersonateDraft:failed', { message });
+      this.showToast(`Impersonation draft failed: ${message}`);
+    } finally {
+      this.isImpersonationDrafting = false;
+    }
+  }
+
+  /**
+   * Toggles the impersonation quick-button visibility in the chat input bar.
+   */
+  toggleImpersonationQuickButton(): void {
+    this.impersonationConfig = {
+      ...this.impersonationConfig,
+      quickButtonEnabled: !this.impersonationConfig.quickButtonEnabled,
+    };
+  }
+
+  /**
+   * Navigates the slash command autocomplete selection.
+   * @param delta — -1 to move up, +1 to move down.
+   */
+  navigateSlashCompletion(delta: number): void {
+    if (this.slashCompletions.length === 0) {
+      return;
+    }
+    const next = this.selectedSlashCompletion + delta;
+    if (next < 0) {
+      this.selectedSlashCompletion = this.slashCompletions.length - 1;
+    } else if (next >= this.slashCompletions.length) {
+      this.selectedSlashCompletion = 0;
+    } else {
+      this.selectedSlashCompletion = next;
+    }
+  }
+
+  /**
+   * Applies the currently selected slash completion to the input.
+   * Replaces the current `/partial` with `/commandName ` and
+   * dismisses the autocomplete popup.
+   */
+  applySlashCompletion(): void {
+    if (!this.showSlashCompletions || this.selectedSlashCompletion < 0) {
+      return;
+    }
+    const cmd = this.slashCompletions[this.selectedSlashCompletion];
+    if (!cmd) {
+      return;
+    }
+
+    this.inputText = `/${cmd.name} `;
+    this.showSlashCompletions = false;
+    this.slashCompletions = [];
+    this.selectedSlashCompletion = -1;
+
+    // Return focus to the textarea after autocomplete insertion.
+    // The view registers this callback when the textarea mounts.
+    this._focusTextarea?.();
+  }
+
+  /** Callback registered by the view to focus the textarea. */
+  private _focusTextarea?: () => void;
+
+  /** Registers a callback to focus the chat textarea (called from the view). */
+  setFocusTextareaCallback(callback: () => void): void {
+    this._focusTextarea = callback;
+  }
+
+  /**
+   * Selects a completion by index and immediately applies it.
+   */
+  selectAndApplySlashCompletion(index: number): void {
+    this.selectedSlashCompletion = index;
+    this.applySlashCompletion();
+  }
+
+  /**
+   * Handles the /impersonate slash command from sendMessage().
+   * Generates a draft as the player persona, places it in the input field.
+   */
+  private async _handleImpersonateCommand(direction: string): Promise<void> {
+    if (this.isImpersonationDrafting) {
+      return;
+    }
+
+    const persona = await personaService.getActivePersona();
+    if (!persona) {
+      this.showToast(NO_PERSONA_TOAST_MESSAGE);
+      return;
+    }
+
+    this.isImpersonationDrafting = true;
+
+    try {
+      const recentMessages = chatService.messages.map((m) => ({
+        sender: m.sender,
+        text: m.text,
+      }));
+
+      const draft = await impersonationService.generateDraft({
+        personaName: persona.name,
+        personaTraits: persona.personalityTraits ?? '',
+        recentMessages,
+        direction: direction || undefined,
+      });
+
+      this.inputText = draft;
+      this.showToast(IMPERSONATION_DRAFT_READY_TOAST);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.error('_handleImpersonateCommand:failed', { message });
+      this.showToast(`Impersonation draft failed: ${message}`);
+    } finally {
+      this.isImpersonationDrafting = false;
     }
   }
 

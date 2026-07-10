@@ -205,7 +205,7 @@
 | C-238 | Lorebook World Info | ✅ completed |
 | C-239 | Expression Emotion System | ✅ completed |
 | C-240 | Session Management | ✅ completed |
-| C-241 | Chat Modes Address System | ⏳ not_started |
+| C-241 | Chat Modes Address System | ✅ completed |
 | C-242 | Image Generation Pipeline | ⏳ not_started |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
 | C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |

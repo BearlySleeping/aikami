@@ -16,6 +16,7 @@ export type {
   GameStateListener,
   GameStateOptions,
 } from './game.ts';
+export type { ImpersonationConfig } from './impersonation.ts';
 export type {
   KeywordMatch,
   Lorebook,
