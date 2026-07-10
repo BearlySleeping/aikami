@@ -1,9 +1,9 @@
 // packages/shared/types/src/lib/database/config.ts
-import type { ConfigCreateSchema, ConfigSchema, ConfigUpdateSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-export type ConfigData = Type.Static<typeof ConfigSchema>;
-
-export type ConfigCreateData = Type.Static<typeof ConfigCreateSchema>;
-
-export type ConfigUpdateData = Type.Static<typeof ConfigUpdateSchema>;
+export type {
+  Config as ConfigData,
+  ConfigCreate as ConfigCreateData,
+  ConfigUpdate as ConfigUpdateData,
+} from '@aikami/schemas';

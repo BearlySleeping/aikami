@@ -10,8 +10,8 @@
  */
 
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { $ } from 'bun';
 
@@ -87,6 +87,59 @@ async function sh(command: TemplateStringsArray, ...args: unknown[]) {
     throw new Error(`Command failed: ${cmd}`);
   }
   return result;
+}
+
+// ── sanitize skill descriptions ─────────────────────────────────────
+
+const MAX_DESCRIPTION_LENGTH = 1024;
+
+async function sanitizeSkillDescriptions(): Promise<void> {
+  const skillsDir = join(PI_DIR, 'generated-skills');
+  if (!existsSync(skillsDir)) {
+    return;
+  }
+
+  async function walkDir(dir: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walkDir(fullPath);
+      } else if (entry.isFile() && entry.name === 'SKILL.md') {
+        await fixDescription(fullPath);
+      }
+    }
+  }
+
+  async function fixDescription(filePath: string): Promise<void> {
+    const content = await readFile(filePath, 'utf-8');
+    // Match the description field within YAML frontmatter: description: "..."
+    const descRegex = /^description:\s*"((?:[^"\\]|\\.)*)"/m;
+    const match = content.match(descRegex);
+    if (!match) {
+      return;
+    }
+
+    const fullMatch = match[0];
+    const innerText = match[1] ?? '';
+    if (!innerText || innerText.length <= MAX_DESCRIPTION_LENGTH) {
+      return;
+    }
+
+    // Truncate at a word boundary, leaving room for closing quote
+    const maxInner = MAX_DESCRIPTION_LENGTH;
+    const truncated = innerText.slice(0, maxInner).replace(/\s+\S*$/, '');
+    const newLine = `description: "${truncated}"`;
+    const newContent = content.replace(fullMatch, newLine);
+
+    console.log(
+      `  Truncated description in ${basename(dirname(filePath))}/${basename(filePath)} ` +
+        `(${innerText.length} → ${truncated.length} chars)`,
+    );
+    await writeFile(filePath, newContent);
+  }
+
+  await walkDir(skillsDir);
 }
 
 // ── install one skill source ─────────────────────────────────────────
@@ -184,6 +237,10 @@ async function main() {
       }
     }
   }
+
+  // 4. Sanitize skill descriptions to stay within the 1024 char Agent Skills spec limit
+  console.log('\n── Sanitizing descriptions ──');
+  await sanitizeSkillDescriptions();
 
   const names = SKILL_SOURCES.map((s) => s.name).join(' + ');
   console.log(`\nDone! ${names} skills installed to .pi/generated-skills/`);

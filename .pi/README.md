@@ -64,9 +64,11 @@ See individual skill files for details.
 | Skill                  | When Used                                                                                                                                                           |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `aikami-conventions`   | **🔴 LOAD FIRST** before ANY code — critical violations, TS strictness, imports, arrow functions, errors, private member `_` prefix, snake_case files, output style |
-| `svelte-conventions`   | Svelte 5 runes, ViewModel, services, aliases                                                                                                                        |
-| `backend-conventions`  | Backend patterns — repository, database abstraction, services                                                                                                       |
-| `firebase-functions`   | Cloud Functions — firestack v2, Zod wrappers, deployment                                                                                                            |
+| `svelte-conventions`   | Svelte 5 runes, zero-logic Views, ViewModel pattern, services, client aliases                                                                                       |
+| `backend-conventions`  | Controller → service → repository → BaseDatabaseService, backend testing                                                                                            |
+| `aikami-ui`            | UI styling — DaisyUI primitives vs components, typography, semantic colors                                                                                          |
+| `dataconnect`          | Data Connect schemas + `bun moon run firebase:generate` + `@aikami/frontend-dataconnect` import surface                                                              |
+| `svelte-page`          | Scaffolding SvelteKit pages (View + ViewModel pattern)                                                                                                              |
 | `firestore-collection` | Scaffolding new Firestore collections                                                                                                                               |
 | `svelte-page`          | Scaffolding new SvelteKit pages                                                                                                                                     |
 | `new-project`          | Scaffolding new monorepo projects/packages                                                                                                                          |
@@ -105,6 +107,7 @@ See individual skill files for details.
 | General TS rules, imports, arrow functions, private `_` prefix, snake_case files, output style    | `aikami-conventions` skill 🔴 |
 | Svelte 5 ViewModel, services, runes                                                               | `svelte-conventions` skill    |
 | Backend repository pattern, database abstraction                                                  | `backend-conventions` skill   |
+| Data Connect generate + import surface                                                            | `dataconnect` skill           |
 | Game engine boundary, PixiJS patterns                                                             | `pixijs-v8` skill             |
 | Private class members use `_` prefix                                                              | `aikami-conventions` skill    |
 | Direnv environment is always loaded — extensions read `AIKAMI_MODE`, `AIKAMI_PROJECT_ID` directly | direnv.ts                     |

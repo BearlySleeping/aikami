@@ -8,4 +8,7 @@ import Type from 'typebox';
 // supportedLocales = ['en'] as const
 export const SupportedLocaleSchema = Type.Union([Type.Literal('en')]);
 
+export type SupportedLocale = Type.Static<typeof SupportedLocaleSchema>;
 export const LocaleDataSchema = Type.Record(SupportedLocaleSchema, Type.Optional(Type.String()));
+
+export type LocaleData = Type.Static<typeof LocaleDataSchema>;

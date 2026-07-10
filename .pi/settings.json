@@ -8,7 +8,7 @@
     "keepRecentTokens": 20000
   },
   "packages": ["npm:context-mode", "npm:pi-mcp-adapter", "npm:@hypabolic/pi-hypa"],
-  "extensions": ["./.pi/extensions"],
-  "skills": ["./.pi/skills", "./.pi/generated-skills"],
-  "prompts": ["./.pi/prompts"]
+  "extensions": ["./extensions"],
+  "skills": ["./skills", "./generated-skills"],
+  "prompts": ["./prompts"]
 }

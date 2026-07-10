@@ -1,36 +1,35 @@
 // packages/shared/types/src/lib/database/user.ts
-import type {
-  UserCreateSchema,
-  UserLiteCreateSchema,
-  UserLiteSchema,
-  UserSchema,
-  UserSessionSchema,
-  UserUpdateSchema,
-} from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Schema-derived names re-exported with traditional Data suffix for backward compatibility.
+// Hand-authored composite types (CurrentUser, etc.) remain here.
+
+import type { User, UserLite, UserSession } from '@aikami/schemas';
 import type { SignInProvider } from '../auth.ts';
+
+// ── Re-exports from schemas (source of truth) ───────────────────────────
+
+export type {
+  User as UserData,
+  UserCreate as UserCreateData,
+  UserLite as UserLiteData,
+  UserLiteCreate as UserLiteCreateData,
+  UserSession as UserSessionData,
+  UserUpdate as UserUpdateData,
+} from '@aikami/schemas';
+
+// ── Hand-authored composite types ───────────────────────────────────────
 
 export type CurrentUser = CurrentUserData | CurrentUserLiteData | CurrentUserSessionData;
 
-export type CurrentUserData = UserData & {
+export type CurrentUserData = User & {
   currentSignInProvider?: SignInProvider;
   fetchedUserData: true;
 };
 
-export type CurrentUserLiteData = UserLiteData & {
+export type CurrentUserLiteData = UserLite & {
   fetchedUserData?: true;
 };
 
-export type CurrentUserSessionData = UserSessionData & {
+export type CurrentUserSessionData = UserSession & {
   fetchedUserData?: true;
 };
-export type UserCreateData = Type.Static<typeof UserCreateSchema>;
-
-export type UserData = Type.Static<typeof UserSchema>;
-
-export type UserLiteCreateData = Type.Static<typeof UserLiteCreateSchema>;
-export type UserLiteData = Type.Static<typeof UserLiteSchema>;
-
-export type UserSessionData = Type.Static<typeof UserSessionSchema>;
-
-export type UserUpdateData = Type.Static<typeof UserUpdateSchema>;

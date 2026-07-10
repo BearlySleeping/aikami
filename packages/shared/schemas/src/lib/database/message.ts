@@ -43,6 +43,7 @@ export const MessageSchema = Composite(
   }),
 );
 
+export type Message = Type.Static<typeof MessageSchema>;
 export const MessageCreateSchema = Type.Intersect([
   Type.Omit(MessageSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(FieldValueSchema) }),
@@ -51,6 +52,7 @@ export const MessageCreateSchema = Type.Intersect([
   }),
 ]);
 
+export type MessageCreate = Type.Static<typeof MessageCreateSchema>;
 export const MessageUpdateSchema = Type.Intersect([
   Type.Omit(MessageSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(MessageSchema as unknown as Record<string, unknown>)),
@@ -59,3 +61,5 @@ export const MessageUpdateSchema = Type.Intersect([
     editedAt: MessageSchema.properties.editedAt as Type.TSchema,
   }),
 ]);
+
+export type MessageUpdate = Type.Static<typeof MessageUpdateSchema>;

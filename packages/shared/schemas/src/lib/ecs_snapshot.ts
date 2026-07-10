@@ -48,6 +48,7 @@ export const EcsSnapshotSchema = Type.Object({
   components: Type.Record(Type.String(), ComponentSliceSchema),
 });
 
+export type EcsSnapshot = Type.Static<typeof EcsSnapshotSchema>;
 /**
  * Validates a raw ECS snapshot payload string.
  *

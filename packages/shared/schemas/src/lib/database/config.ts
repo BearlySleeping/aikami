@@ -62,16 +62,23 @@ export const ConfigSchema = Composite(
   }),
 );
 
+export type Config = Type.Static<typeof ConfigSchema>;
 export const ThemeSchema = _themeUnion;
+
+export type Theme = Type.Static<typeof ThemeSchema>;
 export const GameDifficultySchema = _gameDifficultyUnion;
 
+export type GameDifficulty = Type.Static<typeof GameDifficultySchema>;
 export const ConfigCreateSchema = Type.Intersect([
   Type.Omit(ConfigSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
 ]);
 
+export type ConfigCreate = Type.Static<typeof ConfigCreateSchema>;
 export const ConfigUpdateSchema = Type.Intersect([
   Type.Omit(ConfigSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(ConfigSchema as unknown as Record<string, unknown>)),
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
+
+export type ConfigUpdate = Type.Static<typeof ConfigUpdateSchema>;

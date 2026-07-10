@@ -34,6 +34,7 @@ export const NpcSheetSchema = Composite(
   }),
 );
 
+export type NpcSheet = Type.Static<typeof NpcSheetSchema>;
 export const NpcSchema = Composite(
   Composite(CoreSchema, NpcSheetSchema),
   Type.Object({
@@ -46,12 +47,16 @@ export const NpcSchema = Composite(
   }),
 );
 
+export type Npc = Type.Static<typeof NpcSchema>;
 export const NpcCreateSchema = Type.Intersect([
   Type.Omit(NpcSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
 ]);
 
+export type NpcCreate = Type.Static<typeof NpcCreateSchema>;
 export const NpcUpdateSchema = Type.Intersect([
   Type.Omit(Type.Partial(NpcSchema), [...CoreOmitKeys]),
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
+
+export type NpcUpdate = Type.Static<typeof NpcUpdateSchema>;

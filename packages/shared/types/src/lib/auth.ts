@@ -1,19 +1,27 @@
 /** biome-ignore-all lint/style/useNamingConvention: Firebase Auth API uses snake_case fields */
 // packages/shared/types/src/lib/auth.ts
+//
+// Schema-derived names re-exported from @aikami/schemas; hand-authored types remain.
+
 import type {
-  FirebaseSignInProviderNameSchema,
-  SignInProviderSchema,
-  SignInSocialProviderSchema,
-  UserClaimsSchema,
-  UserRoleSchema,
-  UserStatusSchema,
-  UserTokenSchema,
+  FirebaseSignInProviderName,
+  SignInProvider,
+  SignInSocialProvider,
+  UserClaims,
+  UserRole,
+  UserStatus,
+  UserToken,
 } from '@aikami/schemas';
-import type { Type } from 'typebox';
 
-export type SignInSocialProvider = Type.Static<typeof SignInSocialProviderSchema>;
-
-export type SignInProvider = Type.Static<typeof SignInProviderSchema>;
+export type {
+  FirebaseSignInProviderName,
+  SignInProvider,
+  SignInSocialProvider,
+  UserClaims,
+  UserRole,
+  UserStatus,
+  UserToken as UserTokenData,
+};
 
 export type UserMetadata = {
   firstName?: string;
@@ -49,13 +57,3 @@ export type MicrosoftMetadata = {
   name?: string;
   verified_email?: boolean;
 };
-
-export type FirebaseSignInProviderName = Type.Static<typeof FirebaseSignInProviderNameSchema>;
-
-export type UserClaims = Type.Static<typeof UserClaimsSchema>;
-
-export type UserRole = Type.Static<typeof UserRoleSchema>;
-
-export type UserStatus = Type.Static<typeof UserStatusSchema>;
-
-export type UserTokenData = Type.Static<typeof UserTokenSchema>;

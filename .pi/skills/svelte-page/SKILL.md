@@ -7,7 +7,7 @@ description: Scaffold a new SvelteKit page conforming to the Svelte 5 View and V
 
 Use this skill when adding a new page or view component to the SvelteKit app.
 
-> **See `svelte-conventions` for**: full ViewModel template, View template, interface patterns, import aliases, and all conventions.
+> **See `svelte-conventions` for**: full ViewModel template, View constraints, interface patterns, import aliases, and all Svelte 5 rules.
 >
 > **See `aikami-conventions` for**: snake_case file naming, `_` prefix, arrow functions, error handling.
 
@@ -36,7 +36,7 @@ Follow the template in `svelte-conventions` → ViewModel Pattern.
 
 ## 2. View
 
-Follow the template in `svelte-conventions` → View Template.
+Follow the constraints in `svelte-conventions` → View Structural Constraints.
 
 - Wrap in `<BaseViewModelContainer {viewModel}>`
 - Zero logic — only property access on `viewModel`

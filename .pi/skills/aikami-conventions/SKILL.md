@@ -1,13 +1,14 @@
 ---
 name: aikami-conventions
 description: >-
-    🔴 LOAD BEFORE writing ANY Aikami code — TypeScript and monorepo conventions
-    including critical violations (logger, imports, types), strict TS rules, import
-    path discipline, arrow functions, `as const` / `satisfies`, error handling,
-    validation boundaries, project structure, private member naming, file naming,
-    output style, and direnv environment.
-version: 4.0.0
-tags: ["aikami", "conventions", "typescript", "monorepo", "critical", "phase-2", "tauri", "spa", "monorepo-boundaries"]
+    🔴 LOAD BEFORE writing ANY Aikami code — universal TypeScript and monorepo
+    conventions: critical violations (logger, imports, types), strict TS rules,
+    import path discipline, arrow functions, `as const` / `satisfies`, error
+    handling, validation boundaries, project structure, private member naming,
+    file naming, output style, and direnv environment. For frontend load
+    svelte-conventions; for backend load backend-conventions.
+version: 5.0.0
+tags: ["aikami", "conventions", "typescript", "monorepo", "critical", "monorepo-boundaries"]
 ---
 
 # Aikami Conventions
@@ -16,22 +17,26 @@ tags: ["aikami", "conventions", "typescript", "monorepo", "critical", "phase-2",
 break the build, cause esbuild/aliasing errors, or produce code that won't
 compile. Load this skill first, before touching any file.
 
-For framework-specific patterns, also load:
+This skill contains ONLY universal rules. Load the layer-specific skill for
+your task:
 
-| Skill                  | Covers                                                    |
-| ---------------------- | --------------------------------------------------------- |
-| `aikami-ui`            | UI styling rules: DaisyUI primitives vs components,       |
-|                        | typography (`font-mono`/`font-sans`), semantic colors,    |
-|                        | and global CSS routing (`app.css`)                        |
-| `pixijs-v8`            | PixiJS v8 + bitECS, game engine boundary, ECS patterns    |
-| `tauri-v2`             | Tauri v2 desktop patterns and constraints                 |
-| `firestore-collection` | Scaffolding Firestore collections                         |
-| `firestack`            | Firebase Functions deployment, emulators, security rules  |
-| `svelte-page`          | Scaffolding new SvelteKit pages                           |
+| Working on…                      | Load                                            |
+| -------------------------------- | ----------------------------------------------- |
+| **Frontend (client, Svelte)**    | `svelte-conventions` — runes, Views/ViewModels, |
+|                                  | services, `$services` barrel, aliases           |
+| **Backend (functions, packages)**| `backend-conventions` — controller/service/     |
+|                                  | repository layers, testing                      |
+| UI styling                       | `aikami-ui`                                     |
+| Game engine                      | `pixijs-v8`                                     |
+| Tauri desktop                    | `tauri-v2`                                      |
+| Firestore collections            | `firestore-collection`                          |
+| Data Connect                     | `dataconnect`                                   |
+| Functions deploy/emulators       | `firestack`                                     |
+| New SvelteKit page               | `svelte-page`                                   |
 
 ---
 
-## 🔴 PHASE 2 — ARCHITECTURE PILLARS
+## 🔴 ARCHITECTURE PILLARS
 
 These four pillars govern all code generation in the Aikami monorepo.
 Violating any of them produces code that will be rejected in review and
@@ -109,15 +114,13 @@ schema to `packages/shared/schemas/`. Never define it locally as a shortcut.
 
 ### Pillars 3 & 4: Svelte MVVM + Dev Sandboxes
 
-Enforced by `svelte-conventions` — always loaded after this skill.
+Enforced in the `svelte-conventions` skill — load it for any client work.
 
-| Pillar | Rule                                          | Skill Section          |
-| ------ | --------------------------------------------- | ---------------------- |
-| 3      | Views are completely logicless; state and     | `svelte-conventions`   |
-|        | business logic in `_view_model.svelte.ts`     | § Phase 2 Pillars      |
-| 4      | `routes/(dev)/` sandboxes use `DevViewModel`  | `svelte-conventions`   |
-|        | override pattern — extend production VM,      | § Phase 2 Pillars      |
-|        | override fetch methods with mock data         |                        |
+| Pillar | Rule                                                                |
+| ------ | ------------------------------------------------------------------- |
+| 3      | Views are completely logicless; state and business logic in        |
+|        | `_view_model.svelte.ts`                                             |
+| 4      | `routes/(dev)/` sandboxes use `DevViewModel` override pattern       |
 
 ---
 
@@ -202,44 +205,6 @@ class MyClass {
 modules (PixiJS, engine code) are allowed — this rule only applies to **type-level**
 `import()` expressions.
 
-### 2c. Always Import Services from `$services` Barrel, Never Direct Paths
-
-```typescript
-// ✅ CORRECT — import from $services barrel
-import { vendorService, audioService, gameStateService } from '$services';
-
-// ❌ WRONG — never import from $lib/services/... directly
-import { vendorService } from '$lib/services/game/vendor_service.svelte';
-```
-
-**Why**: The barrel (`$services/index.ts`) is the single entry point. Direct imports
-bypass re-exports, cause duplicate module instances, and create circular dependency
-risks when the imported module itself imports from `$services`.
-
-### 2d. Export ViewModels via Factory Function, Never Raw Class
-
-```typescript
-// ✅ CORRECT — factory with create() returns interface
-class MyViewModel extends BaseViewModel<MyOptions> implements MyViewModelInterface {
-  // ...
-}
-
-export const getMyViewModel = (options: MyOptions): MyViewModelInterface =>
-  MyViewModel.create(options);
-
-// ❌ WRONG — never export class directly, never use `new`
-export class MyViewModel { ... }
-
-export { MyViewModel };
-
-const vm = new MyViewModel(options);
-```
-
-**Why**: `BaseViewModel.create()` wraps the instance in a proxy that auto-logs
-every public method call. Raw `new` bypasses this proxy — no logging, no diagnostics.
-The factory returns the Interface type so consumers depend on the contract, not
-the implementation.
-
 ### 3. Never Export Data, Types, or Schemas from Service Files
 
 Services are for **business logic and state management only**. Data, types, and
@@ -268,13 +233,12 @@ location, your code will be rejected.
 | **1. Constants & Labels** | `packages/shared/constants/src/` | Provider registries, enum-like arrays, default configs, display labels, error codes, routing paths, feature flags | Runtime state, computed values, configs from external APIs (those go in `apps/.../data/`), ViewModel-local UI strings |
 | **2. Type Definitions** | `packages/shared/types/src/` | Cross-project domain types, API request/response shapes, entity interfaces | Single-app-local types (go in `apps/<app>/src/lib/types/`), single-function-internal types (go inline), ViewModel interface types (go in ViewModel file) |
 | **3. Runtime Schemas** | `packages/shared/schemas/src/` (TypeBox) | All cross-boundary data validation shapes (API inputs, Firestore documents, EngineBridge payloads) | Zod schemas (use TypeBox), validation logic for a single function (inline guard), backend-only validation that never crosses to client |
-| **4. UI State Flags** | `apps/frontend/client/src/lib/views/*_view_model.svelte.ts` | Visibility booleans, active modals, selected tab index, loading/error/submit flags, form field values | Domain data (goes in services), computed values used by 2+ views (goes in services), persisted application state (goes in services or shared constants) |
+| **4. UI State Flags** | `apps/frontend/client/src/lib/views/*_view_model.svelte.ts` | See `svelte-conventions` § UI State Flags | — |
 
 **🔴 Violations**:
-- Labels/translations in ViewModels → extract to `packages/shared/constants/`
+- Labels/translations hardcoded in app code → extract to `packages/shared/constants/`
 - Types defined in `apps/` that another package needs → move to `packages/shared/types/`
 - Validation in service files → create TypeBox schema in `packages/shared/schemas/`
-- `$state` domain data in ViewModels that services should own → move to the appropriate service
 
 ```typescript
 // ❌ WRONG — data/type/schema defined in a service file
@@ -812,242 +776,9 @@ import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
 
 ---
 
-## Svelte 5 + SvelteKit Conventions
+## Layer-Specific Conventions
 
-### Svelte 5 Core: Runes ONLY
-
-No `$:` syntax. No stores (`writable`, `readable`).
-
-```typescript
-let count = $state(0);              // State
-let doubled = $derived(count * 2);  // Derived
-$effect(() => { console.log(count); }); // Side effects
-```
-
-Props:
-
-```svelte
-let { user, theme = 'dark' } = $props();
-let { value = $bindable() } = $props();
-```
-
-Event handlers use HTML `onclick`, not Svelte 4 `on:click`:
-
-```svelte
-<button onclick={handleClick}>Click</button>
-```
-
-Always use `<script lang="ts">`. All `.svelte.ts` files (ViewModels) are
-first-class TypeScript modules with Svelte 5 rune support.
-
-### ViewModel Pattern
-
-**Views have zero logic** — they are pure HTML/Svelte wrappers. No conditionals,
-no data transformation, no `onMount`. Every expression in the view template
-must be a direct property access on the ViewModel.
-
-**ViewModels are thin bridges to services** — orchestrate service calls, expose
-state to the view, but never contain heavy business logic, import repositories,
-or call API/firebase functions directly. That belongs in services.
-
-#### 🔴 CRITICAL: View Structural Constraints
-
-- ❌ **Zero script imports** from services, network clients, repositories
-- ❌ **No local `$state`** — all state belongs in the ViewModel
-- ❌ **No `$derived`** — computed values belong in the ViewModel as getters
-- ❌ **No `onMount`** — initialization goes in `ViewModel.initialize()`
-- ❌ **No inline event logic** — handlers delegate to ViewModel methods
-- ❌ **No destructuring** the `viewModel` prop
-
-#### ViewModel Template
-
-```typescript
-// apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts
-import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from "$lib/components/BaseViewModel.svelte";
-import { myService } from "$services/my_service";
-
-export type FeatureViewModelInterface = BaseViewModelInterface & {
-  readonly items: string[];
-};
-
-export type FeatureViewModelOptions = BaseViewModelOptions & {};
-
-export class FeatureViewModel
-  extends BaseViewModel<FeatureViewModelOptions>
-  implements FeatureViewModelInterface
-{
-  items = $state<string[]>([]);
-
-  async initialize(): Promise<void> {
-    this.debug("initialize");
-    this.items = myService.getItems();
-  }
-}
-
-export const getFeatureViewModel = (
-  options: FeatureViewModelOptions,
-): FeatureViewModelInterface => FeatureViewModel.create(options);
-```
-
-#### ViewModel Rules
-
-- Export `type ...Interface` with **all properties `readonly`**
-- Export `type ...Options` alongside the class
-- Export a `getFeatureViewModel` factory function using `ClassName.create()` — **never `new ClassName()`**
-- Always extend `BaseViewModel` and `implements *Interface`
-- ViewModel files: `{name}_view_model.svelte.ts` (NOT `vm` shorthand)
-- Call `super.initialize()` **at the end** of `initialize()`
-- Use `registerEffectRoot()` for reactive side effects (NEVER raw `$effect` in views)
-- Views access data only through the ViewModel
-- **Sub-view components** should accept optional `viewModel` via `$props()` with a default factory — never create ViewModels in the parent's `<script>` block and pass them down
-
-#### Optional ViewModel Prop Pattern
-
-Sub-view components (reusable UI panels, editor modals) should self-instantiate
-their ViewModel via default `$props()`:
-
-```svelte
-<!-- ✅ CORRECT — optional viewModel with default factory -->
-<script lang="ts">
-  import { getMyViewModel, type MyViewModelInterface } from './my_view_model.svelte';
-
-  type Props = {
-    viewModel?: MyViewModelInterface;
-  };
-
-  const {
-    viewModel = getMyViewModel({ className: 'MyViewModel' }),
-  }: Props = $props();
-</script>
-
-<!-- ❌ WRONG — creating ViewModel in parent's <script> -->
-<script lang="ts">
-  // parent_view.svelte
-  const childVm = getChildViewModel({ ... });
-</script>
-<ChildView viewModel={childVm} />
-```
-
-**Zero-logic views**: Views must contain NO data transformation, mapping,
-formatting, or computed values. Every expression in the template must be a
-direct property access on the ViewModel:
-
-```svelte
-<!-- ✅ CORRECT — direct property access -->
-<span>{viewModel.formattedParams.temperature}</span>
-
-<!-- ❌ WRONG — inline transformation/logic in view -->
-<span>{viewModel.params.temperature.toFixed(2)}</span>
-<span>{providers.find(p => p.id === id)?.label}</span>
-const getLabel = (id: string) => providers.find(...)?.label;
-```
-
-### Services Architecture
-
-Singleton classes with `$state` for external state management. Never use
-Svelte stores.
-
-```typescript
-// packages/frontend/services/src/lib/my_service.svelte.ts
-import { BaseClass, type BaseClassInterface } from "@aikami/utils";
-
-export type MyServiceInterface = BaseClassInterface & {
-  readonly items: string[];
-  loadItems: () => Promise<void>;
-};
-
-export class MyService extends BaseClass implements MyServiceInterface {
-  items = $state<string[]>([]);
-
-  async loadItems(): Promise<void> {
-    this.debug("loadItems");
-  }
-}
-
-export const myService: MyServiceInterface = new MyService({
-  className: "MyService",
-});
-```
-
-#### Native Getters Over `$derived`
-
-```typescript
-// ❌ WRONG — $derived on self-referential field
-isLoggedIn = $derived(!!this.currentUser);
-
-// ✅ CORRECT — native getter
-get isLoggedIn(): boolean { return !!this.currentUser; }
-```
-
-Exception: heavy computations (translation, mapping) stay in `$derived(...)`.
-
-### Import Aliases (client only)
-
-| Alias       | Resolves to                                                   |
-| ----------- | ------------------------------------------------------------- |
-| `$lib`      | `apps/frontend/client/src/lib`                                   |
-| `$types`    | `apps/frontend/client/src/lib/types` (app-local types)           |
-| `$services` | `apps/frontend/client/src/lib/client/services/index.ts` (barrel) |
-| `$logger`   | Environment-specific logger                                   |
-| `$views`    | `$lib/views`                                                  |
-
-`$services` is a barrel, never a directory — always import from root.
-
----
-
-## Backend Architecture
-
-### Architecture Layers
-
-```
-Controller (thin) → Service (business logic) → Repository (data access) → BaseDatabaseService (abstraction)
-```
-
-### Repository Pattern
-
-Every repository accepts a `BaseDatabaseService` via constructor injection.
-
-```typescript
-export class UserRepository {
-  private readonly _collection = "users";
-
-  constructor(private readonly _db: BaseDatabaseService) {
-    if (!_db) throw new Error("UserRepository requires BaseDatabaseService");
-  }
-
-  async findById(id: string): Promise<UserDocument | undefined> {
-    if (!id) throw new Error("id is required");
-    return this._db.getDocument<UserDocument>(this._collection, id);
-  }
-}
-```
-
-#### Rules
-
-- Constructor injection: `constructor(private readonly _db: BaseDatabaseService)`
-- Guard clauses first
-- Never import Firestore SDK directly — go through `BaseDatabaseService`
-- Collection name as private field
-
-### Service Layer
-
-Services contain business logic, depend on repositories (never on database directly):
-
-- Options object for constructor
-- Depend on repositories, not database
-- Business logic only — no HTTP concerns, no Firestore SDK calls
-
-### Controller Structure
-
-Thin — parse input, call service, return response. One `export default` per file.
-Use firestack wrappers: `onCall`, `onRequest`, `onCreated`, etc.
-
-### Backend Testing
-
-- Tests in `tests/` at project root (not `src/__tests__/`)
-- Use `bun:test`
-- Mock `BaseDatabaseService`, never Firestore SDK directly
+- **Frontend (Svelte/SvelteKit)** → load `svelte-conventions` (runes-only,
+  zero-logic Views, ViewModel pattern, services architecture, client aliases)
+- **Backend (Functions, packages/backend)** → load `backend-conventions`
+  (controller → service → repository → BaseDatabaseService, testing rules)

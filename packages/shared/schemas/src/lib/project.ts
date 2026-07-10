@@ -14,6 +14,7 @@ export const ModeSchema = Type.Union([
   Type.Literal('testing'),
 ]);
 
+export type Mode = Type.Static<typeof ModeSchema>;
 /**
  * TypeBox schema for Firebase/GCP project IDs.
  * Derived from MODE_PROJECT_MAP values.
@@ -25,6 +26,7 @@ export const ProjectIdSchema = Type.Union(
   ],
 );
 
+export type ProjectId = Type.Static<typeof ProjectIdSchema>;
 /**
  * The mapped project IDs as a schema.
  */
@@ -35,6 +37,7 @@ export const ProjectIdMapSchema = Type.Object(
   >,
 );
 
+export type ProjectIdMap = Type.Static<typeof ProjectIdMapSchema>;
 // appIds, backendAppIds, frontendAppIds are spread from constants
 // backendAppIds = ['firebase'] as const
 // frontendAppIds = ['docs', 'site', 'client'] as const
@@ -45,10 +48,14 @@ export const AppIdSchema = Type.Union([
   Type.Literal('client'),
 ]);
 
+export type AppId = Type.Static<typeof AppIdSchema>;
 export const BackendAppIdSchema = Type.Union([Type.Literal('firebase')]);
 
+export type BackendAppId = Type.Static<typeof BackendAppIdSchema>;
 export const FrontendAppIdSchema = Type.Union([
   Type.Literal('docs'),
   Type.Literal('site'),
   Type.Literal('client'),
 ]);
+
+export type FrontendAppId = Type.Static<typeof FrontendAppIdSchema>;

@@ -5,7 +5,7 @@ description: >-
   the SvelteKit ↔ game engine architectural boundary, and project conventions for
   combining PixiJS, bitECS, and Svelte 5 in the Aikami Client. For general PixiJS v8
   API usage (Application, Container, Sprite, Graphics, Text, Assets, Ticker, Events,
-  Filters, etc.), see the official skills in .pi/skills-pixijs/.
+  Filters, etc.), see the official skills in .pi/generated-skills/pixijs/.
 version: 2.0.0
 tags: ["pixijs", "pixijs-v8", "game-engine", "bitECS", "ecs", "sveltekit", "boundary"]
 ---
@@ -16,7 +16,7 @@ This skill covers **Aikami-specific** PixiJS patterns that combine the PixiJS
 rendering engine, bitECS game logic, and SvelteKit UI. For standard PixiJS v8
 API reference (Application, Container, Sprite, Graphics, Text, Assets, Ticker,
 Events, Filters, etc.), use the official skills installed in
-`.pi/skills-pixijs/` — they are loaded alongside this one.
+`.pi/generated-skills/pixijs/` — they are loaded alongside this one.
 
 ---
 

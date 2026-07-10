@@ -7,6 +7,8 @@ import { BaseCharacterSheetSchema } from './character.ts';
 
 export const PersonaSheetSchema = Composite(BaseCharacterSheetSchema, Type.Object({}));
 
+export type PersonaSheet = Type.Static<typeof PersonaSheetSchema>;
+
 export const PersonaSchema = Composite(
   Composite(CoreSchema, PersonaSheetSchema),
   Type.Object({
@@ -26,13 +28,19 @@ export const PersonaSchema = Composite(
   }),
 );
 
+export type PersonaData = Type.Static<typeof PersonaSchema>;
+
 export const PersonaCreateSchema = Type.Intersect([
   Type.Omit(PersonaSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
 ]);
+
+export type PersonaCreateData = Type.Static<typeof PersonaCreateSchema>;
 
 export const PersonaUpdateSchema = Type.Intersect([
   Type.Omit(PersonaSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(PersonaSchema as unknown as Record<string, unknown>)),
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
+
+export type PersonaUpdateData = Type.Static<typeof PersonaUpdateSchema>;

@@ -11,6 +11,7 @@ export const EquipmentSlotSchema = Type.Union([Type.Literal('weapon'), Type.Lite
 });
 
 export type EquipmentSlotData = Type.Static<typeof EquipmentSlotSchema>;
+export type EquipmentSlot = Type.Static<typeof EquipmentSlotSchema>;
 
 // ── Item Definition ─────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ export const ItemDefinitionSchema = Type.Object(
 );
 
 export type ItemDefinitionData = Type.Static<typeof ItemDefinitionSchema>;
+export type ItemDefinition = Type.Static<typeof ItemDefinitionSchema>;
 
 // ── Inventory Item ──────────────────────────────────────────────────────
 
@@ -38,3 +40,4 @@ export const InventoryItemSchema = Type.Object(
 );
 
 export type InventoryItemData = Type.Static<typeof InventoryItemSchema>;
+export type InventoryItem = Type.Static<typeof InventoryItemSchema>;

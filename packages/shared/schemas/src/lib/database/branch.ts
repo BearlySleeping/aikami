@@ -24,4 +24,6 @@ export const BranchPointSchema = Type.Object({
 });
 
 export type StoryBranchData = Type.Static<typeof StoryBranchSchema>;
+export type StoryBranch = Type.Static<typeof StoryBranchSchema>;
 export type BranchPointData = Type.Static<typeof BranchPointSchema>;
+export type BranchPoint = Type.Static<typeof BranchPointSchema>;

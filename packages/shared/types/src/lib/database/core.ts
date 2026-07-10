@@ -1,8 +1,9 @@
 // packages/shared/types/src/lib/database/core.ts
-import type { CoreCreateSchema, CoreSchema, CoreUpdateSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-export type CoreData = Type.Static<typeof CoreSchema>;
-
-export type CoreCreateData = Type.Static<typeof CoreCreateSchema>;
-export type CoreUpdateData = Type.Static<typeof CoreUpdateSchema>;
+export type {
+  Core as CoreData,
+  CoreCreate as CoreCreateData,
+  CoreUpdate as CoreUpdateData,
+} from '@aikami/schemas';

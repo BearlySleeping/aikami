@@ -1,16 +1,12 @@
 // packages/shared/types/src/lib/api/game.ts
+//
+// Schema-derived names re-exported from @aikami/schemas; hand-authored types remain.
 
-import type { ActiveSessionSchema, GeneratedAudioSchema, SceneImageSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
-
-/** Active session derived from its schema. */
-export type ActiveSessionData = Type.Static<typeof ActiveSessionSchema>;
-
-/** Scene image derived from its schema. */
-export type SceneImageData = Type.Static<typeof SceneImageSchema>;
-
-/** Generated audio derived from its schema. */
-export type GeneratedAudioData = Type.Static<typeof GeneratedAudioSchema>;
+export type {
+  ActiveSession as ActiveSessionData,
+  GeneratedAudio as GeneratedAudioData,
+  SceneImage as SceneImageData,
+} from '@aikami/schemas';
 
 /** A location within a game world. */
 export type WorldLocation = {

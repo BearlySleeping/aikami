@@ -58,13 +58,17 @@ export const ChatSchema = Type.Intersect([
   }),
 ]);
 
+export type Chat = Type.Static<typeof ChatSchema>;
 export const ChatCreateSchema = Type.Intersect([
   Type.Omit(ChatSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
 ]);
 
+export type ChatCreate = Type.Static<typeof ChatCreateSchema>;
 export const ChatUpdateSchema = Type.Intersect([
   Type.Omit(ChatSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(ChatSchema as unknown as Record<string, unknown>)),
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
+
+export type ChatUpdate = Type.Static<typeof ChatUpdateSchema>;

@@ -1,14 +1,5 @@
 // packages/shared/types/src/lib/database/item.ts
 //
-// Static types derived from ItemDefinitionSchema.
+// Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-import type {
-  EquipmentSlotSchema,
-  InventoryItemSchema,
-  ItemDefinitionSchema,
-} from '@aikami/schemas';
-import type { Type } from 'typebox';
-
-export type EquipmentSlot = Type.Static<typeof EquipmentSlotSchema>;
-export type ItemDefinition = Type.Static<typeof ItemDefinitionSchema>;
-export type InventoryItem = Type.Static<typeof InventoryItemSchema>;
+export type { EquipmentSlot, InventoryItem, ItemDefinition } from '@aikami/schemas';

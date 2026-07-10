@@ -1,5 +1,5 @@
 // packages/shared/types/src/lib/form/auth.ts
-import type { RegisterFormSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-export type RegisterForm = Type.Static<typeof RegisterFormSchema>;
+export type { RegisterForm } from '@aikami/schemas';

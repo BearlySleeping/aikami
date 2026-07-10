@@ -18,6 +18,7 @@ export const UserSessionSchema = Composite(
   Type.Object({ currentSignInProvider: SignInProviderSchema }),
 );
 
+export type UserSession = Type.Static<typeof UserSessionSchema>;
 /** The user data in firebase auth */
 export const UserLiteSchema = Composite(
   UserSessionSchema,
@@ -27,6 +28,7 @@ export const UserLiteSchema = Composite(
   }),
 );
 
+export type UserLite = Type.Static<typeof UserLiteSchema>;
 export const UserSchema = Composite(
   Composite(Type.Omit(UserLiteSchema, ['createdAt', 'currentSignInProvider']), CoreSchema),
   Type.Object({
@@ -40,6 +42,7 @@ export const UserSchema = Composite(
   }),
 );
 
+export type User = Type.Static<typeof UserSchema>;
 export const UserCreateSchema = Type.Intersect([
   Type.Omit(UserSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(FieldValueSchema) }),
@@ -48,15 +51,19 @@ export const UserCreateSchema = Type.Intersect([
   }),
 ]);
 
+export type UserCreate = Type.Static<typeof UserCreateSchema>;
 export const UserUpdateSchema = Type.Intersect([
   Type.Omit(UserSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(UserSchema as unknown as Record<string, unknown>)),
   Type.Object({ updatedAt: FieldValueSchema }),
 ]);
 
+export type UserUpdate = Type.Static<typeof UserUpdateSchema>;
 export const UserLiteCreateSchema = Type.Object({
   displayName: Type.Optional(Type.String()),
   email: Type.String({ format: 'email' }),
   errorMessage: Type.Optional(Type.String()),
   userRole: UserRoleSchema,
 });
+
+export type UserLiteCreate = Type.Static<typeof UserLiteCreateSchema>;

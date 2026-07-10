@@ -1,6 +1,7 @@
 // packages/shared/types/src/lib/ecs_snapshot.ts
 //
-// Derived types from the EcsSnapshot TypeBox schema.
+// ComponentSlice is a computed indexed-access type from EcsSnapshotSchema;
+// cannot be a simple re-export. EcsSnapshot is re-exported from schemas.
 
 import type { EcsSnapshotSchema } from '@aikami/schemas';
 import type { Type } from 'typebox';
@@ -9,4 +10,4 @@ import type { Type } from 'typebox';
 export type ComponentSlice = Type.Static<typeof EcsSnapshotSchema>['components'][string];
 
 /** Full ECS snapshot payload for the save/load pipeline. */
-export type EcsSnapshot = Type.Static<typeof EcsSnapshotSchema>;
+export type { EcsSnapshot } from '@aikami/schemas';

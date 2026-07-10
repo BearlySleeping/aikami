@@ -8,11 +8,13 @@ import { GeoPointSchema } from '../fields.ts';
  */
 export const CountryCodeSchema = Type.String({ minLength: 2, maxLength: 2 });
 
+export type CountryCode = Type.Static<typeof CountryCodeSchema>;
 export const PositionFieldSchema = Type.Object({
   geohash: Type.String(),
   geopoint: GeoPointSchema,
 });
 
+export type PositionField = Type.Static<typeof PositionFieldSchema>;
 export const AddressFieldSchema = Type.Object({
   /**
    * The city name for the location of the requester's public IP address.
@@ -42,3 +44,5 @@ export const AddressFieldSchema = Type.Object({
    */
   regionCode: Type.Optional(Type.String()),
 });
+
+export type AddressField = Type.Static<typeof AddressFieldSchema>;
