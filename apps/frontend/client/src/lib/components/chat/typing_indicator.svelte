@@ -1,16 +1,16 @@
 <script lang="ts">
-  /**
-   * Props for the TypingIndicator component.
-   * Animated indicator shown when the AI is typing a response.
-   */
-  type Props = {
-    /** Whether to show the typing indicator */
-    visible?: boolean;
-    /** Label text to display next to indicator */
-    label?: string;
-  };
+/**
+ * Props for the TypingIndicator component.
+ * Animated indicator shown when the AI is typing a response.
+ */
+type Props = {
+  /** Whether to show the typing indicator */
+  visible?: boolean;
+  /** Label text to display next to indicator */
+  label?: string;
+};
 
-  let { visible = false, label = 'AI is typing' }: Props = $props();
+let { visible = false, label = 'AI is typing' }: Props = $props();
 </script>
 
 {#if visible}

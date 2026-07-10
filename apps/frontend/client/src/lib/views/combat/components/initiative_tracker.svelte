@@ -1,35 +1,30 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/initiative_tracker.svelte
-  // C-234 Combat Enhancement: Dice & Initiative — sorted combatant list
-  //
-  // Shows all combatants sorted by initiative value (descending),
-  // with mini HP bars, current-turn highlight, and defeated-at-bottom graying.
-  //
-  // Pure component — zero business logic. All state via $props().
+// apps/frontend/client/src/lib/views/combat/components/initiative_tracker.svelte
+// C-234 Combat Enhancement: Dice & Initiative — sorted combatant list
+//
+// Shows all combatants sorted by initiative value (descending),
+// with mini HP bars, current-turn highlight, and defeated-at-bottom graying.
+//
+// Pure component — zero business logic. All state via $props().
 
-  import type { InitiativeEntry } from '../types/combat_enhancements.ts';
-  import { sortInitiative } from '../utils/dice_notation.ts';
+import type { InitiativeEntry } from '../types/combat_enhancements.ts';
+import { sortInitiative } from '../utils/dice_notation.ts';
 
-  type Props = {
-    /** All combatant initiative entries. */
-    entries: InitiativeEntry[];
-    /** Whether this panel is collapsed. */
-    collapsed?: boolean;
-    /** Toggle collapse state. */
-    onToggleCollapse?: () => void;
-    /** Optional label for the panel. Defaults to "Initiative". */
-    label?: string;
-  };
+type Props = {
+  /** All combatant initiative entries. */
+  entries: InitiativeEntry[];
+  /** Whether this panel is collapsed. */
+  collapsed?: boolean;
+  /** Toggle collapse state. */
+  onToggleCollapse?: () => void;
+  /** Optional label for the panel. Defaults to "Initiative". */
+  label?: string;
+};
 
-  const {
-    entries = [],
-    collapsed = false,
-    onToggleCollapse,
-    label = 'Initiative',
-  }: Props = $props();
+const { entries = [], collapsed = false, onToggleCollapse, label = 'Initiative' }: Props = $props();
 
-  /** Sorted entries — recalculated reactively. */
-  const sortedEntries = $derived(sortInitiative(entries));
+/** Sorted entries — recalculated reactively. */
+const sortedEntries = $derived(sortInitiative(entries));
 </script>
 
 <div class="initiative-tracker rounded-lg border border-base-300 bg-base-200">

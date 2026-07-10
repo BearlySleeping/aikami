@@ -1,11 +1,11 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/ui/overlays/game_over_overlay.svelte
-  type Props = {
-    onRespawn: () => void;
-    onLoadLastSave: () => void;
-  };
+// apps/frontend/client/src/lib/views/game/ui/overlays/game_over_overlay.svelte
+type Props = {
+  onRespawn: () => void;
+  onLoadLastSave: () => void;
+};
 
-  const { onRespawn, onLoadLastSave }: Props = $props();
+const { onRespawn, onLoadLastSave }: Props = $props();
 </script>
 
 <div

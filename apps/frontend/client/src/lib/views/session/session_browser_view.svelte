@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/session/session_browser_view.svelte
-  import type { SessionBrowserViewModelInterface } from './session_browser_view_model.svelte';
+// apps/frontend/client/src/lib/views/session/session_browser_view.svelte
+import type { SessionBrowserViewModelInterface } from './session_browser_view_model.svelte';
 
-  type Props = {
-    viewModel: SessionBrowserViewModelInterface;
-  };
+type Props = {
+  viewModel: SessionBrowserViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div class="flex min-h-screen flex-col bg-base-200">

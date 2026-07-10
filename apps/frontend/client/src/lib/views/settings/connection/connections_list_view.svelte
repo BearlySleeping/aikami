@@ -1,20 +1,20 @@
 <script lang="ts">
-  import ConnectionEditorPanel from './connection_editor_panel.svelte';
-  // apps/frontend/client/src/lib/views/settings/connection/connections_list_view.svelte
-  import {
-    type ConnectionManagerViewModelInterface,
-    getConnectionManagerViewModel,
-  } from './connection_manager_view_model.svelte';
+import ConnectionEditorPanel from './connection_editor_panel.svelte';
+// apps/frontend/client/src/lib/views/settings/connection/connections_list_view.svelte
+import {
+  type ConnectionManagerViewModelInterface,
+  getConnectionManagerViewModel,
+} from './connection_manager_view_model.svelte';
 
-  type Props = {
-    viewModel?: ConnectionManagerViewModelInterface;
-  };
+type Props = {
+  viewModel?: ConnectionManagerViewModelInterface;
+};
 
-  const {
-    viewModel = getConnectionManagerViewModel({
-      className: 'ConnectionManagerViewModel',
-    }),
-  }: Props = $props();
+const {
+  viewModel = getConnectionManagerViewModel({
+    className: 'ConnectionManagerViewModel',
+  }),
+}: Props = $props();
 </script>
 
 <div class="space-y-6">

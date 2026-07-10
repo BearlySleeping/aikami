@@ -1,29 +1,29 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view.svelte
-  //
-  // Camera & Spatial UI sandbox — renders the game canvas, spatial speech
-  // bubble, and collapsible devtools panel with debug event log.
-  //
-  // Contract: C-161 Spatial UI Camera — devtool sandbox
+// apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view.svelte
+//
+// Camera & Spatial UI sandbox — renders the game canvas, spatial speech
+// bubble, and collapsible devtools panel with debug event log.
+//
+// Contract: C-161 Spatial UI Camera — devtool sandbox
 
-  import { onMount } from 'svelte';
-  import BaseViewModelContainer from '$components/base_view_model_container.svelte';
-  import type { CameraSandboxViewModelInterface } from './camera_sandbox_view_model.svelte.ts';
+import { onMount } from 'svelte';
+import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import type { CameraSandboxViewModelInterface } from './camera_sandbox_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: CameraSandboxViewModelInterface;
-  };
+type Props = {
+  viewModel: CameraSandboxViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  let canvasElement: HTMLCanvasElement | undefined = $state();
-  let devtoolsCollapsed = $state(false);
+let canvasElement: HTMLCanvasElement | undefined = $state();
+let devtoolsCollapsed = $state(false);
 
-  onMount(() => {
-    if (canvasElement) {
-      void viewModel.initializeEngine(canvasElement);
-    }
-  });
+onMount(() => {
+  if (canvasElement) {
+    void viewModel.initializeEngine(canvasElement);
+  }
+});
 </script>
 
 <svelte:head>

@@ -1,14 +1,14 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/auth/register/RegisterView.svelte
-  import t from '$i18n';
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { RegisterViewModelInterface } from './register_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/auth/register/RegisterView.svelte
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { RegisterViewModelInterface } from './register_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: RegisterViewModelInterface;
-  };
+type Props = {
+  viewModel: RegisterViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer

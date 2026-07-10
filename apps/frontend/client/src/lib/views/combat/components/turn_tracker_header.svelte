@@ -1,34 +1,34 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/turn_tracker_header.svelte
-  // C-234 Combat Enhancement: Dice & Initiative — turn tracking header
-  //
-  // Banner showing "Your Turn" / "Enemy Turn" with action economy dots
-  // (Action / Bonus Action / Reaction) and an End Turn button.
-  //
-  // Pure component — zero business logic. All state via $props().
+// apps/frontend/client/src/lib/views/combat/components/turn_tracker_header.svelte
+// C-234 Combat Enhancement: Dice & Initiative — turn tracking header
+//
+// Banner showing "Your Turn" / "Enemy Turn" with action economy dots
+// (Action / Bonus Action / Reaction) and an End Turn button.
+//
+// Pure component — zero business logic. All state via $props().
 
-  import type { ActionEconomy, TurnState } from '../types/combat_enhancements.ts';
+import type { ActionEconomy, TurnState } from '../types/combat_enhancements.ts';
 
-  type Props = {
-    /** Current turn state. */
-    turnState: TurnState | null;
-    /** Current action economy consumed this turn. */
-    actionEconomy: ActionEconomy;
-    /** Callback to end the current turn. */
-    onEndTurn: () => void;
-    /** Whether the End Turn button is disabled. */
-    isEndTurnDisabled: boolean;
-  };
+type Props = {
+  /** Current turn state. */
+  turnState: TurnState | null;
+  /** Current action economy consumed this turn. */
+  actionEconomy: ActionEconomy;
+  /** Callback to end the current turn. */
+  onEndTurn: () => void;
+  /** Whether the End Turn button is disabled. */
+  isEndTurnDisabled: boolean;
+};
 
-  const { turnState, actionEconomy, onEndTurn, isEndTurnDisabled = false }: Props = $props();
+const { turnState, actionEconomy, onEndTurn, isEndTurnDisabled = false }: Props = $props();
 
-  /** Build the dot class: colored when available, muted when consumed. */
-  const dotClass = (available: boolean, color: string): string =>
-    `inline-block h-2.5 w-2.5 rounded-full ${available ? color : 'bg-base-content/20'}`;
+/** Build the dot class: colored when available, muted when consumed. */
+const dotClass = (available: boolean, color: string): string =>
+  `inline-block h-2.5 w-2.5 rounded-full ${available ? color : 'bg-base-content/20'}`;
 
-  /** Build the label class: full opacity when available, dimmed when consumed. */
-  const labelClass = (available: boolean): string =>
-    `text-xs ${available ? 'text-base-content/70' : 'text-base-content/30'}`;
+/** Build the label class: full opacity when available, dimmed when consumed. */
+const labelClass = (available: boolean): string =>
+  `text-xs ${available ? 'text-base-content/70' : 'text-base-content/30'}`;
 </script>
 
 {#if turnState}

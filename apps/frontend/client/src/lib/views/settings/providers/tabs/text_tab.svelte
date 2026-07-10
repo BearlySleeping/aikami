@@ -1,15 +1,15 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/text_tab.svelte -->
 <script lang="ts">
-  import { Select } from '@aikami/frontend/components';
-  import type { AuxiliaryModels } from '$lib/services/config/config_service.svelte';
-  import ProvidersModelSelector from '../providers_model_selector.svelte';
-  import type { TextTabViewModelInterface } from './text_tab_view_model.svelte';
+import { Select } from '@aikami/frontend/components';
+import type { AuxiliaryModels } from '$lib/services/config/config_service.svelte';
+import ProvidersModelSelector from '../providers_model_selector.svelte';
+import type { TextTabViewModelInterface } from './text_tab_view_model.svelte';
 
-  type Props = {
-    viewModel: TextTabViewModelInterface;
-  };
+type Props = {
+  viewModel: TextTabViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div class="space-y-6">

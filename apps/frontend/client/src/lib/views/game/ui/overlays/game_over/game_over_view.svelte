@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/ui/overlays/game_over/game_over_view.svelte
-  import type { GameOverViewModelInterface } from './game_over_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/ui/overlays/game_over/game_over_view.svelte
+import type { GameOverViewModelInterface } from './game_over_view_model.svelte';
 
-  type Props = {
-    viewModel: GameOverViewModelInterface;
-  };
+type Props = {
+  viewModel: GameOverViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div

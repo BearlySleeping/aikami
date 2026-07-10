@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-07-09
-> Files: 253 across 11 categories
+> Generated: 2026-07-10
+> Files: 254 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -291,6 +291,9 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 ## scripts/
 
 - [Scripts](scripts/README.md)
+## TODO.md/
+
+- [TODO](TODO.md)
 
 ---
 

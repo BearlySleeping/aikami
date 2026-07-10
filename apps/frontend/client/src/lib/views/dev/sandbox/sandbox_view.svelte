@@ -1,28 +1,28 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view.svelte
-  import { onMount } from 'svelte';
-  import BaseViewModelContainer from '$components/base_view_model_container.svelte';
-  import type { SandboxViewModelInterface } from './sandbox_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view.svelte
+import { onMount } from 'svelte';
+import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import type { SandboxViewModelInterface } from './sandbox_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: SandboxViewModelInterface;
-  };
+type Props = {
+  viewModel: SandboxViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  let canvasElement: HTMLCanvasElement | undefined = $state();
+let canvasElement: HTMLCanvasElement | undefined = $state();
 
-  /**
-   * Hands the bound canvas to the ViewModel for engine initialization.
-   *
-   * The ViewModel manages the full GameWorld lifecycle (Web Worker, PixiJS
-   * renderer, keyboard input). The view only provides the canvas reference.
-   */
-  onMount(() => {
-    if (canvasElement) {
-      void viewModel.initializeEngine(canvasElement);
-    }
-  });
+/**
+ * Hands the bound canvas to the ViewModel for engine initialization.
+ *
+ * The ViewModel manages the full GameWorld lifecycle (Web Worker, PixiJS
+ * renderer, keyboard input). The view only provides the canvas reference.
+ */
+onMount(() => {
+  if (canvasElement) {
+    void viewModel.initializeEngine(canvasElement);
+  }
+});
 </script>
 
 <svelte:head>

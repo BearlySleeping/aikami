@@ -1,31 +1,31 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view.svelte
-  //
-  // Thin Svelte view for the Map & Zoning sandbox.
-  // Binds a canvas to the ViewModel and renders floating Dev UI buttons.
-  //
-  // Contracts: C-139 Task 2, C-178
+// apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view.svelte
+//
+// Thin Svelte view for the Map & Zoning sandbox.
+// Binds a canvas to the ViewModel and renders floating Dev UI buttons.
+//
+// Contracts: C-139 Task 2, C-178
 
-  import { onMount } from 'svelte';
-  import BaseViewModelContainer from '$components/base_view_model_container.svelte';
-  import type { MapSandboxViewModelInterface } from './map_sandbox_view_model.svelte.ts';
+import { onMount } from 'svelte';
+import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import type { MapSandboxViewModelInterface } from './map_sandbox_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: MapSandboxViewModelInterface;
-  };
+type Props = {
+  viewModel: MapSandboxViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  let canvasElement: HTMLCanvasElement | undefined = $state();
+let canvasElement: HTMLCanvasElement | undefined = $state();
 
-  /**
-   * Hands the bound canvas to the ViewModel for engine initialization.
-   */
-  onMount(() => {
-    if (canvasElement) {
-      void viewModel.initializeEngine(canvasElement);
-    }
-  });
+/**
+ * Hands the bound canvas to the ViewModel for engine initialization.
+ */
+onMount(() => {
+  if (canvasElement) {
+    void viewModel.initializeEngine(canvasElement);
+  }
+});
 </script>
 
 <svelte:head>

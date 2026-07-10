@@ -1,28 +1,28 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/lorebook/lorebook_sandbox_view.svelte
-  //
-  // Split-panel dev sandbox for the Lorebook / World Info system.
-  // Left: lorebook editor. Right: keyword scanner simulator +
-  // Active Context panel + AI generator panel.
+// apps/frontend/client/src/lib/views/lorebook/lorebook_sandbox_view.svelte
+//
+// Split-panel dev sandbox for the Lorebook / World Info system.
+// Left: lorebook editor. Right: keyword scanner simulator +
+// Active Context panel + AI generator panel.
 
-  import ActiveContextPanel from './active_context_panel.svelte';
-  import LorebookEditorView from './lorebook_editor_view.svelte';
-  import {
-    getLorebookEditorViewModel,
-    type LorebookEditorViewModelInterface,
-  } from './lorebook_editor_view_model.svelte';
-  import LorebookGenerator from './lorebook_generator.svelte';
-  import type { LorebookSandboxViewModelInterface } from './lorebook_sandbox_view_model.svelte';
+import ActiveContextPanel from './active_context_panel.svelte';
+import LorebookEditorView from './lorebook_editor_view.svelte';
+import {
+  getLorebookEditorViewModel,
+  type LorebookEditorViewModelInterface,
+} from './lorebook_editor_view_model.svelte';
+import LorebookGenerator from './lorebook_generator.svelte';
+import type { LorebookSandboxViewModelInterface } from './lorebook_sandbox_view_model.svelte';
 
-  type Props = {
-    sandboxViewModel: LorebookSandboxViewModelInterface;
-    editorViewModel?: LorebookEditorViewModelInterface;
-  };
+type Props = {
+  sandboxViewModel: LorebookSandboxViewModelInterface;
+  editorViewModel?: LorebookEditorViewModelInterface;
+};
 
-  const {
-    sandboxViewModel,
-    editorViewModel = getLorebookEditorViewModel({ className: 'LorebookEditorViewModel' }),
-  }: Props = $props();
+const {
+  sandboxViewModel,
+  editorViewModel = getLorebookEditorViewModel({ className: 'LorebookEditorViewModel' }),
+}: Props = $props();
 </script>
 
 <div class="flex h-full gap-4 p-4">

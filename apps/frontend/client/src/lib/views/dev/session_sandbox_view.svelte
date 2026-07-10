@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/session_sandbox_view.svelte
-  import type { SessionSandboxViewModelInterface } from './session_sandbox_view_model.svelte';
+// apps/frontend/client/src/lib/views/dev/session_sandbox_view.svelte
+import type { SessionSandboxViewModelInterface } from './session_sandbox_view_model.svelte';
 
-  type Props = {
-    viewModel: SessionSandboxViewModelInterface;
-  };
+type Props = {
+  viewModel: SessionSandboxViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div class="min-h-screen bg-base-200 p-8">

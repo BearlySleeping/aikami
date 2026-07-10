@@ -1,55 +1,55 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/sandbox/dialogue/+page.svelte
-  //
-  // Isolated Dialogue Action Menu & Interactive Dice sandbox with devtools.
-  // Mounts the DialogueOverlay with DialogueDevViewModel for testing C-162:
-  //   - Action context menu (Persuasion/Intimidation/Stealth/Attack/Custom)
-  //   - Interactive d20 click-to-roll with controlled outcomes
-  //   - Toggle between mock AI and real LLM extraction
-  //   - NPC persona presets (sage, guard, innkeeper, blacksmith, bandit, merchant)
-  //   - Interaction mode switch (menu vs freeform)
-  //
-  // Contract: C-162 BG3 Action Menu & Dice
+// apps/frontend/client/src/routes/(dev)/dev/sandbox/dialogue/+page.svelte
+//
+// Isolated Dialogue Action Menu & Interactive Dice sandbox with devtools.
+// Mounts the DialogueOverlay with DialogueDevViewModel for testing C-162:
+//   - Action context menu (Persuasion/Intimidation/Stealth/Attack/Custom)
+//   - Interactive d20 click-to-roll with controlled outcomes
+//   - Toggle between mock AI and real LLM extraction
+//   - NPC persona presets (sage, guard, innkeeper, blacksmith, bandit, merchant)
+//   - Interaction mode switch (menu vs freeform)
+//
+// Contract: C-162 BG3 Action Menu & Dice
 
-  import { browser } from '$app/environment';
-  import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
-  import {
-    type DevInteractionMode,
-    type DevNpcPreset,
-    DialogueDevViewModel,
-    type DialogueDevViewModelInterface,
-    type DiceOutcome,
-  } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
+import { browser } from '$app/environment';
+import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
+import {
+  type DevInteractionMode,
+  type DevNpcPreset,
+  DialogueDevViewModel,
+  type DialogueDevViewModelInterface,
+  type DiceOutcome,
+} from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
 
-  /** Navigate back to sandbox index on End Chat / combat transition. */
-  const goBack = () => {
-    if (browser) {
-      window.history.back();
-    }
-  };
+/** Navigate back to sandbox index on End Chat / combat transition. */
+const goBack = () => {
+  if (browser) {
+    window.history.back();
+  }
+};
 
-  const MOCK_NPC_DATA = {
-    npcId: 'sandbox-elder',
-    npcName: 'Elder Thrain',
-    dialog: 'Ah, a traveler! Welcome to our humble village. How may I be of assistance?',
-    personaId: 'sage',
-  };
+const MOCK_NPC_DATA = {
+  npcId: 'sandbox-elder',
+  npcName: 'Elder Thrain',
+  dialog: 'Ah, a traveler! Welcome to our humble village. How may I be of assistance?',
+  personaId: 'sage',
+};
 
-  const viewModel: DialogueDevViewModelInterface = new DialogueDevViewModel({
-    className: 'DialogueSandboxVM',
-    npcData: MOCK_NPC_DATA,
-    onEndChat: goBack,
-    onStartCombat: () => {
-      goBack();
-    },
-    initialDiceOutcome: 'random',
-    initialUseMockAi: true,
-    initialNpcPreset: 'sage',
-    initialInteractionMode: 'menu',
-  });
+const viewModel: DialogueDevViewModelInterface = new DialogueDevViewModel({
+  className: 'DialogueSandboxVM',
+  npcData: MOCK_NPC_DATA,
+  onEndChat: goBack,
+  onStartCombat: () => {
+    goBack();
+  },
+  initialDiceOutcome: 'random',
+  initialUseMockAi: true,
+  initialNpcPreset: 'sage',
+  initialInteractionMode: 'menu',
+});
 
-  // ── Devtool state ───────────────────────────────────────────────────
-  let devToolsOpen = $state(true);
+// ── Devtool state ───────────────────────────────────────────────────
+let devToolsOpen = $state(true);
 </script>
 
 <svelte:head>

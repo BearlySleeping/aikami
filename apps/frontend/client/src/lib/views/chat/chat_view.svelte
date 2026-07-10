@@ -1,30 +1,30 @@
 <script lang="ts">
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  // apps/frontend/client/src/lib/views/chat/chat_view.svelte
-  import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
-  import CharacterCard from '$lib/components/chat/character_card.svelte';
-  import EnhancedChatMessage from '$lib/components/chat/enhanced_chat_message.svelte';
-  import TypingIndicator from '$lib/components/chat/typing_indicator.svelte';
-  import AddressModeToggleView from '$views/gm/address_mode_toggle_view.svelte';
-  import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_view_model.svelte.ts';
-  import PushStoryButtonView from '$views/gm/push_story_button_view.svelte';
-  import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_view_model.svelte.ts';
-  import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+// apps/frontend/client/src/lib/views/chat/chat_view.svelte
+import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
+import CharacterCard from '$lib/components/chat/character_card.svelte';
+import EnhancedChatMessage from '$lib/components/chat/enhanced_chat_message.svelte';
+import TypingIndicator from '$lib/components/chat/typing_indicator.svelte';
+import AddressModeToggleView from '$views/gm/address_mode_toggle_view.svelte';
+import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_view_model.svelte.ts';
+import PushStoryButtonView from '$views/gm/push_story_button_view.svelte';
+import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_view_model.svelte.ts';
+import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: ChatViewModelInterface;
-  };
+type Props = {
+  viewModel: ChatViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  // GM system sub-ViewModels (optional — default factories)
-  const addressModeViewModel = getAddressModeTogggleViewModel({
-    className: 'AddressModeToggleViewModel',
-    initialMode: 'scene',
-  });
-  const pushStoryViewModel = getPushStoryButtonViewModel({
-    className: 'PushStoryButtonViewModel',
-  });
+// GM system sub-ViewModels (optional — default factories)
+const addressModeViewModel = getAddressModeTogggleViewModel({
+  className: 'AddressModeToggleViewModel',
+  initialMode: 'scene',
+});
+const pushStoryViewModel = getPushStoryButtonViewModel({
+  className: 'PushStoryButtonViewModel',
+});
 </script>
 
 <BaseViewModelContainer {viewModel}>

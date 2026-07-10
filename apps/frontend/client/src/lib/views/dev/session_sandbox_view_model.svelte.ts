@@ -37,6 +37,10 @@ class SessionSandboxViewModel
   testLog = $state<string[]>([]);
   mockMessageCount = $state(0);
 
+  get testMessageCount(): number {
+    return this.mockMessageCount;
+  }
+
   get sessionServiceReady(): boolean {
     return sessionService !== undefined;
   }

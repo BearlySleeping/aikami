@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
-  import type { LpcViewModelInterface } from './lpc_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
+import type { LpcViewModelInterface } from './lpc_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: LpcViewModelInterface;
-  };
+type Props = {
+  viewModel: LpcViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
-  let showControls = $state(true);
+let { viewModel }: Props = $props();
+let showControls = $state(true);
 </script>
 
 <svelte:head>

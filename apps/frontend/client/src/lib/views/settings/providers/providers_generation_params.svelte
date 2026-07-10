@@ -1,79 +1,78 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/providers/providers_generation_params.svelte
-  import type {
-    GenerationParams,
-    InstructTemplate,
-  } from '$lib/services/config/config_service.svelte';
+// apps/frontend/client/src/lib/views/settings/providers/providers_generation_params.svelte
+import type {
+  GenerationParams,
+  InstructTemplate,
+} from '$lib/services/config/config_service.svelte';
 
-  type Props = {
-    params: GenerationParams;
-    instructTemplate: InstructTemplate;
-    instructTemplates: readonly string[];
-    onsetParam: (field: keyof GenerationParams, value: number) => void;
-    onsetTemplate: (template: InstructTemplate) => void;
-  };
+type Props = {
+  params: GenerationParams;
+  instructTemplate: InstructTemplate;
+  instructTemplates: readonly string[];
+  onsetParam: (field: keyof GenerationParams, value: number) => void;
+  onsetTemplate: (template: InstructTemplate) => void;
+};
 
-  const { params, instructTemplate, instructTemplates, onsetParam, onsetTemplate }: Props =
-    $props();
+const { params, instructTemplate, instructTemplates, onsetParam, onsetTemplate }: Props = $props();
 
-  // ── Slider definitions ─────────────────────────────────────────────────
+// ── Slider definitions ─────────────────────────────────────────────────
 
-  type ParamSlider = {
-    field: keyof GenerationParams;
-    label: string;
-    min: number;
-    max: number;
-    step: number;
-    format: (v: number) => string;
-  };
+type ParamSlider = {
+  field: keyof GenerationParams;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  format: (v: number) => string;
+};
 
-  const SLIDERS: readonly ParamSlider[] = [
-    {
-      field: 'temperature',
-      label: 'Temperature',
-      min: 0,
-      max: 2,
-      step: 0.05,
-      format: (v: number) => v.toFixed(2),
-    },
-    {
-      field: 'topP',
-      label: 'Top P',
-      min: 0,
-      max: 1,
-      step: 0.05,
-      format: (v: number) => v.toFixed(2),
-    },
-    {
-      field: 'topK',
-      label: 'Top K',
-      min: 1,
-      max: 200,
-      step: 1,
-      format: (v: number) => `${v}`,
-    },
-    {
-      field: 'repetitionPenalty',
-      label: 'Repetition Penalty',
-      min: 1,
-      max: 2,
-      step: 0.05,
-      format: (v: number) => v.toFixed(2),
-    },
-    {
-      field: 'presencePenalty',
-      label: 'Presence Penalty',
-      min: -2,
-      max: 2,
-      step: 0.1,
-      format: (v: number) => v.toFixed(1),
-    },
-  ] as const;
+const SLIDERS: readonly ParamSlider[] = [
+  {
+    field: 'temperature',
+    label: 'Temperature',
+    min: 0,
+    max: 2,
+    step: 0.05,
+    format: (v: number) => v.toFixed(2),
+  },
+  {
+    field: 'topP',
+    label: 'Top P',
+    min: 0,
+    max: 1,
+    step: 0.05,
+    format: (v: number) => v.toFixed(2),
+  },
+  {
+    field: 'topK',
+    label: 'Top K',
+    min: 1,
+    max: 200,
+    step: 1,
+    format: (v: number) => `${v}`,
+  },
+  {
+    field: 'repetitionPenalty',
+    label: 'Repetition Penalty',
+    min: 1,
+    max: 2,
+    step: 0.05,
+    format: (v: number) => v.toFixed(2),
+  },
+  {
+    field: 'presencePenalty',
+    label: 'Presence Penalty',
+    min: -2,
+    max: 2,
+    step: 0.1,
+    format: (v: number) => v.toFixed(1),
+  },
+] as const;
 
-  const NUMBER_FIELDS: readonly { field: keyof GenerationParams; label: string; min: number }[] = [
-    { field: 'maxTokens', label: 'Max Tokens', min: 1 },
-    { field: 'contextSize', label: 'Context Size', min: 256 },
-  ] as const;
+const NUMBER_FIELDS: readonly { field: keyof GenerationParams; label: string; min: number }[] = [
+  { field: 'maxTokens', label: 'Max Tokens', min: 1 },
+  { field: 'contextSize', label: 'Context Size', min: 256 },
+] as const;
 </script>
 
 <div class="grid gap-6">

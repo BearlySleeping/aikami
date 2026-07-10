@@ -1,28 +1,28 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/presets/prompt_preview_modal.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { PromptPreviewViewModelInterface } from './prompt_preview_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/presets/prompt_preview_modal.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { PromptPreviewViewModelInterface } from './prompt_preview_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: PromptPreviewViewModelInterface;
-  };
+type Props = {
+  viewModel: PromptPreviewViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  let dialogElement: HTMLDialogElement | undefined = $state();
+let dialogElement: HTMLDialogElement | undefined = $state();
 
-  $effect(() => {
-    const dialog = dialogElement;
-    if (!dialog) {
-      return;
-    }
+$effect(() => {
+  const dialog = dialogElement;
+  if (!dialog) {
+    return;
+  }
 
-    if (viewModel.isOpen) {
-      dialog.showModal();
-    } else {
-      dialog.close();
-    }
-  });
+  if (viewModel.isOpen) {
+    dialog.showModal();
+  } else {
+    dialog.close();
+  }
+});
 </script>
 
 <BaseViewModelContainer {viewModel}>

@@ -1,40 +1,40 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/lorebook/active_context_panel.svelte
-  //
-  // DaisyUI drawer showing active keyword matches from lorebook scanning.
-  // Triggered from chat toolbar. Shows match reason ("constant" or
-  // "matched: 'goblin'"), new-match highlight animation, and inline editing
-  // toggle. Token budget indicator turns red when >2KB.
+// apps/frontend/client/src/lib/views/lorebook/active_context_panel.svelte
+//
+// DaisyUI drawer showing active keyword matches from lorebook scanning.
+// Triggered from chat toolbar. Shows match reason ("constant" or
+// "matched: 'goblin'"), new-match highlight animation, and inline editing
+// toggle. Token budget indicator turns red when >2KB.
 
-  import type { KeywordMatch } from '$types/lorebook';
+import type { KeywordMatch } from '$types/lorebook';
 
-  type Props = {
-    /** Whether the drawer is open. */
-    open: boolean;
-    /** Callback to close the drawer. */
-    onclose: () => void;
-    /** Matched entries from the keyword scanner. */
-    matches: KeywordMatch[];
-    /** Total byte size of the matched entry content. */
-    tokenBudget: number;
-    /** Callback when toggling entry edit mode. */
-    ontoggleEdit?: (entryId: string) => void;
-  };
+type Props = {
+  /** Whether the drawer is open. */
+  open: boolean;
+  /** Callback to close the drawer. */
+  onclose: () => void;
+  /** Matched entries from the keyword scanner. */
+  matches: KeywordMatch[];
+  /** Total byte size of the matched entry content. */
+  tokenBudget: number;
+  /** Callback when toggling entry edit mode. */
+  ontoggleEdit?: (entryId: string) => void;
+};
 
-  const {
-    open = false,
-    onclose,
-    matches = [],
-    tokenBudget = 0,
-    ontoggleEdit: _ontoggleEdit,
-  }: Props = $props();
+const {
+  open = false,
+  onclose,
+  matches = [],
+  tokenBudget = 0,
+  ontoggleEdit: _ontoggleEdit,
+}: Props = $props();
 
-  const _formatBytes = (bytes: number): string => {
-    if (bytes >= 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB`;
-    }
-    return `${bytes} B`;
-  };
+const _formatBytes = (bytes: number): string => {
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${bytes} B`;
+};
 </script>
 
 {#if open}

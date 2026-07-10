@@ -1,19 +1,19 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/dashboard/character_sheet_view.svelte
-  //
-  // Zero-logic tabbed D&D-style character sheet. Replaces the minimal
-  // character dashboard from C-153. All state lives in the ViewModel.
-  //
-  // Contract: C-232 Character Sheet & Traits System
-  import { Modal } from '@aikami/frontend/components';
-  import { ABILITY_KEYS } from '$lib/data/character_sheet_types';
-  import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/dashboard/character_sheet_view.svelte
+//
+// Zero-logic tabbed D&D-style character sheet. Replaces the minimal
+// character dashboard from C-153. All state lives in the ViewModel.
+//
+// Contract: C-232 Character Sheet & Traits System
+import { Modal } from '@aikami/frontend/components';
+import { ABILITY_KEYS } from '$lib/data/character_sheet_types';
+import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
 
-  type Props = {
-    viewModel: CharacterSheetViewModelInterface;
-  };
+type Props = {
+  viewModel: CharacterSheetViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <!-- biome-ignore lint/a11y/useSemanticElements: fullscreen backdrop must be div -->
@@ -25,6 +25,8 @@
   onclick={() => viewModel.closeSheet()}
   onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeSheet()}
 >
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- biome-ignore lint/a11y/noStaticElementInteractions: prevent backdrop close when clicking card -->
   <!-- biome-ignore lint/a11y/useKeyWithClickEvents: card stops propagation only -->
   <div

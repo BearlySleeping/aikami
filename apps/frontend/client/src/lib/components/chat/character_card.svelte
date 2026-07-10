@@ -1,40 +1,40 @@
 <script lang="ts">
-  /**
-   * Props for the CharacterCard component.
-   * Displays character information including name, avatar, race/class/level, and personality details.
-   */
-  type Props = {
-    /** The character's display name */
-    name: string;
-    /** URL to the character's avatar image */
-    avatarUrl?: string;
-    /** The character's race (e.g., Human, Elf, Dwarf) */
-    race?: string;
-    /** The character's class (e.g., Warrior, Mage, Rogue) */
-    characterClass?: string;
-    /** The character's current level */
-    level?: number;
-    /** Brief personality trait description */
-    personalityTraits?: string;
-    /** Character background/backstory */
-    background?: string;
-    /** Additional notes about the character */
-    notes?: string;
-    /** The character's greeting message */
-    greeting?: string;
-  };
+/**
+ * Props for the CharacterCard component.
+ * Displays character information including name, avatar, race/class/level, and personality details.
+ */
+type Props = {
+  /** The character's display name */
+  name: string;
+  /** URL to the character's avatar image */
+  avatarUrl?: string;
+  /** The character's race (e.g., Human, Elf, Dwarf) */
+  race?: string;
+  /** The character's class (e.g., Warrior, Mage, Rogue) */
+  characterClass?: string;
+  /** The character's current level */
+  level?: number;
+  /** Brief personality trait description */
+  personalityTraits?: string;
+  /** Character background/backstory */
+  background?: string;
+  /** Additional notes about the character */
+  notes?: string;
+  /** The character's greeting message */
+  greeting?: string;
+};
 
-  const {
-    name,
-    avatarUrl,
-    race,
-    characterClass,
-    level,
-    personalityTraits,
-    background: _background,
-    notes: _notes,
-    greeting,
-  }: Props = $props();
+const {
+  name,
+  avatarUrl,
+  race,
+  characterClass,
+  level,
+  personalityTraits,
+  background: _background,
+  notes: _notes,
+  greeting,
+}: Props = $props();
 </script>
 
 <div class="card bg-base-200 shadow-sm">

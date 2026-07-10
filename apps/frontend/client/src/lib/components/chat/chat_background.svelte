@@ -1,20 +1,20 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/ChatBackground.svelte
-  type Props = {
-    imageUrl?: string | null;
-    isGenerating?: boolean;
-    isDemo?: boolean;
-    onGenerate?: (prompt?: string) => void;
-    onClear?: () => void;
-  };
+// apps/frontend/client/src/lib/components/chat/ChatBackground.svelte
+type Props = {
+  imageUrl?: string | null;
+  isGenerating?: boolean;
+  isDemo?: boolean;
+  onGenerate?: (prompt?: string) => void;
+  onClear?: () => void;
+};
 
-  let {
-    imageUrl = null,
-    isGenerating = false,
-    isDemo = false,
-    onGenerate,
-    onClear,
-  }: Props = $props();
+let {
+  imageUrl = null,
+  isGenerating = false,
+  isDemo = false,
+  onGenerate,
+  onClear,
+}: Props = $props();
 </script>
 
 {#if imageUrl}

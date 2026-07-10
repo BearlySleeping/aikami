@@ -1,104 +1,104 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte
-  //
-  // Unified Combat Dev Sandbox — Sidebar Layout Only
-  //
-  // URL params:
-  //   ?state=initial|log-filled|low-hp|victory|defeat (visual test presets)
-  //   ?ally-hp=N&enemy-hp=N&enemy-name=X&log=entry1|entry2
-  //   ?useRealAi=false (disable real AI for fast mock resolution)
-  //
-  // Merged from C-164 combat-split + C-166 visual testing.
+// apps/frontend/client/src/routes/(dev)/dev/combat/+page.svelte
+//
+// Unified Combat Dev Sandbox — Sidebar Layout Only
+//
+// URL params:
+//   ?state=initial|log-filled|low-hp|victory|defeat (visual test presets)
+//   ?ally-hp=N&enemy-hp=N&enemy-name=X&log=entry1|entry2
+//   ?useRealAi=false (disable real AI for fast mock resolution)
+//
+// Merged from C-164 combat-split + C-166 visual testing.
 
-  import { onMount } from 'svelte';
-  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import { gameStateService } from '$services';
-  import CombatSidebar from '$views/combat/combat_sidebar.svelte';
-  import { getCombatDevViewModel } from '$views/combat/combat_view_model.dev.svelte.ts';
-  import CombatPortraitStage from '$views/combat/components/combat_portrait_stage.svelte';
+import { onMount } from 'svelte';
+import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import { gameStateService } from '$services';
+import CombatSidebar from '$views/combat/combat_sidebar.svelte';
+import { getCombatDevViewModel } from '$views/combat/combat_view_model.dev.svelte.ts';
+import CombatPortraitStage from '$views/combat/components/combat_portrait_stage.svelte';
 
-  // ── URL params ──
-  const params =
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search)
-      : new URLSearchParams();
-  const stateParam = params.get('state') ?? undefined;
-  const allyHp = params.get('ally-hp') ? Number(params.get('ally-hp')) : undefined;
-  const enemyHp = params.get('enemy-hp') ? Number(params.get('enemy-hp')) : undefined;
-  const enemyName = params.get('enemy-name') ?? undefined;
-  const logParam = params.get('log') ?? undefined;
-  const logEntries = logParam ? logParam.split('|').filter(Boolean) : undefined;
-  const useRealAiParam = params.get('useRealAi');
-  const useRealAiDefault = useRealAiParam !== 'false';
+// ── URL params ──
+const params =
+  typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search)
+    : new URLSearchParams();
+const stateParam = params.get('state') ?? undefined;
+const allyHp = params.get('ally-hp') ? Number(params.get('ally-hp')) : undefined;
+const enemyHp = params.get('enemy-hp') ? Number(params.get('enemy-hp')) : undefined;
+const enemyName = params.get('enemy-name') ?? undefined;
+const logParam = params.get('log') ?? undefined;
+const logEntries = logParam ? logParam.split('|').filter(Boolean) : undefined;
+const useRealAiParam = params.get('useRealAi');
+const useRealAiDefault = useRealAiParam !== 'false';
 
-  const viewModel = getCombatDevViewModel({
-    className: 'CombatDevViewModel',
-    useRealAi: useRealAiDefault,
-    useRealMusic: useRealAiDefault,
-    initialState:
-      allyHp || enemyHp || enemyName || logEntries || stateParam
-        ? { allyHp, enemyHp, enemyName, logEntries, state: stateParam }
-        : undefined,
-  });
+const viewModel = getCombatDevViewModel({
+  className: 'CombatDevViewModel',
+  useRealAi: useRealAiDefault,
+  useRealMusic: useRealAiDefault,
+  initialState:
+    allyHp || enemyHp || enemyName || logEntries || stateParam
+      ? { allyHp, enemyHp, enemyName, logEntries, state: stateParam }
+      : undefined,
+});
 
-  onMount(() => {
-    gameStateService.setMode('COMBAT');
-    void viewModel.initialize();
-    return () => {
-      gameStateService.setMode('EXPLORE');
-    };
-  });
-
-  // ── Toggles ──
-  let useRealAi = $state(useRealAiDefault);
-  let useRealMusic = $state(useRealAiDefault);
-
-  // ── Music test ──
-  const MOODS = [
-    'epic',
-    'tense',
-    'triumph',
-    'sorrow',
-    'mysterious',
-    'peaceful',
-    'heroic',
-    'foreboding',
-  ] as const;
-  let selectedMood: string = $state('epic');
-  let isPlayingMusic = $state(false);
-  let musicStatus = $state<string>('');
-
-  const playTestMusic = async () => {
-    isPlayingMusic = true;
-    musicStatus = `Querying Data Connect for '${selectedMood}'...`;
-    try {
-      await viewModel.playMusic(selectedMood);
-      musicStatus = `✅ Playing '${selectedMood}' BGM from Storage emulator`;
-    } catch (e) {
-      musicStatus = `❌ Failed: ${(e as Error).message}`;
-    }
-    isPlayingMusic = false;
+onMount(() => {
+  gameStateService.setMode('COMBAT');
+  void viewModel.initialize();
+  return () => {
+    gameStateService.setMode('EXPLORE');
   };
+});
 
-  const stopMusic = () => {
-    import('$lib/services/audio/audio_service.svelte.ts').then(({ audioService }) => {
-      audioService.stopAll();
-      musicStatus = '⏹️ Stopped';
-    });
-  };
+// ── Toggles ──
+let useRealAi = $state(useRealAiDefault);
+let useRealMusic = $state(useRealAiDefault);
 
-  // ── Dev tool actions ──
-  const devActions = [
-    { label: 'Force Player HP to 1', onClick: () => viewModel.forcePlayer1HP() },
-    { label: 'Simulate Enemy Turn', onClick: () => viewModel.simulateEnemyTurn() },
-    { label: 'Simulate Player Attack', onClick: () => viewModel.simulatePlayerAttack() },
-    { label: 'End Battle (Victory)', onClick: () => viewModel.endBattle(true) },
-    { label: 'End Battle (Defeat)', onClick: () => viewModel.endBattle(false) },
-    { label: 'Reset Combat', onClick: () => viewModel.resetCombat() },
-  ];
+// ── Music test ──
+const MOODS = [
+  'epic',
+  'tense',
+  'triumph',
+  'sorrow',
+  'mysterious',
+  'peaceful',
+  'heroic',
+  'foreboding',
+] as const;
+let selectedMood: string = $state('epic');
+let isPlayingMusic = $state(false);
+let musicStatus = $state<string>('');
 
-  // Hide dev tools and controls for visual testing states
-  const hideControls = stateParam !== undefined && stateParam !== 'initial';
+const playTestMusic = async () => {
+  isPlayingMusic = true;
+  musicStatus = `Querying Data Connect for '${selectedMood}'...`;
+  try {
+    await viewModel.playMusic(selectedMood);
+    musicStatus = `✅ Playing '${selectedMood}' BGM from Storage emulator`;
+  } catch (e) {
+    musicStatus = `❌ Failed: ${(e as Error).message}`;
+  }
+  isPlayingMusic = false;
+};
+
+const stopMusic = () => {
+  import('$lib/services/audio/audio_service.svelte.ts').then(({ audioService }) => {
+    audioService.stopAll();
+    musicStatus = '⏹️ Stopped';
+  });
+};
+
+// ── Dev tool actions ──
+const devActions = [
+  { label: 'Force Player HP to 1', onClick: () => viewModel.forcePlayer1HP() },
+  { label: 'Simulate Enemy Turn', onClick: () => viewModel.simulateEnemyTurn() },
+  { label: 'Simulate Player Attack', onClick: () => viewModel.simulatePlayerAttack() },
+  { label: 'End Battle (Victory)', onClick: () => viewModel.endBattle(true) },
+  { label: 'End Battle (Defeat)', onClick: () => viewModel.endBattle(false) },
+  { label: 'Reset Combat', onClick: () => viewModel.resetCombat() },
+];
+
+// Hide dev tools and controls for visual testing states
+const hideControls = stateParam !== undefined && stateParam !== 'initial';
 </script>
 
 <svelte:head>

@@ -1,19 +1,19 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/world-gen/+page.svelte
-  //
-  // Dev sandbox for C-233 World Generation Wizard.
-  // Provides isolated testing with mock LLM responses, debug prompt panel,
-  // and failure simulation for retry logic verification.
-  //
-  // Contract: C-233
+// apps/frontend/client/src/routes/(dev)/dev/world-gen/+page.svelte
+//
+// Dev sandbox for C-233 World Generation Wizard.
+// Provides isolated testing with mock LLM responses, debug prompt panel,
+// and failure simulation for retry logic verification.
+//
+// Contract: C-233
 
-  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import { getWorldGenSandboxViewModel } from '$views/dev/world_gen_sandbox_view_model.svelte.ts';
-  import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
+import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import { getWorldGenSandboxViewModel } from '$views/dev/world_gen_sandbox_view_model.svelte.ts';
+import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
 
-  const viewModel = getWorldGenSandboxViewModel({
-    className: 'WorldGenSandboxViewModel',
-  });
+const viewModel = getWorldGenSandboxViewModel({
+  className: 'WorldGenSandboxViewModel',
+});
 </script>
 
 <div class="flex flex-col h-screen">

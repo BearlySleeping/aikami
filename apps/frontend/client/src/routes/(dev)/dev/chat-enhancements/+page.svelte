@@ -1,20 +1,20 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/chat-enhancements/+page.svelte
-  //
-  // Dev sandbox for C-231 Rich Chat Streaming enhancements.
-  // Demonstrates: message branching (alternatives/swiping), input drafts,
-  // inline action bars, auto-resize textarea, and streaming TTS toggle.
-  //
-  // Contract: C-231 AC-6 Dev Sandbox
+// apps/frontend/client/src/routes/(dev)/dev/chat-enhancements/+page.svelte
+//
+// Dev sandbox for C-231 Rich Chat Streaming enhancements.
+// Demonstrates: message branching (alternatives/swiping), input drafts,
+// inline action bars, auto-resize textarea, and streaming TTS toggle.
+//
+// Contract: C-231 AC-6 Dev Sandbox
 
-  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import { getChatEnhancementsSandboxViewModel } from '$views/chat/chat_enhancements_sandbox_view_model.svelte.ts';
-  import ChatView from '$views/chat/chat_view.svelte';
+import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import { getChatEnhancementsSandboxViewModel } from '$views/chat/chat_enhancements_sandbox_view_model.svelte.ts';
+import ChatView from '$views/chat/chat_view.svelte';
 
-  const viewModel = getChatEnhancementsSandboxViewModel({
-    className: 'ChatEnhancementsSandboxViewModel',
-    chatId: 'dev-chat-enhancements',
-  });
+const viewModel = getChatEnhancementsSandboxViewModel({
+  className: 'ChatEnhancementsSandboxViewModel',
+  chatId: 'dev-chat-enhancements',
+});
 </script>
 
 <div class="flex flex-col h-screen p-4">

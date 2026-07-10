@@ -1,16 +1,16 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/start/components/missing_providers_dialog.svelte
-  import { Modal } from '@aikami/frontend/components';
+// apps/frontend/client/src/lib/views/start/components/missing_providers_dialog.svelte
+import { Modal } from '@aikami/frontend/components';
 
-  let {
-    open = $bindable(),
-    onGoToSettings,
-    onClose,
-  }: {
-    open: boolean;
-    onGoToSettings: () => void;
-    onClose: () => void;
-  } = $props();
+let {
+  open = $bindable(),
+  onGoToSettings,
+  onClose,
+}: {
+  open: boolean;
+  onGoToSettings: () => void;
+  onClose: () => void;
+} = $props();
 </script>
 
 <Modal bind:open size="md" onclose={onClose}>

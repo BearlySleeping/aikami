@@ -1,24 +1,24 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view.svelte
-  //
-  // View for the Party Follow sandbox — renders the game canvas,
-  // party member list with recruit/toggle controls, and debug info.
+// apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view.svelte
+//
+// View for the Party Follow sandbox — renders the game canvas,
+// party member list with recruit/toggle controls, and debug info.
 
-  import type { PartyFollowSandboxViewModelInterface } from './party_follow_sandbox_view_model.svelte.ts';
+import type { PartyFollowSandboxViewModelInterface } from './party_follow_sandbox_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: PartyFollowSandboxViewModelInterface;
-  };
+type Props = {
+  viewModel: PartyFollowSandboxViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
 
-  $effect(() => {
-    if (canvasElement) {
-      void viewModel.initializeEngine(canvasElement);
-    }
-  });
+$effect(() => {
+  if (canvasElement) {
+    void viewModel.initializeEngine(canvasElement);
+  }
+});
 </script>
 
 <div class="relative h-screen w-screen overflow-hidden bg-black">

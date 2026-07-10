@@ -1,41 +1,41 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/text/text_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { TextViewModelInterface } from './text_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/text/text_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { TextViewModelInterface } from './text_view_model.svelte.ts';
 
-  type Props = { viewModel: TextViewModelInterface };
-  let { viewModel }: Props = $props();
+type Props = { viewModel: TextViewModelInterface };
+let { viewModel }: Props = $props();
 
-  let outputContainer = $state<HTMLPreElement>();
+let outputContainer = $state<HTMLPreElement>();
 
-  $effect(() => {
-    void viewModel.output;
-    if (outputContainer) {
-      outputContainer.scrollTop = outputContainer.scrollHeight;
-    }
-  });
+$effect(() => {
+  void viewModel.output;
+  if (outputContainer) {
+    outputContainer.scrollTop = outputContainer.scrollHeight;
+  }
+});
 
-  /** Example JSON schema for quick testing. */
-  const EXAMPLE_SCHEMA = JSON.stringify(
-    {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: "The person's name" },
-        age: { type: 'number', description: 'Age in years' },
-        skills: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'List of skills',
-        },
+/** Example JSON schema for quick testing. */
+const EXAMPLE_SCHEMA = JSON.stringify(
+  {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: "The person's name" },
+      age: { type: 'number', description: 'Age in years' },
+      skills: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'List of skills',
       },
-      required: ['name', 'age'],
-      additionalProperties: false,
     },
-    null,
-    2,
-  );
+    required: ['name', 'age'],
+    additionalProperties: false,
+  },
+  null,
+  2,
+);
 
-  const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
+const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
 </script>
 
 <svelte:head>

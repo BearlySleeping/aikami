@@ -1,37 +1,37 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/lorebook/+page.svelte
-  //
-  // Dev sandbox route for the Lorebook / World Info system (C-238 AC-5).
-  // Instantiates LorebookSandboxViewModel, renders LorebookSandboxView.
-  // DevToolsPanel with reset actions.
+// apps/frontend/client/src/routes/(dev)/dev/lorebook/+page.svelte
+//
+// Dev sandbox route for the Lorebook / World Info system (C-238 AC-5).
+// Instantiates LorebookSandboxViewModel, renders LorebookSandboxView.
+// DevToolsPanel with reset actions.
 
-  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import type { DevAction } from '$types';
-  import LorebookSandboxView from '$views/lorebook/lorebook_sandbox_view.svelte';
-  import { getLorebookSandboxViewModel } from '$views/lorebook/lorebook_sandbox_view_model.svelte';
+import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import type { DevAction } from '$types';
+import LorebookSandboxView from '$views/lorebook/lorebook_sandbox_view.svelte';
+import { getLorebookSandboxViewModel } from '$views/lorebook/lorebook_sandbox_view_model.svelte';
 
-  const sandboxViewModel = getLorebookSandboxViewModel({
-    className: 'LorebookSandboxViewModel',
-  });
+const sandboxViewModel = getLorebookSandboxViewModel({
+  className: 'LorebookSandboxViewModel',
+});
 
-  const devActions: DevAction[] = [
-    {
-      label: 'Reset All',
-      onClick: () => {
-        sandboxViewModel.resetAll();
-      },
+const devActions: DevAction[] = [
+  {
+    label: 'Reset All',
+    onClick: () => {
+      sandboxViewModel.resetAll();
     },
-    {
-      label: 'Toggle Active Context',
-      onClick: () => {
-        if (sandboxViewModel.activeContextOpen) {
-          sandboxViewModel.closeActiveContext();
-        } else {
-          sandboxViewModel.openActiveContext();
-        }
-      },
+  },
+  {
+    label: 'Toggle Active Context',
+    onClick: () => {
+      if (sandboxViewModel.activeContextOpen) {
+        sandboxViewModel.closeActiveContext();
+      } else {
+        sandboxViewModel.openActiveContext();
+      }
     },
-  ];
+  },
+];
 </script>
 
 <div class="flex flex-col h-screen">

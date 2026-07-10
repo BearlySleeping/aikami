@@ -1,49 +1,49 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/dev/sandbox/mode/+page.svelte
-  import { untrack } from 'svelte';
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import ModeIndicator from '$lib/components/mode_indicator.svelte';
-  import { gameStateService } from '$services';
-  import {
-    getModeSandboxViewModel,
-    type ModeSandboxViewModelInterface,
-  } from './mode_sandbox_view_model.svelte';
+// apps/frontend/client/src/routes/dev/sandbox/mode/+page.svelte
+import { untrack } from 'svelte';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import ModeIndicator from '$lib/components/mode_indicator.svelte';
+import { gameStateService } from '$services';
+import {
+  getModeSandboxViewModel,
+  type ModeSandboxViewModelInterface,
+} from './mode_sandbox_view_model.svelte';
 
-  const viewModel: ModeSandboxViewModelInterface = getModeSandboxViewModel({
-    className: 'ModeSandboxViewModel',
-  });
+const viewModel: ModeSandboxViewModelInterface = getModeSandboxViewModel({
+  className: 'ModeSandboxViewModel',
+});
 
-  let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
 
-  $effect(() => {
-    const el = canvasElement;
-    if (el) {
+$effect(() => {
+  const el = canvasElement;
+  if (el) {
+    untrack(() => {
+      viewModel.canvasElement = el;
+    });
+
+    return () => {
       untrack(() => {
-        viewModel.canvasElement = el;
+        viewModel.canvasElement = undefined;
       });
+    };
+  }
+});
 
-      return () => {
-        untrack(() => {
-          viewModel.canvasElement = undefined;
-        });
-      };
-    }
-  });
+/** Derived button active state for mode toggle buttons. */
+const exploreActive = $derived(gameStateService.currentMode === 'EXPLORE');
+const dialogueActive = $derived(gameStateService.currentMode === 'DIALOGUE');
+const menuActive = $derived(gameStateService.currentMode === 'MENU');
 
-  /** Derived button active state for mode toggle buttons. */
-  const exploreActive = $derived(gameStateService.currentMode === 'EXPLORE');
-  const dialogueActive = $derived(gameStateService.currentMode === 'DIALOGUE');
-  const menuActive = $derived(gameStateService.currentMode === 'MENU');
+/** Whether any non-EXPLORE overlay is active. */
+const isLocked = $derived(gameStateService.currentMode !== 'EXPLORE');
 
-  /** Whether any non-EXPLORE overlay is active. */
-  const isLocked = $derived(gameStateService.currentMode !== 'EXPLORE');
-
-  /** Locked-mode overlay color classes. */
-  const lockedColor = $derived(
-    gameStateService.currentMode === 'DIALOGUE'
-      ? 'border-info/40 bg-info/10'
-      : 'border-base-300/40 bg-base-300/10',
-  );
+/** Locked-mode overlay color classes. */
+const lockedColor = $derived(
+  gameStateService.currentMode === 'DIALOGUE'
+    ? 'border-info/40 bg-info/10'
+    : 'border-base-300/40 bg-base-300/10',
+);
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>

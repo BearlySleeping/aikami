@@ -1,22 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/presets/preset_editor_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { PresetEditorViewModelInterface } from './preset_editor_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/presets/preset_editor_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { PresetEditorViewModelInterface } from './preset_editor_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: PresetEditorViewModelInterface;
-  };
+type Props = {
+  viewModel: PresetEditorViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  /** Current preset name for display. */
-  const currentPresetName = $derived.by(() => {
-    if (viewModel.isNewPreset) {
-      return viewModel.newPresetName || 'New Preset';
-    }
-    const preset = viewModel.presets.find((p) => p.id === viewModel.selectedPresetId);
-    return preset?.name ?? 'Select a preset';
-  });
+/** Current preset name for display. */
+const currentPresetName = $derived.by(() => {
+  if (viewModel.isNewPreset) {
+    return viewModel.newPresetName || 'New Preset';
+  }
+  const preset = viewModel.presets.find((p) => p.id === viewModel.selectedPresetId);
+  return preset?.name ?? 'Select a preset';
+});
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight>

@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/game/+page.svelte
-  import CombatSidebar from '$lib/views/combat/combat_sidebar.svelte';
-  import GameView from '$lib/views/game/canvas/game_view.svelte';
-  import { getGameViewViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
-  import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
-  import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
+// apps/frontend/client/src/routes/game/+page.svelte
+import CombatSidebar from '$lib/views/combat/combat_sidebar.svelte';
+import GameView from '$lib/views/game/canvas/game_view.svelte';
+import { getGameViewViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
+import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
+import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
 
-  const gameViewViewModel = getGameViewViewModel({ className: 'GameViewViewModel' });
-  const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
+const gameViewViewModel = getGameViewViewModel({ className: 'GameViewViewModel' });
+const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
 </script>
 
 <!--

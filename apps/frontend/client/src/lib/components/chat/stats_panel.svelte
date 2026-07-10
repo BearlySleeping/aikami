@@ -1,30 +1,30 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/StatsPanel.svelte
-  type Stats = {
-    hp?: number;
-    ac?: number;
-    level?: number;
-    class?: string;
-    abilities?: Record<string, { score: number; modifier: number }>;
-  };
+// apps/frontend/client/src/lib/components/chat/StatsPanel.svelte
+type Stats = {
+  hp?: number;
+  ac?: number;
+  level?: number;
+  class?: string;
+  abilities?: Record<string, { score: number; modifier: number }>;
+};
 
-  type Props = {
-    stats?: Stats;
-    npcName?: string;
-    isExpanded?: boolean;
-    onToggle?: () => void;
-  };
+type Props = {
+  stats?: Stats;
+  npcName?: string;
+  isExpanded?: boolean;
+  onToggle?: () => void;
+};
 
-  let { stats = {}, npcName = 'NPC', isExpanded = false, onToggle }: Props = $props();
+let { stats = {}, npcName = 'NPC', isExpanded = false, onToggle }: Props = $props();
 
-  const abilityNames: Record<string, string> = {
-    strength: 'STR',
-    dexterity: 'DEX',
-    constitution: 'CON',
-    intelligence: 'INT',
-    wisdom: 'WIS',
-    charisma: 'CHA',
-  };
+const abilityNames: Record<string, string> = {
+  strength: 'STR',
+  dexterity: 'DEX',
+  constitution: 'CON',
+  intelligence: 'INT',
+  wisdom: 'WIS',
+  charisma: 'CHA',
+};
 </script>
 
 <div class="card bg-base-200 shadow-xl">

@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/credits/credits_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { CreditsViewModelInterface } from './credits_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/game/credits/credits_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { CreditsViewModelInterface } from './credits_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: CreditsViewModelInterface;
-  };
+type Props = {
+  viewModel: CreditsViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>

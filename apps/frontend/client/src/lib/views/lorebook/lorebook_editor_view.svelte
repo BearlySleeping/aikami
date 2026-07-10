@@ -1,18 +1,18 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/lorebook/lorebook_editor_view.svelte
-  //
-  // DaisyUI CRUD form for lorebooks and entries. Pure view — delegates
-  // all logic to LorebookEditorViewModel. Supports lorebook list sidebar,
-  // entry cards with keyword chips, content textarea, constant toggle,
-  // priority input, and inline editing.
+// apps/frontend/client/src/lib/views/lorebook/lorebook_editor_view.svelte
+//
+// DaisyUI CRUD form for lorebooks and entries. Pure view — delegates
+// all logic to LorebookEditorViewModel. Supports lorebook list sidebar,
+// entry cards with keyword chips, content textarea, constant toggle,
+// priority input, and inline editing.
 
-  import type { LorebookEditorViewModelInterface } from './lorebook_editor_view_model.svelte';
+import type { LorebookEditorViewModelInterface } from './lorebook_editor_view_model.svelte';
 
-  type Props = {
-    viewModel: LorebookEditorViewModelInterface;
-  };
+type Props = {
+  viewModel: LorebookEditorViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

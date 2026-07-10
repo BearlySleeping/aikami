@@ -1,26 +1,26 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view.svelte
-  //
-  // DaisyUI template for the World Generation Wizard.
-  // Implements a 5-step wizard with step indicator, genre/tone chips,
-  // setting textarea, difficulty radio, goals textarea, generating spinner,
-  // preview cards, and error state.
-  //
-  // Contract: C-233
+// apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view.svelte
+//
+// DaisyUI template for the World Generation Wizard.
+// Implements a 5-step wizard with step indicator, genre/tone chips,
+// setting textarea, difficulty radio, goals textarea, generating spinner,
+// preview cards, and error state.
+//
+// Contract: C-233
 
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { WorldGenWizardViewModelInterface } from './world_gen_wizard_view_model.svelte.ts';
-  import {
-    DIFFICULTY_OPTIONS,
-    GENRE_OPTIONS,
-    TONE_OPTIONS,
-  } from './world_gen_wizard_view_model.svelte.ts';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { WorldGenWizardViewModelInterface } from './world_gen_wizard_view_model.svelte.ts';
+import {
+  DIFFICULTY_OPTIONS,
+  GENRE_OPTIONS,
+  TONE_OPTIONS,
+} from './world_gen_wizard_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: WorldGenWizardViewModelInterface;
-  };
+type Props = {
+  viewModel: WorldGenWizardViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

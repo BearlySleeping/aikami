@@ -1,24 +1,24 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte
-  //
-  // Floating, collapsible Dev Tools overlay for (dev) sandbox routes.
-  // Accepts generic actions (buttons) and toggles (checkboxes).
-  // NEVER import this file from production code or non-(dev) routes.
+// apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte
+//
+// Floating, collapsible Dev Tools overlay for (dev) sandbox routes.
+// Accepts generic actions (buttons) and toggles (checkboxes).
+// NEVER import this file from production code or non-(dev) routes.
 
-  import type { DevAction, DevToggle } from '$types';
+import type { DevAction, DevToggle } from '$types';
 
-  type Props = {
-    /** Action buttons to render. */
-    readonly actions?: readonly DevAction[];
-    /** Toggle switches to render. */
-    readonly toggles?: readonly DevToggle[];
-  };
+type Props = {
+  /** Action buttons to render. */
+  readonly actions?: readonly DevAction[];
+  /** Toggle switches to render. */
+  readonly toggles?: readonly DevToggle[];
+};
 
-  const { actions = [], toggles = [] }: Props = $props();
+const { actions = [], toggles = [] }: Props = $props();
 
-  // ── State ─────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────
 
-  let collapsed = $state(false);
+let collapsed = $state(false);
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

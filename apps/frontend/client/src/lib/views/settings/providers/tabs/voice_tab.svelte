@@ -1,14 +1,14 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/voice_tab.svelte -->
 <script lang="ts">
-  import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
+import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  const voiceConfig = $derived(viewModel.config.voice);
+const voiceConfig = $derived(viewModel.config.voice);
 </script>
 
 <div class="space-y-6">

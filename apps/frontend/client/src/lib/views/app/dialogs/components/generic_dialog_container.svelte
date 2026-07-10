@@ -1,18 +1,18 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/dialogs/components/GenericDialogContainer.svelte
-  //
-  // Shared backdrop + centered container for all dialogs.
-  // Usage:
-  //   <GenericDialogContainer onClose={() => dialogService.close()}>
-  //     <YourDialogContent />
-  //   </GenericDialogContainer>
+// apps/frontend/client/src/lib/views/app/dialogs/components/GenericDialogContainer.svelte
+//
+// Shared backdrop + centered container for all dialogs.
+// Usage:
+//   <GenericDialogContainer onClose={() => dialogService.close()}>
+//     <YourDialogContent />
+//   </GenericDialogContainer>
 
-  type Props = {
-    onClose: () => void;
-    children: import('svelte').Snippet;
-  };
+type Props = {
+  onClose: () => void;
+  children: import('svelte').Snippet;
+};
 
-  let { onClose, children }: Props = $props();
+let { onClose, children }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

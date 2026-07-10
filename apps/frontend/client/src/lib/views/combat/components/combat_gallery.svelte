@@ -1,21 +1,21 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/combat_gallery.svelte
-  //
-  // Encounter gallery — masonry grid of all AI-generated images produced
-  // during the current combat encounter. Replaces the single-image preview
-  // in the Gallery tab when the sidebar toggles from Log to Gallery.
-  //
-  // Contract: C-165 Combat Inline Images & Gallery
+// apps/frontend/client/src/lib/views/combat/components/combat_gallery.svelte
+//
+// Encounter gallery — masonry grid of all AI-generated images produced
+// during the current combat encounter. Replaces the single-image preview
+// in the Gallery tab when the sidebar toggles from Log to Gallery.
+//
+// Contract: C-165 Combat Inline Images & Gallery
 
-  type Props = {
-    /** All generated image URLs for this encounter (most recent first). */
-    images: readonly string[];
-  };
+type Props = {
+  /** All generated image URLs for this encounter (most recent first). */
+  images: readonly string[];
+};
 
-  const { images }: Props = $props();
+const { images }: Props = $props();
 
-  /** Which image is currently expanded fullscreen. */
-  let expandedUrl = $state<string | null>(null);
+/** Which image is currently expanded fullscreen. */
+let expandedUrl = $state<string | null>(null);
 </script>
 
 {#if images.length === 0}

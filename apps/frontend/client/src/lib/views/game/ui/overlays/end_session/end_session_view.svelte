@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view.svelte
-  import type { EndSessionViewModelInterface } from './end_session_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view.svelte
+import type { EndSessionViewModelInterface } from './end_session_view_model.svelte';
 
-  type Props = {
-    viewModel: EndSessionViewModelInterface;
-  };
+type Props = {
+  viewModel: EndSessionViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div

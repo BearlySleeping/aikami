@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/options/options_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { OptionsViewModelInterface } from './options_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/game/options/options_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { OptionsViewModelInterface } from './options_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: OptionsViewModelInterface;
-  };
+type Props = {
+  viewModel: OptionsViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>

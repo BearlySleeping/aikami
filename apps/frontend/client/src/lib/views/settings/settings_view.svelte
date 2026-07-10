@@ -1,33 +1,33 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/settings_view.svelte
-  //
-  // Game Options menu with two primary categories: Game (Display, Audio,
-  // Controls) and AI Engine (Text, Image, Voice). The Text sub-tab hosts the
-  // full ProvidersView for AI provider configuration.
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import SettingsAudioView from './audio/settings_audio_view.svelte';
-  import SettingsControlsView from './controls/settings_controls_view.svelte';
-  import SettingsDisplayView from './display/settings_display_view.svelte';
-  import ProvidersView from './providers/providers_view.svelte';
-  import type { SettingsViewModelInterface } from './settings_view_model.svelte';
+// apps/frontend/client/src/lib/views/settings/settings_view.svelte
+//
+// Game Options menu with two primary categories: Game (Display, Audio,
+// Controls) and AI Engine (Text, Image, Voice). The Text sub-tab hosts the
+// full ProvidersView for AI provider configuration.
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import SettingsAudioView from './audio/settings_audio_view.svelte';
+import SettingsControlsView from './controls/settings_controls_view.svelte';
+import SettingsDisplayView from './display/settings_display_view.svelte';
+import ProvidersView from './providers/providers_view.svelte';
+import type { SettingsViewModelInterface } from './settings_view_model.svelte';
 
-  type Props = {
-    viewModel: SettingsViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: SettingsViewModelInterface;
+};
+const { viewModel }: Props = $props();
 
-  // ── Static lookup tables ──────────────────────────────────────────────
+// ── Static lookup tables ──────────────────────────────────────────────
 
-  const CATEGORIES = [
-    { id: 'game' as const, label: 'Game' },
-    { id: 'ai_engine' as const, label: 'AI Engine' },
-  ];
+const CATEGORIES = [
+  { id: 'game' as const, label: 'Game' },
+  { id: 'ai_engine' as const, label: 'AI Engine' },
+];
 
-  const GAME_SUB_TABS = [
-    { id: 'display' as const, label: 'Display' },
-    { id: 'audio' as const, label: 'Audio' },
-    { id: 'controls' as const, label: 'Controls' },
-  ];
+const GAME_SUB_TABS = [
+  { id: 'display' as const, label: 'Display' },
+  { id: 'audio' as const, label: 'Audio' },
+  { id: 'controls' as const, label: 'Controls' },
+];
 </script>
 
 <BaseViewModelContainer {viewModel} class="min-h-screen bg-base-200">

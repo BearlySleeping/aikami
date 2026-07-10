@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/menu/menu_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { MenuViewModelInterface } from './menu_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/game/menu/menu_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { MenuViewModelInterface } from './menu_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: MenuViewModelInterface;
-  };
+type Props = {
+  viewModel: MenuViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true} class="relative">

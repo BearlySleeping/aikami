@@ -1,27 +1,27 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/agent/agent_thought_bubble.svelte
-  import type { ThoughtBubble } from '$types/agent_types';
+// apps/frontend/client/src/lib/components/agent/agent_thought_bubble.svelte
+import type { ThoughtBubble } from '$types/agent_types';
 
-  type Props = {
-    bubble: ThoughtBubble;
-  };
+type Props = {
+  bubble: ThoughtBubble;
+};
 
-  const { bubble }: Props = $props();
+const { bubble }: Props = $props();
 
-  const phaseClass = (() => {
-    if (bubble.phase === 'pre') {
-      return 'badge-info';
-    }
-    if (bubble.phase === 'post') {
-      return 'badge-accent';
-    }
-    return 'badge-ghost';
-  })();
+const phaseClass = (() => {
+  if (bubble.phase === 'pre') {
+    return 'badge-info';
+  }
+  if (bubble.phase === 'post') {
+    return 'badge-accent';
+  }
+  return 'badge-ghost';
+})();
 
-  const formattedTime = (() => {
-    const d = new Date(bubble.timestamp);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-  })();
+const formattedTime = (() => {
+  const d = new Date(bubble.timestamp);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+})();
 </script>
 
 <div class="chat chat-start">

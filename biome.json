@@ -46,9 +46,7 @@
         "useFilenamingConvention": {
           "level": "error",
           "options": {
-            "filenameCases": [
-              "snake_case"
-            ]
+            "filenameCases": ["snake_case"]
           }
         },
         "useNumberNamespace": "error",
@@ -85,7 +83,6 @@
               "@aikami/frontend-services": "Use @aikami/frontend/services instead",
               "@aikami/frontend-utils": "Use @aikami/frontend/utils instead",
               "@aikami/frontend-components": "Use @aikami/frontend/components instead"
-
             }
           }
         }
@@ -118,18 +115,13 @@
       "attributePosition": "auto",
       "operatorLinebreak": "after"
     },
-    "globals": [
-      "Bun",
-      "process",
-      "fetch",
-      "prompt"
-    ]
+    "globals": ["Bun", "process", "fetch", "prompt"]
   },
   "html": {
     "experimentalFullSupportEnabled": true,
     "formatter": {
       "enabled": true,
-      "indentScriptAndStyle": true
+      "indentScriptAndStyle": false
     }
   },
   "css": {
@@ -139,9 +131,7 @@
   },
   "overrides": [
     {
-      "includes": [
-        "**/*.d.ts"
-      ],
+      "includes": ["**/*.d.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -152,11 +142,7 @@
       }
     },
     {
-      "includes": [
-        "apps/e2e/**",
-        "**/scripts/**",
-        ".pi/**"
-      ],
+      "includes": ["apps/e2e/**", "**/scripts/**", ".pi/**"],
       "linter": {
         "rules": {
           "suspicious": {

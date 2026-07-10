@@ -1,24 +1,18 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/DiceRollPanel.svelte
-  type Props = {
-    isOpen?: boolean;
-    onRollPerception?: () => void;
-    onRollPersuasion?: () => void;
-    history?: Array<{ type: string; roll: number; total: number; timestamp: Date }>;
-    onClose?: () => void;
-  };
+// apps/frontend/client/src/lib/components/chat/DiceRollPanel.svelte
+type Props = {
+  isOpen?: boolean;
+  onRollPerception?: () => void;
+  onRollPersuasion?: () => void;
+  history?: Array<{ type: string; roll: number; total: number; timestamp: Date }>;
+  onClose?: () => void;
+};
 
-  let {
-    isOpen = false,
-    onRollPerception,
-    onRollPersuasion,
-    history = [],
-    onClose,
-  }: Props = $props();
+let { isOpen = false, onRollPerception, onRollPersuasion, history = [], onClose }: Props = $props();
 
-  function formatTime(date: Date): string {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 </script>
 
 {#if isOpen}

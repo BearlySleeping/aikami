@@ -1,41 +1,41 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
-  //
-  // Left pane of the split-screen combat layout. Rendered by game_view.svelte
-  // when gameStateService.currentMode === 'COMBAT'.
-  //
-  // Contract: C-164 Combat Split-Screen Layout
-  //
-  // Layout (flex column, full height of the 35vw grid column):
-  //   Top: Compact HP bars (player + enemy side-by-side)
-  //   Middle: Tab row (Log | Gallery), then scrollable combat log (flex-grow: 1)
-  //   Bottom: Fixed action bar (Attack / Defend / Flee + custom action input)
-  // ---------------------------------------------------------------------------
+// apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
+//
+// Left pane of the split-screen combat layout. Rendered by game_view.svelte
+// when gameStateService.currentMode === 'COMBAT'.
+//
+// Contract: C-164 Combat Split-Screen Layout
+//
+// Layout (flex column, full height of the 35vw grid column):
+//   Top: Compact HP bars (player + enemy side-by-side)
+//   Middle: Tab row (Log | Gallery), then scrollable combat log (flex-grow: 1)
+//   Bottom: Fixed action bar (Attack / Defend / Flee + custom action input)
+// ---------------------------------------------------------------------------
 
-  import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-  import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
-  import CombatDiceUi from './components/combat_dice_ui.svelte';
-  import CombatGallery from './components/combat_gallery.svelte';
-  import CombatInlineImage from './components/combat_inline_image.svelte';
-  import DiceQuickMenu from './components/dice_quick_menu.svelte';
-  import EnrichedLogEntry from './components/enriched_log_entry.svelte';
-  import InitiativeTracker from './components/initiative_tracker.svelte';
-  import { parseDamageFromLog, parseDiceFromLog } from './utils/dice_notation.ts';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
+import CombatDiceUi from './components/combat_dice_ui.svelte';
+import CombatGallery from './components/combat_gallery.svelte';
+import CombatInlineImage from './components/combat_inline_image.svelte';
+import DiceQuickMenu from './components/dice_quick_menu.svelte';
+import EnrichedLogEntry from './components/enriched_log_entry.svelte';
+import InitiativeTracker from './components/initiative_tracker.svelte';
+import { parseDamageFromLog, parseDiceFromLog } from './utils/dice_notation.ts';
 
-  type Props = {
-    viewModel: CombatViewModelInterface;
-  };
+type Props = {
+  viewModel: CombatViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  /** Temporary input value for the freeform custom action text field. */
-  let customActionInput = $state('');
+/** Temporary input value for the freeform custom action text field. */
+let customActionInput = $state('');
 
-  /** Track which tab is active: 'log' or 'gallery'. */
-  let activeTab = $state<'log' | 'gallery'>('log');
+/** Track which tab is active: 'log' or 'gallery'. */
+let activeTab = $state<'log' | 'gallery'>('log');
 
-  /** C-234: Whether the initiative tracker is collapsed. */
-  let initiativeCollapsed = $state(false);
+/** C-234: Whether the initiative tracker is collapsed. */
+let initiativeCollapsed = $state(false);
 </script>
 
 <div class="h-full flex flex-col bg-base-100 border-r border-base-300">

@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/audio/audio_view.dev.svelte
-  //
-  // Dev sandbox view for testing BGM transitions and SFX playback.
-  // Buttons trigger AudioService methods via the DevAudioViewModel.
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { DevAudioViewModelInterface } from './audio_view_model.dev.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/audio/audio_view.dev.svelte
+//
+// Dev sandbox view for testing BGM transitions and SFX playback.
+// Buttons trigger AudioService methods via the DevAudioViewModel.
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { DevAudioViewModelInterface } from './audio_view_model.dev.svelte.ts';
 
-  type Props = {
-    viewModel: DevAudioViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: DevAudioViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="min-h-screen bg-base-200">

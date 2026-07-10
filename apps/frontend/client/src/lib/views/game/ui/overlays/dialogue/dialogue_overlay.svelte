@@ -1,20 +1,20 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte
-  import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
-  import GameDice from '$lib/components/game/game_dice.svelte';
-  import DiceQuickMenu from '$views/combat/components/dice_quick_menu.svelte';
-  import type { QueuedRoll } from '$views/combat/types/combat_enhancements.ts';
-  import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte
+import AutoResizeTextarea from '$lib/components/chat/auto_resize_textarea.svelte';
+import GameDice from '$lib/components/game/game_dice.svelte';
+import DiceQuickMenu from '$views/combat/components/dice_quick_menu.svelte';
+import type { QueuedRoll } from '$views/combat/types/combat_enhancements.ts';
+import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
 
-  // C-234: Quick-dice popover state
-  let showDicePopover = $state(false);
-  let queuedDice: QueuedRoll[] = $state([]);
+// C-234: Quick-dice popover state
+let showDicePopover = $state(false);
+let queuedDice: QueuedRoll[] = $state([]);
 
-  type Props = {
-    viewModel: DialogueOverlayViewModelInterface;
-  };
+type Props = {
+  viewModel: DialogueOverlayViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->

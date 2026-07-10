@@ -1,24 +1,18 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/agent/agent_status_badge.svelte
-  import type { AgentRunResult } from '$types/agent_types';
+// apps/frontend/client/src/lib/components/agent/agent_status_badge.svelte
+import type { AgentRunResult } from '$types/agent_types';
 
-  type Props = {
-    result: AgentRunResult;
-  };
+type Props = {
+  result: AgentRunResult;
+};
 
-  const { result }: Props = $props();
+const { result }: Props = $props();
 
-  const statusClass = result.success ? 'badge-success' : 'badge-error';
-  const statusLabel = result.success ? 'OK' : 'FAIL';
-  const phaseLabel = (() => {
-    if (result.phase === 'pre') {
-      return 'PRE';
-    }
-    if (result.phase === 'post') {
-      return 'POST';
-    }
-    return result.phase.toUpperCase();
-  })();
+const statusClass = $derived(result.success ? 'badge-success' : 'badge-error');
+const statusLabel = $derived(result.success ? 'OK' : 'FAIL');
+const phaseLabel = $derived(
+  result.phase === 'pre' ? 'PRE' : result.phase === 'post' ? 'POST' : result.phase.toUpperCase(),
+);
 </script>
 
 <div class="flex items-center justify-between gap-2 p-2 bg-base-100 rounded">

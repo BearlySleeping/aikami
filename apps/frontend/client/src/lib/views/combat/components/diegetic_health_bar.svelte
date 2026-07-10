@@ -1,38 +1,38 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/diegetic_health_bar.svelte
-  //
-  // Floating health bar rendered in the DOM layer on top of the PixiJS canvas.
-  // Positioned absolutely using screen-space coordinates projected from the
-  // engine via COMBAT_STATE_UPDATE.entityScreenX / entityScreenY.
-  //
-  // Contract: C-166 Diegetic Combat Stage — AC-2
+// apps/frontend/client/src/lib/views/combat/components/diegetic_health_bar.svelte
+//
+// Floating health bar rendered in the DOM layer on top of the PixiJS canvas.
+// Positioned absolutely using screen-space coordinates projected from the
+// engine via COMBAT_STATE_UPDATE.entityScreenX / entityScreenY.
+//
+// Contract: C-166 Diegetic Combat Stage — AC-2
 
-  type Props = {
-    /** Entity ID for keying. */
-    entityId: number;
-    /** Current HP. */
-    hp: number;
-    /** Maximum HP. */
-    maxHp: number;
-    /** Screen-space X coordinate (CSS pixels). */
-    screenX: number;
-    /** Screen-space Y coordinate (CSS pixels). */
-    screenY: number;
-    /** Whether this combatant currently has the active turn. */
-    isActiveTurn?: boolean;
-    /** Display label (e.g. "Player" or enemy name). */
-    label?: string;
-  };
+type Props = {
+  /** Entity ID for keying. */
+  entityId: number;
+  /** Current HP. */
+  hp: number;
+  /** Maximum HP. */
+  maxHp: number;
+  /** Screen-space X coordinate (CSS pixels). */
+  screenX: number;
+  /** Screen-space Y coordinate (CSS pixels). */
+  screenY: number;
+  /** Whether this combatant currently has the active turn. */
+  isActiveTurn?: boolean;
+  /** Display label (e.g. "Player" or enemy name). */
+  label?: string;
+};
 
-  const { entityId, hp, maxHp, screenX, screenY, isActiveTurn = false, label }: Props = $props();
+const { entityId, hp, maxHp, screenX, screenY, isActiveTurn = false, label }: Props = $props();
 
-  /** HP percentage for the progress bar. */
-  const hpPercent = $derived(maxHp > 0 ? Math.max(0, (hp / maxHp) * 100) : 0);
+/** HP percentage for the progress bar. */
+const hpPercent = $derived(maxHp > 0 ? Math.max(0, (hp / maxHp) * 100) : 0);
 
-  /** HP bar color based on remaining health. */
-  const barColor = $derived(
-    hpPercent > 50 ? 'bg-success' : hpPercent > 25 ? 'bg-warning' : 'bg-error',
-  );
+/** HP bar color based on remaining health. */
+const barColor = $derived(
+  hpPercent > 50 ? 'bg-success' : hpPercent > 25 ? 'bg-warning' : 'bg-error',
+);
 </script>
 
 <div

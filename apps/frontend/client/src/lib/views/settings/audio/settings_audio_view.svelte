@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/audio/settings_audio_view.svelte
-  //
-  // Settings > Game > Audio sub-tab. Volume sliders wired to AudioService
-  // plus optional test-playback buttons.
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { SettingsAudioViewModelInterface } from './settings_audio_view_model.svelte';
+// apps/frontend/client/src/lib/views/settings/audio/settings_audio_view.svelte
+//
+// Settings > Game > Audio sub-tab. Volume sliders wired to AudioService
+// plus optional test-playback buttons.
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { SettingsAudioViewModelInterface } from './settings_audio_view_model.svelte';
 
-  type Props = {
-    viewModel: SettingsAudioViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: SettingsAudioViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

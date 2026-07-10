@@ -1,22 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import ConnectionsListView from '$views/settings/connection/connections_list_view.svelte';
-  import type { ProvidersViewModelInterface } from './providers_view_model.svelte';
-  import AdvancedTab from './tabs/advanced_tab.svelte';
-  import ImageTab from './tabs/image_tab.svelte';
-  import TextTab from './tabs/text_tab.svelte';
-  import { getTextTabViewModel } from './tabs/text_tab_view_model.svelte';
-  import VoiceTab from './tabs/voice_tab.svelte';
+// apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import ConnectionsListView from '$views/settings/connection/connections_list_view.svelte';
+import type { ProvidersViewModelInterface } from './providers_view_model.svelte';
+import AdvancedTab from './tabs/advanced_tab.svelte';
+import ImageTab from './tabs/image_tab.svelte';
+import TextTab from './tabs/text_tab.svelte';
+import { getTextTabViewModel } from './tabs/text_tab_view_model.svelte';
+import VoiceTab from './tabs/voice_tab.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  /** Per-tab ViewModel for text configuration. */
-  const textTabViewModel = getTextTabViewModel({ className: 'TextTabViewModel' });
+/** Per-tab ViewModel for text configuration. */
+const textTabViewModel = getTextTabViewModel({ className: 'TextTabViewModel' });
 </script>
 
 <svelte:head>

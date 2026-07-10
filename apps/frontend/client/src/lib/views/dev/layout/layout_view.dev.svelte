@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/layout/layout_view.dev.svelte
-  import type { Snippet } from 'svelte';
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/layout/layout_view.dev.svelte
+import type { Snippet } from 'svelte';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
 
-  type Props = {
-    viewModel: DevViewModelInterface;
-    children: Snippet;
-  };
+type Props = {
+  viewModel: DevViewModelInterface;
+  children: Snippet;
+};
 
-  let { viewModel, children }: Props = $props();
+let { viewModel, children }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="drawer lg:drawer-open">

@@ -1,18 +1,18 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/expression/expression_view.svelte
-  //
-  // Dev sandbox view for expression detection and LPC overlay preview.
-  //
-  // Contract: C-239 Expression Emotion System
+// apps/frontend/client/src/lib/views/dev/expression/expression_view.svelte
+//
+// Dev sandbox view for expression detection and LPC overlay preview.
+//
+// Contract: C-239 Expression Emotion System
 
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { ExpressionDevViewModelInterface } from './expression_view_model.svelte.ts';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { ExpressionDevViewModelInterface } from './expression_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: ExpressionDevViewModelInterface;
-  };
+type Props = {
+  viewModel: ExpressionDevViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

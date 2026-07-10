@@ -1,8 +1,8 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/connections/+page.svelte
-  import ConnectionsListView from '$views/settings/connection/connections_list_view.svelte';
+// apps/frontend/client/src/routes/(dev)/dev/connections/+page.svelte
+import ConnectionsListView from '$views/settings/connection/connections_list_view.svelte';
 
-  // The ConnectionsListView uses its own ViewModel with default factory
+// The ConnectionsListView uses its own ViewModel with default factory
 </script>
 
 <svelte:head>

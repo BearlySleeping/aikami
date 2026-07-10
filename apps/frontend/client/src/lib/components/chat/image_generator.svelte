@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/ImageGenerator.svelte
-  type Props = {
-    isGenerating?: boolean;
-    lastImageUrl?: string | null;
-    isDemo?: boolean;
-    onGenerate?: (prompt: string) => void;
-  };
+// apps/frontend/client/src/lib/components/chat/ImageGenerator.svelte
+type Props = {
+  isGenerating?: boolean;
+  lastImageUrl?: string | null;
+  isDemo?: boolean;
+  onGenerate?: (prompt: string) => void;
+};
 
-  let { isGenerating = false, lastImageUrl = null, isDemo = false, onGenerate }: Props = $props();
+let { isGenerating = false, lastImageUrl = null, isDemo = false, onGenerate }: Props = $props();
 
-  let prompt = $state('');
+let prompt = $state('');
 </script>
 
 <div class="card bg-base-200 shadow-xl">

@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/gm/push_story_button_view.svelte
-  import type { PushStoryButtonViewModelInterface } from './push_story_button_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/gm/push_story_button_view.svelte
+import type { PushStoryButtonViewModelInterface } from './push_story_button_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: PushStoryButtonViewModelInterface;
-  };
+type Props = {
+  viewModel: PushStoryButtonViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <button

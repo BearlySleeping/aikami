@@ -1,30 +1,30 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/enriched_log_entry.svelte
-  // C-234 Combat Enhancement: Dice & Initiative — enriched combat log rendering
-  //
-  // Renders a single combat log entry with:
-  // - Bolded dice totals
-  // - Advantage/disadvantage icons
-  // - Damage type color coding
-  // - Italicized target names
-  // - Critical hit/miss highlighting
-  //
-  // Pure component — zero business logic. All state via $props().
+// apps/frontend/client/src/lib/views/combat/components/enriched_log_entry.svelte
+// C-234 Combat Enhancement: Dice & Initiative — enriched combat log rendering
+//
+// Renders a single combat log entry with:
+// - Bolded dice totals
+// - Advantage/disadvantage icons
+// - Damage type color coding
+// - Italicized target names
+// - Critical hit/miss highlighting
+//
+// Pure component — zero business logic. All state via $props().
 
-  import type { EnrichedCombatLogEntry } from '../types/combat_enhancements.ts';
-  import { getDamageTypeColor } from '../types/combat_enhancements.ts';
+import type { EnrichedCombatLogEntry } from '../types/combat_enhancements.ts';
+import { getDamageTypeColor } from '../types/combat_enhancements.ts';
 
-  type Props = {
-    /** The enriched log entry to render. */
-    entry: EnrichedCombatLogEntry;
-  };
+type Props = {
+  /** The enriched log entry to render. */
+  entry: EnrichedCombatLogEntry;
+};
 
-  const { entry }: Props = $props();
+const { entry }: Props = $props();
 
-  /** Damage type color class, if applicable. */
-  const damageColorClass = $derived(
-    entry.damageType ? getDamageTypeColor(entry.damageType) : undefined,
-  );
+/** Damage type color class, if applicable. */
+const damageColorClass = $derived(
+  entry.damageType ? getDamageTypeColor(entry.damageType) : undefined,
+);
 </script>
 
 <div class="enriched-log-entry text-xs leading-relaxed text-base-content/70">

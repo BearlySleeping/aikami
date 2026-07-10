@@ -1,20 +1,20 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/emotion_tab.svelte -->
 <script lang="ts">
-  import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
+import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  const emotionConfig = $derived(viewModel.emotion);
+const emotionConfig = $derived(viewModel.emotion);
 
-  const methodLabels: Record<string, string> = {
-    submodel: 'LLM submodel – uses a dedicated reasoning pass to extract emotion labels from text.',
-    embedding:
-      'Embedding similarity – uses MiniLM or equivalent embeddings to match text to emotion vectors.',
-  };
+const methodLabels: Record<string, string> = {
+  submodel: 'LLM submodel – uses a dedicated reasoning pass to extract emotion labels from text.',
+  embedding:
+    'Embedding similarity – uses MiniLM or equivalent embeddings to match text to emotion vectors.',
+};
 </script>
 
 <div class="space-y-6">

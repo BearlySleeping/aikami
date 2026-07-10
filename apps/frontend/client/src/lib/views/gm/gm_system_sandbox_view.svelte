@@ -1,16 +1,16 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/gm/gm_system_sandbox_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import AddressModeToggleView from './address_mode_toggle_view.svelte';
-  import type { GmSystemSandboxViewModelInterface } from './gm_system_sandbox_view_model.svelte.ts';
-  import PushStoryButtonView from './push_story_button_view.svelte';
-  import SessionSummaryPanelView from './session_summary_panel_view.svelte';
+// apps/frontend/client/src/lib/views/gm/gm_system_sandbox_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import AddressModeToggleView from './address_mode_toggle_view.svelte';
+import type { GmSystemSandboxViewModelInterface } from './gm_system_sandbox_view_model.svelte.ts';
+import PushStoryButtonView from './push_story_button_view.svelte';
+import SessionSummaryPanelView from './session_summary_panel_view.svelte';
 
-  type Props = {
-    viewModel: GmSystemSandboxViewModelInterface;
-  };
+type Props = {
+  viewModel: GmSystemSandboxViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

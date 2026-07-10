@@ -1,30 +1,30 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/dialogs/app_dialogs_view.svelte
-  //
-  // Renders global dialogs, snackbar, and loading overlay using
-  // DaisyUI's native <dialog> element with showModal()/close().
+// apps/frontend/client/src/lib/views/app/dialogs/app_dialogs_view.svelte
+//
+// Renders global dialogs, snackbar, and loading overlay using
+// DaisyUI's native <dialog> element with showModal()/close().
 
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import { getAppDialogsViewModel } from './app_dialogs_view_model.svelte.ts';
-  import AppLoading from './components/app_loading.svelte';
-  import AppSnackbar from './components/app_snackbar.svelte';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { getAppDialogsViewModel } from './app_dialogs_view_model.svelte.ts';
+import AppLoading from './components/app_loading.svelte';
+import AppSnackbar from './components/app_snackbar.svelte';
 
-  const viewModel = getAppDialogsViewModel({ className: 'AppDialogsView' });
+const viewModel = getAppDialogsViewModel({ className: 'AppDialogsView' });
 
-  let dialogElement = $state<HTMLDialogElement>();
+let dialogElement = $state<HTMLDialogElement>();
 
-  /** When a dialog is active, show the native modal. When cleared, close it. */
-  $effect(() => {
-    const el = dialogElement;
-    if (!el) {
-      return;
-    }
-    if (viewModel.currentDialog) {
-      el.showModal();
-    } else {
-      el.close();
-    }
-  });
+/** When a dialog is active, show the native modal. When cleared, close it. */
+$effect(() => {
+  const el = dialogElement;
+  if (!el) {
+    return;
+  }
+  if (viewModel.currentDialog) {
+    el.showModal();
+  } else {
+    el.close();
+  }
+});
 </script>
 
 <BaseViewModelContainer {viewModel}>

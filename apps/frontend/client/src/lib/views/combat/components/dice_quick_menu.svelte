@@ -1,88 +1,84 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/dice_quick_menu.svelte
-  // C-234 Combat Enhancement: Dice & Initiative — multi-dice quick menu
-  //
-  // Reusable component: 8-preset grid (d4–d100, 2d6) + custom notation input
-  // + queued badges + Roll All button.
-  //
-  // Pure component — zero business logic. All state and actions provided
-  // via $props().
+// apps/frontend/client/src/lib/views/combat/components/dice_quick_menu.svelte
+// C-234 Combat Enhancement: Dice & Initiative — multi-dice quick menu
+//
+// Reusable component: 8-preset grid (d4–d100, 2d6) + custom notation input
+// + queued badges + Roll All button.
+//
+// Pure component — zero business logic. All state and actions provided
+// via $props().
 
-  import {
-    DICE_PRESETS,
-    type DiceNotation,
-    type QueuedRoll,
-  } from '../types/combat_enhancements.ts';
+import { DICE_PRESETS, type DiceNotation, type QueuedRoll } from '../types/combat_enhancements.ts';
 
-  type Props = {
-    /** Currently queued rolls (shown as badges below the grid). */
-    queuedRolls: QueuedRoll[];
-    /** Callback when a preset or custom dice is queued. */
-    onQueueRoll: (options: { notation: DiceNotation; label: string }) => void;
-    /** Callback to remove a specific queued roll. */
-    onRemoveQueuedRoll: (rollId: string) => void;
-    /** Callback to resolve (roll) all queued dice. */
-    onRollAll: () => void;
-    /** Whether the roll-all button should be disabled. */
-    isRolling: boolean;
-  };
+type Props = {
+  /** Currently queued rolls (shown as badges below the grid). */
+  queuedRolls: QueuedRoll[];
+  /** Callback when a preset or custom dice is queued. */
+  onQueueRoll: (options: { notation: DiceNotation; label: string }) => void;
+  /** Callback to remove a specific queued roll. */
+  onRemoveQueuedRoll: (rollId: string) => void;
+  /** Callback to resolve (roll) all queued dice. */
+  onRollAll: () => void;
+  /** Whether the roll-all button should be disabled. */
+  isRolling: boolean;
+};
 
-  const {
-    queuedRolls,
-    onQueueRoll,
-    onRemoveQueuedRoll,
-    onRollAll,
-    isRolling = false,
-  }: Props = $props();
+const {
+  queuedRolls,
+  onQueueRoll,
+  onRemoveQueuedRoll,
+  onRollAll,
+  isRolling = false,
+}: Props = $props();
 
-  /** Custom dice notation input (e.g. "3d8", "1d20"). */
-  let customInput = $state('');
+/** Custom dice notation input (e.g. "3d8", "1d20"). */
+let customInput = $state('');
 
-  /** Validation error for custom input. */
-  let customError = $state('');
+/** Validation error for custom input. */
+let customError = $state('');
 
-  /**
-   * Queue a custom dice roll from the text input.
-   * Validates the notation before queueing.
-   */
-  const handleCustomQueue = (): void => {
-    const trimmed = customInput.trim();
-    if (trimmed.length === 0) {
-      return;
-    }
+/**
+ * Queue a custom dice roll from the text input.
+ * Validates the notation before queueing.
+ */
+const handleCustomQueue = (): void => {
+  const trimmed = customInput.trim();
+  if (trimmed.length === 0) {
+    return;
+  }
 
-    // Parse notation using convention — inline parse for component purity
-    const match = trimmed.toLowerCase().match(/^(\d+)?d(\d+)$/);
-    if (!match) {
-      customError = 'Use format: 2d6, d20, 1d100';
-      return;
-    }
+  // Parse notation using convention — inline parse for component purity
+  const match = trimmed.toLowerCase().match(/^(\d+)?d(\d+)$/);
+  if (!match) {
+    customError = 'Use format: 2d6, d20, 1d100';
+    return;
+  }
 
-    const count = match[1] ? Number.parseInt(match[1], 10) : 1;
-    const sides = Number.parseInt(match[2], 10);
+  const count = match[1] ? Number.parseInt(match[1], 10) : 1;
+  const sides = Number.parseInt(match[2], 10);
 
-    if (count < 1 || sides < 1) {
-      customError = 'Count and sides must be ≥ 1';
-      return;
-    }
+  if (count < 1 || sides < 1) {
+    customError = 'Count and sides must be ≥ 1';
+    return;
+  }
 
-    const label = count === 1 ? `d${sides}` : `${count}d${sides}`;
-    const notation: DiceNotation = { count, sides, label };
+  const label = count === 1 ? `d${sides}` : `${count}d${sides}`;
+  const notation: DiceNotation = { count, sides, label };
 
-    customError = '';
-    customInput = '';
-    onQueueRoll({ notation, label });
-  };
+  customError = '';
+  customInput = '';
+  onQueueRoll({ notation, label });
+};
 
-  /**
-   * Handle keydown on the custom input — Enter to queue.
-   */
-  const handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      handleCustomQueue();
-    }
-  };
+/**
+ * Handle keydown on the custom input — Enter to queue.
+ */
+const handleKeyDown = (event: KeyboardEvent): void => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    handleCustomQueue();
+  }
+};
 </script>
 
 <div class="dice-quick-menu rounded-lg border border-base-300 bg-base-200 p-3">

@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view.svelte
-  import type { CharacterDashboardViewModelInterface } from './character_dashboard_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view.svelte
+import type { CharacterDashboardViewModelInterface } from './character_dashboard_view_model.svelte';
 
-  type Props = {
-    viewModel: CharacterDashboardViewModelInterface;
-  };
+type Props = {
+  viewModel: CharacterDashboardViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <!-- biome-ignore lint/a11y/useSemanticElements: fullscreen backdrop must be div -->
@@ -18,6 +18,8 @@
   onclick={() => viewModel.closeDashboard()}
   onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeDashboard()}
 >
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- biome-ignore lint/a11y/noStaticElementInteractions: prevent backdrop close when clicking card -->
   <!-- biome-ignore lint/a11y/useKeyWithClickEvents: card stops propagation only -->
   <div

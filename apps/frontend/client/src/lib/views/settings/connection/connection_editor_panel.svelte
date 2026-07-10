@@ -1,19 +1,19 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/connection/connection_editor_panel.svelte
-  import {
-    type ConnectionManagerViewModelInterface,
-    getConnectionManagerViewModel,
-  } from './connection_manager_view_model.svelte';
+// apps/frontend/client/src/lib/views/settings/connection/connection_editor_panel.svelte
+import {
+  type ConnectionManagerViewModelInterface,
+  getConnectionManagerViewModel,
+} from './connection_manager_view_model.svelte';
 
-  type Props = {
-    viewModel?: ConnectionManagerViewModelInterface;
-  };
+type Props = {
+  viewModel?: ConnectionManagerViewModelInterface;
+};
 
-  const {
-    viewModel = getConnectionManagerViewModel({
-      className: 'ConnectionManagerViewModel',
-    }),
-  }: Props = $props();
+const {
+  viewModel = getConnectionManagerViewModel({
+    className: 'ConnectionManagerViewModel',
+  }),
+}: Props = $props();
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

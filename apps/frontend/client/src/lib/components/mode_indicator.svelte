@@ -1,19 +1,19 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/mode_indicator.svelte
-  import { gameStateService } from '$services';
+// apps/frontend/client/src/lib/components/mode_indicator.svelte
+import { gameStateService } from '$services';
 
-  /**
-   * Color classes keyed by game mode — derived reactively via $derived.
-   *
-   * EXPLORE → green (success), DIALOGUE → blue (info), MENU → gray (neutral).
-   */
-  const badgeColor = $derived(
-    gameStateService.currentMode === 'EXPLORE'
-      ? 'badge-success'
-      : gameStateService.currentMode === 'DIALOGUE'
-        ? 'badge-info'
-        : 'badge-ghost',
-  );
+/**
+ * Color classes keyed by game mode — derived reactively via $derived.
+ *
+ * EXPLORE → green (success), DIALOGUE → blue (info), MENU → gray (neutral).
+ */
+const badgeColor = $derived(
+  gameStateService.currentMode === 'EXPLORE'
+    ? 'badge-success'
+    : gameStateService.currentMode === 'DIALOGUE'
+      ? 'badge-info'
+      : 'badge-ghost',
+);
 </script>
 
 <!--

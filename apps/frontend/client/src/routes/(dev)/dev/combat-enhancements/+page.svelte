@@ -1,160 +1,160 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/combat-enhancements/+page.svelte
-  // C-234 Dev Sandbox — Combat Enhancements (Dice & Initiative)
-  //
-  // Standalone sandbox for testing the 5 new UI features without the
-  // full combat split-screen layout:
-  // 1. Multi-dice quick menu
-  // 2. Initiative tracker
-  // 3. Turn tracking header
-  // 4. Enriched combat log
-  // 5. Quick-dice in chat (tested via simulated dialogue)
-  //
-  // Uses a local mock state — no bridge, no engine.
+// apps/frontend/client/src/routes/(dev)/dev/combat-enhancements/+page.svelte
+// C-234 Dev Sandbox — Combat Enhancements (Dice & Initiative)
+//
+// Standalone sandbox for testing the 5 new UI features without the
+// full combat split-screen layout:
+// 1. Multi-dice quick menu
+// 2. Initiative tracker
+// 3. Turn tracking header
+// 4. Enriched combat log
+// 5. Quick-dice in chat (tested via simulated dialogue)
+//
+// Uses a local mock state — no bridge, no engine.
 
-  import { onMount } from 'svelte';
-  import DiceQuickMenu from '$views/combat/components/dice_quick_menu.svelte';
-  import EnrichedLogEntry from '$views/combat/components/enriched_log_entry.svelte';
-  import InitiativeTracker from '$views/combat/components/initiative_tracker.svelte';
-  import TurnTrackerHeader from '$views/combat/components/turn_tracker_header.svelte';
-  import type {
-    DiceNotation,
-    EnrichedCombatLogEntry,
-    InitiativeEntry,
-    QueuedRoll,
-    TurnState,
-  } from '$views/combat/types/combat_enhancements.ts';
-  import { parseDamageFromLog, parseDiceFromLog } from '$views/combat/utils/dice_notation.ts';
+import { onMount } from 'svelte';
+import DiceQuickMenu from '$views/combat/components/dice_quick_menu.svelte';
+import EnrichedLogEntry from '$views/combat/components/enriched_log_entry.svelte';
+import InitiativeTracker from '$views/combat/components/initiative_tracker.svelte';
+import TurnTrackerHeader from '$views/combat/components/turn_tracker_header.svelte';
+import type {
+  DiceNotation,
+  EnrichedCombatLogEntry,
+  InitiativeEntry,
+  QueuedRoll,
+  TurnState,
+} from '$views/combat/types/combat_enhancements.ts';
+import { parseDamageFromLog, parseDiceFromLog } from '$views/combat/utils/dice_notation.ts';
 
-  // ── Mock state ──
-  let queuedRolls: QueuedRoll[] = $state([]);
-  let isRolling = $state(false);
-  let rollCounter = 0;
+// ── Mock state ──
+let queuedRolls: QueuedRoll[] = $state([]);
+let isRolling = $state(false);
+let rollCounter = 0;
 
-  let initiativeEntries: InitiativeEntry[] = $state([
+let initiativeEntries: InitiativeEntry[] = $state([
+  {
+    entityId: 1,
+    name: 'Player',
+    initiative: 18,
+    currentHp: 75,
+    maxHp: 100,
+    isCurrentTurn: true,
+    isDefeated: false,
+  },
+  {
+    entityId: 2,
+    name: 'Goblin',
+    initiative: 14,
+    currentHp: 42,
+    maxHp: 80,
+    isCurrentTurn: false,
+    isDefeated: false,
+  },
+  {
+    entityId: 3,
+    name: 'Skeleton',
+    initiative: 10,
+    currentHp: 0,
+    maxHp: 50,
+    isCurrentTurn: false,
+    isDefeated: true,
+  },
+]);
+
+let turnState: TurnState | null = $state({
+  currentEntityId: 1,
+  currentEntityName: 'Player',
+  isPlayerTurn: true,
+  actionEconomy: { action: false, bonusAction: false, reaction: false },
+  turnNumber: 3,
+});
+
+let actionEconomy = $derived(
+  turnState?.actionEconomy ?? { action: false, bonusAction: false, reaction: false },
+);
+
+let testLogText = $state('Player rolls 18 (+5 = 23) to hit for 12 slashing damage');
+
+// ── Helpers ──
+const getEnrichedEntry = (text: string): EnrichedCombatLogEntry => {
+  const dice = parseDiceFromLog(text);
+  const damage = parseDamageFromLog(text);
+  return {
+    rawText: text,
+    isPlainText: !dice,
+    ...dice,
+    ...damage,
+  };
+};
+
+const queueRoll = (options: { notation: DiceNotation; label: string }): void => {
+  rollCounter++;
+  queuedRolls = [
+    ...queuedRolls,
     {
-      entityId: 1,
-      name: 'Player',
-      initiative: 18,
-      currentHp: 75,
-      maxHp: 100,
-      isCurrentTurn: true,
-      isDefeated: false,
+      id: `q-${rollCounter}`,
+      notation: options.notation,
+      label: options.label,
+      timestamp: Date.now(),
     },
-    {
-      entityId: 2,
-      name: 'Goblin',
-      initiative: 14,
-      currentHp: 42,
-      maxHp: 80,
-      isCurrentTurn: false,
-      isDefeated: false,
-    },
-    {
-      entityId: 3,
-      name: 'Skeleton',
-      initiative: 10,
-      currentHp: 0,
-      maxHp: 50,
-      isCurrentTurn: false,
-      isDefeated: true,
-    },
-  ]);
+  ];
+};
 
-  let turnState: TurnState | null = $state({
-    currentEntityId: 1,
-    currentEntityName: 'Player',
-    isPlayerTurn: true,
+const removeQueuedRoll = (id: string): void => {
+  queuedRolls = queuedRolls.filter((r) => r.id !== id);
+};
+
+const resolveAllRolls = (): void => {
+  if (queuedRolls.length === 0) {
+    return;
+  }
+  isRolling = true;
+  setTimeout(() => {
+    queuedRolls = [];
+    isRolling = false;
+  }, 1500);
+};
+
+const cycleTurn = (): void => {
+  if (!turnState) {
+    return;
+  }
+  const nextId = turnState.currentEntityId === 1 ? 2 : 1;
+  turnState = {
+    currentEntityId: nextId,
+    currentEntityName: nextId === 1 ? 'Player' : 'Goblin',
+    isPlayerTurn: nextId === 1,
     actionEconomy: { action: false, bonusAction: false, reaction: false },
-    turnNumber: 3,
+    turnNumber: turnState.turnNumber + 1,
+  };
+  initiativeEntries = initiativeEntries.map((e) => ({
+    ...e,
+    isCurrentTurn: e.entityId === nextId,
+  }));
+};
+
+const toggleDefeated = (): void => {
+  initiativeEntries = initiativeEntries.map((e) => {
+    if (e.entityId === 2) {
+      return { ...e, isDefeated: !e.isDefeated, currentHp: e.isDefeated ? 42 : 0 };
+    }
+    return e;
   });
+};
 
-  let actionEconomy = $derived(
-    turnState?.actionEconomy ?? { action: false, bonusAction: false, reaction: false },
-  );
-
-  let testLogText = $state('Player rolls 18 (+5 = 23) to hit for 12 slashing damage');
-
-  // ── Helpers ──
-  const getEnrichedEntry = (text: string): EnrichedCombatLogEntry => {
-    const dice = parseDiceFromLog(text);
-    const damage = parseDamageFromLog(text);
-    return {
-      rawText: text,
-      isPlainText: !dice,
-      ...dice,
-      ...damage,
-    };
+const toggleActionEconomy = (type: 'action' | 'bonusAction' | 'reaction'): void => {
+  if (!turnState) {
+    return;
+  }
+  turnState = {
+    ...turnState,
+    actionEconomy: { ...turnState.actionEconomy, [type]: !turnState.actionEconomy[type] },
   };
+};
 
-  const queueRoll = (options: { notation: DiceNotation; label: string }): void => {
-    rollCounter++;
-    queuedRolls = [
-      ...queuedRolls,
-      {
-        id: `q-${rollCounter}`,
-        notation: options.notation,
-        label: options.label,
-        timestamp: Date.now(),
-      },
-    ];
-  };
-
-  const removeQueuedRoll = (id: string): void => {
-    queuedRolls = queuedRolls.filter((r) => r.id !== id);
-  };
-
-  const resolveAllRolls = (): void => {
-    if (queuedRolls.length === 0) {
-      return;
-    }
-    isRolling = true;
-    setTimeout(() => {
-      queuedRolls = [];
-      isRolling = false;
-    }, 1500);
-  };
-
-  const cycleTurn = (): void => {
-    if (!turnState) {
-      return;
-    }
-    const nextId = turnState.currentEntityId === 1 ? 2 : 1;
-    turnState = {
-      currentEntityId: nextId,
-      currentEntityName: nextId === 1 ? 'Player' : 'Goblin',
-      isPlayerTurn: nextId === 1,
-      actionEconomy: { action: false, bonusAction: false, reaction: false },
-      turnNumber: turnState.turnNumber + 1,
-    };
-    initiativeEntries = initiativeEntries.map((e) => ({
-      ...e,
-      isCurrentTurn: e.entityId === nextId,
-    }));
-  };
-
-  const toggleDefeated = (): void => {
-    initiativeEntries = initiativeEntries.map((e) => {
-      if (e.entityId === 2) {
-        return { ...e, isDefeated: !e.isDefeated, currentHp: e.isDefeated ? 42 : 0 };
-      }
-      return e;
-    });
-  };
-
-  const toggleActionEconomy = (type: 'action' | 'bonusAction' | 'reaction'): void => {
-    if (!turnState) {
-      return;
-    }
-    turnState = {
-      ...turnState,
-      actionEconomy: { ...turnState.actionEconomy, [type]: !turnState.actionEconomy[type] },
-    };
-  };
-
-  onMount(() => {
-    // No bridge initialization needed — pure sandbox
-  });
+onMount(() => {
+  // No bridge initialization needed — pure sandbox
+});
 </script>
 
 <svelte:head>

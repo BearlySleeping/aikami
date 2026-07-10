@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/gm/address_mode_toggle_view.svelte
-  import type { AddressModeTogggleViewModelInterface } from './address_mode_toggle_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/gm/address_mode_toggle_view.svelte
+import type { AddressModeTogggleViewModelInterface } from './address_mode_toggle_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: AddressModeTogggleViewModelInterface;
-  };
+type Props = {
+  viewModel: AddressModeTogggleViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div class="flex items-center gap-2">

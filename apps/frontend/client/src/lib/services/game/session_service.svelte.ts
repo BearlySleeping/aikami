@@ -371,11 +371,16 @@ class SessionService
       'Make the player feel like they are continuing an ongoing story.',
     ].join('\n');
 
-    const result = await textGenerationService.generateText({
+    let accumulated = '';
+
+    await textGenerationService.streamChat({
       messages: [{ role: 'user', content: prompt }],
+      onChunk: (text: string) => {
+        accumulated += text;
+      },
     });
 
-    return result;
+    return accumulated;
   }
 
   /**

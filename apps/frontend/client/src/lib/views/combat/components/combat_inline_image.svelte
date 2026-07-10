@@ -1,31 +1,31 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/combat_inline_image.svelte
-  //
-  // Inline image displayed inside the combat log stream. Fades in when the
-  // image loads, shows a skeleton placeholder while generating, and reveals
-  // Expand / Regenerate buttons on hover.
-  //
-  // Contract: C-165 Combat Inline Images & Gallery
+// apps/frontend/client/src/lib/views/combat/components/combat_inline_image.svelte
+//
+// Inline image displayed inside the combat log stream. Fades in when the
+// image loads, shows a skeleton placeholder while generating, and reveals
+// Expand / Regenerate buttons on hover.
+//
+// Contract: C-165 Combat Inline Images & Gallery
 
-  type Props = {
-    /** Image URL to display. */
-    imageUrl?: string;
-    /** Whether the image is still being generated (shows skeleton). */
-    isGenerating?: boolean;
-    /** Fired when the user clicks the "Regenerate" hover button. */
-    onRegenerate?: () => void;
-  };
+type Props = {
+  /** Image URL to display. */
+  imageUrl?: string;
+  /** Whether the image is still being generated (shows skeleton). */
+  isGenerating?: boolean;
+  /** Fired when the user clicks the "Regenerate" hover button. */
+  onRegenerate?: () => void;
+};
 
-  const { imageUrl, isGenerating = false, onRegenerate }: Props = $props();
+const { imageUrl, isGenerating = false, onRegenerate }: Props = $props();
 
-  /** Whether the image has finished loading (triggers fade-in). */
-  let isLoaded = $state(false);
+/** Whether the image has finished loading (triggers fade-in). */
+let isLoaded = $state(false);
 
-  /** Whether the fullscreen expand modal is open. */
-  let isExpanded = $state(false);
+/** Whether the fullscreen expand modal is open. */
+let isExpanded = $state(false);
 
-  /** Whether the hover overlay is visible. */
-  let _isHovered = $state(false);
+/** Whether the hover overlay is visible. */
+let _isHovered = $state(false);
 </script>
 
 {#if isGenerating && !imageUrl}

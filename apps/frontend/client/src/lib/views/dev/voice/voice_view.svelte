@@ -1,26 +1,26 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/voice/voice_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { VoiceViewModelInterface } from './voice_view_model.svelte.ts';
-  import { OUTPUT_FORMATS } from './voice_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/voice/voice_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { VoiceViewModelInterface } from './voice_view_model.svelte.ts';
+import { OUTPUT_FORMATS } from './voice_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: VoiceViewModelInterface;
-  };
+type Props = {
+  viewModel: VoiceViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  /** The active voice list: server-fetched if available, fallback otherwise. */
-  const displayVoices = $derived(
-    viewModel.voices.length > 0 ? viewModel.voices : viewModel.fallbackVoices,
-  );
+/** The active voice list: server-fetched if available, fallback otherwise. */
+const displayVoices = $derived(
+  viewModel.voices.length > 0 ? viewModel.voices : viewModel.fallbackVoices,
+);
 
-  /** Show progress only during active synthesis/playback. */
-  const showProgress = $derived(viewModel.isConnected || viewModel.isPlaying);
-  /** Synthesis download % during fetch, word playback % during audio. */
-  const progressPercent = $derived(
-    viewModel.isPlaying ? viewModel.playbackProgress : viewModel.synthesisProgress,
-  );
+/** Show progress only during active synthesis/playback. */
+const showProgress = $derived(viewModel.isConnected || viewModel.isPlaying);
+/** Synthesis download % during fetch, word playback % during audio. */
+const progressPercent = $derived(
+  viewModel.isPlaying ? viewModel.playbackProgress : viewModel.synthesisProgress,
+);
 </script>
 
 <svelte:head>

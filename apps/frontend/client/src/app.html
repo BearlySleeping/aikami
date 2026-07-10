@@ -10,11 +10,11 @@
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>
     <script>
-      // Register the audio-range service worker for iOS Safari compatibility.
-      // Contract: C-150 Audio System — Service Worker Range Interceptor
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
-      }
+    // Register the audio-range service worker for iOS Safari compatibility.
+    // Contract: C-150 Audio System — Service Worker Range Interceptor
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+    }
     </script>
   </body>
 </html>

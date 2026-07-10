@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/controls/settings_controls_view.svelte
-  //
-  // Settings > Game > Controls sub-tab. Keybinding configuration persisted
-  // to localStorage. Click an action to rebind it.
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { SettingsControlsViewModelInterface } from './settings_controls_view_model.svelte';
+// apps/frontend/client/src/lib/views/settings/controls/settings_controls_view.svelte
+//
+// Settings > Game > Controls sub-tab. Keybinding configuration persisted
+// to localStorage. Click an action to rebind it.
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { SettingsControlsViewModelInterface } from './settings_controls_view_model.svelte';
 
-  type Props = {
-    viewModel: SettingsControlsViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: SettingsControlsViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

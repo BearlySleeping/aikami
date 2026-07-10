@@ -1,34 +1,34 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/lorebook/lorebook_generator.svelte
-  //
-  // AI-powered lorebook entry generator. Textarea for free-form world notes,
-  // "Generate Entries" button, spinner during LLM call, preview cards for
-  // generated entries, and "Save All" to confirm.
+// apps/frontend/client/src/lib/views/lorebook/lorebook_generator.svelte
+//
+// AI-powered lorebook entry generator. Textarea for free-form world notes,
+// "Generate Entries" button, spinner during LLM call, preview cards for
+// generated entries, and "Save All" to confirm.
 
-  import type { LorebookEntryInput } from '$types/lorebook';
+import type { LorebookEntryInput } from '$types/lorebook';
 
-  type Props = {
-    /** Whether the generator is currently making an LLM call. */
-    isGenerating: boolean;
-    /** Preview entries from the AI generator. */
-    generatedEntries: LorebookEntryInput[];
-    /** Callback to trigger generation with the world notes. */
-    ongenerate: (worldNotes: string) => void;
-    /** Callback to save all generated entries. */
-    onsave: () => void;
-    /** Callback to clear generated entries. */
-    onclear: () => void;
-  };
+type Props = {
+  /** Whether the generator is currently making an LLM call. */
+  isGenerating: boolean;
+  /** Preview entries from the AI generator. */
+  generatedEntries: LorebookEntryInput[];
+  /** Callback to trigger generation with the world notes. */
+  ongenerate: (worldNotes: string) => void;
+  /** Callback to save all generated entries. */
+  onsave: () => void;
+  /** Callback to clear generated entries. */
+  onclear: () => void;
+};
 
-  const {
-    isGenerating = false,
-    generatedEntries = [],
-    ongenerate = () => {},
-    onsave = () => {},
-    onclear = () => {},
-  }: Props = $props();
+const {
+  isGenerating = false,
+  generatedEntries = [],
+  ongenerate = () => {},
+  onsave = () => {},
+  onclear = () => {},
+}: Props = $props();
 
-  let worldNotes = $state('');
+let worldNotes = $state('');
 </script>
 
 <div class="flex flex-col gap-3 p-4 border border-base-300 rounded-lg">

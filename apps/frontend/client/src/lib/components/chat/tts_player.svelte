@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/TTSPlayer.svelte
-  type Props = {
-    isPlaying?: boolean;
-    currentText?: string;
-    isDemo?: boolean;
-    onStop?: () => void;
-  };
+// apps/frontend/client/src/lib/components/chat/TTSPlayer.svelte
+type Props = {
+  isPlaying?: boolean;
+  currentText?: string;
+  isDemo?: boolean;
+  onStop?: () => void;
+};
 
-  let { isPlaying = false, currentText = '', isDemo = false, onStop }: Props = $props();
+let { isPlaying = false, currentText = '', isDemo = false, onStop }: Props = $props();
 </script>
 
 {#if isPlaying}

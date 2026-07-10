@@ -1,27 +1,27 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/message_swipe_controls.svelte
-  //
-  // Left/right arrow buttons + alternative counter badge for browsing
-  // alternative AI responses. Only renders when alternatives.length > 1.
-  //
-  // Contract: C-231 AC-1 Message Branching & Swiping
+// apps/frontend/client/src/lib/components/chat/message_swipe_controls.svelte
+//
+// Left/right arrow buttons + alternative counter badge for browsing
+// alternative AI responses. Only renders when alternatives.length > 1.
+//
+// Contract: C-231 AC-1 Message Branching & Swiping
 
-  type Props = {
-    /** Whether swipe left is available. */
-    canSwipeLeft: boolean;
-    /** Whether swipe right is available. */
-    canSwipeRight: boolean;
-    /** Display label for alternative counter (e.g. "2/3"). */
-    label: string;
-    /** Called when left arrow is clicked. */
-    onSwipeLeft: () => void;
-    /** Called when right arrow is clicked. */
-    onSwipeRight: () => void;
-  };
+type Props = {
+  /** Whether swipe left is available. */
+  canSwipeLeft: boolean;
+  /** Whether swipe right is available. */
+  canSwipeRight: boolean;
+  /** Display label for alternative counter (e.g. "2/3"). */
+  label: string;
+  /** Called when left arrow is clicked. */
+  onSwipeLeft: () => void;
+  /** Called when right arrow is clicked. */
+  onSwipeRight: () => void;
+};
 
-  const { canSwipeLeft, canSwipeRight, label, onSwipeLeft, onSwipeRight }: Props = $props();
+const { canSwipeLeft, canSwipeRight, label, onSwipeLeft, onSwipeRight }: Props = $props();
 
-  const shouldShow = $derived(label.length > 0);
+const shouldShow = $derived(label.length > 0);
 </script>
 
 {#if shouldShow}

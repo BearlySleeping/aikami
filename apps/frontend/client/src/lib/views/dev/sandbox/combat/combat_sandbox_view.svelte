@@ -1,43 +1,43 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte
-  //
-  // View for the Combat Encounter sandbox — renders the game canvas
-  // and the combat overlay when an encounter is triggered.
-  //
-  // C-144 Task 5, C-147 Progression & Persistence
+// apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte
+//
+// View for the Combat Encounter sandbox — renders the game canvas
+// and the combat overlay when an encounter is triggered.
+//
+// C-144 Task 5, C-147 Progression & Persistence
 
-  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import FloatingText from '$lib/components/game/floating_text.svelte';
-  import CombatSidebar from '$lib/views/combat/combat_sidebar.svelte';
-  import GameOverOverlay from '../../../game/ui/overlays/game_over_overlay.svelte';
-  import type { CombatSandboxViewModelInterface } from './combat_sandbox_view_model.svelte.ts';
+import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import FloatingText from '$lib/components/game/floating_text.svelte';
+import CombatSidebar from '$lib/views/combat/combat_sidebar.svelte';
+import GameOverOverlay from '../../../game/ui/overlays/game_over_overlay.svelte';
+import type { CombatSandboxViewModelInterface } from './combat_sandbox_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: CombatSandboxViewModelInterface;
-  };
+type Props = {
+  viewModel: CombatSandboxViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
+let canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
 
-  $effect(() => {
-    if (canvasElement) {
-      void viewModel.initializeEngine(canvasElement);
-    }
-  });
+$effect(() => {
+  if (canvasElement) {
+    void viewModel.initializeEngine(canvasElement);
+  }
+});
 
-  /**
-   * When combat starts/ends, the CSS grid layout changes the canvas size.
-   * Trigger a PixiJS resize so the engine doesn't render stretched pixels (C-164).
-   */
-  $effect(() => {
-    const _hasCombat = !!viewModel.combatViewModel;
-    if (viewModel.engineReady) {
-      requestAnimationFrame(() => {
-        viewModel.triggerResize();
-      });
-    }
-  });
+/**
+ * When combat starts/ends, the CSS grid layout changes the canvas size.
+ * Trigger a PixiJS resize so the engine doesn't render stretched pixels (C-164).
+ */
+$effect(() => {
+  const _hasCombat = !!viewModel.combatViewModel;
+  if (viewModel.engineReady) {
+    requestAnimationFrame(() => {
+      viewModel.triggerResize();
+    });
+  }
+});
 </script>
 
 <svelte:window
@@ -217,41 +217,41 @@
 </div>
 
 <style>
-  @keyframes shake {
-    0%,
-    100% {
-      transform: translate(0, 0);
-    }
-    10% {
-      transform: translate(-4px, -2px);
-    }
-    20% {
-      transform: translate(3px, 1px);
-    }
-    30% {
-      transform: translate(-3px, 2px);
-    }
-    40% {
-      transform: translate(2px, -1px);
-    }
-    50% {
-      transform: translate(-2px, -2px);
-    }
-    60% {
-      transform: translate(1px, 1px);
-    }
-    70% {
-      transform: translate(-1px, -1px);
-    }
-    80% {
-      transform: translate(1px, 0);
-    }
-    90% {
-      transform: translate(-1px, 1px);
-    }
+@keyframes shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
   }
+  10% {
+    transform: translate(-4px, -2px);
+  }
+  20% {
+    transform: translate(3px, 1px);
+  }
+  30% {
+    transform: translate(-3px, 2px);
+  }
+  40% {
+    transform: translate(2px, -1px);
+  }
+  50% {
+    transform: translate(-2px, -2px);
+  }
+  60% {
+    transform: translate(1px, 1px);
+  }
+  70% {
+    transform: translate(-1px, -1px);
+  }
+  80% {
+    transform: translate(1px, 0);
+  }
+  90% {
+    transform: translate(-1px, 1px);
+  }
+}
 
-  .animate-shake {
-    animation: shake 0.3s ease-in-out;
-  }
+.animate-shake {
+  animation: shake 0.3s ease-in-out;
+}
 </style>

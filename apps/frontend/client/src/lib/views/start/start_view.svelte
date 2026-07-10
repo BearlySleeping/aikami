@@ -1,9 +1,9 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/start/start_view.svelte
-  import MissingProvidersDialog from './components/missing_providers_dialog.svelte';
-  import type { StartViewModelInterface } from './start_view_model.svelte';
+// apps/frontend/client/src/lib/views/start/start_view.svelte
+import MissingProvidersDialog from './components/missing_providers_dialog.svelte';
+import type { StartViewModelInterface } from './start_view_model.svelte';
 
-  let { viewModel }: { viewModel: StartViewModelInterface } = $props();
+let { viewModel }: { viewModel: StartViewModelInterface } = $props();
 </script>
 
 <div class="hero min-h-screen bg-base-200">

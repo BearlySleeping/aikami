@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/agent/agent_hud_drawer.svelte
-  import type { AgentHudViewModelInterface } from '$views/agent/agent_hud_view_model.svelte.ts';
-  import AgentStatusBadge from './agent_status_badge.svelte';
+// apps/frontend/client/src/lib/components/agent/agent_hud_drawer.svelte
+import type { AgentHudViewModelInterface } from '$views/agent/agent_hud_view_model.svelte.ts';
+import AgentStatusBadge from './agent_status_badge.svelte';
 
-  type Props = {
-    viewModel: AgentHudViewModelInterface;
-  };
+type Props = {
+  viewModel: AgentHudViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 {#if viewModel.showDrawer}

@@ -1,22 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/image/image_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { ImageViewModelInterface } from './image_view_model.svelte.ts';
-  import { EXPRESSIONS, SAMPLERS, SCHEDULERS } from './image_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/image/image_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { ImageViewModelInterface } from './image_view_model.svelte.ts';
+import { EXPRESSIONS, SAMPLERS, SCHEDULERS } from './image_view_model.svelte.ts';
 
-  type Props = { viewModel: ImageViewModelInterface };
-  let { viewModel }: Props = $props();
+type Props = { viewModel: ImageViewModelInterface };
+let { viewModel }: Props = $props();
 
-  const showProgress = $derived(viewModel.isGenerating);
-  const hasInputImage = $derived(viewModel.inputImageDataUrl !== undefined);
+const showProgress = $derived(viewModel.isGenerating);
+const hasInputImage = $derived(viewModel.inputImageDataUrl !== undefined);
 
-  /** Handles file input change events. */
-  const onFileChange = (e: Event) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) {
-      viewModel.handleImageUpload(file);
-    }
-  };
+/** Handles file input change events. */
+const onFileChange = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) {
+    viewModel.handleImageUpload(file);
+  }
+};
 </script>
 
 <svelte:head>

@@ -1,166 +1,164 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/macros/+page.svelte
-  //
-  // Dev sandbox for the prompt template macro system (C-237 AC-5).
-  // Split-panel: template editor with live macro autocomplete on the left,
-  // live resolution output on the right. Preset editor below with CRUD.
-  // DevToolsPanel with reset actions.
+// apps/frontend/client/src/routes/(dev)/dev/macros/+page.svelte
+//
+// Dev sandbox for the prompt template macro system (C-237 AC-5).
+// Split-panel: template editor with live macro autocomplete on the left,
+// live resolution output on the right. Preset editor below with CRUD.
+// DevToolsPanel with reset actions.
 
-  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import MacroAutocomplete from '$lib/components/macro_autocomplete.svelte';
-  import type { DevAction } from '$types';
-  import { getMacrosSandboxViewModel } from '$views/macros/macros_sandbox_view_model.svelte.ts';
-  import PresetEditorView from '$views/presets/preset_editor_view.svelte';
-  import { getPresetEditorViewModel } from '$views/presets/preset_editor_view_model.svelte.ts';
+import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import MacroAutocomplete from '$lib/components/macro_autocomplete.svelte';
+import type { DevAction } from '$types';
+import { getMacrosSandboxViewModel } from '$views/macros/macros_sandbox_view_model.svelte.ts';
+import PresetEditorView from '$views/presets/preset_editor_view.svelte';
+import { getPresetEditorViewModel } from '$views/presets/preset_editor_view_model.svelte.ts';
 
-  const sandboxViewModel = getMacrosSandboxViewModel({ className: 'MacrosSandboxViewModel' });
-  const presetEditorViewModel = getPresetEditorViewModel({ className: 'PresetEditorViewModel' });
+const sandboxViewModel = getMacrosSandboxViewModel({ className: 'MacrosSandboxViewModel' });
+const presetEditorViewModel = getPresetEditorViewModel({ className: 'PresetEditorViewModel' });
 
-  // ── Autocomplete state ───────────────────────────────────────────────────
+// ── Autocomplete state ───────────────────────────────────────────────────
 
-  let showAutocomplete = $state(false);
-  let autocompleteTrigger = $state('');
-  let autocompleteTop = $state(0);
-  let autocompleteLeft = $state(0);
-  let textareaElement: HTMLTextAreaElement | undefined = $state();
+let showAutocomplete = $state(false);
+let autocompleteTrigger = $state('');
+let autocompleteTop = $state(0);
+let autocompleteLeft = $state(0);
+let textareaElement: HTMLTextAreaElement | undefined = $state();
 
-  /** Extracts the trigger text after the last `{{` from the textarea. */
-  const extractTrigger = (): { trigger: string; position: number } | undefined => {
+/** Extracts the trigger text after the last `{{` from the textarea. */
+const extractTrigger = (): { trigger: string; position: number } | undefined => {
+  const textarea = textareaElement;
+  if (!textarea) {
+    return undefined;
+  }
+
+  const cursorPos = textarea.selectionStart ?? 0;
+  const textBeforeCursor = textarea.value.slice(0, cursorPos);
+
+  // Find the last `{{` before cursor
+  const lastOpen = textBeforeCursor.lastIndexOf('{{');
+  if (lastOpen < 0) {
+    return undefined;
+  }
+
+  // Check that there isn't a closing `}}` between `{{` and cursor
+  const afterOpen = textBeforeCursor.slice(lastOpen + 2);
+  if (afterOpen.includes('}}')) {
+    return undefined;
+  }
+
+  return { trigger: afterOpen, position: lastOpen };
+};
+
+/** Handles input events on the template textarea. */
+const handleTextareaInput = (e: Event): void => {
+  const target = e.target as HTMLTextAreaElement;
+  sandboxViewModel.updateTemplate(target.value);
+
+  const extracted = extractTrigger();
+  if (extracted) {
+    autocompleteTrigger = extracted.trigger;
+    showAutocomplete = true;
+
+    // Calculate position for the dropdown
     const textarea = textareaElement;
-    if (!textarea) {
-      return undefined;
+    if (textarea) {
+      const rect = textarea.getBoundingClientRect();
+      // Approximate position: use textarea's top-left with some offset
+      autocompleteTop = rect.bottom + 4;
+      autocompleteLeft = rect.left;
     }
-
-    const cursorPos = textarea.selectionStart ?? 0;
-    const textBeforeCursor = textarea.value.slice(0, cursorPos);
-
-    // Find the last `{{` before cursor
-    const lastOpen = textBeforeCursor.lastIndexOf('{{');
-    if (lastOpen < 0) {
-      return undefined;
-    }
-
-    // Check that there isn't a closing `}}` between `{{` and cursor
-    const afterOpen = textBeforeCursor.slice(lastOpen + 2);
-    if (afterOpen.includes('}}')) {
-      return undefined;
-    }
-
-    return { trigger: afterOpen, position: lastOpen };
-  };
-
-  /** Handles input events on the template textarea. */
-  const handleTextareaInput = (e: Event): void => {
-    const target = e.target as HTMLTextAreaElement;
-    sandboxViewModel.updateTemplate(target.value);
-
-    const extracted = extractTrigger();
-    if (extracted) {
-      autocompleteTrigger = extracted.trigger;
-      showAutocomplete = true;
-
-      // Calculate position for the dropdown
-      const textarea = textareaElement;
-      if (textarea) {
-        const rect = textarea.getBoundingClientRect();
-        // Approximate position: use textarea's top-left with some offset
-        autocompleteTop = rect.bottom + 4;
-        autocompleteLeft = rect.left;
-      }
-    } else {
-      showAutocomplete = false;
-      autocompleteTrigger = '';
-    }
-  };
-
-  /** Inserts a selected macro at the cursor position. */
-  const handleMacroSelect = (name: string): void => {
-    const textarea = textareaElement;
-    if (!textarea) {
-      return;
-    }
-
-    const cursorPos = textarea.selectionStart ?? 0;
-    const textBeforeCursor = textarea.value.slice(0, cursorPos);
-    const lastOpen = textBeforeCursor.lastIndexOf('{{');
-
-    if (lastOpen < 0) {
-      return;
-    }
-
-    const before = textarea.value.slice(0, lastOpen);
-    const after = textarea.value.slice(cursorPos);
-    const newValue = `${before}{{${name}}}${after}`;
-
-    sandboxViewModel.updateTemplate(newValue);
+  } else {
     showAutocomplete = false;
     autocompleteTrigger = '';
+  }
+};
 
-    // Reposition cursor after the inserted macro
-    requestAnimationFrame(() => {
-      if (textareaElement) {
-        const newCursorPos = lastOpen + name.length + 4; // `{{name}}`
-        textareaElement.focus();
-        textareaElement.setSelectionRange(newCursorPos, newCursorPos);
-      }
-    });
-  };
+/** Inserts a selected macro at the cursor position. */
+const handleMacroSelect = (name: string): void => {
+  const textarea = textareaElement;
+  if (!textarea) {
+    return;
+  }
 
-  /** Closes the autocomplete dropdown. */
-  const handleAutocompleteClose = (): void => {
-    showAutocomplete = false;
-    autocompleteTrigger = '';
-  };
+  const cursorPos = textarea.selectionStart ?? 0;
+  const textBeforeCursor = textarea.value.slice(0, cursorPos);
+  const lastOpen = textBeforeCursor.lastIndexOf('{{');
 
-  // ── Focus handler to refresh autocomplete on click ──────────────────────
+  if (lastOpen < 0) {
+    return;
+  }
 
-  const handleTextareaFocus = (): void => {
-    const extracted = extractTrigger();
-    if (extracted) {
-      autocompleteTrigger = extracted.trigger;
-      showAutocomplete = true;
-      const textarea = textareaElement;
-      if (textarea) {
-        const rect = textarea.getBoundingClientRect();
-        autocompleteTop = rect.bottom + 4;
-        autocompleteLeft = rect.left;
-      }
+  const before = textarea.value.slice(0, lastOpen);
+  const after = textarea.value.slice(cursorPos);
+  const newValue = `${before}{{${name}}}${after}`;
+
+  sandboxViewModel.updateTemplate(newValue);
+  showAutocomplete = false;
+  autocompleteTrigger = '';
+
+  // Reposition cursor after the inserted macro
+  requestAnimationFrame(() => {
+    if (textareaElement) {
+      const newCursorPos = lastOpen + name.length + 4; // `{{name}}`
+      textareaElement.focus();
+      textareaElement.setSelectionRange(newCursorPos, newCursorPos);
     }
-  };
+  });
+};
 
-  // ── DevTools actions ────────────────────────────────────────────────────
+/** Closes the autocomplete dropdown. */
+const handleAutocompleteClose = (): void => {
+  showAutocomplete = false;
+  autocompleteTrigger = '';
+};
 
-  const devActions: DevAction[] = [
-    {
-      label: 'Reset All',
-      onClick: () => {
-        sandboxViewModel.resetAll();
-        presetEditorViewModel.discardChanges();
-      },
+// ── Focus handler to refresh autocomplete on click ──────────────────────
+
+const handleTextareaFocus = (): void => {
+  const extracted = extractTrigger();
+  if (extracted) {
+    autocompleteTrigger = extracted.trigger;
+    showAutocomplete = true;
+    const textarea = textareaElement;
+    if (textarea) {
+      const rect = textarea.getBoundingClientRect();
+      autocompleteTop = rect.bottom + 4;
+      autocompleteLeft = rect.left;
+    }
+  }
+};
+
+// ── DevTools actions ────────────────────────────────────────────────────
+
+const devActions: DevAction[] = [
+  {
+    label: 'Reset All',
+    onClick: () => {
+      sandboxViewModel.resetAll();
+      presetEditorViewModel.discardChanges();
     },
-    {
-      label: 'Reset Context',
-      onClick: () => {
-        sandboxViewModel.resetContext();
-      },
+  },
+  {
+    label: 'Reset Context',
+    onClick: () => {
+      sandboxViewModel.resetContext();
     },
-    {
-      label: 'Reset Template',
-      onClick: () => {
-        // biome-ignore format: template literal with intentional line breaks
-        sandboxViewModel.updateTemplate(`You are roleplaying as {{char}}. {{personality}}
+  },
+  {
+    label: 'Reset Template',
+    onClick: () => {
+      sandboxViewModel.updateTemplate(`You are roleplaying as {{char}}. {{personality}}
+  Character: {{description}}
 
-              Character: {{description}}
+  Setting: {{scenario}}
 
-              Setting: {{scenario}}
+  Previous conversation:
+  {{history}}
 
-              Previous conversation:
-              {{history}}
-
-              User ({{user}}): {{message}}`);
-      },
+  User ({{user}}): {{message}}`);
     },
-  ];
+  },
+];
 </script>
 
 <div class="flex flex-col h-screen">

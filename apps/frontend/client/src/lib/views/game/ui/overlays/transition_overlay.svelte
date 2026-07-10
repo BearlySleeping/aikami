@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/ui/overlays/transition_overlay.svelte
-  import type { GameUIViewModelInterface } from '../game_ui_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/ui/overlays/transition_overlay.svelte
+import type { GameUIViewModelInterface } from '../game_ui_view_model.svelte';
 
-  type Props = {
-    viewModel: GameUIViewModelInterface;
-  };
+type Props = {
+  viewModel: GameUIViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <!--

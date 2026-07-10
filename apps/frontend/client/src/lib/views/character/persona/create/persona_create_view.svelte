@@ -1,34 +1,34 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { PersonaCreateViewModelInterface } from './persona_create_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { PersonaCreateViewModelInterface } from './persona_create_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: PersonaCreateViewModelInterface;
-  };
+type Props = {
+  viewModel: PersonaCreateViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  let messagesContainer = $state<HTMLDivElement>();
+let messagesContainer = $state<HTMLDivElement>();
 
-  $effect(() => {
-    void viewModel.messages.length;
-    if (messagesContainer) {
-      requestAnimationFrame(() => {
-        if (messagesContainer) {
-          messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-      });
-    }
-  });
-
-  function handleAvatarUpload(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) {
-      viewModel.uploadAvatar(file);
-    }
+$effect(() => {
+  void viewModel.messages.length;
+  if (messagesContainer) {
+    requestAnimationFrame(() => {
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    });
   }
+});
+
+function handleAvatarUpload(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (file) {
+    viewModel.uploadAvatar(file);
+  }
+}
 </script>
 
 <svelte:head>

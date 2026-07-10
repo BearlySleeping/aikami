@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/gm/session_summary_panel_view.svelte
-  import type { SessionSummaryPanelViewModelInterface } from './session_summary_panel_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/gm/session_summary_panel_view.svelte
+import type { SessionSummaryPanelViewModelInterface } from './session_summary_panel_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: SessionSummaryPanelViewModelInterface;
-  };
+type Props = {
+  viewModel: SessionSummaryPanelViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div class="card bg-base-200 shadow-sm">

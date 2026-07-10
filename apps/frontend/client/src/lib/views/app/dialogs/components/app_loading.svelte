@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/dialogs/components/app_loading.svelte
-  //
-  // Fullscreen loading overlay using DaisyUI progress bar.
+// apps/frontend/client/src/lib/views/app/dialogs/components/app_loading.svelte
+//
+// Fullscreen loading overlay using DaisyUI progress bar.
 
-  import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.svelte';
+import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.svelte';
 
-  type Props = {
-    viewModel: AppDialogsViewModelInterface;
-  };
+type Props = {
+  viewModel: AppDialogsViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 {#if viewModel.appLoading}

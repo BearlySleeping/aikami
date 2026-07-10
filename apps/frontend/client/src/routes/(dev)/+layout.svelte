@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/+layout.svelte
+// apps/frontend/client/src/routes/(dev)/+layout.svelte
 
-  import { BaseDevViewModel } from '@aikami/frontend/services';
-  import DevView from '$lib/views/dev/layout/layout_view.dev.svelte';
-  import { getDevViewModel } from '$lib/views/dev/layout/layout_view_model.dev.svelte.ts';
-  import type { LayoutProps } from './$types';
+import { BaseDevViewModel } from '@aikami/frontend/services';
+import DevView from '$lib/views/dev/layout/layout_view.dev.svelte';
+import { getDevViewModel } from '$lib/views/dev/layout/layout_view_model.dev.svelte.ts';
+import type { LayoutProps } from './$types';
 
-  let { children }: LayoutProps = $props();
+let { children }: LayoutProps = $props();
 
-  const isScreenshot = $state(BaseDevViewModel.isScreenshot());
-  const viewModel = getDevViewModel({ className: 'DevViewModel' });
+const isScreenshot = $state(BaseDevViewModel.isScreenshot());
+const viewModel = getDevViewModel({ className: 'DevViewModel' });
 </script>
 
 {#if isScreenshot}
