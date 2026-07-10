@@ -10,7 +10,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { $ } from 'bun';
@@ -33,6 +33,11 @@ type SkillSource = {
    * When omitted, the entire sourceSubdir is copied recursively.
    */
   files?: string[];
+  /**
+   * Optional: top-level subdirectories to EXCLUDE from the copy — prunes
+   * skills irrelevant to this repo so they never bloat the agent prompt.
+   */
+  exclude?: string[];
 };
 
 const SKILL_SOURCES: SkillSource[] = [
@@ -60,6 +65,15 @@ const SKILL_SOURCES: SkillSource[] = [
     repoUrl: 'https://github.com/firebase/agent-skills.git',
     sourceSubdir: 'skills',
     targetSubdir: 'firebase',
+    // Not used by Aikami — mobile/iOS, hosting variants, and remote-config
+    // skills only bloat the agent prompt.
+    exclude: [
+      'xcode-project-setup',
+      'firebase-crashlytics',
+      'firebase-app-hosting-basics',
+      'firebase-remote-config-basics',
+      'firebase-ai-logic-basics',
+    ],
   },
 ];
 
@@ -115,8 +129,17 @@ async function installSkillSource(source: SkillSource): Promise<void> {
       console.log(`Copied ${source.sourceSubdir}/${file} → ${dstFile}`);
     }
   } else {
-    await cp(src, target, { recursive: true });
-    console.log(`Copied ${source.sourceSubdir} → ${target}`);
+    const excluded = new Set(source.exclude ?? []);
+    await cp(src, target, {
+      recursive: true,
+      filter: (srcPath) => {
+        const rel = srcPath.slice(src.length).replace(/^\/+/, '');
+        const topLevel = rel.split('/')[0] ?? '';
+        return !excluded.has(topLevel);
+      },
+    });
+    const excludeNote = excluded.size > 0 ? ` (excluded: ${[...excluded].join(', ')})` : '';
+    console.log(`Copied ${source.sourceSubdir} → ${target}${excludeNote}`);
   }
 
   // 4. Clean up temp clone
@@ -144,23 +167,7 @@ async function main() {
     console.log('"./.pi/generated-skills" already in settings.json → skills[]');
   }
 
-  // 3. Register aikami-conventions skills (written by import_community_rules.ts)
-  const conventionsDir = join(PI_DIR, 'skills', 'aikami-conventions');
-  if (existsSync(conventionsDir)) {
-    const entries = await readdir(conventionsDir, { withFileTypes: true });
-    const conventionDocs = entries
-      .filter((e) => e.isFile() && e.name.endsWith('.md') && e.name !== 'SKILL.md')
-      .map((e) => e.name);
-    if (conventionDocs.length > 0) {
-      console.log(
-        `\nRegistered ${conventionDocs.length} aikami-conventions doc(s): ${conventionDocs.join(', ')}`,
-      );
-    } else {
-      console.log('\nNo aikami-conventions docs found (run import_community_rules.ts first).');
-    }
-  }
-
-  // 4. Bootstrap MCP bridge registrations (C-321)
+  // 3. Bootstrap MCP bridge registrations (C-321)
   const mcpConfigPath = join(PI_DIR, 'mcp.json');
   if (existsSync(mcpConfigPath)) {
     const mcpRaw = await readFile(mcpConfigPath, 'utf-8');
@@ -168,9 +175,7 @@ async function main() {
     const servers = mcpConfig.mcpServers;
     if (servers && typeof servers === 'object') {
       const serverNames = Object.keys(servers);
-      console.log(
-        `\nRegistered ${serverNames.length} MCP server(s) for swarm agents: ${serverNames.join(', ')}`,
-      );
+      console.log(`\nRegistered ${serverNames.length} MCP server(s): ${serverNames.join(', ')}`);
       for (const [name, cfg] of Object.entries(servers) as [
         string,
         { command: string; args: string[] },

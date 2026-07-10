@@ -1,7 +1,7 @@
 // .pi/extensions/herdr_orchestrator.ts
 //
 // Consolidated herdr extension for pi — pane orchestration, agent wait, dev
-// service management, and swarm slash commands.
+// service management slash commands.
 //
 // Dev service lifecycle delegates to scripts/src/lib/herdr/session.ts
 // (single source of truth shared with CLI scripts and blackbox tests).

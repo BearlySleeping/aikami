@@ -7,6 +7,7 @@
 | **Priority** | P{0\|1\|2} — {one-line justification} |
 | **Dependencies** | {list of contracts or packages this depends on} |
 | **Status** | not_started |
+| **Docs Impact** | {user-facing → page in `apps/frontend/docs/src/content/docs/` \| internal → none} |
 | **Contract version** | 1.0.0 |
 
 ## Overview

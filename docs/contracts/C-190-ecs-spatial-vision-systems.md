@@ -8,7 +8,7 @@
 | **Target** | `packages/frontend/engine/src/systems/spatial_vision_system.ts` |
 | **Priority** | P0 — Core perception layer required for all subsequent GOAP, faction, and crime dynamics. |
 | **Dependencies** | `packages/frontend/engine` |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

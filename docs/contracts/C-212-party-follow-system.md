@@ -7,7 +7,7 @@
 | **Target** | `packages/frontend/engine/` — GameCommand + worker bridge, `apps/frontend/client/` — sandbox ViewModel |
 | **Priority** | P2 — unblocks party companion gameplay for MVP |
 | **Dependencies** | C-196 (Emergent World Integration), C-137 (Camera Follow), C-141 (NPC Interaction) |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

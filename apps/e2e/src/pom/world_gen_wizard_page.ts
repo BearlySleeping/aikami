@@ -36,17 +36,20 @@ export class WorldGenWizardPage {
   // ── Navigation ────────────────────────────────────────────
 
   /**
-   * Navigate to the setup page (wizard entry point).
+   * Navigate to the setup page (wizard entry point) and wait for render.
    */
   async gotoSetup(): Promise<void> {
     await this.page.goto('/setup');
+    await this.page.locator('progress.progress').waitFor({ timeout: 10000 });
   }
 
   /**
-   * Navigate to the dev sandbox.
+   * Navigate to the dev sandbox and wait for the wizard to render.
    */
   async gotoDevSandbox(): Promise<void> {
     await this.page.goto('/dev/world-gen');
+    // Wait for the wizard to fully render (progress bar appears after VM init)
+    await this.page.locator('progress.progress').waitFor({ timeout: 10000 });
   }
 
   // ── Step detection ────────────────────────────────────────
@@ -91,9 +94,10 @@ export class WorldGenWizardPage {
 
   /**
    * Get the currently selected genre chip.
+   * Uses .btn-sm to avoid matching the Next/Gemini/Regenerate primary buttons.
    */
   async getSelectedGenre(): Promise<string | null> {
-    const btn = this.page.locator('button.btn-primary');
+    const btn = this.page.locator('button.btn-sm.btn-primary').first();
     return await btn.textContent();
   }
 
@@ -212,11 +216,13 @@ export class WorldGenWizardPage {
 
   /**
    * Wait for the preview step (world output rendered).
+   * Looks for the card title or the NPC cards which only appear on the preview step.
    */
   async waitForPreview(): Promise<void> {
     await this.page
-      .locator('text=World Name')
-      .or(this.page.locator('div.card h3.card-title'))
+      .locator('h3.card-title')
+      .or(this.page.locator('div.card h4.font-bold'))
+      .first()
       .waitFor({ timeout: 10000 });
   }
 
@@ -226,7 +232,7 @@ export class WorldGenWizardPage {
   async waitForCharacterCreation(): Promise<void> {
     await this.page
       .getByRole('button', { name: 'Start Character Creation' })
-      .waitFor({ timeout: 5000 });
+      .waitFor({ timeout: 10000 });
   }
 
   // ── Preview selectors ────────────────────────────────────

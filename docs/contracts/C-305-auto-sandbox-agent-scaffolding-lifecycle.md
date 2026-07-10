@@ -9,7 +9,7 @@
 | **Target** | scripts/src/lib/agents/sandbox_scaffolder.ts — Isolated workspace view generator |
 | **Priority** | P1 — Closes the diagnostic testing loop for autonomous UI/Engine verification |
 | **Dependencies** | C-120, C-139, C-300, C-302, C-303 |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

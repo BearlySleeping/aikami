@@ -159,7 +159,9 @@ const _setupServiceOverrides = (): void => {
     AudioQueuePlayer: class {},
     ttsService: _createServiceStub(),
     TtsService: class {},
-    authService: _createServiceStub(),
+    authService: {
+      uid: undefined,
+    },
     AuthService: class {},
     PersonaCreationService: class {},
     characterService: _createServiceStub(),

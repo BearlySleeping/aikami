@@ -8,7 +8,7 @@
 | **Target** | `packages/frontend/engine/src/systems/goap_scheduler_system.ts` |
 | **Priority** | P0 — Forms the dynamic runtime engine decision-making loop for all characters. |
 | **Dependencies** | `docs/contracts/C-190-ecs-spatial-vision-systems.md` |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

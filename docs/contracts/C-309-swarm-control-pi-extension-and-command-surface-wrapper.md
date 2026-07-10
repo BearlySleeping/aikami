@@ -9,7 +9,7 @@
 | **Target** | .pi/extensions/swarm_control.ts — Conversational pipeline controller |
 | **Priority** | P0 — Eliminates shell-command friction for executing swarm operations |
 | **Dependencies** | C-300, C-306 |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

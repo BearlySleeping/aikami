@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/game/dashboard/` + `apps/frontend/client/src/lib/views/character/` — D&D-Style Character Sheet with abilities, skills, traits, and AI context injection |
 | **Priority** | P0 — Defines the RPG identity; the character sheet is the player's primary self-reference throughout the game |
 | **Dependencies** | C-153 (Character Dashboard & Equipment — COMPLETED), C-158 (LPC Avatar Integration — COMPLETED), `GameStateService`, `PersonaData` schema, `persona_create_view_model.svelte.ts` (ability score extraction — EXISTS), `character_extraction_schema.ts` (AI extraction — EXISTS), C-230 (Connection config — COMPLETED), C-202 (Provider settings — COMPLETED) |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

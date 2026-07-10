@@ -9,7 +9,7 @@
 | **Target** | Multiple — Orchestration layers, scratchpad nodes, token routers, and convention gates |
 | **Priority** | P0 — Eliminates cross-pane deadlocks and stabilizes OpenRouter prefix caches |
 | **Dependencies** | C-300, C-301, C-302, C-303, C-304 |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

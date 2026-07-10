@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/src/lib/services/expression/` + `apps/frontend/client/src/lib/views/chat/` — Expression catalog, two-tier detection, LPC overlay mapping, per-message persistence |
 | **Priority** | P2 — Expressions bring static LPC sprites to life; key for visual storytelling |
 | **Dependencies** | C-158 (LPC Avatar Integration — COMPLETED), C-236 (Agent Pipeline — COMPLETED for expression agent), `expression_asset_resolver.ts` (EXISTS — maps expressions to LPC asset paths), `textGenerationService` (lightweight LLM calls) |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

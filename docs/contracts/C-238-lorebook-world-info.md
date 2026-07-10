@@ -6,7 +6,7 @@
 | **Target** | `apps/frontend/client/src/lib/services/lorebook/` + `apps/frontend/client/src/lib/views/lorebook/` — Lorebook data model, keyword scanner, editor, World Info panel |
 | **Priority** | P2 — Lorebooks are the primary world-building tool; they let GMs author persistent world knowledge without engineering prompts |
 | **Dependencies** | C-237 (Macro System — COMPLETED for macro support in entry content), `ConfigService` (localStorage persistence), `gmPromptService` (C-235 — COMPLETED for prompt injection), `textGenerationService.extractStructure()` (AI lorebook generator) |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -9,7 +9,7 @@
 | **Target** | scripts/src/lib/agents/scope_explorer.ts — Dependency extraction loop |
 | **Priority** | P1 — Eliminates manual target-file designation for the Swarm Director |
 | **Dependencies** | C-300, C-301, C-302 |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

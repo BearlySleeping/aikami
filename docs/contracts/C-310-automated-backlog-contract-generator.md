@@ -9,7 +9,7 @@
 | **Target** | scripts/src/lib/agents/contract_generator.ts — Automated template factory |
 | **Priority** | P0 — Automates the generation of feature contracts directly from markdown logs |
 | **Dependencies** | C-002, C-007, C-309 |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview

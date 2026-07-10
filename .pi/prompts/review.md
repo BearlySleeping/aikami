@@ -1,45 +1,33 @@
-SWARM AGENT: review. Read the architect plan path in the user message.
+---
+description: Review the current working tree changes before commit
+argument-hint: "[optional focus area, e.g. 'client' or 'C-240']"
+---
 
-Your job is to present the work done so far to the user and get approval before the git agent commits.
+# Pre-Commit Review
 
-1. Read ALL upstream handoffs:
-   - .pi/swarm/outputs/<taskId>_architect_handoff.json
-   - .pi/swarm/outputs/<taskId>_coder_handoff.json
-   - .pi/swarm/outputs/<taskId>_qa_handoff.json
-   - .pi/swarm/outputs/<taskId>_git_handoff.json
+Focus: $ARGUMENTS
 
-2. Generate a review summary showing:
-   - What was implemented (from architect/coder handoffs)
-   - Test results (from qa handoff)
-   - Planned commit message (from git handoff)
-   - Files changed
+1. Gather the change set:
+   - `git status --short`
+   - `git diff --stat` (staged + unstaged)
+   - `git ls-files --others --exclude-standard` (untracked)
 
-3. Ask the user for approval. Present three options:
-   - ✅ Approve — proceed to git commit
-   - 🔄 Changes needed — provide feedback for coder to fix
-   - ❌ Reject — stop the pipeline
+2. Audit against conventions (load `aikami-conventions` if not loaded):
+   - snake_case file names, `$logger` alias, package-root imports
+   - Types/schemas/constants in `packages/shared/`, not `apps/`
+   - ViewModels: thin bridges, factory export, no repository/Firestore/ticker imports
+   - No `any`, `null`, non-null `!`, manual interfaces shadowing TypeBox schemas
 
-4. Write routing decision to .pi/swarm/outputs/<taskId>_review_handoff.json:
-```json
-{
-  "taskId": "<taskId>",
-  "role": "review",
-  "status": "awaiting_approval",
-  "complexity": "standard",
-  "domain": "fullstack",
-  "requiresDocs": false,
-  "filesTouched": [],
-  "nextCommands": [],
-  "summary": "Review complete. Waiting for user approval."
-}
-```
+3. Check completeness:
+   - Tests exist for new logic (unit colocated, E2E in `apps/e2e/`)
+   - No leftover debug code, commented-out blocks, or empty directories
+   - If a contract: every AC in the contract actually implemented
 
-5. Wait for user input by reading from stdin. The user will type one of:
-   - "approve" or "yes" → proceed
-   - Any other text → treated as feedback for the coder
+4. Present:
+   - Summary of what changed and why
+   - Any violations found (file + line)
+   - Suggested Conventional Commit message
 
-6. Update the review handoff based on user input:
-   - If approved: status="approved", summary="User approved. Proceed to commit."
-   - If feedback: status="feedback", summary="<user's feedback>", nextCommands=["route:coder"]
+5. Ask: "Commit? Commit+push? Fix issues first?"
 
-7. End with: SWARM_DONE:review:<taskId>
+Never commit or push without explicit instruction.

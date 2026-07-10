@@ -84,13 +84,15 @@ test.describe('Character Sheet — Dev Sandbox', () => {
   test('should add and remove narrative trait chips', async () => {
     await sheet.tabTraits.click();
 
-    // Add a new 'like' chip
-    const likesInput = sheet.narrativeAddInput('LIKES');
+    // Scroll to the Narrative Traits section and fill in the likes input
+    const likesInput = sheet.card.locator('input[type="text"]').first();
+    await likesInput.scrollIntoViewIfNeeded();
     await likesInput.fill('Music');
-    await sheet.narrativeAddButton('LIKES').click();
+    // Click the "+" button next to the input
+    await sheet.card.locator('button:has-text("+")').first().click();
 
     // Should see the new chip
-    const musicChip = sheet.narrativeChips('LIKES').filter({ hasText: 'Music' });
+    const musicChip = sheet.card.locator('.badge').filter({ hasText: 'Music' });
     await expect(musicChip).toBeVisible({ timeout: 3_000 });
 
     // Remove it
@@ -101,6 +103,10 @@ test.describe('Character Sheet — Dev Sandbox', () => {
   test('should toggle Pro Mode and display JSON', async () => {
     // Toggle pro mode on
     await sheet.proModeToggle.click();
+
+    // Enable editing to see the textarea
+    const editToggle = sheet.card.locator('input[type="checkbox"].toggle').nth(1);
+    await editToggle.click();
 
     // JSON textarea should appear
     const jsonArea = sheet.jsonTextarea;

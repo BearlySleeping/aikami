@@ -23,6 +23,7 @@ import { mock } from 'bun:test';
 // ── IndexedDB polyfill (required by DraftStore in test env) ────────────────
 
 const _indexedStore = new Map<string, Map<string, Map<string, unknown>>>();
+const _deletedDatabases = new Set<string>();
 
 /** Creates a request-like object that fires onsuccess on next microtask. */
 const _createRequest = <T>(result: T) => {
@@ -38,6 +39,11 @@ const _createRequest = <T>(result: T) => {
 
 (globalThis as Record<string, unknown>).indexedDB = {
   open: (dbName: string, _version?: number) => {
+    // Treat deleted databases as empty (Firebase Integrity check)
+    if (_deletedDatabases.has(dbName)) {
+      _deletedDatabases.delete(dbName);
+      _indexedStore.delete(dbName);
+    }
     if (!_indexedStore.has(dbName)) {
       _indexedStore.set(dbName, new Map());
     }
@@ -111,6 +117,18 @@ const _createRequest = <T>(result: T) => {
       queueMicrotask(() => openRequest.onsuccess?.({ target: openRequest } as unknown));
     }
     return openRequest;
+  },
+  deleteDatabase: (dbName: string) => {
+    _deletedDatabases.add(dbName);
+    _indexedStore.delete(dbName);
+    const request = {
+      onsuccess: undefined as (() => void) | undefined,
+      onerror: undefined as (() => void) | undefined,
+      result: undefined,
+      error: null as DOMException | null,
+    };
+    queueMicrotask(() => request.onsuccess?.());
+    return request;
   },
 };
 

@@ -8,7 +8,7 @@
 | **Target** | `packages/frontend/services/src/lib/base/base_dev_view_model.svelte.ts`, `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts`, `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/+layout.svelte`, `apps/frontend/client/src/routes/(dev)/+layout.svelte`, and `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view.svelte` |
 | **Priority** | P0 — Utility panels and developer UI elements block the canvas view during automated testing, corrupting bounding box assertions. |
 | **Dependencies** | `docs/contracts/C-200-visual-pipeline-optimization.md` |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.1.0 |
 
 ### Execution Report — 2026-07-01
