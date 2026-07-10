@@ -24,6 +24,7 @@ export * from './ai/text_generation_service.svelte.ts';
 export * from './analytics/analytics_service.svelte.ts';
 export * from './app/app.svelte.ts';
 export * from './app/preference.svelte.ts';
+export * from './assets/asset_store.svelte.ts';
 export * from './audio/audio_context_manager';
 export * from './audio/audio_queue_player';
 export * from './audio/audio_service.svelte';

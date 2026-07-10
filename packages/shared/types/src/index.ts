@@ -39,6 +39,7 @@ export * from './lib/endpoints/pwa_endpoints.ts';
 export * from './lib/endpoints/request_functions.ts';
 export * from './lib/error.ts';
 export * from './lib/form/auth.ts';
+export * from './lib/game_assets.ts';
 export * from './lib/helpers.ts';
 export * from './lib/image_style_profile.ts';
 export * from './lib/logger.ts';

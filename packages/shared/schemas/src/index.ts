@@ -28,6 +28,7 @@ export * from './lib/database/world.ts';
 export * from './lib/ecs_snapshot.ts';
 export * from './lib/fields.ts';
 export * from './lib/form/auth.ts';
+export * from './lib/game_assets.ts';
 export * from './lib/image_generation.ts';
 export * from './lib/image_style_profile.ts';
 export * from './lib/logging/index.ts';

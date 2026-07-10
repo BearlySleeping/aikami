@@ -94,6 +94,33 @@ Errors use `toAppError` from `@aikami/utils` (see `aikami-conventions`
 
 ---
 
+## What Does NOT Belong in Firebase Functions
+
+Cloud Functions are **stateless, ephemeral, and deployed to GCP** — they have
+no persistent local filesystem. The following MUST NOT be allocated to
+`apps/backend/firebase/src/controllers/`:
+
+- **Local filesystem operations**: directory scanning, `manifest.json`
+  writes, file copy/move/rename on disk, reading/writing files outside
+  `/tmp`.
+- **Binary file serving from disk**: streaming images, audio, or video from
+  a local directory. Use Firebase Storage + signed URLs instead.
+- **Local asset management**: upload to a local folder, folder browser UIs
+  backed by `fs.readdirSync`, OS file-picker integration.
+
+These belong in:
+
+| Concern                             | Correct location                                     |
+| ----------------------------------- | ---------------------------------------------------- |
+| Local file scanning, manifest gen   | `packages/frontend/engine/src/` (runs in client)     |
+| Binary file serving in dev          | Vite dev server (client) or Tauri `asset://` protocol |
+| OS file-picker, drag-drop upload    | `apps/frontend/client/src/` (Tauri APIs)             |
+| Heavy local processing              | `apps/backend/{image,text,voice}/` (local services)   |
+| Authenticated Firebase Storage      | `controllers/callable/` (not `controllers/api/`)     |
+
+🔴 **Rule**: Before writing any `controllers/` file, ask: "Does this operation
+touch the local filesystem?" If yes, it does NOT belong in Firebase Functions.
+
 ## Related Skills
 
 | Skill                  | Covers                                                   |

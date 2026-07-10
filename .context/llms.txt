@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-10
-> Files: 254 across 12 categories
+> Files: 255 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -230,6 +230,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 240 session management](contracts/C-240-session-management.md)
 - [C 241 chat modes address system](contracts/C-241-chat-modes-address-system.md)
 - [C 242 image generation pipeline](contracts/C-242-image-generation-pipeline.md)
+- [C 243 asset management system](contracts/C-243-asset-management-system.md)
 - [Contract C-300: Swarm Director & Workspace Provisioning Lifecycle](contracts/C-300-swarm-director-and-workspace-provisioning-lifecycle.md)
 - [Contract C-301: Algorithmic Token Router & AST Footprint Extractor](contracts/C-301-algorithmic-token-router-and-ast-footprint-extractor.md)
 - [Contract C-302: Coherent Ephemeral SQLite-WAL Scratchpad Engine](contracts/C-302-coherent-ephemeral-sqlite-wal-scratchpad-engine.md)

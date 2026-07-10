@@ -130,11 +130,39 @@ These are the most common mistakes. Check this list before every import or type
 definition. If you get an esbuild error about a missing module, **the fix is
 never to bypass the convention.** The convention is the fix.
 
-### 1. Logger: Always `$logger`, Never `@aikami/logger`
+### 1. Logger: `this.debug()` in Classes, `$logger` in Module Functions
+
+Two-tier rule:
+
+1. **Inside any `BaseClass`/`BaseViewModel` subclass (services, ViewModels,
+   repositories)** — use the inherited methods: `this.debug()`, `this.info()`,
+   `this.warn()`, `this.error()`, `this.log()`. NEVER import `$logger` in
+   these files. The inherited methods prefix the class name and integrate
+   with `create()` auto-logging.
+2. **Module-level code (standalone arrow functions, utils, scripts)** — import
+   from `$logger`, NEVER from `@aikami/logger`.
 
 ```typescript
-// ✅ CORRECT — $logger resolves to the right impl for this environment
+// ✅ CORRECT — class code uses inherited logging
+class UploadService extends BaseClass {
+  async upload(): Promise<void> {
+    this.debug("upload:start");
+  }
+}
+
+// ✅ CORRECT — module-level function uses $logger
 import { logger } from "$logger";
+const parseManifest = (raw: string) => {
+  logger.debug("parseManifest");
+};
+
+// ❌ WRONG — $logger inside a BaseClass subclass
+import { logger } from "$logger";
+class UploadService extends BaseClass {
+  async upload(): Promise<void> {
+    logger.debug("upload"); // loses className prefix
+  }
+}
 
 // ❌ WRONG — bypasses environment-specific resolution, breaks builds
 import { logger } from "@aikami/logger";
@@ -158,9 +186,6 @@ know which environment you're in and will resolve to the wrong implementation.
 import type { User, Session } from "@aikami/types";
 import { toAppError } from "@aikami/utils";
 import { userSchema } from "@aikami/schemas";
-
-// ✅ CORRECT — local alias also maps to package root
-import type { User } from "$types";
 
 // ❌ WRONG — never import from lib/ sub-paths
 import type { User } from "@aikami/types/lib/user";
@@ -364,6 +389,13 @@ pleasantries, hedging. Fragments are OK. Every word must earn its place.
 ### ✅ Required Patterns
 
 - **Arrow Functions** — Use arrow functions everywhere. The sole exception is class methods: use regular method syntax (`methodName() {}` instead of `methodName = () => {}`) so that `this` and `super` work correctly.
+- **Interface/type method members use method shorthand** — declare
+  `closeUploadInfo(): void`, never `closeUploadInfo: () => void`. Method
+  signatures mirror the regular-method implementation and stay bivariant for
+  interface compatibility.
+- **Callers must preserve `this`** — never pass an unbound method reference
+  (`onclick={viewModel.open}`, `array.map(service.format)`); wrap in an arrow
+  function (`onclick={() => viewModel.open()}`).
 - **Escape Early** — Return-early pattern to avoid deep nesting
 - **Extract Logic** — If a section within a function can stand alone, extract it into a separate private function (with `_` prefix: `_extractedHelper()`)
 - **JSDoc Everything** — All exported functions, types, and complex internals must have JSDoc comments
@@ -396,21 +428,24 @@ export const createUser = (email: string, displayName: string, role?: string) =>
 ### Class Instantiation — Always `ClassName.create()`, Never `new`
 
 All classes extending `BaseClass` must be instantiated with the static `create()`
-factory method. The proxy wrapper auto-logs every public method call — **no manual
+factory method. It auto-logs every public method call — **no manual
 `this.debug()` at method entry is needed.**
 
 ```typescript
-// ✅ CORRECT — ClassName.create() factory (enables proxy auto-logging)
+// ✅ CORRECT — ClassName.create() factory (enables auto-logging)
 export const service = MyService.create({ className: 'MyService' });
 export const authService = FirebaseAuthService.create({ className: 'FirebaseAuthService' });
 
-// ❌ WRONG — raw `new` bypasses proxy (no auto-logging)
+// ❌ WRONG — raw `new` bypasses auto-logging
 export const service = new MyService({ className: 'MyService' });
 ```
 
-**Proxy auto-logging**: The `create()` factory wraps the instance in an ES6
-Proxy that logs `methodName + args` for every public method call. In production
-(`NODE_ENV === 'production'`), the proxy is skipped for zero overhead.
+**Auto-logging mechanism**: `create()` shadows every public prototype method
+on the instance with a shim that logs `methodName + args` before delegating
+(prototype shadowing, not an ES6 Proxy — Svelte 5 `$state` breaks under
+custom Proxies). Only regular class methods participate — arrow-function
+fields are invisible to it (one more reason arrow methods are banned). In
+production the wrapping is skipped for zero overhead.
 
 **Mid-method debug logging** for state transitions or error conditions is still
 acceptable:
@@ -418,7 +453,7 @@ acceptable:
 ```typescript
 class MyService extends BaseClass {
   async process(options: { id: string }) {
-    // Proxy auto-logs: debug('process', { args: [options] })
+    // create() auto-logs: debug('process', options)
     // No manual this.debug() needed here
 
     const result = await this._fetch(options.id);
@@ -432,7 +467,7 @@ class MyService extends BaseClass {
 ```
 
 **Arrow functions** that are NOT class methods should still use `logger.debug()`
-from `$logger` at entry since they don't participate in the proxy:
+from `$logger` at entry since they don't participate in auto-logging:
 
 ```typescript
 // ✅ Arrow functions still manually log
@@ -488,13 +523,16 @@ import { toAppError } from "@aikami/utils/lib/errors";
 
 ```typescript
 // ✅ CORRECT
-import type { User } from "$types"; // maps to @aikami/types → src/index.ts
+import type { Connection } from "$types"; // client-local types barrel
 import { userSchema } from "@aikami/schemas"; // maps to src/index.ts
 
 // ❌ WRONG
-import type { User } from "$types/lib/user";
+import type { Connection } from "$types/lib/connection";
 import { userSchema } from "@aikami/schemas/lib/user";
 ```
+
+Note: in the client, `$types` maps to `apps/frontend/client/src/lib/types`
+(app-local types) — cross-project types come from `@aikami/types`.
 
 ### Backend Package Aliases: Forward Slash, Never Hyphen
 
@@ -638,16 +676,17 @@ library needed.
 ```
 aikami/
   apps/
-    frontend/client/          — SvelteKit Client
-    frontend/site/ — Public site (Astro)
-    frontend/docs/         — Documentation site (Astro)
-    frontend/game/         — PixiJS v8 + bitECS (merged into client)
-    backend/firebase/      — Firebase Cloud Functions v2
+    frontend/client/       — SvelteKit Client (SvelteKit + PixiJS + Tauri)
+    frontend/site/         — Public site (Astro)
+    frontend/docs/         — Documentation site (Astro Starlight)
+    backend/firebase/      — Firebase Cloud Functions v2 + Data Connect
+    backend/image|text|voice/ — Local AI microservices
+    e2e/                   — E2E test suite
   packages/
-    shared/                — constants, logger, mocks, schemas, types, utils, parser
-    backend/               — ai, auth, configs, database, svelte-kit, utils
-    frontend/              — components, configs, repositories, services, utils, tanstack-db
-    scripts/               — CI, setup, ops scripts
+    shared/                — constants, logger, mocks, parser, schemas, types, utils
+    backend/               — ai, auth, chat, configs, database, image, svelte-kit, utils
+    frontend/              — components, configs, dataconnect, engine, repositories, services, utils
+  scripts/                 — CI, setup, ops scripts
 ```
 
 ---
@@ -769,8 +808,8 @@ import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
 
 ```svelte
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/feature/view.svelte
-  import BaseViewModelContainer from '$lib/components/BaseViewModelContainer.svelte';
+  // apps/frontend/client/src/lib/views/feature/feature_view.svelte
+  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 </script>
 ```
 

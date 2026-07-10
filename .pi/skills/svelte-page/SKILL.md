@@ -29,17 +29,22 @@ Three files per page:
 
 Follow the template in `svelte-conventions` → ViewModel Pattern.
 
-- Extend `BaseViewModel`, implement `<Name>ViewModelInterface`
-- Export `get<Name>ViewModel` factory function
+- Extend `BaseViewModel` (from `@aikami/frontend/services`), implement `<Name>ViewModelInterface`
+- Interface methods use method shorthand: `close(): void`, NOT `close: () => void`
+- Export `get<Name>ViewModel` factory function using `ClassName.create()`
 - `initialize()` calls `super.initialize()` at the end
+- Logging via inherited `this.debug()` / `this.error()` — never import `$logger`
 - File: `{name}_view_model.svelte.ts`
 
 ## 2. View
 
 Follow the constraints in `svelte-conventions` → View Structural Constraints.
 
-- Wrap in `<BaseViewModelContainer {viewModel}>`
+- Wrap in `<BaseViewModelContainer {viewModel}>` (import from
+  `$lib/components/base_view_model_container.svelte`)
 - Zero logic — only property access on `viewModel`
+- Event handlers use arrow wrappers: `onclick={() => viewModel.method()}` —
+  never `onclick={viewModel.method}`
 - File: `{name}_view.svelte`
 
 ## 3. Route Page

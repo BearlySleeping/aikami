@@ -188,6 +188,21 @@ export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer
 
 // Rendering
 
+// Asset Manifest (C-243)
+export {
+  buildAssetTagList,
+  buildAssetTree,
+  buildManifest,
+  ensureAssetDirs,
+  hasNativeMarker,
+  loadManifest,
+  pathToTag,
+  resolveAssetUrl,
+  sanitizeAssetFilename,
+  tagToPath,
+  validUniquePath,
+} from './assets/asset_manifest.ts';
+
 export type { JtonParseResult } from './assets/jton_parser.ts';
 export {
   jtonToTilemapData,
@@ -286,6 +301,9 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './rendering/animation_controller.ts';
+// Scene Background (C-243)
+export type { SceneBackgroundOptions } from './rendering/scene_background.ts';
+export { SceneBackground } from './rendering/scene_background.ts';
 export type { PaletteSpriteOptions } from './rendering/sprite_composer.ts';
 export {
   initLpcShaders,

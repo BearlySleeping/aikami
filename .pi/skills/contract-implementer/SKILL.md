@@ -55,6 +55,36 @@ See `.pi/skills/testing/SKILL.md` for suite/POM patterns and run commands.
 
 ## Contract → Location Mapping
 
+Use this decision tree BEFORE writing Architecture Directives in a contract.
+Not every endpoint belongs in Firebase Functions.
+
+```
+Is the logic…
+├─ Local filesystem operation (scan, read, write, serve files from disk)?
+│  → packages/frontend/engine/src/ or apps/frontend/client/src/
+│
+├─ Heavy local processing (AI inference, image gen, TTS)?
+│  → apps/backend/{image,text,voice}/ (local microservices)
+│
+├─ Business logic that needs Firebase Auth + Firestore/Storage?
+│  ├─ Called by signed-in client? → controllers/callable/
+│  ├─ Called by external services (webhooks, public API)? → controllers/api/
+│  └─ Triggered by Firestore/Auth/Storage events? → controllers/firestore|auth|storage/
+│
+├─ Shared types, schemas, constants (no runtime)?
+│  → packages/shared/{types,schemas,constants}/
+│
+└─ Backend library code (reusable across services)?
+   → packages/backend/{ai,auth,chat,database,utils}/
+```
+
+🔴 **Golden rule**: If the operation touches `fs.readdirSync`, `writeFileSync`,
+`createReadStream` on a non-`/tmp` path, or serves binary files from a local
+directory — it CANNOT go in `apps/backend/firebase/src/controllers/`. Cloud
+Functions are stateless and ephemeral; they have no persistent filesystem.
+
+Static mapping (legacy reference):
+
 ```
 client-*    → apps/frontend/client/src/
 site-*      → apps/frontend/site/src/
