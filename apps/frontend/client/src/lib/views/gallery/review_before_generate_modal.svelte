@@ -14,16 +14,15 @@ const { viewModel }: Props = $props();
 </script>
 
 {#if viewModel.isOpen}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
   >
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="bg-base-100 rounded-lg border border-base-300 shadow-2xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto"
+      role="document"
       onclick={(e: MouseEvent) => e.stopPropagation()}
       onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
     >
@@ -40,10 +39,12 @@ const { viewModel }: Props = $props();
         <div>
           <label
             class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+            for="review-positive-prompt"
           >
             Positive Prompt
           </label>
           <textarea
+            id="review-positive-prompt"
             class="textarea textarea-bordered w-full text-sm font-mono h-24"
             value={viewModel.positivePrompt}
             oninput={(e: Event) => viewModel.setPositivePrompt((e.target as HTMLTextAreaElement).value)}
@@ -53,10 +54,12 @@ const { viewModel }: Props = $props();
         <div>
           <label
             class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+            for="review-negative-prompt"
           >
             Negative Prompt
           </label>
           <textarea
+            id="review-negative-prompt"
             class="textarea textarea-bordered w-full text-sm font-mono h-20"
             value={viewModel.negativePrompt}
             oninput={(e: Event) => viewModel.setNegativePrompt((e.target as HTMLTextAreaElement).value)}

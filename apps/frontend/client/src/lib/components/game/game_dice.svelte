@@ -33,7 +33,6 @@ const failureLabel = $derived(dice?.labels?.failure ?? 'FAILURE');
 </script>
 
 {#if dice}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="dice-overlay absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-sm"
   >
@@ -49,17 +48,15 @@ const failureLabel = $derived(dice?.labels?.failure ?? 'FAILURE');
 
       <!-- d20 die -->
       {#if dice.phase === 'interactive'}
-        <!-- biome-ignore lint/a11y/useSemanticElements: styled dice with proper a11y attributes -->
-        <div
-          class="d20-die interactive cursor-pointer"
-          role="button"
-          tabindex="0"
+        <button
+          class="d20-die interactive cursor-pointer border-none bg-transparent p-0"
+          type="button"
           aria-label="Click to roll d20"
           onclick={dice.onRoll}
           onkeydown={(e) => e.key === 'Enter' && dice.onRoll?.()}
         >
           <span class="d20-question">?</span>
-        </div>
+        </button>
         <span class="text-sm font-medium text-base-content/60 animate-pulse">Click to roll</span>
       {:else if dice.phase === 'rolling'}
         <div class="d20-die spinning">

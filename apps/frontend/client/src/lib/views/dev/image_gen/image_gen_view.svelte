@@ -55,9 +55,11 @@ const TRIGGER_EVENTS = [
           <div>
             <label
               class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+              for="active-profile-select"
               >Active Profile</label
             >
             <select
+              id="active-profile-select"
               class="select select-bordered w-full text-sm"
               value={viewModel.activeProfileId}
               onchange={(e: Event) => (viewModel.activeProfileId = (e.target as HTMLSelectElement).value)}
@@ -145,8 +147,13 @@ const TRIGGER_EVENTS = [
               </h3>
 
               <div>
-                <label class="text-xs font-semibold text-base-content/60 block mb-0.5">Name</label>
+                <label
+                  class="text-xs font-semibold text-base-content/60 block mb-0.5"
+                  for="edit-profile-name"
+                  >Name</label
+                >
                 <input
+                  id="edit-profile-name"
                   class="input input-bordered input-sm w-full text-sm"
                   value={viewModel.editingProfile.name}
                   oninput={(e: Event) => viewModel.updateEditingField('name', (e.target as HTMLInputElement).value)}
@@ -154,10 +161,13 @@ const TRIGGER_EVENTS = [
               </div>
 
               <div>
-                <label class="text-xs font-semibold text-base-content/60 block mb-0.5"
+                <label
+                  class="text-xs font-semibold text-base-content/60 block mb-0.5"
+                  for="edit-positive-tags"
                   >Positive Tags</label
                 >
                 <textarea
+                  id="edit-positive-tags"
                   class="textarea textarea-bordered w-full text-xs font-mono h-20"
                   value={viewModel.editingProfile.positiveTags}
                   oninput={(e: Event) => viewModel.updateEditingField('positiveTags', (e.target as HTMLTextAreaElement).value)}
@@ -165,10 +175,13 @@ const TRIGGER_EVENTS = [
               </div>
 
               <div>
-                <label class="text-xs font-semibold text-base-content/60 block mb-0.5"
+                <label
+                  class="text-xs font-semibold text-base-content/60 block mb-0.5"
+                  for="edit-negative-tags"
                   >Negative Tags</label
                 >
                 <textarea
+                  id="edit-negative-tags"
                   class="textarea textarea-bordered w-full text-xs font-mono h-20"
                   value={viewModel.editingProfile.negativeTags}
                   oninput={(e: Event) => viewModel.updateEditingField('negativeTags', (e.target as HTMLTextAreaElement).value)}
@@ -176,21 +189,23 @@ const TRIGGER_EVENTS = [
               </div>
 
               <div>
-                <label class="text-xs font-semibold text-base-content/60 block mb-0.5"
-                  >Per-Image Tags</label
-                >
-                <div class="grid grid-cols-1 gap-2">
-                  {#each IMAGE_TYPES as imageType}
-                    <div>
-                      <span class="text-[10px] font-mono text-base-content/40">{imageType}</span>
-                      <input
-                        class="input input-bordered input-sm w-full text-xs font-mono"
-                        value={viewModel.editingProfile.perImageTags[imageType] ?? ''}
-                        oninput={(e: Event) => viewModel.updatePerImageTag(imageType, (e.target as HTMLInputElement).value)}
-                      >
-                    </div>
-                  {/each}
-                </div>
+                <fieldset class="border-0 p-0">
+                  <legend class="text-xs font-semibold text-base-content/60 block mb-0.5">
+                    Per-Image Tags
+                  </legend>
+                  <div class="grid grid-cols-1 gap-2">
+                    {#each IMAGE_TYPES as imageType}
+                      <div>
+                        <span class="text-[10px] font-mono text-base-content/40">{imageType}</span>
+                        <input
+                          class="input input-bordered input-sm w-full text-xs font-mono"
+                          value={viewModel.editingProfile.perImageTags[imageType] ?? ''}
+                          oninput={(e: Event) => viewModel.updatePerImageTag(imageType, (e.target as HTMLInputElement).value)}
+                        >
+                      </div>
+                    {/each}
+                  </div>
+                </fieldset>
               </div>
 
               <div class="flex gap-2 pt-2">
@@ -218,9 +233,9 @@ const TRIGGER_EVENTS = [
       {#if viewModel.activeTab === 'compiler'}
         <div class="space-y-4">
           <div>
-            <label
+            <span
               class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
-              >Active Profile</label
+              >Active Profile</span
             >
             <p class="text-sm font-mono">
               {viewModel.activeProfile?.name ?? 'none'}
@@ -231,9 +246,11 @@ const TRIGGER_EVENTS = [
           <div>
             <label
               class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+              for="compiler-base-prompt"
               >Base Prompt</label
             >
             <textarea
+              id="compiler-base-prompt"
               class="textarea textarea-bordered w-full text-sm font-mono h-16"
               value={viewModel.compilerBasePrompt}
               oninput={(e: Event) => (viewModel.compilerBasePrompt = (e.target as HTMLTextAreaElement).value)}
@@ -243,9 +260,11 @@ const TRIGGER_EVENTS = [
           <div>
             <label
               class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+              for="compiler-image-type"
               >Image Type</label
             >
             <select
+              id="compiler-image-type"
               class="select select-bordered w-full text-sm"
               value={viewModel.compilerImageType}
               onchange={(e: Event) => (viewModel.compilerImageType = (e.target as HTMLSelectElement).value as ImageGenViewModelInterface['compilerImageType'])}
@@ -291,10 +310,13 @@ const TRIGGER_EVENTS = [
       {#if viewModel.activeTab === 'triggers'}
         <div class="space-y-4">
           <div class="flex items-center gap-2">
-            <label class="text-xs font-semibold text-base-content/60 uppercase tracking-wider"
+            <label
+              class="text-xs font-semibold text-base-content/60 uppercase tracking-wider"
+              for="trigger-enabled"
               >Enabled</label
             >
             <input
+              id="trigger-enabled"
               type="checkbox"
               class="toggle toggle-sm"
               checked={viewModel.triggerEnabled}
@@ -305,9 +327,11 @@ const TRIGGER_EVENTS = [
           <div>
             <label
               class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+              for="trigger-event"
               >Trigger Event</label
             >
             <select
+              id="trigger-event"
               class="select select-bordered w-full text-sm"
               value={viewModel.triggerEvent}
               onchange={(e: Event) => (viewModel.triggerEvent = (e.target as HTMLSelectElement).value as typeof viewModel.triggerEvent)}
@@ -321,9 +345,11 @@ const TRIGGER_EVENTS = [
           <div>
             <label
               class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+              for="trigger-context"
               >Context</label
             >
             <input
+              id="trigger-context"
               class="input input-bordered w-full text-sm"
               value={viewModel.triggerContext}
               oninput={(e: Event) => (viewModel.triggerContext = (e.target as HTMLInputElement).value)}
@@ -333,9 +359,11 @@ const TRIGGER_EVENTS = [
           <div>
             <label
               class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+              for="trigger-character-name"
               >Character Name (for NPC events)</label
             >
             <input
+              id="trigger-character-name"
               class="input input-bordered w-full text-sm"
               value={viewModel.triggerCharacterName}
               oninput={(e: Event) => (viewModel.triggerCharacterName = (e.target as HTMLInputElement).value)}
@@ -380,9 +408,11 @@ const TRIGGER_EVENTS = [
             <div class="flex-1">
               <label
                 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+                for="gallery-chat-id"
                 >Chat ID</label
               >
               <input
+                id="gallery-chat-id"
                 class="input input-bordered input-sm w-full text-sm"
                 value={viewModel.galleryChatId}
                 oninput={(e: Event) => viewModel.setGalleryChatId((e.target as HTMLInputElement).value)}
@@ -415,7 +445,7 @@ const TRIGGER_EVENTS = [
                 >
                   <img
                     src={image.url}
-                    alt="Gallery image"
+                    alt="Generated artwork"
                     class="w-full h-auto block"
                     loading="lazy"
                   >
@@ -431,7 +461,6 @@ const TRIGGER_EVENTS = [
           {/if}
 
           {#if viewModel.galleryExpandedUrl}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
               class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
               onclick={() => viewModel.closeGalleryExpand()}
@@ -449,7 +478,7 @@ const TRIGGER_EVENTS = [
               </button>
               <img
                 src={viewModel.galleryExpandedUrl}
-                alt="Gallery image (fullscreen)"
+                alt="Generated artwork (fullscreen)"
                 class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl"
               >
             </div>

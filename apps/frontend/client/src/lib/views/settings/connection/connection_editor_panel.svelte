@@ -16,10 +16,11 @@ const {
 }: Props = $props();
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: backdrop click to dismiss -->
 <div
   class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  role="dialog"
+  aria-modal="true"
+  tabindex="-1"
   onclick={(e) => {
     if (e.target === e.currentTarget) {
       viewModel.cancelEdit();

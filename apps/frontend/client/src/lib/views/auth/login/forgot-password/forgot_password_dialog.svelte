@@ -81,20 +81,16 @@ const viewModel = getForgotPasswordViewModel({
         </div>
       </form>
     </div>
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
-    <div
-      class="modal-backdrop"
+    <button
+      class="modal-backdrop border-none bg-transparent p-0"
+      type="button"
       onclick={() => viewModel.close()}
       onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                     viewModel.close();
                 }
             }}
-      role="button"
-      tabindex="0"
       aria-label="Close dialog"
-    ></div>
+    ></button>
   </BaseViewModelContainer>
 {/if}

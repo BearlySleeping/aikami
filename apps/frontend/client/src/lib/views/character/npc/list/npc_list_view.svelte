@@ -225,15 +225,13 @@ function handleUrlSubmit() {
           <button type="button" class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
         </div>
       </div>
-      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
-      <div
-        class="modal-backdrop"
+      <button
+        class="modal-backdrop border-none bg-transparent p-0"
+        type="button"
         onclick={() => (showUrlModal = false)}
         onkeydown={(e) => { if (e.key === 'Enter') { showUrlModal = false; } }}
-        role="button"
-        tabindex="0"
         aria-label="Close"
-      ></div>
+      ></button>
     </div>
   {/if}
 
@@ -249,15 +247,13 @@ function handleUrlSubmit() {
           </button>
         </div>
       </div>
-      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
-      <div
-        class="modal-backdrop"
+      <button
+        class="modal-backdrop border-none bg-transparent p-0"
+        type="button"
         onclick={() => (showCreateModal = false)}
         onkeydown={(e) => { if (e.key === 'Enter') { showCreateModal = false; } }}
-        role="button"
-        tabindex="0"
         aria-label="Close"
-      ></div>
+      ></button>
     </div>
   {/if}
 
@@ -350,15 +346,13 @@ function handleUrlSubmit() {
           </button>
         </div>
       </div>
-      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
-      <div
-        class="modal-backdrop"
+      <button
+        class="modal-backdrop border-none bg-transparent p-0"
+        type="button"
         onclick={() => viewModel.closeEditModal()}
         onkeydown={(e) => { if (e.key === 'Enter') { viewModel.closeEditModal(); } }}
-        role="button"
-        tabindex="0"
         aria-label="Close"
-      ></div>
+      ></button>
     </div>
   {/if}
 </BaseViewModelContainer>

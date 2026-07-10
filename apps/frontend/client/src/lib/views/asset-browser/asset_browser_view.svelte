@@ -209,9 +209,9 @@ const handleGlobalClick = () => {
       </div>
     </aside>
 
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
+    <section
       class="flex-1 flex flex-col min-w-0 relative"
+      aria-label="Asset drop zone"
       ondragenter={handleDragEnter}
       ondragleave={handleDragLeave}
       ondragover={handleDragOver}
@@ -385,16 +385,16 @@ const handleGlobalClick = () => {
           </div>
         </div>
       {/if}
-    </div>
+    </section>
   </div>
 
   {#if viewModel.contextMenu.open && viewModel.contextMenu.asset}
     {@const asset = viewModel.contextMenu.asset}
-    <!-- svelte-ignore a11y_use_key_with_click_events -->
     <div
       class="fixed z-50 menu menu-sm bg-base-200 rounded-box shadow-lg border border-base-300 p-1 min-w-36"
       style="left: {viewModel.contextMenu.x}px; top: {viewModel.contextMenu.y}px;"
       onclick={(e) => e.stopPropagation()}
+      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closeContextMenu(); } }}
       role="menu"
     >
       <button
@@ -423,10 +423,17 @@ const handleGlobalClick = () => {
   {/if}
 
   {#if viewModel.uploadInfoOpen}
-    <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
-    <dialog class="modal modal-open" onclick={() => viewModel.closeUploadInfo()}>
-      <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
-      <div class="modal-box" onclick={(e) => e.stopPropagation()}>
+    <dialog
+      class="modal modal-open"
+      onclick={() => viewModel.closeUploadInfo()}
+      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closeUploadInfo(); } }}
+    >
+      <div
+        class="modal-box"
+        role="document"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
+      >
         <h3 class="font-bold text-lg mb-4">Adding Assets</h3>
         <div class="space-y-4 text-sm">
           <p>
@@ -471,10 +478,17 @@ const handleGlobalClick = () => {
   {/if}
 
   {#if viewModel.previewModalOpen && viewModel.previewAsset}
-    <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
-    <dialog class="modal modal-open" onclick={() => viewModel.closePreview()}>
-      <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
-      <div class="modal-box max-w-2xl" onclick={(e) => e.stopPropagation()}>
+    <dialog
+      class="modal modal-open"
+      onclick={() => viewModel.closePreview()}
+      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closePreview(); } }}
+    >
+      <div
+        class="modal-box max-w-2xl"
+        role="document"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
+      >
         <div class="flex items-center gap-3 mb-4">
           <h3 class="font-bold text-lg truncate flex-1">{viewModel.previewAsset.name}</h3>
           <span class="badge badge-sm">{viewModel.previewAsset.category}</span>
@@ -483,8 +497,10 @@ const handleGlobalClick = () => {
         {#if viewModel.hasPreview}
           {#if viewModel.previewAsset.ext === '.mp3' || viewModel.previewAsset.ext === '.ogg' || viewModel.previewAsset.ext === '.wav'}
             {#if viewModel.previewUrl}
-              <!-- svelte-ignore a11y_use_media_caption -->
-              <audio controls class="w-full"><source src={viewModel.previewUrl}></audio>
+              <audio controls class="w-full">
+                <source src={viewModel.previewUrl}>
+                <track kind="captions">
+              </audio>
             {/if}
           {:else if viewModel.previewUrl}
             <img

@@ -17,10 +17,10 @@ type Props = {
 const { viewModel }: Props = $props();
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div
   class="pointer-events-auto absolute inset-0 z-10 flex flex-col justify-end bg-gradient-to-t from-base-300/60 to-transparent"
   role="dialog"
+  aria-modal="true"
   aria-label="Dialogue with {viewModel.npcName}"
 >
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->

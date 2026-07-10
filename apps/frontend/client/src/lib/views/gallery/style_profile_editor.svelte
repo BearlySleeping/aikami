@@ -18,10 +18,13 @@ const IMAGE_TYPES = ['background', 'portrait', 'illustration', 'sprite', 'selfie
 <div class="space-y-4">
   <!-- Active profile selector -->
   <div>
-    <label class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+    <label
+      class="text-xs font-semibold text-base-content/60 uppercase tracking-wider block mb-1"
+      for="style-active-profile"
       >Active Profile</label
     >
     <select
+      id="style-active-profile"
       class="select select-bordered w-full text-sm"
       value={viewModel.activeProfileId}
       onchange={(e: Event) => viewModel.selectProfile((e.target as HTMLSelectElement).value)}
@@ -102,8 +105,11 @@ const IMAGE_TYPES = ['background', 'portrait', 'illustration', 'sprite', 'selfie
       <h3 class="font-semibold text-sm text-primary">Editing: {viewModel.editingProfile.name}</h3>
 
       <div>
-        <label class="text-xs font-semibold text-base-content/60 block mb-0.5">Name</label>
+        <label class="text-xs font-semibold text-base-content/60 block mb-0.5" for="style-name"
+          >Name</label
+        >
         <input
+          id="style-name"
           class="input input-bordered input-sm w-full text-sm"
           value={viewModel.editingProfile.name}
           oninput={(e: Event) => viewModel.updateEditingField('name', (e.target as HTMLInputElement).value)}
@@ -111,8 +117,13 @@ const IMAGE_TYPES = ['background', 'portrait', 'illustration', 'sprite', 'selfie
       </div>
 
       <div>
-        <label class="text-xs font-semibold text-base-content/60 block mb-0.5">Positive Tags</label>
+        <label
+          class="text-xs font-semibold text-base-content/60 block mb-0.5"
+          for="style-positive-tags"
+          >Positive Tags</label
+        >
         <textarea
+          id="style-positive-tags"
           class="textarea textarea-bordered w-full text-xs font-mono h-20"
           value={viewModel.editingProfile.positiveTags}
           oninput={(e: Event) => viewModel.updateEditingField('positiveTags', (e.target as HTMLTextAreaElement).value)}
@@ -120,8 +131,13 @@ const IMAGE_TYPES = ['background', 'portrait', 'illustration', 'sprite', 'selfie
       </div>
 
       <div>
-        <label class="text-xs font-semibold text-base-content/60 block mb-0.5">Negative Tags</label>
+        <label
+          class="text-xs font-semibold text-base-content/60 block mb-0.5"
+          for="style-negative-tags"
+          >Negative Tags</label
+        >
         <textarea
+          id="style-negative-tags"
           class="textarea textarea-bordered w-full text-xs font-mono h-20"
           value={viewModel.editingProfile.negativeTags}
           oninput={(e: Event) => viewModel.updateEditingField('negativeTags', (e.target as HTMLTextAreaElement).value)}
@@ -129,21 +145,23 @@ const IMAGE_TYPES = ['background', 'portrait', 'illustration', 'sprite', 'selfie
       </div>
 
       <div>
-        <label class="text-xs font-semibold text-base-content/60 block mb-0.5"
-          >Per-Image Tags</label
-        >
-        <div class="grid grid-cols-1 gap-2">
-          {#each IMAGE_TYPES as imageType}
-            <div>
-              <span class="text-[10px] font-mono text-base-content/40">{imageType}</span>
-              <input
-                class="input input-bordered input-sm w-full text-xs font-mono"
-                value={viewModel.editingProfile.perImageTags[imageType] ?? ''}
-                oninput={(e: Event) => viewModel.updatePerImageTag(imageType, (e.target as HTMLInputElement).value)}
-              >
-            </div>
-          {/each}
-        </div>
+        <fieldset class="border-0 p-0">
+          <legend class="text-xs font-semibold text-base-content/60 block mb-0.5">
+            Per-Image Tags
+          </legend>
+          <div class="grid grid-cols-1 gap-2">
+            {#each IMAGE_TYPES as imageType}
+              <div>
+                <span class="text-[10px] font-mono text-base-content/40">{imageType}</span>
+                <input
+                  class="input input-bordered input-sm w-full text-xs font-mono"
+                  value={viewModel.editingProfile.perImageTags[imageType] ?? ''}
+                  oninput={(e: Event) => viewModel.updatePerImageTag(imageType, (e.target as HTMLInputElement).value)}
+                >
+              </div>
+            {/each}
+          </div>
+        </fieldset>
       </div>
 
       <div class="flex gap-2 pt-2">

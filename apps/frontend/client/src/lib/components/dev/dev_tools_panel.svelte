@@ -21,7 +21,6 @@ const { actions = [], toggles = [] }: Props = $props();
 let collapsed = $state(false);
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 transition-all duration-200"
   class:min-w-64={!collapsed}

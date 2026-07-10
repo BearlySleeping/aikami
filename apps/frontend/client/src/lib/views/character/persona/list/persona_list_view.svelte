@@ -88,8 +88,7 @@ const { viewModel }: Props = $props();
           <div class="grid gap-3">
             {#each viewModel.personas as persona (persona.persona.id)}
               {@const p = persona.persona}
-              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <!-- biome-ignore lint/a11y/useSemanticElements: card contains nested buttons -->
+              <!-- biome-ignore lint/a11y/useSemanticElements: cannot use <button> — card contains nested buttons (Set Active, Delete) -->
               <div
                 class="card bg-base-100 shadow hover:shadow-md transition-shadow cursor-pointer relative"
                 class:ring-2={p.isActive}

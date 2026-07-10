@@ -149,11 +149,11 @@ const _itemIcon = (itemId: string): string => {
 };
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm"
   onclick={() => viewModel.closeVendor()}
   role="dialog"
+  aria-modal="true"
   tabindex="-1"
   aria-label="Trading with {viewModel.vendorName}"
   onkeydown={handleKeyDown}

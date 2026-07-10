@@ -16,23 +16,16 @@ type Props = {
 const { viewModel }: Props = $props();
 </script>
 
-<!-- biome-ignore lint/a11y/useSemanticElements: fullscreen backdrop must be div -->
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-  role="button"
-  tabindex="0"
+  role="dialog"
+  aria-modal="true"
   aria-label="Close character sheet"
-  onclick={() => viewModel.closeSheet()}
+  tabindex="-1"
+  onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.closeSheet(); } }}
   onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeSheet()}
 >
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <!-- biome-ignore lint/a11y/noStaticElementInteractions: prevent backdrop close when clicking card -->
-  <!-- biome-ignore lint/a11y/useKeyWithClickEvents: card stops propagation only -->
-  <div
-    class="card w-full max-w-lg bg-base-100 shadow-2xl max-h-[90vh] overflow-y-auto"
-    onclick={(e: MouseEvent) => e.stopPropagation()}
-  >
+  <div class="card w-full max-w-lg bg-base-100 shadow-2xl max-h-[90vh] overflow-y-auto">
     <div class="card-body p-4 gap-3">
       <!-- Header -->
       <div class="flex items-center justify-between">

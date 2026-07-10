@@ -89,12 +89,12 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
 
 <!-- Credits Modal -->
 {#if viewModel.showCredits}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <!-- biome-ignore lint/a11y/useSemanticElements: modal overlay needs full-layer click handling -->
   <div
     class="modal modal-open"
-    role="button"
-    tabindex="0"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Credits"
+    tabindex="-1"
     onclick={() => viewModel.hideCreditsModal()}
     onkeydown={(e) => {
       if (e.key === 'Escape' || e.key === 'Enter') {

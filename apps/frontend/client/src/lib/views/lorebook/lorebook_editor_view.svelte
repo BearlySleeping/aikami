@@ -15,7 +15,6 @@ type Props = {
 const { viewModel }: Props = $props();
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex h-full gap-4">
   <!-- ═══ Lorebook list sidebar ═══ -->
   <div class="w-56 shrink-0 flex flex-col gap-2 border-r border-base-300 pr-3 overflow-auto">

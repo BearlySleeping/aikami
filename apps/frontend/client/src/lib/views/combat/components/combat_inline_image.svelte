@@ -76,7 +76,6 @@ let _isHovered = $state(false);
 
   <!-- Fullscreen expand modal (AC-2) -->
   {#if isExpanded}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onclick={() => (isExpanded = false)}

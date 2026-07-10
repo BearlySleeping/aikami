@@ -214,12 +214,12 @@ async function _getPageTarget(): Promise<{ id: string; webSocketDebuggerUrl: str
   return target;
 }
 
-interface NavOptions {
+type NavOptions = {
   /** Extra settle time after network idle (ms). Default 0. */
   settleMs?: number;
   /** Max total wait (ms). Default 15000. */
   timeoutMs?: number;
-}
+};
 
 /** Navigate and wait for loadEventFired + network idle (then optional settle). */
 async function navigateAndWait(url: string, opts: NavOptions = {}): Promise<void> {
@@ -244,7 +244,9 @@ async function navigateAndWait(url: string, opts: NavOptions = {}): Promise<void
     }, timeoutMs);
 
     function checkIdle() {
-      if (!loadFired) return;
+      if (!loadFired) {
+        return;
+      }
       if (pendingRequests > 0) {
         idleSince = undefined;
         return;

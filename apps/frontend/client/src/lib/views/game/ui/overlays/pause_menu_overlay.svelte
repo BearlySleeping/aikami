@@ -10,11 +10,12 @@ type Props = {
 const { isSaving = false, saveMessage }: Props = $props();
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div
   class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-base-300/80 backdrop-blur-sm"
   role="dialog"
+  aria-modal="true"
   aria-label="Pause Menu"
+  onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { gameOverlayService.resumeGame(); } }}
 >
   <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
     <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>

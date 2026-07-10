@@ -218,3 +218,153 @@ so DaisyUI theme variables cascade correctly:
 | Colors                                        | `bg-base-100` / `text-primary` / etc.   |
 | Opacity                                       | `bg-primary/50`                         |
 | Global CSS change                             | `app.css` `@theme` block                |
+
+---
+
+## Rule 7: Accessibility — No Ignores, Semantic Elements Only
+
+**🔴 NEVER add `svelte-ignore a11y_*` or `biome-ignore lint/a11y/*` comments.**
+Fix the underlying a11y issue instead. The linter rules exist to enforce real
+accessibility requirements.
+
+### 7a: Interactive elements MUST be semantic
+
+| Pattern | ✅ DO | ❌ NEVER |
+|---|---|---|
+| Clickable overlay/backdrop | `<button type="button" class="..." aria-label="Close">` | `<div onclick={...}>` |
+| Clickable card/container | `<button type="button" class="..." aria-label="...">` | `<div role="button" onclick={...}>` |
+| **Exception**: Card with nested `<button>` children | `<div role="button" tabindex="0" onclick={...} onkeydown={...}>` + single `biome-ignore` for `useSemanticElements` | `<button>` (HTML forbids nested buttons) |
+| Modal backdrop with nested interactive children | `<div role="dialog" aria-modal="true" tabindex="-1">` | `<button>` (can't nest buttons) |
+
+### 7b: Modal / dialog backdrops
+
+Every modal overlay MUST have all of:
+- `role="dialog"`
+- `aria-modal="true"`
+- `tabindex="-1"`
+- `onclick` for backdrop-close (using `e.target === e.currentTarget`)
+- `onkeydown` for Escape key dismissal
+
+```svelte
+<!-- ✅ CORRECT — modal backdrop overlay -->
+{#if open}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Settings"
+    tabindex="-1"
+    onclick={(e) => { if (e.target === e.currentTarget) close(); }}
+    onkeydown={(e) => { if (e.key === 'Escape') close(); }}
+  >
+    <div class="modal-box">
+      <!-- content -->
+    </div>
+  </div>
+{/if}
+```
+
+**🔴 Use `e.target === e.currentTarget` — NEVER `onclick stopPropagation` on children.**
+The `stopPropagation` pattern requires extra event handlers on child divs which
+triggers `noStaticElementInteractions` and `useKeyWithClickEvents`.
+
+### 7c: Labels MUST have `for` / `id`
+
+Every `<label>` element must be associated with a form control:
+
+```svelte
+<!-- ✅ CORRECT -->
+<label for="name-input" class="...">Name</label>
+<input id="name-input" class="input input-bordered" />
+
+<!-- ❌ WRONG -->
+<label class="...">Name</label>
+<input class="input input-bordered" />
+```
+
+**Static text headers that look like labels**: Use `<span>`, `<h4>`, or `<div>` —
+NOT `<label>`. The `<label>` element is only for form controls.
+
+**Group of inputs with a label**: Use `<fieldset>` + `<legend>`:
+
+```svelte
+<!-- ✅ CORRECT -->
+<fieldset class="border-0 p-0">
+  <legend class="text-xs font-semibold">Per-Image Tags</legend>
+  <!-- grouped inputs -->
+</fieldset>
+```
+
+### 7d: Form controls MUST have `type` attributes
+
+Every `<button>` outside a `<form>` needs `type="button"` (prevents accidental
+form submission). Inside a form, use `type="submit"` for submit buttons.
+
+### 7e: Media elements MUST have captions
+
+Every `<audio>` and `<video>` element must include a `<track>`:
+
+```svelte
+<audio controls class="w-full">
+  <source src={url}>
+  <track kind="captions">
+</audio>
+```
+
+### 7f: Alt text — no redundant "image"/"picture"/"photo"
+
+Screen readers already announce "image" — don't repeat it in alt text.
+
+```svelte
+<!-- ❌ WRONG -->
+<img src={url} alt="Gallery image">
+<img src={url} alt="Picture of a dragon">
+
+<!-- ✅ CORRECT -->
+<img src={url} alt="Generated artwork">
+<img src={url} alt="Red dragon breathing fire">
+```
+
+### 7g: Fullscreen image modals
+
+```svelte
+{#if expandedUrl}
+  <div
+    class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    onclick={() => (expandedUrl = null)}
+    onkeydown={(e) => { if (e.key === 'Escape') { expandedUrl = null; } }}
+  >
+    <button type="button"
+      class="absolute top-4 right-4 btn btn-sm btn-ghost text-white text-xl"
+      onclick={() => (expandedUrl = null)}>✕</button>
+    <img src={expandedUrl} alt="Combat scene (fullscreen)"
+      class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl">
+  </div>
+{/if}
+```
+
+### 7h: DaisyUI dialog / modal-backdrop
+
+When using DaisyUI's `.modal` / `.modal-backdrop` pattern, the backdrop element
+must be a `<button>` (not `<div>`):
+
+```svelte
+<div class="modal modal-open">
+  <div class="modal-box">
+    <!-- content -->
+  </div>
+  <button
+    type="button"
+    class="modal-backdrop border-none bg-transparent p-0"
+    onclick={() => close()}
+    onkeydown={(e) => { if (e.key === 'Enter') close(); }}
+    aria-label="Close"
+  ></button>
+</div>
+```
+
+Note: DaisyUI `.modal-backdrop` on a `<button>` needs `border-none bg-transparent p-0`
+to reset default button styling.

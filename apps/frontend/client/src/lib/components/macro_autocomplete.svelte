@@ -92,7 +92,6 @@ const categories = $derived.by(() => {
           >{category}</span
         >
         {#each macros as macro}
-          <!-- svelte-ignore a11y_click_events_have_key_events -->
           <button
             type="button"
             class="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-base-200 rounded-lg w-full text-left"
