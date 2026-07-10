@@ -20,6 +20,7 @@ export type {
   AgentOutput,
   CyoaAgentOutput,
   ExpressionOutput,
+  MusicCueOutput,
   ProseGuardianOutput,
   QuestUpdateOutput,
   SceneDirectionOutput,
@@ -34,6 +35,7 @@ export {
 } from './agent_schemas.ts';
 export { runCyoaAgent } from './agents/cyoa_agent.ts';
 export { runExpressionAgent } from './agents/expression_agent.ts';
+export { runMusicDjAgent } from './agents/music_dj_agent.ts';
 export { runNarrativeDirectorAgent } from './agents/narrative_director_agent.ts';
 export { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
 export { runQuestTrackerAgent } from './agents/quest_tracker_agent.ts';

@@ -27,6 +27,9 @@ export type AudioServiceInterface = BaseClassInterface & {
   /** Whether a crossfade transition is currently in progress. */
   readonly isCrossfading: boolean;
 
+  /** URL of the currently playing BGM track (null if not playing). */
+  readonly activeTrackUrl: string | null;
+
   /**
    * The master GainNode at the root of the audio graph.
    *
@@ -217,6 +220,11 @@ export class AudioService extends BaseClass<AudioServiceOptions> implements Audi
       throw new Error('AudioService: masterCompressorNode not initialized');
     }
     return node;
+  }
+
+  /** @inheritdoc */
+  get activeTrackUrl(): string | null {
+    return this._activeTrackUrl ?? null;
   }
 
   /** @inheritdoc */

@@ -35,6 +35,10 @@ import {
   getExportViewModel,
 } from './export/export_view_model.svelte';
 import {
+  getSettingsMusicViewModel,
+  type SettingsMusicViewModelInterface,
+} from './music/settings_music_view_model.svelte';
+import {
   getProvidersViewModel,
   type ProvidersViewModelInterface,
 } from './providers/providers_view_model.svelte';
@@ -45,7 +49,7 @@ import {
 
 export type SettingsCategory = 'game' | 'ai_engine' | 'agents';
 
-export type GameSubTab = 'display' | 'audio' | 'controls' | 'export';
+export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -60,6 +64,8 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly providersViewModel: ProvidersViewModelInterface;
   /** Audio settings view model wired to AudioService. */
   readonly audioViewModel: SettingsAudioViewModelInterface;
+  /** Music DJ settings view model — track library, scene overrides, provider. */
+  readonly musicViewModel: SettingsMusicViewModelInterface;
   /** Display settings view model wired to Tauri window API. */
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   /** Controls settings view model with localStorage keybindings. */
@@ -101,6 +107,7 @@ export class SettingsViewModel
   gameSubTab: GameSubTab = $state('display');
   readonly providersViewModel: ProvidersViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
+  readonly musicViewModel: SettingsMusicViewModelInterface;
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
   readonly exportViewModel: ExportViewModelInterface;
@@ -111,6 +118,7 @@ export class SettingsViewModel
     super(options);
     this.providersViewModel = getProvidersViewModel({ className: 'ProvidersViewModel' });
     this.audioViewModel = getSettingsAudioViewModel({ className: 'SettingsAudioViewModel' });
+    this.musicViewModel = getSettingsMusicViewModel({ className: 'SettingsMusicViewModel' });
     this.displayViewModel = getSettingsDisplayViewModel({ className: 'SettingsDisplayViewModel' });
     this.controlsViewModel = getSettingsControlsViewModel({
       className: 'SettingsControlsViewModel',

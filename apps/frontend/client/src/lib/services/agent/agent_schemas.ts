@@ -141,6 +141,32 @@ export type CyoaAgentOutput = {
   choices: CyoaChoice[];
 };
 
+// ── Music Cue (C-249) ───────────────────────────────────────────────────
+
+/**
+ * Music DJ agent output — the MusicCue schema is the source of truth
+ * in `@aikami/schemas` (`MusicCueSchema`). Re-exported here for the
+ * agent pipeline's output union.
+ */
+export { MusicCueSchema, type MusicCueValidated } from '@aikami/schemas';
+
+export type MusicCueOutput = {
+  /** Result type discriminator for the agent result union. */
+  type: 'music_cue';
+  action: {
+    type: string;
+    trackId?: string;
+    fadeInMs?: number;
+    durationMs?: number;
+    fadeOutMs?: number;
+    target?: string;
+    level?: number;
+    reason?: string;
+  };
+  reasoning: string;
+  sceneTags: string[];
+};
+
 // ── Union type for all agent outputs ────────────────────────────────────
 
 export type AgentOutput =
@@ -149,4 +175,5 @@ export type AgentOutput =
   | QuestUpdateOutput
   | ExpressionOutput
   | ProseGuardianOutput
-  | CyoaAgentOutput;
+  | CyoaAgentOutput
+  | MusicCueOutput;

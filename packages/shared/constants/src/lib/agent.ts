@@ -42,6 +42,7 @@ export const BUILT_IN_AGENT_IDS = new Set([
   'expression',
   'cyoa',
   'prose-guardian',
+  'music-dj',
 ]);
 
 /** Firestore collection name for agent definitions. */

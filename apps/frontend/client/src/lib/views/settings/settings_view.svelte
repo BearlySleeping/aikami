@@ -11,6 +11,7 @@ import SettingsAudioView from './audio/settings_audio_view.svelte';
 import SettingsControlsView from './controls/settings_controls_view.svelte';
 import SettingsDisplayView from './display/settings_display_view.svelte';
 import ExportView from './export/export_view.svelte';
+import SettingsMusicView from './music/settings_music_view.svelte';
 import ProvidersView from './providers/providers_view.svelte';
 import type { SettingsViewModelInterface } from './settings_view_model.svelte';
 
@@ -32,6 +33,7 @@ const GAME_SUB_TABS = [
   { id: 'audio' as const, label: 'Audio' },
   { id: 'controls' as const, label: 'Controls' },
   { id: 'export' as const, label: 'Export & Data' },
+  { id: 'music' as const, label: 'Music' },
 ];
 </script>
 
@@ -106,6 +108,8 @@ const GAME_SUB_TABS = [
         <SettingsControlsView viewModel={viewModel.controlsViewModel} />
       {:else if viewModel.gameSubTab === 'export'}
         <ExportView viewModel={viewModel.exportViewModel} />
+      {:else if viewModel.gameSubTab === 'music'}
+        <SettingsMusicView viewModel={viewModel.musicViewModel} />
       {/if}
     </div>
   <!-- ═══════════════════════════════════════════════════════════════════

@@ -20,6 +20,7 @@ import type {
 } from '$types/agent_types';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';
+import { runMusicDjAgent } from './agents/music_dj_agent.ts';
 import { runNarrativeDirectorAgent } from './agents/narrative_director_agent.ts';
 import { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
 import { runQuestTrackerAgent } from './agents/quest_tracker_agent.ts';
@@ -119,6 +120,12 @@ const AGENT_RUNNERS: Record<
       _context: opts.context,
       aiResponse: opts.aiResponse ?? '',
     }),
+  'music-dj': (opts) =>
+    runMusicDjAgent({
+      config: opts.config,
+      _context: opts.context,
+      aiResponse: opts.aiResponse ?? '',
+    }),
 };
 
 // ── Implementation ───────────────────────────────────────────────────────
@@ -132,7 +139,7 @@ class AgentPipelineService
    * filtering by enabledAgents when provided.
    */
   private async _resolveAgents(enabledAgents?: string[]): Promise<AgentConfig[]> {
-    const builtIn = BUILT_IN_AGENTS.filter((a) => a.enabled).filter(
+    const builtIn = BUILT_IN_AGENTS.filter(
       (a) => !enabledAgents || enabledAgents.length === 0 || enabledAgents.includes(a.id),
     );
 

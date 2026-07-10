@@ -8,8 +8,8 @@ import { describe, expect, it } from 'bun:test';
 import { BUILT_IN_AGENTS } from './built_in_agents.ts';
 
 describe('BUILT_IN_AGENTS', () => {
-  it('should have exactly 6 agents', () => {
-    expect(BUILT_IN_AGENTS).toHaveLength(6);
+  it('should have exactly 7 agents', () => {
+    expect(BUILT_IN_AGENTS).toHaveLength(7);
   });
 
   it('should have exactly one pre-agent', () => {
@@ -18,9 +18,9 @@ describe('BUILT_IN_AGENTS', () => {
     expect(preAgents[0].id).toBe('narrative-director');
   });
 
-  it('should have exactly five post-agents', () => {
+  it('should have exactly six post-agents', () => {
     const postAgents = BUILT_IN_AGENTS.filter((a) => a.phase === 'post');
-    expect(postAgents).toHaveLength(5);
+    expect(postAgents).toHaveLength(6);
 
     const ids = postAgents.map((a) => a.id);
     expect(ids).toContain('world-state');
@@ -28,6 +28,7 @@ describe('BUILT_IN_AGENTS', () => {
     expect(ids).toContain('expression');
     expect(ids).toContain('prose-guardian');
     expect(ids).toContain('cyoa');
+    expect(ids).toContain('music-dj');
   });
 
   it('should have unique agent IDs', () => {

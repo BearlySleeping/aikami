@@ -14,6 +14,7 @@ export * from './lib/impersonation.ts';
 export * from './lib/locale_codes.ts';
 export * from './lib/location.ts';
 export * from './lib/logger.ts';
+export * from './lib/music.ts';
 export * from './lib/project.ts';
 export * from './lib/providers.ts';
 export * from './lib/regex.ts';

@@ -76,7 +76,7 @@ export class AgentPipelineViewModel
     results: [],
     thoughtBubbles: [],
     showDrawer: false,
-    enabledAgents: BUILT_IN_AGENTS.map((a) => a.id),
+    enabledAgents: BUILT_IN_AGENTS.filter((a) => a.enabled).map((a) => a.id),
   });
 
   // ── Getters ──────────────────────────────────────────────────────
