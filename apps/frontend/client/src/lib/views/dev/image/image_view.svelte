@@ -50,6 +50,60 @@ const onFileChange = (e: Event) => {
            IMAGE GEN TAB
            ═══════════════════════════════════════════════════════════════ -->
       {#if viewModel.activeTab === 'generate'}
+        <!-- Style Profile Pipeline (C-242) -->
+        <div class="card bg-base-200 shadow mb-6">
+          <div class="card-body p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="font-mono text-xs uppercase tracking-wider text-primary">
+                Style Profile Pipeline
+              </h2>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <span class="text-[10px] font-mono text-base-content/50">Auto</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-xs"
+                  checked={viewModel.autoCompile}
+                  onchange={() => (viewModel.autoCompile = !viewModel.autoCompile)}
+                >
+              </label>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="form-control">
+                <div class="label py-0.5">
+                  <span class="label-text text-xs font-semibold">Style Profile</span>
+                </div>
+                <select
+                  class="select select-bordered select-sm w-full"
+                  value={viewModel.styleProfileId}
+                  onchange={(e: Event) => (viewModel.styleProfileId = (e.target as HTMLSelectElement).value)}
+                  disabled={viewModel.isGenerating}
+                >
+                  {#each viewModel.styleProfiles as profile}
+                    <option value={profile.id}>
+                      {profile.name}{profile.isBuiltIn ? ' 🔒' : ''}
+                    </option>
+                  {/each}
+                </select>
+              </label>
+              <label class="form-control">
+                <div class="label py-0.5">
+                  <span class="label-text text-xs font-semibold">Image Type</span>
+                </div>
+                <select
+                  class="select select-bordered select-sm w-full"
+                  value={viewModel.imageType}
+                  onchange={(e: Event) => (viewModel.imageType = (e.target as HTMLSelectElement).value as ReturnType<() => typeof viewModel.imageType>)}
+                  disabled={viewModel.isGenerating}
+                >
+                  {#each viewModel.imageTypes as imageType}
+                    <option value={imageType}>{imageType}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <!-- Config -->
         <div class="card bg-base-200 shadow mb-6">
           <div class="card-body p-4">
@@ -178,6 +232,23 @@ const onFileChange = (e: Event) => {
         <!-- Prompts -->
         <div class="card bg-base-200 shadow mb-6">
           <div class="card-body p-6">
+            <!-- Compile section (C-242) -->
+            <div class="flex items-center gap-2 mb-4">
+              <button
+                type="button"
+                class="btn btn-xs btn-outline btn-primary"
+                onclick={() => viewModel.compilePrompt()}
+                disabled={viewModel.isGenerating || !viewModel.prompt.trim()}
+              >
+                🧪 Compile
+              </button>
+              {#if viewModel.compiledTagsSummary}
+                <span class="text-[10px] font-mono text-base-content/50"
+                  >{viewModel.compiledTagsSummary}</span
+                >
+              {/if}
+            </div>
+
             <label class="form-control w-full mb-4">
               <div class="label">
                 <span class="label-text font-semibold">Prompt</span

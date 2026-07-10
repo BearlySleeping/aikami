@@ -4,7 +4,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { type CheckpointInfo, imageGenerationService } from '$services';
+import type { ImageType } from '@aikami/types';
+import { compileImagePrompt } from '$lib/services/image/prompt_compiler';
+import { type CheckpointInfo, imageGenerationService, styleProfileService } from '$services';
 
 export type { CheckpointInfo };
 
@@ -108,6 +110,15 @@ export type ImageViewModelInterface = BaseViewModelInterface & {
   readonly results: readonly string[];
   cancel(): void;
 
+  // ── Style Profile Pipeline (C-242) ────────────────────────────────────
+  styleProfileId: string;
+  readonly styleProfiles: readonly { id: string; name: string; isBuiltIn: boolean }[];
+  imageType: ImageType;
+  readonly imageTypes: readonly ImageType[];
+  autoCompile: boolean;
+  readonly compiledTagsSummary: string;
+  compilePrompt(): void;
+
   // ── Image Gen tab ─────────────────────────────────────────────────────
   readonly prompt: string;
   readonly negativePrompt: string;
@@ -150,6 +161,19 @@ class ImageViewModel
 {
   // Tab state
   activeTab: ImageTab = $state('generate');
+
+  // ── Style Profile Pipeline (C-242) ───────────────────────────────────
+  autoCompile = $state(true);
+  imageType = $state<ImageType>('illustration');
+  private _compiledTagsSummary = $state('');
+
+  readonly imageTypes: readonly ImageType[] = [
+    'background',
+    'portrait',
+    'illustration',
+    'sprite',
+    'selfie',
+  ] as const;
 
   // Image Gen state
   prompt = $state('');
@@ -204,6 +228,45 @@ class ImageViewModel
     return EXPRESSIONS;
   }
 
+  // ── Pipeline getters/setters (C-242) ──────────────────────────────────
+
+  get styleProfiles(): readonly { id: string; name: string; isBuiltIn: boolean }[] {
+    return styleProfileService.profiles;
+  }
+
+  get styleProfileId(): string {
+    return styleProfileService.activeProfileId;
+  }
+
+  set styleProfileId(value: string) {
+    styleProfileService.setActiveProfile(value);
+  }
+
+  get compiledTagsSummary(): string {
+    return this._compiledTagsSummary;
+  }
+
+  /** Compiles the current prompt through the active style profile pipeline. */
+  compilePrompt(): void {
+    const profile = styleProfileService.activeProfile;
+    if (!profile) {
+      return;
+    }
+
+    const compiled = compileImagePrompt({
+      basePrompt: this.prompt,
+      profile,
+      imageType: this.imageType,
+    });
+
+    this.prompt = compiled.positive;
+    this.negativePrompt = compiled.negative;
+
+    this._compiledTagsSummary =
+      `${profile.name} / ${this.imageType} — ` +
+      `Pos: ${compiled.positive.length} chars, Neg: ${compiled.negative.length} chars`;
+  }
+
   // ── Public: navigation ────────────────────────────────────────────────
 
   setActiveTab(tab: ImageTab): void {
@@ -249,6 +312,11 @@ class ImageViewModel
   async generate(): Promise<void> {
     if (!this.prompt.trim()) {
       return;
+    }
+
+    // Auto-compile through style profile pipeline if enabled (C-242)
+    if (this.autoCompile) {
+      this.compilePrompt();
     }
 
     this.cancel();

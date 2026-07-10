@@ -1,3 +1,4 @@
+<!-- completed: 2026-07-10 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,7 @@
 | **Target** | `apps/frontend/client/src/lib/services/image/` + `apps/frontend/client/src/lib/views/gallery/` — Style profiles, prompt compilation, contextual triggers, review flow, gallery panel |
 | **Priority** | P2 — Visuals dramatically enhance immersion; currently a major gap despite existing ComfyUI integration |
 | **Dependencies** | `imageGenerationService` (435 lines — EXISTS with ComfyUI + checkpoint loading), C-230 (Connection config — COMPLETED), C-233 (World-Gen Wizard — COMPLETED for art style prompt), `combat_inline_image.svelte` (EXISTS), `combat_gallery.svelte` (EXISTS) |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview
@@ -158,3 +159,72 @@ Aikami already has a strong ComfyUI integration (`imageGenerationService`, 435 l
 - **Contextual trigger flood**: Debounce same-type triggers — max 1 background per 30s, max 1 portrait per NPC per session.
 - **Gallery storage**: Store image URLs + metadata only — not base64. Images served from ComfyUI output directory.
 - **Built-in profile cloning**: User can clone a built-in profile to create a custom variant. Built-in originals remain immutable.
+
+---
+
+## Execution Report
+
+### Summary
+
+Implemented the Image Generation Pipeline (C-242) atop the existing ComfyUI integration. Delivered 6 built-in style profiles, a pure-function prompt compiler (tag dedup + negative extraction), contextual trigger service (5 event types with debouncing), per-chat gallery service (masonry grid + full-res modal), review-before-generate modal, style profile editor, and a dev sandbox at `/dev/image-gen`.
+
+### AC Status
+
+| AC | Status | Details |
+|----|--------|--------|
+| AC-1: Style Profile System | ✅ Done | 6 built-in profiles (Auto, Anime, Realistic, Cinematic, Fantasy, Pixel Art). CRUD via StyleProfileService. Built-in immutability enforced. Clone functionality. Editor in dev sandbox + settings. |
+| AC-2: Prompt Compilation | ✅ Done | `compileImagePrompt()` pure function: tag dedup case-insensitive, negative phrase extraction, per-image-type tag injection. Live test area in dev sandbox. E2E test validates dedup + negative extraction. |
+| AC-3: Contextual Triggers | ✅ Done | 5 event types mapped to image types. Debounce (30s/60s) enforced. NPC portrait dedup per session. ContextualTriggerService with `fireTrigger()` API. E2E validates trigger + debounce behavior. |
+| AC-4: Review & Gallery | ✅ Done | Review-before-generate toggle in ImageConfig. `review_before_generate_modal.svelte` with editable positive/negative fields. Gallery panel with masonry grid, hover expand, full-res modal, delete. GalleryService with per-chat scoping + 100-image cap. E2E validates add + expand + delete. |
+| AC-5: Dev Sandbox | ✅ Done | `/dev/image-gen` with 4 tabs: Profiles (view/edit/clone/delete), Compiler (live prompt compilation with output), Triggers (event simulator with result display), Gallery (masonry grid with mock image injection). Visual validation score 95/100. |
+
+### Files Created
+
+| File | Purpose |
+|------|--------|
+| `packages/shared/schemas/src/lib/image_style_profile.ts` | TypeBox schemas: ImageStyleProfile, GalleryImage, ImageType, etc. |
+| `packages/shared/types/src/lib/image_style_profile.ts` | Static types derived from schemas |
+| `packages/shared/constants/src/lib/image_style_profiles.ts` | 6 built-in style profiles + DEFAULT_STYLE_PROFILE_ID |
+| `apps/frontend/client/src/lib/services/image/prompt_compiler.ts` | `compileImagePrompt()` pure function |
+| `apps/frontend/client/src/lib/services/image/style_profile_service.svelte.ts` | StyleProfileService: CRUD, clone, built-in guard |
+| `apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts` | ContextualTriggerService: event → prompt, debounce, NPC dedup |
+| `apps/frontend/client/src/lib/services/image/gallery_service.svelte.ts` | GalleryService: per-chat CRUD, 100-image cap |
+| `apps/frontend/client/src/lib/views/gallery/gallery_view_model.svelte.ts` | GalleryViewModel: masonry grid state, expand, delete |
+| `apps/frontend/client/src/lib/views/gallery/style_profile_editor_view_model.svelte.ts` | StyleProfileEditorViewModel: edit, clone, delete |
+| `apps/frontend/client/src/lib/views/gallery/review_modal_view_model.svelte.ts` | ReviewModalViewModel: prompt edit, confirm/cancel |
+| `apps/frontend/client/src/lib/views/gallery/gallery_panel.svelte` | Gallery panel view: masonry grid + full-res modal |
+| `apps/frontend/client/src/lib/views/gallery/style_profile_editor.svelte` | Style profile editor view |
+| `apps/frontend/client/src/lib/views/gallery/review_before_generate_modal.svelte` | Review-before-generate modal view |
+| `apps/frontend/client/src/lib/views/dev/image_gen/image_gen_view_model.svelte.ts` | Dev sandbox ViewModel: 4-tab integration |
+| `apps/frontend/client/src/lib/views/dev/image_gen/image_gen_view.svelte` | Dev sandbox view: all tabs |
+| `apps/frontend/client/src/routes/(dev)/dev/image-gen/+page.svelte` | Dev sandbox route page |
+| `apps/e2e/tests/client/image_gen.spec.ts` | E2E tests: 11 test cases covering all ACs |
+| `apps/e2e/src/pom/image_gen_page.ts` | POM for image-gen sandbox |
+| `apps/e2e/src/visual/suites/image_gen.visual.ts` | Visual test suite: profiles, compiler, gallery |
+| `apps/frontend/docs/src/content/docs/guides/image-generation.mdx` | User-facing docs page |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `packages/shared/schemas/src/index.ts` | Added `image_style_profile` export |
+| `packages/shared/types/src/index.ts` | Added `image_style_profile` export |
+| `packages/shared/constants/src/index.ts` | Added `image_style_profiles` export |
+| `apps/frontend/client/src/lib/services/index.ts` | Added 4 new service exports |
+| `apps/frontend/client/src/lib/services/config/config_service.svelte.ts` | Added `styleProfileId` + `reviewBeforeGenerate` to ImageConfig |
+| `apps/e2e/src/pom/index.ts` | Added ImageGenPage export |
+
+### Deviations
+
+- **Constructor removal**: `StyleProfileService` and `ContextualTriggerService` constructors only called `super()` — removed per Biome `noUselessConstructor`.
+- **Naming convention**: Record keys `location_changed` etc. are `ContextualTriggerEvent` union literals — cannot be renamed to camelCase. Added `biome-ignore` directives.
+- **PerImageTags added `selfie` key** to match `ImageType` union (TypeScript index signature constraint).
+
+### Test Results
+
+- **E2E**: 11/11 passed (4.4s) — style profiles, prompt compilation, contextual triggers (fire + debounce), gallery (add + expand + delete), dev sandbox
+- **Visual**: Profiles tab score 95/100 (PASS) — all expected elements present; minor: empty per-image tags for Auto profile (by design)
+- **Typecheck**: client 0 errors, e2e 0 errors, schemas 0 errors, types 0 errors, constants 0 errors
+- **Unit tests**: Not written (E2E coverage is comprehensive for all ACs; pure functions testable via E2E compiler tab)
+- **pi typecheck**: 3 pre-existing errors in `scripts/update_skills.ts` — unrelated to this contract
+

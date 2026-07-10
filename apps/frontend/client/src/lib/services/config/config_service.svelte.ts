@@ -256,6 +256,10 @@ export type ImageConfig = {
   comfyWorkflow?: string;
   /** NovelAI noise schedule override (provider-specific). */
   novelAiNoiseSchedule?: string;
+  /** Active style profile ID for the image generation pipeline (C-242). */
+  styleProfileId: string;
+  /** Whether to show a review/edit modal before each image generation (C-242). */
+  reviewBeforeGenerate: boolean;
 };
 
 /** Generic model configuration for a single provider. */
@@ -544,7 +548,9 @@ const DEFAULT_IMAGE_CONFIG: ImageConfig = {
   checkpoint: 'sd_xl_base_1.0',
   height: 1024,
   provider: 'comfyui',
+  reviewBeforeGenerate: false,
   steps: 30,
+  styleProfileId: 'auto',
   width: 1024,
 };
 

@@ -5,6 +5,7 @@ export { allCountries } from './lib/country_codes.ts';
 export * from './lib/country_codes_phone_number.ts';
 export * from './lib/development_ports.ts';
 export * from './lib/emulator.ts';
+export * from './lib/image_style_profiles.ts';
 export * from './lib/impersonation.ts';
 export * from './lib/locale_codes.ts';
 export * from './lib/location.ts';

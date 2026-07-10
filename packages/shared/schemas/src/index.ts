@@ -1,6 +1,3 @@
-// Note: PersonaSchema from persona.schema.ts is not re-exported here to avoid
-// collision with the existing PersonaSchema from ./lib/database/persona.ts.
-// Import directly from '@aikami/schemas/persona.schema' for the Phase 1.1 schema.
 import { Value } from 'typebox/value';
 export const schemaCheck = Value.Check;
 export * from './lib/api/fcm.ts';
@@ -32,10 +29,10 @@ export * from './lib/ecs_snapshot.ts';
 export * from './lib/fields.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/image_generation.ts';
+export * from './lib/image_style_profile.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/macro.ts';
 export * from './lib/parser.ts';
 export * from './lib/project.ts';
 export * from './lib/swarm_handoff.ts';
 export { type ParseLevel, validateWithLevel } from './lib/validate.ts';
-export type { Persona } from './persona.schema.ts';

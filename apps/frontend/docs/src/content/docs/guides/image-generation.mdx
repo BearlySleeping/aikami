@@ -1,0 +1,40 @@
+---
+title: Image Generation Pipeline
+description: Style profiles, prompt compilation, contextual triggers, and image gallery for Aikami's AI-generated visuals.
+---
+
+The **Image Generation Pipeline** produces AI-generated visuals (backgrounds, portraits, illustrations) using ComfyUI, guided by configurable **style profiles** and automatic **contextual triggers**.
+
+## Style Profiles
+
+Six built-in profiles define the visual aesthetic: **Auto**, **Anime**, **Realistic**, **Cinematic**, **Fantasy**, and **Pixel Art**. Each profile includes a prompt grammar (natural language, Danbooru tags, or comma-separated tags), positive/negative tag sets, and per-image-type overrides.
+
+Built-in profiles are immutable but can be **cloned** to create editable custom variants. Select your active profile from the Providers settings page.
+
+## Prompt Compilation
+
+The `compileImagePrompt()` function merges your base prompt with the active style profile, removes near-duplicate tags (case-insensitive), extracts negative phrases (text, watermark, blurry) to the negative prompt, and injects per-image-type tags (e.g., "scenic, wide shot" for backgrounds).
+
+## Contextual Triggers
+
+Auto-generate images from game events:
+
+- **Location changed** → scenic background
+- **Combat started** → battle scene
+- **NPC introduced** → portrait
+- **Dramatic moment** → scene illustration
+- **Quest completed** → commemorative illustration
+
+Triggers include debouncing (max one generation per event type per 30 seconds) and NPC deduplication (one portrait per NPC per session). Enable or disable in settings.
+
+## Gallery Panel
+
+Generated images are stored per-chat in a masonry grid with hover expand and full-res modal view. Each image retains its prompt metadata and image type badge.
+
+## Source
+
+- Style profile service: `apps/frontend/client/src/lib/services/image/style_profile_service.svelte.ts`
+- Prompt compiler: `apps/frontend/client/src/lib/services/image/prompt_compiler.ts`
+- Contextual triggers: `apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts`
+- Gallery service: `apps/frontend/client/src/lib/services/image/gallery_service.svelte.ts`
+- Dev sandbox: `/dev/image-gen`
