@@ -14,6 +14,7 @@ export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   saveGame(): Promise<void>;
   goToSettings(): Promise<void>;
   quitToMainMenu(): Promise<void>;
+  openEndSession(): void;
 };
 
 class PauseMenuViewModel
@@ -42,6 +43,10 @@ class PauseMenuViewModel
 
   async quitToMainMenu(): Promise<void> {
     await gameOverlayService.quitToMainMenu();
+  }
+
+  openEndSession(): void {
+    gameOverlayService.openEndSession();
   }
 }
 

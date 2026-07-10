@@ -8,11 +8,13 @@ import {
 import { OllamaClient } from '$lib/services/ai/clients/index.ts';
 import {
   type AutoSaveStatus,
+  chatService,
   combatService,
   type DialogueNpcData,
   type GameOverlayType,
   gameOverlayService,
   npcDialogueService,
+  sessionService,
   timeService,
 } from '$services';
 import { CombatViewModel } from '../../combat/combat_view_model.svelte.ts';
@@ -25,6 +27,8 @@ import { getVendorViewModel } from '../../vendor/vendor_view_model.svelte';
 import type { CharacterSheetViewModelInterface } from '../dashboard/character_sheet_view_model.svelte';
 import { getCharacterSheetViewModel } from '../dashboard/character_sheet_view_model.svelte';
 import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
+import type { EndSessionViewModelInterface } from './overlays/end_session/end_session_view_model.svelte';
+import { getEndSessionViewModel } from './overlays/end_session/end_session_view_model.svelte';
 import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
 import { getGameOverViewModel } from './overlays/game_over/game_over_view_model.svelte';
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
@@ -51,6 +55,9 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly windVelocity: number;
   readonly rainIntensity: number;
 
+  /** Whether the chat is locked (read-only) — session has ended. */
+  readonly chatLocked: boolean;
+
   /** Whether to show the clock HUD (hidden during pause menu and game over). */
   readonly showClockHud: boolean;
 
@@ -63,6 +70,7 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
   readonly combatViewModel: CombatViewModel | undefined;
   readonly vendorViewModel: VendorViewModelInterface | undefined;
+  readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
 
   handleKeyDown(event: KeyboardEvent): void;
@@ -86,6 +94,7 @@ class GameUIViewModel
   dashboardViewModel = $state<CharacterSheetViewModelInterface | undefined>(undefined);
   combatViewModel = $state<CombatViewModel | undefined>(undefined);
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
+  endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
 
   // ── Service-proxied state ──
@@ -118,9 +127,13 @@ class GameUIViewModel
     return timeService.rainIntensity;
   }
 
+  get chatLocked(): boolean {
+    return sessionService.chatLocked;
+  }
+
   get showClockHud(): boolean {
     const overlay = gameOverlayService.activeOverlay;
-    return overlay !== 'PAUSE_MENU' && overlay !== 'GAME_OVER';
+    return overlay !== 'PAUSE_MENU' && overlay !== 'GAME_OVER' && overlay !== 'END_SESSION';
   }
 
   // ── Lifecycle ──
@@ -247,6 +260,19 @@ class GameUIViewModel
         };
       });
 
+      // ── End Session (C-240) ──
+      $effect(() => {
+        if (gameOverlayService.activeOverlay !== 'END_SESSION') {
+          return;
+        }
+        const vm = getEndSessionViewModel();
+        this.endSessionViewModel = vm;
+
+        return () => {
+          this.endSessionViewModel = undefined;
+        };
+      });
+
       // Camera zoom forwarding (for dialogue spatial UI)
       $effect(() => {
         const x = gameOverlayService._cameraZoomNpcScreenX;
@@ -267,6 +293,14 @@ class GameUIViewModel
     // Create static overlay VMs (pause menu and game over are always ready)
     this.pauseMenuViewModel = getPauseMenuViewModel({ className: 'PauseMenuViewModel' });
     this.gameOverViewModel = getGameOverViewModel({ className: 'GameOverViewModel' });
+
+    // Auto-summary threshold check (C-240)
+    this.registerEffectRoot(() => {
+      $effect(() => {
+        void chatService.messages.length;
+        sessionService.checkAutoSummaryThreshold();
+      });
+    });
 
     await gameOverlayService.initialize();
     await super.initialize();

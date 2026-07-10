@@ -11,6 +11,7 @@ import { audioService } from '$lib/services/audio/audio_service.svelte';
 import { logger } from '$logger';
 import { GameSaveService } from '$services/game/game_save_service.svelte';
 import { gameStateService } from '$services/game/game_state_service.svelte';
+import { sessionService } from '$services/game/session_service.svelte';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
@@ -28,7 +29,8 @@ export type GameOverlayType =
   | 'QUEST_LOG'
   | 'GAME_OVER'
   | 'CHARACTER_DASHBOARD'
-  | 'VENDOR';
+  | 'VENDOR'
+  | 'END_SESSION';
 
 export type DialogueNpcData = {
   npcId: string;
@@ -93,6 +95,17 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   openCharacterDashboard(): void;
   closeCharacterDashboard(): void;
   startCombat(options: { enemyName: string }): void;
+
+  // ── Session Management (C-240) ──
+
+  /** Opens the End Session confirmation dialog overlay. */
+  openEndSession(): void;
+  /** Closes the End Session overlay without ending. */
+  closeEndSession(): void;
+  /** Executes the end-session flow: lock chat, summarize, save. */
+  endSession(): Promise<void>;
+  /** Starts a new session after previous ended. */
+  startNewSession(): Promise<void>;
 
   /** Intent-driven methods for bridge_listeners (not for general use). */
   setBridge(bridge: EngineBridge): void;
@@ -264,6 +277,10 @@ export class GameOverlayService
       event.preventDefault();
       if (this.activeOverlay === 'DIALOGUE') {
         this.endDialogue();
+        return;
+      }
+      if (this.activeOverlay === 'END_SESSION') {
+        this.closeEndSession();
         return;
       }
       if (this.activeOverlay === 'INVENTORY') {
@@ -463,6 +480,34 @@ export class GameOverlayService
         this.setActive(overlay);
       },
     });
+  }
+
+  // ── Session Management (C-240) ─────────────────────────────────────
+
+  /** @inheritdoc */
+  openEndSession(): void {
+    this.activeOverlay = 'END_SESSION';
+    gameStateService.setMode('MENU');
+    this._engineService?.pauseEngine();
+  }
+
+  /** @inheritdoc */
+  closeEndSession(): void {
+    this.activeOverlay = 'PAUSE_MENU';
+  }
+
+  /** @inheritdoc */
+  async endSession(): Promise<void> {
+    await sessionService.endSession({ playtimeMinutes: 30 });
+  }
+
+  /** @inheritdoc */
+  async startNewSession(): Promise<void> {
+    const gameId = gameStateService.worldGenOutput?.worldName ?? 'default';
+    await sessionService.startNewSession({ gameId });
+    this.activeOverlay = 'NONE';
+    gameStateService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
   }
 
   private _togglePauseMenu(): void {

@@ -7,6 +7,7 @@
   // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
   import ClockHud from './overlays/clock_hud/clock_hud.svelte';
   import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
+  import EndSessionView from './overlays/end_session/end_session_view.svelte';
   import GameOverOverlay from './overlays/game_over_overlay.svelte';
   import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
   import TransitionOverlay from './overlays/transition_overlay.svelte';
@@ -34,7 +35,17 @@
     />
   {/if}
 
-  <!-- Overlay router — each overlay gets its own ViewModel from the parent -->
+  <!-- Overlay router -->
+  {#if viewModel.chatLocked}
+    <!-- Chat locked banner (C-240) -->
+    <div
+      class="pointer-events-auto fixed top-0 left-0 right-0 z-50 bg-warning/90 px-4 py-2 text-center text-sm font-semibold text-warning-content"
+      role="alert"
+    >
+      Session ended. Start a new session to continue chatting.
+    </div>
+  {/if}
+
   {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
     <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
   {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
@@ -58,6 +69,8 @@
     <CharacterSheetView viewModel={viewModel.dashboardViewModel} />
   {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
     <VendorView viewModel={viewModel.vendorViewModel} />
+  {:else if viewModel.activeOverlay === 'END_SESSION' && viewModel.endSessionViewModel}
+    <EndSessionView viewModel={viewModel.endSessionViewModel} />
   {/if}
 
   <TransitionOverlay {viewModel} />

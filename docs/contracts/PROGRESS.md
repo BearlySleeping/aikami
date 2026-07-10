@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-09)
+## Status Summary (Auto-generated: 2026-07-10)
 
 | Contract | Name | Status |
 |----------|------|--------|
@@ -196,15 +196,15 @@
 | C-221 | Modal Dialog Encapsulation | ✅ completed |
 | C-230 | Provider Connection Config | ✅ completed |
 | C-231 | Rich Chat Streaming | ✅ completed |
-| C-232 | Character Sheet Traits | ⏳ not_started |
+| C-232 | Character Sheet Traits | ✅ completed |
 | C-233 | World Generation Wizard | ✅ completed |
-| C-234 | Combat Enhancement Dice Initiative | ❓ done |
-| C-235 | Gm Narrative Director | ❓ done |
+| C-234 | Combat Enhancement Dice Initiative | ✅ completed |
+| C-235 | Gm Narrative Director | ✅ completed |
 | C-236 | Agent Pipeline System | ✅ completed |
-| C-237 | Prompt Template Macro System | ❓ completed (2026-07-09) |
-| C-238 | Lorebook World Info | ⏳ not_started |
-| C-239 | Expression Emotion System | ⏳ not_started |
-| C-240 | Session Management | ⏳ not_started |
+| C-237 | Prompt Template Macro System | ✅ completed |
+| C-238 | Lorebook World Info | ✅ completed |
+| C-239 | Expression Emotion System | ✅ completed |
+| C-240 | Session Management | ✅ completed |
 | C-241 | Chat Modes Address System | ⏳ not_started |
 | C-242 | Image Generation Pipeline | ⏳ not_started |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
@@ -220,7 +220,7 @@
 | C-310 | Automated Backlog Contract Generator | ✅ completed |
 | C-311 | Swarm Socket Orchestration | ✅ completed |
 | C-320 | C 320_mdc_skill_scraper | ✅ completed |
-| C-321 | C 321_mcp_runner_bridge | ⏳ not_started |
+| C-321 | C 321_mcp_runner_bridge | ✅ completed |
 | MIG-001 | Knowledge Splitting | ✅ completed |
 | MIG-002 | Backend Dataconnect | ✅ completed |
 | MIG-003 | Scripting Infra | ✅ completed |

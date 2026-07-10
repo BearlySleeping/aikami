@@ -56,6 +56,7 @@ export * from './game/npc_dialogue_service.svelte';
 export * from './game/pixi_texture_injector';
 export * from './game/quest_service.svelte';
 export * from './game/serializable_service';
+export * from './game/session_service.svelte';
 export * from './game/time_service.svelte';
 export * from './game/vendor_service.svelte.ts';
 // ── GM Narrative Director ────────────────────────────────────────────

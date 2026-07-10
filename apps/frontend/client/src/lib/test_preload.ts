@@ -22,7 +22,7 @@ import { mock } from 'bun:test';
 
 // ── IndexedDB polyfill (required by DraftStore in test env) ────────────────
 
-const _indexedStore = new Map<string, Map<string, unknown>>();
+const _indexedStore = new Map<string, Map<string, Map<string, unknown>>>();
 
 /** Creates a request-like object that fires onsuccess on next microtask. */
 const _createRequest = <T>(result: T) => {
@@ -37,36 +37,58 @@ const _createRequest = <T>(result: T) => {
 };
 
 (globalThis as Record<string, unknown>).indexedDB = {
-  open: (_name: string, _version?: number) => {
-    if (!_indexedStore.has('drafts')) {
-      _indexedStore.set('drafts', new Map());
+  open: (dbName: string, _version?: number) => {
+    if (!_indexedStore.has(dbName)) {
+      _indexedStore.set(dbName, new Map());
     }
+    const dbStores = _indexedStore.get(dbName) ?? new Map();
     const db = {
       objectStoreNames: {
-        contains: () => _indexedStore.has('drafts'),
+        contains: (storeName: string) => dbStores.has(storeName),
       },
       createObjectStore: (storeName: string, _options?: unknown) => {
-        if (!_indexedStore.has(storeName)) {
-          _indexedStore.set(storeName, new Map());
+        if (!dbStores.has(storeName)) {
+          dbStores.set(storeName, new Map());
         }
-        return {};
-      },
-      transaction: (storeName: string, _mode: string) => {
-        const store = _indexedStore.get(storeName) ?? new Map();
         return {
-          objectStore: () => ({
-            get: (key: string) => _createRequest(store.get(key)),
-            put: (value: Record<string, unknown>) => {
-              const key = (value as { chatId?: string }).chatId ?? '';
-              store.set(key, value);
-              return _createRequest(key);
-            },
-            delete: (key: string) => {
-              store.delete(key);
-              return _createRequest(undefined);
-            },
-            getAll: () => _createRequest(Array.from(store.values())),
-          }),
+          createIndex: (..._args: unknown[]) => {},
+        };
+      },
+      transaction: (_storeName: string | string[], _mode: string) => {
+        return {
+          objectStore: (name: string) => {
+            const store = dbStores.get(name) ?? new Map();
+            const indexStore = new Map<string, Map<string, unknown[]>>();
+            return {
+              get: (key: string) => _createRequest(store.get(key)),
+              put: (value: Record<string, unknown>) => {
+                const key =
+                  (value as { id?: string; chatId?: string }).id ??
+                  (value as { chatId?: string }).chatId ??
+                  '';
+                store.set(key, value);
+                return _createRequest(key);
+              },
+              delete: (key: string) => {
+                store.delete(key);
+                return _createRequest(undefined);
+              },
+              getAll: () => _createRequest(Array.from(store.values())),
+              index: (indexName: string) => {
+                if (!indexStore.has(indexName)) {
+                  indexStore.set(indexName, new Map());
+                }
+                return {
+                  getAll: (key: string) => {
+                    const results = Array.from(store.values()).filter(
+                      (doc) => (doc as Record<string, unknown>)[indexName] === key,
+                    );
+                    return _createRequest(results);
+                  },
+                };
+              },
+            };
+          },
         };
       },
       onclose: null as (() => void) | null,
@@ -79,7 +101,15 @@ const _createRequest = <T>(result: T) => {
       result: db,
       error: null as DOMException | null,
     };
-    queueMicrotask(() => openRequest.onsuccess?.({ target: openRequest } as unknown));
+    // Fire onupgradeneeded if database is new (no stores exist yet)
+    if (dbStores.size === 0) {
+      queueMicrotask(() => {
+        openRequest.onupgradeneeded?.({ target: openRequest } as unknown);
+        openRequest.onsuccess?.({ target: openRequest } as unknown);
+      });
+    } else {
+      queueMicrotask(() => openRequest.onsuccess?.({ target: openRequest } as unknown));
+    }
     return openRequest;
   },
 };
@@ -363,6 +393,17 @@ const _localServicesMock = () => ({
   GameOverlayService: class {},
   gameEngineService: _createServiceStub(),
   GameEngineService: class {},
+  sessionService: Object.assign(_createServiceStub(), {
+    activeSession: null,
+    chatLocked: false,
+    sessions: [],
+    latestSummary: null,
+    showAutoSummaryToast: false,
+    isEndingSession: false,
+    isStartingSession: false,
+    reset: mock(async () => {}),
+  }),
+  SessionService: class {},
   __esModule: true,
 });
 

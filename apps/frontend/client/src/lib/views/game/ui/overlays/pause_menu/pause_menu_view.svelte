@@ -61,6 +61,14 @@
 
       <button
         type="button"
+        class="btn btn-ghost btn-block"
+        onclick={() => viewModel.openEndSession()}
+      >
+        End Session
+      </button>
+
+      <button
+        type="button"
         class="btn btn-ghost btn-block text-error"
         onclick={() => viewModel.quitToMainMenu()}
       >
