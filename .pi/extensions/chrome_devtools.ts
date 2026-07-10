@@ -141,21 +141,22 @@ async function cdpSend(
   params: Record<string, unknown> = {},
   targetId?: string,
 ): Promise<unknown> {
-  // Get a target (page) to talk to
-  const pagesRes = await fetch(`${CDP_BASE}/json/list`, {
-    signal: AbortSignal.timeout(3000),
-  });
-  const pages = (await pagesRes.json()) as Array<{
-    id: string;
-    webSocketDebuggerUrl: string;
-    type: string;
-    url: string;
-    title: string;
-  }>;
-
-  const target = targetId
-    ? pages.find((p) => p.id === targetId)
-    : pages.find((p) => p.type === 'page');
+  // Get a target (page) — when a specific targetId is given, look it up
+  // explicitly; otherwise use the first page target.
+  let target: { id: string; webSocketDebuggerUrl: string } | undefined;
+  if (targetId) {
+    const res = await fetch(`${CDP_BASE}/json/list`, { signal: AbortSignal.timeout(3000) });
+    const pages = (await res.json()) as Array<{
+      id: string;
+      webSocketDebuggerUrl: string;
+      type: string;
+      url: string;
+      title: string;
+    }>;
+    target = pages.find((p) => p.id === targetId);
+  } else {
+    target = await _getPageTarget();
+  }
 
   if (!target) {
     throw new Error('No page target found. Is a page loaded in Chromium?');
@@ -194,12 +195,117 @@ async function cdpSend(
   });
 }
 
-/** Navigate the browser to a URL and wait for load. */
-async function navigateTo(url: string): Promise<void> {
-  await cdpSend('Page.enable');
-  await cdpSend('Page.navigate', { url });
-  // Brief wait for navigation to settle
-  await new Promise((r) => setTimeout(r, 2000));
+/** Fetch the first page target from CDP. Returns its id and WebSocket URL. */
+async function _getPageTarget(): Promise<{ id: string; webSocketDebuggerUrl: string }> {
+  const res = await fetch(`${CDP_BASE}/json/list`, {
+    signal: AbortSignal.timeout(3000),
+  });
+  const pages = (await res.json()) as Array<{
+    id: string;
+    webSocketDebuggerUrl: string;
+    type: string;
+    url: string;
+    title: string;
+  }>;
+  const target = pages.find((p) => p.type === 'page');
+  if (!target) {
+    throw new Error('No page target found. Is a page loaded in Chromium?');
+  }
+  return target;
+}
+
+interface NavOptions {
+  /** Extra settle time after network idle (ms). Default 0. */
+  settleMs?: number;
+  /** Max total wait (ms). Default 15000. */
+  timeoutMs?: number;
+}
+
+/** Navigate and wait for loadEventFired + network idle (then optional settle). */
+async function navigateAndWait(url: string, opts: NavOptions = {}): Promise<void> {
+  const { settleMs = 0, timeoutMs = 15000 } = opts;
+  const target = await _getPageTarget();
+
+  let loadFired = false;
+  let pendingRequests = 0;
+  let idleSince: number | undefined;
+  const IdleGraceMs = 500; // network counted as idle after 500ms with zero pending
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      ws.close();
+      // If load fired, resolve even on timeout — page is likely ready.
+      // If not, reject so the caller can decide.
+      if (loadFired) {
+        resolve();
+      } else {
+        reject(new Error(`Navigation to ${url} timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+
+    function checkIdle() {
+      if (!loadFired) return;
+      if (pendingRequests > 0) {
+        idleSince = undefined;
+        return;
+      }
+      if (idleSince === undefined) {
+        idleSince = Date.now();
+        return;
+      }
+      if (Date.now() - idleSince >= IdleGraceMs) {
+        clearTimeout(timer);
+        ws.close();
+        if (settleMs > 0) {
+          setTimeout(resolve, settleMs);
+        } else {
+          resolve();
+        }
+      }
+    }
+
+    const ws = new WebSocket(target.webSocketDebuggerUrl);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ id: 1, method: 'Page.enable' }));
+      ws.send(JSON.stringify({ id: 2, method: 'Network.enable' }));
+    };
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(String(event.data));
+
+      // Response to Page.enable → trigger navigation
+      if (msg.id === 1 || msg.id === 2) {
+        // Wait for both enable commands before navigating
+        // (simple state machine — navigate after first response, second is network)
+        if (msg.id === 2) {
+          ws.send(JSON.stringify({ id: 3, method: 'Page.navigate', params: { url } }));
+        }
+        return;
+      }
+
+      // Page load event
+      if (msg.method === 'Page.loadEventFired') {
+        loadFired = true;
+        checkIdle();
+      }
+
+      // Network request tracking
+      if (msg.method === 'Network.requestWillBeSent') {
+        pendingRequests++;
+      }
+      if (msg.method === 'Network.loadingFinished' || msg.method === 'Network.loadingFailed') {
+        pendingRequests = Math.max(0, pendingRequests - 1);
+        if (loadFired) {
+          checkIdle();
+        }
+      }
+    };
+
+    ws.onerror = (err) => {
+      clearTimeout(timer);
+      reject(new Error(`WebSocket error during navigation: ${err}`));
+    };
+  });
 }
 
 // ── Extension Registration ────────────────────────────────────────────
@@ -255,7 +361,7 @@ export default function (pi: ExtensionAPI) {
 
       // Navigate if URL provided
       const targetUrl = params.url ?? getAppUrl(app);
-      await navigateTo(targetUrl);
+      await navigateAndWait(targetUrl);
 
       // Get DOM snapshot
       let domScript = 'document.documentElement.outerHTML.slice(0, 50000)';
@@ -337,13 +443,10 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (params.url) {
-        await navigateTo(params.url);
+        await navigateAndWait(params.url);
       } else {
-        await navigateTo(getAppUrl(app));
+        await navigateAndWait(getAppUrl(app));
       }
-
-      // Wait a bit for rendering
-      await new Promise((r) => setTimeout(r, 1500));
 
       // Capture screenshot
       const captureParams: Record<string, unknown> = { format: 'png' };
@@ -431,7 +534,6 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const app = params.app ?? 'client';
-      const level = params.level ?? 'all';
       const launch = await ensureBrowser(app);
       if (!launch.ok) {
         return {
@@ -440,26 +542,12 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      // Instead of monkey-patching console.* (which has timing issues),
-      // use CDP's native Runtime.consoleAPICalled event to capture
-      // all console output from page load onward.
+      // Navigate (waits for load + network idle) first, then capture
+      // console events via CDP.
       const targetUrl = getAppUrl(app);
+      await navigateAndWait(targetUrl);
 
-      const pagesRes = await fetch(`${CDP_BASE}/json/list`, {
-        signal: AbortSignal.timeout(3000),
-      });
-      const pages = (await pagesRes.json()) as Array<{
-        id: string;
-        webSocketDebuggerUrl: string;
-        type: string;
-      }>;
-      const target = pages.find((p) => p.type === 'page');
-      if (!target) {
-        return {
-          content: [{ type: 'text', text: '❌ No page target found in Chromium.' }],
-          details: { success: false },
-        };
-      }
+      const target = await _getPageTarget();
 
       // Collect console entries via CDP events over a persistent WebSocket.
       const entries: Array<{
@@ -469,19 +557,15 @@ export default function (pi: ExtensionAPI) {
         stack: string;
       }> = [];
 
-      let pageUrl = 'unknown';
-      let readyState = 'unknown';
-      let loadComplete = false;
+      let pageUrl = targetUrl;
+      let readyState = 'complete';
 
       const ws = new WebSocket(target.webSocketDebuggerUrl);
 
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          resolve(); // Timeout — return whatever we collected
-        }, 8000);
+        const timer = setTimeout(() => resolve(), 8000);
 
         ws.onopen = () => {
-          // Enable Runtime domain to receive console events
           ws.send(JSON.stringify({ id: 1, method: 'Runtime.enable' }));
         };
 
@@ -515,12 +599,7 @@ export default function (pi: ExtensionAPI) {
                     `    at ${f.functionName || '(anonymous)'} (${f.url}:${f.lineNumber})`,
                 )
                 .join('\n') ?? '';
-            entries.push({
-              level: entryLevel,
-              args,
-              ts: entry.timestamp,
-              stack,
-            });
+            entries.push({ level: entryLevel, args, ts: entry.timestamp, stack });
           }
 
           // Handle exceptions
@@ -549,34 +628,6 @@ export default function (pi: ExtensionAPI) {
                   .join('\n') ?? '',
             });
           }
-
-          // Handle command responses
-          if (msg.id === 1) {
-            // Runtime.enable done — now enable Page domain and navigate
-            ws.send(JSON.stringify({ id: 2, method: 'Page.enable' }));
-          }
-          if (msg.id === 2) {
-            ws.send(
-              JSON.stringify({
-                id: 3,
-                method: 'Page.navigate',
-                params: { url: targetUrl },
-              }),
-            );
-          }
-          if (msg.id === 3) {
-            // Navigation started. Wait for load event, then collect.
-          }
-
-          // Detect page load complete
-          if (msg.method === 'Page.loadEventFired') {
-            loadComplete = true;
-            // Give the page a moment to settle, then resolve
-            setTimeout(() => {
-              clearTimeout(timer);
-              resolve();
-            }, 2000);
-          }
         };
 
         ws.onerror = (err) => {
@@ -603,8 +654,6 @@ export default function (pi: ExtensionAPI) {
         } catch {
           // Use defaults
         }
-      } else {
-        pageUrl = targetUrl;
       }
 
       const levelFilter = params.level ?? 'all';
@@ -617,8 +666,8 @@ export default function (pi: ExtensionAPI) {
 
       const lines: string[] = [
         `🖥  Console — ${app} (${pageUrl})`,
-        `   State: ${readyState}${loadComplete ? ' (load complete)' : ' (capturing...)'}`,
-        `   Buffered: ${filtered.length} entries shown${entries.length !== filtered.length ? ` (${entries.length} total, filtered by level: ${level})` : ''}`,
+        `   State: ${readyState}`,
+        `   Buffered: ${filtered.length} entries shown${entries.length !== filtered.length ? ` (${entries.length} total, filtered by level: ${levelFilter})` : ''}`,
         `   Interceptor: ✅ CDP native event capture`,
         '',
       ];
@@ -697,7 +746,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      await navigateTo(getAppUrl(app));
+      await navigateAndWait(getAppUrl(app));
 
       // Use Performance API to get resource timing
       const duration = params.durationMs ?? 5000;
@@ -777,10 +826,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       const targetUrl = params.url ?? getAppUrl(app);
-      await navigateTo(targetUrl);
-
-      // Wait for page to fully load
-      await new Promise((r) => setTimeout(r, 3000));
+      await navigateAndWait(targetUrl, { settleMs: 1500 });
 
       // Collect performance metrics via CDP and Performance API
       const perfMetrics = (await cdpSend('Performance.getMetrics')) as {

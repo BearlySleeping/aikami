@@ -32,6 +32,7 @@ export * from './audio/tts_service.svelte.ts';
 export * from './auth/auth_service.svelte.ts';
 export * from './character/character.svelte.ts';
 export * from './chat/chat.svelte.ts';
+export * from './chat/connected_chats_service.svelte.ts';
 export * from './chat/context_builder';
 export * from './chat/conversation_repository.svelte.ts';
 export * from './chat/draft_store';

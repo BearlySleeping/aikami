@@ -208,6 +208,7 @@
 | C-241 | Chat Modes Address System | ✅ completed |
 | C-242 | Image Generation Pipeline | ✅ completed |
 | C-243 | Asset Management System | ✅ completed |
+| C-244 | Connected Chats Cross Mode Bridge | ✅ completed |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
 | C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |
 | C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ✅ completed |

@@ -1,5 +1,6 @@
 export * from './lib/agent.ts';
 export * from './lib/auth.ts';
+export * from './lib/bridge_tags.ts';
 export * from './lib/common.ts';
 export { allCountries } from './lib/country_codes.ts';
 export * from './lib/country_codes_phone_number.ts';

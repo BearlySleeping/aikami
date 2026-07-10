@@ -426,7 +426,7 @@ const handleGlobalClick = () => {
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
     <dialog class="modal modal-open" onclick={() => viewModel.closeUploadInfo()}>
       <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
-    <div class="modal-box" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-box" onclick={(e) => e.stopPropagation()}>
         <h3 class="font-bold text-lg mb-4">Adding Assets</h3>
         <div class="space-y-4 text-sm">
           <p>
@@ -474,7 +474,7 @@ const handleGlobalClick = () => {
     <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
     <dialog class="modal modal-open" onclick={() => viewModel.closePreview()}>
       <!-- svelte-ignore a11y_no_static_element_interactions a11y_use_key_with_click_events -->
-    <div class="modal-box max-w-2xl" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-box max-w-2xl" onclick={(e) => e.stopPropagation()}>
         <div class="flex items-center gap-3 mb-4">
           <h3 class="font-bold text-lg truncate flex-1">{viewModel.previewAsset.name}</h3>
           <span class="badge badge-sm">{viewModel.previewAsset.category}</span>
@@ -483,8 +483,8 @@ const handleGlobalClick = () => {
         {#if viewModel.hasPreview}
           {#if viewModel.previewAsset.ext === '.mp3' || viewModel.previewAsset.ext === '.ogg' || viewModel.previewAsset.ext === '.wav'}
             {#if viewModel.previewUrl}
-                            <!-- svelte-ignore a11y_use_media_caption -->
-              <audio controls class="w-full"><source src={viewModel.previewUrl} /></audio>
+              <!-- svelte-ignore a11y_use_media_caption -->
+              <audio controls class="w-full"><source src={viewModel.previewUrl}></audio>
             {/if}
           {:else if viewModel.previewUrl}
             <img

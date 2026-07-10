@@ -8,6 +8,7 @@ import {
   type SlashCommandEntry,
 } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
+import { parseBridgeTags } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -21,6 +22,7 @@ import {
   authService,
   type ChatMessage,
   chatService,
+  connectedChatsService,
   diceService,
   draftStore,
   imageGenerationService,
@@ -442,6 +444,27 @@ export class ChatViewModel
         });
         return; // Do NOT send to AI
       }
+    }
+
+    // ── Bridge tag parsing (C-244) — extract notes/influences/ooc ──
+    const tagResult = parseBridgeTags(text);
+    if (
+      tagResult.notes.length > 0 ||
+      tagResult.influences.length > 0 ||
+      tagResult.oocContents.length > 0
+    ) {
+      // Use cleaned content for the displayed/sent message
+      text = tagResult.cleanContent || text;
+
+      // Handle OOC cross-posting asynchronously
+      void connectedChatsService.crossPostOoc({
+        targetChatId: this._chatId,
+        oocContents: tagResult.oocContents,
+      });
+
+      // Notes and influences are added via the UI (connected chats settings panel).
+      // The tag parser extracts them but we store in-message metadata only.
+      // Actual ChatLink update happens via ConnectedChatsService UI.
     }
 
     // ── Normal AI message flow ──

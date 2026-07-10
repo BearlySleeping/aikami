@@ -12,6 +12,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
+import type { BridgeContext } from '@aikami/types';
 // Direct imports to avoid barrel mock resolution issues in tests
 import { combatService } from '$lib/services/game/combat_service.svelte.ts';
 import { gameStateService } from '$lib/services/game/game_state_service.svelte.ts';
@@ -40,7 +41,11 @@ export type GmPromptServiceInterface = BaseFrontendClassInterface & {
    * @param options.userMessage - Optional user message for lorebook keyword scanning.
    * @returns A formatted system prompt string.
    */
-  assemblePrompt(options: { mode: AddressMode; userMessage?: string }): string;
+  assemblePrompt(options: {
+    mode: AddressMode;
+    userMessage?: string;
+    bridgeContext?: BridgeContext | null;
+  }): string;
 
   /**
    * Gathers the current game state into a structured context object
@@ -65,8 +70,12 @@ class GmPromptService
   implements GmPromptServiceInterface
 {
   /** @inheritdoc */
-  assemblePrompt(options: { mode: AddressMode; userMessage?: string }): string {
-    const { mode, userMessage } = options;
+  assemblePrompt(options: {
+    mode: AddressMode;
+    userMessage?: string;
+    bridgeContext?: BridgeContext | null;
+  }): string {
+    const { mode, userMessage, bridgeContext } = options;
     const context = this.gatherContext();
     const combatContext = this.gatherCombatContext();
     const lines: string[] = [];
@@ -182,6 +191,27 @@ class GmPromptService
           lines.push(resolved);
         }
         lines.push('[/WORLD INFO]');
+      }
+    }
+
+    // ── Bridge Context (C-244) — connected chats bridge ─────────────
+    if (bridgeContext) {
+      if (bridgeContext.durableNotes.length > 0) {
+        lines.push('');
+        lines.push('[DM NOTES (from linked OOC chat)]');
+        for (const note of bridgeContext.durableNotes) {
+          lines.push(`- ${note}`);
+        }
+        lines.push('[/DM NOTES]');
+      }
+
+      if (bridgeContext.turnInfluences.length > 0) {
+        lines.push('');
+        lines.push('[INFLUENCE (this turn only)]');
+        for (const influence of bridgeContext.turnInfluences) {
+          lines.push(`- ${influence}`);
+        }
+        lines.push('[/INFLUENCE]');
       }
     }
 

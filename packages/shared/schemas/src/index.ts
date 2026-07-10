@@ -11,6 +11,7 @@ export * from './lib/database/appearance.ts';
 export * from './lib/database/branch.ts';
 export * from './lib/database/character.ts';
 export * from './lib/database/chat.ts';
+export * from './lib/database/chat_link.ts';
 export * from './lib/database/config.ts';
 export * from './lib/database/item.ts';
 export * from './lib/database/knowledge_graph.ts';

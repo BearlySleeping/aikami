@@ -5,7 +5,7 @@
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 20000
+    "keepRecentTokens": 60000
   },
   "packages": ["npm:context-mode", "npm:pi-mcp-adapter", "npm:@hypabolic/pi-hypa"],
   "extensions": ["./extensions"],

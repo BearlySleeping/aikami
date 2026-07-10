@@ -435,6 +435,8 @@ export type { TilemapRenderOptions, TilemapRenderResult } from './systems/tilema
 export { renderTilemap } from './systems/tilemap_render_system.ts';
 export { updateZoningSystem } from './systems/zoning_system.ts';
 // Types (plain serializable — safe for UI consumption)
+// Bridge tag parser (C-244)
+export { parseBridgeTags } from './tag_parser.ts';
 export type {
   GameCommand,
   GameCommandOfType,
