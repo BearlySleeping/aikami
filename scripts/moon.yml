@@ -56,3 +56,11 @@ tasks:
     options:
       cache: false
       runInCI: false
+
+  lint-contracts:
+    command: 'bun run lint-contracts'
+    inputs:
+      - 'src/lib/ops/lint_contracts.ts'
+    options:
+      cache: false
+      runInCI: true

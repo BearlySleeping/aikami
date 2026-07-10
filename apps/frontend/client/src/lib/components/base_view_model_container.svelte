@@ -49,7 +49,7 @@ onMount(() => {
 <svelte:element
   this={element}
   data-testid={id || viewModel._className}
-  class:min-h-screen={fillHeight}
+  class:h-screen={fillHeight}
   class={classStyle}
 >
   {#if viewModel.showLoadingView}

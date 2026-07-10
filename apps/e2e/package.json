@@ -17,8 +17,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",
-    "playwright": "1.61.1",
-    "typescript": "6.0.3"
+    "playwright": "1.61.1"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

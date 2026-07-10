@@ -259,7 +259,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
 - [Contracts](contracts/README.md)
-- [TEMPLATE](contracts/TEMPLATE.md)
+- [Contract {FEATURE_CODE}: {TITLE}](contracts/TEMPLATE.md)
 ## decisions/
 
 - [Decisions](decisions/README.md)
@@ -283,7 +283,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Structure](guides/STRUCTURE.md)
 - [Tauri Desktop App — Development Guide](guides/TAURI.md)
 - [Testing Strategy](guides/TESTING.md)
-- [Todo & Future Features](guides/TODO.md)
+- [TODO Moved](guides/TODO.md)
 ## index.md/
 
 - [Welcome to Aikami Docs](index.md)
@@ -300,7 +300,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Scripts](scripts/README.md)
 ## TODO.md/
 
-- [TODO](TODO.md)
+- [Aikami Unified Product Backlog](TODO.md)
 
 ---
 

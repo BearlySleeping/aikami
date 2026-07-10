@@ -262,19 +262,9 @@ script-config.*.ts
 test-results/
 
 *.gd.uid
-examples/**/*.import
-examples/**/*.png
-examples/**/*.wav
-examples/**/*.ttf
-examples/**/*.svg
-examples/godot-examples/
 examples
-game/addons/godot_whisper/bin/
-game/addons/godot_whisper/models/
-game/assets/audio/
 .direnv/
 apps/frontend/client/src-tauri/target/
-examples/Universal-LPC-Spritesheet-Character-Generator/
 scripts/lpc/.lpc_manifest.json
 
 # LPC assets — canonical source is Firebase Storage

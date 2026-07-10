@@ -28,7 +28,7 @@
     "test:unit": "bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "2.20.2",
+    "@inlang/paraglide-js": "2.21.0",
     "@playwright/test": "1.61.1",
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "2.69.2",

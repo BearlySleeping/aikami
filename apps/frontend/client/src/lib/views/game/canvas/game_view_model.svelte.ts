@@ -140,6 +140,13 @@ class GameViewViewModel
     // Initialize the engine bridge (register listeners, load persona).
     await gameEngineService.initializeEngine();
 
+    // If canvas was already bound when the $effect fired, bootWithCanvas
+    // may have returned early because the bridge wasn't initialized yet.
+    // Retry now that the bridge is guaranteed to be available.
+    if (this.canvasElement) {
+      void gameEngineService.bootWithCanvas(this.canvasElement);
+    }
+
     await super.initialize();
   }
 

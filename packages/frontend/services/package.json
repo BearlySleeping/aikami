@@ -19,7 +19,7 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "firebase": "12.15.0",
+    "firebase": "12.16.0",
     "idb-keyval": "6.3.0"
   },
   "devDependencies": {
