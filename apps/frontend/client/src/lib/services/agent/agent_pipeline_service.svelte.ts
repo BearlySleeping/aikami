@@ -16,6 +16,7 @@ import type {
   AgentPhase,
   AgentPipelineContext,
   AgentRunResult,
+  CustomAgentDefinition,
 } from '$types/agent_types';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';
@@ -24,6 +25,7 @@ import { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
 import { runQuestTrackerAgent } from './agents/quest_tracker_agent.ts';
 import { runWorldStateAgent } from './agents/world_state_agent.ts';
 import { BUILT_IN_AGENTS } from './built_in_agents.ts';
+import { customAgentToConfig, runCustomAgent } from './custom_agent_factory.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -126,17 +128,32 @@ class AgentPipelineService
   implements AgentPipelineServiceInterface
 {
   /**
-   * Resolves active agents from the built-in registry, filtering by
-   * enabledAgents when provided.
+   * Resolves active agents from built-in and custom registries,
+   * filtering by enabledAgents when provided.
    */
-  private _resolveAgents(enabledAgents?: string[]): AgentConfig[] {
-    const agents = BUILT_IN_AGENTS.filter((a) => a.enabled);
+  private async _resolveAgents(enabledAgents?: string[]): Promise<AgentConfig[]> {
+    const builtIn = BUILT_IN_AGENTS.filter((a) => a.enabled).filter(
+      (a) => !enabledAgents || enabledAgents.length === 0 || enabledAgents.includes(a.id),
+    );
 
-    if (enabledAgents && enabledAgents.length > 0) {
-      return agents.filter((a) => enabledAgents.includes(a.id));
+    // Discover custom agents from the registry
+    let custom: AgentConfig[] = [];
+    try {
+      const { agentRegistryService } = await import('./agent_registry_service.svelte.ts');
+      const customDefs = await agentRegistryService.listAgents();
+      custom = customDefs
+        .filter((d: CustomAgentDefinition) => d.enabled)
+        .filter(
+          (d: CustomAgentDefinition) =>
+            !enabledAgents || enabledAgents.length === 0 || enabledAgents.includes(d.id),
+        )
+        .map((d: CustomAgentDefinition) => customAgentToConfig(d));
+    } catch {
+      this.warn('_resolveAgents:failed-to-load-custom');
     }
 
-    return [...agents];
+    // Merge: built-in first, then custom agents
+    return [...builtIn, ...custom];
   }
 
   /** @inheritdoc */
@@ -163,7 +180,7 @@ class AgentPipelineService
     preResults: AgentRunResult[];
     postResults: AgentRunResult[];
   }> {
-    const allAgents = this._resolveAgents(enabledAgents);
+    const allAgents = await this._resolveAgents(enabledAgents);
     const preAgents = allAgents.filter((a) => a.phase === 'pre');
     const postAgents = allAgents.filter((a) => a.phase === 'post');
 
@@ -316,6 +333,24 @@ class AgentPipelineService
   }): Promise<AgentRunResult> {
     const runner = AGENT_RUNNERS[agent.id];
     if (!runner) {
+      // Fall back to custom agent runner
+      try {
+        const { agentRegistryService } = await import('./agent_registry_service.svelte.ts');
+        const definition = await agentRegistryService.getAgent({ id: agent.id });
+        if (definition) {
+          const customResult = await runCustomAgent({
+            config: agent,
+            context,
+            definition,
+            aiResponse,
+          });
+          onAgentResult?.(customResult);
+          return customResult;
+        }
+      } catch {
+        // Fall through to the error below
+      }
+
       const result: AgentRunResult = {
         agentId: agent.id,
         phase: agent.phase,

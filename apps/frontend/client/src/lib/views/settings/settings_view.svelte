@@ -5,6 +5,8 @@
 // Controls) and AI Engine (Text, Image, Voice). The Text sub-tab hosts the
 // full ProvidersView for AI provider configuration.
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
+import AgentListView from '../agent/list/agent_list_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import SettingsControlsView from './controls/settings_controls_view.svelte';
 import SettingsDisplayView from './display/settings_display_view.svelte';
@@ -22,6 +24,7 @@ const { viewModel }: Props = $props();
 const CATEGORIES = [
   { id: 'game' as const, label: 'Game' },
   { id: 'ai_engine' as const, label: 'AI Engine' },
+  { id: 'agents' as const, label: 'Agents' },
 ];
 
 const GAME_SUB_TABS = [
@@ -110,5 +113,12 @@ const GAME_SUB_TABS = [
        ═══════════════════════════════════════════════════════════════════ -->
   {:else if viewModel.activeCategory === 'ai_engine'}
     <ProvidersView viewModel={viewModel.providersViewModel} />
+  {:else if viewModel.activeCategory === 'agents'}
+    <div class="px-6 py-4 max-w-2xl">
+      <AgentListView viewModel={viewModel.agentListViewModel} />
+    </div>
   {/if}
+
+  <!-- Agent Editor (always available) -->
+  <AgentEditorView viewModel={viewModel.agentEditorViewModel} />
 </BaseViewModelContainer>

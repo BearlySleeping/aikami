@@ -112,3 +112,65 @@ export type AgentHudState = {
   /** IDs of agents that are enabled for the current chat. */
   enabledAgents: string[];
 };
+
+// ── Custom Agent Definition (C-247) ──────────────────────────────────────
+
+/**
+ * Full custom agent definition — extends AgentConfig with user-facing
+ * metadata, serialized output schema, and ownership fields.
+ *
+ * Contract: C-247 Custom Agent Creation
+ */
+export type CustomAgentDefinition = {
+  /** Format version for forward compatibility. */
+  formatVersion: '1.0.0';
+  /** Discriminator for import/export format. */
+  type: 'agent_definition';
+  /** Unique agent identifier (generated on create). */
+  id: string;
+  /** Human-readable agent name (1-60 chars). */
+  name: string;
+  /** User-facing description of what the agent does (max 500 chars). */
+  description: string;
+  /** Optional folder for organization (e.g. "Combat", "World"). */
+  folder?: string;
+  /** Execution phase. */
+  phase: AgentPhase;
+  /** Prompt template with optional macro placeholders ({{user}}, {{input}}, etc.). */
+  promptTemplate: string;
+  /** JSON Schema for validating the agent's structured output. */
+  outputSchema: Record<string, unknown>;
+  /** Result discriminator key (e.g. 'tracker_state', 'memory', 'command', 'custom'). */
+  resultType: string;
+  /** Optional connection ID override (use a different model than the chat). */
+  connectionId?: string;
+  /** Timeout in milliseconds (default: 15000). */
+  timeout: number;
+  /** Whether this agent is currently enabled. */
+  enabled: boolean;
+  /** Always false for custom agents. */
+  isBuiltIn: false;
+  /** For pre-agents: section key used when injecting output into the system prompt. */
+  contextKey?: string;
+  /** Owner user ID. */
+  uid: string;
+  /** Creation timestamp (ISO 8601). */
+  createdAt: string;
+  /** Last update timestamp (ISO 8601). */
+  updatedAt: string;
+};
+
+/**
+ * Input shape for creating a new custom agent (no server-generated fields).
+ */
+export type CreateAgentInput = Omit<
+  CustomAgentDefinition,
+  'id' | 'createdAt' | 'updatedAt' | 'isBuiltIn' | 'formatVersion' | 'type' | 'uid' | 'enabled'
+>;
+
+/**
+ * Input shape for updating an existing custom agent.
+ */
+export type UpdateAgentInput = Partial<
+  Omit<CustomAgentDefinition, 'id' | 'createdAt' | 'isBuiltIn' | 'formatVersion' | 'type' | 'uid'>
+>;

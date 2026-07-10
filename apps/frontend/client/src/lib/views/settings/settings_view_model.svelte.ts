@@ -9,6 +9,15 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { routerService } from '$services';
+import type { CustomAgentDefinition } from '$types/agent_types';
+import {
+  type AgentEditorViewModelInterface,
+  getAgentEditorViewModel,
+} from '../agent/editor/agent_editor_view_model.svelte.ts';
+import {
+  type AgentListViewModelInterface,
+  getAgentListViewModel,
+} from '../agent/list/agent_list_view_model.svelte.ts';
 import {
   getSettingsAudioViewModel,
   type SettingsAudioViewModelInterface,
@@ -34,7 +43,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsCategory = 'game' | 'ai_engine';
+export type SettingsCategory = 'game' | 'ai_engine' | 'agents';
 
 export type GameSubTab = 'display' | 'audio' | 'controls' | 'export';
 
@@ -57,6 +66,10 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly controlsViewModel: SettingsControlsViewModelInterface;
   /** Export & Data settings view model (C-246). */
   readonly exportViewModel: ExportViewModelInterface;
+  /** Agent list view model (C-247). */
+  readonly agentListViewModel: AgentListViewModelInterface;
+  /** Agent editor view model (C-247). */
+  readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
   setActiveCategory(category: SettingsCategory): void;
   setGameSubTab(tab: GameSubTab): void;
@@ -91,6 +104,8 @@ export class SettingsViewModel
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
   readonly exportViewModel: ExportViewModelInterface;
+  readonly agentListViewModel: AgentListViewModelInterface;
+  readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
   constructor(options: SettingsViewModelOptions) {
     super(options);
@@ -102,6 +117,14 @@ export class SettingsViewModel
     });
     this.exportViewModel = getExportViewModel({
       className: 'ExportViewModel',
+    });
+    this.agentEditorViewModel = getAgentEditorViewModel({
+      className: 'AgentEditorViewModel',
+    });
+    this.agentListViewModel = getAgentListViewModel({
+      className: 'AgentListViewModel',
+      onCreateAgent: () => this.agentEditorViewModel.openCreate(),
+      onEditAgent: (agent: CustomAgentDefinition) => this.agentEditorViewModel.openEdit(agent),
     });
   }
 
@@ -118,6 +141,12 @@ export class SettingsViewModel
 
   setGameSubTab(tab: GameSubTab): void {
     this.gameSubTab = tab;
+  }
+
+  /** Navigates to the Agents tab. */
+  showAgentsTab(): void {
+    this.activeCategory = 'agents';
+    this.agentListViewModel.refresh();
   }
 
   async closeSettings(): Promise<void> {

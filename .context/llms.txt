@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-10
-> Files: 259 across 12 categories
+> Files: 261 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -235,6 +235,8 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C 245 cyoa choices branching narrative](contracts/C-245-cyoa-choices-branching-narrative.md)
 - [C 246 export import system](contracts/C-246-export-import-system.md)
 - [C 247 custom agent creation](contracts/C-247-custom-agent-creation.md)
+- [C 248 autonomous npc behavior schedules](contracts/C-248-autonomous-npc-behavior-schedules.md)
+- [C 249 music dj audio player](contracts/C-249-music-dj-audio-player.md)
 - [Contract C-300: Swarm Director & Workspace Provisioning Lifecycle](contracts/C-300-swarm-director-and-workspace-provisioning-lifecycle.md)
 - [Contract C-301: Algorithmic Token Router & AST Footprint Extractor](contracts/C-301-algorithmic-token-router-and-ast-footprint-extractor.md)
 - [Contract C-302: Coherent Ephemeral SQLite-WAL Scratchpad Engine](contracts/C-302-coherent-ephemeral-sqlite-wal-scratchpad-engine.md)

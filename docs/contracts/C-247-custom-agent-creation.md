@@ -1,3 +1,5 @@
+<!-- completed: 2026-07-10 -->
+
 ## Metadata
 
 | Field | Value |
@@ -6,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/agent/` + `apps/frontend/client/src/lib/services/agent/` — Agent editor UI, agent registry service, custom agent factory, import/export |
 | **Priority** | P2 — Medium-high complexity, low-medium impact. Power-user feature; most users will use built-in agents |
 | **Dependencies** | C-236 (Agent Pipeline System — COMPLETED for `AgentConfig`, `AgentRunResult`, `agentPipelineService`, `AgentHudState`, built-in agents + toggles), C-237 (Prompt Template & Macro System — COMPLETED for `resolveMacros()` engine), C-230 (Connection Config — COMPLETED for connection selector), `textGenerationService.extractStructure()` (C-080 — COMPLETED), `agent_schemas.ts` (EXISTING for TypeBox output validation) |
-| **Status** | not_started |
+| **Status** | completed |
 | **Contract version** | 1.0.0 |
 
 ## Overview
@@ -269,3 +271,79 @@ Saving creates the agent. Editing an existing agent pre-fills all fields.
 - **Imported agent with future formatVersion**: `"formatVersion": "2.0.0"` — future version unknown to current code. Show "This agent definition requires Aikami v2.0 or later" error. Do not crash.
 - **Agent execution order within phase**: Built-in pre agents run first (deterministic order per C-236), then custom pre agents (sorted by `createdAt`, oldest first). Same pattern for post agents. Parallel agents all run concurrently regardless of origin.
 - **Macro resolution failure**: If `resolveMacros()` throws because of an unknown macro reference (e.g., `{{unknown_macro}}`), leave the placeholder in the prompt and log a warning. Do not fail the agent run.
+
+---
+
+## Execution Report
+
+**Completed**: 2026-07-10
+
+### Summary
+
+Implemented C-247 Custom Agent Creation across 14 files. Built a Firestore-backed agent registry service with full CRUD, import/export, and duplicate support. Extended the agent pipeline to discover and execute custom agents alongside built-in ones. Created DaisyUI agent editor form and agent list views integrated into the Settings "Agents" tab. Added Firestore security rules, E2E tests (8 passing), visual test suite, and dev sandbox page.
+
+### AC Status
+
+| AC | Description | Status | Notes |
+|----|-------------|--------|-------|
+| AC-1 | Agent Registry CRUD | ✅ Pass | `agentRegistryService` with Firestore-backed create/update/delete/get/list/duplicate. Validation against built-in IDs. |
+| AC-2 | Agent Editor UI | ✅ Pass | `AgentEditorViewModel` + `AgentEditorView` with name, description, folder, phase, prompt, schema, result type, connection, timeout fields. Schema validation on blur. Save/create buttons. |
+| AC-3 | Dynamic Agent Execution | ✅ Pass | `customAgentToConfig()` + `runCustomAgent()` factory. Pipeline extended to discover custom agents via `_resolveAgents()`. Macro resolution in prompts. |
+| AC-4 | Agent List & Toggle Management | ✅ Pass | `AgentListView` with built-in (6 cards) + custom sections. Edit/duplicate/delete/export buttons on custom agents. Toggle switches. Settings integration with "Agents" tab. |
+| AC-5 | Import/Export Agent Definitions | ✅ Pass | `.aikami.agent.json` format. Import with validation (format version check, duplicate name handling, uid reassignment). Export strips internal fields. |
+| AC-6 | Test Run (Agent Sandbox) | ✅ Pass | Test Run section in editor with input, run/cancel, result panel (pass/fail badge, duration, raw output, error display). AbortController for cancellation. |
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `packages/shared/constants/src/lib/agent.ts` | Extended: `BUILT_IN_AGENT_IDS`, `PHASE_OPTIONS`, `RESULT_TYPE_OPTIONS`, `AGENT_DEFINITIONS_COLLECTION`, validation constants |
+| `apps/frontend/client/src/lib/types/agent_types.ts` | Extended: `CustomAgentDefinition`, `CreateAgentInput`, `UpdateAgentInput` |
+| `apps/frontend/client/src/lib/services/agent/agent_registry_service.svelte.ts` | Firestore-backed CRUD, import/export, duplicate |
+| `apps/frontend/client/src/lib/services/agent/custom_agent_factory.ts` | `customAgentToConfig()`, `runCustomAgent()` |
+| `apps/frontend/client/src/lib/services/agent/index.ts` | Updated barrel exports |
+| `apps/frontend/client/src/lib/services/agent/agent_pipeline_service.svelte.ts` | Extended: `_resolveAgents()` discovers custom agents, `_runAgentWithTimeout()` falls back to `runCustomAgent` |
+| `apps/frontend/client/src/lib/services/index.ts` | Updated barrel exports |
+| `apps/frontend/client/src/lib/views/agent/editor/agent_editor_view_model.svelte.ts` | Editor form state, validation, save/create, import/export, test run |
+| `apps/frontend/client/src/lib/views/agent/editor/agent_editor_view.svelte` | DaisyUI modal with all form fields, test run panel |
+| `apps/frontend/client/src/lib/views/agent/list/agent_list_view_model.svelte.ts` | Agent list with built-in + custom sections, CRUD actions |
+| `apps/frontend/client/src/lib/views/agent/list/agent_list_view.svelte` | Agent cards with badges, toggles, action buttons |
+| `apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts` | Extended: Agents tab, `agentListViewModel`, `agentEditorViewModel` |
+| `apps/frontend/client/src/lib/views/settings/settings_view.svelte` | Extended: Agents tab + editor integration |
+| `apps/backend/firebase/src/rules/firestore.rules` | Added `agent_definitions` collection rules |
+| `apps/frontend/client/src/routes/(dev)/dev/agent-editor/+page.svelte` | Dev sandbox page |
+| `apps/e2e/tests/client/agent_editor.spec.ts` | 8 E2E tests (all passing) |
+| `apps/e2e/src/visual/suites/agent_editor.visual.ts` | Visual test suite (2 cases) |
+
+### Deviations
+
+- **Per-chat toggle race debounce**: Not implemented — the existing C-236 toggle system uses local state without Firestore debouncing. Can be added when per-chat agent persistence is needed.
+- **Schema size warning (>10KB)**: Not implemented — can be added as a UI enhancement later.
+- **Circular macro detection**: Not implemented — macro resolution already handles circular references via the existing 10-pass limit in `resolveMacros()`.
+- **Per-chat agent override UI**: Not implemented — C-236's `enabledAgents` array already supports custom agent IDs. The per-chat settings view needs a separate UI contract.
+- **Agent deletion warning for active chats**: Not implemented — chat agent enabled state isn't persisted to Firestore yet.
+
+### Test Results
+
+- **Typecheck**: 0 errors, 6 warnings (pre-existing)
+- **Lint/Fix**: 0 errors
+- **E2E**: 8/8 passing (agent_editor.spec.ts)
+- **Visual**: Suite defined, not run (requires OPENROUTER_API_KEY)
+- **Pre-existing failures**: `export_settings` (1 test) — unrelated to this contract
+
+### Suggested Commit
+
+```
+feat(client): add custom agent creation with editor, registry, and pipeline integration
+
+- Agent registry service with Firestore CRUD, import/export, duplicate
+- Custom agent factory with macro resolution and structural extraction
+- DaisyUI agent editor form (name, description, phase, prompt, schema, etc.)
+- Agent list view with built-in + custom sections in Settings > Agents
+- Extended pipeline to discover and execute custom agents
+- Dev sandbox at /dev/agent-editor
+- E2E tests (8 passing) + visual test suite
+- Firestore security rules for agent_definitions collection
+
+Contract: C-247
+```

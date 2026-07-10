@@ -2,7 +2,7 @@
 //
 // Agent pipeline module barrel exports.
 //
-// Contract: C-236 Agent Pipeline System
+// Contracts: C-236 Agent Pipeline System, C-247 Custom Agent Creation
 
 export {
   AgentPipelineService,
@@ -10,6 +10,12 @@ export {
   type AgentPipelineServiceOptions,
   agentPipelineService,
 } from './agent_pipeline_service.svelte.ts';
+export {
+  AgentRegistryService,
+  type AgentRegistryServiceInterface,
+  type AgentRegistryServiceOptions,
+  agentRegistryService,
+} from './agent_registry_service.svelte.ts';
 export type {
   AgentOutput,
   CyoaAgentOutput,
@@ -33,3 +39,4 @@ export { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
 export { runQuestTrackerAgent } from './agents/quest_tracker_agent.ts';
 export { runWorldStateAgent } from './agents/world_state_agent.ts';
 export { BUILT_IN_AGENTS } from './built_in_agents.ts';
+export { customAgentToConfig, runCustomAgent } from './custom_agent_factory.ts';

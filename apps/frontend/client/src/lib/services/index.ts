@@ -14,8 +14,14 @@ export {
   AgentPipelineService,
   type AgentPipelineServiceInterface,
   type AgentPipelineServiceOptions,
+  AgentRegistryService,
+  type AgentRegistryServiceInterface,
+  type AgentRegistryServiceOptions,
   agentPipelineService,
+  agentRegistryService,
   BUILT_IN_AGENTS,
+  customAgentToConfig,
+  runCustomAgent,
 } from './agent/index.ts';
 export * from './ai/ai_service.svelte.ts';
 export * from './ai/sentence_boundary_chunker';
