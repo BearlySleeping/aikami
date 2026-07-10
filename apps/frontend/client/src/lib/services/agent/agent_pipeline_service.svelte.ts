@@ -24,6 +24,7 @@ import { runMusicDjAgent } from './agents/music_dj_agent.ts';
 import { runNarrativeDirectorAgent } from './agents/narrative_director_agent.ts';
 import { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
 import { runQuestTrackerAgent } from './agents/quest_tracker_agent.ts';
+import { runSchedulePlannerAgent } from './agents/schedule_planner_agent.ts';
 import { runWorldStateAgent } from './agents/world_state_agent.ts';
 import { BUILT_IN_AGENTS } from './built_in_agents.ts';
 import { customAgentToConfig, runCustomAgent } from './custom_agent_factory.ts';
@@ -125,6 +126,11 @@ const AGENT_RUNNERS: Record<
       config: opts.config,
       _context: opts.context,
       aiResponse: opts.aiResponse ?? '',
+    }),
+  'schedule-planner': (opts) =>
+    runSchedulePlannerAgent({
+      config: opts.config,
+      context: opts.context,
     }),
 };
 

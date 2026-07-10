@@ -8,6 +8,7 @@ import BaseViewModelContainer from '$lib/components/base_view_model_container.sv
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
+import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
 import SettingsControlsView from './controls/settings_controls_view.svelte';
 import SettingsDisplayView from './display/settings_display_view.svelte';
 import ExportView from './export/export_view.svelte';
@@ -34,6 +35,7 @@ const GAME_SUB_TABS = [
   { id: 'controls' as const, label: 'Controls' },
   { id: 'export' as const, label: 'Export & Data' },
   { id: 'music' as const, label: 'Music' },
+  { id: 'autonomous' as const, label: 'Autonomous NPCs' },
 ];
 </script>
 
@@ -110,6 +112,8 @@ const GAME_SUB_TABS = [
         <ExportView viewModel={viewModel.exportViewModel} />
       {:else if viewModel.gameSubTab === 'music'}
         <SettingsMusicView viewModel={viewModel.musicViewModel} />
+      {:else if viewModel.gameSubTab === 'autonomous'}
+        <AutonomousSettingsView viewModel={viewModel.autonomousViewModel} />
       {/if}
     </div>
   <!-- ═══════════════════════════════════════════════════════════════════

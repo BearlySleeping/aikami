@@ -23,6 +23,10 @@ import {
   type SettingsAudioViewModelInterface,
 } from './audio/settings_audio_view_model.svelte';
 import {
+  type AutonomousSettingsViewModelInterface,
+  getAutonomousSettingsViewModel,
+} from './autonomous/autonomous_settings_view_model.svelte';
+import {
   getSettingsControlsViewModel,
   type SettingsControlsViewModelInterface,
 } from './controls/settings_controls_view_model.svelte';
@@ -49,7 +53,7 @@ import {
 
 export type SettingsCategory = 'game' | 'ai_engine' | 'agents';
 
-export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music';
+export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music' | 'autonomous';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -66,6 +70,8 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly audioViewModel: SettingsAudioViewModelInterface;
   /** Music DJ settings view model — track library, scene overrides, provider. */
   readonly musicViewModel: SettingsMusicViewModelInterface;
+  /** Autonomous NPCs settings view model (C-248). */
+  readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
   /** Display settings view model wired to Tauri window API. */
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   /** Controls settings view model with localStorage keybindings. */
@@ -111,6 +117,7 @@ export class SettingsViewModel
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
   readonly exportViewModel: ExportViewModelInterface;
+  readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
   readonly agentListViewModel: AgentListViewModelInterface;
   readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
@@ -125,6 +132,9 @@ export class SettingsViewModel
     });
     this.exportViewModel = getExportViewModel({
       className: 'ExportViewModel',
+    });
+    this.autonomousViewModel = getAutonomousSettingsViewModel({
+      className: 'AutonomousSettingsViewModel',
     });
     this.agentEditorViewModel = getAgentEditorViewModel({
       className: 'AgentEditorViewModel',

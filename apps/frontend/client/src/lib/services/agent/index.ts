@@ -39,6 +39,7 @@ export { runMusicDjAgent } from './agents/music_dj_agent.ts';
 export { runNarrativeDirectorAgent } from './agents/narrative_director_agent.ts';
 export { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
 export { runQuestTrackerAgent } from './agents/quest_tracker_agent.ts';
+export { runSchedulePlannerAgent } from './agents/schedule_planner_agent.ts';
 export { runWorldStateAgent } from './agents/world_state_agent.ts';
 export { BUILT_IN_AGENTS } from './built_in_agents.ts';
 export { customAgentToConfig, runCustomAgent } from './custom_agent_factory.ts';

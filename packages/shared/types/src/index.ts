@@ -49,6 +49,7 @@ export * from './lib/image_style_profile.ts';
 export * from './lib/logger.ts';
 export * from './lib/macro.ts';
 export * from './lib/music.ts';
+export * from './lib/npc_schedule.ts';
 export * from './lib/project.ts';
 export * from './lib/repository/utils.ts';
 export * from './lib/swarm_handoff.ts';

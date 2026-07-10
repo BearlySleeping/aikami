@@ -167,6 +167,17 @@ export type MusicCueOutput = {
   sceneTags: string[];
 };
 
+// ── Schedule Planner Output (C-248) ─────────────────────────────────────
+
+export type SchedulePlannerOutput = {
+  type: 'schedule_planner';
+  dailyPattern: string;
+  schedule: {
+    days: Array<{ day: number; hours: Array<{ hour: number; status: string; activity?: string }> }>;
+  };
+  suggestedTalkativeness: number;
+};
+
 // ── Union type for all agent outputs ────────────────────────────────────
 
 export type AgentOutput =
