@@ -5,6 +5,7 @@
 //
 // Contract: C-236 Agent Pipeline System
 
+import type { CyoaChoice } from '@aikami/types';
 import { type Static, Type } from 'typebox';
 
 // ── Scene Direction (Narrative Director adapter) ────────────────────────
@@ -127,6 +128,19 @@ export const proseGuardianSchema = Type.Object({
 
 export type ProseGuardianOutput = Static<typeof proseGuardianSchema>;
 
+// ── CYOA Choices (C-245) ─────────────────────────────────────────────────
+
+/**
+ * CYOA agent result — tagged output carrying 2–4 structured player
+ * choices. Schema source of truth lives in `@aikami/schemas` (`CyoaChoiceResultSchema`).
+ */
+export type CyoaAgentOutput = {
+  /** Result type discriminator for the agent result union. */
+  type: 'cyoa_choices';
+  /** Proposed player choices (0–4; 0 = no-op, 1 = prompt-advance). */
+  choices: CyoaChoice[];
+};
+
 // ── Union type for all agent outputs ────────────────────────────────────
 
 export type AgentOutput =
@@ -134,4 +148,5 @@ export type AgentOutput =
   | WorldStateExtractionOutput
   | QuestUpdateOutput
   | ExpressionOutput
-  | ProseGuardianOutput;
+  | ProseGuardianOutput
+  | CyoaAgentOutput;

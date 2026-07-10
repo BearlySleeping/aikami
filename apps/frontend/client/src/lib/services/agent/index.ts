@@ -12,6 +12,7 @@ export {
 } from './agent_pipeline_service.svelte.ts';
 export type {
   AgentOutput,
+  CyoaAgentOutput,
   ExpressionOutput,
   ProseGuardianOutput,
   QuestUpdateOutput,
@@ -25,6 +26,7 @@ export {
   sceneDirectionSchema,
   worldStateExtractionSchema,
 } from './agent_schemas.ts';
+export { runCyoaAgent } from './agents/cyoa_agent.ts';
 export { runExpressionAgent } from './agents/expression_agent.ts';
 export { runNarrativeDirectorAgent } from './agents/narrative_director_agent.ts';
 export { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';

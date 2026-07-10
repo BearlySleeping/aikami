@@ -17,6 +17,7 @@ import type {
   AgentPipelineContext,
   AgentRunResult,
 } from '$types/agent_types';
+import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';
 import { runNarrativeDirectorAgent } from './agents/narrative_director_agent.ts';
 import { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
@@ -100,6 +101,12 @@ const AGENT_RUNNERS: Record<
     }),
   expression: (opts) =>
     runExpressionAgent({
+      config: opts.config,
+      _context: opts.context,
+      aiResponse: opts.aiResponse ?? '',
+    }),
+  cyoa: (opts) =>
+    runCyoaAgent({
       config: opts.config,
       _context: opts.context,
       aiResponse: opts.aiResponse ?? '',

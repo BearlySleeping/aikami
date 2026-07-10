@@ -10,6 +10,7 @@ import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_vi
 import PushStoryButtonView from '$views/gm/push_story_button_view.svelte';
 import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_view_model.svelte.ts';
 import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
+import ChoiceButtonsView from './choice_buttons_view.svelte';
 
 type Props = {
   viewModel: ChatViewModelInterface;
@@ -103,6 +104,9 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
               visible={viewModel.isTyping}
               label="{viewModel.npc.name} is typing..."
             />
+
+            <!-- CYOA choice buttons below the latest AI message (C-245) -->
+            <ChoiceButtonsView viewModel={viewModel.choiceButtonsViewModel} />
           </div>
 
           <!-- Slash command autocomplete popup -->
@@ -197,6 +201,20 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
                 onclick={() => viewModel.toggleImpersonationQuickButton()}
               >
             </label>
+            {#if viewModel.impersonationConfig.quickButtonEnabled}
+              <label
+                class="flex items-center gap-1 cursor-pointer"
+                data-testid="cyoa-as-direction-toggle"
+              >
+                <span class="text-xs text-base-content/50">Use CYOA as direction</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-xs"
+                  checked={viewModel.useCyoaAsDirection}
+                  onclick={() => viewModel.toggleUseCyoaAsDirection()}
+                >
+              </label>
+            {/if}
           </div>
 
           <!-- GM Controls (visible in GM mode) -->

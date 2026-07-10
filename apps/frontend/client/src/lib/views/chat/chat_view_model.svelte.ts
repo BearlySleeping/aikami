@@ -1,6 +1,7 @@
 // apps/frontend/client/src/lib/views/chat/chat-view-model.svelte.ts
 
 import {
+  CYOA_AGENT_ID,
   getSlashCompletions,
   IMPERSONATION_COMMAND,
   IMPERSONATION_DRAFT_READY_TOAST,
@@ -15,13 +16,14 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
-import type { ChatData, MessageData, NpcData } from '@aikami/types';
+import type { ChatData, CyoaChoice, MessageData, NpcData } from '@aikami/types';
 import { impersonationService } from '$lib/services/gm/impersonation_service.svelte.ts';
 import {
   aiService,
   authService,
   type ChatMessage,
   chatService,
+  choiceHistoryStore,
   connectedChatsService,
   diceService,
   draftStore,
@@ -34,6 +36,10 @@ import {
   ttsService,
 } from '$services';
 import type { ImpersonationConfig } from '$types';
+import {
+  type ChoiceButtonsViewModelInterface,
+  getChoiceButtonsViewModel,
+} from './choice_buttons_view_model.svelte.ts';
 
 export type ChatViewModelOptions = BaseViewModelOptions & {
   /** The chat document ID to load. */
@@ -79,6 +85,12 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
   readonly showSlashCompletions: boolean;
   /** Toast notification message (e.g. 'Copied!'). */
   readonly toastMessage: string;
+  /** CYOA choice buttons ViewModel (C-245) — rendered below the latest AI message. */
+  readonly choiceButtonsViewModel: ChoiceButtonsViewModelInterface;
+  /** Whether "Use CYOA as direction" feeds choices into impersonation drafts (C-245 AC-6). */
+  readonly useCyoaAsDirection: boolean;
+  /** Toggles the "Use CYOA as direction" impersonation integration. */
+  toggleUseCyoaAsDirection(): void;
   loadChatHistory(chat: ChatData): Promise<void>;
   sendMessage(text: string): Promise<void>;
   editMessage(messageId: string, newText: string): Promise<void>;
@@ -169,6 +181,11 @@ export class ChatViewModel
   showSlashCompletions = $state(false);
   /** Toast notification message — auto-clears after display. */
   toastMessage = $state('');
+  /** Whether CYOA choices feed the impersonation draft instead of posting (C-245 AC-6). */
+  useCyoaAsDirection = $state(false);
+
+  /** CYOA choice buttons ViewModel — owns display state for the choice stack. */
+  readonly choiceButtonsViewModel: ChoiceButtonsViewModelInterface;
 
   /** Sentence boundary chunker for streaming TTS. */
   private readonly _chunker = new SentenceBoundaryChunker();
@@ -205,6 +222,11 @@ export class ChatViewModel
     this._npcId = options.npcId;
     this.gameEntityId = options.gameEntityId;
     this._agentPipelineViewModel = options.agentPipelineViewModel;
+    this.choiceButtonsViewModel = getChoiceButtonsViewModel({
+      className: 'ChoiceButtonsViewModel',
+      choices: [],
+      onSelect: (choice) => this._handleChoiceSelected(choice),
+    });
   }
 
   /** Scrollable message container — bound by View via bind:this. */
@@ -494,6 +516,9 @@ export class ChatViewModel
         return aiService.sendMessageToAI(text, this.npc ?? undefined);
       };
 
+      // Any previously rendered choices are stale once a new turn starts
+      this.choiceButtonsViewModel.setChoices([]);
+
       const rawResponse: string | undefined = pipelineVm
         ? await pipelineVm.runPipeline({
             chatId: this._chatId,
@@ -506,6 +531,11 @@ export class ChatViewModel
             npcId: this._npcId,
           })
         : await generateResponse();
+
+      // ── CYOA choices (C-245): surface post-agent output as buttons ──
+      if (pipelineVm) {
+        this._applyCyoaResults(pipelineVm.results);
+      }
 
       const response = rawResponse || undefined;
       if (response) {
@@ -548,6 +578,11 @@ export class ChatViewModel
     if (idx === -1) {
       return;
     }
+
+    // Editing an AI message invalidates any choices derived from it (C-245)
+    if (msgs[idx].sender === 'ai') {
+      this.choiceButtonsViewModel.dismiss();
+    }
     msgs[idx] = { ...msgs[idx], text: newText };
     chatService.setMessages(msgs);
     await this.persistMessages(msgs);
@@ -565,6 +600,9 @@ export class ChatViewModel
 
   swipeAlternative(messageId: string, direction: 'left' | 'right'): void {
     messageBranchStore.swipeAlternative({ messageId, direction });
+    // Choices were generated for the previously displayed branch —
+    // agent results are not tracked per-branch, so hide them (C-245).
+    this.choiceButtonsViewModel.dismiss();
   }
 
   async copyMessage(text: string): Promise<void> {
@@ -679,6 +717,104 @@ export class ChatViewModel
       ...this.impersonationConfig,
       quickButtonEnabled: !this.impersonationConfig.quickButtonEnabled,
     };
+  }
+
+  /**
+   * Toggles whether a selected CYOA choice feeds the impersonation
+   * draft pipeline instead of posting directly as a user message.
+   */
+  toggleUseCyoaAsDirection(): void {
+    this.useCyoaAsDirection = !this.useCyoaAsDirection;
+  }
+
+  /**
+   * Extracts CYOA choices from the latest pipeline post-agent results
+   * and feeds them to the choice buttons ViewModel. Malformed or failed
+   * CYOA results leave the UI hidden (empty choice set).
+   */
+  private _applyCyoaResults(
+    results: ReadonlyArray<{ agentId: string; success: boolean; output?: unknown }>,
+  ): void {
+    const cyoaResult = results.find((r) => r.agentId === CYOA_AGENT_ID);
+    if (!cyoaResult?.success || !cyoaResult.output) {
+      return;
+    }
+
+    const output = cyoaResult.output as { type?: string; choices?: CyoaChoice[] };
+    if (output.type !== 'cyoa_choices' || !Array.isArray(output.choices)) {
+      return;
+    }
+
+    this.choiceButtonsViewModel.setChoices(output.choices);
+  }
+
+  /**
+   * Handles a CYOA choice selection: records it to the per-chat history
+   * and either posts it as a user message or feeds it to the
+   * impersonation draft when "Use CYOA as direction" is active (AC-6).
+   */
+  private _handleChoiceSelected(choice: CyoaChoice): void {
+    const useDirection = this.useCyoaAsDirection && this.impersonationConfig.quickButtonEnabled;
+
+    choiceHistoryStore.recordChoice({
+      chatId: this._chatId,
+      entry: {
+        choiceId: choice.id,
+        label: choice.label,
+        selectedAt: Date.now(),
+        ...(useDirection ? { context: 'impersonation' } : {}),
+      },
+    });
+
+    if (useDirection) {
+      void this._draftChoiceAsDirection(choice);
+      return;
+    }
+
+    void this.sendMessage(choice.label);
+  }
+
+  /**
+   * Feeds the choice label to the impersonation draft pipeline (AC-6).
+   * On failure, falls back to posting the label as a plain user message.
+   */
+  private async _draftChoiceAsDirection(choice: CyoaChoice): Promise<void> {
+    if (this.isImpersonationDrafting) {
+      return;
+    }
+
+    const persona = await personaService.getActivePersona();
+    if (!persona) {
+      // No persona — fall back to plain posting
+      void this.sendMessage(choice.label);
+      return;
+    }
+
+    this.isImpersonationDrafting = true;
+
+    try {
+      const recentMessages = chatService.messages.map((m) => ({
+        sender: m.sender,
+        text: m.text,
+      }));
+
+      const draft = await impersonationService.generateDraft({
+        personaName: persona.name,
+        personaTraits: persona.personalityTraits ?? '',
+        recentMessages,
+        direction: choice.label,
+      });
+
+      this.inputText = draft;
+      this.showToast(IMPERSONATION_DRAFT_READY_TOAST);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.error('_draftChoiceAsDirection:failed', { message });
+      // Fallback: post the choice label as a plain user message
+      void this.sendMessage(choice.label);
+    } finally {
+      this.isImpersonationDrafting = false;
+    }
   }
 
   /**
@@ -807,6 +943,9 @@ export class ChatViewModel
         chatService.setMessages(msgs);
         await this.persistMessages(msgs);
 
+        // Regenerated response invalidates choices from the old response (C-245)
+        this.choiceButtonsViewModel.dismiss();
+
         // Feed through chunker for streaming TTS
         if (this.streamingTtsEnabled) {
           this._chunker.feed(response);
@@ -916,6 +1055,7 @@ export class ChatViewModel
     chatService.clear();
     this.showGreeting = true;
     this.inputText = '';
+    this.choiceButtonsViewModel.setChoices([]);
     void draftStore.clearDraft({ chatId: this._chatId });
 
     // TTS cleanup

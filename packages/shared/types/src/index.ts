@@ -18,6 +18,7 @@ export * from './lib/class.ts';
 export * from './lib/client/ai_service_interface.ts';
 export * from './lib/common/preferences.ts';
 export * from './lib/common.ts';
+export * from './lib/cyoa.ts';
 export * from './lib/database/character_card.ts';
 export * from './lib/database/chat.ts';
 export * from './lib/database/chat_link.ts';

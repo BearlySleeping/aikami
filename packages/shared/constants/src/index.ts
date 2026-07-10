@@ -4,6 +4,7 @@ export * from './lib/bridge_tags.ts';
 export * from './lib/common.ts';
 export { allCountries } from './lib/country_codes.ts';
 export * from './lib/country_codes_phone_number.ts';
+export * from './lib/cyoa.ts';
 export * from './lib/development_ports.ts';
 export * from './lib/emulator.ts';
 export * from './lib/game_assets.ts';

@@ -14,6 +14,7 @@ import {
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
 // Direct imports to avoid barrel mock resolution issues in tests
+import { choiceHistoryStore } from '$lib/services/chat/choice_history_store.svelte.ts';
 import { combatService } from '$lib/services/game/combat_service.svelte.ts';
 import { gameStateService } from '$lib/services/game/game_state_service.svelte.ts';
 import { timeService } from '$lib/services/game/time_service.svelte.ts';
@@ -39,12 +40,14 @@ export type GmPromptServiceInterface = BaseFrontendClassInterface & {
    *
    * @param options.mode - The address mode controlling narrative perspective.
    * @param options.userMessage - Optional user message for lorebook keyword scanning.
+   * @param options.chatId - Optional chat ID for CYOA choice history injection (C-245).
    * @returns A formatted system prompt string.
    */
   assemblePrompt(options: {
     mode: AddressMode;
     userMessage?: string;
     bridgeContext?: BridgeContext | null;
+    chatId?: string;
   }): string;
 
   /**
@@ -74,8 +77,9 @@ class GmPromptService
     mode: AddressMode;
     userMessage?: string;
     bridgeContext?: BridgeContext | null;
+    chatId?: string;
   }): string {
-    const { mode, userMessage, bridgeContext } = options;
+    const { mode, userMessage, bridgeContext, chatId } = options;
     const context = this.gatherContext();
     const combatContext = this.gatherCombatContext();
     const lines: string[] = [];
@@ -191,6 +195,15 @@ class GmPromptService
           lines.push(resolved);
         }
         lines.push('[/WORLD INFO]');
+      }
+    }
+
+    // ── CYOA Choice History (C-245) ──────────────────────────────
+    if (chatId) {
+      const historySection = choiceHistoryStore.formatHistorySection(chatId);
+      if (historySection.length > 0) {
+        lines.push('');
+        lines.push(historySection);
       }
     }
 

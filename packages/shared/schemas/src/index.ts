@@ -7,6 +7,7 @@ export * from './lib/auth.ts';
 export * from './lib/common/position.ts';
 export * from './lib/common/preference.ts';
 export * from './lib/core.ts';
+export * from './lib/cyoa.ts';
 export * from './lib/database/appearance.ts';
 export * from './lib/database/branch.ts';
 export * from './lib/database/character.ts';
