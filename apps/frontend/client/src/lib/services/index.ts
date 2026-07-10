@@ -42,6 +42,7 @@ export * from './chat/npc_chat_repository.svelte.ts';
 export * from './config/config_service.svelte.ts';
 export * from './config/macro_preset_store.svelte.ts';
 export * from './dice/dice_service.svelte.ts';
+export * from './export/export_service.svelte.ts';
 export * from './expression/expression_asset_resolver';
 export {
   type ExpressionServiceInterface,

@@ -22,6 +22,10 @@ import {
   type SettingsDisplayViewModelInterface,
 } from './display/settings_display_view_model.svelte';
 import {
+  type ExportViewModelInterface,
+  getExportViewModel,
+} from './export/export_view_model.svelte';
+import {
   getProvidersViewModel,
   type ProvidersViewModelInterface,
 } from './providers/providers_view_model.svelte';
@@ -32,7 +36,7 @@ import {
 
 export type SettingsCategory = 'game' | 'ai_engine';
 
-export type GameSubTab = 'display' | 'audio' | 'controls';
+export type GameSubTab = 'display' | 'audio' | 'controls' | 'export';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -51,6 +55,8 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   /** Controls settings view model with localStorage keybindings. */
   readonly controlsViewModel: SettingsControlsViewModelInterface;
+  /** Export & Data settings view model (C-246). */
+  readonly exportViewModel: ExportViewModelInterface;
 
   setActiveCategory(category: SettingsCategory): void;
   setGameSubTab(tab: GameSubTab): void;
@@ -84,6 +90,7 @@ export class SettingsViewModel
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
+  readonly exportViewModel: ExportViewModelInterface;
 
   constructor(options: SettingsViewModelOptions) {
     super(options);
@@ -92,6 +99,9 @@ export class SettingsViewModel
     this.displayViewModel = getSettingsDisplayViewModel({ className: 'SettingsDisplayViewModel' });
     this.controlsViewModel = getSettingsControlsViewModel({
       className: 'SettingsControlsViewModel',
+    });
+    this.exportViewModel = getExportViewModel({
+      className: 'ExportViewModel',
     });
   }
 

@@ -210,7 +210,8 @@
 | C-243 | Asset Management System | ✅ completed |
 | C-244 | Connected Chats Cross Mode Bridge | ✅ completed |
 | C-245 | Cyoa Choices Branching Narrative | ✅ completed |
-| C-246 | Export Import System | ⏳ not_started |
+| C-246 | Export Import System | ✅ completed |
+| C-247 | Custom Agent Creation | ⏳ not_started |
 | C-300 | Swarm Director And Workspace Provisioning Lifecycle | ✅ completed |
 | C-301 | Algorithmic Token Router And Ast Footprint Extractor | ✅ completed |
 | C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ✅ completed |
