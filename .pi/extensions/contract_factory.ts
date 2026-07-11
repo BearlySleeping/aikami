@@ -16,7 +16,19 @@ import { join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
-// ── Inline parser (avoids cross-process import of parse_backlog.ts) ─
+// ── Inline parser ───────────────────────────────────────────────
+//
+// ⚠️  MAINTENANCE NOTE: This is a deliberate copy of the canonical
+// parser at scripts/src/lib/ops/parse_backlog.ts. Pi extensions run
+// in a Node.js context and cannot import Bun-specific modules.
+//
+// RULE: Any change to parse_backlog.ts parsing logic MUST be
+// reflected here. The parsing algorithm, regexes, and field names
+// must stay identical.
+//
+// Divergence check: both files use the same regex for headings
+// (/^###\s+(C-\d+|MIG-\d+)\s+[–—\-]\s+(.+)/) and field lines
+// (/^-\s+\*\*(.+?):\*\*\s*(.+)/). Keep them in sync.
 
 type BacklogItem = {
   id: string;

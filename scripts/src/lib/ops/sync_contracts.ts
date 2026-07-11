@@ -15,6 +15,7 @@
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { parseBacklog } from './parse_backlog.js';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 
@@ -37,6 +38,8 @@ const STATUS_LABELS: Record<string, string> = {
   legacy_completed: '📦 legacy_completed',
   // biome-ignore lint/style/useNamingConvention: keys match contract status strings
   not_started: '⏳ not_started',
+  // biome-ignore lint/style/useNamingConvention: descriptive key
+  not_started_no_file: '⏳ not_started (no contract file)',
 
   // Archived (in docs/contracts/archived/)
   archived: '📦 archived',
@@ -216,10 +219,30 @@ export const syncContracts = () => {
     const activeContracts = activeResult.contracts;
     const archivedContracts = archivedResult.contracts;
 
+    // Cross-reference with TODO.md backlog
+    const activeIdSet = new Set(activeContracts.map((c) => c.id));
+    const backlogDoc = parseBacklog(REPO_ROOT);
+    let missingFromContracts = 0;
+
+    for (const item of backlogDoc.items) {
+      const id = item.id.toLowerCase();
+      if (!activeIdSet.has(id)) {
+        activeContracts.push({
+          id,
+          name: item.title,
+          status: 'not_started_no_file',
+          version: 0,
+          promotion: undefined,
+          fileName: '(no contract file)',
+          archived: false,
+        });
+        missingFromContracts++;
+      }
+    }
+
     const allDuplicateIds = [...activeResult.duplicateIds, ...archivedResult.duplicateIds];
 
-    // Check for cross-directory duplicate IDs
-    const activeIdSet = new Set(activeContracts.map((c) => c.id));
+    // Check for cross-directory duplicate IDs (activeIdSet already includes TODO.md-only items)
     for (const ac of archivedContracts) {
       if (activeIdSet.has(ac.id)) {
         allDuplicateIds.push(`${ac.id} (active + archived)`);
@@ -236,7 +259,7 @@ export const syncContracts = () => {
       '',
       `## Status Summary (Auto-generated: ${now})`,
       '',
-      `**${activeContracts.length} active, ${archivedContracts.length} archived, ${allDuplicateIds.length} duplicates**`,
+      `**${activeContracts.length} active (${missingFromContracts} without contract file), ${archivedContracts.length} archived, ${allDuplicateIds.length} duplicates**`,
       '',
       '### Active Contracts',
       '',
@@ -245,13 +268,13 @@ export const syncContracts = () => {
     ];
 
     for (const c of activeContracts) {
-      const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
+      const statusLabel = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
       const promotionLabel = c.promotion
         ? (PROMOTION_LABELS[c.promotion] ?? `❓ ${c.promotion}`)
         : '—';
-      const verLabel = c.version === 2 ? 'v2' : 'v1';
+      const verLabel = c.version === 0 ? '—' : c.version === 2 ? 'v2' : 'v1';
       lines.push(
-        `| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${promotionLabel} | ${verLabel} |`,
+        `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${promotionLabel} | ${verLabel} |`,
       );
     }
 

@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 26 integrated, 2 release_verified, 71 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 121 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -43,6 +43,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-247 | Custom Agent Creation | 🏁 completed | v1 |
 | C-248 | Autonomous Npc Behavior Schedules | 🏁 completed | v1 |
 | C-249 | Music Dj Audio Player | 🏁 completed | v1 |
+| C-312 | Restore Planning Promotion And Release Truth | 🛠️ implemented | v2 |
 
 ## 🧪 Sandbox
 
@@ -131,6 +132,56 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-309 | Swarm Control Pi Extension And Command Surface Wrapper | 🏁 completed | v1 |
 | C-310 | Automated Backlog Contract Generator | 🏁 completed | v1 |
 | C-311 | Swarm Socket Orchestration | ⏳ not_started | v1 |
+| C-313 | Introduce the Campaign Aggregate and Boot State Machine | ⏳ not_started (no contract file) | v1 |
+| C-314 | Establish a Production Game Composition Root and Split God Services | ⏳ not_started (no contract file) | v1 |
+| C-315 | Define a Versioned Campaign Content Pack and Atomic Loader | ⏳ not_started (no contract file) | v1 |
+| C-316 | Build the Authored “Emberwatch: The Fading Ward” Demo Adventure | ⏳ not_started (no contract file) | v1 |
+| C-317 | Rebuild the Start Menu Around Campaigns, Not Personas | ⏳ not_started (no contract file) | v1 |
+| C-318 | Add One-Screen Capability Setup and an Offline Demo Fallback | ⏳ not_started (no contract file) | v1 |
+| C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | v1 |
 | C-320 | C 320_mdc_skill_scraper | ⏳ not_started | v1 |
 | C-321 | C 321_mcp_runner_bridge | ⏳ not_started | v1 |
+| C-322 | Add In-World Onboarding and Unified Interaction UX | ⏳ not_started (no contract file) | v1 |
+| C-323 | Integrate Bounded AI NPC Dialogue with Authored Fallbacks | ⏳ not_started (no contract file) | v1 |
+| C-324 | Integrate the Demo Quest from Offer Through Reward | ⏳ not_started (no contract file) | v1 |
+| C-325 | Integrate Deterministic Demo Combat and Declared Skill Checks | ⏳ not_started (no contract file) | v1 |
+| C-326 | Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop | ⏳ not_started (no contract file) | v1 |
+| C-327 | Redesign the Minimal Game HUD and Overlay Navigation | ⏳ not_started (no contract file) | v1 |
+| C-328 | Simplify Settings with Progressive Disclosure | ⏳ not_started (no contract file) | v1 |
+| C-329 | Make Local Save, Continue, Autosave, and Recovery Reliable | ⏳ not_started (no contract file) | v1 |
+| C-330 | Enforce the Playable Demo Release Gate | ⏳ not_started (no contract file) | v1 |
+| C-331 | Extract a Deterministic Rules Kernel and Typed Game Command Protocol | ⏳ not_started (no contract file) | v1 |
+| C-332 | Complete Character Progression, Classes, Abilities, Skills, and Spells | ⏳ not_started (no contract file) | v1 |
+| C-333 | Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI | ⏳ not_started (no contract file) | v1 |
+| C-334 | Complete Quest Graph, Journal, Objectives, and Reward Pipelines | ⏳ not_started (no contract file) | v1 |
+| C-335 | Build Party and Companion Gameplay | ⏳ not_started (no contract file) | v1 |
+| C-336 | Add Relationships, Factions, Reputation, and Persistent Consequences | ⏳ not_started (no contract file) | v1 |
+| C-337 | Add World Interactables, Dungeons, Puzzles, and Loot Tables | ⏳ not_started (no contract file) | v1 |
+| C-338 | Promote Rich Chat UX into Production Gameplay | ⏳ not_started (no contract file) | v1 |
+| C-339 | Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle | ⏳ not_started (no contract file) | v1 |
+| C-340 | Add a Campaign/Content-Pack Browser and a Second Adventure | ⏳ not_started (no contract file) | v1 |
+| C-341 | Complete Gamepad, Touch, Responsive, and Accessibility Support | ⏳ not_started (no contract file) | v1 |
+| C-342 | Establish Asset Attribution, Licensing, and Content Provenance | ⏳ not_started (no contract file) | v1 |
+| C-343 | Build a Unified AI Turn Orchestrator with Validated State Patches | ⏳ not_started (no contract file) | v1 |
+| C-344 | Add Prompt Regression, Context Budgets, Cost Guards, and AI Tracing | ⏳ not_started (no contract file) | v1 |
+| C-345 | Add Hierarchical Lore and Memory Retrieval | ⏳ not_started (no contract file) | v1 |
+| C-346 | Integrate an AI Game Master and Narrative Director | ⏳ not_started (no contract file) | v1 |
+| C-347 | Integrate NPC Autonomy, Schedules, and Offscreen Simulation | ⏳ not_started (no contract file) | v1 |
+| C-348 | Add Generative Quests Inside Authored Rules and Content Constraints | ⏳ not_started (no contract file) | v1 |
+| C-349 | Reintroduce Generated Campaigns as a Content-Pack Compiler | ⏳ not_started (no contract file) | v1 |
+| C-350 | Build an Optional Media Director for Expressions, Voice, Images, and Music | ⏳ not_started (no contract file) | v1 |
+| C-351 | Complete Local Model Discovery, Lifecycle, and Hybrid Failover | ⏳ not_started (no contract file) | v1 |
+| C-352 | Add Local-First Cloud Sync with an Outbox and Conflict Policy | ⏳ not_started (no contract file) | v1 |
+| C-353 | Build a Content Authoring Studio and Validation Pipeline | ⏳ not_started (no contract file) | v1 |
+| C-354 | Complete Import, Export, Backup, and Migration | ⏳ not_started (no contract file) | v1 |
+| C-355 | Enforce Runtime Performance, Memory, and Asset Budgets | ⏳ not_started (no contract file) | v1 |
+| C-356 | Harden Tauri and PWA Offline Installation and Updates | ⏳ not_started (no contract file) | v1 |
+| C-357 | Deliver Mobile/Small-Screen Packaging and Thermal Budgets | ⏳ not_started (no contract file) | v1 |
+| C-358 | Add Privacy, Security, Secret, and AI Cost Controls | ⏳ not_started (no contract file) | v1 |
+| C-359 | Add Speech Input and Hands-Free Play as an Accessibility Mode | ⏳ not_started (no contract file) | v1 |
+| C-360 | Add Bring-Your-Own Rulesets and Rulebook RAG | ⏳ not_started (no contract file) | v1 |
+| C-361 | Add Co-op Multiplayer with Authoritative Campaign Sessions | ⏳ not_started (no contract file) | v1 |
+| C-362 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | v1 |
+| C-363 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | v1 |
+| C-364 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | v1 |
 

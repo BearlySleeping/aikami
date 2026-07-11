@@ -6,6 +6,11 @@
  * field lines (`- **Field:** value`).
  *
  * DO NOT create a parallel parser elsewhere. This is the canonical one.
+ *
+ * ⚠️  MAINTENANCE: Pi extension at .pi/extensions/contract_factory.ts
+ * maintains an inline copy of this parser (Pi extensions run in Node.js
+ * and cannot import Bun-specific modules). Any change to the parsing
+ * logic here MUST be mirrored there.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';

@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-11
-> Files: 264 across 12 categories
+> Files: 265 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -255,9 +255,10 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-309: Swarm Control Pi Extension & Command Surface Wrapper](contracts/C-309-swarm-control-pi-extension-and-command-surface-wrapper.md)
 - [Contract C-310: Automated Backlog Contract Generator](contracts/C-310-automated-backlog-contract-generator.md)
 - [C-311: Swarm Socket Orchestration & Structural Handoff Refactor](contracts/C-311-swarm-socket-orchestration.md)
+- [Contract C-312: Restore Planning, Promotion, and Release Truth](contracts/C-312-restore-planning-promotion-and-release-truth.md)
 - [Contract: C-320 - Automated MDC Skill Scraper and Transpiler](contracts/C-320_mdc_skill_scraper.md)
 - [Contract: C-321 - MCP (Model Context Protocol) Stdio Runner Bridge](contracts/C-321_mcp_runner_bridge.md)
-- [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
+- [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
 - [Feature Promotion Matrix](contracts/PROMOTION.md)

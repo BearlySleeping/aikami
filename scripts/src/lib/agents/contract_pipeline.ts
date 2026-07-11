@@ -507,8 +507,10 @@ const parseImplementerVerdict = (text: string): StageVerdict => {
  * Regex: /## Verification Verdict: (PASS|CHANGES_REQUESTED)/m
  */
 const parseVerifierVerdict = (text: string): StageVerdict => {
-  const verdictMatch = text.match(/##\s*Verification Verdict:\s*(PASS|CHANGES_REQUESTED)/i);
-  const acTable = text.match(/###\s*AC Evidence[\s\S]*?(?=###|$)/i);
+  const verdictMatch = text.match(
+    /##\s*(?:✅|⚠|❌)?\s*(?:Verification\s+)?Verdict:\s*(PASS|CHANGES_REQUESTED|VERIFIED|NOT_VERIFIED|FAILED)/i,
+  );
+  const acTable = text.match(/###\s*AC (?:Summary|Evidence|Status)[\s\S]*?(?=###|$)/i);
 
   if (!verdictMatch) {
     return {
@@ -516,9 +518,14 @@ const parseVerifierVerdict = (text: string): StageVerdict => {
     };
   }
 
+  const rawVerdict = verdictMatch[1]?.toUpperCase() ?? '';
+  // Normalize: VERIFIED → PASS, FAILED / NOT_VERIFIED → CHANGES_REQUESTED
+  const normalized: 'PASS' | 'CHANGES_REQUESTED' =
+    rawVerdict === 'VERIFIED' || rawVerdict === 'PASS' ? 'PASS' : 'CHANGES_REQUESTED';
+
   return {
     verifier: {
-      verdict: verdictMatch[1]?.toUpperCase() as 'PASS' | 'CHANGES_REQUESTED',
+      verdict: normalized,
       acEvidence: acTable?.[0],
       summary: verdictMatch[0]?.slice(0, 1000),
     },
@@ -588,6 +595,9 @@ const pipelineLog = (runId: string, cwd: string, msg: string): void => {
 const lockPath = (contractId: string, cwd: string): string =>
   join(cwd, RUNS_DIR, `lock_${contractId.replace(/[^A-Za-z0-9]/g, '-')}.pid`);
 
+/** Registered cleanup callbacks for active locks. Keyed by lock file path. */
+const _lockCleanups = new Map<string, () => void>();
+
 const acquireLock = (contractId: string, cwd: string): void => {
   const path = lockPath(contractId, cwd);
   mkdirSync(join(cwd, RUNS_DIR), { recursive: true });
@@ -624,6 +634,7 @@ const acquireLock = (contractId: string, cwd: string): void => {
       /* already gone */
     }
   };
+  _lockCleanups.set(path, cleanup);
   process.on('exit', cleanup);
   process.on('SIGINT', () => {
     cleanup();
@@ -633,6 +644,23 @@ const acquireLock = (contractId: string, cwd: string): void => {
     cleanup();
     process.exit(143);
   });
+};
+
+/** Release the lock AND deregister cleanup handlers. Call before forking. */
+const releaseLock = (contractId: string, cwd: string): void => {
+  const path = lockPath(contractId, cwd);
+  const cleanup = _lockCleanups.get(path);
+  if (cleanup) {
+    process.removeListener('exit', cleanup);
+    process.removeListener('SIGINT', cleanup);
+    process.removeListener('SIGTERM', cleanup);
+    _lockCleanups.delete(path);
+  }
+  try {
+    unlinkSync(path);
+  } catch {
+    /* already gone */
+  }
 };
 
 // ── Herdr Workspace & Tab Provisioning ──────────────────────
@@ -905,33 +933,130 @@ const runWorkerStage = async (
     await new Promise((r) => setTimeout(r, PI_STARTUP_GRACE_MS));
   }
 
-  // ── Send the prompt command ──
-  await herdr(['pane', 'run', paneId, promptCommand]);
+  // ── Send the prompt as agent input (NOT pane run — that runs a shell command) ──
+  await herdr(['pane', 'send-text', paneId, promptCommand]);
+  await herdr(['pane', 'send-keys', paneId, 'Enter']);
   console.debug(`[pipeline:worker] prompt sent: ${promptCommand.slice(0, 100)}`);
 
-  // ── Wait for agent to become idle/done (work complete) ──
-  // Try idle first (active tab), then done (background tab)
+  // ── Wait for agent to start working, then complete ──
+  // Per herdr docs: for background panes, wait for `working` first to
+  // confirm the prompt was received, then `done`.  Waiting for `idle`
+  // races — the agent may be idle from startup and match instantly.
   let waitResult = await herdr([
     'wait',
     'agent-status',
     paneId,
     '--status',
-    'idle',
+    'working',
     '--timeout',
-    String(timeoutMs),
+    '30000',
   ]);
 
   if (waitResult.code !== 0) {
-    // Try 'done' status for background tabs
-    waitResult = await herdr([
-      'wait',
-      'agent-status',
+    // Never entered working — may already be done (instant task) or
+    // prompt was never processed (fatal).  Check current status.
+    const check = await herdrJson<PaneGetResult>(['pane', 'get', paneId]);
+    if (check?.result?.pane?.agent_status === 'done') {
+      // Already completed — fall through to read
+    } else {
+      // Last resort: foreground pattern (idle → done)
+      waitResult = await herdr([
+        'wait',
+        'agent-status',
+        paneId,
+        '--status',
+        'idle',
+        '--timeout',
+        String(timeoutMs),
+      ]);
+      if (waitResult.code !== 0) {
+        waitResult = await herdr([
+          'wait',
+          'agent-status',
+          paneId,
+          '--status',
+          'done',
+          '--timeout',
+          String(timeoutMs),
+        ]);
+      }
+    }
+  } else {
+    // Agent is working — poll until done, idle, or blocked.
+    // Polling is required because herdr wait is a single-status call;
+    // a blocked agent (e.g. ask_user_question) would otherwise silently
+    // consume the full timeout before timing out.
+    const pollIntervalMs = 10_000;
+    const deadline = Date.now() + timeoutMs;
+    let agentDone = false;
+    let agentBlocked = false;
+
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
+      const check = await herdrJson<PaneGetResult>(['pane', 'get', paneId]);
+      const status = check?.result?.pane?.agent_status;
+
+      if (status === 'done' || status === 'idle') {
+        agentDone = true;
+        break;
+      }
+      if (status === 'blocked') {
+        agentBlocked = true;
+        pipelineLog(
+          '',
+          cwd,
+          `[pipeline:worker] AGENT BLOCKED — pi is waiting for user input (e.g. ask_user_question). ` +
+            `Attach with: herdr session attach default`,
+        );
+        // Try sending a notification via herdr
+        await herdr([
+          'notification',
+          'send',
+          `Contract pipeline: agent blocked in ${paneId}. Attach to herdr to answer questions.`,
+          '--level',
+          'warn',
+        ]).catch(() => {});
+        // Try to unblock: send "Continue without asking" or similar
+        // but this is fragile — just report and stop
+        break;
+      }
+      // still working — continue polling
+    }
+
+    if (agentBlocked) {
+      // Don't set waitResult — return directly with blocked verdict
+      const blockedVerdict: StageVerdict = {
+        implementer: { acStatus: {}, filesChanged: [], summary: 'Agent blocked — requires user interaction.' },
+      };
+      return { verdict: blockedVerdict, paneOutput: '', timedOut: true };
+    }
+
+    // Read pane output (even if timed out — might have partial work)
+    const readResult2 = await herdr([
+      'pane',
+      'read',
       paneId,
-      '--status',
-      'done',
-      '--timeout',
-      String(timeoutMs),
+      '--source',
+      'recent-unwrapped',
+      '--lines',
+      '500',
     ]);
+    const _paneOutput2 = readResult2.stdout;
+
+    if (agentDone) {
+      // Check for verdict in output
+      if (completionRegex.test(_paneOutput2)) {
+        return { verdict: verdictParser(_paneOutput2), paneOutput: _paneOutput2, timedOut: false };
+      }
+    }
+
+    // If we get here: timed out or no verdict found, fall through to follow-up
+    pipelineLog(
+      '',
+      cwd,
+      `[pipeline:worker] agent did not produce completion verdict — sending follow-up`,
+    );
+    return { verdict: {}, paneOutput: _paneOutput2, timedOut: true };
   }
 
   if (waitResult.code !== 0) {
@@ -961,22 +1086,49 @@ const runWorkerStage = async (
   console.debug('[pipeline:worker] no verdict found — sending follow-up');
   await herdr([
     'pane',
-    'run',
+    'send-text',
     paneId,
     'Please write your completion summary now. Include the verdict section as specified in your prompt.',
   ]);
+  await herdr(['pane', 'send-keys', paneId, 'Enter']);
 
-  // Wait again (shorter timeout)
+  // Wait for follow-up to be processed (working → done)
   let followupWait = await herdr([
     'wait',
     'agent-status',
     paneId,
     '--status',
-    'idle',
+    'working',
     '--timeout',
-    String(FOLLOWUP_TIMEOUT_MS),
+    '30000',
   ]);
+
   if (followupWait.code !== 0) {
+    const check = await herdrJson<PaneGetResult>(['pane', 'get', paneId]);
+    if (check?.result?.pane?.agent_status !== 'done') {
+      // Fallback: idle → done
+      followupWait = await herdr([
+        'wait',
+        'agent-status',
+        paneId,
+        '--status',
+        'idle',
+        '--timeout',
+        String(FOLLOWUP_TIMEOUT_MS),
+      ]);
+      if (followupWait.code !== 0) {
+        followupWait = await herdr([
+          'wait',
+          'agent-status',
+          paneId,
+          '--status',
+          'done',
+          '--timeout',
+          String(FOLLOWUP_TIMEOUT_MS),
+        ]);
+      }
+    }
+  } else {
     followupWait = await herdr([
       'wait',
       'agent-status',
@@ -986,6 +1138,18 @@ const runWorkerStage = async (
       '--timeout',
       String(FOLLOWUP_TIMEOUT_MS),
     ]);
+    if (followupWait.code !== 0) {
+      // Foreground pane fallback
+      followupWait = await herdr([
+        'wait',
+        'agent-status',
+        paneId,
+        '--status',
+        'idle',
+        '--timeout',
+        '30000',
+      ]);
+    }
   }
 
   const followupRead = await herdr([
@@ -1040,8 +1204,9 @@ const setupReviewCaptain = async (
   await herdr(['wait', 'agent-status', reviewPaneId, '--status', 'idle', '--timeout', '30000']);
   await new Promise((r) => setTimeout(r, 2000));
 
-  // Send the review captain prompt
-  await herdr(['pane', 'run', reviewPaneId, `/contract-review-captain ${taskId}`]);
+  // Send the review captain prompt as agent input
+  await herdr(['pane', 'send-text', reviewPaneId, `/contract-review-captain ${taskId}`]);
+  await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
 
   console.log('[pipeline:review-captain] initialized');
 };
@@ -1079,7 +1244,8 @@ const sendReviewUpdate = async (
     `**Run ID**: ${manifest.runId}`,
   ].join('\n');
 
-  await herdr(['pane', 'run', reviewPaneId, msg]);
+  await herdr(['pane', 'send-text', reviewPaneId, msg]);
+  await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
 };
 
 /**
@@ -1130,16 +1296,21 @@ const sendFinalSummary = async (
     'Review the contract, make finishing touches, and request commit/push when ready.',
   ].join('\n');
 
-  await herdr(['pane', 'run', reviewPaneId, msg]);
+  await herdr(['pane', 'send-text', reviewPaneId, msg]);
+  await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
 };
 
 // ── Stage Definitions ────────────────────────────────────────
 
-const WRITER_COMPLETION_RE = /##\s*Contract Writer Summary/;
+// Matches "Contract Writer Summary", "Completion Summary", etc.
+const WRITER_COMPLETION_RE =
+  /##\s*(?:Contract\s+Writer\s+)?(?:Completion|Contract Writer|Writer)\s+Summary/;
 const CRITIC_COMPLETION_RE =
   /##\s*Critique Verdict:\s*(APPROVE|CHANGES_REQUESTED|NEEDS_CLARIFICATION)/i;
 const IMPLEMENTER_COMPLETION_RE = /##\s*Execution Report/;
-const VERIFIER_COMPLETION_RE = /##\s*Verification Verdict:\s*(PASS|CHANGES_REQUESTED)/i;
+// Matches "Verification Verdict: PASS", "## ✅ Verdict: VERIFIED", etc.
+const VERIFIER_COMPLETION_RE =
+  /##\s*(?:✅|⚠|❌)?\s*(?:Verification\s+)?Verdict:\s*(PASS|CHANGES_REQUESTED|VERIFIED|NOT_VERIFIED|FAILED)/i;
 
 const STAGE_DEFS: Record<string, StageDef> = {
   write_contract: {
@@ -1386,11 +1557,16 @@ const runPipeline = async (cli: CliArgs): Promise<void> => {
   pipelineLog(manifest.runId, cwd, 'Setting up Review Captain...');
   await setupReviewCaptain(reviewPaneId, taskId, cwd);
 
-  // ── Touch pipeline log for tail -f ──
+  // ── Touch pipeline log for tail -f (redirect to run-specific path) ──
   mkdirSync(join(cwd, RUNS_DIR, manifest.runId), { recursive: true });
-  if (!existsSync(logPath(manifest.runId, cwd))) {
-    writeFileSync(logPath(manifest.runId, cwd), '');
+  const runLogFile = logPath(manifest.runId, cwd);
+  if (!existsSync(runLogFile)) {
+    writeFileSync(runLogFile, '');
   }
+  // Kill the placeholder tail and start watching the real run log
+  await herdr(['pane', 'send-keys', pipelinePaneId, 'C-c']);
+  await new Promise((r) => setTimeout(r, 500));
+  await herdr(['pane', 'run', pipelinePaneId, `tail -f ${runLogFile}`]);
 
   // ── Join mode: attach user to herdr ──
   if (!cli.background) {
@@ -1399,6 +1575,9 @@ const runPipeline = async (cli: CliArgs): Promise<void> => {
       console.log(
         '\n  Attaching to herdr review tab (Ctrl+C here will NOT kill the pipeline)...\n',
       );
+
+      // Release the parent's lock so the child can acquire its own
+      releaseLock(contractInfo.id, cwd);
 
       // Detach pipeline before joining
       const logFile = logPath(manifest.runId, cwd);
@@ -1600,12 +1779,9 @@ const runPipeline = async (cli: CliArgs): Promise<void> => {
   // ── Blocked stage ──
   if (currentStage === 'blocked') {
     pipelineLog(manifest.runId, cwd, 'Pipeline blocked — sending error to review captain');
-    await herdr([
-      'pane',
-      'run',
-      reviewPaneId,
-      `## Pipeline Blocked\n\nThe pipeline has been blocked and requires manual intervention.\nSee the pipeline log for details: .pi/contract-runs/${manifest.runId}/pipeline.log`,
-    ]);
+    const blockedMsg = `## Pipeline Blocked\n\nThe pipeline has been blocked and requires manual intervention.\nSee the pipeline log for details: .pi/contract-runs/${manifest.runId}/pipeline.log`;
+    await herdr(['pane', 'send-text', reviewPaneId, blockedMsg]);
+    await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
   }
 
   pipelineLog(manifest.runId, cwd, 'PIPELINE COMPLETE');
