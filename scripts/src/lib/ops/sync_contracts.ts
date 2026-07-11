@@ -37,6 +37,9 @@ const STATUS_LABELS: Record<string, string> = {
   legacy_completed: '📦 legacy_completed',
   // biome-ignore lint/style/useNamingConvention: keys match contract status strings
   not_started: '⏳ not_started',
+
+  // Archived (in docs/contracts/archived/)
+  archived: '📦 archived',
 };
 
 const PROMOTION_LABELS: Record<string, string> = {
@@ -130,64 +133,106 @@ type ContractInfo = {
   version: number;
   promotion: string | undefined;
   fileName: string;
+  archived: boolean;
+};
+
+const readContractsFromDir = (
+  dir: string,
+  archived: boolean,
+): { contracts: ContractInfo[]; duplicateIds: string[] } => {
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter(
+      (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'),
+    );
+  } catch {
+    return { contracts: [], duplicateIds: [] };
+  }
+
+  const contracts: ContractInfo[] = [];
+  const seenIds = new Set<string>();
+  const duplicateIds: string[] = [];
+
+  for (const file of files) {
+    const idMatch = file.match(/^((?:C|MIG)-\d+)/);
+    if (!idMatch) {
+      continue;
+    }
+
+    const id = idMatch[1].toLowerCase();
+
+    if (seenIds.has(id)) {
+      duplicateIds.push(id);
+      continue;
+    }
+    seenIds.add(id);
+
+    const content = readFileSync(join(dir, file), 'utf8');
+    const version = detectVersion(content);
+    const name = slugToName(file);
+
+    let status: string;
+    if (archived) {
+      status = 'archived';
+    } else if (version === 1 && isLegacyCompleted(content)) {
+      status = 'legacy_completed';
+    } else {
+      status = extractStatus(content);
+    }
+
+    const promotion = archived ? undefined : extractPromotion(content);
+
+    contracts.push({ id, name, status, version, promotion, fileName: file, archived });
+  }
+
+  return { contracts, duplicateIds };
+};
+
+const sortContracts = (contracts: ContractInfo[]): void => {
+  contracts.sort((a, b) => {
+    const aIsMig = a.id.startsWith('mig');
+    const bIsMig = b.id.startsWith('mig');
+    if (aIsMig !== bIsMig) {
+      return aIsMig ? 1 : -1;
+    }
+    const aNum = Number.parseInt(a.id.replace(/^(c|mig)-/, ''), 10);
+    const bNum = Number.parseInt(b.id.replace(/^(c|mig)-/, ''), 10);
+    return aNum - bNum;
+  });
 };
 
 export const syncContracts = () => {
   const contractsDir = join(REPO_ROOT, 'docs/contracts');
+  const archivedDir = join(REPO_ROOT, 'docs/contracts/archived');
   const progressPath = join(REPO_ROOT, 'docs/contracts/PROGRESS.md');
 
   console.log('📄 Syncing PROGRESS.md from individual contract files...');
 
   try {
-    const files = readdirSync(contractsDir).filter(
-      (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'),
-    );
+    // Read active contracts
+    const activeResult = readContractsFromDir(contractsDir, false);
 
-    const contracts: ContractInfo[] = [];
-    const seenIds = new Set<string>();
-    const duplicateIds: string[] = [];
+    // Read archived contracts
+    const archivedResult = readContractsFromDir(archivedDir, true);
 
-    for (const file of files) {
-      const idMatch = file.match(/^((?:C|MIG)-\d+)/);
-      if (!idMatch) {
-        continue;
+    const activeContracts = activeResult.contracts;
+    const archivedContracts = archivedResult.contracts;
+
+    const allDuplicateIds = [
+      ...activeResult.duplicateIds,
+      ...archivedResult.duplicateIds,
+    ];
+
+    // Check for cross-directory duplicate IDs
+    const activeIdSet = new Set(activeContracts.map((c) => c.id));
+    for (const ac of archivedContracts) {
+      if (activeIdSet.has(ac.id)) {
+        allDuplicateIds.push(`${ac.id} (active + archived)`);
       }
-
-      const id = idMatch[1].toLowerCase();
-
-      if (seenIds.has(id)) {
-        duplicateIds.push(id);
-        continue;
-      }
-      seenIds.add(id);
-
-      const content = readFileSync(join(contractsDir, file), 'utf8');
-      const version = detectVersion(content);
-      const name = slugToName(file);
-
-      let status: string;
-      if (version === 1 && isLegacyCompleted(content)) {
-        status = 'legacy_completed';
-      } else {
-        status = extractStatus(content);
-      }
-
-      const promotion = extractPromotion(content);
-
-      contracts.push({ id, name, status, version, promotion, fileName: file });
     }
 
-    // Sort: C first by numeric ID, then MIG by numeric ID
-    contracts.sort((a, b) => {
-      const aIsMig = a.id.startsWith('mig');
-      const bIsMig = b.id.startsWith('mig');
-      if (aIsMig !== bIsMig) {
-        return aIsMig ? 1 : -1;
-      }
-      const aNum = Number.parseInt(a.id.replace(/^(c|mig)-/, ''), 10);
-      const bNum = Number.parseInt(b.id.replace(/^(c|mig)-/, ''), 10);
-      return aNum - bNum;
-    });
+    sortContracts(activeContracts);
+    sortContracts(archivedContracts);
 
     // Generate PROGRESS.md
     const now = new Date().toISOString().split('T')[0];
@@ -196,11 +241,15 @@ export const syncContracts = () => {
       '',
       `## Status Summary (Auto-generated: ${now})`,
       '',
+      `**${activeContracts.length} active, ${archivedContracts.length} archived, ${allDuplicateIds.length} duplicates**`,
+      '',
+      '### Active Contracts',
+      '',
       '| Contract | Name | Status | Promotion | Version |',
       '|----------|------|--------|-----------|---------|',
     ];
 
-    for (const c of contracts) {
+    for (const c of activeContracts) {
       const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
       const promotionLabel = c.promotion
         ? (PROMOTION_LABELS[c.promotion] ?? `❓ ${c.promotion}`)
@@ -211,10 +260,50 @@ export const syncContracts = () => {
       );
     }
 
-    if (duplicateIds.length > 0) {
+    if (archivedContracts.length > 0) {
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+      lines.push('### 📦 Archived Contracts');
+      lines.push('');
+      lines.push(
+        `> These ${archivedContracts.length} legacy v1 contracts were marked completed with no execution report and are not referenced by pending work.`,
+      );
+      lines.push('> See `docs/contracts/archived/README.md` for details.');
+      lines.push('');
+      lines.push('| Contract | Name | Status | Version |');
+      lines.push('|----------|------|--------|---------|');
+
+      // Show first 20 archived, then count remaining
+      const shownArchived = archivedContracts.slice(0, 20);
+      for (const c of shownArchived) {
+        const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
+        const verLabel = c.version === 2 ? 'v2' : 'v1';
+        lines.push(
+          `| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} |`,
+        );
+      }
+
+      if (archivedContracts.length > 20) {
+        const remaining = archivedContracts.length - 20;
+        const remainingIds = archivedContracts
+          .slice(20)
+          .map((c) => c.id.toUpperCase())
+          .join(', ');
+        lines.push(`| ... | _${remaining} more archived_ | | |`);
+        lines.push('');
+        lines.push(`<details><summary>All ${archivedContracts.length} archived IDs</summary>`);
+        lines.push('');
+        lines.push(remainingIds);
+        lines.push('');
+        lines.push('</details>');
+      }
+    }
+
+    if (allDuplicateIds.length > 0) {
       lines.push('');
       lines.push('## ⚠️ Duplicate IDs');
-      for (const dup of duplicateIds) {
+      for (const dup of allDuplicateIds) {
         lines.push(`- \`${dup.toUpperCase()}\` — resolve before next sync`);
       }
     }
@@ -224,12 +313,12 @@ export const syncContracts = () => {
     const output = `${lines.join('\n')}\n`;
     writeFileSync(progressPath, output);
 
-    // Generate PROMOTION.md — feature-promotion matrix
+    // Generate PROMOTION.md — feature-promotion matrix (active contracts only)
     const promotionPath = join(REPO_ROOT, 'docs/contracts/PROMOTION.md');
-    const sandboxContracts = contracts.filter((c) => c.promotion === 'sandbox');
-    const integratedContracts = contracts.filter((c) => c.promotion === 'integrated');
-    const releaseVerifiedContracts = contracts.filter((c) => c.promotion === 'release_verified');
-    const unassessedContracts = contracts.filter((c) => !c.promotion);
+    const sandboxContracts = activeContracts.filter((c) => c.promotion === 'sandbox');
+    const integratedContracts = activeContracts.filter((c) => c.promotion === 'integrated');
+    const releaseVerifiedContracts = activeContracts.filter((c) => c.promotion === 'release_verified');
+    const unassessedContracts = activeContracts.filter((c) => !c.promotion);
 
     const promotionLines: string[] = [
       '# Feature Promotion Matrix',
@@ -238,7 +327,7 @@ export const syncContracts = () => {
       '',
       'Tracks which features have progressed from dev sandboxes through production integration to release readiness.',
       '',
-      `**Summary**: ${sandboxContracts.length} sandbox, ${integratedContracts.length} integrated, ${releaseVerifiedContracts.length} release_verified, ${unassessedContracts.length} unassessed`,
+      `**Summary**: ${sandboxContracts.length} sandbox, ${integratedContracts.length} integrated, ${releaseVerifiedContracts.length} release_verified, ${unassessedContracts.length} unassessed (active only; ${archivedContracts.length} archived contracts excluded)`,
       '',
     ];
 
@@ -269,19 +358,15 @@ export const syncContracts = () => {
     const promotionOutput = `${promotionLines.join('\n')}\n`;
     writeFileSync(promotionPath, promotionOutput);
 
-    const verified = contracts.filter((c) => c.status === 'verified' || c.status === 'completed');
-    const legacy = contracts.filter((c) => c.status === 'legacy_completed');
-
     console.log(
-      `✅ Generated PROGRESS.md: ${contracts.length} contracts ` +
-        `(${verified.length} verified, ${legacy.length} legacy, ${duplicateIds.length} duplicates)`,
+      `✅ Generated PROGRESS.md: ${activeContracts.length} active, ${archivedContracts.length} archived, ${allDuplicateIds.length} duplicates`,
     );
     console.log(
       `✅ Generated PROMOTION.md: ${sandboxContracts.length} sandbox, ${integratedContracts.length} integrated, ${releaseVerifiedContracts.length} release_verified`,
     );
 
-    if (duplicateIds.length > 0) {
-      console.warn(`⚠️ Duplicate IDs: ${duplicateIds.join(', ')}`);
+    if (allDuplicateIds.length > 0) {
+      console.warn(`⚠️ Duplicate IDs: ${allDuplicateIds.join(', ')}`);
     }
   } catch (error) {
     console.error('❌ Failed to sync contracts:', error);

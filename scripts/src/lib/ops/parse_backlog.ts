@@ -44,6 +44,8 @@ export type BacklogItem = {
   alreadyGenerated: boolean;
   /** Path to existing contract file, if any */
   existingContractPath: string | null;
+  /** Whether the existing contract is in the archived directory */
+  isArchived: boolean;
   /** Raw bullet field map (field name → value) for extensibility */
   rawFields: Record<string, string>;
 };
@@ -62,6 +64,7 @@ export type BacklogDocument = {
 
 const TODO_PATH = 'docs/TODO.md';
 const CONTRACTS_DIR = 'docs/contracts';
+const ARCHIVED_CONTRACTS_DIR = 'docs/contracts/archived';
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -91,18 +94,43 @@ const parseHeading = (line: string): { id: string; title: string } | null => {
 
 /**
  * Find an existing contract file by ID prefix match.
+ * Checks active directory first, then falls back to archived/.
  * e.g. "C-312" matches "C-312-restore-planning-promotion-and-release-truth.md"
+ *
+ * Returns { path, isArchived } or null.
  */
-const findExistingContract = (contractsDir: string, id: string): string | null => {
+const findExistingContract = (
+  activeDir: string,
+  archivedDir: string,
+  id: string,
+): { path: string; isArchived: boolean } | null => {
+  // Check active directory first
   try {
-    const files = readdirSync(contractsDir);
-    const match = files.find(
+    const activeFiles = readdirSync(activeDir);
+    const activeMatch = activeFiles.find(
       (f) => f.startsWith(`${id}-`) && f.endsWith('.md') && f !== 'TEMPLATE.md',
     );
-    return match ?? null;
+    if (activeMatch) {
+      return { path: activeMatch, isArchived: false };
+    }
   } catch {
-    return null;
+    // ignore
   }
+
+  // Fall back to archived/
+  try {
+    const archivedFiles = readdirSync(archivedDir);
+    const archivedMatch = archivedFiles.find(
+      (f) => f.startsWith(`${id}-`) && f.endsWith('.md'),
+    );
+    if (archivedMatch) {
+      return { path: archivedMatch, isArchived: true };
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 };
 
 // ── Parser ─────────────────────────────────────────────────
@@ -120,6 +148,7 @@ export const parseBacklog = (repoRoot: string): BacklogDocument => {
 
   const todoPath = join(repoRoot, TODO_PATH);
   const contractsDir = join(repoRoot, CONTRACTS_DIR);
+  const archivedContractsDir = join(repoRoot, ARCHIVED_CONTRACTS_DIR);
 
   if (!existsSync(todoPath)) {
     errors.push(`Backlog file not found: ${todoPath}`);
@@ -160,6 +189,7 @@ export const parseBacklog = (repoRoot: string): BacklogDocument => {
             currentPhase,
             currentItemLines,
             contractsDir,
+            archivedContractsDir,
           );
           if (seenIds.has(item.id)) {
             errors.push(`Duplicate ID: ${item.id}`);
@@ -189,6 +219,7 @@ export const parseBacklog = (repoRoot: string): BacklogDocument => {
         currentPhase,
         currentItemLines,
         contractsDir,
+        archivedContractsDir,
       );
       if (seenIds.has(item.id)) {
         errors.push(`Duplicate ID: ${item.id}`);
@@ -211,6 +242,7 @@ const buildItem = (
   phase: string,
   lines: string[],
   contractsDir: string,
+  archivedContractsDir: string,
 ): BacklogItem => {
   const rawFields: Record<string, string> = {};
 
@@ -224,8 +256,8 @@ const buildItem = (
   const get = (fieldName: string): string =>
     rawFields[fieldName] ?? rawFields[fieldName.toLowerCase()] ?? '';
 
-  // Check for existing contract
-  const existingContractPath = findExistingContract(contractsDir, id);
+  // Check for existing contract (active first, then archived)
+  const existing = findExistingContract(contractsDir, archivedContractsDir, id);
 
   return {
     id,
@@ -239,8 +271,9 @@ const buildItem = (
     dependencies: get('Dependencies'),
     acceptanceGate: get('Acceptance gate'),
     references: get('References'),
-    alreadyGenerated: existingContractPath !== null,
-    existingContractPath,
+    alreadyGenerated: existing !== null,
+    existingContractPath: existing?.path ?? null,
+    isArchived: existing?.isArchived ?? false,
     rawFields,
   };
 };

@@ -32,15 +32,18 @@ type BacklogItem = {
   references: string;
   alreadyGenerated: boolean;
   existingContractPath: string | null;
+  isArchived: boolean;
   promotion: string | null;
 };
 
 const TODO_PATH = 'docs/TODO.md';
 const CONTRACTS_DIR = 'docs/contracts';
+const ARCHIVED_CONTRACTS_DIR = 'docs/contracts/archived';
 
 const _parseBacklog = (repoRoot: string): { items: BacklogItem[]; errors: string[] } => {
   const todoPath = join(repoRoot, TODO_PATH);
   const contractsDir = join(repoRoot, CONTRACTS_DIR);
+  const archivedContractsDir = join(repoRoot, ARCHIVED_CONTRACTS_DIR);
   const errors: string[] = [];
   const items: BacklogItem[] = [];
 
@@ -70,7 +73,14 @@ const _parseBacklog = (repoRoot: string): { items: BacklogItem[]; errors: string
       if (headingMatch) {
         if (inItem && currentId) {
           items.push(
-            _buildItem(currentId, currentTitle, currentPhase, currentItemLines, contractsDir),
+            _buildItem(
+              currentId,
+              currentTitle,
+              currentPhase,
+              currentItemLines,
+              contractsDir,
+              archivedContractsDir,
+            ),
           );
         }
         currentId = headingMatch[1] ?? '';
@@ -85,7 +95,16 @@ const _parseBacklog = (repoRoot: string): { items: BacklogItem[]; errors: string
     }
 
     if (inItem && currentId) {
-      items.push(_buildItem(currentId, currentTitle, currentPhase, currentItemLines, contractsDir));
+      items.push(
+        _buildItem(
+          currentId,
+          currentTitle,
+          currentPhase,
+          currentItemLines,
+          contractsDir,
+          archivedContractsDir,
+        ),
+      );
     }
   }
 
@@ -114,6 +133,7 @@ const _buildItem = (
   phase: string,
   lines: string[],
   contractsDir: string,
+  archivedContractsDir: string,
 ): BacklogItem => {
   const rawFields: Record<string, string> = {};
   for (const line of lines) {
@@ -124,14 +144,31 @@ const _buildItem = (
   }
   const get = (fieldName: string): string => rawFields[fieldName] ?? '';
 
-  // Find existing contract by ID prefix
+  // Find existing contract by ID prefix (active first, then archived)
   let existingContractPath: string | null = null;
+  let isArchived = false;
   try {
-    const files = readdirSync(contractsDir);
-    const match = files.find(
+    const activeFiles = readdirSync(contractsDir);
+    const activeMatch = activeFiles.find(
       (f) => f.startsWith(`${id}-`) && f.endsWith('.md') && f !== 'TEMPLATE.md',
     );
-    existingContractPath = match ? join(contractsDir, match) : null;
+    if (activeMatch) {
+      existingContractPath = join(contractsDir, activeMatch);
+    } else {
+      // Fall back to archived/
+      try {
+        const archivedFiles = readdirSync(archivedContractsDir);
+        const archivedMatch = archivedFiles.find(
+          (f) => f.startsWith(`${id}-`) && f.endsWith('.md'),
+        );
+        if (archivedMatch) {
+          existingContractPath = join(archivedContractsDir, archivedMatch);
+          isArchived = true;
+        }
+      } catch {
+        // no archived dir
+      }
+    }
   } catch {
     existingContractPath = null;
   }
@@ -155,6 +192,7 @@ const _buildItem = (
     references: get('References'),
     alreadyGenerated: existingContractPath !== null,
     existingContractPath,
+    isArchived,
     promotion,
   };
 };
@@ -255,7 +293,8 @@ export default function (pi: ExtensionAPI) {
         for (const item of existing) {
           const promoIcon = item.promotion ? (PromotionIcons[item.promotion] ?? '') : '';
           const promoStr = item.promotion ? ` [${promoIcon} ${item.promotion}]` : ' [—]';
-          lines.push(`✅ \`${item.id}\` — ${item.title}${promoStr}`);
+          const archivedTag = item.isArchived ? ' 📦 archived' : '';
+          lines.push(`✅ \`${item.id}\` — ${item.title}${promoStr}${archivedTag}`);
         }
       }
 
@@ -317,21 +356,30 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (item.alreadyGenerated && item.existingContractPath) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: [
-                `⚠️ Contract for \`${item.id}\` already exists.`,
-                `File: \`${item.existingContractPath}\``,
-                '',
-                'Delete it first if you want to regenerate from scratch.',
-                'Or edit the existing contract directly.',
-              ].join('\n'),
-            },
-          ],
-          details: { alreadyExists: true, filePath: item.existingContractPath },
-        };
+        if (item.isArchived) {
+          // Contract exists in archived/ — warn but proceed to generate new v2 draft
+          console.warn(
+            `📦 Contract ${item.id} exists in archived/. Generating a new v2 draft.`,
+            `Archived: ${item.existingContractPath}`,
+          );
+          // Fall through to generate a new active contract
+        } else {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `⚠️ Contract for \`${item.id}\` already exists.`,
+                  `File: \`${item.existingContractPath}\``,
+                  '',
+                  'Delete it first if you want to regenerate from scratch.',
+                  'Or edit the existing contract directly.',
+                ].join('\n'),
+              },
+            ],
+            details: { alreadyExists: true, filePath: item.existingContractPath },
+          };
+        }
       }
 
       // Load the canonical template
@@ -409,6 +457,9 @@ export default function (pi: ExtensionAPI) {
               `**${item.title}**`,
               `File: \`docs/contracts/${fileName}\``,
               `Priority: ${priority} | Status: draft | Template: v2.0.0`,
+              item.isArchived
+                ? `\n📦 Old v1 contract is archived at \`${item.existingContractPath}\` — this is a fresh v2 draft.`
+                : '',
               '',
               `Next steps:`,
               `1. Use \`/contract-create\` to complete the draft with codebase inspection`,

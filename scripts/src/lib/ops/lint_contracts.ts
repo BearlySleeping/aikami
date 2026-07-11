@@ -40,12 +40,14 @@ type ContractInfo = {
   content: string;
   status: string;
   version: number;
+  archived: boolean;
 };
 
 // ── Constants ──────────────────────────────────────────────
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 const CONTRACTS_DIR = join(REPO_ROOT, 'docs', 'contracts');
+const ARCHIVED_CONTRACTS_DIR = join(REPO_ROOT, 'docs', 'contracts', 'archived');
 
 const VALID_STATUSES = new Set([
   'draft',
@@ -76,6 +78,28 @@ const readContractFiles = (): string[] =>
   readdirSync(CONTRACTS_DIR).filter(
     (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md') && f !== 'TEMPLATE.md',
   );
+
+const readArchivedContractFiles = (): string[] => {
+  try {
+    return readdirSync(ARCHIVED_CONTRACTS_DIR).filter(
+      (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'),
+    );
+  } catch {
+    return [];
+  }
+};
+
+/** Check archived/ for a contract ID. Returns filename if found. */
+const findInArchived = (id: string): string | null => {
+  const upperId = id.toUpperCase();
+  const archivedFiles = readArchivedContractFiles();
+  for (const f of archivedFiles) {
+    if (extractId(f).toUpperCase() === upperId) {
+      return f;
+    }
+  }
+  return null;
+};
 
 const extractId = (filename: string): string => {
   const match = filename.match(/^((?:C|MIG)-\d+)/);
@@ -579,7 +603,7 @@ const main = () => {
   const opts = parseArgs();
   const allFiles = readContractFiles();
 
-  // Parse all contracts
+  // Parse all active contracts
   const allContracts: ContractInfo[] = [];
   for (const filename of allFiles) {
     const content = readFileSync(join(CONTRACTS_DIR, filename), 'utf-8');
@@ -589,6 +613,22 @@ const main = () => {
       content,
       status: extractStatus(content),
       version: detectVersion(content),
+      archived: false,
+    });
+  }
+
+  // Parse archived contracts (for --all duplicate-ID checks and --contract lookups)
+  const archivedFiles = opts.mode === 'all' || opts.mode === 'contract' ? readArchivedContractFiles() : [];
+  const archivedContracts: ContractInfo[] = [];
+  for (const filename of archivedFiles) {
+    const content = readFileSync(join(ARCHIVED_CONTRACTS_DIR, filename), 'utf-8');
+    archivedContracts.push({
+      filename,
+      id: extractId(filename),
+      content,
+      status: extractStatus(content),
+      version: detectVersion(content),
+      archived: true,
     });
   }
 
@@ -601,6 +641,13 @@ const main = () => {
       targetContracts = allContracts.filter((c) => c.id.toUpperCase() === id);
       modeLabel = `contract ${id || '(unspecified)'}`;
       if (targetContracts.length === 0) {
+        // Check archived
+        const archivedFile = findInArchived(id);
+        if (archivedFile) {
+          console.log(`📦 Contract ${id} is archived: docs/contracts/archived/${archivedFile}`);
+          console.log('   See docs/contracts/archived/README.md for details.');
+          process.exit(0);
+        }
         console.error(`❌ Contract not found: ${id}`);
         process.exit(1);
       }
@@ -622,13 +669,17 @@ const main = () => {
   console.log(`🔍 Linting contracts — ${modeLabel} (${targetContracts.length} files)\n`);
 
   const issues = (() => {
-    // Global duplicate IDs in --all mode only.
+    // Global duplicate IDs: in --all mode include both active + archived.
     // In --contract/--changed mode, only report duplicates involving target files.
     const targetFilenames =
       opts.mode === 'all' ? undefined : new Set(targetContracts.map((c) => c.filename));
-    const result: LintIssue[] = [...checkDuplicateIds(allContracts, targetFilenames)];
 
-    // Per-contract checks run in ALL modes
+    // Combine active + archived for global duplicate check in --all mode
+    const allForDups =
+      opts.mode === 'all' ? [...allContracts, ...archivedContracts] : allContracts;
+    const result: LintIssue[] = [...checkDuplicateIds(allForDups, targetFilenames)];
+
+    // Per-contract checks run in ALL modes (archived contracts get no checks beyond duplicates)
     for (const c of targetContracts) {
       result.push(...lintContract(c));
     }
