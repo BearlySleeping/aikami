@@ -142,9 +142,7 @@ const readContractsFromDir = (
 ): { contracts: ContractInfo[]; duplicateIds: string[] } => {
   let files: string[];
   try {
-    files = readdirSync(dir).filter(
-      (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'),
-    );
+    files = readdirSync(dir).filter((f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'));
   } catch {
     return { contracts: [], duplicateIds: [] };
   }
@@ -218,10 +216,7 @@ export const syncContracts = () => {
     const activeContracts = activeResult.contracts;
     const archivedContracts = archivedResult.contracts;
 
-    const allDuplicateIds = [
-      ...activeResult.duplicateIds,
-      ...archivedResult.duplicateIds,
-    ];
+    const allDuplicateIds = [...activeResult.duplicateIds, ...archivedResult.duplicateIds];
 
     // Check for cross-directory duplicate IDs
     const activeIdSet = new Set(activeContracts.map((c) => c.id));
@@ -279,9 +274,7 @@ export const syncContracts = () => {
       for (const c of shownArchived) {
         const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
         const verLabel = c.version === 2 ? 'v2' : 'v1';
-        lines.push(
-          `| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} |`,
-        );
+        lines.push(`| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} |`);
       }
 
       if (archivedContracts.length > 20) {
@@ -317,7 +310,9 @@ export const syncContracts = () => {
     const promotionPath = join(REPO_ROOT, 'docs/contracts/PROMOTION.md');
     const sandboxContracts = activeContracts.filter((c) => c.promotion === 'sandbox');
     const integratedContracts = activeContracts.filter((c) => c.promotion === 'integrated');
-    const releaseVerifiedContracts = activeContracts.filter((c) => c.promotion === 'release_verified');
+    const releaseVerifiedContracts = activeContracts.filter(
+      (c) => c.promotion === 'release_verified',
+    );
     const unassessedContracts = activeContracts.filter((c) => !c.promotion);
 
     const promotionLines: string[] = [

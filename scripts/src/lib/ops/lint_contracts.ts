@@ -618,7 +618,8 @@ const main = () => {
   }
 
   // Parse archived contracts (for --all duplicate-ID checks and --contract lookups)
-  const archivedFiles = opts.mode === 'all' || opts.mode === 'contract' ? readArchivedContractFiles() : [];
+  const archivedFiles =
+    opts.mode === 'all' || opts.mode === 'contract' ? readArchivedContractFiles() : [];
   const archivedContracts: ContractInfo[] = [];
   for (const filename of archivedFiles) {
     const content = readFileSync(join(ARCHIVED_CONTRACTS_DIR, filename), 'utf-8');
@@ -675,8 +676,7 @@ const main = () => {
       opts.mode === 'all' ? undefined : new Set(targetContracts.map((c) => c.filename));
 
     // Combine active + archived for global duplicate check in --all mode
-    const allForDups =
-      opts.mode === 'all' ? [...allContracts, ...archivedContracts] : allContracts;
+    const allForDups = opts.mode === 'all' ? [...allContracts, ...archivedContracts] : allContracts;
     const result: LintIssue[] = [...checkDuplicateIds(allForDups, targetFilenames)];
 
     // Per-contract checks run in ALL modes (archived contracts get no checks beyond duplicates)

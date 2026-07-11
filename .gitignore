@@ -275,6 +275,9 @@ apps/frontend/client/static/lpc/**/*
 .pi/swarm/agent_scratchpad.db*
 .pi/swarm/markers/
 .pi/swarm/outputs/
+
+# Contract pipeline runs (new stable pipeline)
+.pi/contract-runs/
 .pi/swarm/plans/
 .pi/swarm/payloads/
 .pi/pipeline_payload_*.json

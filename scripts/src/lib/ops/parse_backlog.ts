@@ -120,9 +120,7 @@ const findExistingContract = (
   // Fall back to archived/
   try {
     const archivedFiles = readdirSync(archivedDir);
-    const archivedMatch = archivedFiles.find(
-      (f) => f.startsWith(`${id}-`) && f.endsWith('.md'),
-    );
+    const archivedMatch = archivedFiles.find((f) => f.startsWith(`${id}-`) && f.endsWith('.md'));
     if (archivedMatch) {
       return { path: archivedMatch, isArchived: true };
     }
