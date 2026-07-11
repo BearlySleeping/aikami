@@ -9,6 +9,7 @@
 | **Priority** | P2 — Essential for power-user customization of auxiliary AI systems |
 | **Dependencies** | ConfigService, ProvidersViewModel |
 | **Status** | completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

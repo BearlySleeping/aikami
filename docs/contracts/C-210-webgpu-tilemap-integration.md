@@ -8,6 +8,7 @@
 | **Priority**         | P1 — Core visual foundation for the game world                      |
 | **Dependencies**     | C-016 (Game Engine Boundary)                                        |
 | **Status**           | completed                                                           |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0                                                               |
 
 ## Overview

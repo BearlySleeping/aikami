@@ -9,6 +9,7 @@
 | **Priority** | P0 — Forms the dynamic runtime engine decision-making loop for all characters. |
 | **Dependencies** | `docs/contracts/C-190-ecs-spatial-vision-systems.md` |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

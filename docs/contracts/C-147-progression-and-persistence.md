@@ -1,4 +1,5 @@
 <!-- completed: 2026-06-29 -->
+<!-- audit: legacy — no execution report -->
 # Contract: C-147 Progression, Game Over, and Persistence
 
 ## Goal

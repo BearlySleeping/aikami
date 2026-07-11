@@ -8,6 +8,7 @@
 | **Priority** | P2 — High complexity, low-medium impact. Polish feature that makes the world feel alive |
 | **Dependencies** | C-236 (Agent Pipeline — COMPLETED for agent execution pattern), C-231 (Rich Chat — COMPLETED for `chat_view_model.sendMessage()`), C-080 (`textGenerationService` — COMPLETED), `ChatSchema` + `MessageSchema` (EXISTING), `npcService` / `npcRepository` (EXISTING for NPC data) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -8,6 +8,7 @@
 | **Priority** | P0 — Foundation for all multi-provider, per-chat override, and agent pipeline features |
 | **Dependencies** | C-202 (Provider Settings UX Overhaul — COMPLETED), ConfigService, AiServiceInterface (C-015) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

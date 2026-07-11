@@ -9,6 +9,7 @@
 | **Priority** | P1 — Fixes critical transparent dropdown UI bug and establishes DRY styling patterns |
 | **Dependencies** | None |
 | **Status** | ✅ completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

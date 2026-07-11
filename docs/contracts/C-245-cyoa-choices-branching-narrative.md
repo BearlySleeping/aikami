@@ -8,6 +8,7 @@
 | **Priority** | P2 — Low complexity, medium impact. Gives non-typing users a guided interaction path; excellent for mobile |
 | **Dependencies** | C-236 (Agent Pipeline System — COMPLETED for `agentPipelineService`, `AgentConfig`, `AgentPhase`, `AgentRunResult`), C-231 (Rich Chat — COMPLETED for message rendering + `chat_view_model`), `textGenerationService.extractStructure()` (C-080 — COMPLETED), `ChatSchema` + `MessageSchema` in `@aikami/schemas` (EXISTING) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

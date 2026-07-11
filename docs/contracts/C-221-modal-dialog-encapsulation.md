@@ -9,6 +9,7 @@
 | **Priority** | P1 — Prevents layout hallucinations and standardizes accessible backdrop overlays |
 | **Dependencies** | C-219, C-220 |
 | **Status** | ✅ completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

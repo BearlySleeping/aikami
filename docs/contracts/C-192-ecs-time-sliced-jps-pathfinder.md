@@ -9,6 +9,7 @@
 | **Priority** | P0 — High-performance path routing required for real-time chasing, patrolling, and group movement. |
 | **Dependencies** | `docs/contracts/C-190-ecs-spatial-vision-systems.md` |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

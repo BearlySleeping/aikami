@@ -8,6 +8,7 @@
 | **Priority** | P2 — Visuals dramatically enhance immersion; currently a major gap despite existing ComfyUI integration |
 | **Dependencies** | `imageGenerationService` (435 lines — EXISTS with ComfyUI + checkpoint loading), C-230 (Connection config — COMPLETED), C-233 (World-Gen Wizard — COMPLETED for art style prompt), `combat_inline_image.svelte` (EXISTS), `combat_gallery.svelte` (EXISTS) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

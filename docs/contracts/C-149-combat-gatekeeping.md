@@ -1,4 +1,5 @@
 <!-- completed: 2026-06-29 -->
+<!-- audit: legacy — no execution report -->
 # Contract: C-149 Combat Mechanics & AI Gatekeeping
 
 ## Goal

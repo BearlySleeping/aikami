@@ -9,6 +9,7 @@
 | **Priority** | P{0\|1\|2\|3} — {one-line justification} |
 | **Dependencies** | {list of contracts or packages this depends on} |
 | **Status** | draft |
+| **Promotion** | `sandbox` \| `integrated` \| `release_verified` \| — |
 | **Docs Impact** | {user-facing → page in `apps/frontend/docs/src/content/docs/` \| internal → none} |
 | **Contract version** | 2.0.0 |
 
@@ -137,6 +138,19 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Promotion Lifecycle
+
+```
+— → sandbox → integrated → release_verified
+```
+
+| State | Meaning | Evidence Required |
+|---|---|---|
+| `—` | Not yet assessed — default for legacy or new contracts. | None |
+| `sandbox` | Feature works in a dev sandbox route (`(dev)/sandbox/...`). | Dev sandbox route exists |
+| `integrated` | Feature is wired into the production route and E2E tests pass. | Production route + E2E pass |
+| `release_verified` | Feature has visual tests + all ACs verified. Ready for release. | Visual suite + verified ACs |
 
 ## Status Lifecycle
 

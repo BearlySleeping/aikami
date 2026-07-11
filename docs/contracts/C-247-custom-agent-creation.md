@@ -9,6 +9,7 @@
 | **Priority** | P2 — Medium-high complexity, low-medium impact. Power-user feature; most users will use built-in agents |
 | **Dependencies** | C-236 (Agent Pipeline System — COMPLETED for `AgentConfig`, `AgentRunResult`, `agentPipelineService`, `AgentHudState`, built-in agents + toggles), C-237 (Prompt Template & Macro System — COMPLETED for `resolveMacros()` engine), C-230 (Connection Config — COMPLETED for connection selector), `textGenerationService.extractStructure()` (C-080 — COMPLETED), `agent_schemas.ts` (EXISTING for TypeBox output validation) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

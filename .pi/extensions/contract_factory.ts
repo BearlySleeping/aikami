@@ -32,6 +32,7 @@ type BacklogItem = {
   references: string;
   alreadyGenerated: boolean;
   existingContractPath: string | null;
+  promotion: string | null;
 };
 
 const TODO_PATH = 'docs/TODO.md';
@@ -91,6 +92,22 @@ const _parseBacklog = (repoRoot: string): { items: BacklogItem[]; errors: string
   return { items, errors };
 };
 
+const _extractPromotionFromContract = (contractPath: string): string | null => {
+  try {
+    const content = readFileSync(contractPath, 'utf8');
+    const match = content.match(/\|\s*\*\*Promotion\*\*\s*\|\s*\*{0,2}([^*|]+?)\*{0,2}\s*\|/i);
+    if (match) {
+      const raw = (match[1] ?? '').trim();
+      if (raw && raw !== '—') {
+        return raw;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+};
+
 const _buildItem = (
   id: string,
   title: string,
@@ -119,6 +136,11 @@ const _buildItem = (
     existingContractPath = null;
   }
 
+  // Extract promotion from existing contract
+  const promotion = existingContractPath
+    ? _extractPromotionFromContract(existingContractPath)
+    : null;
+
   return {
     id,
     title,
@@ -133,6 +155,7 @@ const _buildItem = (
     references: get('References'),
     alreadyGenerated: existingContractPath !== null,
     existingContractPath,
+    promotion,
   };
 };
 
@@ -220,10 +243,19 @@ export default function (pi: ExtensionAPI) {
         }
       }
 
+      const PromotionIcons: Record<string, string> = {
+        sandbox: '🧪',
+        integrated: '🔗',
+        // biome-ignore lint/style/useNamingConvention: matches promotion state key
+        release_verified: '🚀',
+      };
+
       if (existing.length > 0) {
         lines.push(`\n### Already Generated (${existing.length})\n`);
         for (const item of existing) {
-          lines.push(`✅ \`${item.id}\` — ${item.title}`);
+          const promoIcon = item.promotion ? (PromotionIcons[item.promotion] ?? '') : '';
+          const promoStr = item.promotion ? ` [${promoIcon} ${item.promotion}]` : ' [—]';
+          lines.push(`✅ \`${item.id}\` — ${item.title}${promoStr}`);
         }
       }
 
@@ -338,6 +370,7 @@ export default function (pi: ExtensionAPI) {
       replaceRow('Priority', `${priority} — ${priorityJustification}`);
       replaceRow('Dependencies', rawDeps);
       replaceRow('Status', 'draft');
+      replaceRow('Promotion', '—');
       replaceRow('Contract version', '2.0.0');
       replaceRow('Docs Impact', 'TBD');
 

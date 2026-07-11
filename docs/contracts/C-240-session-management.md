@@ -9,6 +9,7 @@
 | **Priority** | P2 — Enables long-running campaigns without context window bloat |
 | **Dependencies** | C-235 (GM/Narrative Director — COMPLETED for `SessionSummary` type + `sessionSummaryService`), C-132 (Save/Load — COMPLETED for `gameSaveService`), `gameStateService` (ECS bridge — EXISTS) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

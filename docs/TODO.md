@@ -1,7 +1,6 @@
 # Aikami Unified Product Backlog
 
-> **Canonical source of truth.** This file replaces the former split backlog in
-> `docs/guides/TODO.md`. Completed implementation history remains in
+> **Canonical source of truth.** Completed implementation history remains in
 > `docs/contracts/`; pending work belongs here until a contract is generated.
 >
 > **Roadmap rule:** no new breadth-first feature work until the Phase 1 playable
@@ -180,7 +179,7 @@ Every `### C-NNN` item below is one potential contract based on
   `release_verified` states; completed contracts link to existing evidence.
 - **Scope:** make contract tooling read this canonical file and stable explicit
   IDs; audit C-119–C-249 claims; reopen or annotate missing execution/test
-  evidence; remove `docs/guides/TODO.md` as a second backlog.
+  evidence; backlog has been consolidated into this single file.
 - **Dependencies:** C-310, C-304.
 - **Acceptance gate:** Given any pending item here, when backlog scan runs, then
   its stable ID is discoverable; given any completed contract, its production

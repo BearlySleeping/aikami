@@ -7,6 +7,7 @@
 | **Priority** | P1 — Agents are modular intelligence; they make complex state tracking possible without bloating the main LLM prompt |
 | **Dependencies** | C-230 (Connection config — COMPLETED), C-235 (GM/Narrative Director — COMPLETED for `narrativeDirectorService`), `textGenerationService.extractStructure()` (C-080 — COMPLETED), `GameStateService` (ECS bridge — EXISTS), `characterSheetService` (C-232 — EXISTS), `questService`, `inventoryService` (EXIST) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

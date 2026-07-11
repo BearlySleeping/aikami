@@ -1,4 +1,5 @@
 ## Metadata
+<!-- audit: legacy — no execution report -->
 
 | Field | Value |
 |---|---|

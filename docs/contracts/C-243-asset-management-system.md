@@ -9,6 +9,7 @@
 | **Priority** | P2 — Enables dynamic visuals and audio without hardcoded asset paths; bridges PixiJS rendering pipeline with user-managed content |
 | **Dependencies** | C-158 (COMPLETED — LPC Asset Catalog), texture_manager.ts (PixiJS `Assets.load()` pipeline), `packages/frontend/engine/src/rendering/sprite_composer.ts` (LPC shader pipeline), `packages/frontend/repositories/src/lib/opfs_asset_cache.ts` (OPFS offline cache pattern) |
 | **Status** | completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

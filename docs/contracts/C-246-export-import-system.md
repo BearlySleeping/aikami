@@ -9,6 +9,7 @@
 | **Priority** | P2 — Medium complexity, medium impact. Enables sharing, backup, and "read your adventure as a book" |
 | **Dependencies** | C-231 (Rich Chat — COMPLETED for message data model), C-232 (Character Sheet — COMPLETED for character schema), C-240 (Session Management — COMPLETED for `SessionSummary`), `FirestoreRepository` pattern (EXISTING), `StorageService` for avatar downloads (EXISTING), `character_importer.ts` (EXISTING), `character_downloader.ts` (EXISTING) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

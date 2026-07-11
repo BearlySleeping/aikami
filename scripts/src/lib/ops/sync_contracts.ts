@@ -39,6 +39,13 @@ const STATUS_LABELS: Record<string, string> = {
   not_started: '⏳ not_started',
 };
 
+const PROMOTION_LABELS: Record<string, string> = {
+  sandbox: '🧪 sandbox',
+  integrated: '🔗 integrated',
+  // biome-ignore lint/style/useNamingConvention: keys match promotion state strings
+  release_verified: '🚀 release_verified',
+};
+
 const slugToName = (filename: string): string => {
   const stem = filename.replace(/\.md$/, '');
   const namePart = stem.replace(/^(C|MIG)-\d+-/, '');
@@ -83,6 +90,24 @@ const isLegacyCompleted = (content: string): boolean => {
 };
 
 /**
+ * Extract promotion state from the metadata table **Promotion** field.
+ * Returns undefined if the field is missing or set to "—".
+ */
+const extractPromotion = (content: string): string | undefined => {
+  const promotionMatch = content.match(
+    /\|\s*\*\*Promotion\*\*\s*\|\s*\*{0,2}([^*|]+?)\*{0,2}\s*\|/i,
+  );
+  if (!promotionMatch) {
+    return undefined;
+  }
+  const raw = (promotionMatch[1] ?? '').trim();
+  if (raw === '—' || raw === '' || raw === '—') {
+    return undefined;
+  }
+  return raw;
+};
+
+/**
  * Detect contract format version.
  * Returns 2 if contract declares version 2.0.0+, 1 otherwise.
  */
@@ -103,6 +128,8 @@ type ContractInfo = {
   name: string;
   status: string;
   version: number;
+  promotion: string | undefined;
+  fileName: string;
 };
 
 export const syncContracts = () => {
@@ -145,7 +172,9 @@ export const syncContracts = () => {
         status = extractStatus(content);
       }
 
-      contracts.push({ id, name, status, version });
+      const promotion = extractPromotion(content);
+
+      contracts.push({ id, name, status, version, promotion, fileName: file });
     }
 
     // Sort: C first by numeric ID, then MIG by numeric ID
@@ -167,14 +196,19 @@ export const syncContracts = () => {
       '',
       `## Status Summary (Auto-generated: ${now})`,
       '',
-      '| Contract | Name | Status | Version |',
-      '|----------|------|--------|---------|',
+      '| Contract | Name | Status | Promotion | Version |',
+      '|----------|------|--------|-----------|---------|',
     ];
 
     for (const c of contracts) {
       const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
+      const promotionLabel = c.promotion
+        ? (PROMOTION_LABELS[c.promotion] ?? `❓ ${c.promotion}`)
+        : '—';
       const verLabel = c.version === 2 ? 'v2' : 'v1';
-      lines.push(`| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} |`);
+      lines.push(
+        `| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${promotionLabel} | ${verLabel} |`,
+      );
     }
 
     if (duplicateIds.length > 0) {
@@ -190,12 +224,60 @@ export const syncContracts = () => {
     const output = `${lines.join('\n')}\n`;
     writeFileSync(progressPath, output);
 
+    // Generate PROMOTION.md — feature-promotion matrix
+    const promotionPath = join(REPO_ROOT, 'docs/contracts/PROMOTION.md');
+    const sandboxContracts = contracts.filter((c) => c.promotion === 'sandbox');
+    const integratedContracts = contracts.filter((c) => c.promotion === 'integrated');
+    const releaseVerifiedContracts = contracts.filter((c) => c.promotion === 'release_verified');
+    const unassessedContracts = contracts.filter((c) => !c.promotion);
+
+    const promotionLines: string[] = [
+      '# Feature Promotion Matrix',
+      '',
+      `> Auto-generated: ${now}`,
+      '',
+      'Tracks which features have progressed from dev sandboxes through production integration to release readiness.',
+      '',
+      `**Summary**: ${sandboxContracts.length} sandbox, ${integratedContracts.length} integrated, ${releaseVerifiedContracts.length} release_verified, ${unassessedContracts.length} unassessed`,
+      '',
+    ];
+
+    const writeSection = (title: string, sectionContracts: ContractInfo[]): void => {
+      promotionLines.push(`## ${title}`);
+      promotionLines.push('');
+      if (sectionContracts.length === 0) {
+        promotionLines.push('_None_');
+      } else {
+        promotionLines.push('| Contract | Name | Status | Version |');
+        promotionLines.push('|----------|------|--------|---------|');
+        for (const c of sectionContracts) {
+          const statusLabel = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
+          const verLabel = c.version === 2 ? 'v2' : 'v1';
+          promotionLines.push(
+            `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${verLabel} |`,
+          );
+        }
+      }
+      promotionLines.push('');
+    };
+
+    writeSection('🚀 Release Verified', releaseVerifiedContracts);
+    writeSection('🔗 Integrated', integratedContracts);
+    writeSection('🧪 Sandbox', sandboxContracts);
+    writeSection('❓ Unassessed', unassessedContracts);
+
+    const promotionOutput = `${promotionLines.join('\n')}\n`;
+    writeFileSync(promotionPath, promotionOutput);
+
     const verified = contracts.filter((c) => c.status === 'verified' || c.status === 'completed');
     const legacy = contracts.filter((c) => c.status === 'legacy_completed');
 
     console.log(
       `✅ Generated PROGRESS.md: ${contracts.length} contracts ` +
         `(${verified.length} verified, ${legacy.length} legacy, ${duplicateIds.length} duplicates)`,
+    );
+    console.log(
+      `✅ Generated PROMOTION.md: ${sandboxContracts.length} sandbox, ${integratedContracts.length} integrated, ${releaseVerifiedContracts.length} release_verified`,
     );
 
     if (duplicateIds.length > 0) {

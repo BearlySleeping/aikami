@@ -10,6 +10,7 @@
 | **Priority** | P2 — Quality of life; enables session continuity |
 | **Dependencies** | C-117, C-118, C-125 |
 | **Status** | **completed** |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Goal

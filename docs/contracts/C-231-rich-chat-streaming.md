@@ -8,6 +8,7 @@
 | **Priority** | P0 — Chat is the primary UX surface; message quality-of-life defines the game feel |
 | **Dependencies** | C-230 (Connection config — COMPLETED), `textGenerationService` (C-080, C-111 — COMPLETED), `chat_view_model.svelte.ts` (edit/delete/regenerate — EXISTS), `dialogue_overlay_view_model.svelte.ts` (streaming + skill checks — EXISTS), C-211 (Realtime TTS Streaming Pipeline — COMPLETED), `parseStreamChunk` + `parseLine` in `@aikami/parser` (EXISTS) |
 | **Status** | ✅ completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

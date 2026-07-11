@@ -9,6 +9,7 @@
 | **Priority** | P2 — Enables the "DM text channel" pattern D&D players expect; medium complexity, medium impact |
 | **Dependencies** | C-231 (Rich Chat Streaming — COMPLETED for message swiping, input drafts), C-235 (GM Narrative Director — COMPLETED for `AddressMode` and `gmPromptService`), C-241 (Chat Modes & Address System — COMPLETED for address toggle), `ChatSchema` + `MessageSchema` (EXISTING in `@aikami/schemas`) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

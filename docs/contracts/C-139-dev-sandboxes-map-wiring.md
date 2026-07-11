@@ -1,4 +1,5 @@
 <!-- completed: 2026-06-16 -->
+<!-- audit: legacy — no execution report -->
 # Contract: C-139 Isolated Dev Sandboxes & Map Wiring
 
 ## Goal

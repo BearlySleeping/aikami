@@ -8,6 +8,7 @@
 | **Priority** | P2 — unblocks party companion gameplay for MVP |
 | **Dependencies** | C-196 (Emergent World Integration), C-137 (Camera Follow), C-141 (NPC Interaction) |
 | **Status** | completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

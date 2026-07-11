@@ -9,6 +9,7 @@
 | **Priority** | P1 — Prevents AI regression and hallucinated UI components |
 | **Dependencies** | C-219 |
 | **Status** | ✅ completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

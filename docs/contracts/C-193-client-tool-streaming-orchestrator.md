@@ -9,6 +9,7 @@
 | **Priority** | P0 — Final core bridge translating semantic streaming LLM tools into high-speed game actions. |
 | **Dependencies** | `docs/contracts/C-191-goap-bitmask-scheduler.md` |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

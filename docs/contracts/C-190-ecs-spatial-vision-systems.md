@@ -9,6 +9,7 @@
 | **Priority** | P0 — Core perception layer required for all subsequent GOAP, faction, and crime dynamics. |
 | **Dependencies** | `packages/frontend/engine` |
 | **Status** | completed |
+| **Promotion** | release_verified |
 | **Contract version** | 1.0.0 |
 
 ## Overview

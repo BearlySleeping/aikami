@@ -9,6 +9,7 @@
 | **Priority** | P3 — Very high complexity, low impact. Explicitly the last feature to implement per product vision. Scene-aware music is impactful but the implementation complexity (OAuth, external APIs) makes it a late-stage polish item |
 | **Dependencies** | C-150 (Audio Service — COMPLETED for crossfade BGM, SFX, reactive volume, masterGainNode, buffer cache), C-236 (Agent Pipeline — COMPLETED for agent execution), C-243 (Asset Management — COMPLETED for asset manifest + tag-based lookup), C-230 (Connection Config — COMPLETED for provider connections), `audioService.transitionToBgm()` (EXISTING) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

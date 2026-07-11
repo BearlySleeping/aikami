@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-11
-> Files: 261 across 12 categories
+> Files: 263 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -27,6 +27,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [[TICKET-ID] : [Short Descriptive Imperative Subject]](archive/tickets/template.md)
 ## contracts/
 
+- [Contract Audit Report: C-119–C-249](contracts/AUDIT_C-119_C-249.md)
 - [AI vendor directories](contracts/C-001-remove-ai-vendor-dirs.md)
 - [C 002 establish knowledge dir](contracts/C-002-establish-knowledge-dir.md)
 - [C 003 establish pi setup](contracts/C-003-establish-pi-setup.md)
@@ -249,6 +250,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-309: Swarm Control Pi Extension & Command Surface Wrapper](contracts/C-309-swarm-control-pi-extension-and-command-surface-wrapper.md)
 - [Contract C-310: Automated Backlog Contract Generator](contracts/C-310-automated-backlog-contract-generator.md)
 - [C-311: Swarm Socket Orchestration & Structural Handoff Refactor](contracts/C-311-swarm-socket-orchestration.md)
+- [Contract C-312: Restore Planning, Promotion, and Release Truth](contracts/C-312-restore-planning-promotion-and-release-truth.md)
 - [Contract: C-320 - Automated MDC Skill Scraper and Transpiler](contracts/C-320_mdc_skill_scraper.md)
 - [Contract: C-321 - MCP (Model Context Protocol) Stdio Runner Bridge](contracts/C-321_mcp_runner_bridge.md)
 - [Contracts — Aikami Monorepo Refactoring](contracts/INDEX.md)
@@ -258,6 +260,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [MIG 004 frontend configs](contracts/MIG-004-frontend-configs.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
+- [Feature Promotion Matrix](contracts/PROMOTION.md)
 - [Contracts](contracts/README.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/TEMPLATE.md)
 ## decisions/
@@ -283,7 +286,6 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Structure](guides/STRUCTURE.md)
 - [Tauri Desktop App — Development Guide](guides/TAURI.md)
 - [Testing Strategy](guides/TESTING.md)
-- [TODO Moved](guides/TODO.md)
 ## index.md/
 
 - [Welcome to Aikami Docs](index.md)

@@ -9,6 +9,7 @@
 | **Priority** | P2 — Separates in-character RP from out-of-character mechanics talk; completes the address mode system |
 | **Dependencies** | C-235 (GM/Narrative Director — COMPLETED for `AddressMode` type, `gmPromptService`, `address_mode_toggle` component), C-231 (Rich Chat — COMPLETED for message action bar), `textGenerationService` (C-080 — COMPLETED) |
 | **Status** | completed |
+| **Promotion** | release_verified |
 | **Contract version** | 1.0.0 |
 
 ## Overview

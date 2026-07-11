@@ -9,6 +9,7 @@
 | **Priority** | P0 — High-priority visual polish to stabilize testing maps and establish baseline appearance sets. |
 | **Dependencies** | `docs/contracts/C-196-ecs-emergent-world-integration.md` |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview
