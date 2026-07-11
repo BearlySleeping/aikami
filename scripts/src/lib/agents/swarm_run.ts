@@ -4,10 +4,14 @@
  *
  * Usage:
  *   bun swarm:run C-233
+ *   bun run contract C-233            (alias)
  *   bun swarm:run C-233 --tier pro
  *   bun swarm:run C-233 --no-review   (skip review step)
  *   bun swarm:run C-233 --fresh        (discard previous progress, start over)
  *   bun swarm:run C-233 --join         (attach to herdr to watch)
+ *
+ * If the contract file does not exist, it is auto-generated from docs/TODO.md
+ * using docs/contracts/TEMPLATE.md. No separate generation step needed.
  *
  * Resume-by-default: if handoffs from a previous (crashed/interrupted) run
  * exist on disk, the pipeline resumes from the first incomplete role.
@@ -48,37 +52,122 @@ if (!contractId) {
   console.error('  --fresh        discard previous progress, start over (alias: --force, --clean)');
   console.error('  --join         attach to herdr session to watch');
   console.error('');
-  console.error('Default behavior: resumes from existing handoffs if a previous run');
-  console.error('was interrupted (e.g. continues at coder if the architect finished).');
+  console.error('If the contract file does not exist, it is auto-generated from docs/TODO.md.');
+  console.error('Resumes from existing handoffs unless --fresh is passed.');
   process.exit(1);
 }
 
-// ── Find contract file ─────────────────────────────────────
+// ── Find or generate contract file ─────────────────────────
 
 const contractsDir = join(process.cwd(), 'docs', 'contracts');
 const files = readdirSync(contractsDir);
-const contractFile = files.find((f) => f.startsWith(contractId) && f.endsWith('.md'));
+let contractFile = files.find((f) => f.startsWith(contractId) && f.endsWith('.md'));
 
 if (!contractFile) {
-  console.error(`❌ Contract not found: ${contractId}`);
-  console.error(`   Looked in: ${contractsDir}`);
-  console.error('');
-  console.error('   Generate it first via Pi:');
-  console.error(`   > contract_generate ${contractId}`);
-  console.error('   > /contract-create');
-  console.error('');
-  const available = files
-    .filter((f) => f.startsWith('C-'))
-    .slice(0, 10)
-    .join(', ');
-  console.error(`   Available (first 10): ${available}`);
-  process.exit(1);
+  console.log(`📝 Contract ${contractId} not found — generating from docs/TODO.md...`);
+  contractFile = _generateContract(contractId, contractsDir);
+  console.log(`✅ Generated: docs/contracts/${contractFile}\n`);
 }
 
 const contractPath = resolve(contractsDir, contractFile);
 console.log(`📄 Contract: ${contractPath}`);
-console.log(`🤖 Tier: ${tier}`);
+console.log(`🤖 Tier: ${tier || 'default (per-role matrix)'}`);
 console.log(`🔍 Review: ${skipReview ? 'skipped (auto-approve)' : 'enabled'}`);
+
+// ── Contract auto-generation (inlined — no external deps) ──
+
+function _generateContract(id: string, contractsDir: string): string {
+  const cwd = process.cwd();
+  const todoPath = join(cwd, 'docs/TODO.md');
+  const templatePath = join(cwd, 'docs/contracts/TEMPLATE.md');
+
+  if (!existsSync(todoPath)) {
+    console.error('❌ docs/TODO.md not found — cannot auto-generate.');
+    process.exit(1);
+  }
+  if (!existsSync(templatePath)) {
+    console.error('❌ docs/contracts/TEMPLATE.md not found.');
+    process.exit(1);
+  }
+
+  const todoContent = readFileSync(todoPath, 'utf-8');
+
+  // Find the item by heading: ### C-312 — Title
+  const headingRe = new RegExp(
+    `###\\s+${id}\\s+[–—\\-]\\s+(.+)\\n([\\s\\S]*?)(?=\\n###\\s+(?:C-|MIG-)|$)`,
+    'm',
+  );
+  const itemMatch = todoContent.match(headingRe);
+
+  if (!itemMatch) {
+    console.error(`❌ ${id} not found in docs/TODO.md.`);
+    console.error('   Run contract_scan_backlog in Pi to see available IDs.');
+    process.exit(1);
+  }
+
+  const title = (itemMatch[1] ?? '').trim();
+  const body = itemMatch[2] ?? '';
+
+  // Extract fields from bullet lines: - **Field:** value
+  const rawFields: Record<string, string> = {};
+  const fieldRe = /^-\s+\*\*(.+?):\*\*\s+(.+)/gm;
+  let fm: RegExpExecArray | null;
+  while (true) {
+    fm = fieldRe.exec(body);
+    if (fm === null) {
+      break;
+    }
+    rawFields[(fm[1] ?? '').trim()] = (fm[2] ?? '').trim();
+  }
+  const getField = (name: string): string => rawFields[name] ?? '';
+  const firstLine = (text: string): string => (text ?? '').split('\n')[0]?.trim() ?? '';
+
+  let template = readFileSync(templatePath, 'utf-8');
+
+  // Step 1: Substitute heading placeholders only
+  template = template.replace(/\{FEATURE_CODE\}/g, id).replace(/\{TITLE\}/g, title);
+
+  // Step 2: Rewrite metadata table rows (replaces entire row including display hints)
+  const replaceRow = (label: string, value: string): void => {
+    template = template.replace(
+      new RegExp(`\\|\\s*\\*\\*${label}\\*\\*\\s*\\|[^\\n]*\\|`),
+      `| **${label}** | ${value} |`,
+    );
+  };
+
+  replaceRow('Source', `TODO.md — ${id}`);
+  replaceRow('Target', `${firstLine(getField('Target')) || 'TBD'} — TBD`);
+  replaceRow('Priority', getField('Priority') || 'P2');
+  replaceRow('Dependencies', getField('Dependencies') || '—');
+  replaceRow('Status', 'draft');
+  replaceRow('Contract version', '2.0.0');
+  replaceRow('Docs Impact', 'TBD');
+
+  // Step 3: Fill Overview
+  template = template.replace(
+    /\{2-4 sentences describing what this task is[^}]*\}/,
+    firstLine(getField('Outcome')) || title,
+  );
+
+  // Step 4: Fill Problem baseline
+  template = template.replace(
+    /\{what is broken or missing today[^}]*\}/,
+    `${title} — see docs/TODO.md for details.`,
+  );
+
+  // Build slug: "Restore Planning, Promotion..." → "restore-planning-promotion..."
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 60)
+    .replace(/-$/, '');
+
+  const fileName = `${id}-${slug}.md`;
+  writeFileSync(join(contractsDir, fileName), template);
+  return fileName;
+}
 
 // ── Clean stale handoffs if --fresh ────────────────────────
 
@@ -89,25 +178,22 @@ const payloadDir = join(process.cwd(), '.pi', 'swarm', 'payloads');
 mkdirSync(payloadDir, { recursive: true });
 
 if (fresh) {
-  const { unlinkSync, existsSync } = await import('node:fs');
-  // Outputs: handoffs, feedback files, qa failures, pipeline log
+  const { unlinkSync: ul, existsSync: ex } = await import('node:fs');
   for (const f of readdirSync(outputsDir)) {
     if (f.startsWith(contractId)) {
-      unlinkSync(join(outputsDir, f));
+      ul(join(outputsDir, f));
       console.log(`  🧹 Cleaned: ${f}`);
     }
   }
-  // Plan file — resume detection treats plan+handoff as architect completion
   const planFile = join(process.cwd(), '.pi', 'swarm', 'plans', `architect_plan_${contractId}.md`);
-  if (existsSync(planFile)) {
-    unlinkSync(planFile);
+  if (ex(planFile)) {
+    ul(planFile);
     console.log(`  🧹 Cleaned: architect_plan_${contractId}.md`);
   }
 } else {
-  // Resume preview — tell the user what will be reused
-  const { existsSync } = await import('node:fs');
+  const { existsSync: ex } = await import('node:fs');
   const existingRoles = ['architect', 'coder', 'qa', 'review', 'git'].filter((role) =>
-    existsSync(join(outputsDir, `${contractId}_${role}_handoff.json`)),
+    ex(join(outputsDir, `${contractId}_${role}_handoff.json`)),
   );
   if (existingRoles.length > 0) {
     console.log(`♻️  Resume: found handoffs for [${existingRoles.join(', ')}]`);
@@ -156,7 +242,6 @@ const checkDirectorLock = (): boolean => {
   try {
     pid = Number(readFileSync(directorLockPath, 'utf-8').trim());
   } catch {
-    // corrupted lock — treat as dead
     return false;
   }
 
@@ -164,17 +249,14 @@ const checkDirectorLock = (): boolean => {
     return false;
   }
 
-  // Check if PID is alive
   try {
-    process.kill(pid, 0); // signal 0 = existence check
+    process.kill(pid, 0);
     return true;
   } catch {
-    // PID not alive — stale lock
     return false;
   }
 };
 
-// Handle --fresh: also clear stale lock
 if (fresh) {
   try {
     unlinkSync(directorLockPath);
@@ -192,10 +274,8 @@ if (checkDirectorLock()) {
   process.exit(1);
 }
 
-// Write lock with current PID
 writeFileSync(directorLockPath, String(process.pid));
 
-// Remove lock on exit
 const removeLock = (): void => {
   try {
     unlinkSync(directorLockPath);
@@ -248,11 +328,6 @@ const main = async (): Promise<void> => {
 
   try {
     if (doJoin) {
-      // Spawn the pipeline in its OWN process group (detached) so Ctrl+C in
-      // this terminal (e.g. detaching from herdr attach) cannot kill it.
-      // Previous version used execSync(`cmd &`) — non-interactive sh has no
-      // job control, so the pipeline shared our process group and died on
-      // the first SIGINT, silently (stdio was ignored).
       const logPath = join(outputsDir, `${contractId}_pipeline.log`);
       const logFd = openSync(logPath, 'a');
       const child = spawn('bun', ['run', startScript, payloadPath], {
@@ -269,8 +344,6 @@ const main = async (): Promise<void> => {
       execSync('herdr session attach default', { stdio: 'inherit' });
     } else {
       console.log('  Open herdr to watch: herdr session attach default\n');
-      // Use tee to write output to both terminal and the pipeline log (so the
-      // pipeline tab's tail -f shows progress).
       const logPath = join(outputsDir, `${contractId}_pipeline.log`);
       const teeCmd = `${cmd} 2>&1 | tee '${logPath}'`;
       execSync(teeCmd, {
