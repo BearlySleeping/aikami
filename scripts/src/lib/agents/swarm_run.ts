@@ -40,6 +40,7 @@ const doJoin = args.includes('--join') || args.includes('-j');
 
 if (!contractId) {
   console.error('Usage: bun swarm:run <contract-id> [options]');
+  console.error('       bun run contract <contract-id> [options]  (alias)');
   console.error('');
   console.error('  contract-id    e.g. C-233, C-311');
   console.error('  --tier <tier>  pro | flash (default: per-role matrix in .pi/swarm/models.ts)');
@@ -61,8 +62,16 @@ const contractFile = files.find((f) => f.startsWith(contractId) && f.endsWith('.
 if (!contractFile) {
   console.error(`❌ Contract not found: ${contractId}`);
   console.error(`   Looked in: ${contractsDir}`);
-  const available = files.filter((f) => f.startsWith('C-')).join(', ');
-  console.error(`   Available: ${available}`);
+  console.error('');
+  console.error('   Generate it first via Pi:');
+  console.error(`   > contract_generate ${contractId}`);
+  console.error('   > /contract-create');
+  console.error('');
+  const available = files
+    .filter((f) => f.startsWith('C-'))
+    .slice(0, 10)
+    .join(', ');
+  console.error(`   Available (first 10): ${available}`);
   process.exit(1);
 }
 
@@ -210,6 +219,9 @@ process.on('SIGTERM', () => {
 const main = async (): Promise<void> => {
   if (!checkHerdr()) {
     console.log('🔄 Starting herdr daemon...');
+    console.log('   (If this hangs, Herdr is not installed or not on PATH)');
+    console.log('   Install: bun run herdr:start');
+    console.log('');
     execSync('herdr server &>/dev/null &', { stdio: 'ignore' });
     for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 500));

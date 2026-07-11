@@ -25,10 +25,12 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
    ```
    Expected: branch named `feat/C-XXX-...` or `contract/C-XXX-...` with no unrelated files.
 
-2. **Record baseline**:
+2. **Record baseline**: Store base commit in a run-scoped file, never `/tmp`.
    ```bash
-   git rev-parse HEAD > /tmp/contract_base_commit.txt
+   git rev-parse HEAD
    ```
+   Save the output hash to the contract's execution report or run manifest.
+   Do NOT write to `/tmp/contract_base_commit.txt` — it is unsafe across sessions.
 
 3. **Read the contract** fully: data model, ACs, Evidence Matrix, Scope, Quality Requirements, Open Questions.
 
