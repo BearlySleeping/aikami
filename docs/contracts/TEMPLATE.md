@@ -10,7 +10,7 @@
 | **Dependencies** | {list of contracts or packages this depends on} |
 | **Status** | draft |
 | **Docs Impact** | {user-facing → page in `apps/frontend/docs/src/content/docs/` \| internal → none} |
-| **Contract version** | 1.0.0 |
+| **Contract version** | 2.0.0 |
 
 ## Problem & Baseline Evidence
 
