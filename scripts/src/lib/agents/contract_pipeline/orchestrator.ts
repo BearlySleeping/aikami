@@ -262,11 +262,7 @@ export const runContractPipeline = async (options: {
           startTime,
           endTime: new Date().toISOString(),
           result,
-          usage: outcome.usage,
         });
-        if (outcome.usage) {
-          manifest.usage[`${stage}-${attempt}`] = outcome.usage;
-        }
 
         if (stage === 'critique' && result.status === 'passed') {
           updateContractStatus({ contractPath: manifest.contractPath, status: 'approved' });

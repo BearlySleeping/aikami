@@ -3,7 +3,7 @@
 import { existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadRolePrompt } from './prompt_loader.ts';
-import { readStageResult, readStageUsage, writeStageResult } from './stage_result.ts';
+import { readStageResult, writeStageResult } from './stage_result.ts';
 import type {
   ContractPipelineStage,
   ContractStageResult,
@@ -50,16 +50,8 @@ export const runStage = async (options: {
     'stages',
     `${options.stage}-${options.attempt}.json`,
   );
-  const usagePath = join(
-    options.runDirectory,
-    'stages',
-    `${options.stage}-${options.attempt}.usage.json`,
-  );
   if (existsSync(resultPath)) {
     unlinkSync(resultPath);
-  }
-  if (existsSync(usagePath)) {
-    unlinkSync(usagePath);
   }
 
   const prompt = loadRolePrompt({
@@ -71,7 +63,6 @@ export const runStage = async (options: {
   const { paneId } = await options.launchWorker({
     runId: options.runId,
     resultPath,
-    usagePath,
     delivery: 'direct_prompt',
     prompt,
     contractPath: options.contractPath,
@@ -90,13 +81,7 @@ export const runStage = async (options: {
       attempt: options.attempt,
     });
     if (result) {
-      const usageDeadline = Date.now() + 500;
-      let usage = readStageUsage(usagePath);
-      while (!usage && Date.now() < usageDeadline) {
-        await sleep(100);
-        usage = readStageUsage(usagePath);
-      }
-      return { result, paneId, usage };
+      return { result, paneId };
     }
     await sleep(pollIntervalMs);
   }

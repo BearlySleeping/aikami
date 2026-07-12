@@ -92,7 +92,6 @@ export type RunManifest = {
 export type WorkerLaunchRequest = {
   runId: string;
   resultPath: string;
-  usagePath: string;
   delivery: 'direct_prompt';
   prompt: string;
   contractPath: string;

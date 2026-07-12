@@ -146,7 +146,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
   }
 
-  /** Launch a headless Pi worker in a dedicated tab. */
+  /** Launch Pi directly in a dedicated tab — fully visible to the user. */
   async launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }> {
     if (!this._workspaceId) {
       throw new Error('Herdr workspace is not initialized.');
@@ -166,33 +166,71 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       throw new Error(`Failed to create ${request.role} worker tab.`);
     }
 
+    const paneId = tab.result.root_pane.pane_id;
+
+    // Write the expanded prompt to a file that Pi loads via --append-system-prompt.
     const promptDirectory = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');
     mkdirSync(promptDirectory, { recursive: true });
     const promptPath = join(promptDirectory, `${request.stage}-${request.attempt}.md`);
     atomicWrite({ path: promptPath, content: request.prompt });
 
-    const workerPath = join(this._repoRoot, 'scripts/src/lib/agents/contract_pipeline/worker.ts');
-    const command = [
-      'bun',
-      'run',
-      shellQuote(workerPath),
-      '--run-id',
-      shellQuote(request.runId),
-      '--stage',
-      shellQuote(request.stage),
-      '--attempt',
-      String(request.attempt),
-      '--contract',
-      shellQuote(request.contractPath),
-      '--prompt',
-      shellQuote(promptPath),
-      '--result',
-      shellQuote(request.resultPath),
-      '--usage',
-      shellQuote(request.usagePath),
+    // Write the result path hint so contract_stage_complete knows where to write.
+    const environment = [
+      `CONTRACT_PIPELINE_RUN_ID=${shellQuote(request.runId)}`,
+      `CONTRACT_PIPELINE_ROLE=${shellQuote(request.role)}`,
+      `CONTRACT_PIPELINE_STAGE=${shellQuote(request.stage)}`,
+      `CONTRACT_PIPELINE_ATTEMPT=${String(request.attempt)}`,
+      `CONTRACT_PIPELINE_CONTRACT_PATH=${shellQuote(request.contractPath)}`,
+      `CONTRACT_PIPELINE_RESULT_PATH=${shellQuote(request.resultPath)}`,
     ].join(' ');
-    await runHerdr(['pane', 'run', tab.result.root_pane.pane_id, command]);
-    return { paneId: tab.result.root_pane.pane_id };
+    const contractId = request.contractPath.match(/(C-\d+|MIG-\d+)/)?.[0] ?? request.runId;
+    const sessionId = `contract-${request.runId}-${request.stage}-${request.attempt}`;
+    const toolsArg = [];
+    if (request.role === 'writer') {
+      toolsArg.push(
+        '--tools',
+        'read,grep,find,ls,edit,write,contract_scan_backlog,contract_generate,contract_stage_complete',
+      );
+    } else if (request.role === 'critic') {
+      toolsArg.push('--tools', 'read,grep,find,ls,contract_scan_backlog,contract_stage_complete');
+    }
+
+    // Start Pi interactively — no JSON mode, no -p. The user sees the full Pi TUI.
+    const startCommand = [
+      environment,
+      'pi',
+      '--session-id',
+      shellQuote(sessionId),
+      '--append-system-prompt',
+      shellQuote(promptPath),
+      ...toolsArg,
+    ].join(' ');
+    await runHerdr(['pane', 'run', paneId, startCommand]);
+
+    // Wait for Pi to be idle (ready for prompt).
+    const idleResult = await herdr([
+      'wait',
+      'agent-status',
+      paneId,
+      '--status',
+      'idle',
+      '--timeout',
+      '30000',
+    ]);
+    if (idleResult.code !== 0) {
+      await new Promise((r) => setTimeout(r, 3_000));
+    }
+
+    // Send the task prompt.
+    const taskMessage = [
+      `Execute the ${request.role} stage for ${contractId}.`,
+      'Read the system prompt for full instructions.',
+      'Finish through contract_stage_complete.',
+      'Do not ask questions — if blocked, finish with status blocked.',
+    ].join(' ');
+    await runHerdr(['pane', 'run', paneId, taskMessage]);
+
+    return { paneId };
   }
 
   /** Start the single interactive review Pi session. */

@@ -10,19 +10,9 @@ import type { ContractHerdrAdapterInterface } from './herdr_adapter.ts';
 import { createManifest, writeManifest } from './manifest_store.ts';
 import { runContractPipeline } from './orchestrator.ts';
 import { writeStageResult } from './stage_result.ts';
-import type { ContractReviewDecision, StageUsage, WorkerLaunchRequest } from './types.ts';
+import type { ContractReviewDecision, WorkerLaunchRequest } from './types.ts';
 
 const temporaryDirectories: string[] = [];
-const usage: StageUsage = {
-  model: 'test-model',
-  turns: 1,
-  inputTokens: 10,
-  outputTokens: 5,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
-  totalTokens: 15,
-  cost: 0,
-};
 
 const setupRepository = (): { root: string; contractPath: string } => {
   const root = mkdtempSync(join(tmpdir(), 'aikami-orchestrator-'));
@@ -95,7 +85,6 @@ class FakeAdapter implements ContractHerdrAdapterInterface {
         diffHash: captureGitState(this.root).fingerprint,
       },
     });
-    writeFileSync(request.usagePath, JSON.stringify(usage));
     return { paneId: `pane-${request.role}` };
   }
 
@@ -142,7 +131,7 @@ describe('runContractPipeline', () => {
     expect(adapter.reviewStarts).toBe(1);
     expect(manifest.currentStage).toBe('accepted');
     expect(manifest.verificationFingerprint).toBeDefined();
-    expect(Object.keys(manifest.usage)).toHaveLength(4);
+    expect(manifest.attempts).toHaveLength(4);
     expect(readFileSync(repository.contractPath, 'utf-8')).toContain('| **Status** | verified |');
   });
 
