@@ -41,6 +41,7 @@ const activeTools = (role: string): string[] | undefined => {
       'edit',
       'write',
       'contract_scan_backlog',
+      'contract_generate',
       'contract_stage_complete',
     ];
   }

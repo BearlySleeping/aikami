@@ -28,14 +28,27 @@ export const loadRolePrompt = (options: {
     '\\',
     '/',
   );
+  const contractId = contractArgument.match(/(C-\d+|MIG-\d+)/)?.[0] ?? contractArgument;
+  const contractExistsOnDisk = existsSync(resolve(options.contractPath));
   const canonical = stripFrontmatter(readFileSync(promptPath, 'utf-8')).replace(
     /\$ARGUMENTS\b/g,
     contractArgument,
   );
   const feedback = options.feedback?.trim();
+  const creationInstruction =
+    options.role === 'writer' && !contractExistsOnDisk
+      ? [
+          '\n## Contract file does not exist yet',
+          `The contract at ${contractArgument} does not exist on disk.`,
+          `1. Call \`contract_generate\` with \`${contractId}\` to create the v2 contract shell from the canonical TEMPLATE.md.`,
+          '2. Read the newly created file and complete every section with evidence from the codebase.',
+          '3. Set status to `draft` and call `contract_stage_complete`.',
+        ].join('\n')
+      : '';
 
   return [
     canonical,
+    creationInstruction,
     feedback ? `\n## Prior-stage feedback\n\n${feedback}` : '',
     '\n## Automated pipeline completion',
     "This session has exactly one role. Do not perform another role's work.",

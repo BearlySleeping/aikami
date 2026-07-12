@@ -1,7 +1,7 @@
 // scripts/src/lib/agents/contract_pipeline/contract_resolver.ts
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { type BacklogItem, parseBacklog } from '../../ops/parse_backlog.ts';
+import { parseBacklog } from '../../ops/parse_backlog.ts';
 
 /** Resolved contract metadata. */
 export type ContractInfo = {
@@ -37,49 +37,11 @@ const contractSlug = (title: string): string =>
     .slice(0, 60)
     .replace(/-$/, '');
 
-const fillDraft = (options: { repoRoot: string; item: BacklogItem }): string => {
-  const contractsDirectory = resolve(options.repoRoot, CONTRACTS_DIR);
-  const templatePath = join(contractsDirectory, 'TEMPLATE.md');
-  if (!existsSync(templatePath)) {
-    throw new Error('docs/contracts/TEMPLATE.md not found.');
-  }
+/** Compute the expected contract filename from a TODO ID and title — never writes to disk. */
+const expectedContractPath = (options: { repoRoot: string; id: string; title: string }): string =>
+  join(resolve(options.repoRoot, CONTRACTS_DIR), `${options.id}-${contractSlug(options.title)}.md`);
 
-  let content = readFileSync(templatePath, 'utf-8')
-    .replaceAll('{FEATURE_CODE}', options.item.id)
-    .replaceAll('{TITLE}', options.item.title);
-  const replaceRow = (label: string, value: string): void => {
-    content = content.replace(
-      new RegExp(`\\|\\s*\\*\\*${label}\\*\\*\\s*\\|[^\\n]*\\|`),
-      `| **${label}** | ${value} |`,
-    );
-  };
-  replaceRow('Source', `TODO.md — ${options.item.phase}`);
-  replaceRow('Target', options.item.target || 'TBD');
-  replaceRow('Priority', options.item.priority);
-  replaceRow('Dependencies', options.item.dependencies || '—');
-  replaceRow('Status', 'draft');
-  replaceRow('Promotion', '—');
-  replaceRow('Docs Impact', 'TBD');
-  replaceRow('Contract version', '2.0.0');
-  content = content.replace(
-    /\{2-4 sentences describing what this task is[^}]*\}/,
-    options.item.outcome || options.item.title,
-  );
-  content = content.replace(
-    /\{what is broken or missing today[^}]*\}/,
-    `${options.item.title} — see docs/TODO.md for the canonical backlog evidence.`,
-  );
-
-  mkdirSync(contractsDirectory, { recursive: true });
-  const path = join(
-    contractsDirectory,
-    `${options.item.id}-${contractSlug(options.item.title)}.md`,
-  );
-  writeFileSync(path, content);
-  return path;
-};
-
-/** Resolve an existing path or a canonical backlog ID, generating a shell when required. */
+/** Resolve an existing path or a canonical backlog ID. */
 export const resolveContract = (options: { target: string; repoRoot: string }): ContractInfo => {
   if (options.target.endsWith('.md')) {
     const path = resolve(options.repoRoot, options.target);
@@ -110,8 +72,12 @@ export const resolveContract = (options: { target: string; repoRoot: string }): 
     throw new Error(`${identifier} not found in docs/TODO.md.`);
   }
 
-  if (item.existingContractPath && !item.isArchived) {
-    return parseContract(resolve(options.repoRoot, item.existingContractPath));
-  }
-  return parseContract(fillDraft({ repoRoot: options.repoRoot, item }));
+  // Contract does not exist on disk yet — the writer Pi session will create it
+  // via contract_generate. Return the expected path without writing to disk.
+  return {
+    id: item.id,
+    title: item.title,
+    path: expectedContractPath({ repoRoot: options.repoRoot, id: item.id, title: item.title }),
+    status: 'draft',
+  };
 };

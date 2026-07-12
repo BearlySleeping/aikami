@@ -1,7 +1,7 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import { captureGitState, changedPaths, contentHash, currentCommit } from './git_state.ts';
@@ -238,6 +238,21 @@ export const runContractPipeline = async (options: {
               unauthorizedPaths: postconditions.unauthorizedPaths,
             });
         result = enforceStageStatus({ stage, result, contractPath: manifest.contractPath });
+
+        // After writer succeeds, discover the actual contract file (contract_generate
+        // may produce a slightly different slug than the resolver prediction).
+        if (stage === 'write_contract' && result.status === 'passed') {
+          const resolvedContractPath = resolve(options.repoRoot, manifest.contractPath);
+          if (!existsSync(resolvedContractPath)) {
+            const contractsDirectory = resolve(options.repoRoot, 'docs/contracts');
+            const discovered = readdirSync(contractsDirectory).find(
+              (file) => file.startsWith(`${manifest.contractId}-`) && file.endsWith('.md'),
+            );
+            if (discovered) {
+              manifest.contractPath = join(contractsDirectory, discovered);
+            }
+          }
+        }
 
         manifest.attempts.push({
           stage,

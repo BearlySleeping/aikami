@@ -1,8 +1,11 @@
 // scripts/src/lib/agents/contract_pipeline/contract_status.ts
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
-/** Read the contract metadata status. */
+/** Read the contract metadata status. Returns 'draft' when the file does not exist yet. */
 export const readContractStatus = (contractPath: string): string => {
+  if (!existsSync(contractPath)) {
+    return 'draft';
+  }
   const content = readFileSync(contractPath, 'utf-8');
   return content.match(/\|\s*\*\*Status\*\*\s*\|\s*([^|\s]+)\s*\|/)?.[1]?.trim() ?? 'draft';
 };
