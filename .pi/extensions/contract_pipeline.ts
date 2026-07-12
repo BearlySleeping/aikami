@@ -118,7 +118,28 @@ const isFileMutationAllowed = (options: {
     return true;
   }
   if (options.role === 'writer') {
-    return resolve(options.inputPath) === resolve(options.contractPath);
+    // The contract path may be a placeholder (C-315.md) while the actual
+    // file created by contract_generate has a full slug
+    // (C-315-define-versioned-....md). Match by contract ID prefix.
+    const resolvedInput = resolve(options.inputPath);
+    const resolvedContract = resolve(options.contractPath);
+
+    if (resolvedInput === resolvedContract) {
+      return true;
+    }
+
+    const contractFileName = basename(options.contractPath);
+    const inputFileName = basename(options.inputPath);
+    const contractId = contractFileName.match(/^(C-\d+|MIG-\d+)/)?.[0];
+
+    if (contractId) {
+      // Allow the placeholder (C-315.md) or the slugged name (C-315-*.md)
+      if (inputFileName === `${contractId}.md` || inputFileName.startsWith(`${contractId}-`)) {
+        return true;
+      }
+    }
+
+    return false;
   }
   return false;
 };

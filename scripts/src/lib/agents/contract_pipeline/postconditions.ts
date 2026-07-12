@@ -1,5 +1,5 @@
 // scripts/src/lib/agents/contract_pipeline/postconditions.ts
-import { relative, resolve } from 'node:path';
+import { basename, relative, resolve } from 'node:path';
 import { changedBetweenSnapshots } from './git_state.ts';
 import type { ContractWorkerRole, GitStateSnapshot } from './types.ts';
 
@@ -24,10 +24,26 @@ export const validatePostconditions = (options: {
   }
 
   let unauthorizedPaths: string[] = [];
-  if (options.role === 'writer') {
-    unauthorizedPaths = changed.filter((path) => path !== relativeContractPath);
-  } else if (options.role === 'verifier') {
-    unauthorizedPaths = changed.filter((path) => path !== relativeContractPath);
+  if (options.role === 'writer' || options.role === 'verifier') {
+    // The contract path may be a placeholder (C-315.md) while the actual
+    // contract file created by contract_generate has a full slug
+    // (C-315-define-versioned-....md). Match by contract ID prefix.
+    const contractFileName = basename(options.contractPath);
+    const contractId = contractFileName.match(/^(C-\d+|MIG-\d+)/)?.[0];
+
+    unauthorizedPaths = changed.filter((path) => {
+      if (path === relativeContractPath) {
+        return false; // Exact match (placeholder) — allowed
+      }
+      if (contractId && path.startsWith('docs/contracts/')) {
+        const fileName = basename(path);
+        // Allow the placeholder (C-315.md) or the slugged name (C-315-*.md)
+        if (fileName === `${contractId}.md` || fileName.startsWith(`${contractId}-`)) {
+          return false; // Pattern match — allowed
+        }
+      }
+      return true;
+    });
   }
 
   return {

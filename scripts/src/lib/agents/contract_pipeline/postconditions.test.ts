@@ -77,4 +77,31 @@ describe('validatePostconditions', () => {
     });
     expect(result.passed).toBe(true);
   });
+
+  it('allows writer to modify the slugged contract file when placeholder path is given', () => {
+    const result = validatePostconditions({
+      role: 'writer',
+      contractPath: '/repo/docs/contracts/C-365.md', // placeholder
+      repoRoot,
+      before: snapshot({}),
+      after: snapshot({
+        'docs/contracts/C-365-define-a-versioned-feature.md': 'draft',
+      }),
+    });
+    expect(result.passed).toBe(true);
+  });
+
+  it('blocks writer from modifying a contract with a different ID prefix', () => {
+    const result = validatePostconditions({
+      role: 'writer',
+      contractPath: '/repo/docs/contracts/C-365.md',
+      repoRoot,
+      before: snapshot({}),
+      after: snapshot({
+        'docs/contracts/C-366-other-contract.md': 'draft',
+      }),
+    });
+    expect(result.passed).toBe(false);
+    expect(result.unauthorizedPaths).toEqual(['docs/contracts/C-366-other-contract.md']);
+  });
 });
