@@ -1,6 +1,7 @@
 // scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { logPath } from './manifest_store.ts';
@@ -54,6 +55,36 @@ const extractContractId = (contractPath: string): string => {
 const buildSessionId = (options: { contractId: string; role: string }): string =>
   `pi-${options.contractId}-agent-${options.role}`;
 
+// ── Jujutsu workspace helpers ──────────────────────────────
+
+const MAX_WORKSPACE_NAME_LENGTH = 80;
+
+const sanitizeWorkspaceName = (raw: string): string =>
+  raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_WORKSPACE_NAME_LENGTH);
+
+const runJj = (command: string, cwd?: string): string => {
+  const configFlags = [
+    `--config-toml 'ui.user-name="Pi Agent"'`,
+    `--config-toml 'ui.user-email="agent@pi.internal"'`,
+  ].join(' ');
+
+  const result = execSync(`jj ${configFlags} ${command}`, {
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    cwd,
+  });
+  return result.trim();
+};
+
+const jjChangeId = (workspacePath: string): string => {
+  return runJj('log -r @ --no-graph -T change_id', workspacePath);
+};
+
 /** Map roles to their allowed pi tools. */
 const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
   if (role === 'writer') {
@@ -96,6 +127,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   private readonly _workspaceLabel: string;
   private _workspaceId = '';
   private _pipelinePaneId = '';
+  private _workspacePath = '';
 
   constructor(options: { repoRoot: string; runId: string; contractId: string }) {
     this._repoRoot = options.repoRoot;
@@ -128,6 +160,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       if (pipelinePane) {
         this._workspaceId = existingWorkspaceId;
         this._pipelinePaneId = pipelinePane.pane_id;
+
+        this._provisionJjWorkspace();
+
         return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
       }
 
@@ -153,6 +188,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         this._pipelinePaneId,
         `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
       ]);
+
+      this._provisionJjWorkspace();
+
       return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
     }
 
@@ -178,6 +216,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       this._pipelinePaneId,
       `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
     ]);
+
+    // Provision the jj workspace for implementer/verifier isolation.
+    this._provisionJjWorkspace();
+
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
   }
 
@@ -187,6 +229,34 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       throw new Error('Herdr workspace is not initialized.');
     }
     return this._workspaceId;
+  }
+
+  /** Provision an isolated jj workspace for implementer/verifier file mutations. */
+  private _provisionJjWorkspace(): void {
+    const sanitized = sanitizeWorkspaceName(this._runId);
+    const wsDir = join(this._repoRoot, '.pi', 'workspaces', sanitized);
+
+    mkdirSync(join(this._repoRoot, '.pi', 'workspaces'), { recursive: true });
+
+    try {
+      runJj(`workspace add ${wsDir}`, this._repoRoot);
+      const changeId = jjChangeId(wsDir);
+      this._workspacePath = wsDir;
+      console.log(`🔧 jj workspace: ${wsDir} (change: ${changeId})`);
+    } catch (err) {
+      // Workspace may already exist from a prior run.
+      if (existsSync(wsDir)) {
+        this._workspacePath = wsDir;
+        try {
+          console.log(`🔧 jj workspace (existing): ${wsDir} (change: ${jjChangeId(wsDir)})`);
+        } catch {
+          console.log(`🔧 jj workspace (existing): ${wsDir}`);
+        }
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`⚠️  jj workspace provisioning failed: ${message}`);
+      }
+    }
   }
 
   /** Close a tab by label if it exists in the current workspace. */
@@ -261,13 +331,22 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     sessionId: string | undefined;
     request: WorkerLaunchRequest;
   }): Promise<{ paneId: string }> {
+    // Writer and critic only edit docs/contracts/ (gitignored) — they use the
+    // repo root. Implementer and verifier mutate source code — they use the
+    // isolated jj workspace at .pi/workspaces/<runId>/.
+    const isolationRoles: ContractWorkerRole[] = ['implementer', 'verifier'];
+    const cwd =
+      isolationRoles.includes(options.request.role) && this._workspacePath
+        ? this._workspacePath
+        : this._repoRoot;
+
     const tab = await herdrJson<TabCreateResult>([
       'tab',
       'create',
       '--workspace',
       this._workspaceId,
       '--cwd',
-      this._repoRoot,
+      cwd,
       '--label',
       options.tabLabel,
       '--no-focus',
