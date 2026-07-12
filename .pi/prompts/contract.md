@@ -178,7 +178,10 @@ Decide from the contract's Target/Overview:
 - Baseline: {N} pre-existing failures, {N} new failures
 ```
 
-3. Run `bun knowledge:sync` — regenerates PROGRESS.md from contract files. 🔴 NEVER hand-edit PROGRESS.md or INDEX.md.
+3. Knowledge sync ownership:
+   - Automated contract pipeline (`CONTRACT_PIPELINE_RUN_ID` set): do **not** run `bun knowledge:sync`; the pre-commit hook regenerates and stages contract dashboards.
+   - Manual `/contract` session: run `bun knowledge:sync` when reviewers need PROGRESS.md updated before commit.
+   - 🔴 NEVER hand-edit PROGRESS.md, PROMOTION.md, or INDEX.md.
 
 4. Present a diff summary + suggested Conventional Commit message:
    ```

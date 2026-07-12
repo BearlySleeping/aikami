@@ -15,7 +15,7 @@ Your job is to be the human's informed partner — present a concise status, mak
 
 ## Phase 1: Assemble Status
 
-1. If given a run ID, read the run manifest from `.pi/swarm/runs/<run-id>/manifest.json`.
+1. If given a run ID, read the run manifest from `.pi/contract-runs/<run-id>/manifest.json`.
 2. If given a contract ID, find the contract and its associated run.
 3. Read:
    - The contract file
@@ -67,9 +67,9 @@ You may:
 
 If you modify ANY source file after the pipeline passed verification:
 
-1. **Run state changes to `changes_after_verification`**.
-2. **Display a warning**: "⚠️ Code modified after verification. Re-verification required before commit."
-3. **Before any commit**: re-run the independent verifier. This can be done by calling the re-verify tool or asking the user to run `/contract-verify` again.
+1. **Display a warning**: "⚠️ Code modified after verification. Re-verification required before commit."
+2. Call `contract_review_decision` with `changes_applied` after finishing the requested edits. The orchestrator clears the verified fingerprint and starts the correct fresh critic/verifier stage.
+3. **Before any commit**: wait for the orchestrator to report a fresh verifier PASS.
 
 Store a deterministic fingerprint of the verified diff. Compare current diff against it.
 

@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 121 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 120 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -183,5 +183,4 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-362 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | v1 |
 | C-363 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | v1 |
 | C-364 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | v1 |
-| C-365 | Harden Contract Pipeline Orchestration | 👍 approved | v2 |
 

@@ -167,7 +167,7 @@
 | C-362 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | — | — |
 | C-363 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | — | — |
 | C-364 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | — | — |
-| C-365 | Harden Contract Pipeline Orchestration | 👍 approved | — | v2 |
+| C-365 | Harden Contract Pipeline Orchestration | ✅ verified | ❓ `integrated` | v2 |
 
 ---
 

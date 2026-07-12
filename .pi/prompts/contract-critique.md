@@ -104,4 +104,4 @@ ACs: {count} | Projects affected: {count} | Split recommended: {yes/no}
 - **Flag missing information as CHANGES_REQUESTED** — an underspecified contract wastes implementation time.
 - **Check the codebase** — don't just read the contract. A contract that says "create a new service" when one already exists is wrong.
 - **Never modify the contract** — this is review-only.
-- If the contract status is `draft`, output: `Status → approved` in the verdict. Only the user can approve.
+- If the contract status is `draft`, output `APPROVE` only when every blocking issue is resolved. In an automated `bun run contract` run, that command is the user's authorization for the orchestrator to promote a critic-approved contract to `approved`; do not edit the status yourself. In a manual critique session, only the user may approve.

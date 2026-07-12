@@ -48,7 +48,9 @@ draft → superseded
    - Files created / modified tables
    - Deviations from spec + rationale (any unapproved AC changes → propose Amendment)
    - Test results (unit / E2E / visual / baseline, with exact counts)
-3. Run `bun knowledge:sync` to regenerate PROGRESS.md.
+3. Knowledge sync ownership:
+   - Automated contract pipeline: skip manual sync; the pre-commit hook regenerates and stages dashboards.
+   - Manual implementation session: run `bun knowledge:sync` only when reviewers need current dashboards before commit.
 4. Hand off for independent verification via `/contract-verify`.
 5. Do NOT commit/push without explicit instruction.
 

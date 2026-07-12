@@ -116,5 +116,5 @@ Next: `/contract-critique` for adversarial review, then user approval.
 - Never mark status above `draft`.
 - Index.md is read-only. Do not edit it.
 - Use `type`, never `interface`.
-- If the contract already exists and is filled, do NOT overwrite. Report it.
+- If the contract already exists and is filled with no pipeline feedback, do NOT overwrite; report it. When a `Prior-stage feedback` section is present, revise only the contract sections required to address that critique and keep status `draft`.
 - If the request cannot be matched to a TODO.md item, confirm with the user.
