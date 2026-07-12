@@ -256,7 +256,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       await new Promise((r) => setTimeout(r, 3_000));
     }
 
-    // Send the task prompt.
+    // Send the task prompt as input to the running Pi process.
     const contractId = extractContractId(options.request.contractPath);
     const taskMessage = [
       `Execute the ${options.request.role} stage for ${contractId}.`,
@@ -264,7 +264,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'Finish through contract_stage_complete.',
       'Do not ask questions — if blocked, finish with status blocked.',
     ].join(' ');
-    await runHerdr(['pane', 'run', paneId, taskMessage]);
+    await runHerdr(['pane', 'send-text', paneId, taskMessage]);
+    await runHerdr(['pane', 'send-keys', paneId, 'Enter']);
 
     return { paneId };
   }
@@ -356,15 +357,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runHerdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '30000']);
     await runHerdr([
       'pane',
-      'run',
+      'send-text',
       paneId,
       `Review contract run ${this._runId}. Present the verified status, then wait for the user.`,
     ]);
+    await runHerdr(['pane', 'send-keys', paneId, 'Enter']);
     return paneId;
   }
 
   /** Deliver one orchestrator update to the existing review session. */
   async sendReviewMessage(options: { paneId: string; message: string }): Promise<void> {
-    await runHerdr(['pane', 'run', options.paneId, options.message]);
+    await runHerdr(['pane', 'send-text', options.paneId, options.message]);
+    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
   }
 }
