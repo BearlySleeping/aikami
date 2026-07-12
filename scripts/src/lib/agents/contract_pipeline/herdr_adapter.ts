@@ -1,10 +1,10 @@
 // scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
-import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { logPath } from './manifest_store.ts';
-import type { WorkerLaunchRequest } from './types.ts';
+import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
 
 type WorkspaceCreateResult = {
   result: {
@@ -42,6 +42,38 @@ const atomicWrite = (options: { path: string; content: string }): void => {
   const temporaryPath = `${options.path}.${process.pid}.tmp`;
   writeFileSync(temporaryPath, options.content);
   renameSync(temporaryPath, options.path);
+};
+
+/** Extract a contract identifier from a path. */
+const extractContractId = (contractPath: string): string => {
+  const match = contractPath.match(/(C-\d+|MIG-\d+)/);
+  return match?.[0] ?? contractPath.split('/').pop() ?? contractPath;
+};
+
+/** Build the pi session ID for a contract role. Format: pi-{contractId}-agent-{role} */
+const buildSessionId = (options: { contractId: string; role: string }): string =>
+  `pi-${options.contractId}-agent-${options.role}`;
+
+/** Map roles to their allowed pi tools. */
+const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
+  if (role === 'writer') {
+    return [
+      'read',
+      'grep',
+      'find',
+      'ls',
+      'edit',
+      'write',
+      'contract_scan_backlog',
+      'contract_generate',
+      'contract_stage_complete',
+    ];
+  }
+  if (role === 'critic') {
+    return ['read', 'grep', 'find', 'ls', 'contract_scan_backlog', 'contract_stage_complete'];
+  }
+  // Implementer and verifier use default pi tools.
+  return undefined;
 };
 
 /** Adapter surface consumed by the contract orchestrator. */
@@ -146,46 +178,22 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
   }
 
-  /** Launch Pi directly in a dedicated tab — fully visible to the user. */
-  async launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }> {
-    if (!this._workspaceId) {
-      throw new Error('Herdr workspace is not initialized.');
+  /** Close a tab by label if it exists in the current workspace. */
+  private async _closeTabByLabel(label: string): Promise<void> {
+    const tabs = await herdrJson<TabListResult>(['tab', 'list', '--workspace', this._workspaceId]);
+    const existingTab = tabs?.result.tabs.find((tab) => tab.label === label);
+    if (existingTab) {
+      await runHerdr(['tab', 'close', existingTab.tab_id]);
     }
-    const tab = await herdrJson<TabCreateResult>([
-      'tab',
-      'create',
-      '--workspace',
-      this._workspaceId,
-      '--cwd',
-      this._repoRoot,
-      '--label',
-      `${request.role}-${request.attempt}`,
-      '--no-focus',
-    ]);
-    if (!tab?.result) {
-      throw new Error(`Failed to create ${request.role} worker tab.`);
-    }
+  }
 
-    const paneId = tab.result.root_pane.pane_id;
-
-    // Delete any pre-existing contract file before the writer's first attempt.
-    // This ensures the contract is always created through Pi (via contract_generate)
-    // rather than relying on a stale programmatically-generated shell.
-    if (request.role === 'writer' && request.attempt === 1) {
-      try {
-        unlinkSync(resolve(this._repoRoot, request.contractPath));
-      } catch {
-        // File does not exist — nothing to clean up.
-      }
-    }
-
-    // Write the expanded prompt to a file that Pi loads via --append-system-prompt.
+  /** Write the worker prompt and build the pi start command with env vars. */
+  private _buildWorkerCommand(request: WorkerLaunchRequest, sessionId: string): string {
     const promptDirectory = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');
     mkdirSync(promptDirectory, { recursive: true });
     const promptPath = join(promptDirectory, `${request.stage}-${request.attempt}.md`);
     atomicWrite({ path: promptPath, content: request.prompt });
 
-    // Write the result path hint so contract_stage_complete knows where to write.
     const environment = [
       `CONTRACT_PIPELINE_RUN_ID=${shellQuote(request.runId)}`,
       `CONTRACT_PIPELINE_ROLE=${shellQuote(request.role)}`,
@@ -194,20 +202,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `CONTRACT_PIPELINE_CONTRACT_PATH=${shellQuote(request.contractPath)}`,
       `CONTRACT_PIPELINE_RESULT_PATH=${shellQuote(request.resultPath)}`,
     ].join(' ');
-    const contractId = request.contractPath.match(/(C-\d+|MIG-\d+)/)?.[0] ?? request.runId;
-    const sessionId = `contract-${request.runId}-${request.stage}-${request.attempt}`;
-    const toolsArg = [];
-    if (request.role === 'writer') {
-      toolsArg.push(
-        '--tools',
-        'read,grep,find,ls,edit,write,contract_scan_backlog,contract_generate,contract_stage_complete',
-      );
-    } else if (request.role === 'critic') {
-      toolsArg.push('--tools', 'read,grep,find,ls,contract_scan_backlog,contract_stage_complete');
-    }
 
-    // Start Pi interactively — no JSON mode, no -p. The user sees the full Pi TUI.
-    const startCommand = [
+    const tools = toolsForRole(request.role);
+    const toolsArg = tools ? ['--tools', tools.join(',')] : [];
+
+    return [
       environment,
       'pi',
       '--session-id',
@@ -216,6 +215,31 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       shellQuote(promptPath),
       ...toolsArg,
     ].join(' ');
+  }
+
+  /** Create a new worker tab and start pi. */
+  private async _createWorkerTab(options: {
+    tabLabel: string;
+    sessionId: string;
+    request: WorkerLaunchRequest;
+  }): Promise<{ paneId: string }> {
+    const tab = await herdrJson<TabCreateResult>([
+      'tab',
+      'create',
+      '--workspace',
+      this._workspaceId,
+      '--cwd',
+      this._repoRoot,
+      '--label',
+      options.tabLabel,
+      '--no-focus',
+    ]);
+    if (!tab?.result) {
+      throw new Error(`Failed to create ${options.request.role} worker tab.`);
+    }
+
+    const paneId = tab.result.root_pane.pane_id;
+    const startCommand = this._buildWorkerCommand(options.request, options.sessionId);
     await runHerdr(['pane', 'run', paneId, startCommand]);
 
     // Wait for Pi to be idle (ready for prompt).
@@ -233,8 +257,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
 
     // Send the task prompt.
+    const contractId = extractContractId(options.request.contractPath);
     const taskMessage = [
-      `Execute the ${request.role} stage for ${contractId}.`,
+      `Execute the ${options.request.role} stage for ${contractId}.`,
       'Read the system prompt for full instructions.',
       'Finish through contract_stage_complete.',
       'Do not ask questions — if blocked, finish with status blocked.',
@@ -242,6 +267,31 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runHerdr(['pane', 'run', paneId, taskMessage]);
 
     return { paneId };
+  }
+
+  /**
+   * Launch Pi in a persistent, role-named tab.
+   *
+   * First launch creates the tab and pi session.
+   * Subsequent launches (feedback loops) close the old tab and recreate it,
+   * restarting pi with the same --session-id to preserve conversation history.
+   * Tab labels use the role name only (writer, critic, implementer, verifier).
+   * Session IDs follow: pi-{contractId}-agent-{role}
+   */
+  async launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }> {
+    if (!this._workspaceId) {
+      throw new Error('Herdr workspace is not initialized.');
+    }
+
+    const tabLabel = request.role; // "writer", "critic", "implementer", "verifier"
+    const contractId = extractContractId(request.contractPath);
+    const sessionId = buildSessionId({ contractId, role: request.role });
+
+    // Close any existing tab with this role label for a clean restart.
+    // Pi session history persists on disk via --session-id.
+    await this._closeTabByLabel(tabLabel);
+
+    return this._createWorkerTab({ tabLabel, sessionId, request });
   }
 
   /** Start the single interactive review Pi session. */
@@ -253,29 +303,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     if (!this._workspaceId) {
       throw new Error('Herdr workspace is not initialized.');
     }
-    const existingTabs = await herdrJson<TabListResult>([
-      'tab',
-      'list',
-      '--workspace',
-      this._workspaceId,
-    ]);
-    const existingPanes = await herdrJson<PaneListResult>([
-      'pane',
-      'list',
-      '--workspace',
-      this._workspaceId,
-    ]);
-    const existingReviewTab = existingTabs?.result.tabs.find(
-      (candidate) => candidate.label === 'review',
-    );
-    const existingReviewPane = existingReviewTab
-      ? existingPanes?.result.panes.find(
-          (candidate) => candidate.tab_id === existingReviewTab.tab_id,
-        )
-      : undefined;
-    if (existingReviewPane) {
-      return existingReviewPane.pane_id;
-    }
+
+    const contractId = extractContractId(options.contractPath);
+    const sessionId = buildSessionId({ contractId, role: 'review' });
+
+    // Close any existing review tab for a clean restart.
+    await this._closeTabByLabel('review');
 
     const tab = await herdrJson<TabCreateResult>([
       'tab',
@@ -309,7 +342,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `CONTRACT_PIPELINE_CONTRACT_PATH=${shellQuote(options.contractPath)}`,
       `CONTRACT_PIPELINE_REVIEW_PATH=${shellQuote(options.reviewDecisionPath)}`,
     ].join(' ');
-    const command = `${environment} pi --session-id ${shellQuote(`contract-${this._runId}-review`)} --append-system-prompt ${shellQuote(promptPath)}`;
+    const command = [
+      environment,
+      'pi',
+      '--session-id',
+      shellQuote(sessionId),
+      '--append-system-prompt',
+      shellQuote(promptPath),
+    ].join(' ');
+
     const paneId = tab.result.root_pane.pane_id;
     await runHerdr(['pane', 'run', paneId, command]);
     await runHerdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '30000']);

@@ -39,10 +39,12 @@ export const loadRolePrompt = (options: {
     options.role === 'writer' && !contractExistsOnDisk
       ? [
           '\n## Contract file does not exist yet',
-          `The contract at ${contractArgument} does not exist on disk.`,
-          `1. Call \`contract_generate\` with \`${contractId}\` to create the v2 contract shell from the canonical TEMPLATE.md.`,
-          '2. Read the newly created file and complete every section with evidence from the codebase.',
-          '3. Set status to `draft` and call `contract_stage_complete`.',
+          `No contract file exists yet for ${contractId}. The placeholder path ${contractArgument} is not a real file.`,
+          `1. Call \`contract_generate\` with \`${contractId}\` to create the v2 contract shell from TEMPLATE.md.`,
+          '2. Discover the actual file created by contract_generate (it will be under docs/contracts/).',
+          '3. Read that file and complete every section with evidence from the codebase.',
+          '4. Set status to `draft` and call `contract_stage_complete`.',
+          'The pipeline will discover the actual filename after you finish.',
         ].join('\n')
       : '';
 

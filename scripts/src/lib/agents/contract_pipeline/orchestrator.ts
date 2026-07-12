@@ -2,6 +2,7 @@
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { findWorkspace } from '../../herdr/session.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import { captureGitState, changedPaths, contentHash, currentCommit } from './git_state.ts';
@@ -161,7 +162,9 @@ export const runContractPipeline = async (options: {
     if (!options.target) {
       throw new Error('A contract ID or path is required for a new run.');
     }
-    const dirtyPaths = changedPaths(options.repoRoot);
+    const dirtyPaths = changedPaths(options.repoRoot).filter(
+      (path) => !path.startsWith('docs/') && path !== 'flake.lock',
+    );
     if (dirtyPaths.length > 0 && !options.allowDirty) {
       throw new Error(
         `Contract pipeline requires a clean worktree. Dirty paths:\n${dirtyPaths.map((path) => `- ${path}`).join('\n')}`,
@@ -183,7 +186,22 @@ export const runContractPipeline = async (options: {
     return manifest;
   }
 
-  acquireLock({ contractId: manifest.contractId, cwd: options.repoRoot });
+  const buildWorkspaceLabel = (runId: string): string => `aikami-contract-${runId}`;
+
+  await acquireLock({
+    contractId: manifest.contractId,
+    runId: manifest.runId,
+    cwd: options.repoRoot,
+    checkWorkspaceAlive: async (runId: string) => {
+      try {
+        const wsId = await findWorkspace(buildWorkspaceLabel(runId));
+        return wsId !== null;
+      } catch {
+        // Herdr not reachable — assume workspace is dead.
+        return false;
+      }
+    },
+  });
   const adapter =
     options.adapterFactory?.({ repoRoot: options.repoRoot, runId: manifest.runId }) ??
     new ContractHerdrAdapter({ repoRoot: options.repoRoot, runId: manifest.runId });
@@ -224,6 +242,22 @@ export const runContractPipeline = async (options: {
           launchWorker: (request) => adapter.launchWorker(request),
         });
         const after = captureGitState(options.repoRoot);
+
+        // After writer succeeds, discover the actual contract file.
+        // The resolver uses a placeholder path; contract_generate creates the real file.
+        if (stage === 'write_contract' && outcome.result.status === 'passed') {
+          const contractsDirectory = resolve(options.repoRoot, 'docs/contracts');
+          const discovered = readdirSync(contractsDirectory).find(
+            (file) =>
+              file.startsWith(`${manifest.contractId}-`) &&
+              file.endsWith('.md') &&
+              file !== `${manifest.contractId}.md`,
+          );
+          if (discovered) {
+            manifest.contractPath = join(contractsDirectory, discovered);
+          }
+        }
+
         const postconditions = validatePostconditions({
           role,
           contractPath: manifest.contractPath,
@@ -238,21 +272,6 @@ export const runContractPipeline = async (options: {
               unauthorizedPaths: postconditions.unauthorizedPaths,
             });
         result = enforceStageStatus({ stage, result, contractPath: manifest.contractPath });
-
-        // After writer succeeds, discover the actual contract file (contract_generate
-        // may produce a slightly different slug than the resolver prediction).
-        if (stage === 'write_contract' && result.status === 'passed') {
-          const resolvedContractPath = resolve(options.repoRoot, manifest.contractPath);
-          if (!existsSync(resolvedContractPath)) {
-            const contractsDirectory = resolve(options.repoRoot, 'docs/contracts');
-            const discovered = readdirSync(contractsDirectory).find(
-              (file) => file.startsWith(`${manifest.contractId}-`) && file.endsWith('.md'),
-            );
-            if (discovered) {
-              manifest.contractPath = join(contractsDirectory, discovered);
-            }
-          }
-        }
 
         manifest.attempts.push({
           stage,

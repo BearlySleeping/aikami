@@ -25,19 +25,24 @@ afterEach(() => {
 });
 
 describe('pipeline lock', () => {
-  it('acquires once and rejects a live owner', () => {
+  it('acquires once and rejects a live owner', async () => {
     const cwd = temporaryDirectory();
-    acquireLock({ contractId: 'C-365', cwd });
-    expect(() => acquireLock({ contractId: 'C-365', cwd })).toThrow('already running');
+    await acquireLock({ contractId: 'C-365', runId: 'run-test-1', cwd });
+    await expect(acquireLock({ contractId: 'C-365', runId: 'run-test-2', cwd })).rejects.toThrow(
+      'already running',
+    );
     releaseLock({ contractId: 'C-365', cwd });
   });
 
-  it('replaces a stale or corrupt lock atomically', () => {
+  it('replaces a stale or corrupt lock atomically', async () => {
     const cwd = temporaryDirectory();
     const directory = join(cwd, '.pi/contract-runs');
     mkdirSync(directory, { recursive: true });
-    writeFileSync(join(directory, 'lock_C-365.json'), '{"pid":999999,"contractId":"C-365"}');
-    expect(() => acquireLock({ contractId: 'C-365', cwd })).not.toThrow();
+    writeFileSync(
+      join(directory, 'lock_C-365.json'),
+      '{"pid":999999,"contractId":"C-365","runId":""}',
+    );
+    await acquireLock({ contractId: 'C-365', runId: 'run-test', cwd });
     releaseLock({ contractId: 'C-365', cwd });
   });
 });

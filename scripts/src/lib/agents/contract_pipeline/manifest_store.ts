@@ -20,6 +20,7 @@ const _lockCleanups = new Map<
 type LockMetadata = {
   pid: number;
   contractId: string;
+  runId: string;
   createdAt: string;
 };
 
@@ -44,6 +45,7 @@ const readLock = (path: string): LockMetadata | undefined => {
     return {
       pid: value.pid,
       contractId: value.contractId,
+      runId: typeof value.runId === 'string' ? value.runId : '',
       createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
     };
   } catch {
@@ -59,14 +61,23 @@ const removeFile = (path: string): void => {
   }
 };
 
+/** Check if a lock's workspace is still alive. Called before breaking a stale lock. */
+type WorkspaceAliveCheck = (runId: string) => Promise<boolean>;
+
 /** Acquire an atomic, process-owned lock for one contract. */
-export const acquireLock = (options: { contractId: string; cwd: string }): void => {
+export const acquireLock = async (options: {
+  contractId: string;
+  runId: string;
+  cwd: string;
+  checkWorkspaceAlive?: WorkspaceAliveCheck;
+}): Promise<void> => {
   const path = buildLockPath(options);
   mkdirSync(join(options.cwd, RUNS_DIR), { recursive: true });
 
   const metadata: LockMetadata = {
     pid: process.pid,
     contractId: options.contractId,
+    runId: options.runId,
     createdAt: new Date().toISOString(),
   };
 
@@ -79,15 +90,32 @@ export const acquireLock = (options: { contractId: string; cwd: string }): void 
     }
   };
 
+  const breakStaleLock = async (): Promise<void> => {
+    const existing = readLock(path);
+    if (!existing || !isProcessAlive(existing.pid)) {
+      removeFile(path);
+      return;
+    }
+
+    // Process is alive — check if its herdr workspace still exists.
+    if (options.checkWorkspaceAlive && existing.runId) {
+      const workspaceAlive = await options.checkWorkspaceAlive(existing.runId);
+      if (!workspaceAlive) {
+        // Workspace was killed but process lingered — break the lock.
+        removeFile(path);
+        return;
+      }
+    }
+
+    throw new Error(
+      `Pipeline already running for ${options.contractId} (PID ${existing.pid}, run ${existing.runId}).`,
+    );
+  };
+
   try {
     create();
   } catch {
-    const existing = readLock(path);
-    if (existing && isProcessAlive(existing.pid)) {
-      throw new Error(`Pipeline already running for ${options.contractId} (PID ${existing.pid}).`);
-    }
-
-    removeFile(path);
+    await breakStaleLock();
     try {
       create();
     } catch {
@@ -109,6 +137,15 @@ export const acquireLock = (options: { contractId: string; cwd: string }): void 
   process.once('exit', cleanup);
   process.once('SIGINT', signalCleanup);
   process.once('SIGTERM', terminationCleanup);
+};
+
+/** Read the current lock metadata without acquiring. Returns undefined if no lock or invalid. */
+export const readLockMetadata = (options: {
+  contractId: string;
+  cwd: string;
+}): LockMetadata | undefined => {
+  const path = buildLockPath(options);
+  return readLock(path);
 };
 
 /** Release a previously acquired contract lock. */

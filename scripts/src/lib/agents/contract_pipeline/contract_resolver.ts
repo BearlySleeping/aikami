@@ -28,18 +28,9 @@ const parseContract = (path: string): ContractInfo => {
   };
 };
 
-const contractSlug = (title: string): string =>
-  title
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .slice(0, 60)
-    .replace(/-$/, '');
-
-/** Compute the expected contract filename from a TODO ID and title — never writes to disk. */
-const expectedContractPath = (options: { repoRoot: string; id: string; title: string }): string =>
-  join(resolve(options.repoRoot, CONTRACTS_DIR), `${options.id}-${contractSlug(options.title)}.md`);
+/** Return a simple placeholder contract path. The LLM creates the real filename via contract_generate. */
+const placeholderContractPath = (options: { repoRoot: string; id: string }): string =>
+  join(resolve(options.repoRoot, CONTRACTS_DIR), `${options.id}.md`);
 
 /** Resolve an existing path or a canonical backlog ID. */
 export const resolveContract = (options: { target: string; repoRoot: string }): ContractInfo => {
@@ -73,11 +64,12 @@ export const resolveContract = (options: { target: string; repoRoot: string }): 
   }
 
   // Contract does not exist on disk yet — the writer Pi session will create it
-  // via contract_generate. Return the expected path without writing to disk.
+  // via contract_generate. Use a placeholder path; the orchestrator discovers
+  // the real filename after the writer creates it.
   return {
     id: item.id,
     title: item.title,
-    path: expectedContractPath({ repoRoot: options.repoRoot, id: item.id, title: item.title }),
+    path: placeholderContractPath({ repoRoot: options.repoRoot, id: item.id }),
     status: 'draft',
   };
 };
