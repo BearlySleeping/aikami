@@ -307,8 +307,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
           'Do not ask questions — if blocked, finish with status blocked.',
         ].join(' ')
       : [
-          `Execute the ${options.request.role} stage for ${contractId}.`,
-          'Read the system prompt for full instructions.',
+          `Begin the ${options.request.role} stage for ${contractId}.`,
+          'Assess the current state — prior work may exist in this session. Review it against the system prompt and ensure the stage is complete.',
           'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
           'Printing a text summary without the tool call will block the pipeline forever.',
           'Do not ask questions — if blocked, finish with status blocked.',
