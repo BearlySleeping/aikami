@@ -30,7 +30,7 @@
     "@storybook/test-runner": "0.24.4",
     "@sveltejs/vite-plugin-svelte": "7.2.0",
     "autoprefixer": "10.5.2",
-    "postcss": "8.5.16",
+    "postcss": "8.5.17",
     "storybook": "10.5.0",
     "svelte": "5.56.4",
     "tailwindcss": "4.3.2",
