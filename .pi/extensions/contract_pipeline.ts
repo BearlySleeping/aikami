@@ -407,6 +407,14 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             'Defaults to the sanitized workspace name or CONTRACT_PIPELINE_RUN_ID.',
         }),
       ),
+      baseBranch: Type.Optional(
+        Type.String({
+          default: 'dev',
+          description:
+            'Target base branch for the PR (default: "dev"). ' +
+            'Use "main" or "master" for production-targeting pipelines.',
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const wsPath = params.workspacePath;
@@ -444,10 +452,38 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       }
 
       // Derive a safe bookmark name from the contract ID, workspace name,
-      // or pipeline run ID.
+      // or pipeline run ID. Idempotency guard: if a bookmark with this name
+      // already exists on the remote (from a prior partial run), append a
+      // timestamp token to avoid non-fast-forward push rejection.
       const contractId =
         params.contractId ?? process.env.CONTRACT_PIPELINE_RUN_ID ?? basename(wsPath);
-      const bookmarkName = `contract-task-${sanitizeWorkspaceName(contractId)}`;
+      const baseBookmark = `contract-task-${sanitizeWorkspaceName(contractId)}`;
+      const baseBranch = params.baseBranch ?? 'dev';
+
+      let bookmarkName = baseBookmark;
+
+      // Check if the bookmark already exists on the remote.
+      // git ls-remote is used (not jj) because it's a fast read-only check
+      // that works from the repo root regardless of workspace state.
+      try {
+        const remoteCheck = execSync(`git ls-remote --heads origin refs/heads/${baseBookmark}`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          cwd,
+          timeout: 10000,
+        }).trim();
+        if (remoteCheck) {
+          // Bookmark exists — append a short unique token to avoid collision
+          const token = Date.now().toString(36).slice(-6);
+          bookmarkName = `${baseBookmark}-${token}`;
+          console.log(
+            `  ⚠️  Bookmark \`${baseBookmark}\` already exists on remote. Using \`${bookmarkName}\`.`,
+          );
+        }
+      } catch {
+        // If we can't check, assume the name is safe and proceed.
+        // The subsequent `jj git push` will surface the real error if there is one.
+      }
 
       // Finalize the workspace description
       const finalMsg = `Feat: Completed contract pipeline task — PR as \`${bookmarkName}\` (change: ${changeId})`;
@@ -486,10 +522,12 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       }
 
       // Step B: Push the bookmark to the remote tracked Git repository.
+      // Explicit --remote origin prevents headless pipeline hangs when
+      // multiple remotes are configured or no default tracking remote is set.
       // The retry/backoff wrapper in runJj handles transient network blips
       // and git lock contention.
       try {
-        runJj(`git push -b ${bookmarkName}`, wsPath);
+        runJj(`git push --remote origin -b ${bookmarkName}`, wsPath);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -502,7 +540,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                 'The workspace and bookmark have been preserved. Manual push:',
                 `  1. cd ${wsPath}`,
                 `  2. jj git push -b ${bookmarkName}`,
-                `  3. gh pr create --head "${bookmarkName}" --base main`,
+                `  3. gh pr create --head "${bookmarkName}" --base ${baseBranch}`,
               ].join('\n'),
             },
           ],
@@ -536,7 +574,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         };
         const escapedBody = prBody.replace(/'/g, "'\\''");
         prUrl = execSync(
-          `gh pr create --title "${prTitle}" --body '${escapedBody}' --base main --head "${bookmarkName}"`,
+          `gh pr create --title "${prTitle}" --body '${escapedBody}' --base ${baseBranch} --head "${bookmarkName}"`,
           ghOpts,
         ).trim();
       } catch (err: unknown) {
@@ -555,7 +593,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                 'The workspace has been preserved for manual resolution:',
                 '',
                 `  1. cd ${cwd}`,
-                `  2. gh pr create --head "${bookmarkName}" --base main --title "${prTitle}"`,
+                `  2. gh pr create --head "${bookmarkName}" --base ${baseBranch} --title "${prTitle}"`,
                 `  3. After PR is created, run cleanup manually.`,
               ].join('\n'),
             },
