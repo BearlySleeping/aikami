@@ -2,7 +2,7 @@
 // apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
 //
 // Left pane of the split-screen combat layout. Rendered by game_view.svelte
-// when gameStateService.currentMode === 'COMBAT'.
+// when game mode is 'COMBAT'.
 //
 // Contract: C-164 Combat Split-Screen Layout
 //

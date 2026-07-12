@@ -185,7 +185,10 @@ mock.module('$services', () => ({
 // Imports (after mocks are registered)
 // ---------------------------------------------------------------------------
 
-import { DialogueOverlayViewModel } from './dialogue_overlay_view_model.svelte';
+import {
+  type DialogueOverlayViewModelInterface,
+  getDialogueOverlayViewModel,
+} from './dialogue_overlay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -204,8 +207,8 @@ const createViewModel = (options?: {
   npcData?: ReturnType<typeof createNpcData>;
   onEndChat?: () => void;
   ollamaClient?: unknown;
-}): DialogueOverlayViewModel => {
-  return new DialogueOverlayViewModel({
+}): DialogueOverlayViewModelInterface => {
+  return getDialogueOverlayViewModel({
     className: 'TestDialogueOverlayViewModel',
     npcData: options?.npcData ?? createNpcData(),
     onEndChat: options?.onEndChat ?? (() => {}),
@@ -512,7 +515,7 @@ describe('DialogueOverlayViewModel', () => {
     let combatNpcData: ReturnType<typeof createNpcData> | undefined;
 
     const npcData = createNpcData({ npcName: 'Bandit Leader' });
-    const vmWithCombat = new DialogueOverlayViewModel({
+    const vmWithCombat = getDialogueOverlayViewModel({
       className: 'TestDialogueOverlayViewModel',
       npcData,
       onEndChat: () => {

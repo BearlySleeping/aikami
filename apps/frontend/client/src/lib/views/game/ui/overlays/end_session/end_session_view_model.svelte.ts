@@ -6,7 +6,7 @@
 // Contract: C-240 Session Management
 
 import { BaseViewModel, type BaseViewModelInterface } from '@aikami/frontend/services';
-import { gameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
+import { gameOverlayService } from '$services';
 import { sessionService } from '$services/game/session_service.svelte';
 
 export type EndSessionViewModelInterface = BaseViewModelInterface & {

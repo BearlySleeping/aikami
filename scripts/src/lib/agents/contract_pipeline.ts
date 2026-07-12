@@ -22,6 +22,7 @@ type CliArguments = {
   background: boolean;
   dryRun: boolean;
   allowDirty: boolean;
+  noAttach: boolean;
   launcherToken?: string;
   help: boolean;
 };
@@ -46,6 +47,7 @@ const parseArguments = (): CliArguments => {
     background: args.includes('--background'),
     dryRun: args.includes('--dry-run'),
     allowDirty: args.includes('--allow-dirty'),
+    noAttach: args.includes('--no-attach'),
     help: args.length === 0 || args.includes('--help') || args.includes('-h'),
   };
 };
@@ -63,6 +65,7 @@ Options:
   --dry-run          Resolve and create the manifest without starting Herdr/Pi
   --background       Internal/background mode; do not attach Herdr
   --allow-dirty      Explicitly accept an existing dirty worktree baseline
+  --no-attach        Run pipeline in background without attaching to herdr
   -h, --help         Show this help
 `);
 };
@@ -73,14 +76,16 @@ const atomicWrite = (options: { path: string; value: unknown }): void => {
   renameSync(temporaryPath, options.path);
 };
 
-const launchBackground = async (): Promise<void> => {
+const launchBackground = async (options: { noAttach: boolean }): Promise<void> => {
   const token = `launch-${Date.now().toString(36)}-${process.pid}`;
   const runsDirectory = join(process.cwd(), '.pi/contract-runs');
   mkdirSync(runsDirectory, { recursive: true });
   const readyPath = join(runsDirectory, `${token}.json`);
   const launcherLogPath = join(runsDirectory, `${token}.log`);
   const descriptor = openSync(launcherLogPath, 'a');
-  const forwarded = process.argv.slice(2).filter((value) => value !== '--background');
+  const forwarded = process.argv
+    .slice(2)
+    .filter((value) => value !== '--background' && value !== '--no-attach');
   const child = spawn(
     'bun',
     ['run', import.meta.path, ...forwarded, '--background', '--launcher-token', token],
@@ -110,6 +115,12 @@ const launchBackground = async (): Promise<void> => {
     workspaceId?: string;
   };
   console.log(`Pipeline ${ready.runId ?? token} ready in ${ready.workspaceId ?? 'Herdr'}.`);
+  if (options.noAttach) {
+    console.log(
+      'Running detached — pipeline continues in background. Use herdr session attach default to view.',
+    );
+    return;
+  }
   if (ready.workspaceId) {
     const focus = spawn('herdr', ['workspace', 'focus', ready.workspaceId], {
       stdio: 'ignore',
@@ -134,7 +145,7 @@ const main = async (): Promise<void> => {
   }
 
   if (!cli.background && !cli.dryRun) {
-    await launchBackground();
+    await launchBackground({ noAttach: cli.noAttach });
     return;
   }
 

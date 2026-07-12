@@ -96,4 +96,4 @@ class CharacterSheetSandboxViewModel
 
 export const getCharacterSheetSandboxViewModel = (
   options: CharacterSheetViewModelOptions,
-): CharacterSheetSandboxViewModelInterface => new CharacterSheetSandboxViewModel(options);
+): CharacterSheetSandboxViewModelInterface => CharacterSheetSandboxViewModel.create(options);

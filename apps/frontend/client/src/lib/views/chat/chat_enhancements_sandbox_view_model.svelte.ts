@@ -6,7 +6,7 @@
 //
 // Contract: C-231 AC-6 Dev Sandbox
 
-import { messageBranchStore } from '$services';
+import { chatService, messageBranchStore } from '$services';
 import {
   ChatViewModel,
   type ChatViewModelInterface,
@@ -102,8 +102,7 @@ export const getChatEnhancementsSandboxViewModel = (
     };
     (vm as unknown as Record<string, unknown>).showGreeting = false;
 
-    const { chatService: cs } = await import('$services');
-    cs.setMessages(
+    chatService.setMessages(
       MOCK_MESSAGES.map((m) => ({
         id: m.id,
         text: m.text,
@@ -116,7 +115,7 @@ export const getChatEnhancementsSandboxViewModel = (
     // Override sendMessage to just append mock AI replies
     vm.sendMessage = async (text: string) => {
       // Add user message locally
-      cs.addMessage({
+      chatService.addMessage({
         id: crypto.randomUUID(),
         text,
         sender: 'user',
@@ -127,14 +126,14 @@ export const getChatEnhancementsSandboxViewModel = (
       vm.inputText = '';
 
       // Simulate brief typing delay
-      cs.setTyping(true);
+      chatService.setTyping(true);
       await new Promise((resolve) => setTimeout(resolve, 800));
-      cs.setTyping(false);
+      chatService.setTyping(false);
 
       // Add mock AI response
       const mockReply =
         'Interesting... The ancient scrolls speak of such things. Let me consult my records.';
-      cs.appendAIMessage(mockReply);
+      chatService.appendAIMessage(mockReply);
 
       // Feed through chunker for streaming TTS (if enabled)
       if (vm.streamingTtsEnabled) {

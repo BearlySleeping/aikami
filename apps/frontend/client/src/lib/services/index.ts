@@ -59,26 +59,28 @@ export {
 } from './expression/expression_service.svelte.ts';
 export * from './game/bridge_listeners';
 export * from './game/combat_service.svelte';
+export * from './game/equipment_service.svelte.ts';
+export * from './game/game_composition_root.svelte.ts';
 export * from './game/game_engine_service.svelte.ts';
-export * from './game/game_load_state.svelte.ts';
+export * from './game/game_mode_service.svelte.ts';
 export * from './game/game_overlay_service.svelte.ts';
 export * from './game/game_save_service.svelte.ts';
 export * from './game/game_state_service.svelte.ts';
 export * from './game/idle_detection_service.svelte.ts';
-export * from './game/inventory_service.svelte';
+export * from './game/inventory_service.svelte.ts';
 export * from './game/npc_dialogue_service.svelte';
 export * from './game/pixi_texture_injector';
+export * from './game/player_state_service.svelte.ts';
 export * from './game/quest_service.svelte';
 export * from './game/serializable_service';
 export * from './game/session_service.svelte';
 export * from './game/time_service.svelte';
 export * from './game/vendor_service.svelte.ts';
+export * from './game/world_state_service.svelte.ts';
+export * from './gm/gm_prompt_service.svelte.ts';
 export * from './image/contextual_trigger_service.svelte';
 export * from './image/gallery_service.svelte';
-// ── GM Narrative Director ────────────────────────────────────────────
-// NOTE: GM services are NOT re-exported from here to avoid Bun's `export * from`
-// limitation with .svelte.ts re-exports in test runner. Consumers import directly
-// from './gm/gm_prompt_service.svelte.ts' etc.
+// ── GM Narrative Director ──
 export * from './image/image_generation_service.svelte.ts';
 export * from './image/style_profile_service.svelte';
 export * from './lorebook/keyword_scanner';
@@ -94,3 +96,4 @@ export * from './persona/persona_repository.svelte.ts';
 export * from './settings/ai_settings.svelte.ts';
 export * from './storage/storage_service.svelte.ts';
 export * from './user/user_repository.svelte.ts';
+export * from './worldgen/world_gen_seeding_service.svelte.ts';

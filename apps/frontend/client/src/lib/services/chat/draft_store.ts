@@ -6,7 +6,11 @@
 //
 // Contract: C-231 AC-2 Input Draft Persistence
 
-import { BaseClass, type BaseClassInterface } from '@aikami/utils';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import { logger } from '$logger';
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -26,7 +30,7 @@ type DraftRecord = {
 
 // ── Service Interface ────────────────────────────────────────────────────
 
-export type DraftStoreInterface = BaseClassInterface & {
+export type DraftStoreInterface = BaseFrontendClassInterface & {
   /** Saves or updates a draft for the given chat. */
   saveDraft(options: { chatId: string; text: string }): Promise<void>;
   /** Loads the draft text for the given chat, or empty string if none. */
@@ -39,7 +43,10 @@ export type DraftStoreInterface = BaseClassInterface & {
 
 // ── Implementation ───────────────────────────────────────────────────────
 
-class DraftStore extends BaseClass implements DraftStoreInterface {
+class DraftStore
+  extends BaseFrontendClass<BaseFrontendClassOptions>
+  implements DraftStoreInterface
+{
   private _db: IDBDatabase | null = null;
   private _dbReady: Promise<IDBDatabase> | null = null;
 

@@ -118,3 +118,4 @@ Next: `/contract-critique` for adversarial review, then user approval.
 - Use `type`, never `interface`.
 - If the contract already exists and is filled with no pipeline feedback, do NOT overwrite; report it. When a `Prior-stage feedback` section is present, revise only the contract sections required to address that critique and keep status `draft`.
 - If the request cannot be matched to a TODO.md item, confirm with the user.
+- **Shared sections**: The contract may reference `docs/contracts/SHARED_SECTIONS.md` for Promotion Lifecycle, Status Lifecycle, and testing conventions. Do NOT copy, verify, or re-analyze these sections — they are static project-wide reference material, not part of this contract's scope.

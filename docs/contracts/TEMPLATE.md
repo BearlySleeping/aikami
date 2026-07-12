@@ -45,7 +45,7 @@ After this contract, a {player\|creator\|developer} can ...
 
 {Existing patterns in the repo to follow. Reference specific files, packages, or previous contracts.}
 
-For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Visual Runner** handles AI visual assessment (`src/visual/suites/*.visual.ts`). Do NOT create `*_visual.spec.ts` files or use the old `scripts/*_visual.ts` pattern. See `.pi/skills/testing/SKILL.md` for conventions.
+> 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
 ## Architecture Directives
 
@@ -86,12 +86,9 @@ If no persistent state is affected: "N/A — no persistent state changes."
 
 ## Contract Size & Split Rule
 
-This contract should be split if it contains:
-- Multiple independently releasable systems
-- More than 5 acceptance criteria
-- More than 2 affected projects
+> 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-Split deferred phases into separate contracts rather than declaring the parent complete.
+**For this contract:**
 
 ## Acceptance Criteria
 
@@ -141,29 +138,10 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Promotion Lifecycle
 
-```
-— → sandbox → integrated → release_verified
-```
-
-| State | Meaning | Evidence Required |
-|---|---|---|
-| `—` | Not yet assessed — default for legacy or new contracts. | None |
-| `sandbox` | Feature works in a dev sandbox route (`(dev)/sandbox/...`). | Dev sandbox route exists |
-| `integrated` | Feature is wired into the production route and E2E tests pass. | Production route + E2E pass |
-| `release_verified` | Feature has visual tests + all ACs verified. Ready for release. | Visual suite + verified ACs |
+> 📋 Promotion states: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle)
 
 ## Status Lifecycle
 
-```
-draft → approved → in_progress → implemented → verified → completed
-                                      ↘ verification_failed → implemented
-draft → blocked
-draft → superseded
-```
+> 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
-Rules:
-- `implemented`: implementer believes code is ready. Set by `/contract`.
-- `verified`: independent verifier passed all mandatory ACs. Set by `/contract-verify`.
-- `completed`: merged and CI passed. Set manually after merge.
-- Any mandatory AC marked ⚠️ or ❌ prevents `verified` and `completed`.
-- Scope changes not recorded in Amendments prevent `verified`.
+---

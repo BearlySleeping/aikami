@@ -12,8 +12,11 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import { logger } from '$logger';
+import { playerStateService } from '$services';
+import { textGenerationService } from '$services/ai/text_generation_service.svelte';
 import { chatService } from '../chat/chat.svelte';
 import type { SessionSummary } from '../gm/gm_types';
+import { sessionSummaryService } from '../gm/session_summary_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -200,7 +203,6 @@ class SessionService
       // Only generate summary if there are enough messages
       if (messageCount >= MIN_MESSAGES_FOR_SUMMARY) {
         try {
-          const { sessionSummaryService } = await import('../gm/session_summary_service.svelte');
           summary = await sessionSummaryService.generateSummary(playtimeMinutes);
           this.latestSummary = summary;
           this.debug('endSession:summary-generated', {
@@ -340,13 +342,11 @@ class SessionService
   private async _captureCharacterSnapshots(): Promise<
     Record<string, { level: number; xp: number; hp: number }>
   > {
-    const { gameStateService } = await import('./game_state_service.svelte');
-
     return {
       player: {
-        level: gameStateService.playerLevel,
-        xp: gameStateService.playerXp,
-        hp: gameStateService.playerHp,
+        level: playerStateService.playerLevel,
+        xp: playerStateService.playerXp,
+        hp: playerStateService.playerHp,
       },
     };
   }
@@ -359,7 +359,6 @@ class SessionService
    */
   private async _generateRecap(options: { previousSummary: SessionSummary }): Promise<string> {
     const { previousSummary } = options;
-    const { textGenerationService } = await import('$services/ai/text_generation_service.svelte');
 
     const prompt = [
       'Write a concise recap (2-3 sentences) of a previous RPG session.',

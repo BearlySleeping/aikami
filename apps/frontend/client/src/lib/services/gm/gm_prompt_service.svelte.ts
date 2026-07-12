@@ -13,12 +13,13 @@ import {
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
-// Direct imports to avoid barrel mock resolution issues in tests
-import { choiceHistoryStore } from '$lib/services/chat/choice_history_store.svelte.ts';
-import { combatService } from '$lib/services/game/combat_service.svelte.ts';
-import { gameStateService } from '$lib/services/game/game_state_service.svelte.ts';
-import { timeService } from '$lib/services/game/time_service.svelte.ts';
-import { lorebookStore } from '$lib/services/lorebook/lorebook_store.svelte';
+import {
+  choiceHistoryStore,
+  combatService,
+  lorebookStore,
+  timeService,
+  worldStateService,
+} from '$services';
 import type { AddressMode, GmCombatContext, GmPromptContext } from './gm_types';
 
 // ---------------------------------------------------------------------------
@@ -245,7 +246,7 @@ class GmPromptService
 
   /** @inheritdoc */
   gatherContext(): GmPromptContext {
-    const worldOutput = gameStateService.worldGenOutput;
+    const worldOutput = worldStateService.worldGenOutput;
 
     return {
       worldName: worldOutput?.worldName ?? 'Unknown World',
@@ -337,7 +338,7 @@ class GmPromptService
    * Gathers active quests from the game state service.
    */
   private _gatherActiveQuests(): GmPromptContext['activeQuests'] {
-    const quests = gameStateService.quests;
+    const quests = worldStateService.quests;
     if (!quests || quests.length === 0) {
       return [];
     }

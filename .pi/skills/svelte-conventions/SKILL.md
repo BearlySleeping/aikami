@@ -92,6 +92,36 @@ imports bypass re-exports, cause duplicate module instances, and create
 circular dependency risks when the imported module itself imports from
 `$services`.
 
+### 🔴 Dynamic Imports in the Client: Concrete Rules
+
+The universal rule is in `aikami-conventions` § Dynamic Imports. This section
+gives the **client-specific** list — what every frontend agent must follow.
+
+#### ❌ NEVER dynamic-import these in the client:
+
+| Pattern | Examples converted in this codebase |
+|---|---|
+| **Service → service** | `game_composition_root` → `game_engine_service`, `autonomous_message_service` → `textGenerationService`, `agent_pipeline_service` → `agentRegistryService` |
+| **ViewModel → service** | `persona_list_view_model` → `personaService`, `game_view_model` → `getGameCompositionRoot`, `combat_view_model` → `audioService` |
+| **Service → $services barrel** | `session_service` → `playerStateService` (from `$services`), `game_ui_view_model` → `gameEngineService` |
+| **"Performance phasing"** | `game_composition_root` had 9 `await import()` calls for phased init — all converted to static |
+
+All of these are pure singletons with **no import-time side effects**. Static
+imports are faster, simpler, and eliminate unnecessary async cascading.
+
+#### ✅ These MUST stay dynamic in the client:
+
+| Pattern | Why dynamic |
+|---|---|
+| **Firebase config modules** | Have import-time side effects (`getAnalytics(app)`, `getAuth(app)`, etc.). Analytics crashes in emulator without `appId`. Offline-first — Firebase only activates when needed. |
+| **`@aikami/frontend/engine`** | Heavy PixiJS bundle. Deferred until game engine initializes. |
+| **AI client factory** | Only the chosen provider's SDK loads (`openai` vs `ollama` vs `gemini`). |
+| **Massive libs** | `onnxruntime-web` (~10MB), `kokoro-js`, `pixi.js` Assets module |
+| **Tauri APIs** | `@tauri-apps/api/window`, `@tauri-apps/plugin-opener` — not available in browser |
+| **Web Workers** | `?worker&type=module` — Vite requires dynamic import syntax |
+| **Dev-only tools** | `eruda` — must not ship to production |
+| **Platform-specific storage** | `IndexedDB` vs `localStorage` — runtime detection |
+
 ---
 
 ## ViewModel Pattern

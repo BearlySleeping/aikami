@@ -7,6 +7,11 @@
 // Contract: C-249
 
 import { DEFAULT_TRACK_TAG, type SceneType } from '@aikami/constants';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import type {
   AssetEntry,
   MusicSceneContext,
@@ -14,7 +19,6 @@ import type {
   Track,
   TrackSource,
 } from '@aikami/types';
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
 import { assetStore } from '../assets/asset_store.svelte';
 import { sceneToMusicTags } from './scene_to_music_tags';
 
@@ -22,9 +26,9 @@ import { sceneToMusicTags } from './scene_to_music_tags';
 // Types
 // ---------------------------------------------------------------------------
 
-export type TrackRegistryServiceOptions = BaseClassOptions;
+export type TrackRegistryServiceOptions = BaseFrontendClassOptions;
 
-export type TrackRegistryServiceInterface = BaseClassInterface & {
+export type TrackRegistryServiceInterface = BaseFrontendClassInterface & {
   /** All registered tracks. */
   readonly tracks: Track[];
   /** Whether the initial discovery scan is complete. */
@@ -55,7 +59,7 @@ export type TrackRegistryServiceInterface = BaseClassInterface & {
 // ---------------------------------------------------------------------------
 
 class TrackRegistryService
-  extends BaseClass<TrackRegistryServiceOptions>
+  extends BaseFrontendClass<TrackRegistryServiceOptions>
   implements TrackRegistryServiceInterface
 {
   tracks = $state<Track[]>([]);
@@ -329,4 +333,4 @@ class TrackRegistryService
 
 export const trackRegistryService: TrackRegistryServiceInterface = TrackRegistryService.create({
   className: 'TrackRegistryService',
-}) as TrackRegistryServiceInterface;
+});

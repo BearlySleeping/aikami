@@ -46,9 +46,9 @@ For EVERY Acceptance Criteria:
 1. **Map to source**: Find the exact file(s) and line ranges that implement this AC.
 2. **Map to test**: Confirm the test artifact declared in Evidence Matrix exists and exercises the AC.
 3. **Replay the test**:
-   ```bash
-   # Run the specific test, not the whole suite
-   bun moon run <project>:test -- -- --testPathPattern="<test file>"
+   Use the `moon_run_task` Pi tool (has built-in timeout):
+   ```
+   moon_run_task({ target: "<project>:test" })
    ```
    Record: PASS / FAIL / SKIPPED.
 4. **Production path check**: If Evidence Matrix declares a production path, navigate there in browser or run the E2E spec that covers it.
@@ -80,7 +80,7 @@ Examples:
 
 ## Phase 5: Cross-Cutting Checks
 
-1. **No new baseline failures**: Run `validate({ test: true })`. Compare failures to baseline. Any new failure = CHANGES_REQUESTED.
+1. **No new baseline failures**: Use `validate({ test: true })` — the Pi tool handles fix+typecheck+build+test with timeouts. Compare failures to baseline. Any new failure = CHANGES_REQUESTED.
 2. **Migration path**: If the contract changes persistent state, verify migration code exists and is referenced in the execution report.
 3. **Unapproved scope changes**: Diff between contract's In Scope and actual changed files. Any unapproved expansion → flag.
 4. **Amendments**: If ACs were changed during implementation, verify an Amendment entry exists with version bump.
@@ -122,3 +122,5 @@ New failures: {count}
 - **Mandatory ACs** — if an AC is marked ⚠️ or ❌, verdict is automatically CHANGES_REQUESTED regardless of other results.
 - **Never mark completed** — the verifier sets status to `verified` or `verification_failed`. Only the user marks `completed` after merge.
 - Report verbatim test output, not summaries. "PASS" / "FAIL" / "SKIPPED" with exact counts.
+- **Shared sections**: `Promotion Lifecycle` and `Status Lifecycle` reference `docs/contracts/SHARED_SECTIONS.md`. Do not read, verify, or re-evaluate them — they are static project-wide material outside this contract's scope. Focus exclusively on the Acceptance Criteria.
+- 🔴 **Use Pi tools for all test/validation commands** — `moon_run_task` and `validate()` have built-in timeouts. Never run raw shell `bun moon run` or `bun test`; they hang forever on large suites.

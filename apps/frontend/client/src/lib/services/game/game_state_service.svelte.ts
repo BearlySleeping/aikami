@@ -9,7 +9,6 @@ import {
 import type {
   ActiveSessionData,
   EquipmentSlot,
-  ItemDefinition,
   WorldEvent,
   WorldGenOutput,
   WorldLocation,
@@ -26,104 +25,9 @@ import type {
 } from '$types/game.ts';
 import { registerSerializable } from './serializable_service';
 
-// ---------------------------------------------------------------------------
-// Item catalog — maps itemId strings to stat bonuses and metadata
-//
-// Contract: C-153 Character Dashboard & Equipment
-//
-// ItemDefinition and EquipmentSlot types are defined in @aikami/schemas + @aikami/types
-// ---------------------------------------------------------------------------
+// C-314: ITEM_CATALOG and getItemDefinition moved to inventory_service.svelte.ts
 
-/**
- * Hardcoded item catalog for MVP equipment system.
- *
- * When items are picked up in the game, this catalog is consulted to
- * determine if they can be equipped and what stat bonuses they provide.
- * Unknown item IDs default to non-equippable generic items.
- */
-const ITEM_CATALOG: Record<string, ItemDefinition> = {
-  rustySword: {
-    label: 'Rusty Sword',
-    attackBonus: 3,
-    defenseBonus: 0,
-    equippable: true,
-    slot: 'weapon',
-  },
-  ironSword: {
-    label: 'Iron Sword',
-    attackBonus: 5,
-    defenseBonus: 0,
-    equippable: true,
-    slot: 'weapon',
-  },
-  steelSword: {
-    label: 'Steel Sword',
-    attackBonus: 8,
-    defenseBonus: 0,
-    equippable: true,
-    slot: 'weapon',
-  },
-  woodenShield: {
-    label: 'Wooden Shield',
-    attackBonus: 0,
-    defenseBonus: 2,
-    equippable: true,
-    slot: 'armor',
-  },
-  leatherArmor: {
-    label: 'Leather Armor',
-    attackBonus: 0,
-    defenseBonus: 3,
-    equippable: true,
-    slot: 'armor',
-  },
-  ironArmor: {
-    label: 'Iron Armor',
-    attackBonus: 0,
-    defenseBonus: 5,
-    equippable: true,
-    slot: 'armor',
-  },
-  healthPotion: {
-    label: 'Health Potion',
-    attackBonus: 0,
-    defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-  },
-  manaPotion: {
-    label: 'Mana Potion',
-    attackBonus: 0,
-    defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-  },
-  goldCoin: {
-    label: 'Gold Coin',
-    attackBonus: 0,
-    defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-  },
-} as const satisfies Record<string, ItemDefinition>;
-
-/** Default definition for unknown item IDs. */
-const DEFAULT_ITEM_DEFINITION: ItemDefinition = {
-  label: 'Unknown Item',
-  attackBonus: 0,
-  defenseBonus: 0,
-  equippable: false,
-  slot: undefined,
-};
-
-/**
- * Looks up the {@link ItemDefinition} for a given item ID.
- *
- * Falls back to {@link DEFAULT_ITEM_DEFINITION} for unknown IDs.
- */
-export const getItemDefinition = (itemId: string): ItemDefinition => {
-  return ITEM_CATALOG[itemId] ?? { ...DEFAULT_ITEM_DEFINITION, label: itemId };
-};
+import { getItemDefinition } from './inventory_service.svelte';
 
 export type GameStateServiceOptions = BaseFrontendClassOptions & {
   uid: string;
@@ -889,7 +793,8 @@ export class GameStateService
   }
 }
 
-export const gameStateService: GameStateServiceInterface = GameStateService.create({
-  uid: 'singleton',
-  className: 'GameStateService',
-});
+// C-314: Module-level singleton removed. Use the five split services instead:
+// PlayerStateService, WorldStateService, InventoryService, EquipmentService, GameModeService
+//
+// The GameStateService class is retained for backward-compatible test imports.
+// Production code should use the composition root or individual service singletons.

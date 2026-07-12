@@ -673,4 +673,4 @@ export class ProvidersViewModel
 
 export const getProvidersViewModel = (
   options: ProvidersViewModelOptions,
-): ProvidersViewModelInterface => new ProvidersViewModel(options);
+): ProvidersViewModelInterface => ProvidersViewModel.create(options);

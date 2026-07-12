@@ -81,4 +81,4 @@ class AppDialogsViewModel
 
 export const getAppDialogsViewModel = (
   options: AppDialogsViewModelOptions,
-): AppDialogsViewModelInterface => new AppDialogsViewModel(options);
+): AppDialogsViewModelInterface => AppDialogsViewModel.create(options);

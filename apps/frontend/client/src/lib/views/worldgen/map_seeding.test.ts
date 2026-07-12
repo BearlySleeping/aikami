@@ -30,7 +30,7 @@ mock.module('$services', () => ({
   npcService: {},
 }));
 
-import { worldGenSeedingService } from './world_gen_seeding_service.svelte.ts';
+import { worldGenSeedingService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Fixtures

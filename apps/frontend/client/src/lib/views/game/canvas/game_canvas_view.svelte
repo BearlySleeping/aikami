@@ -1,13 +1,13 @@
 <script lang="ts">
-// apps/frontend/client/src/lib/views/game/canvas/game_view.svelte
+// apps/frontend/client/src/lib/views/game/canvas/game_canvas_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import FloatingText from '$lib/components/game/floating_text.svelte';
 import ModeIndicator from '$lib/components/mode_indicator.svelte';
 import DiegeticHealthBar from '../../combat/components/diegetic_health_bar.svelte';
-import type { GameViewViewModelInterface } from './game_view_model.svelte';
+import type { GameCanvasViewModelInterface } from './game_canvas_view_model.svelte';
 
 type Props = {
-  viewModel: GameViewViewModelInterface;
+  viewModel: GameCanvasViewModelInterface;
 };
 
 const { viewModel }: Props = $props();

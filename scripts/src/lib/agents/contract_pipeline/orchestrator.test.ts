@@ -61,6 +61,10 @@ class FakeAdapter implements ContractHerdrAdapterInterface {
     return { workspaceId: 'workspace-test', pipelinePaneId: 'pane-pipeline' };
   }
 
+  getWorkspaceId(): string {
+    return 'workspace-test';
+  }
+
   async launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }> {
     this.launchedRoles.push(request.role);
     this.workerPrompts.push(request.prompt);

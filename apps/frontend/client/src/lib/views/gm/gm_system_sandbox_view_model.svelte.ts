@@ -10,8 +10,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gmPromptService } from '$lib/services/gm/gm_prompt_service.svelte.ts';
 import { narrativeDirectorService } from '$lib/services/gm/narrative_director_service.svelte.ts';
+import { gmPromptService } from '$services';
 import {
   type AddressModeTogggleViewModelInterface,
   getAddressModeTogggleViewModel,

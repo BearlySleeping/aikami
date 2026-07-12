@@ -58,10 +58,9 @@ Your job is to be the human's informed partner — present a concise status, mak
 You may:
 
 1. **Inspect any file** — read modified source, check conventions, verify quality.
-2. **Run focused tests** — `bun moon run <project>:test -- -- --testPathPattern="<file>"`.
-3. **Run validation** — `validate({ test: true })` on affected projects.
-4. **Make finishing touches** — fix typos, improve comments, adjust styling.
-5. **Discuss with the user** — ask about design decisions, UX, game feel.
+2. **Run focused tests only if verification failed** — if the verifier passed all tests, do NOT re-run them. The verifier's evidence is sufficient.
+3. **Make finishing touches** — fix typos, improve comments, adjust styling.
+4. **Discuss with the user** — ask about design decisions, UX, game feel.
 
 ## Phase 3: Verification Invalidation
 
@@ -116,3 +115,4 @@ If the pipeline is blocked or failed:
 - **No approval commands** — user speaks naturally.
 - **Verification invalidation** — if you touch code after PASS, mark stale and re-verify before commit.
 - **Be the human's partner** — not an autonomous gatekeeper.
+- **Trust the verifier** — if verification passed, do NOT re-run tests or validation. The verifier already did that work. Present the status and wait.

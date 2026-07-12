@@ -12,10 +12,16 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ItemDefinition } from '@aikami/types';
-import { audioService, gameStateService, getItemDefinition, inventoryService } from '$services';
+import {
+  audioService,
+  equipmentService,
+  gameOverlayService,
+  getItemDefinition,
+  inventoryService,
+} from '$services';
 
-/** Mutable access to GameStateService for equip/unequip. */
-const _game = gameStateService as unknown as {
+/** Mutable access to equipment service for equip/unequip. */
+const _equip = equipmentService as unknown as {
   equippedWeapon: string | undefined;
   equippedArmor: string | undefined;
 };
@@ -36,18 +42,18 @@ export class InventoryViewModel
   implements InventoryViewModelInterface
 {
   get items(): Array<{ itemId: string; quantity: number }> {
-    return gameStateService.inventory;
+    return inventoryService.inventory;
   }
 
   get equippedWeaponDef(): ItemDefinition | undefined {
-    return this.items.find((i) => i.itemId === _game.equippedWeapon)
-      ? getItemDefinition(_game.equippedWeapon ?? '')
+    return this.items.find((i) => i.itemId === _equip.equippedWeapon)
+      ? getItemDefinition(_equip.equippedWeapon ?? '')
       : undefined;
   }
 
   get equippedArmorDef(): ItemDefinition | undefined {
-    return this.items.find((i) => i.itemId === _game.equippedArmor)
-      ? getItemDefinition(_game.equippedArmor ?? '')
+    return this.items.find((i) => i.itemId === _equip.equippedArmor)
+      ? getItemDefinition(_equip.equippedArmor ?? '')
       : undefined;
   }
 
@@ -61,23 +67,23 @@ export class InventoryViewModel
       return;
     }
     if (def.slot === 'weapon') {
-      _game.equippedWeapon = itemId;
+      _equip.equippedWeapon = itemId;
     } else {
-      _game.equippedArmor = itemId;
+      _equip.equippedArmor = itemId;
     }
     void audioService.playSfx('/assets/audio/sfx/sfx_equip.wav');
   }
 
   unequipItem(slot: 'weapon' | 'armor'): void {
     if (slot === 'weapon') {
-      _game.equippedWeapon = undefined;
+      _equip.equippedWeapon = undefined;
     } else {
-      _game.equippedArmor = undefined;
+      _equip.equippedArmor = undefined;
     }
   }
 
   closeInventory(): void {
-    inventoryService.close();
+    gameOverlayService.closeInventory();
   }
 }
 

@@ -121,6 +121,23 @@ These belong in:
 🔴 **Rule**: Before writing any `controllers/` file, ask: "Does this operation
 touch the local filesystem?" If yes, it does NOT belong in Firebase Functions.
 
+### Dynamic Imports: Avoid `await import()` in Functions
+
+Firebase Functions bundles are deployed whole — there is no tree-shaking.
+Dynamic imports do not reduce bundle size and add runtime overhead to
+already-slow cold starts. Prefer static `import`.
+
+✅ **Valid exceptions** (all backend):
+- Optional native packages (`pg`, `@tursodatabase/database`) — only loaded
+  when a feature path is taken
+- Emulator-only scripts (`on_emulate.ts`) — acceptable but static is simpler
+
+❌ **Not valid**:
+- "Cold start optimization" — the overhead of `await import()` during cold
+  start is typically larger than the deferred load saves
+- Wrapping Firebase Admin SDK or `@aikami/backend/*` imports — these are
+  always needed
+
 ## Related Skills
 
 | Skill                  | Covers                                                   |

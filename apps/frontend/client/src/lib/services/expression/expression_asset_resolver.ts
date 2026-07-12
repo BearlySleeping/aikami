@@ -1,5 +1,9 @@
 // apps/frontend/client/src/lib/services/expression/expression_asset_resolver.ts
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import { getExpressionEntry } from '$lib/data/expression_catalog';
 import { logger } from '$logger';
 import type { ExpressionId, ExpressionOverlay } from '$types/expression';
@@ -25,7 +29,7 @@ export type ExpressionAssetEntry = {
   imagePath: string;
 };
 
-export type ExpressionAssetResolverOptions = BaseClassOptions & {
+export type ExpressionAssetResolverOptions = BaseFrontendClassOptions & {
   /**
    * Predefined manifest of static expression assets.
    *
@@ -46,7 +50,7 @@ export type ExpressionAssetResolverOptions = BaseClassOptions & {
   basePath?: string;
 };
 
-export type ExpressionAssetResolverInterface = BaseClassInterface & {
+export type ExpressionAssetResolverInterface = BaseFrontendClassInterface & {
   /**
    * Resolves a static expression asset path for the given NPC and emotion.
    *
@@ -99,7 +103,7 @@ export type ExpressionAssetResolverInterface = BaseClassInterface & {
  * ```
  */
 export class ExpressionAssetResolver
-  extends BaseClass<ExpressionAssetResolverOptions>
+  extends BaseFrontendClass<ExpressionAssetResolverOptions>
   implements ExpressionAssetResolverInterface
 {
   private readonly _manifest: ExpressionAssetEntry[];
@@ -150,4 +154,4 @@ export class ExpressionAssetResolver
 
 export const getExpressionAssetResolver = (
   options: ExpressionAssetResolverOptions,
-): ExpressionAssetResolverInterface => new ExpressionAssetResolver(options);
+): ExpressionAssetResolverInterface => ExpressionAssetResolver.create(options);

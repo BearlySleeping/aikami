@@ -3,7 +3,7 @@
 import { untrack } from 'svelte';
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import ModeIndicator from '$lib/components/mode_indicator.svelte';
-import { gameStateService } from '$services';
+import { gameModeService } from '$services';
 import {
   getModeSandboxViewModel,
   type ModeSandboxViewModelInterface,
@@ -31,16 +31,16 @@ $effect(() => {
 });
 
 /** Derived button active state for mode toggle buttons. */
-const exploreActive = $derived(gameStateService.currentMode === 'EXPLORE');
-const dialogueActive = $derived(gameStateService.currentMode === 'DIALOGUE');
-const menuActive = $derived(gameStateService.currentMode === 'MENU');
+const exploreActive = $derived(gameModeService.currentMode === 'EXPLORE');
+const dialogueActive = $derived(gameModeService.currentMode === 'DIALOGUE');
+const menuActive = $derived(gameModeService.currentMode === 'MENU');
 
 /** Whether any non-EXPLORE overlay is active. */
-const isLocked = $derived(gameStateService.currentMode !== 'EXPLORE');
+const isLocked = $derived(gameModeService.currentMode !== 'EXPLORE');
 
 /** Locked-mode overlay color classes. */
 const lockedColor = $derived(
-  gameStateService.currentMode === 'DIALOGUE'
+  gameModeService.currentMode === 'DIALOGUE'
     ? 'border-info/40 bg-info/10'
     : 'border-base-300/40 bg-base-300/10',
 );
@@ -67,7 +67,7 @@ const lockedColor = $derived(
             class="rounded-xl border {lockedColor} bg-base-200/90 px-8 py-4 shadow-lg backdrop-blur"
           >
             <p class="text-lg font-bold text-base-content">
-              {gameStateService.currentMode}
+              {gameModeService.currentMode}
             </p>
             <p class="mt-1 text-sm text-base-content/50">Movement Locked</p>
           </div>

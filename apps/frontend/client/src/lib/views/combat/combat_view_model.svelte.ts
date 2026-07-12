@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
+import { dataConnect, getTracksByMood } from '@aikami/frontend/dataconnect';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -12,12 +13,17 @@ import {
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
 import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { audioService } from '$lib/services/audio/audio_service.svelte.ts';
 import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
 import { getExpressionAssetResolver } from '$lib/services/expression/expression_asset_resolver';
 import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-import { diceService, gameStateService } from '$services';
+import {
+  diceService,
+  inventoryService,
+  worldGenSeedingService,
+  worldStateService,
+} from '$services';
 import type { ExpressionId } from '$types/expression';
-import { worldGenSeedingService } from '$views/worldgen/world_gen_seeding_service.svelte.ts';
 import type {
   DiceNotation,
   InitiativeEntry,
@@ -561,6 +567,7 @@ export class CombatViewModel
   /** @inheritdoc */
   async initialize(): Promise<void> {
     try {
+      // Keep engine dynamic (heavy — PixiJS + ECS worker)
       const { createEngineBridge } = await import('@aikami/frontend/engine');
 
       this._bridge = createEngineBridge();
@@ -1299,7 +1306,7 @@ export class CombatViewModel
    * @returns A formatted multi-line string describing the player's current state.
    */
   private _buildCharacterSheetContext(): string {
-    const inventory = gameStateService.inventory;
+    const inventory = inventoryService.inventory;
     const inventoryLines =
       inventory.length > 0
         ? inventory.map((item) => `  - ${item.itemId} x${item.quantity}`).join('\n')
@@ -1317,7 +1324,7 @@ export class CombatViewModel
     ];
 
     // Inject world generation context (C-233)
-    const worldGen = gameStateService.worldGenOutput;
+    const worldGen = worldStateService.worldGenOutput;
     if (worldGen && Array.isArray(worldGen.npcs) && worldGen.npcs.length > 0) {
       const gmPrompt = worldGenSeedingService.assembleGmPrompt({
         output: worldGen,
@@ -1349,8 +1356,6 @@ export class CombatViewModel
    */
   private async _transitionBgmByMood(mood: string): Promise<void> {
     try {
-      // Dynamic import — avoids pulling in Firebase SDK at module load time
-      const { dataConnect, getTracksByMood } = await import('@aikami/frontend/dataconnect');
       const result = await getTracksByMood(dataConnect, { mood });
 
       if (result.data?.audioTracks && result.data.audioTracks.length > 0) {
@@ -1367,8 +1372,6 @@ export class CombatViewModel
           availableTracks: tracks.length,
         });
 
-        // Dynamic import — avoids pulling in Web Audio API at module load time
-        const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
         await audioService.transitionToBgm(selected.storageUrl, 2000);
       } else {
         // No tracks found for this mood — fall back to placeholder
@@ -1410,8 +1413,6 @@ export class CombatViewModel
     this.debug('_transitionBgmFallback', { mood, url });
 
     try {
-      // Dynamic import — avoids pulling in Web Audio API at module load time
-      const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
       await audioService.transitionToBgm(url, 2000);
     } catch (error) {
       this.warn('_transitionBgmFallback: crossfade failed', error);
@@ -1511,6 +1512,6 @@ export class CombatViewModel
  * @param options - ViewModel options (standard BaseViewModelOptions).
  * @returns A fully initialized CombatViewModel instance.
  */
-export const getCombatViewModel = (options: CombatViewModelOptions): CombatViewModel => {
-  return new CombatViewModel(options);
+export const getCombatViewModel = (options: CombatViewModelOptions): CombatViewModelInterface => {
+  return CombatViewModel.create(options);
 };

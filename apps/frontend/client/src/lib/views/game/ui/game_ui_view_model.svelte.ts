@@ -12,12 +12,17 @@ import {
   combatService,
   type DialogueNpcData,
   type GameOverlayType,
+  gameEngineService,
   gameOverlayService,
   npcDialogueService,
   sessionService,
   timeService,
 } from '$services';
-import { CombatViewModel } from '../../combat/combat_view_model.svelte.ts';
+import {
+  type CombatViewModel,
+  type CombatViewModelInterface,
+  getCombatViewModel,
+} from '../../combat/combat_view_model.svelte.ts';
 import type { InventoryViewModelInterface } from '../../inventory/inventory_view_model.svelte';
 import { getInventoryViewModel } from '../../inventory/inventory_view_model.svelte';
 import type { QuestViewModelInterface } from '../../quest/quest_view_model.svelte.ts';
@@ -26,7 +31,10 @@ import type { VendorViewModelInterface } from '../../vendor/vendor_view_model.sv
 import { getVendorViewModel } from '../../vendor/vendor_view_model.svelte';
 import type { CharacterSheetViewModelInterface } from '../dashboard/character_sheet_view_model.svelte';
 import { getCharacterSheetViewModel } from '../dashboard/character_sheet_view_model.svelte';
-import { DialogueOverlayViewModel } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
+import {
+  type DialogueOverlayViewModelInterface,
+  getDialogueOverlayViewModel,
+} from './overlays/dialogue/dialogue_overlay_view_model.svelte';
 import type { EndSessionViewModelInterface } from './overlays/end_session/end_session_view_model.svelte';
 import { getEndSessionViewModel } from './overlays/end_session/end_session_view_model.svelte';
 import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
@@ -64,11 +72,11 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   // ── Overlay ViewModels (created on demand by initialize) ──
 
   readonly pauseMenuViewModel: PauseMenuViewModelInterface | undefined;
-  readonly dialogueViewModel: DialogueOverlayViewModel | undefined;
+  readonly dialogueViewModel: DialogueOverlayViewModelInterface | undefined;
   readonly inventoryViewModel: InventoryViewModelInterface | undefined;
   readonly questViewModel: QuestViewModelInterface | undefined;
   readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
-  readonly combatViewModel: CombatViewModel | undefined;
+  readonly combatViewModel: CombatViewModelInterface | undefined;
   readonly vendorViewModel: VendorViewModelInterface | undefined;
   readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
@@ -88,11 +96,11 @@ class GameUIViewModel
   // ── Overlay ViewModels ──
 
   pauseMenuViewModel = $state<PauseMenuViewModelInterface | undefined>(undefined);
-  dialogueViewModel = $state<DialogueOverlayViewModel | undefined>(undefined);
+  dialogueViewModel = $state<DialogueOverlayViewModelInterface | undefined>(undefined);
   inventoryViewModel = $state<InventoryViewModelInterface | undefined>(undefined);
   questViewModel = $state<QuestViewModelInterface | undefined>(undefined);
   dashboardViewModel = $state<CharacterSheetViewModelInterface | undefined>(undefined);
-  combatViewModel = $state<CombatViewModel | undefined>(undefined);
+  combatViewModel = $state<CombatViewModelInterface | undefined>(undefined);
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
@@ -139,7 +147,6 @@ class GameUIViewModel
   // ── Lifecycle ──
 
   async initialize(): Promise<void> {
-    const { gameEngineService } = await import('$services');
     gameOverlayService.setEngineService(
       gameEngineService as import('$lib/services/game/game_engine_service.svelte').GameEngineServiceInterface,
     );
@@ -155,7 +162,7 @@ class GameUIViewModel
         if (!npc) {
           return;
         }
-        const vm = new DialogueOverlayViewModel({
+        const vm = getDialogueOverlayViewModel({
           className: 'DialogueOverlayViewModel',
           npcData: npc,
           onEndChat: () => gameOverlayService.endDialogue(),
@@ -178,7 +185,7 @@ class GameUIViewModel
           return;
         }
         const cs = combatService;
-        const vm = new CombatViewModel({ className: 'CombatViewModel' });
+        const vm = getCombatViewModel({ className: 'CombatViewModel' }) as CombatViewModel;
         void vm.initialize();
         vm.enemyName = cs.enemyName;
         vm.enemyHp = cs.enemyHp;

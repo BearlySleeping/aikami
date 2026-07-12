@@ -305,4 +305,4 @@ class AuthGameViewModel
 
 export const getAuthGameViewModel = (
   options: AuthGameViewModelOptions,
-): AuthGameViewModelInterface => new AuthGameViewModel(options);
+): AuthGameViewModelInterface => AuthGameViewModel.create(options);

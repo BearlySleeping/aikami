@@ -4,12 +4,12 @@
 // Sandbox for testing VendorViewModel + vendor dialog.
 
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-import { gameStateService, vendorService } from '$services';
+import { inventoryService, vendorService } from '$services';
 import VendorView from '$views/vendor/vendor_view.svelte';
 import { getVendorDevViewModel } from '$views/vendor/vendor_view_model.dev.svelte.ts';
 
 // Seed starting gold
-gameStateService.addGold({ amount: 400 });
+inventoryService.addGold({ amount: 400 });
 
 const viewModel = getVendorDevViewModel({
   className: 'VendorDevVM',

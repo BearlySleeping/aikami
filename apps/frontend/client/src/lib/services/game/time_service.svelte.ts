@@ -93,4 +93,5 @@ class TimeService
 
 export const timeService: TimeServiceInterface = TimeService.create({
   className: 'TimeService',
-}) as TimeServiceInterface;
+  excludeAutoDebugMethods: ['updateEnvironment'],
+} as BaseFrontendClassOptions) as TimeServiceInterface;

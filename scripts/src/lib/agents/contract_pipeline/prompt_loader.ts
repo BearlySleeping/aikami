@@ -59,6 +59,12 @@ export const loadRolePrompt = (options: {
     '🔴 Even if the contract is already complete, you MUST still call `contract_stage_complete` with status `passed`.',
     '🔴 Printing a text summary is NOT a handoff. The tool call is the only valid handoff mechanism.',
     '🔴 If you print a summary and stop without calling the tool, the pipeline will time out and fail.',
+    '',
+    '## 🔴 EXECUTION RULES',
+    '- For moon/test/build operations: always use `moon_run_task` or `validate()` Pi tools — they have built-in timeouts.',
+    '- For any other shell command that may run >10s: use `ctx_execute` (sandboxed, timeout, safe) or `bash` with an explicit `timeout` parameter.',
+    '- Never run raw `bun moon run`, `bun test`, or unbounded shell commands — they hang forever with no timeout.',
+    '- If a command stalls (same output for >60s), it is frozen — cancel and report.',
   ]
     .filter((section) => section.length > 0)
     .join('\n');
@@ -86,5 +92,10 @@ export const loadReviewPrompt = (options: {
     '\nSpeak naturally with the user. You may inspect and fix code yourself.',
     'When the user approves, rejects, or asks for re-verification after changes, call `contract_review_decision`.',
     'Never commit or push unless the user separately and explicitly requests that Git operation.',
+    '',
+    '## 🔴 EXECUTION RULES',
+    '- For moon/test/build operations: always use `moon_run_task` or `validate()` Pi tools — they have built-in timeouts.',
+    '- For any other shell command that may run >10s: use `ctx_execute` (sandboxed, timeout, safe) or `bash` with an explicit `timeout` parameter.',
+    '- Never run raw `bun moon run`, `bun test`, or unbounded shell commands — they hang forever with no timeout.',
   ].join('\n');
 };

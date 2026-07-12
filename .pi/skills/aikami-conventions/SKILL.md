@@ -230,6 +230,70 @@ class MyClass {
 modules (PixiJS, engine code) are allowed — this rule only applies to **type-level**
 `import()` expressions.
 
+### 🔴 Dynamic Imports: `await import()` — Avoid Unless Proven Necessary
+
+Aikami's client is a **static SPA** (`ssr: false, prerender: false`). All code
+is bundled into a single build — dynamic imports do NOT reduce bundle size
+(Vite includes everything regardless). They fragment the bundle into
+micro-chunks, add async overhead, and force `async`/`await` cascading
+through call stacks.
+
+The **default is a static `import`**. Only use `await import()` when one of
+these specific justifications applies:
+
+#### ✅ Valid Reasons for `await import()`
+
+| Reason | Example | Applies To |
+|---|---|---|
+| **Import-time side effects** | Firebase config modules (`getAnalytics(app)` crashes in emulator without `appId`) | Client |
+| **Massive library** (>500KB) | `onnxruntime-web`, `kokoro-js`, `pixi.js` Assets | Client |
+| **Conditional provider** | AI client factory — only the chosen provider's SDK loads | Client |
+| **Platform-specific code** | `@tauri-apps/api` (Tauri-only), `IndexedDB` vs `localStorage` | Client |
+| **Build-time branch** | `import.meta.env.SSR` — Vite tree-shakes the dead branch at build time | Client |
+| **Web Worker** | `?worker&type=module` — Vite requires dynamic import for workers | Client |
+| **Lazy data** (>100KB JSON) | Country lists, weak password dictionaries | Client |
+| **Dev-only tools** | `eruda` debug console — must never ship to production | Client |
+| **Node.js built-ins** | `node:fs/promises`, `node:path` — only in CLI/build scripts, not browser | Shared |
+| **External native packages** | `pg`, `@tursodatabase/database` — optional backends | Backend |
+
+#### ❌ NOT Valid Reasons — Use Static `import` Instead
+
+| Anti-pattern | Why It's Wrong | Fix |
+|---|---|---|
+| **Service-to-service** lazy loading | Services are pure singletons, no side effects at import time. Creates false async boundaries. | Static `import { otherService } from '$services'` |
+| **"Performance"** in a static SPA | Vite bundles everything regardless. Dynamic imports create MORE network requests, not fewer. | Static `import` |
+| **Circular dependency workaround** | Dynamic imports mask architectural problems. Fix the dependency graph instead. | Restructure modules, introduce interfaces, or use a composition root |
+| **"SSR guard"** | Client is `ssr: false` — there is no SSR to guard against | Remove the guard, static import |
+| **"Cold start" in Functions** | Firebase Functions bundle is deployed whole — no tree-shaking. Dynamic import adds runtime overhead. | Static `import` (unless it's a genuinely optional heavy dependency) |
+
+```typescript
+// ❌ WRONG — service-to-service dynamic import (no side effects, not circular)
+class AutonomousMessageService extends BaseClass {
+  async _generateMessage(): Promise<void> {
+    const { textGenerationService } = await import('../ai/text_generation_service.svelte.ts');
+    // ...
+  }
+}
+
+// ✅ CORRECT — static import (both are pure singletons)
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
+
+class AutonomousMessageService extends BaseClass {
+  async _generateMessage(): Promise<void> {
+    // use textGenerationService directly
+  }
+}
+
+// ✅ CORRECT — Firebase config with import-time side effects (stays lazy)
+class FirebaseAuthService extends BaseClass {
+  private async _getAuth() {
+    // `auth.ts` calls `getAuth(app)` at import time — must be deferred
+    FirebaseAuthService._auth = await import('@aikami/frontend/configs/auth.ts');
+    return FirebaseAuthService._auth;
+  }
+}
+```
+
 ### 3. Never Export Data, Types, or Schemas from Service Files
 
 Services are for **business logic and state management only**. Data, types, and

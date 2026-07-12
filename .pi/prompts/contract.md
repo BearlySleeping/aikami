@@ -41,9 +41,7 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
 6. **Run `moon_detect_affected`** to see current project state.
 
 7. **Run baseline tests** for any related areas listed in Problem & Baseline Evidence:
-   ```bash
-   bun moon run <project>:test
-   ```
+   Use `moon_run_task({ target: "<project>:test" })` (Pi tool with built-in timeout):
    Record exact failing test IDs. These are the pre-existing failures — no new failures are allowed.
 
 8. **Confirm status is `approved`**. If `draft`, stop — the contract is not ready for implementation.
@@ -196,8 +194,10 @@ Decide from the contract's Target/Overview:
 - One contract at a time
 - `validate()` for final verification
 - `moon_run_task` for per-project operations
+- 🔴 NEVER run raw shell `bun moon run` or `bun test` — use the Pi tools `moon_run_task` and `validate()` which have built-in timeouts. Raw shell commands will hang forever on large test suites.
 - 🔴 NEVER run long-lived servers in the main thread — use `herdr_session` / `firebase_emulator`
 - 🔴 Route groups: literal `(dev)` — a `\(dev\)` directory breaks the route tree
 - Report failures honestly — a partial implementation with a truthful report beats a fake ✅
 - End at `implemented`, never `completed` — the verifier handles the rest
 - Scope changes without an Amendment entry prevent `verified` status
+- **Shared sections**: `Promotion Lifecycle` and `Status Lifecycle` reference `docs/contracts/SHARED_SECTIONS.md`. Do not re-read, re-implement, or re-verify them — they are static project-wide material outside this contract's scope.

@@ -11,7 +11,7 @@
 // Contract: C-233
 
 import { describe, expect, test } from 'bun:test';
-import { worldGenSeedingService } from './world_gen_seeding_service.svelte.ts';
+import { worldGenSeedingService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Fixtures

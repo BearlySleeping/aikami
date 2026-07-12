@@ -349,7 +349,9 @@ export default function (pi: ExtensionAPI) {
           Type.Array(Type.String(), { description: 'Accepted statuses for multi-wait' }),
         ),
         mode: Type.Optional(Type.String({ enum: ['all', 'any'], default: 'all' })),
-        timeout: Type.Optional(Type.Number()),
+        timeout: Type.Optional(
+          Type.Number({ description: 'Timeout in milliseconds (default: no timeout)' }),
+        ),
         lines: Type.Optional(Type.Number()),
         source: Type.Optional(
           Type.String({ enum: ['visible', 'recent', 'recent-unwrapped'], default: 'recent' }),

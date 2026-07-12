@@ -105,3 +105,4 @@ ACs: {count} | Projects affected: {count} | Split recommended: {yes/no}
 - **Check the codebase** — don't just read the contract. A contract that says "create a new service" when one already exists is wrong.
 - **Never modify the contract** — this is review-only.
 - If the contract status is `draft`, output `APPROVE` only when every blocking issue is resolved. In an automated `bun run contract` run, that command is the user's authorization for the orchestrator to promote a critic-approved contract to `approved`; do not edit the status yourself. In a manual critique session, only the user may approve.
+- **Shared sections**: Skip `Promotion Lifecycle`, `Status Lifecycle`, and the testing conventions paragraph — these reference `docs/contracts/SHARED_SECTIONS.md` and are static project-wide material. Do not critique them. Focus on ACs, problem statement, scope, and evidence.

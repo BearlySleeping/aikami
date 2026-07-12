@@ -9,6 +9,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
+  routerService,
 } from '@aikami/frontend/services';
 import type { GameSession } from '$services/game/session_service.svelte';
 import { sessionService } from '$services/game/session_service.svelte';
@@ -75,7 +76,6 @@ class SessionBrowserViewModel
 
   /** @inheritdoc */
   async continueFromSession(_session: GameSession): Promise<void> {
-    const { routerService } = await import('@aikami/frontend/services');
     await routerService.navigateToApp();
   }
 }

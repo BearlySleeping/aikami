@@ -35,7 +35,7 @@ const MOCK_NPC_DATA = {
   personaId: 'sage',
 };
 
-const viewModel: DialogueDevViewModelInterface = new DialogueDevViewModel({
+const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   className: 'DialogueSandboxVM',
   npcData: MOCK_NPC_DATA,
   onEndChat: goBack,

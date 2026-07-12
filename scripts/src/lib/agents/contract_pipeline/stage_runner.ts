@@ -43,6 +43,8 @@ export const runStage = async (options: {
   pollIntervalMs?: number;
   feedback?: string;
   launchWorker: (request: WorkerLaunchRequest) => Promise<{ paneId: string }>;
+  /** Check whether the agent in the worker pane is actively working. Only working time counts toward the timeout. */
+  checkAgentWorking?: (paneId: string) => Promise<boolean>;
 }): Promise<StageRunOutcome> => {
   const role = roleForStage(options.stage);
   const resultPath = join(
@@ -72,8 +74,8 @@ export const runStage = async (options: {
   });
 
   const pollIntervalMs = options.pollIntervalMs ?? 500;
-  const deadline = Date.now() + options.timeoutMs;
-  while (Date.now() < deadline) {
+  let activeMs = 0;
+  while (activeMs < options.timeoutMs) {
     const result = readStageResult({
       resultPath,
       runId: options.runId,
@@ -84,6 +86,22 @@ export const runStage = async (options: {
       return { result, paneId };
     }
     await sleep(pollIntervalMs);
+
+    // Only count time toward the timeout when the agent is actively working.
+    // When idle (e.g. laptop closed, user not interacting), the clock pauses.
+    if (options.checkAgentWorking) {
+      try {
+        const isWorking = await options.checkAgentWorking(paneId);
+        if (isWorking) {
+          activeMs += pollIntervalMs;
+        }
+      } catch {
+        // Herdr unreachable — assume working to avoid hanging forever.
+        activeMs += pollIntervalMs;
+      }
+    } else {
+      activeMs += pollIntervalMs;
+    }
   }
 
   const blockedResult: ContractStageResult = {

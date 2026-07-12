@@ -10,7 +10,7 @@
 
 import type { WorldGenOutput } from '@aikami/types';
 import { page } from '$app/stores';
-import { gameStateService } from '$services';
+import { worldStateService } from '$services';
 import PersonaCreateView from '$views/character/persona/create/persona_create_view.svelte';
 import { getPersonaCreateViewModel } from '$views/character/persona/create/persona_create_view_model.svelte';
 import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
@@ -36,7 +36,7 @@ $effect(() => {
  */
 const onWorldAccepted = async (output: WorldGenOutput): Promise<void> => {
   // Persist world-gen output in GameStateService
-  gameStateService.setWorldGenOutput(output);
+  worldStateService.setWorldGenOutput(output);
 
   // Skip the wizard on subsequent visits after world is accepted
   skipWizard = true;

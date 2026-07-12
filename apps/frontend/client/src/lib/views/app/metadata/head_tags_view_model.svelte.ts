@@ -272,4 +272,4 @@ class HeadTagsViewModel
 
 export const getHeadTagsViewModel = (
   options: HeadTagsViewModelOptions,
-): HeadTagsViewModelInterface => new HeadTagsViewModel(options);
+): HeadTagsViewModelInterface => HeadTagsViewModel.create(options);

@@ -3,7 +3,11 @@
 // IndexedDB-backed repository for Campaign aggregate persistence.
 // Shares the aikami_saves database with gameSaveService.
 // Contract: C-313 Introduce the Campaign Aggregate and Boot State Machine
-
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import type { Campaign } from '@aikami/types';
 import { logger } from '$logger';
 
@@ -34,7 +38,7 @@ type CampaignDocument = {
   updatedAt: string;
 };
 
-export type CampaignRepositoryInterface = {
+export type CampaignRepositoryInterface = BaseFrontendClassInterface & {
   /** Persists a campaign (upsert by ID). */
   create(campaign: Campaign): Promise<Campaign>;
   /** Retrieves a campaign by ID, or undefined if not found. */
@@ -51,7 +55,10 @@ export type CampaignRepositoryInterface = {
 // Repository Implementation
 // ---------------------------------------------------------------------------
 
-class CampaignRepository implements CampaignRepositoryInterface {
+class CampaignRepository
+  extends BaseFrontendClass<BaseFrontendClassOptions>
+  implements CampaignRepositoryInterface
+{
   /** @inheritdoc */
   async create(campaign: Campaign): Promise<Campaign> {
     const db = await this._openDatabase();
@@ -208,4 +215,6 @@ class CampaignRepository implements CampaignRepositoryInterface {
 }
 
 /** Shared singleton instance. */
-export const campaignRepository: CampaignRepositoryInterface = new CampaignRepository();
+export const campaignRepository: CampaignRepositoryInterface = new CampaignRepository({
+  className: 'CampaignRepository',
+});

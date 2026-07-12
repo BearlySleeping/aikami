@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/game/canvas/game_view_model.svelte.ts
+// apps/frontend/client/src/lib/views/game/canvas/game_canvas_view_model.svelte.ts
 
 import type { GameCommand } from '@aikami/frontend/engine';
 import {
@@ -10,7 +10,7 @@ import type {
   CombatantScreenState,
   FloatingTextInstance,
 } from '$lib/services/game/game_engine_service.svelte.ts';
-import { gameEngineService, gameStateService } from '$services';
+import { gameEngineService, gameModeService } from '$services';
 import type { ActiveContextEntry } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -22,9 +22,9 @@ import type { ActiveContextEntry } from '$types';
 // View and keeps the View free of engine imports.
 // ---------------------------------------------------------------------------
 
-export type GameViewViewModelOptions = BaseViewModelOptions;
+export type GameCanvasViewModelOptions = BaseViewModelOptions;
 
-export type GameViewViewModelInterface = BaseViewModelInterface & {
+export type GameCanvasViewModelInterface = BaseViewModelInterface & {
   readonly playerScene: string;
   readonly isGameReady: boolean;
   readonly gameError: string | undefined;
@@ -63,9 +63,9 @@ export type GameViewViewModelInterface = BaseViewModelInterface & {
  * `$state` fields. The only logic here is the canvas-binding `$effect`
  * that connects the View's `<canvas bind:this>` to the engine.
  */
-class GameViewViewModel
-  extends BaseViewModel<GameViewViewModelOptions>
-  implements GameViewViewModelInterface
+class GameCanvasViewModel
+  extends BaseViewModel<GameCanvasViewModelOptions>
+  implements GameCanvasViewModelInterface
 {
   // ── Bindable canvas element (owned here, forwarded to service) ──
 
@@ -112,7 +112,7 @@ class GameViewViewModel
 
   /** Whether the combat split-screen layout (CSS Grid) is active. */
   get isCombat(): boolean {
-    return gameStateService.currentMode === 'COMBAT';
+    return gameModeService.currentMode === 'COMBAT';
   }
 
   // ── Lifecycle ──
@@ -201,6 +201,6 @@ class GameViewViewModel
  * Follows the Svelte 5 `getXViewModel` pattern — see
  * {@link getPersonaListViewModel} for reference.
  */
-export const getGameViewViewModel = (
-  options: GameViewViewModelOptions,
-): GameViewViewModelInterface => GameViewViewModel.create(options);
+export const getGameCanvasViewModel = (
+  options: GameCanvasViewModelOptions,
+): GameCanvasViewModelInterface => GameCanvasViewModel.create(options);

@@ -7,9 +7,11 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
+import { audioContextManager } from '$lib/services/audio/audio_context_manager.ts';
+import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import { logger } from '$logger';
+import { audioService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
-import { consumePendingGameLoad } from '$services/game/game_load_state.svelte';
 import type { ActiveContextEntry } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -409,7 +411,9 @@ class GameEngineService
         textureManager,
       });
 
-      const initialPayload = consumePendingGameLoad();
+      // Campaign data drives world initialization via the composition root.
+      // When no campaign is active (first boot), the world starts with defaults.
+      const initialPayload = undefined;
 
       await this._gameWorld.initialize({
         canvas,
@@ -554,7 +558,6 @@ class GameEngineService
 
   private async _loadActivePersona(): Promise<void> {
     try {
-      const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
       const activePersona = await personaService.getActivePersona();
       if (activePersona) {
         this._activePersona = activePersona;
@@ -601,11 +604,9 @@ class GameEngineService
 
   private async _playHitSfx(): Promise<void> {
     try {
-      const { audioContextManager } = await import('$lib/services/audio/audio_context_manager.ts');
       if (audioContextManager.context.state === 'suspended') {
         await audioContextManager.context.resume();
       }
-      const { audioService } = await import('$services');
       await audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
     } catch (error) {
       logger.debug('GameEngineService:_playHitSfx:failed', { error: String(error) });

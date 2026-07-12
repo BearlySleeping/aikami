@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/views/worldgen/world_gen_seeding_service.svelte.ts
+// apps/frontend/client/src/lib/services/worldgen/world_gen_seeding_service.svelte.ts
 //
 // Dispatches world-gen output to the GameStateService and related subsystems.
 // Seeds NPCs, locations, party arcs, and HUD widgets into the active game state.
@@ -11,7 +11,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { HudWidgetBlueprint, PartyArc, WorldGenNpc, WorldGenOutput } from '@aikami/types';
-import { authService, gameStateService, npcService } from '$services';
+import { authService, npcService, worldStateService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,14 +88,14 @@ export class WorldGenSeedingService
         }
 
         // Also register in game state for runtime presence
-        gameStateService.addNpc(worldNpc.name);
+        worldStateService.addNpc(worldNpc.name);
       } catch (error) {
         this.error('seedNpcs:failed', { name: worldNpc.name, error });
       }
     }
 
     // Record a world event for NPC population
-    gameStateService.recordEvent({
+    worldStateService.recordEvent({
       title: 'World Populated',
       description: `${npcs.length} NPCs were generated and seeded into the world.`,
       isMajor: false,
@@ -113,14 +113,14 @@ export class WorldGenSeedingService
     this.debug('seedLocations', { worldName, count: locations.length });
 
     // Store locations as world variables for the game state
-    await gameStateService.setVariable('worldName', worldName);
-    await gameStateService.setVariable('locations', locations);
+    await worldStateService.setVariable('worldName', worldName);
+    await worldStateService.setVariable('locations', locations);
 
     // Record each location for world state tracking
     for (const location of locations) {
       this.debug('seedLocations:location', { location });
 
-      gameStateService.recordEvent({
+      worldStateService.recordEvent({
         title: `Location Discovered: ${location}`,
         description: `${location} was added to the world of ${worldName}.`,
         isMajor: false,
@@ -139,7 +139,7 @@ export class WorldGenSeedingService
     this.debug('seedPartyArcs', { count: arcs.length });
 
     // Store party arcs as world variables (quest chain data)
-    await gameStateService.setVariable('partyArcs', arcs);
+    await worldStateService.setVariable('partyArcs', arcs);
 
     // Record each arc as a major world event
     for (const arc of arcs) {
@@ -148,7 +148,7 @@ export class WorldGenSeedingService
         objectiveCount: arc.objectives.length,
       });
 
-      gameStateService.recordEvent({
+      worldStateService.recordEvent({
         title: `Story Arc: ${arc.chapter}`,
         description: arc.description,
         participantIds: arc.questGivers,
@@ -168,7 +168,7 @@ export class WorldGenSeedingService
     this.debug('seedHudWidgets', { count: widgets.length });
 
     // Store HUD widget blueprints as world variables
-    await gameStateService.setVariable('hudWidgets', widgets);
+    await worldStateService.setVariable('hudWidgets', widgets);
 
     // Register each widget blueprint
     for (const widget of widgets) {
@@ -180,7 +180,7 @@ export class WorldGenSeedingService
     }
 
     // Record a world event for HUD registration
-    gameStateService.recordEvent({
+    worldStateService.recordEvent({
       title: 'HUD Widgets Registered',
       description: `${widgets.length} HUD widgets were registered from the generated world.`,
       isMajor: false,
@@ -223,6 +223,7 @@ export class WorldGenSeedingService
 }
 
 /** Singleton instance of the seeding service. */
-export const worldGenSeedingService: WorldGenSeedingServiceInterface = new WorldGenSeedingService({
-  className: 'WorldGenSeedingService',
-});
+export const worldGenSeedingService: WorldGenSeedingServiceInterface =
+  WorldGenSeedingService.create({
+    className: 'WorldGenSeedingService',
+  });

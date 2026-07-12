@@ -11,7 +11,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { gameStateService, textGenerationService } from '$services';
+import { textGenerationService, worldStateService } from '$services';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
 import type { SessionSummary } from './gm_types';
 
@@ -89,7 +89,7 @@ class SessionSummaryService
     this._isGenerating = true;
 
     try {
-      const worldName = gameStateService.worldGenOutput?.worldName ?? 'Unknown';
+      const worldName = worldStateService.worldGenOutput?.worldName ?? 'Unknown';
       const synopsisResult = await this._generateSynopsis({ worldName, playtimeMinutes });
 
       const summary: SessionSummary = {
@@ -214,7 +214,7 @@ class SessionSummaryService
    * can restore the game to where the session left off.
    */
   private _buildResumePoint(): string {
-    const worldName = gameStateService.worldGenOutput?.worldName ?? 'Unknown';
+    const worldName = worldStateService.worldGenOutput?.worldName ?? 'Unknown';
     const timestamp = Date.now();
     return `resume:${worldName}:${timestamp}`;
   }

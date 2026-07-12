@@ -5,7 +5,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
+import { gameOverlayService } from '$services';
 
 export type GameOverViewModelInterface = BaseViewModelInterface & {
   respawnPlayer(): Promise<void>;

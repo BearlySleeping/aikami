@@ -2,7 +2,7 @@
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
 import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { findWorkspace } from '../../herdr/session.ts';
+import { findWorkspace, herdrJson } from '../../herdr/session.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
 import { captureGitState, changedPaths, contentHash, currentCommit } from './git_state.ts';
@@ -32,7 +32,7 @@ import { STATUS_TO_START_STAGE } from './types.ts';
 const STAGE_TIMEOUTS: Record<string, number> = {
   write_contract: 20 * 60 * 1000,
   critique: 15 * 60 * 1000,
-  implement: 60 * 60 * 1000,
+  implement: 120 * 60 * 1000, // 2 hours — large contracts need time
   verify: 45 * 60 * 1000,
 };
 const WORKER_STAGES: readonly ContractPipelineStage[] = [
@@ -45,21 +45,58 @@ const WORKER_STAGES: readonly ContractPipelineStage[] = [
 const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+/** Find previous run IDs for a contract, sorted newest first. */
+const findPreviousRuns = (options: { contractId: string; cwd: string }): string[] => {
+  const runsDirectory = join(options.cwd, '.pi/contract-runs');
+  if (!existsSync(runsDirectory)) {
+    return [];
+  }
+  const safeId = options.contractId.replace(/[^A-Za-z0-9]/g, '-');
+  return readdirSync(runsDirectory)
+    .filter((entry) => entry.startsWith('run-') && entry.endsWith(safeId))
+    .map((entry) => entry)
+    .sort()
+    .reverse();
+};
+
 const feedbackForStage = (options: {
   manifest: RunManifest;
   stage: ContractPipelineStage;
+  attempt: number;
 }): string | undefined => {
   const sourceRole = options.stage === 'write_contract' ? 'critic' : 'verifier';
   if (options.stage !== 'write_contract' && options.stage !== 'implement') {
     return undefined;
   }
-  const attempt = [...options.manifest.attempts]
+
+  // For implementer retries (attempt > 1): also pass the previous implementer's
+  // own findings so it knows what was already done and what remains.
+  if (options.stage === 'implement' && options.attempt > 1) {
+    const previousImplement = [...options.manifest.attempts]
+      .reverse()
+      .find((candidate) => candidate.role === 'implementer' && candidate.result);
+    if (previousImplement?.result) {
+      const prior = previousImplement.result;
+      return [
+        `## Previous implement attempt (${prior.status})`,
+        prior.summary,
+        ...prior.findings.map((item) => `- ${item}`),
+        '',
+        'Continue from where the previous attempt left off. Do NOT redo already-completed work.',
+      ].join('\n');
+    }
+  }
+
+  const feedbackAttempt = [...options.manifest.attempts]
     .reverse()
     .find((candidate) => candidate.role === sourceRole && candidate.result);
-  if (!attempt?.result) {
+  if (!feedbackAttempt?.result) {
     return undefined;
   }
-  return [attempt.result.summary, ...attempt.result.findings.map((item) => `- ${item}`)].join('\n');
+  return [
+    feedbackAttempt.result.summary,
+    ...feedbackAttempt.result.findings.map((item) => `- ${item}`),
+  ].join('\n');
 };
 
 const resultForPostconditionFailure = (options: {
@@ -162,6 +199,21 @@ export const runContractPipeline = async (options: {
     }
     manifest = resumed;
     delete manifest.reviewPaneId;
+
+    // Re-evaluate start stage from the contract's actual status.
+    // A previously-blocked run should resume from the correct stage
+    // (e.g. blocked → implement if contract status is still approved).
+    const contractStatus = readContractStatus(manifest.contractPath);
+    const resumeStage = STATUS_TO_START_STAGE[contractStatus] ?? 'write_contract';
+    if (resumeStage !== manifest.currentStage) {
+      pipelineLog({
+        runId: manifest.runId,
+        cwd: options.repoRoot,
+        message: `Resuming: contract status ${contractStatus} → stage ${resumeStage} (was ${manifest.currentStage}).`,
+      });
+      manifest.currentStage = resumeStage;
+      writeManifest({ manifest, cwd: options.repoRoot });
+    }
   } else {
     if (!options.target) {
       throw new Error('A contract ID or path is required for a new run.');
@@ -170,8 +222,19 @@ export const runContractPipeline = async (options: {
       (path) => !path.startsWith('docs/') && path !== 'flake.lock',
     );
     if (dirtyPaths.length > 0 && !options.allowDirty) {
+      const contractId = (options.target ?? '').toUpperCase();
+      const previousRuns = findPreviousRuns({ contractId, cwd: options.repoRoot });
+      const resumeHint =
+        previousRuns.length > 0
+          ? `\n\n💡 A previous pipeline run exists for ${contractId}. Resume it:\n   bun contract --resume ${previousRuns[0]}`
+          : '\n\n💡 No previous run found. Use --allow-dirty to proceed, or commit/stash changes.';
+      const pathList = dirtyPaths
+        .slice(0, 10)
+        .map((path) => `   - ${path}`)
+        .join('\n');
+      const truncated = dirtyPaths.length > 10 ? `\n   ... and ${dirtyPaths.length - 10} more` : '';
       throw new Error(
-        `Contract pipeline requires a clean worktree. Dirty paths:\n${dirtyPaths.map((path) => `- ${path}`).join('\n')}`,
+        `Worktree is dirty (${dirtyPaths.length} changed files):\n${pathList}${truncated}${resumeHint}`,
       );
     }
     const contract = resolveContract({ target: options.target, repoRoot: options.repoRoot });
@@ -251,8 +314,19 @@ export const runContractPipeline = async (options: {
           attempt,
           contractPath: manifest.contractPath,
           timeoutMs: STAGE_TIMEOUTS[stage] ?? 30 * 60 * 1000,
-          feedback: feedbackForStage({ manifest, stage }),
+          feedback: feedbackForStage({ manifest, stage, attempt }),
           launchWorker: (request) => adapter.launchWorker(request),
+          checkAgentWorking: async (paneId: string) => {
+            try {
+              const panes = await herdrJson<{
+                result: { panes: Array<{ pane_id: string; agent_status?: string }> };
+              }>(['pane', 'list', '--workspace', adapter.getWorkspaceId()]);
+              const pane = panes?.result.panes.find((p) => p.pane_id === paneId);
+              return pane?.agent_status === 'working';
+            } catch {
+              return true; // Herdr unreachable — assume working to avoid hang
+            }
+          },
         });
         const after = captureGitState(options.repoRoot);
 

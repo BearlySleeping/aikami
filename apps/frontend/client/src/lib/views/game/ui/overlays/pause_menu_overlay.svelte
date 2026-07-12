@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu_overlay.svelte
-import { gameOverlayService } from '$lib/services/game/game_overlay_service.svelte';
+import { gameOverlayService } from '$services';
 
 type Props = {
   isSaving?: boolean;

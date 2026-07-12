@@ -18,10 +18,9 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { NpcSchedule } from '@aikami/types';
+import { gameOverlayService, idleDetectionService, worldStateService } from '$services';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { chatService } from '../chat/chat.svelte.ts';
-import { gameOverlayService } from '../game/game_overlay_service.svelte.ts';
-import { gameStateService } from '../game/game_state_service.svelte.ts';
-import { idleDetectionService } from '../game/idle_detection_service.svelte.ts';
 import { npcScheduleService } from './npc_schedule_service.svelte.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -262,7 +261,7 @@ class AutonomousMessageService
     const ids = new Set<string>();
 
     // Collect from world gen output NPCs (use names as IDs since WorldGenNpc has no id field)
-    const worldGen = gameStateService.worldGenOutput;
+    const worldGen = worldStateService.worldGenOutput;
     if (worldGen?.npcs && Array.isArray(worldGen.npcs)) {
       for (const npc of worldGen.npcs) {
         ids.add(npc.name);
@@ -362,7 +361,6 @@ class AutonomousMessageService
       ].join('\n');
 
       // Generate the message via text generation service
-      const { textGenerationService } = await import('../ai/text_generation_service.svelte.ts');
 
       let fullText = '';
 

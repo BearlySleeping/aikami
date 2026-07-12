@@ -26,7 +26,7 @@ type TabListResult = {
 };
 
 type PaneListResult = {
-  result: { panes: Array<{ pane_id: string; tab_id: string }> };
+  result: { panes: Array<{ pane_id: string; tab_id: string; agent_status?: string }> };
 };
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
@@ -79,6 +79,7 @@ const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
 /** Adapter surface consumed by the contract orchestrator. */
 export type ContractHerdrAdapterInterface = {
   initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }>;
+  getWorkspaceId(): string;
   launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }>;
   startReview(options: {
     prompt: string;
@@ -180,6 +181,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
   }
 
+  /** Return the current workspace ID. Must be called after initialize(). */
+  getWorkspaceId(): string {
+    if (!this._workspaceId) {
+      throw new Error('Herdr workspace is not initialized.');
+    }
+    return this._workspaceId;
+  }
+
   /** Close a tab by label if it exists in the current workspace. */
   private async _closeTabByLabel(label: string): Promise<void> {
     const tabs = await herdrJson<TabListResult>(['tab', 'list', '--workspace', this._workspaceId]);
@@ -189,8 +198,35 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
   }
 
+  /**
+   * Send text to Pi and submit it.
+   * Retries Enter up to 3 times with increasing delays to handle
+   * welcome/update overlays (e.g. pi-powerline-footer) that may
+   * consume the first one or two Enter keypresses.
+   */
+  private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
+    await runHerdr(['pane', 'send-text', options.paneId, options.text]);
+    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const panes = await herdrJson<PaneListResult>([
+        'pane',
+        'list',
+        '--workspace',
+        this._workspaceId,
+      ]);
+      const targetPane = panes?.result.panes.find((pane) => pane.pane_id === options.paneId);
+      if (targetPane && targetPane.agent_status !== 'idle') {
+        return; // Agent started working — task was submitted.
+      }
+      // Still idle — overlay may have consumed the Enter. Try again.
+      await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
+    }
+  }
+
   /** Write the worker prompt and build the pi start command with env vars. */
-  private _buildWorkerCommand(request: WorkerLaunchRequest, sessionId: string): string {
+  private _buildWorkerCommand(request: WorkerLaunchRequest, sessionId: string | undefined): string {
     const promptDirectory = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');
     mkdirSync(promptDirectory, { recursive: true });
     const promptPath = join(promptDirectory, `${request.stage}-${request.attempt}.md`);
@@ -207,12 +243,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
     const tools = toolsForRole(request.role);
     const toolsArg = tools ? ['--tools', tools.join(',')] : [];
+    const sessionArg = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
 
     return [
       environment,
       'pi',
-      '--session-id',
-      shellQuote(sessionId),
+      ...sessionArg,
       '--append-system-prompt',
       shellQuote(promptPath),
       ...toolsArg,
@@ -222,7 +258,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   /** Create a new worker tab and start pi. */
   private async _createWorkerTab(options: {
     tabLabel: string;
-    sessionId: string;
+    sessionId: string | undefined;
     request: WorkerLaunchRequest;
   }): Promise<{ paneId: string }> {
     const tab = await herdrJson<TabCreateResult>([
@@ -267,8 +303,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'Printing a text summary without the tool call will block the pipeline forever.',
       'Do not ask questions — if blocked, finish with status blocked.',
     ].join(' ');
-    await runHerdr(['pane', 'send-text', paneId, taskMessage]);
-    await runHerdr(['pane', 'send-keys', paneId, 'Enter']);
+    await this._sendTaskText({ paneId, text: taskMessage });
 
     return { paneId };
   }
@@ -289,10 +324,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
     const tabLabel = request.role; // "writer", "critic", "implementer", "verifier"
     const contractId = extractContractId(request.contractPath);
-    const sessionId = buildSessionId({ contractId, role: request.role });
+
+    // First attempt: use session to preserve context across stage transitions.
+    // Retries: start fresh — session history from a previous blocked/passed
+    // attempt confuses the LLM into thinking the work is already done.
+    // The system prompt carries all needed context via feedbackForStage.
+    const sessionId =
+      request.attempt === 1 ? buildSessionId({ contractId, role: request.role }) : undefined;
 
     // Close any existing tab with this role label for a clean restart.
-    // Pi session history persists on disk via --session-id.
     await this._closeTabByLabel(tabLabel);
 
     return this._createWorkerTab({ tabLabel, sessionId, request });
@@ -358,19 +398,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const paneId = tab.result.root_pane.pane_id;
     await runHerdr(['pane', 'run', paneId, command]);
     await runHerdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '30000']);
-    await runHerdr([
-      'pane',
-      'send-text',
+    await this._sendTaskText({
       paneId,
-      `Review contract run ${this._runId}. Present the verified status, then wait for the user.`,
-    ]);
-    await runHerdr(['pane', 'send-keys', paneId, 'Enter']);
+      text: `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
+    });
     return paneId;
   }
 
   /** Deliver one orchestrator update to the existing review session. */
   async sendReviewMessage(options: { paneId: string; message: string }): Promise<void> {
-    await runHerdr(['pane', 'send-text', options.paneId, options.message]);
-    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
+    await this._sendTaskText({ paneId: options.paneId, text: options.message });
   }
 }

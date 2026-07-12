@@ -8,7 +8,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { gameStateService } from '$services';
+import { worldStateService } from '$services';
 
 export type QuestServiceInterface = BaseFrontendClassInterface & {
   readonly isOpen: boolean;
@@ -30,7 +30,7 @@ class QuestService
 
   /** Proxies quest data from GameStateService (synced from ECS bridge). */
   get quests(): readonly QuestData[] {
-    return gameStateService.quests;
+    return worldStateService.quests;
   }
 
   open(): void {

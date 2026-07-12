@@ -18,6 +18,7 @@ import type {
   AgentRunResult,
   CustomAgentDefinition,
 } from '$types/agent_types';
+import { agentRegistryService } from './agent_registry_service.svelte.ts';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';
 import { runMusicDjAgent } from './agents/music_dj_agent.ts';
@@ -152,7 +153,6 @@ class AgentPipelineService
     // Discover custom agents from the registry
     let custom: AgentConfig[] = [];
     try {
-      const { agentRegistryService } = await import('./agent_registry_service.svelte.ts');
       const customDefs = await agentRegistryService.listAgents();
       custom = customDefs
         .filter((d: CustomAgentDefinition) => d.enabled)
@@ -348,7 +348,6 @@ class AgentPipelineService
     if (!runner) {
       // Fall back to custom agent runner
       try {
-        const { agentRegistryService } = await import('./agent_registry_service.svelte.ts');
         const definition = await agentRegistryService.getAgent({ id: agent.id });
         if (definition) {
           const customResult = await runCustomAgent({

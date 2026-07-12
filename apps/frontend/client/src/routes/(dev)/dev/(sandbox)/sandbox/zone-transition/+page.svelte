@@ -12,11 +12,11 @@
 // Also verifies save/load captures player position and inventory correctly.
 
 import { browser } from '$app/environment';
-import GameView from '$lib/views/game/canvas/game_view.svelte';
-import { getGameViewViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
+import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
+import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
 import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
 import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
-import { gameStateService } from '$services';
+import { inventoryService, worldStateService } from '$services';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Available test maps for zone transitions
@@ -79,7 +79,7 @@ if (browser) {
   }
 }
 
-const gameViewModel = getGameViewViewModel({ className: 'GameViewViewModel' });
+const gameViewModel = getGameCanvasViewModel({ className: 'GameCanvasViewModel' });
 const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -141,7 +141,7 @@ const _transitionTo = async (mapUrl: string): Promise<void> => {
     mapUrl,
     targetX: spawn.x,
     targetY: spawn.y,
-    defeatedEnemies: [...(gameStateService.defeatedEnemies as string[])],
+    defeatedEnemies: [...(worldStateService.defeatedEnemies as string[])],
   });
   _refreshMemory();
 };
@@ -255,8 +255,8 @@ const devActions: DevAction[] = [
   {
     label: '+ Sword',
     onClick: () => {
-      gameStateService.inventory = [
-        ...gameStateService.inventory,
+      inventoryService.inventory = [
+        ...inventoryService.inventory,
         { itemId: 'iron-sword', quantity: 1 },
       ];
       _addLog('🗡️ Added iron-sword');
@@ -266,8 +266,8 @@ const devActions: DevAction[] = [
   {
     label: '+ Potion',
     onClick: () => {
-      gameStateService.inventory = [
-        ...gameStateService.inventory,
+      inventoryService.inventory = [
+        ...inventoryService.inventory,
         { itemId: 'health-potion', quantity: 1 },
       ];
       _addLog('🧪 Added health-potion');
@@ -277,7 +277,7 @@ const devActions: DevAction[] = [
   {
     label: 'Clear Inventory',
     onClick: () => {
-      gameStateService.inventory = [];
+      inventoryService.inventory = [];
       _addLog('🗑️ Inventory cleared');
     },
     group: 'Inventory',
@@ -295,7 +295,7 @@ const devActions: DevAction[] = [
 <div class="fixed inset-0 flex">
   <!-- Game canvas (left 70%) -->
   <div class="flex-1 relative">
-    <GameView viewModel={gameViewModel} />
+    <GameCanvasView viewModel={gameViewModel} />
     <GameUIView viewModel={gameUIViewModel} />
   </div>
 

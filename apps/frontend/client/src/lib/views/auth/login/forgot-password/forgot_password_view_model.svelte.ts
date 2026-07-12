@@ -75,4 +75,4 @@ class ForgotPasswordViewModel
 
 export const getForgotPasswordViewModel = (
   options: ForgotPasswordViewModelOptions,
-): ForgotPasswordViewModelInterface => new ForgotPasswordViewModel(options);
+): ForgotPasswordViewModelInterface => ForgotPasswordViewModel.create(options);

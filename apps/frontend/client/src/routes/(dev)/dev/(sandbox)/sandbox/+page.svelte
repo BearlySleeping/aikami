@@ -1,16 +1,16 @@
 <script lang="ts">
 import type { QuestData } from '@aikami/frontend/engine';
 // apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.svelte
-// Extends /game — reuses the same GameView + GameViewModel + GameUIViewModel
+// Extends /game — reuses the same GameCanvasView + GameCanvasViewModel + GameUIViewModel
 // infrastructure, but seeds localStorage with a mock persona so a character
 // loads instantly without needing to go through the character creation flow.
 import { browser } from '$app/environment';
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-import GameView from '$lib/views/game/canvas/game_view.svelte';
-import { getGameViewViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
+import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
+import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
 import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
 import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
-import { gameStateService } from '$services';
+import { inventoryService, worldStateService } from '$services';
 import type { DevAction } from '$types';
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -82,14 +82,14 @@ const _seedQuests = (): void => {
     ...q,
     objectives: q.objectives.map((o) => ({ ...o })),
   }));
-  (gameStateService.quests as QuestData[]).length = 0;
+  (worldStateService.quests as QuestData[]).length = 0;
   for (const clone of clones) {
-    (gameStateService.quests as QuestData[]).push(clone);
+    (worldStateService.quests as QuestData[]).push(clone);
   }
 };
 
 const _progressRandomObjective = (): void => {
-  const active = gameStateService.quests.filter((q) => q.status === 'active');
+  const active = worldStateService.quests.filter((q) => q.status === 'active');
   for (const quest of active) {
     for (const obj of quest.objectives) {
       if (obj.current < obj.max) {
@@ -101,7 +101,7 @@ const _progressRandomObjective = (): void => {
 };
 
 const _failRandomQuest = (): void => {
-  const active = gameStateService.quests.filter((q) => q.status === 'active');
+  const active = worldStateService.quests.filter((q) => q.status === 'active');
   if (active.length === 0) {
     return;
   }
@@ -110,14 +110,14 @@ const _failRandomQuest = (): void => {
 };
 
 const _clearQuests = (): void => {
-  (gameStateService.quests as QuestData[]).length = 0;
+  (worldStateService.quests as QuestData[]).length = 0;
 };
 
-// Seed a mock persona into localStorage before the GameViewModel loads.
+// Seed a mock persona into localStorage before the GameCanvasViewModel loads.
 // This gives the engine an active character with LPC layer IDs [1,2,3,4,5]
 // which maps to body, hair, torso, legs, feet layers through the recipe resolver.
 //
-// Must run synchronously before the GameViewModel constructor reads localStorage,
+// Must run synchronously before the GameCanvasViewModel constructor reads localStorage,
 // so this is a module-level side effect guarded by the 'browser' check.
 if (browser) {
   const existing = localStorage.getItem('aikami-characters');
@@ -165,7 +165,7 @@ if (browser) {
   }
 }
 
-const viewModel = getGameViewViewModel({ className: 'GameViewViewModel' });
+const viewModel = getGameCanvasViewModel({ className: 'GameCanvasViewModel' });
 const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
 
 const devActions = [
@@ -173,8 +173,8 @@ const devActions = [
   {
     label: 'Insert Item (Sword)',
     onClick: () => {
-      gameStateService.inventory = [
-        ...gameStateService.inventory,
+      inventoryService.inventory = [
+        ...inventoryService.inventory,
         { itemId: 'iron-sword', quantity: 1 },
       ];
     },
@@ -182,8 +182,8 @@ const devActions = [
   {
     label: 'Insert Item (Potion)',
     onClick: () => {
-      gameStateService.inventory = [
-        ...gameStateService.inventory,
+      inventoryService.inventory = [
+        ...inventoryService.inventory,
         { itemId: 'health-potion', quantity: 1 },
       ];
     },
@@ -191,15 +191,15 @@ const devActions = [
   {
     label: 'Remove Last Item',
     onClick: () => {
-      if (gameStateService.inventory.length > 0) {
-        gameStateService.inventory = gameStateService.inventory.slice(0, -1);
+      if (inventoryService.inventory.length > 0) {
+        inventoryService.inventory = inventoryService.inventory.slice(0, -1);
       }
     },
   },
   {
     label: 'Clear Inventory',
     onClick: () => {
-      gameStateService.inventory = [];
+      inventoryService.inventory = [];
     },
   },
   // ── Quest Log ─────────────────────────────────────────────────
@@ -311,7 +311,7 @@ const devActions = [
 </script>
 
 <div class="w-screen h-screen overflow-hidden relative">
-  <GameView {viewModel} />
+  <GameCanvasView {viewModel} />
   <GameUIView viewModel={gameUIViewModel} />
 </div>
 

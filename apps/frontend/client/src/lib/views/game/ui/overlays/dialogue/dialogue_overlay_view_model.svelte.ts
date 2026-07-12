@@ -17,13 +17,14 @@ import {
   PERSONA_PROMPTS,
 } from '$lib/data/dialogue_personas';
 import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
-import { gmPromptService } from '$lib/services/gm/gm_prompt_service.svelte.ts';
 import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
   diceService,
   draftStore,
-  gameStateService,
+  gameModeService,
+  gmPromptService,
   messageBranchStore,
+  playerStateService,
   SentenceBoundaryChunker,
   type TextChatMessage,
   textGenerationService,
@@ -400,8 +401,8 @@ class DialogueOverlayViewModel
     this.registerEffectRoot(() => {
       // Autofocus the textarea when dialogue mode is active
       $effect(() => {
-        // gameStateService is imported at module level
-        if (gameStateService.currentMode === 'DIALOGUE' && this.inputElement) {
+        // gameModeService drives the current mode check
+        if (gameModeService.currentMode === 'DIALOGUE' && this.inputElement) {
           this.inputElement.focus();
         }
       });
@@ -681,7 +682,7 @@ class DialogueOverlayViewModel
     );
 
     // Inject character sheet summary for AI context awareness
-    const sheetSummary = gameStateService.characterSheetSummary;
+    const sheetSummary = playerStateService.characterSheetSummary;
     if (sheetSummary) {
       lines.push('', '[CHARACTER SHEET]', sheetSummary, '[/CHARACTER SHEET]');
     }
@@ -1267,3 +1268,13 @@ class DialogueOverlayViewModel
 }
 
 export { DialogueOverlayViewModel };
+
+/**
+ * Factory function for DialogueOverlayViewModel.
+ * Uses BaseViewModel.create() for auto-logging instrumentation.
+ *
+ * Contract: C-314 AC-3 — ViewModels created via factory, never raw `new`.
+ */
+export const getDialogueOverlayViewModel = (
+  options: DialogueOverlayViewModelOptions,
+): DialogueOverlayViewModelInterface => DialogueOverlayViewModel.create(options);

@@ -52,7 +52,7 @@ Introduce the Campaign Aggregate as the root entity owning persona selection, co
 - **Testing**: `mock.module()` for `$services` barrel, in-memory IndexedDB mock with `makeRequest()` helpers.
 - See `.pi/skills/svelte-conventions/SKILL.md` and `.pi/skills/backend-conventions/SKILL.md`.
 
-For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Visual Runner** handles AI visual assessment (`src/visual/suites/*.visual.ts`). Do NOT create `*_visual.spec.ts` files or use the old `scripts/*_visual.ts` pattern. See `.pi/skills/testing/SKILL.md` for conventions.
+> 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
 ## Architecture Directives
 
@@ -130,6 +130,8 @@ TypeBox schemas in `packages/shared/schemas/src/lib/campaign.ts`; derived types 
   - Save slot management beyond metadata — C-329
 
 ## Contract Size & Split Rule
+
+> 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
 This contract is atomic — one aggregate root with one state machine, one repository, one service. No split needed.
 
@@ -243,34 +245,7 @@ Changes to ACs or scope require a version bump and user approval.
 |---|---|---|---|
 | 1.0 | 2026-07-11 | Initial implementation — filled contract from TODO.md + existing partial code | — |
 
-## Promotion Lifecycle
-
-```
-— → sandbox → integrated → release_verified
-```
-
-| State | Meaning | Evidence Required |
-|---|---|---|
-| `—` | Not yet assessed — default for legacy or new contracts. | None |
-| `sandbox` | Feature works in a dev sandbox route (`(dev)/sandbox/...`). | Dev sandbox route exists |
-| `integrated` | Feature is wired into the production route and E2E tests pass. | Production route + E2E pass |
-| `release_verified` | Feature has visual tests + all ACs verified. Ready for release. | Visual suite + verified ACs |
-
-## Status Lifecycle
-
-```
-draft → approved → in_progress → implemented → verified → completed
-                                      ↘ verification_failed → implemented
-draft → blocked
-draft → superseded
-```
-
-Rules:
-- `implemented`: implementer believes code is ready. Set by `/contract`.
-- `verified`: independent verifier passed all mandatory ACs. Set by `/contract-verify`.
-- `completed`: merged and CI passed. Set manually after merge.
-- Any mandatory AC marked ⚠️ or ❌ prevents `verified` and `completed`.
-- Scope changes not recorded in Amendments prevent `verified`.
+> 📋 Promotion & status lifecycles: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md)
 
 ---
 

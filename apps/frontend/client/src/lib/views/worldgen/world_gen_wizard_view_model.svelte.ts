@@ -17,8 +17,7 @@ import type { WizardStep, WorldGenInput, WorldGenOutput } from '@aikami/types';
 import { getRandomPreset } from '@aikami/types';
 import { WorldGenSchema } from '$lib/data/ai_prompts/world_gen_schema';
 import { WORLD_GEN_SYSTEM_PROMPT } from '$lib/data/ai_prompts/world_gen_system_prompt';
-import { routerService, textGenerationService } from '$services';
-import { worldGenSeedingService } from './world_gen_seeding_service.svelte.ts';
+import { routerService, textGenerationService, worldGenSeedingService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types

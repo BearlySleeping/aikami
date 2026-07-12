@@ -294,8 +294,7 @@ const _createServiceStub = () => {
  * through a writable `.fn` on the underlying target object.
  *
  * Tests can replace the implementation by mutating `stub.fn = newMock`
- * instead of trying to reassign `setPendingGameLoad = newMock` on the
- * frozen module namespace.
+ * instead of trying to reassign an export on the frozen module namespace.
  */
 const _createCallableStub = () => {
   const target = { fn: mock(() => {}) as (...args: never) => unknown };
@@ -325,7 +324,6 @@ const _createCallableStub = () => {
 const _localServicesMock = () => ({
   aiService: _createServiceStub(),
   AIService: class {},
-  SentenceBoundaryChunker: class {},
   streamOrchestratorService: _createServiceStub(),
   textGenerationService: _createServiceStub(),
   TextGenerationService: class {},
@@ -359,11 +357,8 @@ const _localServicesMock = () => ({
   DiceService: class {},
   draftStore: _createServiceStub(),
   DraftStore: class {},
-  messageBranchStore: _createServiceStub(),
   MessageBranchStore: class {},
   ExpressionAssetResolver: class {},
-  setPendingGameLoad: _createCallableStub(),
-  consumePendingGameLoad: _createCallableStub(),
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
   gameStateService: Object.assign(_createServiceStub(), {
@@ -377,6 +372,64 @@ const _localServicesMock = () => ({
     },
   }),
   GameStateService: class {},
+  // C-314: Split services
+  playerStateService: Object.assign(_createServiceStub(), {
+    playerLevel: 1,
+    playerXp: 0,
+    playerXpToNext: 100,
+    playerHp: 100,
+    playerMaxHp: 100,
+    playerBaseAttack: 5,
+    playerBaseDefense: 12,
+    characterSheetSummary: '',
+    reset: _createCallableStub(),
+    startListening: _createCallableStub(),
+  }),
+  worldStateService: Object.assign(_createServiceStub(), {
+    currentWorld: undefined,
+    currentLocation: undefined,
+    worldVariables: {},
+    isConnected: false,
+    activeContexts: [],
+    worldGenOutput: {
+      worldName: 'The Realm',
+      worldDescription: 'A world of adventure awaits.',
+      npcs: [],
+      locations: ['Town Square'],
+      partyArcs: [],
+      hudWidgets: [],
+    },
+    quests: [],
+    defeatedEnemies: [],
+    reset: _createCallableStub(),
+    startListening: _createCallableStub(),
+  }),
+  inventoryService: Object.assign(_createServiceStub(), {
+    inventory: [],
+    gold: 100,
+    isOpen: false,
+    addGold: _createCallableStub(),
+    removeGold: _createCallableStub(),
+    open: _createCallableStub(),
+    close: _createCallableStub(),
+    toggle: _createCallableStub(),
+    startListening: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
+  equipmentService: Object.assign(_createServiceStub(), {
+    equippedWeapon: undefined,
+    equippedArmor: undefined,
+    totalAttack: 5,
+    totalDefense: 12,
+    equipItem: _createCallableStub(),
+    unequipItem: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
+  gameModeService: Object.assign(_createServiceStub(), {
+    currentMode: 'EXPLORE',
+    setMode: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
   getItemDefinition: mock((itemId: string) => ({
     label: itemId,
     attackBonus: 0,
@@ -422,6 +475,10 @@ const _localServicesMock = () => ({
     reset: mock(async () => {}),
   }),
   SessionService: class {},
+  campaignService: _createServiceStub(),
+  gmPromptService: _createServiceStub(),
+  messageBranchStore: _createServiceStub(),
+  SentenceBoundaryChunker: class {},
   __esModule: true,
 });
 

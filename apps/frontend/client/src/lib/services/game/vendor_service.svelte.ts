@@ -15,7 +15,7 @@ import {
   VendorActionSchema,
 } from '$lib/data/ai_prompts/vendor_action_schema';
 import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { audioService, gameStateService, getItemDefinition } from '$services';
+import { audioService, getItemDefinition, inventoryService } from '$services';
 
 // ── Pricing ─────────────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ class VendorService
     return this._isOpen;
   }
   get playerGold(): number {
-    return gameStateService.gold;
+    return inventoryService.gold;
   }
 
   open(): void {
@@ -181,24 +181,27 @@ class VendorService
       return;
     }
     const finalPrice = this.getFinalPrice(entry.basePrice);
-    if (gameStateService.gold < finalPrice) {
+    if (inventoryService.gold < finalPrice) {
       this._showTransaction(
-        `Not enough gold! Need ${finalPrice}, have ${gameStateService.gold}.`,
+        `Not enough gold! Need ${finalPrice}, have ${inventoryService.gold}.`,
         false,
       );
       return;
     }
     this.isBuying = true;
     try {
-      gameStateService.removeGold({ amount: finalPrice });
-      const inventory = gameStateService.inventory;
+      inventoryService.removeGold({ amount: finalPrice });
+      const inventory = inventoryService.inventory;
       const idx = inventory.findIndex((i) => i.itemId === itemId);
       if (idx >= 0) {
         inventory[idx] = { itemId, quantity: inventory[idx].quantity + 1 };
       } else {
         inventory.push({ itemId, quantity: 1 });
       }
-      gameStateService.inventory = [...inventory];
+      inventoryService.inventory.length = 0;
+      for (const item of inventory) {
+        inventoryService.inventory.push(item);
+      }
       void audioService.playSfx('/assets/audio/sfx/sfx_pickup.wav');
       this._showTransaction(
         `Purchased ${getItemDefinition(itemId).label} for ${finalPrice} gold!`,

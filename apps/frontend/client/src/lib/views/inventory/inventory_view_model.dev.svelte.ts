@@ -4,7 +4,7 @@
 // NEVER import this file from production code or non-(dev) routes.
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services';
-import { gameStateService } from '$services';
+import { inventoryService } from '$services';
 import { InventoryViewModel } from './inventory_view_model.svelte';
 
 const MOCK_ITEM_IDS = [
@@ -24,7 +24,7 @@ const MOCK_ITEM_IDS = [
 
 class InventoryDevViewModel extends InventoryViewModel {
   override async initialize(): Promise<void> {
-    gameStateService.inventory = [
+    inventoryService.inventory = [
       { itemId: 'ironSword', quantity: 1 },
       { itemId: 'healthPotion', quantity: 3 },
       { itemId: 'woodenShield', quantity: 1 },
@@ -47,11 +47,11 @@ class InventoryDevViewModel extends InventoryViewModel {
       totalQuantity += quantity;
       nameIndex++;
     }
-    gameStateService.inventory = junkItems;
+    inventoryService.inventory = junkItems;
   }
 
   clearInventory(): void {
-    gameStateService.inventory = [];
+    inventoryService.inventory = [];
   }
 }
 

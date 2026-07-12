@@ -5,7 +5,7 @@
 
 import type { QuestData } from '@aikami/frontend/engine';
 import { BaseViewModel, type BaseViewModelOptions } from '@aikami/frontend/services';
-import { gameStateService } from '$services';
+import { worldStateService } from '$services';
 import {
   getQuestViewModel,
   type QuestViewModelInterface,
@@ -97,14 +97,14 @@ class QuestDevViewModel
       ...q,
       objectives: q.objectives.map((o) => ({ ...o })),
     }));
-    (gameStateService.quests as QuestData[]).length = 0;
+    (worldStateService.quests as QuestData[]).length = 0;
     for (const clone of clones) {
-      (gameStateService.quests as QuestData[]).push(clone);
+      (worldStateService.quests as QuestData[]).push(clone);
     }
   }
 
   progressObjective(): void {
-    for (const quest of gameStateService.quests) {
+    for (const quest of worldStateService.quests) {
       if (quest.status !== 'active') {
         continue;
       }
@@ -118,7 +118,7 @@ class QuestDevViewModel
   }
 
   failRandomQuest(): void {
-    const active = gameStateService.quests.filter((q) => q.status === 'active');
+    const active = worldStateService.quests.filter((q) => q.status === 'active');
     if (active.length === 0) {
       return;
     }

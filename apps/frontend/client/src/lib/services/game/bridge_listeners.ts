@@ -2,16 +2,44 @@
 //
 // Thin wiring — translates engine bridge events into domain service calls.
 // No direct state mutation. Every interaction goes through a service method.
+//
+// Contract: C-314 AC-5 — services accepted as parameters, not imported as singletons.
 
 import type { EngineBridge } from '@aikami/frontend/engine';
-import { audioService } from '$lib/services/audio/audio_service.svelte';
-import { combatService } from './combat_service.svelte';
-import { gameEngineService } from './game_engine_service.svelte';
-import { gameOverlayService } from './game_overlay_service.svelte';
-import { npcDialogueService } from './npc_dialogue_service.svelte';
-import { timeService } from './time_service.svelte';
+import type { AudioServiceInterface } from '$lib/services/audio/audio_service.svelte';
+import type { CombatServiceInterface } from './combat_service.svelte';
+import type { GameEngineServiceInterface } from './game_engine_service.svelte';
+import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
+import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
+import type { TimeServiceInterface } from './time_service.svelte';
 
-export const setupBridgeListeners = async (): Promise<void> => {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type SetupBridgeListenersParams = {
+  gameOverlayService: GameOverlayServiceInterface;
+  npcDialogueService: NpcDialogueServiceInterface;
+  gameEngineService: GameEngineServiceInterface;
+  combatService: CombatServiceInterface;
+  timeService: TimeServiceInterface;
+  audioService: AudioServiceInterface;
+};
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+
+export const setupBridgeListeners = async (params: SetupBridgeListenersParams): Promise<void> => {
+  const {
+    gameOverlayService,
+    npcDialogueService,
+    gameEngineService,
+    combatService,
+    timeService,
+    audioService,
+  } = params;
+
   const { createEngineBridge } = await import('@aikami/frontend/engine');
   const bridge: EngineBridge = createEngineBridge();
   gameOverlayService.setBridge(bridge);

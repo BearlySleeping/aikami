@@ -32,20 +32,24 @@ mock.module('$services', () => ({
   vendorService: undefined,
 }));
 
-import { CombatViewModel, type CombatViewModelOptions } from './combat_view_model.svelte.ts';
+import {
+  CombatViewModel,
+  type CombatViewModelInterface,
+  type CombatViewModelOptions,
+} from './combat_view_model.svelte.ts';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 /** Creates a fresh CombatViewModel instance with test options. */
-const createViewModel = (): CombatViewModel => {
+const createViewModel = (): CombatViewModelInterface => {
   const options: CombatViewModelOptions = {
     className: 'CombatViewModelTest',
   };
-  return new CombatViewModel(options);
+  return CombatViewModel.create(options);
 };
 
 /** Extracts the active dice roll value with a non-null assertion guard. */
-const getDiceRoll = (vm: CombatViewModel) => {
+const getDiceRoll = (vm: CombatViewModelInterface) => {
   const roll = vm.activeDiceRoll;
   if (!roll) {
     throw new Error('Expected activeDiceRoll to be non-null');
@@ -61,7 +65,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('activeDiceRoll', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -158,7 +162,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('combatBackgroundImageUrl', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -182,7 +186,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('executeCustomAction — C-149 Gatekeeping', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
     let bridgeSendCalls: Array<Record<string, unknown>>;
 
     beforeEach(() => {
@@ -310,7 +314,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('executeCustomAction — C-151 AI Dynamic Music', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
     let bridgeSendCalls: Array<Record<string, unknown>>;
 
     beforeEach(() => {
@@ -464,7 +468,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('CombatViewModel — C-165 CombatLogEntry', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
 
     beforeEach(() => {
       viewModel = createViewModel();

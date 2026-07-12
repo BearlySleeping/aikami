@@ -11,8 +11,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gmPromptService } from '$lib/services/gm/gm_prompt_service.svelte.ts';
 import type { AddressMode } from '$lib/services/gm/gm_types';
+import { gmPromptService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types

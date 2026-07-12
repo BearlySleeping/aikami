@@ -7,14 +7,21 @@ import {
   type BaseFrontendClassOptions,
   routerService,
 } from '@aikami/frontend/services';
-import { audioService } from '$lib/services/audio/audio_service.svelte';
+import { aiSettingsService } from '$lib/services/settings/ai_settings.svelte';
 import { logger } from '$logger';
-import { GameSaveService } from '$services/game/game_save_service.svelte';
-import { gameStateService } from '$services/game/game_state_service.svelte';
-import { sessionService } from '$services/game/session_service.svelte';
+import {
+  audioService,
+  GameSaveService,
+  gameModeService,
+  sessionService,
+  worldStateService,
+} from '$services';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
+import { gameEngineService } from './game_engine_service.svelte';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
+import { npcDialogueService } from './npc_dialogue_service.svelte';
+import { timeService } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
 // GameOverlayService — overlay router for the game UI layer
@@ -169,7 +176,14 @@ export class GameOverlayService
     }
     this._initialized = true;
     await this._initSettings();
-    await setupBridgeListeners();
+    await setupBridgeListeners({
+      gameOverlayService: this as unknown as GameOverlayServiceInterface,
+      npcDialogueService,
+      gameEngineService,
+      combatService,
+      timeService,
+      audioService,
+    });
   }
 
   /** Sets the engine bridge for save operations. Called by setupBridgeListeners. */
@@ -194,7 +208,7 @@ export class GameOverlayService
 
   /** Returns the current defeated enemies list. */
   getDefeatedEnemies(): string[] {
-    return [...(gameStateService.defeatedEnemies as string[])];
+    return [...worldStateService.defeatedEnemies];
   }
 
   /** Sets camera zoom data for dialogue spatial UI. */
@@ -347,7 +361,7 @@ export class GameOverlayService
 
   resumeGame(): void {
     this.activeOverlay = 'NONE';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
   }
 
@@ -365,7 +379,7 @@ export class GameOverlayService
   endDialogue(): void {
     this.activeOverlay = 'NONE';
     this.dialogueNpc = undefined;
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
     this._handlers?.onDialogueEnd();
   }
@@ -398,14 +412,14 @@ export class GameOverlayService
 
   async respawnPlayer(): Promise<void> {
     this.activeOverlay = 'NONE';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
     this._engineService?.resumeEngine();
     await this._engineService?.loadMap({
       mapUrl: '/assets/maps/sandbox_zone_a.json',
       targetX: 160,
       targetY: 192,
-      defeatedEnemies: [...(gameStateService.defeatedEnemies as string[])],
+      defeatedEnemies: [...worldStateService.defeatedEnemies],
     });
   }
 
@@ -415,56 +429,56 @@ export class GameOverlayService
 
   openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
     this.activeOverlay = 'VENDOR';
-    gameStateService.setMode('MENU');
+    gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this.vendorSessionOptions = options;
   }
 
   closeVendor(): void {
     this.activeOverlay = 'NONE';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
     this._handlers?.onVendorClose();
   }
 
   openInventory(): void {
     this.activeOverlay = 'INVENTORY';
-    gameStateService.setMode('MENU');
+    gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onInventoryOpen();
   }
 
   closeInventory(): void {
     this.activeOverlay = 'NONE';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
     this._handlers?.onInventoryClose();
   }
 
   openQuestLog(): void {
     this.activeOverlay = 'QUEST_LOG';
-    gameStateService.setMode('MENU');
+    gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onQuestLogOpen();
   }
 
   closeQuestLog(): void {
     this.activeOverlay = 'NONE';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
     this._handlers?.onQuestLogClose();
   }
 
   openCharacterDashboard(): void {
     this.activeOverlay = 'CHARACTER_DASHBOARD';
-    gameStateService.setMode('MENU');
+    gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
     this._handlers?.onDashboardOpen();
   }
 
   closeCharacterDashboard(): void {
     this.activeOverlay = 'NONE';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
     this._handlers?.onDashboardClose();
   }
@@ -487,7 +501,7 @@ export class GameOverlayService
   /** @inheritdoc */
   openEndSession(): void {
     this.activeOverlay = 'END_SESSION';
-    gameStateService.setMode('MENU');
+    gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
   }
 
@@ -503,10 +517,10 @@ export class GameOverlayService
 
   /** @inheritdoc */
   async startNewSession(): Promise<void> {
-    const gameId = gameStateService.worldGenOutput?.worldName ?? 'default';
+    const gameId = worldStateService.worldGenOutput?.worldName ?? 'default';
     await sessionService.startNewSession({ gameId });
     this.activeOverlay = 'NONE';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
   }
 
@@ -515,7 +529,7 @@ export class GameOverlayService
       this.resumeGame();
     } else if (this.activeOverlay === 'NONE') {
       this.activeOverlay = 'PAUSE_MENU';
-      gameStateService.setMode('MENU');
+      gameModeService.setMode('MENU');
       this._engineService?.pauseEngine();
     }
   }
@@ -525,7 +539,6 @@ export class GameOverlayService
       return;
     }
     try {
-      const { aiSettingsService } = await import('$lib/services/settings/ai_settings.svelte');
       this._textProviderEndpoint = aiSettingsService.textProvider?.endpoint ?? '';
       this._useOllama = this._textProviderEndpoint.includes('localhost');
     } catch {

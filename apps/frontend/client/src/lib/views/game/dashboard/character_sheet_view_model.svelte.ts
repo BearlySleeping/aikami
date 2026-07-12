@@ -37,7 +37,7 @@ import {
   type SavingThrow,
   type Skill,
 } from '$lib/data/character_sheet_types';
-import { gameStateService, getItemDefinition } from '$services';
+import { equipmentService, getItemDefinition, playerStateService } from '$services';
 
 export type { EquipmentSlot, ItemDefinition };
 
@@ -131,15 +131,15 @@ class CharacterSheetViewModel
   // ── Game stats proxied from GameStateService ──
 
   get level(): number {
-    return gameStateService.playerLevel;
+    return playerStateService.playerLevel;
   }
 
   get xp(): number {
-    return gameStateService.playerXp;
+    return playerStateService.playerXp;
   }
 
   get xpToNext(): number {
-    return gameStateService.playerXpToNext;
+    return playerStateService.playerXpToNext;
   }
 
   get xpPercent(): number {
@@ -151,11 +151,11 @@ class CharacterSheetViewModel
   }
 
   get hp(): number {
-    return gameStateService.playerHp;
+    return playerStateService.playerHp;
   }
 
   get maxHp(): number {
-    return gameStateService.playerMaxHp;
+    return playerStateService.playerMaxHp;
   }
 
   get hpPercent(): number {
@@ -167,23 +167,23 @@ class CharacterSheetViewModel
   }
 
   get baseAttack(): number {
-    return gameStateService.playerBaseAttack;
+    return playerStateService.playerBaseAttack;
   }
 
   get baseDefense(): number {
-    return gameStateService.playerBaseDefense;
+    return playerStateService.playerBaseDefense;
   }
 
   get totalAttack(): number {
-    return gameStateService.playerTotalAttack;
+    return equipmentService.totalAttack;
   }
 
   get totalDefense(): number {
-    return gameStateService.playerTotalDefense;
+    return equipmentService.totalDefense;
   }
 
   get equippedWeaponDef(): ItemDefinition | undefined {
-    const weaponId = gameStateService.equippedWeapon;
+    const weaponId = equipmentService.equippedWeapon;
     if (!weaponId) {
       return undefined;
     }
@@ -191,7 +191,7 @@ class CharacterSheetViewModel
   }
 
   get equippedArmorDef(): ItemDefinition | undefined {
-    const armorId = gameStateService.equippedArmor;
+    const armorId = equipmentService.equippedArmor;
     if (!armorId) {
       return undefined;
     }

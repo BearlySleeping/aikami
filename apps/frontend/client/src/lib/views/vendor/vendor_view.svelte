@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
 import { logger } from '$logger';
-import { gameStateService } from '$services';
+import { gameModeService } from '$services';
 import type { VendorViewModelInterface } from './vendor_view_model.svelte';
 
 type Props = {
@@ -101,7 +101,7 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
 /** Mode-aware autofocus: focus the textarea when MENU/game mode is active. */
 $effect(() => {
-  if (gameStateService.currentMode === 'MENU' && inputElement) {
+  if (gameModeService.currentMode === 'MENU' && inputElement) {
     inputElement.focus();
   }
 });

@@ -12,7 +12,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import { gameStateService, getItemDefinition } from '$services';
+import { equipmentService, getItemDefinition, playerStateService } from '$services';
 
 export type { EquipmentSlot, ItemDefinition };
 
@@ -71,17 +71,17 @@ class CharacterDashboardViewModel
 
   /** @inheritdoc */
   get level(): number {
-    return gameStateService.playerLevel;
+    return playerStateService.playerLevel;
   }
 
   /** @inheritdoc */
   get xp(): number {
-    return gameStateService.playerXp;
+    return playerStateService.playerXp;
   }
 
   /** @inheritdoc */
   get xpToNext(): number {
-    return gameStateService.playerXpToNext;
+    return playerStateService.playerXpToNext;
   }
 
   /** @inheritdoc */
@@ -95,12 +95,12 @@ class CharacterDashboardViewModel
 
   /** @inheritdoc */
   get hp(): number {
-    return gameStateService.playerHp;
+    return playerStateService.playerHp;
   }
 
   /** @inheritdoc */
   get maxHp(): number {
-    return gameStateService.playerMaxHp;
+    return playerStateService.playerMaxHp;
   }
 
   /** @inheritdoc */
@@ -114,27 +114,27 @@ class CharacterDashboardViewModel
 
   /** @inheritdoc */
   get baseAttack(): number {
-    return gameStateService.playerBaseAttack;
+    return playerStateService.playerBaseAttack;
   }
 
   /** @inheritdoc */
   get baseDefense(): number {
-    return gameStateService.playerBaseDefense;
+    return playerStateService.playerBaseDefense;
   }
 
   /** @inheritdoc */
   get totalAttack(): number {
-    return gameStateService.playerTotalAttack;
+    return equipmentService.totalAttack;
   }
 
   /** @inheritdoc */
   get totalDefense(): number {
-    return gameStateService.playerTotalDefense;
+    return equipmentService.totalDefense;
   }
 
   /** @inheritdoc */
   get equippedWeaponDef(): ItemDefinition | undefined {
-    const weaponId = gameStateService.equippedWeapon;
+    const weaponId = equipmentService.equippedWeapon;
     if (!weaponId) {
       return undefined;
     }
@@ -143,7 +143,7 @@ class CharacterDashboardViewModel
 
   /** @inheritdoc */
   get equippedArmorDef(): ItemDefinition | undefined {
-    const armorId = gameStateService.equippedArmor;
+    const armorId = equipmentService.equippedArmor;
     if (!armorId) {
       return undefined;
     }
@@ -160,4 +160,4 @@ export { CharacterDashboardViewModel };
 
 export const getCharacterDashboardViewModel = (
   options: CharacterDashboardViewModelOptions,
-): CharacterDashboardViewModelInterface => new CharacterDashboardViewModel(options);
+): CharacterDashboardViewModelInterface => CharacterDashboardViewModel.create(options);

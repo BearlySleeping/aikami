@@ -17,6 +17,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { AvailabilityStatus, DaySchedule } from '@aikami/types';
+import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
 import { npcScheduleService } from '$services';
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -163,9 +164,6 @@ class ScheduleEditorViewModel
 
     try {
       // Use text generation service to call the Schedule Planner agent
-      const { textGenerationService } = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
 
       const result = (await textGenerationService.extractStructure({
         schema: {

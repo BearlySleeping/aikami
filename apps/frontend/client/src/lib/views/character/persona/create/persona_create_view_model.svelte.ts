@@ -11,15 +11,20 @@ import {
 } from '$lib/data/ai_prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
+import { characterService } from '$lib/services/character/character.svelte';
+import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import {
   aiSettingsService,
   authService,
-  gameStateService,
+  equipmentService,
   imageGenerationService,
+  inventoryService,
   personaCreationService,
+  playerStateService,
   routerService,
   storageService,
   textGenerationService,
+  worldStateService,
 } from '$services';
 
 // LPC Slot → index lookup (built at module init)
@@ -459,13 +464,15 @@ export class PersonaCreateViewModel
 
     // Clear any stale game state from a previous play session
     // so the new game starts with a clean inventory, quest log, etc.
-    gameStateService.reset();
+    inventoryService.reset();
+    worldStateService.reset();
+    playerStateService.reset();
+    equipmentService.reset();
 
     // Set persona as active if user is logged in
     const uid = (authService as { uid?: string }).uid;
     if (uid && this.persona?.id) {
       try {
-        const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
         await personaService.setActivePersona(this.persona.id);
         this.info('enterWorld:active-set', { personaId: this.persona.id });
       } catch (error) {
@@ -548,7 +555,6 @@ export class PersonaCreateViewModel
           const file = new File([blob], `${persona.id}.png`, { type: blob.type || 'image/png' });
 
           // Use the character service's uploadAvatar
-          const { characterService } = await import('$lib/services/character/character.svelte');
           const uploadedUrl = await characterService.uploadAvatar({
             file,
             characterId: persona.id,
@@ -559,7 +565,6 @@ export class PersonaCreateViewModel
         }
 
         // Save to Firestore via personaService
-        const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
         try {
           // Try update first (if exists), fallback is OK — updatePersona throws on missing doc
           await personaService.updatePersona(persona.id, {

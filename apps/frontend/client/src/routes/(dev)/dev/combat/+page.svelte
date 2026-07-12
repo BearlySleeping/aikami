@@ -12,7 +12,7 @@
 
 import { onMount } from 'svelte';
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-import { gameStateService } from '$services';
+import { gameModeService } from '$services';
 import CombatSidebar from '$views/combat/combat_sidebar.svelte';
 import { getCombatDevViewModel } from '$views/combat/combat_view_model.dev.svelte.ts';
 import CombatPortraitStage from '$views/combat/components/combat_portrait_stage.svelte';
@@ -42,10 +42,10 @@ const viewModel = getCombatDevViewModel({
 });
 
 onMount(() => {
-  gameStateService.setMode('COMBAT');
+  gameModeService.setMode('COMBAT');
   void viewModel.initialize();
   return () => {
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
   };
 });
 

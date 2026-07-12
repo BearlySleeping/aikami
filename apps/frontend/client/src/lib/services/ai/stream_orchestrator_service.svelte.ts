@@ -1,5 +1,9 @@
 // apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
 import type { ConversationMessage } from '../chat/context_builder.ts';
 import type { ConversationRepositoryInterface } from '../chat/conversation_repository.svelte.ts';
@@ -46,7 +50,7 @@ const KOKORO_SPEECH_URL = `${import.meta.env.PUBLIC_VOICE_URL ?? 'http://localho
 // StreamOrchestrator
 // ---------------------------------------------------------------------------
 
-export type StreamOrchestratorOptions = BaseClassOptions & {
+export type StreamOrchestratorOptions = BaseFrontendClassOptions & {
   textStream: TextStreamConnection;
   imageStream: ImageStreamConnection;
   audioQueuePlayer: AudioQueuePlayerInterface;
@@ -62,7 +66,7 @@ export type StreamOrchestratorOptions = BaseClassOptions & {
   }) => Promise<ArrayBuffer>;
 };
 
-export type StreamOrchestratorInterface = BaseClassInterface & {
+export type StreamOrchestratorInterface = BaseFrontendClassInterface & {
   readonly isGenerating: boolean;
   readonly currentText: string;
   readonly currentSpeakerId: string | undefined;
@@ -89,7 +93,7 @@ export type StreamOrchestratorInterface = BaseClassInterface & {
  * through the {@link AudioQueuePlayer}.
  */
 export class StreamOrchestrator
-  extends BaseClass<StreamOrchestratorOptions>
+  extends BaseFrontendClass<StreamOrchestratorOptions>
   implements StreamOrchestratorInterface
 {
   isGenerating = false;
@@ -565,4 +569,4 @@ export class StreamOrchestrator
 
 export const getStreamOrchestrator = (
   options: StreamOrchestratorOptions,
-): StreamOrchestratorInterface => new StreamOrchestrator(options);
+): StreamOrchestratorInterface => StreamOrchestrator.create(options);

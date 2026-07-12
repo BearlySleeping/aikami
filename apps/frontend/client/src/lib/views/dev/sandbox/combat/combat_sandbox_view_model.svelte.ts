@@ -21,7 +21,7 @@ import {
   CombatDevViewModel,
   type CombatDevViewModelOptions,
 } from '$lib/views/combat/combat_view_model.dev.svelte.ts';
-import { gameStateService } from '$services';
+import { gameModeService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -223,7 +223,7 @@ class CombatSandboxViewModel
     // Reset engine mode and unlock input so the player can move again
     this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
     this._gameWorld?.setInputLocked(false);
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     void this.combatViewModel?.dispose();
     this.combatViewModel = undefined;
   }
@@ -285,7 +285,7 @@ class CombatSandboxViewModel
       // pass through to the combat dialog's text input (C-148 fix)
       this._gameWorld?.setInputLocked(true);
       this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'COMBAT' } as never);
-      gameStateService.setMode('COMBAT');
+      gameModeService.setMode('COMBAT');
 
       this.combatViewModel = new CombatDevViewModel({
         className: 'CombatSandboxCombatViewModel',
@@ -324,7 +324,7 @@ class CombatSandboxViewModel
         // Player defeated — show Game Over, unlock input
         this._gameWorld?.setInputLocked(false);
         this._bridge?.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' } as never);
-        gameStateService.setMode('EXPLORE');
+        gameModeService.setMode('EXPLORE');
         this.isGameOver = true;
         void this.combatViewModel?.dispose();
         this.combatViewModel = undefined;
