@@ -11,8 +11,9 @@
  *   contract_generate       — Generate a draft contract shell from a backlog item
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
@@ -51,6 +52,77 @@ type BacklogItem = {
 const TODO_PATH = 'docs/TODO.md';
 const CONTRACTS_DIR = 'docs/contracts';
 const ARCHIVED_CONTRACTS_DIR = 'docs/contracts/archived';
+const WORKSPACES_DIR = '.pi/workspaces';
+const MAX_WORKSPACE_NAME_LENGTH = 80;
+
+// ── Jujutsu workspace helpers ───────────────────────────────────
+
+const sanitizeWorkspaceName = (raw: string): string => {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_WORKSPACE_NAME_LENGTH);
+};
+
+interface JjExecError extends Error {
+  stderr?: string;
+}
+
+const isJjExecError = (err: unknown): err is JjExecError => err instanceof Error;
+
+const runJj = (command: string, cwd?: string): string => {
+  // Headless config: guarantees identity in CI/sandbox/Nix containers
+  // where global git/jj config may not be inherited.
+  const configFlags = [
+    `--config-toml 'ui.user-name="Pi Agent"'`,
+    `--config-toml 'ui.user-email="agent@pi.internal"'`,
+  ].join(' ');
+
+  const opts = {
+    encoding: 'utf-8' as const,
+    stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
+    cwd,
+  };
+
+  // Git index.lock retry: co-located git backend can contend across
+  // concurrent workspace syncs. Exponential backoff: 100ms → 200ms → 400ms.
+  const maxRetries = 3;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return execSync(`jj ${configFlags} ${command}`, opts).trim();
+    } catch (err: unknown) {
+      lastError = err;
+      const message = isJjExecError(err) ? (err.stderr ?? err.message) : String(err);
+
+      // Retry only on git lock contention
+      if (/index\.lock/i.test(message) && attempt < maxRetries - 1) {
+        const delay = 100 * 2 ** attempt;
+        console.warn(
+          `  ⚠️  Git lock contention, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
+        );
+        const start = Date.now();
+        while (Date.now() - start < delay) {
+          // Busy-wait is acceptable for sub-second delays in Node.js
+        }
+        continue;
+      }
+
+      throw new Error(`jj ${command} failed: ${message}`);
+    }
+  }
+
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`jj ${command} failed after ${maxRetries} retries: ${message}`);
+};
+
+const getJjChangeId = (cwd: string): string => {
+  const output = runJj('log -r @ --no-graph -T change_id', cwd);
+  return output.trim();
+};
 
 const _parseBacklog = (repoRoot: string): { items: BacklogItem[]; errors: string[] } => {
   const todoPath = join(repoRoot, TODO_PATH);
@@ -485,6 +557,344 @@ export default function (pi: ExtensionAPI) {
           fileName,
           priority,
         },
+      };
+    },
+  });
+
+  // ─────────────────────────────────────────────────────────┐
+  // Tool 3: contract_workspace_create                       │
+  // ─────────────────────────────────────────────────────────┘
+
+  pi.registerTool({
+    name: 'contract_workspace_create',
+    label: 'Contract: Create Workspace',
+    description:
+      'Provision an isolated jj workspace for a contract task. ' +
+      'Creates a co-located workspace at .pi/workspaces/<id> and returns ' +
+      'the absolute path and initial change ID. Use BEFORE writing files or ' +
+      'running compilation tools in a contract task.',
+    promptSnippet: 'Use contract_workspace_create to isolate a task in a dedicated jj workspace.',
+    promptGuidelines: [
+      'Call this before any file mutations or build steps in a contract pipeline.',
+      'Use the returned change_id for checkpointing and reconciliation.',
+      'Workspace directories live under .pi/workspaces/ and are .gitignored.',
+    ],
+    parameters: Type.Object({
+      taskId: Type.String({
+        description:
+          'Unique task or contract ID (e.g. "C-312" or "contract-writer-xyz"). ' +
+          'Used to generate a sanitized workspace directory name.',
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const cwd = ctx.cwd;
+      const sanitized = sanitizeWorkspaceName(params.taskId);
+      const wsDir = join(cwd, WORKSPACES_DIR, sanitized);
+
+      // Ensure parent directory exists
+      if (!existsSync(join(cwd, WORKSPACES_DIR))) {
+        mkdirSync(join(cwd, WORKSPACES_DIR), { recursive: true });
+      }
+
+      // Check for existing workspace
+      if (existsSync(wsDir)) {
+        const existingId = (() => {
+          try {
+            return getJjChangeId(wsDir);
+          } catch {
+            return 'unknown';
+          }
+        })();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: [
+                `⚠️ Workspace already exists: \`${wsDir}\``,
+                `Change ID: \`${existingId}\``,
+                '',
+                'Use this existing workspace or clean it up first with `contract_workspace_cleanup` ',
+                'if you need a fresh one.',
+              ].join('\n'),
+            },
+          ],
+          details: {
+            path: wsDir,
+            changeId: existingId,
+            alreadyExists: true,
+          },
+        };
+      }
+
+      // Create the workspace
+      runJj(`workspace add ${wsDir}`, cwd);
+
+      // Capture the initial change ID in the new workspace
+      const changeId = getJjChangeId(wsDir);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ Workspace created: \`${wsDir}\``,
+              `Change ID: \`${changeId}\``,
+              '',
+              'This workspace is now the active working directory for the task.',
+              'Use `contract_workspace_checkpoint` to save progress snapshots.',
+              'Use `contract_workspace_complete` when the task is done.',
+            ].join('\n'),
+          },
+        ],
+        details: {
+          path: wsDir,
+          changeId,
+          alreadyExists: false,
+        },
+      };
+    },
+  });
+
+  // ─────────────────────────────────────────────────────────┐
+  // Tool 4: contract_workspace_checkpoint                   │
+  // ─────────────────────────────────────────────────────────┘
+
+  pi.registerTool({
+    name: 'contract_workspace_checkpoint',
+    label: 'Contract: Workspace Checkpoint',
+    description:
+      'Snapshot the current working state in a jj workspace with a descriptive ' +
+      'message. No explicit staging needed — jj auto-tracks all file changes.',
+    promptSnippet: 'Use contract_workspace_checkpoint to record an agent milestone.',
+    promptGuidelines: [
+      'Call after completing a successful partial step (test passes, build succeeds).',
+      'Messages should identify what was accomplished (e.g. "Service layer complete").',
+      'Does NOT create a new change — it only updates the description of the current working-copy change.',
+    ],
+    parameters: Type.Object({
+      workspacePath: Type.String({
+        description:
+          'Absolute path to the jj workspace directory (returned by contract_workspace_create).',
+      }),
+      message: Type.String({
+        description:
+          'Human-readable milestone description (e.g. "Agent milestone: Added auth service").',
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const escaped = params.message.replace(/"/g, '\\"');
+      runJj(`describe -m "${escaped}"`, params.workspacePath);
+
+      const changeId = getJjChangeId(params.workspacePath);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ Checkpoint saved.`,
+              `Change ID: \`${changeId}\``,
+              `Message: "${params.message}"`,
+            ].join('\n'),
+          },
+        ],
+        details: { changeId, message: params.message },
+      };
+    },
+  });
+
+  // ─────────────────────────────────────────────────────────┐
+  // Tool 5: contract_workspace_complete                     │
+  // ─────────────────────────────────────────────────────────┘
+
+  pi.registerTool({
+    name: 'contract_workspace_complete',
+    label: 'Contract: Complete Workspace',
+    description:
+      'Finalize an isolated workspace: record the final description, fetch the ' +
+      'change ID, and return reconciliation instructions. Does NOT auto-squash or ' +
+      'push — that step is manual or handled by the pipeline orchestrator.',
+    promptSnippet: 'Use contract_workspace_complete when a task reaches its definition of done.',
+    promptGuidelines: [
+      'Call after all tests/verifications pass.',
+      'Returns the change ID needed for reconciling into the main branch.',
+      'Does NOT clean up the workspace — use contract_workspace_cleanup separately.',
+    ],
+    parameters: Type.Object({
+      workspacePath: Type.String({
+        description: 'Absolute path to the jj workspace directory.',
+      }),
+      message: Type.String({
+        description: 'Final commit message (e.g. "Feat: Completed contract pipeline task C-312").',
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const escaped = params.message.replace(/"/g, '\\"');
+      runJj(`describe -m "${escaped}"`, params.workspacePath);
+
+      const changeId = getJjChangeId(params.workspacePath);
+      const rootDir = ctx.cwd;
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ Workspace finalized.`,
+              `Change ID: \`${changeId}\``,
+              `Message: "${params.message}"`,
+              '',
+              'To reconcile into main branch from the repo root:',
+              `  jj squash --from ${changeId} --into main`,
+              '',
+              'Or to push as a branch for PR:',
+              `  jj git push --change ${changeId} --remote origin --branch feat/${basename(params.workspacePath)}`,
+              '',
+              `Root workspace: \`${rootDir}\``,
+            ].join('\n'),
+          },
+        ],
+        details: {
+          changeId,
+          workspacePath: params.workspacePath,
+          rootDir,
+        },
+      };
+    },
+  });
+
+  // ─────────────────────────────────────────────────────────┐
+  // Tool 6: contract_workspace_cleanup                      │
+  // ─────────────────────────────────────────────────────────┘
+
+  pi.registerTool({
+    name: 'contract_workspace_cleanup',
+    label: 'Contract: Cleanup Workspace',
+    description:
+      'Safely remove a jj workspace: forgets it from jj config and removes ' +
+      'the directory. Use for both successful completions and error recovery.',
+    promptSnippet: 'Use contract_workspace_cleanup to tear down an isolated workspace.',
+    promptGuidelines: [
+      'Call after reconciliation or after a failed task.',
+      'Runs `jj workspace forget` first, then `rm -rf` the directory.',
+      'Does NOT affect changes that were already squashed/pushed.',
+    ],
+    parameters: Type.Object({
+      workspacePath: Type.String({
+        description: 'Absolute path to the jj workspace directory to clean up.',
+      }),
+      abandonChange: Type.Optional(
+        Type.Boolean({
+          default: false,
+          description:
+            'If true, also runs `jj abandon` on the workspace change before cleanup (error recovery).',
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      // If abandoning, do it first from the repo root
+      if (params.abandonChange && existsSync(params.workspacePath)) {
+        try {
+          const changeId = getJjChangeId(params.workspacePath);
+          runJj(`abandon ${changeId}`, ctx.cwd);
+          console.log(`🚫 Abandoned change ${changeId} (error recovery)`);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(`⚠️  Could not abandon change: ${message}`);
+        }
+      }
+
+      // Forget the workspace from jj config
+      try {
+        runJj(`workspace forget ${params.workspacePath}`, ctx.cwd);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`⚠️  Could not forget workspace: ${message}`);
+      }
+
+      // Remove the directory
+      if (existsSync(params.workspacePath)) {
+        rmSync(params.workspacePath, { recursive: true, force: true });
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ Workspace cleaned up: \`${params.workspacePath}\``,
+              params.abandonChange ? '  (change was abandoned)' : '',
+            ].join('\n'),
+          },
+        ],
+        details: {
+          cleanedPath: params.workspacePath,
+          abandoned: params.abandonChange ?? false,
+        },
+      };
+    },
+  });
+
+  // ─────────────────────────────────────────────────────────┐
+  // Tool 7: contract_workspace_list                         │
+  // ─────────────────────────────────────────────────────────┘
+
+  pi.registerTool({
+    name: 'contract_workspace_list',
+    label: 'Contract: List Workspaces',
+    description: 'List all active jj workspaces managed under .pi/workspaces/.',
+    promptSnippet: 'Use contract_workspace_list to inspect active agent workspaces.',
+    promptGuidelines: [
+      'Use for diagnostics — find orphaned or incomplete workspaces.',
+      'Returns workspace path, change ID, and description for each.',
+    ],
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+      const cwd = ctx.cwd;
+      const wsParent = join(cwd, WORKSPACES_DIR);
+      const items: { path: string; changeId: string; description: string }[] = [];
+
+      if (!existsSync(wsParent)) {
+        return {
+          content: [{ type: 'text', text: 'No workspaces directory found.' }],
+          details: { workspaces: [] },
+        };
+      }
+
+      const entries = readdirSync(wsParent, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) {
+          continue;
+        }
+        const wsPath = join(wsParent, entry.name);
+        try {
+          const changeId = getJjChangeId(wsPath);
+          const desc = runJj('log -r @ --no-graph -T description', wsPath);
+          items.push({ path: wsPath, changeId, description: desc.trim() });
+        } catch {
+          // Skip non-jj directories
+        }
+      }
+
+      if (items.length === 0) {
+        return {
+          content: [{ type: 'text', text: 'No active jj workspaces.' }],
+          details: { workspaces: [] },
+        };
+      }
+
+      const lines = [`**Active Workspaces** (${items.length})\n`];
+      for (const item of items) {
+        const shortPath = basename(item.path);
+        lines.push(`🔹 \`${item.changeId}\` — ${shortPath}`);
+        if (item.description) {
+          lines.push(`   ${item.description.slice(0, 80)}`);
+        }
+      }
+
+      return {
+        content: [{ type: 'text', text: lines.join('\n') }],
+        details: { workspaces: items },
       };
     },
   });

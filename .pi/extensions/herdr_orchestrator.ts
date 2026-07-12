@@ -31,7 +31,7 @@ import {
   SERVICE_DEFS,
   startServices,
   stopServices,
-} from '../../scripts/src/lib/herdr/session.ts';
+} from '../../scripts/src/lib/herdr/session';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES

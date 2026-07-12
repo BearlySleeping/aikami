@@ -7,7 +7,7 @@ import {
   listServices,
   startServices,
   stopServices,
-} from '../../scripts/src/lib/herdr/session.ts';
+} from '../../scripts/src/lib/herdr/session';
 // Direnv env vars (set by .envrc / scripts/direnv/) — always available:
 //   AIKAMI_MODE          — emulator | staging | production
 //   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
