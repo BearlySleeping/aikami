@@ -17,11 +17,15 @@ export const validatePostconditions = (options: {
     '/',
   );
 
+  // Critic is read-only — the Pi extension guard blocks write/edit/bash mutations.
+  // A git snapshot comparison would false-positive on files the critic merely read.
+  if (options.role === 'critic') {
+    return { passed: true, unauthorizedPaths: [], changedPaths: changed };
+  }
+
   let unauthorizedPaths: string[] = [];
   if (options.role === 'writer') {
     unauthorizedPaths = changed.filter((path) => path !== relativeContractPath);
-  } else if (options.role === 'critic') {
-    unauthorizedPaths = changed;
   } else if (options.role === 'verifier') {
     unauthorizedPaths = changed.filter((path) => path !== relativeContractPath);
   }

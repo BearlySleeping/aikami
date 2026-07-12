@@ -1,7 +1,7 @@
 // scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { logPath } from './manifest_store.ts';
 import type { WorkerLaunchRequest } from './types.ts';
@@ -167,6 +167,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
 
     const paneId = tab.result.root_pane.pane_id;
+
+    // Delete any pre-existing contract file before the writer's first attempt.
+    // This ensures the contract is always created through Pi (via contract_generate)
+    // rather than relying on a stale programmatically-generated shell.
+    if (request.role === 'writer' && request.attempt === 1) {
+      try {
+        unlinkSync(resolve(this._repoRoot, request.contractPath));
+      } catch {
+        // File does not exist — nothing to clean up.
+      }
+    }
 
     // Write the expanded prompt to a file that Pi loads via --append-system-prompt.
     const promptDirectory = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');

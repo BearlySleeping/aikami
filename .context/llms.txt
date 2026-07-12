@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-12
-> Files: 268 across 12 categories
+> Files: 267 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -257,7 +257,6 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [C-311: Swarm Socket Orchestration & Structural Handoff Refactor](contracts/C-311-swarm-socket-orchestration.md)
 - [Contract C-312: Restore Planning, Promotion, and Release Truth](contracts/C-312-restore-planning-promotion-and-release-truth.md)
 - [Contract C-313: Introduce the Campaign Aggregate and Boot State Machine](contracts/C-313-introduce-the-campaign-aggregate-and-boot-state-machine.md)
-- [Contract C-314: Establish a Production Game Composition Root and Split God Services](contracts/C-314-establish-a-production-game-composition-root-and-split-god-s.md)
 - [Contract: C-320 - Automated MDC Skill Scraper and Transpiler](contracts/C-320_mdc_skill_scraper.md)
 - [Contract: C-321 - MCP (Model Context Protocol) Stdio Runner Bridge](contracts/C-321_mcp_runner_bridge.md)
 - [Contract C-365: Harden Contract Pipeline Orchestration](contracts/C-365-harden-contract-pipeline-orchestration.md)

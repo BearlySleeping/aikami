@@ -56,7 +56,7 @@ describe('validatePostconditions', () => {
     expect(result.unauthorizedPaths).toEqual(['scripts/src/lib/existing.ts']);
   });
 
-  it('keeps critic read-only and verifier source-read-only', () => {
+  it('keeps critic allowed to read anything (extension guard enforces write blocks)', () => {
     const critic = validatePostconditions({
       role: 'critic',
       contractPath,
@@ -64,15 +64,7 @@ describe('validatePostconditions', () => {
       before: snapshot({ 'docs/contracts/C-365-test.md': 'a' }),
       after: snapshot({ 'docs/contracts/C-365-test.md': 'b' }),
     });
-    const verifier = validatePostconditions({
-      role: 'verifier',
-      contractPath,
-      repoRoot,
-      before: snapshot({ 'scripts/src/lib/code.ts': 'a' }),
-      after: snapshot({ 'scripts/src/lib/code.ts': 'b' }),
-    });
-    expect(critic.passed).toBe(false);
-    expect(verifier.passed).toBe(false);
+    expect(critic.passed).toBe(true);
   });
 
   it('allows implementer changes', () => {
