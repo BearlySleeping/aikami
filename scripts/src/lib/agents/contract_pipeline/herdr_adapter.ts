@@ -296,13 +296,23 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
     // Send the task prompt as input to the running Pi process.
     const contractId = extractContractId(options.request.contractPath);
-    const taskMessage = [
-      `Execute the ${options.request.role} stage for ${contractId}.`,
-      'Read the system prompt for full instructions.',
-      'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
-      'Printing a text summary without the tool call will block the pipeline forever.',
-      'Do not ask questions — if blocked, finish with status blocked.',
-    ].join(' ');
+    const isRetry = options.request.attempt > 1;
+    const taskMessage = isRetry
+      ? [
+          `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}).`,
+          'You are resuming in the same session — build on your previous work.',
+          'Read the system prompt for feedback from the prior stage.',
+          'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
+          'Printing a text summary without the tool call will block the pipeline forever.',
+          'Do not ask questions — if blocked, finish with status blocked.',
+        ].join(' ')
+      : [
+          `Execute the ${options.request.role} stage for ${contractId}.`,
+          'Read the system prompt for full instructions.',
+          'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
+          'Printing a text summary without the tool call will block the pipeline forever.',
+          'Do not ask questions — if blocked, finish with status blocked.',
+        ].join(' ');
     await this._sendTaskText({ paneId, text: taskMessage });
 
     return { paneId };
@@ -313,9 +323,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
    *
    * First launch creates the tab and pi session.
    * Subsequent launches (feedback loops) close the old tab and recreate it,
-   * restarting pi with the same --session-id to preserve conversation history.
+   * restarting pi with the same --session-id to preserve conversation history
+   * within a single pipeline run. Cross-run contamination is prevented by
+   * including the run ID in the session namespace.
    * Tab labels use the role name only (writer, critic, implementer, verifier).
-   * Session IDs follow: pi-{contractId}-agent-{role}
+   * Session IDs follow: pi-{contractId}-{runId}-agent-{role}
    */
   async launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }> {
     if (!this._workspaceId) {
@@ -325,12 +337,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const tabLabel = request.role; // "writer", "critic", "implementer", "verifier"
     const contractId = extractContractId(request.contractPath);
 
-    // First attempt: use session to preserve context across stage transitions.
-    // Retries: start fresh — session history from a previous blocked/passed
-    // attempt confuses the LLM into thinking the work is already done.
-    // The system prompt carries all needed context via feedbackForStage.
-    const sessionId =
-      request.attempt === 1 ? buildSessionId({ contractId, role: request.role }) : undefined;
+    // Always use a session within a pipeline run — the run ID in the
+    // session key prevents cross-run contamination. Retries (feedback
+    // loops) benefit from seeing their prior work alongside the new
+    // stage feedback injected into the system prompt.
+    const sessionId = buildSessionId({
+      contractId,
+      role: request.role,
+    });
 
     // Close any existing tab with this role label for a clean restart.
     await this._closeTabByLabel(tabLabel);
