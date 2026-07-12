@@ -148,7 +148,11 @@ export const runContractPipeline = async (options: {
   allowDirty?: boolean;
   dryRun?: boolean;
   onReady?: (manifest: RunManifest) => void;
-  adapterFactory?: (options: { repoRoot: string; runId: string }) => ContractHerdrAdapterInterface;
+  adapterFactory?: (options: {
+    repoRoot: string;
+    runId: string;
+    contractId: string;
+  }) => ContractHerdrAdapterInterface;
 }): Promise<RunManifest> => {
   let manifest: RunManifest;
   if (options.resumeRunId) {
@@ -186,15 +190,16 @@ export const runContractPipeline = async (options: {
     return manifest;
   }
 
-  const buildWorkspaceLabel = (runId: string): string => `aikami-contract-${runId}`;
+  const buildWorkspaceLabel = (contractId: string): string => `aikami-contract-${contractId}`;
 
   await acquireLock({
     contractId: manifest.contractId,
     runId: manifest.runId,
     cwd: options.repoRoot,
-    checkWorkspaceAlive: async (runId: string) => {
+    checkWorkspaceAlive: async (_runId: string) => {
       try {
-        const wsId = await findWorkspace(buildWorkspaceLabel(runId));
+        // Workspace is contract-based: aikami-contract-{contractId}
+        const wsId = await findWorkspace(buildWorkspaceLabel(manifest.contractId));
         return wsId !== null;
       } catch {
         // Herdr not reachable — assume workspace is dead.
@@ -203,8 +208,16 @@ export const runContractPipeline = async (options: {
     },
   });
   const adapter =
-    options.adapterFactory?.({ repoRoot: options.repoRoot, runId: manifest.runId }) ??
-    new ContractHerdrAdapter({ repoRoot: options.repoRoot, runId: manifest.runId });
+    options.adapterFactory?.({
+      repoRoot: options.repoRoot,
+      runId: manifest.runId,
+      contractId: manifest.contractId,
+    }) ??
+    new ContractHerdrAdapter({
+      repoRoot: options.repoRoot,
+      runId: manifest.runId,
+      contractId: manifest.contractId,
+    });
 
   try {
     pipelineLog({

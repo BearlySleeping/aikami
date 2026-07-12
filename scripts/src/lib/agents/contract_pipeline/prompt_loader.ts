@@ -52,11 +52,13 @@ export const loadRolePrompt = (options: {
     canonical,
     creationInstruction,
     feedback ? `\n## Prior-stage feedback\n\n${feedback}` : '',
-    '\n## Automated pipeline completion',
+    '\n## 🔴 MANDATORY COMPLETION HANDOFF',
     "This session has exactly one role. Do not perform another role's work.",
     'Do not ask the user questions. If input is required, finish with status `blocked` and list the questions in findings.',
-    'Your final action MUST call `contract_stage_complete` with a truthful status, summary, findings, filesTouched, and evidence.',
-    'Do not merely print a completion heading; terminal text is not a pipeline handoff.',
+    '🔴 Your last action MUST be a call to `contract_stage_complete`. The pipeline polls for this artifact. Without it, the pipeline blocks forever.',
+    '🔴 Even if the contract is already complete, you MUST still call `contract_stage_complete` with status `passed`.',
+    '🔴 Printing a text summary is NOT a handoff. The tool call is the only valid handoff mechanism.',
+    '🔴 If you print a summary and stop without calling the tool, the pipeline will time out and fail.',
   ]
     .filter((section) => section.length > 0)
     .join('\n');

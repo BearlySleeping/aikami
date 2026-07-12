@@ -92,18 +92,20 @@ export type ContractHerdrAdapterInterface = {
 export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   private readonly _repoRoot: string;
   private readonly _runId: string;
+  private readonly _workspaceLabel: string;
   private _workspaceId = '';
   private _pipelinePaneId = '';
 
-  constructor(options: { repoRoot: string; runId: string }) {
+  constructor(options: { repoRoot: string; runId: string; contractId: string }) {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
+    this._workspaceLabel = `aikami-contract-${options.contractId}`;
   }
 
-  /** Create or recover the run-specific workspace and pipeline log tab. */
+  /** Create or recover the contract-specific workspace and pipeline log tab. */
   async initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }> {
     await ensureServer();
-    const label = `aikami-contract-${this._runId}`;
+    const label = this._workspaceLabel;
     const existingWorkspaceId = await findWorkspace(label);
     if (existingWorkspaceId) {
       const tabs = await herdrJson<TabListResult>([
@@ -261,7 +263,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const taskMessage = [
       `Execute the ${options.request.role} stage for ${contractId}.`,
       'Read the system prompt for full instructions.',
-      'Finish through contract_stage_complete.',
+      'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
+      'Printing a text summary without the tool call will block the pipeline forever.',
       'Do not ask questions — if blocked, finish with status blocked.',
     ].join(' ');
     await runHerdr(['pane', 'send-text', paneId, taskMessage]);
