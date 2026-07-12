@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-12
-> Files: 270 across 12 categories
+> Files: 271 across 13 categories
 
 ## Quick Start (Read These First)
 
@@ -307,6 +307,9 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 ## scripts/
 
 - [Scripts](scripts/README.md)
+## TODO_DRAFT.md/
+
+- [Aikami Less Organized TODO](TODO_DRAFT.md)
 ## TODO.md/
 
 - [Aikami Unified Product Backlog](TODO.md)

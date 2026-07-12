@@ -132,7 +132,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-309 | Swarm Control Pi Extension And Command Surface Wrapper | 🏁 completed | v1 |
 | C-310 | Automated Backlog Contract Generator | 🏁 completed | v1 |
 | C-311 | Swarm Socket Orchestration | ⏳ not_started | v1 |
-| C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 👍 approved | v2 |
+| C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🛠️ implemented | v2 |
 | C-316 | Build the Authored “Emberwatch: The Fading Ward” Demo Adventure | ⏳ not_started (no contract file) | v1 |
 | C-317 | Rebuild the Start Menu Around Campaigns, Not Personas | ⏳ not_started (no contract file) | v1 |
 | C-318 | Add One-Screen Capability Setup and an Offline Demo Fallback | ⏳ not_started (no contract file) | v1 |

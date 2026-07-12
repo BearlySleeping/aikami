@@ -35,6 +35,11 @@ export const validatePostconditions = (options: {
       if (path === relativeContractPath) {
         return false; // Exact match (placeholder) — allowed
       }
+      // docs/ is a separate gitignored repo — stray files (e.g. TODO_DRAFT.md)
+      // that are NOT contract files should not block the verifier/writer.
+      if (path.startsWith('docs/') && !path.startsWith('docs/contracts/')) {
+        return false;
+      }
       if (contractId && path.startsWith('docs/contracts/')) {
         const fileName = basename(path);
         // Allow the placeholder (C-315.md) or the slugged name (C-315-*.md)

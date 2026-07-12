@@ -117,7 +117,7 @@
 | C-312 | Restore Planning Promotion And Release Truth | 🛠️ implemented | 🔗 integrated | v2 |
 | C-313 | Introduce The Campaign Aggregate And Boot State Machine | 🛠️ implemented | ❓ `sandbox` | v2 |
 | C-314 | Establish A Production Game Composition Root And Split God S | 🛠️ implemented | ❓ production | v2 |
-| C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 👍 approved | — | v2 |
+| C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🛠️ implemented | — | v2 |
 | C-316 | Build the Authored “Emberwatch: The Fading Ward” Demo Adventure | ⏳ not_started (no contract file) | — | — |
 | C-317 | Rebuild the Start Menu Around Campaigns, Not Personas | ⏳ not_started (no contract file) | — | — |
 | C-318 | Add One-Screen Capability Setup and an Offline Demo Fallback | ⏳ not_started (no contract file) | — | — |

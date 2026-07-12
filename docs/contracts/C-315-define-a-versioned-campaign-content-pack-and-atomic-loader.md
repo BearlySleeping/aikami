@@ -8,7 +8,7 @@
 | **Target** | `packages/shared/schemas/src/lib/content_pack.ts`, `packages/shared/types/src/lib/content_pack.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `apps/frontend/client/static/content-packs/emberwatch/` |
 | **Priority** | P0 — production currently hardcodes a sandbox map while content pack identity (`contentPackId`) is an orphaned string with no resolver or manifest |
 | **Dependencies** | C-135 ✅, C-136 ✅, C-138 ✅, C-175 ✅, C-210 ✅, C-243 ✅, C-313 🟡 implemented, C-314 🟡 implemented |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal infrastructure |
 | **Contract version** | 2.0.0 |
@@ -455,3 +455,50 @@ None — all questions resolved:
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Implemented the versioned content pack system: TypeBox schema for ContentPackManifest with derived types in shared packages, a module-level ContentPackLoader factory with in-memory caching and path traversal protection, an emberwatch stub manifest at `static/content-packs/emberwatch/manifest.json`, and wired `contentPackId` from CampaignService through GameCompositionRoot into GameEngineService. The hardcoded `DefaultStartingMap` was replaced with content pack resolution. All data is 100% local — served from SvelteKit's static directory via `/content-packs/`.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Schema validates correct manifests, rejects invalids (22 tests) |
+| AC-2 | ✅ | Loader resolves URLs, lookups, caches, path traversal prevention (23 tests) |
+| AC-3 | ✅ | Emberwatch stub manifest serves HTTP 200 from SvelteKit static; integration test via in-memory fetch mock |
+| AC-4 | ✅ | Hardcoded DefaultStartingMap removed; contentPackId threaded from campaign → composition root → engine boot; default fallback to 'emberwatch' |
+| AC-5 | ✅ | Types derived from TypeBox via Static<> in @aikami/types; engine re-exports ContentPackLoaderInterface |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/content_pack.ts` | TypeBox schemas for ContentPackManifest and sub-types |
+| `packages/shared/schemas/src/lib/content_pack.test.ts` | Schema validation tests (22 tests) |
+| `packages/shared/types/src/lib/content_pack.ts` | Derived types via Static<typeof Schema> |
+| `packages/frontend/engine/src/assets/content_pack_loader.ts` | Module-level loadContentPack() factory, clearContentPackCache(), ContentPackLoaderInterface |
+| `packages/frontend/engine/src/assets/content_pack_loader.test.ts` | Loader unit tests (23 tests) |
+| `packages/frontend/engine/src/assets/content_pack_loader.integration.test.ts` | CI-verifiable integration test (8 tests) |
+| `apps/frontend/client/static/content-packs/emberwatch/manifest.json` | Emberwatch stub manifest referencing existing sandbox maps |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Added content_pack.ts barrel export |
+| `packages/shared/types/src/index.ts` | Added content_pack.ts barrel export |
+| `packages/frontend/engine/src/index.ts` | Added loadContentPack, clearContentPackCache, ContentPackLoaderInterface exports |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Added contentPackId state, replaced hardcoded DefaultStartingMap with pack resolution in bootWithCanvas(), added clearContentPackCache in destroyEngine() |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Phase 5b: threads contentPackId from campaignService.activeCampaign to gameEngineService |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.test.ts` | Added test for contentPackId default |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.test.ts` | Updated campaign service mock to include activeCampaign.contentPackId |
+
+### Deviations from Spec
+None — all ACs implemented as specified. The resolveMapUrl method additionally supports absolute paths (starting with /) to allow the emberwatch stub to reference existing sandbox maps at /assets/maps/ without duplicating files.
+
+### Test Results
+- Unit (schemas): 192/192 (0 failures) — includes 22 new content_pack tests
+- Unit (engine): 741/741 (0 failures) — includes 31 new content_pack_loader tests
+- Unit (client — game services): 30/30 (0 failures) — includes 1 new contentPackId test
+- Integration (emberwatch): 8/8 pass
+- Visual: N/A (no UI changes)
+- Baseline: 0 pre-existing failures, 0 new failures
