@@ -14,6 +14,7 @@ const { viewModel }: Props = $props();
   role="dialog"
   aria-modal="true"
   aria-label="Pause Menu"
+  tabindex="-1"
   onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.resumeGame(); } }}
 >
   <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">

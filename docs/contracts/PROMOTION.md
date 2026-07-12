@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 120 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 119 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -132,7 +132,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-309 | Swarm Control Pi Extension And Command Surface Wrapper | 🏁 completed | v1 |
 | C-310 | Automated Backlog Contract Generator | 🏁 completed | v1 |
 | C-311 | Swarm Socket Orchestration | ⏳ not_started | v1 |
-| C-314 | Establish A Production Game Composition Root And Split God S | 📝 draft | v2 |
 | C-315 | Define a Versioned Campaign Content Pack and Atomic Loader | ⏳ not_started (no contract file) | v1 |
 | C-316 | Build the Authored “Emberwatch: The Fading Ward” Demo Adventure | ⏳ not_started (no contract file) | v1 |
 | C-317 | Rebuild the Start Menu Around Campaigns, Not Personas | ⏳ not_started (no contract file) | v1 |

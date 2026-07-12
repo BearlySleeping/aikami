@@ -121,17 +121,18 @@ export class CombatPage {
   }
 
   // ── Dice UI ───────────────────────────────────────────────
+  // Selectors track the shared GameDice component (game_dice.svelte).
 
   get diceOverlay() {
-    return this.page.locator('.dice-roll-overlay');
+    return this.page.locator('.dice-overlay');
   }
 
   get spinningDie() {
-    return this.page.locator('.d20-spinning');
+    return this.page.locator('.d20-die.spinning');
   }
 
   get revealedDie() {
-    return this.page.locator('.d20-reveal');
+    return this.page.locator('.d20-die.revealed');
   }
 
   get diceValue() {
@@ -139,7 +140,7 @@ export class CombatPage {
   }
 
   get diceResultLabel() {
-    return this.page.locator('.dice-container .text-lg').first();
+    return this.page.locator('.dice-overlay .text-lg').first();
   }
 
   // ── Scene Image ───────────────────────────────────────────

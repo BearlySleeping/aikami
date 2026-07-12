@@ -20,9 +20,11 @@ const { viewModel }: Props = $props();
     aria-modal="true"
     tabindex="-1"
   >
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="bg-base-100 rounded-lg border border-base-300 shadow-2xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto"
       role="document"
+      tabindex="-1"
       onclick={(e: MouseEvent) => e.stopPropagation()}
       onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
     >

@@ -28,34 +28,23 @@ test.describe('Game Page (Separated Architecture)', () => {
     await expect(uiLayer).toBeAttached();
   });
 
-  test('should show loading state when engine is not ready', async ({ page }) => {
-    // In test environment without WebGPU, engine stays in loading state
+  test('engine loads and hides loading overlay', async ({ page }) => {
+    // Loading overlay should appear briefly then disappear when engine is ready
     const loadingText = page.getByText('Loading game engine...');
-    await expect(loadingText).toBeVisible({ timeout: 5000 });
+    // With WebGL enabled, engine should load and loading text should disappear
+    await loadingText.waitFor({ state: 'hidden', timeout: 15000 });
   });
 
   test('should respond to Escape key by opening pause menu', async ({ page }) => {
-    // Wait for engine to be ready first (game must be loaded)
+    // Wait for engine to be ready (player HUD appears when canvas renders)
     const playerHud = page.locator('.bg-base-200\\/80');
-    try {
-      await playerHud.waitFor({ state: 'visible', timeout: 10000 });
-    } catch {
-      // Engine may not fully load in test environment — skip the key test
-      test.skip(true, 'Engine not ready in test environment (no WebGPU)');
-      return;
-    }
+    await playerHud.waitFor({ state: 'visible', timeout: 15000 });
 
     // Press Escape to open pause menu
     await page.keyboard.press('Escape');
 
     // Check for pause menu elements
-    const resumeButton = page.getByText('Resume');
-    const hasPauseMenu = await resumeButton.isVisible().catch(() => false);
-
-    if (!hasPauseMenu) {
-      test.skip(true, 'Pause menu did not appear (engine state)');
-    }
-
-    await expect(resumeButton).toBeVisible();
+    const resumeButton = page.getByText('Resume Game');
+    await expect(resumeButton).toBeVisible({ timeout: 5000 });
   });
 });

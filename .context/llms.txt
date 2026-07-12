@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-12
-> Files: 268 across 12 categories
+> Files: 269 across 12 categories
 
 ## Quick Start (Read These First)
 
@@ -266,6 +266,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract Implementation Progress](contracts/PROGRESS.md)
 - [Feature Promotion Matrix](contracts/PROMOTION.md)
 - [Contracts](contracts/README.md)
+- [Shared Contract Sections](contracts/SHARED_SECTIONS.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/TEMPLATE.md)
 ## decisions/
 

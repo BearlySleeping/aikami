@@ -18,14 +18,9 @@ import { InventoryPage } from '$pom';
 test.describe('Inventory Overlay', () => {
   let inventory: InventoryPage;
 
-  test.beforeEach(async ({ page }, testInfo) => {
+  test.beforeEach(async ({ page }) => {
     inventory = new InventoryPage(page);
     await inventory.gotoGame();
-    // Skip all inventory tests if the engine doesn't load (no WebGPU in headless)
-    if (!(await inventory.isEngineLoaded())) {
-      testInfo.skip(true, 'Game engine not loaded in test environment (no WebGPU)');
-      return;
-    }
   });
 
   test('should open inventory overlay when pressing I', async () => {

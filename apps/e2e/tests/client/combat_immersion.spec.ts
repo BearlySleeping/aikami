@@ -25,20 +25,28 @@ test.describe('Combat Immersion (C-148)', () => {
   };
 
   // ── Dice UI ───────────────────────────────────────────────
-  // NOTE: These tests use CSS classes (.dice-roll-overlay, .d20-spinning, etc.)
-  // that were refactored into the GameDice component. The POM needs updating
-  // to match the new combat_dice_ui.svelte structure.
 
   test('should show dice roll overlay when attacking', async () => {
-    test.skip(true, 'Dice UI CSS classes refactored — POM needs update for GameDice component');
+    await combat.clickAttack();
+    await combat.page.waitForTimeout(800);
+    await expect(combat.diceOverlay).toBeVisible();
   });
 
-  test('should show dice roll on custom action submission', async () => {
-    test.skip(true, 'Dice UI CSS classes refactored — POM needs update for GameDice component');
+  test('should show spinning die during roll', async () => {
+    await combat.clickAttack();
+    await combat.page.waitForTimeout(300);
+    // Spinning die should appear during the roll animation
+    await expect(combat.spinningDie).toBeVisible();
   });
 
   test('should show HIT or MISS label after dice animation', async () => {
-    test.skip(true, 'Dice UI CSS classes refactored — POM needs update for GameDice component');
+    await combat.clickAttack();
+    // Wait for roll to complete and reveal
+    await combat.page.waitForTimeout(2000);
+    // Result label should be visible
+    await expect(combat.diceResultLabel).toBeVisible();
+    const labelText = await combat.diceResultLabel.textContent();
+    expect(['HIT!', 'MISS'].some((w) => labelText?.includes(w))).toBe(true);
   });
 
   // ── Scene Image Generation ────────────────────────────────

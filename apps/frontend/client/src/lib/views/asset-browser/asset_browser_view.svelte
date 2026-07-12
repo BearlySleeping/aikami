@@ -396,6 +396,7 @@ const handleGlobalClick = () => {
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closeContextMenu(); } }}
       role="menu"
+      tabindex="-1"
     >
       <button
         type="button"
@@ -428,9 +429,11 @@ const handleGlobalClick = () => {
       onclick={() => viewModel.closeUploadInfo()}
       onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closeUploadInfo(); } }}
     >
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
         class="modal-box"
         role="document"
+        tabindex="-1"
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
       >
@@ -483,9 +486,11 @@ const handleGlobalClick = () => {
       onclick={() => viewModel.closePreview()}
       onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closePreview(); } }}
     >
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
         class="modal-box max-w-2xl"
         role="document"
+        tabindex="-1"
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e: KeyboardEvent) => e.stopPropagation()}
       >
