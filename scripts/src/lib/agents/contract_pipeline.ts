@@ -576,6 +576,8 @@ const readManifest = (runId: string, cwd: string): RunManifest | null => {
 // ── Pipeline Log ─────────────────────────────────────────────
 
 const logPath = (runId: string, cwd: string): string => join(cwd, RUNS_DIR, runId, 'pipeline.log');
+const reviewLogPath = (runId: string, cwd: string): string =>
+  join(cwd, RUNS_DIR, runId, 'review.log');
 
 const pipelineLog = (runId: string, cwd: string, msg: string): void => {
   const path = logPath(runId, cwd);
@@ -585,6 +587,17 @@ const pipelineLog = (runId: string, cwd: string, msg: string): void => {
   console.log(line);
   try {
     writeFileSync(path, `${line}\n`, { flag: 'a' });
+  } catch {
+    /* best effort */
+  }
+};
+
+/** Append a display message to the review log (read-only viewer). */
+const reviewLog = (runId: string, cwd: string, msg: string): void => {
+  const path = reviewLogPath(runId, cwd);
+  mkdirSync(join(cwd, RUNS_DIR, runId), { recursive: true });
+  try {
+    writeFileSync(path, `${msg}\n\n`, { flag: 'a' });
   } catch {
     /* best effort */
   }
@@ -1026,7 +1039,11 @@ const runWorkerStage = async (
     if (agentBlocked) {
       // Don't set waitResult — return directly with blocked verdict
       const blockedVerdict: StageVerdict = {
-        implementer: { acStatus: {}, filesChanged: [], summary: 'Agent blocked — requires user interaction.' },
+        implementer: {
+          acStatus: {},
+          filesChanged: [],
+          summary: 'Agent blocked — requires user interaction.',
+        },
       };
       return { verdict: blockedVerdict, paneOutput: '', timedOut: true };
     }
@@ -1172,15 +1189,13 @@ const runWorkerStage = async (
   return { verdict, paneOutput: followupOutput, timedOut: true };
 };
 
-// ── Review Captain Setup ─────────────────────────────────────
+// ── Review Captain Display ───────────────────────────────────
 
 /**
- * Set up the Review Captain in the review pane:
- * 1. Start Pi
- * 2. Wait for idle
- * 3. Send /contract-review-captain command
+ * Start pi in the review tab and leave it idle — no initial prompt.
+ * The pipeline sends progress updates and a final summary as it runs.
  */
-const setupReviewCaptain = async (
+const setupReviewDisplay = async (
   reviewPaneId: string,
   taskId: string,
   cwd: string,
@@ -1192,7 +1207,7 @@ const setupReviewCaptain = async (
     await new Promise((r) => setTimeout(r, 1000));
   }
 
-  // Start Pi with a unique session ID
+  // Start pi with a unique session ID — no prompt, just idle
   await herdr([
     'pane',
     'run',
@@ -1200,29 +1215,22 @@ const setupReviewCaptain = async (
     `cd '${cwd}' && pi --session-id contract-${taskId}-review`,
   ]);
 
-  // Wait for idle
   await herdr(['wait', 'agent-status', reviewPaneId, '--status', 'idle', '--timeout', '30000']);
-  await new Promise((r) => setTimeout(r, 2000));
 
-  // Send the review captain prompt as agent input
-  await herdr(['pane', 'send-text', reviewPaneId, `/contract-review-captain ${taskId}`]);
-  await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
-
-  console.log('[pipeline:review-captain] initialized');
+  console.log('[pipeline:review] review pi initialized (idle)');
 };
 
 /**
- * Send a progress update to the Review Captain pane.
+ * Send a progress update to the review tab (pi + review log).
  */
 const sendReviewUpdate = async (
   reviewPaneId: string,
   manifest: RunManifest,
-  _cwd: string,
+  cwd: string,
 ): Promise<void> => {
   const { currentStage, loopCount, contractId } = manifest;
   const contractPath = manifest.contractPath;
 
-  // Read the contract for its title
   let title = contractId;
   try {
     const content = readFileSync(contractPath, 'utf-8');
@@ -1235,7 +1243,8 @@ const sendReviewUpdate = async (
   }
 
   const msg = [
-    '## Pipeline Progress Update',
+    '---',
+    `## Pipeline Progress Update`,
     '',
     `**Contract**: ${contractId} — ${title}`,
     `**Current Stage**: ${currentStage}`,
@@ -1244,21 +1253,25 @@ const sendReviewUpdate = async (
     `**Run ID**: ${manifest.runId}`,
   ].join('\n');
 
+  // Persist to review log
+  reviewLog(manifest.runId, cwd, msg);
+  // Send to pi
   await herdr(['pane', 'send-text', reviewPaneId, msg]);
   await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
 };
 
 /**
- * Send the final structured summary to the Review Captain.
+ * Send the final structured summary to the review tab (pi + review log).
  */
 const sendFinalSummary = async (
   reviewPaneId: string,
   manifest: RunManifest,
-  _cwd: string,
+  cwd: string,
 ): Promise<void> => {
   const contractPath = manifest.contractPath;
   let title = manifest.contractId;
   let acSection = '';
+  let commitMsg = '';
 
   try {
     const content = readFileSync(contractPath, 'utf-8');
@@ -1266,17 +1279,26 @@ const sendFinalSummary = async (
     if (titleMatch) {
       title = titleMatch[1]?.trim();
     }
-
-    // Try to extract AC status from the execution report
     const acMatch = content.match(/###\s*AC Status[\s\S]*?(?=###|$)/i);
     if (acMatch) {
       acSection = acMatch[0];
+    }
+    try {
+      const cmMatch = content.match(
+        /###\s*Suggested Commit Message[\s\S]*?```(?:[a-z]*)\n([\s\S]*?)```/i,
+      );
+      if (cmMatch?.[1]) {
+        commitMsg = cmMatch[1].trim();
+      }
+    } catch {
+      /* ignore */
     }
   } catch {
     /* ignore */
   }
 
   const msg = [
+    '---',
     '## Pipeline Complete — Final Summary',
     '',
     `**Contract**: ${manifest.contractId} — ${title}`,
@@ -1291,11 +1313,14 @@ const sendFinalSummary = async (
       ([stage, info]) =>
         `- **${stage}**: ${info.verdict ?? 'no verdict'} (${info.endTime ? `completed ${info.endTime}` : 'incomplete'})`,
     ),
+    ...(commitMsg ? ['', '### Suggested Commit Message', '', '```', commitMsg, '```'] : []),
     '',
     '### Next Steps',
     'Review the contract, make finishing touches, and request commit/push when ready.',
   ].join('\n');
 
+  reviewLog(manifest.runId, cwd, msg);
+  // Send to pi
   await herdr(['pane', 'send-text', reviewPaneId, msg]);
   await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
 };
@@ -1385,7 +1410,7 @@ const runStage = async (
   const manifest = ctx.manifest;
 
   // Create worker pane
-  const label = `${def.label}-${attemptLabel}`;
+  const label = `${def.label}${attemptLabel !== '1' ? `-${attemptLabel}` : ''}`;
   const paneId = await createWorkerPane(ctx.workspaceId, label, ctx.cwd);
 
   // Build prompt command with contract path
@@ -1553,9 +1578,14 @@ const runPipeline = async (cli: CliArgs): Promise<void> => {
     cwd,
   };
 
-  // ── Set up Review Captain (always, even on resume) ──
-  pipelineLog(manifest.runId, cwd, 'Setting up Review Captain...');
-  await setupReviewCaptain(reviewPaneId, taskId, cwd);
+  // ── Set up Review Display (pi session, idle, waiting for updates) ──
+  pipelineLog(manifest.runId, cwd, 'Setting up Review Display...');
+  await setupReviewDisplay(reviewPaneId, taskId, cwd);
+  reviewLog(
+    manifest.runId,
+    cwd,
+    `# Contract Pipeline: ${taskId}\n\nPipeline starting — waiting for stages...`,
+  );
 
   // ── Touch pipeline log for tail -f (redirect to run-specific path) ──
   mkdirSync(join(cwd, RUNS_DIR, manifest.runId), { recursive: true });
@@ -1634,6 +1664,28 @@ const runPipeline = async (cli: CliArgs): Promise<void> => {
           currentStage = 'review';
           transition(ctx, currentStage);
           break;
+        }
+
+        // Enforce: writer MUST set status to draft, never above.
+        // If the writer over-stepped, force-correct it.
+        try {
+          let contractContent = readFileSync(contractInfo.path, 'utf-8');
+          const statusMatch = contractContent.match(/\|\s*\*\*Status\*\*\s*\|\s*(\S+)\s*\|/);
+          const currentStatus = statusMatch?.[1]?.trim();
+          if (currentStatus && currentStatus !== 'draft') {
+            contractContent = contractContent.replace(
+              /\|\s*\*\*Status\*\*\s*\|\s*\S+\s*\|/,
+              '| **Status** | draft |',
+            );
+            writeFileSync(contractInfo.path, contractContent);
+            pipelineLog(
+              manifest.runId,
+              cwd,
+              `Post-writer: forced status draft (was ${currentStatus})`,
+            );
+          }
+        } catch {
+          /* best effort */
         }
 
         // After writer, go to critic
@@ -1778,10 +1830,12 @@ const runPipeline = async (cli: CliArgs): Promise<void> => {
 
   // ── Blocked stage ──
   if (currentStage === 'blocked') {
-    pipelineLog(manifest.runId, cwd, 'Pipeline blocked — sending error to review captain');
-    const blockedMsg = `## Pipeline Blocked\n\nThe pipeline has been blocked and requires manual intervention.\nSee the pipeline log for details: .pi/contract-runs/${manifest.runId}/pipeline.log`;
-    await herdr(['pane', 'send-text', reviewPaneId, blockedMsg]);
-    await herdr(['pane', 'send-keys', reviewPaneId, 'Enter']);
+    pipelineLog(manifest.runId, cwd, 'Pipeline blocked — sending error to review display');
+    reviewLog(
+      manifest.runId,
+      cwd,
+      `## Pipeline Blocked\n\nThe pipeline has been blocked and requires manual intervention.\nSee the pipeline log for details: .pi/contract-runs/${manifest.runId}/pipeline.log`,
+    );
   }
 
   pipelineLog(manifest.runId, cwd, 'PIPELINE COMPLETE');

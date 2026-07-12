@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-07-11
+> Auto-generated: 2026-07-12
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
@@ -132,7 +132,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-309 | Swarm Control Pi Extension And Command Surface Wrapper | 🏁 completed | v1 |
 | C-310 | Automated Backlog Contract Generator | 🏁 completed | v1 |
 | C-311 | Swarm Socket Orchestration | ⏳ not_started | v1 |
-| C-313 | Introduce the Campaign Aggregate and Boot State Machine | ⏳ not_started (no contract file) | v1 |
 | C-314 | Establish a Production Game Composition Root and Split God Services | ⏳ not_started (no contract file) | v1 |
 | C-315 | Define a Versioned Campaign Content Pack and Atomic Loader | ⏳ not_started (no contract file) | v1 |
 | C-316 | Build the Authored “Emberwatch: The Fading Ward” Demo Adventure | ⏳ not_started (no contract file) | v1 |
@@ -184,4 +183,5 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-362 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | v1 |
 | C-363 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | v1 |
 | C-364 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | v1 |
+| C-365 | Harden Contract Pipeline Orchestration | 👍 approved | v2 |
 

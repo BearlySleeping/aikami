@@ -4,6 +4,7 @@ export * from './lib/api/fcm.ts';
 export * from './lib/api/game.ts';
 export * from './lib/api/oauth.ts';
 export * from './lib/auth.ts';
+export * from './lib/campaign.ts';
 export * from './lib/common/position.ts';
 export * from './lib/common/preference.ts';
 export * from './lib/contracts/promotion.ts';

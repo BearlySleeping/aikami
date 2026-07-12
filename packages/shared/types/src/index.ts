@@ -14,6 +14,7 @@ export * from './lib/backend/firebase.ts';
 export * from './lib/backend/firestorage.ts';
 export * from './lib/backend/http.ts';
 export * from './lib/bridge_tags.ts';
+export * from './lib/campaign.ts';
 export * from './lib/class.ts';
 export * from './lib/client/ai_service_interface.ts';
 export * from './lib/common/preferences.ts';
