@@ -784,7 +784,7 @@ Use explicit mode scripts when you need a different backend.
 # ✅ Default — emulator mode (primary dev environment)
 cd apps/frontend/client && bun run dev
 bun moon run client:dev
-bun run tmux:start client
+bun run herdr:start client
 
 # ✅ Explicit mode override when needed
 cd apps/frontend/client && bun run dev:staging

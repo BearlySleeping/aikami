@@ -19,7 +19,7 @@ We need to containerize the `apps/backend/voice` microservice. Since it relies o
 ## Architecture Directives
 - **Voice Dockerfile**: A standard multi-stage build using `oven/bun:1`. It must install dependencies, copy the source, and expose the correct port (8089).
 - **Moon Task Update**: Refactor the `dev` task in `apps/backend/voice/moon.yml` to build and run the container locally instead of executing `bun run main.ts` directly on the host. 
-- **Graceful Termination**: Ensure the container runs with a name (e.g., `aikami-voice-dev`) and is explicitly cleaned up on stop, so `tmux:stop` successfully tears down the environment without leaving orphaned containers holding port 8089 hostage.
+- **Graceful Termination**: Ensure the container runs with a name (e.g., `aikami-voice-dev`) and is explicitly cleaned up on stop, so `herdr:stop` successfully tears down the environment without leaving orphaned containers holding port 8089 hostage.
 
 ## State & Data Models
 No new data models.
@@ -40,7 +40,7 @@ No new data models.
 
 - **AC3: Graceful Teardown**
   - Given an active `voice:dev` container task
-  - When the process receives a termination signal (via Ctrl+C or tmux stop)
+  - When the process receives a termination signal (via Ctrl+C or herdr stop)
   - Then the container gracefully exits and cleans itself up (e.g., via `--rm`).
   - Test Hook: Terminate the moon task and verify `docker ps` no longer shows the container.
 

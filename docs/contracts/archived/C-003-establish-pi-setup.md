@@ -87,7 +87,7 @@ Establish the `.pi/` directory at the monorepo root with project-specific extens
 - Unit: `test -f .pi/extensions/log-viewer.ts`
 
 **Watch Points**:
-- Skip aikami-specific extensions: `zeroclaw-orchestrator.ts`, `deployment-orchestrator.ts`, `genkit-manager.ts`, `tmux-orchestrator.ts`, `image-guard.ts` (aikami doesn't use Genkit, Zeroclaw, or tmux orchestration)
+- Skip aikami-specific extensions: `zeroclaw-orchestrator.ts`, `deployment-orchestrator.ts`, `genkit-manager.ts`, `herdr-orchestrator.ts`, `image-guard.ts` (aikami doesn't use Genkit, Zeroclaw, or herdr orchestration)
 - Add only extensions that aikami actually needs
 
 ### AC-5: .pi .gitignore
@@ -101,7 +101,7 @@ Establish the `.pi/` directory at the monorepo root with project-specific extens
 2. **Adapt extensions path**: settings.json paths should reference `./.pi/extensions`, `./.pi/skills`, `./.pi/prompts`
 3. **package.json**: Copy from aikami, keep only the dependencies needed by the extensions we're keeping
 4. **Extensions to keep**: `moon-integration.ts`, `firebase-tools.ts`, `log-viewer.ts`
-5. **Extensions to skip**: `deployment-orchestrator.ts`, `genkit-manager.ts`, `image-guard.ts`, `tmux-orchestrator.ts`, `zeroclaw-orchestrator.ts`
+5. **Extensions to skip**: `deployment-orchestrator.ts`, `genkit-manager.ts`, `image-guard.ts`, `herdr-orchestrator.ts`, `zeroclaw-orchestrator.ts`
 6. **Skills**: Handled by contract C-004
 7. **Prompts**: Copy `contract.md`, `dev.md`, `pre-commit.md`, `handoff.md` — adapt for aikami naming conventions (e.g., `@aikami/` package scope vs `@aikami/`)
 

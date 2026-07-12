@@ -1,5 +1,5 @@
 <!-- completed: 2026-06-29 -->
-# Contract: C-067 — Voice Microservice & Tmux Orchestration
+# Contract: C-067 — Voice Microservice & Herdr Orchestration
 
 | Field | Value |
 | ----- | ----- |
@@ -11,15 +11,15 @@
 | Version | 1.0 |
 
 ## Overview
-Our Text-to-Speech engine is built as a package but lacks a runtime host. Additionally, our `tmux` development orchestrator still references the deprecated `game` app. This contract covers standing up `apps/backend/voice` as a standalone Bun WebSocket server, updating the shared development ports, and refactoring the `scripts/src/lib/tmux` suite to manage the new `voice` service instead of `game`.
+Our Text-to-Speech engine is built as a package but lacks a runtime host. Additionally, our `herdr` development orchestrator still references the deprecated `game` app. This contract covers standing up `apps/backend/voice` as a standalone Bun WebSocket server, updating the shared development ports, and refactoring the `scripts/src/lib/herdr` suite to manage the new `voice` service instead of `game`.
 
 ## Design Reference
-- Review `scripts/src/lib/tmux/start.ts` and `session.ts` for the current orchestration logic.
+- Review `scripts/src/lib/herdr/start.ts` and `session.ts` for the current orchestration logic.
 - Review `packages/backend/audio/src/lib/tts_websocket_handler.ts` (built in C-057) to see how the Bun WebSocket handler is expected to be integrated.
 
 ## Architecture Directives
 - **Development Ports Update**: Remove `game` and add `voice` (e.g., port `8081` or similar) in `packages/shared/constants/src/lib/development_ports.ts`.
-- **Tmux Orchestrator Refactor**: Strip all references to `game` across the tmux script files (`start.ts`, `session.ts`, `stop.ts`, etc.). Add support for the `voice` service. Update the CLI help text.
+- **Herdr Orchestrator Refactor**: Strip all references to `game` across the herdr script files (`start.ts`, `session.ts`, `stop.ts`, etc.). Add support for the `voice` service. Update the CLI help text.
 - **Voice Microservice Host**: Create `apps/backend/voice` containing a `Bun.serve()` entry point. It imports the TTS worker pool and WebSocket handler from `packages/backend/audio` and binds them to the assigned development port.
 - **Workspace Registration**: Add the new `apps/backend/voice` project to the `.moon/workspace.yml` configuration and scaffold its `package.json`, `moon.yml`, and `tsconfig.json`.
 
@@ -51,10 +51,10 @@ The `Bun.serve` implementation in the Voice microservice should conceptually loo
   - Then `development_ports.ts` no longer contains a `game` port and successfully exports a `voice` port for all environment modes (emulator, staging, production).
   - Test Hook: Run `bun run typecheck` to ensure no other packages break due to the removed `game` port.
 
-- **AC2: Tmux Scripts Refactored**
-  - Given the tmux CLI commands
-  - When executing `bun run scripts/src/index.ts tmux:start voice,client`
-  - Then the orchestrator successfully creates the tmux session, splits the windows, and boots both the Client and the new Voice microservice.
+- **AC2: Herdr Scripts Refactored**
+  - Given the herdr CLI commands
+  - When executing `bun run scripts/src/index.ts herdr:start voice,client`
+  - Then the orchestrator successfully creates the herdr workspace, splits the windows, and boots both the Client and the new Voice microservice.
   - Test Hook: Review `start.ts` and `session.ts` to verify `game` is removed and the startup command for `voice` is mapped to `moon run voice:dev`.
 
 - **AC3: Voice Microservice Bootstrapper**
@@ -70,11 +70,11 @@ The `Bun.serve` implementation in the Voice microservice should conceptually loo
 
 ## Implementation Notes
 1. Start by updating the ports in `@aikami/constants`. Run a workspace typecheck to catch and fix any downstream breakages caused by removing `PORTS.game`.
-2. Refactor the tmux scripts in `scripts/src/lib/tmux/`. The available services should now conceptually be `emulator`, `client`, `voice`, `all`.
+2. Refactor the herdr scripts in `scripts/src/lib/herdr/`. The available services should now conceptually be `emulator`, `client`, `voice`, `all`.
 3. Scaffold `apps/backend/voice`. Use a standard `package.json`, `tsconfig.json`, and `moon.yml` mimicking our existing backend patterns. 
 4. In `apps/backend/voice/src/main.ts`, instantiate the TTS handler and boot the Bun server.
 5. In the Client's Voice Sandbox (`VoiceViewModel`), ensure the WebSocket URL is actually pointing to the new Voice service port (e.g., `ws://127.0.0.1:8081/ws`).
 
 ## Edge Cases & Gotchas
-- **Tmux Session Naming**: If you encounter `exited with code 1` from the `tmux:start` script, it might be due to dangling tmux sessions in the background. Use the `--force` flag in your testing.
+- **Herdr Workspace Naming**: If you encounter `exited with code 1` from the `herdr:start` script, it might be due to dangling herdr workspaces in the background. Use the `--force` flag in your testing.
 - **WebSocket Routing**: Ensure the Client knows how to reach the Voice backend. You may need to inject the Voice port into the Client's Vite environment config or hardcode it in the dev sandbox for now.

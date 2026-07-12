@@ -82,7 +82,7 @@
           direnv
           nix-direnv
 
-          # Herdr — terminal-native agent multiplexer (replaces tmux)
+          # Herdr — terminal-native agent multiplexer
           herdr-pkg
 
           python3

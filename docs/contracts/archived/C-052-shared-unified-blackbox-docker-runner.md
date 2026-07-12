@@ -16,12 +16,12 @@ This contract refactors the Aikami blackbox testing architecture to match the un
 
 # Design Reference
 - The Nordclaw E2E unification strategy (`apps/e2e` consolidation).
-- `scripts/src/lib/test_blackbox/run.ts` (Current Tmux orchestrator to be expanded).
+- `scripts/src/lib/test_blackbox/run.ts` (Current Herdr orchestrator to be expanded).
 
 # Architecture Directives
 - **Unified E2E Workspace**: Create a dedicated `apps/e2e` package. Migrate all existing Playwright configurations, fixtures, and test suites from `apps/frontend/client` and `apps/frontend/game` into this central location. Define distinct Playwright projects for `client`, `game`, and the future `ai-services`.
 - **Runtime Isolation**: Execute Playwright strictly under the Node.js runtime to prevent CDP websocket hanging errors, while continuing to utilize Bun for workspace orchestration.
-- **Docker Orchestration Integration**: Develop `scripts/src/lib/test_blackbox/docker_manager.ts`. This class must mirror the interface of your existing `TmuxManager`, providing methods to build, start, poll (for readiness), and tear down Docker containers. Integrate this manager into `run.ts` so containerized backend services boot alongside the SvelteKit and Game dev servers.
+- **Docker Orchestration Integration**: Develop `scripts/src/lib/test_blackbox/docker_manager.ts`. This class must mirror the interface of your existing `HerdrManager`, providing methods to build, start, poll (for readiness), and tear down Docker containers. Integrate this manager into `run.ts` so containerized backend services boot alongside the SvelteKit and Game dev servers.
 - **Network Bridging**: Ensure the `DockerManager` automatically injects `host.docker.internal` (or the equivalent Linux gateway IP) into the environment variables of the spawned containers, allowing the containerized AI backends to seamlessly communicate with the local Firebase Auth and Firestore emulators running on the host.
 - **Global Lifecycle Hooks**: Implement global setup and teardown scripts within `apps/e2e` that hit the Firebase Emulator REST APIs to completely purge Firestore and Auth data between major test suites, guaranteeing zero state bleed between game sessions.
 
@@ -66,7 +66,7 @@ The `DockerManager` will require a configuration map for future AI services:
 1. Scaffold `apps/e2e` with its own `package.json` and `moon.yml`.
 2. Move the `tests/` directories from `apps/frontend/client` and `apps/frontend/game` into `apps/e2e/tests/client` and `apps/e2e/tests/game`.
 3. Create `docker_manager.ts` in `scripts/src/lib/test_blackbox/`. Use `bun:utils` or standard child processes to execute `docker build` and `docker run` commands dynamically.
-4. Update `scripts/src/lib/test_blackbox/run.ts` to initialize the `DockerManager` alongside the `TmuxManager`.
+4. Update `scripts/src/lib/test_blackbox/run.ts` to initialize the `DockerManager` alongside the `HerdrManager`.
 5. Create `apps/e2e/src/global_setup.ts` and implement the Firebase REST API purge functions. Wire this into the `playwright.config.ts` globalSetup property.
 
 # Edge Cases & Gotchas

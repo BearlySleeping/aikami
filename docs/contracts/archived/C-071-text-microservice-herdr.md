@@ -4,7 +4,7 @@
 | Field                | Value                                                           |
 | -------------------- | --------------------------------------------------------------- |
 | **Source**           | bearlysleeping/aikami                                           |
-| **Target**           | `apps/backend/text` — Text Generator Service & Tmux integration |
+| **Target**           | `apps/backend/text` — Text Generator Service & herdr integration |
 | **Priority**         | P1                                                              |
 | **Dependencies**     | C-070                                                           |
 | **Status**           | **completed**                                                     |
@@ -12,7 +12,7 @@
 
 ## Overview
 
-Scaffold a standalone text generation microservice using the official Ollama Docker image. This completely mirrors our headless image generator framework, ensuring the local LLM runtime runs isolated from our Bun architecture but plugs perfectly into our shared tmux orchestrator workspace layer.
+Scaffold a standalone text generation microservice using the official Ollama Docker image. This completely mirrors our headless image generator framework, ensuring the local LLM runtime runs isolated from our Bun architecture but plugs perfectly into our shared herdr orchestrator workspace layer.
 
 ## Design Reference
 
@@ -79,7 +79,7 @@ The service will download and mount its storage partition dynamically. We will c
 ## Implementation Notes
 
 1. Append port constants for the text engine in the development ports shared file.
-2. Inject the text daemon handle into the tmux environment window generation matrix.
+2. Inject the text daemon handle into the herdr environment tab generation matrix.
 3. Establish `apps/backend/text` containing a Dockerfile utilizing the base Ollama manifest, a package manifest handling clean runtime deletions, and an orchestrator mapping target.
 4. Draft a runtime check script using native fetch methods to evaluate health endpoints and pull the default narrative weight profile when absent.
 

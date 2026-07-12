@@ -2,7 +2,7 @@
 //
 // Chrome DevTools Protocol (CDP) integration for Aikami.
 // Launches headless Chromium (from Nix devShell) and connects via CDP
-// to inspect the Client dev server running in tmux.
+// to inspect the Client dev server running in herdr.
 //
 // Provides tools for:
 //   - browser_inspect:    DOM snapshot, console logs, computed styles
@@ -326,7 +326,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       'Use browser_inspect when the user reports a UI bug, blank page, or unexpected rendering.',
       'Use ONCE — do not repeatedly inspect the same page without navigating or triggering new state.',
-      'Prefer reading source code and tmux logs before resorting to browser_inspect.',
+      'Prefer reading source code and herdr logs before resorting to browser_inspect.',
       'Use the `selector` parameter to narrow output — full DOM dumps are wasteful.',
       'The DOM snapshot is a simplified text tree, not raw HTML.',
     ],
@@ -514,7 +514,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: 'Use browser_console to read browser console errors and warnings.',
     promptGuidelines: [
       'ONLY use when you have evidence of a browser-side JS error (e.g., blank page, broken UI).',
-      'Do NOT call preemptively — use code inspection + tmux logs first.',
+      'Do NOT call preemptively — use code inspection + herdr logs first.',
       'A single call is sufficient; repeated calls yield the same buffer.',
       'Console entries show source URL and line number for stack traces.',
     ],
@@ -719,7 +719,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: 'Use browser_network to see what API calls the app is making.',
     promptGuidelines: [
       'ONLY use when you have a specific hypothesis about a failing API call.',
-      'Do NOT call preemptively — inspect code and tmux logs first.',
+      'Do NOT call preemptively — inspect code and herdr logs first.',
       'A single capture is sufficient; increase durationMs if needed.',
       'Shows status codes, URLs, and timing for each request.',
     ],

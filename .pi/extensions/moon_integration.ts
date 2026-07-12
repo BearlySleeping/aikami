@@ -97,23 +97,23 @@ export default function (pi: ExtensionAPI) {
 
   // ── Run Moon Task ──────────────────────────────────────────────────────
   // 🔴 :dev and :preview tasks are LONG-RUNNING SERVERS that never exit.
-  // They MUST be started via tmux_session, never through this tool.
+  // They MUST be started via herdr_session, never through this tool.
   // Calling moon_run_task on a :dev target will hang pi indefinitely.
   const BlockedTaskSuffixes = [':dev', ':preview'];
 
   /**
-   * Maps moon project names to tmux service keys.
-   * Derived from the canonical service definitions in tmux-orchestrator.ts.
+   * Maps moon project names to herdr service keys.
+   * Derived from the canonical service definitions in herdr-orchestrator.ts.
    */
-  const MoonToTmux: Record<string, string> = {
+  const MoonToHerdr: Record<string, string> = {
     client: 'client',
     image: 'image',
     text: 'text',
     voice: 'voice',
   };
 
-  /** All registered tmux services (for the "try one of" list). */
-  const TmuxServiceList = ['firebase', 'client', 'image', 'text', 'voice'];
+  /** All registered herdr services (for the "try one of" list). */
+  const HerdrServiceList = ['firebase', 'client', 'image', 'text', 'voice'];
 
   pi.registerTool({
     name: 'moon_run_task',
@@ -121,20 +121,20 @@ export default function (pi: ExtensionAPI) {
     description:
       'Run a single moon task: fix, typecheck, build, test, deploy, logs, etc. ' +
       '🔴 NEVER use for :dev or :preview — these are long-running servers that hang forever. ' +
-      'Use tmux_session to start dev servers instead. ' +
+      'Use herdr_session to start dev servers instead. ' +
       'Format: <project>:<task> (e.g. client:fix, functions:typecheck).',
     promptSnippet:
-      'Use moon_run_task to execute moon tasks like build, test, lint. NEVER use for :dev/:preview — use tmux_session instead.',
+      'Use moon_run_task to execute moon tasks like build, test, lint. NEVER use for :dev/:preview — use herdr_session instead.',
     promptGuidelines: [
       'Use moon_run_task to run monorepo tasks through the moon orchestrator instead of calling bun directly.',
       '🔴 NEVER call moon_run_task for a :dev or :preview target — these are long-running servers that will hang pi forever.',
-      'To start a dev server, use tmux_session start <service> instead. tmux handles long-running processes correctly.',
+      'To start a dev server, use herdr_session start <service> instead. herdr handles long-running processes correctly.',
     ],
     parameters: Type.Object({
       target: Type.String({
         description:
           "Moon task target, e.g. 'client:typecheck', 'schemas:build'. " +
-          "🔴 Do NOT use ':dev' or ':preview' — these hang forever. Use tmux_session for dev servers.",
+          "🔴 Do NOT use ':dev' or ':preview' — these hang forever. Use herdr_session for dev servers.",
       }),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
@@ -144,41 +144,41 @@ export default function (pi: ExtensionAPI) {
       for (const suffix of BlockedTaskSuffixes) {
         if (target.endsWith(suffix)) {
           const moonProject = target.replace(suffix, '');
-          const tmuxService = MoonToTmux[moonProject];
+          const herdrService = MoonToHerdr[moonProject];
 
-          if (tmuxService) {
+          if (herdrService) {
             return {
               content: [
                 {
                   type: 'text',
                   text:
                     `🔴 BLOCKED: "${target}" is a long-running dev server — it would hang pi forever.\n\n` +
-                    `Use tmux_session instead:\n` +
-                    `  tmux_session start ${tmuxService}\n\n` +
-                    `Other registered tmux services: ${TmuxServiceList.join(', ')}\n` +
-                    `tmux runs dev servers in persistent background sessions that survive pi restarts.`,
+                    `Use herdr_session instead:\n` +
+                    `  herdr_session start ${herdrService}\n\n` +
+                    `Other registered herdr services: ${HerdrServiceList.join(', ')}\n` +
+                    `herdr runs dev servers in persistent background sessions that survive pi restarts.`,
                 },
               ],
               isError: true,
-              details: { blocked: true, suggestion: `tmux_session start ${tmuxService}` },
+              details: { blocked: true, suggestion: `herdr_session start ${herdrService}` },
             };
           }
 
-          // Unknown project — no tmux mapping exists
+          // Unknown project — no herdr mapping exists
           return {
             content: [
               {
                 type: 'text',
                 text:
                   `🔴 BLOCKED: "${target}" is a long-running dev server — it would hang pi forever.\n\n` +
-                  `"${moonProject}" is not registered as a tmux service.\n` +
-                  `Registered tmux services: ${TmuxServiceList.join(', ')}\n\n` +
+                  `"${moonProject}" is not registered as a herdr service.\n` +
+                  `Registered herdr services: ${HerdrServiceList.join(', ')}\n\n` +
                   `Options:\n` +
                   `  1. Start it manually in a terminal:  bun moon run ${target}\n` +
-                  `  2. If this should be a permanent tmux service, add it to:\n` +
-                  `     • .pi/extensions/tmux-orchestrator.ts\n` +
-                  `     • scripts/src/lib/tmux/session.ts\n\n` +
-                  `tmux runs dev servers in persistent background sessions that survive pi restarts.`,
+                  `  2. If this should be a permanent herdr service, add it to:\n` +
+                  `     • .pi/extensions/herdr-orchestrator.ts\n` +
+                  `     • scripts/src/lib/herdr/session.ts\n\n` +
+                  `herdr runs dev servers in persistent background sessions that survive pi restarts.`,
               },
             ],
             isError: true,
@@ -458,7 +458,7 @@ export default function (pi: ExtensionAPI) {
       '\n🔴 Path prefix key: apps/frontend/ = client, site, docs | apps/backend/ = firebase, image, text, voice | packages/shared/ = constants, schemas, types, logger, utils, mocks, parser | packages/frontend/ = configs, dataconnect, engine, repositories, services, utils | packages/backend/ = ai, auth, chat, configs, database, image, svelte-kit, utils';
 
     const devServerRule =
-      '\n🔴 NEVER call moon_run_task for :dev or :preview targets — these are long-running servers that hang forever. Use tmux_session start <service> instead. Registered tmux services: firebase, client, image, text, voice.';
+      '\n🔴 NEVER call moon_run_task for :dev or :preview targets — these are long-running servers that hang forever. Use herdr_session start <service> instead. Registered herdr services: firebase, client, image, text, voice.';
     return {
       systemPrompt: `${event.systemPrompt}\n${workspaceSummary}${pathPrefixKey}${modeInfo}${devServerRule}`,
     };

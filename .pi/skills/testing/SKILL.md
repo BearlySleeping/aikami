@@ -321,7 +321,7 @@ Then add to `apps/e2e/src/pom/index.ts` barrel export.
 
 ## Debugging Workflow
 
-**Code-first debugging.** Most issues are solved by reading source files, tmux logs, and
+**Code-first debugging.** Most issues are solved by reading source files, herdr logs, and
 checking the Firestore emulator data. Browser tools are a LAST resort — they are expensive
 in tokens and time.
 
@@ -330,7 +330,7 @@ in tokens and time.
 | Priority | Tool                 | When to use                                      |
 | -------- | -------------------- | ------------------------------------------------ |
 | 1        | `read` source files  | Always — understand the code FIRST               |
-| 2        | `tmux_session read`  | Check live server logs for errors                |
+| 2        | `herdr_session read`  | Check live server logs for errors                |
 | 3        | `firestore_query`    | Verify data state in the emulator                |
 | 4        | `browser_inspect`    | UI rendering bug, 404, blank page, env var check |
 | 5        | `browser_console`    | Evidence of a JS runtime error in the browser    |
@@ -352,14 +352,14 @@ in tokens and time.
 # Step 1: Check what's running
 bash: ss -tlnp | grep <port>
 # Step 2: Read server logs
-tmux_session read client
+herdr_session read client
 # Step 3: Check the DOM once
 browser_inspect selector="body"
 # Step 4: Read relevant source files
 
 # Pattern: "API call is failing"
 # Step 1: Read service/repository code
-# Step 2: Check tmux logs for backend errors
+# Step 2: Check herdr logs for backend errors
 # Step 3: browser_network ONLY if XHR/fetch (not Firestore gRPC)
 ```
 

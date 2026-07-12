@@ -1,7 +1,13 @@
 // .pi/extensions/firebase_tools.ts
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-
+import {
+  type AikamiMode,
+  isPortReady,
+  listServices,
+  startServices,
+  stopServices,
+} from '../../scripts/src/lib/herdr/session.ts';
 // Direnv env vars (set by .envrc / scripts/direnv/) — always available:
 //   AIKAMI_MODE          — emulator | staging | production
 //   AIKAMI_PROJECT_ID    — GCP project id (demo-aikami-emulator | aikami-dev | aikami-prod)
@@ -18,8 +24,6 @@ function getProjectId(mode: Mode): string {
 export default function (pi: ExtensionAPI) {
   const DefaultTimeout = 180_000; // 3 min
   const HeavyTimeout = 300_000; // 5 min (deploys, emulator starts)
-  const QuickTimeout = 10_000; // 10s (healthchecks, status queries)
-  const TmuxTimeout = 30_000; // 30s (tmux operations)
 
   // Query Firestore directly from pi
   pi.registerTool({
@@ -148,15 +152,7 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, signal, _onUpdate, _ctx) {
       if (params.action === 'start') {
         // Check if emulator is already running (port 4400 = emulator UI)
-        const checkResult = await pi.exec(
-          'bash',
-          [
-            '-c',
-            "curl -s -o /dev/null -w '%{http_code}' http://localhost:4400 2>/dev/null || echo '000'",
-          ],
-          { signal, timeout: QuickTimeout },
-        );
-        if (checkResult.stdout?.trim() === '200') {
+        if (await isPortReady(4400)) {
           return {
             content: [
               { type: 'text', text: '✅ Emulator already running (port 4400 responding).' },
@@ -165,24 +161,15 @@ export default function (pi: ExtensionAPI) {
           };
         }
 
-        // Delegate to tmux (same session as tmux-orchestrator.ts — aikami-dev:1).
-        // Uses identical commands to avoid session/window conflicts.
+        // Start via herdr session API — creates/herdr workspace aikami-emulator
+        // with a firebase tab running `bun run emulate`.
         _onUpdate?.({
-          content: [{ type: 'text', text: 'Starting emulator in tmux session aikami-dev:1...' }],
+          content: [{ type: 'text', text: 'Starting emulator via herdr (aikami-emulator)...' }],
           details: {},
         });
-        await pi.exec(
-          'bash',
-          [
-            '-c',
-            [
-              'tmux has-session -t aikami-dev 2>/dev/null || tmux new-session -d -s aikami-dev -c "$(pwd)" -n main',
-              'W=$(tmux list-windows -t aikami-dev -F "#{window_index}" 2>/dev/null)',
-              'echo "$W" | grep -qx "1" || tmux new-window -d -t aikami-dev -n emulator -c "$(pwd)" "bun emulate:backend"',
-            ].join(' && '),
-          ],
-          { signal, timeout: TmuxTimeout },
-        );
+
+        const mode: AikamiMode = 'emulator';
+        await startServices({ mode, services: ['firebase'] });
 
         // Poll for readiness (up to 60s)
         let ready = false;
@@ -191,17 +178,7 @@ export default function (pi: ExtensionAPI) {
             break;
           }
           await new Promise((r) => setTimeout(r, 2000));
-          const poll = await pi.exec(
-            'bash',
-            [
-              '-c',
-              "curl -s -o /dev/null -w '%{http_code}' http://localhost:4400 2>/dev/null || echo '000'",
-            ],
-            { signal, timeout: 3000 },
-          );
-          if (poll.stdout?.trim() === '200') {
-            ready = true;
-          }
+          ready = await isPortReady(4400);
         }
 
         if (!ready) {
@@ -223,74 +200,53 @@ export default function (pi: ExtensionAPI) {
         };
       }
       if (params.action === 'stop') {
-        // Only kill the emulator window, not the entire session.
-        // Checking if window 1 is the ONLY window — if so, kill session.
-        const check = await pi.exec(
-          'bash',
-          ['-c', "tmux list-windows -t aikami-dev -F '#{window_index}' 2>/dev/null"],
-          { signal, timeout: TmuxTimeout },
-        );
-        const windows = (check.stdout || '').split('\n').filter(Boolean);
-        if (windows.length <= 1) {
-          // Only emulator window (or none) — safe to kill session
-          await pi.exec('bash', ['-c', 'tmux kill-session -t aikami-dev 2>/dev/null; true'], {
-            signal,
-            timeout: TmuxTimeout,
-          });
-        } else {
-          // Other services running (client, vm-controller) — only kill window 1
-          await pi.exec('bash', ['-c', 'tmux kill-window -t aikami-dev:1 2>/dev/null; true'], {
-            signal,
-            timeout: TmuxTimeout,
-          });
-        }
-        // Also stop any orphaned emulator processes
-        await pi
-          .exec('bun', ['firebase', 'emulators:stop'], { signal, timeout: TmuxTimeout })
-          .catch(() => {});
+        // Stop only the firebase tab (preserve client/voice/image/text if running)
+        const mode: AikamiMode = 'emulator';
+        await stopServices({ mode, services: ['firebase'] });
         return {
           content: [{ type: 'text', text: '🛑 Emulator stopped.' }],
           details: { code: 0 },
         };
       }
-      // status — use ss (portable Linux) instead of lsof (missing on NixOS)
-      const result = await pi.exec(
-        'ss',
-        [
-          '-tlnp',
-          '( sport = :4000 or sport = :4400 or sport = :5001 or sport = :8080 or sport = :9099 or sport = :8085 or sport = :9199 or sport = :9150 or sport = :4500 or sport = :9299 or sport = :9499 )',
-        ],
-        { signal, timeout: QuickTimeout },
-      );
-      const raw = result.stdout || result.stderr || '';
-      // Parse ss output into compact summary
-      const EmulatorPorts: Record<string, string> = {
-        '4000': 'Firestore',
-        '4400': 'Emulator UI',
-        '5001': 'Hosting',
-        '8080': 'Pub/Sub',
-        '9099': 'Auth',
-        '8085': 'Cloud Tasks',
-        '9199': 'Storage',
-        '9150': 'Dataconnect',
-        '4500': 'Data Connect',
-        '9299': 'Eventarc',
-        '9499': 'Extensions',
-      };
-      const lines = raw.split('\n').filter(Boolean);
-      const active: string[] = [];
-      for (const port of Object.keys(EmulatorPorts)) {
-        if (lines.some((l) => l.includes(`:${port}`))) {
-          active.push(`${EmulatorPorts[port]} (:${port})`);
-        }
+      // status — check via herdr service list + port readiness
+      const sessions = await listServices('emulator');
+      const firebaseSession = sessions.find((s) => s.name === 'aikami-emulator');
+
+      if (!firebaseSession || firebaseSession.services.length === 0) {
+        return {
+          content: [{ type: 'text', text: '⏸️  No aikami-emulator workspace running.' }],
+          details: { code: 0 },
+        };
       }
-      const text =
-        active.length > 0
-          ? `✅ **Emulator ports active**: ${active.join(', ')}`
-          : '⏸️  No emulator ports detected';
+
+      const emulatorPorts = [4000, 4400, 5001, 8080, 9099, 8085, 9199, 9150, 4500, 9299, 9499];
+      const portChecks = await Promise.all(
+        emulatorPorts.map(async (p) => ({ port: p, ready: await isPortReady(p) })),
+      );
+      const active = portChecks.filter((p) => p.ready);
+
+      if (active.length === 0) {
+        const fbSvc = firebaseSession.services.find((s) => s.service === 'firebase');
+        const status = fbSvc?.running ? 'booting' : 'not running';
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `⏸️  Emulator workspace exists but firebase tab is ${status}.`,
+            },
+          ],
+          details: { code: 0 },
+        };
+      }
+
       return {
-        content: [{ type: 'text', text }],
-        details: { code: result.code, activePorts: active },
+        content: [
+          {
+            type: 'text',
+            text: `✅ **Emulator ports active**: ${active.map((p) => `:${p.port}`).join(', ')}`,
+          },
+        ],
+        details: { code: 0, activePorts: active.map((p) => p.port) },
       };
     },
   });

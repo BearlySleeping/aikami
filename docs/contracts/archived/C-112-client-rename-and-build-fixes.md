@@ -66,7 +66,7 @@ Updated `apps/frontend/client` → `apps/frontend/client` in:
 - `.moon/workspace.yml` (project path + defaultProject)
 - `.moon/task-templates/vite-application.yml` (comment)
 - `biome.json`, `README.md`
-- `scripts/` (tmux, test_blackbox, deploy, generate_context, pin_dependencies)
+- `scripts/` (herdr, test_blackbox, deploy, generate_context, pin_dependencies)
 - `packages/` (constants, services tsconfig, frontend configs/engine/components/parser READMEs)
 - `apps/e2e/` (moon.yml, playwright.config.ts, POM files, tests directory)
 - All filepath comments inside `apps/frontend/client/src/` (200+ files)

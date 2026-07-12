@@ -275,7 +275,7 @@ const _matchQueryToBoundaries = (
       words: ['schema', 'type', 'constant', 'utility', 'shared', 'interface', 'validator'],
       boundary: 'shared',
     },
-    { words: ['script', 'build', 'ci', 'deploy', 'setup', 'tmux', 'herdr'], boundary: 'script' },
+    { words: ['script', 'build', 'ci', 'deploy', 'setup', 'herdr'], boundary: 'script' },
   ];
 
   for (const { words, boundary } of boundaryKeywords) {
