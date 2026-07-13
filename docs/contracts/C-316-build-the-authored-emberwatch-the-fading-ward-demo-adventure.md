@@ -8,7 +8,7 @@
 | **Target** | `apps/frontend/client/static/content-packs/emberwatch/` — 3 authored Tiled maps, complete manifest with NPCs/items/dialogues/quests/encounters, and fallback text for offline play |
 | **Priority** | P0 — Aikami needs a game, not another empty system surface |
 | **Dependencies** | C-315 (completed), C-313 (implemented/sandbox — tested in dev routes only, promotion `sandbox`), C-314 (implemented/production — composition root wired in `/game` route, promotion `production`), C-144 (completed), C-154 (completed), C-157 (completed), C-158 (completed), existing LPC/tile/audio assets |
-| **Status** | approved |
+| **Status** | verified |
 | **Promotion** | — |
 | **Docs Impact** | None — authored game content, not user-facing documentation |
 | **Contract version** | 2.0.0 |
@@ -612,3 +612,47 @@ N/A — no persistent state changes. The emberwatch content pack manifest versio
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Built the complete authored Emberwatch: The Fading Ward demo adventure content pack (v2.0.0). Extended the content pack schema with optional `quests`, `encounters`, `credits` fields plus `combatStats` on NPC entries and `vendorInventory` pattern validation. Extended the loader with `getQuest()`, `getEncounter()`, `getAllQuests()`, `getAllEncounters()`, `getCredits()` accessors. Created 3 authored Tiled JSON maps (Village 20×20, Old Road 30×15, Shrine 20×20), a full manifest with 7 NPCs, 8 items, 27 dialogue strings, 2 quests (1 main + 1 optional), 1 encounter with skill check, and credits. All 96 tests pass across schema, loader unit, and integration test suites.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Manifest loads/validates — version 2.0.0, 3 maps, 7 NPCs, 8 items, 27 dialogues, 2 quests, 1 encounter, credits present |
+| AC-2 | ✅ | 3 authored maps created (Village, Road, Shrine) with spawns, transitions, collision — valid Tiled JSON format |
+| AC-3 | ✅ | Full NPC cast with authored dialogue — all dialogue keys resolve, vendor inventory validated, appearance layers assigned |
+| AC-4 | ✅ | Fading Ward quest: 3 objectives, 3 endings (50+ char narration each), rewards with item+gold+xp. Optional Lost Pendant quest. |
+| AC-5 | ✅ | Encounter defined with skill check (persuasion DC 14, charisma), enemy NPC with combatStats, guaranteed loot, all dialogue keys resolve. Item IDs reconcile with ITEM_CATALOG. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/static/content-packs/emberwatch/maps/emberwatch_village.json` | Emberwatch Village map (20×20) — quest giver, merchant, guard spawns + transitions |
+| `apps/frontend/client/static/content-packs/emberwatch/maps/old_road.json` | Old Road map (30×15) — companion, rival spawns + item pickup + dual transitions |
+| `apps/frontend/client/static/content-packs/emberwatch/maps/ruined_ward_shrine.json` | Ruined Ward Shrine map (20×20) — shrine spirit, encounter trigger, altar + transition |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | Extended schema: `quests`, `encounters`, `credits` optional fields on manifest; new sub-schemas for `ContentPackCombatStats`, `ContentPackQuestEntry`, `ContentPackEncounterEntry`, `ContentPackSkillCheck`, `ContentPackLootEntry`, `ContentPackCredits`; `vendorInventory` pattern validation; `combatStats` on NPC entries |
+| `packages/shared/types/src/lib/game/content_pack.ts` | Added 13 derived types via `Static<typeof Schema>` |
+| `packages/frontend/engine/src/assets/content_pack_loader.ts` | Added 5 accessor methods: `getQuest()`, `getEncounter()`, `getAllQuests()`, `getAllEncounters()`, `getCredits()` |
+| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | Added 16 new tests (vendorInventory patterns, combatStats, quests, encounters, credits, validation) |
+| `packages/frontend/engine/src/assets/content_pack_loader.test.ts` | Added 12 new tests (quest/encounter/credits accessors, dispose coverage) |
+| `packages/frontend/engine/src/assets/content_pack_loader.integration.test.ts` | Complete rewrite for v2.0.0 manifest — 23 tests covering all ACs including item-ID reconciliation |
+| `apps/frontend/client/static/content-packs/emberwatch/manifest.json` | Complete rewrite: v2.0.0, 7 NPCs, 8 items, 27 dialogues, 2 quests, 1 encounter, credits |
+| `apps/frontend/client/src/lib/services/game/inventory_service.svelte.ts` | Added 3 Emberwatch items to ITEM_CATALOG (wardPendant, wardAmulet, wardShard) |
+
+### Deviations from Spec
+- **EquipmentSlot for neck items**: The `wardAmulet` and `wardPendant` items were specified with `slot: 'neck'` but the `EquipmentSlotSchema` only supports `'weapon' | 'armor'`. Set `wardAmulet` to `slot: 'armor'` and `wardPendant` to `slot: undefined` (key item, not equippable). Extending equipment slots is a separate concern.
+- **NPC count is 7, not 6**: Added `shade_guardian` as a separate NPC entry (needed for encounter enemy definition with combatStats). Total: 6 story NPCs + 1 enemy-only NPC.
+
+### Test Results
+- Unit (schemas): 38/38 pass (0 failures) — baseline was 22
+- Unit (loader): 35/35 pass (0 failures) — baseline was 23
+- Integration (emberwatch): 23/23 pass (0 failures) — baseline was 8
+- Full validate: 4/4 projects pass (schemas, types, frontend-engine, client)
+- Baseline: 0 pre-existing failures, 0 new failures
