@@ -39,13 +39,15 @@ export {
   writeStageResult,
 } from './stage_result.ts';
 export { roleForStage, runStage } from './stage_runner.ts';
-export { resolveNextStage, transition } from './state_machine.ts';
+export { resolveNextStage, resolveReviewDecision, transition } from './state_machine.ts';
 export type {
   ContractPipelineStage,
   ContractReviewDecision,
   ContractStageResult,
   ContractWorkerRole,
   GitStateSnapshot,
+  ReconciliationResult,
+  ReviewDecision,
   RunManifest,
   StageAttempt,
   StageRunOutcome,

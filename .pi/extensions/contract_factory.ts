@@ -11,11 +11,16 @@
  *   contract_generate       — Generate a draft contract shell from a backlog item
  */
 
-import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import {
+  getJjChangeId,
+  runJj,
+  sanitizeWorkspaceName,
+  WORKSPACES_DIR,
+} from '../../scripts/src/lib/agents/jj';
 
 // ── Inline parser ───────────────────────────────────────────────
 //
@@ -52,77 +57,6 @@ type BacklogItem = {
 const TODO_PATH = 'docs/TODO.md';
 const CONTRACTS_DIR = 'docs/contracts';
 const ARCHIVED_CONTRACTS_DIR = 'docs/contracts/archived';
-const WORKSPACES_DIR = '.pi/workspaces';
-const MAX_WORKSPACE_NAME_LENGTH = 80;
-
-// ── Jujutsu workspace helpers ───────────────────────────────────
-
-const sanitizeWorkspaceName = (raw: string): string => {
-  return raw
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_WORKSPACE_NAME_LENGTH);
-};
-
-interface JjExecError extends Error {
-  stderr?: string;
-}
-
-const isJjExecError = (err: unknown): err is JjExecError => err instanceof Error;
-
-const runJj = (command: string, cwd?: string): string => {
-  // Headless config: guarantees identity in CI/sandbox/Nix containers
-  // where global git/jj config may not be inherited.
-  const configFlags = [
-    `--config-toml 'ui.user-name="Pi Agent"'`,
-    `--config-toml 'ui.user-email="agent@pi.internal"'`,
-  ].join(' ');
-
-  const opts = {
-    encoding: 'utf-8' as const,
-    stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
-    cwd,
-  };
-
-  // Git index.lock retry: co-located git backend can contend across
-  // concurrent workspace syncs. Exponential backoff: 100ms → 200ms → 400ms.
-  const maxRetries = 3;
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return execSync(`jj ${configFlags} ${command}`, opts).trim();
-    } catch (err: unknown) {
-      lastError = err;
-      const message = isJjExecError(err) ? (err.stderr ?? err.message) : String(err);
-
-      // Retry only on git lock contention
-      if (/index\.lock/i.test(message) && attempt < maxRetries - 1) {
-        const delay = 100 * 2 ** attempt;
-        console.warn(
-          `  ⚠️  Git lock contention, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
-        );
-        const start = Date.now();
-        while (Date.now() - start < delay) {
-          // Busy-wait is acceptable for sub-second delays in Node.js
-        }
-        continue;
-      }
-
-      throw new Error(`jj ${command} failed: ${message}`);
-    }
-  }
-
-  const message = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(`jj ${command} failed after ${maxRetries} retries: ${message}`);
-};
-
-const getJjChangeId = (cwd: string): string => {
-  const output = runJj('log -r @ --no-graph -T change_id', cwd);
-  return output.trim();
-};
 
 const _parseBacklog = (repoRoot: string): { items: BacklogItem[]; errors: string[] } => {
   const todoPath = join(repoRoot, TODO_PATH);
@@ -627,7 +561,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       // Create the workspace
-      runJj(`workspace add ${wsDir}`, cwd);
+      runJj(`workspace add ${wsDir}`, { cwd: cwd });
 
       // Capture the initial change ID in the new workspace
       const changeId = getJjChangeId(wsDir);
@@ -683,7 +617,7 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const escaped = params.message.replace(/"/g, '\\"');
-      runJj(`describe -m "${escaped}"`, params.workspacePath);
+      runJj(`describe -m "${escaped}"`, { cwd: params.workspacePath });
 
       const changeId = getJjChangeId(params.workspacePath);
 
@@ -730,7 +664,7 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const escaped = params.message.replace(/"/g, '\\"');
-      runJj(`describe -m "${escaped}"`, params.workspacePath);
+      runJj(`describe -m "${escaped}"`, { cwd: params.workspacePath });
 
       const changeId = getJjChangeId(params.workspacePath);
       const rootDir = ctx.cwd;
@@ -796,7 +730,7 @@ export default function (pi: ExtensionAPI) {
       if (params.abandonChange && existsSync(params.workspacePath)) {
         try {
           const changeId = getJjChangeId(params.workspacePath);
-          runJj(`abandon ${changeId}`, ctx.cwd);
+          runJj(`abandon ${changeId}`, { cwd: ctx.cwd });
           console.log(`🚫 Abandoned change ${changeId} (error recovery)`);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
@@ -806,7 +740,7 @@ export default function (pi: ExtensionAPI) {
 
       // Forget the workspace from jj config
       try {
-        runJj(`workspace forget ${params.workspacePath}`, ctx.cwd);
+        runJj(`workspace forget ${params.workspacePath}`, { cwd: ctx.cwd });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         console.warn(`⚠️  Could not forget workspace: ${message}`);
@@ -869,7 +803,7 @@ export default function (pi: ExtensionAPI) {
         const wsPath = join(wsParent, entry.name);
         try {
           const changeId = getJjChangeId(wsPath);
-          const desc = runJj('log -r @ --no-graph -T description', wsPath);
+          const desc = runJj('log -r @ --no-graph -T description', { cwd: wsPath });
           items.push({ path: wsPath, changeId, description: desc.trim() });
         } catch {
           // Skip non-jj directories

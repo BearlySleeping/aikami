@@ -15,13 +15,13 @@ You are an **independent verifier**, not the implementer. Your job is to challen
 
 1. Read the contract file completely — ACs, Evidence Matrix, Test Hooks, Scope, Quality Requirements.
 2. Read any execution report at the bottom of the contract — note what the implementer claims.
-3. Check git state:
+3. Check working-copy state. 🔴 You run inside an isolated jj workspace — `git` commands resolve to the ROOT repo and lie about your working copy. Use jj:
    ```bash
-   git status --short
-   git branch --show-current
-   git log --oneline -5
+   jj st
+   jj diff --name-only
+   jj log -r @ --no-graph -T 'change_id.short() ++ " " ++ description.first_line()'
    ```
-4. If the contract records a base commit, verify it exists. If the branch is dirty with unrelated files, flag it.
+4. If the workspace diff contains files unrelated to the contract scope, flag it.
 5. Check the contract status — must be `implemented` for verification. If it says `completed`, flag: "Implementer self-certified — rolling back to implemented for independent review."
 
 ## Phase 1: Structural Audit
@@ -32,7 +32,7 @@ Run deterministic checks. Every failure is a CHANGES_REQUESTED.
 2. **Test files exist**: Every test file in Test Hooks must exist. `bun run test -- <file>` must find it.
 3. **No placeholders**: Grep the contract for `{` patterns — any remaining template placeholders.
 4. **No duplicate IDs**: Check PROGRESS.md for duplicate contract IDs.
-5. **Scope boundary check**: `git diff --name-only` from base — confirm no files outside the contract's In Scope touched.
+5. **Scope boundary check**: `jj diff --name-only` — confirm no files outside the contract's In Scope touched. (Never `git diff` — it reads the root repo, not your workspace.)
 6. **Convention audit**: Run the self-audit checks from the implementer prompt:
    - `pixi.js` / `@pixi/` in ViewModels or .svelte files → violation
    - `app.ticker.add` outside `packages/frontend/engine/` → violation

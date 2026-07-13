@@ -72,33 +72,19 @@ If you modify ANY source file after the pipeline passed verification:
 
 Store a deterministic fingerprint of the verified diff. Compare current diff against it.
 
-## Phase 4: Commit & Push
+## Phase 4: Review Decision
 
-**NEVER commit or push without explicit natural-language instruction from the user.**
+When the user indicates their intent, call `contract_review_decision`:
 
-When the user asks to commit:
+| User says | Decision | Effect |
+|---|---|---|
+| "looks good", "done", `/approve` | `approve` | Accept run. Stop here (no PR). |
+| "create PR", "pr it", `/ship` | `approve_pr` | Reconcile workspace → push bookmark → create PR to dev. Wait for review. |
+| "merge it", "send it", `/merge` | `approve_merge` | Above + auto-merge. The "send-it" path. |
+| "I changed X", "fix that", `/fix` | `changes_applied` | Re-verify (or re-critique if contract changed). |
+| "bad", "reject", `/reject` | `reject` | Block run, keep workspace for diagnostics. |
 
-1. Run the contract linter in strict per-contract mode:
-   ```bash
-   bun run scripts/src/lib/ops/lint_contracts.ts --contract C-XXX
-   ```
-   Must pass with 0 errors.
-
-2. Verify:
-   - Contract status is `verified` (or `completed` if previously merged)
-   - No unrelated files are staged
-   - Required test files exist
-   - No mandatory AC is ⚠️ or ❌
-   - Verification fingerprint matches (if code was modified after verify, re-verify first)
-
-3. Stage explicitly: `git add <specific files>` — never `git add .`
-
-4. Suggested commit:
-   ```
-   {type}({scope}): {description} (C-XXX)
-   ```
-
-5. Ask: "Commit? Push? Both?" — wait for explicit answer.
+**The orchestrator handles all git/PR/merge operations** — you only record the intent.
 
 ## Phase 5: Blocked or Failed Runs
 

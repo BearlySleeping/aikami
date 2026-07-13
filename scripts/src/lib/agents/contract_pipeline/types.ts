@@ -10,6 +10,9 @@ export type ContractPipelineStage =
   | 'verify'
   | 'review'
   | 'accepted'
+  | 'reconciling'
+  | 'pr_created'
+  | 'merged'
   | 'blocked';
 
 /** Worker role associated with a model-driven stage. */
@@ -29,17 +32,45 @@ export type ContractStageResult = {
   diffHash: string;
 };
 
+/**
+ * Review decision modes matching user intent:
+ *  - approve: accept run, stop here
+ *  - approve_pr: reconcile → push bookmark → create PR to dev
+ *  - approve_merge: PR + auto-merge + sync (the "send-it")
+ *  - changes_applied: edits made → re-verify
+ *  - reject: block run, keep workspace for diagnostics
+ */
+export type ReviewDecision =
+  | 'approve'
+  | 'approve_pr'
+  | 'approve_merge'
+  | 'changes_applied'
+  | 'reject'
+  | 'blocked';
+
 /** Decision written through the contract_review_decision tool. */
 export type ContractReviewDecision = {
   runId: string;
-  decision: 'approve' | 'changes_applied' | 'reject' | 'blocked';
+  decision: ReviewDecision;
   summary: string;
   diffHash: string;
   contractChanged: boolean;
   createdAt: string;
 };
 
-/** Per-stage model usage captured from Pi JSON events. */
+/** Reconciliation result after successful approve_pr / approve_merge. */
+export type ReconciliationResult = {
+  changeId: string;
+  bookmarkName: string;
+  headBranch: string;
+  baseBranch: string;
+  prTitle: string;
+  prBody: string;
+  prUrl?: string;
+  merged?: boolean;
+};
+
+/** Per-stage model usage captured from Pi session JSONL. */
 export type StageUsage = {
   model: string;
   turns: number;
@@ -75,11 +106,11 @@ export type RunManifest = {
   startTime: string;
   lastUpdated: string;
   currentStage: ContractPipelineStage;
-  criticLoops: number;
   verifyLoops: number;
   attempts: StageAttempt[];
   usage: Record<string, StageUsage>;
   reviewDecision?: ContractReviewDecision;
+  reconciliation?: ReconciliationResult;
   verificationFingerprint?: string;
   verificationContractHash?: string;
   workspaceId?: string;
@@ -98,6 +129,9 @@ export type WorkerLaunchRequest = {
   role: ContractWorkerRole;
   stage: ContractPipelineStage;
   attempt: number;
+  /** Optional user message sent after pi starts. Used for feedback
+   *  on retries (keep system prompt static → DeepSeek cache valid). */
+  userMessage?: string;
 };
 
 /** Outcome returned by one stage run. */

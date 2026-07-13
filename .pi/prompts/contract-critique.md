@@ -64,12 +64,25 @@ Answer every question honestly. "I don't know" means the contract is underspecif
 3. **Check convention alignment**: Does the contract ask for `interface` declarations (prohibited)? Does it reference `@pixi/*` sub-packages (v8 doesn't use them)?
 4. **Check for forbidden placement**: Does it propose a TypeBox schema in a service file? A logger import in a BaseClass subclass?
 
-## Phase 4: Verdict
+## Phase 4: Fix, Then Verdict
+
+**Fix-then-approve model.** You have `edit` access to the contract file. For
+every correctable issue you find — typos, wrong file paths, formatting,
+underspecified ACs you can clarify from codebase evidence, missing evidence
+citations, ordering mistakes — fix it directly in the contract, then approve.
+
+Only block (status `blocked`) when the contract has STRUCTURAL problems you
+cannot fix yourself:
+
+- Wrong scope or fundamentally wrong problem statement
+- Needs splitting (too large)
+- Missing critical ACs that require architect input
+- A factual claim you cannot verify even after codebase inspection
 
 Produce a structured review:
 
 ```markdown
-## Critique Verdict: {APPROVE | CHANGES_REQUESTED | NEEDS_CLARIFICATION}
+## Critique Verdict: {APPROVED | APPROVED_WITH_FIXES | BLOCKED}
 
 ### Strengths
 - {what the contract does well}
@@ -91,18 +104,21 @@ ACs: {count} | Projects affected: {count} | Split recommended: {yes/no}
 |---|---|---|
 | C-XXX | {verified/draft/in_progress} | {✅/❌} |
 
+### Fixes Applied
+- {fix you made directly in the contract, or "None"}
+
 ### Recommendation
 {One of:}
-- APPROVE — proceed to implementation
-- CHANGES_REQUESTED — fix critical issues, then re-critique
-- NEEDS_CLARIFICATION — unresolved questions require architect input
+- APPROVED — contract was already sound; proceed to implementation
+- APPROVED_WITH_FIXES — issues found and fixed inline; proceed to implementation
+- BLOCKED — structural problem requires architect input (list questions in findings)
 ```
 
 ## Rules
 
 - **Be adversarial but constructive** — the goal is a better contract, not to block progress.
-- **Flag missing information as CHANGES_REQUESTED** — an underspecified contract wastes implementation time.
+- **Fix what you can, block only what you can't** — an underspecified contract wastes implementation time, but a bounce wastes tokens. Prefer fixing inline.
 - **Check the codebase** — don't just read the contract. A contract that says "create a new service" when one already exists is wrong.
-- **Never modify the contract** — this is review-only.
-- If the contract status is `draft`, output `APPROVE` only when every blocking issue is resolved. In an automated `bun run contract` run, that command is the user's authorization for the orchestrator to promote a critic-approved contract to `approved`; do not edit the status yourself. In a manual critique session, only the user may approve.
+- **Only edit the contract file** — never source code, tests, or other contracts.
+- Keep the contract status at `draft` — the orchestrator promotes it to `approved` after you pass. Do not edit the status yourself.
 - **Shared sections**: Skip `Promotion Lifecycle`, `Status Lifecycle`, and the testing conventions paragraph — these reference `docs/contracts/SHARED_SECTIONS.md` and are static project-wide material. Do not critique them. Focus on ACs, problem statement, scope, and evidence.

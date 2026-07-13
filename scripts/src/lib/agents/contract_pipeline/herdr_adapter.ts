@@ -1,9 +1,9 @@
 // scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
-import { execSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
+import { provisionJjWorkspace } from '../jj.ts';
 import { logPath } from './manifest_store.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
 
@@ -51,41 +51,22 @@ const extractContractId = (contractPath: string): string => {
   return match?.[0] ?? contractPath.split('/').pop() ?? contractPath;
 };
 
-/** Build the pi session ID for a contract role. Format: pi-{contractId}-agent-{role} */
-const buildSessionId = (options: { contractId: string; role: string }): string =>
-  `pi-${options.contractId}-agent-${options.role}`;
+/**
+ * Build a run-scoped pi session ID.
+ * Format: pi-{contractId}-{runId}-agent-{role}
+ * Includes runId to prevent cross-run contamination.
+ */
+const buildSessionId = (options: { contractId: string; runId: string; role: string }): string =>
+  `pi-${options.contractId}-${options.runId}-agent-${options.role}`;
 
-// ── Jujutsu workspace helpers ──────────────────────────────
+// ── Role tool allowlists ────────────────────────────────────
 
-const MAX_WORKSPACE_NAME_LENGTH = 80;
-
-const sanitizeWorkspaceName = (raw: string): string =>
-  raw
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_WORKSPACE_NAME_LENGTH);
-
-const runJj = (command: string, cwd?: string): string => {
-  const configFlags = [
-    `--config 'ui.user-name=Pi Agent'`,
-    `--config 'ui.user-email=agent@pi.internal'`,
-  ].join(' ');
-
-  const result = execSync(`jj ${configFlags} ${command}`, {
-    encoding: 'utf-8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-    cwd,
-  });
-  return result.trim();
-};
-
-const jjChangeId = (workspacePath: string): string => {
-  return runJj('log -r @ --no-graph -T change_id', workspacePath);
-};
-
-/** Map roles to their allowed pi tools. */
+/**
+ * Map roles to their allowed pi tools.
+ * Writer: read codebase, generate/edit contract
+ * Critic: read codebase + edit contract (fixes inline, no writer bounce)
+ * Implementer/verifier: default tools (no restrictions)
+ */
 const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
   if (role === 'writer') {
     return [
@@ -101,7 +82,17 @@ const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
     ];
   }
   if (role === 'critic') {
-    return ['read', 'grep', 'find', 'ls', 'contract_scan_backlog', 'contract_stage_complete'];
+    // Critic can edit the contract to fix issues inline.
+    // No bash/write to code — only contract file mutations via edit.
+    return [
+      'read',
+      'grep',
+      'find',
+      'ls',
+      'edit',
+      'contract_scan_backlog',
+      'contract_stage_complete',
+    ];
   }
   // Implementer and verifier use default pi tools.
   return undefined;
@@ -111,6 +102,7 @@ const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
 export type ContractHerdrAdapterInterface = {
   initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }>;
   getWorkspaceId(): string;
+  getWorkspacePath(): string;
   launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }>;
   startReview(options: {
     prompt: string;
@@ -217,7 +209,6 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
     ]);
 
-    // Provision the jj workspace for implementer/verifier isolation.
     this._provisionJjWorkspace();
 
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
@@ -231,30 +222,26 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return this._workspaceId;
   }
 
-  /** Provision an isolated jj workspace for implementer/verifier file mutations. */
+  /** Return the isolated jj workspace path. Must be called after initialize(). */
+  getWorkspacePath(): string {
+    return this._workspacePath;
+  }
+
+  /**
+   * Provision an isolated jj workspace on top of dev.
+   * The root working copy is never moved — all file mutations happen here.
+   */
   private _provisionJjWorkspace(): void {
-    const sanitized = sanitizeWorkspaceName(this._runId);
-    const wsDir = join(this._repoRoot, '.pi', 'workspaces', sanitized);
-
-    mkdirSync(join(this._repoRoot, '.pi', 'workspaces'), { recursive: true });
-
+    const wsName = `run-${this._runId}`;
     try {
-      runJj(`workspace add ${wsDir}`, this._repoRoot);
-      const changeId = jjChangeId(wsDir);
-      this._workspacePath = wsDir;
-      console.log(`🔧 jj workspace: ${wsDir} (change: ${changeId})`);
+      const { workspacePath, changeId } = provisionJjWorkspace({
+        repoRoot: this._repoRoot,
+        name: wsName,
+        baseRevision: 'dev',
+      });
+      this._workspacePath = workspacePath;
+      console.log(`🔧 jj workspace: ${workspacePath} (change: ${changeId})`);
     } catch (err) {
-      // Workspace may already exist from a prior (resumed) run.
-      if (existsSync(join(wsDir, '.jj'))) {
-        this._workspacePath = wsDir;
-        try {
-          console.log(`🔧 jj workspace (recovered): ${wsDir} (change: ${jjChangeId(wsDir)})`);
-        } catch {
-          console.log(`🔧 jj workspace (recovered): ${wsDir}`);
-        }
-        return;
-      }
-      // jj not available or workspace add genuinely failed — fall back to repo root.
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`⚠️  jj workspace provisioning failed — using repo root: ${message}`);
     }
@@ -272,8 +259,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   /**
    * Send text to Pi and submit it.
    * Retries Enter up to 3 times with increasing delays to handle
-   * welcome/update overlays (e.g. pi-powerline-footer) that may
-   * consume the first one or two Enter keypresses.
+   * welcome/update overlays that may consume Enter keypresses.
    */
   private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
     await runHerdr(['pane', 'send-text', options.paneId, options.text]);
@@ -289,19 +275,22 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       ]);
       const targetPane = panes?.result.panes.find((pane) => pane.pane_id === options.paneId);
       if (targetPane && targetPane.agent_status !== 'idle') {
-        return; // Agent started working — task was submitted.
+        return;
       }
-      // Still idle — overlay may have consumed the Enter. Try again.
       await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
     }
   }
 
-  /** Write the worker prompt and build the pi start command with env vars. */
+  /** Write the static worker prompt and build the pi start command with env vars. */
   private _buildWorkerCommand(request: WorkerLaunchRequest, sessionId: string | undefined): string {
     const promptDirectory = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');
     mkdirSync(promptDirectory, { recursive: true });
     const promptPath = join(promptDirectory, `${request.stage}-${request.attempt}.md`);
     atomicWrite({ path: promptPath, content: request.prompt });
+
+    const workspaceEnv = this._workspacePath
+      ? ` CONTRACT_PIPELINE_WORKSPACE_PATH=${shellQuote(this._workspacePath)}`
+      : '';
 
     const environment = [
       `CONTRACT_PIPELINE_RUN_ID=${shellQuote(request.runId)}`,
@@ -310,6 +299,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       `CONTRACT_PIPELINE_ATTEMPT=${String(request.attempt)}`,
       `CONTRACT_PIPELINE_CONTRACT_PATH=${shellQuote(request.contractPath)}`,
       `CONTRACT_PIPELINE_RESULT_PATH=${shellQuote(request.resultPath)}`,
+      workspaceEnv,
     ].join(' ');
 
     const tools = toolsForRole(request.role);
@@ -332,17 +322,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     sessionId: string | undefined;
     request: WorkerLaunchRequest;
   }): Promise<{ paneId: string }> {
-    // Writer and critic only edit docs/contracts/ (gitignored) — they use the
-    // repo root. Implementer and verifier mutate source code — they use the
-    // isolated jj workspace at .pi/workspaces/<runId>/.
+    // Writer and critic work at repo root (only touch docs/contracts/).
+    // Implementer and verifier use the isolated jj workspace.
     const isolationRoles: ContractWorkerRole[] = ['implementer', 'verifier'];
     const cwd =
       isolationRoles.includes(options.request.role) && this._workspacePath
         ? this._workspacePath
         : this._repoRoot;
 
-    // The contract file lives in the repo root (created by writer outside jj).
-    // Copy it into the jj workspace so the implementer/verifier can read it.
+    // Copy contract into jj workspace so implementer/verifier can read it.
     if (cwd !== this._repoRoot && existsSync(options.request.contractPath)) {
       const wsContractPath = join(cwd, relative(this._repoRoot, options.request.contractPath));
       mkdirSync(dirname(wsContractPath), { recursive: true });
@@ -369,39 +357,32 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     await runHerdr(['pane', 'run', paneId, startCommand]);
 
     // Wait for Pi to be idle (ready for prompt).
-    const idleResult = await herdr([
-      'wait',
-      'agent-status',
-      paneId,
-      '--status',
-      'idle',
-      '--timeout',
-      '30000',
-    ]);
-    if (idleResult.code !== 0) {
-      await new Promise((r) => setTimeout(r, 3_000));
-    }
+    await herdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '30000']);
 
-    // Send the task prompt as input to the running Pi process.
+    // Send the task message. For retries with feedback, the feedback
+    // is included as a user message (NOT in the system prompt) so that
+    // DeepSeek's prefix cache remains valid across stages.
     const contractId = extractContractId(options.request.contractPath);
     const isRetry = options.request.attempt > 1;
-    const taskMessage = isRetry
-      ? [
-          `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}).`,
-          'You are resuming in the same session — build on your previous work.',
-          'Read the system prompt for feedback from the prior stage.',
-          'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
-          'Printing a text summary without the tool call will block the pipeline forever.',
-          'Do not ask questions — if blocked, finish with status blocked.',
-        ].join(' ')
-      : [
-          `Begin the ${options.request.role} stage for ${contractId}.`,
-          'Assess the current state — prior work may exist in this session. Review it against the system prompt and ensure the stage is complete.',
-          'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
-          'Printing a text summary without the tool call will block the pipeline forever.',
-          'Do not ask questions — if blocked, finish with status blocked.',
-        ].join(' ');
-    await this._sendTaskText({ paneId, text: taskMessage });
+    const parts: string[] = [];
+
+    parts.push(
+      isRetry
+        ? `Continue the ${options.request.role} stage for ${contractId} (attempt ${options.request.attempt}). You are resuming in the same session — build on your previous work.`
+        : `Begin the ${options.request.role} stage for ${contractId}. Assess the current state against the system prompt and ensure the stage is complete.`,
+    );
+
+    if (options.request.userMessage) {
+      parts.push(options.request.userMessage);
+    }
+
+    parts.push(
+      'Your LAST action MUST call contract_stage_complete. Even if already complete, call it with passed.',
+      'Printing a text summary without the tool call will block the pipeline forever.',
+      'Do not ask questions — if blocked, finish with status blocked.',
+    );
+
+    await this._sendTaskText({ paneId, text: parts.join('\n\n') });
 
     return { paneId };
   }
@@ -409,32 +390,29 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   /**
    * Launch Pi in a persistent, role-named tab.
    *
-   * First launch creates the tab and pi session.
-   * Subsequent launches (feedback loops) close the old tab and recreate it,
-   * restarting pi with the same --session-id to preserve conversation history
-   * within a single pipeline run. Cross-run contamination is prevented by
-   * including the run ID in the session namespace.
-   * Tab labels use the role name only (writer, critic, implementer, verifier).
-   * Session IDs follow: pi-{contractId}-{runId}-agent-{role}
+   * Session IDs include the run ID: pi-{contractId}-{runId}-agent-{role}
+   * This prevents cross-run contamination (previous bug: same contract ID
+   * across runs reused the session, causing critic rubber-stamping).
+   *
+   * Retries (implement↔verify feedback loops) close the old tab and
+   * recreate, restarting pi with the same session ID so conversation
+   * history is preserved within a single run.
    */
   async launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }> {
     if (!this._workspaceId) {
       throw new Error('Herdr workspace is not initialized.');
     }
 
-    const tabLabel = request.role; // "writer", "critic", "implementer", "verifier"
+    const tabLabel = request.role;
     const contractId = extractContractId(request.contractPath);
 
-    // Always use a session within a pipeline run — the run ID in the
-    // session key prevents cross-run contamination. Retries (feedback
-    // loops) benefit from seeing their prior work alongside the new
-    // stage feedback injected into the system prompt.
+    // Per-run session: prevents cross-run contamination.
     const sessionId = buildSessionId({
       contractId,
+      runId: request.runId,
       role: request.role,
     });
 
-    // Close any existing tab with this role label for a clean restart.
     await this._closeTabByLabel(tabLabel);
 
     return this._createWorkerTab({ tabLabel, sessionId, request });
@@ -451,9 +429,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
 
     const contractId = extractContractId(options.contractPath);
-    const sessionId = buildSessionId({ contractId, role: 'review' });
+    const sessionId = buildSessionId({
+      contractId,
+      runId: this._runId,
+      role: 'review',
+    });
 
-    // Close any existing review tab for a clean restart.
     await this._closeTabByLabel('review');
 
     const tab = await herdrJson<TabCreateResult>([

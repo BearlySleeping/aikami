@@ -18,19 +18,14 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
 
 ## Phase 0: Preflight
 
-1. **Verify clean worktree**: `git status --short`. If unrelated changes exist, stop and ask the user. Contract work must start from a clean state or a dedicated feature branch.
+1. **Verify clean workspace**: 🔴 You run inside an isolated jj workspace at `.pi/workspaces/` — `git` commands resolve to the ROOT repo and lie about your working copy. Use jj:
    ```bash
-   git status --short
-   git branch --show-current
+   jj st
+   jj log -r @ --no-graph -T 'change_id.short() ++ " " ++ description.first_line()'
    ```
-   Expected: branch named `feat/C-XXX-...` or `contract/C-XXX-...` with no unrelated files.
+   The pipeline provisioned this workspace on top of `dev`. If `jj st` shows unrelated in-flight changes, report them in your findings.
 
-2. **Record baseline**: Store base commit in a run-scoped file, never `/tmp`.
-   ```bash
-   git rev-parse HEAD
-   ```
-   Save the output hash to the contract's execution report or run manifest.
-   Do NOT write to `/tmp/contract_base_commit.txt` — it is unsafe across sessions.
+2. **Record baseline**: The run manifest already stores the base commit — no manual bookkeeping needed. Never write state to `/tmp`.
 
 3. **Read the contract** fully: data model, ACs, Evidence Matrix, Scope, Quality Requirements, Open Questions.
 

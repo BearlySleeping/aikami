@@ -166,8 +166,17 @@ type HerdrResult = {
   stdout: string;
 };
 
-export const herdr = (args: string[], env?: Record<string, string>): Promise<HerdrResult> =>
-  new Promise((resolveH) => {
+export const herdr = (args: string[], env?: Record<string, string>): Promise<HerdrResult> => {
+  const timeout = 3000;
+  return new Promise((resolveH, rejectH) => {
+    const timer = setTimeout(() => {
+      try {
+        proc.kill();
+      } catch {
+        /* already dead */
+      }
+      rejectH(new Error(`herdr timed out after ${timeout}ms: ${args[0]}`));
+    }, timeout);
     const proc = spawn('herdr', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...env },
@@ -176,8 +185,16 @@ export const herdr = (args: string[], env?: Record<string, string>): Promise<Her
     proc.stdout?.on('data', (d) => {
       out += String(d);
     });
-    proc.on('close', (code) => resolveH({ code: code ?? 1, stdout: out }));
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      resolveH({ code: code ?? 1, stdout: out });
+    });
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      rejectH(err);
+    });
   });
+};
 
 export const herdrJson = async <T>(
   args: string[],

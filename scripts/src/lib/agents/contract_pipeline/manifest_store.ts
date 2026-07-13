@@ -187,7 +187,6 @@ const isManifest = (value: unknown, expectedRunId: string): value is RunManifest
     typeof manifest.baseCommit === 'string' &&
     typeof manifest.baselineFingerprint === 'string' &&
     isPipelineStage(manifest.currentStage) &&
-    typeof manifest.criticLoops === 'number' &&
     typeof manifest.verifyLoops === 'number' &&
     Array.isArray(manifest.attempts) &&
     typeof manifest.usage === 'object' &&
@@ -236,7 +235,6 @@ export const createManifest = (options: {
     startTime: timestamp,
     lastUpdated: timestamp,
     currentStage: options.startStage,
-    criticLoops: 0,
     verifyLoops: 0,
     attempts: [],
     usage: {},

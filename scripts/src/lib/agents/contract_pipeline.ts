@@ -139,11 +139,6 @@ const main = async (): Promise<void> => {
     return;
   }
 
-  if (process.env.AIKAMI_CONTRACT_PIPELINE_V3 === '0') {
-    await import('./contract_pipeline_legacy.ts');
-    return;
-  }
-
   if (!cli.background && !cli.dryRun) {
     await launchBackground({ noAttach: cli.noAttach });
     return;

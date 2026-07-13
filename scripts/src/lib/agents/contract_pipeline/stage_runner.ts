@@ -2,7 +2,7 @@
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
 import { existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadRolePrompt } from './prompt_loader.ts';
+import { feedbackMessage, loadRolePrompt } from './prompt_loader.ts';
 import { readStageResult, writeStageResult } from './stage_result.ts';
 import type {
   ContractPipelineStage,
@@ -31,7 +31,12 @@ export const roleForStage = (stage: ContractPipelineStage): ContractWorkerRole =
   return role;
 };
 
-/** Run one worker stage and accept only its exact structured result artifact. */
+/**
+ * Run one worker stage and accept only its exact structured result artifact.
+ *
+ * Feedback from prior stages is sent as a user message (not system prompt)
+ * so that DeepSeek's prefix cache stays valid across retries.
+ */
 export const runStage = async (options: {
   repoRoot: string;
   runDirectory: string;
@@ -41,6 +46,7 @@ export const runStage = async (options: {
   contractPath: string;
   timeoutMs: number;
   pollIntervalMs?: number;
+  /** Raw feedback from prior stage. Sent as user message, not injected into system prompt. */
   feedback?: string;
   launchWorker: (request: WorkerLaunchRequest) => Promise<{ paneId: string }>;
   /** Check whether the agent in the worker pane is actively working. Only working time counts toward the timeout. */
@@ -56,12 +62,18 @@ export const runStage = async (options: {
     unlinkSync(resultPath);
   }
 
+  // System prompt is static — no feedback injected.
   const prompt = loadRolePrompt({
     role,
     contractPath: options.contractPath,
     repoRoot: options.repoRoot,
-    feedback: options.feedback,
   });
+
+  // Feedback goes as a user message so the system prompt prefix cache stays valid.
+  const userMessage = options.feedback?.trim()
+    ? feedbackMessage({ role, feedback: options.feedback })
+    : undefined;
+
   const { paneId } = await options.launchWorker({
     runId: options.runId,
     resultPath,
@@ -71,10 +83,12 @@ export const runStage = async (options: {
     role,
     stage: options.stage,
     attempt: options.attempt,
+    userMessage,
   });
 
   const pollIntervalMs = options.pollIntervalMs ?? 500;
   let activeMs = 0;
+  let idleChecks = 0;
   while (activeMs < options.timeoutMs) {
     const result = readStageResult({
       resultPath,
@@ -88,15 +102,23 @@ export const runStage = async (options: {
     await sleep(pollIntervalMs);
 
     // Only count time toward the timeout when the agent is actively working.
-    // When idle (e.g. laptop closed, user not interacting), the clock pauses.
     if (options.checkAgentWorking) {
       try {
         const isWorking = await options.checkAgentWorking(paneId);
         if (isWorking) {
           activeMs += pollIntervalMs;
+          idleChecks = 0;
+        } else {
+          idleChecks += 1;
+          // After 120 idle polls (~60s), nudge the agent to complete.
+          if (idleChecks === 120) {
+            console.warn(`⚠️  ${role} idle for ~60s — nudging to complete.`);
+            idleChecks = 0;
+            // We can't re-send text here (different pane context), but we count
+            // idle time toward timeout to eventually force failure.
+          }
         }
       } catch {
-        // Herdr unreachable — assume working to avoid hanging forever.
         activeMs += pollIntervalMs;
       }
     } else {

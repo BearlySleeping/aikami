@@ -2,7 +2,7 @@
 
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { StringEnum } from '@earendil-works/pi-ai';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
@@ -13,84 +13,14 @@ import { writeStageResult } from '../../scripts/src/lib/agents/contract_pipeline
 import type {
   ContractReviewDecision,
   ContractWorkerRole,
+  ReviewDecision,
 } from '../../scripts/src/lib/agents/contract_pipeline/types';
+import { getJjChangeId, runJj, sanitizeWorkspaceName } from '../../scripts/src/lib/agents/jj';
 
 const MUTATING_GIT_RE =
   /\bgit\s+(?:add|commit|push|merge|rebase|reset|checkout|switch|clean|stash|tag)\b/i;
 const MUTATING_SHELL_RE = /(?:^|[;&|]\s*)(?:rm|mv|cp|mkdir|touch|tee)\b|>{1,2}|\bsed\s+-i\b/i;
 const DEPLOY_TOOLS = new Set(['firebase_deploy_functions', 'direnv_switch_mode']);
-
-// ── Jujutsu workspace isolation (C-046) ────────────────────────────
-
-const WORKSPACES_DIR = '.pi/workspaces';
-const MAX_WORKSPACE_NAME_LENGTH = 80;
-
-const sanitizeWorkspaceName = (raw: string): string => {
-  return raw
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_WORKSPACE_NAME_LENGTH);
-};
-
-interface JjExecError extends Error {
-  stderr?: string;
-}
-
-const isJjExecError = (err: unknown): err is JjExecError => err instanceof Error;
-
-const runJj = (command: string, cwd?: string): string => {
-  // Headless config: guarantees identity in CI/sandbox/Nix containers
-  // where global git/jj config may not be inherited.
-  const configFlags = [
-    `--config 'ui.user-name=Pi Agent'`,
-    `--config 'ui.user-email=agent@pi.internal'`,
-  ].join(' ');
-
-  const opts = {
-    encoding: 'utf-8' as const,
-    stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
-    cwd,
-  };
-
-  // Git index.lock retry: co-located git backend can contend across
-  // concurrent workspace syncs. Exponential backoff: 100ms → 200ms → 400ms.
-  const maxRetries = 3;
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return execSync(`jj ${configFlags} ${command}`, opts).trim();
-    } catch (err: unknown) {
-      lastError = err;
-      const message = isJjExecError(err) ? (err.stderr ?? err.message) : String(err);
-
-      // Retry only on git lock contention
-      if (/index\.lock/i.test(message) && attempt < maxRetries - 1) {
-        const delay = 100 * 2 ** attempt;
-        console.warn(
-          `  ⚠️  Git lock contention, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
-        );
-        const start = Date.now();
-        while (Date.now() - start < delay) {
-          // Busy-wait is acceptable for sub-second delays in Node.js
-        }
-        continue;
-      }
-
-      throw new Error(`jj ${command} failed: ${message}`);
-    }
-  }
-
-  const message = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(`jj ${command} failed after ${maxRetries} retries: ${message}`);
-};
-
-const getJjChangeId = (cwd: string): string => {
-  const output = runJj('log -r @ --no-graph -T change_id', cwd);
-  return output.trim();
-};
 
 const environment = (name: string): string => {
   const value = process.env[name];
@@ -114,13 +44,11 @@ const isFileMutationAllowed = (options: {
   inputPath: string;
   contractPath: string;
 }): boolean => {
-  if (options.role === 'implementer' || options.role === 'review') {
+  if (options.role === 'implementer' || options.role === 'verifier' || options.role === 'review') {
     return true;
   }
-  if (options.role === 'writer') {
-    // The contract path may be a placeholder (C-315.md) while the actual
-    // file created by contract_generate has a full slug
-    // (C-315-define-versioned-....md). Match by contract ID prefix.
+  // Writer and critic can edit the contract file (docs/contracts/ only).
+  if (options.role === 'writer' || options.role === 'critic') {
     const resolvedInput = resolve(options.inputPath);
     const resolvedContract = resolve(options.contractPath);
 
@@ -147,48 +75,10 @@ const isFileMutationAllowed = (options: {
 /** Register deterministic contract pipeline completion, review, workspace isolation, and role guards. */
 export default function contractPipelineExtension(pi: ExtensionAPI): void {
   // ── Workspace lifecycle state ───────────────────────────────
-
-  let _wsProvisioned = false;
-  let _wsPath: string | null = null;
-  let _wsChangeId: string | null = null;
-
-  const provisionWorkspace = (repoRoot: string, taskId: string): void => {
-    if (_wsProvisioned) {
-      return;
-    }
-
-    const sanitized = sanitizeWorkspaceName(taskId);
-    const wsDir = join(repoRoot, WORKSPACES_DIR, sanitized);
-
-    // Ensure parent directory exists
-    if (!existsSync(join(repoRoot, WORKSPACES_DIR))) {
-      mkdirSync(join(repoRoot, WORKSPACES_DIR), { recursive: true });
-    }
-
-    // Create the workspace (jj workspace add is safe even if it exists)
-    try {
-      runJj(`workspace add ${wsDir}`, repoRoot);
-      _wsPath = wsDir;
-      _wsChangeId = getJjChangeId(wsDir);
-      _wsProvisioned = true;
-      console.log(`🔧 Workspace provisioned: ${wsDir} (change: ${_wsChangeId})`);
-    } catch (err) {
-      // If the workspace already exists, still track it
-      if (existsSync(wsDir)) {
-        _wsPath = wsDir;
-        try {
-          _wsChangeId = getJjChangeId(wsDir);
-        } catch {
-          _wsChangeId = null;
-        }
-        _wsProvisioned = true;
-        console.log(`🔧 Using existing workspace: ${wsDir} (change: ${_wsChangeId})`);
-      } else {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`❌ Failed to provision workspace: ${message}`);
-      }
-    }
-  };
+  // The orchestrator provisions the jj workspace and passes its path
+  // via CONTRACT_PIPELINE_WORKSPACE_PATH. The extension consumes it —
+  // it does NOT provision its own (single source of truth).
+  let _wsPath: string | null = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH ?? null;
 
   pi.on('tool_call', async (event) => {
     const role = process.env.CONTRACT_PIPELINE_ROLE;
@@ -201,16 +91,6 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         block: true,
         reason: `Deployment tool ${event.toolName} is disabled in contract runs.`,
       };
-    }
-
-    // Task-based workspace isolation: provision a workspace on the first tool call
-    // of a contract pipeline session, regardless of role. Once provisioned, ALL
-    // roles (writer, critic, implementer, verifier, reviewer) share this path
-    // for reading/writing, so Critics see in-progress changes — not stale root code.
-    // The root repo is only the source of truth post-reconciliation.
-    if (!_wsProvisioned) {
-      const runId = process.env.CONTRACT_PIPELINE_RUN_ID ?? `task-${Date.now()}`;
-      provisionWorkspace(process.cwd(), runId);
     }
 
     const workspaceRoot = _wsPath;
@@ -226,17 +106,19 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           reason: `Role ${role} may not mutate ${input.path}.`,
         };
       }
-      // When workspace is active and the target path falls under the root repo
-      // (not under .pi/workspaces/), warn that the agent is reading stale code.
+      // Warn if agent accesses root repo paths while workspace is active.
       if (
         workspaceRoot &&
         !resolve(input.path).startsWith(resolve(workspaceRoot)) &&
         !resolve(input.path).startsWith(resolve(join(process.cwd(), '.pi')))
       ) {
-        console.warn(
-          `⚠️  [${role}] Accessing root repo path \`${input.path}\` while workspace \`${workspaceRoot}\` ` +
-            `is active. Consider targeting the workspace path for in-flight changes.`,
-        );
+        const isolatedRoles = ['implementer', 'verifier'];
+        if (isolatedRoles.includes(role)) {
+          console.warn(
+            `⚠️  [${role}] Accessing root repo path \`${input.path}\` while workspace \`${workspaceRoot}\` ` +
+              `is active. File changes in root will be invisible to the workspace.`,
+          );
+        }
       }
     }
 
@@ -244,9 +126,12 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       if (role !== 'review' && MUTATING_GIT_RE.test(input.command)) {
         return { block: true, reason: 'Git mutations are disabled inside contract workers.' };
       }
-      if ((role === 'critic' || role === 'writer') && MUTATING_SHELL_RE.test(input.command)) {
+      if (role === 'writer' && MUTATING_SHELL_RE.test(input.command)) {
         return { block: true, reason: `Mutating shell commands are disabled for ${role}.` };
       }
+      // Critic may mutate docs/contracts/ files only (the guard above on
+      // write/edit prevents source code mutations, but bash could still
+      // mutate files via shell commands).
     }
 
     return undefined;
@@ -283,43 +168,30 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       const resultPath = environment('CONTRACT_PIPELINE_RESULT_PATH');
 
       // ── Workspace lifecycle hooks ──────────────────────────
-      if (['implementer'].includes(role)) {
-        if (params.status === 'passed') {
-          // Phase B: Checkpoint the successful stage
-          if (_wsPath && _wsChangeId) {
-            try {
-              const checkpointMsg = `Checkpoint: ${role} stage passed (attempt ${attempt})`;
-              runJj(`describe -m "${checkpointMsg}"`, _wsPath);
-              console.log(`📝 Workspace checkpointed: ${_wsChangeId}`);
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : String(err);
-              console.warn(`⚠️  Workspace checkpoint failed: ${message}`);
-            }
-          }
-        } else if (params.status === 'failed' || params.status === 'blocked') {
-          // Phase D: Error recovery — log the failed change ID
-          if (_wsChangeId) {
-            console.error(
-              `❌ Task failed with change ID: ${_wsChangeId}. ` +
-                `Workspace kept for diagnostics at: ${_wsPath ?? 'unknown'}`,
-            );
-            params.findings.push(
-              `Failed workspace change ID: ${_wsChangeId} (path: ${_wsPath ?? 'unknown'})`,
-            );
-          }
-        }
-      }
-
-      if (['verifier'].includes(role) && params.status === 'passed') {
-        // Verifier passed — final checkpoint before reconciliation
-        if (_wsPath && _wsChangeId) {
+      const wsPath = _wsPath;
+      if (['implementer', 'verifier'].includes(role)) {
+        if (params.status === 'passed' && wsPath) {
           try {
-            const checkpointMsg = `Checkpoint: verifier approved (attempt ${attempt})`;
-            runJj(`describe -m "${checkpointMsg}"`, _wsPath);
-            console.log(`📝 Workspace checkpointed (verifier): ${_wsChangeId}`);
+            const changeId = getJjChangeId(wsPath);
+            const checkpointMsg = `Checkpoint: ${role} stage passed (attempt ${attempt})`;
+            runJj(`describe -m "${checkpointMsg}"`, { cwd: wsPath });
+            console.log(`📝 Workspace checkpointed: ${changeId}`);
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             console.warn(`⚠️  Workspace checkpoint failed: ${message}`);
+          }
+        } else if (params.status === 'failed' || params.status === 'blocked') {
+          if (wsPath) {
+            try {
+              const changeId = getJjChangeId(wsPath);
+              console.error(
+                `❌ Task failed with change ID: ${changeId}. ` +
+                  `Workspace kept for diagnostics at: ${wsPath}`,
+              );
+              params.findings.push(`Failed workspace change ID: ${changeId} (path: ${wsPath})`);
+            } catch {
+              console.error(`❌ Task failed. Workspace kept at: ${wsPath}`);
+            }
           }
         }
       }
@@ -354,9 +226,16 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
     description:
       'Record the user-informed final review decision. Approval is rejected when code changed after independent verification.',
     promptSnippet:
-      'Record approve, changes_applied, reject, or blocked for the active contract review',
+      'Record approve, approve_pr, approve_merge, changes_applied, reject, or blocked for the active contract review',
     parameters: Type.Object({
-      decision: StringEnum(['approve', 'changes_applied', 'reject', 'blocked'] as const),
+      decision: StringEnum([
+        'approve',
+        'approve_pr',
+        'approve_merge',
+        'changes_applied',
+        'reject',
+        'blocked',
+      ] as const),
       summary: Type.String({ maxLength: 4096 }),
     }),
     async execute(_toolCallId, params) {
@@ -370,8 +249,9 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         throw new Error(`Run manifest not found: ${runId}`);
       }
       const fingerprint = captureGitState(process.cwd()).fingerprint;
+      const approvingDecisions: ReviewDecision[] = ['approve', 'approve_pr', 'approve_merge'];
       if (
-        params.decision === 'approve' &&
+        approvingDecisions.includes(params.decision) &&
         (!manifest.verificationFingerprint || manifest.verificationFingerprint !== fingerprint)
       ) {
         throw new Error(
@@ -511,7 +391,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       // Finalize the workspace description
       const finalMsg = `Feat: Completed contract pipeline task — PR as \`${bookmarkName}\` (change: ${changeId})`;
       try {
-        runJj(`describe -m "${finalMsg}"`, wsPath);
+        runJj(`describe -m "${finalMsg}"`, { cwd: wsPath });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -529,7 +409,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       // Step A: Define safe bookmarks — create a jj bookmark pointing at
       // the agent's current working head (@) in the isolated workspace.
       try {
-        runJj(`bookmark create ${bookmarkName} -r @`, wsPath);
+        runJj(`bookmark create ${bookmarkName} -r @`, { cwd: wsPath });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -550,7 +430,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       // The retry/backoff wrapper in runJj handles transient network blips
       // and git lock contention.
       try {
-        runJj(`git push --remote origin -b ${bookmarkName}`, wsPath);
+        runJj(`git push --remote origin -b ${bookmarkName}`, { cwd: wsPath });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -589,7 +469,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
       // Step C: Teardown — clean up the workspace directory.
       try {
-        runJj(`workspace forget ${wsPath}`, cwd);
+        runJj(`workspace forget ${wsPath}`, { cwd: cwd });
       } catch {
         // Workspace may already be forgotten
       }
@@ -598,10 +478,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         rmSync(wsPath, { recursive: true, force: true });
       }
 
-      // Reset the in-memory state
-      _wsProvisioned = false;
+      // Reset in-memory state
       _wsPath = null;
-      _wsChangeId = null;
 
       return {
         content: [
@@ -682,14 +560,16 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       if (existsSync(wsPath)) {
         try {
           changeId = getJjChangeId(wsPath);
-          logOutput = runJj(`log -r @ --no-graph -T 'change_id ++ " " ++ description'`, wsPath);
-          statusOutput = runJj('status', wsPath);
+          logOutput = runJj(`log -r @ --no-graph -T 'change_id ++ " " ++ description'`, {
+            cwd: wsPath,
+          });
+          statusOutput = runJj('status', { cwd: wsPath });
           // Post-mortem artifact: full diff of what the agent changed.
           // This lets human supervisors see exactly what code caused the failure
           // without needing to manually reconstruct the workspace.
           if (changeId) {
             try {
-              diffOutput = runJj(`diff -r ${changeId}`, wsPath);
+              diffOutput = runJj(`diff -r ${changeId}`, { cwd: wsPath });
             } catch {
               diffOutput = '(diff unavailable)';
             }
@@ -703,7 +583,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       // Abandon the change (marks as abandoned, keeps history)
       if (changeId) {
         try {
-          runJj(`abandon ${changeId}`, cwd);
+          runJj(`abandon ${changeId}`, { cwd: cwd });
           console.log(`🚫 Abandoned failed change: ${changeId}`);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
@@ -713,7 +593,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
       // Clean up the workspace directory
       try {
-        runJj(`workspace forget ${wsPath}`, cwd);
+        runJj(`workspace forget ${wsPath}`, { cwd: cwd });
       } catch {
         // May already be forgotten
       }
@@ -723,9 +603,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       }
 
       // Reset in-memory state
-      _wsProvisioned = false;
       _wsPath = null;
-      _wsChangeId = null;
 
       const lines = [
         `🚫 **Workspace failure logged**`,
