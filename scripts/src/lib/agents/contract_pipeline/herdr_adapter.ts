@@ -261,12 +261,21 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
    * Retries Enter up to 3 times with increasing delays to handle
    * welcome/update overlays that may consume Enter keypresses.
    */
+  /**
+   * Send text to Pi and submit it.
+   * Sends a pre-Enter to clear any startup overlays, then the real text.
+   * Retries up to 5 times with 2s gaps if the agent stays idle.
+   */
   private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
+    // Dismiss any residual overlay first.
+    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     await runHerdr(['pane', 'send-text', options.paneId, options.text]);
     await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       const panes = await herdrJson<PaneListResult>([
         'pane',
         'list',
@@ -275,8 +284,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       ]);
       const targetPane = panes?.result.panes.find((pane) => pane.pane_id === options.paneId);
       if (targetPane && targetPane.agent_status !== 'idle') {
-        return;
+        return; // Agent picked up the task.
       }
+      // Still idle — re-send.
+      await runHerdr(['pane', 'send-text', options.paneId, options.text]);
       await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
     }
   }
@@ -359,9 +370,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // Wait for Pi to be idle (ready for prompt).
     await herdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '30000']);
 
-    // Send the task message. For retries with feedback, the feedback
-    // is included as a user message (NOT in the system prompt) so that
-    // DeepSeek's prefix cache remains valid across stages.
+    // Build the task message.
     const contractId = extractContractId(options.request.contractPath);
     const isRetry = options.request.attempt > 1;
     const parts: string[] = [];
