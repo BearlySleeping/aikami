@@ -212,7 +212,31 @@ export const runContractPipeline = async (options: {
     // A previously-blocked run should resume from the correct stage
     // (e.g. blocked → implement if contract status is still approved).
     const contractStatus = readContractStatus(manifest.contractPath);
-    const resumeStage = STATUS_TO_START_STAGE[contractStatus] ?? 'write_contract';
+    const contractStage = STATUS_TO_START_STAGE[contractStatus] ?? 'write_contract';
+
+    // If the contract file is missing, don't regress past completed stages.
+    // The manifest is the authoritative record — the contract status file
+    // may have been lost (e.g. jj workspace sync, subrepo reset).
+    const stageOrder: ContractPipelineStage[] = [
+      'write_contract',
+      'critique',
+      'implement',
+      'verify',
+    ];
+    const lastCompleted = manifest.attempts
+      .filter((a) => a.result?.status === 'passed')
+      .reduce<ContractPipelineStage | null>((latest, a) => {
+        const aIdx = stageOrder.indexOf(a.stage);
+        const lIdx = latest ? stageOrder.indexOf(latest) : -1;
+        return aIdx > lIdx ? a.stage : latest;
+      }, null);
+    const lastAttempted = manifest.attempts[manifest.attempts.length - 1]?.stage;
+    // Resume from the stage after the last completed one. If nothing was
+    // completed yet, use the contract status. If the contract file is
+    // missing (draft) but stages were completed, move forward from there.
+    const resumeStage = lastCompleted
+      ? (stageOrder[stageOrder.indexOf(lastCompleted) + 1] ?? lastAttempted ?? contractStage)
+      : contractStage;
     if (resumeStage !== manifest.currentStage) {
       pipelineLog({
         runId: manifest.runId,
