@@ -4,7 +4,7 @@
 // herdr adapter, and Pi extensions. Single source of truth — do not fork.
 
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ── Constants ────────────────────────────────────────────────
@@ -127,6 +127,55 @@ export const provisionJjWorkspace = (options: {
   if (!alreadyExists) {
     const base = options.baseRevision ?? 'dev';
     runJj(`workspace add -r ${base} '${wsDir}'`, { cwd: options.repoRoot });
+  }
+
+  // Always ensure direnv is configured — even when recovering an existing
+  // workspace. Nix Flake requires flake.nix to be Git-tracked, but
+  // .pi/workspaces/ is gitignored. Replace .envrc with a source_env
+  // pointing at the repo root.
+  try {
+    writeFileSync(
+      join(wsDir, '.envrc'),
+      `# Workspace direnv — delegate to repo root where flake.nix is Git-tracked
+source_env ${options.repoRoot}
+`,
+    );
+    execSync('direnv allow', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: wsDir,
+      timeout: 5000,
+    });
+  } catch {
+    // direnv may not be installed — not fatal.
+  }
+
+  // Symlink .pi/npm from repo root so pi packages don't re-download.
+  const workspaceNpmDir = join(wsDir, '.pi', 'npm');
+  const rootNpmDir = join(options.repoRoot, '.pi', 'npm');
+  if (existsSync(rootNpmDir) && !existsSync(workspaceNpmDir)) {
+    try {
+      mkdirSync(join(wsDir, '.pi'), { recursive: true });
+      execSync(`ln -sfn '${rootNpmDir}' '${workspaceNpmDir}'`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 5000,
+      });
+    } catch {
+      // Fallback: pi auto-installs.
+    }
+  }
+
+  // Copy .pi/settings.json so pi config (welcome:false etc.) applies.
+  const rootSettingsPath = join(options.repoRoot, '.pi', 'settings.json');
+  const workspaceSettingsPath = join(wsDir, '.pi', 'settings.json');
+  if (existsSync(rootSettingsPath) && !existsSync(workspaceSettingsPath)) {
+    try {
+      mkdirSync(join(wsDir, '.pi'), { recursive: true });
+      copyFileSync(rootSettingsPath, workspaceSettingsPath);
+    } catch {
+      // Non-critical.
+    }
   }
 
   return {

@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-13)
 
-**160 active (46 without contract file), 119 archived, 1 duplicates**
+**160 active (45 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -119,7 +119,7 @@
 | C-314 | Establish A Production Game Composition Root And Split God S | 🛠️ implemented | ❓ production | v2 |
 | C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🏁 completed | — | v2 |
 | C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | ✅ verified | — | v2 |
-| C-317 | Rebuild the Start Menu Around Campaigns, Not Personas | ⏳ not_started (no contract file) | — | — |
+| C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | — | v2 |
 | C-318 | Add One-Screen Capability Setup and an Offline Demo Fallback | ⏳ not_started (no contract file) | — | — |
 | C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | — | — |
 | C-320 | C 320_mdc_skill_scraper | ⏳ not_started | — | v1 |

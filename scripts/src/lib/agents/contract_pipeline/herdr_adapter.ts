@@ -232,7 +232,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
    * The root working copy is never moved — all file mutations happen here.
    */
   private _provisionJjWorkspace(): void {
-    const wsName = `run-${this._runId}`;
+    const wsName = this._runId; // already prefixed "run-" from createManifest
     try {
       const { workspacePath, changeId } = provisionJjWorkspace({
         repoRoot: this._repoRoot,
