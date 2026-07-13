@@ -1,8 +1,8 @@
 // scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { logPath } from './manifest_store.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
@@ -340,6 +340,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       isolationRoles.includes(options.request.role) && this._workspacePath
         ? this._workspacePath
         : this._repoRoot;
+
+    // The contract file lives in the repo root (created by writer outside jj).
+    // Copy it into the jj workspace so the implementer/verifier can read it.
+    if (cwd !== this._repoRoot && existsSync(options.request.contractPath)) {
+      const wsContractPath = join(cwd, relative(this._repoRoot, options.request.contractPath));
+      mkdirSync(dirname(wsContractPath), { recursive: true });
+      copyFileSync(options.request.contractPath, wsContractPath);
+    }
 
     const tab = await herdrJson<TabCreateResult>([
       'tab',

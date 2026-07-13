@@ -278,6 +278,8 @@ apps/frontend/client/static/lpc/**/*
 
 # Contract pipeline runs (new stable pipeline)
 .pi/contract-runs/
+# JiJutsu co-located workspaces for contract pipeline isolation
+.pi/workspaces/
 .pi/swarm/plans/
 .pi/swarm/payloads/
 .pi/pipeline_payload_*.json
