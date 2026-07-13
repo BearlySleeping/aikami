@@ -1,7 +1,7 @@
 // scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
 import { execSync } from 'node:child_process';
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { logPath } from './manifest_store.ts';
@@ -244,8 +244,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       this._workspacePath = wsDir;
       console.log(`🔧 jj workspace: ${wsDir} (change: ${changeId})`);
     } catch (err) {
-      // jj workspace add failed — either jj is not initialized or unavailable.
-      // Don't set _workspacePath so the cwd fallback (repo root) is used.
+      // Workspace may already exist from a prior (resumed) run.
+      if (existsSync(join(wsDir, '.jj'))) {
+        this._workspacePath = wsDir;
+        try {
+          console.log(`🔧 jj workspace (recovered): ${wsDir} (change: ${jjChangeId(wsDir)})`);
+        } catch {
+          console.log(`🔧 jj workspace (recovered): ${wsDir}`);
+        }
+        return;
+      }
+      // jj not available or workspace add genuinely failed — fall back to repo root.
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`⚠️  jj workspace provisioning failed — using repo root: ${message}`);
     }
