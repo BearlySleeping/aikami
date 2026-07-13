@@ -6,10 +6,12 @@ let {
   open = $bindable(),
   onGoToSettings,
   onClose,
+  onProceedWithoutProviders,
 }: {
   open: boolean;
   onGoToSettings: () => void;
   onClose: () => void;
+  onProceedWithoutProviders?: () => void;
 } = $props();
 </script>
 
@@ -32,18 +34,27 @@ let {
         />
       </svg>
     </div>
-    <h3 class="text-lg font-bold text-center">AI Text Provider Required</h3>
+    <h3 class="text-lg font-bold text-center">AI Text Provider Recommended</h3>
   {/snippet}
 
   {#snippet children()}
     <p class="text-sm text-base-content/70">
-      An AI text provider is required to play the game. We highly recommend configuring Image and
-      Voice generation as well for the full experience.
+      An AI text provider enables the full game experience. We also recommend configuring Image and
+      Voice generation for the complete experience. You can proceed without one — the game will run
+      in a limited offline mode.
     </p>
   {/snippet}
 
   {#snippet actions()}
-    <button type="button" class="btn btn-ghost" onclick={onClose}>Cancel</button>
-    <button type="button" class="btn btn-primary" onclick={onGoToSettings}>Go to Settings</button>
+    {#if onProceedWithoutProviders}
+      <button type="button" class="btn btn-ghost" onclick={onClose}>Cancel</button>
+      <button type="button" class="btn btn-outline" onclick={onProceedWithoutProviders}>
+        Proceed Anyway
+      </button>
+      <button type="button" class="btn btn-primary" onclick={onGoToSettings}>Go to Settings</button>
+    {:else}
+      <button type="button" class="btn btn-ghost" onclick={onClose}>Cancel</button>
+      <button type="button" class="btn btn-primary" onclick={onGoToSettings}>Go to Settings</button>
+    {/if}
   {/snippet}
 </Modal>

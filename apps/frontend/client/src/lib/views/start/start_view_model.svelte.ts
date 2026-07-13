@@ -1,23 +1,28 @@
 // apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts
 //
-// ViewModel for the root Start Menu. Bridges AuthService (Firebase auth),
+// ViewModel for the root Start Menu — campaign-first hierarchy.
+// Bridges CampaignService (campaign lifecycle), AuthService (Firebase auth),
 // RouterService (SPA navigation), and Tauri window API (desktop quit).
 // Supports optional Google Sign-In — the game is fully functional without it.
+// Contract: C-317 Rebuild the Start Menu Around Campaigns, Not Personas
 
+import {
+  CONTENT_PACK_LABELS,
+  RESUMABLE_CAMPAIGN_STATES,
+  UNKNOWN_CONTENT_PACK_LABEL,
+} from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { personaService } from '$lib/services/persona/persona_repository.svelte';
-import type { SaveSlotInfo } from '$services';
+import type { Campaign, CapabilityProfile } from '@aikami/types';
 import {
   aiSettingsService,
   authService,
   campaignService,
   equipmentService,
   gameModeService,
-  gameSaveService,
   inventoryService,
   playerStateService,
   routerService,
@@ -27,6 +32,28 @@ import {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** Display-ready summary of a campaign for the start menu. */
+export type CampaignSummary = {
+  /** Campaign ID. */
+  id: string;
+  /** Display name. */
+  name: string;
+  /** ISO timestamp of last save, or undefined if never saved. */
+  lastSavedAt: string | undefined;
+  /** Human-readable last-saved label ("Not yet saved" when never saved). */
+  lastSavedLabel: string;
+  /** Content pack display label. */
+  contentPackLabel: string;
+  /** Whether the campaign is resumable (state is playing, paused, or saving). */
+  isResumable: boolean;
+  /** Whether the campaign is in the failed state (load blocked). */
+  isFailed: boolean;
+  /** Whether the campaign is mid-setup (creating) — resumes at /setup. */
+  isCreating: boolean;
+  /** AI capability indicators. */
+  capabilities: CapabilityProfile;
+};
 
 export type StartViewModelOptions = BaseViewModelOptions;
 
@@ -46,23 +73,62 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether the credits modal is visible. */
   readonly showCredits: boolean;
 
-  /** Whether the missing AI text provider dialog is visible. */
+  /** Whether the missing AI text provider advisory dialog is visible. */
   readonly showMissingProvidersDialog: boolean;
 
-  /** Whether there are existing IndexedDB saves available. */
-  readonly hasSaves: boolean;
+  /** Whether the Load Campaign modal is visible. */
+  readonly showLoadCampaignModal: boolean;
 
-  /** Available save slots from IndexedDB (sorted newest first). */
-  readonly availableSaves: readonly SaveSlotInfo[];
+  /** Whether the destructive New Adventure confirmation dialog is visible. */
+  readonly showNewAdventureConfirm: boolean;
 
-  /** Start a New Game — resets state and routes to character creation. */
-  startNewGame(): Promise<void>;
+  /** All campaigns as display-ready summaries, sorted newest first. */
+  readonly campaignSummaries: readonly CampaignSummary[];
 
-  /** Continue the most recent saved game. */
-  continueGame(): Promise<void>;
+  /** The latest resumable campaign summary, or undefined. */
+  readonly latestResumableCampaign: CampaignSummary | undefined;
 
-  /** @deprecated Use {@link startNewGame} instead. */
-  startGame(): Promise<void>;
+  /** Whether at least one resumable campaign exists (Continue visibility). */
+  readonly hasResumableCampaign: boolean;
+
+  /** Whether any campaigns exist at all (Load Campaign enablement). */
+  readonly hasCampaigns: boolean;
+
+  /** Whether the campaign list failed to load (degraded state). */
+  readonly campaignsLoadFailed: boolean;
+
+  /** Ordered menu item IDs for keyboard/gamepad focus navigation. */
+  readonly menuItemIds: readonly string[];
+
+  /** Continue the latest resumable campaign. */
+  continueLatestCampaign(): Promise<void>;
+
+  /** Start a New Adventure — always creates a fresh campaign draft. */
+  startNewAdventure(): Promise<void>;
+
+  /** Confirms the destructive New Adventure action. */
+  confirmNewAdventure(): Promise<void>;
+
+  /** Cancels the destructive New Adventure confirmation. */
+  cancelNewAdventure(): void;
+
+  /** Opens the Load Campaign modal. */
+  openLoadCampaign(): void;
+
+  /** Closes the Load Campaign modal. */
+  closeLoadCampaign(): void;
+
+  /** Loads a specific campaign by ID and routes appropriately. */
+  loadCampaignById(campaignId: string): Promise<void>;
+
+  /** Proceeds with New Adventure despite missing AI providers (advisory). */
+  proceedWithoutProviders(): Promise<void>;
+
+  /** Moves keyboard/gamepad focus to the next/previous menu item. */
+  moveFocus(direction: 1 | -1): void;
+
+  /** Activates the currently focused menu item (gamepad A / Enter). */
+  activateFocused(): Promise<void>;
 
   /** Signs in with Google (optional). Updates to "Sign Out" when logged in. */
   loginWithGoogle(): Promise<void>;
@@ -173,6 +239,25 @@ const CREDIT_GROUPS: CreditGroup[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Maps a Campaign to a display-ready summary for the start menu. */
+const toCampaignSummary = (campaign: Campaign): CampaignSummary => ({
+  id: campaign.id,
+  name: campaign.name,
+  lastSavedAt: campaign.lastSavedAt,
+  lastSavedLabel: campaign.lastSavedAt
+    ? new Date(campaign.lastSavedAt).toLocaleString()
+    : 'Not yet saved',
+  contentPackLabel: CONTENT_PACK_LABELS[campaign.contentPackId] ?? UNKNOWN_CONTENT_PACK_LABEL,
+  isResumable: RESUMABLE_CAMPAIGN_STATES.includes(campaign.state),
+  isFailed: campaign.state === 'failed',
+  isCreating: campaign.state === 'creating',
+  capabilities: campaign.capabilityProfile,
+});
+
+// ---------------------------------------------------------------------------
 // ViewModel
 // ---------------------------------------------------------------------------
 
@@ -183,17 +268,23 @@ class StartViewModel
   /** Private — tracks sign-in/sign-out progress to prevent double-clicks. */
   private _isSigningIn = $state(false);
 
-  /** Whether there are existing IndexedDB saves. */
-  hasSaves = $state(false);
-
-  /** Available save slots from IndexedDB (sorted newest first). */
-  availableSaves: SaveSlotInfo[] = $state([]);
+  /** Whether the campaign list failed to load from IndexedDB. */
+  campaignsLoadFailed = $state(false);
 
   /** Whether the credits modal is currently visible. */
   showCredits = $state(false);
 
-  /** Whether the missing AI text provider dialog is visible. */
+  /** Whether the missing AI text provider advisory dialog is visible. */
   showMissingProvidersDialog = $state(false);
+
+  /** Whether the Load Campaign modal is visible. */
+  showLoadCampaignModal = $state(false);
+
+  /** Whether the destructive New Adventure confirmation dialog is visible. */
+  showNewAdventureConfirm = $state(false);
+
+  /** Index of the currently focused menu item (keyboard/gamepad). */
+  focusedIndex = $state(0);
 
   /** @inheritdoc */
   get isLoggedIn(): boolean {
@@ -216,135 +307,227 @@ class StartViewModel
   }
 
   /** @inheritdoc */
-  async startNewGame(): Promise<void> {
-    if (!this._hasTextProvider()) {
-      this.showMissingProvidersDialog = true;
-      return;
-    }
-
-    // Check for existing characters from previous sessions
-    const characterCount = this._getCharacterCount();
-
-    if (characterCount === 1) {
-      // One character — load it directly into /game
-      await this._startWithExistingCharacter();
-      return;
-    }
-
-    if (characterCount > 1) {
-      // Multiple characters — let the user choose
-      await routerService.goToRoute('characters', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
-      return;
-    }
-
-    // Zero characters — go to character creation
-    inventoryService.reset();
-    worldStateService.reset();
-    playerStateService.reset();
-    equipmentService.reset();
-    gameModeService.reset();
-
-    await routerService.goToRoute('setup', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
-  }
-
-  /**
-   * Loads the single existing character as the active persona and navigates
-   * to /game. Called when exactly one saved character exists.
-   */
-  private async _startWithExistingCharacter(): Promise<void> {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (!stored) {
-        return;
-      }
-      const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
-      if (characters.length === 0) {
-        return;
-      }
-
-      const characterId = characters[0].persona.id;
-
-      // Set as active persona if logged in, so the game can find it
-      try {
-        await personaService.setActivePersona(characterId);
-      } catch {
-        // Non-critical — GameViewModel falls back to localStorage
-      }
-    } catch (error) {
-      this.warn('_startWithExistingCharacter:persona-set-failed', error);
-    }
-
-    // Clear any stale state from a previous play session
-    inventoryService.reset();
-    worldStateService.reset();
-    playerStateService.reset();
-    equipmentService.reset();
-    gameModeService.reset();
-
-    await routerService.goToRoute('game', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
+  get campaignSummaries(): readonly CampaignSummary[] {
+    return campaignService.campaigns.map(toCampaignSummary);
   }
 
   /** @inheritdoc */
-  async continueGame(): Promise<void> {
-    if (!this._hasTextProvider()) {
-      this.showMissingProvidersDialog = true;
-      return;
+  get latestResumableCampaign(): CampaignSummary | undefined {
+    return this.campaignSummaries.find((summary) => summary.isResumable);
+  }
+
+  /** @inheritdoc */
+  get hasResumableCampaign(): boolean {
+    return this.latestResumableCampaign !== undefined;
+  }
+
+  /** @inheritdoc */
+  get hasCampaigns(): boolean {
+    return this.campaignSummaries.length > 0;
+  }
+
+  /** @inheritdoc */
+  get menuItemIds(): readonly string[] {
+    const ids: string[] = [];
+    if (this.hasResumableCampaign) {
+      ids.push('continue');
+    }
+    ids.push('new-adventure', 'load-campaign', 'settings', 'account', 'credits');
+    if (this.isTauri) {
+      ids.push('quit');
+    }
+    return ids;
+  }
+
+  /** @inheritdoc */
+  override async initialize(): Promise<void> {
+    try {
+      await campaignService.refreshCampaigns();
+      this.campaignsLoadFailed = false;
+      this.debug('initialize:campaigns-loaded', {
+        count: campaignService.campaigns.length,
+      });
+    } catch (error) {
+      this.warn('initialize:campaign-load-failed', error);
+      this.campaignsLoadFailed = true;
     }
 
-    if (this.availableSaves.length === 0) {
-      this.warn('continueGame:no-saves');
+    await super.initialize();
+  }
+
+  // -------------------------------------------------------------------------
+  // Campaign-first flow
+  // -------------------------------------------------------------------------
+
+  /** @inheritdoc */
+  async continueLatestCampaign(): Promise<void> {
+    const latest = this.latestResumableCampaign;
+    if (!latest) {
+      this.warn('continueLatestCampaign:no-resumable-campaign');
       return;
     }
-
-    // Load the most recent save (sorted newest first)
-    const latestSave = this.availableSaves[0];
 
     try {
-      await campaignService.loadCampaign({ campaignId: latestSave.id });
-
+      await campaignService.loadCampaign({ campaignId: latest.id });
       await routerService.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
     } catch (error) {
-      this.error('continueGame:failed', error);
-      this.errorMessage = 'Failed to load save. Try starting a new game.';
+      this.error('continueLatestCampaign:failed', error);
+      this.errorMessage = 'Failed to load campaign. Try Load Campaign or start a new adventure.';
     }
-  }
-
-  /** @inheritdoc @deprecated */
-  async startGame(): Promise<void> {
-    return this.startNewGame();
   }
 
   /** @inheritdoc */
-  override async initialize(): Promise<void> {
-    this.debug('initialize');
-
-    // Check IndexedDB for existing game saves
-    try {
-      await gameSaveService.fetchAvailableSaves();
-      this.availableSaves = gameSaveService.availableSaves;
-      this.hasSaves = this.availableSaves.length > 0;
-      this.debug('initialize:saves-checked', {
-        count: this.availableSaves.length,
-      });
-    } catch (error) {
-      this.warn('initialize:save-check-failed', error);
-      this.hasSaves = false;
+  async startNewAdventure(): Promise<void> {
+    // Soft advisory: no text provider configured — show dialog, allow proceed.
+    if (!this._hasTextProvider() && !this.showMissingProvidersDialog) {
+      this.showMissingProvidersDialog = true;
+      return;
     }
 
-    await super.initialize();
+    // Destructive confirmation when a resumable campaign exists.
+    if (this.hasResumableCampaign) {
+      this.showNewAdventureConfirm = true;
+      return;
+    }
+
+    await this._createNewAdventure();
   }
+
+  /** @inheritdoc */
+  async confirmNewAdventure(): Promise<void> {
+    this.showNewAdventureConfirm = false;
+    await this._createNewAdventure();
+  }
+
+  /** @inheritdoc */
+  cancelNewAdventure(): void {
+    this.showNewAdventureConfirm = false;
+  }
+
+  /** @inheritdoc */
+  async proceedWithoutProviders(): Promise<void> {
+    this.showMissingProvidersDialog = false;
+
+    if (this.hasResumableCampaign) {
+      this.showNewAdventureConfirm = true;
+      return;
+    }
+
+    await this._createNewAdventure();
+  }
+
+  /** @inheritdoc */
+  openLoadCampaign(): void {
+    this.showLoadCampaignModal = true;
+  }
+
+  /** @inheritdoc */
+  closeLoadCampaign(): void {
+    this.showLoadCampaignModal = false;
+  }
+
+  /** @inheritdoc */
+  async loadCampaignById(campaignId: string): Promise<void> {
+    const summary = this.campaignSummaries.find((s) => s.id === campaignId);
+    if (!summary) {
+      this.warn('loadCampaignById:not-found', { campaignId });
+      return;
+    }
+
+    // Failed campaigns cannot be loaded — surface an error instead.
+    if (summary.isFailed) {
+      this.debug('loadCampaignById:failed-campaign-blocked', { campaignId });
+      this.errorMessage = 'This campaign failed to load previously and cannot be resumed.';
+      return;
+    }
+
+    // Interrupted setup — resume character creation instead of loading.
+    if (summary.isCreating) {
+      this.showLoadCampaignModal = false;
+      await routerService.goToRoute('setup', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+      return;
+    }
+
+    try {
+      await campaignService.loadCampaign({ campaignId });
+      this.showLoadCampaignModal = false;
+      await routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.error('loadCampaignById:failed', error);
+      this.errorMessage = 'Failed to load campaign.';
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Keyboard / gamepad focus management
+  // -------------------------------------------------------------------------
+
+  /** @inheritdoc */
+  moveFocus(direction: 1 | -1): void {
+    const count = this.menuItemIds.length;
+    if (count === 0) {
+      return;
+    }
+    this.focusedIndex = (this.focusedIndex + direction + count) % count;
+    this._applyDomFocus();
+  }
+
+  /** @inheritdoc */
+  async activateFocused(): Promise<void> {
+    const id = this.menuItemIds[this.focusedIndex];
+    switch (id) {
+      case 'continue':
+        await this.continueLatestCampaign();
+        return;
+      case 'new-adventure':
+        await this.startNewAdventure();
+        return;
+      case 'load-campaign':
+        this.openLoadCampaign();
+        return;
+      case 'settings':
+        await this.goToOptions();
+        return;
+      case 'account':
+        if (this.isLoggedIn) {
+          await this.signOut();
+        } else {
+          await this.loginWithGoogle();
+        }
+        return;
+      case 'credits':
+        this.showCreditsModal();
+        return;
+      case 'quit':
+        await this.quitApp();
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** Focuses the DOM button matching the focused menu item ID. */
+  private _applyDomFocus(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const id = this.menuItemIds[this.focusedIndex];
+    const element = document.querySelector<HTMLElement>(`[data-menu-item="${id}"]`);
+    element?.focus();
+  }
+
+  // -------------------------------------------------------------------------
+  // Auth / secondary actions
+  // -------------------------------------------------------------------------
 
   /** @inheritdoc */
   async loginWithGoogle(): Promise<void> {
@@ -427,21 +610,48 @@ class StartViewModel
     return CREDIT_GROUPS;
   }
 
-  /**
-   * Returns the number of saved characters in localStorage.
-   * Used to determine the New Game flow: 0→/setup, 1→/game, 2+→/characters.
-   */
-  private _getCharacterCount(): number {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (!stored) {
-        return 0;
-      }
-      const characters = JSON.parse(stored) as unknown[];
-      return Array.isArray(characters) ? characters.length : 0;
-    } catch {
-      return 0;
+  /** @inheritdoc */
+  async quitApp(): Promise<void> {
+    if (!this.isTauri) {
+      return;
     }
+
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().close();
+    } catch (error) {
+      this.debug('quitApp:error', { error: String(error) });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Private
+  // -------------------------------------------------------------------------
+
+  /**
+   * Creates a fresh campaign draft and routes to /setup for character
+   * creation. Clears stale in-memory game state first.
+   */
+  private async _createNewAdventure(): Promise<void> {
+    try {
+      await campaignService.startNewCampaign();
+    } catch (error) {
+      this.error('_createNewAdventure:failed', error);
+      this.errorMessage = 'Failed to start a new adventure. Please try again.';
+      return;
+    }
+
+    // Clear any stale state from a previous play session
+    inventoryService.reset();
+    worldStateService.reset();
+    playerStateService.reset();
+    equipmentService.reset();
+    gameModeService.reset();
+
+    await routerService.goToRoute('setup', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
   }
 
   /**
@@ -463,20 +673,6 @@ class StartViewModel
     }
 
     return false;
-  }
-
-  /** @inheritdoc */
-  async quitApp(): Promise<void> {
-    if (!this.isTauri) {
-      return;
-    }
-
-    try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().close();
-    } catch (error) {
-      this.debug('quitApp:error', { error: String(error) });
-    }
   }
 }
 

@@ -263,6 +263,14 @@ mock.module(_FRONTEND_SVC_PATH, () => ({
   __esModule: true,
 }));
 
+// ── Mock @aikami/constants — required by campaign-first ViewModels ─────────
+
+mock.module('@aikami/constants', () => ({
+  CONTENT_PACK_LABELS: { emberwatch: 'Emberwatch: The Fading Ward' },
+  UNKNOWN_CONTENT_PACK_LABEL: 'Unknown Adventure',
+  RESUMABLE_CAMPAIGN_STATES: ['playing', 'paused', 'saving'],
+}));
+
 // ── Consistent mock for $services (local barrel) ──────────────────────────
 // All ViewModels import from $services. Without a global mock, the first
 // test file that mocks the barrel with mock.module() leaks its partial
@@ -483,6 +491,10 @@ const _localServicesMock = () => ({
 });
 
 mock.module(_LOCAL_SVC_PATH, _localServicesMock);
+
+// Also register the bare '$services' specifier — when Bun resolves from a
+// jj workspace, the absolute path differs from the main checkout path above.
+mock.module('$services', _localServicesMock);
 
 // ── Mock SvelteKit virtual modules required by transitive dependencies ──────
 

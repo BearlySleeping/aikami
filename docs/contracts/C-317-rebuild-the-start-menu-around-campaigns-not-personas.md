@@ -8,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/start/start_view.svelte`, `start_view_model.svelte.ts`, and new campaign summary card components. |
 | **Priority** | P0 — the first player decision currently branches on character count (persona-based), which is semantically wrong. |
 | **Dependencies** | C-313 (Campaign Aggregate & Boot State Machine — `implemented`), C-121 (Start Menu & Optional Auth — `completed`), C-133 (Flexible Provider Onboarding — `completed`). |
-| **Status** | approved |
+| **Status** | verified |
 | **Promotion** | — |
 | **Docs Impact** | Internal only — no user-facing docs page. The start menu is self-documenting. |
 | **Contract version** | 2.0.0 |
@@ -329,3 +329,46 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Rebuilt the start menu to center on campaigns instead of personas. Removed all character-count branching (`_getCharacterCount`, `_startWithExistingCharacter`, `gameSaveService.availableSaves`). Wired Continue to `campaignService.getLatestCampaign()` filtered by resumable states (`playing | paused | saving`). Wired New Adventure to always call `campaignService.startNewCampaign()` then route to `/setup`. Added Load Campaign modal with `CampaignSummaryCard` components showing campaign name, content pack label, last-saved time, and AI capability badges. Added destructive confirmation dialog when a resumable campaign exists. Added keyboard focus order (`menuItemIds`) and arrow-key navigation via `svelte:window`. Added campaign constants (`CONTENT_PACK_LABELS`, `RESUMABLE_CAMPAIGN_STATES`) to `packages/shared/constants/`. Missing-provider check is now advisory ("Proceed Anyway" button). No changes to `campaignService` or routes — those are C-313, C-319, C-321.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Continue visibility gated on resumable campaigns; `continueLatestCampaign()` loads + routes to `/game` |
+| AC-2 | ✅ | `startNewAdventure()` always calls `startNewCampaign()` + routes to `/setup`; old character-count code removed |
+| AC-3 | ✅ | Load Campaign modal shows `CampaignSummaryCard` per campaign; `loadCampaignById()` handles resumable/creating/failed states |
+| AC-4 | ✅ | Confirmation dialog shown when resumable campaign exists; cancel aborts, confirm proceeds |
+| AC-5 | ✅ | `menuItemIds` defines focus order; `moveFocus()` / `activateFocused()` wired to arrow keys + Enter/Space |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/constants/src/lib/campaign.ts` | Content pack labels, resumable campaign states |
+| `apps/frontend/client/src/lib/views/start/components/campaign_summary_card.svelte` | Reusable campaign summary card (name, content pack, timestamps, AI badges) |
+| `apps/frontend/client/src/lib/views/start/components/load_campaign_modal.svelte` | Modal listing all campaigns as summary cards |
+| `apps/frontend/client/src/lib/views/start/components/new_adventure_confirm_dialog.svelte` | Destructive confirmation dialog for New Adventure |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/index.ts` | Added `export * from './lib/campaign.ts'` |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added `@aikami/constants` mock; added bare `$services` specifier mock for workspace resolution |
+| `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` | Full rewrite: campaign-first flow, removed persona branching, added summaries, modals, keyboard focus |
+| `apps/frontend/client/src/lib/views/start/start_view.svelte` | Full rewrite: campaign-first button hierarchy, keyboard navigation via `svelte:window` |
+| `apps/frontend/client/src/lib/views/start/components/missing_providers_dialog.svelte` | Added optional `onProceedWithoutProviders` callback; advisory tone |
+| `apps/frontend/client/src/lib/views/start/start_view_model.test.ts` | Full rewrite: 31 tests covering all 5 ACs |
+
+### Deviations from Spec
+None. All ACs implemented as specified. Scope boundaries respected — no changes to `campaignService`, routes, or `/characters` page.
+
+### Test Results
+- Unit: 31/31 PASS (0 failures)
+- E2E: N/A (deferred; `start_menu.spec.ts` does not exist yet)
+- Visual: N/A (workspace dev server runs from main checkout, not isolated workspace — visual verification requires commit)
+- Baseline: 17 pre-existing campaign service failures (unchanged from pre-contract state); 0 new failures introduced
+- Client typecheck: PASS
+- Client lint (fix): PASS
