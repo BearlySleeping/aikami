@@ -284,8 +284,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
   }
 
-  /** Write the static worker prompt and build the pi start command with env vars. */
-  private _buildWorkerCommand(request: WorkerLaunchRequest, sessionId: string | undefined): string {
+  /** Write the static worker prompt and build the pi JSON-mode headless command. */
+  private _buildWorkerCommand(
+    request: WorkerLaunchRequest,
+    sessionId: string | undefined,
+    taskMessagePath: string,
+  ): string {
     const promptDirectory = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');
     mkdirSync(promptDirectory, { recursive: true });
     const promptPath = join(promptDirectory, `${request.stage}-${request.attempt}.md`);
@@ -309,13 +313,20 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const toolsArg = tools ? ['--tools', tools.join(',')] : [];
     const sessionArg = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
 
+    // JSON headless mode — no TUI. pi reads the prompt via -p (from file),
+    // calls tools, writes contract_stage_complete result, and exits.
+    const catFile = `$(cat ${shellQuote(taskMessagePath)})`;
     return [
       environment,
       'pi',
+      '--mode',
+      'json',
       ...sessionArg,
       '--append-system-prompt',
       shellQuote(promptPath),
       ...toolsArg,
+      '-p',
+      `"${catFile}"`,
     ].join(' ');
   }
 
@@ -356,15 +367,8 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
 
     const paneId = tab.result.root_pane.pane_id;
-    const startCommand = this._buildWorkerCommand(options.request, options.sessionId);
-    await runHerdr(['pane', 'run', paneId, startCommand]);
 
-    // Wait for Pi to be idle, then give context-mode / extensions time
-    // to finish bootstrapping before injecting the task text.
-    await herdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '60000']);
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-
-    // Build the task message.
+    // Build the task message and write it to a file for pi -p (JSON headless mode).
     const contractId = extractContractId(options.request.contractPath);
     const isRetry = options.request.attempt > 1;
     const parts: string[] = [];
@@ -385,7 +389,21 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'Do not ask questions — if blocked, finish with status blocked.',
     );
 
-    await this._sendTaskText({ paneId, text: parts.join('\n\n') });
+    const taskMessagePath = join(
+      this._repoRoot,
+      '.pi/contract-runs',
+      options.request.runId,
+      'prompts',
+      `${options.request.stage}-${options.request.attempt}-task.md`,
+    );
+    atomicWrite({ path: taskMessagePath, content: parts.join('\n\n') });
+
+    const startCommand = this._buildWorkerCommand(
+      options.request,
+      options.sessionId,
+      taskMessagePath,
+    );
+    await runHerdr(['pane', 'run', paneId, startCommand]);
 
     return { paneId };
   }
