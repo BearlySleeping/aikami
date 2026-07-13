@@ -410,7 +410,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       'Creates a bookmark, pushes to the remote, and cleans up the workspace. ' +
       'After this tool succeeds, call gh_create_pr to create the GitHub PR. ' +
       'Only call after all tests pass.',
-    promptSnippet: 'Use contract_workspace_reconcile to push workspace changes, then call gh_create_pr for the PR.',
+    promptSnippet:
+      'Use contract_workspace_reconcile to push workspace changes, then call gh_create_pr for the PR.',
     promptGuidelines: [
       'Call after the pipeline task is completely done (all stages passed).',
       'Pushes the workspace change as a remote bookmark (branch).',
@@ -624,10 +625,10 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
               '```',
               '',
               'After the PR is created, you can: ',
-              '- **Merge it** with \`gh_merge_pr\` when ready',
-              '- **Check CI** with \`gh_pr_status\`',
-              '- **Sync bookmark** with \`jj_sync\` after merge',
-              '- **Move working copy** with \`jj_new\` to start on updated tip',
+              '- **Merge it** with `gh_merge_pr` when ready',
+              '- **Check CI** with `gh_pr_status`',
+              '- **Sync bookmark** with `jj_sync` after merge',
+              '- **Move working copy** with `jj_new` to start on updated tip',
             ].join('\n'),
           },
         ],

@@ -33,10 +33,14 @@ const DEFAULT_BASE = 'dev';
 function resolvePrSelector(raw: string): string {
   // If it's a URL, extract the PR number
   const urlMatch = raw.match(/\/pull\/(\d+)/);
-  if (urlMatch) return urlMatch[1];
+  if (urlMatch) {
+    return urlMatch[1] ?? raw;
+  }
 
   // If it's purely numeric, it's a PR number
-  if (/^\d+$/.test(raw)) return raw;
+  if (/^\d+$/.test(raw)) {
+    return raw;
+  }
 
   // Otherwise treat as branch name
   return raw;
@@ -93,7 +97,9 @@ async function ensureGitHubRepo(
 
 /** Format a list of PRs from gh JSON output. */
 function formatPrList(prs: Array<Record<string, unknown>>): string {
-  if (prs.length === 0) return 'No pull requests found.';
+  if (prs.length === 0) {
+    return 'No pull requests found.';
+  }
 
   const lines: string[] = [];
   for (const pr of prs) {
@@ -103,9 +109,10 @@ function formatPrList(prs: Array<Record<string, unknown>>): string {
     const base = String(pr.baseRefName ?? '?');
     const state = String(pr.state ?? '?');
     const url = String(pr.url ?? '');
-    const author = pr.author && typeof pr.author === 'object'
-      ? String((pr.author as Record<string, unknown>).login ?? '?')
-      : '?';
+    const author =
+      pr.author && typeof pr.author === 'object'
+        ? String((pr.author as Record<string, unknown>).login ?? '?')
+        : '?';
     const draftIcon = pr.isDraft ? '📝 ' : '';
     const stateIcon = state === 'OPEN' ? '🟢' : state === 'MERGED' ? '🟣' : '🔴';
     lines.push(
@@ -124,9 +131,10 @@ function formatPrSummary(data: Record<string, unknown>): string {
   const url = String(data.url ?? '');
   const head = String(data.headRefName ?? '?');
   const base = String(data.baseRefName ?? '?');
-  const author = data.author && typeof data.author === 'object'
-    ? String((data.author as Record<string, unknown>).login ?? '?')
-    : '?';
+  const author =
+    data.author && typeof data.author === 'object'
+      ? String((data.author as Record<string, unknown>).login ?? '?')
+      : '?';
   const body = String(data.body ?? '').slice(0, 2000);
   const createdAt = String(data.createdAt ?? '?');
   const mergedAt = data.mergedAt ? String(data.mergedAt) : null;
@@ -152,19 +160,28 @@ function formatPrSummary(data: Record<string, unknown>): string {
     `**URL:** ${url}`,
   ];
 
-  if (mergedAt) lines.push(`**Merged:** ${mergedAt}`);
-  if (closedAt && !mergedAt) lines.push(`**Closed:** ${closedAt}`);
-  if (labels) lines.push(`**Labels:** ${labels}`);
+  if (mergedAt) {
+    lines.push(`**Merged:** ${mergedAt}`);
+  }
+  if (closedAt && !mergedAt) {
+    lines.push(`**Closed:** ${closedAt}`);
+  }
+  if (labels) {
+    lines.push(`**Labels:** ${labels}`);
+  }
 
   // Review summary
   if (reviews.length > 0) {
-    const reviewSummary = reviews.map((r) => {
-      const rState = String(r.state ?? '?');
-      const rAuthor = r.author && typeof r.author === 'object'
-        ? String((r.author as Record<string, unknown>).login ?? '?')
-        : '?';
-      return `@${rAuthor}: ${rState}`;
-    }).join(', ');
+    const reviewSummary = reviews
+      .map((r) => {
+        const rState = String(r.state ?? '?');
+        const rAuthor =
+          r.author && typeof r.author === 'object'
+            ? String((r.author as Record<string, unknown>).login ?? '?')
+            : '?';
+        return `@${rAuthor}: ${rState}`;
+      })
+      .join(', ');
     lines.push(`**Reviews:** ${reviewSummary}`);
   }
 
@@ -182,7 +199,9 @@ function formatPrSummary(data: Record<string, unknown>): string {
     });
     lines.push(`**Files changed (${files.length}):**`);
     lines.push(...fileList);
-    if (files.length > 20) lines.push(`  ... and ${files.length - 20} more`);
+    if (files.length > 20) {
+      lines.push(`  ... and ${files.length - 20} more`);
+    }
   }
 
   if (body) {
@@ -194,7 +213,9 @@ function formatPrSummary(data: Record<string, unknown>): string {
 
 /** Format CI check status. */
 function formatCheckStatus(raw: string): string {
-  if (!raw.trim()) return 'No CI checks found for this PR.';
+  if (!raw.trim()) {
+    return 'No CI checks found for this PR.';
+  }
 
   const lines = raw.split('\n');
   const statusLines: string[] = [];
@@ -204,7 +225,9 @@ function formatCheckStatus(raw: string): string {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      continue;
+    }
     if (trimmed.includes('pass') || trimmed.includes('✓') || /\bpass\b/i.test(trimmed)) {
       passCount++;
       statusLines.push(`  ✅ ${trimmed}`);
@@ -253,14 +276,12 @@ export default function (pi: ExtensionAPI) {
           description: `Target base branch (default: "${DEFAULT_BASE}")`,
         }),
       ),
-      draft: Type.Optional(
-        Type.Boolean({ default: false, description: 'Create as draft PR' }),
-      ),
+      draft: Type.Optional(Type.Boolean({ default: false, description: 'Create as draft PR' })),
       web: Type.Optional(
         Type.Boolean({ default: false, description: 'Open PR in browser after creation' }),
       ),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const repoCheck = await ensureGitHubRepo(pi);
       if (!repoCheck.ok) {
         return {
@@ -373,9 +394,7 @@ export default function (pi: ExtensionAPI) {
       author: Type.Optional(
         Type.String({ description: 'Filter by author GitHub handle (e.g. "@me" for you)' }),
       ),
-      label: Type.Optional(
-        Type.String({ description: 'Filter by label' }),
-      ),
+      label: Type.Optional(Type.String({ description: 'Filter by label' })),
       limit: Type.Optional(
         Type.Number({ default: 20, description: 'Maximum PRs to list (default: 20)' }),
       ),
@@ -393,9 +412,15 @@ export default function (pi: ExtensionAPI) {
         String(params.limit ?? 20),
       ];
 
-      if (params.base) args.push('--base', params.base);
-      if (params.author) args.push('--author', params.author);
-      if (params.label) args.push('--label', params.label);
+      if (params.base) {
+        args.push('--base', params.base);
+      }
+      if (params.author) {
+        args.push('--author', params.author);
+      }
+      if (params.label) {
+        args.push('--label', params.label);
+      }
 
       const result = await runGh(pi, args, { parseJson: true });
 
@@ -412,7 +437,11 @@ export default function (pi: ExtensionAPI) {
 
       return {
         content: [{ type: 'text', text: formatted }],
-        details: { count: prs.length, state, prs: prs.map((p) => ({ number: p.number, title: p.title, url: p.url })) },
+        details: {
+          count: prs.length,
+          state,
+          prs: prs.map((p) => ({ number: p.number, title: p.title, url: p.url })),
+        },
       };
     },
   });
@@ -448,9 +477,24 @@ export default function (pi: ExtensionAPI) {
           selector,
           '--json',
           [
-            'number', 'title', 'body', 'state', 'url', 'headRefName', 'baseRefName',
-            'author', 'createdAt', 'mergedAt', 'closedAt', 'labels',
-            'assignees', 'reviews', 'comments', 'additions', 'deletions', 'files',
+            'number',
+            'title',
+            'body',
+            'state',
+            'url',
+            'headRefName',
+            'baseRefName',
+            'author',
+            'createdAt',
+            'mergedAt',
+            'closedAt',
+            'labels',
+            'assignees',
+            'reviews',
+            'comments',
+            'additions',
+            'deletions',
+            'files',
           ].join(','),
         ],
         { parseJson: true },
@@ -510,7 +554,9 @@ export default function (pi: ExtensionAPI) {
       const selector = resolvePrSelector(params.pr);
       const args = ['pr', 'checks', selector];
 
-      if (params.watch) args.push('--watch');
+      if (params.watch) {
+        args.push('--watch');
+      }
 
       const result = await runGh(pi, args, { timeout: params.watch ? 600_000 : 60_000 });
 
@@ -584,8 +630,12 @@ export default function (pi: ExtensionAPI) {
       const method = params.method ?? 'squash';
       const args = ['pr', 'merge', selector, `--${method}`];
 
-      if (params.autoMerge) args.push('--auto');
-      if (params.deleteBranch) args.push('--delete-branch');
+      if (params.autoMerge) {
+        args.push('--auto');
+      }
+      if (params.deleteBranch) {
+        args.push('--delete-branch');
+      }
 
       const result = await runGh(pi, args, { timeout: 60_000 });
 
@@ -647,7 +697,9 @@ export default function (pi: ExtensionAPI) {
       const selector = resolvePrSelector(params.pr);
       const args = ['pr', 'close', selector];
 
-      if (params.deleteBranch) args.push('--delete-branch');
+      if (params.deleteBranch) {
+        args.push('--delete-branch');
+      }
 
       const result = await runGh(pi, args, { timeout: 30_000 });
 
@@ -698,15 +750,9 @@ export default function (pi: ExtensionAPI) {
       pr: Type.String({
         description: 'PR number (e.g. "42"), URL, or branch name',
       }),
-      title: Type.Optional(
-        Type.String({ description: 'New PR title' }),
-      ),
-      body: Type.Optional(
-        Type.String({ description: 'New PR description (markdown)' }),
-      ),
-      baseBranch: Type.Optional(
-        Type.String({ description: 'New target base branch' }),
-      ),
+      title: Type.Optional(Type.String({ description: 'New PR title' })),
+      body: Type.Optional(Type.String({ description: 'New PR description (markdown)' })),
+      baseBranch: Type.Optional(Type.String({ description: 'New target base branch' })),
       addLabels: Type.Optional(
         Type.Array(Type.String(), {
           description: 'Labels to add (comma-separated or array)',
@@ -799,5 +845,4 @@ export default function (pi: ExtensionAPI) {
       };
     },
   });
-
 }

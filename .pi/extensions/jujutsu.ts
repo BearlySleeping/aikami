@@ -131,14 +131,17 @@ export default function (pi: ExtensionAPI) {
       let originChangeId: string;
       try {
         // jj tracks remote bookmarks separately — parse from bookmark list
-        const remoteList = execSync(
-          `jj bookmark list --all`,
-          { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: ctx.cwd },
-        );
+        const remoteList = execSync(`jj bookmark list --all`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          cwd: ctx.cwd,
+        });
 
         // Match: "dev@origin: msykvuuo 07815a23 ..."
         const remoteMatch = remoteList.match(
-          new RegExp(`${bookmark.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}@origin:\\s+([a-z]{12,})\\s`),
+          new RegExp(
+            `${bookmark.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}@origin:\\s+([a-z]{12,})\\s`,
+          ),
         );
         if (!remoteMatch) {
           return {
@@ -152,7 +155,19 @@ export default function (pi: ExtensionAPI) {
             details: { bookmark },
           };
         }
-        originChangeId = remoteMatch[1];
+        originChangeId = remoteMatch[1] ?? '';
+        if (!originChangeId) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Could not parse remote bookmark change ID for \`${bookmark}\`.`,
+              },
+            ],
+            isError: true,
+            details: { bookmark },
+          };
+        }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -178,7 +193,13 @@ export default function (pi: ExtensionAPI) {
               text: `✅ **\`${bookmark}\` is already up to date** with \`${bookmark}@origin\`.`,
             },
           ],
-          details: { bookmark, localChangeId, originChangeId, synced: false, alreadyUpToDate: true },
+          details: {
+            bookmark,
+            localChangeId,
+            originChangeId,
+            synced: false,
+            alreadyUpToDate: true,
+          },
         };
       }
 
@@ -376,11 +397,14 @@ export default function (pi: ExtensionAPI) {
       const newChangeId = getCurrentChangeId();
       let parentInfo = '';
       try {
-        parentInfo = execSync(`jj log -r '@-' --no-graph -T '  ◆ commit_id.short() ++ " " ++ description.first_line()'`, {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          cwd: ctx.cwd,
-        }).trim();
+        parentInfo = execSync(
+          `jj log -r '@-' --no-graph -T '  ◆ commit_id.short() ++ " " ++ description.first_line()'`,
+          {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            cwd: ctx.cwd,
+          },
+        ).trim();
       } catch {
         // Non-essential
       }
