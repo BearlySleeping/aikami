@@ -133,7 +133,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-310 | Automated Backlog Contract Generator | 🏁 completed | v1 |
 | C-311 | Swarm Socket Orchestration | ⏳ not_started | v1 |
 | C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🏁 completed | v2 |
-| C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | 👍 approved | v2 |
+| C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | ✅ verified | v2 |
 | C-317 | Rebuild the Start Menu Around Campaigns, Not Personas | ⏳ not_started (no contract file) | v1 |
 | C-318 | Add One-Screen Capability Setup and an Offline Demo Fallback | ⏳ not_started (no contract file) | v1 |
 | C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | v1 |
