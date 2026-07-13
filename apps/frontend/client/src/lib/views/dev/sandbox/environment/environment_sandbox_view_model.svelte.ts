@@ -58,7 +58,7 @@ export type EnvironmentSandboxViewModelOptions = BaseViewModelOptions & {};
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAP_URL = '/assets/maps/sandbox_zone_a.json';
+const MAP_URL = '/game-data/maps/sandbox_zone_a.json';
 const PLAYER_SPAWN_X = 160;
 const PLAYER_SPAWN_Y = 192;
 

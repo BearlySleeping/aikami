@@ -109,4 +109,8 @@ describe('GameEngineService', () => {
   test('should expose triggerResize method', () => {
     expect(typeof service.triggerResize).toBe('function');
   });
+
+  test('should have contentPackId defaulting to emberwatch', () => {
+    expect(service.contentPackId).toBe('emberwatch');
+  });
 });

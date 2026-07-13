@@ -123,7 +123,9 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
       equipmentService: stubService(),
     }));
     mock.module('../campaign/campaign_service.svelte', () => ({
-      campaignService: stubService(),
+      campaignService: Object.assign(stubService(), {
+        activeCampaign: { contentPackId: 'emberwatch' },
+      }),
     }));
 
     const mod = await import('./game_composition_root.svelte');

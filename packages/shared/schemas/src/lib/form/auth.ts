@@ -1,6 +1,6 @@
 // packages/shared/schemas/src/lib/form/auth.ts
 import Type from 'typebox';
-import { SignInProviderSchema } from '../auth.ts';
+import { SignInProviderSchema } from '../auth/auth.ts';
 
 export const RegisterFormSchema = Type.Object({
   email: Type.String({ format: 'email' }),

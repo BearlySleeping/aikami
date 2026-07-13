@@ -202,7 +202,7 @@ const { viewModel }: Props = $props();
             {#if viewModel.tracks.length === 0}
               <p>No tracks in library.</p>
               <p class="text-sm mt-1">
-                Add music files to the game-assets/music/ folder and rescan.
+                Add music files to the game-data/audio/music/ folder and rescan.
               </p>
             {:else}
               <p>No tracks match the selected filters.</p>

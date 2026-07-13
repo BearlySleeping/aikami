@@ -27,7 +27,7 @@ type Props = {
   textureManager?: TextureManager;
   /**
    * Optional asset URL resolver — maps (slot, assetId, state) to
-   * a static asset URL (e.g. `/lpc/body/male/walk.png`).
+   * a static asset URL (e.g. `/game-data/lpc/body/bodies_male.walk.webp`).
    */
   assetUrlResolver?: (slot: string, assetId: string, state: string) => string;
 };
@@ -68,6 +68,12 @@ let layerSpritesheets: Map<string, Spritesheet> = $state(new Map());
  * sprites and starts a fresh async load cycle.
  */
 $effect(() => {
+  // Skip when no resolver is provided — the parent ViewModel handles
+  // all PixiJS rendering directly via its own pipeline.
+  if (!assetUrlResolver) {
+    return;
+  }
+
   // Capture current values for this effect cycle.
   const currentRecipes = recipes;
   const currentResolver = assetUrlResolver;

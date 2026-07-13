@@ -1,7 +1,7 @@
 // packages/shared/types/src/lib/repository/utils.ts
 import type { TSchema } from 'typebox';
 import type { FieldPath, Timestamp, WhereFilterOp } from '../api/firestore.ts';
-import type { Listener, Observable } from '../class.ts';
+import type { Listener, Observable } from '../common/class.ts';
 import type { CoreCreateData, CoreData, CoreUpdateData } from '../database/core.ts';
 
 // ---

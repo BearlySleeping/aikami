@@ -202,6 +202,11 @@ export {
   tagToPath,
   validUniquePath,
 } from './assets/asset_manifest.ts';
+export {
+  type ContentPackLoaderInterface,
+  clearContentPackCache,
+  loadContentPack,
+} from './assets/content_pack_loader.ts';
 
 export type { JtonParseResult } from './assets/jton_parser.ts';
 export {

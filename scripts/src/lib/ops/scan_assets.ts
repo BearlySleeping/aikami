@@ -1,6 +1,6 @@
 // scripts/src/lib/ops/scan_assets.ts
 //
-// CLI entry point: scans static/game-assets/, generates manifest.json,
+// CLI entry point: scans static/game-data/, generates manifest.json,
 // and ensures the default directory structure exists.
 //
 // Usage: bun run scripts/src/lib/ops/scan_assets.ts
@@ -108,7 +108,7 @@ const scanDir = async (rootDir: string): Promise<AssetManifest> => {
 // Main
 // ---------------------------------------------------------------------------
 
-const rootDir = resolve(join(process.cwd(), 'apps/frontend/client/static/game-assets'));
+const rootDir = resolve(join(process.cwd(), 'apps/frontend/client/static/game-data'));
 
 // Ensure category directories exist
 for (const category of Object.values(ASSET_CATEGORIES)) {

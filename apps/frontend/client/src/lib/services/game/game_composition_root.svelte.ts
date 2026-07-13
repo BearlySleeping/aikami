@@ -184,6 +184,12 @@ export class GameCompositionRoot
     // Phase 5: Campaign service (C-313)
     this._campaignService = campaignService;
 
+    // Phase 5b: Thread contentPackId from campaign to engine (C-315)
+    // The engine uses this to resolve the starting map on boot.
+    const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
+    this._gameEngineService.contentPackId = contentPackId;
+    this.debug('initialize:contentPackId', { contentPackId });
+
     // Phase 6: Start ECS bridge listeners for state services
     await playerStateService.startListening();
     await worldStateService.startListening();

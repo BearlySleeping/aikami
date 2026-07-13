@@ -117,7 +117,7 @@ export type CombatSandboxViewModelOptions = BaseViewModelOptions & {};
 // ---------------------------------------------------------------------------
 
 /** Map URL for the combat sandbox. */
-const COMBAT_MAP_URL = '/assets/maps/sandbox_combat.json';
+const COMBAT_MAP_URL = '/game-data/maps/sandbox_combat.json';
 
 /** Player spawn position on the combat map. */
 const PLAYER_SPAWN_X = 100;

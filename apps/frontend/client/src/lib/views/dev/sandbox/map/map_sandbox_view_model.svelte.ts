@@ -296,12 +296,12 @@ class MapSandboxViewModel
     try {
       this.debug('map-sandbox:loadDebugJton', { spawnX: x, spawnY: y, disableClamping });
       await gw.loadMap({
-        mapUrl: '/assets/maps/debug_map.jton',
+        mapUrl: '/game-data/maps/debug_map.jton',
         targetX: x,
         targetY: y,
         disableClamping,
       });
-      this.currentMap = '/assets/maps/debug_map.jton';
+      this.currentMap = '/game-data/maps/debug_map.jton';
       this.debug('map-sandbox:loadDebugJton:complete');
     } catch (err) {
       this.debug('map-sandbox:loadDebugJton:error', { error: String(err) });
@@ -328,13 +328,13 @@ class MapSandboxViewModel
     try {
       this.debug('map-sandbox:loadZoneB', { spawnX: x, spawnY: y, disableClamping });
       await gw.loadMap({
-        mapUrl: '/assets/maps/sandbox_zone_b.json',
+        mapUrl: '/game-data/maps/sandbox_zone_b.json',
         targetX: x,
         targetY: y,
         disableClamping,
         waterGids: new Set(),
       });
-      this.currentMap = '/assets/maps/sandbox_zone_b.json';
+      this.currentMap = '/game-data/maps/sandbox_zone_b.json';
       this.debug('map-sandbox:loadZoneB:complete');
     } catch (err) {
       this.debug('map-sandbox:loadZoneB:error', { error: String(err) });
@@ -363,13 +363,13 @@ class MapSandboxViewModel
     try {
       this.debug('map-sandbox:loadZoneC', { spawnX: x, spawnY: y, disableClamping });
       await gw.loadMap({
-        mapUrl: '/assets/maps/sandbox_textured.jton',
+        mapUrl: '/game-data/maps/sandbox_textured.jton',
         targetX: x,
         targetY: y,
         disableClamping,
         waterGids: new Set(),
       });
-      this.currentMap = '/assets/maps/sandbox_textured.jton';
+      this.currentMap = '/game-data/maps/sandbox_textured.jton';
       this.debug('map-sandbox:loadZoneC:complete');
     } catch (err) {
       this.debug('map-sandbox:loadZoneC:error', { error: String(err) });

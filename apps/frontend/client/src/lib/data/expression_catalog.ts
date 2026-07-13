@@ -48,8 +48,8 @@ export const EXPRESSION_CATALOG = [
       'laughter',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/happy.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/happy.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/happy.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/happy.png',
     },
   },
   {
@@ -78,9 +78,9 @@ export const EXPRESSION_CATALOG = [
       'despair',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/sad.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/sad.png',
-      eyes: '/assets/lpc/body/heads/human/male/eyes/half.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/sad.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/sad.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/half.png',
     },
   },
   {
@@ -111,9 +111,9 @@ export const EXPRESSION_CATALOG = [
       'irate',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/angry.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/angry.png',
-      eyes: '/assets/lpc/body/heads/human/male/eyes/angry.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/angry.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/angry.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/angry.png',
     },
   },
   {
@@ -136,8 +136,8 @@ export const EXPRESSION_CATALOG = [
       'unexpected',
     ],
     lpcOverlays: {
-      eyes: '/assets/lpc/body/heads/human/male/eyes/surprised.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/surprised.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/surprised.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/surprised.png',
     },
   },
   {
@@ -161,9 +161,9 @@ export const EXPRESSION_CATALOG = [
       'panicked',
     ],
     lpcOverlays: {
-      eyes: '/assets/lpc/body/heads/human/male/eyes/fearful.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/fearful.png',
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/fearful.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/fearful.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/fearful.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/fearful.png',
     },
   },
   {
@@ -184,7 +184,7 @@ export const EXPRESSION_CATALOG = [
       'retch',
     ],
     lpcOverlays: {
-      mouth: '/assets/lpc/body/heads/human/male/mouth/disgusted.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/disgusted.png',
     },
   },
   {
@@ -203,8 +203,8 @@ export const EXPRESSION_CATALOG = [
       'snickers',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/amused.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/amused.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/amused.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/amused.png',
     },
   },
   {
@@ -224,8 +224,8 @@ export const EXPRESSION_CATALOG = [
       'grunts',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/annoyed.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/annoyed.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/annoyed.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/annoyed.png',
     },
   },
   {
@@ -243,8 +243,8 @@ export const EXPRESSION_CATALOG = [
       'timid',
     ],
     lpcOverlays: {
-      eyes: '/assets/lpc/body/heads/human/male/eyes/blushing.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/blushing.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/blushing.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/blushing.png',
     },
   },
   {
@@ -262,8 +262,8 @@ export const EXPRESSION_CATALOG = [
       'scratching head',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/confused.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/confused.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/confused.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/confused.png',
     },
   },
   {
@@ -283,8 +283,8 @@ export const EXPRESSION_CATALOG = [
       'unwavering',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/determined.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/determined.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/determined.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/determined.png',
     },
   },
   {
@@ -302,8 +302,8 @@ export const EXPRESSION_CATALOG = [
       'suggestive',
     ],
     lpcOverlays: {
-      eyes: '/assets/lpc/body/heads/human/male/eyes/wink.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/flirty.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/wink.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/flirty.png',
     },
   },
   {
@@ -320,8 +320,8 @@ export const EXPRESSION_CATALOG = [
       'pure',
     ],
     lpcOverlays: {
-      eyes: '/assets/lpc/body/heads/human/male/eyes/innocent.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/innocent.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/innocent.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/innocent.png',
     },
   },
   {
@@ -340,9 +340,9 @@ export const EXPRESSION_CATALOG = [
       'devious',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/mischievous.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/mischievous.png',
-      eyes: '/assets/lpc/body/heads/human/male/eyes/mischievous.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/mischievous.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/mischievous.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/mischievous.png',
     },
   },
   {
@@ -365,9 +365,9 @@ export const EXPRESSION_CATALOG = [
       'injured',
     ],
     lpcOverlays: {
-      eyes: '/assets/lpc/body/heads/human/male/eyes/pained.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/pained.png',
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/pained.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/pained.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/pained.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/pained.png',
     },
   },
   {
@@ -384,8 +384,8 @@ export const EXPRESSION_CATALOG = [
       'thankful',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/relieved.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/relieved.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/relieved.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/relieved.png',
     },
   },
   {
@@ -404,8 +404,8 @@ export const EXPRESSION_CATALOG = [
       'half-lidded',
     ],
     lpcOverlays: {
-      eyes: '/assets/lpc/body/heads/human/male/eyes/half.png',
-      mouth: '/assets/lpc/body/heads/human/male/mouth/sleepy.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/half.png',
+      mouth: '/game-data/lpc/body/heads/human/male/mouth/sleepy.png',
     },
   },
   {
@@ -424,8 +424,8 @@ export const EXPRESSION_CATALOG = [
       'curiosity',
     ],
     lpcOverlays: {
-      eyebrows: '/assets/lpc/body/heads/human/male/eyebrows/thoughtful.png',
-      eyes: '/assets/lpc/body/heads/human/male/eyes/thoughtful.png',
+      eyebrows: '/game-data/lpc/body/heads/human/male/eyebrows/thoughtful.png',
+      eyes: '/game-data/lpc/body/heads/human/male/eyes/thoughtful.png',
     },
   },
 ] as const satisfies readonly ExpressionEntry[];

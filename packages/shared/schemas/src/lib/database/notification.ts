@@ -1,7 +1,7 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/notification.ts
 import Type, { Composite } from 'typebox';
-import { CoreOmitKeys, CoreSchema } from '../core.ts';
+import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
 
 export const NotificationGenericSchema = Type.Object({
   title: Type.String(),

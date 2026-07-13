@@ -6,11 +6,11 @@ import {
   SignInProviderSchema,
   UserClaimsSchema,
   UserRoleSchema,
-} from '../auth.ts';
+} from '../auth/auth.ts';
+import { FieldValueSchema, TimestampSchema } from '../common/fields.ts';
 import { CountryCodeSchema } from '../common/position.ts';
-import { CoreOmitKeys, CoreSchema } from '../core.ts';
-import { FieldValueSchema, TimestampSchema } from '../fields.ts';
-import { getDeletableFields } from '../utils.ts';
+import { getDeletableFields } from '../common/utils.ts';
+import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
 
 /** The user data in firebase auth */
 export const UserSessionSchema = Composite(

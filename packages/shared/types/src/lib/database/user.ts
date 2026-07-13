@@ -4,7 +4,7 @@
 // Hand-authored composite types (CurrentUser, etc.) remain here.
 
 import type { User, UserLite, UserSession } from '@aikami/schemas';
-import type { SignInProvider } from '../auth.ts';
+import type { SignInProvider } from '../auth/auth.ts';
 
 // ── Re-exports from schemas (source of truth) ───────────────────────────
 

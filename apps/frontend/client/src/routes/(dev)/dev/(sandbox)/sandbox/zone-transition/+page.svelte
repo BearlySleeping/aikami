@@ -22,9 +22,9 @@ import { inventoryService, worldStateService } from '$services';
 // Available test maps for zone transitions
 // ═══════════════════════════════════════════════════════════════════════════
 const MAPS = {
-  zoneA: '/assets/maps/sandbox_zone_a.json',
-  zoneB: '/assets/maps/sandbox_zone_b.json',
-  combat: '/assets/maps/sandbox_combat.json',
+  zoneA: '/game-data/maps/sandbox_zone_a.json',
+  zoneB: '/game-data/maps/sandbox_zone_b.json',
+  combat: '/game-data/maps/sandbox_combat.json',
 } as const;
 
 /** Spawn coordinates for each map (x, y in pixels) — portals now at south. */

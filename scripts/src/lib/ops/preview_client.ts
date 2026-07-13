@@ -258,9 +258,9 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
   // Ensure LPC assets are available before building for Tauri.
   // The download_lpc_assets script puts them in src/lib/assets/lpc/,
   // but the app references them at /lpc/ URLs (served from static/).
-  // We need them in static/lpc/ so Vite copies them into the build output.
+  // We need them in static/game-data/lpc/ so Vite copies them into the build output.
   const lpcSrcDir = resolve(CLIENT_DIR, 'src/lib/assets/lpc/body/male');
-  const lpcStaticDir = resolve(CLIENT_DIR, 'static/lpc/body/male');
+  const lpcStaticDir = resolve(CLIENT_DIR, 'static/game-data/lpc/body/male');
   const lpcHasAssets = existsSync(lpcStaticDir) && existsSync(resolve(lpcStaticDir, 'walk.png'));
   const lpcHasDownloaded = existsSync(lpcSrcDir) && existsSync(resolve(lpcSrcDir, 'walk.png'));
 
@@ -277,9 +277,9 @@ const launchTauri = async (mode: AikamiMode, force: boolean, devRoute: boolean):
     }
   }
 
-  // Copy from src/lib/assets/lpc/ to static/lpc/ if needed
+  // Copy from src/lib/assets/lpc/ to static/game-data/lpc/ if needed
   if (!lpcHasAssets && existsSync(resolve(CLIENT_DIR, 'src/lib/assets/lpc'))) {
-    info('Copying LPC assets to static/lpc/ for build…');
+    info('Copying LPC assets to static/game-data/lpc/ for build…');
     const copyCode = await spawn(
       ['cp', '-r', resolve(CLIENT_DIR, 'src/lib/assets/lpc'), resolve(CLIENT_DIR, 'static/lpc')],
       'copy_lpc_to_static',

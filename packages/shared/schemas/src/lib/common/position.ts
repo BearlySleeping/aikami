@@ -1,6 +1,6 @@
 // packages/shared/schemas/src/lib/common/position.ts
 import Type from 'typebox';
-import { GeoPointSchema } from '../fields.ts';
+import { GeoPointSchema } from './fields.ts';
 
 /**
  * Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).

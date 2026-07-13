@@ -416,7 +416,7 @@ export class GameOverlayService
     void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
     this._engineService?.resumeEngine();
     await this._engineService?.loadMap({
-      mapUrl: '/assets/maps/sandbox_zone_a.json',
+      mapUrl: '/game-data/maps/sandbox_zone_a.json',
       targetX: 160,
       targetY: 192,
       defeatedEnemies: [...worldStateService.defeatedEnemies],

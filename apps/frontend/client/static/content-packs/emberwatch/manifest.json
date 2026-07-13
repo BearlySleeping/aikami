@@ -1,0 +1,62 @@
+{
+  "id": "emberwatch",
+  "name": "Emberwatch",
+  "version": "1.0.0",
+  "updatedAt": "2026-07-13T00:00:00.000Z",
+  "startingMapId": "sandbox_zone_a",
+  "maps": {
+    "sandbox_zone_a": {
+      "file": "/game-data/maps/sandbox_zone_a.json",
+      "name": "Sandbox Zone A",
+      "defaultX": 160,
+      "defaultY": 192
+    },
+    "sandbox_zone_b": {
+      "file": "/game-data/maps/sandbox_zone_b.json",
+      "name": "Sandbox Zone B",
+      "defaultX": 160,
+      "defaultY": 192
+    },
+    "sandbox_combat": {
+      "file": "/game-data/maps/sandbox_combat.json",
+      "name": "Sandbox Combat Arena",
+      "defaultX": 160,
+      "defaultY": 192
+    },
+    "sandbox_textured": {
+      "file": "/game-data/maps/sandbox_textured.jton",
+      "name": "Sandbox Textured",
+      "defaultX": 160,
+      "defaultY": 192
+    },
+    "debug_map": {
+      "file": "/game-data/maps/debug_map.jton",
+      "name": "Debug Map",
+      "defaultX": 160,
+      "defaultY": 192
+    }
+  },
+  "npcs": {
+    "guard_captain": {
+      "name": "Guard Captain Aldric",
+      "defaultDialogueKey": "guard_captain_greeting",
+      "isVendor": false
+    }
+  },
+  "items": {
+    "rusty_sword": {
+      "name": "Rusty Sword",
+      "type": "weapon",
+      "attackBonus": 3,
+      "equipmentSlot": "main_hand"
+    },
+    "healing_potion": {
+      "name": "Healing Potion",
+      "type": "consumable"
+    }
+  },
+  "dialogues": {
+    "guard_captain_greeting": "Welcome to Emberwatch, traveler. The roads have been dangerous lately.",
+    "guard_captain_quest": "If you're looking for work, the captain of the watch could use someone with your... talents."
+  }
+}

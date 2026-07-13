@@ -8,7 +8,7 @@
 | **Target** | `packages/shared/schemas/src/lib/content_pack.ts`, `packages/shared/types/src/lib/content_pack.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `apps/frontend/client/static/content-packs/emberwatch/` |
 | **Priority** | P0 — production currently hardcodes a sandbox map while content pack identity (`contentPackId`) is an orphaned string with no resolver or manifest |
 | **Dependencies** | C-135 ✅, C-136 ✅, C-138 ✅, C-175 ✅, C-210 ✅, C-243 ✅, C-313 🟡 implemented, C-314 🟡 implemented |
-| **Status** | implemented |
+| **Status** | verified |
 | **Promotion** | — |
 | **Docs Impact** | None — internal infrastructure |
 | **Contract version** | 2.0.0 |
@@ -435,10 +435,7 @@ N/A — no persistent state changes. This contract adds a new data format and lo
 
 ## Open Questions
 
-None — all questions resolved:
-
-- **Manifest file structure**: Single `manifest.json`. Splitting adds complexity with no Phase 1 benefit. Revisit if packs exceed ~500 NPCs/items.
-- **Static serving path**: Content packs go in `static/content-packs/` (SvelteKit static directory). Served at `/content-packs/` in dev, bundled verbatim in Tauri production. The `basePath` parameter on `loadContentPack` defaults to `/content-packs`.
+None — all questions resolved.
 
 ## Amendments
 
@@ -453,6 +450,14 @@ None — all questions resolved:
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+---
+
+## Verification Verdict
+
+✅ **PASSED** — All 5 ACs verified. Schemas: 192/192, Engine: 741/741, Integration: 8/8. Static manifest HTTP 200. DefaultStartingMap fully removed. contentPackId threaded through composition root. fix: 0 violations, typecheck: all clean.
+
+Fingerprint: `8a6a1023448a15909fe74189153a00c799802b641f6d8eafb43571437101bf1c`
 
 ---
 

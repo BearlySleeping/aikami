@@ -55,7 +55,7 @@ export type ExpressionEntry = {
  * Each field is optional — missing overlays are gracefully skipped.
  */
 export type ExpressionOverlay = {
-  /** Eyes overlay sprite path (e.g. '/assets/lpc/body/heads/human/male/eyes/angry.png'). */
+  /** Eyes overlay sprite path (e.g. '/game-data/lpc/body/heads/human/male/eyes/angry.png'). */
   readonly eyes?: string;
   /** Eyebrows overlay sprite path. */
   readonly eyebrows?: string;

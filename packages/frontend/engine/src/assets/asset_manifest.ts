@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/assets/asset_manifest.ts
 //
-// Asset Manifest Scanner — recursively scans the game-assets directory,
+// Asset Manifest Scanner — recursively scans the game-data directory,
 // builds a tag→path index, persists it as manifest.json, and provides
 // tag-based URL resolution and prompt-optimized tag lists.
 //
@@ -26,7 +26,7 @@ import { logger } from '$logger';
  * Strips the file extension and replaces all path separators with `:`.
  *
  * @example "sprites/generic-fantasy/elf-male.png" → "sprites:generic-fantasy:elf-male"
- * @param relPath - Relative file path from the game-assets root.
+ * @param relPath - Relative file path from the game-data root.
  * @returns The manifest tag string.
  */
 export const pathToTag = (relPath: string): string => {
@@ -76,12 +76,12 @@ export const sanitizeAssetFilename = (filename: string): string => {
 // ---------------------------------------------------------------------------
 
 /**
- * Validates that a resolved path stays within the game-assets directory.
+ * Validates that a resolved path stays within the game-data directory.
  *
  * Resolves the joined path and asserts it starts with the base directory
  * path. Prevents path traversal attacks (e.g. `../../etc/passwd`).
  *
- * @param basePath - Absolute path to the game-assets root.
+ * @param basePath - Absolute path to the game-data root.
  * @param targetPath - The requested relative or absolute path.
  * @returns `true` if the resolved path is within the base directory.
  */
@@ -130,7 +130,7 @@ export const hasNativeMarker = (relPath: string): boolean => {
  * Based on {@link ASSET_CATEGORIES}, creates all top-level category
  * directories and their nested default subdirectories.
  *
- * @param rootDir - Absolute path to the game-assets root.
+ * @param rootDir - Absolute path to the game-data root.
  */
 export const ensureAssetDirs = async (rootDir: string): Promise<void> => {
   const { mkdir } = await import('node:fs/promises');
@@ -153,7 +153,7 @@ export const ensureAssetDirs = async (rootDir: string): Promise<void> => {
 // ---------------------------------------------------------------------------
 
 /**
- * Recursively scans the game-assets directory tree and builds an asset manifest.
+ * Recursively scans the game-data directory tree and builds an asset manifest.
  *
  * Filters files by category-specific extension sets, generates tags via
  * {@link pathToTag}, detects duplicate tag collisions, and writes the
@@ -162,7 +162,7 @@ export const ensureAssetDirs = async (rootDir: string): Promise<void> => {
  * Hidden files and directories (starting with `.`) are excluded from
  * the scan. Symlinks are followed (Bun's `readdir` follows symlinks by default).
  *
- * @param rootDir - Absolute path to the game-assets root directory
+ * @param rootDir - Absolute path to the game-data root directory
  *   (defaults to `data/game-assets/` relative to the current working directory).
  * @returns A promise resolving to the built {@link AssetManifest}.
  */
@@ -309,7 +309,7 @@ export const buildManifest = async (rootDir?: string): Promise<AssetManifest> =>
  * Reads `manifest.json` from the asset root directory and validates
  * it against the {@link AssetManifestSchema} TypeBox schema.
  *
- * @param rootDir - Absolute path to the game-assets root.
+ * @param rootDir - Absolute path to the game-data root.
  * @returns The cached manifest, or `null` if not found or invalid.
  */
 export const loadManifest = async (rootDir?: string): Promise<AssetManifest | null> => {

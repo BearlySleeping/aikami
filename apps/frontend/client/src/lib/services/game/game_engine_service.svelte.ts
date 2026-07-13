@@ -124,6 +124,12 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
 
   /** Initializes the engine bridge and registers listeners (call once before use). */
   initializeEngine(): Promise<void>;
+
+  /**
+   * Content pack ID to load on boot.
+   * Set by the composition root from the active campaign. Defaults to 'emberwatch'.
+   */
+  contentPackId: string;
 };
 
 export type GameEngineServiceOptions = BaseFrontendClassOptions;
@@ -166,6 +172,10 @@ class GameEngineService
   private _activePersona: PersonaData | undefined;
   private _resizeCleanup: (() => void) | undefined;
   private _initialized = false;
+  private _clearContentPackCache: (() => void) | undefined;
+
+  /** Content pack ID set by the composition root before boot. */
+  contentPackId = $state<string>('emberwatch');
 
   // ── Computed ──
 
@@ -277,6 +287,12 @@ class GameEngineService
     if (this._shakeTimeout) {
       clearTimeout(this._shakeTimeout);
       this._shakeTimeout = undefined;
+    }
+
+    // Clear content pack cache so the next boot re-fetches the manifest (C-315)
+    if (this._clearContentPackCache) {
+      this._clearContentPackCache();
+      this._clearContentPackCache = undefined;
     }
   }
 
@@ -423,8 +439,22 @@ class GameEngineService
         playerData,
       });
 
-      const DefaultStartingMap = '/assets/maps/sandbox_zone_a.json';
-      await this._gameWorld.loadMap({ mapUrl: DefaultStartingMap, targetX: 160, targetY: 192 });
+      // Resolve starting map from the content pack (C-315).
+      // Falls back to emberwatch sandbox zone A when no campaign is active.
+      const { loadContentPack: loadPack, clearContentPackCache: clearCacheFn } = await import(
+        '@aikami/frontend/engine'
+      );
+      this._clearContentPackCache = clearCacheFn;
+      const pack = await loadPack({ packId: this.contentPackId });
+      const startingMap = pack.getStartingMap();
+
+      await this._gameWorld.loadMap({
+        mapUrl: pack.resolveMapUrl(
+          this.contentPackId === 'emberwatch' ? 'sandbox_zone_a' : pack.manifest.startingMapId,
+        ),
+        targetX: startingMap.defaultX ?? 160,
+        targetY: startingMap.defaultY ?? 192,
+      });
 
       this._registerResizeHandler();
     } catch (error) {

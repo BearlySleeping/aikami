@@ -308,7 +308,7 @@ const handleGlobalClick = () => {
             <p>No assets in this folder.</p>
             <p class="text-xs">
               Place files in
-              <code class="font-mono bg-base-300 px-1 rounded">static/game-assets/</code>
+              <code class="font-mono bg-base-300 px-1 rounded">static/game-data/</code>
             </p>
           </div>
         {:else}
@@ -350,7 +350,7 @@ const handleGlobalClick = () => {
             <p class="text-sm text-base-content/50 mb-4">
               Copy these files to:<br>
               <code class="font-mono text-xs bg-base-300 px-1 rounded"
-                >static/game-assets/&lt;category&gt;/</code
+                >static/game-data/&lt;category&gt;/</code
               >
             </p>
             <p class="text-xs text-base-content/40 mb-4">
@@ -446,11 +446,11 @@ const handleGlobalClick = () => {
             <p class="font-semibold mb-1">1. Place your files</p>
             <p class="text-base-content/70">
               Copy files into
-              <code class="font-mono text-xs bg-base-100 px-1 rounded">static/game-assets/</code>
+              <code class="font-mono text-xs bg-base-100 px-1 rounded">static/game-data/</code>
             </p>
             <pre
               class="font-mono text-xs bg-base-100 p-2 rounded mt-1 overflow-x-auto"
-            >static/game-assets/
+            >static/game-data/
 ├── backgrounds/fantasy/
 ├── music/exploration/fantasy/calm/
 ├── sfx/combat/

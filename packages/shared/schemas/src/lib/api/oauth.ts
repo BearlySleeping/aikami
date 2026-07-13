@@ -1,6 +1,6 @@
 // packages/shared/schemas/src/lib/api/oauth.ts
 import Type from 'typebox';
-import { FieldValueSchema, TimestampSchema, UniversalValueSchema } from '../fields.ts';
+import { FieldValueSchema, TimestampSchema, UniversalValueSchema } from '../common/fields.ts';
 
 /**
  * The user role in the CRM.

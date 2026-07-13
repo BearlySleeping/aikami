@@ -74,9 +74,9 @@ export const resolveAssetPath = (alias: number): string => {
     case AssetAlias.PLAYER:
       return 'player';
     case AssetAlias.NPC:
-      return '/lpc/body/male/walk.png';
+      return '/game-data/lpc/body/male/walk.png';
     case AssetAlias.PROP_CHEST:
-      return '/lpc/props/chest_01.png';
+      return '/game-data/lpc/props/chest_01.png';
     case AssetAlias.ENEMY:
       return 'enemy';
 

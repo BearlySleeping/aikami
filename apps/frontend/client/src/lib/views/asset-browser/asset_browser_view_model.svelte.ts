@@ -4,7 +4,7 @@
 // folder tree navigation, file grid filtering, and preview modals.
 //
 // Upload is a local-only operation: users place files in
-// static/game-assets/ and run the manifest scanner (Bun CLI or Tauri).
+// static/game-data/ and run the manifest scanner (Bun CLI or Tauri).
 // The upload modal shows instructions instead of a network form.
 //
 // Contract: C-243
@@ -264,7 +264,7 @@ export class AssetBrowserViewModel
     try {
       const { openPath } = await import('@tauri-apps/plugin-opener');
       const { resolve } = await import('@tauri-apps/api/path');
-      const absolutePath = await resolve('static/game-assets');
+      const absolutePath = await resolve('static/game-data');
       await openPath(absolutePath);
       return;
     } catch {
@@ -272,7 +272,7 @@ export class AssetBrowserViewModel
     }
 
     // Web fallback: show the path
-    alert('Assets folder: apps/frontend/client/static/game-assets/');
+    alert('Assets folder: apps/frontend/client/static/game-data/');
   }
 }
 

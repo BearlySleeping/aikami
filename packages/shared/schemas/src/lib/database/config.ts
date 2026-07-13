@@ -1,8 +1,8 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/config.ts
 import Type, { Composite } from 'typebox';
-import { CoreOmitKeys, CoreSchema } from '../core.ts';
-import { getDeletableFields } from '../utils.ts';
+import { getDeletableFields } from '../common/utils.ts';
+import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
 
 const _themeUnion = Type.Union([
   Type.Literal('dark'),

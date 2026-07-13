@@ -94,7 +94,7 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
 export const MANIFEST_FILENAME = 'manifest.json';
 
 /** Default directory name for game assets at the project root. */
-export const DEFAULT_ASSETS_DIR = 'data/game-assets';
+export const DEFAULT_ASSETS_DIR = 'data/game-data';
 
 /** Maximum upload file size in bytes (50 MB for audio/images). */
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;

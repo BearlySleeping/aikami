@@ -1,7 +1,7 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/npc.ts
 import Type, { Composite } from 'typebox';
-import { CoreOmitKeys, CoreSchema } from '../core.ts';
+import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
 import { BaseCharacterSheetSchema } from './character.ts';
 
 const _visibilityUnion = Type.Union([Type.Literal('private'), Type.Literal('public')]);

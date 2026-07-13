@@ -1,8 +1,8 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/chat.ts
 import Type from 'typebox';
-import { CoreOmitKeys } from '../core.ts';
-import { getDeletableFields } from '../utils.ts';
+import { getDeletableFields } from '../common/utils.ts';
+import { CoreOmitKeys } from '../core/core.ts';
 import { MessageSchema } from './message.ts';
 
 const _visibilityUnion = Type.Union([Type.Literal('private'), Type.Literal('public')]);

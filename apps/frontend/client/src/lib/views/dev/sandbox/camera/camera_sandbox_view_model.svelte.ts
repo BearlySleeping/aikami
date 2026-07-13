@@ -298,9 +298,9 @@ class CameraSandboxViewModel
     }
 
     try {
-      this._addLog('LOAD_MAP', '/assets/maps/sandbox_zone_a.json');
+      this._addLog('LOAD_MAP', '/game-data/maps/sandbox_zone_a.json');
       await this._gameWorld.loadMap({
-        mapUrl: '/assets/maps/sandbox_zone_a.json',
+        mapUrl: '/game-data/maps/sandbox_zone_a.json',
         targetX: 160,
         targetY: 192,
       });
