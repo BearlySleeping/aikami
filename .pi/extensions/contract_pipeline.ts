@@ -44,8 +44,8 @@ const runJj = (command: string, cwd?: string): string => {
   // Headless config: guarantees identity in CI/sandbox/Nix containers
   // where global git/jj config may not be inherited.
   const configFlags = [
-    `--config-toml 'ui.user-name="Pi Agent"'`,
-    `--config-toml 'ui.user-email="agent@pi.internal"'`,
+    `--config 'ui.user-name=Pi Agent'`,
+    `--config 'ui.user-email=agent@pi.internal'`,
   ].join(' ');
 
   const opts = {

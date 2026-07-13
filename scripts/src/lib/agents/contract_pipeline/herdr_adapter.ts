@@ -69,8 +69,8 @@ const sanitizeWorkspaceName = (raw: string): string =>
 
 const runJj = (command: string, cwd?: string): string => {
   const configFlags = [
-    `--config-toml 'ui.user-name="Pi Agent"'`,
-    `--config-toml 'ui.user-email="agent@pi.internal"'`,
+    `--config 'ui.user-name=Pi Agent'`,
+    `--config 'ui.user-email=agent@pi.internal'`,
   ].join(' ');
 
   const result = execSync(`jj ${configFlags} ${command}`, {
