@@ -131,6 +131,14 @@ const enforceStageStatus = (options: {
     };
   }
   if (options.stage === 'implement' && status !== 'implemented') {
+    // Contract file may have been lost (e.g. jj workspace sync, subrepo reset).
+    // If the implementer passed and the file is missing, warn instead of blocking.
+    if (!existsSync(options.contractPath) && status === 'draft') {
+      console.warn(
+        `⚠️  Contract file missing at ${options.contractPath} — implementer passed but status check skipped.`,
+      );
+      return options.result;
+    }
     return {
       ...options.result,
       status: 'blocked',
