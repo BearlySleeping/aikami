@@ -4,6 +4,8 @@
     - Offline first, it can use local ollama, comfyui, kokoro, and does not need firebase (but can enable it)
     - Web client, hosted on firebase hosting with byok (bring your own key) and also firebase is optional
     - No setup required, it uses firebase and cloud run and pay with stripe based on usage (we deploy the docker in apps/backend/image|voice|text to cloud run)
+        - For no setup we should have the models in storage not in docker image to speed up cold starts
+        - Considering of doing the same with ollama or if we use model garden from gcp
 - Remove all legacy, backwards compatible code, and unused code and projects, example i don't think we use
     - packages/backend/ai
     - packages/backend/image/src/index.ts
@@ -16,4 +18,6 @@
     - it is in apps/frontend/client/src/lib/services/agent/agent_registry_service.svelte.ts
     - apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts
     - apps/frontend/client/src/lib/services/npc/npc_schedule_service.svelte.ts
--
+- prevent using "as"
+- @inheritdoc is not needed
+- Consider making all classes in packages/frontend/engine/ use BaseClass and initalize with Class.create() to auto debug log

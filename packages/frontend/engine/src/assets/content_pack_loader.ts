@@ -8,10 +8,13 @@
 
 import { ContentPackManifestSchema } from '@aikami/schemas';
 import type {
+  ContentPackCredits,
+  ContentPackEncounterEntry,
   ContentPackItemEntry,
   ContentPackManifest,
   ContentPackMapEntry,
   ContentPackNpcEntry,
+  ContentPackQuestEntry,
 } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { Value } from 'typebox/value';
@@ -43,6 +46,21 @@ export type ContentPackLoaderInterface = {
 
   /** Returns an item entry by ID, or undefined if not found */
   getItem(itemId: string): ContentPackItemEntry | undefined;
+
+  /** Returns a quest entry by ID, or undefined if not found */
+  getQuest(questId: string): ContentPackQuestEntry | undefined;
+
+  /** Returns an encounter entry by ID, or undefined if not found */
+  getEncounter(encounterId: string): ContentPackEncounterEntry | undefined;
+
+  /** Returns all quest entries in the pack */
+  getAllQuests(): ContentPackQuestEntry[];
+
+  /** Returns all encounter entries in the pack */
+  getAllEncounters(): ContentPackEncounterEntry[];
+
+  /** Returns credits or undefined if not present */
+  getCredits(): ContentPackCredits | undefined;
 
   /** Disposes per-instance resources (no-op if already disposed) */
   dispose(): void;
@@ -137,6 +155,36 @@ class ContentPackLoader implements ContentPackLoaderInterface {
   getItem(itemId: string): ContentPackItemEntry | undefined {
     this._assertNotDisposed();
     return this.manifest.items[itemId];
+  }
+
+  /** @inheritdoc */
+  getQuest(questId: string): ContentPackQuestEntry | undefined {
+    this._assertNotDisposed();
+    return this.manifest.quests?.[questId];
+  }
+
+  /** @inheritdoc */
+  getEncounter(encounterId: string): ContentPackEncounterEntry | undefined {
+    this._assertNotDisposed();
+    return this.manifest.encounters?.[encounterId];
+  }
+
+  /** @inheritdoc */
+  getAllQuests(): ContentPackQuestEntry[] {
+    this._assertNotDisposed();
+    return Object.values(this.manifest.quests ?? {});
+  }
+
+  /** @inheritdoc */
+  getAllEncounters(): ContentPackEncounterEntry[] {
+    this._assertNotDisposed();
+    return Object.values(this.manifest.encounters ?? {});
+  }
+
+  /** @inheritdoc */
+  getCredits(): ContentPackCredits | undefined {
+    this._assertNotDisposed();
+    return this.manifest.credits;
   }
 
   /** @inheritdoc */

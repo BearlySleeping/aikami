@@ -89,6 +89,28 @@ const ITEM_CATALOG: Record<string, ItemDefinition> = {
     equippable: false,
     slot: undefined,
   },
+  // C-316: Emberwatch adventure items
+  wardPendant: {
+    label: 'Ward Pendant',
+    attackBonus: 0,
+    defenseBonus: 0,
+    equippable: false,
+    slot: undefined,
+  },
+  wardAmulet: {
+    label: 'Ward Amulet',
+    attackBonus: 0,
+    defenseBonus: 3,
+    equippable: true,
+    slot: 'armor',
+  },
+  wardShard: {
+    label: 'Ward Shard',
+    attackBonus: 0,
+    defenseBonus: 0,
+    equippable: false,
+    slot: undefined,
+  },
 } as const satisfies Record<string, ItemDefinition>;
 
 /** Default definition for unknown item IDs. */
