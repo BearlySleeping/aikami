@@ -8,7 +8,7 @@
 | **Target** | `packages/shared/schemas/src/lib/content_pack.ts`, `packages/shared/types/src/lib/content_pack.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `apps/frontend/client/static/content-packs/emberwatch/` |
 | **Priority** | P0 — production currently hardcodes a sandbox map while content pack identity (`contentPackId`) is an orphaned string with no resolver or manifest |
 | **Dependencies** | C-135 ✅, C-136 ✅, C-138 ✅, C-175 ✅, C-210 ✅, C-243 ✅, C-313 🟡 implemented, C-314 🟡 implemented |
-| **Status** | verified |
+| **Status** | completed |
 | **Promotion** | — |
 | **Docs Impact** | None — internal infrastructure |
 | **Contract version** | 2.0.0 |
