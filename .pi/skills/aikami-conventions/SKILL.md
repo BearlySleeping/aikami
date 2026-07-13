@@ -20,19 +20,19 @@ compile. Load this skill first, before touching any file.
 This skill contains ONLY universal rules. Load the layer-specific skill for
 your task:
 
-| Working on…                      | Load                                            |
-| -------------------------------- | ----------------------------------------------- |
-| **Frontend (client, Svelte)**    | `svelte-conventions` — runes, Views/ViewModels, |
-|                                  | services, `$services` barrel, aliases           |
-| **Backend (functions, packages)**| `backend-conventions` — controller/service/     |
-|                                  | repository layers, testing                      |
-| UI styling                       | `aikami-ui`                                     |
-| Game engine                      | `pixijs-v8`                                     |
-| Tauri desktop                    | `tauri-v2`                                      |
-| Firestore collections            | `firestore-collection`                          |
-| Data Connect                     | `dataconnect`                                   |
-| Functions deploy/emulators       | `firestack`                                     |
-| New SvelteKit page               | `svelte-page`                                   |
+| Working on…                       | Load                                            |
+| --------------------------------- | ----------------------------------------------- |
+| **Frontend (client, Svelte)**     | `svelte-conventions` — runes, Views/ViewModels, |
+|                                   | services, `$services` barrel, aliases           |
+| **Backend (functions, packages)** | `backend-conventions` — controller/service/     |
+|                                   | repository layers, testing                      |
+| UI styling                        | `aikami-ui`                                     |
+| Game engine                       | `pixijs-v8`                                     |
+| Tauri desktop                     | `tauri-v2`                                      |
+| Firestore collections             | `firestore-collection`                          |
+| Data Connect                      | `dataconnect`                                   |
+| Functions deploy/emulators        | `firestack`                                     |
+| New SvelteKit page                | `svelte-page`                                   |
 
 ---
 
@@ -52,11 +52,11 @@ fetching is client-side only. `adapter-static` is the only adapter.
 **🔴 PROHIBITED** — these files must **never** exist anywhere in
 `apps/frontend/client/src/routes/`:
 
-| Forbidden File Pattern | Why                                      |
-| ---------------------- | ---------------------------------------- |
-| `+server.ts`           | SvelteKit API routes — no server in SPA  |
-| `+page.server.ts`      | Server-side page data loading            |
-| `+layout.server.ts`    | Server-side layout data loading          |
+| Forbidden File Pattern | Why                                     |
+| ---------------------- | --------------------------------------- |
+| `+server.ts`           | SvelteKit API routes — no server in SPA |
+| `+page.server.ts`      | Server-side page data loading           |
+| `+layout.server.ts`    | Server-side layout data loading         |
 
 **✅ REQUIRED** data fetching patterns:
 
@@ -67,8 +67,8 @@ import { getAuth, signInWithPopup } from "firebase/auth";
 
 // ✅ Standard fetch to external microservices (voice, image, text)
 const response = await fetch("http://localhost:3001/tts", {
-  method: "POST",
-  body: JSON.stringify({ text }),
+	method: "POST",
+	body: JSON.stringify({ text }),
 });
 
 // ✅ Browser APIs (localStorage, IndexedDB, Web Audio, etc.)
@@ -84,13 +84,13 @@ Domain types, validation schemas, Zod definitions, and global constants
 **must never** be defined inside application packages (`apps/`). They belong
 in `packages/shared/` and are consumed via `@aikami/*` imports.
 
-| ❌ FORBIDDEN — defined in `apps/**`      | ✅ REQUIRED — import from shared package |
-| --------------------------------------- | ---------------------------------------- |
-| `type Agent = { id: string; ... }`      | `import type { Agent } from "@aikami/types"` |
-| `const agentSchema = z.object({...})`   | `import { agentSchema } from "@aikami/schemas"` |
-| `const MAX_RETRIES = 3`                 | `import { MAX_RETRIES } from "@aikami/constants"` |
-| TypeBox schema in `apps/backend/**`     | `import { Type } from "@sinclair/typebox"` in `packages/shared/schemas/` |
-| `apps/frontend/client/src/lib/types/`      | `packages/shared/types/src/lib/` |
+| ❌ FORBIDDEN — defined in `apps/**`   | ✅ REQUIRED — import from shared package                                 |
+| ------------------------------------- | ------------------------------------------------------------------------ |
+| `type Agent = { id: string; ... }`    | `import type { Agent } from "@aikami/types"`                             |
+| `const agentSchema = z.object({...})` | `import { agentSchema } from "@aikami/schemas"`                          |
+| `const MAX_RETRIES = 3`               | `import { MAX_RETRIES } from "@aikami/constants"`                        |
+| TypeBox schema in `apps/backend/**`   | `import { Type } from "@sinclair/typebox"` in `packages/shared/schemas/` |
+| `apps/frontend/client/src/lib/types/` | `packages/shared/types/src/lib/`                                         |
 
 ```typescript
 // ❌ WRONG — domain type defined in app-level code
@@ -116,11 +116,11 @@ schema to `packages/shared/schemas/`. Never define it locally as a shortcut.
 
 Enforced in the `svelte-conventions` skill — load it for any client work.
 
-| Pillar | Rule                                                                |
-| ------ | ------------------------------------------------------------------- |
-| 3      | Views are completely logicless; state and business logic in        |
-|        | `_view_model.svelte.ts`                                             |
-| 4      | `routes/(dev)/` sandboxes use `DevViewModel` override pattern       |
+| Pillar | Rule                                                          |
+| ------ | ------------------------------------------------------------- |
+| 3      | Views are completely logicless; state and business logic in   |
+|        | `_view_model.svelte.ts`                                       |
+| 4      | `routes/(dev)/` sandboxes use `DevViewModel` override pattern |
 
 ---
 
@@ -145,35 +145,35 @@ Two-tier rule:
 ```typescript
 // ✅ CORRECT — class code uses inherited logging
 class UploadService extends BaseClass {
-  async upload(): Promise<void> {
-    this.debug("upload:start");
-  }
+	async upload(): Promise<void> {
+		this.debug("upload:start");
+	}
 }
 
 // ✅ CORRECT — module-level function uses $logger
 import { logger } from "$logger";
 const parseManifest = (raw: string) => {
-  logger.debug("parseManifest");
+	logger.debug("parseManifest");
 };
 
 // ❌ WRONG — $logger inside a BaseClass subclass
 import { logger } from "$logger";
 class UploadService extends BaseClass {
-  async upload(): Promise<void> {
-    logger.debug("upload"); // loses className prefix
-  }
+	async upload(): Promise<void> {
+		logger.debug("upload"); // loses className prefix
+	}
 }
 
 // ❌ WRONG — bypasses environment-specific resolution, breaks builds
 import { logger } from "@aikami/logger";
 ```
 
-| Environment             | `$logger` resolves to                       |
-| ----------------------- | ------------------------------------------- |
-| SvelteKit (Client)         | `shared/logger/src/lib/svelte_kit.ts`       |
-| Firebase Functions      | `shared/logger/src/lib/logger_functions.ts` |
+| Environment            | `$logger` resolves to                       |
+| ---------------------- | ------------------------------------------- |
+| SvelteKit (Client)     | `shared/logger/src/lib/svelte_kit.ts`       |
+| Firebase Functions     | `shared/logger/src/lib/logger_functions.ts` |
 | Browser (client, site) | `shared/logger/src/lib/logger_browser.ts`   |
-| AWS / Node.js           | `shared/logger/src/lib/logger_aws.ts`       |
+| AWS / Node.js          | `shared/logger/src/lib/logger_aws.ts`       |
 
 **Why**: Each environment configures `$logger` in its own `tsconfig.json` `paths`
 (or `svelte.config.js`). `@aikami/logger` is a NPM package alias — it doesn't
@@ -200,29 +200,29 @@ barrel exports and can miss re-exports or renamed symbols.
 
 ```typescript
 // ✅ CORRECT — import type at top of file
-import type { ItemDefinition } from '@aikami/types';
+import type { ItemDefinition } from "@aikami/types";
 
 export type MyInterface = {
-  getItem(id: string): ItemDefinition;
+	getItem(id: string): ItemDefinition;
 };
 
 class MyClass {
-  getItem(id: string): ItemDefinition {
-    return {} as ItemDefinition;
-  }
+	getItem(id: string): ItemDefinition {
+		return {} as ItemDefinition;
+	}
 }
 
 // ❌ WRONG — inline import() type reference
-import type { ItemDefinition } from '@aikami/types';
+import type { ItemDefinition } from "@aikami/types";
 
 export type MyInterface = {
-  getItem(id: string): import('@aikami/types').ItemDefinition;
+	getItem(id: string): import("@aikami/types").ItemDefinition;
 };
 
 class MyClass {
-  getItem(id: string): import('@aikami/types').ItemDefinition {
-    return {} as import('@aikami/types').ItemDefinition;
-  }
+	getItem(id: string): import("@aikami/types").ItemDefinition {
+		return {} as import("@aikami/types").ItemDefinition;
+	}
 }
 ```
 
@@ -243,54 +243,45 @@ these specific justifications applies:
 
 #### ✅ Valid Reasons for `await import()`
 
-| Reason | Example | Applies To |
-|---|---|---|
-| **Import-time side effects** | Firebase config modules (`getAnalytics(app)` crashes in emulator without `appId`) | Client |
-| **Massive library** (>500KB) | `onnxruntime-web`, `kokoro-js`, `pixi.js` Assets | Client |
-| **Conditional provider** | AI client factory — only the chosen provider's SDK loads | Client |
-| **Platform-specific code** | `@tauri-apps/api` (Tauri-only), `IndexedDB` vs `localStorage` | Client |
-| **Build-time branch** | `import.meta.env.SSR` — Vite tree-shakes the dead branch at build time | Client |
-| **Web Worker** | `?worker&type=module` — Vite requires dynamic import for workers | Client |
-| **Lazy data** (>100KB JSON) | Country lists, weak password dictionaries | Client |
-| **Dev-only tools** | `eruda` debug console — must never ship to production | Client |
-| **Node.js built-ins** | `node:fs/promises`, `node:path` — only in CLI/build scripts, not browser | Shared |
-| **External native packages** | `pg`, `@tursodatabase/database` — optional backends | Backend |
+| Reason                       | Example                                                                           | Applies To |
+| ---------------------------- | --------------------------------------------------------------------------------- | ---------- |
+| **Import-time side effects** | Firebase config modules (`getAnalytics(app)` crashes in emulator without `appId`) | Client     |
+| **Massive library** (>500KB) | `onnxruntime-web`, `kokoro-js`, `pixi.js` Assets                                  | Client     |
+| **Conditional provider**     | AI client factory — only the chosen provider's SDK loads                          | Client     |
+| **Platform-specific code**   | `@tauri-apps/api` (Tauri-only), `IndexedDB` vs `localStorage`                     | Client     |
+| **Build-time branch**        | `import.meta.env.SSR` — Vite tree-shakes the dead branch at build time            | Client     |
+| **Web Worker**               | `?worker&type=module` — Vite requires dynamic import for workers                  | Client     |
+| **Lazy data** (>100KB JSON)  | Country lists, weak password dictionaries                                         | Client     |
+| **Dev-only tools**           | `eruda` debug console — must never ship to production                             | Client     |
+| **Node.js built-ins**        | `node:fs/promises`, `node:path` — only in CLI/build scripts, not browser          | Shared     |
+| **External native packages** | `pg`, `@tursodatabase/database` — optional backends                               | Backend    |
 
 #### ❌ NOT Valid Reasons — Use Static `import` Instead
 
-| Anti-pattern | Why It's Wrong | Fix |
-|---|---|---|
-| **Service-to-service** lazy loading | Services are pure singletons, no side effects at import time. Creates false async boundaries. | Static `import { otherService } from '$services'` |
-| **"Performance"** in a static SPA | Vite bundles everything regardless. Dynamic imports create MORE network requests, not fewer. | Static `import` |
-| **Circular dependency workaround** | Dynamic imports mask architectural problems. Fix the dependency graph instead. | Restructure modules, introduce interfaces, or use a composition root |
-| **"SSR guard"** | Client is `ssr: false` — there is no SSR to guard against | Remove the guard, static import |
-| **"Cold start" in Functions** | Firebase Functions bundle is deployed whole — no tree-shaking. Dynamic import adds runtime overhead. | Static `import` (unless it's a genuinely optional heavy dependency) |
+| Anti-pattern                        | Why It's Wrong                                                                                       | Fix                                                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Service-to-service** lazy loading | Services are pure singletons, no side effects at import time. Creates false async boundaries.        | Static `import { otherService } from '$services'`                    |
+| **"Performance"** in a static SPA   | Vite bundles everything regardless. Dynamic imports create MORE network requests, not fewer.         | Static `import`                                                      |
+| **Circular dependency workaround**  | Dynamic imports mask architectural problems. Fix the dependency graph instead.                       | Restructure modules, introduce interfaces, or use a composition root |
+| **"SSR guard"**                     | Client is `ssr: false` — there is no SSR to guard against                                            | Remove the guard, static import                                      |
+| **"Cold start" in Functions**       | Firebase Functions bundle is deployed whole — no tree-shaking. Dynamic import adds runtime overhead. | Static `import` (unless it's a genuinely optional heavy dependency)  |
 
 ```typescript
 // ❌ WRONG — service-to-service dynamic import (no side effects, not circular)
 class AutonomousMessageService extends BaseClass {
-  async _generateMessage(): Promise<void> {
-    const { textGenerationService } = await import('../ai/text_generation_service.svelte.ts');
-    // ...
-  }
+	async _generateMessage(): Promise<void> {
+		const { textGenerationService } = await import("../ai/text_generation_service.svelte.ts");
+		// ...
+	}
 }
 
 // ✅ CORRECT — static import (both are pure singletons)
-import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
+import { textGenerationService } from "$services";
 
 class AutonomousMessageService extends BaseClass {
-  async _generateMessage(): Promise<void> {
-    // use textGenerationService directly
-  }
-}
-
-// ✅ CORRECT — Firebase config with import-time side effects (stays lazy)
-class FirebaseAuthService extends BaseClass {
-  private async _getAuth() {
-    // `auth.ts` calls `getAuth(app)` at import time — must be deferred
-    FirebaseAuthService._auth = await import('@aikami/frontend/configs/auth.ts');
-    return FirebaseAuthService._auth;
-  }
+	async _generateMessage(): Promise<void> {
+		// use textGenerationService directly
+	}
 }
 ```
 
@@ -303,13 +294,13 @@ full rule.
 
 #### What Goes Where
 
-| Category | Location | Example |
-|----------|----------|---------|
-| **Shared constants/data** | `packages/shared/constants/` | `TEXT_PROVIDERS`, `DEFAULT_*`, provider registries |
-| **Shared types** | `packages/shared/types/` (derived from `@aikami/schemas`) | Cross-project domain types |
-| **Shared schemas** | `packages/shared/schemas/` (TypeBox) | Data validation shapes |
-| **Client-local data** | `apps/frontend/client/src/lib/data/` | Provider endpoint configs |
-| **Client-local types** | `apps/frontend/client/src/lib/types/` | `Connection`, `ConnectionTestResult` |
+| Category                  | Location                                                  | Example                                            |
+| ------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| **Shared constants/data** | `packages/shared/constants/`                              | `TEXT_PROVIDERS`, `DEFAULT_*`, provider registries |
+| **Shared types**          | `packages/shared/types/` (derived from `@aikami/schemas`) | Cross-project domain types                         |
+| **Shared schemas**        | `packages/shared/schemas/` (TypeBox)                      | Data validation shapes                             |
+| **Client-local data**     | `apps/frontend/client/src/lib/data/`                      | Provider endpoint configs                          |
+| **Client-local types**    | `apps/frontend/client/src/lib/types/`                     | `Connection`, `ConnectionTestResult`               |
 
 #### 🔴 Domain Structure Allocation Truth Matrix
 
@@ -317,14 +308,15 @@ Every data entity, type, label, and UI state flag has exactly ONE canonical
 location. No duplication across packages. No shortcuts. If you add to the wrong
 location, your code will be rejected.
 
-| Layer | Canonical Location | What Belongs | What Does NOT Belong |
-|---|---|---|---|
-| **1. Constants & Labels** | `packages/shared/constants/src/` | Provider registries, enum-like arrays, default configs, display labels, error codes, routing paths, feature flags | Runtime state, computed values, configs from external APIs (those go in `apps/.../data/`), ViewModel-local UI strings |
-| **2. Type Definitions** | `packages/shared/types/src/` | Cross-project domain types, API request/response shapes, entity interfaces | Single-app-local types (go in `apps/<app>/src/lib/types/`), single-function-internal types (go inline), ViewModel interface types (go in ViewModel file) |
-| **3. Runtime Schemas** | `packages/shared/schemas/src/` (TypeBox) | All cross-boundary data validation shapes (API inputs, Firestore documents, EngineBridge payloads) | Zod schemas (use TypeBox), validation logic for a single function (inline guard), backend-only validation that never crosses to client |
-| **4. UI State Flags** | `apps/frontend/client/src/lib/views/*_view_model.svelte.ts` | See `svelte-conventions` § UI State Flags | — |
+| Layer                     | Canonical Location                                          | What Belongs                                                                                                      | What Does NOT Belong                                                                                                                                     |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Constants & Labels** | `packages/shared/constants/src/`                            | Provider registries, enum-like arrays, default configs, display labels, error codes, routing paths, feature flags | Runtime state, computed values, configs from external APIs (those go in `apps/.../data/`), ViewModel-local UI strings                                    |
+| **2. Type Definitions**   | `packages/shared/types/src/`                                | Cross-project domain types, API request/response shapes, entity interfaces                                        | Single-app-local types (go in `apps/<app>/src/lib/types/`), single-function-internal types (go inline), ViewModel interface types (go in ViewModel file) |
+| **3. Runtime Schemas**    | `packages/shared/schemas/src/` (TypeBox)                    | All cross-boundary data validation shapes (API inputs, Firestore documents, EngineBridge payloads)                | Zod schemas (use TypeBox), validation logic for a single function (inline guard), backend-only validation that never crosses to client                   |
+| **4. UI State Flags**     | `apps/frontend/client/src/lib/views/*_view_model.svelte.ts` | See `svelte-conventions` § UI State Flags                                                                         | —                                                                                                                                                        |
 
 **🔴 Violations**:
+
 - Labels/translations hardcoded in app code → extract to `packages/shared/constants/`
 - Types defined in `apps/` that another package needs → move to `packages/shared/types/`
 - Validation in service files → create TypeBox schema in `packages/shared/schemas/`
@@ -364,7 +356,7 @@ Re-exporting from the correct source is acceptable for backward compatibility:
 
 ```typescript
 // ✅ OK — re-export from the proper source (not defining locally)
-export { TEXT_PROVIDERS, type TextProvider } from '@aikami/constants';
+export { TEXT_PROVIDERS, type TextProvider } from "@aikami/constants";
 ```
 
 ### 4. File Naming: snake_case ONLY
@@ -497,11 +489,11 @@ factory method. It auto-logs every public method call — **no manual
 
 ```typescript
 // ✅ CORRECT — ClassName.create() factory (enables auto-logging)
-export const service = MyService.create({ className: 'MyService' });
-export const authService = FirebaseAuthService.create({ className: 'FirebaseAuthService' });
+export const service = MyService.create({ className: "MyService" });
+export const authService = FirebaseAuthService.create({ className: "FirebaseAuthService" });
 
 // ❌ WRONG — raw `new` bypasses auto-logging
-export const service = new MyService({ className: 'MyService' });
+export const service = new MyService({ className: "MyService" });
 ```
 
 **Auto-logging mechanism**: `create()` shadows every public prototype method
@@ -516,17 +508,17 @@ acceptable:
 
 ```typescript
 class MyService extends BaseClass {
-  async process(options: { id: string }) {
-    // create() auto-logs: debug('process', options)
-    // No manual this.debug() needed here
+	async process(options: { id: string }) {
+		// create() auto-logs: debug('process', options)
+		// No manual this.debug() needed here
 
-    const result = await this._fetch(options.id);
-    if (!result) {
-      this.debug('process:not-found', { id: options.id }); // ✅ contextual
-      return;
-    }
-    this.debug('process:complete', { id: options.id }); // ✅ contextual
-  }
+		const result = await this._fetch(options.id);
+		if (!result) {
+			this.debug("process:not-found", { id: options.id }); // ✅ contextual
+			return;
+		}
+		this.debug("process:complete", { id: options.id }); // ✅ contextual
+	}
 }
 ```
 
@@ -536,8 +528,8 @@ from `$logger` at entry since they don't participate in auto-logging:
 ```typescript
 // ✅ Arrow functions still manually log
 const loadItems = async (options: { filter: string }) => {
-  logger.debug("loadItems", options);
-  // ...
+	logger.debug("loadItems", options);
+	// ...
 };
 ```
 
@@ -685,9 +677,9 @@ export type User = Static<typeof UserSchema>;
 // ❌ WRONG — manual interface duplicates the schema
 // packages/shared/types/src/lib/user.ts
 export type User = {
-  id: string;
-  email: string;
-  displayName: string;
+	id: string;
+	email: string;
+	displayName: string;
 };
 ```
 
@@ -825,11 +817,11 @@ inherit this environment.
 
 ### Mode Switching
 
-| Mode          | Project                | What it means                                                                                                                                             |
-| ------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `emulator`    | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break.                                                                                                  |
-| `staging`     | `aikami-dev`           | Live GCP project with real deployed services. Acts as staging — deployed Cloud Functions, live Firestore data. Can also run locally against live backend. |
-| `production`  | `aikami-prod`          | Live production. Deploy with care.                                                                                                                        |
+| Mode         | Project                | What it means                                                                                                                                             |
+| ------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `emulator`   | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break.                                                                                                  |
+| `staging`    | `aikami-dev`           | Live GCP project with real deployed services. Acts as staging — deployed Cloud Functions, live Firestore data. Can also run locally against live backend. |
+| `production` | `aikami-prod`          | Live production. Deploy with care.                                                                                                                        |
 
 ```bash
 aikami_switch emulator     # Local emulators, no GCP

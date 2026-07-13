@@ -1,0 +1,19 @@
+# Aikami Less Organized TODO
+
+- 3 Modes to play aikami
+    - Offline first, it can use local ollama, comfyui, kokoro, and does not need firebase (but can enable it)
+    - Web client, hosted on firebase hosting with byok (bring your own key) and also firebase is optional
+    - No setup required, it uses firebase and cloud run and pay with stripe based on usage (we deploy the docker in apps/backend/image|voice|text to cloud run)
+- Remove all legacy, backwards compatible code, and unused code and projects, example i don't think we use
+    - packages/backend/ai
+    - packages/backend/image/src/index.ts
+    - packages/backend/svelte-kit/package.json
+- Migrate firestore database to dataconnect, like npc, chat, items etc. since we are using apps/backend/firebase/dataconnect/dataconnect.yaml and firestore we should use dataconnect where it makes sense and firestore where it makes sense
+- Create a tilemap editor, maybe add a new frontend app that is sveltekit but ssr that we host on cloud run similar to nordclaw, it will be like for creator.aikami.com, and it will be posible to create and edit tilemaps, items, npc, quests, and other game content. maybe even add mod support, like you can upload own
+- Use secretspec with gcsm https://secretspec.dev/quick-start (it garanties that you have the secrets before you build/dev)
+- There are some await import('... that should be refactored
+- We import @aikami/frontend/configs/firestore.ts directly somewhere, we should force to always use repositories: packages/frontend/repositories/src/lib/.
+    - it is in apps/frontend/client/src/lib/services/agent/agent_registry_service.svelte.ts
+    - apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts
+    - apps/frontend/client/src/lib/services/npc/npc_schedule_service.svelte.ts
+-
