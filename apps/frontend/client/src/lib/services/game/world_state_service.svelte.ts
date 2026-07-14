@@ -61,6 +61,8 @@ export type WorldStateServiceInterface = BaseFrontendClassInterface & {
   setWorldGenOutput(output: WorldGenOutput): void;
   serializeWorldGen(): WorldGenOutput | undefined;
   hydrateWorldGen(data: WorldGenOutput | undefined): void;
+  /** Clears world generation output explicitly (full campaign teardown). */
+  clearWorldGen(): void;
 
   /** Starts ECS bridge listeners for quests and combat progression. */
   startListening(): Promise<void>;
@@ -211,7 +213,11 @@ class WorldStateService
   async setVariable(key: string, value: unknown): Promise<void> {
     const world = this.currentWorld;
     if (!world) {
-      throw new Error('No world loaded');
+      // World-gen wizard may call this before a world is loaded.
+      // Warn rather than throw — the wizard retries when world is live.
+      // C-313: campaigns create the world before seeding variables.
+      this.warn('setVariable:no-world-loaded', { key });
+      return;
     }
 
     this.currentWorld = {
@@ -230,7 +236,11 @@ class WorldStateService
   async addNpc(npcId: string): Promise<void> {
     const location = this.currentLocation;
     if (!location) {
-      throw new Error('No location loaded');
+      // World-gen wizard may call this before a location is set.
+      // Warn rather than throw — NPCs are seeded when the map loads.
+      // C-313: location is created before NPCs are added.
+      this.warn('addNpc:no-location-loaded', { npcId });
+      return;
     }
 
     if (!location.npcIds.includes(npcId)) {
@@ -274,7 +284,11 @@ class WorldStateService
   }): Promise<void> {
     const world = this.currentWorld;
     if (!world) {
-      throw new Error('No world loaded');
+      // World-gen wizard may call this before a world is loaded.
+      // Warn rather than throw — events are recorded when the world is live.
+      // C-313: campaign creates the world before recording events.
+      this.warn('recordEvent:no-world-loaded', { title: options.title });
+      return;
     }
 
     const newEvent: WorldEvent = {
@@ -364,8 +378,16 @@ class WorldStateService
   reset(): void {
     this.quests = [];
     this.defeatedEnemies = [];
-    this._worldGenOutput = undefined;
+    // C-313: reset() clears session-level state only — worldGenOutput is
+    // campaign-level data set by the wizard and preserved across resets
+    // so it's available when the engine boots.
     this.debug('reset:cleared');
+  }
+
+  /** Clears world generation output explicitly (full campaign teardown). */
+  clearWorldGen(): void {
+    this._worldGenOutput = undefined;
+    this.debug('clearWorldGen');
   }
 
   // ── ECS bridge listeners ──

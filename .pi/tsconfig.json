@@ -34,9 +34,5 @@
     "swarm/**/*.ts",
     "*.ts"
   ],
-  "exclude": [
-    "generated-skills",
-    "workspaces",
-    "node_modules"
-  ]
+  "exclude": ["generated-skills", "workspaces", "node_modules"]
 }

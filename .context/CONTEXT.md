@@ -64,8 +64,8 @@ See `docs/intro/README.md` for full developer guidelines.
 | File                          | What it is                            |
 | ----------------------------- | ------------------------------------- |
 | `.context/llms.txt`           | Complete index of all knowledge files |
-| `docs/guides/ARCHITECTURE.md` | System architecture                   |
+| `docs/architecture/architecture.md` | System architecture              |
 | `docs/contracts/INDEX.md`     | All active contracts                  |
 
-> Generated: 2026-07-03
+> Generated: 2026-07-14
 > Run `bun run scripts -- generate_context` to regenerate.

@@ -21,3 +21,6 @@
 - prevent using "as"
 - @inheritdoc is not needed
 - Consider making all classes in packages/frontend/engine/ use BaseClass and initalize with Class.create() to auto debug log
+- Once we actually have a MVP we need to move development from main to dev, but we keep main as of now since code rabbit (free version) only validates PR from the default branch
+- Implement creating contract pipeline from github issues / github roadmap
+    - bun contract --source todo|issues|roadmap (todo means default docs/TODO.md) we already have .pi/extensions/github_cli.ts
