@@ -23,13 +23,13 @@ const { viewModel }: Props = $props();
 
 // ── Static lookup tables ──────────────────────────────────────────────
 
-const ALL_CATEGORIES = [
+const CATEGORIES = [
   { id: 'game' as const, label: 'Game' },
-  { id: 'ai_engine' as const, label: 'AI & Privacy' },
+  { id: 'ai_engine' as const, label: 'AI Engine' },
   { id: 'agents' as const, label: 'Agents' },
 ];
 
-const ALL_GAME_SUB_TABS = [
+const GAME_SUB_TABS = [
   { id: 'display' as const, label: 'Display' },
   { id: 'audio' as const, label: 'Audio' },
   { id: 'controls' as const, label: 'Controls' },
@@ -37,19 +37,6 @@ const ALL_GAME_SUB_TABS = [
   { id: 'music' as const, label: 'Music' },
   { id: 'autonomous' as const, label: 'Autonomous NPCs' },
 ];
-
-// C-328: Progressive disclosure — advanced tabs hidden by default.
-const ADVANCED_GAME_SUB_TABS = new Set(['export', 'music', 'autonomous']);
-
-const visibleCategories = $derived(
-  viewModel.isAdvanced ? ALL_CATEGORIES : ALL_CATEGORIES.filter((c) => c.id !== 'agents'),
-);
-
-const visibleGameSubTabs = $derived(
-  viewModel.isAdvanced
-    ? ALL_GAME_SUB_TABS
-    : ALL_GAME_SUB_TABS.filter((s) => !ADVANCED_GAME_SUB_TABS.has(s.id)),
-);
 </script>
 
 <BaseViewModelContainer {viewModel} class="min-h-screen bg-base-200">
@@ -75,26 +62,15 @@ const visibleGameSubTabs = $derived(
       Close
     </button>
     <h1 class="text-xl font-bold">Settings</h1>
-    <div class="flex items-center gap-3">
-      <!-- C-328: Advanced toggle — progressive disclosure -->
-      <label class="flex items-center gap-1.5 cursor-pointer text-sm text-base-content/70">
-        <input
-          type="checkbox"
-          class="toggle toggle-sm"
-          checked={viewModel.isAdvanced}
-          onchange={() => viewModel.toggleAdvanced()}
-        >
-        Advanced
-      </label>
-      <div class="w-6"></div>
-    </div>
+    <!-- Spacer for visual centering -->
+    <div class="w-20"></div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
        Primary Category Tabs
        ═══════════════════════════════════════════════════════════════════ -->
   <div class="tabs tabs-boxed bg-base-100 m-6 justify-center">
-    {#each visibleCategories as cat}
+    {#each CATEGORIES as cat}
       <button
         type="button"
         class="tab tab-lg"
@@ -112,7 +88,7 @@ const visibleGameSubTabs = $derived(
   {#if viewModel.activeCategory === 'game'}
     <!-- Game Sub-tabs -->
     <div class="tabs tabs-bordered px-6">
-      {#each visibleGameSubTabs as sub}
+      {#each GAME_SUB_TABS as sub}
         <button
           type="button"
           class="tab"

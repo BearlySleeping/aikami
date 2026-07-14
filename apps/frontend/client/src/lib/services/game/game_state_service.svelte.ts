@@ -536,8 +536,7 @@ export class GameStateService
     this.playerMaxHp = 100;
     this.playerBaseAttack = 5;
     this.playerBaseDefense = 12;
-    // C-313: worldGenOutput is campaign-level data, not cleared by reset().
-    // Use clearWorldGen() for full campaign teardown.
+    this._worldGenOutput = undefined;
     this.debug('reset:cleared');
   }
 
