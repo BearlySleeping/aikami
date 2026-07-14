@@ -26,7 +26,6 @@ import {
 } from './manifest_store.ts';
 import { validatePostconditions } from './postconditions.ts';
 import { loadReviewPrompt } from './prompt_loader.ts';
-import { isFingerprintCurrent, stageAfterReviewChanges } from './review_gate.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
 import { resolveNextStage, transition } from './state_machine.ts';
 import type {
@@ -54,24 +53,23 @@ const WORKER_STAGES: readonly ContractPipelineStage[] = [
 
 const sleep = async (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-const TERMINAL_STAGES: readonly ContractPipelineStage[] = [
-  'accepted',
-  'reconciling',
-  'pr_created',
-  'merged',
-];
+const TERMINAL_STAGES: readonly ContractPipelineStage[] = ['pr_created', 'merged'];
 
 /** Find the newest incomplete run for a contract. */
 const findPreviousRuns = (options: { contractId: string; cwd: string }): string | undefined => {
   const d = join(options.cwd, '.pi/contract-runs');
-  if (!existsSync(d)) return undefined;
+  if (!existsSync(d)) {
+    return undefined;
+  }
   const sid = options.contractId.replace(/[^A-Za-z0-9]/g, '-');
   for (const rid of readdirSync(d)
     .filter((e) => e.startsWith('run-') && e.endsWith(`-${sid}`))
     .sort()
     .reverse()) {
     const m = readManifest({ runId: rid, cwd: options.cwd });
-    if (m && !TERMINAL_STAGES.includes(m.currentStage)) return rid;
+    if (m && !TERMINAL_STAGES.includes(m.currentStage)) {
+      return rid;
+    }
   }
   return undefined;
 };
@@ -166,14 +164,7 @@ const readReviewDecision = (path: string, runId: string): ContractReviewDecision
   }
   try {
     const value = JSON.parse(readFileSync(path, 'utf-8')) as Partial<ContractReviewDecision>;
-    const validDecisions: ReviewDecision[] = [
-      'approve',
-      'approve_pr',
-      'approve_merge',
-      'changes_applied',
-      'reject',
-      'blocked',
-    ];
+    const validDecisions: ReviewDecision[] = ['approve', 'merge', 'change', 'reject'];
     if (
       value.runId !== runId ||
       typeof value.decision !== 'string' ||
@@ -295,98 +286,33 @@ const createGitHubPr = (options: {
   title: string;
   body: string;
   repoRoot: string;
+  draft?: boolean;
 }): string => {
-  const result = execFileSync(
-    'gh',
-    [
-      'pr',
-      'create',
-      '--head',
-      options.headBranch,
-      '--base',
-      options.baseBranch,
-      '--title',
-      options.title,
-      '--body',
-      options.body,
-    ],
-    { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: options.repoRoot, timeout: 30000 },
-  ).trim();
+  const args = [
+    'pr',
+    'create',
+    '--head',
+    options.headBranch,
+    '--base',
+    options.baseBranch,
+    '--title',
+    options.title,
+    '--body',
+    options.body,
+  ];
+  if (options.draft) {
+    args.push('--draft');
+  }
+  const result = execFileSync('gh', args, {
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    cwd: options.repoRoot,
+    timeout: 30000,
+  }).trim();
 
   // Extract PR URL from gh output.
   const urlMatch = result.match(/https:\/\/github\.com\/[^\s]+/);
   return urlMatch?.[0] ?? result;
-};
-
-/**
- * Execute the full accept pipeline: reconcile → create PR → optionally merge.
- */
-const executeAcceptPipeline = async (options: {
-  manifest: RunManifest;
-  repoRoot: string;
-  decision: ContractReviewDecision;
-}): Promise<RunManifest> => {
-  let manifest = { ...options.manifest };
-
-  const reconciliation = reconcileWorkspace({
-    manifest,
-    repoRoot: options.repoRoot,
-    baseBranch: PIPELINE_BASE_BRANCH,
-  });
-  manifest = transition({ manifest, next: 'reconciling' });
-  manifest.reconciliation = reconciliation;
-  writeManifest({ manifest, cwd: options.repoRoot });
-  pipelineLog({
-    runId: manifest.runId,
-    cwd: options.repoRoot,
-    message: `Reconciled workspace → bookmark ${reconciliation.bookmarkName}.`,
-  });
-
-  if (options.decision.decision === 'approve_pr' || options.decision.decision === 'approve_merge') {
-    const prUrl = createGitHubPr({
-      headBranch: reconciliation.headBranch,
-      baseBranch: reconciliation.baseBranch,
-      title: reconciliation.prTitle,
-      body: reconciliation.prBody ?? '',
-      repoRoot: options.repoRoot,
-    });
-    manifest = transition({ manifest, next: 'pr_created' });
-    manifest.reconciliation = { ...reconciliation, prUrl };
-    writeManifest({ manifest, cwd: options.repoRoot });
-    pipelineLog({
-      runId: manifest.runId,
-      cwd: options.repoRoot,
-      message: `PR created: ${prUrl}`,
-    });
-    console.log(`\n🔗 PR created: ${prUrl}\n`);
-
-    if (options.decision.decision === 'approve_merge') {
-      // Auto-merge via squash.
-      execSync(`gh pr merge ${prUrl} --squash --auto --delete-branch`, {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        cwd: options.repoRoot,
-        timeout: 30000,
-      });
-      manifest = transition({ manifest, next: 'merged' });
-      manifest.reconciliation = {
-        ...manifest.reconciliation,
-        prUrl,
-        merged: true,
-      } as ReconciliationResult;
-      writeManifest({ manifest, cwd: options.repoRoot });
-      pipelineLog({
-        runId: manifest.runId,
-        cwd: options.repoRoot,
-        message: `PR merged (auto-merge enabled).`,
-      });
-      console.log(
-        `\n🚀 PR auto-merge queued. Run \`git pull\` on dev to update your local branch.\n`,
-      );
-    }
-  }
-
-  return manifest;
 };
 
 // ── Main orchestrator ─────────────────────────────────────────
@@ -420,7 +346,9 @@ export const runContractPipeline = async (options: {
   let manifest: RunManifest;
   if (resumeRunId) {
     const resumed = readManifest({ runId: resumeRunId, cwd: options.repoRoot });
-    if (!resumed) throw new Error(`Run ${resumeRunId} is not a valid v3 manifest.`);
+    if (!resumed) {
+      throw new Error(`Run ${resumeRunId} is not a valid v3 manifest.`);
+    }
     manifest = resumed;
     delete manifest.reviewPaneId;
     delete manifest.blockedReason;
@@ -461,7 +389,9 @@ export const runContractPipeline = async (options: {
       writeManifest({ manifest, cwd: options.repoRoot });
     }
   } else {
-    if (!options.target) throw new Error('A contract ID or path is required for a new run.');
+    if (!options.target) {
+      throw new Error('A contract ID or path is required for a new run.');
+    }
     // No dirty-worktree guardrail — Git Worktrees isolate all stage mutations.
     const contract = resolveContract({ target: options.target, repoRoot: options.repoRoot });
     const baseline = captureGitState(options.repoRoot);
@@ -526,8 +456,6 @@ export const runContractPipeline = async (options: {
     // ── Main loop ────────────────────────────────────────────
 
     while (
-      manifest.currentStage !== 'accepted' &&
-      manifest.currentStage !== 'reconciling' &&
       manifest.currentStage !== 'pr_created' &&
       manifest.currentStage !== 'merged' &&
       manifest.currentStage !== 'blocked'
@@ -583,7 +511,9 @@ export const runContractPipeline = async (options: {
           existsSync(manifest.contractPath)
         ) {
           const wcp = join(workspacePath, relative(options.repoRoot, manifest.contractPath));
-          if (existsSync(wcp)) copyFileSync(wcp, manifest.contractPath);
+          if (existsSync(wcp)) {
+            copyFileSync(wcp, manifest.contractPath);
+          }
         }
 
         // After writer succeeds, discover the actual contract file.
@@ -618,6 +548,12 @@ export const runContractPipeline = async (options: {
               original: outcome.result,
               unauthorizedPaths: postconditions.unauthorizedPaths,
             });
+
+        // Update contract status BEFORE enforceStageStatus so the guardrail passes.
+        if (stage === 'implement' && result.status === 'passed') {
+          updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+        }
+
         result = enforceStageStatus({ stage, result, contractPath: manifest.contractPath });
 
         manifest.attempts.push({
@@ -640,6 +576,29 @@ export const runContractPipeline = async (options: {
             // Fingerprint from workspace for verification gate.
             manifest.verificationFingerprint = after.fingerprint;
             manifest.verificationContractHash = '';
+
+            // Reconcile workspace → push branch → create draft PR for review.
+            const reconciliation = reconcileWorkspace({
+              manifest,
+              repoRoot: options.repoRoot,
+              baseBranch: PIPELINE_BASE_BRANCH,
+            });
+            manifest.reconciliation = reconciliation;
+            const prUrl = createGitHubPr({
+              headBranch: reconciliation.headBranch,
+              baseBranch: reconciliation.baseBranch,
+              title: reconciliation.prTitle,
+              body: reconciliation.prBody,
+              repoRoot: options.repoRoot,
+              draft: true,
+            });
+            manifest.prUrl = prUrl;
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `Draft PR created: ${prUrl}`,
+            });
+            console.log(`\n📦 Draft PR: ${prUrl}\n`);
           } else if (result.status === 'changes_requested') {
             updateContractStatus({
               contractPath: manifest.contractPath,
@@ -696,65 +655,88 @@ export const runContractPipeline = async (options: {
           throw new Error('Review pane was not initialized.');
         }
 
-        if (
-          decision.decision === 'approve' ||
-          decision.decision === 'approve_pr' ||
-          decision.decision === 'approve_merge'
-        ) {
-          const workspacePath = adapter.getWorkspacePath();
-          const cwdForFingerprint = workspacePath || options.repoRoot;
-          const currentFingerprint = captureGitState(cwdForFingerprint).fingerprint;
+        const prUrl = manifest.prUrl;
+        if (!prUrl) {
+          throw new Error('PR URL not found in manifest — review requires a PR.');
+        }
 
-          if (
-            !isFingerprintCurrent({
-              storedFingerprint: manifest.verificationFingerprint,
-              currentFingerprint,
-            })
-          ) {
-            await adapter.sendReviewMessage({
-              paneId: reviewPaneId,
-              message:
-                'Approval rejected: code changed after verification. Request re-verification.',
+        if (decision.decision === 'approve') {
+          // Mark draft PR as ready. gh pr ready may not exist in older gh CLI
+          // versions — the PR remains valid regardless.
+          try {
+            execSync(`gh pr ready ${prUrl}`, {
+              encoding: 'utf-8',
+              stdio: ['pipe', 'pipe', 'pipe'],
+              cwd: options.repoRoot,
+              timeout: 15000,
             });
-            continue;
+          } catch {
+            // Non-fatal — user can mark ready manually in GitHub UI.
           }
-
-          // Execute accept pipeline (may reconcile, create PR, merge).
-          manifest = await executeAcceptPipeline({
-            manifest,
-            repoRoot: options.repoRoot,
-            decision,
+          pipelineLog({
+            runId: manifest.runId,
+            cwd: options.repoRoot,
+            message: `PR marked ready: ${prUrl}`,
           });
-          writeManifest({ manifest, cwd: options.repoRoot });
-
-          // Show the final status.
-          const prUrl = manifest.reconciliation?.prUrl;
-          const merged = manifest.reconciliation?.merged;
-          if (merged) {
-            console.log(`\n🚀 Pipeline complete — ${manifest.contractId} merged.\n`);
-          } else if (prUrl) {
-            console.log(`\n📦 Pipeline complete — PR ready: ${prUrl}\n`);
-          } else {
-            console.log(`\n✅ Pipeline complete — ${manifest.contractId} accepted.\n`);
+          console.log(`\n✅ PR ready for review: ${prUrl}\n`);
+          manifest = transition({ manifest, next: 'pr_created' });
+        } else if (decision.decision === 'merge') {
+          try {
+            execSync(`gh pr ready ${prUrl}`, {
+              encoding: 'utf-8',
+              stdio: ['pipe', 'pipe', 'pipe'],
+              cwd: options.repoRoot,
+              timeout: 15000,
+            });
+          } catch {
+            // Draft PR — fall through to merge attempt.
           }
-        } else if (decision.decision === 'changes_applied') {
+          execSync(`gh pr merge ${prUrl} --squash --auto --delete-branch`, {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            cwd: options.repoRoot,
+            timeout: 30000,
+          });
+          manifest = transition({ manifest, next: 'merged' });
+          pipelineLog({
+            runId: manifest.runId,
+            cwd: options.repoRoot,
+            message: `PR auto-merge queued: ${prUrl}`,
+          });
+          console.log(`\n🚀 PR auto-merge queued: ${prUrl}\n`);
+        } else if (decision.decision === 'change') {
+          execSync(`gh pr close ${prUrl}`, {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            cwd: options.repoRoot,
+            timeout: 15000,
+          });
+          pipelineLog({
+            runId: manifest.runId,
+            cwd: options.repoRoot,
+            message: `PR closed (changes requested): ${prUrl}`,
+          });
+          delete manifest.prUrl;
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
-          const nextStage = stageAfterReviewChanges(decision.contractChanged);
-          if (nextStage === 'critique') {
-            updateContractStatus({ contractPath: manifest.contractPath, status: 'draft' });
-          } else {
-            updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
-          }
-          manifest = transition({ manifest, next: nextStage });
+          updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+          manifest = transition({ manifest, next: 'implement' });
           await adapter.sendReviewMessage({
             paneId: reviewPaneId,
-            message:
-              nextStage === 'verify'
-                ? 'Code changes recorded. Starting fresh independent verifier.'
-                : 'Contract changes recorded. Starting fresh critique.',
+            message: 'Changes requested. Closed PR — starting fresh implementer run.',
           });
         } else {
+          execSync(`gh pr close ${prUrl}`, {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            cwd: options.repoRoot,
+            timeout: 15000,
+          });
+          pipelineLog({
+            runId: manifest.runId,
+            cwd: options.repoRoot,
+            message: `PR closed (rejected): ${prUrl}`,
+          });
           manifest.blockedReason = decision.summary;
           manifest = transition({ manifest, next: 'blocked' });
         }

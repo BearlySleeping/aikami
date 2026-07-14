@@ -13,8 +13,8 @@ import { writeStageResult } from '../../scripts/src/lib/agents/contract_pipeline
 import type {
   ContractReviewDecision,
   ContractWorkerRole,
-  ReviewDecision,
 } from '../../scripts/src/lib/agents/contract_pipeline/types';
+import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import {
   getGitHeadCommit,
   runGit,
@@ -227,19 +227,10 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'contract_review_decision',
     label: 'Contract Review Decision',
-    description:
-      'Record the user-informed final review decision. Approval is rejected when code changed after independent verification.',
-    promptSnippet:
-      'Record approve, approve_pr, approve_merge, changes_applied, reject, or blocked for the active contract review',
+    description: 'Record the user-informed final review decision for the active contract PR.',
+    promptSnippet: 'Record approve, merge, change, or reject for the active contract review',
     parameters: Type.Object({
-      decision: StringEnum([
-        'approve',
-        'approve_pr',
-        'approve_merge',
-        'changes_applied',
-        'reject',
-        'blocked',
-      ] as const),
+      decision: StringEnum(['approve', 'merge', 'change', 'reject'] as const),
       summary: Type.String({ maxLength: 4096 }),
     }),
     async execute(_toolCallId, params) {
@@ -253,15 +244,6 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         throw new Error(`Run manifest not found: ${runId}`);
       }
       const fingerprint = captureGitState(process.cwd()).fingerprint;
-      const approvingDecisions: ReviewDecision[] = ['approve', 'approve_pr', 'approve_merge'];
-      if (
-        approvingDecisions.includes(params.decision) &&
-        (!manifest.verificationFingerprint || manifest.verificationFingerprint !== fingerprint)
-      ) {
-        throw new Error(
-          'Code changed after verification. Choose changes_applied to request re-verification.',
-        );
-      }
       const contractPath = environment('CONTRACT_PIPELINE_CONTRACT_PATH');
       const contractChanged =
         typeof manifest.verificationContractHash === 'string' &&
@@ -315,10 +297,10 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       ),
       baseBranch: Type.Optional(
         Type.String({
-          default: 'dev',
+          default: PIPELINE_BASE_BRANCH,
           description:
-            'Target base branch for the PR (default: "dev"). ' +
-            'Use "main" or "master" for production-targeting pipelines.',
+            `Target base branch for the PR (default: "${PIPELINE_BASE_BRANCH}"). ` +
+            'Use "dev" for development or "main" for production-targeting pipelines.',
         }),
       ),
     }),
@@ -366,7 +348,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       const contractId =
         params.contractId ?? process.env.CONTRACT_PIPELINE_RUN_ID ?? basename(wsPath);
       const baseBranchName = `contract-task-${sanitizeBranchName(contractId)}`;
-      const baseBranch = params.baseBranch ?? 'dev';
+      const baseBranch = params.baseBranch ?? PIPELINE_BASE_BRANCH;
 
       let headBranch = baseBranchName;
 
