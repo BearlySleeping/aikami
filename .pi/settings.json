@@ -1,5 +1,8 @@
 {
   "steeringMode": "all",
+  "npmCommand": ["bun"],
+  "defaultProvider": "deepseek",
+  "defaultModel": "deepseek-v4-pro",
   "followUpMode": "all",
   "enableSkillCommands": true,
   "compaction": {

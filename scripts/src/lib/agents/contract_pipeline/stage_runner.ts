@@ -58,7 +58,19 @@ export const runStage = async (options: {
     'stages',
     `${options.stage}-${options.attempt}.json`,
   );
+  // Adopt orphaned result from crashed orchestrator
+  const orphaned = readStageResult({
+    resultPath,
+    runId: options.runId,
+    role,
+    attempt: options.attempt,
+  });
+  if (orphaned) {
+    console.log(`♻️  Adopting completed ${role} result from prior run (${orphaned.status}).`);
+    return { result: orphaned, paneId: 'recovered' };
+  }
   if (existsSync(resultPath)) {
+    // Stale — discard.
     unlinkSync(resultPath);
   }
 

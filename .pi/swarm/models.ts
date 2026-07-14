@@ -60,5 +60,28 @@ export const getModelForTier = (tier: string): string => {
   return SWARM_MODELS.tiers[t] ?? SWARM_MODELS.tiers.flash;
 };
 
-/** Get the default tier string. */
 export const getDefaultTier = (): string => 'flash';
+
+// ── Contract pipeline (writer → critic → implementer → verifier → review) ──
+
+export const CONTRACT_ROLE_MODEL_TIER: Record<string, ModelTier> = {
+  writer: 'pro',
+  critic: 'flash',
+  implementer: 'pro',
+  verifier: 'flash',
+  review: 'flash',
+} as const;
+
+export const CONTRACT_ROLE_THINKING_LEVEL: Record<string, ThinkingLevel> = {
+  writer: 'medium',
+  critic: 'low',
+  implementer: 'medium',
+  verifier: 'low',
+  review: 'low',
+} as const;
+
+export const getContractModelForRole = (role: string): string =>
+  getModelForTier(CONTRACT_ROLE_MODEL_TIER[role] ?? 'flash');
+
+export const getContractThinkingForRole = (role: string): ThinkingLevel =>
+  CONTRACT_ROLE_THINKING_LEVEL[role] ?? 'low';
