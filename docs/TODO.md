@@ -18,35 +18,26 @@ world generation, agents, saves, and character tooling. Most of those systems
 were implemented and validated in isolation. The missing product is the narrow
 composition layer that turns them into one reliable adventure.
 
-The immediate problem is not another missing subsystem. It is integration,
-state ownership, and UX:
+### Promotion Gate: Sandbox → Integrated → Release-Verified
 
-1. `StartViewModel.startNewGame()` treats saved personas as games. One persona
-   bypasses setup and opens `/game`; multiple personas open a character library.
-   A **character**, **campaign**, and **save slot** are different concepts.
-2. The world-generation wizard seeds NPCs and locations before a world/location
-   exists. `GameStateService.addNpc()`, `setVariable()`, and `recordEvent()` can
-   throw in that state.
-3. `/setup` stores `WorldGenOutput`, but `PersonaCreateViewModel.enterWorld()`
-   immediately calls `gameStateService.reset()`, which clears that output.
-4. `GameEngineService.bootWithCanvas()` always loads
-   `/assets/maps/sandbox_zone_a.json`; generated world, selected campaign, and
-   quest content do not determine the boot map.
-5. The default settings surface exposes Agents, autonomous NPCs, Music DJ,
-   export tools, and detailed provider controls before the basic game loop is
-   dependable. This is power-user UX, not player UX.
-6. Large orchestration classes (`GameStateService`, persona creation, dialogue,
-   provider settings) mix persistence, workflow, UI state, and integrations.
-   Direct `localStorage`, dynamic service imports, raw class construction, and
-   route-level state make lifecycle behavior difficult to reason about.
-7. Contract completion metadata is not a release signal. A repository scan on
-   2026-07-10 found 221 contract files marked completed, only 56 with an
-   execution report, and many referenced E2E/visual paths absent (including the
-   C-159 demo happy-path spec). The project needs a promotion gate from
-   **sandbox → integrated → release-verified**.
-8. Product and architecture docs are stale and contradictory (Godot references,
-   old implementation status, Firestore/Data Connect/PowerSync claims, and old
-   validation rules). This makes future implementation less reliable.
+Every contract must declare its promotion level. No contract that impacts the
+production player flow may be marked complete while its evidence remains at
+the sandbox level.
+
+| Level                | Definition                                                                                                 | Evidence Required                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Sandbox**          | Capability exists in a dev route (`/dev/*`). May work in isolation.                                        | Dev route renders; unit tests pass.                                               |
+| **Integrated**       | Capability works in a production route (`/game`, `/setup`, `/`) and is composed with surrounding services. | Production-route E2E test passes; no raw JSON or dev controls needed to exercise. |
+| **Release-Verified** | Integrated + deterministic replay, visual QA, offline fallback, and accessibility baseline confirmed.      | Production E2E, visual snapshot, a11y lint, engine replay, and offline test pass. |
+
+**Audit action** (from C-312): Scan all completed contracts in `docs/contracts/`.
+For each:
+
+1. If the contract references a `/dev/*` route but no production route, demote to `sandbox`.
+2. If no execution report exists, add `⚠️ UNVERIFIED` flag.
+3. If referenced E2E/visual paths are absent, mark the contract `incomplete`.
+
+**No false completion.** C-312 is the gatekeeper.
 
 ### Honest Recommendation
 
@@ -194,7 +185,7 @@ Every `### C-NNN` item below is one potential contract based on
 - **Target:** shared campaign schemas/types plus a client campaign lifecycle
   service and repository interface.
 - **Outcome:** explicit transitions for `idle → creating → loading → playing →
-  paused → saving → failed`, with new/load/resume as atomic operations.
+paused → saving → failed`, with new/load/resume as atomic operations.
 - **Scope:** define campaign identity, selected persona, content-pack version,
   deterministic seed, world snapshot, save metadata, and capability profile;
   eliminate view-owned global resets.
@@ -1034,47 +1025,47 @@ Phase 1:
 
 Nothing actionable from the former two TODO files was discarded.
 
-| Former item | Canonical destination |
-|---|---|
-| Session Zero conversational creation | C-319; optional AI interview after fast starter/custom path |
-| NPC interaction intent macros | C-323 typed commands; C-343 transactional AI pipeline |
-| Quest graph/Data Connect | C-324 MVP integration; C-334 complete graph; storage adapter later |
-| Local-first AI / Ollama / hybrid fallback | C-318 authored fallback; C-351 managed local inference |
-| Dynamic ruleset / PDF RAG | C-360 |
-| Director agent / world state / GOAP | C-343, C-346, C-347 |
-| STT / continuous voice / session export | C-354, C-359 |
-| Co-op / spatial chat / party state | C-361 |
-| Provider configuration | C-318 default UX; C-328 Advanced settings |
-| Rich streaming chat / branches / commands | C-323 MVP; C-338 full promotion |
-| Character sheet and traits | C-319, C-332, C-336 |
-| World generation wizard | Deferred default; rebuilt safely in C-349 |
-| Combat/dice/initiative | C-325 MVP; C-331–C-333 depth |
-| GM, agents, macros, lorebook, expressions | C-343–C-350; C-362 power-user tools |
-| Session management / address modes / CYOA | C-338, C-339 |
-| Image generation / asset management / music | C-315, C-350, C-353, C-355 |
-| Import/export/custom agents/autonomous NPCs | C-347, C-354, C-362 |
-| OpenViking workflow | Evaluate and integrate under C-345, not as a mandatory stack choice |
-| PromptFoo NPC regression | C-344 |
-| Inventory/combat/quest/leveling/world persistence | C-324–C-326, C-329, C-331–C-334 |
-| Generative quests/worlds | C-348, C-349, C-363 |
-| Real-time player chat/multiplayer/mobile | C-357, C-361 |
+| Former item                                       | Canonical destination                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------- |
+| Session Zero conversational creation              | C-319; optional AI interview after fast starter/custom path         |
+| NPC interaction intent macros                     | C-323 typed commands; C-343 transactional AI pipeline               |
+| Quest graph/Data Connect                          | C-324 MVP integration; C-334 complete graph; storage adapter later  |
+| Local-first AI / Ollama / hybrid fallback         | C-318 authored fallback; C-351 managed local inference              |
+| Dynamic ruleset / PDF RAG                         | C-360                                                               |
+| Director agent / world state / GOAP               | C-343, C-346, C-347                                                 |
+| STT / continuous voice / session export           | C-354, C-359                                                        |
+| Co-op / spatial chat / party state                | C-361                                                               |
+| Provider configuration                            | C-318 default UX; C-328 Advanced settings                           |
+| Rich streaming chat / branches / commands         | C-323 MVP; C-338 full promotion                                     |
+| Character sheet and traits                        | C-319, C-332, C-336                                                 |
+| World generation wizard                           | Deferred default; rebuilt safely in C-349                           |
+| Combat/dice/initiative                            | C-325 MVP; C-331–C-333 depth                                        |
+| GM, agents, macros, lorebook, expressions         | C-343–C-350; C-362 power-user tools                                 |
+| Session management / address modes / CYOA         | C-338, C-339                                                        |
+| Image generation / asset management / music       | C-315, C-350, C-353, C-355                                          |
+| Import/export/custom agents/autonomous NPCs       | C-347, C-354, C-362                                                 |
+| OpenViking workflow                               | Evaluate and integrate under C-345, not as a mandatory stack choice |
+| PromptFoo NPC regression                          | C-344                                                               |
+| Inventory/combat/quest/leveling/world persistence | C-324–C-326, C-329, C-331–C-334                                     |
+| Generative quests/worlds                          | C-348, C-349, C-363                                                 |
+| Real-time player chat/multiplayer/mobile          | C-357, C-361                                                        |
 
 ---
 
 ## Example Project Review: Adopt vs Avoid
 
-| Reference | Adopt | Avoid / Defer |
-|---|---|---|
-| **Marinara Engine** | streaming/branching conversation, sensible defaults, explicit sessions, address modes, prompt visibility for advanced users, modular agents | seven-step default setup, provider-first onboarding, one huge world-gen call, empty visual-novel chrome without image generation, agent/settings overload, very large orchestration files |
-| **RisuAI / SillyTavern** | provider and card compatibility, lorebooks, mobile-friendly chat, import/export ecosystem | making prompt/provider internals the primary product surface |
-| **Multihog D&D Framework** | state is fed back to AI, declared DC before RNG, dedicated extraction, mechanical integrity | frontier-model/token dependency for baseline mechanics |
-| **MazeMaster** | immediate quick start, authored encounters, fairness/pity, clear commands and objectives | broad mode count before one polished loop |
-| **RPG Companion / MVU Game Maker / Universal Immersion Engine** | contextual HUD, review-before-apply state, relationship/event tracking, swipe-aware state | 75k-token late-session state, AI-owned rules, dense configurable dashboards by default |
-| **Pax Fluxia** | one deterministic authoritative engine, presentation-only client, replay regression, readable game state | copying proprietary code/assets; exposing its deep tuning surface to normal players |
-| **Godot Aikami v1/v2, AARPG, Game Template** | conventional menu/loading/pause/save shell, interactables, controller support, complete quest/inventory loops | another engine rewrite or manager layer parallel to PixiJS/bitECS |
-| **Pixi tiled-map projects** | asset-loader integration, preload, packed/chunked rendering, stable texture reuse, benchmarks | renderer replacement without profiling current C-210 pipeline |
-| **RapidLPC / Universal LPC Generator** | composable layers, live animation preview, deterministic export, attribution | requiring AI image generation for a usable player sprite |
-| **Firebase, SQLite/Kysely, multiplayer examples** | repository boundaries and later sync/network references | putting backend/sync work on the Phase 1 critical path |
+| Reference                                                       | Adopt                                                                                                                                       | Avoid / Defer                                                                                                                                                                             |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Marinara Engine**                                             | streaming/branching conversation, sensible defaults, explicit sessions, address modes, prompt visibility for advanced users, modular agents | seven-step default setup, provider-first onboarding, one huge world-gen call, empty visual-novel chrome without image generation, agent/settings overload, very large orchestration files |
+| **RisuAI / SillyTavern**                                        | provider and card compatibility, lorebooks, mobile-friendly chat, import/export ecosystem                                                   | making prompt/provider internals the primary product surface                                                                                                                              |
+| **Multihog D&D Framework**                                      | state is fed back to AI, declared DC before RNG, dedicated extraction, mechanical integrity                                                 | frontier-model/token dependency for baseline mechanics                                                                                                                                    |
+| **MazeMaster**                                                  | immediate quick start, authored encounters, fairness/pity, clear commands and objectives                                                    | broad mode count before one polished loop                                                                                                                                                 |
+| **RPG Companion / MVU Game Maker / Universal Immersion Engine** | contextual HUD, review-before-apply state, relationship/event tracking, swipe-aware state                                                   | 75k-token late-session state, AI-owned rules, dense configurable dashboards by default                                                                                                    |
+| **Pax Fluxia**                                                  | one deterministic authoritative engine, presentation-only client, replay regression, readable game state                                    | copying proprietary code/assets; exposing its deep tuning surface to normal players                                                                                                       |
+| **Godot Aikami v1/v2, AARPG, Game Template**                    | conventional menu/loading/pause/save shell, interactables, controller support, complete quest/inventory loops                               | another engine rewrite or manager layer parallel to PixiJS/bitECS                                                                                                                         |
+| **Pixi tiled-map projects**                                     | asset-loader integration, preload, packed/chunked rendering, stable texture reuse, benchmarks                                               | renderer replacement without profiling current C-210 pipeline                                                                                                                             |
+| **RapidLPC / Universal LPC Generator**                          | composable layers, live animation preview, deterministic export, attribution                                                                | requiring AI image generation for a usable player sprite                                                                                                                                  |
+| **Firebase, SQLite/Kysely, multiplayer examples**               | repository boundaries and later sync/network references                                                                                     | putting backend/sync work on the Phase 1 critical path                                                                                                                                    |
 
 Projects reviewed under `examples/`: Marinara Engine; Universal LPC Generator;
 AARPG tutorial; Aikami v1 Godot; Aikami v2 GodotJS; gamejs-old; both Godot

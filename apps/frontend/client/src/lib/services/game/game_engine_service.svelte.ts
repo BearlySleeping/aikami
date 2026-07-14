@@ -8,6 +8,7 @@ import {
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
 import { audioContextManager } from '$lib/services/audio/audio_context_manager.ts';
+import { characterRepository } from '$lib/services/character/character_repository.svelte';
 import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import { logger } from '$logger';
 import { audioService } from '$services';
@@ -439,8 +440,9 @@ class GameEngineService
         playerData,
       });
 
-      // Resolve starting map from the content pack (C-315).
-      // Falls back to emberwatch sandbox zone A when no campaign is active.
+      // Resolve starting map from the content pack manifest (C-315, C-321).
+      // The active campaign determines the content pack; no hardcoded fallback.
+      // C-313: generated world, selected campaign, and quest content determine boot.
       const { loadContentPack: loadPack, clearContentPackCache: clearCacheFn } = await import(
         '@aikami/frontend/engine'
       );
@@ -449,9 +451,7 @@ class GameEngineService
       const startingMap = pack.getStartingMap();
 
       await this._gameWorld.loadMap({
-        mapUrl: pack.resolveMapUrl(
-          this.contentPackId === 'emberwatch' ? 'sandbox_zone_a' : pack.manifest.startingMapId,
-        ),
+        mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX ?? 160,
         targetY: startingMap.defaultY ?? 192,
       });
@@ -600,18 +600,16 @@ class GameEngineService
       });
     }
 
+    // C-313: Fallback to local character repository instead of direct localStorage.
     try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (stored) {
-        const characters = JSON.parse(stored) as Array<{ persona: PersonaData }>;
-        if (characters.length > 0) {
-          const persona = characters[characters.length - 1].persona;
-          this._activePersona = persona;
-          this._personaPlayerName = persona.name || persona.race || '';
-        }
+      const lastSaved = characterRepository.getMostRecent();
+      if (lastSaved) {
+        const persona = lastSaved.persona;
+        this._activePersona = persona;
+        this._personaPlayerName = persona.name || persona.race || '';
       }
     } catch (error) {
-      logger.debug('GameEngineService:loadActivePersona:localStorage-failed', {
+      logger.debug('GameEngineService:loadActivePersona:local-repo-failed', {
         error: String(error),
       });
     }

@@ -9,7 +9,6 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import type { SaveSlotInfo } from '$services';
 import {
   aiSettingsService,
@@ -222,25 +221,10 @@ class StartViewModel
       return;
     }
 
-    // Check for existing characters from previous sessions
-    const characterCount = this._getCharacterCount();
-
-    if (characterCount === 1) {
-      // One character — load it directly into /game
-      await this._startWithExistingCharacter();
-      return;
-    }
-
-    if (characterCount > 1) {
-      // Multiple characters — let the user choose
-      await routerService.goToRoute('characters', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
-      return;
-    }
-
-    // Zero characters — go to character creation
+    // A character, campaign, and save slot are different concepts.
+    // New Game always starts a fresh campaign — existing personas do
+    // not bypass creation. Use Continue to resume a saved campaign.
+    // C-313: explicit new/load/resume as atomic state-machine transitions.
     inventoryService.reset();
     worldStateService.reset();
     playerStateService.reset();
@@ -248,46 +232,6 @@ class StartViewModel
     gameModeService.reset();
 
     await routerService.goToRoute('setup', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
-  }
-
-  /**
-   * Loads the single existing character as the active persona and navigates
-   * to /game. Called when exactly one saved character exists.
-   */
-  private async _startWithExistingCharacter(): Promise<void> {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (!stored) {
-        return;
-      }
-      const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
-      if (characters.length === 0) {
-        return;
-      }
-
-      const characterId = characters[0].persona.id;
-
-      // Set as active persona if logged in, so the game can find it
-      try {
-        await personaService.setActivePersona(characterId);
-      } catch {
-        // Non-critical — GameViewModel falls back to localStorage
-      }
-    } catch (error) {
-      this.warn('_startWithExistingCharacter:persona-set-failed', error);
-    }
-
-    // Clear any stale state from a previous play session
-    inventoryService.reset();
-    worldStateService.reset();
-    playerStateService.reset();
-    equipmentService.reset();
-    gameModeService.reset();
-
-    await routerService.goToRoute('game', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -425,23 +369,6 @@ class StartViewModel
    */
   get creditGroups(): readonly CreditGroup[] {
     return CREDIT_GROUPS;
-  }
-
-  /**
-   * Returns the number of saved characters in localStorage.
-   * Used to determine the New Game flow: 0→/setup, 1→/game, 2+→/characters.
-   */
-  private _getCharacterCount(): number {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (!stored) {
-        return 0;
-      }
-      const characters = JSON.parse(stored) as unknown[];
-      return Array.isArray(characters) ? characters.length : 0;
-    } catch {
-      return 0;
-    }
   }
 
   /**

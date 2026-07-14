@@ -64,6 +64,10 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly activeCategory: SettingsCategory;
   /** Currently selected sub-tab under the Game category. */
   readonly gameSubTab: GameSubTab;
+  /** Whether advanced settings (agents, export, autonomous, music) are visible. */
+  readonly isAdvanced: boolean;
+  /** Toggles advanced mode on/off. */
+  toggleAdvanced(): void;
   /** The C-120 ProvidersViewModel for AI provider configuration. */
   readonly providersViewModel: ProvidersViewModelInterface;
   /** Audio settings view model wired to AudioService. */
@@ -111,6 +115,8 @@ export class SettingsViewModel
 {
   activeCategory: SettingsCategory = $state('game');
   gameSubTab: GameSubTab = $state('display');
+  /** C-328: Progressive disclosure — advanced settings hidden by default. */
+  isAdvanced = $state(false);
   readonly providersViewModel: ProvidersViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly musicViewModel: SettingsMusicViewModelInterface;
@@ -159,6 +165,24 @@ export class SettingsViewModel
 
   setGameSubTab(tab: GameSubTab): void {
     this.gameSubTab = tab;
+  }
+
+  /** C-328: Toggles advanced settings visibility. */
+  toggleAdvanced(): void {
+    this.isAdvanced = !this.isAdvanced;
+    // When disabling advanced mode, reset active category to 'game' if
+    // currently on a hidden category (agents) or hidden sub-tab.
+    if (!this.isAdvanced) {
+      if (this.activeCategory === 'agents') {
+        this.activeCategory = 'game';
+      }
+      const advancedSubTabs: GameSubTab[] = ['export', 'music', 'autonomous'];
+      if (advancedSubTabs.includes(this.gameSubTab)) {
+        this.gameSubTab = 'display';
+      }
+      // When advanced is off, AI Engine only shows providers (text config).
+      // Agents tab is hidden entirely.
+    }
   }
 
   /** Navigates to the Agents tab. */
