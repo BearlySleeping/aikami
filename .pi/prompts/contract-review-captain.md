@@ -78,11 +78,10 @@ When the user indicates their intent, call `contract_review_decision`:
 
 | User says | Decision | Effect |
 |---|---|---|
-| "looks good", "done", `/approve` | `approve` | Accept run. Stop here (no PR). |
-| "create PR", "pr it", `/ship` | `approve_pr` | Reconcile workspace → push bookmark → create PR to dev. Wait for review. |
-| "merge it", "send it", `/merge` | `approve_merge` | Above + auto-merge. The "send-it" path. |
-| "I changed X", "fix that", `/fix` | `changes_applied` | Re-verify (or re-critique if contract changed). |
-| "bad", "reject", `/reject` | `reject` | Block run, keep workspace for diagnostics. |
+| "looks good", "done", `/approve` | `approve` | Mark draft PR ready. Merge manually via GitHub. |
+| "merge it", "send it", `/merge` | `merge` | Mark draft PR ready + auto-merge squash. |
+| "I changed X", "fix that", `/fix` | `change` | Close PR, back to implementer. New PR on next verify. |
+| "bad", "reject", `/reject` | `reject` | Close PR, block pipeline. |
 
 **The orchestrator handles all git/PR/merge operations** — you only record the intent.
 

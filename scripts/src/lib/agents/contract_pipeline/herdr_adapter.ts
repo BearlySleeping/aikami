@@ -66,7 +66,9 @@ const waitForShellReady = async (paneId: string): Promise<boolean> => {
   while (Date.now() < deadline) {
     const idle = await isShellIdle(paneId).catch(() => false);
     consecutiveIdle = idle ? consecutiveIdle + 1 : 0;
-    if (consecutiveIdle >= 2) return true;
+    if (consecutiveIdle >= 2) {
+      return true;
+    }
     await sleep(delay);
     delay = Math.min(delay * 1.25, 3_000);
   }
@@ -75,12 +77,16 @@ const waitForShellReady = async (paneId: string): Promise<boolean> => {
 
 const runPaneCommand = async (options: { paneId: string; command: string }): Promise<void> => {
   const ready = await waitForShellReady(options.paneId);
-  if (!ready) console.warn(`⚠️  Pane ${options.paneId} shell never became idle`);
+  if (!ready) {
+    console.warn(`⚠️  Pane ${options.paneId} shell never became idle`);
+  }
   for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
     await runHerdr(['pane', 'run', options.paneId, options.command]);
     const dl = Date.now() + 10_000;
     while (Date.now() < dl) {
-      if (await isCommandRunning(options.paneId).catch(() => false)) return;
+      if (await isCommandRunning(options.paneId).catch(() => false)) {
+        return;
+      }
       await sleep(500);
     }
     await sleep(1_000 * attempt);
@@ -347,7 +353,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     let delay = 500;
     while (Date.now() < dl) {
       const s = await this._getAgentStatus(o.paneId).catch(() => undefined);
-      if (s !== undefined && o.statuses.includes(s)) return true;
+      if (s !== undefined && o.statuses.includes(s)) {
+        return true;
+      }
       await sleep(delay);
       delay = Math.min(delay * 1.5, 5_000);
     }
@@ -360,7 +368,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       statuses: ['idle', 'blocked'],
       timeoutMs: AGENT_READY_TIMEOUT_MS,
     });
-    if (!ready) console.warn(`⚠️  Pane ${options.paneId} never reported receptive`);
+    if (!ready) {
+      console.warn(`⚠️  Pane ${options.paneId} never reported receptive`);
+    }
     await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
     await sleep(500);
     for (let a = 1; a <= MAX_SEND_ATTEMPTS; a++) {
@@ -370,11 +380,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         statuses: ['working', 'done'],
         timeoutMs: SEND_ACCEPT_TIMEOUT_MS,
       });
-      if (ok) return;
+      if (ok) {
+        return;
+      }
       await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
       await sleep(1_000 * a);
       const late = await this._getAgentStatus(options.paneId).catch(() => undefined);
-      if (late === 'working' || late === 'done') return;
+      if (late === 'working' || late === 'done') {
+        return;
+      }
     }
     console.warn(`⚠️  Prompt to ${options.paneId} unacked after ${MAX_SEND_ATTEMPTS} attempts`);
   }
@@ -403,7 +417,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     ]
       .filter(Boolean)
       .join(' ');
-    const ta = toolsForRole(request.role) ? ['--tools', toolsForRole(request.role)!.join(',')] : [];
+    const ta = toolsForRole(request.role) ? ['--tools', toolsForRole(request.role)?.join(',')] : [];
     const sa = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
     const ma = [
       '--model',
@@ -506,6 +520,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'prompts',
       `${options.request.stage}-${options.request.attempt}-task.md`,
     );
+    mkdirSync(dirname(taskMessagePath), { recursive: true });
     atomicWrite({ path: taskMessagePath, content: parts.join('\n\n') });
 
     const startCommand = this._buildWorkerCommand(

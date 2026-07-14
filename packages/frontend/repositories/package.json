@@ -13,7 +13,7 @@
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "@tursodatabase/database": "0.6.1",
+    "@tursodatabase/database": "0.7.0",
     "firebase": "12.16.0"
   }
 }

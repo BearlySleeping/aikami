@@ -44,19 +44,12 @@ export type ContractStageResult = {
 
 /**
  * Review decision modes matching user intent:
- *  - approve: accept run, stop here
- *  - approve_pr: reconcile → push branch → create PR to dev
- *  - approve_merge: PR + auto-merge + sync (the "send-it")
- *  - changes_applied: edits made → re-verify
- *  - reject: block run, keep workspace for diagnostics
+ *  - approve: PR is ready → finish (user merges manually)
+ *  - merge: PR is ready → auto-merge via squash
+ *  - change: close PR → back to implementer for fixes
+ *  - reject: close PR → block pipeline
  */
-export type ReviewDecision =
-  | 'approve'
-  | 'approve_pr'
-  | 'approve_merge'
-  | 'changes_applied'
-  | 'reject'
-  | 'blocked';
+export type ReviewDecision = 'approve' | 'merge' | 'change' | 'reject';
 
 /** Decision written through the contract_review_decision tool. */
 export type ContractReviewDecision = {
@@ -123,6 +116,8 @@ export type RunManifest = {
   reconciliation?: ReconciliationResult;
   verificationFingerprint?: string;
   verificationContractHash?: string;
+  /** Draft PR URL created after verification passes. */
+  prUrl?: string;
   workspaceId?: string;
   pipelinePaneId?: string;
   reviewPaneId?: string;

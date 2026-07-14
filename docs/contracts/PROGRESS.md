@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-13)
+## Status Summary (Auto-generated: 2026-07-14)
 
-**160 active (45 without contract file), 119 archived, 1 duplicates**
+**160 active (44 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -120,7 +120,7 @@
 | C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🏁 completed | — | v2 |
 | C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | ✅ verified | — | v2 |
 | C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | — | v2 |
-| C-318 | Add One-Screen Capability Setup and an Offline Demo Fallback | ⏳ not_started (no contract file) | — | — |
+| C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | ✅ verified | — | v2 |
 | C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | — | — |
 | C-320 | C 320_mdc_skill_scraper | ⏳ not_started | — | v1 |
 | C-321 | C 321_mcp_runner_bridge | ⏳ not_started | — | v1 |

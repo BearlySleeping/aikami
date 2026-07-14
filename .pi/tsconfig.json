@@ -26,5 +26,6 @@
       "@aikami/types/*": ["../packages/shared/types/src/lib/*"]
     }
   },
-  "exclude": ["generated-skills"]
+  "include": ["*.ts", "scripts/**/*.ts", "extensions/**/*.ts", "runners/**/*.ts"],
+  "exclude": ["generated-skills", "workspaces", "node_modules", "npm"]
 }
