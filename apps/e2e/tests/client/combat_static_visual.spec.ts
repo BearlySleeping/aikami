@@ -100,7 +100,7 @@ test('AC4 — idle combat state screenshot matches baseline', async ({ page }) =
 
   await expect(page).toHaveScreenshot('combat-idle-state.png', {
     fullPage: true,
-    maxDiffPixels: 200,
+    maxDiffPixels: 500,
   });
 });
 

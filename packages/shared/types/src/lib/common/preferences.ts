@@ -1,8 +1,10 @@
 // packages/shared/types/src/lib/common/preferences.ts
-import type { SupportedLocaleSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Schema-derived names re-exported from @aikami/schemas; hand-authored types remain.
 
-export type SupportedLocale = Type.Static<typeof SupportedLocaleSchema>;
+import type { SupportedLocale } from '@aikami/schemas';
+
+export type { SupportedLocale };
 
 export type LangData = {
   [Key in SupportedLocale]?: string;

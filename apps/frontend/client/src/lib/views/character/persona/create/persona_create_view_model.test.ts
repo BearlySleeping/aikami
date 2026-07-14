@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
@@ -63,7 +64,7 @@ const _setupServiceOverrides = (): void => {
   // stubs that auto-create mock functions on property access.
   mock.module(_MOCK_SVC, () => ({
     // Test-specific service overrides
-    characterCreationService: {
+    personaCreationService: {
       get persona() {
         return mockPersona;
       },
@@ -158,12 +159,14 @@ const _setupServiceOverrides = (): void => {
     AudioQueuePlayer: class {},
     ttsService: _createServiceStub(),
     TtsService: class {},
-    authService: _createServiceStub(),
+    authService: {
+      uid: undefined,
+    },
     AuthService: class {},
-    CharacterCreationService: class {},
+    PersonaCreationService: class {},
     characterService: _createServiceStub(),
     CharacterService: class {},
-    characterTextStreamService: _createServiceStub(),
+    personaCreationTextStreamService: _createServiceStub(),
     CharacterTextStreamService: class {},
     chatService: _createServiceStub(),
     contextBuilder: _createServiceStub(),
@@ -609,7 +612,7 @@ describe('PersonaCreateViewModel — C-078', () => {
       expect(vm.phase).toBe('CHAT');
     });
 
-    test('cancel should call characterCreationService.cancel', async () => {
+    test('cancel should call personaCreationService.cancel', async () => {
       const vm = await loadVm();
 
       vm.cancel();
@@ -624,7 +627,7 @@ describe('PersonaCreateViewModel — C-078', () => {
 
   describe('C-081: Schema Compilation', () => {
     test('CharacterExtractionSchema should compile to valid JSON schema', async () => {
-      const mod = await import('$lib/game/core/ai/prompts/character_extraction_schema.ts');
+      const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
 
       // TypeBox schemas are plain objects with a type property
@@ -641,7 +644,7 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('appearance sub-schema should enforce additionalProperties: false', async () => {
-      const mod = await import('$lib/game/core/ai/prompts/character_extraction_schema.ts');
+      const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
       const properties = schema.properties as Record<string, unknown>;
       const appearance = properties.appearance as Record<string, unknown>;
@@ -659,7 +662,7 @@ describe('PersonaCreateViewModel — C-078', () => {
     });
 
     test('abilityScores sub-schema should enforce additionalProperties: false', async () => {
-      const mod = await import('$lib/game/core/ai/prompts/character_extraction_schema.ts');
+      const mod = await import('$lib/data/ai_prompts/character_extraction_schema.ts');
       const schema = mod.CharacterExtractionSchema as Record<string, unknown>;
       const properties = schema.properties as Record<string, unknown>;
       const scores = properties.abilityScores as Record<string, unknown>;
@@ -743,7 +746,7 @@ describe('PersonaCreateViewModel — C-078', () => {
       expect(extractionCalls[0].systemPrompt).toBeDefined();
     });
 
-    test('should store extracted persona in characterCreationService', async () => {
+    test('should store extracted persona in personaCreationService', async () => {
       const vm = await loadVm();
       await vm.sendChatMessage('Dwarf warrior');
 

@@ -7,7 +7,8 @@
 | **Target** | `packages/frontend/engine/src/systems/camera_system.ts`, `apps/e2e/src/visual/suites/map.visual.ts`, and `apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts` |
 | **Priority** | P0 — Faulty camera tracking and clamping models break autonomous visual validation and `.pi` self-healing loops. |
 | **Dependencies** | None |
-| **Status** | not_started |
+| **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

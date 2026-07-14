@@ -150,4 +150,4 @@ class RegisterViewModel
 
 export const getRegisterViewModel = (
   options: RegisterViewModelOptions,
-): RegisterViewModelInterface => new RegisterViewModel(options);
+): RegisterViewModelInterface => RegisterViewModel.create(options);

@@ -1,18 +1,30 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/dialogs/app_dialogs_view.svelte
-  //
-  // Renders global dialogs, snackbar, and loading overlay.
-  //
-  // Adding a new dialog type:
-  //   1. Add an {#if currentDialog.type === 'your-type'} branch below
-  //   2. Open it with: dialogService.open({ type: 'your-type', props: {...} })
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import { getAppDialogsViewModel } from './app_dialogs_view_model.svelte.ts';
-  import AppLoading from './components/app_loading.svelte';
-  import AppSnackbar from './components/app_snackbar.svelte';
-  import GenericDialogContainer from './components/generic_dialog_container.svelte';
+// apps/frontend/client/src/lib/views/app/dialogs/app_dialogs_view.svelte
+//
+// Renders global dialogs, snackbar, and loading overlay using
+// DaisyUI's native <dialog> element with showModal()/close().
 
-  const viewModel = getAppDialogsViewModel({ className: 'AppDialogsView' });
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { getAppDialogsViewModel } from './app_dialogs_view_model.svelte.ts';
+import AppLoading from './components/app_loading.svelte';
+import AppSnackbar from './components/app_snackbar.svelte';
+
+const viewModel = getAppDialogsViewModel({ className: 'AppDialogsView' });
+
+let dialogElement = $state<HTMLDialogElement>();
+
+/** When a dialog is active, show the native modal. When cleared, close it. */
+$effect(() => {
+  const el = dialogElement;
+  if (!el) {
+    return;
+  }
+  if (viewModel.currentDialog) {
+    el.showModal();
+  } else {
+    el.close();
+  }
+});
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -20,45 +32,53 @@
   <AppSnackbar {viewModel} />
 </BaseViewModelContainer>
 
-{#if viewModel.currentDialog}
-  {@const dialog = viewModel.currentDialog}
-  <GenericDialogContainer onClose={() => viewModel.closeDialog()}>
-    {#if dialog.type === 'example'}
-    <!-- Custom dialog goes here -->
-    {:else if dialog.type === 'confirm'}
-      {@const p = dialog.props as Record<string, string> | undefined}
-      <div class="w-full max-w-md bg-card rounded-lg border border-border p-6 shadow-sm">
-        <h3 class="text-lg font-semibold">{p?.title ?? ''}</h3>
-        {#if p?.message}
-          <p class="py-4 text-sm text-muted-foreground">{p.message}</p>
-        {/if}
-        <div class="flex justify-end gap-2 mt-4">
-          <button
-            class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium hover:bg-muted"
-            onclick={() => viewModel.closeDialog(false)}
-          >
-            {p?.disagreeLabel ?? 'Cancel'}
-          </button>
-          <button
-            class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90"
-            onclick={() => viewModel.closeDialog(true)}
-          >
-            {p?.agreeLabel ?? 'Confirm'}
-          </button>
-        </div>
-      </div>
-    {:else}
-      <div
-        class="w-full max-w-md bg-card rounded-lg border border-border p-6 text-center shadow-sm"
-      >
-        <p class="text-muted-foreground text-sm">Integration_unknown</p>
-        <button
-          class="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium hover:bg-muted mt-4"
-          onclick={() => viewModel.closeDialog()}
-        >
-          Close
-        </button>
-      </div>
-    {/if}
-  </GenericDialogContainer>
+{#if viewModel.bottomProgress > 0}
+  <progress
+    class="progress progress-primary fixed bottom-0 left-0 z-50 h-1 w-full rounded-none"
+    value={viewModel.bottomProgress}
+    max="100"
+  ></progress>
 {/if}
+
+<dialog bind:this={dialogElement} class="modal">
+  {#if viewModel.currentDialog}
+    {@const dialog = viewModel.currentDialog}
+    <div class="modal-box">
+      {#if dialog.type === 'confirm'}
+        {@const p = dialog.props as Record<string, string> | undefined}
+        <h3 class="text-lg font-bold">{p?.title ?? ''}</h3>
+        {#if p?.message}
+          <p class="py-4">{p.message}</p>
+        {/if}
+        <div class="modal-action">
+          <form method="dialog">
+            {#if !p?.hideDisagreeButton}
+              <button type="button" class="btn" onclick={() => viewModel.closeDialog(false)}>
+                {p?.disagreeLabel ?? 'Cancel'}
+              </button>
+            {/if}
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick={() => viewModel.closeDialog(true)}
+            >
+              {p?.agreeLabel ?? 'Confirm'}
+            </button>
+          </form>
+        </div>
+      {:else}
+        <p class="py-4 text-base-content/70">Unknown dialog type</p>
+        <div class="modal-action">
+          <form method="dialog">
+            <button type="button" class="btn" onclick={() => viewModel.closeDialog()}>Close</button>
+          </form>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Click backdrop to close -->
+    <form method="dialog" class="modal-backdrop">
+      <button type="button">close</button>
+    </form>
+  {/if}
+</dialog>

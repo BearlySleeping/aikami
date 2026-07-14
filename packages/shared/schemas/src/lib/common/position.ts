@@ -1,6 +1,6 @@
 // packages/shared/schemas/src/lib/common/position.ts
 import Type from 'typebox';
-import { GeoPointSchema } from '../fields.ts';
+import { GeoPointSchema } from './fields.ts';
 
 /**
  * Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
@@ -8,11 +8,13 @@ import { GeoPointSchema } from '../fields.ts';
  */
 export const CountryCodeSchema = Type.String({ minLength: 2, maxLength: 2 });
 
+export type CountryCode = Type.Static<typeof CountryCodeSchema>;
 export const PositionFieldSchema = Type.Object({
   geohash: Type.String(),
   geopoint: GeoPointSchema,
 });
 
+export type PositionField = Type.Static<typeof PositionFieldSchema>;
 export const AddressFieldSchema = Type.Object({
   /**
    * The city name for the location of the requester's public IP address.
@@ -42,3 +44,5 @@ export const AddressFieldSchema = Type.Object({
    */
   regionCode: Type.Optional(Type.String()),
 });
+
+export type AddressField = Type.Static<typeof AddressFieldSchema>;

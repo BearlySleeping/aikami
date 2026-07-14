@@ -1,33 +1,53 @@
-# Repository Agent Guidelines & Skills Index
+# Aikami — Agent Guidelines
 
-This repository contains structured architectural context layouts and domain-specific knowledge matrices optimized for code agents.
+Monorepo: AI-powered 2D JRPG platform. SvelteKit 2 + PixiJS v8 + Tauri v2
+client, Firebase backend, local AI microservices. Bun runtime, Moon
+orchestrator, Biome linting (never Prettier/ESLint).
 
----
+## 📂 Directory Layout
 
-## 🛑 Architectural Execution Rules
+🔴 **Moon project IDs are flat names; filesystem paths are nested.** The
+client lives at `apps/frontend/client/` — **not** `apps/client/`.
 
-Before modifying code layout or proposing code completions, you must ingest our structural guidelines:
+| Path prefix | Contents |
+|---|---|
+| `apps/frontend/` | client (SvelteKit+PixiJS+Tauri), site (Astro), docs (Starlight) |
+| `apps/backend/` | firebase (Functions+Data Connect), image (ComfyUI), text (Ollama), voice (Kokoro) |
+| `apps/e2e/` | E2E test suite |
+| `packages/shared/` | constants, schemas, types, logger, utils, mocks, parser |
+| `packages/frontend/` | configs, dataconnect, engine, repositories, services, utils |
+| `packages/backend/` | ai, auth, chat, configs, database, image, svelte-kit, utils |
+| `scripts/` | Build/infra scripts |
+| `.pi/` | Pi agent extensions, skills, prompts |
 
-1. Read `.context/CONTEXT.md` to inspect current stack version targets and structural directories.
-2. Read `.context/index.md` to map workspace modules and active boundary rules.
+## 🧠 Skills — Load Before Coding
 
----
+Skills live in `.pi/skills/` (project rules) and `.pi/generated-skills/`
+(vendored upstream docs: PixiJS, daisyUI, Firebase, firestack, herdr). Pi
+discovers them automatically — load the matching skill BEFORE writing code:
 
-## 🧠 Codebase Skills & Constraints Index (`.pi/skills/`)
+| Task | Required skill(s) |
+|---|---|
+| **Any code** | `aikami-conventions` (universal: logger, imports, TS rules, boundaries) |
+| Frontend / Svelte | `svelte-conventions` (runes, Views/ViewModels, services) |
+| Backend / Functions | `backend-conventions` (controller → service → repository) |
+| UI styling | `aikami-ui` |
+| Game engine | `pixijs-v8` |
+| Data Connect | `dataconnect` (🔴 generate ONLY via `bun moon run firebase:generate`) |
+| Firestore collections | `firestore-collection` |
+| Deploy / emulators | `firestack` |
+| Testing | `testing` |
 
-We maintain isolated framework skill sheets and configuration guides under the `.pi/skills/` directory. You must read and strictly implement the design blueprints found in these directories when modifying code:
+Agents without skill support: read the SKILL.md files above directly from
+`.pi/skills/<name>/SKILL.md`.
 
-### 1. Frontend Client Architecture (Svelte 5 Runes & PixiJS)
+## 🛑 Before Structural Changes
 
-- **MVVM ViewModel Pattern:** Read `.pi/skills/svelte-page/SKILL.md` and `.pi/skills/aikami-conventions/SKILL.md`. All template interaction rules belong inside pure Svelte files (`+page.svelte`), while underlying reactive states and logic must be isolated in companion files named `*_view_model.svelte.ts`.
-- **Game Rendering Loop:** Read `.pi/skills/pixijs-v8/SKILL.md` and items inside `.pi/skills/pixijs/` to construct or update bitECS tracking states and PixiJS canvas render groups.
+Read `.context/CONTEXT.md` (stack versions, structure) and `.context/index.md`
+(module map, boundary rules).
 
-### 2. Backend Infrastructure & Tooling
+## ✅ Verification
 
-- **Firebase Strategy (`firestack`):** Read `.pi/skills/firestack/SKILL.md` and sub-references before writing Firestore rules, updating Cloud Functions, or editing Data Connect schemas.
-- **Desktop Runtime Shell:** Read `.pi/skills/tauri-v2/SKILL.md` for Tauri cross-compilation restrictions.
-
-### 3. Syntax Formatting & Verification Standards
-
-- **Lint Enforcement:** We strictly use Biome for system-wide checking. Do not use Prettier or ESLint. Code structure patterns must be verified via `bun run lint` and formatted via `bun run fix`. Refer to `.pi/skills/aikami-standards/SKILL.md`.
-- **Test suites:** Review code assertion guidelines inside `.pi/skills/testing/SKILL.md` before deploying or refactoring software blocks.
+- Lint/format: `bun run lint` / `bun run fix` (Biome only)
+- Full validation: `bun moon run :validate` (or pi's `validate()` tool)
+- Never commit/push without explicit user instruction

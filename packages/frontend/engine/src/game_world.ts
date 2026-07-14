@@ -23,6 +23,7 @@ import { createPixiApp } from './pixi_app.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
+import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
@@ -221,6 +222,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Texture manager instance. */
   private readonly _textureManager?: TextureManager;
 
+  /** Weather overlay quad for procedural rain/fog (C-213). */
+  private _weatherOverlay: WeatherOverlay | undefined;
+
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
 
@@ -350,8 +354,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     this._app.stage.addChild(this._worldContainer);
 
+    // ── C-213 AC-3: Hardcode filterArea and boundsArea on the world
+    // container to prevent PixiJS from recursively traversing thousands
+    // of tilemap chunk vertices every frame when post-processing filters
+    // or scene effects are evaluated.
+    if (this._app.screen) {
+      this._worldContainer.filterArea = this._app.screen;
+      this._app.stage.filterArea = this._app.screen;
+      this._app.stage.boundsArea = this._app.screen;
+    }
+
     // Draw a debug floor grid for spatial orientation
     this._drawDebugGrid();
+
+    // ---- 1b. Create weather overlay (C-213) ------------------------
+    // Attached to the stage above the world container so rain renders
+    // over the game scene. Initially transparent (rain intensity = 0).
+    // Skipped in E2E test mode — weather particles are non-deterministic.
+    if (!this._isE2ETestMode()) {
+      this._weatherOverlay = WeatherOverlay.create({ parent: this._app.stage });
+    }
 
     // ---- 2. Allocate shared memory buffers ----------------------------
     this._allocateBuffers();
@@ -386,6 +408,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     this._app.ticker.add(this._tickerCallback);
     this._running = true;
+
+    // ── C-217: E2E test mode — freeze ticker after first render ──
+    // When running in deterministic E2E mode, let exactly one ticker
+    // frame render, then pause the ticker and expose engine state
+    // on window for Playwright assertions.
+    if (this._isE2ETestMode()) {
+      this._app.ticker.addOnce(() => {
+        this._running = false;
+        this._exposeEngineState();
+      });
+    }
   }
 
   /**
@@ -476,12 +509,60 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._app = undefined;
     }
 
+    // Destroy weather overlay (C-213)
+    if (this._weatherOverlay) {
+      this._weatherOverlay.destroy();
+      this._weatherOverlay = undefined;
+    }
+
     this._worldContainer = undefined;
   }
 
   // -----------------------------------------------------------------------
   // Internal: Buffer allocation
   // -----------------------------------------------------------------------
+
+  // ── C-217: E2E test mode helpers ──────────────────────────────────
+
+  /**
+   * Detects whether the engine is running in E2E visual test mode.
+   *
+   * Checks URL search params (`?e2e=true`) and a global window flag
+   * (`window.__AIKAMI_E2E_TEST_MODE__`) set by Playwright before
+   * page navigation.
+   */
+  private _isE2ETestMode(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('e2e') === 'true') {
+        return true;
+      }
+    } catch {
+      // window.location may be unavailable (SSR)
+    }
+    return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__;
+  }
+
+  /**
+   * Exposes engine state on `window.__AIKAMI_ENGINE_STATE__` so Playwright
+   * can await specific bitECS conditions before capturing screenshots.
+   */
+  private _exposeEngineState(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const state = {
+      frozen: !this._running,
+      entityCount: this._renderEntries.size,
+      playerEntityId: this._playerEntityId,
+      cameraX: this._cameraX,
+      cameraY: this._cameraY,
+    } as const;
+    (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ = state;
+  }
 
   /**
    * Allocates the shared memory buffers for entity state exchange.
@@ -700,6 +781,28 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._bridge.emit(gameEvent);
       }
     }
+
+    // ── Environment state forwarding (C-213) ──
+    // Extract the environment UBO data from the STATE_UPDATE message
+    // and emit it as an ENVIRONMENT_UPDATED event for the clock HUD
+    // and weather overlay.
+    const envData = message.environment as Record<string, unknown> | undefined;
+    if (envData) {
+      // Update the weather overlay with the fresh UBO data (C-213)
+      const ubo = envData.ubo as Float32Array | undefined;
+      if (ubo && this._weatherOverlay) {
+        this._weatherOverlay.update(ubo);
+      }
+
+      this._bridge.emit({
+        type: 'ENVIRONMENT_UPDATED',
+        gameHour: envData.gameHour as number,
+        gameMinute: envData.gameMinute as number,
+        gameTimeSeconds: envData.gameTimeSeconds as number,
+        windVelocity: envData.windVelocity as number,
+        rainIntensity: envData.rainIntensity as number,
+      });
+    }
   }
 
   /**
@@ -903,6 +1006,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         command: {
           type: 'INTERACT',
           targetEntityId: interactCmd.targetEntityId,
+        },
+      });
+    });
+
+    // Forward SET_ENVIRONMENT_CONFIG commands (C-213)
+    bridgeWithCommands.onCommand('SET_ENVIRONMENT_CONFIG', (cmd: unknown) => {
+      const envCmd = cmd as {
+        timeScale?: number;
+        windVelocity?: number;
+        rainIntensity?: number;
+        startHour?: number;
+      };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'SET_ENVIRONMENT_CONFIG',
+          timeScale: envCmd.timeScale,
+          windVelocity: envCmd.windVelocity,
+          rainIntensity: envCmd.rainIntensity,
+          startHour: envCmd.startHour,
         },
       });
     });

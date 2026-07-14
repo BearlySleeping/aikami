@@ -8,7 +8,8 @@
 | **Target** | `packages/frontend/engine/src/systems/jps_pathfinder_system.ts` |
 | **Priority** | P0 — High-performance path routing required for real-time chasing, patrolling, and group movement. |
 | **Dependencies** | `docs/contracts/C-190-ecs-spatial-vision-systems.md` |
-| **Status** | not_started |
+| **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

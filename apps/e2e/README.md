@@ -160,6 +160,6 @@ bun moon run e2e:run-visual-tests # AI visual runner
 
 ## Prerequisites
 
-- Client dev server on port 5274 (`bun moon run client:dev` or `tmux_session start client`)
-- Firebase emulators for functional tests (`tmux_session start firebase`)
+- Client dev server on port 5274 (`bun moon run client:dev` or `herdr_session start client`)
+- Firebase emulators for functional tests (`herdr_session start firebase`)
 - `OPENROUTER_API_KEY` env var for AI visual evaluation

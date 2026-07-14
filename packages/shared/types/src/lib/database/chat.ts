@@ -1,9 +1,9 @@
 // packages/shared/types/src/lib/database/chat.ts
-import type { ChatCreateSchema, ChatSchema, ChatUpdateSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-export type ChatData = Type.Static<typeof ChatSchema>;
-
-export type ChatCreateData = Type.Static<typeof ChatCreateSchema>;
-
-export type ChatUpdateData = Type.Static<typeof ChatUpdateSchema>;
+export type {
+  Chat as ChatData,
+  ChatCreate as ChatCreateData,
+  ChatUpdate as ChatUpdateData,
+} from '@aikami/schemas';

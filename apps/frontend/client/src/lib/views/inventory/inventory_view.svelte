@@ -1,16 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/inventory/inventory_view.svelte
-  import type { InventoryViewModelInterface } from './inventory_view_model.svelte';
+// apps/frontend/client/src/lib/views/inventory/inventory_view.svelte
+import type { InventoryViewModelInterface } from './inventory_view_model.svelte';
 
-  type Props = {
-    viewModel: InventoryViewModelInterface;
-  };
+type Props = {
+  viewModel: InventoryViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Close inventory"
+  tabindex="-1"
+  onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.closeInventory(); } }}
+  onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeInventory()}
 >
   <div class="card w-full max-w-md bg-base-100 shadow-xl">
     <div class="card-body p-6 gap-4">
@@ -18,6 +24,7 @@
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-bold text-base-content">Inventory</h2>
         <button
+          type="button"
           class="btn btn-sm btn-ghost btn-circle"
           onclick={() => viewModel.closeInventory()}
           aria-label="Close inventory"
@@ -51,6 +58,7 @@
                   ATK</span
                 >
                 <button
+                  type="button"
                   class="btn btn-xs btn-ghost text-error"
                   onclick={() => viewModel.unequipItem('weapon')}
                   aria-label="Unequip weapon"
@@ -83,6 +91,7 @@
                   DEF</span
                 >
                 <button
+                  type="button"
                   class="btn btn-xs btn-ghost text-error"
                   onclick={() => viewModel.unequipItem('armor')}
                   aria-label="Unequip armor"
@@ -110,6 +119,7 @@
             stroke="currentColor"
             stroke-width="1.5"
           >
+            <title>icon</title>
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -139,6 +149,7 @@
               {/if}
               {#if definition}
                 <button
+                  type="button"
                   class="btn btn-xs btn-primary btn-outline mt-1"
                   onclick={() => viewModel.equipItem(item.itemId)}
                   aria-label="Equip {item.itemId}"

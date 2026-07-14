@@ -9,17 +9,17 @@
  * Also ensures each skill path is listed in .pi/settings.json → skills[].
  */
 
-import { $ } from "bun";
-import { rm, cp, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync } from 'node:fs';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { $ } from 'bun';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PI_DIR = join(__dirname, "..");
-const SETTINGS_PATH = join(PI_DIR, "settings.json");
+const PI_DIR = join(__dirname, '..');
+const SETTINGS_PATH = join(PI_DIR, 'settings.json');
 
-interface SkillSource {
+type SkillSource = {
   /** Human-readable label for logging */
   name: string;
   /** Git repo URL (shallow-cloned) */
@@ -28,20 +28,52 @@ interface SkillSource {
   sourceSubdir: string;
   /** Target directory under .pi/generated-skills/ */
   targetSubdir: string;
-}
+  /**
+   * Optional: specific files to copy from sourceSubdir (relative to sourceSubdir).
+   * When omitted, the entire sourceSubdir is copied recursively.
+   */
+  files?: string[];
+  /**
+   * Optional: top-level subdirectories to EXCLUDE from the copy — prunes
+   * skills irrelevant to this repo so they never bloat the agent prompt.
+   */
+  exclude?: string[];
+};
 
 const SKILL_SOURCES: SkillSource[] = [
   {
-    name: "PixiJS",
-    repoUrl: "https://github.com/pixijs/pixijs-skills.git",
-    sourceSubdir: "skills",
-    targetSubdir: "pixijs",
+    name: 'PixiJS',
+    repoUrl: 'https://github.com/pixijs/pixijs-skills.git',
+    sourceSubdir: 'skills',
+    targetSubdir: 'pixijs',
   },
   {
-    name: "daisyUI",
-    repoUrl: "https://github.com/saadeghi/daisyui.git",
-    sourceSubdir: "skills/daisyui",
-    targetSubdir: "daisyui",
+    name: 'daisyUI',
+    repoUrl: 'https://github.com/saadeghi/daisyui.git',
+    sourceSubdir: 'skills/daisyui',
+    targetSubdir: 'daisyui',
+  },
+  {
+    name: 'Herdr',
+    repoUrl: 'https://github.com/ogulcancelik/herdr.git',
+    sourceSubdir: '.',
+    targetSubdir: 'herdr',
+    files: ['SKILL.md'],
+  },
+  {
+    name: 'Firebase',
+    repoUrl: 'https://github.com/firebase/agent-skills.git',
+    sourceSubdir: 'skills',
+    targetSubdir: 'firebase',
+    // Not used by Aikami — mobile/iOS, hosting variants, and remote-config
+    // skills only bloat the agent prompt.
+    exclude: [
+      'xcode-project-setup',
+      'firebase-crashlytics',
+      'firebase-app-hosting-basics',
+      'firebase-remote-config-basics',
+      'firebase-ai-logic-basics',
+    ],
   },
 ];
 
@@ -51,39 +83,180 @@ async function sh(command: TemplateStringsArray, ...args: unknown[]) {
   const cmd = String.raw({ raw: command }, ...args);
   console.log(`  $ ${cmd}`);
   const result = await $`${{ raw: cmd }}`.quiet();
-  if (result.exitCode !== 0) throw new Error(`Command failed: ${cmd}`);
+  if (result.exitCode !== 0) {
+    throw new Error(`Command failed: ${cmd}`);
+  }
   return result;
+}
+
+// ── sanitize skill descriptions ─────────────────────────────────────
+
+const MAX_DESCRIPTION_LENGTH = 1024;
+
+async function sanitizeSkillDescriptions(): Promise<void> {
+  const skillsDir = join(PI_DIR, 'generated-skills');
+  if (!existsSync(skillsDir)) {
+    return;
+  }
+
+  async function walkDir(dir: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walkDir(fullPath);
+      } else if (entry.isFile() && entry.name === 'SKILL.md') {
+        await fixDescription(fullPath);
+      }
+    }
+  }
+
+  async function fixDescription(filePath: string): Promise<void> {
+    const content = await readFile(filePath, 'utf-8');
+    // Match the description field within YAML frontmatter: description: "..."
+    const descRegex = /^description:\s*"((?:[^"\\]|\\.)*)"/m;
+    const match = content.match(descRegex);
+    if (!match) {
+      return;
+    }
+
+    const fullMatch = match[0];
+    const innerText = match[1] ?? '';
+    if (!innerText || innerText.length <= MAX_DESCRIPTION_LENGTH) {
+      return;
+    }
+
+    // Truncate at a word boundary, leaving room for closing quote
+    const maxInner = MAX_DESCRIPTION_LENGTH;
+    const truncated = innerText.slice(0, maxInner).replace(/\s+\S*$/, '');
+    const newLine = `description: "${truncated}"`;
+    const newContent = content.replace(fullMatch, newLine);
+
+    console.log(
+      `  Truncated description in ${basename(dirname(filePath))}/${basename(filePath)} ` +
+        `(${innerText.length} → ${truncated.length} chars)`,
+    );
+    await writeFile(filePath, newContent);
+  }
+
+  await walkDir(skillsDir);
 }
 
 // ── install one skill source ─────────────────────────────────────────
 
 async function installSkillSource(source: SkillSource): Promise<void> {
-  const target = join(PI_DIR, "generated-skills", source.targetSubdir);
+  const target = join(PI_DIR, 'generated-skills', source.targetSubdir);
   const tmp = join(PI_DIR, `.tmp-${source.targetSubdir}-skills`);
 
   // 1. Clean up any leftover temp dir
-  if (existsSync(tmp)) await rm(tmp, { recursive: true });
+  if (existsSync(tmp)) {
+    await rm(tmp, { recursive: true });
+  }
 
   // 2. Shallow-clone the repo
   console.log(`\n── ${source.name} ──`);
   console.log(`Cloning ${source.repoUrl} (shallow)...`);
   await sh`git clone --depth 1 ${source.repoUrl} ${tmp}`;
 
-  // 3. Locate and copy the source subdirectory
+  // 3. Locate and copy the source subdirectory (or specific files)
   const src = join(tmp, source.sourceSubdir);
   if (!existsSync(src)) {
-    throw new Error(
-      `${source.name}: repo missing "${source.sourceSubdir}" directory`,
-    );
+    throw new Error(`${source.name}: repo missing "${source.sourceSubdir}" directory`);
   }
 
-  if (existsSync(target)) await rm(target, { recursive: true });
-  await cp(src, target, { recursive: true });
-  console.log(`Copied ${source.sourceSubdir} → ${target}`);
+  if (existsSync(target)) {
+    await rm(target, { recursive: true });
+  }
+
+  if (source.files && source.files.length > 0) {
+    // Copy only the specified files into the target directory
+    for (const file of source.files) {
+      const srcFile = join(src, file);
+      const dstFile = join(target, file);
+      if (!existsSync(srcFile)) {
+        throw new Error(`${source.name}: repo missing file "${source.sourceSubdir}/${file}"`);
+      }
+      // Ensure the target subdirectory exists
+      await mkdir(dirname(dstFile), { recursive: true });
+      await cp(srcFile, dstFile);
+      console.log(`Copied ${source.sourceSubdir}/${file} → ${dstFile}`);
+    }
+  } else {
+    const excluded = new Set(source.exclude ?? []);
+    await cp(src, target, {
+      recursive: true,
+      filter: (srcPath) => {
+        const rel = srcPath.slice(src.length).replace(/^\/+/, '');
+        const topLevel = rel.split('/')[0] ?? '';
+        return !excluded.has(topLevel);
+      },
+    });
+    const excludeNote = excluded.size > 0 ? ` (excluded: ${[...excluded].join(', ')})` : '';
+    console.log(`Copied ${source.sourceSubdir} → ${target}${excludeNote}`);
+  }
 
   // 4. Clean up temp clone
   await rm(tmp, { recursive: true });
-  console.log("Cleaned up temp clone.");
+  console.log('Cleaned up temp clone.');
+}
+
+// ── validate local Jujutsu skill ───────────────────────────────────
+
+const JUJUTSU_SKILL_PATH = join(PI_DIR, 'skills', 'jujutsu', 'SKILL.md');
+
+async function validateJujutsuSkill(): Promise<void> {
+  if (!existsSync(JUJUTSU_SKILL_PATH)) {
+    console.warn('  ⚠️  Jujutsu skill not found at', JUJUTSU_SKILL_PATH);
+    console.warn('     Run `mkdir -p .pi/skills/jujutsu && cp ... SKILL.md` to provision it.');
+    return;
+  }
+
+  const content = await readFile(JUJUTSU_SKILL_PATH, 'utf-8');
+
+  // Parse YAML-like frontmatter
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!fmMatch?.[1]) {
+    console.warn('  ⚠️  Jujutsu skill missing frontmatter block');
+    return;
+  }
+
+  const fm = fmMatch[1];
+  const nameMatch = fm.match(/^name:\s*(.+)$/m);
+  const descMatch = fm.match(/^description:\s*(.+)$/m);
+  const versionMatch = fm.match(/^version:\s*(.+)$/m);
+  const tagsMatch = fm.match(/^tags:\s*\[(.+)\]$/m);
+
+  const name = nameMatch?.[1]?.trim();
+  const description = descMatch?.[1]?.trim();
+  const version = versionMatch?.[1]?.trim();
+  const tags = tagsMatch?.[1]
+    ? tagsMatch[1].split(',').map((t: string) => t.trim().replace(/^"|"$/g, ''))
+    : [];
+
+  // Verify capability mentions in the body
+  const body = content.slice((fmMatch[0]?.length ?? 0) + 8); // skip frontmatter + `\n---\n`
+  const capabilities: Record<string, boolean> = {
+    'workspace add': /jj workspace add/.test(body),
+    'workspace forget': /jj workspace forget/.test(body),
+    'workspace list': /jj workspace list/.test(body),
+    describe: /jj describe/.test(body),
+    squash: /jj squash/.test(body),
+    abandon: /jj abandon/.test(body),
+    'git push': /jj git push/.test(body),
+    log: /jj log/.test(body),
+  };
+
+  const missing = Object.entries(capabilities)
+    .filter(([, found]) => !found)
+    .map(([cap]) => cap);
+
+  console.log(`  ✅ Jujutsu skill: ${name} v${version}`);
+  console.log(`     Description: ${description?.slice(0, 80)}…`);
+  console.log(`     Tags: ${tags.join(', ')}`);
+  console.log(`     Capabilities: ${Object.keys(capabilities).length} tracked`);
+  if (missing.length > 0) {
+    console.warn(`     ⚠️  Missing capability references: ${missing.join(', ')}`);
+  }
 }
 
 // ── main ─────────────────────────────────────────────────────────────
@@ -94,31 +267,49 @@ async function main() {
     await installSkillSource(source);
   }
 
-  // 2. Ensure all skill paths are in settings.json
-  const settingsRaw = await readFile(SETTINGS_PATH, "utf-8");
+  // 2. Ensure the generated-skills parent path is in settings.json
+  const settingsRaw = await readFile(SETTINGS_PATH, 'utf-8');
   const settings = JSON.parse(settingsRaw);
-  let modified = false;
 
-  for (const source of SKILL_SOURCES) {
-    const skillsPath = `./.pi/generated-skills/${source.targetSubdir}`;
-    if (!settings.skills.includes(skillsPath)) {
-      settings.skills.push(skillsPath);
-      console.log(`Added "${skillsPath}" to settings.json → skills[]`);
-      modified = true;
-    } else {
-      console.log(`"${skillsPath}" already in settings.json → skills[]`);
+  if (!settings.skills.includes('./.pi/generated-skills')) {
+    settings.skills.push('./.pi/generated-skills');
+    await writeFile(SETTINGS_PATH, `${JSON.stringify(settings, null, 2)}\n`);
+    console.log('Added "./.pi/generated-skills" to settings.json → skills[]');
+  } else {
+    console.log('"./.pi/generated-skills" already in settings.json → skills[]');
+  }
+
+  // 3. Bootstrap MCP bridge registrations (C-321)
+  const mcpConfigPath = join(PI_DIR, 'mcp.json');
+  if (existsSync(mcpConfigPath)) {
+    const mcpRaw = await readFile(mcpConfigPath, 'utf-8');
+    const mcpConfig = JSON.parse(mcpRaw);
+    const servers = mcpConfig.mcpServers;
+    if (servers && typeof servers === 'object') {
+      const serverNames = Object.keys(servers);
+      console.log(`\nRegistered ${serverNames.length} MCP server(s): ${serverNames.join(', ')}`);
+      for (const [name, cfg] of Object.entries(servers) as [
+        string,
+        { command: string; args: string[] },
+      ][]) {
+        console.log(`  MCP Server "${name}": ${cfg.command} ${(cfg.args ?? []).join(' ')}`);
+      }
     }
   }
 
-  if (modified) {
-    await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
-  }
+  // 4. Validate local Jujutsu skill registration (C-046: jj workspace isolation)
+  console.log('\n── Validating Jujutsu skill ──');
+  await validateJujutsuSkill();
 
-  const names = SKILL_SOURCES.map((s) => s.name).join(" + ");
+  // 5. Sanitize skill descriptions to stay within the 1024 char Agent Skills spec limit
+  console.log('\n── Sanitizing descriptions ──');
+  await sanitizeSkillDescriptions();
+
+  const names = SKILL_SOURCES.map((s) => s.name).join(' + ');
   console.log(`\nDone! ${names} skills installed to .pi/generated-skills/`);
 }
 
 main().catch((err) => {
-  console.error("update_skills failed:", err);
+  console.error('update_skills failed:', err);
   process.exit(1);
 });

@@ -1,55 +1,55 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/sandbox/dialogue/+page.svelte
-  //
-  // Isolated Dialogue Action Menu & Interactive Dice sandbox with devtools.
-  // Mounts the DialogueOverlay with DialogueDevViewModel for testing C-162:
-  //   - Action context menu (Persuasion/Intimidation/Stealth/Attack/Custom)
-  //   - Interactive d20 click-to-roll with controlled outcomes
-  //   - Toggle between mock AI and real LLM extraction
-  //   - NPC persona presets (sage, guard, innkeeper, blacksmith, bandit, merchant)
-  //   - Interaction mode switch (menu vs freeform)
-  //
-  // Contract: C-162 BG3 Action Menu & Dice
+// apps/frontend/client/src/routes/(dev)/dev/sandbox/dialogue/+page.svelte
+//
+// Isolated Dialogue Action Menu & Interactive Dice sandbox with devtools.
+// Mounts the DialogueOverlay with DialogueDevViewModel for testing C-162:
+//   - Action context menu (Persuasion/Intimidation/Stealth/Attack/Custom)
+//   - Interactive d20 click-to-roll with controlled outcomes
+//   - Toggle between mock AI and real LLM extraction
+//   - NPC persona presets (sage, guard, innkeeper, blacksmith, bandit, merchant)
+//   - Interaction mode switch (menu vs freeform)
+//
+// Contract: C-162 BG3 Action Menu & Dice
 
-  import { browser } from '$app/environment';
-  import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
-  import {
-    type DevInteractionMode,
-    type DevNpcPreset,
-    DialogueDevViewModel,
-    type DialogueDevViewModelInterface,
-    type DiceOutcome,
-  } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
+import { browser } from '$app/environment';
+import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
+import {
+  type DevInteractionMode,
+  type DevNpcPreset,
+  DialogueDevViewModel,
+  type DialogueDevViewModelInterface,
+  type DiceOutcome,
+} from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
 
-  /** Navigate back to sandbox index on End Chat / combat transition. */
-  const goBack = () => {
-    if (browser) {
-      window.history.back();
-    }
-  };
+/** Navigate back to sandbox index on End Chat / combat transition. */
+const goBack = () => {
+  if (browser) {
+    window.history.back();
+  }
+};
 
-  const MOCK_NPC_DATA = {
-    npcId: 'sandbox-elder',
-    npcName: 'Elder Thrain',
-    dialog: 'Ah, a traveler! Welcome to our humble village. How may I be of assistance?',
-    personaId: 'sage',
-  };
+const MOCK_NPC_DATA = {
+  npcId: 'sandbox-elder',
+  npcName: 'Elder Thrain',
+  dialog: 'Ah, a traveler! Welcome to our humble village. How may I be of assistance?',
+  personaId: 'sage',
+};
 
-  const viewModel: DialogueDevViewModelInterface = new DialogueDevViewModel({
-    className: 'DialogueSandboxVM',
-    npcData: MOCK_NPC_DATA,
-    onEndChat: goBack,
-    onStartCombat: () => {
-      goBack();
-    },
-    initialDiceOutcome: 'random',
-    initialUseMockAi: true,
-    initialNpcPreset: 'sage',
-    initialInteractionMode: 'menu',
-  });
+const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
+  className: 'DialogueSandboxVM',
+  npcData: MOCK_NPC_DATA,
+  onEndChat: goBack,
+  onStartCombat: () => {
+    goBack();
+  },
+  initialDiceOutcome: 'random',
+  initialUseMockAi: true,
+  initialNpcPreset: 'sage',
+  initialInteractionMode: 'menu',
+});
 
-  // ── Devtool state ───────────────────────────────────────────────────
-  let devToolsOpen = $state(true);
+// ── Devtool state ───────────────────────────────────────────────────
+let devToolsOpen = $state(true);
 </script>
 
 <svelte:head>
@@ -72,6 +72,7 @@
           <span class="badge badge-xs badge-accent">C-162</span>
         </div>
         <button
+          type="button"
           class="btn btn-ghost btn-xs text-base-content/60"
           onclick={() => (devToolsOpen = false)}
         >
@@ -87,6 +88,7 @@
         <div class="join join-vertical">
           {#each (['random', 'always_succeed', 'always_fail'] as const) as outcome}
             <button
+              type="button"
               class="btn btn-xs join-item {viewModel.diceOutcome === outcome
                 ? 'btn-active btn-success'
                 : 'btn-ghost'}"
@@ -109,12 +111,14 @@
         >
         <div class="join">
           <button
+            type="button"
             class="btn btn-xs join-item {viewModel.useMockAi ? 'btn-active btn-warning' : 'btn-ghost'}"
             onclick={() => viewModel.setUseMockAi(true)}
           >
             🎭 Mock AI
           </button>
           <button
+            type="button"
             class="btn btn-xs join-item {!viewModel.useMockAi ? 'btn-active btn-info' : 'btn-ghost'}"
             onclick={() => viewModel.setUseMockAi(false)}
           >
@@ -140,6 +144,7 @@
         <div class="flex flex-wrap gap-1">
           {#each (['sage', 'guard', 'innkeeper', 'blacksmith', 'bandit', 'merchant'] as const) as preset}
             <button
+              type="button"
               class="btn btn-xs {viewModel.mockNpcPreset === preset
                 ? 'btn-active btn-primary'
                 : 'btn-outline'}"
@@ -168,6 +173,7 @@
         >
         <div class="join">
           <button
+            type="button"
             class="btn btn-xs join-item {viewModel.interactionMode === 'menu'
               ? 'btn-active btn-secondary'
               : 'btn-ghost'}"
@@ -176,6 +182,7 @@
             📜 Action Menu
           </button>
           <button
+            type="button"
             class="btn btn-xs join-item {viewModel.interactionMode === 'freeform'
               ? 'btn-active btn-accent'
               : 'btn-ghost'}"
@@ -198,12 +205,14 @@
         >
         <div class="join">
           <button
+            type="button"
             class="btn btn-xs join-item {viewModel.autoGenerateImage ? 'btn-active btn-success' : 'btn-ghost'}"
             onclick={() => viewModel.setAutoGenerateImage(true)}
           >
             🤖 Auto
           </button>
           <button
+            type="button"
             class="btn btn-xs join-item {!viewModel.autoGenerateImage ? 'btn-active btn-ghost' : 'btn-ghost'}"
             onclick={() => viewModel.setAutoGenerateImage(false)}
           >
@@ -225,17 +234,23 @@
         <div class="flex flex-col gap-1">
           <!-- Generate Scene Image -->
           <button
+            type="button"
             class="btn btn-xs btn-accent btn-outline"
             onclick={() => viewModel.generateSceneImage()}
           >
             🖼️ Generate Scene Image
           </button>
           <!-- End Chat -->
-          <button class="btn btn-xs btn-error btn-outline" onclick={() => viewModel.endChat()}>
+          <button
+            type="button"
+            class="btn btn-xs btn-error btn-outline"
+            onclick={() => viewModel.endChat()}
+          >
             🚪 End Chat
           </button>
           <!-- Reset (re-create the VM) -->
           <button
+            type="button"
             class="btn btn-xs btn-ghost"
             onclick={() => {
               viewModel.setMockNpcPreset('sage');
@@ -284,6 +299,7 @@
   <!-- DevTools toggle button (when panel is closed) -->
   {#if !devToolsOpen}
     <button
+      type="button"
       class="pointer-events-auto fixed right-2 top-2 z-50 btn btn-xs btn-ghost"
       onclick={() => (devToolsOpen = true)}
     >

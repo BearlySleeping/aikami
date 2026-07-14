@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/menu/menu_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { MenuViewModelInterface } from './menu_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/game/menu/menu_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { MenuViewModelInterface } from './menu_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: MenuViewModelInterface;
-  };
+type Props = {
+  viewModel: MenuViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true} class="relative">
@@ -20,13 +20,17 @@
     <div class="mt-8 flex w-64 flex-col gap-3">
       <!-- Continue (shown when saves exist) -->
       {#if viewModel.canContinue}
-        <button class="btn btn-secondary btn-lg" onclick={() => viewModel.continueGame()}>
+        <button
+          type="button"
+          class="btn btn-secondary btn-lg"
+          onclick={() => viewModel.continueGame()}
+        >
           Continue
         </button>
       {/if}
 
       <!-- Start (always enabled — works offline) -->
-      <button class="btn btn-primary btn-lg" onclick={() => viewModel.startGame()}>
+      <button type="button" class="btn btn-primary btn-lg" onclick={() => viewModel.startGame()}>
         {#if viewModel.canContinue}
           New Game
         {:else}
@@ -35,24 +39,27 @@
       </button>
 
       <!-- Options -->
-      <button class="btn btn-outline btn-lg" onclick={() => viewModel.goToOptions()}>
+      <button type="button" class="btn btn-outline btn-lg" onclick={() => viewModel.goToOptions()}>
         Options
       </button>
 
       <!-- Credits -->
-      <button class="btn btn-outline btn-lg" onclick={() => viewModel.goToCredits()}>
+      <button type="button" class="btn btn-outline btn-lg" onclick={() => viewModel.goToCredits()}>
         Credits
       </button>
 
       <!-- Quit (Tauri / desktop only) -->
       {#if viewModel.isTauri}
-        <button class="btn btn-ghost btn-lg" onclick={() => viewModel.quitApp()}>Quit</button>
+        <button type="button" class="btn btn-ghost btn-lg" onclick={() => viewModel.quitApp()}>
+          Quit
+        </button>
       {/if}
 
       <!-- Sign in with Google (optional, shown when not logged in) -->
       {#if !viewModel.isLoggedIn}
         <div class="mt-4 border-t border-base-300 pt-4">
           <button
+            type="button"
             class="btn btn-ghost btn-sm w-full"
             disabled={viewModel.isSigningIn}
             onclick={() => viewModel.loginWithGoogle()}

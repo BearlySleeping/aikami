@@ -21,6 +21,89 @@ Visual tests live in `suites/*.visual.ts`, not `tests/*.visual.spec.ts`.
 
 ---
 
+## Bun Unit Tests (Client)
+
+Client-side unit tests use Bun's test runner with a required preload script.
+
+### 🔴 Critical: Always Use `--preload`
+
+Every client unit test depends on `src/lib/test_preload.ts` which provides:
+
+| What | Why |
+|------|-----|
+| Svelte 5 rune polyfills (`$state`, `$derived`, `$effect`) | `.svelte.ts` files won't parse without them |
+| `@aikami/frontend/services` mock | `BaseFrontendClass`, `BaseViewModel`, `dialogService`, etc. |
+| `$services` barrel mock | All ViewModels import from `$services` |
+| `$app/navigation`, `$app/state` mocks | SvelteKit virtual modules required by transitive deps |
+| `indexedDB` polyfill | Required by `DraftStore` in test env |
+| `window`, `AudioContext`, `KeyboardEvent` polyfills | Browser APIs not available in Bun |
+| Vite env vars (`PUBLIC_*`) | Required by `@aikami/frontend/configs/environment.ts` |
+
+**Without `--preload`, tests fail with `Cannot find module` or `undefined is not an object` errors.**
+
+### Running Client Unit Tests
+
+```bash
+# ✅ Correct — always include --preload
+cd apps/frontend/client && bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib
+
+# ✅ Single file
+cd apps/frontend/client && bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib/services/game/game_composition_root.test.ts
+
+# ✅ Via moon (uses the script from package.json)
+bun moon run client:test
+
+# ❌ WRONG — missing --preload, tests will fail
+bun test src/lib/services/game/game_composition_root.test.ts
+```
+
+The `client:test` moon task already includes `--preload` — prefer it for running all tests.
+
+### Mock Patterns for Service Tests
+
+When testing a service that extends `BaseFrontendClass`, use `mock.module()` in
+`beforeEach` to stub its dependencies. The global mocks from `test_preload.ts`
+cover the `@aikami/frontend/services` and `$services` barrels — you only need
+to mock the service's own imports:
+
+```typescript
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+
+describe('MyService', () => {
+  let service: import('./my_service.svelte.ts').MyServiceInterface;
+
+  beforeEach(async () => {
+    // Mock sub-service dependencies
+    mock.module('./dependency_service.svelte', () => ({
+      dependencyService: {
+        initialize: mock(async () => {}),
+        doSomething: mock(() => 'result'),
+      },
+    }));
+
+    const mod = await import('./my_service.svelte');
+    service = mod.myService;
+  });
+
+  test('should do something', async () => {
+    // ...
+  });
+});
+```
+
+**Rule**: use `await import()` inside `beforeEach` so `mock.module()` calls register
+before the real module is evaluated.
+
+### Known Limitations
+
+| Issue | Details |
+|-------|---------|
+| `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The global barrel mocks in `test_preload.ts` mitigate most cases. |
+| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Tests must treat `$state` fields as plain values. |
+| PixiJS / WebGPU | Not available in Bun. Tests that touch the game engine are skipped in CI (handled by E2E). |
+
+---
+
 ## AI Visual Testing Framework
 
 Declarative, TypeBox-validated visual assessment. Captures screenshots via Playwright, evaluates via OpenRouter AI, caches results with SHA-256 hashes, and generates a static HTML report.
@@ -238,7 +321,7 @@ Then add to `apps/e2e/src/pom/index.ts` barrel export.
 
 ## Debugging Workflow
 
-**Code-first debugging.** Most issues are solved by reading source files, tmux logs, and
+**Code-first debugging.** Most issues are solved by reading source files, herdr logs, and
 checking the Firestore emulator data. Browser tools are a LAST resort — they are expensive
 in tokens and time.
 
@@ -247,7 +330,7 @@ in tokens and time.
 | Priority | Tool                 | When to use                                      |
 | -------- | -------------------- | ------------------------------------------------ |
 | 1        | `read` source files  | Always — understand the code FIRST               |
-| 2        | `tmux_session read`  | Check live server logs for errors                |
+| 2        | `herdr_session read`  | Check live server logs for errors                |
 | 3        | `firestore_query`    | Verify data state in the emulator                |
 | 4        | `browser_inspect`    | UI rendering bug, 404, blank page, env var check |
 | 5        | `browser_console`    | Evidence of a JS runtime error in the browser    |
@@ -269,14 +352,14 @@ in tokens and time.
 # Step 1: Check what's running
 bash: ss -tlnp | grep <port>
 # Step 2: Read server logs
-tmux_session read client
+herdr_session read client
 # Step 3: Check the DOM once
 browser_inspect selector="body"
 # Step 4: Read relevant source files
 
 # Pattern: "API call is failing"
 # Step 1: Read service/repository code
-# Step 2: Check tmux logs for backend errors
+# Step 2: Check herdr logs for backend errors
 # Step 3: browser_network ONLY if XHR/fetch (not Firestore gRPC)
 ```
 

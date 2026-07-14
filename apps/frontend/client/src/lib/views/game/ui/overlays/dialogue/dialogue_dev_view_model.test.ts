@@ -6,6 +6,7 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.test.ts
 
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
@@ -62,6 +63,26 @@ const textGenStreamChat = async (options: { onChunk: (text: string) => void }) =
   }
 };
 
+// Mock game service files BEFORE $services so that barrel evaluation
+// can resolve GM service imports (gm_prompt_service imports these directly).
+const COMBAT_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
+mock.module(COMBAT_PATH, () => ({
+  combatService: { enemyName: 'Unknown Enemy', enemyHp: 0, enemyMaxHp: 0 },
+}));
+
+const GAME_STATE_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
+mock.module(GAME_STATE_PATH, () => ({
+  gameStateService: { worldGenOutput: undefined, quests: [], characterSheetSummary: undefined },
+}));
+
+const TIME_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/time_service.svelte.ts';
+mock.module(TIME_PATH, () => ({
+  timeService: { gameHour: 12, gameMinute: 0, rainIntensity: 0 },
+}));
+
 mock.module('$services', () => ({
   textGenerationService: {
     streamChat: textGenStreamChat,
@@ -83,10 +104,40 @@ mock.module('$services', () => ({
     selectedVoice: 'af_bella',
     status: 'uninitialized',
   },
+  gmPromptService: {
+    assemblePrompt: mock(() => 'Mock GM system prompt for testing'),
+  },
+  narrativeDirectorService: {
+    isRunning: false,
+    start: mock(() => {}),
+    stop: mock(() => {}),
+    pushStory: mock(async () => {}),
+  },
+  sessionSummaryService: {
+    currentSummary: null,
+    isGenerating: false,
+    generateSummary: mock(async () => ({})),
+    clearSummary: mock(() => {}),
+  },
+  combatService: {
+    enemyName: 'Unknown Enemy',
+    enemyHp: 0,
+    enemyMaxHp: 0,
+  },
+  gameStateService: {
+    worldGenOutput: undefined,
+    quests: [],
+    characterSheetSummary: undefined,
+  },
+  timeService: {
+    gameHour: 12,
+    gameMinute: 0,
+    rainIntensity: 0,
+  },
 }));
 
 // ---------------------------------------------------------------------------
-// Mock: @aikami/frontend/api-core (OllamaClient)
+// Mock: $lib/services/ai/clients (OllamaClient)
 // ---------------------------------------------------------------------------
 
 const createMockOllamaClient = (): Record<string, unknown> => {
@@ -121,7 +172,7 @@ const createMockOllamaClient = (): Record<string, unknown> => {
   };
 };
 
-mock.module('@aikami/frontend/api-core', () => createMockOllamaClient());
+mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
 
 // ---------------------------------------------------------------------------
 // Mock: URL and setTimeout globals (not available in Bun)
@@ -213,7 +264,7 @@ describe('DialogueDevViewModel', () => {
   });
 
   afterEach(() => {
-    mock.module('@aikami/frontend/api-core', () => createMockOllamaClient());
+    mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
   });
 
   // ── Initial state ────────────────────────────────────────────────────

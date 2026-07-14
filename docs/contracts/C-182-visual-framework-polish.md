@@ -9,6 +9,7 @@
 | **Priority** | P1 — Eliminates technical debt, prevents OpenRouter rate limits, and unifies the testing strategy |
 | **Dependencies** | C-181 |
 | **Status** | **completed** |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

@@ -1,16 +1,16 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/memory_tab.svelte -->
 <script lang="ts">
-  import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
+import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  const memoryConfig = $derived(viewModel.config.memory);
+const memoryConfig = $derived(viewModel.config.memory);
 
-  const showCustomEmbedding = $derived(memoryConfig.embeddingModel === 'custom');
+const showCustomEmbedding = $derived(memoryConfig.embeddingModel === 'custom');
 </script>
 
 <div class="space-y-6">
@@ -26,6 +26,7 @@
     <div class="flex gap-2">
       {#each viewModel.memoryTypes as mtype}
         <button
+          type="button"
           class="btn btn-sm font-['JetBrains_Mono'] text-xs {memoryConfig.type === mtype
             ? 'btn-primary'
             : 'btn-ghost text-[#938ea1]'}"

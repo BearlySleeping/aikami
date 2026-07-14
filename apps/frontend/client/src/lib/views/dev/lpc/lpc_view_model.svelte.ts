@@ -7,8 +7,6 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { Application } from 'pixi.js';
-import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { setContext } from 'svelte';
 import { goto } from '$app/navigation';
 import { page } from '$app/state';
@@ -24,17 +22,19 @@ import {
   lpcStateToSearchParams,
   searchParamsToLpcState,
 } from '$lib/data/lpc_url_config';
+import type { Application } from './lpc_pixi_facade';
+import { Container, Graphics, Sprite, Texture } from './lpc_pixi_facade';
 
 // Use the generated catalog directly — all slots with verified webp assets.
 const FILTERED_LPC_SLOTS = GENERATED_LPC_SLOTS;
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const MAX_LAYERS = 8;
-const CANVAS_WIDTH = 960;
-const CANVAS_HEIGHT = 540;
-const ENTITY_X = CANVAS_WIDTH / 2;
-const ENTITY_Y = CANVAS_HEIGHT / 2 - 32;
+const MaxLayers = 8;
+const CanvasWidth = 960;
+const CanvasHeight = 540;
+const EntityX = CanvasWidth / 2;
+const EntityY = CanvasHeight / 2 - 32;
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -89,11 +89,11 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   readonly compositionFailed: boolean;
   readonly zoom: number;
 
-  readonly MAX_LAYERS: number;
-  readonly CANVAS_WIDTH: number;
-  readonly CANVAS_HEIGHT: number;
-  readonly ENTITY_X: number;
-  readonly ENTITY_Y: number;
+  readonly maxLayers: number;
+  readonly canvasWidth: number;
+  readonly canvasHeight: number;
+  readonly entityX: number;
+  readonly entityY: number;
   readonly allSlots: typeof FILTERED_LPC_SLOTS;
   readonly animationStateOptions: typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions: typeof DIRECTION_OPTIONS;
@@ -120,11 +120,11 @@ export type LpcViewModelOptions = BaseViewModelOptions & {};
 class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcViewModelInterface {
   // ── Constants (exposed) ──────────────────────────────────────────────
 
-  readonly MAX_LAYERS = MAX_LAYERS;
-  readonly CANVAS_WIDTH = CANVAS_WIDTH;
-  readonly CANVAS_HEIGHT = CANVAS_HEIGHT;
-  readonly ENTITY_X = ENTITY_X;
-  readonly ENTITY_Y = ENTITY_Y;
+  readonly maxLayers = MaxLayers;
+  readonly canvasWidth = CanvasWidth;
+  readonly canvasHeight = CanvasHeight;
+  readonly entityX = EntityX;
+  readonly entityY = EntityY;
   readonly allSlots = FILTERED_LPC_SLOTS;
   readonly animationStateOptions = ANIMATION_STATE_OPTIONS as typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS as typeof DIRECTION_OPTIONS;
@@ -268,8 +268,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   // ── Layer management ────────────────────────────────────────────────
 
   addLayer(): void {
-    if (this.activeLayers.length >= MAX_LAYERS) {
-      this._setStatus(`Maximum ${MAX_LAYERS} layers reached.`, 'warn');
+    if (this.activeLayers.length >= MaxLayers) {
+      this._setStatus(`Maximum ${MaxLayers} layers reached.`, 'warn');
       return;
     }
 
@@ -459,7 +459,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     }
 
     const promise = (async () => {
-      const { Assets } = await import('pixi.js');
+      const { Assets } = await import('./lpc_pixi_facade');
       try {
         const mod = await import(/* @vite-ignore */ `/src/lib/assets/lpc/${assetId}.webp?url`);
         const url = (mod as { default: string }).default;
@@ -468,7 +468,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         this._sheetTextureCache.set(cacheKey, texture);
         return texture;
       } catch {
-        const { Texture: T } = await import('pixi.js');
+        const { Texture: T } = await import('./lpc_pixi_facade');
         this._sheetTextureCache.set(cacheKey, T.EMPTY);
         return T.EMPTY;
       }
@@ -538,7 +538,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           return;
         }
 
-        const { Rectangle } = await import('pixi.js');
+        const { Rectangle } = await import('./lpc_pixi_facade');
         const frameTexture = new Texture({
           source: texture.source,
           frame: new Rectangle(x, y, 64, 64),
@@ -580,8 +580,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       }
 
       container.scale.set(currentZoom, currentZoom);
-      container.x = CANVAS_WIDTH / 2;
-      container.y = CANVAS_HEIGHT / 2;
+      container.x = CanvasWidth / 2;
+      container.y = CanvasHeight / 2;
 
       this.pixiApp.stage.addChild(container);
       this._characterContainer = container;
@@ -595,8 +595,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       fallbackGfx.fill({ color: 0xff00ff, alpha: 0.9 });
       fallbackGfx.rect(0, 0, 64, 64);
       fallbackGfx.stroke({ color: 0xff0000, width: 2 });
-      fallbackGfx.x = CANVAS_WIDTH / 2 - 32;
-      fallbackGfx.y = CANVAS_HEIGHT / 2 - 32;
+      fallbackGfx.x = CanvasWidth / 2 - 32;
+      fallbackGfx.y = CanvasHeight / 2 - 32;
       fallbackGfx.eventMode = 'none';
 
       this.pixiApp.stage.addChild(fallbackGfx);
@@ -672,8 +672,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     const gridContainer = new Container();
     gridContainer.eventMode = 'none';
     gridContainer.scale.set(this.zoom, this.zoom);
-    gridContainer.x = CANVAS_WIDTH / 2;
-    gridContainer.y = CANVAS_HEIGHT / 2;
+    gridContainer.x = CanvasWidth / 2;
+    gridContainer.y = CanvasHeight / 2;
     gfx.x = -32;
     gfx.y = -32;
     gridContainer.addChild(gfx);
@@ -879,8 +879,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     try {
       const result = await createPixiApp({
         canvas: this.canvasElement,
-        width: CANVAS_WIDTH,
-        height: CANVAS_HEIGHT,
+        width: CanvasWidth,
+        height: CanvasHeight,
         backgroundColor: 0x0d0d1a,
       });
 

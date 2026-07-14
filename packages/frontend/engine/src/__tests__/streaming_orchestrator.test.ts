@@ -262,7 +262,7 @@ describe('StreamingOrchestratorService — integration: large-volume', () => {
         }),
       );
     }
-    const payload = lines.join('\n') + '\n';
+    const payload = `${lines.join('\n')}\n`;
 
     const results = orchestrator.processChunk(new TextEncoder().encode(payload));
 

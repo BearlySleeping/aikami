@@ -1,6 +1,6 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/layout/layout_index_page.dev.svelte
-  import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/layout/layout_index_page.dev.svelte
+import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
 </script>
 
 <div class="p-6">
@@ -31,6 +31,7 @@
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
+          <title>icon</title>
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={item.icon} />
         </svg>
         <span class="text-sm font-medium">{item.label}</span>

@@ -25,7 +25,7 @@ const mockGlobalFetch = (ollama: MockFetchResponse | Error, comfy: MockFetchResp
     async (input: string | URL | Request, _init?: RequestInit): Promise<MockFetchResponse> => {
       const url = typeof input === 'string' ? input : input.toString();
 
-      if (url.includes('11434')) {
+      if (url.includes('/api/text/')) {
         if (ollama instanceof Error) {
           throw ollama;
         }
@@ -265,11 +265,11 @@ describe('BootDiagnosticsViewModel', () => {
 
   // ── Ping URLs ────────────────────────────────────────────────────────
 
-  test('checkProviders pings Ollama on port 11434', async () => {
+  test('checkProviders pings Ollama via Vite dev proxy /api/text/', async () => {
     const { vm } = createVm();
     await vm.checkProviders();
     const calls = fetchSpy.mock.calls as Array<[string, RequestInit | undefined]>;
-    expect(calls.some(([u]) => typeof u === 'string' && u.includes('11434'))).toBe(true);
+    expect(calls.some(([u]) => typeof u === 'string' && u.includes('/api/text/'))).toBe(true);
   });
 
   test('checkProviders pings ComfyUI via Vite proxy', async () => {

@@ -1,9 +1,9 @@
 // packages/shared/types/src/lib/database/npc.ts
-import type { NpcCreateSchema, NpcSchema, NpcUpdateSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-export type NpcData = Type.Static<typeof NpcSchema>;
-
-export type NpcCreateData = Type.Static<typeof NpcCreateSchema>;
-
-export type NpcUpdateData = Type.Static<typeof NpcUpdateSchema>;
+export type {
+  Npc as NpcData,
+  NpcCreate as NpcCreateData,
+  NpcUpdate as NpcUpdateData,
+} from '@aikami/schemas';

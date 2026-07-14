@@ -1,53 +1,36 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts
 
-import type { OllamaClient } from '@aikami/frontend/api-core';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { DiceState } from '$lib/components/game/game_dice.svelte';
+import {
+  DIALOG_ACTION_SYSTEM_PROMPT,
+  type DialogActionIntent,
+  DialogActionSchema,
+} from '$lib/data/ai_prompts/dialog_action_schema';
+import {
+  FALLBACK_AVATAR_URL,
+  FALLBACK_PERSONA_ID,
+  PERSONA_PROMPTS,
+} from '$lib/data/dialogue_personas';
+import type { OllamaClient } from '$lib/services/ai/clients/index.ts';
+import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
   diceService,
+  draftStore,
+  gameModeService,
+  gmPromptService,
+  messageBranchStore,
+  playerStateService,
   SentenceBoundaryChunker,
   type TextChatMessage,
   textGenerationService,
   ttsService,
 } from '$services';
-import {
-  DIALOG_ACTION_SYSTEM_PROMPT,
-  type DialogActionIntent,
-  DialogActionSchema,
-} from '../../../../../game/core/ai/prompts/dialog_action_schema.ts';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
-
-// ── LPC fallback constants ────────────────────────────────────────────
-
-/** Default LPC spritesheet URL used as fallback NPC avatar when image generation is disabled. */
-const FALLBACK_AVATAR_URL = '/lpc/body/male/walk.png' as const;
-
-// ── Persona prompt templates ───────────────────────────────────────
-
-/** Known NPC persona archetypes with their role-playing descriptions. */
-const PERSONA_PROMPTS: Record<string, string> = {
-  default: 'You are a helpful and knowledgeable non-player character in a fantasy world.',
-  blacksmith:
-    'You are an old, grumpy blacksmith who has worked the forge for forty years. You speak in short, gruff sentences and complain about your aching back. You take pride in your craft but are suspicious of strangers.',
-  innkeeper:
-    'You are a warm, gossipy innkeeper who knows everyone in town. You love sharing rumors and making travelers feel welcome. You speak in a friendly, chatty manner and often offer unsolicited advice.',
-  guard:
-    'You are a disciplined town guard who takes your duty seriously. You speak formally and are suspicious of troublemakers. You follow orders but have a hidden soft spot for honest folk.',
-  merchant:
-    'You are a charismatic traveling merchant always looking for a good deal. You speak enthusiastically about your wares and use flowery language. Everything is "the finest in the land" according to you.',
-  sage: 'You are a wise, ancient sage who speaks in riddles and cryptic warnings. You know secrets about the world but reveal them only to those who prove worthy. Your speech is measured and mysterious.',
-  bandit:
-    'You are a rough-edged bandit hiding in the hills. You speak with a coarse accent and make veiled threats. Deep down you have a code of honor, but you would never admit it.',
-  healer:
-    'You are a gentle, compassionate healer dedicated to helping the injured and sick. You speak softly and always put others before yourself. You have a deep knowledge of herbs and medicine.',
-  guild_master:
-    'You are a shrewd guild master who runs the local trade organization with an iron fist. You speak in calculated terms and weigh every word. You are always looking to expand your influence.',
-} as const;
-
-const FALLBACK_PERSONA_ID = 'default' as const;
 
 // ---------------------------------------------------------------------------
 // DialogueOverlayViewModel — orchestrates AI chat with an NPC
@@ -62,44 +45,6 @@ const FALLBACK_PERSONA_ID = 'default' as const;
 //
 // Contract: C-128 (origin), C-129 (polish)
 // ---------------------------------------------------------------------------
-
-/** A single chat message rendered in the dialogue history. */
-export type DialogueMessage = {
-  /** Unique identifier for the message (used as Svelte {#each} key). */
-  id: string;
-  /** The role of the speaker. */
-  role: 'player' | 'npc';
-  /** The message content text. */
-  content: string;
-};
-
-// ── Action Context Menu Types (C-162) ────────────────────────────────
-
-/**
- * A pre-written action option shown in the BG3-style action context menu.
- *
- * Contract: C-162 BG3 Action Menu & Dice
- */
-export type ActionOption = {
-  /** Unique action identifier. */
-  id: string;
-  /** Display label shown on the action button. */
-  label: string;
-  /** The type of action — determines the resolution flow. */
-  type: 'skill_check' | 'direct_combat' | 'custom';
-  /** The skill being tested, if this is a skill_check action. */
-  skill?: string;
-};
-
-/**
- * Phases of the dialogue interaction loop.
- *
- * - `MENU`: Action context menu is visible.
- * - `CUSTOM_INPUT`: Freeform text input is visible (triggered by [Custom]).
- * - `DICE`: Interactive d20 is visible, awaiting player click.
- * - `CHAT`: Standard chat flow (after dice resolution or during streaming).
- */
-export type DialoguePhase = 'MENU' | 'CUSTOM_INPUT' | 'DICE' | 'CHAT';
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
   /** NPC data from the ECS interaction event. */
@@ -147,7 +92,7 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   readonly isStreaming: boolean;
 
   /** The player's current input text (bound to the text input field). */
-  readonly inputText: string;
+  inputText: string;
 
   /** Error message from the last failed generation, if any. */
   readonly streamError: string | null;
@@ -188,6 +133,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
     readonly isSuccess: boolean | null;
   } | null;
 
+  /** Unified dice state for the shared GameDice component. */
+  readonly diceState: DiceState | null;
+
   /** Whether the AI is resolving a structured skill check (disables all inputs). */
   readonly isResolvingSkillCheck: boolean;
 
@@ -213,6 +161,12 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * is sending CAMERA_ZOOM_UPDATE events.
    */
   hasNpcScreenPosition: boolean;
+
+  /** Scrollable message container — bound by View via bind:this. */
+  messageContainerElement: HTMLDivElement | undefined;
+
+  /** Textarea input — bound by View via bind:this for autofocus. */
+  inputElement: HTMLTextAreaElement | undefined;
 
   /**
    * Selects an action from the context menu.
@@ -260,6 +214,29 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * Enter submits the message; Escape ends the chat.
    */
   handleKeyDown(event: KeyboardEvent): void;
+
+  // ── C-231 Rich Chat Streaming ──────────────────────────────────
+
+  /** Swipe between alternative NPC responses for a message. */
+  swipeAlternative(messageId: string, direction: 'left' | 'right'): void;
+
+  /** Copy message text to clipboard with toast feedback. */
+  copyMessage(text: string): Promise<void>;
+
+  /** Fork a new conversation from the given message (placeholder). */
+  branchFromMessage(messageId: string): void;
+
+  /** Toast notification message (e.g. 'Copied!'). */
+  readonly toastMessage: string;
+
+  /** Shows a toast notification that auto-dismisses. */
+  showToast(message: string): void;
+
+  /** Whether streaming TTS is enabled for this conversation. */
+  readonly streamingTtsEnabled: boolean;
+
+  /** Toggles streaming TTS on/off for this chat. */
+  toggleStreamingTts(): void;
 };
 
 class DialogueOverlayViewModel
@@ -311,6 +288,23 @@ class DialogueOverlayViewModel
   /** Whether the AI is resolving a structured skill check. */
   isResolvingSkillCheck = $state(false);
 
+  /** Unified dice state mapping for the shared GameDice component. */
+  get diceState(): DiceState | null {
+    const s = this.skillCheckState;
+    if (!s) {
+      return null;
+    }
+    return {
+      phase: s.phase === 'awaiting_click' ? 'interactive' : s.phase,
+      value: s.rollValue,
+      isSuccess: s.isSuccess,
+      checkInfo: { type: s.checkType, dc: s.difficultyClass },
+      onRoll: () => {
+        void this.rollDice();
+      },
+    };
+  }
+
   /** @inheritdoc */
   npcScreenX = $state<number>(0);
 
@@ -319,6 +313,18 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   hasNpcScreenPosition = $state<boolean>(false);
+
+  /** Scrollable message container — set by View via bind:this. */
+  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
+
+  /** Textarea input — set by View via bind:this for autofocus. */
+  inputElement = $state.raw<HTMLTextAreaElement | undefined>(undefined);
+
+  /** Toast notification message — auto-clears after display. */
+  toastMessage = $state('');
+
+  /** Whether streaming TTS is enabled for this conversation. */
+  streamingTtsEnabled = $state(false);
 
   private readonly _npcData: DialogueNpcData;
 
@@ -341,6 +347,16 @@ class DialogueOverlayViewModel
     this._onStartCombat = options.onStartCombat;
     this._ollamaClient = options.ollamaClient;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
+
+    // Restore per-chat input draft from IndexedDB (fire-and-forget)
+    const draftPromise = draftStore.loadDraft({ chatId: this._npcData.npcId });
+    if (draftPromise && typeof draftPromise.then === 'function') {
+      void draftPromise.then((draft: string) => {
+        if (draft) {
+          this.inputText = draft;
+        }
+      });
+    }
 
     // Show the NPC's initial greeting dialog as the first message.
     // Done in constructor (not initialize) because the consumer may
@@ -381,14 +397,44 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
+    // Register reactive effects for DOM interactions
+    this.registerEffectRoot(() => {
+      // Autofocus the textarea when dialogue mode is active
+      $effect(() => {
+        // gameModeService drives the current mode check
+        if (gameModeService.currentMode === 'DIALOGUE' && this.inputElement) {
+          this.inputElement.focus();
+        }
+      });
+
+      // Auto-scroll to bottom when new messages arrive or AI is streaming
+      $effect(() => {
+        void this.messages.length;
+        void this.isStreaming;
+        if (this.messageContainerElement) {
+          this.messageContainerElement.scrollTop = this.messageContainerElement.scrollHeight;
+        }
+      });
+
+      // Auto-save input draft (bind:value bypasses setInput)
+      $effect(() => {
+        const text = this.inputText;
+        if (text.length > 0) {
+          void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
+        }
+      });
+    });
+
     // Initialize native Kokoro TTS if not already done
     if (!this._ttsInitialized) {
       this._ttsInitialized = true;
       this._chunker.onSentence(({ sentence }) => {
-        ttsService.synthesize({
-          text: sentence,
-          voice: ttsService.selectedVoice,
-        });
+        if (this.streamingTtsEnabled) {
+          ttsService.synthesize({
+            text: sentence,
+            voice: ttsService.selectedVoice,
+          });
+        }
       });
 
       // Fire-and-forget — TTS init happens in background, speech works
@@ -408,6 +454,8 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   setInput(text: string): void {
     this.inputText = text;
+    // Fire-and-forget draft save
+    void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
   }
 
   // ── Action Context Menu (C-162) ─────────────────────────────────────
@@ -505,6 +553,9 @@ class DialogueOverlayViewModel
     this.inputText = '';
     this.streamError = null;
 
+    // Clear the per-chat draft since a message is being sent
+    void draftStore.clearDraft({ chatId: this._npcData.npcId });
+
     // Append the player's message
     const playerMessage: DialogueMessage = {
       id: crypto.randomUUID(),
@@ -542,20 +593,80 @@ class DialogueOverlayViewModel
     }
   }
 
+  // ── C-231: Rich Chat Streaming ───────────────────────────────────────
+
+  /** @inheritdoc */
+  swipeAlternative(messageId: string, direction: 'left' | 'right'): void {
+    messageBranchStore.swipeAlternative({ messageId, direction });
+  }
+
+  /** @inheritdoc */
+  async copyMessage(text: string): Promise<void> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for insecure contexts
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      this.showToast('Copied!');
+    } catch {
+      this.showToast('Copy failed');
+    }
+  }
+
+  /** @inheritdoc */
+  branchFromMessage(_messageId: string): void {
+    // Placeholder: creates a new conversation fork.
+    this.showToast('Branch created!');
+  }
+
+  /** @inheritdoc */
+  showToast(message: string): void {
+    this.toastMessage = message;
+    setTimeout(() => {
+      if (this.toastMessage === message) {
+        this.toastMessage = '';
+      }
+    }, 2000);
+  }
+
+  /** @inheritdoc */
+  toggleStreamingTts(): void {
+    this.streamingTtsEnabled = !this.streamingTtsEnabled;
+    if (!this.streamingTtsEnabled) {
+      ttsService.stop();
+    }
+  }
+
   // ── Private: AI response generation ──────────────────────────────────
 
   /**
    * Builds the system prompt that defines the NPC's personality and
-   * response style. Uses the NPC name and greeting for context.
+   * response style. Uses the GM Prompt Service for world/state context
+   * and overlays NPC-specific personality on top.
    */
   private _buildSystemPrompt(): string {
     const { npcName, dialog, personaId } = this._npcData;
 
-    // Start with the persona-specific archetype description
+    // Start with the GM prompt assembler for world/state context
+    const basePrompt = gmPromptService.assemblePrompt({ mode: 'scene' });
+
+    // Overlay NPC-specific personality
     const personaPrompt =
       PERSONA_PROMPTS[personaId ?? FALLBACK_PERSONA_ID] ?? PERSONA_PROMPTS[FALLBACK_PERSONA_ID];
 
     const lines = [
+      basePrompt,
+      '',
+      '[NPC CONTEXT]',
       personaPrompt,
       `Your name is ${npcName}.`,
       `Stay in character at all times. Respond as ${npcName} would.`,
@@ -569,6 +680,12 @@ class DialogueOverlayViewModel
       'Keep responses concise — 1 to 3 sentences. Be immersive and natural.',
       'Do not break character. Do not mention being an AI.',
     );
+
+    // Inject character sheet summary for AI context awareness
+    const sheetSummary = playerStateService.characterSheetSummary;
+    if (sheetSummary) {
+      lines.push('', '[CHARACTER SHEET]', sheetSummary, '[/CHARACTER SHEET]');
+    }
 
     return lines.join('\n');
   }
@@ -1007,13 +1124,13 @@ class DialogueOverlayViewModel
   /**
    * Returns a difficulty class for the given skill check against this NPC.
    *
-   * Base DC is 12; harder NPC personas (guard, bandit, guild_master) get
+   * Base DC is 12; harder NPC personas (guard, bandit, guildMaster) get
    * +2, softer personas (innkeeper, healer, merchant) get -2.
    *
    * Contract: C-162 BG3 Action Menu & Dice
    */
   private _getDifficultyClass(_skill: string): number {
-    const hardPersonas = ['guard', 'bandit', 'guild_master'] as const;
+    const hardPersonas = ['guard', 'bandit', 'guildMaster'] as const;
     const softPersonas = ['innkeeper', 'healer', 'merchant'] as const;
     const personaId = this._npcData.personaId ?? FALLBACK_PERSONA_ID;
 
@@ -1151,3 +1268,13 @@ class DialogueOverlayViewModel
 }
 
 export { DialogueOverlayViewModel };
+
+/**
+ * Factory function for DialogueOverlayViewModel.
+ * Uses BaseViewModel.create() for auto-logging instrumentation.
+ *
+ * Contract: C-314 AC-3 — ViewModels created via factory, never raw `new`.
+ */
+export const getDialogueOverlayViewModel = (
+  options: DialogueOverlayViewModelOptions,
+): DialogueOverlayViewModelInterface => DialogueOverlayViewModel.create(options);

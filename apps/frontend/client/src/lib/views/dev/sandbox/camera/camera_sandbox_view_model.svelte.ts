@@ -19,7 +19,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { gameStateService } from '$services';
+import type { LpcAnimationState } from '$lib/data/lpc_models';
+import { gameModeService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -239,7 +240,7 @@ class CameraSandboxViewModel
       const tm = new TextureManager();
       const paletteBytes = new Uint8Array(1024);
 
-      const SANDBOX_RECIPES: LpcLayerRecipe[] = [
+      const SandboxRecipes: LpcLayerRecipe[] = [
         { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
         { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
         { slot: 'torso', assetId: 'torso/armour/plate_male', hexPalette: paletteBytes },
@@ -254,14 +255,10 @@ class CameraSandboxViewModel
         textureManager: tm,
         recipeResolver: (layerIds) =>
           layerIds
-            .map((id, idx) => (id > 0 ? SANDBOX_RECIPES[idx] : null))
+            .map((id, idx) => (id > 0 ? SandboxRecipes[idx] : null))
             .filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(
-            slot,
-            assetId,
-            state as unknown as import('$lib/data/lpc_models').LpcAnimationState,
-          ),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GW.create(worldOptions);
@@ -273,7 +270,7 @@ class CameraSandboxViewModel
         this._addLog('E_KEY', `NPC=${npc.npcName} eid=${npc.eid}`);
         this.interactionHint = undefined;
         // Update mode state (read by ModeIndicator)
-        gameStateService.setMode('DIALOGUE');
+        gameModeService.setMode('DIALOGUE');
         this.mockDialogueActive = true;
         // Switch mode to DIALOGUE — required for zoom tracking
         this._engineBridge?.send({ type: 'SET_GAME_MODE', mode: 'DIALOGUE' });
@@ -301,9 +298,9 @@ class CameraSandboxViewModel
     }
 
     try {
-      this._addLog('LOAD_MAP', '/assets/maps/sandbox_zone_a.json');
+      this._addLog('LOAD_MAP', '/game-data/maps/sandbox_zone_a.json');
       await this._gameWorld.loadMap({
-        mapUrl: '/assets/maps/sandbox_zone_a.json',
+        mapUrl: '/game-data/maps/sandbox_zone_a.json',
         targetX: 160,
         targetY: 192,
       });
@@ -324,7 +321,7 @@ class CameraSandboxViewModel
     }
 
     this.mockDialogueActive = true;
-    gameStateService.setMode('DIALOGUE');
+    gameModeService.setMode('DIALOGUE');
     this._addLog('MOCK_ON', 'sending SET_GAME_MODE DIALOGUE');
     this._engineBridge.send({ type: 'SET_GAME_MODE', mode: 'DIALOGUE' });
   }
@@ -339,7 +336,7 @@ class CameraSandboxViewModel
     this.trackingNpcPosition = false;
     this.activeNpcName = '';
     this.activeNpcDialog = '';
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     this._addLog('MOCK_OFF');
     this._engineBridge.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' });
   }

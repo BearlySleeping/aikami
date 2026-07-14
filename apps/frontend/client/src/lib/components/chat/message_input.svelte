@@ -1,47 +1,47 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/MessageInput.svelte
-  type Props = {
-    message?: string;
-    isSending?: boolean;
-    onSend?: (message: string) => void;
-    onAttach?: (file: File) => void;
-    placeholder?: string;
-  };
+// apps/frontend/client/src/lib/components/chat/MessageInput.svelte
+type Props = {
+  message?: string;
+  isSending?: boolean;
+  onSend?: (message: string) => void;
+  onAttach?: (file: File) => void;
+  placeholder?: string;
+};
 
-  let {
-    message = $bindable(''),
-    isSending = false,
-    onSend,
-    onAttach,
-    placeholder = 'Type your message...',
-  }: Props = $props();
+let {
+  message = $bindable(''),
+  isSending = false,
+  onSend,
+  onAttach,
+  placeholder = 'Type your message...',
+}: Props = $props();
 
-  let fileInput: HTMLInputElement;
+let fileInput: HTMLInputElement;
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      if (message.trim()) {
-        onSend?.(message);
-        message = '';
-      }
-    }
-  }
-
-  function handleSubmit() {
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
     if (message.trim()) {
       onSend?.(message);
       message = '';
     }
   }
+}
 
-  function handleFileSelect(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files?.[0]) {
-      onAttach?.(input.files[0]);
-      input.value = '';
-    }
+function handleSubmit() {
+  if (message.trim()) {
+    onSend?.(message);
+    message = '';
   }
+}
+
+function handleFileSelect(event: Event) {
+  const input = event.target as HTMLInputElement;
+  if (input.files?.[0]) {
+    onAttach?.(input.files[0]);
+    input.value = '';
+  }
+}
 </script>
 
 <div class="flex gap-2 items-end">
@@ -87,6 +87,7 @@
         viewBox="0 0 24 24"
         stroke="currentColor"
       >
+        <title>icon</title>
         <path
           stroke-linecap="round"
           stroke-linejoin="round"

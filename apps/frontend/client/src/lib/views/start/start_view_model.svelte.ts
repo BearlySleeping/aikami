@@ -9,14 +9,19 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import type { SaveSlotInfo } from '$services';
 import {
   aiSettingsService,
   authService,
+  campaignService,
+  equipmentService,
+  gameModeService,
   gameSaveService,
-  gameStateService,
+  inventoryService,
+  playerStateService,
   routerService,
-  setPendingGameLoad,
+  worldStateService,
 } from '$services';
 
 // ---------------------------------------------------------------------------
@@ -236,7 +241,11 @@ class StartViewModel
     }
 
     // Zero characters — go to character creation
-    gameStateService.reset();
+    inventoryService.reset();
+    worldStateService.reset();
+    playerStateService.reset();
+    equipmentService.reset();
+    gameModeService.reset();
 
     await routerService.goToRoute('setup', {
       queryParameters: undefined,
@@ -263,7 +272,6 @@ class StartViewModel
 
       // Set as active persona if logged in, so the game can find it
       try {
-        const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
         await personaService.setActivePersona(characterId);
       } catch {
         // Non-critical — GameViewModel falls back to localStorage
@@ -273,7 +281,11 @@ class StartViewModel
     }
 
     // Clear any stale state from a previous play session
-    gameStateService.reset();
+    inventoryService.reset();
+    worldStateService.reset();
+    playerStateService.reset();
+    equipmentService.reset();
+    gameModeService.reset();
 
     await routerService.goToRoute('game', {
       queryParameters: undefined,
@@ -297,8 +309,7 @@ class StartViewModel
     const latestSave = this.availableSaves[0];
 
     try {
-      const payload = await gameSaveService.getSavePayload(latestSave.id);
-      setPendingGameLoad(payload);
+      await campaignService.loadCampaign({ campaignId: latestSave.id });
 
       await routerService.goToRoute('game', {
         queryParameters: undefined,

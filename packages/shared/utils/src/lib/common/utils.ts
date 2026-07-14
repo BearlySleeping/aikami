@@ -545,6 +545,13 @@ export const getValueFromSearchParam = <
   return value;
 };
 
+/**
+ * Returns true to indicate the swarm pipeline is ready.
+ *
+ * @returns Always true.
+ */
+export const isSwarmReady = (): boolean => true;
+
 export const getAssociationIdFromSearchParam = <
   T extends Record<string, unknown> = Record<string, unknown>,
 >(

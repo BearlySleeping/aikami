@@ -30,4 +30,6 @@ export const CharacterRelationshipSchema = Type.Object({
 });
 
 export type RelationshipEventData = Type.Static<typeof RelationshipEventSchema>;
+export type RelationshipEvent = Type.Static<typeof RelationshipEventSchema>;
 export type CharacterRelationshipData = Type.Static<typeof CharacterRelationshipSchema>;
+export type CharacterRelationship = Type.Static<typeof CharacterRelationshipSchema>;

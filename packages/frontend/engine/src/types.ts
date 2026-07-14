@@ -140,6 +140,23 @@ export type GameCommand =
       weapon?: string;
       /** Item ID of the equipped armor, or undefined if none. */
       armor?: string;
+    }
+  | {
+      /**
+       * Configures the environment system at runtime (time scale, weather).
+       * Used by dev sandboxes to test diurnal cycles and weather overlays.
+       *
+       * Contract: C-213 Environment, Time, and Weather Core System
+       */
+      type: 'SET_ENVIRONMENT_CONFIG';
+      /** Time scale: game seconds per real second. */
+      timeScale?: number;
+      /** Wind velocity (−1.0 to 1.0). */
+      windVelocity?: number;
+      /** Rain intensity (0.0 to 1.0). */
+      rainIntensity?: number;
+      /** Starting game hour (0–24). */
+      startHour?: number;
     };
 
 // ---------------------------------------------------------------------------
@@ -411,6 +428,25 @@ export type GameEvent =
       screenX: number;
       /** Screen-space Y coordinate for floating text placement. */
       screenY: number;
+    }
+  | {
+      /**
+       * Emitted every tick with the current environment state (time, weather).
+       * The clock HUD and weather overlay consume this for reactive updates.
+       *
+       * Contract: C-213 Environment, Time, and Weather Core System
+       */
+      type: 'ENVIRONMENT_UPDATED';
+      /** Game hour (0–24). */
+      gameHour: number;
+      /** Game minute (0–59). */
+      gameMinute: number;
+      /** Game time in seconds since epoch. */
+      gameTimeSeconds: number;
+      /** Wind velocity (−1.0 to 1.0). */
+      windVelocity: number;
+      /** Rain intensity (0.0 to 1.0). */
+      rainIntensity: number;
     };
 
 // ---------------------------------------------------------------------------

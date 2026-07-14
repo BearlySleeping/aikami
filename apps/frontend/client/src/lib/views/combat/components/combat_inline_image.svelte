@@ -1,31 +1,31 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/combat_inline_image.svelte
-  //
-  // Inline image displayed inside the combat log stream. Fades in when the
-  // image loads, shows a skeleton placeholder while generating, and reveals
-  // Expand / Regenerate buttons on hover.
-  //
-  // Contract: C-165 Combat Inline Images & Gallery
+// apps/frontend/client/src/lib/views/combat/components/combat_inline_image.svelte
+//
+// Inline image displayed inside the combat log stream. Fades in when the
+// image loads, shows a skeleton placeholder while generating, and reveals
+// Expand / Regenerate buttons on hover.
+//
+// Contract: C-165 Combat Inline Images & Gallery
 
-  type Props = {
-    /** Image URL to display. */
-    imageUrl?: string;
-    /** Whether the image is still being generated (shows skeleton). */
-    isGenerating?: boolean;
-    /** Fired when the user clicks the "Regenerate" hover button. */
-    onRegenerate?: () => void;
-  };
+type Props = {
+  /** Image URL to display. */
+  imageUrl?: string;
+  /** Whether the image is still being generated (shows skeleton). */
+  isGenerating?: boolean;
+  /** Fired when the user clicks the "Regenerate" hover button. */
+  onRegenerate?: () => void;
+};
 
-  const { imageUrl, isGenerating = false, onRegenerate }: Props = $props();
+const { imageUrl, isGenerating = false, onRegenerate }: Props = $props();
 
-  /** Whether the image has finished loading (triggers fade-in). */
-  let isLoaded = $state(false);
+/** Whether the image has finished loading (triggers fade-in). */
+let isLoaded = $state(false);
 
-  /** Whether the fullscreen expand modal is open. */
-  let isExpanded = $state(false);
+/** Whether the fullscreen expand modal is open. */
+let isExpanded = $state(false);
 
-  /** Whether the hover overlay is visible. */
-  let isHovered = $state(false);
+/** Whether the hover overlay is visible. */
+let _isHovered = $state(false);
 </script>
 
 {#if isGenerating && !imageUrl}
@@ -56,13 +56,18 @@
       class="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
     >
       <button
+        type="button"
         class="btn btn-xs btn-ghost text-white hover:bg-white/20"
         onclick={() => (isExpanded = true)}
       >
         🔍 Expand
       </button>
       {#if onRegenerate}
-        <button class="btn btn-xs btn-ghost text-white hover:bg-white/20" onclick={onRegenerate}>
+        <button
+          type="button"
+          class="btn btn-xs btn-ghost text-white hover:bg-white/20"
+          onclick={onRegenerate}
+        >
           🔄 Regenerate
         </button>
       {/if}
@@ -71,7 +76,6 @@
 
   <!-- Fullscreen expand modal (AC-2) -->
   {#if isExpanded}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onclick={() => (isExpanded = false)}
@@ -81,6 +85,7 @@
       tabindex="-1"
     >
       <button
+        type="button"
         class="absolute top-4 right-4 btn btn-sm btn-ghost text-white text-xl"
         onclick={() => (isExpanded = false)}
       >

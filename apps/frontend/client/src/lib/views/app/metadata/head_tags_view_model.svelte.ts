@@ -25,7 +25,9 @@ export type BaseMetaTags = {
 };
 
 export type MetaTagArticleProperties = {
+  // biome-ignore lint/style/useNamingConvention: API contract field name
   modified_time: string;
+  // biome-ignore lint/style/useNamingConvention: API contract field name
   published_time: string;
   section: string;
   tag: string;
@@ -53,6 +55,7 @@ export type MetaTagOpenGraphProperties = {
   'image:width': string;
   locale: string;
   'locale:alternate': string;
+  // biome-ignore lint/style/useNamingConvention: API contract field name
   site_name: string;
   title: string;
   type: string;
@@ -269,4 +272,4 @@ class HeadTagsViewModel
 
 export const getHeadTagsViewModel = (
   options: HeadTagsViewModelOptions,
-): HeadTagsViewModelInterface => new HeadTagsViewModel(options);
+): HeadTagsViewModelInterface => HeadTagsViewModel.create(options);

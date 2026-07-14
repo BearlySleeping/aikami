@@ -1,10 +1,10 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "$schema": "node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true,
-    "defaultBranch": "main"
+    "defaultBranch": "master"
   },
   "files": {
     "ignoreUnknown": true,
@@ -12,6 +12,8 @@
       "apps/**",
       "packages/**",
       "scripts/**",
+      ".pi/**",
+      "!.pi/generated-skills",
       "!**/temp/*",
       "!**/tmp/*",
       "!**/dist/*",
@@ -32,7 +34,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noThenProperty": "error",
         "noExplicitAny": "error",
@@ -70,15 +72,17 @@
               "@aikami/backend-auth": "Use @aikami/backend/auth instead",
               "@aikami/backend-configs": "Use @aikami/backend/configs instead",
               "@aikami/backend-database": "Use @aikami/backend/database instead",
+              "@aikami/backend-chat": "Use @aikami/backend/chat instead",
+              "@aikami/backend-image": "Use @aikami/backend/image instead",
               "@aikami/backend-svelte-kit": "Use @aikami/backend/svelte-kit instead",
               "@aikami/backend-utils": "Use @aikami/backend/utils instead",
-              "@aikami/frontend-api-core": "Use @aikami/frontend/api-core instead",
               "@aikami/frontend-configs": "Use @aikami/frontend/configs instead",
               "@aikami/frontend-dataconnect": "Use @aikami/frontend/dataconnect instead",
               "@aikami/frontend-engine": "Use @aikami/frontend/engine instead",
               "@aikami/frontend-repositories": "Use @aikami/frontend/repositories instead",
               "@aikami/frontend-services": "Use @aikami/frontend/services instead",
-              "@aikami/frontend-utils": "Use @aikami/frontend/utils instead"
+              "@aikami/frontend-utils": "Use @aikami/frontend/utils instead",
+              "@aikami/frontend-components": "Use @aikami/frontend/components instead"
             }
           }
         }
@@ -117,7 +121,7 @@
     "experimentalFullSupportEnabled": true,
     "formatter": {
       "enabled": true,
-      "indentScriptAndStyle": true
+      "indentScriptAndStyle": false
     }
   },
   "css": {
@@ -126,16 +130,6 @@
     }
   },
   "overrides": [
-    {
-      "includes": ["**/*.css"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noUnknownAtRules": "off"
-          }
-        }
-      }
-    },
     {
       "includes": ["**/*.d.ts"],
       "linter": {
@@ -148,93 +142,11 @@
       }
     },
     {
-      "includes": ["**/scripts/**/*.ts"],
+      "includes": ["apps/e2e/**", "**/scripts/**", ".pi/**"],
       "linter": {
         "rules": {
           "suspicious": {
             "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["apps/e2e/src/auth.setup.ts", "apps/e2e/src/global_setup.ts", "apps/e2e/src/global_teardown.ts", "apps/e2e/src/emulator_helper.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["apps/e2e/src/visual/**/*.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/astro.config.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/*.svelte", "**/*.astro"],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "useButtonType": "off",
-            "noSvgWithoutTitle": "off",
-            "useAnchorContent": "off",
-            "useValidAriaValues": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/tailwind.config.mjs"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/math/goap/**/*.ts"],
-      "linter": {
-        "rules": {
-          "style": {
-            "useNamingConvention": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "apps/frontend/client/**",
-        "scripts/src/lib/test_blackbox/**",
-        "scripts/src/index.ts",
-        "scripts/src/lib/deploy/deployment_config.ts"
-      ],
-      "linter": {
-        "rules": {
-          "a11y": {
-            "useValidLang": "off"
-          },
-          "style": {
-            "useNamingConvention": "off",
-            "useFilenamingConvention": "off"
           }
         }
       }

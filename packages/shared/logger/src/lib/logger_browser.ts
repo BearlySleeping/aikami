@@ -7,7 +7,7 @@ export type FrontendLoggerInterface = LoggerInterface;
 
 /**
  * HTTP log sink — sends structured log entries to the Vite dev server's
- * /api/logs endpoint so they appear in `tmux_session read client` output.
+ * /api/logs endpoint so they appear in `herdr_session read client` output.
  *
  * Only active when `fetch` is available (browser env). Silently skipped
  * in Bun test environment and production builds.

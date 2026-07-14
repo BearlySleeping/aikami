@@ -20,17 +20,16 @@ test.describe('Inventory Overlay', () => {
 
   test.beforeEach(async ({ page }) => {
     inventory = new InventoryPage(page);
+    await inventory.gotoGame();
   });
 
   test('should open inventory overlay when pressing I', async () => {
-    await inventory.gotoGame();
     await inventory.toggle();
     await inventory.expectOpen();
     await inventory.expectEmpty();
   });
 
   test('should close inventory when pressing I again', async () => {
-    await inventory.gotoGame();
     await inventory.toggle();
     await inventory.expectOpen();
     await inventory.toggle();
@@ -38,7 +37,6 @@ test.describe('Inventory Overlay', () => {
   });
 
   test('should close inventory when pressing Escape', async () => {
-    await inventory.gotoGame();
     await inventory.toggle();
     await inventory.expectOpen();
     await inventory.close();
@@ -46,7 +44,6 @@ test.describe('Inventory Overlay', () => {
   });
 
   test('should close inventory via the close button', async () => {
-    await inventory.gotoGame();
     await inventory.toggle();
     await inventory.expectOpen();
 
@@ -59,8 +56,6 @@ test.describe('Inventory Overlay', () => {
   });
 
   test('should not open inventory when another overlay is active', async () => {
-    await inventory.gotoGame();
-
     // Open pause menu first (Escape)
     await inventory.close(); // Escape
     const pauseMenu = inventory.page.locator('text=Resume Game');

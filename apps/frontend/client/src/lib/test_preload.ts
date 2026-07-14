@@ -10,12 +10,170 @@
 // 3. Set Vite env vars so @aikami/frontend/configs/environment.ts can
 //    validate without crashing in Bun.
 
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names from @aikami/frontend-services for module mocking
 import { mock } from 'bun:test';
 
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────
 
 (globalThis as Record<string, unknown>).$state = (value: unknown) => value;
+(globalThis as Record<string, unknown>).$state.raw = (value: unknown) => value;
+(globalThis as Record<string, unknown>).$state.snapshot = (value: unknown) => value;
 (globalThis as Record<string, unknown>).$derived = (value: unknown) => value;
+
+// ── IndexedDB polyfill (required by DraftStore in test env) ────────────────
+
+const _indexedStore = new Map<string, Map<string, Map<string, unknown>>>();
+const _deletedDatabases = new Set<string>();
+
+/** Creates a request-like object that fires onsuccess on next microtask. */
+const _createRequest = <T>(result: T) => {
+  const request = {
+    onsuccess: undefined as (() => void) | undefined,
+    onerror: undefined as (() => void) | undefined,
+    result,
+    error: null as DOMException | null,
+  };
+  queueMicrotask(() => request.onsuccess?.());
+  return request;
+};
+
+(globalThis as Record<string, unknown>).indexedDB = {
+  open: (dbName: string, _version?: number) => {
+    // Treat deleted databases as empty (Firebase Integrity check)
+    if (_deletedDatabases.has(dbName)) {
+      _deletedDatabases.delete(dbName);
+      _indexedStore.delete(dbName);
+    }
+    if (!_indexedStore.has(dbName)) {
+      _indexedStore.set(dbName, new Map());
+    }
+    const dbStores = _indexedStore.get(dbName) ?? new Map();
+    const db = {
+      objectStoreNames: {
+        contains: (storeName: string) => dbStores.has(storeName),
+      },
+      createObjectStore: (storeName: string, _options?: unknown) => {
+        if (!dbStores.has(storeName)) {
+          dbStores.set(storeName, new Map());
+        }
+        return {
+          createIndex: (..._args: unknown[]) => {},
+        };
+      },
+      transaction: (_storeName: string | string[], _mode: string) => {
+        return {
+          objectStore: (name: string) => {
+            const store = dbStores.get(name) ?? new Map();
+            const indexStore = new Map<string, Map<string, unknown[]>>();
+            return {
+              get: (key: string) => _createRequest(store.get(key)),
+              put: (value: Record<string, unknown>) => {
+                const key =
+                  (value as { id?: string; chatId?: string }).id ??
+                  (value as { chatId?: string }).chatId ??
+                  '';
+                store.set(key, value);
+                return _createRequest(key);
+              },
+              delete: (key: string) => {
+                store.delete(key);
+                return _createRequest(undefined);
+              },
+              getAll: () => _createRequest(Array.from(store.values())),
+              index: (indexName: string) => {
+                if (!indexStore.has(indexName)) {
+                  indexStore.set(indexName, new Map());
+                }
+                return {
+                  getAll: (key: string) => {
+                    const results = Array.from(store.values()).filter(
+                      (doc) => (doc as Record<string, unknown>)[indexName] === key,
+                    );
+                    return _createRequest(results);
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      onclose: null as (() => void) | null,
+      close: () => {},
+    };
+    const openRequest = {
+      onupgradeneeded: undefined as ((event: unknown) => void) | undefined,
+      onsuccess: undefined as ((event: unknown) => void) | undefined,
+      onerror: undefined as ((event: unknown) => void) | undefined,
+      result: db,
+      error: null as DOMException | null,
+    };
+    // Fire onupgradeneeded if database is new (no stores exist yet)
+    if (dbStores.size === 0) {
+      queueMicrotask(() => {
+        openRequest.onupgradeneeded?.({ target: openRequest } as unknown);
+        openRequest.onsuccess?.({ target: openRequest } as unknown);
+      });
+    } else {
+      queueMicrotask(() => openRequest.onsuccess?.({ target: openRequest } as unknown));
+    }
+    return openRequest;
+  },
+  deleteDatabase: (dbName: string) => {
+    _deletedDatabases.add(dbName);
+    _indexedStore.delete(dbName);
+    const request = {
+      onsuccess: undefined as (() => void) | undefined,
+      onerror: undefined as (() => void) | undefined,
+      result: undefined,
+      error: null as DOMException | null,
+    };
+    queueMicrotask(() => request.onsuccess?.());
+    return request;
+  },
+};
+
+// ── Browser API polyfills (required by services in test env) ────────────────
+
+if (typeof KeyboardEvent === 'undefined') {
+  (globalThis as Record<string, unknown>).KeyboardEvent = class {
+    key: string;
+    constructor(_type: string, options?: { key?: string }) {
+      this.key = options?.key ?? '';
+    }
+    preventDefault = mock(() => {});
+    stopPropagation = mock(() => {});
+  };
+}
+
+if (typeof window === 'undefined') {
+  (globalThis as Record<string, unknown>).window = {
+    AudioContext: class {
+      state = 'suspended';
+      resume = mock(async () => {});
+      close = mock(async () => {});
+      createGain = mock(() => ({ connect: mock(() => {}), gain: { value: 1 } }));
+      createBufferSource = mock(() => ({
+        connect: mock(() => {}),
+        start: mock(() => {}),
+        stop: mock(() => {}),
+      }));
+      createDynamicsCompressor = mock(() => ({
+        connect: mock(() => {}),
+        threshold: { value: -24 },
+        knee: { value: 30 },
+        ratio: { value: 12 },
+        attack: { value: 0.003 },
+        release: { value: 0.25 },
+      }));
+      decodeAudioData = mock(async () => ({ duration: 1 }));
+      destination = {};
+    },
+    innerWidth: 1920,
+    innerHeight: 1080,
+    addEventListener: mock(() => {}),
+    removeEventListener: mock(() => {}),
+  };
+}
 
 const effectPolyfill = ((fn: () => void) => {
   fn();
@@ -136,8 +294,7 @@ const _createServiceStub = () => {
  * through a writable `.fn` on the underlying target object.
  *
  * Tests can replace the implementation by mutating `stub.fn = newMock`
- * instead of trying to reassign `setPendingGameLoad = newMock` on the
- * frozen module namespace.
+ * instead of trying to reassign an export on the frozen module namespace.
  */
 const _createCallableStub = () => {
   const target = { fn: mock(() => {}) as (...args: never) => unknown };
@@ -167,7 +324,6 @@ const _createCallableStub = () => {
 const _localServicesMock = () => ({
   aiService: _createServiceStub(),
   AIService: class {},
-  SentenceBoundaryChunker: class {},
   streamOrchestratorService: _createServiceStub(),
   textGenerationService: _createServiceStub(),
   TextGenerationService: class {},
@@ -185,12 +341,12 @@ const _localServicesMock = () => ({
   TtsService: class {},
   authService: _createServiceStub(),
   AuthService: class {},
-  characterCreationService: _createServiceStub(),
-  CharacterCreationService: class {},
+  personaCreationService: _createServiceStub(),
+  PersonaCreationService: class {},
   characterService: _createServiceStub(),
   CharacterService: class {},
-  characterTextStreamService: _createServiceStub(),
-  CharacterTextStreamService: class {},
+  personaCreationTextStreamService: _createServiceStub(),
+  PersonaCreationTextStreamService: class {},
   chatService: _createServiceStub(),
   contextBuilder: _createServiceStub(),
   conversationRepository: _createServiceStub(),
@@ -199,13 +355,81 @@ const _localServicesMock = () => ({
   ConfigService: class {},
   diceService: _createServiceStub(),
   DiceService: class {},
+  draftStore: _createServiceStub(),
+  DraftStore: class {},
+  MessageBranchStore: class {},
   ExpressionAssetResolver: class {},
-  setPendingGameLoad: _createCallableStub(),
-  consumePendingGameLoad: _createCallableStub(),
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
-  gameStateService: _createServiceStub(),
+  gameStateService: Object.assign(_createServiceStub(), {
+    worldGenOutput: {
+      worldName: 'The Realm',
+      worldDescription: 'A world of adventure awaits.',
+      npcs: [],
+      locations: ['Town Square'],
+      partyArcs: [],
+      hudWidgets: [],
+    },
+  }),
   GameStateService: class {},
+  // C-314: Split services
+  playerStateService: Object.assign(_createServiceStub(), {
+    playerLevel: 1,
+    playerXp: 0,
+    playerXpToNext: 100,
+    playerHp: 100,
+    playerMaxHp: 100,
+    playerBaseAttack: 5,
+    playerBaseDefense: 12,
+    characterSheetSummary: '',
+    reset: _createCallableStub(),
+    startListening: _createCallableStub(),
+  }),
+  worldStateService: Object.assign(_createServiceStub(), {
+    currentWorld: undefined,
+    currentLocation: undefined,
+    worldVariables: {},
+    isConnected: false,
+    activeContexts: [],
+    worldGenOutput: {
+      worldName: 'The Realm',
+      worldDescription: 'A world of adventure awaits.',
+      npcs: [],
+      locations: ['Town Square'],
+      partyArcs: [],
+      hudWidgets: [],
+    },
+    quests: [],
+    defeatedEnemies: [],
+    reset: _createCallableStub(),
+    startListening: _createCallableStub(),
+  }),
+  inventoryService: Object.assign(_createServiceStub(), {
+    inventory: [],
+    gold: 100,
+    isOpen: false,
+    addGold: _createCallableStub(),
+    removeGold: _createCallableStub(),
+    open: _createCallableStub(),
+    close: _createCallableStub(),
+    toggle: _createCallableStub(),
+    startListening: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
+  equipmentService: Object.assign(_createServiceStub(), {
+    equippedWeapon: undefined,
+    equippedArmor: undefined,
+    totalAttack: 5,
+    totalDefense: 12,
+    equipItem: _createCallableStub(),
+    unequipItem: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
+  gameModeService: Object.assign(_createServiceStub(), {
+    currentMode: 'EXPLORE',
+    setMode: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
   getItemDefinition: mock((itemId: string) => ({
     label: itemId,
     attackBonus: 0,
@@ -236,6 +460,25 @@ const _localServicesMock = () => ({
   UserService: class {},
   routerService: _createServiceStub(),
   pixiTextureInjector: _createServiceStub(),
+  gameOverlayService: _createServiceStub(),
+  GameOverlayService: class {},
+  gameEngineService: _createServiceStub(),
+  GameEngineService: class {},
+  sessionService: Object.assign(_createServiceStub(), {
+    activeSession: null,
+    chatLocked: false,
+    sessions: [],
+    latestSummary: null,
+    showAutoSummaryToast: false,
+    isEndingSession: false,
+    isStartingSession: false,
+    reset: mock(async () => {}),
+  }),
+  SessionService: class {},
+  campaignService: _createServiceStub(),
+  gmPromptService: _createServiceStub(),
+  messageBranchStore: _createServiceStub(),
+  SentenceBoundaryChunker: class {},
   __esModule: true,
 });
 
@@ -279,3 +522,4 @@ process.env.PUBLIC_IMAGE_URL = 'http://localhost:8188';
 delete process.env.PUBLIC_OPENROUTER_API_KEY;
 delete process.env.PUBLIC_OPENROUTER_MODEL;
 delete process.env.OPENROUTER_API_KEY;
+delete process.env.PUBLIC_OLLAMA_MODEL;

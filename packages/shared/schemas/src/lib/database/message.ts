@@ -1,9 +1,9 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/message.ts
 import Type, { Composite } from 'typebox';
-import { CoreOmitKeys, CoreSchema } from '../core.ts';
-import { FieldValueSchema, TimestampSchema } from '../fields.ts';
-import { getDeletableFields } from '../utils.ts';
+import { FieldValueSchema, TimestampSchema } from '../common/fields.ts';
+import { getDeletableFields } from '../common/utils.ts';
+import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
 
 const _senderUnion = Type.Union([Type.Literal('user'), Type.Literal('ai')]);
 const _attachmentTypeUnion = Type.Union([Type.Literal('image'), Type.Literal('file')]);
@@ -43,6 +43,7 @@ export const MessageSchema = Composite(
   }),
 );
 
+export type Message = Type.Static<typeof MessageSchema>;
 export const MessageCreateSchema = Type.Intersect([
   Type.Omit(MessageSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(FieldValueSchema) }),
@@ -51,6 +52,7 @@ export const MessageCreateSchema = Type.Intersect([
   }),
 ]);
 
+export type MessageCreate = Type.Static<typeof MessageCreateSchema>;
 export const MessageUpdateSchema = Type.Intersect([
   Type.Omit(MessageSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(MessageSchema as unknown as Record<string, unknown>)),
@@ -59,3 +61,5 @@ export const MessageUpdateSchema = Type.Intersect([
     editedAt: MessageSchema.properties.editedAt as Type.TSchema,
   }),
 ]);
+
+export type MessageUpdate = Type.Static<typeof MessageUpdateSchema>;

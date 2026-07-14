@@ -2,6 +2,8 @@
 $schema: "https://moonrepo.dev/schemas/workspace.json"
 
 projects:
+  pi: ".pi"
+
   # Scripts
   scripts: "scripts"
 
@@ -36,21 +38,16 @@ projects:
 
   # Frontend Packages
   frontend-engine: "packages/frontend/engine"
-  frontend-api-core: "packages/frontend/api-core"
   frontend-dataconnect: "packages/frontend/dataconnect"
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"
   frontend-repositories: "packages/frontend/repositories"
   frontend-configs: "packages/frontend/configs"
 
-defaultProject: "client"
-
 vcs:
-  client: "git"
   provider: "github"
   defaultBranch: "master"
   remoteCandidates: ["origin"]
-  sync: true
   hooks:
     pre-commit:
       - "bunx moon run :fix --affected --status=staged"
@@ -86,7 +83,3 @@ hasher:
     - "**/tsconfig*.json"
 
 telemetry: false
-
-experiments:
-  asyncAffectedTracking: true
-  asyncGraphBuilding: true

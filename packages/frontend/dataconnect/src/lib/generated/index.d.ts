@@ -15,6 +15,11 @@ export type UUIDString = string;
 export type Int64String = string;
 export type DateString = string;
 
+export interface AudioTrack_Key {
+  id: UUIDString;
+  __typename?: 'AudioTrack_Key';
+}
+
 export interface Chat_Key {
   id: string;
   __typename?: 'Chat_Key';
@@ -23,6 +28,18 @@ export interface Chat_Key {
 export interface Config_Key {
   id: string;
   __typename?: 'Config_Key';
+}
+
+export interface GetTracksByMoodData {
+  audioTracks: ({
+    id: UUIDString;
+    title: string;
+    storageUrl: string;
+  } & AudioTrack_Key)[];
+}
+
+export interface GetTracksByMoodVariables {
+  mood: string;
 }
 
 export interface ListSaveSlotsData {
@@ -91,23 +108,6 @@ export interface User_Key {
   __typename?: 'User_Key';
 }
 
-export interface AudioTrack_Key {
-  id: string;
-  __typename?: 'AudioTrack_Key';
-}
-
-export interface GetTracksByMoodData {
-  audioTracks: ({
-    id: string;
-    title: string;
-    storageUrl: string;
-  } & AudioTrack_Key)[];
-}
-
-export interface GetTracksByMoodVariables {
-  mood: string;
-}
-
 interface ListUsersRef {
   /* Allow users to create refs without passing in DataConnect */
   (): QueryRef<ListUsersData, undefined>;
@@ -122,6 +122,28 @@ export function listUsers(
   dc: DataConnect,
   options?: ExecuteQueryOptions,
 ): QueryPromise<ListUsersData, undefined>;
+
+interface GetTracksByMoodRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetTracksByMoodVariables): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (
+    dc: DataConnect,
+    vars: GetTracksByMoodVariables,
+  ): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
+  operationName: string;
+}
+export const getTracksByMoodRef: GetTracksByMoodRef;
+
+export function getTracksByMood(
+  vars: GetTracksByMoodVariables,
+  options?: ExecuteQueryOptions,
+): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
+export function getTracksByMood(
+  dc: DataConnect,
+  vars: GetTracksByMoodVariables,
+  options?: ExecuteQueryOptions,
+): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
 
 interface ListSaveSlotsRef {
   /* Allow users to create refs without passing in DataConnect */
@@ -156,26 +178,6 @@ interface UpsertSaveSlotRef {
   operationName: string;
 }
 export const upsertSaveSlotRef: UpsertSaveSlotRef;
-
-interface GetTracksByMoodRef {
-  (vars: GetTracksByMoodVariables): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
-  (
-    dc: DataConnect,
-    vars: GetTracksByMoodVariables,
-  ): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
-  operationName: string;
-}
-export const getTracksByMoodRef: GetTracksByMoodRef;
-
-export function getTracksByMood(
-  vars: GetTracksByMoodVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
-export function getTracksByMood(
-  dc: DataConnect,
-  vars: GetTracksByMoodVariables,
-  options?: ExecuteQueryOptions,
-): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
 
 export function upsertSaveSlot(
   vars: UpsertSaveSlotVariables,

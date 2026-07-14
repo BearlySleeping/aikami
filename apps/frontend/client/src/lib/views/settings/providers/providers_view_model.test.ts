@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/settings/providers/providers_view_model.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
@@ -187,9 +188,9 @@ describe('ProvidersViewModel — C-079', () => {
       expect(vm.activeTab).toBe('text');
     });
 
-    test('should have 4 tabs defined', async () => {
+    test('should have 5 tabs defined', async () => {
       const vm = await getViewModel();
-      expect(vm.tabs.length).toBe(4);
+      expect(vm.tabs.length).toBe(5);
     });
 
     test('should have correct tab labels', async () => {
@@ -199,6 +200,7 @@ describe('ProvidersViewModel — C-079', () => {
       expect(labels).toContain('Voice');
       expect(labels).toContain('Image');
       expect(labels).toContain('Advanced');
+      expect(labels).toContain('Connections');
     });
 
     test('setActiveTab should change active tab', async () => {
@@ -209,7 +211,7 @@ describe('ProvidersViewModel — C-079', () => {
 
     test('setActiveTab should accept all valid tabs', async () => {
       const vm = await getViewModel();
-      const tabs: ConfigTab[] = ['text', 'voice', 'image', 'advanced'];
+      const tabs: ConfigTab[] = ['text', 'voice', 'image', 'advanced', 'connections'];
 
       for (const tab of tabs) {
         vm.setActiveTab(tab);

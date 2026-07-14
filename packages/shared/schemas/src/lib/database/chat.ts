@@ -1,8 +1,8 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/chat.ts
 import Type from 'typebox';
-import { CoreOmitKeys } from '../core.ts';
-import { getDeletableFields } from '../utils.ts';
+import { getDeletableFields } from '../common/utils.ts';
+import { CoreOmitKeys } from '../core/core.ts';
 import { MessageSchema } from './message.ts';
 
 const _visibilityUnion = Type.Union([Type.Literal('private'), Type.Literal('public')]);
@@ -58,13 +58,17 @@ export const ChatSchema = Type.Intersect([
   }),
 ]);
 
+export type Chat = Type.Static<typeof ChatSchema>;
 export const ChatCreateSchema = Type.Intersect([
   Type.Omit(ChatSchema, [...CoreOmitKeys]),
   Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
 ]);
 
+export type ChatCreate = Type.Static<typeof ChatCreateSchema>;
 export const ChatUpdateSchema = Type.Intersect([
   Type.Omit(ChatSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(ChatSchema as unknown as Record<string, unknown>)),
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
+
+export type ChatUpdate = Type.Static<typeof ChatUpdateSchema>;

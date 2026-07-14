@@ -1,19 +1,20 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/combat_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-  import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
-  import CombatDiceUi from './components/combat_dice_ui.svelte';
-  import CombatPortraitStage from './components/combat_portrait_stage.svelte';
+// apps/frontend/client/src/lib/views/combat/combat_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
+import CombatDiceUi from './components/combat_dice_ui.svelte';
+import CombatPortraitStage from './components/combat_portrait_stage.svelte';
+import TurnTrackerHeader from './components/turn_tracker_header.svelte';
 
-  type Props = {
-    viewModel: CombatViewModelInterface;
-  };
+type Props = {
+  viewModel: CombatViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  /** Temporary input value for the freeform custom action text field. */
-  let customActionInput = $state('');
+/** Temporary input value for the freeform custom action text field. */
+let customActionInput = $state('');
 </script>
 
 <div
@@ -59,10 +60,22 @@
             </ul>
           </div>
         {/if}
-        <button class="btn btn-primary" onclick={() => viewModel.dismissResult()}>Continue</button>
+        <button type="button" class="btn btn-primary" onclick={() => viewModel.dismissResult()}>
+          Continue
+        </button>
       </div>
     {:else if viewModel.inCombat}
       <div class="flex flex-col gap-4 p-4 relative z-10">
+        <!-- C-234: Turn tracker header banner -->
+        {#if viewModel.turnState}
+          <TurnTrackerHeader
+            turnState={viewModel.turnState}
+            actionEconomy={viewModel.turnState.actionEconomy}
+            onEndTurn={() => viewModel.endTurn()}
+            isEndTurnDisabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
+          />
+        {/if}
+
         <!-- Portrait stage — DOM-based character visuals (C-167) -->
         <div class="h-[320px] sm:h-[380px] md:h-[420px] w-full">
           <CombatPortraitStage
@@ -158,6 +171,7 @@
         {#if !viewModel.combatResult}
           <div class="grid grid-cols-3 gap-2">
             <button
+              type="button"
               class="btn btn-success btn-sm"
               onclick={() => viewModel.attack()}
               disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -166,6 +180,7 @@
               {viewModel.isAttacking ? '⚔️ ...' : '⚔️ Attack'}
             </button>
             <button
+              type="button"
               class="btn btn-outline btn-sm"
               onclick={() => viewModel.defend()}
               disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -174,6 +189,7 @@
               🛡️ Defend
             </button>
             <button
+              type="button"
               class="btn btn-ghost btn-sm text-error"
               onclick={() => viewModel.flee()}
               disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -219,6 +235,7 @@
             </form>
             <!-- Manual scene image generation (C-148) -->
             <button
+              type="button"
               class="btn btn-ghost btn-sm"
               onclick={() => viewModel.generateSceneImage()}
               disabled={viewModel.isResolvingAiAction || imageGenerationService.isGenerating}

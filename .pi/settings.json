@@ -5,14 +5,10 @@
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 20000
+    "keepRecentTokens": 60000
   },
-  "packages": [
-    "npm:context-mode",
-    "npm:pi-mcp-adapter",
-    "npm:@hypabolic/pi-hypa"
-  ],
-  "extensions": ["./.pi/extensions"],
-  "skills": ["./.pi/skills", "./.pi/generated-skills/pixijs", "./.pi/generated-skills/daisyui"],
-  "prompts": ["./.pi/prompts"]
+  "packages": ["npm:context-mode", "npm:pi-mcp-adapter", "npm:@hypabolic/pi-hypa"],
+  "extensions": ["./extensions"],
+  "skills": ["./skills", "./generated-skills", "./.pi/generated-skills"],
+  "prompts": ["./prompts"]
 }

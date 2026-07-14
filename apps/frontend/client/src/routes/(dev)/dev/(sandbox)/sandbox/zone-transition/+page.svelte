@@ -1,295 +1,291 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/sandbox/zone-transition/+page.svelte
-  //
-  // Zone Transition, Autosave & Memory Hardening Test Harness.
-  // Full game engine with dev controls for testing C-155 acceptance criteria.
-  //
-  // AC-1: Zone transition auto-save — trigger map changes and watch the toast
-  // AC-2: Auto-save UI feedback — observe spinner → checkmark / error flow
-  // AC-3: PixiJS asset cleanup — rapid-cycle maps and check JS heap
-  // AC-4: Audio buffer cleanup — BGM stops on transition, restarts on load
-  //
-  // Also verifies save/load captures player position and inventory correctly.
+// apps/frontend/client/src/routes/(dev)/dev/sandbox/zone-transition/+page.svelte
+//
+// Zone Transition, Autosave & Memory Hardening Test Harness.
+// Full game engine with dev controls for testing C-155 acceptance criteria.
+//
+// AC-1: Zone transition auto-save — trigger map changes and watch the toast
+// AC-2: Auto-save UI feedback — observe spinner → checkmark / error flow
+// AC-3: PixiJS asset cleanup — rapid-cycle maps and check JS heap
+// AC-4: Audio buffer cleanup — BGM stops on transition, restarts on load
+//
+// Also verifies save/load captures player position and inventory correctly.
 
-  import { browser } from '$app/environment';
-  import GameView from '$lib/views/game/canvas/game_view.svelte';
-  import { GameViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
-  import { GameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
-  import { gameStateService } from '$services';
+import { browser } from '$app/environment';
+import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
+import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
+import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';
+import { getGameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
+import { inventoryService, worldStateService } from '$services';
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Available test maps for zone transitions
-  // ═══════════════════════════════════════════════════════════════════════════
-  const MAPS = {
-    zoneA: '/assets/maps/sandbox_zone_a.json',
-    zoneB: '/assets/maps/sandbox_zone_b.json',
-    combat: '/assets/maps/sandbox_combat.json',
-  } as const;
+// ═══════════════════════════════════════════════════════════════════════════
+// Available test maps for zone transitions
+// ═══════════════════════════════════════════════════════════════════════════
+const MAPS = {
+  zoneA: '/game-data/maps/sandbox_zone_a.json',
+  zoneB: '/game-data/maps/sandbox_zone_b.json',
+  combat: '/game-data/maps/sandbox_combat.json',
+} as const;
 
-  /** Spawn coordinates for each map (x, y in pixels) — portals now at south. */
-  const MAP_SPAWNS: Record<string, { x: number; y: number }> = {
-    [MAPS.zoneA]: { x: 160, y: 288 },
-    [MAPS.zoneB]: { x: 128, y: 224 },
-    [MAPS.combat]: { x: 160, y: 288 },
-  };
+/** Spawn coordinates for each map (x, y in pixels) — portals now at south. */
+const MAP_SPAWNS: Record<string, { x: number; y: number }> = {
+  [MAPS.zoneA]: { x: 160, y: 288 },
+  [MAPS.zoneB]: { x: 128, y: 224 },
+  [MAPS.combat]: { x: 160, y: 288 },
+};
 
-  // Seed mock persona so the engine has a character.
-  if (browser) {
-    const existing = localStorage.getItem('aikami-characters');
-    if (!existing?.includes('Zone Tester')) {
-      const mockCharacters = [
-        {
-          persona: {
-            id: crypto.randomUUID(),
-            name: 'Zone Tester',
-            race: 'Human',
-            class: 'Fighter',
-            level: 1,
-            alignment: 'Neutral Good',
-            background: 'A methodical cartographer testing map boundaries.',
-            abilityScores: {
-              strength: 15,
-              dexterity: 13,
-              constitution: 14,
-              intelligence: 10,
-              wisdom: 12,
-              charisma: 8,
-            },
-            appearance: { physicalDescription: 'A sturdy human in traveling gear.' },
-            hitPoints: 12,
-            hitPointsMax: 12,
-            temporaryHitPoints: 0,
-            armorClass: 15,
-            speed: 30,
-            experiencePoints: 0,
-            savingThrows: [],
-            skills: [],
-            proficiencies: [],
-            languages: ['Common'],
-            equipment: [],
-            inventory: [],
-            isActive: true,
+// Seed mock persona so the engine has a character.
+if (browser) {
+  const existing = localStorage.getItem('aikami-characters');
+  if (!existing?.includes('Zone Tester')) {
+    const mockCharacters = [
+      {
+        persona: {
+          id: crypto.randomUUID(),
+          name: 'Zone Tester',
+          race: 'Human',
+          class: 'Fighter',
+          level: 1,
+          alignment: 'Neutral Good',
+          background: 'A methodical cartographer testing map boundaries.',
+          abilityScores: {
+            strength: 15,
+            dexterity: 13,
+            constitution: 14,
+            intelligence: 10,
+            wisdom: 12,
+            charisma: 8,
           },
-          avatarUrl: '',
-          savedAt: new Date().toISOString(),
+          appearance: { physicalDescription: 'A sturdy human in traveling gear.' },
+          hitPoints: 12,
+          hitPointsMax: 12,
+          temporaryHitPoints: 0,
+          armorClass: 15,
+          speed: 30,
+          experiencePoints: 0,
+          savingThrows: [],
+          skills: [],
+          proficiencies: [],
+          languages: ['Common'],
+          equipment: [],
+          inventory: [],
+          isActive: true,
         },
-      ];
-      localStorage.setItem('aikami-characters', JSON.stringify(mockCharacters));
-    }
-  }
-
-  const gameViewModel = new GameViewModel({ className: 'GameViewModel' });
-  const gameUIViewModel = new GameUIViewModel({
-    className: 'GameUIViewModel',
-    gameViewModel,
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Reactive dev panel state
-  // ═══════════════════════════════════════════════════════════════════════════
-  let memoryStats = $state<{
-    jsHeapSizeLimit: number;
-    totalJSHeapSize: number;
-    usedJSHeapSize: number;
-  } | null>(null);
-
-  let lastSaveSlot = $state<string>('');
-  let saveVerifyMessage = $state<string>('');
-  let cycleProgress = $state<string>('');
-  let cycleRunning = $state<boolean>(false);
-  let transitionLog = $state<string[]>([]);
-
-  const _addLog = (message: string): void => {
-    transitionLog = [
-      ...transitionLog.slice(-19),
-      `[${new Date().toLocaleTimeString()}] ${message}`,
+        avatarUrl: '',
+        savedAt: new Date().toISOString(),
+      },
     ];
-  };
+    localStorage.setItem('aikami-characters', JSON.stringify(mockCharacters));
+  }
+}
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Memory stats polling
-  // ═══════════════════════════════════════════════════════════════════════════
-  const _refreshMemory = (): void => {
-    const mem = (
-      performance as unknown as {
-        memory?: {
-          jsHeapSizeLimit: number;
-          totalJSHeapSize: number;
-          usedJSHeapSize: number;
-        };
-      }
-    ).memory;
-    if (mem) {
-      memoryStats = {
-        jsHeapSizeLimit: mem.jsHeapSizeLimit,
-        totalJSHeapSize: mem.totalJSHeapSize,
-        usedJSHeapSize: mem.usedJSHeapSize,
+const gameViewModel = getGameCanvasViewModel({ className: 'GameCanvasViewModel' });
+const gameUIViewModel = getGameUIViewModel({ className: 'GameUIViewModel' });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Reactive dev panel state
+// ═══════════════════════════════════════════════════════════════════════════
+let memoryStats = $state<{
+  jsHeapSizeLimit: number;
+  totalJSHeapSize: number;
+  usedJSHeapSize: number;
+} | null>(null);
+
+let lastSaveSlot = $state<string>('');
+let saveVerifyMessage = $state<string>('');
+let cycleProgress = $state<string>('');
+let cycleRunning = $state<boolean>(false);
+let transitionLog = $state<string[]>([]);
+
+const _addLog = (message: string): void => {
+  transitionLog = [...transitionLog.slice(-19), `[${new Date().toLocaleTimeString()}] ${message}`];
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Memory stats polling
+// ═══════════════════════════════════════════════════════════════════════════
+const _refreshMemory = (): void => {
+  const mem = (
+    performance as unknown as {
+      memory?: {
+        jsHeapSizeLimit: number;
+        totalJSHeapSize: number;
+        usedJSHeapSize: number;
       };
     }
-  };
+  ).memory;
+  if (mem) {
+    memoryStats = {
+      jsHeapSizeLimit: mem.jsHeapSizeLimit,
+      totalJSHeapSize: mem.totalJSHeapSize,
+      usedJSHeapSize: mem.usedJSHeapSize,
+    };
+  }
+};
 
-  if (browser) {
-    setInterval(_refreshMemory, 2000);
+if (browser) {
+  setInterval(_refreshMemory, 2000);
+}
+
+const _formatMB = (bytes: number): string => {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Zone transition actions
+// ═══════════════════════════════════════════════════════════════════════════
+const _transitionTo = async (mapUrl: string): Promise<void> => {
+  const spawn = MAP_SPAWNS[mapUrl] ?? { x: 160, y: 192 };
+  _addLog(`Transition → ${mapUrl.split('/').pop()}`);
+  await gameViewModel.loadMap({
+    mapUrl,
+    targetX: spawn.x,
+    targetY: spawn.y,
+    defeatedEnemies: [...(worldStateService.defeatedEnemies as string[])],
+  });
+  _refreshMemory();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Rapid cycle — memory hardening test (AC-3)
+// ═══════════════════════════════════════════════════════════════════════════
+const _rapidCycle = async (count: number): Promise<void> => {
+  if (cycleRunning) {
+    return;
+  }
+  cycleRunning = true;
+  cycleProgress = `Starting ${count}-map cycle...`;
+  _addLog(`⚡ Rapid cycle: ${count} maps`);
+
+  const maps = [MAPS.zoneA, MAPS.zoneB, MAPS.zoneA, MAPS.combat, MAPS.zoneA];
+
+  for (let i = 0; i < count; i++) {
+    const map = maps[i % maps.length] ?? MAPS.zoneA;
+    cycleProgress = `Map ${i + 1}/${count}: ${map.split('/').pop()}`;
+    await _transitionTo(map);
+    _refreshMemory();
+    // Brief pause between transitions
+    await new Promise((r) => setTimeout(r, 500));
   }
 
-  const _formatMB = (bytes: number): string => {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  };
+  cycleProgress = `Complete — ${count} maps cycled`;
+  cycleRunning = false;
+  _addLog('✅ Rapid cycle complete');
+  _refreshMemory();
+};
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Zone transition actions
-  // ═══════════════════════════════════════════════════════════════════════════
-  const _transitionTo = async (mapUrl: string): Promise<void> => {
-    const spawn = MAP_SPAWNS[mapUrl] ?? { x: 160, y: 192 };
-    _addLog(`Transition → ${mapUrl.split('/').pop()}`);
-    await gameViewModel.loadMap({
-      mapUrl,
-      targetX: spawn.x,
-      targetY: spawn.y,
-      defeatedEnemies: [...(gameStateService.defeatedEnemies as string[])],
-    });
-    _refreshMemory();
-  };
+// ═══════════════════════════════════════════════════════════════════════════
+// Save/Load verification
+// ═══════════════════════════════════════════════════════════════════════════
+const _verifySave = async (): Promise<void> => {
+  try {
+    const { GameSaveService } = await import('$lib/services/game/game_save_service.svelte');
+    const saveService = GameSaveService.create({ className: 'SandboxSaveService' });
+    await saveService.fetchAvailableSaves();
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Rapid cycle — memory hardening test (AC-3)
-  // ═══════════════════════════════════════════════════════════════════════════
-  const _rapidCycle = async (count: number): Promise<void> => {
-    if (cycleRunning) {
+    if (saveService.availableSaves.length === 0) {
+      saveVerifyMessage = 'No saves found. Save the game first.';
       return;
     }
-    cycleRunning = true;
-    cycleProgress = `Starting ${count}-map cycle...`;
-    _addLog(`⚡ Rapid cycle: ${count} maps`);
 
-    const maps = [MAPS.zoneA, MAPS.zoneB, MAPS.zoneA, MAPS.combat, MAPS.zoneA];
-
-    for (let i = 0; i < count; i++) {
-      const map = maps[i % maps.length] ?? MAPS.zoneA;
-      cycleProgress = `Map ${i + 1}/${count}: ${map.split('/').pop()}`;
-      await _transitionTo(map);
-      _refreshMemory();
-      // Brief pause between transitions
-      await new Promise((r) => setTimeout(r, 500));
+    const latest = saveService.availableSaves[0];
+    if (!latest) {
+      saveVerifyMessage = 'No save slots available.';
+      return;
     }
 
-    cycleProgress = `Complete — ${count} maps cycled`;
-    cycleRunning = false;
-    _addLog('✅ Rapid cycle complete');
-    _refreshMemory();
-  };
+    const payload = await saveService.getSavePayload(latest.id);
+    lastSaveSlot = latest.id;
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Save/Load verification
-  // ═══════════════════════════════════════════════════════════════════════════
-  const _verifySave = async (): Promise<void> => {
-    try {
-      const { GameSaveService } = await import('$lib/services/game/game_save_service.svelte');
-      const saveService = GameSaveService.create({ className: 'SandboxSaveService' });
-      await saveService.fetchAvailableSaves();
+    // Parse the EcsSnapshot structure: { version, timestamp, entities: number[], components: { Position: { x: number[], y: number[] }, ... } }
+    const parsed = JSON.parse(payload) as Record<string, unknown>;
+    const eids = (parsed.entities as number[]) ?? [];
+    const components = (parsed.components ?? {}) as Record<string, Record<string, number[]>>;
+    const posX = components.Position?.x?.[0];
+    const posY = components.Position?.y?.[0];
+    const hp = components.CombatStats?.hp?.[0] ?? '?';
 
-      if (saveService.availableSaves.length === 0) {
-        saveVerifyMessage = 'No saves found. Save the game first.';
-        return;
-      }
+    saveVerifyMessage = `✅ Save OK | Player EID=${eids[0] ?? '?'} | Pos=(${typeof posX === 'number' ? posX.toFixed(0) : '?'}, ${typeof posY === 'number' ? posY.toFixed(0) : '?'}) | HP=${hp} | Entities=${eids.length}`;
 
-      const latest = saveService.availableSaves[0];
-      if (!latest) {
-        saveVerifyMessage = 'No save slots available.';
-        return;
-      }
+    _addLog(`📦 Verified save: ${saveVerifyMessage}`);
+  } catch (error) {
+    saveVerifyMessage = `❌ Error: ${String(error)}`;
+    _addLog(`❌ Save verify failed: ${String(error)}`);
+  }
+};
 
-      const payload = await saveService.getSavePayload(latest.id);
-      lastSaveSlot = latest.id;
+// ═══════════════════════════════════════════════════════════════════════════
+// Dev actions for the panel
+// ═══════════════════════════════════════════════════════════════════════════
+type DevAction = {
+  label: string;
+  onClick: () => void;
+  group?: string;
+};
 
-      // Parse the EcsSnapshot structure: { version, timestamp, entities: number[], components: { Position: { x: number[], y: number[] }, ... } }
-      const parsed = JSON.parse(payload) as Record<string, unknown>;
-      const eids = (parsed.entities as number[]) ?? [];
-      const components = (parsed.components ?? {}) as Record<string, Record<string, number[]>>;
-      const posX = components.Position?.x?.[0];
-      const posY = components.Position?.y?.[0];
-      const hp = components.CombatStats?.hp?.[0] ?? '?';
+const devActions: DevAction[] = [
+  // ── Zone Transitions (AC-1) ─────────────────────────────────────────
+  { label: '➡️ Zone A', onClick: () => void _transitionTo(MAPS.zoneA), group: 'Zone Transitions' },
+  { label: '➡️ Zone B', onClick: () => void _transitionTo(MAPS.zoneB), group: 'Zone Transitions' },
+  {
+    label: '➡️ Combat Map',
+    onClick: () => void _transitionTo(MAPS.combat),
+    group: 'Zone Transitions',
+  },
 
-      saveVerifyMessage = `✅ Save OK | Player EID=${eids[0] ?? '?'} | Pos=(${typeof posX === 'number' ? posX.toFixed(0) : '?'}, ${typeof posY === 'number' ? posY.toFixed(0) : '?'}) | HP=${hp} | Entities=${eids.length}`;
+  // ── Memory Hardening (AC-3) ─────────────────────────────────────────
+  { label: '⚡ Rapid Cycle (3)', onClick: () => void _rapidCycle(3), group: 'Memory Test' },
+  { label: '⚡ Rapid Cycle (5)', onClick: () => void _rapidCycle(5), group: 'Memory Test' },
 
-      _addLog(`📦 Verified save: ${saveVerifyMessage}`);
-    } catch (error) {
-      saveVerifyMessage = `❌ Error: ${String(error)}`;
-      _addLog(`❌ Save verify failed: ${String(error)}`);
-    }
-  };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Dev actions for the panel
-  // ═══════════════════════════════════════════════════════════════════════════
-  type DevAction = {
-    label: string;
-    onClick: () => void;
-    group?: string;
-  };
-
-  const devActions: DevAction[] = [
-    // ── Zone Transitions (AC-1) ─────────────────────────────────────────
-    { label: '➡️ Zone A', onClick: () => void _transitionTo(MAPS.zoneA), group: 'Zone Transitions' },
-    { label: '➡️ Zone B', onClick: () => void _transitionTo(MAPS.zoneB), group: 'Zone Transitions' },
-    {
-      label: '➡️ Combat Map',
-      onClick: () => void _transitionTo(MAPS.combat),
-      group: 'Zone Transitions',
+  // ── Save/Load Verification ──────────────────────────────────────────
+  { label: '📦 Inspect Last Save', onClick: () => void _verifySave(), group: 'Save/Load' },
+  {
+    label: '📦 Force Auto-Save',
+    onClick: async () => {
+      // Directly trigger the auto-save via the overlay service
+      const { gameOverlayService } = await import('$services');
+      const svc = gameOverlayService as unknown as { _triggerAutoSave: () => Promise<void> };
+      void svc._triggerAutoSave();
+      _addLog('🔄 Manual auto-save triggered');
     },
+    group: 'Save/Load',
+  },
 
-    // ── Memory Hardening (AC-3) ─────────────────────────────────────────
-    { label: '⚡ Rapid Cycle (3)', onClick: () => void _rapidCycle(3), group: 'Memory Test' },
-    { label: '⚡ Rapid Cycle (5)', onClick: () => void _rapidCycle(5), group: 'Memory Test' },
+  // ── Inventory (for save verification) ───────────────────────────────
+  {
+    label: '+ Sword',
+    onClick: () => {
+      inventoryService.inventory = [
+        ...inventoryService.inventory,
+        { itemId: 'iron-sword', quantity: 1 },
+      ];
+      _addLog('🗡️ Added iron-sword');
+    },
+    group: 'Inventory',
+  },
+  {
+    label: '+ Potion',
+    onClick: () => {
+      inventoryService.inventory = [
+        ...inventoryService.inventory,
+        { itemId: 'health-potion', quantity: 1 },
+      ];
+      _addLog('🧪 Added health-potion');
+    },
+    group: 'Inventory',
+  },
+  {
+    label: 'Clear Inventory',
+    onClick: () => {
+      inventoryService.inventory = [];
+      _addLog('🗑️ Inventory cleared');
+    },
+    group: 'Inventory',
+  },
 
-    // ── Save/Load Verification ──────────────────────────────────────────
-    { label: '📦 Inspect Last Save', onClick: () => void _verifySave(), group: 'Save/Load' },
-    {
-      label: '📦 Force Auto-Save',
-      onClick: () => {
-        // Directly trigger the auto-save mechanism exposed on the VM
-        const uiVm = gameUIViewModel as unknown as { _triggerAutoSave: () => Promise<void> };
-        void uiVm._triggerAutoSave();
-        _addLog('🔄 Manual auto-save triggered');
-      },
-      group: 'Save/Load',
-    },
-
-    // ── Inventory (for save verification) ───────────────────────────────
-    {
-      label: '+ Sword',
-      onClick: () => {
-        gameStateService.inventory = [
-          ...gameStateService.inventory,
-          { itemId: 'iron-sword', quantity: 1 },
-        ];
-        _addLog('🗡️ Added iron-sword');
-      },
-      group: 'Inventory',
-    },
-    {
-      label: '+ Potion',
-      onClick: () => {
-        gameStateService.inventory = [
-          ...gameStateService.inventory,
-          { itemId: 'health-potion', quantity: 1 },
-        ];
-        _addLog('🧪 Added health-potion');
-      },
-      group: 'Inventory',
-    },
-    {
-      label: 'Clear Inventory',
-      onClick: () => {
-        gameStateService.inventory = [];
-        _addLog('🗑️ Inventory cleared');
-      },
-      group: 'Inventory',
-    },
-
-    // ── Refresh ──────────────────────────────────────────────────────────
-    { label: '🔄 Refresh Memory', onClick: _refreshMemory, group: 'Diagnostics' },
-  ];
+  // ── Refresh ──────────────────────────────────────────────────────────
+  { label: '🔄 Refresh Memory', onClick: _refreshMemory, group: 'Diagnostics' },
+];
 </script>
 
 <svelte:head>
@@ -299,7 +295,8 @@
 <div class="fixed inset-0 flex">
   <!-- Game canvas (left 70%) -->
   <div class="flex-1 relative">
-    <GameView viewModel={gameViewModel} {gameUIViewModel} />
+    <GameCanvasView viewModel={gameViewModel} />
+    <GameUIView viewModel={gameUIViewModel} />
   </div>
 
   <!-- Dev panel (right 30%) — scrollable overlay -->
@@ -418,6 +415,7 @@
           <div class="p-2 space-y-1">
             {#each devActions.filter((a) => a.group === group) as action}
               <button
+                type="button"
                 class="btn btn-xs btn-ghost w-full justify-start text-left"
                 class:btn-disabled={cycleRunning && action.label.startsWith('⚡')}
                 onclick={action.onClick}
@@ -437,6 +435,7 @@
             >Event Log</span
           >
           <button
+            type="button"
             class="btn btn-ghost btn-xs text-base-content/30"
             onclick={() => { transitionLog = []; }}
           >

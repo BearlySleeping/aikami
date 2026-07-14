@@ -6,7 +6,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gameStateService } from '$services';
+import { gameModeService } from '$services';
 
 // ---------------------------------------------------------------------------
 // ModeSandboxViewModel — isolated dev sandbox for C-140 mode system
@@ -98,7 +98,7 @@ class ModeSandboxViewModel
 
   /** @inheritdoc */
   setExploreMode(): void {
-    gameStateService.setMode('EXPLORE');
+    gameModeService.setMode('EXPLORE');
     if (this._gameWorld) {
       this._gameWorld.setInputLocked(false);
     }
@@ -106,7 +106,7 @@ class ModeSandboxViewModel
 
   /** @inheritdoc */
   setDialogueMode(): void {
-    gameStateService.setMode('DIALOGUE');
+    gameModeService.setMode('DIALOGUE');
     if (this._gameWorld) {
       this._gameWorld.setInputLocked(true);
     }
@@ -114,7 +114,7 @@ class ModeSandboxViewModel
 
   /** @inheritdoc */
   setMenuMode(): void {
-    gameStateService.setMode('MENU');
+    gameModeService.setMode('MENU');
     if (this._gameWorld) {
       this._gameWorld.setInputLocked(true);
     }

@@ -19,7 +19,7 @@
  * @returns A texture key string resolvable by PixiJS Assets.
  */
 export const resolveNpcTexture = (_properties: Record<string, unknown>): string => {
-  return '/lpc/body/male/walk.png';
+  return '/game-data/lpc/body/bodies_male.walk.webp';
 };
 
 /**
@@ -37,8 +37,8 @@ export const resolvePropTexture = (properties: Record<string, unknown>): string 
   const assetId = properties.assetId;
 
   if (typeof assetId === 'string' && assetId.length > 0) {
-    return `/lpc/props/${assetId}.png`;
+    return `/game-data/lpc/props/${assetId}.png`;
   }
 
-  return '/lpc/props/default.png';
+  return '/game-data/lpc/props/default.png';
 };

@@ -16,7 +16,7 @@ describe('ThemeSchema', () => {
   });
 
   test('should default to system', () => {
-    const result = Value.Parse(ThemeSchema, undefined);
+    const result = Value.Default(ThemeSchema, undefined);
     expect(result).toBe('system');
   });
 
@@ -33,7 +33,7 @@ describe('GameDifficultySchema', () => {
   });
 
   test('should default to normal', () => {
-    const result = Value.Parse(GameDifficultySchema, undefined);
+    const result = Value.Default(GameDifficultySchema, undefined);
     expect(result).toBe('normal');
   });
 });
@@ -64,7 +64,7 @@ describe('ConfigSchema', () => {
       id: 'user-456',
       uid: 'user-456',
     };
-    const result = Value.Parse(ConfigSchema, minimalConfig);
+    const result = Value.Default(ConfigSchema, minimalConfig);
     expect(result.theme).toBe('system');
     expect(result.locale).toBe('en');
     expect(result.notificationsEnabled).toBe(true);

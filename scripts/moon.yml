@@ -24,6 +24,15 @@ fileGroups:
     - 'src/index.ts'
 
 tasks:
+  test:
+    command: 'bun test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(entry)'
+    options:
+      mergeArgs: 'replace'
+
   typecheck:
     command: 'bun run typecheck'
     inputs:
@@ -56,3 +65,11 @@ tasks:
     options:
       cache: false
       runInCI: false
+
+  lint-contracts:
+    command: 'bun run lint-contracts'
+    inputs:
+      - 'src/lib/ops/lint_contracts.ts'
+    options:
+      cache: false
+      runInCI: true

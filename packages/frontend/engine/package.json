@@ -9,7 +9,6 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "dependencies": {
-    "@aikami/frontend-api-core": "workspace:*",
     "@aikami/frontend-dataconnect": "workspace:*",
     "@tursodatabase/database": "0.6.1",
     "@aikami/frontend/configs": "workspace:*",
@@ -22,6 +21,6 @@
     "bitecs": "^0.4.0",
     "jsonchunk": "^0.1.0",
     "pixi.js": "8.19.0",
-    "typebox": "1.3.2"
+    "typebox": "1.3.6"
   }
 }

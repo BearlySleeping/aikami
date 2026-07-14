@@ -1,5 +1,9 @@
 // apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import { audioContextManager } from './audio_context_manager';
 
 // ---------------------------------------------------------------------------
@@ -14,10 +18,10 @@ import { audioContextManager } from './audio_context_manager';
 // ---------------------------------------------------------------------------
 
 /** Options for constructing an AudioService. */
-export type AudioServiceOptions = BaseClassOptions;
+export type AudioServiceOptions = BaseFrontendClassOptions;
 
 /** Public interface for AudioService. */
-export type AudioServiceInterface = BaseClassInterface & {
+export type AudioServiceInterface = BaseFrontendClassInterface & {
   /** Master volume (0–1). Scales both BGM and SFX. */
   readonly masterVolume: number;
   /** BGM volume (0–1). Scales only background music. */
@@ -26,6 +30,9 @@ export type AudioServiceInterface = BaseClassInterface & {
   readonly sfxVolume: number;
   /** Whether a crossfade transition is currently in progress. */
   readonly isCrossfading: boolean;
+
+  /** URL of the currently playing BGM track (null if not playing). */
+  readonly activeTrackUrl: string | null;
 
   /**
    * The master GainNode at the root of the audio graph.
@@ -113,7 +120,10 @@ export type AudioServiceInterface = BaseClassInterface & {
  * All GainNode values are reactive `$state` properties — changing them
  * updates the Web Audio graph immediately.
  */
-export class AudioService extends BaseClass<AudioServiceOptions> implements AudioServiceInterface {
+export class AudioService
+  extends BaseFrontendClass<AudioServiceOptions>
+  implements AudioServiceInterface
+{
   // ── Reactive volume state ──
   masterVolume = $state<number>(1);
   bgmVolume = $state<number>(0.8);
@@ -217,6 +227,11 @@ export class AudioService extends BaseClass<AudioServiceOptions> implements Audi
       throw new Error('AudioService: masterCompressorNode not initialized');
     }
     return node;
+  }
+
+  /** @inheritdoc */
+  get activeTrackUrl(): string | null {
+    return this._activeTrackUrl ?? null;
   }
 
   /** @inheritdoc */
@@ -482,6 +497,6 @@ export class AudioService extends BaseClass<AudioServiceOptions> implements Audi
 }
 
 /** Singleton instance of the audio service. */
-export const audioService: AudioServiceInterface = new AudioService({
+export const audioService: AudioServiceInterface = AudioService.create({
   className: 'AudioService',
 });

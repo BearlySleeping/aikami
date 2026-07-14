@@ -1,47 +1,65 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/combat_portrait_stage.svelte
-  //
-  // Pure DOM portrait stage for combat — replaces the PixiJS canvas with
-  // static character portraits positioned left (player) and right (enemy).
-  // Uses CSS Grid/Flexbox, object-fit portrait scaling, and CSS @keyframes
-  // for damage feedback (shake + red flash).
-  //
-  // Contract: C-167 Svelte Native Combat UI MVP
+// apps/frontend/client/src/lib/views/combat/components/combat_portrait_stage.svelte
+//
+// Pure DOM portrait stage for combat — replaces the PixiJS canvas with
+// static character portraits positioned left (player) and right (enemy).
+// Uses CSS Grid/Flexbox, object-fit portrait scaling, and CSS @keyframes
+// for damage feedback (shake + red flash).
+//
+// Optional expression overlays (eyes, eyebrows, mouth) are layered over
+// the base portrait for emotion feedback.
+//
+// Contract: C-167 Svelte Native Combat UI MVP
+// Contract: C-239 Expression Emotion System
 
-  import diegeticHealthBar from './diegetic_health_bar.svelte';
+type Props = {
+  /** Display state for the player combatant. */
+  playerName: string;
+  playerPortraitUrl: string;
+  playerCurrentHealth: number;
+  playerMaxHealth: number;
+  isPlayerTakingDamage: boolean;
+  isPlayerActiveTurn: boolean;
 
-  type Props = {
-    /** Display state for the player combatant. */
-    playerName: string;
-    playerPortraitUrl: string;
-    playerCurrentHealth: number;
-    playerMaxHealth: number;
-    isPlayerTakingDamage: boolean;
-    isPlayerActiveTurn: boolean;
+  /** Expression overlay sources for the player portrait. */
+  playerEyesSrc?: string;
+  playerEyebrowsSrc?: string;
+  playerMouthSrc?: string;
 
-    /** Display state for the enemy combatant. */
-    enemyName: string;
-    enemyPortraitUrl: string;
-    enemyCurrentHealth: number;
-    enemyMaxHealth: number;
-    isEnemyTakingDamage: boolean;
-    isEnemyActiveTurn: boolean;
-  };
+  /** Display state for the enemy combatant. */
+  enemyName: string;
+  enemyPortraitUrl: string;
+  enemyCurrentHealth: number;
+  enemyMaxHealth: number;
+  isEnemyTakingDamage: boolean;
+  isEnemyActiveTurn: boolean;
 
-  const {
-    playerName,
-    playerPortraitUrl,
-    playerCurrentHealth,
-    playerMaxHealth,
-    isPlayerTakingDamage,
-    isPlayerActiveTurn,
-    enemyName,
-    enemyPortraitUrl,
-    enemyCurrentHealth,
-    enemyMaxHealth,
-    isEnemyTakingDamage,
-    isEnemyActiveTurn,
-  }: Props = $props();
+  /** Expression overlay sources for the enemy portrait. */
+  enemyEyesSrc?: string;
+  enemyEyebrowsSrc?: string;
+  enemyMouthSrc?: string;
+};
+
+const {
+  playerName,
+  playerPortraitUrl,
+  playerCurrentHealth,
+  playerMaxHealth,
+  isPlayerTakingDamage,
+  isPlayerActiveTurn,
+  playerEyesSrc,
+  playerEyebrowsSrc,
+  playerMouthSrc,
+  enemyName,
+  enemyPortraitUrl,
+  enemyCurrentHealth,
+  enemyMaxHealth,
+  isEnemyTakingDamage,
+  isEnemyActiveTurn,
+  enemyEyesSrc,
+  enemyEyebrowsSrc,
+  enemyMouthSrc,
+}: Props = $props();
 </script>
 
 <div
@@ -64,6 +82,31 @@
         class="w-full h-full object-cover object-top"
         loading="eager"
       >
+      <!-- Expression overlays (layered over base portrait) -->
+      {#if playerEyesSrc}
+        <img
+          src={playerEyesSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if playerEyebrowsSrc}
+        <img
+          src={playerEyebrowsSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if playerMouthSrc}
+        <img
+          src={playerMouthSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
       <!-- Damage flash overlay -->
       {#if isPlayerTakingDamage}
         <div class="absolute inset-0 bg-red-500/40 animate-flash-overlay pointer-events-none"></div>
@@ -108,6 +151,31 @@
         class="w-full h-full object-cover object-top"
         loading="eager"
       >
+      <!-- Expression overlays (layered over base portrait) -->
+      {#if enemyEyesSrc}
+        <img
+          src={enemyEyesSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if enemyEyebrowsSrc}
+        <img
+          src={enemyEyebrowsSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
+      {#if enemyMouthSrc}
+        <img
+          src={enemyMouthSrc}
+          alt=""
+          class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
+          loading="eager"
+        >
+      {/if}
       <!-- Damage flash overlay -->
       {#if isEnemyTakingDamage}
         <div class="absolute inset-0 bg-red-500/40 animate-flash-overlay pointer-events-none"></div>
@@ -132,83 +200,83 @@
 </div>
 
 <style>
-  /* ── Damage shake animation ── */
-  @keyframes damage-shake {
-    0%,
-    100% {
-      transform: translate(0, 0);
-    }
-    10% {
-      transform: translate(-3px, -1px);
-    }
-    20% {
-      transform: translate(2px, 1px);
-    }
-    30% {
-      transform: translate(-2px, 2px);
-    }
-    40% {
-      transform: translate(1px, -1px);
-    }
-    50% {
-      transform: translate(-2px, -2px);
-    }
-    60% {
-      transform: translate(1px, 1px);
-    }
-    70% {
-      transform: translate(-1px, -1px);
-    }
-    80% {
-      transform: translate(1px, 0);
-    }
-    90% {
-      transform: translate(-1px, 1px);
-    }
+/* ── Damage shake animation ── */
+@keyframes damage-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
   }
+  10% {
+    transform: translate(-3px, -1px);
+  }
+  20% {
+    transform: translate(2px, 1px);
+  }
+  30% {
+    transform: translate(-2px, 2px);
+  }
+  40% {
+    transform: translate(1px, -1px);
+  }
+  50% {
+    transform: translate(-2px, -2px);
+  }
+  60% {
+    transform: translate(1px, 1px);
+  }
+  70% {
+    transform: translate(-1px, -1px);
+  }
+  80% {
+    transform: translate(1px, 0);
+  }
+  90% {
+    transform: translate(-1px, 1px);
+  }
+}
 
-  .animate-damage-shake {
-    animation: damage-shake 0.35s ease-in-out;
-  }
+.animate-damage-shake {
+  animation: damage-shake 0.35s ease-in-out;
+}
 
-  /* ── Damage red tint (border + shadow) ── */
-  @keyframes damage-flash-border {
-    0%,
-    100% {
-      border-color: inherit;
-    }
-    50% {
-      border-color: rgb(239 68 68);
-      box-shadow: 0 0 12px rgb(239 68 68 / 0.4);
-    }
+/* ── Damage red tint (border + shadow) ── */
+@keyframes damage-flash-border {
+  0%,
+  100% {
+    border-color: inherit;
   }
+  50% {
+    border-color: rgb(239 68 68);
+    box-shadow: 0 0 12px rgb(239 68 68 / 0.4);
+  }
+}
 
-  .animate-damage-flash {
-    animation: damage-flash-border 0.35s ease-in-out;
-  }
+.animate-damage-flash {
+  animation: damage-flash-border 0.35s ease-in-out;
+}
 
-  /* ── Flash overlay (fades in then out) ── */
-  @keyframes flash-overlay {
-    0% {
-      opacity: 0;
-    }
-    20% {
-      opacity: 1;
-    }
-    80% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0;
-    }
+/* ── Flash overlay (fades in then out) ── */
+@keyframes flash-overlay {
+  0% {
+    opacity: 0;
   }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 
-  .animate-flash-overlay {
-    animation: flash-overlay 0.35s ease-in-out;
-  }
+.animate-flash-overlay {
+  animation: flash-overlay 0.35s ease-in-out;
+}
 
-  /* Smooth scale transition for active turn indicator */
-  :global(.scale-105) {
-    transition: transform 0.3s ease;
-  }
+/* Smooth scale transition for active turn indicator */
+:global(.scale-105) {
+  transition: transform 0.3s ease;
+}
 </style>

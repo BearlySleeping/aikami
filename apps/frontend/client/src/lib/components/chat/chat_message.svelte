@@ -1,51 +1,51 @@
 <script lang="ts">
-  import type { ChatMessage as ChatMessageType } from '$lib/services/chat/chat.svelte.ts';
-  import { ttsService } from '$services';
+import type { ChatMessage as ChatMessageType } from '$lib/services/chat/chat.svelte.ts';
+import { ttsService } from '$services';
 
-  /**
-   * Props for the ChatMessage component.
-   * Displays a single chat message with appropriate styling based on sender and type.
-   */
-  type Props = {
-    /** The message object to display */
-    message: ChatMessageType;
-    /** Avatar URL for the AI character */
-    avatarUrl?: string;
-    /** Name of the AI character */
-    characterName?: string;
-  };
+/**
+ * Props for the ChatMessage component.
+ * Displays a single chat message with appropriate styling based on sender and type.
+ */
+type Props = {
+  /** The message object to display */
+  message: ChatMessageType;
+  /** Avatar URL for the AI character */
+  avatarUrl?: string;
+  /** Name of the AI character */
+  characterName?: string;
+};
 
-  const { message, avatarUrl, characterName = 'AI' }: Props = $props();
+const { message, avatarUrl, characterName = 'AI' }: Props = $props();
 
-  function formatTime(date: Date): string {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function detectMessageType(text: string): 'action' | 'system' | 'normal' {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('/me ') || (trimmed.startsWith('*') && trimmed.endsWith('*'))) {
+    return 'action';
   }
-
-  function detectMessageType(text: string): 'action' | 'system' | 'normal' {
-    const trimmed = text.trim();
-    if (trimmed.startsWith('/me ') || (trimmed.startsWith('*') && trimmed.endsWith('*'))) {
-      return 'action';
-    }
-    if (trimmed.startsWith('[System]') || trimmed.startsWith('/system ')) {
-      return 'system';
-    }
-    return 'normal';
+  if (trimmed.startsWith('[System]') || trimmed.startsWith('/system ')) {
+    return 'system';
   }
+  return 'normal';
+}
 
-  function formatActionText(text: string): string {
-    let processed = text.trim();
-    if (processed.startsWith('/me ')) {
-      processed = processed.slice(4);
-    }
-    if (processed.startsWith('*') && processed.endsWith('*')) {
-      processed = processed.slice(1, -1);
-    }
-    return processed;
+function formatActionText(text: string): string {
+  let processed = text.trim();
+  if (processed.startsWith('/me ')) {
+    processed = processed.slice(4);
   }
+  if (processed.startsWith('*') && processed.endsWith('*')) {
+    processed = processed.slice(1, -1);
+  }
+  return processed;
+}
 
-  const messageType = $derived(detectMessageType(message.text));
-  const isAction = $derived(messageType === 'action');
-  const isSystem = $derived(messageType === 'system');
+const messageType = $derived(detectMessageType(message.text));
+const isAction = $derived(messageType === 'action');
+const isSystem = $derived(messageType === 'system');
 </script>
 
 <div class="chat {message.sender === 'user' ? 'chat-end' : 'chat-start'}">

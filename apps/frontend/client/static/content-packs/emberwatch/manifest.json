@@ -1,0 +1,282 @@
+{
+  "id": "emberwatch",
+  "name": "Emberwatch: The Fading Ward",
+  "version": "2.0.0",
+  "updatedAt": "2026-07-13T00:00:00.000Z",
+  "startingMapId": "emberwatch_village",
+  "maps": {
+    "emberwatch_village": {
+      "file": "maps/emberwatch_village.json",
+      "name": "Emberwatch Village",
+      "defaultSpawnId": "village_gate",
+      "defaultX": 320,
+      "defaultY": 576
+    },
+    "old_road": {
+      "file": "maps/old_road.json",
+      "name": "The Old Road",
+      "defaultX": 64,
+      "defaultY": 240
+    },
+    "ruined_ward_shrine": {
+      "file": "maps/ruined_ward_shrine.json",
+      "name": "Ruined Ward Shrine",
+      "defaultX": 96,
+      "defaultY": 332
+    }
+  },
+  "npcs": {
+    "village_elder": {
+      "name": "Elder Thalia",
+      "defaultDialogueKey": "elder_thalia_greeting",
+      "appearanceLayers": [1, 5, 8, 12],
+      "isVendor": false
+    },
+    "guard_captain": {
+      "name": "Guard Captain Aldric",
+      "defaultDialogueKey": "guard_captain_greeting",
+      "appearanceLayers": [3, 7, 10, 15],
+      "isVendor": false
+    },
+    "traveling_merchant": {
+      "name": "Keth the Merchant",
+      "defaultDialogueKey": "merchant_keth_greeting",
+      "appearanceLayers": [1, 4, 9, 11],
+      "isVendor": true,
+      "vendorInventory": "ironSword, healthPotion, manaPotion, ironArmor, woodenShield"
+    },
+    "elara_wayfinder": {
+      "name": "Elara Wayfinder",
+      "defaultDialogueKey": "elara_wayfinder_greeting",
+      "appearanceLayers": [2, 6, 13, 14],
+      "isVendor": false
+    },
+    "kade_blackthorn": {
+      "name": "Kade Blackthorn",
+      "defaultDialogueKey": "kade_blackthorn_taunt",
+      "appearanceLayers": [3, 5, 11, 15],
+      "isVendor": false
+    },
+    "shrine_spirit": {
+      "name": "Vesperine Spirit",
+      "defaultDialogueKey": "shrine_spirit_greeting",
+      "appearanceLayers": [4, 8, 12, 16],
+      "isVendor": false
+    },
+    "shade_guardian": {
+      "name": "Shade Guardian",
+      "defaultDialogueKey": "shade_guardian_manifest",
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 30,
+        "armorClass": 13,
+        "attackBonus": 4,
+        "damage": "1d8+2",
+        "initiativeBonus": 0,
+        "xpValue": 75
+      }
+    }
+  },
+  "items": {
+    "ironSword": {
+      "name": "Iron Sword",
+      "type": "weapon",
+      "attackBonus": 5,
+      "equipmentSlot": "weapon"
+    },
+    "healthPotion": {
+      "name": "Health Potion",
+      "type": "consumable"
+    },
+    "manaPotion": {
+      "name": "Mana Potion",
+      "type": "consumable"
+    },
+    "ironArmor": {
+      "name": "Iron Armor",
+      "type": "armor",
+      "defenseBonus": 5,
+      "equipmentSlot": "armor"
+    },
+    "woodenShield": {
+      "name": "Wooden Shield",
+      "type": "armor",
+      "defenseBonus": 2,
+      "equipmentSlot": "armor"
+    },
+    "wardPendant": {
+      "name": "Ward Pendant",
+      "type": "key",
+      "equipmentSlot": "neck"
+    },
+    "wardAmulet": {
+      "name": "Ward Amulet",
+      "type": "misc",
+      "defenseBonus": 3,
+      "equipmentSlot": "neck"
+    },
+    "wardShard": {
+      "name": "Ward Shard",
+      "type": "misc"
+    }
+  },
+  "dialogues": {
+    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time — the ancient ward protecting our lands is fading. Please, come inside and let me explain.",
+    "elder_thalia_offer": "The Ward of Emberwatch was placed centuries ago by the Vesperine Order. It shields our valley from the corruption that festers beyond the Old Road. But the ward crystal at the Ruined Shrine grows dim. If it fails, Emberwatch will fall. I need someone brave to travel the Old Road, reach the shrine, and renew the ward. Will you help us?",
+    "elder_thalia_progress": "Any news from the Old Road? The ward grows weaker each day. You must reach the Ruined Shrine before it is too late. Elara Wayfinder was last seen along the Old Road — she may have discovered something useful.",
+    "elder_thalia_complete": "You've returned! And the ward — I can feel its power surging through the valley once more. Emberwatch owes you a debt that can never be repaid. Thank you, brave soul. You are a true hero of our village.",
+    "elder_thalia_ending_renewed": "The Ward renewed! I felt its pulse from here. You have restored hope to Emberwatch. The Vesperine Order smiles upon you.",
+    "elder_thalia_ending_sacrificed": "A sacrifice was made... I sense the ward's power has changed. It is different now — heavier, tinged with sorrow. But it holds. That is what matters.",
+    "elder_thalia_ending_shattered": "The ward... it is gone. I felt it break. Emberwatch is unprotected now. We will need to prepare for what comes. Still, you did your best — and for that, we are grateful.",
+    "guard_captain_greeting": "Welcome to Emberwatch, traveler. The roads have been dangerous lately. If you're looking for work, Elder Thalia could use someone with your talents. Her hut is the one with the thatched roof to the west.",
+    "guard_captain_quest": "Elder Thalia's been worried sick about the ward. She could use someone like you. You should speak with her directly — her hut is the one with the thatched roof.",
+    "merchant_keth_greeting": "Well met, traveler! Keth's the name, and fine wares are my game. I've got swords, shields, armor, and potions — everything an adventurer needs. What catches your eye?",
+    "merchant_keth_lost_pendant": "Say, you look like someone who gets around. I dropped a family pendant on the Old Road a while back — silver chain, small blue gem. If you find it out there, I'd be mighty grateful. Might even have something special for you in return.",
+    "elara_wayfinder_greeting": "You must be the one Elder Thalia sent. I'm Elara Wayfinder — I scout the Old Road for signs of corruption. The road ahead is treacherous, but I've marked a safe path through the brambles. Before you continue to the shrine, you should know: Kade Blackthorn lies in wait ahead. He's a rogue sword-for-hire who abandoned the guard years ago. He'll try to stop you.",
+    "elara_wayfinder_join": "You'll need help against whatever waits at the shrine. I know these roads better than anyone. Let me accompany you. Together we stand a better chance.",
+    "elara_wayfinder_context": "The ward's been failing for weeks now. Animals have grown restless. Strange lights flicker in the forest at night. Everyone's scared, but no one wants to admit it. You're doing something brave, you know.",
+    "kade_blackthorn_taunt": "Well, well. Another fool chasing fairy tales. The ward isn't worth saving — it's kept Emberwatch weak and complacent for centuries. I'm here to make sure no one reaches that shrine. Turn back now, or I'll make you regret it.",
+    "kade_blackthorn_persuasion_success": "Hmph. You speak with conviction, I'll give you that. Fine — I won't stop you. But don't think this makes us friends. If that ward falls, I'll be the one saying 'I told you so.' Now get out of my sight.",
+    "kade_blackthorn_persuasion_failure": "Nice words. But words don't change anything. If you want to pass, you'll have to go through me. Draw your weapon.",
+    "shrine_spirit_greeting": "At last... someone has come. I am the last echo of the Vesperine Order — the spirit bound to the Fading Ward. For centuries I have held back the corruption, but my strength wanes. The ward requires a living soul to renew it. Will you give of yourself to save Emberwatch?",
+    "shrine_spirit_explanation": "The ward was created through sacrifice — a Vesperine mage gave their essence to forge the crystal. To renew it, you must offer something of equal value. There are three paths before you: You may channel your own life force into the ward, taking its burden upon yourself. The ward will be renewed, but at great personal cost. Or... you may shatter the ward entirely, releasing all its power in a single burst that will purify the valley — but leave Emberwatch unprotected forever. The choice is yours alone.",
+    "shrine_spirit_ending_renewed": "You chose renewal through sacrifice. I feel your essence flowing into the crystal... the ward blazes with light! Emberwatch is saved. But a part of you will always remain here, bound to this stone. Thank you, brave one.",
+    "shrine_spirit_ending_sacrificed": "You gave something precious, and the ward accepted the offering. It is changed — no longer the pure shield it once was. But it holds. The valley is safe. Go now, and live with what you have given.",
+    "shrine_spirit_ending_shattered": "The crystal shatters... the ward's power erupts in a wave of cleansing fire! The corruption burns away. The valley is purged. Emberwatch is free — but unprotected. You have traded safety for freedom. I hope it was worth it.",
+    "shade_guardian_manifest": "The corruption stirs... a dark shape rises from the crumbling stones, its form wreathed in shadow.",
+    "encounter_start": "A twisted shade emerges from the shadows of the ruined shrine! Its hollow eyes fix upon you as it raises a sword of blackened steel.",
+    "encounter_victory": "The shade dissolves into mist with a mournful wail. The path to the ward crystal is clear. You feel a chill run down your spine — the corruption is strong here, but you have prevailed.",
+    "shade_persuaded": "You speak words of peace and understanding. The shade hesitates... something flickers in its hollow eyes — a memory, perhaps, of who it once was. Slowly, it lowers its weapon and fades into the darkness, granting you passage.",
+    "shade_enraged": "Your words mean nothing to the shade — it has forgotten language, forgotten mercy. With a shriek of rage, it lunges at you!"
+  },
+  "quests": {
+    "fading_ward": {
+      "id": "fading_ward",
+      "name": "The Fading Ward",
+      "description": "The ancient ward protecting Emberwatch is failing. Travel the Old Road to the Ruined Ward Shrine, discover the truth behind the ward's decay, and decide the fate of the valley.",
+      "objectives": [
+        {
+          "text": "Investigate the Old Road",
+          "completeOnMapEnter": "old_road"
+        },
+        {
+          "text": "Reach the Ruined Ward Shrine",
+          "completeOnMapEnter": "ruined_ward_shrine"
+        },
+        {
+          "text": "Decide the ward's fate",
+          "completeOnEncounterComplete": "ruined_ward_encounter"
+        }
+      ],
+      "offerDialogueKey": "elder_thalia_offer",
+      "progressDialogueKey": "elder_thalia_progress",
+      "rewards": [
+        {
+          "type": "item",
+          "itemId": "wardAmulet"
+        },
+        {
+          "type": "gold",
+          "amount": 200
+        },
+        {
+          "type": "xp",
+          "amount": 500
+        }
+      ],
+      "endings": {
+        "ward_renewed": {
+          "title": "The Ward Renewed",
+          "narration": "You place your hands upon the fading crystal and channel your own life force into the ward. A searing light erupts from the shrine, flooding the valley with warmth. The corruption recoils and retreats beyond the mountains. Emberwatch is saved. But as the light fades, you feel a cold emptiness where your vitality once burned — a piece of you now lives within the ward, guarding the valley for all time.",
+          "reactionDialogueKey": "elder_thalia_ending_renewed",
+          "worldStateFlag": "emberwatch.ending.renewed"
+        },
+        "ward_sacrificed": {
+          "title": "The Ward Sacrificed",
+          "narration": "You offer the Ward Pendant — Elara's family heirloom, entrusted to you on the road — to the crystal. The pendant dissolves into motes of blue light that weave themselves into the failing ward, mending its fractures. The shield holds, but it is not the same: it now carries the weight of loss, of a gift given freely. The valley is protected, but you cannot shake the feeling that something irreplaceable was lost in the exchange.",
+          "reactionDialogueKey": "elder_thalia_ending_sacrificed",
+          "worldStateFlag": "emberwatch.ending.sacrificed"
+        },
+        "ward_shattered": {
+          "title": "The Ward Shattered",
+          "narration": "With a decisive strike, you shatter the ward crystal. A shockwave of raw arcane energy ripples outward, scouring the valley clean of corruption. The dark creatures that lurked in the shadows are obliterated. Emberwatch is free — but the shield that protected it for centuries is gone forever. The villagers will need to learn to defend themselves. You have given them freedom, but taken away their sanctuary.",
+          "reactionDialogueKey": "elder_thalia_ending_shattered",
+          "worldStateFlag": "emberwatch.ending.shattered"
+        }
+      }
+    },
+    "lost_pendant": {
+      "id": "lost_pendant",
+      "name": "The Merchant's Lost Pendant",
+      "description": "Keth the Merchant dropped a silver pendant with a blue gem somewhere on the Old Road. Find it and return it to him for a reward.",
+      "objectives": [
+        {
+          "text": "Find Keth's lost pendant on the Old Road",
+          "completeOnItemPickup": "wardPendant"
+        },
+        {
+          "text": "Return the pendant to Keth",
+          "completeOnNpcInteract": "traveling_merchant"
+        }
+      ],
+      "offerDialogueKey": "merchant_keth_lost_pendant",
+      "progressDialogueKey": "merchant_keth_greeting",
+      "rewards": [
+        {
+          "type": "item",
+          "itemId": "steelSword"
+        },
+        {
+          "type": "gold",
+          "amount": 100
+        }
+      ],
+      "endings": {
+        "returned": {
+          "title": "Pendant Returned",
+          "narration": "Keth's eyes light up as you hand him the pendant. 'My grandmother's pendant! I thought I'd never see it again.' He presses a gleaming steel sword into your hands and refuses to take no for an answer. 'You've done me a kindness I cannot repay. Take this — you'll need it more than I do.'",
+          "reactionDialogueKey": "merchant_keth_greeting",
+          "worldStateFlag": "emberwatch.pendant.returned"
+        }
+      }
+    }
+  },
+  "encounters": {
+    "ruined_ward_encounter": {
+      "id": "ruined_ward_encounter",
+      "mapId": "ruined_ward_shrine",
+      "name": "Shade of the Ruined Shrine",
+      "enemyNpcIds": ["shade_guardian"],
+      "allowNonCombatResolution": true,
+      "nonCombatSkillCheck": {
+        "skill": "persuasion",
+        "dc": 14,
+        "statModifier": "charisma",
+        "successDialogueKey": "shade_persuaded",
+        "failureDialogueKey": "shade_enraged"
+      },
+      "startDialogueKey": "encounter_start",
+      "victoryDialogueKey": "encounter_victory",
+      "nonCombatSuccessDialogueKey": "shade_persuaded",
+      "loot": [
+        {
+          "itemId": "wardShard",
+          "quantity": 1,
+          "dropChance": 1.0
+        },
+        {
+          "itemId": "healthPotion",
+          "quantity": 1,
+          "dropChance": 0.5
+        }
+      ]
+    }
+  },
+  "credits": {
+    "design": ["Aikami Studio"],
+    "writing": ["Aikami Studio"],
+    "art": ["Liberated Pixel Cup (LPC) asset contributors"],
+    "music": ["Chainsmoker — Exploration Theme"],
+    "thanks": ["The open-source game development community", "The LPC asset artists"]
+  }
+}

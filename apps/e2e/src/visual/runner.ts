@@ -133,7 +133,7 @@ const checkClientRunning = async (): Promise<void> => {
   console.error('[runner]');
   console.error('[runner] Start the client before running visual tests:');
   console.error('[runner]   bun moon run client:dev');
-  console.error('[runner]   or: tmux_session start client');
+  console.error('[runner]   or: herdr_session start client');
   process.exit(1);
 };
 

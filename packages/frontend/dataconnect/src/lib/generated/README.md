@@ -9,6 +9,7 @@ This README will guide you through the process of using the generated JavaScript
   - [*Connecting to the local Emulator*](#connecting-to-the-local-emulator)
 - [**Queries**](#queries)
   - [*ListUsers*](#listusers)
+  - [*GetTracksByMood*](#gettracksbymood)
   - [*ListSaveSlots*](#listsaveslots)
 - [**Mutations**](#mutations)
   - [*UpsertSaveSlot*](#upsertsaveslot)
@@ -149,6 +150,119 @@ console.log(data.users);
 executeQuery(ref).then((response) => {
   const data = response.data;
   console.log(data.users);
+});
+```
+
+## GetTracksByMood
+You can execute the `GetTracksByMood` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+getTracksByMood(vars: GetTracksByMoodVariables, options?: ExecuteQueryOptions): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
+
+interface GetTracksByMoodRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetTracksByMoodVariables): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
+}
+export const getTracksByMoodRef: GetTracksByMoodRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getTracksByMood(dc: DataConnect, vars: GetTracksByMoodVariables, options?: ExecuteQueryOptions): QueryPromise<GetTracksByMoodData, GetTracksByMoodVariables>;
+
+interface GetTracksByMoodRef {
+  ...
+  (dc: DataConnect, vars: GetTracksByMoodVariables): QueryRef<GetTracksByMoodData, GetTracksByMoodVariables>;
+}
+export const getTracksByMoodRef: GetTracksByMoodRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getTracksByMoodRef:
+```typescript
+const name = getTracksByMoodRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `GetTracksByMood` query requires an argument of type `GetTracksByMoodVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetTracksByMoodVariables {
+  mood: string;
+}
+```
+### Return Type
+Recall that executing the `GetTracksByMood` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetTracksByMoodData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetTracksByMoodData {
+  audioTracks: ({
+    id: UUIDString;
+    title: string;
+    storageUrl: string;
+  } & AudioTrack_Key)[];
+}
+```
+### Using `GetTracksByMood`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, getTracksByMood, GetTracksByMoodVariables } from '@aikami/frontend-dataconnect';
+
+// The `GetTracksByMood` query requires an argument of type `GetTracksByMoodVariables`:
+const getTracksByMoodVars: GetTracksByMoodVariables = {
+  mood: ..., 
+};
+
+// Call the `getTracksByMood()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await getTracksByMood(getTracksByMoodVars);
+// Variables can be defined inline as well.
+const { data } = await getTracksByMood({ mood: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await getTracksByMood(dataConnect, getTracksByMoodVars);
+
+console.log(data.audioTracks);
+
+// Or, you can use the `Promise` API.
+getTracksByMood(getTracksByMoodVars).then((response) => {
+  const data = response.data;
+  console.log(data.audioTracks);
+});
+```
+
+### Using `GetTracksByMood`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, getTracksByMoodRef, GetTracksByMoodVariables } from '@aikami/frontend-dataconnect';
+
+// The `GetTracksByMood` query requires an argument of type `GetTracksByMoodVariables`:
+const getTracksByMoodVars: GetTracksByMoodVariables = {
+  mood: ..., 
+};
+
+// Call the `getTracksByMoodRef()` function to get a reference to the query.
+const ref = getTracksByMoodRef(getTracksByMoodVars);
+// Variables can be defined inline as well.
+const ref = getTracksByMoodRef({ mood: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = getTracksByMoodRef(dataConnect, getTracksByMoodVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.audioTracks);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.audioTracks);
 });
 ```
 

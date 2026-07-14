@@ -9,10 +9,23 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { routerService } from '$services';
+import type { CustomAgentDefinition } from '$types/agent_types';
+import {
+  type AgentEditorViewModelInterface,
+  getAgentEditorViewModel,
+} from '../agent/editor/agent_editor_view_model.svelte.ts';
+import {
+  type AgentListViewModelInterface,
+  getAgentListViewModel,
+} from '../agent/list/agent_list_view_model.svelte.ts';
 import {
   getSettingsAudioViewModel,
   type SettingsAudioViewModelInterface,
 } from './audio/settings_audio_view_model.svelte';
+import {
+  type AutonomousSettingsViewModelInterface,
+  getAutonomousSettingsViewModel,
+} from './autonomous/autonomous_settings_view_model.svelte';
 import {
   getSettingsControlsViewModel,
   type SettingsControlsViewModelInterface,
@@ -22,6 +35,14 @@ import {
   type SettingsDisplayViewModelInterface,
 } from './display/settings_display_view_model.svelte';
 import {
+  type ExportViewModelInterface,
+  getExportViewModel,
+} from './export/export_view_model.svelte';
+import {
+  getSettingsMusicViewModel,
+  type SettingsMusicViewModelInterface,
+} from './music/settings_music_view_model.svelte';
+import {
   getProvidersViewModel,
   type ProvidersViewModelInterface,
 } from './providers/providers_view_model.svelte';
@@ -30,9 +51,9 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsCategory = 'game' | 'ai_engine';
+export type SettingsCategory = 'game' | 'ai_engine' | 'agents';
 
-export type GameSubTab = 'display' | 'audio' | 'controls';
+export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music' | 'autonomous';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -47,10 +68,20 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly providersViewModel: ProvidersViewModelInterface;
   /** Audio settings view model wired to AudioService. */
   readonly audioViewModel: SettingsAudioViewModelInterface;
+  /** Music DJ settings view model — track library, scene overrides, provider. */
+  readonly musicViewModel: SettingsMusicViewModelInterface;
+  /** Autonomous NPCs settings view model (C-248). */
+  readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
   /** Display settings view model wired to Tauri window API. */
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   /** Controls settings view model with localStorage keybindings. */
   readonly controlsViewModel: SettingsControlsViewModelInterface;
+  /** Export & Data settings view model (C-246). */
+  readonly exportViewModel: ExportViewModelInterface;
+  /** Agent list view model (C-247). */
+  readonly agentListViewModel: AgentListViewModelInterface;
+  /** Agent editor view model (C-247). */
+  readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
   setActiveCategory(category: SettingsCategory): void;
   setGameSubTab(tab: GameSubTab): void;
@@ -82,16 +113,36 @@ export class SettingsViewModel
   gameSubTab: GameSubTab = $state('display');
   readonly providersViewModel: ProvidersViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
+  readonly musicViewModel: SettingsMusicViewModelInterface;
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
+  readonly exportViewModel: ExportViewModelInterface;
+  readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
+  readonly agentListViewModel: AgentListViewModelInterface;
+  readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
   constructor(options: SettingsViewModelOptions) {
     super(options);
     this.providersViewModel = getProvidersViewModel({ className: 'ProvidersViewModel' });
     this.audioViewModel = getSettingsAudioViewModel({ className: 'SettingsAudioViewModel' });
+    this.musicViewModel = getSettingsMusicViewModel({ className: 'SettingsMusicViewModel' });
     this.displayViewModel = getSettingsDisplayViewModel({ className: 'SettingsDisplayViewModel' });
     this.controlsViewModel = getSettingsControlsViewModel({
       className: 'SettingsControlsViewModel',
+    });
+    this.exportViewModel = getExportViewModel({
+      className: 'ExportViewModel',
+    });
+    this.autonomousViewModel = getAutonomousSettingsViewModel({
+      className: 'AutonomousSettingsViewModel',
+    });
+    this.agentEditorViewModel = getAgentEditorViewModel({
+      className: 'AgentEditorViewModel',
+    });
+    this.agentListViewModel = getAgentListViewModel({
+      className: 'AgentListViewModel',
+      onCreateAgent: () => this.agentEditorViewModel.openCreate(),
+      onEditAgent: (agent: CustomAgentDefinition) => this.agentEditorViewModel.openEdit(agent),
     });
   }
 
@@ -108,6 +159,12 @@ export class SettingsViewModel
 
   setGameSubTab(tab: GameSubTab): void {
     this.gameSubTab = tab;
+  }
+
+  /** Navigates to the Agents tab. */
+  showAgentsTab(): void {
+    this.activeCategory = 'agents';
+    this.agentListViewModel.refresh();
   }
 
   async closeSettings(): Promise<void> {
@@ -130,4 +187,4 @@ export class SettingsViewModel
 
 export const getSettingsViewModel = (
   options: SettingsViewModelOptions,
-): SettingsViewModelInterface => new SettingsViewModel(options);
+): SettingsViewModelInterface => SettingsViewModel.create(options);

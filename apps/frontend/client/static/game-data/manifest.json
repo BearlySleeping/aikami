@@ -1,0 +1,30 @@
+{
+  "scannedAt": "2026-07-10T13:54:41.443Z",
+  "count": 1,
+  "assets": {
+    "music:exploration:Chainsmoker": {
+      "tag": "music:exploration:Chainsmoker",
+      "category": "music",
+      "subcategory": "exploration",
+      "name": "Chainsmoker",
+      "path": "music/exploration/Chainsmoker.mp3",
+      "ext": ".mp3"
+    }
+  },
+  "byCategory": {
+    "music": [
+      {
+        "tag": "music:exploration:Chainsmoker",
+        "category": "music",
+        "subcategory": "exploration",
+        "name": "Chainsmoker",
+        "path": "music/exploration/Chainsmoker.mp3",
+        "ext": ".mp3"
+      }
+    ],
+    "sfx": [],
+    "ambient": [],
+    "sprites": [],
+    "backgrounds": []
+  }
+}

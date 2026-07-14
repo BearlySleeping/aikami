@@ -83,6 +83,42 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 - Data Connect security rules documentation minimal
 - PowerSync sync protocol documentation not started
 
+## Architectural Constraints (Critical — Must Enforce)
+
+These constraints were identified in the July 2026 architecture review. Violating any of them causes runtime failures.
+
+### PowerSync Init Boundary (Tauri)
+
+`tauri-plugin-powersync` `connect()` **must** be invoked from the Rust core, never from client-side JavaScript. Attempting to initialize the replication stream from JS will immediately crash the runtime. All PowerSync initialization code lives in `src-tauri/` and is exposed to the frontend only through Tauri IPC commands.
+
+- **Lint guard**: A future ESLint/Biome rule should ban `PowerSync.connect()` in `apps/frontend/client/src/`.
+- **Review gate**: Any PR touching PowerSync initialization requires Rust-side review.
+
+### PixiJS v8 WebGPU Shader Reflection Bug
+
+PixiJS v8's internal shader reflection utility (`extractAttributesFromGpuProgram.ts`) contains a regex bug: if a WGSL vertex shader input attribute is declared immediately before a closing parenthesis without trailing whitespace, the regex parser fails, causing a WebGPU validation crash.
+
+```wgsl
+// ❌ CRASHES the rendering pipeline:
+fn mainVert(@location(0) aPosition: vec2f, @location(1) aUV: vec2f)
+
+// ✅ Fixes the reflection parser:
+fn mainVert(@location(0) aPosition: vec2f, @location(1) aUV: vec2f )
+```
+
+All `.wgsl` shader files must have trailing whitespace before closing parentheses in attribute lists.
+A validation script (`scripts/src/lib/ops/validate_wgsl.ts`) enforces this at build time.
+
+### Data Connect GraphQL Field Naming
+
+SQL Connect (Firebase Data Connect) reserves the underscore character (`_`) in GraphQL field names for internal relationship compilers and helper queries. **GraphQL field names must use camelCase only.** Column-level names via `@col(name: "snake_case")` are unaffected — only the GraphQL schema type field names are restricted.
+
+A validation script (`scripts/src/lib/ops/validate_gql_fields.ts`) enforces this.
+
+### PowerSync Queue Validation: 2xx on Business Failures
+
+When the client sends a mutation that fails server-side business validation (e.g., insufficient gold for a purchase), the backend **must** respond with a 2xx success status. Responding with a 4xx error will jam the client's `ps_crud` upload queue, blocking all subsequent sync operations. The error payload should be in the response body, not the HTTP status code.
+
 ## TODO (High Priority)
 
 1. Implement C-016: Game Engine Boundary (PixiJS v8 + bitECS + EngineBridge)

@@ -17,7 +17,7 @@ export default defineConfig({
     service: passthroughImageService(),
   },
   vite: {
-    // see https://github.com/tailwindlabs/tailwindcss/issues/18802
+    // biome-ignore lint/suspicious/noExplicitAny: see https://github.com/tailwindlabs/tailwindcss/issues/18802
     plugins: [tailwindcss() as any],
     server: {
       fs: {

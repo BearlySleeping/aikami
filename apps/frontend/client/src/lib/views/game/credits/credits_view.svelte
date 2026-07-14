@@ -1,20 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/credits/credits_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { CreditsViewModelInterface } from './credits_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/game/credits/credits_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { CreditsViewModelInterface } from './credits_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: CreditsViewModelInterface;
-  };
+type Props = {
+  viewModel: CreditsViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <div class="flex min-h-screen flex-col items-center px-4 py-8">
     <!-- Header with back button -->
     <div class="flex w-full max-w-2xl items-center gap-4">
-      <button class="btn btn-ghost btn-sm" onclick={() => viewModel.backToMenu()}>← Back</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => viewModel.backToMenu()}>
+        ← Back
+      </button>
       <h1 class="text-2xl font-bold text-primary">Credits</h1>
     </div>
 

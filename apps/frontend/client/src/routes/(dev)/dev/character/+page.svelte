@@ -1,32 +1,32 @@
 <script lang="ts">
-  import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
-  import PersonaCreateView from '$views/character/persona/create/persona_create_view.svelte';
-  // apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte
-  import { getPersonaCreateDevViewModel } from '$views/character/persona/create/persona_create_view_model.dev.svelte.ts';
+import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import PersonaCreateView from '$views/character/persona/create/persona_create_view.svelte';
+// apps/frontend/client/src/routes/(dev)/dev/character/+page.svelte
+import { getPersonaCreateDevViewModel } from '$views/character/persona/create/persona_create_view_model.dev.svelte.ts';
 
-  const viewModel = getPersonaCreateDevViewModel({
-    className: 'PersonaCreateDevViewModel',
-  });
+const viewModel = getPersonaCreateDevViewModel({
+  className: 'PersonaCreateDevViewModel',
+});
 
-  /** Dev tools actions wired to CharacterDevViewModel sandbox methods. */
-  const devActions = [
-    {
-      label: 'Dev Generate (AI)',
-      onClick: () => viewModel.dev(),
-    },
-    {
-      label: 'Mock Generate',
-      onClick: () => viewModel.mockGenerateCharacter(),
-    },
-    {
-      label: 'Force Error State',
-      onClick: () => viewModel.forceErrorState(),
-    },
-    {
-      label: 'Inject Junk Data',
-      onClick: () => viewModel.injectJunkData(),
-    },
-  ];
+/** Dev tools actions wired to CharacterDevViewModel sandbox methods. */
+const devActions = [
+  {
+    label: 'Dev Generate (AI)',
+    onClick: () => viewModel.dev(),
+  },
+  {
+    label: 'Mock Generate',
+    onClick: () => viewModel.mockGenerateCharacter(),
+  },
+  {
+    label: 'Force Error State',
+    onClick: () => viewModel.forceErrorState(),
+  },
+  {
+    label: 'Inject Junk Data',
+    onClick: () => viewModel.injectJunkData(),
+  },
+];
 </script>
 
 <PersonaCreateView {viewModel} />

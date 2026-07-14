@@ -1,14 +1,14 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/voice_tab.svelte -->
 <script lang="ts">
-  import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
+import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  const voiceConfig = $derived(viewModel.config.voice);
+const voiceConfig = $derived(viewModel.config.voice);
 </script>
 
 <div class="space-y-6">
@@ -176,6 +176,7 @@
 
     <div class="pt-2">
       <button
+        type="button"
         class="btn btn-sm btn-ghost font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#cabeff]"
         onclick={() => viewModel.testVoice()}
         disabled={viewModel.isTestingVoice}

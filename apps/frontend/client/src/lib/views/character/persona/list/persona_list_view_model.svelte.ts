@@ -9,7 +9,16 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import { authService, gameStateService, routerService } from '$services';
+import { personaService } from '$lib/services/persona/persona_repository.svelte';
+import {
+  authService,
+  equipmentService,
+  gameModeService,
+  inventoryService,
+  playerStateService,
+  routerService,
+  worldStateService,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,7 +109,6 @@ class PersonaListViewModel
 
     // Set as active persona if logged in, so Firestore-aware game init can find it
     try {
-      const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
       await personaService.setActivePersona(id);
     } catch (error) {
       // Non-critical — localStorage fallback in GameViewModel handles this
@@ -108,7 +116,11 @@ class PersonaListViewModel
     }
 
     // Clear any stale state from a previous play session
-    gameStateService.reset();
+    playerStateService.reset();
+    inventoryService.reset();
+    equipmentService.reset();
+    gameModeService.reset();
+    worldStateService.reset();
 
     await routerService.goToRoute('game', {
       queryParameters: undefined,
@@ -141,7 +153,6 @@ class PersonaListViewModel
   /** @inheritdoc */
   async setActivePersona(personaId: string): Promise<void> {
     try {
-      const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
       await personaService.setActivePersona(personaId);
 
       // Refresh from Firestore to get updated active states
@@ -173,7 +184,6 @@ class PersonaListViewModel
 
   private async _loadFromFirestore(uid: string): Promise<void> {
     try {
-      const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
       const firestorePersonas = await personaService.getPersonas(uid);
 
       if (firestorePersonas.length > 0) {

@@ -1,37 +1,20 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/start/components/missing_providers_dialog.svelte
-  let {
-    onGoToSettings,
-    onClose,
-  }: {
-    onGoToSettings: () => void;
-    onClose: () => void;
-  } = $props();
+// apps/frontend/client/src/lib/views/start/components/missing_providers_dialog.svelte
+import { Modal } from '@aikami/frontend/components';
+
+let {
+  open = $bindable(),
+  onGoToSettings,
+  onClose,
+}: {
+  open: boolean;
+  onGoToSettings: () => void;
+  onClose: () => void;
+} = $props();
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<!-- biome-ignore lint/a11y/useSemanticElements: modal overlay contains nested buttons -->
-<div
-  class="modal modal-open"
-  role="button"
-  tabindex="0"
-  onclick={onClose}
-  onkeydown={(e) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  }}
->
-  <div
-    class="modal-box max-w-md"
-    role="dialog"
-    tabindex="-1"
-    aria-modal="true"
-    aria-label="AI Text Provider Required"
-    onclick={(e) => e.stopPropagation()}
-    onkeydown={(e) => e.stopPropagation()}
-  >
-    <!-- Icon -->
+<Modal bind:open size="md" onclose={onClose}>
+  {#snippet title()}
     <div class="flex justify-center mb-4">
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -40,6 +23,7 @@
         viewBox="0 0 24 24"
         stroke="currentColor"
       >
+        <title>icon</title>
         <path
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -48,20 +32,18 @@
         />
       </svg>
     </div>
+    <h3 class="text-lg font-bold text-center">AI Text Provider Required</h3>
+  {/snippet}
 
-    <!-- Title -->
-    <h3 class="text-lg font-bold text-center mb-4">AI Text Provider Required</h3>
-
-    <!-- Message -->
-    <p class="text-sm text-base-content/70 mb-6">
+  {#snippet children()}
+    <p class="text-sm text-base-content/70">
       An AI text provider is required to play the game. We highly recommend configuring Image and
       Voice generation as well for the full experience.
     </p>
+  {/snippet}
 
-    <!-- Actions -->
-    <div class="modal-action flex gap-2 justify-center">
-      <button class="btn btn-ghost" onclick={onClose}>Cancel</button>
-      <button class="btn btn-primary" onclick={onGoToSettings}>Go to Settings</button>
-    </div>
-  </div>
-</div>
+  {#snippet actions()}
+    <button type="button" class="btn btn-ghost" onclick={onClose}>Cancel</button>
+    <button type="button" class="btn btn-primary" onclick={onGoToSettings}>Go to Settings</button>
+  {/snippet}
+</Modal>

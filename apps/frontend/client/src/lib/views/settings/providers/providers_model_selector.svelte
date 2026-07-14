@@ -1,63 +1,63 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/providers/providers_model_selector.svelte
-  import type { OpenRouterModel } from '$lib/services/config/openrouter_models';
+// apps/frontend/client/src/lib/views/settings/providers/providers_model_selector.svelte
+import type { OpenRouterModel } from '$lib/services/config/openrouter_models';
 
-  type Props = {
-    models: readonly OpenRouterModel[];
-    selectedModel: string;
-    searchQuery: string;
-    isFetching: boolean;
-    onfetch: () => void;
-    onselect: (modelId: string) => void;
-    onsearch: (query: string) => void;
-    hasApiKey: boolean;
-    isKeyVerified: boolean;
-  };
+type Props = {
+  models: readonly OpenRouterModel[];
+  selectedModel: string;
+  searchQuery: string;
+  isFetching: boolean;
+  onfetch: () => void;
+  onselect: (modelId: string) => void;
+  onsearch: (query: string) => void;
+  hasApiKey: boolean;
+  isKeyVerified: boolean;
+};
 
-  const {
-    models,
-    selectedModel,
-    searchQuery,
-    isFetching,
-    onfetch,
-    onselect,
-    onsearch,
-    hasApiKey,
-    isKeyVerified,
-  }: Props = $props();
+const {
+  models,
+  selectedModel,
+  searchQuery,
+  isFetching,
+  onfetch,
+  onselect,
+  onsearch,
+  hasApiKey,
+  isKeyVerified,
+}: Props = $props();
 
-  let detailsOpen = $state(false);
+let detailsOpen = $state(false);
 
-  const filteredModels = $derived(
-    searchQuery
-      ? models.filter(
-          (m) =>
-            m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            m.name.toLowerCase().includes(searchQuery.toLowerCase()),
-        )
-      : models,
-  );
+const filteredModels = $derived(
+  searchQuery
+    ? models.filter(
+        (m) =>
+          m.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          m.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : models,
+);
 
-  const displayLabel = $derived(
-    selectedModel
-      ? (models.find((m) => m.id === selectedModel)?.name ?? selectedModel)
-      : 'Select a model...',
-  );
+const displayLabel = $derived(
+  selectedModel
+    ? (models.find((m) => m.id === selectedModel)?.name ?? selectedModel)
+    : 'Select a model...',
+);
 
-  const selectModel = (modelId: string): void => {
-    onselect(modelId);
-    detailsOpen = false;
-  };
+const selectModel = (modelId: string): void => {
+  onselect(modelId);
+  detailsOpen = false;
+};
 
-  const formatContextLength = (tokens: number): string => {
-    if (tokens >= 1_000_000) {
-      return `${(tokens / 1_000_000).toFixed(0)}M`;
-    }
-    if (tokens >= 1_000) {
-      return `${(tokens / 1_000).toFixed(0)}K`;
-    }
-    return `${tokens}`;
-  };
+const formatContextLength = (tokens: number): string => {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(0)}M`;
+  }
+  if (tokens >= 1_000) {
+    return `${(tokens / 1_000).toFixed(0)}K`;
+  }
+  return `${tokens}`;
+};
 </script>
 
 <div class="form-control">
@@ -89,6 +89,7 @@
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
+          <title>icon</title>
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -127,6 +128,7 @@
         {:else}
           {#each filteredModels as model}
             <button
+              type="button"
               class="w-full text-left px-3 py-2 hover:bg-white/[0.06] transition-colors flex items-center justify-between {model.id === selectedModel
                 ? 'bg-[#00e3fd]/10 border-l-2 border-[#00e3fd]'
                 : 'border-l-2 border-transparent'}"
@@ -151,6 +153,7 @@
 
     <!-- Fetch button -->
     <button
+      type="button"
       class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs gap-1.5 shrink-0"
       onclick={onfetch}
       disabled={isFetching || !hasApiKey || !isKeyVerified}

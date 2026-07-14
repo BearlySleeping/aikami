@@ -6,127 +6,28 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { ActiveSessionData, WorldEvent, WorldLocation, WorldState } from '@aikami/types';
+import type {
+  ActiveSessionData,
+  EquipmentSlot,
+  WorldEvent,
+  WorldGenOutput,
+  WorldLocation,
+  WorldState,
+} from '@aikami/types';
+import { serializeForAi } from '$lib/data/character_sheet_helpers';
+import type { NarrativeTraits } from '$lib/data/character_sheet_types';
+import { type CharacterSheet, createDefaultSheet } from '$lib/data/character_sheet_types';
 import type {
   ActiveContextEntry,
   GameMode,
   GameStateEvent,
   GameStateListener,
 } from '$types/game.ts';
+import { registerSerializable } from './serializable_service';
 
-// ---------------------------------------------------------------------------
-// Item definition catalog — maps itemId strings to stat bonuses and metadata
-//
-// Contract: C-153 Character Dashboard & Equipment
-// ---------------------------------------------------------------------------
+// C-314: ITEM_CATALOG and getItemDefinition moved to inventory_service.svelte.ts
 
-/** Equipment slot type for distinguishing weapon vs armor. */
-export type EquipmentSlot = 'weapon' | 'armor';
-
-/** Definition for a single item type in the game. */
-export type ItemDefinition = {
-  /** Display label shown in the UI. */
-  readonly label: string;
-  /** Attack bonus when equipped (0 for non-weapons). */
-  readonly attackBonus: number;
-  /** Defense bonus when equipped (0 for non-armor). */
-  readonly defenseBonus: number;
-  /** Whether the item can be equipped at all. */
-  readonly equippable: boolean;
-  /** Which slot the item occupies when equipped (only relevant when equippable). */
-  readonly slot: EquipmentSlot | undefined;
-};
-
-/**
- * Hardcoded item catalog for MVP equipment system.
- *
- * When items are picked up in the game, this catalog is consulted to
- * determine if they can be equipped and what stat bonuses they provide.
- * Unknown item IDs default to non-equippable generic items.
- */
-const ITEM_CATALOG: Record<string, ItemDefinition> = {
-  rusty_sword: {
-    label: 'Rusty Sword',
-    attackBonus: 3,
-    defenseBonus: 0,
-    equippable: true,
-    slot: 'weapon',
-  },
-  iron_sword: {
-    label: 'Iron Sword',
-    attackBonus: 5,
-    defenseBonus: 0,
-    equippable: true,
-    slot: 'weapon',
-  },
-  steel_sword: {
-    label: 'Steel Sword',
-    attackBonus: 8,
-    defenseBonus: 0,
-    equippable: true,
-    slot: 'weapon',
-  },
-  wooden_shield: {
-    label: 'Wooden Shield',
-    attackBonus: 0,
-    defenseBonus: 2,
-    equippable: true,
-    slot: 'armor',
-  },
-  leather_armor: {
-    label: 'Leather Armor',
-    attackBonus: 0,
-    defenseBonus: 3,
-    equippable: true,
-    slot: 'armor',
-  },
-  iron_armor: {
-    label: 'Iron Armor',
-    attackBonus: 0,
-    defenseBonus: 5,
-    equippable: true,
-    slot: 'armor',
-  },
-  health_potion: {
-    label: 'Health Potion',
-    attackBonus: 0,
-    defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-  },
-  mana_potion: {
-    label: 'Mana Potion',
-    attackBonus: 0,
-    defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-  },
-  gold_coin: {
-    label: 'Gold Coin',
-    attackBonus: 0,
-    defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-  },
-} as const satisfies Record<string, ItemDefinition>;
-
-/** Default definition for unknown item IDs. */
-const DEFAULT_ITEM_DEFINITION: ItemDefinition = {
-  label: 'Unknown Item',
-  attackBonus: 0,
-  defenseBonus: 0,
-  equippable: false,
-  slot: undefined,
-};
-
-/**
- * Looks up the {@link ItemDefinition} for a given item ID.
- *
- * Falls back to {@link DEFAULT_ITEM_DEFINITION} for unknown IDs.
- */
-export const getItemDefinition = (itemId: string): ItemDefinition => {
-  return ITEM_CATALOG[itemId] ?? { ...DEFAULT_ITEM_DEFINITION, label: itemId };
-};
+import { getItemDefinition } from './inventory_service.svelte';
 
 export type GameStateServiceOptions = BaseFrontendClassOptions & {
   uid: string;
@@ -156,6 +57,19 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
    * Contract: C-154 AI Vendors Economy
    */
   readonly gold: number;
+  /** Narrative traits (likes, temptations, keys) for AI context injection (C-232). */
+  readonly narrativeTraits: NarrativeTraits;
+  /** Compact AI-ready summary of the character sheet (C-232). */
+  readonly characterSheetSummary: string;
+
+  // ── World Generation (C-233) ──
+
+  /** Generated world output, or a minimal default for legacy saves. */
+  readonly worldGenOutput: WorldGenOutput;
+
+  /** Sets the generated world output after wizard completion. */
+  setWorldGenOutput(output: WorldGenOutput): void;
+
   /** Adds the given amount to the player's gold balance. */
   addGold(options: { amount: number }): void;
   /**
@@ -226,6 +140,12 @@ export type GameStateServiceInterface = BaseFrontendClassInterface & {
   getActiveSession(): ActiveSessionData | undefined;
   setMode(mode: GameMode): void;
 
+  /** Serializes world-gen state for save persistence. */
+  serializeWorldGen(): WorldGenOutput | undefined;
+
+  /** Hydrates world-gen state from a saved payload. */
+  hydrateWorldGen(data: WorldGenOutput | undefined): void;
+
   /**
    * Resets all mutable game state arrays (inventory, defeatedEnemies, quests,
    * equipment, player stats).
@@ -266,6 +186,12 @@ export class GameStateService
   equippedWeapon = $state<string | undefined>(undefined);
   equippedArmor = $state<string | undefined>(undefined);
 
+  // ── Narrative traits (C-232 Character Sheet) ──
+  narrativeTraits = $state<NarrativeTraits>({ likes: [], temptations: [], keys: [] });
+
+  // ── World Generation (C-233) ──
+  _worldGenOutput = $state<WorldGenOutput | undefined>(undefined);
+
   // ── Computed stat getters ──
 
   /** Total attack = base + weapon bonus. */
@@ -276,6 +202,21 @@ export class GameStateService
   /** Total defense = base + armor bonus. */
   get playerTotalDefense(): number {
     return this.playerBaseDefense + this._equipmentDefenseBonus;
+  }
+
+  /** Compact AI-ready character sheet summary for prompt injection (C-232). */
+  get characterSheetSummary(): string {
+    const sheet: CharacterSheet = {
+      ...createDefaultSheet(),
+      level: this.playerLevel,
+      xp: this.playerXp,
+      hp: this.playerHp,
+      maxHp: this.playerMaxHp,
+      attack: this.playerTotalAttack,
+      defense: this.playerTotalDefense,
+      narrativeTraits: this.narrativeTraits,
+    };
+    return serializeForAi(sheet);
   }
 
   /** Attack bonus from currently equipped weapon. */
@@ -298,8 +239,47 @@ export class GameStateService
     return this.currentWorld?.variables ?? {};
   }
 
+  /** @inheritdoc */
+  get worldGenOutput(): WorldGenOutput {
+    return this._worldGenOutput ?? this._getDefaultWorldGenOutput();
+  }
+
+  /** @inheritdoc */
+  setWorldGenOutput(output: WorldGenOutput): void {
+    this._worldGenOutput = output;
+    this.debug('setWorldGenOutput', { worldName: output.worldName });
+  }
+
   get isConnected(): boolean {
     return this.currentWorld !== undefined;
+  }
+
+  /**
+   * Returns a minimal default WorldGenOutput for backward compatibility
+   * with pre-wizard saves.
+   */
+  private _getDefaultWorldGenOutput(): WorldGenOutput {
+    return {
+      worldName: 'The Realm',
+      worldDescription: 'A world of adventure awaits.',
+      npcs: [],
+      locations: ['Town Square'],
+      partyArcs: [],
+      hudWidgets: [],
+    };
+  }
+
+  /** @inheritdoc */
+  serializeWorldGen(): WorldGenOutput | undefined {
+    return this._worldGenOutput;
+  }
+
+  /** @inheritdoc */
+  hydrateWorldGen(data: WorldGenOutput | undefined): void {
+    if (data) {
+      this._worldGenOutput = data;
+      this.debug('hydrateWorldGen', { worldName: data.worldName });
+    }
   }
 
   private readonly uid: string;
@@ -309,6 +289,18 @@ export class GameStateService
   constructor(options: GameStateServiceOptions) {
     super(options);
     this.uid = options.uid;
+
+    // Register for save/load serialization (C-233)
+    registerSerializable('gameState', {
+      serialize: () => ({ worldGenOutput: this._worldGenOutput }),
+      hydrate: (data: unknown) => {
+        const payload = data as { worldGenOutput?: WorldGenOutput };
+        if (payload.worldGenOutput) {
+          this._worldGenOutput = payload.worldGenOutput;
+        }
+      },
+    });
+
     void this._listenForInventoryUpdates();
     void this._listenForQuestUpdates();
     void this._listenForCombatEnded();
@@ -544,6 +536,7 @@ export class GameStateService
     this.playerMaxHp = 100;
     this.playerBaseAttack = 5;
     this.playerBaseDefense = 12;
+    this._worldGenOutput = undefined;
     this.debug('reset:cleared');
   }
 
@@ -800,7 +793,8 @@ export class GameStateService
   }
 }
 
-export const gameStateService: GameStateServiceInterface = GameStateService.create({
-  uid: 'singleton',
-  className: 'GameStateService',
-});
+// C-314: Module-level singleton removed. Use the five split services instead:
+// PlayerStateService, WorldStateService, InventoryService, EquipmentService, GameModeService
+//
+// The GameStateService class is retained for backward-compatible test imports.
+// Production code should use the composition root or individual service singletons.

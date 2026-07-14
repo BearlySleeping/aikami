@@ -8,7 +8,9 @@
     "typecheck": "tsgo --noEmit",
     "lint": "biome check .",
     "format": "biome format .",
-    "fix": "biome check --write . --error-on-warnings"
+    "fix": "biome check --write . --error-on-warnings",
+    "test": "bun test",
+    "lint-contracts": "bun run src/lib/ops/lint_contracts.ts"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

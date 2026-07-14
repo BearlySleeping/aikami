@@ -1,12 +1,12 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/save_load/save_load_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { SaveLoadViewModelInterface } from './save_load_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/save_load/save_load_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { SaveLoadViewModelInterface } from './save_load_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: SaveLoadViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: SaveLoadViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -27,6 +27,7 @@
       </div>
       {#if !viewModel.uid}
         <button
+          type="button"
           class="btn btn-accent btn-xs"
           disabled={viewModel.isSigningIn}
           onclick={() => viewModel.signInAnonymously()}
@@ -69,6 +70,7 @@
     <!-- Action buttons -->
     <div class="flex gap-2">
       <button
+        type="button"
         class="btn btn-primary btn-sm"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.saveSlot()}
@@ -80,6 +82,7 @@
       </button>
 
       <button
+        type="button"
         class="btn btn-outline btn-sm"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.loadSlot()}
@@ -88,6 +91,7 @@
       </button>
 
       <button
+        type="button"
         class="btn btn-error btn-sm btn-outline"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.deleteSlot()}
@@ -96,6 +100,7 @@
       </button>
 
       <button
+        type="button"
         class="btn btn-ghost btn-sm"
         disabled={viewModel.isBusy}
         onclick={() => viewModel.loadSlots()}

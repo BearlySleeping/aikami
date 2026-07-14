@@ -1,5 +1,9 @@
 // apps/frontend/client/src/lib/services/media/pixi_texture_injector.ts
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import { type Container, Texture } from 'pixi.js';
 
 // ---------------------------------------------------------------------------
@@ -15,7 +19,7 @@ import { type Container, Texture } from 'pixi.js';
 // reclaimed until the app is destroyed.
 // ---------------------------------------------------------------------------
 
-export type PixiTextureInjectorOptions = BaseClassOptions & {
+export type PixiTextureInjectorOptions = BaseFrontendClassOptions & {
   /**
    * The target PixiJS Container (Sprite or Mesh) whose texture will be updated.
    * Must have a `texture` property.
@@ -30,7 +34,7 @@ export type PixiTextureInjectorOptions = BaseClassOptions & {
   mimeType?: string;
 };
 
-export type PixiTextureInjectorInterface = BaseClassInterface & {
+export type PixiTextureInjectorInterface = BaseFrontendClassInterface & {
   /**
    * Converts a binary image buffer to a PixiJS Texture and applies it to
    * the target display object.
@@ -73,7 +77,7 @@ export type PixiTextureInjectorInterface = BaseClassInterface & {
  * ```
  */
 export class PixiTextureInjector
-  extends BaseClass<PixiTextureInjectorOptions>
+  extends BaseFrontendClass<PixiTextureInjectorOptions>
   implements PixiTextureInjectorInterface
 {
   private readonly _target: Container & { texture: Texture };
@@ -158,4 +162,4 @@ export class PixiTextureInjector
 
 export const getPixiTextureInjector = (
   options: PixiTextureInjectorOptions,
-): PixiTextureInjectorInterface => new PixiTextureInjector(options);
+): PixiTextureInjectorInterface => PixiTextureInjector.create(options);

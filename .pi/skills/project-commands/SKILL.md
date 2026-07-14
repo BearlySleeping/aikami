@@ -7,7 +7,7 @@ description: Aikami monorepo commands reference — moon tasks, validation, depl
 
 > **See `aikami-conventions` for**: direnv environment, mode switching, Client dev server defaults, logger alias.
 >
-> This skill covers moon configs, root scripts, commit directives, and tmux.
+> This skill covers moon configs, root scripts, commit directives, and herdr.
 
 ---
 
@@ -15,24 +15,24 @@ description: Aikami monorepo commands reference — moon tasks, validation, depl
 
 These rules govern how AI agents spawn commands for this project.
 
-### 1. Long-Running Processes → Tmux
+### 1. Long-Running Processes → Herdr
 
-**Always prefer `bun run tmux:start <service>` for processes that stay alive**
+**Always prefer `bun run herdr:start <service>` for processes that stay alive**
 (dev servers, firebase, watchers). Never use `moon_run_task client:dev` or
 `moon_run_task image:dev` — these start foreground processes that block the
 agent indefinitely.
 
 ```bash
-# ✅ CORRECT — background tmux session
-bun run tmux:start client          # Client dev server in tmux
-bun run tmux:start all             # Full stack
-bun run tmux:start firebase        # Firebase emulators
+# ✅ CORRECT — background herdr workspace
+bun run herdr:start client          # Client dev server in herdr
+bun run herdr:start all             # Full stack
+bun run herdr:start firebase        # Firebase emulators
 
 # ❌ WRONG — foreground dev server blocks agent
 bun moon run client:dev
 ```
 
-After starting a tmux session, wait 3-5 seconds then use `browser_inspect` to
+After starting a herdr workspace, wait 3-5 seconds then use `browser_inspect` to
 verify the page is accessible.
 
 ### 2. Finite Tasks → Set Timeout & Predict Duration
@@ -58,21 +58,21 @@ bash("npm test 2>&1")
 | Build       | 600s            | Bundling can be slow    |
 | Test (E2E)  | 600s            | Includes server startup |
 
-### 3. Tmux Session Lifecycle
+### 3. Herdr Session Lifecycle
 
 ```bash
 # Check what's already running
-bun run tmux:status
+bun run herdr:status
 
 # Start (only if not already running)
-bun run tmux:start client
-bun run tmux:start all --force     # Kill + recreate
+bun run herdr:start client
+bun run herdr:start all --force     # Kill + recreate
 
 # Join to inspect
-bun run tmux:join firebase
+bun run herdr:join firebase
 
 # Cleanup when done
-bun run tmux:stop client
+bun run herdr:stop client
 ```
 
 ---
@@ -252,15 +252,15 @@ The root `package.json` provides shortcuts for common operations:
 | Script    | Command                                  | Purpose                                                  |
 | --------- | ---------------------------------------- | -------------------------------------------------------- |
 | `dev`     | `moon run $APP:dev`                      | Start dev server for $APP (defaults to emulator for Client) |
-| `dev:all` | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in tmux (mode from $AIKAMI_MODE)        |
+| `dev:all` | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in herdr (mode from $AIKAMI_MODE)        |
 
-| Tmux Script     | Command                                    | Purpose                                                     |
+| Herdr Script     | Command                                    | Purpose                                                     |
 | --------------- | ------------------------------------------ | ----------------------------------------------------------- |
-| `tmux:start`    | `bun run scripts/src/lib/tmux/start.ts`    | Start a tmux session (firebase/client/image/text/voice/all) |
-| `tmux:join`     | `bun run scripts/src/lib/tmux/join.ts`     | Attach to a running tmux session                            |
-| `tmux:stop`     | `bun run scripts/src/lib/tmux/stop.ts`     | Stop a tmux session                                         |
-| `tmux:stop-all` | `bun run scripts/src/lib/tmux/stop_all.ts` | Stop all aikami tmux sessions                               |
-| `tmux:status`   | `bun run scripts/src/lib/tmux/status.ts`   | List running aikami tmux sessions                           |
+| `herdr:start`    | `bun run scripts/src/lib/herdr/start.ts`    | Start a herdr workspace (firebase/client/image/text/voice/all) |
+| `herdr:join`     | `bun run scripts/src/lib/herdr/join.ts`     | Attach to a running herdr workspace                            |
+| `herdr:stop`     | `bun run scripts/src/lib/herdr/stop.ts`     | Stop a herdr workspace                                         |
+| `herdr:stop-all` | `bun run scripts/src/lib/herdr/stop_all.ts` | Stop all aikami herdr workspaces                               |
+| `herdr:status`   | `bun run scripts/src/lib/herdr/status.ts`   | List running aikami herdr workspaces                           |
 
 ### Validation (Run Separately)
 
@@ -295,7 +295,7 @@ The root `package.json` provides shortcuts for common operations:
 | -------------- | ---------------------------------------- | ------------------------ |
 | `ops:secrets`  | `bun run scripts/ops/upload_secrets.ts`  | Upload secrets to GCP    |
 | `ops:add-user` | `bun run scripts/ops/add_user.ts`        | Add user to GCP IAM      |
-| `ops:dev-all`  | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in tmux |
+| `ops:dev-all`  | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in herdr |
 
 ### Logging
 
@@ -392,69 +392,69 @@ The AI enforces: 2 failed attempts → diagnostic script. Never ask user to "try
 
 ---
 
-## Running Dev Servers in Tmux
+## Running Dev Servers in Herdr
 
-All tmux sessions use a unified naming convention: `aikami-{mode}-{service}`.
+All herdr workspaces use a unified naming convention: `aikami-{mode}`.
 
 | Variable  | Values                                                |
 | --------- | ----------------------------------------------------- |
 | `mode`    | `emulator`, `staging`, `production`                   |
-| `service` | `firebase`, `client`, `image`, `text`, `voice`, `all` |
+| `service` | `firebase`, `client`, `image`, `text`, `voice`, `preview-client`, `all` |
 
 ### Root package.json scripts
 
 | Script                         | Purpose                      |
 | ------------------------------ | ---------------------------- |
-| `bun run tmux:start <service>` | Start a session (background) |
-| `bun run tmux:join <service>`  | Attach to a running session  |
-| `bun run tmux:stop <service>`  | Stop a session               |
-| `bun run tmux:stop-all`        | Stop all aikami sessions     |
-| `bun run tmux:status`          | List all running sessions    |
+| `bun run herdr:start <service>` | Start a workspace (background) |
+| `bun run herdr:join <service>`  | Attach to a running workspace  |
+| `bun run herdr:stop <service>`  | Stop a workspace               |
+| `bun run herdr:stop-all`        | Stop all aikami workspaces     |
+| `bun run herdr:status`          | List all running workspaces    |
 
 All scripts respect `$AIKAMI_MODE` from direnv. Override with `--mode <mode>`.
-Use `--force` with `tmux:start` to kill and recreate an existing session.
+Use `--force` with `herdr:start` to kill and recreate an existing workspace.
 
 ### Quick reference
 
 ```bash
 # Start services (mode from $AIKAMI_MODE, defaults to emulator)
-bun run tmux:start firebase          # Firebase emulators only
-bun run tmux:start client            # Client dev server
-bun run tmux:start image             # Image generation (ComfyUI Docker)
-bun run tmux:start text              # Text generation (Ollama Docker)
-bun run tmux:start voice             # Voice synthesis (Kokoro TTS Docker)
-bun run tmux:start all               # Full stack (firebase + client + image + text + voice)
+bun run herdr:start firebase          # Firebase emulators only
+bun run herdr:start client            # Client dev server
+bun run herdr:start image             # Image generation (ComfyUI Docker)
+bun run herdr:start text              # Text generation (Ollama Docker)
+bun run herdr:start voice             # Voice synthesis (Kokoro TTS Docker)
+bun run herdr:start all               # Full stack (firebase + client + image + text + voice)
 
 # Override mode
-bun run tmux:start firebase --mode staging
+bun run herdr:start firebase --mode staging
 
 # Force recreate
-bun run tmux:start all --force
+bun run herdr:start all --force
 
 # Join / watch
-bun run tmux:join firebase          # Attach to firebase session
-bun run tmux:join all                # Attach to full stack session
+bun run herdr:join firebase          # Attach to firebase tab
+bun run herdr:join all                # Attach to full stack workspace
 
 # Manage
-bun run tmux:status                  # List all aikami sessions
-bun run tmux:stop client                # Stop Client session
-bun run tmux:stop-all                # Stop everything
+bun run herdr:status                  # List all aikami workspaces
+bun run herdr:stop client                # Stop Client tab
+bun run herdr:stop-all                # Stop everything
 
-# Direct tmux commands also work
-tmux attach -t aikami-emulator
-tmux kill-session -t aikami-emulator
+# Direct herdr commands also work
+herdr attach -t aikami-emulator
+herdr kill -t aikami-emulator
 ```
 
 ### Blackbox testing
 
-Blackbox tests automatically use the unified tmux manager. Sessions are named
-`aikami-{mode}` (windows named by service).
+Blackbox tests automatically use the unified herdr manager. Workspaces are named
+`aikami-{mode}` (tabs named by service).
 
 ```bash
 # Normal run — reuses existing sessions if already running in emulator mode
 bun run test:blackbox
 
-# Force recreate all sessions from scratch
+# Force recreate all workspaces from scratch
 bun run test:blackbox --force
 
 # Skip service startup entirely (sessions must already be running)
@@ -463,14 +463,14 @@ bun run test:blackbox --no-emulator
 
 ### How it works
 
-The unified library (`scripts/src/lib/tmux/session.ts`) handles:
+The unified library (`scripts/src/lib/herdr/session.ts`) handles:
 
-1. **Session naming**: `aikami-{mode}-{service}` stored as a tmux env var
-2. **Mode detection**: Checks `AIKAMI_TMUX_MODE` env var in the session
+1. **Workspace naming**: `aikami-{mode}` stored as a herdr workspace variable
+2. **Mode detection**: Checks `AIKAMI_HERDR_MODE` env var in the workspace
 3. **Start logic**:
-    - Session doesn't exist → create new
-    - Session exists, same mode → reuse (no-op)
-    - Session exists, different mode → error (use `--force` to override)
+    - Workspace doesn't exist → create new
+    - Workspace exists, same mode → reuse (no-op)
+    - Workspace exists, different mode → error (use `--force` to override)
 4. **Command wrapping**: Uses `direnv exec . bash -c '...'` to load Nix env
 5. **Keepalive**: Appends `; echo; echo '=== Stopped. Press Enter to close ==='; read`
    so the pane stays open after the command exits

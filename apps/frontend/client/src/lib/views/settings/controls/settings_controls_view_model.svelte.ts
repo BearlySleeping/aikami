@@ -170,4 +170,4 @@ class SettingsControlsViewModel
 
 export const getSettingsControlsViewModel = (
   options: SettingsControlsViewModelOptions,
-): SettingsControlsViewModelInterface => new SettingsControlsViewModel(options);
+): SettingsControlsViewModelInterface => SettingsControlsViewModel.create(options);

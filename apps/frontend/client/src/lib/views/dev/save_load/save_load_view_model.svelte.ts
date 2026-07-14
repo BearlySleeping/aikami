@@ -19,18 +19,18 @@ const DEFAULT_SNAPSHOT = JSON.stringify(
     timestamp: Date.now(),
     entities: [1, 2],
     components: {
-      Position: {
+      position: {
         x: [400, 600],
         y: [300, 350],
       },
-      Appearance: {
-        layerIds_0: [101, 0],
-        layerIds_1: [201, 0],
-        layerIds_2: [301, 0],
-        layerIds_3: [401, 0],
-        layerIds_4: [501, 0],
+      appearance: {
+        layerIds0: [101, 0],
+        layerIds1: [201, 0],
+        layerIds2: [301, 0],
+        layerIds3: [401, 0],
+        layerIds4: [501, 0],
       },
-      CombatStats: {
+      combatStats: {
         hp: [100, 50],
         maxHp: [100, 50],
         attack: [15, 8],

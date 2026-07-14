@@ -1,27 +1,24 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/dialogs/components/AppLoading.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/app/dialogs/components/app_loading.svelte
+//
+// Fullscreen loading overlay using DaisyUI progress bar.
 
-  type Props = {
-    viewModel: AppDialogsViewModelInterface;
-  };
+import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.svelte';
 
-  let { viewModel }: Props = $props();
+type Props = {
+  viewModel: AppDialogsViewModelInterface;
+};
+
+const { viewModel }: Props = $props();
 </script>
 
 {#if viewModel.appLoading}
-  <BaseViewModelContainer
-    {viewModel}
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-  >
-    <div class="bg-card rounded-lg border border-border shadow-sm p-8">
-      <div class="flex flex-col items-center gap-4">
-        <div
-          class="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full"
-        ></div>
-        <p class="text-lg font-medium">{viewModel.appLoading.label}</p>
-      </div>
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div class="flex flex-col items-center gap-4 rounded-xl bg-base-100 p-8 shadow-2xl">
+      <progress class="progress w-56"></progress>
+      <p class="text-sm font-medium text-base-content/70">
+        {viewModel.appLoading.label}
+      </p>
     </div>
-  </BaseViewModelContainer>
+  </div>
 {/if}

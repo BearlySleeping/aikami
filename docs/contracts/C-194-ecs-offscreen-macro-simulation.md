@@ -9,6 +9,7 @@
 | **Priority**         | P0 — Core multi-zone map lifecycle required to maintain schedule integrity across inactive sectors.                    |
 | **Dependencies**     | `docs/contracts/C-192-ecs-time-sliced-jps-pathfinder.md`, `docs/contracts/C-193-client-tool-streaming-orchestrator.md` |
 | **Status**           | completed                                                                                                              |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0                                                                                                                  |
 
 ## Overview
