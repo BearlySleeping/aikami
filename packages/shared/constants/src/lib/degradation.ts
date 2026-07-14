@@ -5,25 +5,11 @@
 // Read-only, no runtime dependencies — pure data module.
 // Contract: C-318 AC-5
 
-import type { CapabilityProfile } from '@aikami/types';
-
-// ── Degradation mode ───────────────────────────────────────────────────
-
 /**
  * How a feature behaves when its required AI capability is absent.
- *
- * - `full_ai`: Feature operates with full AI augmentation.
- * - `authored_fallback`: Pre-authored content from the content pack is used.
- * - `template_fallback`: Deterministic templates fill in the gaps.
- * - `static`: A static/default value is substituted.
- * - `disabled`: Feature is completely disabled / silent.
+ * Generated from DegradationModeSchema in @aikami/schemas.
  */
-export type DegradationMode =
-  | 'full_ai'
-  | 'authored_fallback'
-  | 'template_fallback'
-  | 'static'
-  | 'disabled';
+import type { CapabilityProfile, DegradationMode } from '@aikami/types';
 
 // ── Feature IDs ────────────────────────────────────────────────────────
 

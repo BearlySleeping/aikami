@@ -11,13 +11,15 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/app/boot/boot_diagnostics_view_model.test.ts
 
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 // capabilityService is mocked globally via test_preload.ts (returns 'detected'/'online')
 
 const { getBootDiagnosticsViewModel } = await import('./boot_diagnostics_view_model.svelte.ts');
 type Vm = ReturnType<typeof getBootDiagnosticsViewModel>;
+// Import the mocked capabilityService to verify method calls in delegation tests.
+const { capabilityService } = await import('$services');
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -64,8 +66,16 @@ describe('BootDiagnosticsViewModel', () => {
   // ── checkProviders (delegates to CapabilityService, C-318) ──────────
 
   test('checkProviders delegates to capabilityService and maps results', async () => {
+    const detectTextSpy = spyOn(capabilityService, 'detectText');
+    const detectImageSpy = spyOn(capabilityService, 'detectImage');
+
     const { vm } = createVm();
     await vm.checkProviders();
+
+    // Verify delegation: both methods must be called exactly once
+    expect(detectTextSpy).toHaveBeenCalledTimes(1);
+    expect(detectImageSpy).toHaveBeenCalledTimes(1);
+
     // Preload mock returns 'detected' → mapped to 'online'
     expect(vm.textStatus).toBe('online');
     // Preload mock returns 'online' → mapped to 'online'

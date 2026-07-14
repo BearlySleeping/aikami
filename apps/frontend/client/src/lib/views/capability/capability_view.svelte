@@ -156,10 +156,10 @@ const { viewModel }: Props = $props();
 
       <!-- Privacy / cost disclosure -->
       <p class="mt-2 text-xs text-base-content/60">
-        {#if viewModel.selectedCloudProvider === 'openrouter'}
-          Your prompts are sent to {TEXT_PROVIDERS.find(p => p.id === viewModel.selectedCloudProvider)?.label ?? 'the selected provider'} (which routes to various model providers). Usage-based billing applies per their pricing.
+        {#if viewModel.isCloudProviderOpenRouter}
+          Your prompts are sent to {viewModel.selectedCloudProviderLabel} (which routes to various model providers). Usage-based billing applies per their pricing.
         {:else}
-          Your prompts are sent to {TEXT_PROVIDERS.find(p => p.id === viewModel.selectedCloudProvider)?.label ?? 'the selected provider'}'s API. Usage-based billing applies.
+          Your prompts are sent to {viewModel.selectedCloudProviderLabel}'s API. Usage-based billing applies.
         {/if}
       </p>
 

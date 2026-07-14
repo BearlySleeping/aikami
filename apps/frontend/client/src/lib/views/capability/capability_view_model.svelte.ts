@@ -11,9 +11,9 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
+import { TEXT_PROVIDERS } from '@aikami/constants';
 import { encrypt } from '$lib/utils/crypto_vault';
-import { campaignService, capabilityService, routerService } from '$services';
-import { PROVIDER_MODEL_FETCH } from '$lib/services/config/provider_endpoints';
+import { campaignService, capabilityService, PROVIDER_MODEL_FETCH, routerService } from '$services';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -55,6 +55,10 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   testCloudConnection(): Promise<void>;
   /** Saves the cloud connection and proceeds. */
   confirmCloudConnection(): Promise<void>;
+  /** Human-readable label for the selected cloud provider. */
+  readonly selectedCloudProviderLabel: string;
+  /** Whether the selected cloud provider is OpenRouter (special routing note). */
+  readonly isCloudProviderOpenRouter: boolean;
 };
 
 export type CapabilityViewModelOptions = BaseViewModelOptions;
@@ -103,6 +107,15 @@ class CapabilityViewModel
 
   get cloudConfigured(): boolean {
     return this.snapshot.textStatus === 'configured';
+  }
+
+  get selectedCloudProviderLabel(): string {
+    const provider = TEXT_PROVIDERS.find((p) => p.id === this.selectedCloudProvider);
+    return provider?.label ?? this.selectedCloudProvider;
+  }
+
+  get isCloudProviderOpenRouter(): boolean {
+    return this.selectedCloudProvider === 'openrouter';
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────
