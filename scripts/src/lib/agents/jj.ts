@@ -150,32 +150,45 @@ source_env ${options.repoRoot}
     // direnv may not be installed — not fatal.
   }
 
-  // Symlink .pi/npm from repo root so pi packages don't re-download.
   const workspaceNpmDir = join(wsDir, '.pi', 'npm');
   const rootNpmDir = join(options.repoRoot, '.pi', 'npm');
-  if (existsSync(rootNpmDir) && !existsSync(workspaceNpmDir)) {
+  if (existsSync(rootNpmDir)) {
     try {
       mkdirSync(join(wsDir, '.pi'), { recursive: true });
-      execSync(`ln -sfn '${rootNpmDir}' '${workspaceNpmDir}'`, {
+      execSync(`rm -f '${join(workspaceNpmDir, 'npm')}'`, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: 5000,
       });
+      if (existsSync(workspaceNpmDir)) {
+        const rm = join(rootNpmDir, 'node_modules');
+        const wm = join(workspaceNpmDir, 'node_modules');
+        if (existsSync(rm) && !existsSync(wm)) {
+          execSync(`ln -sfn '${rm}' '${wm}'`, {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            timeout: 5000,
+          });
+        }
+      } else {
+        execSync(`ln -sfn '${rootNpmDir}' '${workspaceNpmDir}'`, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 5000,
+        });
+      }
     } catch {
-      // Fallback: pi auto-installs.
+      /* fallback: pi auto-installs */
     }
   }
 
-  // Copy .pi/settings.json so pi config (welcome:false etc.) applies.
   const rootSettingsPath = join(options.repoRoot, '.pi', 'settings.json');
   const workspaceSettingsPath = join(wsDir, '.pi', 'settings.json');
-  if (existsSync(rootSettingsPath) && !existsSync(workspaceSettingsPath)) {
+  if (existsSync(rootSettingsPath)) {
     try {
       mkdirSync(join(wsDir, '.pi'), { recursive: true });
       copyFileSync(rootSettingsPath, workspaceSettingsPath);
-    } catch {
-      // Non-critical.
-    }
+    } catch {}
   }
 
   return {

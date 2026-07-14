@@ -1,6 +1,16 @@
 // scripts/src/lib/agents/contract_pipeline/types.ts
 // biome-ignore-all lint/style/useNamingConvention: contract statuses and stages are persisted domain values
 
+/**
+ * 🔴 SINGLE SOURCE OF TRUTH: default base branch for contract pipeline PRs
+ * and jj workspace base revisions.
+ *
+ * Currently `main` — early development, and CodeRabbit only reviews PRs
+ * targeting main. Change this one constant (or set CONTRACT_PIPELINE_BASE_BRANCH)
+ * to retarget the whole pipeline (e.g. back to `dev` later).
+ */
+export const PIPELINE_BASE_BRANCH = process.env.CONTRACT_PIPELINE_BASE_BRANCH ?? 'main';
+
 /** Pipeline stages for one contract run. */
 export type ContractPipelineStage =
   | 'prepare'

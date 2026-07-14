@@ -60,13 +60,13 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 | NPCs           | CRUD + visibility | Public marketplace, forking, expressions |
 | World Building | World schema      | World creation UI, world-settings        |
 
-### Deprecated / Archived
+### Deprecated
 
 | Component                                     | Status         | Notes                                                                                                                                    |
 | --------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| GodotJS Game Client (`apps/frontend/gamejs/`) | ❌ Archived    | Removed. Replaced by PixiJS v8 + bitECS engine (C-016 complete).                                                                          |
+| GodotJS Game Client (`apps/frontend/gamejs/`) | ⚠️ Deprecated  | Preserved for reference. Migration target: `client/src/lib/game/` (PixiJS v8 + bitECS, C-016). Will be archived after C-016 is complete. |
 | Genkit AI Framework                           | Replaced       | Migrated to vendor-agnostic AiServiceInterface (C-015). Direct Genkit imports being refactored.                                          |
-| Firestore NoSQL                               | Active / Stable | Firestore is the current database. Data Connect PostgreSQL is planned for Phase 3+ (C-014 not yet started).                              |
+| Firestore NoSQL                               | Being migrated | Target: Firebase Data Connect (PostgreSQL) per C-014. Existing Firestore repositories remain operational during incremental migration.   |
 
 ## Test Coverage Gaps
 

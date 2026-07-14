@@ -1,13 +1,13 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
-import { execSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { execFileSync, execSync } from 'node:child_process';
+import { copyFileSync, existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { findWorkspace, herdrJson } from '../../herdr/session.ts';
 import { provisionJjWorkspace, runJj } from '../jj.ts';
 import { resolveContract } from './contract_resolver.ts';
 import { readContractStatus, updateContractStatus } from './contract_status.ts';
-import { captureGitState, changedPaths, currentCommit } from './git_state.ts';
+import { captureGitState, currentCommit } from './git_state.ts';
 import { ContractHerdrAdapter, type ContractHerdrAdapterInterface } from './herdr_adapter.ts';
 import {
   acquireLock,
@@ -31,7 +31,7 @@ import type {
   ReviewDecision,
   RunManifest,
 } from './types.ts';
-import { STATUS_TO_START_STAGE } from './types.ts';
+import { PIPELINE_BASE_BRANCH, STATUS_TO_START_STAGE } from './types.ts';
 
 const STAGE_TIMEOUTS: Record<string, number> = {
   write_contract: 20 * 60 * 1000,
@@ -46,20 +46,28 @@ const WORKER_STAGES: readonly ContractPipelineStage[] = [
   'verify',
 ];
 
-const sleep = async (milliseconds: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
+const sleep = async (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Find previous run IDs for a contract, sorted newest first. */
-const findPreviousRuns = (options: { contractId: string; cwd: string }): string[] => {
-  const runsDirectory = join(options.cwd, '.pi/contract-runs');
-  if (!existsSync(runsDirectory)) {
-    return [];
-  }
-  const safeId = options.contractId.replace(/[^A-Za-z0-9]/g, '-');
-  return readdirSync(runsDirectory)
-    .filter((entry) => entry.startsWith('run-') && entry.endsWith(safeId))
+const TERMINAL_STAGES: readonly ContractPipelineStage[] = [
+  'accepted',
+  'reconciling',
+  'pr_created',
+  'merged',
+];
+
+/** Find the newest incomplete run for a contract. */
+const findPreviousRuns = (options: { contractId: string; cwd: string }): string | undefined => {
+  const d = join(options.cwd, '.pi/contract-runs');
+  if (!existsSync(d)) return undefined;
+  const sid = options.contractId.replace(/[^A-Za-z0-9]/g, '-');
+  for (const rid of readdirSync(d)
+    .filter((e) => e.startsWith('run-') && e.endsWith(`-${sid}`))
     .sort()
-    .reverse();
+    .reverse()) {
+    const m = readManifest({ runId: rid, cwd: options.cwd });
+    if (m && !TERMINAL_STAGES.includes(m.currentStage)) return rid;
+  }
+  return undefined;
 };
 
 /** Build implementer feedback from prior verifier results (for retries). */
@@ -203,15 +211,20 @@ const reconcileWorkspace = (options: {
   baseBranch?: string;
 }): ReconciliationResult => {
   // Find workspace path from attempts — the implementer/verifier ran there.
-  const workspaceRunName = `run-${options.manifest.runId}`;
+  const workspaceRunName = options.manifest.runId;
   const { workspacePath, changeId } = provisionJjWorkspace({
     repoRoot: options.repoRoot,
     name: workspaceRunName,
-    baseRevision: options.baseBranch ?? 'dev',
+    baseRevision: options.baseBranch ?? PIPELINE_BASE_BRANCH,
   });
-
-  const baseBookmark = `contract-task-${options.manifest.contractId.toLowerCase()}-${options.manifest.runId.slice(-8)}`;
-  const baseBranch = options.baseBranch ?? 'dev';
+  for (const ip of ['.envrc', '.pi/settings.json']) {
+    try {
+      runJj(`restore --from @- '${ip}'`, { cwd: workspacePath });
+    } catch {}
+  }
+  const runToken = options.manifest.runId.replace(/^run-/, '').split('-')[0];
+  const baseBookmark = `contract-task-${options.manifest.contractId.toLowerCase()}-${runToken}`;
+  const baseBranch = options.baseBranch ?? PIPELINE_BASE_BRANCH;
 
   // Check for collision, append token if needed.
   let bookmarkName = baseBookmark;
@@ -270,26 +283,22 @@ const createGitHubPr = (options: {
   body: string;
   repoRoot: string;
 }): string => {
-  const gh = (args: string[]): string =>
-    execSync(`gh ${args.join(' ')}`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: options.repoRoot,
-      timeout: 30000,
-    }).trim();
-
-  const result = gh([
-    'pr',
-    'create',
-    '--head',
-    options.headBranch,
-    '--base',
-    options.baseBranch,
-    '--title',
-    `"${options.title}"`,
-    '--body',
-    `"${options.body}"`,
-  ]);
+  const result = execFileSync(
+    'gh',
+    [
+      'pr',
+      'create',
+      '--head',
+      options.headBranch,
+      '--base',
+      options.baseBranch,
+      '--title',
+      options.title,
+      '--body',
+      options.body,
+    ],
+    { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: options.repoRoot, timeout: 30000 },
+  ).trim();
 
   // Extract PR URL from gh output.
   const urlMatch = result.match(/https:\/\/github\.com\/[^\s]+/);
@@ -309,7 +318,7 @@ const executeAcceptPipeline = async (options: {
   const reconciliation = reconcileWorkspace({
     manifest,
     repoRoot: options.repoRoot,
-    baseBranch: 'dev',
+    baseBranch: PIPELINE_BASE_BRANCH,
   });
   manifest = transition({ manifest, next: 'reconciling' });
   manifest.reconciliation = reconciliation;
@@ -372,7 +381,7 @@ export const runContractPipeline = async (options: {
   repoRoot: string;
   target?: string;
   resumeRunId?: string;
-  allowDirty?: boolean;
+  fresh?: boolean;
   dryRun?: boolean;
   onReady?: (manifest: RunManifest) => void;
   adapterFactory?: (options: {
@@ -381,14 +390,25 @@ export const runContractPipeline = async (options: {
     contractId: string;
   }) => ContractHerdrAdapterInterface;
 }): Promise<RunManifest> => {
-  let manifest: RunManifest;
-  if (options.resumeRunId) {
-    const resumed = readManifest({ runId: options.resumeRunId, cwd: options.repoRoot });
-    if (!resumed) {
-      throw new Error(`Run ${options.resumeRunId} is not a valid v3 manifest.`);
+  // Auto-resume
+  let resumeRunId = options.resumeRunId;
+  if (!resumeRunId && options.target && !options.fresh) {
+    const c = resolveContract({ target: options.target, repoRoot: options.repoRoot });
+    const f = findPreviousRuns({ contractId: c.id, cwd: options.repoRoot });
+    if (f) {
+      console.log(`♻️  Found incomplete run for ${c.id} — resuming ${f}.`);
+      console.log('   (use --fresh to start over)');
+      resumeRunId = f;
     }
+  }
+
+  let manifest: RunManifest;
+  if (resumeRunId) {
+    const resumed = readManifest({ runId: resumeRunId, cwd: options.repoRoot });
+    if (!resumed) throw new Error(`Run ${resumeRunId} is not a valid v3 manifest.`);
     manifest = resumed;
     delete manifest.reviewPaneId;
+    delete manifest.blockedReason;
 
     const contractStatus = readContractStatus(manifest.contractPath);
     const contractStage = STATUS_TO_START_STAGE[contractStatus] ?? 'write_contract';
@@ -399,16 +419,22 @@ export const runContractPipeline = async (options: {
       'implement',
       'verify',
     ];
+    const stageAfter: Partial<Record<ContractPipelineStage, ContractPipelineStage>> = {
+      write_contract: 'critique',
+      critique: 'implement',
+      implement: 'verify',
+      verify: 'review',
+    };
     const lastCompleted = manifest.attempts
       .filter((a) => a.result?.status === 'passed')
-      .reduce<ContractPipelineStage | null>((latest, a) => {
-        const aIdx = stageOrder.indexOf(a.stage);
-        const lIdx = latest ? stageOrder.indexOf(latest) : -1;
-        return aIdx > lIdx ? a.stage : latest;
+      .reduce<ContractPipelineStage | null>((l, a) => {
+        const ai = stageOrder.indexOf(a.stage);
+        const li = l ? stageOrder.indexOf(l) : -1;
+        return ai > li ? a.stage : l;
       }, null);
     const lastAttempted = manifest.attempts[manifest.attempts.length - 1]?.stage;
     const resumeStage = lastCompleted
-      ? (stageOrder[stageOrder.indexOf(lastCompleted) + 1] ?? lastAttempted ?? contractStage)
+      ? (stageAfter[lastCompleted] ?? lastAttempted ?? contractStage)
       : contractStage;
     if (resumeStage !== manifest.currentStage) {
       pipelineLog({
@@ -420,28 +446,8 @@ export const runContractPipeline = async (options: {
       writeManifest({ manifest, cwd: options.repoRoot });
     }
   } else {
-    if (!options.target) {
-      throw new Error('A contract ID or path is required for a new run.');
-    }
-    const dirtyPaths = changedPaths(options.repoRoot).filter(
-      (path) => !path.startsWith('docs/') && path !== 'flake.lock',
-    );
-    if (dirtyPaths.length > 0 && !options.allowDirty) {
-      const contractId = (options.target ?? '').toUpperCase();
-      const previousRuns = findPreviousRuns({ contractId, cwd: options.repoRoot });
-      const resumeHint =
-        previousRuns.length > 0
-          ? `\n\n💡 A previous pipeline run exists for ${contractId}. Resume it:\n   bun contract --resume ${previousRuns[0]}`
-          : '\n\n💡 No previous run found. Use --allow-dirty to proceed, or commit/stash changes.';
-      const pathList = dirtyPaths
-        .slice(0, 10)
-        .map((path) => `   - ${path}`)
-        .join('\n');
-      const truncated = dirtyPaths.length > 10 ? `\n   ... and ${dirtyPaths.length - 10} more` : '';
-      throw new Error(
-        `Worktree is dirty (${dirtyPaths.length} changed files):\n${pathList}${truncated}${resumeHint}`,
-      );
-    }
+    if (!options.target) throw new Error('A contract ID or path is required for a new run.');
+    // No dirty-worktree guardrail — jj workspaces isolate all stage mutations.
     const contract = resolveContract({ target: options.target, repoRoot: options.repoRoot });
     const baseline = captureGitState(options.repoRoot);
     manifest = createManifest({
@@ -554,6 +560,16 @@ export const runContractPipeline = async (options: {
           },
         });
         const after = captureGitState(cwdForGit);
+
+        // Sync contract back from workspace (docs/ is gitignored — jj won't propagate).
+        if (
+          workspacePath &&
+          (stage === 'implement' || stage === 'verify') &&
+          existsSync(manifest.contractPath)
+        ) {
+          const wcp = join(workspacePath, relative(options.repoRoot, manifest.contractPath));
+          if (existsSync(wcp)) copyFileSync(wcp, manifest.contractPath);
+        }
 
         // After writer succeeds, discover the actual contract file.
         // The resolver uses a placeholder path; contract_generate creates the real file.

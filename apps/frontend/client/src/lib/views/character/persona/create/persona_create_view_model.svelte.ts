@@ -12,7 +12,6 @@ import {
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import { characterService } from '$lib/services/character/character.svelte';
-import { characterRepository } from '$lib/services/character/character_repository.svelte';
 import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import {
   aiSettingsService,
@@ -523,9 +522,24 @@ export class PersonaCreateViewModel
       savedAt: new Date().toISOString(),
     };
 
-    // 1. Save locally via CharacterRepository (C-313: local-first persistence)
-    characterRepository.save(characterData);
-    this.info('saveCharacter:local', { id: persona.id });
+    // 1. Save locally to localStorage
+    try {
+      const stored = localStorage.getItem('aikami-characters');
+      const characters = stored ? (JSON.parse(stored) as unknown[]) : [];
+      // Replace existing entry for this character ID or append
+      const idx = characters.findIndex(
+        (c: unknown) => (c as { persona: { id: string } }).persona?.id === persona.id,
+      );
+      if (idx >= 0) {
+        characters[idx] = characterData;
+      } else {
+        characters.push(characterData);
+      }
+      localStorage.setItem('aikami-characters', JSON.stringify(characters));
+      this.info('saveCharacter:local', { id: persona.id });
+    } catch (error) {
+      this.error('saveCharacter:local-failed', error);
+    }
 
     // 2. Save to Firestore if user is signed in
     const uid = (authService as { uid?: string }).uid;

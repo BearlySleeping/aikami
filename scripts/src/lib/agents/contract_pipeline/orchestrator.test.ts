@@ -69,28 +69,15 @@ describe('runContractPipeline', () => {
     expect(manifest.contractId).toBe('C-365');
   });
 
-  it('rejects dirty worktree', async () => {
+  it('allows tracked+untracked changes (jj workspaces isolate mutations)', async () => {
     const repository = setupRepository();
     writeFileSync(join(repository.root, 'dirty-file.ts'), '// changed');
-    await expect(
-      runContractPipeline({
-        repoRoot: repository.root,
-        target: repository.contractPath,
-        dryRun: true,
-      }),
-    ).rejects.toThrow(/dirty/);
-  });
-
-  it('allows dirty worktree with --allow-dirty', async () => {
-    const repository = setupRepository();
-    writeFileSync(join(repository.root, 'dirty-file.ts'), '// changed');
+    writeFileSync(join(repository.root, 'untracked-file.ts'), '// untracked');
     const manifest = await runContractPipeline({
       repoRoot: repository.root,
       target: repository.contractPath,
       dryRun: true,
-      allowDirty: true,
     });
-
     expect(manifest.contractId).toBe('C-365');
   });
 
@@ -123,5 +110,64 @@ describe('runContractPipeline', () => {
 
     expect(manifest.runId).toBe(resumable.runId);
     expect(manifest.currentStage).toBe('verify'); // STATUS_TO_START_STAGE['implemented'] = 'verify'
+  });
+
+  it('auto-resumes the newest incomplete run for a contract', async () => {
+    const repository = setupRepository();
+    const baseline = captureGitState(repository.root);
+    const incomplete = createManifest({
+      contractId: 'C-365',
+      contractPath: repository.contractPath,
+      baseCommit: currentCommit(repository.root),
+      baselineFingerprint: baseline.fingerprint,
+      startStage: 'write_contract',
+    });
+    writeManifest({ manifest: incomplete, cwd: repository.root });
+    const manifest = await runContractPipeline({
+      repoRoot: repository.root,
+      target: 'C-365',
+      dryRun: true,
+    });
+    expect(manifest.runId).toBe(incomplete.runId);
+  });
+
+  it('starts a new run with --fresh despite incomplete run', async () => {
+    const repository = setupRepository();
+    const baseline = captureGitState(repository.root);
+    const incomplete = createManifest({
+      contractId: 'C-365',
+      contractPath: repository.contractPath,
+      baseCommit: currentCommit(repository.root),
+      baselineFingerprint: baseline.fingerprint,
+      startStage: 'write_contract',
+    });
+    writeManifest({ manifest: incomplete, cwd: repository.root });
+    const manifest = await runContractPipeline({
+      repoRoot: repository.root,
+      target: 'C-365',
+      fresh: true,
+      dryRun: true,
+    });
+    expect(manifest.runId).not.toBe(incomplete.runId);
+  });
+
+  it('skips terminal (merged) runs when auto-resuming', async () => {
+    const repository = setupRepository();
+    const baseline = captureGitState(repository.root);
+    const finished = createManifest({
+      contractId: 'C-365',
+      contractPath: repository.contractPath,
+      baseCommit: currentCommit(repository.root),
+      baselineFingerprint: baseline.fingerprint,
+      startStage: 'write_contract',
+    });
+    finished.currentStage = 'merged';
+    writeManifest({ manifest: finished, cwd: repository.root });
+    const manifest = await runContractPipeline({
+      repoRoot: repository.root,
+      target: 'C-365',
+      dryRun: true,
+    });
+    expect(manifest.runId).not.toBe(finished.runId);
   });
 });

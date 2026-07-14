@@ -21,7 +21,7 @@ type CliArguments = {
   resumeRunId?: string;
   background: boolean;
   dryRun: boolean;
-  allowDirty: boolean;
+  fresh: boolean;
   noAttach: boolean;
   launcherToken?: string;
   help: boolean;
@@ -46,7 +46,7 @@ const parseArguments = (): CliArguments => {
     launcherToken: valueAfter('--launcher-token'),
     background: args.includes('--background'),
     dryRun: args.includes('--dry-run'),
-    allowDirty: args.includes('--allow-dirty'),
+    fresh: args.includes('--fresh'),
     noAttach: args.includes('--no-attach'),
     help: args.length === 0 || args.includes('--help') || args.includes('-h'),
   };
@@ -64,7 +64,7 @@ Options:
   --resume <run-id>  Resume an incomplete v3 run
   --dry-run          Resolve and create the manifest without starting Herdr/Pi
   --background       Internal/background mode; do not attach Herdr
-  --allow-dirty      Explicitly accept an existing dirty worktree baseline
+  --fresh            Start a brand-new run (skip auto-resume)
   --no-attach        Run pipeline in background without attaching to herdr
   -h, --help         Show this help
 `);
@@ -148,7 +148,7 @@ const main = async (): Promise<void> => {
     repoRoot: process.cwd(),
     target: cli.target,
     resumeRunId: cli.resumeRunId,
-    allowDirty: cli.allowDirty,
+    fresh: cli.fresh,
     dryRun: cli.dryRun,
     onReady: cli.launcherToken
       ? (readyManifest) => {

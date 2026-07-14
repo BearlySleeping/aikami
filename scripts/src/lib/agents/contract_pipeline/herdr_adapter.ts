@@ -2,10 +2,15 @@
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import {
+  getContractModelForRole,
+  getContractThinkingForRole,
+} from '../../../../../.pi/swarm/models';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { provisionJjWorkspace } from '../jj.ts';
 import { logPath } from './manifest_store.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
+import { PIPELINE_BASE_BRANCH } from './types.ts';
 
 type WorkspaceCreateResult = {
   result: {
@@ -31,6 +36,60 @@ type PaneListResult = {
 };
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
+
+const sleep = async (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+const AGENT_READY_TIMEOUT_MS = 120_000;
+const SEND_ACCEPT_TIMEOUT_MS = 45_000;
+const MAX_SEND_ATTEMPTS = 5;
+const SHELL_READY_TIMEOUT_MS = 90_000;
+const SHELL_NAMES = new Set(['fish', 'bash', 'zsh', 'sh', 'dash']);
+
+type PaneProcessInfoResult = {
+  result: { process_info: { foreground_processes: Array<{ name: string }> } };
+};
+
+const isShellIdle = async (paneId: string): Promise<boolean> => {
+  const info = await herdrJson<PaneProcessInfoResult>(['pane', 'process-info', '--pane', paneId]);
+  const procs = info?.result.process_info.foreground_processes;
+  return procs ? procs.every((c) => SHELL_NAMES.has(c.name)) : false;
+};
+
+const isCommandRunning = async (paneId: string): Promise<boolean> => {
+  const info = await herdrJson<PaneProcessInfoResult>(['pane', 'process-info', '--pane', paneId]);
+  const procs = info?.result.process_info.foreground_processes;
+  return procs ? procs.some((c) => !SHELL_NAMES.has(c.name)) : false;
+};
+
+const waitForShellReady = async (paneId: string): Promise<boolean> => {
+  const deadline = Date.now() + SHELL_READY_TIMEOUT_MS;
+  let consecutiveIdle = 0;
+  let delay = 500;
+  while (Date.now() < deadline) {
+    const idle = await isShellIdle(paneId).catch(() => false);
+    consecutiveIdle = idle ? consecutiveIdle + 1 : 0;
+    if (consecutiveIdle >= 2) return true;
+    await sleep(delay);
+    delay = Math.min(delay * 1.25, 3_000);
+  }
+  return false;
+};
+
+const runPaneCommand = async (options: { paneId: string; command: string }): Promise<void> => {
+  const ready = await waitForShellReady(options.paneId);
+  if (!ready) console.warn(`⚠️  Pane ${options.paneId} shell never became idle`);
+  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
+    await runHerdr(['pane', 'run', options.paneId, options.command]);
+    const dl = Date.now() + 10_000;
+    while (Date.now() < dl) {
+      if (await isCommandRunning(options.paneId).catch(() => false)) return;
+      await sleep(500);
+    }
+    await sleep(1_000 * attempt);
+  }
+  console.warn(`⚠️  Command never observed in pane ${options.paneId}`);
+};
 
 const runHerdr = async (args: string[]): Promise<void> => {
   const result = await herdr(args);
@@ -117,14 +176,21 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   private readonly _repoRoot: string;
   private readonly _runId: string;
   private readonly _workspaceLabel: string;
+  private readonly _headless: boolean;
   private _workspaceId = '';
   private _pipelinePaneId = '';
   private _workspacePath = '';
 
-  constructor(options: { repoRoot: string; runId: string; contractId: string }) {
+  constructor(options: {
+    repoRoot: string;
+    runId: string;
+    contractId: string;
+    headless?: boolean;
+  }) {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
     this._workspaceLabel = `aikami-contract-${options.contractId}`;
+    this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS === '1';
   }
 
   /** Create or recover the contract-specific workspace and pipeline log tab. */
@@ -174,12 +240,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       }
       this._workspaceId = existingWorkspaceId;
       this._pipelinePaneId = recoveredTab.result.root_pane.pane_id;
-      await runHerdr([
-        'pane',
-        'run',
-        this._pipelinePaneId,
-        `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
-      ]);
+      await runPaneCommand({
+        paneId: this._pipelinePaneId,
+        command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+      });
 
       this._provisionJjWorkspace();
 
@@ -202,12 +266,10 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     this._workspaceId = result.result.workspace.workspace_id;
     this._pipelinePaneId = result.result.root_pane.pane_id;
     await runHerdr(['tab', 'rename', result.result.tab.tab_id, 'pipeline']);
-    await runHerdr([
-      'pane',
-      'run',
-      this._pipelinePaneId,
-      `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
-    ]);
+    await runPaneCommand({
+      paneId: this._pipelinePaneId,
+      command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+    });
 
     this._provisionJjWorkspace();
 
@@ -237,7 +299,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       const { workspacePath, changeId } = provisionJjWorkspace({
         repoRoot: this._repoRoot,
         name: wsName,
-        baseRevision: 'dev',
+        baseRevision: PIPELINE_BASE_BRANCH,
       });
       this._workspacePath = workspacePath;
       console.log(`🔧 jj workspace: ${workspacePath} (change: ${changeId})`);
@@ -267,66 +329,115 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
    * Re-sends the full text+Enter up to 5 more times with 2s gaps to handle
    * slow context-mode bootstrapping swallowing the initial input.
    */
-  private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
-    // Dismiss any residual overlay with a throwaway keystroke.
-    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Send the task text + Enter, then re-send unconditionally up to 5 more
-    // times. Pi's TUI may not be ready to accept input on the first few
-    // attempts (context-mode bootstrapping, extension loading).
-    for (let i = 0; i < 6; i++) {
-      await runHerdr(['pane', 'send-text', options.paneId, options.text]);
-      await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
-      if (i < 5) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-    }
+  private async _getAgentStatus(paneId: string): Promise<string | undefined> {
+    const panes = await herdrJson<PaneListResult>([
+      'pane',
+      'list',
+      '--workspace',
+      this._workspaceId,
+    ]);
+    return panes?.result.panes.find((p) => p.pane_id === paneId)?.agent_status;
   }
 
-  /** Write the static worker prompt and build the pi JSON-mode headless command. */
+  private async _waitForAgentStatus(o: {
+    paneId: string;
+    statuses: readonly string[];
+    timeoutMs: number;
+  }): Promise<boolean> {
+    const dl = Date.now() + o.timeoutMs;
+    let delay = 500;
+    while (Date.now() < dl) {
+      const s = await this._getAgentStatus(o.paneId).catch(() => undefined);
+      if (s !== undefined && o.statuses.includes(s)) return true;
+      await sleep(delay);
+      delay = Math.min(delay * 1.5, 5_000);
+    }
+    return false;
+  }
+
+  private async _sendTaskText(options: { paneId: string; text: string }): Promise<void> {
+    const ready = await this._waitForAgentStatus({
+      paneId: options.paneId,
+      statuses: ['idle', 'blocked'],
+      timeoutMs: AGENT_READY_TIMEOUT_MS,
+    });
+    if (!ready) console.warn(`⚠️  Pane ${options.paneId} never reported receptive`);
+    await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
+    await sleep(500);
+    for (let a = 1; a <= MAX_SEND_ATTEMPTS; a++) {
+      await runHerdr(['pane', 'run', options.paneId, options.text]);
+      const ok = await this._waitForAgentStatus({
+        paneId: options.paneId,
+        statuses: ['working', 'done'],
+        timeoutMs: SEND_ACCEPT_TIMEOUT_MS,
+      });
+      if (ok) return;
+      await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
+      await sleep(1_000 * a);
+      const late = await this._getAgentStatus(options.paneId).catch(() => undefined);
+      if (late === 'working' || late === 'done') return;
+    }
+    console.warn(`⚠️  Prompt to ${options.paneId} unacked after ${MAX_SEND_ATTEMPTS} attempts`);
+  }
+
+  /** Write the static worker prompt and build the pi start command. */
   private _buildWorkerCommand(
     request: WorkerLaunchRequest,
     sessionId: string | undefined,
     taskMessagePath: string,
   ): string {
-    const promptDirectory = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');
-    mkdirSync(promptDirectory, { recursive: true });
-    const promptPath = join(promptDirectory, `${request.stage}-${request.attempt}.md`);
-    atomicWrite({ path: promptPath, content: request.prompt });
-
-    const workspaceEnv = this._workspacePath
-      ? ` CONTRACT_PIPELINE_WORKSPACE_PATH=${shellQuote(this._workspacePath)}`
+    const pd = join(this._repoRoot, '.pi/contract-runs', request.runId, 'prompts');
+    mkdirSync(pd, { recursive: true });
+    const pp = join(pd, `${request.stage}-${request.attempt}.md`);
+    atomicWrite({ path: pp, content: request.prompt });
+    const wsEnv = this._workspacePath
+      ? `CONTRACT_PIPELINE_WORKSPACE_PATH=${shellQuote(this._workspacePath)}`
       : '';
-
-    const environment = [
+    const env = [
       `CONTRACT_PIPELINE_RUN_ID=${shellQuote(request.runId)}`,
       `CONTRACT_PIPELINE_ROLE=${shellQuote(request.role)}`,
       `CONTRACT_PIPELINE_STAGE=${shellQuote(request.stage)}`,
       `CONTRACT_PIPELINE_ATTEMPT=${String(request.attempt)}`,
       `CONTRACT_PIPELINE_CONTRACT_PATH=${shellQuote(request.contractPath)}`,
       `CONTRACT_PIPELINE_RESULT_PATH=${shellQuote(request.resultPath)}`,
-      workspaceEnv,
-    ].join(' ');
-
-    const tools = toolsForRole(request.role);
-    const toolsArg = tools ? ['--tools', tools.join(',')] : [];
-    const sessionArg = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
-
-    // JSON headless mode — no TUI. pi reads the prompt via -p (from file),
-    // calls tools, writes contract_stage_complete result, and exits.
-    const catFile = `$(cat ${shellQuote(taskMessagePath)})`;
+      wsEnv,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const ta = toolsForRole(request.role) ? ['--tools', toolsForRole(request.role)!.join(',')] : [];
+    const sa = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
+    const ma = [
+      '--model',
+      shellQuote(getContractModelForRole(request.role)),
+      '--thinking',
+      getContractThinkingForRole(request.role),
+    ];
+    if (this._headless) {
+      const cf = `$(cat ${shellQuote(taskMessagePath)})`;
+      return [
+        env,
+        'pi',
+        '--mode',
+        'json',
+        '--approve',
+        ...ma,
+        ...sa,
+        '--append-system-prompt',
+        shellQuote(pp),
+        ...ta,
+        '-p',
+        `"${cf}"`,
+      ].join(' ');
+    }
     return [
-      environment,
+      env,
       'pi',
-      '--mode',
-      'json',
-      ...sessionArg,
+      '--approve',
+      ...ma,
+      ...sa,
       '--append-system-prompt',
-      shellQuote(promptPath),
-      ...toolsArg,
-      '-p',
-      `"${catFile}"`,
+      shellQuote(pp),
+      ...ta,
     ].join(' ');
   }
 
@@ -403,7 +514,18 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       options.sessionId,
       taskMessagePath,
     );
-    await runHerdr(['pane', 'run', paneId, startCommand]);
+    await runPaneCommand({ paneId, command: startCommand });
+
+    if (!this._headless) {
+      await this._sendTaskText({
+        paneId,
+        text:
+          `${parts[0]} ` +
+          `Read your full task brief at ${taskMessagePath} FIRST, then execute it. ` +
+          'Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. ' +
+          'Do not ask questions; if blocked, finish with status blocked.',
+      });
+    }
 
     return { paneId };
   }
@@ -489,10 +611,20 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'CONTRACT_PIPELINE_ROLE=review',
       `CONTRACT_PIPELINE_CONTRACT_PATH=${shellQuote(options.contractPath)}`,
       `CONTRACT_PIPELINE_REVIEW_PATH=${shellQuote(options.reviewDecisionPath)}`,
-    ].join(' ');
+      this._workspacePath
+        ? `CONTRACT_PIPELINE_WORKSPACE_PATH=${shellQuote(this._workspacePath)}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
     const command = [
       environment,
       'pi',
+      '--approve',
+      '--model',
+      shellQuote(getContractModelForRole('review')),
+      '--thinking',
+      getContractThinkingForRole('review'),
       '--session-id',
       shellQuote(sessionId),
       '--append-system-prompt',
@@ -500,8 +632,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     ].join(' ');
 
     const paneId = tab.result.root_pane.pane_id;
-    await runHerdr(['pane', 'run', paneId, command]);
-    await runHerdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '30000']);
+    await runPaneCommand({ paneId, command });
     await this._sendTaskText({
       paneId,
       text: `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`,
