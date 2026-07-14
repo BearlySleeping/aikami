@@ -403,7 +403,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       options.sessionId,
       taskMessagePath,
     );
-    await runHerdr(['pane', 'run', paneId, startCommand]);
+    // Wrap in bash -c so env vars and $(cat ...) are interpreted correctly.
+    // fish (herdr's default shell) silently fails with VAR=value command syntax.
+    await runHerdr(['pane', 'run', paneId, `bash -c ${shellQuote(startCommand)}`]);
 
     return { paneId };
   }
@@ -500,7 +502,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     ].join(' ');
 
     const paneId = tab.result.root_pane.pane_id;
-    await runHerdr(['pane', 'run', paneId, command]);
+    // Wrap in bash -c so env vars are interpreted correctly.
+    // fish (herdr's default shell) silently fails with VAR=value command syntax.
+    await runHerdr(['pane', 'run', paneId, `bash -c ${shellQuote(command)}`]);
     await runHerdr(['wait', 'agent-status', paneId, '--status', 'idle', '--timeout', '30000']);
     await this._sendTaskText({
       paneId,
