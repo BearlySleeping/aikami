@@ -1,53 +1,45 @@
 // scripts/src/lib/agents/contract_pipeline/models.ts
-/**
- * Per-role model configuration for the contract pipeline.
- *
- * Roles and rationale:
- *   writer      → pro,  high     (planning quality compounds downstream)
- *   critic      → pro,  high     (critical review needs full reasoning)
- *   implementer → pro,  medium   (implementation is the core work)
- *   verifier    → flash, low     (mechanical verification against contract)
- *
- * Review is interactive (no fixed model — user's pi defaults apply).
- */
-
-import type { ContractWorkerRole } from './types.ts';
+//
+// 🔴 SINGLE SOURCE OF TRUTH: model + thinking tier configuration for the
+// contract pipeline. Every pi spawn in herdr_adapter.ts passes explicit
+// `--model` + `--thinking` from these maps — never inherits the user's
+// default/last-used model.
 
 export type ModelTier = 'pro' | 'flash' | 'free';
+
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
-export const PIPELINE_MODELS = {
-  tiers: {
-    pro: 'deepseek/deepseek-v4-pro',
-    flash: 'deepseek/deepseek-v4-flash',
-    free: 'opencode/big-pickle',
-  },
+const TIERS = {
+  pro: 'deepseek/deepseek-v4-pro',
+  flash: 'deepseek/deepseek-v4-flash',
+  free: 'opencode/big-pickle',
 } as const;
 
-export const ROLE_MODEL_TIER: Record<ContractWorkerRole, ModelTier> = {
+const resolveTier = (tier: string): string =>
+  (TIERS as Record<string, string>)[tier] ?? (TIERS as Record<string, string>).flash;
+
+/** Per-stage model tiers for the contract pipeline. */
+export const CONTRACT_ROLE_MODEL_TIER: Record<string, ModelTier> = {
   writer: 'pro',
-  critic: 'pro',
+  critic: 'flash',
   implementer: 'pro',
   verifier: 'flash',
-};
+  review: 'flash',
+} as const;
 
-export const ROLE_THINKING_LEVEL: Record<ContractWorkerRole, ThinkingLevel> = {
-  writer: 'high',
-  critic: 'high',
+/** Per-stage thinking levels — DeepSeek bills thinking tokens as output. */
+export const CONTRACT_ROLE_THINKING_LEVEL: Record<string, ThinkingLevel> = {
+  writer: 'medium',
+  critic: 'low',
   implementer: 'medium',
   verifier: 'low',
-};
+  review: 'low',
+} as const;
 
-export const getModelForTier = (tier: ModelTier): string => {
-  return PIPELINE_MODELS.tiers[tier] ?? PIPELINE_MODELS.tiers.flash;
-};
+/** Resolve the model slug for a contract pipeline role. Never undefined. */
+export const getContractModelForRole = (role: string): string =>
+  resolveTier(CONTRACT_ROLE_MODEL_TIER[role] ?? 'flash');
 
-export const piModelFlags = (role: ContractWorkerRole): string[] => {
-  const tier = ROLE_MODEL_TIER[role];
-  const thinking = ROLE_THINKING_LEVEL[role];
-  if (!tier) {
-    return [];
-  }
-  const model = getModelForTier(tier);
-  return ['--model', model, '--thinking', thinking];
-};
+/** Resolve the thinking level for a contract pipeline role. */
+export const getContractThinkingForRole = (role: string): ThinkingLevel =>
+  CONTRACT_ROLE_THINKING_LEVEL[role] ?? 'low';
