@@ -46,4 +46,52 @@ describe('DiceService', () => {
 
     Math.random = originalRandom;
   });
+
+  describe('rollNotation', () => {
+    test('d20 should return a value between 1 and 20', () => {
+      for (let i = 0; i < 50; i++) {
+        const result = diceService.rollNotation({ count: 1, sides: 20, label: '1d20' });
+        expect(result).toBeGreaterThanOrEqual(1);
+        expect(result).toBeLessThanOrEqual(20);
+      }
+    });
+
+    test('2d6 should return a value between 2 and 12', () => {
+      for (let i = 0; i < 50; i++) {
+        const result = diceService.rollNotation({ count: 2, sides: 6, label: '2d6' });
+        expect(result).toBeGreaterThanOrEqual(2);
+        expect(result).toBeLessThanOrEqual(12);
+      }
+    });
+
+    test('d100 should return a value between 1 and 100', () => {
+      for (let i = 0; i < 50; i++) {
+        const result = diceService.rollNotation({ count: 1, sides: 100, label: '1d100' });
+        expect(result).toBeGreaterThanOrEqual(1);
+        expect(result).toBeLessThanOrEqual(100);
+      }
+    });
+
+    test('should push result to history', () => {
+      const beforeLength = diceService.history.length;
+      diceService.rollNotation({ count: 1, sides: 20, label: '1d20' });
+      expect(diceService.history.length).toBe(beforeLength + 1);
+    });
+
+    test('should push multiple results to history for multiple calls', () => {
+      const beforeLength = diceService.history.length;
+      diceService.rollNotation({ count: 1, sides: 20 });
+      diceService.rollNotation({ count: 1, sides: 20 });
+      diceService.rollNotation({ count: 1, sides: 20 });
+      expect(diceService.history.length).toBe(beforeLength + 3);
+    });
+
+    test('4d6 should return a value between 4 and 24', () => {
+      for (let i = 0; i < 50; i++) {
+        const result = diceService.rollNotation({ count: 4, sides: 6, label: '4d6' });
+        expect(result).toBeGreaterThanOrEqual(4);
+        expect(result).toBeLessThanOrEqual(24);
+      }
+    });
+  });
 });

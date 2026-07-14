@@ -9,6 +9,7 @@
 | **Priority** | P0 — Essential boundary layer to eliminate heap allocation tracking from active engine loops. |
 | **Dependencies** | `docs/contracts/C-194-ecs-offscreen-macro-simulation.md` |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

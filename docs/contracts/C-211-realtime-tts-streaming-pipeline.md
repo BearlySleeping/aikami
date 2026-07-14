@@ -9,6 +9,7 @@
 | **Priority** | P1 — Foundational requirement for AI-driven NPC immersion |
 | **Dependencies** | C-131 (Native WebGPU Voice), C-148 (Combat Immersion), C-150 (Audio System BGM/SFX) |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.1.0 |
 
 ## Overview

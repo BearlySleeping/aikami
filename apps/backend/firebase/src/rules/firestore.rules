@@ -143,6 +143,15 @@ service cloud.firestore {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // Agent Definitions (C-247) — owner CRUD
+    // ═══════════════════════════════════════════════════════════════
+    match /agent_definitions/{agentId} {
+      allow read: if isDocumentOwner('uid');
+      allow create: if isAuthenticated() && isRequestOwner('uid');
+      allow update, delete: if isDocumentOwner('uid');
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     // Default deny — explicit catch-all at the end
     // ═══════════════════════════════════════════════════════════════
     match /{document=**} {

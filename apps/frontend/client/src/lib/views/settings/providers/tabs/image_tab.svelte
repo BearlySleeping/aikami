@@ -1,14 +1,14 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/image_tab.svelte -->
 <script lang="ts">
-  import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
+import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  const imageConfig = $derived(viewModel.config.image);
+const imageConfig = $derived(viewModel.config.image);
 </script>
 
 <div class="space-y-6">

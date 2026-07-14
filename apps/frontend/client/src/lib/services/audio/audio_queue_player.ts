@@ -1,5 +1,9 @@
 // apps/frontend/client/src/lib/services/media/audio_queue_player.ts
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import { audioContextManager } from './audio_context_manager';
 
 // ---------------------------------------------------------------------------
@@ -14,9 +18,9 @@ import { audioContextManager } from './audio_context_manager';
 // out-of-order playback when decoding times vary.
 // ---------------------------------------------------------------------------
 
-export type AudioQueuePlayerOptions = BaseClassOptions;
+export type AudioQueuePlayerOptions = BaseFrontendClassOptions;
 
-export type AudioQueuePlayerInterface = BaseClassInterface & {
+export type AudioQueuePlayerInterface = BaseFrontendClassInterface & {
   /** Number of chunks currently buffered and waiting to play. */
   readonly queueSize: number;
 
@@ -77,7 +81,7 @@ export type AudioQueuePlayerInterface = BaseClassInterface & {
  * ```
  */
 export class AudioQueuePlayer
-  extends BaseClass<AudioQueuePlayerOptions>
+  extends BaseFrontendClass<AudioQueuePlayerOptions>
   implements AudioQueuePlayerInterface
 {
   private _nextStartTime = 0;

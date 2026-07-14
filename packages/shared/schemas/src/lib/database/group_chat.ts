@@ -1,8 +1,8 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
 // packages/shared/schemas/src/lib/database/group_chat.ts
 import Type, { Composite } from 'typebox';
-import { CoreOmitKeys, CoreSchema } from '../core.ts';
-import { getDeletableFields } from '../utils.ts';
+import { getDeletableFields } from '../common/utils.ts';
+import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
 
 const _replyModeUnion = Type.Union([
   Type.Literal('sequential'),
@@ -33,6 +33,7 @@ export const GroupChatCreateSchema = Type.Intersect([
   Type.Object({ createdAt: Type.Optional(Type.Unsafe<any>(Type.Any())) }),
 ]);
 
+export type GroupChatCreate = Type.Static<typeof GroupChatCreateSchema>;
 export const GroupChatUpdateSchema = Type.Intersect([
   Type.Omit(GroupChatSchema, [...CoreOmitKeys]),
   Type.Object(getDeletableFields(GroupChatSchema as unknown as Record<string, unknown>)),
@@ -49,5 +50,8 @@ export const GroupMessageSchema = Type.Object({
 });
 
 export type GroupChatData = Type.Static<typeof GroupChatSchema>;
+export type GroupChat = Type.Static<typeof GroupChatSchema>;
 export type GroupChatUpdateData = Type.Static<typeof GroupChatUpdateSchema>;
+export type GroupChatUpdate = Type.Static<typeof GroupChatUpdateSchema>;
 export type GroupMessageData = Type.Static<typeof GroupMessageSchema>;
+export type GroupMessage = Type.Static<typeof GroupMessageSchema>;

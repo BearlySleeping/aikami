@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/audio/settings_audio_view.svelte
-  //
-  // Settings > Game > Audio sub-tab. Volume sliders wired to AudioService
-  // plus optional test-playback buttons.
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { SettingsAudioViewModelInterface } from './settings_audio_view_model.svelte';
+// apps/frontend/client/src/lib/views/settings/audio/settings_audio_view.svelte
+//
+// Settings > Game > Audio sub-tab. Volume sliders wired to AudioService
+// plus optional test-playback buttons.
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { SettingsAudioViewModelInterface } from './settings_audio_view_model.svelte';
 
-  type Props = {
-    viewModel: SettingsAudioViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: SettingsAudioViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -90,20 +90,32 @@
 
         <!-- BGM test buttons -->
         <div class="flex gap-3 mt-2">
-          <button class="btn btn-primary flex-1" onclick={() => viewModel.testExploreBgm()}>
+          <button
+            type="button"
+            class="btn btn-primary flex-1"
+            onclick={() => viewModel.testExploreBgm()}
+          >
             🌲 Explore BGM
           </button>
-          <button class="btn btn-error flex-1" onclick={() => viewModel.testCombatBgm()}>
+          <button
+            type="button"
+            class="btn btn-error flex-1"
+            onclick={() => viewModel.testCombatBgm()}
+          >
             ⚔️ Combat BGM
           </button>
         </div>
 
         <!-- SFX test button -->
         <div class="flex gap-3 mt-3">
-          <button class="btn btn-warning flex-1" onclick={() => viewModel.testHitSfx()}>
+          <button
+            type="button"
+            class="btn btn-warning flex-1"
+            onclick={() => viewModel.testHitSfx()}
+          >
             🔨 Test SFX
           </button>
-          <button class="btn btn-outline btn-sm" onclick={() => viewModel.stopAll()}>
+          <button type="button" class="btn btn-outline btn-sm" onclick={() => viewModel.stopAll()}>
             ⏹ Stop All
           </button>
         </div>

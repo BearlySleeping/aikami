@@ -11,3 +11,5 @@ export const LogLevelSchema = Type.Union([
   Type.Literal('ALERT'),
   Type.Literal('EMERGENCY'),
 ]);
+
+export type LogLevel = Type.Static<typeof LogLevelSchema>;

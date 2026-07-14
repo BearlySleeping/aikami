@@ -1,9 +1,9 @@
 // packages/shared/types/src/lib/database/message.ts
-import type { MessageCreateSchema, MessageSchema, MessageUpdateSchema } from '@aikami/schemas';
-import type { Type } from 'typebox';
+//
+// Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-export type MessageCreateData = Type.Static<typeof MessageCreateSchema>;
-
-export type MessageUpdateData = Type.Static<typeof MessageUpdateSchema>;
-
-export type MessageData = Type.Static<typeof MessageSchema>;
+export type {
+  Message as MessageData,
+  MessageCreate as MessageCreateData,
+  MessageUpdate as MessageUpdateData,
+} from '@aikami/schemas';

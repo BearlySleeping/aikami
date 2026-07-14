@@ -18,7 +18,6 @@ dependsOn:
   - 'parser'
   - 'frontend-utils'
   - 'frontend-services'
-  - 'frontend-api-core'
   - 'schemas'
   - 'types'
   - 'constants'
@@ -61,11 +60,17 @@ tasks:
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
   test-unit:
     command: 'bun run test:unit'
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'
+      - '@group(configs)'
+    options:
+      cache: true
   tauri-dev:
     command: 'bun run tauri:dev'
     preset: 'server'

@@ -1,164 +1,167 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
-  import { logger } from '$logger';
-  import { gameStateService } from '$services';
-  import type { VendorViewModelInterface } from './vendor_view_model.svelte';
+// apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
+import { logger } from '$logger';
+import { gameModeService } from '$services';
+import type { VendorViewModelInterface } from './vendor_view_model.svelte';
 
-  type Props = {
-    viewModel: VendorViewModelInterface;
-  };
+type Props = {
+  viewModel: VendorViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  /** Reference to the scrollable message container for auto-scroll. */
-  let messageContainer = $state<HTMLDivElement>();
+/** Reference to the scrollable message container for auto-scroll. */
+let messageContainer = $state<HTMLDivElement>();
 
-  /** Reference to the textarea for mode-aware autofocus. */
-  let inputElement = $state<HTMLTextAreaElement>();
+/** Reference to the textarea for mode-aware autofocus. */
+let inputElement = $state<HTMLTextAreaElement>();
 
-  /** Player's current haggling text. */
-  let haggleInput = $state('');
+/** Player's current haggling text. */
+let haggleInput = $state('');
 
-  // ── Toast system for purchase notifications ──────────────────────────
+// ── Toast system for purchase notifications ──────────────────────────
 
-  /** Toast entries shown after purchases. Each auto-dismisses after 2.5s. */
-  const toasts = $state<
-    Array<{ id: string; message: string; itemId: string; type: 'success' | 'error' }>
-  >([]);
+/** Toast entries shown after purchases. Each auto-dismisses after 2.5s. */
+const toasts = $state<
+  Array<{ id: string; message: string; itemId: string; type: 'success' | 'error' }>
+>([]);
 
-  /** Adds a toast notification and removes it after 2.5 seconds. */
-  const _showToast = (message: string, itemId: string, type: 'success' | 'error') => {
-    const id = crypto.randomUUID();
-    toasts.push({ id, message, itemId, type });
-    setTimeout(() => {
-      const idx = toasts.findIndex((t) => t.id === id);
-      if (idx >= 0) {
-        toasts.splice(idx, 1);
-      }
-    }, 2500);
-  };
+/** Adds a toast notification and removes it after 2.5 seconds. */
+const _showToast = (message: string, itemId: string, type: 'success' | 'error') => {
+  const id = crypto.randomUUID();
+  toasts.push({ id, message, itemId, type });
+  setTimeout(() => {
+    const idx = toasts.findIndex((t) => t.id === id);
+    if (idx >= 0) {
+      toasts.splice(idx, 1);
+    }
+  }, 2500);
+};
 
-  // ── Purchase wrapper with toast ──────────────────────────────────────
+// ── Purchase wrapper with toast ──────────────────────────────────────
 
-  /**
-   * Wraps the ViewModel's buyItem with a toast notification.
-   * The ViewModel handles transaction messages internally via the
-   * inline bar — this adds a floating toast for extra visibility.
-   */
-  const buyItemWithToast = async (itemId: string, label: string) => {
-    logger.debug('[vendor_view] buyItemWithToast:click', {
-      itemId,
-      label,
-      playerGold: viewModel.playerGold,
-      isBuying: viewModel.isBuying,
-      refusesToSell: viewModel.refusesToSell,
+/**
+ * Wraps the ViewModel's buyItem with a toast notification.
+ * The ViewModel handles transaction messages internally via the
+ * inline bar — this adds a floating toast for extra visibility.
+ */
+const buyItemWithToast = async (itemId: string, label: string) => {
+  logger.debug('[vendor_view] buyItemWithToast:click', {
+    itemId,
+    label,
+    playerGold: viewModel.playerGold,
+    isBuying: viewModel.isBuying,
+    refusesToSell: viewModel.refusesToSell,
+    isHaggling: viewModel.isHaggling,
+  });
+  const goldBefore = viewModel.playerGold;
+  await viewModel.buyItem(itemId);
+  logger.debug('[vendor_view] buyItemWithToast:after-buyItem', {
+    itemId,
+    goldBefore,
+    goldAfter: viewModel.playerGold,
+    delta: viewModel.playerGold - goldBefore,
+    isBuying: viewModel.isBuying,
+  });
+  // If gold decreased, the purchase likely succeeded (or at least was attempted)
+  if (viewModel.playerGold < goldBefore) {
+    _showToast(`Purchased ${label}!`, itemId, 'success');
+  } else if (viewModel.playerGold === goldBefore && !viewModel.refusesToSell) {
+    _showToast(`Cannot afford ${label}`, itemId, 'error');
+  }
+};
+
+/** Submit the haggling message and clear the input. */
+const submitHaggle = async () => {
+  const text = haggleInput.trim();
+  if (!text || viewModel.isHaggling || viewModel.refusesToSell) {
+    logger.debug('[vendor_view] submitHaggle:blocked', {
+      text: !!text,
       isHaggling: viewModel.isHaggling,
+      refusesToSell: viewModel.refusesToSell,
     });
-    const goldBefore = viewModel.playerGold;
-    await viewModel.buyItem(itemId);
-    logger.debug('[vendor_view] buyItemWithToast:after-buyItem', {
-      itemId,
-      goldBefore,
-      goldAfter: viewModel.playerGold,
-      delta: viewModel.playerGold - goldBefore,
-      isBuying: viewModel.isBuying,
-    });
-    // If gold decreased, the purchase likely succeeded (or at least was attempted)
-    if (viewModel.playerGold < goldBefore) {
-      _showToast(`Purchased ${label}!`, itemId, 'success');
-    } else if (viewModel.playerGold === goldBefore && !viewModel.refusesToSell) {
-      _showToast(`Cannot afford ${label}`, itemId, 'error');
-    }
-  };
+    return;
+  }
+  logger.debug('[vendor_view] submitHaggle:sending', { text: text.slice(0, 50) });
+  haggleInput = '';
+  await viewModel.haggle(text);
+};
 
-  /** Submit the haggling message and clear the input. */
-  const submitHaggle = async () => {
-    const text = haggleInput.trim();
-    if (!text || viewModel.isHaggling || viewModel.refusesToSell) {
-      logger.debug('[vendor_view] submitHaggle:blocked', {
-        text: !!text,
-        isHaggling: viewModel.isHaggling,
-        refusesToSell: viewModel.refusesToSell,
-      });
-      return;
-    }
-    logger.debug('[vendor_view] submitHaggle:sending', { text: text.slice(0, 50) });
-    haggleInput = '';
-    await viewModel.haggle(text);
-  };
+/** Handle Enter key for submit (Shift+Enter for newline). */
+const handleKeyDown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    void submitHaggle();
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    viewModel.closeVendor();
+  }
+};
 
-  /** Handle Enter key for submit (Shift+Enter for newline). */
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      void submitHaggle();
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      viewModel.closeVendor();
-    }
-  };
+/** Mode-aware autofocus: focus the textarea when MENU/game mode is active. */
+$effect(() => {
+  if (gameModeService.currentMode === 'MENU' && inputElement) {
+    inputElement.focus();
+  }
+});
 
-  /** Mode-aware autofocus: focus the textarea when MENU/game mode is active. */
-  $effect(() => {
-    if (gameStateService.currentMode === 'MENU' && inputElement) {
-      inputElement.focus();
-    }
-  });
+/** Auto-scroll to the bottom when new messages arrive or AI is streaming. */
+$effect(() => {
+  const count = viewModel.messages.length;
+  const haggling = viewModel.isHaggling;
+  void count;
+  void haggling;
+  if (messageContainer) {
+    messageContainer.scrollTop = messageContainer.scrollHeight;
+  }
+});
 
-  /** Auto-scroll to the bottom when new messages arrive or AI is streaming. */
-  $effect(() => {
-    const count = viewModel.messages.length;
-    const haggling = viewModel.isHaggling;
-    void count;
-    void haggling;
-    if (messageContainer) {
-      messageContainer.scrollTop = messageContainer.scrollHeight;
-    }
-  });
+// ── Item icon mapping ────────────────────────────────────────────────
 
-  // ── Item icon mapping ────────────────────────────────────────────────
-
-  /** Returns a representative emoji icon for a given item ID. */
-  const _itemIcon = (itemId: string): string => {
-    if (itemId.includes('sword') || itemId.includes('blade')) {
-      return '⚔️';
-    }
-    if (itemId.includes('shield')) {
-      return '🛡️';
-    }
-    if (itemId.includes('armor') || itemId.includes('plate') || itemId.includes('mail')) {
-      return '🛡️';
-    }
-    if (itemId.includes('potion') || itemId.includes('elixir')) {
-      return '🧪';
-    }
-    if (itemId.includes('coin') || itemId.includes('gold')) {
-      return '🪙';
-    }
-    if (itemId.includes('ring') || itemId.includes('amulet')) {
-      return '💍';
-    }
-    if (itemId.includes('scroll') || itemId.includes('book')) {
-      return '📜';
-    }
-    if (itemId.includes('bow') || itemId.includes('arrow')) {
-      return '🏹';
-    }
-    return '📦';
-  };
+/** Returns a representative emoji icon for a given item ID. */
+const _itemIcon = (itemId: string): string => {
+  if (itemId.includes('sword') || itemId.includes('blade')) {
+    return '⚔️';
+  }
+  if (itemId.includes('shield')) {
+    return '🛡️';
+  }
+  if (itemId.includes('armor') || itemId.includes('plate') || itemId.includes('mail')) {
+    return '🛡️';
+  }
+  if (itemId.includes('potion') || itemId.includes('elixir')) {
+    return '🧪';
+  }
+  if (itemId.includes('coin') || itemId.includes('gold')) {
+    return '🪙';
+  }
+  if (itemId.includes('ring') || itemId.includes('amulet')) {
+    return '💍';
+  }
+  if (itemId.includes('scroll') || itemId.includes('book')) {
+    return '📜';
+  }
+  if (itemId.includes('bow') || itemId.includes('arrow')) {
+    return '🏹';
+  }
+  return '📦';
+};
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+  onclick={() => viewModel.closeVendor()}
   role="dialog"
+  aria-modal="true"
   tabindex="-1"
   aria-label="Trading with {viewModel.vendorName}"
   onkeydown={handleKeyDown}
 >
   <div
     class="flex w-full max-w-5xl h-[80vh] rounded-xl border border-base-300 bg-base-200 shadow-2xl overflow-hidden"
+    onclick={(e: MouseEvent) => e.stopPropagation()}
+    role="none"
   >
     <!-- ── Left pane: AI Chat ── -->
     <div class="flex flex-col w-3/5 border-r border-base-300">
@@ -171,6 +174,7 @@
           <h3 class="text-sm font-bold text-primary">{viewModel.vendorName}</h3>
         </div>
         <button
+          type="button"
           class="btn btn-ghost btn-xs text-error"
           onclick={() => viewModel.closeVendor()}
           aria-label="Close vendor"
@@ -222,6 +226,7 @@
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
+              <title>icon</title>
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -246,6 +251,7 @@
             disabled={viewModel.isHaggling || viewModel.refusesToSell}
           ></textarea>
           <button
+            type="button"
             class="btn btn-primary btn-sm self-end"
             onclick={() => submitHaggle()}
             disabled={viewModel.isHaggling || viewModel.refusesToSell || !haggleInput.trim()}
@@ -384,6 +390,7 @@
 
                 <!-- Buy button -->
                 <button
+                  type="button"
                   class="btn btn-xs w-full gap-1 {canAfford
                     ? 'btn-primary'
                     : 'btn-ghost'} {viewModel.refusesToSell ? 'btn-disabled' : ''}"

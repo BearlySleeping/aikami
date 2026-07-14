@@ -15,6 +15,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import type { LpcAnimationState } from '$lib/data/lpc_models';
 
 // ---------------------------------------------------------------------------
 // Lazily-resolved ECS worker constructor (SSR-safe dynamic import)
@@ -69,7 +70,7 @@ export type PartyFollowSandboxViewModelOptions = BaseViewModelOptions & {};
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAP_URL = '/assets/maps/sandbox_zone_a.json';
+const MAP_URL = '/game-data/maps/sandbox_zone_a.json';
 const PLAYER_SPAWN_X = 160;
 const PLAYER_SPAWN_Y = 192;
 
@@ -142,7 +143,7 @@ class PartyFollowSandboxViewModel
       const paletteBytes = new Uint8Array(1024);
 
       // LPC recipes matching map sandbox quality
-      const SANDBOX_RECIPES: Record<number, LpcLayerRecipe> = {
+      const SandboxRecipes: Record<number, LpcLayerRecipe> = {
         // Player
         1: { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
         2: { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
@@ -178,13 +179,9 @@ class PartyFollowSandboxViewModel
         bridge: this._bridge,
         workerFactory: () => new workerCtor(),
         recipeResolver: (layerIds) =>
-          layerIds.map((id) => SANDBOX_RECIPES[id]).filter(Boolean) as LpcLayerRecipe[],
+          layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(
-            slot,
-            assetId,
-            state as unknown as import('$lib/data/lpc_models').LpcAnimationState,
-          ),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         textureManager: this._textureManager,
       };
 

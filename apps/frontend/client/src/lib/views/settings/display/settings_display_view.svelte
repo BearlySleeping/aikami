@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/display/settings_display_view.svelte
-  //
-  // Settings > Game > Display sub-tab. Resolution presets and fullscreen
-  // toggle wired to the Tauri window API.
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { SettingsDisplayViewModelInterface } from './settings_display_view_model.svelte';
+// apps/frontend/client/src/lib/views/settings/display/settings_display_view.svelte
+//
+// Settings > Game > Display sub-tab. Resolution presets and fullscreen
+// toggle wired to the Tauri window API.
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { SettingsDisplayViewModelInterface } from './settings_display_view_model.svelte';
 
-  type Props = {
-    viewModel: SettingsDisplayViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: SettingsDisplayViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>

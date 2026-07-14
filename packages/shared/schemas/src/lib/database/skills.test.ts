@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
 import {
   AbilityTypeSchema,
   DEFAULT_SAVING_THROWS,
@@ -10,14 +11,14 @@ import {
 
 describe('AbilityTypeSchema', () => {
   test('should parse valid ability types', () => {
-    expect(AbilityTypeSchema.parse('strength')).toBe('strength');
-    expect(AbilityTypeSchema.parse('dexterity')).toBe('dexterity');
-    expect(AbilityTypeSchema.parse('charisma')).toBe('charisma');
+    expect(Value.Parse(AbilityTypeSchema, 'strength')).toBe('strength');
+    expect(Value.Parse(AbilityTypeSchema, 'dexterity')).toBe('dexterity');
+    expect(Value.Parse(AbilityTypeSchema, 'charisma')).toBe('charisma');
   });
 
   test('should reject invalid ability types', () => {
-    expect(() => AbilityTypeSchema.parse('power')).toThrow();
-    expect(() => AbilityTypeSchema.parse('STR')).toThrow();
+    expect(() => Value.Parse(AbilityTypeSchema, 'power')).toThrow();
+    expect(() => Value.Parse(AbilityTypeSchema, 'STR')).toThrow();
   });
 });
 
@@ -29,7 +30,7 @@ describe('SkillSchema', () => {
       isProficient: true,
       isExpertise: false,
     };
-    const result = SkillSchema.parse(skill);
+    const result = Value.Parse(SkillSchema, skill);
     expect(result.name).toBe('Athletics');
     expect(result.isProficient).toBe(true);
   });
@@ -39,7 +40,7 @@ describe('SkillSchema', () => {
       name: 'Acrobatics',
       ability: 'dexterity' as const,
     };
-    const result = SkillSchema.parse(skill);
+    const result = Value.Default(SkillSchema, skill);
     expect(result.isProficient).toBe(false);
     expect(result.isExpertise).toBe(false);
   });
@@ -50,7 +51,7 @@ describe('SkillSchema', () => {
       ability: 'invalid',
       isProficient: true,
     };
-    expect(() => SkillSchema.parse(skill)).toThrow();
+    expect(() => Value.Parse(SkillSchema, skill)).toThrow();
   });
 });
 
@@ -61,14 +62,14 @@ describe('SavingThrowSchema', () => {
       isProficient: true,
       isExpertise: false,
     };
-    const result = SavingThrowSchema.parse(save);
+    const result = Value.Parse(SavingThrowSchema, save);
     expect(result.ability).toBe('dexterity');
     expect(result.isProficient).toBe(true);
   });
 
   test('should have default values for optional fields', () => {
     const save = { ability: 'wisdom' as const };
-    const result = SavingThrowSchema.parse(save);
+    const result = Value.Default(SavingThrowSchema, save);
     expect(result.isProficient).toBe(false);
     expect(result.isExpertise).toBe(false);
   });

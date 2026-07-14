@@ -265,7 +265,7 @@ export class OpfsAssetCache {
     const cachePath = this._cachePath(options.url, options.category);
 
     try {
-      await this._root!.removeEntry(cachePath);
+      await this._root?.removeEntry(cachePath);
     } catch {
       // File already removed — no-op
     }
@@ -283,8 +283,12 @@ export class OpfsAssetCache {
     const dirs = [IMAGE_DIR, AUDIO_DIR, BINARY_DIR];
     for (const dir of dirs) {
       try {
-        await this._root!.removeEntry(dir, { recursive: true });
-        await this._ensureDir(this._root!, dir);
+        await this._root?.removeEntry(dir, { recursive: true });
+        const root = this._root;
+        if (!root) {
+          throw new Error('OpfsAssetCache: not initialised');
+        }
+        await this._ensureDir(root, dir);
       } catch {
         // Directory may already be empty
       }
@@ -346,7 +350,10 @@ export class OpfsAssetCache {
   /** Gets a file handle for reading from the given path. */
   private async _getFileHandle(path: string): Promise<FileSystemFileHandle> {
     const parts = path.split('/');
-    let current = this._root!;
+    let current = this._root;
+    if (!current) {
+      throw new Error('OpfsAssetCache: not initialised');
+    }
     for (const part of parts.slice(0, -1)) {
       current = await current.getDirectoryHandle(part);
     }
@@ -356,7 +363,10 @@ export class OpfsAssetCache {
   /** Creates a file handle for writing at the given path. */
   private async _createFileHandle(path: string): Promise<FileSystemFileHandle> {
     const parts = path.split('/');
-    let current = this._root!;
+    let current = this._root;
+    if (!current) {
+      throw new Error('OpfsAssetCache: not initialised');
+    }
     for (const part of parts.slice(0, -1)) {
       current = await current.getDirectoryHandle(part);
     }
@@ -381,7 +391,7 @@ export class OpfsAssetCache {
 
       const [url, entry] = oldest;
       try {
-        await this._root!.removeEntry(entry.cachePath);
+        await this._root?.removeEntry(entry.cachePath);
       } catch {
         // File already gone
       }

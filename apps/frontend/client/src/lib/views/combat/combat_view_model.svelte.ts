@@ -1,20 +1,35 @@
 // apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts
 
+import { dataConnect, getTracksByMood } from '@aikami/frontend/dataconnect';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
-import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-import { gameStateService } from '$services';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,
   CombatActionSchema,
-} from '../../game/core/ai/prompts/combat_action_schema.ts';
+} from '$lib/data/ai_prompts/combat_action_schema';
+import { textGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { audioService } from '$lib/services/audio/audio_service.svelte.ts';
+import { ttsService } from '$lib/services/audio/tts_service.svelte.ts';
+import { getExpressionAssetResolver } from '$lib/services/expression/expression_asset_resolver';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import {
+  diceService,
+  inventoryService,
+  worldGenSeedingService,
+  worldStateService,
+} from '$services';
+import type { ExpressionId } from '$types/expression';
+import type {
+  DiceNotation,
+  InitiativeEntry,
+  QueuedRoll,
+  TurnState,
+} from './types/combat_enhancements.ts';
 
 // ---------------------------------------------------------------------------
 // CombatViewModel — Svelte 5 ViewModel for the combat / turn-based battle UI
@@ -139,6 +154,30 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
   /** Whether it's the enemy's active turn (for portrait highlight). */
   readonly isEnemyActiveTurn: boolean;
 
+  /** Current expression for the player character. */
+  readonly playerExpression: ExpressionId;
+
+  /** Current expression for the enemy character. */
+  readonly enemyExpression: ExpressionId;
+
+  /** Player LPC eyes overlay source. */
+  readonly playerEyesSrc: string | undefined;
+
+  /** Player LPC eyebrows overlay source. */
+  readonly playerEyebrowsSrc: string | undefined;
+
+  /** Player LPC mouth overlay source. */
+  readonly playerMouthSrc: string | undefined;
+
+  /** Enemy LPC eyes overlay source. */
+  readonly enemyEyesSrc: string | undefined;
+
+  /** Enemy LPC eyebrows overlay source. */
+  readonly enemyEyebrowsSrc: string | undefined;
+
+  /** Enemy LPC mouth overlay source. */
+  readonly enemyMouthSrc: string | undefined;
+
   /**
    * Ordered combat log entries — most recent first.
    * Each entry carries structured actor/action/outcome data and
@@ -249,6 +288,52 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    * Contract: C-148 Combat Immersion
    */
   generateSceneImage(): void;
+
+  // C-234: Dice & Initiative
+  // -----------------------------------------------------------------------
+
+  /**
+   * Queued dice rolls awaiting resolution.
+   * Added via dice_quick_menu, resolved via resolveAllRolls().
+   */
+  readonly queuedRolls: QueuedRoll[];
+
+  /**
+   * All combatants in the current encounter, sorted by initiative.
+   * Populated when combat starts, updated on turn changes.
+   */
+  readonly initiativeEntries: InitiativeEntry[];
+
+  /**
+   * Current turn state — which entity is acting, action economy, turn number.
+   * `null` when no combat encounter is in progress.
+   */
+  readonly turnState: TurnState | null;
+
+  /**
+   * Queue a dice roll for later resolution.
+   *
+   * @param options - Dice notation and optional label.
+   */
+  queueRoll(options: { notation: DiceNotation; label?: string }): void;
+
+  /**
+   * Remove a queued dice roll by ID.
+   *
+   * @param rollId - The QueuedRoll ID to remove.
+   */
+  removeQueuedRoll(rollId: string): void;
+
+  /**
+   * Resolve (roll) all queued dice and append results to the combat log.
+   */
+  resolveAllRolls(): void;
+
+  /**
+   * End the current turn — advances initiative to the next combatant.
+   * Dispatches END_TURN via the engine bridge.
+   */
+  endTurn(): void;
 };
 
 /**
@@ -305,6 +390,59 @@ export class CombatViewModel
   /** Portrait image URL for the enemy character. */
   enemyPortraitUrl = $state('/assets/images/combat/enemy_portrait.webp');
 
+  /** Current expression for the player character. */
+  playerExpression: ExpressionId = $state('neutral');
+
+  /** Current expression for the enemy character. */
+  enemyExpression: ExpressionId = $state('neutral');
+
+  /** Lazy-initialized expression asset resolver for LPC overlay paths. */
+  private _expressionResolver = getExpressionAssetResolver({
+    className: 'CombatExpressionResolver',
+  });
+
+  /**
+   * Player LPC eyes overlay source — derived from current player expression.
+   */
+  get playerEyesSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.playerExpression).eyes;
+  }
+
+  /**
+   * Player LPC eyebrows overlay source.
+   */
+  get playerEyebrowsSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.playerExpression).eyebrows;
+  }
+
+  /**
+   * Player LPC mouth overlay source.
+   */
+  get playerMouthSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.playerExpression).mouth;
+  }
+
+  /**
+   * Enemy LPC eyes overlay source — derived from current enemy expression.
+   */
+  get enemyEyesSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.enemyExpression).eyes;
+  }
+
+  /**
+   * Enemy LPC eyebrows overlay source.
+   */
+  get enemyEyebrowsSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.enemyExpression).eyebrows;
+  }
+
+  /**
+   * Enemy LPC mouth overlay source.
+   */
+  get enemyMouthSrc(): string | undefined {
+    return this._expressionResolver.resolveLpcOverlays(this.enemyExpression).mouth;
+  }
+
   /** Whether the player is currently taking damage (triggers CSS shake/flash). */
   isPlayerTakingDamage = $state(false);
 
@@ -329,6 +467,15 @@ export class CombatViewModel
     isRolling: boolean;
     isSuccess: boolean;
   } | null = $state(null);
+
+  /** C-234: Queued dice rolls awaiting resolution. */
+  queuedRolls: QueuedRoll[] = $state([]);
+
+  /** C-234: Combatant initiative entries. */
+  initiativeEntries: InitiativeEntry[] = $state([]);
+
+  /** C-234: Current turn state. */
+  turnState: TurnState | null = $state(null);
 
   /** Timeout handle for clearing the active dice roll after animation. */
   private _diceTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -420,6 +567,7 @@ export class CombatViewModel
   /** @inheritdoc */
   async initialize(): Promise<void> {
     try {
+      // Keep engine dynamic (heavy — PixiJS + ECS worker)
       const { createEngineBridge } = await import('@aikami/frontend/engine');
 
       this._bridge = createEngineBridge();
@@ -444,6 +592,22 @@ export class CombatViewModel
     const removeTurnChanged = bridge.on('TURN_CHANGED', (event) => {
       this.activeEntities = event.activeEntities;
       this.currentTurnEntity = event.currentEntityId;
+
+      // C-234: Update initiative entries for new turn
+      const isPlayerEntity = event.currentEntityId === 1;
+      this.initiativeEntries = this.initiativeEntries.map((e) => ({
+        ...e,
+        isCurrentTurn: e.entityId === event.currentEntityId,
+      }));
+
+      // C-234: Update turn state
+      this.turnState = {
+        currentEntityId: event.currentEntityId,
+        currentEntityName: isPlayerEntity ? this.playerName : this.enemyName || 'Enemy',
+        isPlayerTurn: isPlayerEntity,
+        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        turnNumber: (this.turnState?.turnNumber ?? 0) + 1,
+      };
     });
 
     const removeCombatStarted = bridge.on('COMBAT_STARTED', (event) => {
@@ -464,19 +628,73 @@ export class CombatViewModel
       this.combatResult = null;
       this.combatLog = [];
       this.encounterImages = [];
+      this.queuedRolls = [];
       this._turnCounter = 0;
+      this.playerExpression = 'neutral';
+      this.enemyExpression = 'neutral';
+
+      // C-234: Build initiative entries from participant data
+      const playerInit = Math.floor(Math.random() * 20) + 1;
+      const enemyInit = Math.floor(Math.random() * 20) + 1;
+      this.initiativeEntries = [
+        {
+          entityId: 1,
+          name: this.playerName,
+          initiative: playerInit,
+          currentHp: this.playerHp,
+          maxHp: this.playerMaxHp,
+          isCurrentTurn: event.firstTurnEntityId === 1,
+          isDefeated: false,
+        },
+        ...event.participantIds
+          .filter((id: number) => id !== 1)
+          .map((id: number, index: number) => ({
+            entityId: id,
+            name: index === 0 ? this.enemyName || 'Enemy' : `Entity #${id}`,
+            initiative: index === 0 ? enemyInit : Math.floor(Math.random() * 20) + 1,
+            currentHp: index === 0 ? this.enemyHp : 50,
+            maxHp: index === 0 ? this.enemyMaxHp : 50,
+            isCurrentTurn: event.firstTurnEntityId === id,
+            isDefeated: false,
+          })),
+      ] as InitiativeEntry[];
+
+      // C-234: Initialize turn state
+      this.turnState = {
+        currentEntityId: event.firstTurnEntityId,
+        currentEntityName:
+          event.firstTurnEntityId === 1 ? this.playerName : this.enemyName || 'Enemy',
+        isPlayerTurn: event.firstTurnEntityId === 1,
+        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        turnNumber: 1,
+      };
     });
 
     const removeCombatEnded = bridge.on('COMBAT_ENDED', (event) => {
       this.debug('COMBAT_ENDED received', { victory: event.victory });
       if (event.victory) {
         this.combatResult = 'victory';
+        this.playerExpression = 'happy';
+        this.enemyExpression = 'pained';
       } else {
         this.combatResult = 'defeat';
+        this.playerExpression = 'pained';
+        this.enemyExpression = 'happy';
       }
       this.currentTurnEntity = null;
       this.isPlayerTurn = false;
       this.isAttacking = false;
+      this.queuedRolls = [];
+
+      // Mark defeated entries
+      this.initiativeEntries = this.initiativeEntries.map((e) => ({
+        ...e,
+        isCurrentTurn: false,
+        isDefeated: event.victory
+          ? e.entityId !== 1 // non-player entities defeated on victory
+          : e.entityId === 1, // player defeated on defeat
+      }));
+      this.turnState = null;
     });
 
     const removeCombatLog = bridge.on('COMBAT_LOG', (event) => {
@@ -512,6 +730,8 @@ export class CombatViewModel
         // Trigger damage flash if player HP decreased
         if (event.targetRemainingHp < prevPlayerHp) {
           this._triggerDamageFlash('player');
+          // Expression trigger: wounded on damage
+          this.playerExpression = 'pained';
         }
       } else {
         const prevEnemyHp = this.enemyHp;
@@ -520,6 +740,26 @@ export class CombatViewModel
         // Trigger damage flash if enemy HP decreased
         if (event.targetRemainingHp < prevEnemyHp) {
           this._triggerDamageFlash('enemy');
+          // Expression trigger: wounded on damage
+          this.enemyExpression = 'pained';
+        }
+      }
+
+      // Expression trigger: enraged on critical hit
+      if (/critical/i.test(event.message)) {
+        if (event.sourceId === 1) {
+          this.playerExpression = 'determined';
+        } else {
+          this.enemyExpression = 'angry';
+        }
+      }
+
+      // Expression trigger: fatal blow — pained on victim
+      if (event.targetRemainingHp <= 0) {
+        if (event.targetId === 1) {
+          this.playerExpression = 'pained';
+        } else {
+          this.enemyExpression = 'pained';
         }
       }
     });
@@ -589,9 +829,14 @@ export class CombatViewModel
     this.isEnemyTakingDamage = false;
     this.playerPortraitUrl = '/assets/images/combat/player_portrait.webp';
     this.enemyPortraitUrl = '/assets/images/combat/enemy_portrait.webp';
+    this.playerExpression = 'neutral';
+    this.enemyExpression = 'neutral';
     this.combatLog = [];
     this.encounterImages = [];
     this.combatResult = null;
+    this.queuedRolls = [];
+    this.initiativeEntries = [];
+    this.turnState = null;
     this._logEntryCounter = 0;
     this._turnCounter = 0;
 
@@ -868,6 +1113,103 @@ export class CombatViewModel
     });
   }
 
+  // C-234: Dice & Initiative
+  // -----------------------------------------------------------------------
+
+  /** @inheritdoc */
+  queueRoll(options: { notation: DiceNotation; label?: string }): void {
+    this.debug('queueRoll', { notation: options.notation, label: options.label });
+    const roll: QueuedRoll = {
+      id: `queued-${++this._logEntryCounter}`,
+      notation: options.notation,
+      label: options.label ?? options.notation.label,
+      timestamp: Date.now(),
+    };
+    this.queuedRolls = [...this.queuedRolls, roll];
+  }
+
+  /** @inheritdoc */
+  removeQueuedRoll(rollId: string): void {
+    this.debug('removeQueuedRoll', { rollId });
+    this.queuedRolls = this.queuedRolls.filter((r) => r.id !== rollId);
+  }
+
+  /** @inheritdoc */
+  resolveAllRolls(): void {
+    this.debug('resolveAllRolls', { count: this.queuedRolls.length });
+
+    if (this.queuedRolls.length === 0) {
+      return;
+    }
+
+    // Roll each queued dice, append results to log
+    const results: string[] = [];
+    const resolved: QueuedRoll[] = [];
+
+    for (const roll of this.queuedRolls) {
+      const total = diceService.rollNotation({
+        count: roll.notation.count,
+        sides: roll.notation.sides,
+        label: roll.notation.label,
+      });
+      const rollLabel =
+        roll.label !== roll.notation.label
+          ? `${roll.label} (${roll.notation.label})`
+          : roll.notation.label;
+      results.push(`🎲 ${rollLabel}: ${total}`);
+      resolved.push({ ...roll, result: total });
+    }
+
+    // Clear queue
+    this.queuedRolls = [];
+
+    // Append combined result to combat log
+    const resultText = results.join(' | ');
+    this.combatLog = [
+      {
+        id: `log-${++this._logEntryCounter}`,
+        turnNumber: this._turnCounter,
+        actor: 'System',
+        actionText: `🎲 Dice Roll — ${resultText}`,
+        outcomeText: '',
+      },
+      ...this.combatLog,
+    ];
+  }
+
+  /** @inheritdoc */
+  endTurn(): void {
+    if (!this.inCombat) {
+      this.debug('endTurn: blocked — no combat in progress');
+      return;
+    }
+
+    this.debug('endTurn: resolving locally');
+
+    // Advance turn to next combatant (alternate between 1 and nearest enemy)
+    // In full combat with many entities, the bridge would handle this.
+    const nextId = this.currentTurnEntity === 1 ? (this.enemyEntityId ?? 2) : 1;
+    this.currentTurnEntity = nextId;
+    this.isPlayerTurn = nextId === 1;
+
+    // Reset turn state locally
+    if (this.turnState) {
+      this.turnState = {
+        currentEntityId: nextId,
+        currentEntityName: nextId === 1 ? this.playerName : this.enemyName || 'Enemy',
+        isPlayerTurn: nextId === 1,
+        actionEconomy: { action: false, bonusAction: false, reaction: false },
+        turnNumber: this.turnState.turnNumber + 1,
+      };
+    }
+
+    // Update initiative current-turn highlight
+    this.initiativeEntries = this.initiativeEntries.map((e) => ({
+      ...e,
+      isCurrentTurn: e.entityId === nextId,
+    }));
+  }
+
   /** @inheritdoc */
   generateSceneImage(): void {
     if (!this.inCombat) {
@@ -964,13 +1306,13 @@ export class CombatViewModel
    * @returns A formatted multi-line string describing the player's current state.
    */
   private _buildCharacterSheetContext(): string {
-    const inventory = gameStateService.inventory;
+    const inventory = inventoryService.inventory;
     const inventoryLines =
       inventory.length > 0
         ? inventory.map((item) => `  - ${item.itemId} x${item.quantity}`).join('\n')
         : '  (empty)';
 
-    return [
+    const lines = [
       '--- Player Character Sheet ---',
       `Level: ${this.playerLevel}`,
       `HP: ${this.playerHp}/${this.playerMaxHp}`,
@@ -979,7 +1321,19 @@ export class CombatViewModel
       'Inventory:',
       inventoryLines,
       '--- End Character Sheet ---',
-    ].join('\n');
+    ];
+
+    // Inject world generation context (C-233)
+    const worldGen = worldStateService.worldGenOutput;
+    if (worldGen && Array.isArray(worldGen.npcs) && worldGen.npcs.length > 0) {
+      const gmPrompt = worldGenSeedingService.assembleGmPrompt({
+        output: worldGen,
+        playerGoals: `Explore the world of ${worldGen.worldName}.`,
+      });
+      lines.push('', '--- World Context ---', gmPrompt, '--- End World Context ---');
+    }
+
+    return lines.join('\n');
   }
 
   // -----------------------------------------------------------------------
@@ -1002,8 +1356,6 @@ export class CombatViewModel
    */
   private async _transitionBgmByMood(mood: string): Promise<void> {
     try {
-      // Dynamic import — avoids pulling in Firebase SDK at module load time
-      const { dataConnect, getTracksByMood } = await import('@aikami/frontend/dataconnect');
       const result = await getTracksByMood(dataConnect, { mood });
 
       if (result.data?.audioTracks && result.data.audioTracks.length > 0) {
@@ -1020,8 +1372,6 @@ export class CombatViewModel
           availableTracks: tracks.length,
         });
 
-        // Dynamic import — avoids pulling in Web Audio API at module load time
-        const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
         await audioService.transitionToBgm(selected.storageUrl, 2000);
       } else {
         // No tracks found for this mood — fall back to placeholder
@@ -1063,8 +1413,6 @@ export class CombatViewModel
     this.debug('_transitionBgmFallback', { mood, url });
 
     try {
-      // Dynamic import — avoids pulling in Web Audio API at module load time
-      const { audioService } = await import('$lib/services/audio/audio_service.svelte.ts');
       await audioService.transitionToBgm(url, 2000);
     } catch (error) {
       this.warn('_transitionBgmFallback: crossfade failed', error);
@@ -1164,6 +1512,6 @@ export class CombatViewModel
  * @param options - ViewModel options (standard BaseViewModelOptions).
  * @returns A fully initialized CombatViewModel instance.
  */
-export const getCombatViewModel = (options: CombatViewModelOptions): CombatViewModel => {
-  return new CombatViewModel(options);
+export const getCombatViewModel = (options: CombatViewModelOptions): CombatViewModelInterface => {
+  return CombatViewModel.create(options);
 };

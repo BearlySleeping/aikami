@@ -16,6 +16,6 @@
     "@aikami/backend-utils": "workspace:*"
   },
   "devDependencies": {
-    "@sveltejs/kit": "2.68.0"
+    "@sveltejs/kit": "2.69.2"
   }
 }

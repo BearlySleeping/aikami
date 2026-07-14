@@ -1167,7 +1167,7 @@ Updated all knowledge files with current project state after full audit:
 - Removed Playwright devDependencies and test configs from PWA and Game packages. Updated moon.yml tasks to run only unit tests (e2e tests now run exclusively from `apps/e2e`).
 - Implemented `global_setup.ts` and `global_teardown.ts` hitting Firebase Emulator REST APIs (`DELETE /emulator/v1/projects/{id}/databases/(default)/documents` and `DELETE /emulator/v1/projects/{id}/accounts`) to guarantee zero state bleed between suites.
 - Built `DockerManager` in `scripts/src/lib/test_blackbox/docker_manager.ts` with full lifecycle: `build` (docker build), `run` (docker run with `--add-host=host.docker.internal:host-gateway`), `poll` (HTTP health check polling), `kill` (docker stop/rm). Injects `FIREBASE_AUTH_EMULATOR_HOST`, `FIRESTORE_EMULATOR_HOST`, and other emulator env vars into containers via `host.docker.internal` for cross-platform network bridging.
-- Updated `run.ts` to orchestrate `DockerManager` alongside `TmuxManager`. Added `--with-docker` flag. Docker services start before emulators, teardown runs in reverse order.
+- Updated `run.ts` to orchestrate `DockerManager` alongside `HerdrManager`. Added `--with-docker` flag. Docker services start before emulators, teardown runs in reverse order.
 - Updated `client.e2e.ts` and `game_e2e.ts` suite runners to invoke Playwright from the unified `apps/e2e` package using `npx playwright test --project=client` / `--project=game`.
 - Verified DockerManager end-to-end: built nginx:alpine container, mapped port 9999, health-checked via HTTP, cleanly stopped. Full cycle: build → run → poll → kill.
 - Fixed pre-existing workspace dependency bug: `@aikami/frontend/configs` → `@aikami/frontend-configs` in `packages/frontend/engine/package.json`.
@@ -1530,7 +1530,7 @@ Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit Cli
 - [x] **AC-1: Code Relocation & Import Fixing** — 26 source files moved from `apps/frontend/game/src/lib/` to `apps/frontend/client/src/lib/client/game/`. All `$lib/...` imports updated to `$lib/client/game/...`. File path comments updated. `svelte-check` passes with 0 errors.
 - [x] **AC-2: SvelteKit SSR Enforcement** — `+page.ts` files created for both `(authenticated)/game/` and `(dev)/dev/sandbox/` with `export const ssr = false; export const prerender = false;`. Game engine only instantiates on the client.
 - [x] **AC-3: PixiJS Lifecycle Hooking** — `(authenticated)/game/+page.svelte` uses `onMount(() => { viewModel.initialize(); return () => viewModel.dispose(); })` and `onDestroy(() => viewModel.dispose())` for failsafe WebGL cleanup. `(dev)/dev/sandbox/+page.svelte` uses `onMount()` to init PixiJS app and `onDestroy()` to call `app.destroy(true, { children: true })`. BaseViewModelContainer already handles `initialize()` → `dispose()` lifecycle via onMount return.
-- [x] **AC-4: Workspace Deprecation** — `apps/frontend/game/` directory deleted. Removed from `.moon/workspace.yml`. Cleaned up references in `biome.json`, `deployment_config.ts`, `dev_server_manager.ts`, `tmux/session.ts`, `tmux-orchestrator.ts`, `generate_context.ts`, `constants/project.ts`, `schemas/project.ts`, and `environment.ts`.
+- [x] **AC-4: Workspace Deprecation** — `apps/frontend/game/` directory deleted. Removed from `.moon/workspace.yml`. Cleaned up references in `biome.json`, `deployment_config.ts`, `dev_server_manager.ts`, `herdr/session.ts`, `herdr-orchestrator.ts`, `generate_context.ts`, `constants/project.ts`, `schemas/project.ts`, and `environment.ts`.
 
 ### Files Created
 - `apps/frontend/client/src/routes/(authenticated)/game/+page.ts` — SSR disabled, prerender disabled
@@ -1554,8 +1554,8 @@ Merged the standalone `apps/frontend/game` PixiJS project into the SvelteKit Cli
 - `biome.json` — removed `apps/frontend/game/tests/**` exclude pattern
 - `scripts/src/lib/deploy/deployment_config.ts` — removed `game` deployment config
 - `scripts/src/lib/test_blackbox/dev_server_manager.ts` — removed `game` dev server
-- `scripts/src/lib/tmux/session.ts` — removed `game` tmux session
-- `.pi/extensions/tmux-orchestrator.ts` — removed `game` window config
+- `scripts/src/lib/herdr/session.ts` — removed `game` herdr workspace
+- `.pi/extensions/herdr-orchestrator.ts` — removed `game` window config
 - `scripts/src/lib/ops/generate_context.ts` — removed `Game` entry
 
 ### Test Results
@@ -1833,15 +1833,15 @@ Built a Dialogue Context Manager that hooks into the Stream Orchestrator lifecyc
 
 ---
 
-## C-067 — Voice Microservice & Tmux Orchestration — ✅ completed
+## C-067 — Voice Microservice & Herdr Orchestration — ✅ completed
 
 ### Summary
-Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the TTS engine from `@aikami/backend-audio`. Replaced the deprecated `game` service references with `voice` across the tmux orchestrator suite (`scripts/src/lib/tmux/`). Updated shared development ports to remove `game` and add `voice`.
+Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the TTS engine from `@aikami/backend-audio`. Replaced the deprecated `game` service references with `voice` across the herdr orchestrator suite (`scripts/src/lib/herdr/`). Updated shared development ports to remove `game` and add `voice`.
 
 ### Root Changes
 - **Development Ports**: Removed `game` port from `EMULATOR_PORTS`, `STAGING_PORTS`, `PRODUCTION_PORTS`. Added `voice` ports: emulator=8089, staging=8088, production=8092. Port allocation table updated with new 8087-8092 backend services range.
 - **Voice Microservice (`apps/backend/voice`)**: Created Bun server entry point (`src/main.ts`) that instantiates `createTtsWebSocketHandler` from `@aikami/backend-audio` and binds it to Bun.serve WebSocket lifecycle. Per-connection session Map for handler lifecycle management. SIGINT graceful shutdown.
-- **Tmux Orchestrator Refactor**: All 8 files in `scripts/src/lib/tmux/` updated — `session.ts`, `cli.ts`, `start.ts`, `stop.ts`, `join.ts`, `list.ts`, `stop_all.ts`, `status.ts`. Added `voice` to `DevService` type union, `SERVICE_DEFS`, `ALL_SERVICES`, `normalizeService` alias map. Help text and error messages updated. Voice runs via `bun run dev` in `apps/backend/voice`.
+- **Herdr Orchestrator Refactor**: All 8 files in `scripts/src/lib/herdr/` updated — `session.ts`, `cli.ts`, `start.ts`, `stop.ts`, `join.ts`, `list.ts`, `stop_all.ts`, `status.ts`. Added `voice` to `DevService` type union, `SERVICE_DEFS`, `ALL_SERVICES`, `normalizeService` alias map. Help text and error messages updated. Voice runs via `bun run dev` in `apps/backend/voice`.
 - **Workspace Registration**: Added `voice: "apps/backend/voice"` to `.moon/workspace.yml`. Scaffolded `package.json`, `tsconfig.json`, `moon.yml` with dependencies on `backend-audio`, `constants`, `logger`.
 - **PWA VoiceViewModel**: Updated to use WebSocket streaming against the voice microservice instead of REST-based `ttsService.speak()`. Connects to `ws://localhost:{EMULATOR_PORTS.voice}`. Added `isConnected` state. Svelte view shows connection badge.
 
@@ -1851,7 +1851,7 @@ Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the 
 
 ### AC Status
 - [x] AC-1: Ports & Config Refactor — `development_ports.ts` no longer contains `game`, exports `voice` for all modes. Downstream imports fixed (game_e2e.ts, e2e/config.ts). All typechecks pass.
-- [x] AC-2: Tmux Scripts Refactored — `bun run scripts/src/index.ts tmux:start voice,client --force` creates session with voice and client tabs. Both ports report ready (voice :8089, client :5274). `tmux:status` lists correct services.
+- [x] AC-2: Herdr Scripts Refactored — `bun run scripts/src/index.ts herdr:start voice,client --force` creates session with voice and client tabs. Both ports report ready (voice :8089, client :5274). `herdr:status` lists correct services.
 - [x] AC-3: Voice Microservice Bootstrapper — `Bun.serve()` starts on port 8089 (emulator). HTTP fallback returns `Voice API Status: OK` (200). WebSocket lifecycle maps to `createTtsWebSocketHandler` onMessage/onClose. Graceful shutdown on SIGINT.
 - [x] AC-4: Workspace Integration — `moon project voice` identifies the project with correct dependencies (`backend-audio`, `constants`, `logger`). Moon detect affected includes voice.
 
@@ -1863,10 +1863,10 @@ Stood up `apps/backend/voice` as a standalone Bun WebSocket server wrapping the 
 
 ### Files modified
 - `packages/shared/constants/src/lib/development_ports.ts` — Removed game ports, added voice ports (8089/8088/8092)
-- `scripts/src/lib/tmux/session.ts` — Added voice service def, updated types, aliases, ALL_SERVICES, help text
-- `scripts/src/lib/tmux/cli.ts` — Updated help text (game→voice)
-- `scripts/src/lib/tmux/start.ts` — Updated usage comment
-- `scripts/src/lib/tmux/stop.ts` — Updated usage comment
+- `scripts/src/lib/herdr/session.ts` — Added voice service def, updated types, aliases, ALL_SERVICES, help text
+- `scripts/src/lib/herdr/cli.ts` — Updated help text (game→voice)
+- `scripts/src/lib/herdr/start.ts` — Updated usage comment
+- `scripts/src/lib/herdr/stop.ts` — Updated usage comment
 - `.moon/workspace.yml` — Added voice project entry
 - `apps/frontend/client/src/lib/views/dev/voice/voice_view_model.svelte.ts` — WebSocket streaming to voice service
 - `apps/frontend/client/src/lib/views/dev/voice/voice_view.svelte` — Connection status badge
@@ -1962,16 +1962,16 @@ the Client frontend so SvelteKit orchestrates TTS via direct HTTP REST calls to 
 
 ---
 
-## C-070 — Image Microservice & Tmux Orchestration — ✅ completed
+## C-070 — Image Microservice & Herdr Orchestration — ✅ completed
 
 ### Summary
-Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `yanwk/comfyui-boot` Docker image. Allocated development ports (8188 emulator, 8187 staging, 8193 production). Integrated image service into the shared tmux orchestrator so it can be managed alongside client, voice, and emulators.
+Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `yanwk/comfyui-boot` Docker image. Allocated development ports (8188 emulator, 8187 staging, 8193 production). Integrated image service into the shared herdr orchestrator so it can be managed alongside client, voice, and emulators.
 
 ### AC Status
 - [x] AC-1: Ports & Config Refactor — `image` property added to `EMULATOR_PORTS` (8188), `STAGING_PORTS` (8187), and `PRODUCTION_PORTS` (8193) in `development_ports.ts`. Downstream typechecks pass.
-- [x] AC-2: Tmux Scripts Refactored — `'image'` added to `DevService` union, `SERVICE_DEFS`, `normalizeService` aliases, and `ALL_SERVICES`. `bun tmux:start image` creates an `image` tmux window running `bun run dev` in `apps/backend/image`. CLI help text updated.
+- [x] AC-2: Herdr Scripts Refactored — `'image'` added to `DevService` union, `SERVICE_DEFS`, `normalizeService` aliases, and `ALL_SERVICES`. `bun herdr:start image` creates an `image` herdr tab running `bun run dev` in `apps/backend/image`. CLI help text updated.
 - [x] AC-3: Image Microservice Containerization — `apps/backend/image/` created with `Dockerfile` (`FROM yanwk/comfyui-boot:latest`), `package.json` with `dev:docker` script, `moon.yml` with server preset, `tsconfig.json`, and `README.md`.
-- [x] AC-4: API Verification Script — `scripts/check_health.ts` fetches `/system_stats`, parses JSON, reports readiness. Gracefully handles ECONNREFUSED with actionable message to run `bun tmux:start image`.
+- [x] AC-4: API Verification Script — `scripts/check_health.ts` fetches `/system_stats`, parses JSON, reports readiness. Gracefully handles ECONNREFUSED with actionable message to run `bun herdr:start image`.
 
 ### Files created
 - `apps/backend/image/package.json` — Container-only microservice with `dev:docker` and `test:image` scripts
@@ -1983,8 +1983,8 @@ Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `
 
 ### Files modified
 - `packages/shared/constants/src/lib/development_ports.ts` — Added `image` to emulator (8188), staging (8187), production (8193) port maps
-- `scripts/src/lib/tmux/session.ts` — Added `'image'` to `DevService` union, `SERVICE_DEFS`, `normalizeService`, `ALL_SERVICES`; updated tab layout comment and error message
-- `scripts/src/lib/tmux/cli.ts` — Updated CLI help text to include `image` in valid services
+- `scripts/src/lib/herdr/session.ts` — Added `'image'` to `DevService` union, `SERVICE_DEFS`, `normalizeService`, `ALL_SERVICES`; updated tab layout comment and error message
+- `scripts/src/lib/herdr/cli.ts` — Updated CLI help text to include `image` in valid services
 - `.moon/workspace.yml` — Registered `image: "apps/backend/image"` project
 
 ### Deviations from contract
@@ -1993,14 +1993,14 @@ Scaffolded `apps/backend/image` as a standalone ComfyUI microservice using the `
 
 ---
 
-## C-071 — Text Microservice & Tmux Orchestration — ✅ completed
+## C-071 — Text Microservice & Herdr Orchestration — ✅ completed
 
 ### Summary
-Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the official `ollama/ollama` Docker image. Allocated development ports (11434 emulator, 11433 staging, 11435 production). Integrated text service into the shared tmux orchestrator alongside client, voice, image, and emulators.
+Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the official `ollama/ollama` Docker image. Allocated development ports (11434 emulator, 11433 staging, 11435 production). Integrated text service into the shared herdr orchestrator alongside client, voice, image, and emulators.
 
 ### AC Status
 - [x] AC-1: Ports & Config Refactor — `text` property added to `EMULATOR_PORTS` (11434), `STAGING_PORTS` (11433), and `PRODUCTION_PORTS` (11435) in `development_ports.ts`. Downstream typechecks pass.
-- [x] AC-2: Tmux Scripts Refactored — `'text'` added to `DevService` union, `SERVICE_DEFS`, `normalizeService` aliases, and `ALL_SERVICES`. `bun tmux:start text` creates a `text` tmux window running `bun run dev` in `apps/backend/text`. CLI help text updated.
+- [x] AC-2: Herdr Scripts Refactored — `'text'` added to `DevService` union, `SERVICE_DEFS`, `normalizeService` aliases, and `ALL_SERVICES`. `bun herdr:start text` creates a `text` herdr tab running `bun run dev` in `apps/backend/text`. CLI help text updated.
 - [x] AC-3: Text Microservice Containerization — `apps/backend/text/` created with `Dockerfile` (`FROM ollama/ollama`), `package.json` with `dev:docker` script mapping volume `./src/cache/ollama:/root/.ollama` and exposing port 11434, `moon.yml` with server preset, `tsconfig.json`, and `README.md`.
 - [x] AC-4: API Verification & Model Setup — `scripts/check_health.ts` fetches `/`, checks for string `"Ollama is running"`, reports readiness. `scripts/download_model.ts` health-checks then POSTs `/api/pull` with `{"name": "qwen3.5:4b"}`, streaming NDJSON with progress reporting. Idempotent — skips if cached. Both handle ECONNREFUSED gracefully.
 
@@ -2017,8 +2017,8 @@ Scaffolded `apps/backend/text` as a standalone Ollama LLM microservice using the
 
 ### Files modified
 - `packages/shared/constants/src/lib/development_ports.ts` — Added `text` to emulator (11434), staging (11433), production (11435) port maps
-- `scripts/src/lib/tmux/session.ts` — Added `'text'` to `DevService` union, `SERVICE_DEFS`, `normalizeService`, `ALL_SERVICES`; updated tab layout comment and error message
-- `scripts/src/lib/tmux/cli.ts` — Updated CLI help text to include `text` in valid services
+- `scripts/src/lib/herdr/session.ts` — Added `'text'` to `DevService` union, `SERVICE_DEFS`, `normalizeService`, `ALL_SERVICES`; updated tab layout comment and error message
+- `scripts/src/lib/herdr/cli.ts` — Updated CLI help text to include `text` in valid services
 - `.moon/workspace.yml` — Registered `text: "apps/backend/text"` project
 
 ### Deviations from contract

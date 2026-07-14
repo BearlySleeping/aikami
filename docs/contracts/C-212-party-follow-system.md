@@ -1,3 +1,4 @@
+<!-- completed: 2026-07-03 -->
 ## Metadata
 
 | Field | Value |
@@ -6,7 +7,8 @@
 | **Target** | `packages/frontend/engine/` — GameCommand + worker bridge, `apps/frontend/client/` — sandbox ViewModel |
 | **Priority** | P2 — unblocks party companion gameplay for MVP |
 | **Dependencies** | C-196 (Emergent World Integration), C-137 (Camera Follow), C-141 (NPC Interaction) |
-| **Status** | not_started |
+| **Status** | completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview
@@ -255,3 +257,38 @@ type FollowConfig = {
 - **Offset positions**: Each follower targets a point offset from the player (-32,0), (-48,-16), (-48,16) to avoid stacking. The offset is added to the player position before computing direction.
 - **Fast player movement**: If the player moves faster than followers, the velocity direction updates each tick (200ms), so followers continuously course-correct. No rubber-banding needed.
 - **Map boundary**: Followers respect map pixel bounds via the existing movement_system clamping. They won't walk through walls or off the map.
+
+---
+
+## Execution Report
+
+**Completed:** 2026-07-03
+
+### Summary
+C-212 was already fully implemented prior to discovery. All engine plumbing (SET_ENTITY_VELOCITY GameCommand, worker handler, GameWorld forwarding, npcMeta getter) and sandbox code (ViewModel with LPC recipes + follow tick + recruit/leave UI, View with canvas + party panel + position HUD) was in place. The route `/dev/sandbox/party-follow` was also registered.
+
+### Acceptance Criteria Status
+
+| AC | Description | Status |
+|----|-------------|--------|
+| 1 | SET_ENTITY_VELOCITY moves arbitrary NPCs | ✅ Implemented — types.ts GameCommand union, ecs_worker.ts handler, game_world.ts command forwarding |
+| 2 | Sandbox NPCs use LPC character sprites | ✅ Implemented — 3 distinct LPC recipe sets (Lydia/Bjorn/Mira) via recipeResolver + TextureManager |
+| 3 | Party members follow the player | ✅ Implemented — 150ms tick sends mirrored velocity with offset spread + 0.3× correction pull |
+| 4 | Leaving party stops following | ✅ Implemented — togglePartyMember zeroes velocity to {0,0} and sets active=false |
+
+### Files (pre-existing)
+
+| File | Role |
+|------|------|
+| `packages/frontend/engine/src/types.ts` | SET_ENTITY_VELOCITY in GameCommand union |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | handleSetEntityVelocity + bridge command handler |
+| `packages/frontend/engine/src/game_world.ts` | Command forwarding (line 880), npcMeta getter |
+| `apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts` | Full ViewModel: LPC recipes, NPC spawn, follow tick, recruit/leave toggle |
+| `apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view.svelte` | Full View: canvas, position HUD, party control panel |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/party-follow/+page.svelte` | Route page |
+
+### Test Results
+
+| Test | Result |
+|------|--------|
+| `client:typecheck` | ✅ Pass (0 errors, 0 warnings) |

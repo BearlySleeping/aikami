@@ -4,7 +4,7 @@
 // NEVER import this file from production code or non-(dev) routes.
 
 import type { PersonaData } from '@aikami/types';
-import { characterCreationService } from '$services';
+import { personaCreationService } from '$services';
 import {
   PersonaCreateViewModel,
   type PersonaCreateViewModelOptions,
@@ -126,8 +126,8 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
 
     await new Promise((resolve) => setTimeout(resolve, 800));
 
-    characterCreationService.persona = { ...MOCK_CHARACTER };
-    characterCreationService.avatarUrl = MOCK_AVATAR_URL;
+    personaCreationService.persona = { ...MOCK_CHARACTER };
+    personaCreationService.avatarUrl = MOCK_AVATAR_URL;
     this.phase = 'TWEAK';
   }
 
@@ -137,14 +137,14 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
   forceErrorState(): void {
     this.phase = 'CHAT';
     this.errorMessage = 'Forced error state for testing.';
-    characterCreationService.persona = undefined;
-    characterCreationService.avatarUrl = '';
+    personaCreationService.persona = undefined;
+    personaCreationService.avatarUrl = '';
   }
 
   /** Injects deliberately malformed/junk data for edge-case testing. */
   injectJunkData(): void {
     this.phase = 'TWEAK';
-    characterCreationService.persona = {
+    personaCreationService.persona = {
       id: 'junk-001',
       name: '',
       level: -1,
@@ -177,7 +177,7 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
       avatarUrl: '',
       isActive: false,
     };
-    characterCreationService.avatarUrl = '';
+    personaCreationService.avatarUrl = '';
   }
 }
 

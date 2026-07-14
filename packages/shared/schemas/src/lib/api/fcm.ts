@@ -6,3 +6,5 @@ export const FCMPlatformSchema = Type.Union([
   Type.Literal('ios'),
   Type.Literal('web'),
 ]);
+
+export type FCMPlatform = Type.Static<typeof FCMPlatformSchema>;

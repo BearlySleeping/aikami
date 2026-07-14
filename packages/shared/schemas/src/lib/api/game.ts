@@ -13,6 +13,7 @@ export const ActiveSessionSchema = Type.Object({
   isActive: Type.Boolean({ default: true }),
 });
 
+export type ActiveSession = Type.Static<typeof ActiveSessionSchema>;
 export const SceneImageSchema = Type.Object({
   id: Type.String(),
   worldId: Type.String(),
@@ -32,6 +33,7 @@ export const SceneImageSchema = Type.Object({
   isActive: Type.Boolean({ default: true }),
 });
 
+export type SceneImage = Type.Static<typeof SceneImageSchema>;
 export const GeneratedAudioSchema = Type.Object({
   id: Type.String(),
   messageId: Type.Optional(Type.String()),
@@ -48,3 +50,5 @@ export const GeneratedAudioSchema = Type.Object({
   text: Type.String(),
   createdAt: Type.String({ format: 'date-time' }),
 });
+
+export type GeneratedAudio = Type.Static<typeof GeneratedAudioSchema>;

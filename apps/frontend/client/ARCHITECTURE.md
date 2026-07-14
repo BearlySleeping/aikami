@@ -107,7 +107,7 @@ export type MyViewModelInterface = BaseViewModelInterface & {
 ```typescript
 export const getMyViewModel = (
   options: MyViewModelOptions,
-): MyViewModelInterface => new MyViewModel(options)
+): MyViewModelInterface => MyViewModel.create(options)
 ```
 
 ### Example ViewModel
@@ -149,7 +149,7 @@ class LoginViewModel extends BaseViewModel implements LoginViewModelInterface {
 
 export const getLoginViewModel = (
   options: LoginViewModelOptions,
-): LoginViewModelInterface => new LoginViewModel(options)
+): LoginViewModelInterface =>  LoginViewModel.create(options)
 ```
 
 ### Example View

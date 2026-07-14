@@ -84,6 +84,7 @@ import {
   spawnSpawnPointEntities,
   spawnTransitionEntities,
 } from '../systems/entity_spawner.ts';
+import { setEnvironmentConfig, stepEnvironment } from '../systems/environment_system.ts';
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateGoapCombatTactics } from '../systems/goap_combat_tactics_system.ts';
 import { updateGoapScheduler } from '../systems/goap_scheduler_system.ts';
@@ -372,6 +373,16 @@ const handleBridgeCommand = (command: GameCommand): void => {
       }
       break;
     }
+    case 'SET_ENVIRONMENT_CONFIG': {
+      // ── Dev sandbox: configure environment time/weather (C-213) ──
+      setEnvironmentConfig({
+        timeScale: (command as { timeScale?: number }).timeScale,
+        windVelocity: (command as { windVelocity?: number }).windVelocity,
+        rainIntensity: (command as { rainIntensity?: number }).rainIntensity,
+        startHour: (command as { startHour?: number }).startHour,
+      });
+      break;
+    }
     default: {
       break;
     }
@@ -386,8 +397,8 @@ const handleBridgeCommand = (command: GameCommand): void => {
  *
  * Maps equipment item IDs to LPC layer variant indices:
  * - Armor: updates layer2 (torso)
- *   - leather_armor → layer 2
- *   - iron_armor   → layer 3
+ *   - leatherArmor → layer 2
+ *   - ironArmor   → layer 3
  *   - no armor     → layer 1 (default)
  *
  * After updating, emits APPEARANCE_CHANGED through the bridge so the
@@ -407,10 +418,10 @@ const _updatePlayerAppearanceFromEquipment = (
   if (equipment.armor) {
     const armorToLayer = (armorId: string): number => {
       switch (armorId) {
-        case 'leather_armor':
-        case 'wooden_shield':
+        case 'leatherArmor':
+        case 'woodenShield':
           return 2;
-        case 'iron_armor':
+        case 'ironArmor':
           return 3;
         default:
           return 2;
@@ -700,6 +711,11 @@ const tickLoop = (): void => {
   const deltaMs = now - lastTickTime;
   lastTickTime = now;
 
+  // ── Environment: time-of-day, diurnal colours, weather ──
+  // Contract C-213: Step environment before all other systems so
+  // diurnal and weather UBO data is fresh for this frame.
+  const environment = stepEnvironment({ deltaMs });
+
   // ────────────────────────────────────────────────────────────────────────
   // Step 1: Ingestion — process streaming payloads from tool orchestrator
   //
@@ -841,6 +857,14 @@ const tickLoop = (): void => {
       cameraX: camera.x,
       cameraY: camera.y,
       zoom,
+      environment: {
+        gameHour: environment.gameHour,
+        gameMinute: environment.gameMinute,
+        gameTimeSeconds: environment.gameTimeSeconds,
+        windVelocity: environment.windVelocity,
+        rainIntensity: environment.rainIntensity,
+        ubo: environment.ubo,
+      },
     };
     if (screenPos.x !== undefined) {
       message.npcScreenX = screenPos.x;
@@ -917,6 +941,14 @@ const tickLoop = (): void => {
       cameraX: camera.x,
       cameraY: camera.y,
       zoom,
+      environment: {
+        gameHour: environment.gameHour,
+        gameMinute: environment.gameMinute,
+        gameTimeSeconds: environment.gameTimeSeconds,
+        windVelocity: environment.windVelocity,
+        rainIntensity: environment.rainIntensity,
+        ubo: environment.ubo,
+      },
     };
     if (screenPos.x !== undefined) {
       message.npcScreenX = screenPos.x;

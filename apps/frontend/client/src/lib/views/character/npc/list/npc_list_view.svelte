@@ -1,101 +1,104 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
+// apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
 
-  import type { NpcData } from '@aikami/types';
-  import t from '$i18n';
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { NpcListViewModelInterface, NpcTab } from './npc_list_view_model.svelte.ts';
+import type { NpcData } from '@aikami/types';
+import t from '$i18n';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { NpcListViewModelInterface, NpcTab } from './npc_list_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: NpcListViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: NpcListViewModelInterface;
+};
+const { viewModel }: Props = $props();
 
-  let fileInput: HTMLInputElement;
-  let urlInput = $state('');
-  let showUrlModal = $state(false);
-  let showCreateModal = $state(false);
+let fileInput: HTMLInputElement;
+let urlInput = $state('');
+let showUrlModal = $state(false);
+let showCreateModal = $state(false);
 
-  // Edit modal state
-  let editName = $state('');
-  let editRace = $state('');
-  let editClass = $state('');
-  let editLevel = $state(1);
-  let editOccupation = $state('');
-  let editPersonality = $state('');
-  let editNotes = $state('');
-  let editVisibility = $state<'private' | 'public'>('private');
-  let isSaving = $state(false);
+// Edit modal state
+let editName = $state('');
+let editRace = $state('');
+let editClass = $state('');
+let editLevel = $state(1);
+let editOccupation = $state('');
+let editPersonality = $state('');
+let editNotes = $state('');
+let editVisibility = $state<'private' | 'public'>('private');
+let isSaving = $state(false);
 
-  async function saveField(field: string, value: unknown) {
-    if (isSaving) {
-      return;
-    }
-    isSaving = true;
-    try {
-      await viewModel.saveNpc({ data: { [field]: value } });
-    } finally {
-      isSaving = false;
-    }
+async function saveField(field: string, value: unknown) {
+  if (isSaving) {
+    return;
   }
-
-  function openEditForm(npc: NpcData) {
-    editName = npc.name || '';
-    editRace = npc.race || '';
-    editClass = npc.class || '';
-    editLevel = npc.level || 1;
-    editOccupation = npc.occupation || '';
-    editPersonality = npc.personality || '';
-    editNotes = npc.notes || '';
-    editVisibility = npc.visibility || 'private';
-    viewModel.openEditModal({ npc });
+  isSaving = true;
+  try {
+    await viewModel.saveNpc({ data: { [field]: value } });
+  } finally {
+    isSaving = false;
   }
+}
 
-  const tabs: { key: NpcTab; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'mine', label: 'My NPCs' },
-    { key: 'public', label: 'Public' },
-    { key: 'system', label: 'System' },
-  ];
+function openEditForm(npc: NpcData) {
+  editName = npc.name || '';
+  editRace = npc.race || '';
+  editClass = npc.class || '';
+  editLevel = npc.level || 1;
+  editOccupation = npc.occupation || '';
+  editPersonality = npc.personality || '';
+  editNotes = npc.notes || '';
+  editVisibility = npc.visibility || 'private';
+  viewModel.openEditModal({ npc });
+}
 
-  function getTabCount(tab: NpcTab): number {
-    switch (tab) {
-      case 'all':
-        return viewModel.systemNpcs.length + viewModel.userNpcs.length;
-      case 'mine':
-        return viewModel.userNpcs.length;
-      case 'public':
-        return viewModel.publicNpcs.length;
-      case 'system':
-        return viewModel.systemNpcs.length;
-      default:
-        return 0;
-    }
+const tabs: { key: NpcTab; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'mine', label: 'My NPCs' },
+  { key: 'public', label: 'Public' },
+  { key: 'system', label: 'System' },
+];
+
+function getTabCount(tab: NpcTab): number {
+  switch (tab) {
+    case 'all':
+      return viewModel.systemNpcs.length + viewModel.userNpcs.length;
+    case 'mine':
+      return viewModel.userNpcs.length;
+    case 'public':
+      return viewModel.publicNpcs.length;
+    case 'system':
+      return viewModel.systemNpcs.length;
+    default:
+      return 0;
   }
+}
 
-  function handleFileChange(event: Event) {
-    viewModel.handleFileImport({ event });
-  }
+function handleFileChange(event: Event) {
+  viewModel.handleFileImport({ event });
+}
 
-  function handleUrlSubmit() {
-    if (urlInput.trim()) {
-      viewModel.handleUrlImport({ url: urlInput.trim() });
-      urlInput = '';
-      showUrlModal = false;
-    }
+function handleUrlSubmit() {
+  if (urlInput.trim()) {
+    viewModel.handleUrlImport({ url: urlInput.trim() });
+    urlInput = '';
+    showUrlModal = false;
   }
+}
 </script>
 
 <BaseViewModelContainer {viewModel}>
   <div class="p-4">
     <header class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">{t.nonPlayerCharacters()}</h1>
-      <button class="btn btn-primary" onclick={() => (showCreateModal = true)}>Create NPC</button>
+      <button type="button" class="btn btn-primary" onclick={() => (showCreateModal = true)}>
+        Create NPC
+      </button>
     </header>
 
     <div class="tabs tabs-boxed mb-4">
       {#each tabs as tab}
         <button
+          type="button"
           class="tab"
           class:tab-active={viewModel.activeTab === tab.key}
           onclick={() => viewModel.setActiveTab(tab.key)}
@@ -107,10 +110,10 @@
     </div>
 
     <div class="mb-4 flex gap-2">
-      <button class="btn btn-outline btn-sm" onclick={() => fileInput.click()}>
+      <button type="button" class="btn btn-outline btn-sm" onclick={() => fileInput.click()}>
         Import PNG/JSON
       </button>
-      <button class="btn btn-outline btn-sm" onclick={() => (showUrlModal = true)}>
+      <button type="button" class="btn btn-outline btn-sm" onclick={() => (showUrlModal = true)}>
         Import from URL
       </button>
       <input
@@ -133,6 +136,7 @@
         {#each viewModel.npcs as npc (npc.id)}
           <div class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer">
             <button
+              type="button"
               class="w-full text-left"
               onclick={() => viewModel.navigateToChat({ npcId: npc.id })}
             >
@@ -165,6 +169,7 @@
             {#if !npc.creatorUid}
               <div class="px-3 pb-3 flex gap-2">
                 <button
+                  type="button"
                   class="btn btn-xs btn-outline"
                   onclick={() => viewModel.handleForkNpc({ npcId: npc.id })}
                 >
@@ -173,10 +178,15 @@
               </div>
             {:else}
               <div class="px-3 pb-3 flex gap-2">
-                <button class="btn btn-xs btn-outline" onclick={() => openEditForm(npc)}>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-outline"
+                  onclick={() => openEditForm(npc)}
+                >
                   Edit
                 </button>
                 <button
+                  type="button"
                   class="btn btn-xs btn-outline btn-error"
                   onclick={() => viewModel.handleDeleteNpc({ npcId: npc.id })}
                 >
@@ -209,19 +219,19 @@
           bind:value={urlInput}
         >
         <div class="modal-action">
-          <button class="btn btn-ghost" onclick={() => (showUrlModal = false)}>Cancel</button>
-          <button class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
+          <button type="button" class="btn btn-ghost" onclick={() => (showUrlModal = false)}>
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
         </div>
       </div>
-      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
-      <div
-        class="modal-backdrop"
+      <button
+        class="modal-backdrop border-none bg-transparent p-0"
+        type="button"
         onclick={() => (showUrlModal = false)}
         onkeydown={(e) => { if (e.key === 'Enter') { showUrlModal = false; } }}
-        role="button"
-        tabindex="0"
         aria-label="Close"
-      ></div>
+      ></button>
     </div>
   {/if}
 
@@ -232,18 +242,18 @@
         <h3 class="font-bold text-lg">Create New NPC</h3>
         <p class="py-4">NPC creation form coming soon!</p>
         <div class="modal-action">
-          <button class="btn btn-ghost" onclick={() => (showCreateModal = false)}>Close</button>
+          <button type="button" class="btn btn-ghost" onclick={() => (showCreateModal = false)}>
+            Close
+          </button>
         </div>
       </div>
-      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
-      <div
-        class="modal-backdrop"
+      <button
+        class="modal-backdrop border-none bg-transparent p-0"
+        type="button"
         onclick={() => (showCreateModal = false)}
         onkeydown={(e) => { if (e.key === 'Enter') { showCreateModal = false; } }}
-        role="button"
-        tabindex="0"
         aria-label="Close"
-      ></div>
+      ></button>
     </div>
   {/if}
 
@@ -331,18 +341,18 @@
           </label>
         </div>
         <div class="modal-action">
-          <button class="btn btn-primary" onclick={() => viewModel.closeEditModal()}>Done</button>
+          <button type="button" class="btn btn-primary" onclick={() => viewModel.closeEditModal()}>
+            Done
+          </button>
         </div>
       </div>
-      <!-- biome-ignore lint/a11y/useSemanticElements: modal-backdrop uses role=button as transparent overlay -->
-      <div
-        class="modal-backdrop"
+      <button
+        class="modal-backdrop border-none bg-transparent p-0"
+        type="button"
         onclick={() => viewModel.closeEditModal()}
         onkeydown={(e) => { if (e.key === 'Enter') { viewModel.closeEditModal(); } }}
-        role="button"
-        tabindex="0"
         aria-label="Close"
-      ></div>
+      ></button>
     </div>
   {/if}
 </BaseViewModelContainer>

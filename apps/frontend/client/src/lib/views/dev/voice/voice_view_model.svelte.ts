@@ -155,10 +155,13 @@ class VoiceViewModel
           input: trimmed,
           model: 'tts-1',
           voice: this.selectedVoice,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           response_format: this.responseFormat,
           speed: this.speed,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           volume_multiplier: this.volumeMultiplier,
           stream: useStream,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           stream_format: useStream ? 'audio' : undefined,
         }),
         signal,

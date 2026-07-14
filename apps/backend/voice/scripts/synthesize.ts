@@ -1,4 +1,5 @@
 // apps/backend/voice/scripts/synthesize.ts
+// biome-ignore-all lint/style/useNamingConvention: Property names must match shell environment variable conventions
 // Synthesize speech via the Kokoro TTS container and play with mpv.
 //
 // Usage:
@@ -67,7 +68,7 @@ try {
 
   if (code === 'ECONNREFUSED' || code === 'ECONNRESET' || message.includes('fetch')) {
     console.error('❌ Failed to connect to Kokoro. Is the container running?');
-    console.error('   Start it: bun run tmux:start voice');
+    console.error('   Start it: bun run herdr:start voice');
     process.exit(1);
   }
 

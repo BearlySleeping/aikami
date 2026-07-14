@@ -23,3 +23,4 @@ export const AppearanceSchema = Type.Object({
 });
 
 export type AppearanceData = Type.Static<typeof AppearanceSchema>;
+export type Appearance = Type.Static<typeof AppearanceSchema>;

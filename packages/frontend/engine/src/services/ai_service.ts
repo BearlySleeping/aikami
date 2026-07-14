@@ -1,6 +1,6 @@
 // apps/frontend/game/src/engine/services/ai_service.ts
 
-import type { FrontendAiInterface } from '@aikami/frontend/api-core';
+import type { FrontendAiInterface } from '@aikami/types';
 
 /**
  * Data about an item in the game.

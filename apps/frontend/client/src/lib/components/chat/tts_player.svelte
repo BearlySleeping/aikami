@@ -1,13 +1,13 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/chat/TTSPlayer.svelte
-  type Props = {
-    isPlaying?: boolean;
-    currentText?: string;
-    isDemo?: boolean;
-    onStop?: () => void;
-  };
+// apps/frontend/client/src/lib/components/chat/TTSPlayer.svelte
+type Props = {
+  isPlaying?: boolean;
+  currentText?: string;
+  isDemo?: boolean;
+  onStop?: () => void;
+};
 
-  let { isPlaying = false, currentText = '', isDemo = false, onStop }: Props = $props();
+let { isPlaying = false, currentText = '', isDemo = false, onStop }: Props = $props();
 </script>
 
 {#if isPlaying}
@@ -21,7 +21,7 @@
         {#if isDemo}
           <span class="badge badge-warning badge-xs">Demo</span>
         {/if}
-        <button class="btn btn-xs btn-error" onclick={onStop}>⏹️ Stop</button>
+        <button type="button" class="btn btn-xs btn-error" onclick={onStop}>⏹️ Stop</button>
       </div>
     </div>
   </div>

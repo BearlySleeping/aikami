@@ -1,78 +1,63 @@
 <script lang="ts">
-  import InventoryView from '../../inventory/inventory_view.svelte';
-  import QuestView from '../../quest/quest_view.svelte';
-  import VendorView from '../../vendor/vendor_view.svelte';
-  // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
-  import CharacterDashboardView from '../dashboard/character_dashboard_view.svelte';
-  import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
-  import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
-  import GameOverOverlay from './overlays/game_over_overlay.svelte';
-  import PauseMenuOverlay from './overlays/pause_menu_overlay.svelte';
-  import TransitionOverlay from './overlays/transition_overlay.svelte';
+import InventoryView from '../../inventory/inventory_view.svelte';
+import QuestView from '../../quest/quest_view.svelte';
+import VendorView from '../../vendor/vendor_view.svelte';
+import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
+import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
+import ClockHud from './overlays/clock_hud/clock_hud.svelte';
+import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
+import EndSessionView from './overlays/end_session/end_session_view.svelte';
+import GameOverOverlay from './overlays/game_over_overlay.svelte';
+import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
+import TransitionOverlay from './overlays/transition_overlay.svelte';
 
-  type Props = {
-    viewModel: GameUIViewModelInterface;
-  };
+type Props = {
+  viewModel: GameUIViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
-<!-- biome-ignore lint/a11y/noStaticElementInteractions: svelte:window is a valid global key handler -->
-<svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
+<!--
+  Game UI layer — absolutely positioned over the canvas.
+  pointer-events-none allows clicks to pass through to the canvas
+  unless a child element explicitly sets pointer-events-auto.
+-->
+<div class="absolute inset-0 z-10 pointer-events-none">
+  <!-- Clock HUD — visible when no full-screen overlay blocks the game (C-213) -->
+  {#if viewModel.showClockHud}
+    <ClockHud
+      gameHour={viewModel.gameHour}
+      gameMinute={viewModel.gameMinute}
+      windVelocity={viewModel.windVelocity}
+      rainIntensity={viewModel.rainIntensity}
+    />
+  {/if}
 
-{#if viewModel.activeOverlay === 'PAUSE_MENU'}
-  <PauseMenuOverlay
-    onResume={() => viewModel.resumeGame()}
-    onSave={() => viewModel.saveGame()}
-    onSettings={() => viewModel.goToSettings()}
-    onQuit={() => viewModel.quitToMainMenu()}
-    isSaving={viewModel.isSaving}
-    saveMessage={viewModel.saveMessage}
-  />
-{/if}
+  <!-- Overlay router -->
+  {#if viewModel.chatLocked}
+    <!-- Chat locked banner (C-240) -->
+    <div
+      class="pointer-events-auto fixed top-0 left-0 right-0 z-50 bg-warning/90 px-4 py-2 text-center text-sm font-semibold text-warning-content"
+      role="alert"
+    >
+      Session ended. Start a new session to continue chatting.
+    </div>
+  {/if}
 
-{#if viewModel.activeOverlay === 'DIALOGUE'}
-  {#if viewModel.dialogueViewModel}
+  {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
+    <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
+  {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
     <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
-  {:else}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
-    >
-      <div class="rounded-xl bg-base-200 p-8">
-        <p class="text-lg font-bold text-error">BROKEN — dialogueViewModel is undefined</p>
-        <p class="text-sm">activeOverlay: {viewModel.activeOverlay}</p>
-        <p class="text-sm">dialogueNpc: {viewModel.dialogueNpc?.npcName ?? 'undefined'}</p>
-      </div>
-    </div>
-  {/if}
-{/if}
-
-{#if viewModel.activeOverlay === 'INVENTORY'}
-  {#if viewModel.inventoryViewModel}
+  {:else if viewModel.activeOverlay === 'GAME_OVER'}
+    <GameOverOverlay
+      onRespawn={() => viewModel.respawnPlayer()}
+      onLoadLastSave={() => viewModel.loadLastSave()}
+    />
+  {:else if viewModel.activeOverlay === 'INVENTORY' && viewModel.inventoryViewModel}
     <InventoryView viewModel={viewModel.inventoryViewModel} />
-  {:else}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
-    >
-      <p class="text-lg font-bold text-error">Inventory loading...</p>
-    </div>
-  {/if}
-{/if}
-
-{#if viewModel.activeOverlay === 'CHARACTER_DASHBOARD'}
-  {#if viewModel.dashboardViewModel}
-    <CharacterDashboardView viewModel={viewModel.dashboardViewModel} />
-  {:else}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
-    >
-      <p class="text-lg font-bold text-error">Character Dashboard loading...</p>
-    </div>
-  {/if}
-{/if}
-
-{#if viewModel.activeOverlay === 'QUEST_LOG'}
-  {#if viewModel.questViewModel}
+  {:else if viewModel.activeOverlay === 'QUEST_LOG' && viewModel.questViewModel}
     <div
       class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     >
@@ -80,80 +65,13 @@
         <QuestView viewModel={viewModel.questViewModel} />
       </div>
     </div>
-  {:else}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
-    >
-      <p class="text-lg font-bold text-error">Quest Log loading...</p>
-    </div>
-  {/if}
-{/if}
-
-{#if viewModel.activeOverlay === 'GAME_OVER'}
-  <GameOverOverlay
-    onRespawn={() => viewModel.respawnPlayer()}
-    onLoadLastSave={() => viewModel.loadLastSave()}
-  />
-{/if}
-
-{#if viewModel.activeOverlay === 'VENDOR'}
-  {#if viewModel.vendorViewModel}
+  {:else if viewModel.activeOverlay === 'CHARACTER_DASHBOARD' && viewModel.dashboardViewModel}
+    <CharacterSheetView viewModel={viewModel.dashboardViewModel} />
+  {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
     <VendorView viewModel={viewModel.vendorViewModel} />
-  {:else}
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/50"
-    >
-      <p class="text-lg font-bold text-error">Vendor loading...</p>
-    </div>
+  {:else if viewModel.activeOverlay === 'END_SESSION' && viewModel.endSessionViewModel}
+    <EndSessionView viewModel={viewModel.endSessionViewModel} />
   {/if}
-{/if}
 
-<TransitionOverlay {viewModel} />
-
-<!-- Auto-Save Toast — Contract C-155 AC-2 -->
-{#if viewModel.autoSaveStatus !== 'idle'}
-  <div
-    class="pointer-events-none fixed bottom-6 right-6 z-30 rounded-lg bg-base-300 px-4 py-2 text-sm shadow-lg transition-opacity duration-300"
-    class:opacity-100={viewModel.autoSaveStatus === 'saving'}
-    class:opacity-90={viewModel.autoSaveStatus === 'saved' || viewModel.autoSaveStatus === 'error'}
-  >
-    {#if viewModel.autoSaveStatus === 'saving'}
-      <span class="flex items-center gap-2">
-        <span class="loading loading-spinner loading-xs"></span>
-        Auto-Saving...
-      </span>
-    {:else if viewModel.autoSaveStatus === 'saved'}
-      <span class="flex items-center gap-2 text-success">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-4 w-4"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-            clip-rule="evenodd"
-          />
-        </svg>
-        Saved!
-      </span>
-    {:else if viewModel.autoSaveStatus === 'error'}
-      <span class="flex items-center gap-2 text-error">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-4 w-4"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-            clip-rule="evenodd"
-          />
-        </svg>
-        Auto-save failed
-      </span>
-    {/if}
-  </div>
-{/if}
+  <TransitionOverlay {viewModel} />
+</div>

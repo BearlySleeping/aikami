@@ -1,0 +1,31 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: Type.Unsafe<any> required for Firestore-specific types */
+// packages/shared/schemas/src/lib/fields.ts
+import Type from 'typebox';
+
+/**
+ * Schema for Firestore Timestamp or Date values.
+ * Uses Type.Unsafe to bypass JSON Schema validation for Firestore-specific types.
+ */
+export const TimestampSchema = Type.Unsafe<any>(Type.Any());
+
+export type Timestamp = Type.Static<typeof TimestampSchema>;
+/**
+ * Schema for Firestore FieldValue (sentinel values like serverTimestamp).
+ * Uses Type.Unsafe to bypass JSON Schema validation for Firestore-specific types.
+ */
+export const FieldValueSchema = Type.Unsafe<any>(Type.Any());
+
+export type FieldValue = Type.Static<typeof FieldValueSchema>;
+/**
+ * Schema for Firestore GeoPoint.
+ * Uses Type.Unsafe to bypass JSON Schema validation for Firestore-specific types.
+ */
+export const GeoPointSchema = Type.Unsafe<any>(Type.Any());
+
+export type GeoPoint = Type.Static<typeof GeoPointSchema>;
+/**
+ * Universal value schema accepting string or number.
+ */
+export const UniversalValueSchema = Type.Union([Type.String(), Type.Number()]);
+
+export type UniversalValue = Type.Static<typeof UniversalValueSchema>;

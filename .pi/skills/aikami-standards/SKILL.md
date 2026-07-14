@@ -10,7 +10,7 @@ When writing or modifying code in the Aikami monorepo, you MUST adhere to the fo
 ## 1. Biome Compliance
 - The codebase uses **BiomeJS** for formatting and linting.
 - You must write code that passes `bunx biome check .` without errors.
-- Do NOT use `any` (`noExplicitAny` is strictly enforced). Use `unknown` if a type is truly unknown, or properly type it using Zod/Typebox.
+- Do NOT use `any` (`noExplicitAny` is strictly enforced). Use `unknown` if a type is truly unknown, or properly type it via a TypeBox schema in `@aikami/schemas` (Zod is banned — see `aikami-conventions`).
 - Do NOT ignore unused variables. Remove them.
 
 ## 2. Imports and Dependencies
@@ -31,31 +31,37 @@ Whenever you write a class, you MUST organize its members in the following order
 4. **Public Methods** (core API first, then getters/setters)
 5. **Private / Protected Methods**
 
+Additional rules (see `aikami-conventions` for full detail):
+- Private members use the `_` prefix (`private readonly _config`).
+- All methods are **regular methods**, never arrow-function fields — `this`
+  and `super` must work, and `create()` auto-logging only sees prototype methods.
+- Classes extending `BaseClass`/`BaseViewModel` are instantiated via
+  `ClassName.create({ className: '...' })`, never `new`.
+- Use inherited `this.debug()` / `this.error()` for logging inside classes.
+
 ```typescript
-export class ExampleService {
+export class ExampleService extends BaseClass implements ExampleServiceInterface {
   // 1. Static Fields
-  private static instanceCount = 0;
+  private static _instanceCount = 0;
 
   // 2. Instance Fields
-  private readonly config: Config;
-  public state: State;
+  private readonly _cache = new Map<string, State>();
+  state: State = 'initialized';
 
-  // 3. Constructor
-  constructor(config: Config) {
-    this.config = config;
-    this.state = 'initialized';
+  // 3. Public Methods
+  async initialize(): Promise<void> {
+    await this._setupDatabase();
   }
 
-  // 4. Public Methods
-  public async initialize(): Promise<void> {
-    await this.setupDatabase();
-  }
-
-  // 5. Private Methods
-  private async setupDatabase(): Promise<void> {
+  // 4. Private Methods
+  private async _setupDatabase(): Promise<void> {
     // ...
   }
 }
+
+export const exampleService: ExampleServiceInterface = ExampleService.create({
+  className: 'ExampleService',
+});
 ```
 
 ## 4. JSDoc and Comments
@@ -72,7 +78,7 @@ export class EngineBridge { ... }
 
 ## 5. Single Source of Truth
 - Do not duplicate constants. If a constant is used in both frontend and backend, it belongs in `packages/shared/constants`.
-- Do not duplicate schemas. Types and schemas go in `packages/shared/schemas` and `packages/shared/types`.
+- Do not duplicate schemas. TypeBox schemas go in `packages/shared/schemas`; types are derived via `Static<typeof Schema>` and re-exported from `packages/shared/types`. Never hand-write a type that already has a schema.
 
 ## 6. Cross-Origin Isolation & Web Workers
 When using `SharedArrayBuffer` for Web Workers, the document MUST be cross-origin isolated by returning `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. 

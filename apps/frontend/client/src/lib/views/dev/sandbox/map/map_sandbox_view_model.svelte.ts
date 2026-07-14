@@ -15,6 +15,7 @@ import {
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import type { LpcAnimationState } from '$lib/data/lpc_models';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -213,7 +214,7 @@ class MapSandboxViewModel
       const tm = new TextureManager();
       const paletteBytes = new Uint8Array(1024);
 
-      const SANDBOX_RECIPES: Record<number, LpcLayerRecipe> = {
+      const SandboxRecipes: Record<number, LpcLayerRecipe> = {
         // Player — 6-layer stack
         1: { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
         2: { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
@@ -235,13 +236,9 @@ class MapSandboxViewModel
         bridge: this._engineBridge,
         textureManager: tm,
         recipeResolver: (layerIds) =>
-          layerIds.map((id) => SANDBOX_RECIPES[id]).filter(Boolean) as LpcLayerRecipe[],
+          layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(
-            slot,
-            assetId,
-            state as unknown as import('$lib/data/lpc_models').LpcAnimationState,
-          ),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);
@@ -299,12 +296,12 @@ class MapSandboxViewModel
     try {
       this.debug('map-sandbox:loadDebugJton', { spawnX: x, spawnY: y, disableClamping });
       await gw.loadMap({
-        mapUrl: '/assets/maps/debug_map.jton',
+        mapUrl: '/game-data/maps/debug_map.jton',
         targetX: x,
         targetY: y,
         disableClamping,
       });
-      this.currentMap = '/assets/maps/debug_map.jton';
+      this.currentMap = '/game-data/maps/debug_map.jton';
       this.debug('map-sandbox:loadDebugJton:complete');
     } catch (err) {
       this.debug('map-sandbox:loadDebugJton:error', { error: String(err) });
@@ -331,13 +328,13 @@ class MapSandboxViewModel
     try {
       this.debug('map-sandbox:loadZoneB', { spawnX: x, spawnY: y, disableClamping });
       await gw.loadMap({
-        mapUrl: '/assets/maps/sandbox_zone_b.json',
+        mapUrl: '/game-data/maps/sandbox_zone_b.json',
         targetX: x,
         targetY: y,
         disableClamping,
         waterGids: new Set(),
       });
-      this.currentMap = '/assets/maps/sandbox_zone_b.json';
+      this.currentMap = '/game-data/maps/sandbox_zone_b.json';
       this.debug('map-sandbox:loadZoneB:complete');
     } catch (err) {
       this.debug('map-sandbox:loadZoneB:error', { error: String(err) });
@@ -366,13 +363,13 @@ class MapSandboxViewModel
     try {
       this.debug('map-sandbox:loadZoneC', { spawnX: x, spawnY: y, disableClamping });
       await gw.loadMap({
-        mapUrl: '/assets/maps/sandbox_textured.jton',
+        mapUrl: '/game-data/maps/sandbox_textured.jton',
         targetX: x,
         targetY: y,
         disableClamping,
         waterGids: new Set(),
       });
-      this.currentMap = '/assets/maps/sandbox_textured.jton';
+      this.currentMap = '/game-data/maps/sandbox_textured.jton';
       this.debug('map-sandbox:loadZoneC:complete');
     } catch (err) {
       this.debug('map-sandbox:loadZoneC:error', { error: String(err) });

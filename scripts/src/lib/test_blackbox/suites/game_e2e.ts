@@ -1,4 +1,5 @@
 // scripts/src/lib/test_blackbox/suites/game_e2e.ts
+// biome-ignore-all lint/style/useNamingConvention: Authorization HTTP header name must match HTTP specification
 /**
  * Game E2E blackbox test suite.
  *

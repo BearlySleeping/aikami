@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/dev/image/image_view_model.test.ts
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts
@@ -80,12 +81,12 @@ const _setupBarrelMock = () => {
     TtsService: class {},
     authService: _createServiceStub(),
     AuthService: class {},
-    characterCreationService: _createServiceStub(),
-    CharacterCreationService: class {},
+    personaCreationService: _createServiceStub(),
+    PersonaCreationService: class {},
     characterService: _createServiceStub(),
     CharacterService: class {},
-    characterTextStreamService: _createServiceStub(),
-    CharacterTextStreamService: class {},
+    personaCreationTextStreamService: _createServiceStub(),
+    PersonaCreationTextStreamService: class {},
     chatService: _createServiceStub(),
     contextBuilder: _createServiceStub(),
     conversationRepository: _createServiceStub(),

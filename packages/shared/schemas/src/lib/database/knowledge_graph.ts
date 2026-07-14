@@ -39,5 +39,8 @@ export const KnowledgeGraphSchema = Type.Object({
 });
 
 export type KGNodeData = Type.Static<typeof KGNodeSchema>;
+export type KGNode = Type.Static<typeof KGNodeSchema>;
 export type KGEdgeData = Type.Static<typeof KGEdgeSchema>;
+export type KGEdge = Type.Static<typeof KGEdgeSchema>;
 export type KnowledgeGraphData = Type.Static<typeof KnowledgeGraphSchema>;
+export type KnowledgeGraph = Type.Static<typeof KnowledgeGraphSchema>;

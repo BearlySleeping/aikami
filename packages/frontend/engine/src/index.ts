@@ -176,7 +176,6 @@ export { createEngineBridge, MockEngineBridge } from './engine_bridge.ts';
 // GameWorld (lifecycle manager)
 export type { GameWorldInitializeOptions, GameWorldOptions, PlayerInitData } from './game_world.ts';
 export { GameWorld } from './game_world.ts';
-export { createConfiguredAiClient, getConfiguredProvider } from './services/ai_config.ts';
 export type { ItemData } from './services/ai_service.ts';
 export { GameAiService } from './services/ai_service.ts';
 export type { ActionResult, GameState, NpcData, PlayerAction } from './services/api_service.ts';
@@ -188,6 +187,26 @@ export { GameApiService } from './services/api_service.ts';
 export { deserializeWorld, serializeWorld } from './serialization/ecs_serializer.ts';
 
 // Rendering
+
+// Asset Manifest (C-243)
+export {
+  buildAssetTagList,
+  buildAssetTree,
+  buildManifest,
+  ensureAssetDirs,
+  hasNativeMarker,
+  loadManifest,
+  pathToTag,
+  resolveAssetUrl,
+  sanitizeAssetFilename,
+  tagToPath,
+  validUniquePath,
+} from './assets/asset_manifest.ts';
+export {
+  type ContentPackLoaderInterface,
+  clearContentPackCache,
+  loadContentPack,
+} from './assets/content_pack_loader.ts';
 
 export type { JtonParseResult } from './assets/jton_parser.ts';
 export {
@@ -220,6 +239,19 @@ export {
   loadJtonMap,
   loadTilemap,
 } from './assets/map_loader.ts';
+export {
+  COLOR_DAWN,
+  COLOR_DUSK,
+  COLOR_MIDNIGHT,
+  COLOR_NOON,
+  copyEnvironmentUBO,
+  createEnvironmentUBO,
+  DIURNAL_KEYFRAMES,
+  ENV_UBO_OFFSETS,
+  ENVIRONMENT_SHADER_STRUCT,
+  ENVIRONMENT_UBO_BYTES,
+  ENVIRONMENT_UBO_SIZE,
+} from './environment/environment_ubo.ts';
 export { checkLineOfSight, clearBresenhamGrid, setBresenhamGrid } from './math/bresenham.ts';
 export type { StaticActionDefinition } from './math/goap/action_registry.ts';
 // GOAP (C-191)
@@ -274,6 +306,9 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './rendering/animation_controller.ts';
+// Scene Background (C-243)
+export type { SceneBackgroundOptions } from './rendering/scene_background.ts';
+export { SceneBackground } from './rendering/scene_background.ts';
 export type { PaletteSpriteOptions } from './rendering/sprite_composer.ts';
 export {
   initLpcShaders,
@@ -287,7 +322,8 @@ export type {
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
-
+export type { WeatherOverlayOptions } from './rendering/weather_overlay.ts';
+export { WeatherOverlay } from './rendering/weather_overlay.ts';
 // Streaming orchestrator (C-193)
 export type {
   ActionMutationPayload,
@@ -337,6 +373,17 @@ export {
   spawnSpawnPointEntities,
   spawnTransitionEntities,
 } from './systems/entity_spawner.ts';
+// Environment (C-213)
+export type {
+  EnvironmentState,
+  SetEnvironmentConfigOptions,
+} from './systems/environment_system.ts';
+export {
+  getEnvironmentState,
+  resetEnvironmentTracking,
+  setEnvironmentConfig,
+  stepEnvironment,
+} from './systems/environment_system.ts';
 // Combat Tactics (C-197)
 export {
   resolveTacticalAction,
@@ -392,8 +439,9 @@ export {
 export type { TilemapRenderOptions, TilemapRenderResult } from './systems/tilemap_render_system.ts';
 export { renderTilemap } from './systems/tilemap_render_system.ts';
 export { updateZoningSystem } from './systems/zoning_system.ts';
-
 // Types (plain serializable — safe for UI consumption)
+// Bridge tag parser (C-244)
+export { parseBridgeTags } from './tag_parser.ts';
 export type {
   GameCommand,
   GameCommandOfType,

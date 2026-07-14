@@ -1,26 +1,26 @@
 <script lang="ts">
-  import type { PersonaData } from '@aikami/types';
-  // apps/frontend/client/src/routes/(dev)/dev/characters/+page.svelte
-  import { browser } from '$app/environment';
+import type { PersonaData } from '@aikami/types';
+// apps/frontend/client/src/routes/(dev)/dev/characters/+page.svelte
+import { browser } from '$app/environment';
 
-  type SavedCharacter = {
-    persona: PersonaData;
-    avatarUrl: string;
-    savedAt: string;
-  };
+type SavedCharacter = {
+  persona: PersonaData;
+  avatarUrl: string;
+  savedAt: string;
+};
 
-  let characters: SavedCharacter[] = $state([]);
+let characters: SavedCharacter[] = $state([]);
 
-  if (browser) {
-    const stored = localStorage.getItem('aikami-characters');
-    if (stored) {
-      try {
-        characters = JSON.parse(stored) as SavedCharacter[];
-      } catch {
-        characters = [];
-      }
+if (browser) {
+  const stored = localStorage.getItem('aikami-characters');
+  if (stored) {
+    try {
+      characters = JSON.parse(stored) as SavedCharacter[];
+    } catch {
+      characters = [];
     }
   }
+}
 </script>
 
 <svelte:head>
@@ -102,6 +102,7 @@
                       Saved {new Date(char.savedAt).toLocaleDateString()}
                     </span>
                     <button
+                      type="button"
                       class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                       onclick={() => {
                         const updated = characters.filter((_, j) => j !== i);

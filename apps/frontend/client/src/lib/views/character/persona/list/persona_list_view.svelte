@@ -1,23 +1,23 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { PersonaListViewModelInterface } from './persona_list_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { PersonaListViewModelInterface } from './persona_list_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: PersonaListViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: PersonaListViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
-  <div class="flex flex-col items-center min-h-screen bg-base-200">
+  <div class="flex flex-col items-center min-h-screen bg-base-200" data-testid="persona-list">
     <!-- ═══════════════════════════════════════════════════════════════════
          Header with Back button
          ═══════════════════════════════════════════════════════════════════ -->
     <div
       class="w-full flex items-center justify-between px-6 py-4 bg-base-100 border-b border-base-300"
     >
-      <button class="btn btn-ghost btn-sm gap-2" onclick={() => viewModel.goBack()}>
+      <button type="button" class="btn btn-ghost btn-sm gap-2" onclick={() => viewModel.goBack()}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           class="h-4 w-4"
@@ -25,6 +25,7 @@
           viewBox="0 0 24 24"
           stroke="currentColor"
         >
+          <title>icon</title>
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -55,7 +56,11 @@
             persona{viewModel.personas.length !== 1 ? 's' : ''}
             saved
           </p>
-          <button class="btn btn-primary btn-sm" onclick={() => viewModel.createPersona()}>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            onclick={() => viewModel.createPersona()}
+          >
             + New Persona
           </button>
         </div>
@@ -69,7 +74,11 @@
               <p class="text-base-content/60 text-sm text-center max-w-sm">
                 Create your first persona to begin your adventure.
               </p>
-              <button class="btn btn-primary mt-2" onclick={() => viewModel.createPersona()}>
+              <button
+                type="button"
+                class="btn btn-primary mt-2"
+                onclick={() => viewModel.createPersona()}
+              >
                 Create Persona
               </button>
             </div>
@@ -79,8 +88,7 @@
           <div class="grid gap-3">
             {#each viewModel.personas as persona (persona.persona.id)}
               {@const p = persona.persona}
-              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-              <!-- biome-ignore lint/a11y/useSemanticElements: card contains nested buttons -->
+              <!-- biome-ignore lint/a11y/useSemanticElements: cannot use <button> — card contains nested buttons (Set Active, Delete) -->
               <div
                 class="card bg-base-100 shadow hover:shadow-md transition-shadow cursor-pointer relative"
                 class:ring-2={p.isActive}
@@ -145,6 +153,7 @@
                         <!-- Set Active button -->
                         {#if !p.isActive}
                           <button
+                            type="button"
                             class="btn btn-xs btn-outline btn-primary"
                             onclick={(e) => {
                               e.stopPropagation();
@@ -156,6 +165,7 @@
                         {/if}
                         <!-- Delete button with stopPropagation to prevent card click -->
                         <button
+                          type="button"
                           class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                           onclick={(e) => {
                             e.stopPropagation();

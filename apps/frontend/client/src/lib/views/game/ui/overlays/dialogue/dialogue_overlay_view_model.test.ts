@@ -6,12 +6,13 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts
 
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 
 // ---------------------------------------------------------------------------
-// Mock: OllamaClient from @aikami/frontend/api-core
+// Mock: OllamaClient from $lib/services/ai/clients
 // ---------------------------------------------------------------------------
 
 type StreamChunk = string;
@@ -59,7 +60,7 @@ const createMockOllamaClient = (): Record<string, unknown> => {
   };
 };
 
-mock.module('@aikami/frontend/api-core', () => {
+mock.module('$lib/services/ai/clients/index.ts', () => {
   const m = createMockOllamaClient();
   return m;
 });
@@ -93,6 +94,40 @@ mock.module(TEXT_GEN_SVC_PATH, () => ({
   __esModule: true,
 }));
 
+// Mock game service files BEFORE $services so that barrel evaluation
+// can resolve GM service imports (gm_prompt_service imports these directly).
+const COMBAT_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
+mock.module(COMBAT_PATH, () => ({
+  combatService: { enemyName: 'Unknown Enemy', enemyHp: 0, enemyMaxHp: 0 },
+}));
+
+const GAME_STATE_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
+mock.module(GAME_STATE_PATH, () => ({
+  gameStateService: { worldGenOutput: undefined, quests: [], characterSheetSummary: undefined },
+}));
+
+const TIME_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/time_service.svelte.ts';
+mock.module(TIME_PATH, () => ({
+  timeService: { gameHour: 12, gameMinute: 0, rainIntensity: 0 },
+  __esModule: true,
+}));
+
+// Mock gmPromptService at its resolved path (ViewModel now imports directly,
+// not through $services) — must come AFTER game service mocks since
+// gm_prompt_service imports from those files.
+const GM_PROMPT_PATH =
+  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts';
+mock.module(GM_PROMPT_PATH, () => ({
+  gmPromptService: {
+    assemblePrompt: mock(() => 'Mock GM system prompt for testing'),
+  },
+  GmPromptService: class {},
+  __esModule: true,
+}));
+
 mock.module('$services', () => ({
   textGenerationService: {
     streamChat: textGenStreamChat,
@@ -114,13 +149,46 @@ mock.module('$services', () => ({
     selectedVoice: 'af_bella',
     status: 'uninitialized',
   },
+  gmPromptService: {
+    assemblePrompt: mock(() => 'Mock GM system prompt for testing'),
+  },
+  narrativeDirectorService: {
+    isRunning: false,
+    start: mock(() => {}),
+    stop: mock(() => {}),
+    pushStory: mock(async () => {}),
+  },
+  sessionSummaryService: {
+    currentSummary: null,
+    isGenerating: false,
+    generateSummary: mock(async () => ({})),
+    clearSummary: mock(() => {}),
+  },
+  combatService: {
+    enemyName: 'Unknown Enemy',
+    enemyHp: 0,
+    enemyMaxHp: 0,
+  },
+  gameStateService: {
+    worldGenOutput: undefined,
+    quests: [],
+    characterSheetSummary: undefined,
+  },
+  timeService: {
+    gameHour: 12,
+    gameMinute: 0,
+    rainIntensity: 0,
+  },
 }));
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks are registered)
 // ---------------------------------------------------------------------------
 
-import { DialogueOverlayViewModel } from './dialogue_overlay_view_model.svelte';
+import {
+  type DialogueOverlayViewModelInterface,
+  getDialogueOverlayViewModel,
+} from './dialogue_overlay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,8 +207,8 @@ const createViewModel = (options?: {
   npcData?: ReturnType<typeof createNpcData>;
   onEndChat?: () => void;
   ollamaClient?: unknown;
-}): DialogueOverlayViewModel => {
-  return new DialogueOverlayViewModel({
+}): DialogueOverlayViewModelInterface => {
+  return getDialogueOverlayViewModel({
     className: 'TestDialogueOverlayViewModel',
     npcData: options?.npcData ?? createNpcData(),
     onEndChat: options?.onEndChat ?? (() => {}),
@@ -162,7 +230,7 @@ describe('DialogueOverlayViewModel', () => {
 
   afterEach(() => {
     // Re-create mocks to reset streamChat spy state
-    mock.module('@aikami/frontend/api-core', () => createMockOllamaClient());
+    mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
   });
 
   // ── Initialization ───────────────────────────────────────────────────
@@ -399,7 +467,7 @@ describe('DialogueOverlayViewModel', () => {
     // Re-register mock with fresh spy
     const ollamaMock = createMockOllamaClient();
     mockStreamChunks = ['Hello', ' traveller'];
-    mock.module('@aikami/frontend/api-core', () => ollamaMock);
+    mock.module('$lib/services/ai/clients/index.ts', () => ollamaMock);
 
     const { OllamaClient: OllamaClientClass } = ollamaMock;
     const ollamaInstance = new (OllamaClientClass as new () => Record<string, unknown>)();
@@ -447,7 +515,7 @@ describe('DialogueOverlayViewModel', () => {
     let combatNpcData: ReturnType<typeof createNpcData> | undefined;
 
     const npcData = createNpcData({ npcName: 'Bandit Leader' });
-    const vmWithCombat = new DialogueOverlayViewModel({
+    const vmWithCombat = getDialogueOverlayViewModel({
       className: 'TestDialogueOverlayViewModel',
       npcData,
       onEndChat: () => {

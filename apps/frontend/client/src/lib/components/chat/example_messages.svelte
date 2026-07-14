@@ -1,16 +1,16 @@
 <script lang="ts">
-  /**
-   * Props for the ExampleMessages component.
-   * Displays example conversation starters for a character.
-   */
-  type Props = {
-    /** Array of example message texts */
-    messages: string[];
-    /** Name of the character for display */
-    characterName?: string;
-  };
+/**
+ * Props for the ExampleMessages component.
+ * Displays example conversation starters for a character.
+ */
+type Props = {
+  /** Array of example message texts */
+  messages: string[];
+  /** Name of the character for display */
+  characterName?: string;
+};
 
-  let { messages, characterName = 'Character' }: Props = $props();
+let { messages, characterName = 'Character' }: Props = $props();
 </script>
 
 {#if messages.length > 0}

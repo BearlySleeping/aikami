@@ -1,5 +1,12 @@
-// apps/frontend/client/src/lib/services/media/expression_asset_resolver.ts
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
+// apps/frontend/client/src/lib/services/expression/expression_asset_resolver.ts
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
+import { getExpressionEntry } from '$lib/data/expression_catalog';
+import { logger } from '$logger';
+import type { ExpressionId, ExpressionOverlay } from '$types/expression';
 
 // ---------------------------------------------------------------------------
 // ExpressionAssetResolver — checks for pre-generated static expression assets
@@ -22,7 +29,7 @@ export type ExpressionAssetEntry = {
   imagePath: string;
 };
 
-export type ExpressionAssetResolverOptions = BaseClassOptions & {
+export type ExpressionAssetResolverOptions = BaseFrontendClassOptions & {
   /**
    * Predefined manifest of static expression assets.
    *
@@ -43,7 +50,7 @@ export type ExpressionAssetResolverOptions = BaseClassOptions & {
   basePath?: string;
 };
 
-export type ExpressionAssetResolverInterface = BaseClassInterface & {
+export type ExpressionAssetResolverInterface = BaseFrontendClassInterface & {
   /**
    * Resolves a static expression asset path for the given NPC and emotion.
    *
@@ -55,6 +62,18 @@ export type ExpressionAssetResolverInterface = BaseClassInterface & {
    * @returns The image path if a static asset exists, or `undefined`.
    */
   resolve(options: { npcId: string; emotion: string }): string | undefined;
+
+  /**
+   * Resolves LPC sprite overlay asset paths for a given expression ID.
+   *
+   * Reads from the expression catalog to return overlay paths for eyes,
+   * eyebrows, and mouth. Each field is optional — missing overlays should
+   * be gracefully skipped by the renderer.
+   *
+   * @param expressionId - Canonical expression identifier.
+   * @returns LPC overlay asset paths (may have missing keys).
+   */
+  resolveLpcOverlays(expressionId: ExpressionId): ExpressionOverlay;
 };
 
 /**
@@ -84,7 +103,7 @@ export type ExpressionAssetResolverInterface = BaseClassInterface & {
  * ```
  */
 export class ExpressionAssetResolver
-  extends BaseClass<ExpressionAssetResolverOptions>
+  extends BaseFrontendClass<ExpressionAssetResolverOptions>
   implements ExpressionAssetResolverInterface
 {
   private readonly _manifest: ExpressionAssetEntry[];
@@ -97,6 +116,16 @@ export class ExpressionAssetResolver
     // Default to '/images/npc' when the option is omitted entirely.
     // When explicitly passed as undefined, disable path resolution.
     this._basePath = 'basePath' in options ? (options.basePath ?? undefined) : '/images/npc';
+  }
+
+  resolveLpcOverlays(expressionId: ExpressionId): ExpressionOverlay {
+    const entry = getExpressionEntry(expressionId);
+    if (!entry) {
+      logger.warn('ExpressionAssetResolver: no catalog entry for expression', { expressionId });
+      return {};
+    }
+    this.debug('resolveLpcOverlays', { expressionId, overlays: entry.lpcOverlays });
+    return entry.lpcOverlays;
   }
 
   resolve(options: { npcId: string; emotion: string }): string | undefined {
@@ -125,4 +154,4 @@ export class ExpressionAssetResolver
 
 export const getExpressionAssetResolver = (
   options: ExpressionAssetResolverOptions,
-): ExpressionAssetResolverInterface => new ExpressionAssetResolver(options);
+): ExpressionAssetResolverInterface => ExpressionAssetResolver.create(options);

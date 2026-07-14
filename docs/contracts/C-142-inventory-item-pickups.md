@@ -1,4 +1,5 @@
 <!-- completed: 2026-06-29 -->
+<!-- audit: legacy — no execution report -->
 # Contract: C-142 Inventory Sync & Item Pickups
 
 ## Goal

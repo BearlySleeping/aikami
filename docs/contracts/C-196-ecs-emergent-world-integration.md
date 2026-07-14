@@ -7,7 +7,8 @@
 | **Target** | `packages/frontend/engine/src/worker/ecs_worker.ts` |
 | **Priority** | P0 — High-priority final engine integration loop binding all cognitive and perception modules. |
 | **Dependencies** | `docs/contracts/C-190-ecs-spatial-vision-systems.md`, `docs/contracts/C-191-goap-bitmask-scheduler.md`, `docs/contracts/C-192-ecs-time-sliced-jps-pathfinder.md`, `docs/contracts/C-193-client-tool-streaming-orchestrator.md`, `docs/contracts/C-194-ecs-offscreen-macro-simulation.md`, `docs/contracts/C-195-ecs-string-registry-hydration.md` |
-| **Status** | not_started |
+| **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

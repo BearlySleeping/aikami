@@ -255,6 +255,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
           model: 'tts-1',
           input: text,
           voice: voiceId ?? this.selectedVoice,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           response_format: 'wav',
         }),
         signal,

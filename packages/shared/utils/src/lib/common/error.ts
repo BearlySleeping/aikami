@@ -75,7 +75,7 @@ export const toAppErrorFromUnknownError = (error: unknown): AppError => {
         errorType: 'unknown',
         statusCode: 500,
       },
-      message: typeof error === 'string' ? error : 'Unknown error',
+      message: 'Unknown error',
     } satisfies AppError;
   }
 

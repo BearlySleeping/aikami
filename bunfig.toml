@@ -1,0 +1,7 @@
+# Use `bun run test` to run the monorepo test suite via moon.
+# `bun test` at root is scoped to ./tests/ only to avoid
+# recursively discovering example/ and node_modules/ tests.
+
+[test]
+root = "./tests"
+

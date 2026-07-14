@@ -144,6 +144,29 @@ export default defineConfig({
         // Tests that need unauthenticated access should use the guestUser fixture,
         // which creates its own isolated context without storageState.
         storageState: AUTH_STATE_FILE,
+        // Enable WebGL so tests that navigate to /game can load the PixiJS engine.
+        // Without these flags, WebGPU/WebGL are unavailable in headless Chromium
+        // and the game engine falls back to Canvas2D (or crashes), breaking any
+        // test that touches the game canvas (inventory, game_page, etc.).
+        //
+        // Font rendering flags match the game project for deterministic pixel
+        // output across headless CI machines with no dedicated GPU.
+        launchOptions: {
+          args: [
+            '--use-gl=angle',
+            '--use-angle=gl',
+            '--enable-webgl',
+            '--ignore-gpu-blocklist',
+            // C-200 AC-1: Deterministic font rendering
+            '--disable-lcd-text',
+            '--font-render-hinting=none',
+            '--disable-font-subpixel-positioning',
+            '--force-color-profile=srgb',
+            // Stability
+            '--disable-gpu-rasterization',
+            '--disable-accelerated-2d-canvas',
+          ],
+        },
       },
       dependencies: ['setup'],
     },
@@ -170,6 +193,9 @@ export default defineConfig({
             '--font-render-hinting=none',
             '--disable-font-subpixel-positioning',
             '--force-color-profile=srgb',
+            // C-217: GPU rasterization stability
+            '--disable-gpu-rasterization',
+            '--disable-accelerated-2d-canvas',
           ],
           // C-200 AC-1: Mesa software rasterization
           env: {

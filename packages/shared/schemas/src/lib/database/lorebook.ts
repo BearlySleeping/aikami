@@ -30,4 +30,6 @@ export const LorebookSchema = Type.Object({
 });
 
 export type LorebookEntryData = Type.Static<typeof LorebookEntrySchema>;
+export type LorebookEntry = Type.Static<typeof LorebookEntrySchema>;
 export type LorebookData = Type.Static<typeof LorebookSchema>;
+export type Lorebook = Type.Static<typeof LorebookSchema>;

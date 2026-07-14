@@ -24,10 +24,17 @@ export class InventoryPage {
     await this.waitForEngineReady();
   }
 
-  /** Wait for the game engine canvas to appear. */
+  /** Wait for the game engine canvas to appear in the DOM. */
   async waitForEngineReady(): Promise<void> {
-    await this.page.waitForSelector('canvas', { timeout: 15_000 });
-    await this.page.waitForTimeout(2000);
+    await this.page.waitForSelector('canvas', { state: 'attached', timeout: 15_000 });
+  }
+
+  /** Check if the game engine is fully loaded (canvas is visible/rendering). */
+  async isEngineLoaded(): Promise<boolean> {
+    return await this.page
+      .locator('canvas')
+      .isVisible()
+      .catch(() => false);
   }
 
   // ── Inventory Toggle ──────────────────────────────────────

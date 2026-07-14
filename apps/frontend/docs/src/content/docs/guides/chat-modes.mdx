@@ -1,0 +1,26 @@
+---
+title: Chat Modes — Address System
+description: Impersonation drafting and party chat voice distinction in the Aikami chat system.
+---
+
+The **Address System** controls how the AI Game Master addresses the player during conversations.
+
+## Address Modes
+
+Three modes available via the toggle at the bottom of the chat:
+
+| Mode | Behavior |
+|------|----------|
+| **Scene** (default) | Omniscient third-person narrator. The GM describes the world without directly addressing the player. |
+| **Party** | Multi-character group focus. Each party member speaks in their distinct voice, matching their personality traits. Responses include `**Name**: dialogue` formatting. |
+| **GM** | Direct second-person address. The GM speaks to you as a human Game Master would. |
+
+## Impersonation Drafting
+
+The `/impersonate [direction]` slash command generates an in-character message as your player persona, based on recent chat context and your character sheet traits. The generated text appears in the input field for editing — **never auto-sent**.
+
+Enable the 🎭 **Impersonate** toggle in chat settings to show a quick button next to the input. Clicking it generates a context-only draft ("what would my character do?").
+
+If no active persona is set, a toast reminds you to complete your Character Sheet first.
+
+See: `apps/frontend/client/src/lib/services/gm/impersonation_service.svelte.ts`

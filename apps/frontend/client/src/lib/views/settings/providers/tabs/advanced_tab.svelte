@@ -1,25 +1,25 @@
 <!-- apps/frontend/client/src/lib/views/settings/providers/tabs/advanced_tab.svelte -->
 <script lang="ts">
-  import ProvidersGenerationParams from '../providers_generation_params.svelte';
-  import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
-  import EmotionTab from './emotion_tab.svelte';
-  import MemoryTab from './memory_tab.svelte';
+import ProvidersGenerationParams from '../providers_generation_params.svelte';
+import type { ProvidersViewModelInterface } from '../providers_view_model.svelte';
+import EmotionTab from './emotion_tab.svelte';
+import MemoryTab from './memory_tab.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
-  const SUB_TABS = [
-    { key: 'generation', label: 'Generation' },
-    { key: 'memory', label: 'Memory' },
-    { key: 'emotion', label: 'Emotion' },
-  ] as const;
+const SUB_TABS = [
+  { key: 'generation', label: 'Generation' },
+  { key: 'memory', label: 'Memory' },
+  { key: 'emotion', label: 'Emotion' },
+] as const;
 
-  type SubTab = (typeof SUB_TABS)[number]['key'];
+type SubTab = (typeof SUB_TABS)[number]['key'];
 
-  let activeSubTab: SubTab = $state('generation');
+let activeSubTab: SubTab = $state('generation');
 </script>
 
 <div class="space-y-6">
@@ -30,6 +30,7 @@
     <div class="flex gap-0" role="tablist">
       {#each SUB_TABS as sub}
         <button
+          type="button"
           role="tab"
           aria-selected={activeSubTab === sub.key}
           class="relative px-5 py-2.5 font-['JetBrains_Mono'] text-xs uppercase tracking-widest transition-colors {activeSubTab === sub.key

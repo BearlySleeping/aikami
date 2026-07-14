@@ -71,8 +71,10 @@ export type ImageGenerationServiceInterface = BaseFrontendClassInterface & {
 // ── ComfyUI API types (internal) ────────────────────────────────────────
 
 type ComfyUiQueueResponse = {
+  // biome-ignore lint/style/useNamingConvention: API contract field name
   prompt_id: string;
   number: number;
+  // biome-ignore lint/style/useNamingConvention: API contract field name
   node_errors: Record<string, unknown>;
 };
 
@@ -213,6 +215,7 @@ export class ImageGenerationService
 
       // Step 1 — queue the prompt
       const queueResponse = await this._post<ComfyUiQueueResponse>('/prompt', {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         client_id: `aikami-dev-${Date.now()}`,
         prompt: this._buildWorkflow({ prompt, checkpoint: effectiveCheckpoint }),
       });
@@ -279,42 +282,54 @@ export class ImageGenerationService
 
     return {
       '3': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'KSampler',
         inputs: {
           seed: Math.floor(Math.random() * 2 ** 32),
           steps: 20,
           cfg: 7.0,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           sampler_name: 'euler',
           scheduler: 'normal',
           denoise: 1,
           model: ['4', 0],
           positive: ['6', 0],
           negative: ['7', 0],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           latent_image: ['5', 0],
         },
       },
       '4': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'CheckpointLoaderSimple',
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         inputs: { ckpt_name: ckptName },
       },
       '5': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'EmptyLatentImage',
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         inputs: { width: 512, height: 512, batch_size: 1 },
       },
       '6': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'CLIPTextEncode',
         inputs: { text: prompt, clip: ['4', 1] },
       },
       '7': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'CLIPTextEncode',
         inputs: { text: '', clip: ['4', 1] },
       },
       '8': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'VAEDecode',
         inputs: { samples: ['3', 0], vae: ['4', 2] },
       },
       '9': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'SaveImage',
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] },
       },
     };

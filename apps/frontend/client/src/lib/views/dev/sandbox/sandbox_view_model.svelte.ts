@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts
 
-import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
+import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
 import {
   BaseEngineClass,
   createEngineBridge,
@@ -13,6 +13,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import type { LpcAnimationState } from '$lib/data/lpc_models';
 import { textGenerationService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
@@ -142,7 +143,7 @@ class SandboxViewModel
 
       const paletteBytes = new Uint8Array(1024);
 
-      const SANDBOX_RECIPES: Record<number, import('@aikami/frontend/engine').LpcLayerRecipe> = {
+      const SandboxRecipes: Record<number, LpcLayerRecipe> = {
         // Player — 6-layer stack
         1: { slot: 'body', assetId: 'body/bodies_male', hexPalette: paletteBytes },
         2: { slot: 'hair', assetId: 'hair/plain_adult', hexPalette: paletteBytes },
@@ -164,15 +165,9 @@ class SandboxViewModel
         bridge: this._engineBridge,
         textureManager: tm,
         recipeResolver: (layerIds) =>
-          layerIds
-            .map((id) => SANDBOX_RECIPES[id])
-            .filter(Boolean) as import('@aikami/frontend/engine').LpcLayerRecipe[],
+          layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(
-            slot,
-            assetId,
-            state as unknown as import('$lib/data/lpc_models').LpcAnimationState,
-          ),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);

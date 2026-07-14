@@ -1,34 +1,41 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
-  //
-  // Left pane of the split-screen combat layout. Rendered by game_view.svelte
-  // when gameStateService.currentMode === 'COMBAT'.
-  //
-  // Contract: C-164 Combat Split-Screen Layout
-  //
-  // Layout (flex column, full height of the 35vw grid column):
-  //   Top: Compact HP bars (player + enemy side-by-side)
-  //   Middle: Tab row (Log | Gallery), then scrollable combat log (flex-grow: 1)
-  //   Bottom: Fixed action bar (Attack / Defend / Flee + custom action input)
-  // ---------------------------------------------------------------------------
+// apps/frontend/client/src/lib/views/combat/combat_sidebar.svelte
+//
+// Left pane of the split-screen combat layout. Rendered by game_view.svelte
+// when game mode is 'COMBAT'.
+//
+// Contract: C-164 Combat Split-Screen Layout
+//
+// Layout (flex column, full height of the 35vw grid column):
+//   Top: Compact HP bars (player + enemy side-by-side)
+//   Middle: Tab row (Log | Gallery), then scrollable combat log (flex-grow: 1)
+//   Bottom: Fixed action bar (Attack / Defend / Flee + custom action input)
+// ---------------------------------------------------------------------------
 
-  import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
-  import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
-  import CombatDiceUi from './components/combat_dice_ui.svelte';
-  import CombatGallery from './components/combat_gallery.svelte';
-  import CombatInlineImage from './components/combat_inline_image.svelte';
+import { imageGenerationService } from '$lib/services/image/image_generation_service.svelte.ts';
+import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
+import CombatDiceUi from './components/combat_dice_ui.svelte';
+import CombatGallery from './components/combat_gallery.svelte';
+import CombatInlineImage from './components/combat_inline_image.svelte';
+import DiceQuickMenu from './components/dice_quick_menu.svelte';
+import EnrichedLogEntry from './components/enriched_log_entry.svelte';
+import InitiativeTracker from './components/initiative_tracker.svelte';
+import { parseDamageFromLog, parseDiceFromLog } from './utils/dice_notation.ts';
 
-  type Props = {
-    viewModel: CombatViewModelInterface;
-  };
+type Props = {
+  viewModel: CombatViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  /** Temporary input value for the freeform custom action text field. */
-  let customActionInput = $state('');
+/** Temporary input value for the freeform custom action text field. */
+let customActionInput = $state('');
 
-  /** Track which tab is active: 'log' or 'gallery'. Gallery is a placeholder for now. */
-  let activeTab = $state<'log' | 'gallery'>('log');
+/** Track which tab is active: 'log' or 'gallery'. */
+let activeTab = $state<'log' | 'gallery'>('log');
+
+/** C-234: Whether the initiative tracker is collapsed. */
+let initiativeCollapsed = $state(false);
 </script>
 
 <div class="h-full flex flex-col bg-base-100 border-r border-base-300">
@@ -59,7 +66,11 @@
           </ul>
         </div>
       {/if}
-      <button class="btn btn-primary btn-sm" onclick={() => viewModel.dismissResult()}>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        onclick={() => viewModel.dismissResult()}
+      >
         Continue
       </button>
     </div>
@@ -102,10 +113,20 @@
       </div>
     </div>
 
+    <!-- C-234: Initiative tracker (collapsible, above log) -->
+    <div class="px-3 pb-1">
+      <InitiativeTracker
+        entries={viewModel.initiativeEntries}
+        collapsed={initiativeCollapsed}
+        onToggleCollapse={() => (initiativeCollapsed = !initiativeCollapsed)}
+      />
+    </div>
+
     <!-- ── Tab header: Log | Gallery ── -->
     <div class="px-3">
       <div class="tabs tabs-bordered">
         <button
+          type="button"
           class="tab tab-sm"
           class:tab-active={activeTab === 'log'}
           onclick={() => (activeTab = 'log')}
@@ -113,6 +134,7 @@
           Log
         </button>
         <button
+          type="button"
           class="tab tab-sm"
           class:tab-active={activeTab === 'gallery'}
           onclick={() => (activeTab = 'gallery')}
@@ -133,7 +155,20 @@
                 class="text-xs leading-relaxed text-base-content/70 border-b border-base-200 pb-1"
               >
                 <span class="font-semibold text-base-content/50">{entry.actor}</span>
-                <span class="ml-1">{entry.actionText}</span>
+                <!-- C-234: Enriched log entry rendering -->
+                {#if entry.actionText}
+                  {@const logEntry = {
+                    rawText: entry.actionText,
+                    ...parseDiceFromLog(entry.actionText),
+                    ...parseDamageFromLog(entry.actionText),
+                    isPlainText: !parseDiceFromLog(entry.actionText),
+                  }}
+                  <span class="ml-1">
+                    <EnrichedLogEntry entry={logEntry} />
+                  </span>
+                {:else}
+                  <span class="ml-1">{entry.actionText}</span>
+                {/if}
               </div>
               <!-- Inline image for this turn (C-165 AC-1) -->
               {#if entry.imageUrl || entry.isGeneratingImage}
@@ -157,6 +192,7 @@
       <div class="border-t border-base-300 px-3 py-2 bg-base-100 flex-shrink-0">
         <div class="text-center">
           <button
+            type="button"
             class="btn btn-ghost btn-sm"
             onclick={() => viewModel.generateSceneImage()}
             disabled={imageGenerationService.isGenerating}
@@ -185,11 +221,23 @@
       </div>
     {/if}
 
+    <!-- C-234: Dice quick menu (above action bar) -->
+    <div class="px-3 pb-1 flex-shrink-0">
+      <DiceQuickMenu
+        queuedRolls={viewModel.queuedRolls}
+        onQueueRoll={(options) => viewModel.queueRoll(options)}
+        onRemoveQueuedRoll={(id) => viewModel.removeQueuedRoll(id)}
+        onRollAll={() => viewModel.resolveAllRolls()}
+        isRolling={viewModel.isAttacking}
+      />
+    </div>
+
     <!-- ── Fixed action bar — anchored to bottom of left pane (AC-2) ── -->
     <div class="border-t border-base-300 p-3 space-y-2 bg-base-100 flex-shrink-0">
       <!-- Quick action buttons -->
       <div class="grid grid-cols-3 gap-2">
         <button
+          type="button"
           class="btn btn-success btn-sm"
           onclick={() => viewModel.attack()}
           disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -198,6 +246,7 @@
           {viewModel.isAttacking ? '⚔️ ...' : '⚔️ Attack'}
         </button>
         <button
+          type="button"
           class="btn btn-outline btn-sm"
           onclick={() => viewModel.defend()}
           disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
@@ -206,6 +255,7 @@
           🛡️ Defend
         </button>
         <button
+          type="button"
           class="btn btn-ghost btn-sm text-error"
           onclick={() => viewModel.flee()}
           disabled={viewModel.isAttacking || viewModel.isResolvingAiAction}

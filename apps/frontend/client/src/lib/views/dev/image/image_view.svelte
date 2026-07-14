@@ -1,22 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/image/image_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { ImageViewModelInterface } from './image_view_model.svelte.ts';
-  import { EXPRESSIONS, SAMPLERS, SCHEDULERS } from './image_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/image/image_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { ImageViewModelInterface } from './image_view_model.svelte.ts';
+import { EXPRESSIONS, SAMPLERS, SCHEDULERS } from './image_view_model.svelte.ts';
 
-  type Props = { viewModel: ImageViewModelInterface };
-  let { viewModel }: Props = $props();
+type Props = { viewModel: ImageViewModelInterface };
+let { viewModel }: Props = $props();
 
-  const showProgress = $derived(viewModel.isGenerating);
-  const hasInputImage = $derived(viewModel.inputImageDataUrl !== undefined);
+const showProgress = $derived(viewModel.isGenerating);
+const hasInputImage = $derived(viewModel.inputImageDataUrl !== undefined);
 
-  /** Handles file input change events. */
-  const onFileChange = (e: Event) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) {
-      viewModel.handleImageUpload(file);
-    }
-  };
+/** Handles file input change events. */
+const onFileChange = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) {
+    viewModel.handleImageUpload(file);
+  }
+};
 </script>
 
 <svelte:head>
@@ -35,6 +35,7 @@
       <div class="tabs tabs-bordered mb-6">
         {#each viewModel.tabs as tab}
           <button
+            type="button"
             class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.activeTab === tab.key
               ? 'tab-active border-[#cabeff] text-[#cabeff]'
               : 'text-[#938ea1]'}"
@@ -49,6 +50,60 @@
            IMAGE GEN TAB
            ═══════════════════════════════════════════════════════════════ -->
       {#if viewModel.activeTab === 'generate'}
+        <!-- Style Profile Pipeline (C-242) -->
+        <div class="card bg-base-200 shadow mb-6">
+          <div class="card-body p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="font-mono text-xs uppercase tracking-wider text-primary">
+                Style Profile Pipeline
+              </h2>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <span class="text-[10px] font-mono text-base-content/50">Auto</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-xs"
+                  checked={viewModel.autoCompile}
+                  onchange={() => (viewModel.autoCompile = !viewModel.autoCompile)}
+                >
+              </label>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="form-control">
+                <div class="label py-0.5">
+                  <span class="label-text text-xs font-semibold">Style Profile</span>
+                </div>
+                <select
+                  class="select select-bordered select-sm w-full"
+                  value={viewModel.styleProfileId}
+                  onchange={(e: Event) => (viewModel.styleProfileId = (e.target as HTMLSelectElement).value)}
+                  disabled={viewModel.isGenerating}
+                >
+                  {#each viewModel.styleProfiles as profile}
+                    <option value={profile.id}>
+                      {profile.name}{profile.isBuiltIn ? ' 🔒' : ''}
+                    </option>
+                  {/each}
+                </select>
+              </label>
+              <label class="form-control">
+                <div class="label py-0.5">
+                  <span class="label-text text-xs font-semibold">Image Type</span>
+                </div>
+                <select
+                  class="select select-bordered select-sm w-full"
+                  value={viewModel.imageType}
+                  onchange={(e: Event) => (viewModel.imageType = (e.target as HTMLSelectElement).value as ReturnType<() => typeof viewModel.imageType>)}
+                  disabled={viewModel.isGenerating}
+                >
+                  {#each viewModel.imageTypes as imageType}
+                    <option value={imageType}>{imageType}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <!-- Config -->
         <div class="card bg-base-200 shadow mb-6">
           <div class="card-body p-4">
@@ -177,6 +232,23 @@
         <!-- Prompts -->
         <div class="card bg-base-200 shadow mb-6">
           <div class="card-body p-6">
+            <!-- Compile section (C-242) -->
+            <div class="flex items-center gap-2 mb-4">
+              <button
+                type="button"
+                class="btn btn-xs btn-outline btn-primary"
+                onclick={() => viewModel.compilePrompt()}
+                disabled={viewModel.isGenerating || !viewModel.prompt.trim()}
+              >
+                🧪 Compile
+              </button>
+              {#if viewModel.compiledTagsSummary}
+                <span class="text-[10px] font-mono text-base-content/50"
+                  >{viewModel.compiledTagsSummary}</span
+                >
+              {/if}
+            </div>
+
             <label class="form-control w-full mb-4">
               <div class="label">
                 <span class="label-text font-semibold">Prompt</span
@@ -207,9 +279,12 @@
             </label>
             <div class="flex gap-3 mt-4">
               {#if viewModel.isGenerating}
-                <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+                <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+                  ⏹ Cancel
+                </button>
               {:else}
                 <button
+                  type="button"
                   class="btn btn-primary"
                   onclick={() => viewModel.generate()}
                   disabled={!viewModel.prompt.trim()}
@@ -242,6 +317,7 @@
                 <div class="flex-1">
                   <p class="text-xs text-base-content/70 mb-2">{viewModel.inputImageName}</p>
                   <button
+                    type="button"
                     class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                     onclick={() => viewModel.clearInputImage()}
                   >
@@ -284,9 +360,12 @@
         <!-- Generate button -->
         <div class="flex gap-3 mb-6">
           {#if viewModel.isGenerating}
-            <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+            <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+              ⏹ Cancel
+            </button>
           {:else}
             <button
+              type="button"
               class="btn btn-primary"
               onclick={() => viewModel.generateExpressions()}
               disabled={!hasInputImage}
@@ -350,6 +429,7 @@
                 <div class="flex-1">
                   <p class="text-xs text-base-content/70 mb-2">{viewModel.inputImageName}</p>
                   <button
+                    type="button"
                     class="btn btn-xs btn-ghost text-red-400/60 hover:text-red-400"
                     onclick={() => viewModel.clearInputImage()}
                   >
@@ -491,9 +571,12 @@
             </label>
             <div class="flex gap-3 mt-4">
               {#if viewModel.isGenerating}
-                <button class="btn btn-ghost" onclick={() => viewModel.cancel()}>⏹ Cancel</button>
+                <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancel()}>
+                  ⏹ Cancel
+                </button>
               {:else}
                 <button
+                  type="button"
                   class="btn btn-primary"
                   onclick={() => viewModel.editImage()}
                   disabled={!hasInputImage || !viewModel.editPrompt.trim()}

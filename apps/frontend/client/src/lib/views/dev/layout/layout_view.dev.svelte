@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/layout/layout_view.dev.svelte
-  import type { Snippet } from 'svelte';
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/layout/layout_view.dev.svelte
+import type { Snippet } from 'svelte';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
 
-  type Props = {
-    viewModel: DevViewModelInterface;
-    children: Snippet;
-  };
+type Props = {
+  viewModel: DevViewModelInterface;
+  children: Snippet;
+};
 
-  let { viewModel, children }: Props = $props();
+let { viewModel, children }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="drawer lg:drawer-open">
@@ -29,6 +29,7 @@
           stroke="currentColor"
           class="my-1.5 inline-block size-4"
         >
+          <title>icon</title>
           <path
             d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"
           ></path>
@@ -54,34 +55,71 @@
       <!-- Sidebar content here -->
       <ul class="menu w-full grow">
         {#each viewModel.navItems as item}
-          <li>
-            <a
-              href={item.route}
-              class:active={viewModel.activeRoute === item.route}
-              class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
-              data-tip={item.label}
-            >
-              <!-- Home icon -->
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                stroke-linejoin="round"
-                stroke-linecap="round"
-                stroke-width="2"
-                fill="none"
-                stroke="currentColor"
-                class="my-1.5 inline-block size-4"
+          {#if item.children}
+            <li>
+              <details open>
+                <summary>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                    stroke-width="2"
+                    fill="none"
+                    stroke="currentColor"
+                    class="my-1.5 inline-block size-4"
+                  >
+                    <title>icon</title>
+                    <path d={item.icon} />
+                  </svg>
+                  <span class="is-drawer-close:hidden">{item.label}</span>
+                </summary>
+                <ul>
+                  {#each item.children as child}
+                    <li>
+                      <a
+                        href={child.route}
+                        class:active={viewModel.activeRoute === child.route}
+                        class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+                        data-tip={child.label}
+                      >
+                        <span class="is-drawer-close:hidden capitalize">{child.label}</span>
+                      </a>
+                    </li>
+                  {/each}
+                </ul>
+              </details>
+            </li>
+          {:else}
+            <li>
+              <a
+                href={item.route}
+                class:active={viewModel.activeRoute === item.route}
+                class="is-drawer-close:tooltip is-drawer-close:tooltip-right"
+                data-tip={item.label}
               >
-                <path
-                  stroke-linecap="round"
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
                   stroke-linejoin="round"
+                  stroke-linecap="round"
                   stroke-width="2"
-                  d={item.icon}
-                />
-              </svg>
-              <span class="is-drawer-close:hidden"> {item.label}</span>
-            </a>
-          </li>
+                  fill="none"
+                  stroke="currentColor"
+                  class="my-1.5 inline-block size-4"
+                >
+                  <title>icon</title>
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d={item.icon}
+                  />
+                </svg>
+                <span class="is-drawer-close:hidden"> {item.label}</span>
+              </a>
+            </li>
+          {/if}
         {/each}
       </ul>
     </div>

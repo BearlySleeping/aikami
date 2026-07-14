@@ -6,10 +6,10 @@ import {
 } from '@aikami/frontend/services';
 import {
   authService,
+  campaignService,
   gameSaveService,
   routerService,
   type SaveSlotInfo,
-  setPendingGameLoad,
 } from '$services';
 
 export type MenuViewModelOptions = BaseViewModelOptions & {
@@ -122,8 +122,7 @@ class MenuViewModel extends BaseViewModel<MenuViewModelOptions> implements MenuV
     }
 
     try {
-      const payload = await gameSaveService.getSavePayload(latest.id);
-      setPendingGameLoad(payload);
+      await campaignService.loadCampaign({ campaignId: latest.id });
       routerService.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,

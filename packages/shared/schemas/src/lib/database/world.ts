@@ -45,5 +45,8 @@ export const WorldStateSchema = Type.Object({
 });
 
 export type WorldLocationData = Type.Static<typeof WorldLocationSchema>;
+export type WorldLocation = Type.Static<typeof WorldLocationSchema>;
 export type WorldEventData = Type.Static<typeof WorldEventSchema>;
+export type WorldEvent = Type.Static<typeof WorldEventSchema>;
 export type WorldStateData = Type.Static<typeof WorldStateSchema>;
+export type WorldState = Type.Static<typeof WorldStateSchema>;

@@ -38,8 +38,6 @@ fileGroups:
     - "/package.json"
     - "/bun.lock"
     - "/biome.json"
-    - "/tsconfig.base.json"
-    - "/tsconfig.json"
 
   # CI/CD and deployment pipeline files
   deployment:

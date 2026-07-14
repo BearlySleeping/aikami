@@ -116,18 +116,16 @@ Client-side perimeter validation uses Valibot instead of Zod:
 **Game Engine (PixiJS v8 + bitECS)**
 - Pure TypeScript, code-first game engine inside `apps/frontend/client/src/lib/game/`
 - PixiJS v8 renders via WebGPU — ~2ms GPU time for 100,000 sprites, keeping the main thread clear
-- bitECS 0.4.0 provides data-oriented entity component system — components stored in typed arrays (SoA layout), systems query via bitECS's archetype-based iteration
+- bitECS provides data-oriented entity component system — components stored in typed arrays (SoA layout), systems query via bitECS's archetype-based iteration
 - Communicates with Svelte UI exclusively through the EngineBridge — see Engine Boundary Pattern above
-- **Target architecture** (C-016 not yet implemented)
+- AI client implementations live in `apps/frontend/client/src/lib/services/ai/clients/` — engine stays pure ECS/Canvas (C-214)
 
 **Landing Page (Astro)**
 - Public marketing site describing the project
 - Lightweight static site
 
 **Docs Site (Astro)**
-- Project documentation, mostly stubbed
-
-> **⚠️ Legacy:** `apps/frontend/gamejs/` (GodotJS) is deprecated. Preserved for reference until the PixiJS/bitECS migration (C-016) is complete.
+- Project documentation
 
 ### 2. Backend Services
 
@@ -174,7 +172,7 @@ Client-side perimeter validation uses Valibot instead of Zod:
 | `backend/utils` | backend | Server utilities (storage upload, etc.) |
 | `frontend/configs` | frontend | Firebase client init, env validation, feature flags |
 | `frontend/services` | frontend | Firebase client services (auth, functions, analytics, storage, FCM) |
-| `frontend/repositories` | frontend | Client-side data access layer |
+| `frontend/engine` | frontend | PixiJS v8 + bitECS game engine, AI interfaces (types only) |
 | `frontend/utils` | frontend | Browser utilities |
 | `frontend/components` | frontend | Shared Svelte 5 UI components |
 
@@ -208,7 +206,7 @@ Client-side perimeter validation uses Valibot instead of Zod:
 ```bash
 bun run setup            # First-time onboarding
 bun run dev              # Client dev server
-bun run dev:all          # Firebase + Client (tmux session)
+bun run dev:all          # Firebase + Client (herdr workspace)
 bun run typecheck        # Typecheck all projects
 bun run fix              # Auto-fix lint/format
 bun run validate         # lint + format + typecheck
@@ -216,14 +214,13 @@ bun run test             # Unit + E2E tests
 bun run test:blackbox    # Full integration suite
 ```
 
-## Migration Status (May 2026)
+## Migration Status (July 2026)
 
-| Component | Current | Target | Contract |
-|-----------|---------|--------|----------|
-| Database | Firestore NoSQL | Data Connect (PostgreSQL) | C-014 |
-| AI Framework | Direct Genkit calls | AiServiceInterface | C-015 |
-| Game Engine | GodotJS (deprecated) | PixiJS v8 + bitECS | C-016 |
-| Client Validation | Zod | Valibot | Planned |
-| Client DB Sync | — | TanStack DB + PowerSync | Planned |
-| Desktop Export | — | Tauri v2 | C-013 |
-| Documentation | Updated | — | C-017 ✅ |
+| Component | Status | Contract |
+|-----------|--------|----------|
+| Database | Data Connect (PostgreSQL) via BaseDatabaseService | C-014 ✅ |
+| AI Framework | AiServiceInterface with OpenAI/Gemini | C-015 ✅ |
+| Game Engine | PixiJS v8 + bitECS | C-016 ✅ |
+| Desktop Export | Tauri v2 | C-013 ✅ |
+| Engine Consolidation | lib/game deleted, api-core migrated | C-214 ✅ |
+| Terminology | Character → Persona/NPC hierarchy enforced | C-215 ✅ |

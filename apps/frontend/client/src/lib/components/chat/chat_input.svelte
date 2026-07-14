@@ -1,42 +1,42 @@
 <script lang="ts">
-  /**
-   * Props for the ChatInput component.
-   * Text input area for typing and sending chat messages.
-   */
-  type Props = {
-    /** Current message text (bindable) */
-    message: string;
-    /** Whether a message is currently being sent (disables input) */
-    isSending: boolean;
-    /** Callback when user sends a message */
-    onSend: (message: string) => void;
-    /** Placeholder text when input is empty */
-    placeholder?: string;
-  };
+/**
+ * Props for the ChatInput component.
+ * Text input area for typing and sending chat messages.
+ */
+type Props = {
+  /** Current message text (bindable) */
+  message: string;
+  /** Whether a message is currently being sent (disables input) */
+  isSending: boolean;
+  /** Callback when user sends a message */
+  onSend: (message: string) => void;
+  /** Placeholder text when input is empty */
+  placeholder?: string;
+};
 
-  let {
-    message = $bindable(),
-    isSending,
-    onSend,
-    placeholder = 'Type your message...',
-  }: Props = $props();
+let {
+  message = $bindable(),
+  isSending,
+  onSend,
+  placeholder = 'Type your message...',
+}: Props = $props();
 
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      if (message.trim()) {
-        onSend(message);
-        message = '';
-      }
-    }
-  }
-
-  function handleSubmit() {
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
     if (message.trim()) {
       onSend(message);
       message = '';
     }
   }
+}
+
+function handleSubmit() {
+  if (message.trim()) {
+    onSend(message);
+    message = '';
+  }
+}
 </script>
 
 <div class="flex gap-2">
@@ -64,6 +64,7 @@
         viewBox="0 0 24 24"
         stroke="currentColor"
       >
+        <title>icon</title>
         <path
           stroke-linecap="round"
           stroke-linejoin="round"

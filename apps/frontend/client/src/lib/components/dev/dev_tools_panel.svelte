@@ -1,27 +1,26 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte
-  //
-  // Floating, collapsible Dev Tools overlay for (dev) sandbox routes.
-  // Accepts generic actions (buttons) and toggles (checkboxes).
-  // NEVER import this file from production code or non-(dev) routes.
+// apps/frontend/client/src/lib/components/dev/dev_tools_panel.svelte
+//
+// Floating, collapsible Dev Tools overlay for (dev) sandbox routes.
+// Accepts generic actions (buttons) and toggles (checkboxes).
+// NEVER import this file from production code or non-(dev) routes.
 
-  import type { DevAction, DevToggle } from '$types';
+import type { DevAction, DevToggle } from '$types';
 
-  type Props = {
-    /** Action buttons to render. */
-    readonly actions?: readonly DevAction[];
-    /** Toggle switches to render. */
-    readonly toggles?: readonly DevToggle[];
-  };
+type Props = {
+  /** Action buttons to render. */
+  readonly actions?: readonly DevAction[];
+  /** Toggle switches to render. */
+  readonly toggles?: readonly DevToggle[];
+};
 
-  const { actions = [], toggles = [] }: Props = $props();
+const { actions = [], toggles = [] }: Props = $props();
 
-  // ── State ─────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────
 
-  let collapsed = $state(false);
+let collapsed = $state(false);
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 transition-all duration-200"
   class:min-w-64={!collapsed}
@@ -29,6 +28,7 @@
 >
   <!-- ═══ Header / Collapse toggle ═══ -->
   <button
+    type="button"
     class="btn btn-sm gap-2 bg-neutral text-neutral-content border-none shadow-lg hover:bg-neutral-focus flex-nowrap"
     onclick={() => (collapsed = !collapsed)}
     title={collapsed ? 'Expand Dev Tools' : 'Collapse Dev Tools'}
@@ -53,6 +53,7 @@
           <span class="text-xs font-mono opacity-50 uppercase tracking-wider mb-1">Actions</span>
           {#each actions as action}
             <button
+              type="button"
               data-testid={`dev-action-${action.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`}
               class="btn btn-sm btn-ghost justify-start text-neutral-content hover:bg-base-300/30"
               onclick={action.onClick}

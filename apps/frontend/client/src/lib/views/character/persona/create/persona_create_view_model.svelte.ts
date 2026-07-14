@@ -5,21 +5,26 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
 import {
   CHARACTER_EXTRACTION_SYSTEM_PROMPT,
   CharacterExtractionSchema,
-} from '$lib/game/core/ai/prompts/character_extraction_schema';
-import { DND_CREATION_SYSTEM_PROMPT } from '$lib/game/core/ai/prompts/dnd_creation';
+} from '$lib/data/ai_prompts/character_extraction_schema';
+import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
+import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
+import { characterService } from '$lib/services/character/character.svelte';
+import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import {
   aiSettingsService,
   authService,
-  characterCreationService,
-  gameStateService,
+  equipmentService,
   imageGenerationService,
+  inventoryService,
+  personaCreationService,
+  playerStateService,
   routerService,
   storageService,
   textGenerationService,
+  worldStateService,
 } from '$services';
 
 // LPC Slot → index lookup (built at module init)
@@ -156,15 +161,15 @@ export class PersonaCreateViewModel
   ] as const;
 
   get persona(): PersonaData | undefined {
-    return characterCreationService.persona;
+    return personaCreationService.persona;
   }
 
   get avatarUrl(): string {
-    return characterCreationService.avatarUrl;
+    return personaCreationService.avatarUrl;
   }
 
   get isStreaming(): boolean {
-    return characterCreationService.isStreaming;
+    return personaCreationService.isStreaming;
   }
 
   get scoreLabels(): readonly ScoreLabel[] {
@@ -249,7 +254,7 @@ export class PersonaCreateViewModel
 
     // Then get the AI response
     try {
-      this.messages = await characterCreationService.sendMessage({
+      this.messages = await personaCreationService.sendMessage({
         text,
         messages: this.messages,
       });
@@ -273,7 +278,7 @@ export class PersonaCreateViewModel
       // If extraction is already done, go straight to TWEAK
       const persona = await extractionPromise;
       if (persona) {
-        characterCreationService.persona = persona;
+        personaCreationService.persona = persona;
         this._startAvatarIfReady();
         this.phase = 'TWEAK';
       } else {
@@ -321,7 +326,7 @@ export class PersonaCreateViewModel
 
     const persona = await this._extractCharacter();
     if (persona) {
-      characterCreationService.persona = persona;
+      personaCreationService.persona = persona;
       this._startAvatarIfReady();
       this.phase = 'TWEAK';
     } else {
@@ -334,7 +339,7 @@ export class PersonaCreateViewModel
   }
 
   cancel(): void {
-    characterCreationService.cancel();
+    personaCreationService.cancel();
     this.phase = 'CHAT';
   }
 
@@ -380,7 +385,7 @@ export class PersonaCreateViewModel
 
       const url = await storageService.uploadAvatar({ file, uid });
       if (url) {
-        characterCreationService.avatarUrl = url;
+        personaCreationService.avatarUrl = url;
       }
     } catch (error) {
       this.error('uploadAvatar', error);
@@ -419,20 +424,20 @@ export class PersonaCreateViewModel
         }
         const prompt = this._enhanceForComfyUI(appearance);
         const result = await imageGenerationService.generateImage({ prompt });
-        characterCreationService.avatarUrl = result.url;
+        personaCreationService.avatarUrl = result.url;
       } else if (this.regenerationMode === 'direct') {
         const prompt = this.directPrompt.trim();
         if (!prompt) {
           return;
         }
         const result = await imageGenerationService.generateImage({ prompt });
-        characterCreationService.avatarUrl = result.url;
+        personaCreationService.avatarUrl = result.url;
       } else if (this.regenerationMode === 'edit') {
         const instruction = this.editInstruction.trim();
         if (!instruction) {
           return;
         }
-        const currentUrl = characterCreationService.avatarUrl;
+        const currentUrl = personaCreationService.avatarUrl;
         if (!currentUrl) {
           return;
         }
@@ -459,13 +464,15 @@ export class PersonaCreateViewModel
 
     // Clear any stale game state from a previous play session
     // so the new game starts with a clean inventory, quest log, etc.
-    gameStateService.reset();
+    inventoryService.reset();
+    worldStateService.reset();
+    playerStateService.reset();
+    equipmentService.reset();
 
     // Set persona as active if user is logged in
     const uid = (authService as { uid?: string }).uid;
     if (uid && this.persona?.id) {
       try {
-        const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
         await personaService.setActivePersona(this.persona.id);
         this.info('enterWorld:active-set', { personaId: this.persona.id });
       } catch (error) {
@@ -494,7 +501,7 @@ export class PersonaCreateViewModel
     }
 
     // Convert blob URL to data URL so it survives page refresh
-    let persistentAvatarUrl = characterCreationService.avatarUrl;
+    let persistentAvatarUrl = personaCreationService.avatarUrl;
     if (persistentAvatarUrl?.startsWith('blob:')) {
       try {
         const blobResponse = await fetch(persistentAvatarUrl);
@@ -539,7 +546,7 @@ export class PersonaCreateViewModel
     if (uid) {
       try {
         // Upload avatar to Firebase Storage first, then save persona to Firestore
-        let firestoreAvatarUrl = characterCreationService.avatarUrl;
+        let firestoreAvatarUrl = personaCreationService.avatarUrl;
 
         if (firestoreAvatarUrl?.startsWith('blob:')) {
           // Convert blob URL to a file and upload
@@ -548,7 +555,6 @@ export class PersonaCreateViewModel
           const file = new File([blob], `${persona.id}.png`, { type: blob.type || 'image/png' });
 
           // Use the character service's uploadAvatar
-          const { characterService } = await import('$lib/services/character/character.svelte');
           const uploadedUrl = await characterService.uploadAvatar({
             file,
             characterId: persona.id,
@@ -559,7 +565,6 @@ export class PersonaCreateViewModel
         }
 
         // Save to Firestore via personaService
-        const { personaService } = await import('$lib/services/persona/persona_repository.svelte');
         try {
           // Try update first (if exists), fallback is OK — updatePersona throws on missing doc
           await personaService.updatePersona(persona.id, {
@@ -615,35 +620,46 @@ export class PersonaCreateViewModel
 
     const workflow = {
       '3': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'KSampler',
         inputs: {
           seed: Math.floor(Math.random() * 2 ** 32),
           steps: 25,
           cfg: 7.0,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           sampler_name: 'euler',
           scheduler: 'normal',
           denoise: 0.5,
           model: ['4', 0],
           positive: ['6', 0],
           negative: ['7', 0],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           latent_image: ['11', 0],
         },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
       '6': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'CLIPTextEncode',
         inputs: { text: `${instruction}, same person, same face, high quality`, clip: ['4', 1] },
       },
       '7': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'CLIPTextEncode',
         inputs: { text: 'deformed, different person, blurry, low quality', clip: ['4', 1] },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
       '9': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'SaveImage',
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         inputs: { filename_prefix: 'aikami-edit', images: ['8', 0] },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '10': { class_type: 'LoadImage', inputs: { image: imageName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
     };
 
@@ -651,6 +667,7 @@ export class PersonaCreateViewModel
     const queueResponse = await fetch('/api/image/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       body: JSON.stringify({ client_id: `aikami-edit-${Date.now()}`, prompt: workflow }),
     });
 
@@ -658,6 +675,7 @@ export class PersonaCreateViewModel
       throw new Error('Failed to queue image edit workflow');
     }
 
+    // biome-ignore lint/style/useNamingConvention: API contract field name
     const { prompt_id: promptId } = (await queueResponse.json()) as { prompt_id: string };
 
     // Poll for result
@@ -681,7 +699,7 @@ export class PersonaCreateViewModel
         const viewUrl = `/api/image/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder ?? '')}&type=output`;
         const blobResponse = await fetch(viewUrl);
         const newBlob = await blobResponse.blob();
-        characterCreationService.avatarUrl = URL.createObjectURL(newBlob);
+        personaCreationService.avatarUrl = URL.createObjectURL(newBlob);
         return;
       }
     }
@@ -766,7 +784,7 @@ export class PersonaCreateViewModel
         persona.proficiencies = extractedObj.proficiencies as string[];
       }
       if (extractedObj.languages) {
-        persona.languages = [...persona.languages, ...(extractedObj.languages as string[])];
+        persona.languages = [...(persona.languages ?? []), ...(extractedObj.languages as string[])];
       }
       if (extractedObj.equipment) {
         persona.equipment = extractedObj.equipment as string[];
@@ -798,7 +816,7 @@ export class PersonaCreateViewModel
     if (!this.isImageGenReady) {
       return;
     }
-    const p = characterCreationService.persona;
+    const p = personaCreationService.persona;
     if (!p) {
       return;
     }
@@ -807,7 +825,7 @@ export class PersonaCreateViewModel
       (p?.race && p?.class
         ? `${p.race} ${p.class}, fantasy character portrait`
         : p?.name || 'fantasy character');
-    characterCreationService.startAvatarGeneration({ prompt: imagePrompt });
+    personaCreationService.startAvatarGeneration({ prompt: imagePrompt });
   }
 
   private _compileChatHistory(): string {

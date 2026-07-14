@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/audio/audio_view.dev.svelte
-  //
-  // Dev sandbox view for testing BGM transitions and SFX playback.
-  // Buttons trigger AudioService methods via the DevAudioViewModel.
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { DevAudioViewModelInterface } from './audio_view_model.dev.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/audio/audio_view.dev.svelte
+//
+// Dev sandbox view for testing BGM transitions and SFX playback.
+// Buttons trigger AudioService methods via the DevAudioViewModel.
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import type { DevAudioViewModelInterface } from './audio_view_model.dev.svelte.ts';
 
-  type Props = {
-    viewModel: DevAudioViewModelInterface;
-  };
-  const { viewModel }: Props = $props();
+type Props = {
+  viewModel: DevAudioViewModelInterface;
+};
+const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="min-h-screen bg-base-200">
@@ -57,10 +57,18 @@
           Crossfade between exploration and combat tracks with Equal-Power transitions.
         </p>
         <div class="flex gap-3 mt-2">
-          <button class="btn btn-primary flex-1" onclick={() => viewModel.playExploreBgm()}>
+          <button
+            type="button"
+            class="btn btn-primary flex-1"
+            onclick={() => viewModel.playExploreBgm()}
+          >
             🌲 Explore BGM
           </button>
-          <button class="btn btn-error flex-1" onclick={() => viewModel.playCombatBgm()}>
+          <button
+            type="button"
+            class="btn btn-error flex-1"
+            onclick={() => viewModel.playCombatBgm()}
+          >
             ⚔️ Combat BGM
           </button>
         </div>
@@ -73,10 +81,18 @@
         <h2 class="card-title">💥 Sound Effects</h2>
         <p class="text-base-content/60 text-sm">Fire-and-forget concurrent SFX playback.</p>
         <div class="flex gap-3 mt-2">
-          <button class="btn btn-warning flex-1" onclick={() => viewModel.playHitSfx()}>
+          <button
+            type="button"
+            class="btn btn-warning flex-1"
+            onclick={() => viewModel.playHitSfx()}
+          >
             🔨 Hit SFX
           </button>
-          <button class="btn btn-success flex-1" onclick={() => viewModel.playPickupSfx()}>
+          <button
+            type="button"
+            class="btn btn-success flex-1"
+            onclick={() => viewModel.playPickupSfx()}
+          >
             💎 Pickup SFX
           </button>
         </div>
@@ -96,7 +112,7 @@
               </span>
             {/if}
           </div>
-          <button class="btn btn-outline btn-sm" onclick={() => viewModel.stopAll()}>
+          <button type="button" class="btn btn-outline btn-sm" onclick={() => viewModel.stopAll()}>
             ⏹ Stop All
           </button>
         </div>

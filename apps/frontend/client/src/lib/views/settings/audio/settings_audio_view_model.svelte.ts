@@ -119,4 +119,4 @@ class SettingsAudioViewModel
 
 export const getSettingsAudioViewModel = (
   options: SettingsAudioViewModelOptions,
-): SettingsAudioViewModelInterface => new SettingsAudioViewModel(options);
+): SettingsAudioViewModelInterface => SettingsAudioViewModel.create(options);

@@ -1,13 +1,14 @@
 // scripts/src/lib/test_blackbox/docker_manager.ts
 // Docker container lifecycle manager for blackbox tests.
 // Builds, runs, polls, and tears down Docker containers for AI backend services.
-// Mirrors the TmuxManager interface so it can plug into run.ts seamlessly.
+// Mirrors the HerdrManager interface so it can plug into run.ts seamlessly.
 //
 // Key features:
 //   - --add-host=host.docker.internal:host-gateway for cross-platform networking
 //   - Health-check polling via HTTP endpoint
 //   - Clean teardown on test completion
 
+// biome-ignore-all lint/style/useNamingConvention: Environment variable names must match Firebase emulator convention (CONSTANT_CASE)
 import { execSync, spawn } from 'node:child_process';
 
 /** Configuration for a single Docker-backed service. */

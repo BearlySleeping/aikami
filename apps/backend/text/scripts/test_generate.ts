@@ -1,4 +1,5 @@
 // apps/backend/text/scripts/test_generate.ts
+// biome-ignore-all lint/style/useNamingConvention: Property names must match Ollama API field names (snake_case)
 // Test generation script for the Ollama text microservice.
 // Sends a prompt to /api/generate and streams the response.
 //
@@ -182,7 +183,7 @@ const main = async (): Promise<void> => {
     console.error(
       `\n✗ Ollama is not running on port ${OLLAMA_PORT}.`,
     );
-    console.error('  Start it with: bun tmux:start text');
+    console.error('  Start it with: bun herdr:start text');
     process.exit(1);
   }
 

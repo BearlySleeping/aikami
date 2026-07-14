@@ -11,24 +11,35 @@ import { describe, expect, test } from 'bun:test';
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 // $services barrel is mocked globally via test_preload.ts
 
-import { VendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
+import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
+import { getVendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 let onCloseCalled = false;
 
-const createViewModel = (options?: { vendorInventory?: string }): VendorViewModel => {
+const createViewModel = (options?: {
+  vendorInventory?: string;
+}): ReturnType<typeof getVendorViewModel> => {
   onCloseCalled = false;
+  // Reset vendor service state between tests
+  vendorService.priceMultiplier = 1.0;
+  vendorService.refusesToSell = false;
   const vmOptions: VendorViewModelOptions = {
     className: 'VendorViewModelTest',
     vendorId: 'test-vendor-1',
     vendorName: 'Test Vendor',
-    vendorInventory: options?.vendorInventory ?? 'rusty_sword,health_potion,iron_sword',
-    onClose: () => {
-      onCloseCalled = true;
-    },
+    vendorInventory: options?.vendorInventory ?? 'rustySword,healthPotion,ironSword',
   };
-  return new VendorViewModel(vmOptions);
+  const vm = getVendorViewModel(vmOptions);
+  // Monkey-patch closeVendor to track calls (vendorService.close also calls onClose)
+  // Override vendorService.close so we can track calls
+  const originalServiceClose = vendorService.close.bind(vendorService);
+  vendorService.close = () => {
+    onCloseCalled = true;
+    originalServiceClose();
+  };
+  return vm;
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -36,17 +47,17 @@ const createViewModel = (options?: { vendorInventory?: string }): VendorViewMode
 describe('VendorViewModel — C-154 AI Vendors Economy', () => {
   describe('item parsing', () => {
     test('parses comma-separated vendor inventory into items', () => {
-      const viewModel = createViewModel({ vendorInventory: 'rusty_sword,health_potion' });
+      const viewModel = createViewModel({ vendorInventory: 'rustySword,healthPotion' });
       expect(viewModel.items.length).toBe(2);
-      expect(viewModel.items[0].itemId).toBe('rusty_sword');
-      expect(viewModel.items[1].itemId).toBe('health_potion');
+      expect(viewModel.items[0].itemId).toBe('rustySword');
+      expect(viewModel.items[1].itemId).toBe('healthPotion');
     });
 
     test('trims whitespace from item IDs', () => {
-      const viewModel = createViewModel({ vendorInventory: ' rusty_sword , iron_sword ' });
+      const viewModel = createViewModel({ vendorInventory: ' rustySword , ironSword ' });
       expect(viewModel.items.length).toBe(2);
-      expect(viewModel.items[0].itemId).toBe('rusty_sword');
-      expect(viewModel.items[1].itemId).toBe('iron_sword');
+      expect(viewModel.items[0].itemId).toBe('rustySword');
+      expect(viewModel.items[1].itemId).toBe('ironSword');
     });
 
     test('handles empty inventory string', () => {
@@ -68,33 +79,28 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
 
     test('rounds down with fractional result (haggle discount)', () => {
       const viewModel = createViewModel();
-      // Manually set multiplier for testing
-      const vm = viewModel as unknown as { priceMultiplier: number };
-      vm.priceMultiplier = 0.8;
+      vendorService.priceMultiplier = 0.8;
       // 15 * 0.8 = 12 → Math.floor(12) = 12
       expect(viewModel.getFinalPrice(15)).toBe(12);
     });
 
     test('rounds down with fractional result (price gouge)', () => {
       const viewModel = createViewModel();
-      const vm = viewModel as unknown as { priceMultiplier: number };
-      vm.priceMultiplier = 1.3;
+      vendorService.priceMultiplier = 1.3;
       // 15 * 1.3 = 19.5 → Math.floor(19.5) = 19
       expect(viewModel.getFinalPrice(15)).toBe(19);
     });
 
     test('handles 0.5 multiplier (minimum discount)', () => {
       const viewModel = createViewModel();
-      const vm = viewModel as unknown as { priceMultiplier: number };
-      vm.priceMultiplier = 0.5;
+      vendorService.priceMultiplier = 0.5;
       // 100 * 0.5 = 50
       expect(viewModel.getFinalPrice(100)).toBe(50);
     });
 
     test('handles 1.5 multiplier (maximum penalty)', () => {
       const viewModel = createViewModel();
-      const vm = viewModel as unknown as { priceMultiplier: number };
-      vm.priceMultiplier = 1.5;
+      vendorService.priceMultiplier = 1.5;
       // 10 * 1.5 = 15
       expect(viewModel.getFinalPrice(10)).toBe(15);
     });
@@ -108,10 +114,9 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
   describe('refusesToSell', () => {
     test('buyItem returns early when refusesToSell is true', async () => {
       const viewModel = createViewModel();
-      const vm = viewModel as unknown as { refusesToSell: boolean; isBuying: boolean };
-      vm.refusesToSell = true;
+      vendorService.refusesToSell = true;
 
-      await viewModel.buyItem('rusty_sword');
+      await viewModel.buyItem('rustySword');
       // Should not start buying
       expect(viewModel.isBuying).toBe(false);
     });
@@ -120,8 +125,7 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
   describe('closeVendor', () => {
     test('resets multiplier to 1.0 and calls onClose', () => {
       const viewModel = createViewModel();
-      const vm = viewModel as unknown as { priceMultiplier: number };
-      vm.priceMultiplier = 0.7;
+      vendorService.priceMultiplier = 0.7;
 
       viewModel.closeVendor();
       expect(viewModel.priceMultiplier).toBe(1.0);
@@ -130,9 +134,8 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
 
     test('resets refusesToSell on close', () => {
       const viewModel = createViewModel();
-      const vm = viewModel as unknown as { refusesToSell: boolean; priceMultiplier: number };
-      vm.refusesToSell = true;
-      vm.priceMultiplier = 1.5;
+      vendorService.refusesToSell = true;
+      vendorService.priceMultiplier = 1.5;
 
       viewModel.closeVendor();
       expect(viewModel.priceMultiplier).toBe(1.0);
@@ -185,15 +188,15 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
 
   describe('getItemDef', () => {
     test('returns definition for known equippable item', () => {
-      const viewModel = createViewModel({ vendorInventory: 'iron_sword' });
-      const def = viewModel.getItemDef('iron_sword');
-      expect(def.label).toBe('iron_sword');
+      const viewModel = createViewModel({ vendorInventory: 'ironSword' });
+      const def = viewModel.getItemDef('ironSword');
+      expect(def.label).toBe('ironSword');
     });
 
     test('returns definition for consumable items', () => {
-      const viewModel = createViewModel({ vendorInventory: 'health_potion' });
-      const def = viewModel.getItemDef('health_potion');
-      expect(def.label).toBe('health_potion');
+      const viewModel = createViewModel({ vendorInventory: 'healthPotion' });
+      const def = viewModel.getItemDef('healthPotion');
+      expect(def.label).toBe('healthPotion');
       expect(def.equippable).toBe(false);
     });
 

@@ -83,8 +83,6 @@ const config = {
       '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
       '@aikami/frontend/repositories': toPackagesPath('frontend/repositories/src'),
       '@aikami/frontend/repositories/*': toPackagesPath('frontend/repositories/src/lib'),
-      '@aikami/frontend/api-core': toPackagesPath('frontend/api-core/src'),
-      '@aikami/frontend/api-core/*': toPackagesPath('frontend/api-core/src/lib'),
 
       '@aikami/mocks': toPackagesPath('shared/mocks/src'),
       '@aikami/schemas': toPackagesPath('shared/schemas/src'),

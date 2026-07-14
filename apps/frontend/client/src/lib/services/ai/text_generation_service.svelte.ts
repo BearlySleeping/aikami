@@ -85,8 +85,19 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** OpenRouter chat completions endpoint. */
-const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
+/** Resolves the chat completions URL from routing info. */
+function resolveChatUrl(routing: ResolvedRouting): string {
+  if (routing.endpoint) {
+    // Strip trailing slash then append /chat/completions
+    const base = routing.endpoint.replace(/\/$/, '');
+    return `${base}/chat/completions`;
+  }
+  // Default to OpenRouter
+  return 'https://openrouter.ai/api/v1/chat/completions';
+}
+
+/** Chat completions URL for backwards-compatible fallback. */
+const _OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** Timeout for the entire fetch+stream operation (90 seconds). */
 const FETCH_TIMEOUT_MS = 90_000;
@@ -233,12 +244,15 @@ class TextGenerationService
         stream: true,
       };
 
-      const response = await fetch(OPENROUTER_CHAT_URL, {
+      const chatUrl = resolveChatUrl(routing);
+
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // biome-ignore lint/style/useNamingConvention: HTTP header field name
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-          ...OPENROUTER_HEADERS,
+          ...(routing.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
         },
         body: JSON.stringify(body),
         signal: abortController.signal,
@@ -253,7 +267,7 @@ class TextGenerationService
       }
 
       if (!response.body) {
-        throw new Error('No response body from OpenRouter');
+        throw new Error(`No response body from ${chatUrl}`);
       }
 
       await this._readOpenRouterSSEStream({
@@ -339,8 +353,10 @@ class TextGenerationService
         model: routing.model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         stream: true,
+        // biome-ignore lint/style/useNamingConvention: OpenAI API contract field names
         response_format: {
           type: 'json_schema',
+          // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
           json_schema: {
             name: schemaName,
             schema: compiledSchema,
@@ -349,12 +365,15 @@ class TextGenerationService
         },
       };
 
-      const response = await fetch(OPENROUTER_CHAT_URL, {
+      const chatUrl = resolveChatUrl(routing);
+
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // biome-ignore lint/style/useNamingConvention: HTTP header field name
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-          ...OPENROUTER_HEADERS,
+          ...(routing.provider === 'openrouter' ? OPENROUTER_HEADERS : {}),
         },
         body: JSON.stringify(body),
         signal: abortController.signal,
@@ -503,6 +522,7 @@ class TextGenerationService
             const parsed = JSON.parse(data) as {
               choices?: Array<{
                 delta?: { content?: string };
+                // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
                 finish_reason?: string | null;
               }>;
             };

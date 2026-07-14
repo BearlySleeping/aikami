@@ -68,7 +68,7 @@ export {
 // ---------------------------------------------------------------------------
 
 /** Configuration tab identifiers. */
-export const CONFIG_TABS = ['text', 'voice', 'image', 'advanced'] as const;
+export const CONFIG_TABS = ['text', 'voice', 'image', 'advanced', 'connections'] as const;
 
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 
@@ -221,6 +221,7 @@ const TAB_META: readonly ConfigTabMeta[] = [
   { key: 'voice', label: 'Voice' },
   { key: 'image', label: 'Image' },
   { key: 'advanced', label: 'Advanced' },
+  { key: 'connections', label: 'Connections' },
 ] as const;
 
 /** Debounce delay in milliseconds before auto-saving after a field change. */
@@ -544,6 +545,7 @@ export class ProvidersViewModel
           body: JSON.stringify({
             input: testText,
             model: 'tts-1',
+            // biome-ignore lint/style/useNamingConvention: API contract field name
             response_format: 'mp3',
             speed,
             voice: voiceId,
@@ -671,4 +673,4 @@ export class ProvidersViewModel
 
 export const getProvidersViewModel = (
   options: ProvidersViewModelOptions,
-): ProvidersViewModelInterface => new ProvidersViewModel(options);
+): ProvidersViewModelInterface => ProvidersViewModel.create(options);

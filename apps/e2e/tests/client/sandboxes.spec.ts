@@ -117,8 +117,11 @@ test.describe('Inventory Sandbox (/dev/inventory)', () => {
     const response = await authUser.goto('/dev/inventory');
     expect(response?.status()).toBe(200);
 
-    // Inventory card should be visible
-    await expect(authUser.locator('.card:has-text("Inventory")')).toBeVisible();
+    // Click "Open Inventory" to show the overlay
+    await authUser.getByRole('button', { name: 'Open Inventory' }).click();
+
+    // Inventory card should now be visible
+    await expect(authUser.locator('h2:has-text("Inventory")')).toBeVisible();
 
     // DevToolsPanel should be present
     await expect(authUser.locator('[data-testid="dev-action-fill-with-junk"]')).toBeVisible();
@@ -126,7 +129,9 @@ test.describe('Inventory Sandbox (/dev/inventory)', () => {
 
   test('should fill inventory with junk items via Fill with Junk action', async ({ authUser }) => {
     await authUser.goto('/dev/inventory');
-    await authUser.waitForTimeout(1000);
+
+    // Click "Open Inventory" to show the overlay
+    await authUser.getByRole('button', { name: 'Open Inventory' }).click();
 
     // Initially shows empty state
     await expect(authUser.getByText('No items collected yet')).toBeVisible();

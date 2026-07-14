@@ -16,6 +16,11 @@
 // version exactly, because PLAYWRIGHT_BROWSERS_PATH points to Nix-managed
 // browsers that are version-locked to the driver.
 //
+// ── typescript ──────────────────────────────────────────────────
+// Pinned to 6.0.3 because TypeScript 7 is not yet supported by
+// vtsls (Zed's TypeScript LSP) and other tooling in the ecosystem.
+// Remove this pin once vtsls ships TS 7 compatibility.
+//
 // ── @astrojs/starlight ───────────────────────────────────────────
 // Pinned because starlight ships raw .ts source files in its npm
 // package (withastro/starlight#2644, #3572). TypeScript checks these
@@ -148,6 +153,44 @@ try {
     err instanceof Error ? err.message : String(err),
   );
   hasError = true;
+}
+
+// ── typescript ──────────────────────────────────────────────────
+
+const TYPESCRIPT_VERSION = '6.0.3';
+const tsDirs = [
+  '.', // root
+  'apps/e2e',
+  'packages/backend/ai',
+].filter((dir) => {
+  const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
+  if (!existsSync(pkgPath)) {
+    return false;
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return 'typescript' in (pkg.devDependencies || {});
+  } catch {
+    return false;
+  }
+});
+
+console.log(`🔒 Pinning typescript to ${TYPESCRIPT_VERSION}`);
+
+for (const dir of tsDirs) {
+  try {
+    execSync(`bun add -d typescript@${TYPESCRIPT_VERSION} --exact`, {
+      cwd: resolve(MONOREPO_ROOT, dir),
+      stdio: 'inherit',
+    });
+    console.log(`✅ Pinned typescript@${TYPESCRIPT_VERSION} in ${dir}`);
+  } catch (err) {
+    console.error(
+      `⚠️  Failed to pin typescript in ${dir}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    hasError = true;
+  }
 }
 
 // ── Exit ────────────────────────────────────────────────────────

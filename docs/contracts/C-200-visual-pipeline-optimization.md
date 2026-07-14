@@ -8,6 +8,7 @@
 | **Priority**         | P0 — Flaky frame captures, lack of image payload scaling standards, and unoptimized model routing stall the self-healing CI pipeline.               |
 | **Dependencies**     | `docs/contracts/C-199-visual-camera-alignment.md`                                                                                                   |
 | **Status**           | ✅ completed                                                                                                                                        |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0                                                                                                                                               |
 
 ## Overview

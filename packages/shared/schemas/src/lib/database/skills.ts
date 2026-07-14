@@ -26,6 +26,7 @@ export const SkillSchema = Type.Object({
 });
 
 export type SkillData = Type.Static<typeof SkillSchema>;
+export type Skill = Type.Static<typeof SkillSchema>;
 
 export const SavingThrowSchema = Type.Object({
   ability: AbilityTypeSchema,
@@ -40,6 +41,7 @@ export const SavingThrowSchema = Type.Object({
 });
 
 export type SavingThrowData = Type.Static<typeof SavingThrowSchema>;
+export type SavingThrow = Type.Static<typeof SavingThrowSchema>;
 
 export const SKILL_ABILITY_MAP: Record<string, AbilityType> = {
   athletics: 'strength',

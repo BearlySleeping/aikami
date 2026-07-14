@@ -17,7 +17,15 @@ import { join } from 'node:path';
 
 // ── Configuration ────────────────────────────────────────────────────
 
-const SECRET_KEYS = ['GEMINI_API_KEY', 'FIREBASE_SERVICE_ACCOUNT'] as const;
+const SECRET_KEYS = [
+  'GEMINI_API_KEY',
+  'FIREBASE_SERVICE_ACCOUNT',
+  'OPENROUTER_API_KEY',
+  'VLM_PROVIDER',
+  'VLM_MODEL',
+  'VLM_TEMPERATURE',
+  'VLM_NUM_PREDICT',
+] as const;
 
 // see check.ts for cache TTL
 

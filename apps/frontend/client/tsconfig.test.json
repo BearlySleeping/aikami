@@ -13,8 +13,6 @@
       "$routes": ["./src/lib/constants/routes.ts"],
       "$routes/*": ["./src/lib/constants/routes/*"],
       "@aikami/frontend/services": ["../../../packages/frontend/services/src/index.ts"],
-      "@aikami/frontend/api-core": ["../../../packages/frontend/api-core/src/index.ts"],
-      "@aikami/frontend/api-core/*": ["../../../packages/frontend/api-core/src/*"],
       "@aikami/frontend/services/*": [
         "../../../packages/frontend/services/src/lib/*",
         "../../../packages/frontend/services/src/*"

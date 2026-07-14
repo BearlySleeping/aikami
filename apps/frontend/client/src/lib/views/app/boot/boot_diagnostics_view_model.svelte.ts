@@ -53,7 +53,7 @@ export type BootDiagnosticsViewModelInterface = BaseViewModelInterface & {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const OLLAMA_URL = 'http://localhost:11434/' as const;
+const OLLAMA_URL = '/api/text/' as const;
 const COMFY_PROXY_PATH = '/api/image/object_info' as const;
 const POLL_INTERVAL_MS = 3000;
 const PING_TIMEOUT_MS = 3000;

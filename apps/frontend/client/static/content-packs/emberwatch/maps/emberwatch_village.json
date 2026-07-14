@@ -1,0 +1,182 @@
+{
+  "compressionlevel": -1,
+  "width": 20,
+  "height": 20,
+  "tilewidth": 32,
+  "tileheight": 32,
+  "infinite": false,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "name": "debug_tiles",
+      "image": "/game-data/sprites/tilesets/debug_tiles.png",
+      "imagewidth": 128,
+      "imageheight": 32,
+      "tilewidth": 32,
+      "tileheight": 32,
+      "columns": 4,
+      "tilecount": 4,
+      "spacing": 0,
+      "margin": 0
+    }
+  ],
+  "layers": [
+    {
+      "name": "ground",
+      "type": "tilelayer",
+      "width": 20,
+      "height": 20,
+      "visible": true,
+      "data": [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 3, 3, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 1,
+        3, 3, 3, 3, 1, 1, 1, 3, 3, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 3, 3, 1, 1,
+        1, 3, 3, 3, 3, 1, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 3, 3, 1, 1, 1, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3,
+        3, 1, 1, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1
+      ]
+    },
+    {
+      "name": "collision",
+      "type": "tilelayer",
+      "width": 20,
+      "height": 20,
+      "visible": false,
+      "data": [
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 2, 2, 0,
+        2, 2, 2, 2, 0, 2, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 2, 2, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0,
+        0, 2, 2, 2, 2, 0, 2, 2, 0, 2, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 2, 2, 0, 2, 2, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 2, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        2, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 2, 0, 0, 0, 0, 0,
+        0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 2, 2, 2, 2, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2,
+        0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2
+      ]
+    },
+    {
+      "name": "spawns",
+      "type": "objectgroup",
+      "visible": true,
+      "objects": [
+        {
+          "id": 1,
+          "type": "npc",
+          "x": 256,
+          "y": 192,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            { "name": "npcId", "type": "string", "value": "village_elder" },
+            { "name": "npcName", "type": "string", "value": "Elder Thalia" },
+            { "name": "dialogueKey", "type": "string", "value": "elder_thalia_greeting" },
+            { "name": "interactionRadius", "type": "float", "value": 48 }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "npc",
+          "x": 480,
+          "y": 192,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            { "name": "npcId", "type": "string", "value": "guard_captain" },
+            { "name": "npcName", "type": "string", "value": "Guard Captain Aldric" },
+            { "name": "dialogueKey", "type": "string", "value": "guard_captain_greeting" },
+            { "name": "interactionRadius", "type": "float", "value": 48 }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "npc",
+          "x": 448,
+          "y": 416,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            { "name": "npcId", "type": "string", "value": "traveling_merchant" },
+            { "name": "npcName", "type": "string", "value": "Keth the Merchant" },
+            { "name": "dialogueKey", "type": "string", "value": "merchant_keth_greeting" },
+            { "name": "interactionRadius", "type": "float", "value": 48 },
+            { "name": "isVendor", "type": "bool", "value": true },
+            {
+              "name": "vendorInventory",
+              "type": "string",
+              "value": "ironSword,healthPotion,manaPotion,ironArmor,woodenShield"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "prop",
+          "x": 160,
+          "y": 320,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            { "name": "propId", "type": "string", "value": "village_well" },
+            { "name": "propName", "type": "string", "value": "Old Stone Well" }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "prop",
+          "x": 96,
+          "y": 224,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            { "name": "propId", "type": "string", "value": "notice_board" },
+            { "name": "propName", "type": "string", "value": "Village Notice Board" }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "prop",
+          "x": 320,
+          "y": 544,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            { "name": "propId", "type": "string", "value": "village_gate" },
+            { "name": "propName", "type": "string", "value": "Emberwatch Village Gate" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "transitions",
+      "type": "objectgroup",
+      "visible": false,
+      "objects": [
+        {
+          "id": 7,
+          "type": "transition",
+          "x": 288,
+          "y": 610,
+          "width": 96,
+          "height": 24,
+          "properties": [
+            { "name": "targetMap", "type": "string", "value": "old_road" },
+            { "name": "targetX", "type": "float", "value": 32 },
+            { "name": "targetY", "type": "float", "value": 240 }
+          ]
+        }
+      ]
+    }
+  ]
+}

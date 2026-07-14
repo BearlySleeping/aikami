@@ -1,16 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view.svelte
-  import type { CharacterDashboardViewModelInterface } from './character_dashboard_view_model.svelte';
+// apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view.svelte
+import type { CharacterDashboardViewModelInterface } from './character_dashboard_view_model.svelte';
 
-  type Props = {
-    viewModel: CharacterDashboardViewModelInterface;
-  };
+type Props = {
+  viewModel: CharacterDashboardViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
 <div
   class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Close dialog"
+  tabindex="-1"
+  onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.closeDashboard(); } }}
+  onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeDashboard()}
 >
   <div class="card w-full max-w-lg bg-base-100 shadow-2xl">
     <div class="card-body p-6 gap-4">
@@ -18,6 +24,7 @@
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-bold text-base-content">Character</h2>
         <button
+          type="button"
           class="btn btn-sm btn-ghost btn-circle"
           onclick={() => viewModel.closeDashboard()}
           aria-label="Close character dashboard"

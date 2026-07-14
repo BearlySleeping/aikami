@@ -1,33 +1,22 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import type { ProvidersViewModelInterface } from './providers_view_model.svelte';
-  import AdvancedTab from './tabs/advanced_tab.svelte';
-  import ImageTab from './tabs/image_tab.svelte';
-  import TextTab from './tabs/text_tab.svelte';
-  import VoiceTab from './tabs/voice_tab.svelte';
+// apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import ConnectionsListView from '$views/settings/connection/connections_list_view.svelte';
+import type { ProvidersViewModelInterface } from './providers_view_model.svelte';
+import AdvancedTab from './tabs/advanced_tab.svelte';
+import ImageTab from './tabs/image_tab.svelte';
+import TextTab from './tabs/text_tab.svelte';
+import { getTextTabViewModel } from './tabs/text_tab_view_model.svelte';
+import VoiceTab from './tabs/voice_tab.svelte';
 
-  type Props = {
-    viewModel: ProvidersViewModelInterface;
-  };
+type Props = {
+  viewModel: ProvidersViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  // ── API key visibility toggles ────────────────────────────────────────
-
-  const visibleKeys = $state<Record<string, boolean>>({});
-
-  const toggleKeyVisibility = (provider: string): void => {
-    visibleKeys[provider] = !visibleKeys[provider];
-  };
-
-  const isKeyVisible = (provider: string): boolean => visibleKeys[provider] === true;
-
-  // ── Derived ───────────────────────────────────────────────────────────
-
-  const hasOpenRouterKey = $derived((viewModel.config.text.apiKeys.openrouter?.length ?? 0) > 0);
-
-  const isOpenRouterKeyVerified = $derived(viewModel.verificationStatus.openrouter === 'valid');
+/** Per-tab ViewModel for text configuration. */
+const textTabViewModel = getTextTabViewModel({ className: 'TextTabViewModel' });
 </script>
 
 <svelte:head>
@@ -79,6 +68,7 @@
 
           <!-- Detection controls -->
           <button
+            type="button"
             class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs gap-1.5"
             onclick={() => viewModel.detectServices()}
             disabled={viewModel.isDetecting}
@@ -94,6 +84,7 @@
                 viewBox="0 0 24 24"
                 stroke="currentColor"
               >
+                <title>icon</title>
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -138,6 +129,7 @@
         <div class="flex gap-0" role="tablist">
           {#each viewModel.tabs as tab}
             <button
+              type="button"
               role="tab"
               aria-selected={viewModel.activeTab === tab.key}
               class="relative px-5 py-3 font-['JetBrains_Mono'] text-xs uppercase tracking-widest transition-colors {viewModel.activeTab === tab.key
@@ -163,7 +155,7 @@
     <main class="max-w-7xl mx-auto px-6 py-8">
       <!-- ── Text Tab ────────────────────────────────────────────────── -->
       {#if viewModel.activeTab === 'text'}
-        <TextTab {viewModel} />
+        <TextTab viewModel={textTabViewModel} />
       <!-- ── Voice Tab ────────────────────────────────────────────────── -->
       {:else if viewModel.activeTab === 'voice'}
         <VoiceTab {viewModel} />
@@ -173,6 +165,9 @@
       <!-- ── Advanced Tab ─────────────────────────────────────────────── -->
       {:else if viewModel.activeTab === 'advanced'}
         <AdvancedTab {viewModel} />
+      <!-- ── Connections Tab (C-230) ───────────────────────────────────── -->
+      {:else if viewModel.activeTab === 'connections'}
+        <ConnectionsListView />
       {/if}
 
       <!-- ═══════════════════════════════════════════════════════════════
@@ -181,6 +176,7 @@
       <div class="mt-8 pt-6 border-t border-white/[0.06] flex items-center justify-between">
         <div class="flex gap-3">
           <button
+            type="button"
             class="btn btn-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider border-[#cabeff]/30 text-[#cabeff] hover:bg-[#cabeff]/10"
             onclick={() => viewModel.save()}
             disabled={viewModel.isSaving}
@@ -193,6 +189,7 @@
             {/if}
           </button>
           <button
+            type="button"
             class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-[#938ea1]"
             onclick={() => viewModel.revert()}
           >
@@ -201,6 +198,7 @@
         </div>
 
         <button
+          type="button"
           class="btn btn-ghost btn-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider text-red-400/60 hover:text-red-400"
           onclick={() => viewModel.reset()}
         >

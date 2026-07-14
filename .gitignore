@@ -262,22 +262,29 @@ script-config.*.ts
 test-results/
 
 *.gd.uid
-examples/**/*.import
-examples/**/*.png
-examples/**/*.wav
-examples/**/*.ttf
-examples/**/*.svg
-examples/godot-examples/
-examples/web/
-game/addons/godot_whisper/bin/
-game/addons/godot_whisper/models/
-game/assets/audio/
+examples
 .direnv/
 apps/frontend/client/src-tauri/target/
-examples/Universal-LPC-Spritesheet-Character-Generator/
 scripts/lpc/.lpc_manifest.json
 
 # LPC assets — canonical source is Firebase Storage
 apps/frontend/client/src/lib/assets/lpc/
 apps/backend/packages/
 apps/frontend/client/static/lpc/**/*
+# Swarm artifacts — ephemeral pipeline outputs
+.pi/swarm/agent_scratchpad.db*
+.pi/swarm/markers/
+.pi/swarm/outputs/
+
+# Contract pipeline runs (new stable pipeline)
+.pi/contract-runs/
+# JiJutsu co-located workspaces for contract pipeline isolation
+.pi/workspaces/
+.pi/swarm/plans/
+.pi/swarm/payloads/
+.pi/pipeline_payload_*.json
+.pi/agent_scratchpad.db*
+.pi/MARKER_*
+.pi/architect_plan_*.md
+tmp/
+apps/frontend/client/static/game-assets/

@@ -1,5 +1,9 @@
 // apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts
-import { BaseClass, type BaseClassInterface, type BaseClassOptions } from '@aikami/utils';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
 import type { ConversationMessage } from '../chat/context_builder.ts';
 import type { ConversationRepositoryInterface } from '../chat/conversation_repository.svelte.ts';
@@ -35,6 +39,7 @@ type KokoroRequest = {
   model: string;
   input: string;
   voice: string;
+  // biome-ignore lint/style/useNamingConvention: API contract field name
   response_format: 'wav';
 };
 
@@ -45,7 +50,7 @@ const KOKORO_SPEECH_URL = `${import.meta.env.PUBLIC_VOICE_URL ?? 'http://localho
 // StreamOrchestrator
 // ---------------------------------------------------------------------------
 
-export type StreamOrchestratorOptions = BaseClassOptions & {
+export type StreamOrchestratorOptions = BaseFrontendClassOptions & {
   textStream: TextStreamConnection;
   imageStream: ImageStreamConnection;
   audioQueuePlayer: AudioQueuePlayerInterface;
@@ -61,7 +66,7 @@ export type StreamOrchestratorOptions = BaseClassOptions & {
   }) => Promise<ArrayBuffer>;
 };
 
-export type StreamOrchestratorInterface = BaseClassInterface & {
+export type StreamOrchestratorInterface = BaseFrontendClassInterface & {
   readonly isGenerating: boolean;
   readonly currentText: string;
   readonly currentSpeakerId: string | undefined;
@@ -88,7 +93,7 @@ export type StreamOrchestratorInterface = BaseClassInterface & {
  * through the {@link AudioQueuePlayer}.
  */
 export class StreamOrchestrator
-  extends BaseClass<StreamOrchestratorOptions>
+  extends BaseFrontendClass<StreamOrchestratorOptions>
   implements StreamOrchestratorInterface
 {
   isGenerating = false;
@@ -295,6 +300,7 @@ export class StreamOrchestrator
         model: 'tts-1',
         input: sentence,
         voice: 'af_bella',
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         response_format: 'wav',
       };
 
@@ -429,7 +435,7 @@ export class StreamOrchestrator
   }
 
   private _isPotentialTagPrefix(buffer: string): boolean {
-    const TAG_PREFIX = '<emotion:';
+    const TagPrefix = '<emotion:';
     if (buffer.length === 0) {
       return false;
     }
@@ -438,8 +444,8 @@ export class StreamOrchestrator
     }
 
     for (let i = 1; i < buffer.length; i++) {
-      if (i < TAG_PREFIX.length) {
-        if (buffer[i] !== TAG_PREFIX[i]) {
+      if (i < TagPrefix.length) {
+        if (buffer[i] !== TagPrefix[i]) {
           return false;
         }
       } else {
@@ -563,4 +569,4 @@ export class StreamOrchestrator
 
 export const getStreamOrchestrator = (
   options: StreamOrchestratorOptions,
-): StreamOrchestratorInterface => new StreamOrchestrator(options);
+): StreamOrchestratorInterface => StreamOrchestrator.create(options);

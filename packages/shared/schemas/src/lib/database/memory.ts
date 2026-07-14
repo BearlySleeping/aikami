@@ -41,5 +41,8 @@ export const CharacterMemorySchema = Type.Object({
 });
 
 export type ChatSummaryData = Type.Static<typeof ChatSummarySchema>;
+export type ChatSummary = Type.Static<typeof ChatSummarySchema>;
 export type MemoryEntryData = Type.Static<typeof MemoryEntrySchema>;
+export type MemoryEntry = Type.Static<typeof MemoryEntrySchema>;
 export type CharacterMemoryData = Type.Static<typeof CharacterMemorySchema>;
+export type CharacterMemory = Type.Static<typeof CharacterMemorySchema>;

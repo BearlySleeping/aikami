@@ -5,6 +5,7 @@
 // non-sensitive settings are stored as plain JSON in localStorage.
 // Firestore sync is optional — works entirely offline for Tauri / local use.
 
+import { BUILT_IN_PRESETS, type GenParamPreset, type TextProvider } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -12,135 +13,22 @@ import {
 } from '@aikami/frontend/services';
 import { clearVault, decrypt, encrypt } from '$lib/utils/crypto_vault';
 import { logger } from '$logger';
+import type { Connection, ConnectionId } from '$types/connection';
+import type { Lorebook, LorebookEntry } from '$types/lorebook';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Text AI providers (C-204 expanded: all RisuAI providers)
+// Re-exports from @aikami/constants for backward compatibility
 // ---------------------------------------------------------------------------
 
-/** Text generation provider descriptors. */
-export const TEXT_PROVIDERS = [
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    description: 'Multi-model aggregator',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    description: 'GPT models via OpenAI API',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'anthropic',
-    label: 'Anthropic',
-    description: 'Claude models',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'google',
-    label: 'Google (Gemini)',
-    description: 'Gemini models via Google AI',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'deepseek',
-    label: 'DeepSeek',
-    description: 'DeepSeek V3/R1 models',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'mistral',
-    label: 'Mistral AI',
-    description: 'Mistral models via La Plateforme',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'cohere',
-    label: 'Cohere',
-    description: 'Command R models',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'deepinfra',
-    label: 'DeepInfra',
-    description: 'Open-source model hosting',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'nanogpt',
-    label: 'NanoGPT',
-    description: 'Pay-per-token model access',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'novelai',
-    label: 'NovelAI',
-    description: 'Kayra / Clio story models',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'aws',
-    label: 'AWS Bedrock',
-    description: 'Claude via AWS',
-    needsKey: true,
-    isLocal: false,
-  },
-  {
-    id: 'horde',
-    label: 'AI Horde',
-    description: 'Volunteer compute cluster',
-    needsKey: false,
-    isLocal: false,
-  },
-  {
-    id: 'ollama',
-    label: 'Ollama (local)',
-    description: 'Local LLM server',
-    needsKey: false,
-    needsUrl: true,
-    isLocal: true,
-  },
-  {
-    id: 'ooba',
-    label: 'TextGen WebUI',
-    description: 'Local Oobabooga server',
-    needsKey: false,
-    needsUrl: true,
-    isLocal: true,
-  },
-  {
-    id: 'custom',
-    label: 'Custom API',
-    description: 'OpenAI-compatible endpoint',
-    needsKey: false,
-    needsUrl: true,
-    isLocal: false,
-  },
-] as const satisfies ReadonlyArray<{
-  id: string;
-  label: string;
-  description: string;
-  needsKey: boolean;
-  needsUrl?: boolean;
-  isLocal: boolean;
-}>;
+export { TEXT_PROVIDERS, type TextProvider } from '@aikami/constants';
 
-export type TextProvider = (typeof TEXT_PROVIDERS)[number]['id'];
+// ---------------------------------------------------------------------------
+// Text AI providers (re-exported from @aikami/constants)
+// ---------------------------------------------------------------------------
 
 /** Map of provider → API key string. */
 export type ApiKeys = Record<string, string>;
@@ -368,6 +256,10 @@ export type ImageConfig = {
   comfyWorkflow?: string;
   /** NovelAI noise schedule override (provider-specific). */
   novelAiNoiseSchedule?: string;
+  /** Active style profile ID for the image generation pipeline (C-242). */
+  styleProfileId: string;
+  /** Whether to show a review/edit modal before each image generation (C-242). */
+  reviewBeforeGenerate: boolean;
 };
 
 /** Generic model configuration for a single provider. */
@@ -455,6 +347,11 @@ export type ResolvedTextProvider = {
   apiKey: string | undefined;
 };
 
+// ---------------------------------------------------------------------------
+// Re-exports for backward compatibility
+export { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
+export type { Connection, ConnectionId, ConnectionTestResult } from '$types/connection';
+
 /** Top-level configuration state. */
 export type ConfigState = {
   /** Text generation settings (provider, API keys, URL). */
@@ -479,6 +376,16 @@ export type ConfigState = {
   advancedOverrides: AdvancedOverrides;
   /** Auxiliary model assignments for specialised tasks. */
   auxiliaryModels: AuxiliaryModels;
+  /** Saved provider connections (C-230). */
+  connections: Connection[];
+  /** ID of the default connection, or null if none set. */
+  defaultConnectionId: ConnectionId | null;
+  /** Generation parameter presets (built-in + user-defined). */
+  presets: GenParamPreset[];
+  /** Lorebooks (world info collections) persisted in localStorage. */
+  lorebooks: Lorebook[];
+  /** IDs of lorebooks assigned to the active chat session. */
+  activeLorebookIds: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -537,6 +444,69 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
    * array has an entry).
    */
   getActiveTextProvider(): ResolvedTextProvider;
+
+  // ── Connection management (C-230) ──────────────────────────────────
+
+  /** Adds a new connection and returns its ID. */
+  addConnection(connection: Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId;
+  /** Updates an existing connection by ID. */
+  updateConnection(id: ConnectionId, patch: Partial<Omit<Connection, 'id' | 'createdAt'>>): void;
+  /** Deletes a connection by ID. */
+  deleteConnection(id: ConnectionId): void;
+  /** Duplicates a connection (new UUID, "(copy)" suffix). */
+  duplicateConnection(id: ConnectionId): ConnectionId | undefined;
+  /** Sets the default connection (clears previous default). */
+  setDefaultConnection(id: ConnectionId): void;
+  /** Returns a connection by ID, or undefined. */
+  getConnection(id: ConnectionId): Connection | undefined;
+
+  // ── Preset management (C-230) ─────────────────────────────────────
+
+  /** Adds a user-defined preset. */
+  addPreset(preset: Omit<GenParamPreset, 'id' | 'isBuiltIn'>): string;
+  /** Deletes a user-defined preset. Built-in presets are a no-op. */
+  deletePreset(id: string): void;
+  /** Returns all presets (built-in merged with user-defined). */
+  getPresets(): GenParamPreset[];
+
+  // ── Macro preset integration (C-237) ──────────────────────────────
+  /** Loads macro presets from localStorage. */
+  loadMacroPresets: () => void;
+
+  // ── Lorebook management (C-238) ──────────────────────────────────
+
+  /** Adds a new lorebook and returns its ID. */
+  addLorebook: (options: { name: string; description: string }) => string;
+  /** Updates an existing lorebook by ID. */
+  updateLorebook: (options: {
+    id: string;
+    patch: Partial<Pick<Lorebook, 'name' | 'description'>>;
+  }) => void;
+  /** Deletes a lorebook and all its entries. */
+  deleteLorebook: (options: { id: string }) => void;
+  /** Returns all lorebooks. */
+  getLorebooks: () => Lorebook[];
+  /** Returns a single lorebook by ID, or undefined. */
+  getLorebook: (options: { id: string }) => Lorebook | undefined;
+
+  /** Adds an entry to a lorebook. Returns the entry ID. */
+  addEntry: (options: {
+    lorebookId: string;
+    entry: Omit<LorebookEntry, 'id' | 'createdAt' | 'updatedAt'>;
+  }) => string;
+  /** Updates an entry within a lorebook. */
+  updateEntry: (options: {
+    lorebookId: string;
+    entryId: string;
+    patch: Partial<Omit<LorebookEntry, 'id' | 'createdAt' | 'lorebookId'>>;
+  }) => void;
+  /** Deletes an entry from a lorebook. */
+  deleteEntry: (options: { lorebookId: string; entryId: string }) => void;
+  /** Reorders entries within a lorebook (provides the full new order by entry ID). */
+  reorderEntries: (options: { lorebookId: string; entryIds: string[] }) => void;
+
+  /** Sets the lorebook IDs assigned to the active chat session. */
+  setActiveLorebookIds: (options: { ids: string[] }) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -578,7 +548,9 @@ const DEFAULT_IMAGE_CONFIG: ImageConfig = {
   checkpoint: 'sd_xl_base_1.0',
   height: 1024,
   provider: 'comfyui',
+  reviewBeforeGenerate: false,
   steps: 30,
+  styleProfileId: 'auto',
   width: 1024,
 };
 
@@ -609,15 +581,20 @@ const DEFAULT_EMOTION_CONFIG: EmotionConfig = {
 const DEFAULT_TEMPLATE: InstructTemplate = 'chatml';
 
 const DEFAULT_STATE: ConfigState = {
+  activeLorebookIds: [],
   advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
   auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
+  connections: [],
+  defaultConnectionId: null,
   emotion: { ...DEFAULT_EMOTION_CONFIG },
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
   instructTemplate: DEFAULT_TEMPLATE,
+  lorebooks: [],
   memory: { ...DEFAULT_MEMORY_CONFIG },
   models: [...DEFAULT_MODEL_CONFIGS],
   preferredModel: '',
+  presets: [...BUILT_IN_PRESETS],
   text: { ...DEFAULT_TEXT_CONFIG },
   voice: { ...DEFAULT_VOICE_CONFIG },
 };
@@ -646,17 +623,44 @@ class ConfigService
   async load(pin?: string): Promise<void> {
     logger.debug('ConfigService.load');
 
-    // 1. Load API keys from encrypted vault
+    // 1. Load API keys + text provider + connections from encrypted vault
     const raw = await decrypt({ pin });
     if (raw) {
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
-        if (vault.apiKeys && typeof vault.apiKeys === 'object') {
-          this.state.text = {
-            ...DEFAULT_TEXT_CONFIG,
-            apiKeys: { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) },
-            provider: this.state.text.provider,
-          };
+        const apiKeys: ApiKeys =
+          vault.apiKeys && typeof vault.apiKeys === 'object'
+            ? { ...DEFAULT_API_KEYS, ...(vault.apiKeys as ApiKeys) }
+            : { ...DEFAULT_API_KEYS };
+        const provider: TextProvider =
+          typeof vault.textProvider === 'string'
+            ? (vault.textProvider as TextProvider)
+            : this.state.text.provider;
+        const url: string | undefined =
+          typeof vault.textUrl === 'string' ? vault.textUrl : this.state.text.url;
+        this.state.text = {
+          ...DEFAULT_TEXT_CONFIG,
+          apiKeys,
+          provider,
+          url,
+        };
+
+        // Load connections from vault (C-230)
+        if (Array.isArray(vault.connections)) {
+          this.state.connections = vault.connections as Connection[];
+        }
+        if (typeof vault.defaultConnectionId === 'string' || vault.defaultConnectionId === null) {
+          this.state.defaultConnectionId = vault.defaultConnectionId as ConnectionId | null;
+        }
+        // Load user presets from vault (built-in presets are merged on load)
+        if (Array.isArray(vault.userPresets)) {
+          const userPresets = vault.userPresets as GenParamPreset[];
+          // Merge user presets on top of built-in presets (user wins on duplicate IDs)
+          const builtInIds = new Set<string>(BUILT_IN_PRESETS.map((p) => p.id));
+          this.state.presets = [
+            ...BUILT_IN_PRESETS,
+            ...userPresets.filter((p) => !builtInIds.has(p.id)),
+          ];
         }
       } catch {
         this.warn('load: failed to parse vault JSON');
@@ -710,6 +714,12 @@ class ConfigService
             ...(parsed.auxiliaryModels as Partial<AuxiliaryModels>),
           };
         }
+        if (Array.isArray(parsed.lorebooks)) {
+          this.state.lorebooks = parsed.lorebooks as Lorebook[];
+        }
+        if (Array.isArray(parsed.activeLorebookIds)) {
+          this.state.activeLorebookIds = parsed.activeLorebookIds as string[];
+        }
       } catch {
         this.warn('load: failed to parse plain config');
       }
@@ -724,21 +734,28 @@ class ConfigService
   async save(): Promise<void> {
     logger.debug('ConfigService.save');
 
-    // Encrypt API keys (part of text config)
+    // Encrypt sensitive data: text config + connections (API keys)
+    const userPresets = this.state.presets.filter((p) => !p.isBuiltIn);
     const vaultPayload = JSON.stringify({
       apiKeys: this.state.text.apiKeys,
       textProvider: this.state.text.provider,
+      textUrl: this.state.text.url,
+      connections: this.state.connections,
+      defaultConnectionId: this.state.defaultConnectionId,
+      userPresets,
     });
     await encrypt({ text: vaultPayload });
 
     // Plain config (non-sensitive)
     const plain: Record<string, unknown> = {
+      activeLorebookIds: this.state.activeLorebookIds,
       advancedOverrides: this.state.advancedOverrides,
       auxiliaryModels: this.state.auxiliaryModels,
       emotion: this.state.emotion,
       generationParams: this.state.generationParams,
       image: this.state.image,
       instructTemplate: this.state.instructTemplate,
+      lorebooks: this.state.lorebooks,
       memory: this.state.memory,
       models: this.state.models,
       preferredModel: this.state.preferredModel,
@@ -825,37 +842,166 @@ class ConfigService
       this._injectEnvDefaults();
     }
 
+    const { text, connections = [], defaultConnectionId } = this.state;
+
+    // ── Priority 1: Default connection (C-230) ──────────────────────
+    if (defaultConnectionId) {
+      const conn = connections.find((c) => c.id === defaultConnectionId);
+      if (conn) {
+        return {
+          model: conn.model,
+          provider: conn.provider,
+          endpoint: conn.baseUrl || '',
+          apiKey: conn.apiKey || text.apiKeys[conn.provider] || '',
+        };
+      }
+    }
+
+    // ── Priority 2: First available connection ──────────────────────
+    if (connections.length > 0) {
+      const conn = connections[0];
+      return {
+        model: conn.model,
+        provider: conn.provider,
+        endpoint: conn.baseUrl || '',
+        apiKey: conn.apiKey || text.apiKeys[conn.provider] || '',
+      };
+    }
+
+    // ── Priority 3: Legacy provider config (no connections created) ──
+    const provider = text.provider;
     const { preferredModel, models } = this.state;
 
+    let endpoint = text.url ?? '';
     let model = preferredModel;
-    let provider = 'openrouter';
-    let endpoint = '';
 
-    if (model && models.length > 0) {
+    if (!model && models.length > 0) {
+      const match = models.find((m) => m.provider === provider);
+      if (match) {
+        model = match.model;
+        endpoint = endpoint || match.endpoint || '';
+      } else {
+        model = models[0].model;
+        endpoint = endpoint || models[0].endpoint || '';
+      }
+    }
+
+    if (model && !endpoint && models.length > 0) {
       const match = models.find((m) => m.model === model);
       if (match) {
-        provider = match.provider || 'openrouter';
         endpoint = match.endpoint || '';
       }
-    } else if (models.length > 0) {
-      model = models[0].model;
-      provider = models[0].provider || 'openrouter';
-      endpoint = models[0].endpoint || '';
+    }
+
+    if (!endpoint) {
+      if (provider === 'ollama') {
+        endpoint = 'http://localhost:11434/v1';
+      } else if (provider === 'ooba') {
+        endpoint = 'http://localhost:5000/v1';
+      }
     }
 
     if (!model) {
-      throw new Error(
-        'No text generation provider configured. ' +
-          'Open the Config dashboard or set PUBLIC_OPENROUTER_MODEL in your .env file.',
-      );
+      if (provider === 'ollama') {
+        model = 'llama3.2';
+      } else if (provider === 'openai') {
+        model = 'gpt-4o-mini';
+      } else if (provider === 'anthropic') {
+        model = 'claude-3-haiku-20240307';
+      } else if (provider === 'deepseek') {
+        model = 'deepseek-chat';
+      } else {
+        throw new Error(
+          'No text generation provider configured. ' +
+            'Create a Connection in Settings or set PUBLIC_OPENROUTER_MODEL in your .env file.',
+        );
+      }
     }
 
     return {
       model,
       provider,
       endpoint,
-      apiKey: this.state.text.apiKeys[this.state.text.provider],
+      apiKey: text.apiKeys[provider],
     };
+  }
+
+  // ── Private: connection seeding from env ──────────────────────────
+
+  /**
+   * Seeds connections from environment variables when no connections
+   * have been created yet. This provides a zero-config onboarding path
+   * while keeping Connections as the primary configuration surface.
+   */
+  private _seedConnectionsFromEnv(): void {
+    if (this.state.connections && this.state.connections.length > 0) {
+      return;
+    }
+
+    // Ensure connections array exists
+    if (!this.state.connections) {
+      this.state.connections = [];
+    }
+
+    const ollamaModel = this._readEnv('PUBLIC_OLLAMA_MODEL');
+    const ollamaUrl = this._readEnv('PUBLIC_OLLAMA_BASE_URL');
+    const openrouterModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
+    const openrouterKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
+    const now = new Date().toISOString();
+    const seeded: Connection[] = [];
+
+    // Seed Ollama connection from env
+    if (ollamaModel) {
+      seeded.push({
+        id: crypto.randomUUID(),
+        name: 'Ollama (local)',
+        provider: 'ollama',
+        apiKey: '',
+        baseUrl: ollamaUrl || 'http://localhost:11434/v1',
+        model: ollamaModel,
+        generationParams: {
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          repetitionPenalty: 1,
+          presencePenalty: 0,
+          maxTokens: 1024,
+          contextSize: 4096,
+        },
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    // Seed OpenRouter connection from env (only if no Ollama connection seeded)
+    if (openrouterModel && seeded.length === 0) {
+      seeded.push({
+        id: crypto.randomUUID(),
+        name: 'OpenRouter',
+        provider: 'openrouter',
+        apiKey: openrouterKey || '',
+        baseUrl: '',
+        model: openrouterModel,
+        generationParams: {
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          repetitionPenalty: 1,
+          presencePenalty: 0,
+          maxTokens: 1024,
+          contextSize: 4096,
+        },
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (seeded.length > 0) {
+      this.state.connections = seeded;
+      this.state.defaultConnectionId = seeded[0].id;
+    }
   }
 
   // ── Private: env helpers ─────────────────────────────────────────────
@@ -863,15 +1009,20 @@ class ConfigService
   /** Returns a fresh deep copy of the default state (no shared references). */
   private _makeDefaultState(): ConfigState {
     return {
+      activeLorebookIds: [],
       advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
       auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
+      connections: [],
+      defaultConnectionId: null,
       emotion: { ...DEFAULT_EMOTION_CONFIG },
       generationParams: { ...DEFAULT_GENERATION_PARAMS },
       image: { ...DEFAULT_IMAGE_CONFIG },
       instructTemplate: DEFAULT_TEMPLATE,
+      lorebooks: [],
       memory: { ...DEFAULT_MEMORY_CONFIG },
       models: [],
       preferredModel: '',
+      presets: [...BUILT_IN_PRESETS],
       text: { apiKeys: {}, provider: 'openrouter' },
       voice: { ...DEFAULT_VOICE_CONFIG },
     };
@@ -884,19 +1035,279 @@ class ConfigService
    * set — this ensures the key survives stale vaults and model-only saves.
    */
   private _injectEnvDefaults(): void {
-    const envModel = this._readEnv('PUBLIC_OPENROUTER_MODEL');
+    // Seed connections from env vars when none exist (zero-config onboarding)
+    this._seedConnectionsFromEnv();
+
+    // Inject OpenRouter API key from env (always available as fallback)
     const envKey = this._readEnv('PUBLIC_OPENROUTER_API_KEY');
-
-    if (!this.state.preferredModel && this.state.models.length === 0 && envModel) {
-      this.state.preferredModel = envModel;
-    }
-
     if (envKey && !this.state.text.apiKeys.openrouter) {
       this.state.text = {
         ...this.state.text,
         apiKeys: { ...this.state.text.apiKeys, openrouter: envKey },
       };
     }
+  }
+
+  // ── Connection management (C-230) ──────────────────────────────────
+
+  addConnection(connection: Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId {
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const newConnection: Connection = {
+      ...connection,
+      createdAt: now,
+      id,
+      updatedAt: now,
+    };
+
+    // If this is marked as default, clear previous default
+    if (newConnection.isDefault) {
+      this.state.connections = this.state.connections.map((c) =>
+        c.isDefault ? { ...c, isDefault: false } : c,
+      );
+      this.state.defaultConnectionId = id;
+    }
+
+    // If this is the first connection, make it default automatically
+    if (
+      this.state.connections.length === 0 &&
+      !newConnection.isDefault &&
+      this.state.defaultConnectionId === null
+    ) {
+      newConnection.isDefault = true;
+      this.state.defaultConnectionId = id;
+    }
+
+    this.state.connections = [...this.state.connections, newConnection];
+    return id;
+  }
+
+  updateConnection(id: ConnectionId, patch: Partial<Omit<Connection, 'id' | 'createdAt'>>): void {
+    this.state.connections = this.state.connections.map((c) => {
+      if (c.id !== id) {
+        return c;
+      }
+      const updated = { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() };
+
+      // Handle default switching
+      if (patch.isDefault && c.isDefault === false) {
+        // Clear previous default on other connections
+        this.state.connections = this.state.connections.map((oc) =>
+          oc.id !== id && oc.isDefault ? { ...oc, isDefault: false } : oc,
+        );
+        this.state.defaultConnectionId = id;
+      }
+
+      return updated;
+    });
+  }
+
+  deleteConnection(id: ConnectionId): void {
+    const filtered = this.state.connections.filter((c) => c.id !== id);
+    this.state.connections = filtered;
+
+    // If the deleted connection was the default, pick the first remaining
+    if (this.state.defaultConnectionId === id) {
+      if (filtered.length > 0) {
+        const newDefault = { ...filtered[0], isDefault: true };
+        this.state.connections = [newDefault, ...filtered.slice(1)];
+        this.state.defaultConnectionId = newDefault.id;
+      } else {
+        this.state.defaultConnectionId = null;
+      }
+    }
+  }
+
+  duplicateConnection(id: ConnectionId): ConnectionId | undefined {
+    const original = this.state.connections.find((c) => c.id === id);
+    if (!original) {
+      return undefined;
+    }
+
+    const now = new Date().toISOString();
+    const newId = crypto.randomUUID();
+    const copy: Connection = {
+      ...original,
+      createdAt: now,
+      id: newId,
+      isDefault: false,
+      name: `${original.name} (copy)`,
+      updatedAt: now,
+    };
+
+    this.state.connections = [...this.state.connections, copy];
+    return newId;
+  }
+
+  setDefaultConnection(id: ConnectionId): void {
+    this.state.connections = this.state.connections.map((c) => ({
+      ...c,
+      isDefault: c.id === id,
+    }));
+    this.state.defaultConnectionId = id;
+  }
+
+  getConnection(id: ConnectionId): Connection | undefined {
+    return this.state.connections.find((c) => c.id === id);
+  }
+
+  // ── Preset management (C-230) ─────────────────────────────────────
+
+  addPreset(preset: Omit<GenParamPreset, 'id' | 'isBuiltIn'>): string {
+    const id = `user-${crypto.randomUUID()}`;
+    const newPreset: GenParamPreset = {
+      ...preset,
+      id,
+      isBuiltIn: false,
+    };
+    this.state.presets = [...this.state.presets, newPreset];
+    return id;
+  }
+
+  deletePreset(id: string): void {
+    const preset = this.state.presets.find((p) => p.id === id);
+    if (!preset || preset.isBuiltIn) {
+      this.warn('deletePreset: cannot delete built-in or missing preset', { id });
+      return;
+    }
+    this.state.presets = this.state.presets.filter((p) => p.id !== id);
+  }
+
+  getPresets(): GenParamPreset[] {
+    return this.state.presets;
+  }
+
+  // ── Macro preset integration (C-237) ──────────────────────────────
+
+  loadMacroPresets(): void {
+    import('$lib/services/config/macro_preset_store.svelte').then((mod) => {
+      mod.macroPresetStore.loadPresets();
+      this.debug('loadMacroPresets:loaded', { count: mod.macroPresetStore.presets.length });
+    });
+  }
+
+  // ── Lorebook management (C-238) ──────────────────────────────────
+
+  addLorebook(options: { name: string; description: string }): string {
+    const { name, description } = options;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const lorebook: Lorebook = {
+      id,
+      name,
+      description,
+      entries: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.state.lorebooks = [...this.state.lorebooks, lorebook];
+    return id;
+  }
+
+  updateLorebook(options: {
+    id: string;
+    patch: Partial<Pick<Lorebook, 'name' | 'description'>>;
+  }): void {
+    const { id, patch } = options;
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== id) {
+        return lb;
+      }
+      return { ...lb, ...patch, updatedAt: new Date().toISOString() };
+    });
+  }
+
+  deleteLorebook(options: { id: string }): void {
+    const { id } = options;
+    this.state.lorebooks = this.state.lorebooks.filter((lb) => lb.id !== id);
+  }
+
+  getLorebooks(): Lorebook[] {
+    return this.state.lorebooks;
+  }
+
+  getLorebook(options: { id: string }): Lorebook | undefined {
+    const { id } = options;
+    return this.state.lorebooks.find((lb) => lb.id === id);
+  }
+
+  addEntry(options: {
+    lorebookId: string;
+    entry: Omit<LorebookEntry, 'id' | 'createdAt' | 'updatedAt'>;
+  }): string {
+    const { lorebookId, entry } = options;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const newEntry: LorebookEntry = { ...entry, id, createdAt: now, updatedAt: now };
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      return { ...lb, entries: [...lb.entries, newEntry], updatedAt: now };
+    });
+    return id;
+  }
+
+  updateEntry(options: {
+    lorebookId: string;
+    entryId: string;
+    patch: Partial<Omit<LorebookEntry, 'id' | 'createdAt' | 'lorebookId'>>;
+  }): void {
+    const { lorebookId, entryId, patch } = options;
+    const now = new Date().toISOString();
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      return {
+        ...lb,
+        entries: lb.entries.map((e) => {
+          if (e.id !== entryId) {
+            return e;
+          }
+          return { ...e, ...patch, updatedAt: now };
+        }),
+        updatedAt: now,
+      };
+    });
+  }
+
+  deleteEntry(options: { lorebookId: string; entryId: string }): void {
+    const { lorebookId, entryId } = options;
+    const now = new Date().toISOString();
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      return {
+        ...lb,
+        entries: lb.entries.filter((e) => e.id !== entryId),
+        updatedAt: now,
+      };
+    });
+  }
+
+  reorderEntries(options: { lorebookId: string; entryIds: string[] }): void {
+    const { lorebookId, entryIds } = options;
+    const now = new Date().toISOString();
+
+    this.state.lorebooks = this.state.lorebooks.map((lb) => {
+      if (lb.id !== lorebookId) {
+        return lb;
+      }
+      const entryMap = new Map(lb.entries.map((e) => [e.id, e]));
+      const reordered = entryIds
+        .map((id) => entryMap.get(id))
+        .filter((e): e is LorebookEntry => e !== undefined);
+      return { ...lb, entries: reordered, updatedAt: now };
+    });
+  }
+
+  setActiveLorebookIds(options: { ids: string[] }): void {
+    this.state.activeLorebookIds = options.ids;
   }
 
   /** Safely reads a Vite PUBLIC_* env var. Returns undefined in tests. */

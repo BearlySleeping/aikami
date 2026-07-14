@@ -87,7 +87,9 @@ export const VoiceGenerationResultSchema = Type.Object({
 export type VoiceGenerationResult = Type.Static<typeof VoiceGenerationResultSchema>;
 
 export type VoiceConfigData = Type.Static<typeof VoiceConfigSchema>;
+export type VoiceConfig = Type.Static<typeof VoiceConfigSchema>;
 export type GeneratedSpeechData = Type.Static<typeof GeneratedSpeechSchema>;
+export type GeneratedSpeech = Type.Static<typeof GeneratedSpeechSchema>;
 
 export type VoiceProviderInterface = {
   readonly name: string;

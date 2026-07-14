@@ -1,7 +1,8 @@
 /** biome-ignore-all lint/style/useNamingConvention: Character card format uses snake_case fields */
 // apps/frontend/client/src/lib/services/character/character-importer.ts
 
-import type { Character } from '@aikami/types';
+import { AIKAMI_PNG_CHUNK_KEYWORD } from '@aikami/constants';
+import type { AikamiCharacterCard, Character } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
 import { isV1Card, isV2Card } from './character_validator.ts';
@@ -80,6 +81,32 @@ const convertRisuAiToCharacter = (options: { data: any }): Character => {
 };
 
 /**
+ * Converts an AikamiCharacterCard (full D&D sheet) to the simpler Character
+ * card format used by the character import flow.
+ */
+const convertAikamiCardToCharacter = (options: { card: AikamiCharacterCard }): Character => {
+  const { card } = options;
+  const sheet = card.character;
+  return {
+    name: sheet.name || '',
+    description: sheet.background || '',
+    personality: sheet.personalityTraits || '',
+    scenario: '',
+    first_mes: '',
+    mes_example: '',
+    creator_notes: sheet.notes || '',
+    system_prompt: '',
+    post_history_instructions: '',
+    alternate_greetings: [],
+    tags: [],
+    creator: '',
+    character_version: '',
+    extensions: {},
+    avatarUrl: card.avatarUrl,
+  };
+};
+
+/**
  * Imports a character from a PNG file and optionally extracts its avatar.
  * @param options - Options containing the PNG file
  * @returns The parsed character and avatar file
@@ -99,6 +126,23 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
   const textChunks = extractTextChunks({ data: uint8Array });
 
   let character: Character | undefined;
+
+  // C-246: Detect Aikami character card (tEXt chunk with aikami_character keyword)
+  if (!character && textChunks[AIKAMI_PNG_CHUNK_KEYWORD]) {
+    try {
+      const card: AikamiCharacterCard = JSON.parse(textChunks[AIKAMI_PNG_CHUNK_KEYWORD]);
+      if (card.formatVersion && card.type && card.character?.name) {
+        character = convertAikamiCardToCharacter({ card });
+        logger.debug('character-importer', { message: 'aikami_character chunk parsed' });
+      }
+    } catch {
+      logger.debug('character-importer', { message: 'aikami_character chunk JSON parse failed' });
+      throw toAppError({
+        errorType: 'invalid-argument',
+        errorMessage: 'This card appears to be damaged. The character data could not be read.',
+      });
+    }
+  }
 
   if (textChunks.ccv3) {
     logger.debug('character-importer', { message: 'CCV3 chunk found, attempting parse' });
@@ -150,7 +194,21 @@ export const importFromJson = async (options: { file: File }): Promise<Character
 
   let character: Character | undefined;
 
-  if (isV2Card(json)) {
+  // C-246: Detect Aikami character card JSON format
+  const maybeCard = json as Partial<AikamiCharacterCard>;
+  if (maybeCard.formatVersion && maybeCard.type && maybeCard.character?.name) {
+    try {
+      character = convertAikamiCardToCharacter({ card: json as AikamiCharacterCard });
+      logger.debug('character-importer', { message: 'aikami.json card parsed' });
+    } catch {
+      throw toAppError({
+        errorType: 'invalid-argument',
+        errorMessage: 'This card appears to be damaged. The character data could not be read.',
+      });
+    }
+  }
+
+  if (!character && isV2Card(json)) {
     character = json.data as Character;
   } else if (isV1Card(json)) {
     character = convertV1ToV2({ data: json });
@@ -166,9 +224,15 @@ export const importFromJson = async (options: { file: File }): Promise<Character
   }
 
   let avatarFile: File | undefined;
+
+  // C-246: Extract avatar from Aikami card if available
+  if (maybeCard.avatarBase64?.startsWith('data:image')) {
+    avatarFile = await dataUriToFile({ dataUri: maybeCard.avatarBase64, fileName: 'avatar.png' });
+  }
+
   const avatarDataUri = (json as Record<string, unknown>).avatar as string | undefined;
 
-  if (avatarDataUri?.startsWith('data:image')) {
+  if (!avatarFile && avatarDataUri?.startsWith('data:image')) {
     avatarFile = await dataUriToFile({ dataUri: avatarDataUri, fileName: 'avatar.png' });
   }
 

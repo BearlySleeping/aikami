@@ -1,11 +1,11 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/error/AppErrorView.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import { getAppErrorViewModel } from './app_error_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/app/error/AppErrorView.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { getAppErrorViewModel } from './app_error_view_model.svelte.ts';
 
-  const viewModel = getAppErrorViewModel({
-    className: 'AppErrorViewModel',
-  });
+const viewModel = getAppErrorViewModel({
+  className: 'AppErrorViewModel',
+});
 </script>
 
 <BaseViewModelContainer {viewModel} class="hero min-h-screen bg-base-200">
@@ -24,6 +24,7 @@
             stroke="currentColor"
             stroke-width="2"
           >
+            <title>icon</title>
             <path stroke-linecap="round" stroke-linejoin="round" d={viewModel.currentError.icon} />
           </svg>
         </div>
@@ -37,7 +38,7 @@
 
       <!-- Actions -->
       <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
-        <button class="btn btn-primary" onclick={() => viewModel.handleRetry()}>
+        <button type="button" class="btn btn-primary" onclick={() => viewModel.handleRetry()}>
           {#if viewModel.errorType === "page-not-found"}
             Go Home
           {:else if viewModel.errorType === "access-denied"}
@@ -48,7 +49,9 @@
         </button>
 
         {#if viewModel.errorType !== "access-denied"}
-          <button class="btn btn-ghost" onclick={() => window.history.back()}>Go Back</button>
+          <button type="button" class="btn btn-ghost" onclick={() => window.history.back()}>
+            Go Back
+          </button>
         {/if}
       </div>
     </div>

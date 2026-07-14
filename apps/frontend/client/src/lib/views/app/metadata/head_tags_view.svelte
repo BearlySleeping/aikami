@@ -1,21 +1,21 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/app/metadata/HeadTagsView.svelte
-  import {
-    type BaseMetaTags,
-    getHeadTagsViewModel,
-    type HeadTagsViewModelInterface,
-  } from './head_tags_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/app/metadata/HeadTagsView.svelte
+import {
+  type BaseMetaTags,
+  getHeadTagsViewModel,
+  type HeadTagsViewModelInterface,
+} from './head_tags_view_model.svelte.ts';
 
-  type Props = {
-    data?: BaseMetaTags;
-    viewModel?: HeadTagsViewModelInterface;
-  };
+type Props = {
+  data?: BaseMetaTags;
+  viewModel?: HeadTagsViewModelInterface;
+};
 
-  let {
-    data,
-    // svelte-ignore state_referenced_locally
-    viewModel = getHeadTagsViewModel({ data, className: 'HeadTagsView' }),
-  }: Props = $props();
+let {
+  data,
+  // svelte-ignore state_referenced_locally
+  viewModel = getHeadTagsViewModel({ data, className: 'HeadTagsView' }),
+}: Props = $props();
 </script>
 
 <svelte:head>

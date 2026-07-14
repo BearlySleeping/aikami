@@ -17,6 +17,12 @@ export type BaseClassOptions = {
    * Defaults to checking the environment (enabled in DEV, disabled in PROD).
    */
   enableAutoDebug?: boolean;
+  /**
+   * Method names to exclude from auto-debug logging.
+   * Use this for methods called at high frequency (e.g. every game tick)
+   * where per-call debug spam would be overwhelming.
+   */
+  excludeAutoDebugMethods?: readonly string[];
 };
 
 export type BaseClassInterface = {
@@ -125,6 +131,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
           typeof descriptor.value === 'function' &&
           typeof propKey === 'string' &&
           !EXCLUDED_PROXY_METHODS.has(propKey) &&
+          !options.excludeAutoDebugMethods?.includes(propKey) &&
           !propKey.startsWith('_') &&
           !Object.hasOwn(instance, propKey) // Prevent double-wrapping if overridden
         ) {

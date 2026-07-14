@@ -9,6 +9,7 @@
 | **Priority** | P1 — Prevents flaky E2E tests caused by parallel data mutation in Firebase emulators |
 | **Dependencies** | C-182 |
 | **Status** | **completed** |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

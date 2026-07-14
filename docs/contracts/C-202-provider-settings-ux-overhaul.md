@@ -8,6 +8,7 @@
 | **Priority** | P1 — Dramatically improves user onboarding and model configuration UX |
 | **Dependencies** | ConfigService, ProvidersViewModel |
 | **Status** | completed |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

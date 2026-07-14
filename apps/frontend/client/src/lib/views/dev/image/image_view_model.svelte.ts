@@ -4,7 +4,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { type CheckpointInfo, imageGenerationService } from '$services';
+import type { ImageType } from '@aikami/types';
+import { compileImagePrompt } from '$lib/services/image/prompt_compiler';
+import { type CheckpointInfo, imageGenerationService, styleProfileService } from '$services';
 
 export type { CheckpointInfo };
 
@@ -108,6 +110,15 @@ export type ImageViewModelInterface = BaseViewModelInterface & {
   readonly results: readonly string[];
   cancel(): void;
 
+  // ── Style Profile Pipeline (C-242) ────────────────────────────────────
+  styleProfileId: string;
+  readonly styleProfiles: readonly { id: string; name: string; isBuiltIn: boolean }[];
+  imageType: ImageType;
+  readonly imageTypes: readonly ImageType[];
+  autoCompile: boolean;
+  readonly compiledTagsSummary: string;
+  compilePrompt(): void;
+
   // ── Image Gen tab ─────────────────────────────────────────────────────
   readonly prompt: string;
   readonly negativePrompt: string;
@@ -150,6 +161,19 @@ class ImageViewModel
 {
   // Tab state
   activeTab: ImageTab = $state('generate');
+
+  // ── Style Profile Pipeline (C-242) ───────────────────────────────────
+  autoCompile = $state(true);
+  imageType = $state<ImageType>('illustration');
+  private _compiledTagsSummary = $state('');
+
+  readonly imageTypes: readonly ImageType[] = [
+    'background',
+    'portrait',
+    'illustration',
+    'sprite',
+    'selfie',
+  ] as const;
 
   // Image Gen state
   prompt = $state('');
@@ -204,6 +228,45 @@ class ImageViewModel
     return EXPRESSIONS;
   }
 
+  // ── Pipeline getters/setters (C-242) ──────────────────────────────────
+
+  get styleProfiles(): readonly { id: string; name: string; isBuiltIn: boolean }[] {
+    return styleProfileService.profiles;
+  }
+
+  get styleProfileId(): string {
+    return styleProfileService.activeProfileId;
+  }
+
+  set styleProfileId(value: string) {
+    styleProfileService.setActiveProfile(value);
+  }
+
+  get compiledTagsSummary(): string {
+    return this._compiledTagsSummary;
+  }
+
+  /** Compiles the current prompt through the active style profile pipeline. */
+  compilePrompt(): void {
+    const profile = styleProfileService.activeProfile;
+    if (!profile) {
+      return;
+    }
+
+    const compiled = compileImagePrompt({
+      basePrompt: this.prompt,
+      profile,
+      imageType: this.imageType,
+    });
+
+    this.prompt = compiled.positive;
+    this.negativePrompt = compiled.negative;
+
+    this._compiledTagsSummary =
+      `${profile.name} / ${this.imageType} — ` +
+      `Pos: ${compiled.positive.length} chars, Neg: ${compiled.negative.length} chars`;
+  }
+
   // ── Public: navigation ────────────────────────────────────────────────
 
   setActiveTab(tab: ImageTab): void {
@@ -249,6 +312,11 @@ class ImageViewModel
   async generate(): Promise<void> {
     if (!this.prompt.trim()) {
       return;
+    }
+
+    // Auto-compile through style profile pipeline if enabled (C-242)
+    if (this.autoCompile) {
+      this.compilePrompt();
     }
 
     this.cancel();
@@ -448,6 +516,7 @@ class ImageViewModel
     const queueResponse = await fetch('/api/image/prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       body: JSON.stringify({ client_id: `aikami-dev-${Date.now()}`, prompt: workflow }),
       signal,
     });
@@ -457,6 +526,7 @@ class ImageViewModel
       throw new Error(`ComfyUI API error (${queueResponse.status}): ${errText.slice(0, 200)}`);
     }
 
+    // biome-ignore lint/style/useNamingConvention: API contract field name
     const { prompt_id: promptId } = (await queueResponse.json()) as { prompt_id: string };
 
     this.generationStatus = 'Generating...';
@@ -527,25 +597,34 @@ class ImageViewModel
 
     return {
       '3': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'KSampler',
         inputs: {
           seed,
           steps,
           cfg,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           sampler_name: sampler,
           scheduler,
           denoise: 1,
           model: ['4', 0],
           positive: ['6', 0],
           negative: ['7', 0],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           latent_image: ['5', 0],
         },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '5': { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] } },
     };
   }
@@ -578,26 +657,36 @@ class ImageViewModel
 
     return {
       '3': {
+        // biome-ignore lint/style/useNamingConvention: API contract field name
         class_type: 'KSampler',
         inputs: {
           seed,
           steps,
           cfg,
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           sampler_name: sampler,
           scheduler,
           denoise,
           model: ['4', 0],
           positive: ['6', 0],
           negative: ['7', 0],
+          // biome-ignore lint/style/useNamingConvention: API contract field name
           latent_image: ['11', 0],
         },
       },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: ckptName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '7': { class_type: 'CLIPTextEncode', inputs: { text: negative, clip: ['4', 1] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'aikami-dev', images: ['8', 0] } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '10': { class_type: 'LoadImage', inputs: { image: imageName } },
+      // biome-ignore lint/style/useNamingConvention: API contract field name
       '11': { class_type: 'VAEEncode', inputs: { pixels: ['10', 0], vae: ['4', 2] } },
     };
   }

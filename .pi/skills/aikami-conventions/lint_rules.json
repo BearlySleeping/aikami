@@ -1,0 +1,382 @@
+{
+  "$schema": "./lint_rules.schema.json",
+  "version": "1.0.0",
+  "description": "Structured AST configuration matrix for the convention gate (C-304 Tier 1). Each rule maps to a deterministic check that runs without LLM invocation.",
+  "rules": [
+    {
+      "id": "SRC-001",
+      "name": "File Path Comment",
+      "category": "file-structure",
+      "severity": "error",
+      "description": "Every source file must include its relative path from the monorepo root as a comment on line 1.",
+      "treeSitterQuery": "(comment) @first-line",
+      "biomeRule": "useFilenamingConvention",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "line": 1,
+          "regex": "^\\/\\/\\s+(apps|packages|scripts|config)\\/(frontend|backend|shared)\\/.+\\.[jt]sx?$"
+        },
+        {
+          "fileGlob": "**/*.svelte",
+          "line": 2,
+          "regex": "^\\s*\\/\\/\\s+(apps|packages|scripts|config)\\/(frontend|backend|shared)\\/.+\\.[jt]sx?$"
+        }
+      ]
+    },
+    {
+      "id": "SRC-002",
+      "name": "Snake Case File Names",
+      "category": "file-structure",
+      "severity": "error",
+      "description": "All source files must use snake_case naming. Enforced by Biome useFilenamingConvention.",
+      "biomeRule": "useFilenamingConvention",
+      "patterns": [
+        {
+          "fileGlob": "**/*",
+          "regex": "^[a-z][a-z0-9]*(_[a-z0-9]+)*(\\.[a-z]+)*(\\.[jt]sx?|\\.[jt]s|\\.[jt]sx|.svelte)$",
+          "excludePatterns": [
+            "^\\.(gitkeep|gitignore|env|json|yml|yaml|cjs|mjs)$",
+            "^README\\.",
+            "^LICENSE\\.",
+            "^CHANGELOG\\.",
+            "^package\\.json$"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "RTE-001",
+      "name": "Route Boundary — No Server Routes",
+      "category": "route-boundary",
+      "severity": "error",
+      "description": "The client is a static SPA. +server.ts, +page.server.ts, and +layout.server.ts files must NOT exist under apps/frontend/client/src/routes/.",
+      "patterns": [
+        {
+          "fileGlob": "apps/frontend/client/src/routes/**/+server.ts",
+          "forbidden": true,
+          "message": "🔴 SPA boundary violation: +server.ts files are forbidden in client routes"
+        },
+        {
+          "fileGlob": "apps/frontend/client/src/routes/**/+page.server.ts",
+          "forbidden": true,
+          "message": "🔴 SPA boundary violation: +page.server.ts files are forbidden in client routes"
+        },
+        {
+          "fileGlob": "apps/frontend/client/src/routes/**/+layout.server.ts",
+          "forbidden": true,
+          "message": "🔴 SPA boundary violation: +layout.server.ts files are forbidden in client routes"
+        }
+      ]
+    },
+    {
+      "id": "SIG-001",
+      "name": "Options Object Signature",
+      "category": "function-signature",
+      "severity": "error",
+      "description": "Functions with more than 1 argument must use an options object pattern. Exception: class constructors and method overrides.",
+      "treeSitterQuery": "(function_declaration parameters: (formal_parameters (required_parameter) @p1 (required_parameter) @p2))",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "export\\s+(const|function)\\s+\\w+\\s*[=]?\\s*[<(][^)]*,[^)]*[>)]",
+          "message": "🔴 Function has >1 positional argument — must use options object"
+        }
+      ]
+    },
+    {
+      "id": "CLS-001",
+      "name": "Private Field Underscore Prefix",
+      "category": "class-structure",
+      "severity": "error",
+      "description": "All private class members must use a leading underscore (_) prefix. Exception: $state ViewModel fields.",
+      "treeSitterQuery": "(class_body (method_definition [(private_property_identifier) (property_identifier)] @private-name))",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "private\\s+(?!\\$)\\w+\\s*[:(=]",
+          "excludePatterns": ["private\\s+_.*", "private\\s+\\$"],
+          "message": "🔴 Private member lacks _ prefix — required by aikami-conventions"
+        }
+      ]
+    },
+    {
+      "id": "IMP-001",
+      "name": "Import from Package Root",
+      "category": "imports",
+      "severity": "error",
+      "description": "Never import from lib/ sub-paths of shared packages. Always import from the package root (maps to src/index.ts).",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "from\\s+['\"]@aikami\\/[a-z-]+\\/lib\\/",
+          "message": "🔴 Import from lib/ sub-path — use package root import instead"
+        }
+      ]
+    },
+    {
+      "id": "IMP-002",
+      "name": "Logger Alias Enforcement",
+      "category": "imports",
+      "severity": "error",
+      "description": "Always import logger from $logger alias, never from @aikami/logger directly.",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "from\\s+['\"]@aikami/logger['\"]",
+          "excludePatterns": ["from\\s+['\"]\\$logger['\"]"],
+          "message": "🔴 Import from @aikami/logger — use $logger alias instead"
+        }
+      ]
+    },
+    {
+      "id": "IMP-003",
+      "name": "Type Import — No Inline import()",
+      "category": "imports",
+      "severity": "error",
+      "description": "Type references must use top-level import type statements, never inline import() expressions.",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": ":\\s*import\\(['\"](@aikami|\\$)",
+          "message": "🔴 Inline import() type — use top-level import type instead"
+        }
+      ]
+    },
+    {
+      "id": "VEW-001",
+      "name": "ViewModel Separation",
+      "category": "svelte-view",
+      "severity": "error",
+      "description": "Svelte views (.svelte) must not contain data transformation, logic, or state. All logic belongs in the ViewModel.",
+      "patterns": [
+        {
+          "fileGlob": "**/+page.svelte",
+          "regex": "\\$(?:derived|effect|state)\\(",
+          "excludePatterns": ["viewModel\\.\\$"],
+          "message": "⚠️ View contains $state/$derived/$effect — move to ViewModel"
+        },
+        {
+          "fileGlob": "**/routes/**/*.svelte",
+          "regex": "import\\s+\\{[^}]*\\}\\s+from\\s+['\"]\\$lib\\/services",
+          "message": "⚠️ View imports from $lib/services — delegate to ViewModel"
+        }
+      ]
+    },
+    {
+      "id": "VEW-002",
+      "name": "ViewModel Factory Export",
+      "category": "svelte-view",
+      "severity": "error",
+      "description": "ViewModels must be exported via a factory function (getXxxViewModel), never as raw classes.",
+      "patterns": [
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "export\\s+class\\s+\\w+ViewModel",
+          "requireAlso": "export\\s+const\\s+get\\w+ViewModel",
+          "message": "⚠️ ViewModel exported as raw class — use factory function pattern"
+        }
+      ]
+    },
+    {
+      "id": "TYP-001",
+      "name": "No any Type",
+      "category": "typescript",
+      "severity": "error",
+      "description": "Never use the any type. Use unknown with type guards instead. Enforced by Biome noExplicitAny.",
+      "biomeRule": "noExplicitAny"
+    },
+    {
+      "id": "TYP-002",
+      "name": "No null Usage",
+      "category": "typescript",
+      "severity": "warning",
+      "description": "Use undefined instead of null everywhere in the codebase.",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "\\bnull\\b(?!\\s*[;:,)\\]}])",
+          "excludePatterns": [
+            "\\bnull\\s*\\?\\.",
+            "\\bnull\\s*!",
+            "\\bnull\\s*\\|\\|",
+            "\\bnull\\s*\\?\\?"
+          ],
+          "message": "⚠️ null usage — prefer undefined"
+        }
+      ]
+    },
+    {
+      "id": "EXP-001",
+      "name": "No Type/Schema in Service Files",
+      "category": "exports",
+      "severity": "error",
+      "description": "Service files must not export data, types, or schemas. These belong in dedicated packages.",
+      "patterns": [
+        {
+          "fileGlob": "**/services/**/*.svelte.ts",
+          "regex": "export\\s+(type|const|enum)\\s+\\w+",
+          "excludePatterns": ["export\\s+type\\s+\\w+Interface", "export\\s+type\\s+\\w+Options"],
+          "message": "🔴 Data/type/schema exported from service file — move to shared package"
+        }
+      ]
+    },
+    {
+      "id": "ARC-001",
+      "name": "No Server Routes in SPA",
+      "category": "architecture",
+      "severity": "error",
+      "description": "The SvelteKit client must not contain server-side routes or endpoints. All data fetching is client-side.",
+      "biomeRule": "noRestrictedImports",
+      "patterns": [
+        {
+          "fileGlob": "apps/frontend/client/src/routes/**/*.ts",
+          "regex": "export\\s+(async\\s+)?(function|const)\\s+(GET|POST|PUT|DELETE|PATCH)\\b",
+          "message": "🔴 Server endpoint in SPA — use client-side data fetching"
+        }
+      ]
+    },
+    {
+      "id": "ARC-002",
+      "name": "No Raw Dictionaries in ViewModels",
+      "category": "architecture",
+      "severity": "error",
+      "description": "ViewModels must not declare raw translation dictionaries or constant lookup tables. These belong in packages/shared/constants/.",
+      "patterns": [
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "(?:const|let)\\s+\\w*(?:PHASE|LABEL|LABELS|DICT|DICTIONARY|TRANSLATION|STRINGS)\\w*\\s*(?::\\s*[^=]+)?=\\s*\\{",
+          "message": "🔴 Raw label dictionary in ViewModel — extract to packages/shared/constants/"
+        },
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "private\\s+static\\s+readonly\\s+_(?:PHASE_|LABEL|LABELS|STRINGS)",
+          "message": "🔴 Static label dictionary in ViewModel — extract to packages/shared/constants/"
+        }
+      ]
+    },
+    {
+      "id": "ARC-003",
+      "name": "No TypeBox Outside Schemas Package",
+      "category": "architecture",
+      "severity": "error",
+      "description": "TypeBox imports and Type.* declarations are forbidden outside packages/shared/schemas/ and test files. Schemas are the single source of truth — they live in one place only.",
+      "patterns": [
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "Type\\.(Object|Array|String|Number|Boolean|Union|Intersect|Partial|Omit|Pick|Record|Ref|Optional|Nullable|Enum|Literal|Tuple|Any|Unknown)",
+          "excludePatterns": [
+            "packages/shared/schemas/",
+            "\\.test\\.ts$",
+            "\\.spec\\.ts$",
+            "__tests__/"
+          ],
+          "message": "🔴 TypeBox schema outside packages/shared/schemas/ — move schema to shared package"
+        },
+        {
+          "fileGlob": "**/*.svelte.ts",
+          "regex": "Type\\.(Object|Array|String|Number|Boolean|Union|Intersect|Partial|Omit|Pick|Record|Ref|Optional|Nullable|Enum|Literal|Tuple|Any|Unknown)",
+          "excludePatterns": ["packages/shared/schemas/", "\\.test\\.svelte\\.ts$"],
+          "message": "🔴 TypeBox schema in ViewModel — move to packages/shared/schemas/"
+        },
+        {
+          "fileGlob": "**/*.svelte",
+          "regex": "Type\\.(Object|Array|String|Number|Boolean|Union|Intersect|Partial|Omit|Pick|Record|Ref|Optional|Nullable|Enum|Literal|Tuple|Any|Unknown)",
+          "message": "🔴 TypeBox schema in Svelte view — schemas belong in packages/shared/schemas/"
+        },
+        {
+          "fileGlob": "**/*.ts",
+          "regex": "from\\s+['\"]@sinclair/typebox['\"]",
+          "excludePatterns": [
+            "packages/shared/schemas/",
+            "packages/shared/types/",
+            "\\.test\\.ts$",
+            "\\.spec\\.ts$",
+            "__tests__/"
+          ],
+          "message": "🔴 @sinclair/typebox import outside schemas/types package — schemas belong in packages/shared/schemas/"
+        }
+      ]
+    },
+    {
+      "id": "ARC-004",
+      "name": "No PixiJS Import in ViewModels",
+      "category": "architecture",
+      "severity": "error",
+      "description": "ViewModels must never import pixi.js or hook into the game ticker. Use EngineBridge for all game communication.",
+      "patterns": [
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "from\\s+['\"](?:pixi\\.js|@pixi\\/",
+          "excludePatterns": ["views/dev/lpc/lpc_view_model"],
+          "message": "🔴 pixi.js import in ViewModel — use EngineBridge, never app.ticker directly"
+        },
+        {
+          "fileGlob": "**/*.svelte",
+          "regex": "from\\s+['\"](?:pixi\\.js|@pixi\\/",
+          "excludePatterns": ["views/dev/lpc/"],
+          "message": "🔴 pixi.js import in Svelte view — game rendering belongs in engine package"
+        },
+        {
+          "fileGlob": "**/**_view_model.svelte.ts",
+          "regex": "app\\.ticker\\.add",
+          "excludePatterns": ["views/dev/lpc/lpc_view_model"],
+          "message": "🔴 app.ticker.add() in ViewModel — ticker ownership belongs to packages/frontend/engine/"
+        }
+      ]
+    },
+    {
+      "id": "ARC-005",
+      "name": "No Duplicate Types from TypeBox Schemas",
+      "category": "architecture",
+      "severity": "error",
+      "description": "Types in packages/shared/types/ must derive from TypeBox schemas via Static<typeof Schema>. Never duplicate interfaces manually.",
+      "patterns": [
+        {
+          "fileGlob": "packages/shared/types/src/**/*.ts",
+          "regex": "export\\s+type\\s+\\w+\\s*=\\s*\\{[^}]+\\}(?!.*Static)",
+          "excludePatterns": ["Static<typeof"],
+          "message": "⚠️ Raw type definition in shared/types — derive from TypeBox schema via Static<typeof Schema> instead"
+        }
+      ]
+    },
+    {
+      "id": "NAM-001",
+      "name": "No Abbreviations in Shared Packages",
+      "category": "naming",
+      "severity": "warning",
+      "description": "Shared packages must use fully-spelled identifiers, never abbreviations. Exceptions: well-known acronyms (URL, API, ID, HTML, CSS, JSON, HTTP).",
+      "patterns": [
+        {
+          "fileGlob": "packages/shared/**/*.ts",
+          "regex": "\\b(?:ctx|opts|pkg|fn|cfg|msg|err|svc|mgr|btn|tbl|req|resp|val|param|args|prev|curr|tmp)\\b(?!['\"`])",
+          "excludePatterns": ["(?:ctx|opts|pkg)['\"`]"],
+          "message": "⚠️ Abbreviation in shared package — use full word (context not ctx, options not opts, function not fn, config not cfg, etc.)"
+        }
+      ]
+    }
+  ],
+  "tier2": {
+    "description": "LLM Cognitive Review Pass — only invoked after Tier 1 passes.",
+    "checks": [
+      {
+        "id": "LLM-001",
+        "name": "View State Audit",
+        "prompt": "Audit Svelte views for logic violations: state definitions, derived computations, data transformations, and service imports inside .svelte files.",
+        "failOn": "Any view contains $state, $derived, data transformation, or service imports"
+      },
+      {
+        "id": "LLM-002",
+        "name": "ViewModel Boundary Audit",
+        "prompt": "Audit ViewModels for boundary violations: direct database references, repository imports, or API calls that should be delegated to services.",
+        "failOn": "ViewModel imports from repositories, database layers, or makes direct API/firebase calls"
+      },
+      {
+        "id": "LLM-003",
+        "name": "AST Structure Skeleton Review",
+        "prompt": "Review the provided AST-outline skeleton + unified patch delta for logical violations. Only type declarations and structural outlines are provided.",
+        "failOn": "Structural regression, removed security guards, or convention violations visible in type skeleton"
+      }
+    ]
+  }
+}

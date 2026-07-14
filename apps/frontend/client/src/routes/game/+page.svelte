@@ -1,14 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/game/+page.svelte
-  import GameView from '$lib/views/game/canvas/game_view.svelte';
-  import { GameViewModel } from '$lib/views/game/canvas/game_view_model.svelte';
-  import { GameUIViewModel } from '$lib/views/game/ui/game_ui_view_model.svelte';
+// apps/frontend/client/src/routes/game/+page.svelte
+//
+// Production /game route. The GameViewModel owns the composition root
+// lifecycle and all sub-ViewModels. The View is a pure shell.
+//
+// Contract: C-314 — Production game composition root
 
-  const viewModel = new GameViewModel({ className: 'GameViewModel' });
-  const gameUIViewModel = new GameUIViewModel({
-    className: 'GameUIViewModel',
-    gameViewModel: viewModel,
-  });
+import GameView from '$lib/views/game/game_view.svelte';
+import { getGameViewModel } from '$lib/views/game/game_view_model.svelte';
+
+const viewModel = getGameViewModel({ className: 'GameViewModel' });
 </script>
 
-<GameView {viewModel} {gameUIViewModel} />
+<GameView {viewModel} />

@@ -19,4 +19,4 @@ These files were consolidated from the root-level `docs/` directory:
 | `STACK.md` | Technology stack reference |
 | `STRUCTURE.md` | Monorepo structure reference |
 | `TESTING.md` | Testing strategy and tools |
-| `TODO.md` | Project TODO and backlog |
+| [`../TODO.md`](../TODO.md) | Canonical project backlog (the local `TODO.md` is a compatibility pointer) |

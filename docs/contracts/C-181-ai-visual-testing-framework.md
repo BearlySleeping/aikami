@@ -9,6 +9,7 @@
 | **Priority** | P1 — Dramatically reduces flakiness, AI costs, and developer friction for visual validation |
 | **Dependencies** | `@playwright/test`, `typebox`, `@aikami/constants` |
 | **Status** | **completed** |
+| **Promotion** | integrated |
 | **Contract version** | 1.0.0 |
 
 ## Overview

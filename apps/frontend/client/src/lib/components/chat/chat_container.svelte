@@ -1,55 +1,55 @@
 <script lang="ts">
-  import type { ChatMessage as ChatMessageType } from '$lib/services/chat/chat.svelte.ts';
-  import ChatInput from './chat_input.svelte';
-  import ChatMessage from './chat_message.svelte';
-  import TypingIndicator from './typing_indicator.svelte';
+import type { ChatMessage as ChatMessageType } from '$lib/services/chat/chat.svelte.ts';
+import ChatInput from './chat_input.svelte';
+import ChatMessage from './chat_message.svelte';
+import TypingIndicator from './typing_indicator.svelte';
 
-  /**
-   * Props for the ChatContainer component.
-   * Main chat interface that displays messages and provides input.
-   */
-  type Props = {
-    /** Array of chat messages to display */
-    messages: ChatMessageType[];
-    /** Whether messages are currently loading */
-    isLoading?: boolean;
-    /** Whether a message is currently being sent */
-    isSending?: boolean;
-    /** Whether the AI is typing (show typing indicator) */
-    isTyping?: boolean;
-    /** Callback function when user sends a message */
-    onSend: (message: string) => void;
-    /** Optional title to display above chat */
-    title?: string;
-    /** Name of the character being chatted with */
-    characterName?: string;
-    /** Avatar URL of the character being chatted with */
-    characterAvatarUrl?: string;
-  };
+/**
+ * Props for the ChatContainer component.
+ * Main chat interface that displays messages and provides input.
+ */
+type Props = {
+  /** Array of chat messages to display */
+  messages: ChatMessageType[];
+  /** Whether messages are currently loading */
+  isLoading?: boolean;
+  /** Whether a message is currently being sent */
+  isSending?: boolean;
+  /** Whether the AI is typing (show typing indicator) */
+  isTyping?: boolean;
+  /** Callback function when user sends a message */
+  onSend: (message: string) => void;
+  /** Optional title to display above chat */
+  title?: string;
+  /** Name of the character being chatted with */
+  characterName?: string;
+  /** Avatar URL of the character being chatted with */
+  characterAvatarUrl?: string;
+};
 
-  let {
-    messages,
-    isLoading = false,
-    isSending = false,
-    isTyping = false,
-    onSend,
-    title = 'Chat',
-    characterName = 'AI',
-    characterAvatarUrl,
-  }: Props = $props();
+let {
+  messages,
+  isLoading = false,
+  isSending = false,
+  isTyping = false,
+  onSend,
+  title = 'Chat',
+  characterName = 'AI',
+  characterAvatarUrl,
+}: Props = $props();
 
-  let message = $state('');
-  let messagesContainer: HTMLDivElement;
+let message = $state('');
+let messagesContainer: HTMLDivElement;
 
-  $effect(() => {
-    if (messages.length > 0 && messagesContainer) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-  });
-
-  function _handleSend(msg: string) {
-    onSend(msg);
+$effect(() => {
+  if (messages.length > 0 && messagesContainer) {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
+});
+
+function _handleSend(msg: string) {
+  onSend(msg);
+}
 </script>
 
 <div class="flex flex-col h-full">

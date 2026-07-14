@@ -5,6 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     playwright-flake.url = "github:pietdevries94/playwright-web-flake";
+    herdr.url = "github:ogulcancelik/herdr";
   };
 
   outputs = {
@@ -13,6 +14,7 @@
     nixpkgs,
     flake-utils,
     playwright-flake,
+    herdr,
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       overlay = final: prev: {
@@ -22,6 +24,7 @@
         inherit system;
         overlays = [overlay];
       };
+      herdr-pkg = herdr.packages.${system}.default or herdr.packages.${system}.herdr;
 
       # ----------------------------------------------------------------------
       # Chromium wrapper with PixiJS DevTools extension injection.
@@ -79,8 +82,13 @@
           direnv
           nix-direnv
 
+          # Herdr — terminal-native agent multiplexer
+          herdr-pkg
+
           python3
           git-filter-repo
+          jujutsu
+          gh
 
           # Chromium wrapped with PixiJS DevTools extension support
           chromium-pixi-devtools

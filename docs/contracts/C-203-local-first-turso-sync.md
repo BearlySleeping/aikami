@@ -9,6 +9,7 @@
 | **Priority** | P1 — Foundational for offline capabilities and Tauri performance |
 | **Dependencies** | Firebase Configs, Engine ECS |
 | **Status** | completed |
+| **Promotion** | sandbox |
 | **Contract version** | 1.0.0 |
 
 ## Overview

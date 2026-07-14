@@ -3,16 +3,16 @@
 </div>
 
 <style>
-  .delayed-loader {
-    /* Start completely invisible */
-    opacity: 0;
-    /* Fade in over 200ms, but WAIT 250ms before starting */
-    animation: fadeIn 0.2s ease-in forwards 250ms;
-  }
+.delayed-loader {
+  /* Start completely invisible */
+  opacity: 0;
+  /* Fade in over 200ms, but WAIT 250ms before starting */
+  animation: fadeIn 0.2s ease-in forwards 250ms;
+}
 
-  @keyframes fadeIn {
-    to {
-      opacity: 1;
-    }
+@keyframes fadeIn {
+  to {
+    opacity: 1;
   }
+}
 </style>

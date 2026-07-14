@@ -1,21 +1,21 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/combat/components/combat_gallery.svelte
-  //
-  // Encounter gallery — masonry grid of all AI-generated images produced
-  // during the current combat encounter. Replaces the single-image preview
-  // in the Gallery tab when the sidebar toggles from Log to Gallery.
-  //
-  // Contract: C-165 Combat Inline Images & Gallery
+// apps/frontend/client/src/lib/views/combat/components/combat_gallery.svelte
+//
+// Encounter gallery — masonry grid of all AI-generated images produced
+// during the current combat encounter. Replaces the single-image preview
+// in the Gallery tab when the sidebar toggles from Log to Gallery.
+//
+// Contract: C-165 Combat Inline Images & Gallery
 
-  type Props = {
-    /** All generated image URLs for this encounter (most recent first). */
-    images: readonly string[];
-  };
+type Props = {
+  /** All generated image URLs for this encounter (most recent first). */
+  images: readonly string[];
+};
 
-  const { images }: Props = $props();
+const { images }: Props = $props();
 
-  /** Which image is currently expanded fullscreen. */
-  let expandedUrl = $state<string | null>(null);
+/** Which image is currently expanded fullscreen. */
+let expandedUrl = $state<string | null>(null);
 </script>
 
 {#if images.length === 0}
@@ -30,6 +30,7 @@
   <div class="columns-2 gap-2 px-2">
     {#each images as url (url)}
       <button
+        type="button"
         class="mb-2 break-inside-avoid rounded-lg overflow-hidden border border-base-300 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all w-full text-left bg-transparent p-0"
         onclick={() => (expandedUrl = url)}
       >
@@ -40,7 +41,6 @@
 
   <!-- Fullscreen expand modal -->
   {#if expandedUrl}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onclick={() => (expandedUrl = null)}
@@ -50,6 +50,7 @@
       tabindex="-1"
     >
       <button
+        type="button"
         class="absolute top-4 right-4 btn btn-sm btn-ghost text-white text-xl"
         onclick={() => (expandedUrl = null)}
       >

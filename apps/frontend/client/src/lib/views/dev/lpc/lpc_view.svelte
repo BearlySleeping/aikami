@@ -1,15 +1,15 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-  import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
-  import type { LpcViewModelInterface } from './lpc_view_model.svelte.ts';
+// apps/frontend/client/src/lib/views/dev/lpc/lpc_view.svelte
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import LpcCharacterRenderer from '$lib/components/game/lpc_character_renderer.svelte';
+import type { LpcViewModelInterface } from './lpc_view_model.svelte.ts';
 
-  type Props = {
-    viewModel: LpcViewModelInterface;
-  };
+type Props = {
+  viewModel: LpcViewModelInterface;
+};
 
-  let { viewModel }: Props = $props();
-  let showControls = $state(true);
+let { viewModel }: Props = $props();
+let showControls = $state(true);
 </script>
 
 <svelte:head>
@@ -27,8 +27,8 @@
         id="game-canvas"
         bind:this={viewModel.canvasElement}
         class="block [image-rendering:pixelated]"
-        width={viewModel.CANVAS_WIDTH}
-        height={viewModel.CANVAS_HEIGHT}
+        width={viewModel.canvasWidth}
+        height={viewModel.canvasHeight}
       ></canvas>
     </div>
   {:else}
@@ -43,6 +43,7 @@
         >
           <span class="flex-1">{viewModel.statusBanner.message}</span>
           <button
+            type="button"
             class="btn btn-ghost btn-xs opacity-70 hover:opacity-100"
             onclick={() => viewModel.clearStatus()}
             aria-label="Dismiss notification"
@@ -60,12 +61,14 @@
         <div class="flex-1 flex items-center justify-center relative overflow-hidden min-h-0">
           <div class="absolute top-2 right-2 flex gap-2 z-10">
             <button
+              type="button"
               class="btn btn-sm btn-ghost bg-base-100/50 hover:bg-base-100"
               onclick={() => showControls = !showControls}
             >
               {showControls ? 'Hide Controls' : 'Show Controls'}
             </button>
             <button
+              type="button"
               class="btn btn-sm btn-ghost bg-base-100/50 hover:bg-base-100"
               onclick={() => {
               if (document.fullscreenElement) { document.exitFullscreen(); }
@@ -80,8 +83,8 @@
             id="game-canvas"
             bind:this={viewModel.canvasElement}
             class="block max-w-full max-h-full rounded-sm"
-            width={viewModel.CANVAS_WIDTH}
-            height={viewModel.CANVAS_HEIGHT}
+            width={viewModel.canvasWidth}
+            height={viewModel.canvasHeight}
           ></canvas>
 
           <!-- UBO data management (invisible) -->
@@ -90,8 +93,8 @@
             aria-hidden="true"
           >
             <LpcCharacterRenderer
-              x={viewModel.ENTITY_X}
-              y={viewModel.ENTITY_Y}
+              x={viewModel.entityX}
+              y={viewModel.entityY}
               state={viewModel.animationState}
               direction={viewModel.facingDirection}
               frame={viewModel.animationFrame}
@@ -246,7 +249,7 @@
             </h2>
             <span class="text-xs text-base-content/40 tabular-nums"
               >{viewModel.activeLayers.length}
-              / {viewModel.MAX_LAYERS} layers</span
+              / {viewModel.maxLayers} layers</span
             >
           </div>
 
@@ -300,6 +303,7 @@
 
               <div class="flex gap-1.5 items-center">
                 <button
+                  type="button"
                   class="btn btn-sm flex-1"
                   class:btn-success={!viewModel.isPlaying}
                   class:btn-warning={viewModel.isPlaying}
@@ -310,6 +314,7 @@
                 </button>
 
                 <button
+                  type="button"
                   class="btn btn-ghost btn-sm flex-1"
                   onclick={() => viewModel.stepPrev()}
                   disabled={viewModel.isPlaying}
@@ -319,6 +324,7 @@
                 </button>
 
                 <button
+                  type="button"
                   class="btn btn-ghost btn-sm flex-1"
                   onclick={() => viewModel.stepNext()}
                   disabled={viewModel.isPlaying}
@@ -395,6 +401,7 @@
               </span>
               {#if viewModel.globalTint}
                 <button
+                  type="button"
                   class="btn btn-ghost btn-xs text-[0.65rem]"
                   onclick={() => viewModel.setGlobalTint('')}
                 >
@@ -458,6 +465,7 @@
                     <span class="badge badge-error badge-xs uppercase">hidden</span>
                   {/if}
                   <button
+                    type="button"
                     class="btn btn-ghost btn-xs"
                     onclick={() => viewModel.removeLayer(i)}
                     aria-label="Remove layer {i}"
@@ -519,6 +527,7 @@
                       </span>
                       {#if viewModel.paletteColors[i]}
                         <button
+                          type="button"
                           class="btn btn-ghost btn-xs text-[0.65rem]"
                           onclick={() => viewModel.setLayerColor(i, '')}
                         >
@@ -526,6 +535,7 @@
                         </button>
                       {/if}
                       <button
+                        type="button"
                         class="btn btn-ghost btn-xs text-[0.65rem] text-warning"
                         onclick={() => viewModel.toggleLayerOverride(i)}
                       >
@@ -537,6 +547,7 @@
                         {viewModel.globalTint || 'none'}
                       </span>
                       <button
+                        type="button"
                         class="btn btn-outline btn-xs text-[0.65rem]"
                         onclick={() => viewModel.toggleLayerOverride(i)}
                       >
@@ -550,9 +561,10 @@
           </div>
 
           <button
+            type="button"
             class="btn btn-ghost btn-sm mx-2 mb-4 shrink-0"
             onclick={() => viewModel.addLayer()}
-            disabled={viewModel.activeLayers.length >= viewModel.MAX_LAYERS}
+            disabled={viewModel.activeLayers.length >= viewModel.maxLayers}
           >
             + Add Layer
           </button>

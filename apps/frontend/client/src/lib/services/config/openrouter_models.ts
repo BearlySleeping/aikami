@@ -17,6 +17,7 @@ export type OpenRouterModel = {
   /** Human-readable model name. */
   name: string;
   /** Maximum context length in tokens. */
+  // biome-ignore lint/style/useNamingConvention: OpenRouter API uses snake_case
   context_length: number;
   /** Pricing information per token. */
   pricing: {
@@ -75,6 +76,7 @@ export const fetchOpenRouterModels = async (apiKey: string): Promise<OpenRouterM
     const response = await fetch('https://openrouter.ai/api/v1/models', {
       method: 'GET',
       headers: {
+        // biome-ignore lint/style/useNamingConvention: HTTP header name
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },

@@ -1,192 +1,211 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-02)
+## Status Summary (Auto-generated: 2026-07-13)
 
-| Contract | Name | Status |
-|----------|------|--------|
-| C-001 | Remove Ai Vendor Dirs | ✅ completed |
-| C-002 | Establish Knowledge Dir | ✅ completed |
-| C-003 | Establish Pi Setup | ✅ completed |
-| C-004 | Migrate Skills | ✅ completed |
-| C-005 | Restructure Packages Shared | ✅ completed |
-| C-006 | Add Frontend Configs Package | ✅ completed |
-| C-007 | Establish Scripts Project | ✅ completed |
-| C-008 | Copy Moon Setup | ✅ completed |
-| C-009 | Standardize Moon Tsconfig | ✅ completed |
-| C-010 | Setup Script | ✅ completed |
-| C-011 | Blackbox Testing | ✅ completed |
-| C-012 | Generate Llms And Context | ✅ completed |
-| C-013 | Setup Tooling And Mcp | ✅ completed |
-| C-014 | Database Abstraction And Dataconnect | ✅ completed |
-| C-015 | Ai Service Abstraction | ✅ completed |
-| C-016 | Game Engine Boundary | ✅ completed |
-| C-017 | Update Knowledge Base | ✅ completed |
-| C-018 | Frontend Api Abstraction | ✅ completed |
-| C-019 | Macro Slash Engine | ✅ completed |
-| C-020 | Spatial Context Injection | ✅ completed |
-| C-021 | Engine Package Extraction | ✅ completed |
-| C-022 | Worker Ecs Synchronization | ✅ completed |
-| C-023 | Dense Spatial Hash | ✅ completed |
-| C-024 | Dynamic Sprite Caching | ✅ completed |
-| C-025 | Tts Audio Sync | ✅ completed |
-| C-026 | Expression Sprite Mapping | ✅ completed |
-| C-027 | Provider Configuration | ✅ completed |
-| C-028 | Game Firebase Auth Testing | ✅ completed |
-| C-029 | Dynamic Character Creation | ✅ completed |
-| C-030 | Persistent Npc Interaction | ✅ completed |
-| C-031 | Adapter Static And Hosting | ✅ completed |
-| C-032 | Lpc Spritesheet Pipeline | ✅ completed |
-| C-033 | Lpc Ubo Batching | ✅ completed |
-| C-034 | Lpc Render Pipeline | ✅ completed |
-| C-035 | Ecs Svelte Sync | ✅ completed |
-| C-035 | Viewport Layer Integration | ✅ completed |
-| C-036 | Ecs Appearance Bridge | ✅ completed |
-| C-037 | Lpc Render Demo | ✅ completed |
-| C-038 | Lpc Spritesheet Texture Arrays | ✅ completed |
-| C-039 | Lpc Animation Controller | ✅ completed |
-| C-040 | Grid Movement Transform Pipeline | ✅ completed |
-| C-041 | World Economy Inventory Core | ✅ completed |
-| C-042 | Reusable Lpc Sprite Component | ✅ completed |
-| C-043 | Lpc Layer Visual Debugger | ✅ completed |
-| C-044 | Lpc Fallback Grid Projection | ✅ completed |
-| C-045 | Pixi Graphics Dirty Flag Synchronizer | ✅ completed |
-| C-046 | Nix Chromium Extension Injection | ✅ completed |
-| C-047 | Pixi Devtools Emulator Wiring | ✅ completed |
-| C-048 | Lpc Laboratory And Texture Projection | ✅ completed |
-| C-049 | Lpc Asset Injector And Visual Workbench | ✅ completed |
-| C-050 | Lpc Visual Testing Harness | ✅ completed |
-| C-051 | Lpc Rendering Fixes | ✅ completed |
-| C-052 | Shared Unified Blackbox Docker Runner | ✅ completed |
-| C-054 | Shared E2e Pattern Refactor | ✅ completed |
-| C-055 | Shared E2e Assertion Fix | ✅ completed |
-| C-056 | Hybrid Text Gateway | ✅ completed |
-| C-057 | Edge Tts Worker | ✅ completed |
-| C-058 | Comfyui Orchestrator | ✅ completed |
-| C-059 | Client Stream Sync | ✅ completed |
-| C-060 | Dialogue System Integration | ✅ completed |
-| C-061 | Frontend App Consolidation | ✅ completed |
-| C-062 | Dialogue Memory Manager | ✅ completed |
-| C-063 | Hybrid Expression Extraction | ✅ completed |
-| C-064 | Dev Console Layouts | ✅ completed |
-| C-065 | Dev Ui Refactor Text Sandbox | ✅ completed |
-| C-066 | Dev Ui Voice Image Sandboxes | ✅ completed |
-| C-067 | Voice Microservice And Tmux | ✅ completed |
-| C-068 | Voice Containerization | ✅ completed |
-| C-069 | Direct Kokoro Orchestration | ✅ completed |
-| C-070 | Image Microservice Tmux | ✅ completed |
-| C-071 | Text Microservice Tmux | ✅ completed |
-| C-072 | Frontend Text Sandbox E2e | ✅ completed |
-| C-073 | Lpc Visual Smoke Harness | ✅ completed |
-| C-074 | Lpc Screenshot Isolation | ✅ completed |
-| C-076 | Image Sandbox Checkpoints | ✅ completed |
-| C-077 | Dev Text Service Openrouter | ✅ completed |
-| C-078 | Dev Character Creation | ✅ completed |
-| C-079 | Dev Config Dashboard | ✅ completed |
-| C-080 | Unified Text Intelligence Service | ✅ completed |
-| C-081 | Character Creation Structural Extraction | ✅ completed |
-| C-101 | Shared Package Enforce | ✅ completed |
-| C-102 | Tauri Spa Enforcement | ✅ completed |
-| C-103 | Mvvm Sandbox Pattern | ✅ completed |
-| C-104 | Sandbox Infrastructure | ✅ completed |
-| C-105 | Chat Mvvm Sandbox | ✅ completed |
-| C-106 | Combat Mvvm Sandbox | ✅ completed |
-| C-107 | Inventory Mvvm Sandbox | ✅ completed |
-| C-108 | Quest Mvvm Sandbox | ✅ completed |
-| C-109 | Service Layer Restructure | ✅ completed |
-| C-110 | Sandbox E2e Testing | ✅ completed |
-| C-111 | Microservice Rewiring | ✅ completed |
-| C-112 | Client Rename And Build Fixes | ✅ completed |
-| C-113 | Tauri Sanity Check | ✅ completed |
-| C-114 | Sandbox Engine Wiring | ✅ completed |
-| C-115 | Sandbox Lpc Animation | ✅ completed |
-| C-116 | Sandbox Ai Dialogue | ✅ completed |
-| C-117 | Ecs Snapshot Serializer | ✅ completed |
-| C-118 | Save Load Ui Wiring | ✅ completed |
-| C-119 | Routing And Layout Simplification | ✅ completed |
-| C-120 | View Folder Restructure | ✅ completed |
-| C-121 | Start Menu And Auth | ✅ completed |
-| C-122 | Onboarding Provider Gate | ✅ completed |
-| C-123 | Character Creation Flow | ✅ completed |
-| C-124 | Game Engine Initialization | ✅ completed |
-| C-125 | Game Ui Overlay Architecture | ✅ completed |
-| C-126 | Headless App Shell | ✅ completed |
-| C-127 | Settings Menu Refactor | ✅ completed |
-| C-128 | Dialogue Overlay And Ai Chat | ✅ completed |
-| C-129 | Dialogue Ai Integration Polish | ✅ completed |
-| C-130 | In Game Ai Diagnostics | ✅ completed |
-| C-131 | Native Webgpu Voice | ✅ completed |
-| C-132 | Save Load System | ✅ completed |
-| C-133 | Flexible Provider Onboarding | ✅ completed |
-| C-134 | Inline Provider Setup | ✅ completed |
-| C-135 | Tilemap Environment Parsing | ✅ completed |
-| C-136 | Entity Prop Spawner | ✅ completed |
-| C-137 | Camera Follow Viewport | ✅ completed |
-| C-138 | Map Transitions | ✅ completed |
-| C-139 | Dev Sandboxes Map Wiring | ✅ completed |
-| C-140 | Game Mode System | ✅ completed |
-| C-141 | Npc Interaction Trigger | ✅ completed |
-| C-142 | Inventory Item Pickups | ✅ completed |
-| C-143 | Quest Log And Test Fixes | ✅ completed |
-| C-144 | Combat Encounter Integration | ✅ completed |
-| C-145 | Turn Based Combat Loop | ✅ completed |
-| C-146 | Freeform Ai Combat | ✅ completed |
-| C-147 | Progression And Persistence | ✅ completed |
-| C-148 | Combat Immersion | ✅ completed |
-| C-149 | Combat Gatekeeping | ✅ completed |
-| C-150 | Audio System Bgm Sfx | ✅ completed |
-| C-151 | Ai Dynamic Music | ✅ completed |
-| C-152 | End To End Boot Flow | ✅ completed |
-| C-153 | Character Dashboard Equipment | ✅ completed |
-| C-154 | Ai Vendors Economy | ✅ completed |
-| C-155 | Autosave Memory Hardening | ✅ completed |
-| C-156 | Tauri Production Release | ✅ completed |
-| C-157 | Dialogue Skill Checks | ✅ completed |
-| C-158 | Lpc Avatar Integration | ✅ completed |
-| C-159 | Demo Happy Path E2e | ✅ completed |
-| C-160 | Engine Polish | ✅ completed |
-| C-161 | Spatial Ui Camera | ✅ completed |
-| C-162 | Bg3 Action Menu Dice | ✅ completed |
-| C-163 | Visceral Feedback Juice | ✅ completed |
-| C-164 | Combat Split Screen Layout | ✅ completed |
-| C-165 | Combat Inline Images Gallery | ✅ completed |
-| C-166 | Diegetic Combat Stage | ✅ completed |
-| C-167 | Svelte Combat Ui Mvp | ✅ completed |
-| C-168 | Pixijs Asset Pipeline Fix | ✅ completed |
-| C-169 | Lpc Sandbox Refactor | ✅ completed |
-| C-170 | Ecs Visual Observer Pattern | ✅ completed |
-| C-171 | Webgpu Tilemap Mesh Pipeline | ✅ completed |
-| C-172 | Staging World Transitions | ✅ completed |
-| C-173 | Ecs Spatial Hash Grid | ✅ completed |
-| C-174 | Ecs Bresenham Line Of Sight | ✅ completed |
-| C-175 | Llm Jton Map Pipeline | ✅ completed |
-| C-176 | Ecs Generational Indices | ✅ completed |
-| C-177 | Gpu Driven Tile Animation | ✅ completed |
-| C-178 | Visual Pipeline Validation | ✅ completed |
-| C-179 | Glsl Fallback Shader | ✅ completed |
-| C-180 | Engine Stability Harness | ✅ completed |
-| C-181 | Ai Visual Testing Framework | ✅ completed |
-| C-182 | Visual Framework Polish | ✅ completed |
-| C-183 | E2e Worker Isolation | ✅ completed |
-| C-190 | Ecs Spatial Vision Systems | ✅ completed |
-| C-191 | Goap Bitmask Scheduler | ✅ completed |
-| C-192 | Ecs Time Sliced Jps Pathfinder | ✅ completed |
-| C-193 | Client Tool Streaming Orchestrator | ✅ completed |
-| C-194 | Ecs Offscreen Macro Simulation | ✅ completed |
-| C-195 | Ecs String Registry Hydration | ✅ completed |
-| C-196 | Ecs Emergent World Integration | ✅ completed |
-| C-197 | Ecs Goap Combat Tactics | ✅ completed |
-| C-198 | Dev Sandbox Polish And Zoning | ✅ completed |
-| C-199 | Visual Camera Alignment | ✅ completed |
-| C-200 | Visual Pipeline Optimization | ✅ completed |
-| C-201 | Hide Dev Overlays On Screenshot | ✅ completed |
-| C-202 | Provider Settings Ux Overhaul | ✅ completed |
-| C-203 | Local First Turso Sync | ✅ completed |
-| C-204 | Auxiliary Systems Config | ✅ completed |
-| C-210 | Webgpu Tilemap Integration | ✅ completed |
-| C-211 | Realtime Tts Streaming Pipeline | ✅ completed |
-| C-212 | Party Follow System | ⏳ not_started |
-| MIG-001 | Knowledge Splitting | ✅ completed |
-| MIG-002 | Backend Dataconnect | ✅ completed |
-| MIG-003 | Scripting Infra | ✅ completed |
-| MIG-004 | Frontend Configs | ✅ completed |
+**160 active (45 without contract file), 119 archived, 1 duplicates**
+
+### Active Contracts
+
+| Contract | Name | Status | Promotion | Version |
+|----------|------|--------|-----------|---------|
+| C-011 | Blackbox Testing | 🏁 completed | — | v1 |
+| C-014 | Database Abstraction And Dataconnect | 🏁 completed | — | v1 |
+| C-015 | Ai Service Abstraction | 📦 legacy_completed | — | v1 |
+| C-031 | Adapter Static And Hosting | 📦 legacy_completed | — | v1 |
+| C-056 | Hybrid Text Gateway | 📦 legacy_completed | — | v1 |
+| C-117 | Ecs Snapshot Serializer | 📦 legacy_completed | — | v1 |
+| C-118 | Save Load Ui Wiring | 📦 legacy_completed | — | v1 |
+| C-119 | Routing And Layout Simplification | 📦 legacy_completed | — | v1 |
+| C-120 | View Folder Restructure | 📦 legacy_completed | — | v1 |
+| C-121 | Start Menu And Auth | 📦 legacy_completed | — | v1 |
+| C-123 | Character Creation Flow | 📦 legacy_completed | — | v1 |
+| C-124 | Game Engine Initialization | 📦 legacy_completed | — | v1 |
+| C-125 | Game Ui Overlay Architecture | 📦 legacy_completed | — | v1 |
+| C-127 | Settings Menu Refactor | 📦 legacy_completed | — | v1 |
+| C-128 | Dialogue Overlay And Ai Chat | 📦 legacy_completed | — | v1 |
+| C-129 | Dialogue Ai Integration Polish | 🏁 completed | — | v1 |
+| C-132 | Save Load System | 🏁 completed | 🔗 integrated | v1 |
+| C-133 | Flexible Provider Onboarding | 🏁 completed | — | v1 |
+| C-134 | Inline Provider Setup | 🏁 completed | — | v1 |
+| C-135 | Tilemap Environment Parsing | 📦 legacy_completed | — | v1 |
+| C-136 | Entity Prop Spawner | 📦 legacy_completed | — | v1 |
+| C-138 | Map Transitions | 📦 legacy_completed | — | v1 |
+| C-140 | Game Mode System | 📦 legacy_completed | — | v1 |
+| C-141 | Npc Interaction Trigger | 📦 legacy_completed | — | v1 |
+| C-142 | Inventory Item Pickups | 📦 legacy_completed | — | v1 |
+| C-143 | Quest Log And Test Fixes | 📦 legacy_completed | — | v1 |
+| C-144 | Combat Encounter Integration | 📦 legacy_completed | — | v1 |
+| C-149 | Combat Gatekeeping | 📦 legacy_completed | — | v1 |
+| C-152 | End To End Boot Flow | 🏁 completed | — | v1 |
+| C-153 | Character Dashboard Equipment | 🏁 completed | — | v1 |
+| C-154 | Ai Vendors Economy | 🏁 completed | — | v1 |
+| C-155 | Autosave Memory Hardening | 🏁 completed | — | v1 |
+| C-156 | Tauri Production Release | 🏁 completed | — | v1 |
+| C-157 | Dialogue Skill Checks | 🏁 completed | — | v1 |
+| C-158 | Lpc Avatar Integration | 🏁 completed | — | v1 |
+| C-159 | Demo Happy Path E2e | 🏁 completed | — | v1 |
+| C-161 | Spatial Ui Camera | 🏁 completed | — | v1 |
+| C-162 | Bg3 Action Menu Dice | 🏁 completed | — | v1 |
+| C-163 | Visceral Feedback Juice | 🏁 completed | — | v1 |
+| C-164 | Combat Split Screen Layout | 🏁 completed | — | v1 |
+| C-168 | Pixijs Asset Pipeline Fix | 📦 legacy_completed | — | v1 |
+| C-173 | Ecs Spatial Hash Grid | 🏁 completed | — | v1 |
+| C-175 | Llm Jton Map Pipeline | 🏁 completed | — | v1 |
+| C-180 | Engine Stability Harness | 🏁 completed | — | v1 |
+| C-181 | Ai Visual Testing Framework | 🏁 completed | 🔗 integrated | v1 |
+| C-182 | Visual Framework Polish | 🏁 completed | 🔗 integrated | v1 |
+| C-183 | E2e Worker Isolation | 🏁 completed | 🔗 integrated | v1 |
+| C-190 | Ecs Spatial Vision Systems | 🏁 completed | 🚀 release_verified | v1 |
+| C-191 | Goap Bitmask Scheduler | 🏁 completed | 🔗 integrated | v1 |
+| C-192 | Ecs Time Sliced Jps Pathfinder | 🏁 completed | 🔗 integrated | v1 |
+| C-193 | Client Tool Streaming Orchestrator | 🏁 completed | 🔗 integrated | v1 |
+| C-194 | Ecs Offscreen Macro Simulation | 🏁 completed | 🔗 integrated | v1 |
+| C-195 | Ecs String Registry Hydration | 🏁 completed | 🔗 integrated | v1 |
+| C-196 | Ecs Emergent World Integration | 🏁 completed | 🔗 integrated | v1 |
+| C-197 | Ecs Goap Combat Tactics | 📦 legacy_completed | — | v1 |
+| C-198 | Dev Sandbox Polish And Zoning | 🏁 completed | 🔗 integrated | v1 |
+| C-199 | Visual Camera Alignment | 🏁 completed | 🔗 integrated | v1 |
+| C-200 | Visual Pipeline Optimization | ❓ ✅ completed | 🔗 integrated | v1 |
+| C-201 | Hide Dev Overlays On Screenshot | 🏁 completed | 🧪 sandbox | v1 |
+| C-202 | Provider Settings Ux Overhaul | 🏁 completed | 🔗 integrated | v1 |
+| C-203 | Local First Turso Sync | 🏁 completed | 🧪 sandbox | v1 |
+| C-204 | Auxiliary Systems Config | 🏁 completed | 🧪 sandbox | v1 |
+| C-210 | Webgpu Tilemap Integration | 🏁 completed | 🔗 integrated | v1 |
+| C-211 | Realtime Tts Streaming Pipeline | 🏁 completed | 🔗 integrated | v1 |
+| C-212 | Party Follow System | 🏁 completed | 🧪 sandbox | v1 |
+| C-213 | Environment Time System | ⏳ not_started | — | v1 |
+| C-214 | Engine And Api Consolidation | ⏳ not_started | — | v1 |
+| C-215 | Data And Terminology Unification | ⏳ not_started | — | v1 |
+| C-216 | Documentation Overhaul | ⏳ not_started | — | v1 |
+| C-217 | E2e Stabilisation | ⏳ not_started | — | v1 |
+| C-218 | E2e Logic Ui Resolution | ⏳ not_started | — | v1 |
+| C-219 | Ui Component System Refactor | ❓ ✅ completed | 🧪 sandbox | v1 |
+| C-220 | Ui Skills And Theming | ❓ ✅ completed | 🧪 sandbox | v1 |
+| C-221 | Modal Dialog Encapsulation | ❓ ✅ completed | 🧪 sandbox | v1 |
+| C-230 | Provider Connection Config | 🏁 completed | 🔗 integrated | v1 |
+| C-231 | Rich Chat Streaming | ❓ ✅ completed | 🧪 sandbox | v1 |
+| C-232 | Character Sheet Traits | 🏁 completed | — | v1 |
+| C-233 | World Generation Wizard | 🏁 completed | — | v1 |
+| C-234 | Combat Enhancement Dice Initiative | ❓ done | — | v1 |
+| C-235 | Gm Narrative Director | ❓ done | — | v1 |
+| C-236 | Agent Pipeline System | 🏁 completed | 🔗 integrated | v1 |
+| C-237 | Prompt Template Macro System | ❓ completed (2026-07-09) | — | v1 |
+| C-238 | Lorebook World Info | 🏁 completed | — | v1 |
+| C-239 | Expression Emotion System | 🏁 completed | — | v1 |
+| C-240 | Session Management | 🏁 completed | 🔗 integrated | v1 |
+| C-241 | Chat Modes Address System | 🏁 completed | 🚀 release_verified | v1 |
+| C-242 | Image Generation Pipeline | 🏁 completed | 🔗 integrated | v1 |
+| C-243 | Asset Management System | 🏁 completed | 🧪 sandbox | v1 |
+| C-244 | Connected Chats Cross Mode Bridge | 🏁 completed | 🔗 integrated | v1 |
+| C-245 | Cyoa Choices Branching Narrative | 🏁 completed | 🔗 integrated | v1 |
+| C-246 | Export Import System | 🏁 completed | 🔗 integrated | v1 |
+| C-247 | Custom Agent Creation | 🏁 completed | 🔗 integrated | v1 |
+| C-248 | Autonomous Npc Behavior Schedules | 🏁 completed | 🔗 integrated | v1 |
+| C-249 | Music Dj Audio Player | 🏁 completed | 🔗 integrated | v1 |
+| C-300 | Swarm Director And Workspace Provisioning Lifecycle | ⏳ not_started | — | v1 |
+| C-301 | Algorithmic Token Router And Ast Footprint Extractor | ⏳ not_started | — | v1 |
+| C-302 | Coherent Ephemeral Sqlite Wal Scratchpad Engine | ⏳ not_started | — | v1 |
+| C-303 | Self Healing Visual Test Harness | ⏳ not_started | — | v1 |
+| C-304 | Ast Aware Behavioral Code Reviewer And Convention Gate | ⏳ not_started | — | v1 |
+| C-305 | Auto Sandbox Agent Scaffolding Lifecycle | 🏁 completed | — | v1 |
+| C-306 | Swarm Hardening And Cache Synchronization Refactor | 🏁 completed | — | v1 |
+| C-307 | Autonomous Scope Explorer And Semantic Dependency Traverser | 🏁 completed | — | v1 |
+| C-308 | Swarm Post Mortem And Meta Reflective Skill Optimizer | 🏁 completed | — | v1 |
+| C-309 | Swarm Control Pi Extension And Command Surface Wrapper | 🏁 completed | — | v1 |
+| C-310 | Automated Backlog Contract Generator | 🏁 completed | — | v1 |
+| C-311 | Swarm Socket Orchestration | ⏳ not_started | — | v1 |
+| C-312 | Restore Planning Promotion And Release Truth | 🛠️ implemented | 🔗 integrated | v2 |
+| C-313 | Introduce The Campaign Aggregate And Boot State Machine | 🛠️ implemented | ❓ `sandbox` | v2 |
+| C-314 | Establish A Production Game Composition Root And Split God S | 🛠️ implemented | ❓ production | v2 |
+| C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🏁 completed | — | v2 |
+| C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | ✅ verified | — | v2 |
+| C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | — | v2 |
+| C-318 | Add One-Screen Capability Setup and an Offline Demo Fallback | ⏳ not_started (no contract file) | — | — |
+| C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | — | — |
+| C-320 | C 320_mdc_skill_scraper | ⏳ not_started | — | v1 |
+| C-321 | C 321_mcp_runner_bridge | ⏳ not_started | — | v1 |
+| C-322 | Add In-World Onboarding and Unified Interaction UX | ⏳ not_started (no contract file) | — | — |
+| C-323 | Integrate Bounded AI NPC Dialogue with Authored Fallbacks | ⏳ not_started (no contract file) | — | — |
+| C-324 | Integrate the Demo Quest from Offer Through Reward | ⏳ not_started (no contract file) | — | — |
+| C-325 | Integrate Deterministic Demo Combat and Declared Skill Checks | ⏳ not_started (no contract file) | — | — |
+| C-326 | Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop | ⏳ not_started (no contract file) | — | — |
+| C-327 | Redesign the Minimal Game HUD and Overlay Navigation | ⏳ not_started (no contract file) | — | — |
+| C-328 | Simplify Settings with Progressive Disclosure | ⏳ not_started (no contract file) | — | — |
+| C-329 | Make Local Save, Continue, Autosave, and Recovery Reliable | ⏳ not_started (no contract file) | — | — |
+| C-330 | Enforce the Playable Demo Release Gate | ⏳ not_started (no contract file) | — | — |
+| C-331 | Extract a Deterministic Rules Kernel and Typed Game Command Protocol | ⏳ not_started (no contract file) | — | — |
+| C-332 | Complete Character Progression, Classes, Abilities, Skills, and Spells | ⏳ not_started (no contract file) | — | — |
+| C-333 | Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI | ⏳ not_started (no contract file) | — | — |
+| C-334 | Complete Quest Graph, Journal, Objectives, and Reward Pipelines | ⏳ not_started (no contract file) | — | — |
+| C-335 | Build Party and Companion Gameplay | ⏳ not_started (no contract file) | — | — |
+| C-336 | Add Relationships, Factions, Reputation, and Persistent Consequences | ⏳ not_started (no contract file) | — | — |
+| C-337 | Add World Interactables, Dungeons, Puzzles, and Loot Tables | ⏳ not_started (no contract file) | — | — |
+| C-338 | Promote Rich Chat UX into Production Gameplay | ⏳ not_started (no contract file) | — | — |
+| C-339 | Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle | ⏳ not_started (no contract file) | — | — |
+| C-340 | Add a Campaign/Content-Pack Browser and a Second Adventure | ⏳ not_started (no contract file) | — | — |
+| C-341 | Complete Gamepad, Touch, Responsive, and Accessibility Support | ⏳ not_started (no contract file) | — | — |
+| C-342 | Establish Asset Attribution, Licensing, and Content Provenance | ⏳ not_started (no contract file) | — | — |
+| C-343 | Build a Unified AI Turn Orchestrator with Validated State Patches | ⏳ not_started (no contract file) | — | — |
+| C-344 | Add Prompt Regression, Context Budgets, Cost Guards, and AI Tracing | ⏳ not_started (no contract file) | — | — |
+| C-345 | Add Hierarchical Lore and Memory Retrieval | ⏳ not_started (no contract file) | — | — |
+| C-346 | Integrate an AI Game Master and Narrative Director | ⏳ not_started (no contract file) | — | — |
+| C-347 | Integrate NPC Autonomy, Schedules, and Offscreen Simulation | ⏳ not_started (no contract file) | — | — |
+| C-348 | Add Generative Quests Inside Authored Rules and Content Constraints | ⏳ not_started (no contract file) | — | — |
+| C-349 | Reintroduce Generated Campaigns as a Content-Pack Compiler | ⏳ not_started (no contract file) | — | — |
+| C-350 | Build an Optional Media Director for Expressions, Voice, Images, and Music | ⏳ not_started (no contract file) | — | — |
+| C-351 | Complete Local Model Discovery, Lifecycle, and Hybrid Failover | ⏳ not_started (no contract file) | — | — |
+| C-352 | Add Local-First Cloud Sync with an Outbox and Conflict Policy | ⏳ not_started (no contract file) | — | — |
+| C-353 | Build a Content Authoring Studio and Validation Pipeline | ⏳ not_started (no contract file) | — | — |
+| C-354 | Complete Import, Export, Backup, and Migration | ⏳ not_started (no contract file) | — | — |
+| C-355 | Enforce Runtime Performance, Memory, and Asset Budgets | ⏳ not_started (no contract file) | — | — |
+| C-356 | Harden Tauri and PWA Offline Installation and Updates | ⏳ not_started (no contract file) | — | — |
+| C-357 | Deliver Mobile/Small-Screen Packaging and Thermal Budgets | ⏳ not_started (no contract file) | — | — |
+| C-358 | Add Privacy, Security, Secret, and AI Cost Controls | ⏳ not_started (no contract file) | — | — |
+| C-359 | Add Speech Input and Hands-Free Play as an Accessibility Mode | ⏳ not_started (no contract file) | — | — |
+| C-360 | Add Bring-Your-Own Rulesets and Rulebook RAG | ⏳ not_started (no contract file) | — | — |
+| C-361 | Add Co-op Multiplayer with Authoritative Campaign Sessions | ⏳ not_started (no contract file) | — | — |
+| C-362 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | — | — |
+| C-363 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | — | — |
+| C-364 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | — | — |
+| C-365 | Harden Contract Pipeline Orchestration | ✅ verified | ❓ `integrated` | v2 |
+
+---
+
+### 📦 Archived Contracts
+
+> These 119 legacy v1 contracts were marked completed with no execution report and are not referenced by pending work.
+> See `docs/contracts/archived/README.md` for details.
+
+| Contract | Name | Status | Version |
+|----------|------|--------|---------|
+| C-001 | Remove Ai Vendor Dirs | 📦 archived | v1 |
+| C-002 | Establish Knowledge Dir | 📦 archived | v1 |
+| C-003 | Establish Pi Setup | 📦 archived | v1 |
+| C-004 | Migrate Skills | 📦 archived | v1 |
+| C-005 | Restructure Packages Shared | 📦 archived | v1 |
+| C-006 | Add Frontend Configs Package | 📦 archived | v1 |
+| C-007 | Establish Scripts Project | 📦 archived | v1 |
+| C-008 | Copy Moon Setup | 📦 archived | v1 |
+| C-009 | Standardize Moon Tsconfig | 📦 archived | v1 |
+| C-010 | Setup Script | 📦 archived | v1 |
+| C-012 | Generate Llms And Context | 📦 archived | v1 |
+| C-013 | Setup Tooling And Mcp | 📦 archived | v1 |
+| C-016 | Game Engine Boundary | 📦 archived | v1 |
+| C-017 | Update Knowledge Base | 📦 archived | v1 |
+| C-018 | Frontend Api Abstraction | 📦 archived | v1 |
+| C-019 | Macro Slash Engine | 📦 archived | v1 |
+| C-020 | Spatial Context Injection | 📦 archived | v1 |
+| C-021 | Engine Package Extraction | 📦 archived | v1 |
+| C-022 | Worker Ecs Synchronization | 📦 archived | v1 |
+| C-023 | Dense Spatial Hash | 📦 archived | v1 |
+| ... | _99 more archived_ | | |
+
+<details><summary>All 119 archived IDs</summary>
+
+C-024, C-025, C-026, C-027, C-028, C-029, C-030, C-032, C-033, C-034, C-035, C-036, C-037, C-038, C-039, C-040, C-041, C-042, C-043, C-044, C-045, C-046, C-047, C-048, C-049, C-050, C-051, C-052, C-054, C-055, C-057, C-058, C-059, C-060, C-061, C-062, C-063, C-064, C-065, C-066, C-067, C-068, C-069, C-070, C-071, C-072, C-073, C-074, C-076, C-077, C-078, C-079, C-080, C-081, C-101, C-102, C-103, C-104, C-105, C-106, C-107, C-108, C-109, C-110, C-111, C-112, C-113, C-114, C-115, C-116, C-122, C-126, C-130, C-131, C-137, C-139, C-145, C-146, C-147, C-148, C-150, C-151, C-160, C-165, C-166, C-167, C-169, C-170, C-171, C-172, C-174, C-176, C-177, C-178, C-179, MIG-001, MIG-002, MIG-003, MIG-004
+
+</details>
+
+## ⚠️ Duplicate IDs
+- `C-035` — resolve before next sync
 
