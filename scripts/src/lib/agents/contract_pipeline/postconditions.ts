@@ -1,8 +1,8 @@
 // scripts/src/lib/agents/contract_pipeline/postconditions.ts
 //
 // Validate role-specific filesystem boundaries after a worker attempt.
-// For implementer/verifier (which run in a jj workspace), diffs are captured
-// from the workspace, not the root repo, to avoid false boundary violations.
+// For implementer/verifier (which run in a Git Worktree), diffs are captured
+// from the worktree, not the root repo, to avoid false boundary violations.
 import { basename, relative, resolve } from 'node:path';
 import { changedBetweenSnapshots } from './git_state.ts';
 import type { ContractWorkerRole, GitStateSnapshot } from './types.ts';
@@ -12,7 +12,7 @@ export const validatePostconditions = (options: {
   role: ContractWorkerRole;
   contractPath: string;
   repoRoot: string;
-  /** The jj workspace path (for implementer/verifier). If undefined, uses repo root. */
+  /** The Git Worktree path (for implementer/verifier). If undefined, uses repo root. */
   workspacePath?: string;
   before: GitStateSnapshot;
   after: GitStateSnapshot;

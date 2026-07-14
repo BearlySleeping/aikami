@@ -2,8 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { runJj } from '../jj.ts';
+import { resolve } from 'node:path';
 import type { GitStateSnapshot } from './types.ts';
 
 const gitLines = (options: { cwd: string; args: string[] }): string[] => {
@@ -22,34 +21,7 @@ const gitLines = (options: { cwd: string; args: string[] }): string[] => {
 };
 
 /** Return all tracked and untracked paths currently changed from HEAD. */
-const PROVISIONING_PATHS = new Set(['.envrc', '.pi/settings.json']);
-
-const isJjOnlyWorkspace = (cwd: string): boolean =>
-  existsSync(join(cwd, '.jj')) && !existsSync(join(cwd, '.git'));
-
-const jjChangedPaths = (cwd: string): string[] => {
-  try {
-    return runJj('diff --summary', { cwd })
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-      .map((l) => {
-        const p = l.slice(2).trim();
-        if (!p.includes(' => ')) return p;
-        const br = p.match(/^(.*)\{.* => (.*)\}(.*)$/);
-        return br
-          ? `${br[1]}${br[2]}${br[3]}`.replaceAll('//', '/')
-          : p.slice(p.lastIndexOf(' => ') + 4);
-      })
-      .filter((p) => !PROVISIONING_PATHS.has(p))
-      .sort();
-  } catch {
-    return [];
-  }
-};
-
 export const changedPaths = (cwd: string): string[] => {
-  if (isJjOnlyWorkspace(cwd)) return jjChangedPaths(cwd);
   const t = gitLines({ cwd, args: ['diff', '--name-only', 'HEAD'] });
   const u = gitLines({ cwd, args: ['ls-files', '--others', '--exclude-standard'] });
   return [...new Set([...t, ...u])].sort();

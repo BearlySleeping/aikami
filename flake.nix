@@ -87,7 +87,6 @@
 
           python3
           git-filter-repo
-          jujutsu
           gh
 
           # Chromium wrapped with PixiJS DevTools extension support

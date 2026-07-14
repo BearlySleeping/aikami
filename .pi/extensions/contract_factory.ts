@@ -16,11 +16,12 @@ import { basename, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import {
-  getJjChangeId,
-  runJj,
-  sanitizeWorkspaceName,
+  getGitHeadCommit,
+  provisionGitWorktree,
+  runGit,
+  sanitizeBranchName,
   WORKSPACES_DIR,
-} from '../../scripts/src/lib/agents/jj';
+} from '../../scripts/src/lib/agents/git_worktree';
 
 // ── Inline parser ───────────────────────────────────────────────
 //
@@ -503,14 +504,14 @@ export default function (pi: ExtensionAPI) {
     name: 'contract_workspace_create',
     label: 'Contract: Create Workspace',
     description:
-      'Provision an isolated jj workspace for a contract task. ' +
-      'Creates a co-located workspace at .pi/workspaces/<id> and returns ' +
-      'the absolute path and initial change ID. Use BEFORE writing files or ' +
+      'Provision an isolated Git Worktree for a contract task. ' +
+      'Creates a worktree at .pi/workspaces/<id> on a new branch and returns ' +
+      'the absolute path and branch name. Use BEFORE writing files or ' +
       'running compilation tools in a contract task.',
-    promptSnippet: 'Use contract_workspace_create to isolate a task in a dedicated jj workspace.',
+    promptSnippet: 'Use contract_workspace_create to isolate a task in a dedicated Git Worktree.',
     promptGuidelines: [
       'Call this before any file mutations or build steps in a contract pipeline.',
-      'Use the returned change_id for checkpointing and reconciliation.',
+      'Use the returned branch_name for reference.',
       'Workspace directories live under .pi/workspaces/ and are .gitignored.',
     ],
     parameters: Type.Object({
@@ -522,7 +523,7 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
-      const sanitized = sanitizeWorkspaceName(params.taskId);
+      const sanitized = sanitizeBranchName(params.taskId);
       const wsDir = join(cwd, WORKSPACES_DIR, sanitized);
 
       // Ensure parent directory exists
@@ -534,7 +535,7 @@ export default function (pi: ExtensionAPI) {
       if (existsSync(wsDir)) {
         const existingId = (() => {
           try {
-            return getJjChangeId(wsDir);
+            return getGitHeadCommit(wsDir);
           } catch {
             return 'unknown';
           }
@@ -545,7 +546,7 @@ export default function (pi: ExtensionAPI) {
               type: 'text',
               text: [
                 `⚠️ Workspace already exists: \`${wsDir}\``,
-                `Change ID: \`${existingId}\``,
+                `HEAD: \`${existingId}\``,
                 '',
                 'Use this existing workspace or clean it up first with `contract_workspace_cleanup` ',
                 'if you need a fresh one.',
@@ -554,27 +555,28 @@ export default function (pi: ExtensionAPI) {
           ],
           details: {
             path: wsDir,
-            changeId: existingId,
+            headCommit: existingId,
             alreadyExists: true,
           },
         };
       }
 
-      // Create the workspace
-      runJj(`workspace add ${wsDir}`, { cwd: cwd });
-
-      // Capture the initial change ID in the new workspace
-      const changeId = getJjChangeId(wsDir);
+      // Create the Git Worktree
+      const { branchName, headCommit } = provisionGitWorktree({
+        repoRoot: cwd,
+        name: params.taskId,
+      });
 
       return {
         content: [
           {
             type: 'text',
             text: [
-              `✅ Workspace created: \`${wsDir}\``,
-              `Change ID: \`${changeId}\``,
+              `✅ Git Worktree created: \`${wsDir}\``,
+              `Branch: \`${branchName}\``,
+              `HEAD: \`${headCommit}\``,
               '',
-              'This workspace is now the active working directory for the task.',
+              'This worktree is now the active working directory for the task.',
               'Use `contract_workspace_checkpoint` to save progress snapshots.',
               'Use `contract_workspace_complete` when the task is done.',
             ].join('\n'),
@@ -582,7 +584,8 @@ export default function (pi: ExtensionAPI) {
         ],
         details: {
           path: wsDir,
-          changeId,
+          branchName,
+          headCommit,
           alreadyExists: false,
         },
       };
@@ -597,18 +600,18 @@ export default function (pi: ExtensionAPI) {
     name: 'contract_workspace_checkpoint',
     label: 'Contract: Workspace Checkpoint',
     description:
-      'Snapshot the current working state in a jj workspace with a descriptive ' +
-      'message. No explicit staging needed — jj auto-tracks all file changes.',
+      'Commit the current working state in a Git Worktree with a descriptive ' +
+      'message. Stages all changes and commits them.',
     promptSnippet: 'Use contract_workspace_checkpoint to record an agent milestone.',
     promptGuidelines: [
       'Call after completing a successful partial step (test passes, build succeeds).',
       'Messages should identify what was accomplished (e.g. "Service layer complete").',
-      'Does NOT create a new change — it only updates the description of the current working-copy change.',
+      'This triggers `git add -A && git commit` — Moonrepo pre-commit hooks will run.',
     ],
     parameters: Type.Object({
       workspacePath: Type.String({
         description:
-          'Absolute path to the jj workspace directory (returned by contract_workspace_create).',
+          'Absolute path to the Git Worktree directory (returned by contract_workspace_create).',
       }),
       message: Type.String({
         description:
@@ -616,10 +619,16 @@ export default function (pi: ExtensionAPI) {
       }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const escaped = params.message.replace(/"/g, '\\"');
-      runJj(`describe -m "${escaped}"`, { cwd: params.workspacePath });
-
-      const changeId = getJjChangeId(params.workspacePath);
+      const headCommit = (() => {
+        try {
+          return runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
+            cwd: params.workspacePath,
+          });
+        } catch {
+          // No changes to commit — return current HEAD.
+          return getGitHeadCommit(params.workspacePath);
+        }
+      })();
 
       return {
         content: [
@@ -627,12 +636,12 @@ export default function (pi: ExtensionAPI) {
             type: 'text',
             text: [
               `✅ Checkpoint saved.`,
-              `Change ID: \`${changeId}\``,
+              `HEAD: \`${headCommit}\``,
               `Message: "${params.message}"`,
             ].join('\n'),
           },
         ],
-        details: { changeId, message: params.message },
+        details: { headCommit, message: params.message },
       };
     },
   });
@@ -645,28 +654,43 @@ export default function (pi: ExtensionAPI) {
     name: 'contract_workspace_complete',
     label: 'Contract: Complete Workspace',
     description:
-      'Finalize an isolated workspace: record the final description, fetch the ' +
-      'change ID, and return reconciliation instructions. Does NOT auto-squash or ' +
-      'push — that step is manual or handled by the pipeline orchestrator.',
+      'Finalize an isolated worktree: commit all changes and return the branch ' +
+      'name for PR creation. Does NOT push or clean up — that step is manual or ' +
+      'handled by the pipeline orchestrator.',
     promptSnippet: 'Use contract_workspace_complete when a task reaches its definition of done.',
     promptGuidelines: [
       'Call after all tests/verifications pass.',
-      'Returns the change ID needed for reconciling into the main branch.',
-      'Does NOT clean up the workspace — use contract_workspace_cleanup separately.',
+      'Returns the branch name and HEAD commit needed for PR creation.',
+      'Does NOT clean up the worktree — use contract_workspace_cleanup separately.',
     ],
     parameters: Type.Object({
       workspacePath: Type.String({
-        description: 'Absolute path to the jj workspace directory.',
+        description: 'Absolute path to the Git Worktree directory.',
       }),
       message: Type.String({
         description: 'Final commit message (e.g. "Feat: Completed contract pipeline task C-312").',
       }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const escaped = params.message.replace(/"/g, '\\"');
-      runJj(`describe -m "${escaped}"`, { cwd: params.workspacePath });
+      let headCommit: string;
+      try {
+        headCommit = runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
+          cwd: params.workspacePath,
+        });
+      } catch {
+        // No changes to commit — use current HEAD.
+        headCommit = getGitHeadCommit(params.workspacePath);
+      }
 
-      const changeId = getJjChangeId(params.workspacePath);
+      let branchName = 'unknown';
+      try {
+        branchName = runGit('rev-parse --abbrev-ref HEAD', {
+          cwd: params.workspacePath,
+        });
+      } catch {
+        // Non-fatal.
+      }
+
       const rootDir = ctx.cwd;
 
       return {
@@ -674,22 +698,21 @@ export default function (pi: ExtensionAPI) {
           {
             type: 'text',
             text: [
-              `✅ Workspace finalized.`,
-              `Change ID: \`${changeId}\``,
+              `✅ Worktree finalized.`,
+              `Branch: \`${branchName}\``,
+              `HEAD: \`${headCommit}\``,
               `Message: "${params.message}"`,
               '',
-              'To reconcile into main branch from the repo root:',
-              `  jj squash --from ${changeId} --into main`,
-              '',
-              'Or to push as a branch for PR:',
-              `  jj git push --change ${changeId} --remote origin --branch feat/${basename(params.workspacePath)}`,
+              'To push for PR creation from the worktree:',
+              `  git push -u origin ${branchName}`,
               '',
               `Root workspace: \`${rootDir}\``,
             ].join('\n'),
           },
         ],
         details: {
-          changeId,
+          headCommit,
+          branchName,
           workspacePath: params.workspacePath,
           rootDir,
         },
@@ -705,50 +728,62 @@ export default function (pi: ExtensionAPI) {
     name: 'contract_workspace_cleanup',
     label: 'Contract: Cleanup Workspace',
     description:
-      'Safely remove a jj workspace: forgets it from jj config and removes ' +
-      'the directory. Use for both successful completions and error recovery.',
+      'Safely remove a Git Worktree: runs `git worktree remove --force` and ' +
+      'deletes the directory. Also removes the local branch. ' +
+      'Use for both successful completions and error recovery.',
     promptSnippet: 'Use contract_workspace_cleanup to tear down an isolated workspace.',
     promptGuidelines: [
       'Call after reconciliation or after a failed task.',
-      'Runs `jj workspace forget` first, then `rm -rf` the directory.',
-      'Does NOT affect changes that were already squashed/pushed.',
+      'Runs `git worktree remove --force` which cleans up both the worktree and its branch.',
+      'Does NOT affect commits that were already pushed.',
     ],
     parameters: Type.Object({
       workspacePath: Type.String({
-        description: 'Absolute path to the jj workspace directory to clean up.',
+        description: 'Absolute path to the Git Worktree directory to clean up.',
       }),
       abandonChange: Type.Optional(
         Type.Boolean({
           default: false,
           description:
-            'If true, also runs `jj abandon` on the workspace change before cleanup (error recovery).',
+            'If true, also deletes the local branch (error recovery). ' +
+            'By default, branches are preserved for PR creation.',
         }),
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      // If abandoning, do it first from the repo root
-      if (params.abandonChange && existsSync(params.workspacePath)) {
+      // Determine the branch name before removing the worktree.
+      let branchName: string | undefined;
+      if (existsSync(params.workspacePath)) {
         try {
-          const changeId = getJjChangeId(params.workspacePath);
-          runJj(`abandon ${changeId}`, { cwd: ctx.cwd });
-          console.log(`🚫 Abandoned change ${changeId} (error recovery)`);
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn(`⚠️  Could not abandon change: ${message}`);
+          branchName = runGit('rev-parse --abbrev-ref HEAD', {
+            cwd: params.workspacePath,
+          });
+        } catch {
+          // Non-fatal.
         }
       }
 
-      // Forget the workspace from jj config
+      // Remove the Git Worktree (--force handles dirty state).
       try {
-        runJj(`workspace forget ${params.workspacePath}`, { cwd: ctx.cwd });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.warn(`⚠️  Could not forget workspace: ${message}`);
+        runGit(`worktree remove '${params.workspacePath}' --force`, {
+          cwd: ctx.cwd,
+        });
+      } catch {
+        // Fall back to rm -rf if git worktree remove fails.
+        if (existsSync(params.workspacePath)) {
+          rmSync(params.workspacePath, { recursive: true, force: true });
+        }
       }
 
-      // Remove the directory
-      if (existsSync(params.workspacePath)) {
-        rmSync(params.workspacePath, { recursive: true, force: true });
+      // Optionally delete the local branch (error recovery).
+      if (params.abandonChange && branchName) {
+        try {
+          runGit(`branch -D ${branchName}`, { cwd: ctx.cwd });
+          console.log(`🚫 Deleted local branch ${branchName} (error recovery)`);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(`⚠️  Could not delete branch: ${message}`);
+        }
       }
 
       return {
@@ -756,8 +791,8 @@ export default function (pi: ExtensionAPI) {
           {
             type: 'text',
             text: [
-              `✅ Workspace cleaned up: \`${params.workspacePath}\``,
-              params.abandonChange ? '  (change was abandoned)' : '',
+              `✅ Worktree cleaned up: \`${params.workspacePath}\``,
+              params.abandonChange ? '  (branch was deleted)' : '',
             ].join('\n'),
           },
         ],
@@ -776,17 +811,18 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: 'contract_workspace_list',
     label: 'Contract: List Workspaces',
-    description: 'List all active jj workspaces managed under .pi/workspaces/.',
+    description: 'List all active Git Worktrees managed under .pi/workspaces/.',
     promptSnippet: 'Use contract_workspace_list to inspect active agent workspaces.',
     promptGuidelines: [
       'Use for diagnostics — find orphaned or incomplete workspaces.',
-      'Returns workspace path, change ID, and description for each.',
+      'Returns workspace path, branch name, and HEAD commit for each.',
     ],
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
       const wsParent = join(cwd, WORKSPACES_DIR);
-      const items: { path: string; changeId: string; description: string }[] = [];
+      const items: { path: string; headCommit: string; branchName: string; description: string }[] =
+        [];
 
       if (!existsSync(wsParent)) {
         return {
@@ -802,25 +838,26 @@ export default function (pi: ExtensionAPI) {
         }
         const wsPath = join(wsParent, entry.name);
         try {
-          const changeId = getJjChangeId(wsPath);
-          const desc = runJj('log -r @ --no-graph -T description', { cwd: wsPath });
-          items.push({ path: wsPath, changeId, description: desc.trim() });
+          const headCommit = getGitHeadCommit(wsPath);
+          const branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath });
+          const desc = runGit('log -1 --format=%s', { cwd: wsPath });
+          items.push({ path: wsPath, headCommit, branchName, description: desc.trim() });
         } catch {
-          // Skip non-jj directories
+          // Skip non-worktree directories
         }
       }
 
       if (items.length === 0) {
         return {
-          content: [{ type: 'text', text: 'No active jj workspaces.' }],
+          content: [{ type: 'text', text: 'No active Git Worktrees.' }],
           details: { workspaces: [] },
         };
       }
 
-      const lines = [`**Active Workspaces** (${items.length})\n`];
+      const lines = [`**Active Worktrees** (${items.length})\n`];
       for (const item of items) {
         const shortPath = basename(item.path);
-        lines.push(`🔹 \`${item.changeId}\` — ${shortPath}`);
+        lines.push(`🔹 \`${item.branchName}\` (${item.headCommit.slice(0, 12)}) — ${shortPath}`);
         if (item.description) {
           lines.push(`   ${item.description.slice(0, 80)}`);
         }

@@ -2,13 +2,10 @@
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import {
-  getContractModelForRole,
-  getContractThinkingForRole,
-} from './models.ts';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
-import { provisionJjWorkspace } from '../jj.ts';
+import { provisionGitWorktree } from '../git_worktree.ts';
 import { logPath } from './manifest_store.ts';
+import { getContractModelForRole, getContractThinkingForRole } from './models.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
 import { PIPELINE_BASE_BRANCH } from './types.ts';
 
@@ -219,7 +216,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         this._workspaceId = existingWorkspaceId;
         this._pipelinePaneId = pipelinePane.pane_id;
 
-        this._provisionJjWorkspace();
+        this._provisionGitWorktree();
 
         return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
       }
@@ -245,7 +242,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
       });
 
-      this._provisionJjWorkspace();
+      this._provisionGitWorktree();
 
       return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
     }
@@ -271,7 +268,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
     });
 
-    this._provisionJjWorkspace();
+    this._provisionGitWorktree();
 
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
   }
@@ -284,28 +281,30 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return this._workspaceId;
   }
 
-  /** Return the isolated jj workspace path. Must be called after initialize(). */
+  /** Return the isolated git worktree path. Must be called after initialize(). */
   getWorkspacePath(): string {
     return this._workspacePath;
   }
 
   /**
-   * Provision an isolated jj workspace on top of dev.
+   * Provision an isolated Git Worktree on top of the base branch.
    * The root working copy is never moved — all file mutations happen here.
    */
-  private _provisionJjWorkspace(): void {
+  private _provisionGitWorktree(): void {
     const wsName = this._runId; // already prefixed "run-" from createManifest
     try {
-      const { workspacePath, changeId } = provisionJjWorkspace({
+      const { workspacePath, branchName, headCommit } = provisionGitWorktree({
         repoRoot: this._repoRoot,
         name: wsName,
         baseRevision: PIPELINE_BASE_BRANCH,
       });
       this._workspacePath = workspacePath;
-      console.log(`🔧 jj workspace: ${workspacePath} (change: ${changeId})`);
+      console.log(
+        `🔧 git worktree: ${workspacePath} (branch: ${branchName}, commit: ${headCommit})`,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn(`⚠️  jj workspace provisioning failed — using repo root: ${message}`);
+      console.warn(`⚠️  git worktree provisioning failed — using repo root: ${message}`);
     }
   }
 
@@ -448,14 +447,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     request: WorkerLaunchRequest;
   }): Promise<{ paneId: string }> {
     // Writer and critic work at repo root (only touch docs/contracts/).
-    // Implementer and verifier use the isolated jj workspace.
+    // Implementer and verifier use the isolated Git Worktree.
     const isolationRoles: ContractWorkerRole[] = ['implementer', 'verifier'];
     const cwd =
       isolationRoles.includes(options.request.role) && this._workspacePath
         ? this._workspacePath
         : this._repoRoot;
 
-    // Copy contract into jj workspace so implementer/verifier can read it.
+    // Copy contract into worktree so implementer/verifier can read it.
     if (cwd !== this._repoRoot && existsSync(options.request.contractPath)) {
       const wsContractPath = join(cwd, relative(this._repoRoot, options.request.contractPath));
       mkdirSync(dirname(wsContractPath), { recursive: true });
