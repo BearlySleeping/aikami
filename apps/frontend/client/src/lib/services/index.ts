@@ -39,6 +39,7 @@ export * from './audio/track_registry_service.svelte';
 export * from './audio/tts_service.svelte.ts';
 export * from './auth/auth_service.svelte.ts';
 export * from './campaign/campaign_service.svelte.ts';
+export * from './capability/capability_service.svelte.ts';
 export * from './character/character.svelte.ts';
 export * from './chat/chat.svelte.ts';
 export * from './chat/choice_history_store.svelte.ts';

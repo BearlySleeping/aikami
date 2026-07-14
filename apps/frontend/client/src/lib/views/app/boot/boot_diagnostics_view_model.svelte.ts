@@ -1,25 +1,20 @@
 // apps/frontend/client/src/lib/views/app/boot/boot_diagnostics_view_model.svelte
 //
-// ViewModel for the in-game boot diagnostics screen. Pings AI providers
-// to determine connectivity. Text providers (Ollama, OpenRouter) and Image
-// providers (ComfyUI) are checked; Voice defaults to online (Kokoro WebGPU).
-//
-// Ollama is pinged via native fetch (CORS-limited in browser mode;
-// requires Tauri or Ollama running with CORS headers to show online).
-// ComfyUI is pinged via the Vite dev proxy (/api/image) matching the
-// LocalServiceDetector pattern used in the settings/config system.
-// OpenRouter verifies configuration via aiSettingsService.
+// ViewModel for the in-game boot diagnostics screen. Delegates provider
+// detection to CapabilityService (C-318) for shared logic between the
+// pre-game capability screen and in-game diagnostics.
 //
 // Gate: only Text provider must be online. Image/Voice are optional.
 //
-// Contract: C-130 (origin), C-133 (flexible provider onboarding)
+// Contract: C-130 (origin), C-133 (flexible provider onboarding), C-318 (capability delegation)
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { aiSettingsService } from '$services';
+import type { DetectionStatus } from '@aikami/types';
+import { aiSettingsService, capabilityService } from '$services';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -53,10 +48,22 @@ export type BootDiagnosticsViewModelInterface = BaseViewModelInterface & {
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-const OLLAMA_URL = '/api/text/' as const;
-const COMFY_PROXY_PATH = '/api/image/object_info' as const;
 const POLL_INTERVAL_MS = 3000;
-const PING_TIMEOUT_MS = 3000;
+
+/** Maps CapabilityService DetectionStatus to the ProviderStatus used by this ViewModel. */
+const mapDetectionStatus = (s: DetectionStatus): ProviderStatus => {
+  switch (s) {
+    case 'detected':
+    case 'configured':
+      return 'online';
+    case 'not_found':
+    case 'error':
+    case 'skipped':
+      return 'offline';
+    case 'pending':
+      return 'pending';
+  }
+};
 
 // ── ViewModel ──────────────────────────────────────────────────────────
 
@@ -188,45 +195,11 @@ class BootDiagnosticsViewModel
   // ── Private: text checks ─────────────────────────────────────────────
 
   private async _checkTextProvider(): Promise<void> {
-    if (this.activeTextProvider === 'ollama') {
-      return this._checkOllama();
-    }
-    return this._checkOpenRouter();
-  }
-
-  /**
-   * Pings Ollama via native fetch with manual abort timeout.
-   * In browser mode CORS will block → caught → offline.
-   */
-  private async _checkOllama(): Promise<void> {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
-      const response = await fetch(OLLAMA_URL, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      this.textStatus = response.ok ? 'online' : 'offline';
+      const status = await capabilityService.detectText();
+      this.textStatus = mapDetectionStatus(status);
     } catch {
       this.textStatus = 'offline';
-    }
-  }
-
-  /**
-   * Validates OpenRouter configuration via aiSettingsService.
-   * Checks for a configured API key or endpoint+model combination.
-   */
-  private async _checkOpenRouter(): Promise<void> {
-    try {
-      const { textProvider } = aiSettingsService;
-      if (textProvider.apiKey || (textProvider.endpoint && textProvider.model)) {
-        this.textStatus = 'online';
-        return;
-      }
-      this.textStatus = 'unconfigured';
-    } catch {
-      this.textStatus = 'unconfigured';
     }
   }
 
@@ -241,38 +214,10 @@ class BootDiagnosticsViewModel
       this.imageStatus = 'online';
       return;
     }
-    return this._checkComfyUI();
-  }
 
-  /**
-   * Checks ComfyUI availability.
-   *
-   * First checks aiSettingsService.imageProvider configuration
-   * (matches the OpenRouter pattern). If configured, treats as online.
-   * Otherwise falls back to a health check via the Vite dev proxy.
-   */
-  private async _checkComfyUI(): Promise<void> {
-    // Check if image provider is already configured in settings
     try {
-      const { imageProvider } = aiSettingsService;
-      if (imageProvider.endpoint || imageProvider.model) {
-        this.imageStatus = 'online';
-        return;
-      }
-    } catch {
-      // Fall through to proxy check
-    }
-
-    // Health check via Vite dev proxy (same-origin, no CORS issues)
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
-      const response = await fetch(COMFY_PROXY_PATH, {
-        method: 'GET',
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      this.imageStatus = response.status < 500 ? 'online' : 'offline';
+      const status = await capabilityService.detectImage();
+      this.imageStatus = mapDetectionStatus(status);
     } catch {
       this.imageStatus = 'offline';
     }
