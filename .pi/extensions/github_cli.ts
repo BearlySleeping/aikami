@@ -5,7 +5,7 @@
 // cancellation safety and consistent timeout handling.
 //
 // Registered tools:
-//   gh_create_pr      — Create a PR (default base: dev)
+//   gh_create_pr      — Create a PR (default base: main)
 //   gh_list_prs       — List open PRs
 //   gh_summarize_pr   — View + summarize a PR
 //   gh_pr_status      — Show CI checks status for a PR
@@ -21,7 +21,10 @@ import { Type } from 'typebox';
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_TIMEOUT = 60_000;
-const DEFAULT_BASE = 'dev';
+
+import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
+
+const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
 
 /**
  * Resolve a pr identifier (number, URL, or branch name) to a gh-compatible
@@ -260,10 +263,10 @@ export default function (pi: ExtensionAPI) {
       'Create a GitHub Pull Request using gh CLI. Default base branch is "dev". ' +
       'Returns the PR URL on success. ' +
       'Set draft=true for work-in-progress PRs. Set web=true to open in browser.',
-    promptSnippet: 'Use gh_create_pr to create a GitHub PR (default base: dev)',
+    promptSnippet: 'Use gh_create_pr to create a GitHub PR (default base: main)',
     promptGuidelines: [
       'Use gh_create_pr when the user asks to create a pull request.',
-      'The default base branch is "dev". Use baseBranch to override.',
+      'The default base branch is set via PIPELINE_BASE_BRANCH in contract_pipeline/types.ts. Use baseBranch to override.',
       'After creation, the PR URL is shown — offer to merge it with gh_merge_pr if approved.',
     ],
     parameters: Type.Object({

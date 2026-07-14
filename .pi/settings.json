@@ -13,5 +13,8 @@
   "packages": ["npm:context-mode", "npm:pi-mcp-adapter", "npm:@hypabolic/pi-hypa"],
   "extensions": ["./extensions"],
   "skills": ["./skills", "./generated-skills", "./.pi/generated-skills"],
-  "prompts": ["./prompts"]
+  "prompts": ["./prompts"],
+  "powerline": {
+    "welcome": false
+  }
 }

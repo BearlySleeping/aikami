@@ -55,14 +55,12 @@ export const resolveNextStage = (options: {
 export const resolveReviewDecision = (decision: ReviewDecision): ContractPipelineStage => {
   switch (decision) {
     case 'approve':
-      return 'accepted';
-    case 'approve_pr':
-    case 'approve_merge':
-      return 'accepted'; // orchestrator handles reconciliation after accepted
-    case 'changes_applied':
-      return 'verify'; // re-verify (not critique — contract changes are rare, verifier catches)
+      return 'pr_created';
+    case 'merge':
+      return 'merged';
+    case 'change':
+      return 'implement';
     case 'reject':
-    case 'blocked':
       return 'blocked';
   }
 };

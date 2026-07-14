@@ -67,7 +67,8 @@ auto-logging is bypassed.
 - ❌ `on:click` / `on:keydown` / `on:submit` event directives
 - ❌ `createEventDispatcher` — use callback props instead
 - ❌ `<slot>` / `<slot name="...">` — use `{@render children?.()}` and named
-  snippet props
+  snippet props. `{@render}` works ONLY with snippets defined via
+  `{#snippet}` — for reusable components, use `<ComponentName />` import syntax
 
 Use `$derived.by()` for multi-statement derivations. In ViewModels prefer
 native getters over `$derived` for computed properties.
