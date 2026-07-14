@@ -5,7 +5,7 @@ import { dirname, join, relative } from 'node:path';
 import {
   getContractModelForRole,
   getContractThinkingForRole,
-} from '../../../../../.pi/swarm/models';
+} from './models.ts';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { provisionJjWorkspace } from '../jj.ts';
 import { logPath } from './manifest_store.ts';
