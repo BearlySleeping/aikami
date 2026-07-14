@@ -200,23 +200,23 @@ async function installSkillSource(source: SkillSource): Promise<void> {
   console.log('Cleaned up temp clone.');
 }
 
-// ── validate local Jujutsu skill ───────────────────────────────────
+// ── validate local Git Worktree skill ───────────────────────────────────
 
-const JUJUTSU_SKILL_PATH = join(PI_DIR, 'skills', 'jujutsu', 'SKILL.md');
+const GIT_WORKTREE_SKILL_PATH = join(PI_DIR, 'skills', 'git-worktree', 'SKILL.md');
 
-async function validateJujutsuSkill(): Promise<void> {
-  if (!existsSync(JUJUTSU_SKILL_PATH)) {
-    console.warn('  ⚠️  Jujutsu skill not found at', JUJUTSU_SKILL_PATH);
-    console.warn('     Run `mkdir -p .pi/skills/jujutsu && cp ... SKILL.md` to provision it.');
+async function validateGitWorktreeSkill(): Promise<void> {
+  if (!existsSync(GIT_WORKTREE_SKILL_PATH)) {
+    console.warn('  ⚠️  Git Worktree skill not found at', GIT_WORKTREE_SKILL_PATH);
+    console.warn('     Run `mkdir -p .pi/skills/git-worktree && cp ... SKILL.md` to provision it.');
     return;
   }
 
-  const content = await readFile(JUJUTSU_SKILL_PATH, 'utf-8');
+  const content = await readFile(GIT_WORKTREE_SKILL_PATH, 'utf-8');
 
   // Parse YAML-like frontmatter
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
   if (!fmMatch?.[1]) {
-    console.warn('  ⚠️  Jujutsu skill missing frontmatter block');
+    console.warn('  ⚠️  Git Worktree skill missing frontmatter block');
     return;
   }
 
@@ -236,21 +236,20 @@ async function validateJujutsuSkill(): Promise<void> {
   // Verify capability mentions in the body
   const body = content.slice((fmMatch[0]?.length ?? 0) + 8); // skip frontmatter + `\n---\n`
   const capabilities: Record<string, boolean> = {
-    'workspace add': /jj workspace add/.test(body),
-    'workspace forget': /jj workspace forget/.test(body),
-    'workspace list': /jj workspace list/.test(body),
-    describe: /jj describe/.test(body),
-    squash: /jj squash/.test(body),
-    abandon: /jj abandon/.test(body),
-    'git push': /jj git push/.test(body),
-    log: /jj log/.test(body),
+    'worktree add': /git worktree add/.test(body),
+    'worktree remove': /git worktree remove/.test(body),
+    'worktree list': /git worktree list/.test(body),
+    commit: /git commit/.test(body),
+    push: /git push/.test(body),
+    branch: /git branch/.test(body),
+    log: /git log/.test(body),
   };
 
   const missing = Object.entries(capabilities)
     .filter(([, found]) => !found)
     .map(([cap]) => cap);
 
-  console.log(`  ✅ Jujutsu skill: ${name} v${version}`);
+  console.log(`  ✅ Git Worktree skill: ${name} v${version}`);
   console.log(`     Description: ${description?.slice(0, 80)}…`);
   console.log(`     Tags: ${tags.join(', ')}`);
   console.log(`     Capabilities: ${Object.keys(capabilities).length} tracked`);
@@ -297,9 +296,9 @@ async function main() {
     }
   }
 
-  // 4. Validate local Jujutsu skill registration (C-046: jj workspace isolation)
-  console.log('\n── Validating Jujutsu skill ──');
-  await validateJujutsuSkill();
+  // 4. Validate local Git Worktree skill registration
+  console.log('\n── Validating Git Worktree skill ──');
+  await validateGitWorktreeSkill();
 
   // 5. Sanitize skill descriptions to stay within the 1024 char Agent Skills spec limit
   console.log('\n── Sanitizing descriptions ──');

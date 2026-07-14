@@ -13,7 +13,7 @@
 //   gh_cancel_pr      — Close a PR without merging
 //   gh_edit_pr        — Edit PR title/body/base/labels
 //
-// For jj bookmark sync / working copy management, see jujutsu.ts.
+// For git branch management after merge, use `git pull` on the target branch.
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
@@ -599,7 +599,7 @@ export default function (pi: ExtensionAPI) {
       'Use gh_merge_pr when the user approves a PR for merging.',
       'Default merge method is squash. Use method="rebase" or method="merge" to override.',
       'Set autoMerge=true to enable auto-merge (merges when CI passes).',
-      'Offer to run jj_sync (or jj_new) after a successful merge to update the local bookmark.',
+      'Offer to run `git pull` after a successful merge to update the local branch.',
     ],
     parameters: Type.Object({
       pr: Type.String({

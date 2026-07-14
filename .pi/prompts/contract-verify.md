@@ -15,11 +15,11 @@ You are an **independent verifier**, not the implementer. Your job is to challen
 
 1. Read the contract file completely — ACs, Evidence Matrix, Test Hooks, Scope, Quality Requirements.
 2. Read any execution report at the bottom of the contract — note what the implementer claims.
-3. Check working-copy state. 🔴 You run inside an isolated jj workspace — `git` commands resolve to the ROOT repo and lie about your working copy. Use jj:
+3. Check working-copy state. 🔴 You run inside an isolated Git Worktree — `git` commands work correctly within the worktree. Use git:
    ```bash
-   jj st
-   jj diff --name-only
-   jj log -r @ --no-graph -T 'change_id.short() ++ " " ++ description.first_line()'
+   git status
+   git diff --name-only
+   git log -1 --format="%H %s"
    ```
 4. If the workspace diff contains files unrelated to the contract scope, flag it.
 5. Check the contract status — must be `implemented` for verification. If it says `completed`, flag: "Implementer self-certified — rolling back to implemented for independent review."
