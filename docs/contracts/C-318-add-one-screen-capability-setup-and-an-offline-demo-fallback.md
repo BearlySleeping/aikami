@@ -8,7 +8,7 @@
 | **Target** | Capability detection screen (new), capability service (new), start menu integration (modify), per-feature degradation policy. |
 | **Priority** | P0 — provider configuration must not block the authored demo. |
 | **Dependencies** | C-133 (completed), C-134 (completed), C-202 (completed), C-230 (completed), C-317 (approved — start menu rebuilt around campaigns). |
-| **Status** | implemented |
+| **Status** | verification_failed |
 | **Promotion** | — |
 | **Docs Impact** | Internal — capability screen is self-documenting; degradation policy is a developer reference. |
 | **Contract version** | 2.0.0 |
@@ -471,8 +471,14 @@ Built the one-screen capability setup for C-318: a new `CapabilityService` extra
 
 ### Test Results
 - Unit (degradation): 6/6 pass (0 failures)
+- Unit (capability_service): 15/15 pass (0 failures)
+- Unit (capability_view_model): 13/13 pass (0 failures)
 - Unit (boot_diagnostics_view_model): 18/18 pass (0 failures) — baseline had 17/19 pass with 2 pre-existing failures; now 18/18 with delegation pattern
 - Unit (campaign_service): 0/16 pass (16 pre-existing IndexedDB mock failures) — unchanged from baseline
 - Unit (start_view_model): module load error (pre-existing) — unchanged from baseline
 - Visual: N/A (capability screen is primarily functional)
 - Baseline: 0 new failures introduced; 18 pre-existing failures unchanged
+
+### Verifier Feedback Resolved (Attempt 2)
+- **StatusBadge snippet**: Fixed `{#snippet}` invocation — changed from `<StatusBadge/>` component syntax to `{@render StatusBadge({...})}` (Svelte 5 snippet call syntax).
+- **Missing test artifacts**: Added `capability_service.test.ts` (15 tests covering AC-1, AC-3 — text/image detection, Ollama proxy/native, timeouts, cloud config) and `capability_view_model.test.ts` (13 tests covering AC-2, AC-4 — offline demo path, local AI path, cloud modal lifecycle).
