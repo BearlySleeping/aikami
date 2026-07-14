@@ -15,7 +15,11 @@ import type {
   ContractWorkerRole,
   ReviewDecision,
 } from '../../scripts/src/lib/agents/contract_pipeline/types';
-import { getJjChangeId, runJj, sanitizeWorkspaceName } from '../../scripts/src/lib/agents/jj';
+import {
+  getGitHeadCommit,
+  runGit,
+  sanitizeBranchName,
+} from '../../scripts/src/lib/agents/git_worktree';
 
 const MUTATING_GIT_RE =
   /\bgit\s+(?:add|commit|push|merge|rebase|reset|checkout|switch|clean|stash|tag)\b/i;
@@ -75,7 +79,7 @@ const isFileMutationAllowed = (options: {
 /** Register deterministic contract pipeline completion, review, workspace isolation, and role guards. */
 export default function contractPipelineExtension(pi: ExtensionAPI): void {
   // ── Workspace lifecycle state ───────────────────────────────
-  // The orchestrator provisions the jj workspace and passes its path
+  // The orchestrator provisions the Git Worktree and passes its path
   // via CONTRACT_PIPELINE_WORKSPACE_PATH. The extension consumes it —
   // it does NOT provision its own (single source of truth).
   let _wsPath: string | null = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH ?? null;
@@ -172,10 +176,10 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       if (['implementer', 'verifier'].includes(role)) {
         if (params.status === 'passed' && wsPath) {
           try {
-            const changeId = getJjChangeId(wsPath);
+            const headCommit = getGitHeadCommit(wsPath);
             const checkpointMsg = `Checkpoint: ${role} stage passed (attempt ${attempt})`;
-            runJj(`describe -m "${checkpointMsg}"`, { cwd: wsPath });
-            console.log(`📝 Workspace checkpointed: ${changeId}`);
+            runGit(`commit -a -m "${checkpointMsg}"`, { cwd: wsPath });
+            console.log(`📝 Workspace checkpointed: ${headCommit}`);
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             console.warn(`⚠️  Workspace checkpoint failed: ${message}`);
@@ -183,14 +187,14 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         } else if (params.status === 'failed' || params.status === 'blocked') {
           if (wsPath) {
             try {
-              const changeId = getJjChangeId(wsPath);
+              const headCommit = getGitHeadCommit(wsPath);
               console.error(
-                `❌ Task failed with change ID: ${changeId}. ` +
-                  `Workspace kept for diagnostics at: ${wsPath}`,
+                `❌ Task failed at commit: ${headCommit}. ` +
+                  `Worktree kept for diagnostics at: ${wsPath}`,
               );
-              params.findings.push(`Failed workspace change ID: ${changeId} (path: ${wsPath})`);
+              params.findings.push(`Failed worktree commit: ${headCommit} (path: ${wsPath})`);
             } catch {
-              console.error(`❌ Task failed. Workspace kept at: ${wsPath}`);
+              console.error(`❌ Task failed. Worktree kept at: ${wsPath}`);
             }
           }
         }
@@ -286,27 +290,26 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
     name: 'contract_workspace_reconcile',
     label: 'Contract: Reconcile Workspace',
     description:
-      'Publish an isolated jj workspace to a remote Git bookmark. ' +
-      'Creates a bookmark, pushes to the remote, and cleans up the workspace. ' +
+      'Publish an isolated Git Worktree to a remote branch. ' +
+      'Commits all changes, pushes to the remote, and cleans up the worktree. ' +
       'After this tool succeeds, call gh_create_pr to create the GitHub PR. ' +
       'Only call after all tests pass.',
     promptSnippet:
       'Use contract_workspace_reconcile to push workspace changes, then call gh_create_pr for the PR.',
     promptGuidelines: [
       'Call after the pipeline task is completely done (all stages passed).',
-      'Pushes the workspace change as a remote bookmark (branch).',
+      'Pushes the workspace branch to origin.',
       'This tool does NOT create the PR — after it succeeds, call gh_create_pr with the returned headBranch.',
-      'Cleans up the workspace directory automatically on success.',
-      'If the user approves, use gh_merge_pr to merge. Then jj_sync + jj_new to update the local working copy.',
+      'Cleans up the worktree directory automatically on success.',
     ],
     parameters: Type.Object({
       workspacePath: Type.String({
-        description: 'Absolute path to the jj workspace directory.',
+        description: 'Absolute path to the Git Worktree directory.',
       }),
       contractId: Type.Optional(
         Type.String({
           description:
-            'Contract or task ID used in the bookmark name and PR title. ' +
+            'Contract or task ID used in the branch name and PR title. ' +
             'Defaults to the sanitized workspace name or CONTRACT_PIPELINE_RUN_ID.',
         }),
       ),
@@ -328,7 +331,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           content: [
             {
               type: 'text',
-              text: `❌ Workspace not found: \`${wsPath}\``,
+              text: `❌ Worktree not found: \`${wsPath}\``,
             },
           ],
           isError: true,
@@ -337,16 +340,18 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       }
 
       // Phase C: Task Completion — GitHub PR Reconciliation
-      let changeId: string;
+      let headCommit: string;
+      let branchName: string;
       try {
-        changeId = getJjChangeId(wsPath);
+        headCommit = getGitHeadCommit(wsPath);
+        branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
           content: [
             {
               type: 'text',
-              text: `❌ Could not read change ID from workspace: ${message}`,
+              text: `❌ Could not read git state from worktree: ${message}`,
             },
           ],
           isError: true,
@@ -354,83 +359,68 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         };
       }
 
-      // Derive a safe bookmark name from the contract ID, workspace name,
-      // or pipeline run ID. Idempotency guard: if a bookmark with this name
+      // Derive a safe branch name from the contract ID, workspace name,
+      // or pipeline run ID. Idempotency guard: if a branch with this name
       // already exists on the remote (from a prior partial run), append a
       // timestamp token to avoid non-fast-forward push rejection.
       const contractId =
         params.contractId ?? process.env.CONTRACT_PIPELINE_RUN_ID ?? basename(wsPath);
-      const baseBookmark = `contract-task-${sanitizeWorkspaceName(contractId)}`;
+      const baseBranchName = `contract-task-${sanitizeBranchName(contractId)}`;
       const baseBranch = params.baseBranch ?? 'dev';
 
-      let bookmarkName = baseBookmark;
+      let headBranch = baseBranchName;
 
-      // Check if the bookmark already exists on the remote.
-      // git ls-remote is used (not jj) because it's a fast read-only check
-      // that works from the repo root regardless of workspace state.
+      // Check if the branch already exists on the remote.
       try {
-        const remoteCheck = execSync(`git ls-remote --heads origin refs/heads/${baseBookmark}`, {
+        const remoteCheck = execSync(`git ls-remote --heads origin refs/heads/${baseBranchName}`, {
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
           cwd,
           timeout: 10000,
         }).trim();
         if (remoteCheck) {
-          // Bookmark exists — append a short unique token to avoid collision
+          // Branch exists — append a short unique token to avoid collision
           const token = Date.now().toString(36).slice(-6);
-          bookmarkName = `${baseBookmark}-${token}`;
+          headBranch = `${baseBranchName}-${token}`;
           console.log(
-            `  ⚠️  Bookmark \`${baseBookmark}\` already exists on remote. Using \`${bookmarkName}\`.`,
+            `  ⚠️  Branch \`${baseBranchName}\` already exists on remote. Using \`${headBranch}\`.`,
           );
         }
       } catch {
         // If we can't check, assume the name is safe and proceed.
-        // The subsequent `jj git push` will surface the real error if there is one.
       }
 
-      // Finalize the workspace description
-      const finalMsg = `Feat: Completed contract pipeline task — PR as \`${bookmarkName}\` (change: ${changeId})`;
-      try {
-        runJj(`describe -m "${finalMsg}"`, { cwd: wsPath });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to finalize workspace description: ${message}`,
-            },
-          ],
-          isError: true,
-          details: {},
-        };
+      // Rename the worktree branch if needed.
+      if (branchName !== headBranch) {
+        try {
+          runGit(`branch -m ${branchName} ${headBranch}`, { cwd: wsPath });
+          branchName = headBranch;
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Failed to rename branch \`${branchName}\` → \`${headBranch}\`: ${message}`,
+              },
+            ],
+            isError: true,
+            details: { headCommit, branchName },
+          };
+        }
       }
 
-      // Step A: Define safe bookmarks — create a jj bookmark pointing at
-      // the agent's current working head (@) in the isolated workspace.
+      // Finalize: commit all changes.
+      const finalMsg = `Feat: Completed contract pipeline task — PR as \`${headBranch}\` (commit: ${headCommit})`;
       try {
-        runJj(`bookmark create ${bookmarkName} -r @`, { cwd: wsPath });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `❌ Failed to create bookmark \`${bookmarkName}\`: ${message}`,
-            },
-          ],
-          isError: true,
-          details: { changeId, bookmarkName },
-        };
+        runGit(`commit -a -m "${finalMsg}"`, { cwd: wsPath });
+      } catch {
+        // No changes to commit — proceed with push.
       }
 
-      // Step B: Push the bookmark to the remote tracked Git repository.
-      // Explicit --remote origin prevents headless pipeline hangs when
-      // multiple remotes are configured or no default tracking remote is set.
-      // The retry/backoff wrapper in runJj handles transient network blips
-      // and git lock contention.
+      // Push the branch to origin.
       try {
-        runJj(`git push --remote origin -b ${bookmarkName}`, { cwd: wsPath });
+        runGit(`push -u origin ${headBranch}`, { cwd: wsPath });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -438,44 +428,41 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             {
               type: 'text',
               text: [
-                `❌ Failed to push bookmark \`${bookmarkName}\` to remote: ${message}`,
+                `❌ Failed to push branch \`${headBranch}\` to remote: ${message}`,
                 '',
-                'The workspace and bookmark have been preserved. Manual push:',
+                'The worktree has been preserved. Manual push:',
                 `  1. cd ${wsPath}`,
-                `  2. jj git push -b ${bookmarkName}`,
-                `  3. gh pr create --head "${bookmarkName}" --base ${baseBranch}`,
+                `  2. git push -u origin ${headBranch}`,
+                `  3. gh pr create --head "${headBranch}" --base ${baseBranch}`,
               ].join('\n'),
             },
           ],
           isError: true,
-          details: { changeId, bookmarkName, workspacePath: wsPath },
+          details: { headCommit, headBranch, workspacePath: wsPath },
         };
       }
 
       // Build PR title + body for gh_create_pr delegation.
-      // PR creation is delegated to the gh_create_pr tool so the agent
-      // can use the full GitHub CLI extension (merge, sync, etc.).
       const prTitle = `Pi Agent Resolution: Contract ${contractId}`;
       const prBody = [
         `## Automated Pull Request`,
         '',
         `- **Contract ID:** \`${contractId}\``,
-        `- **Change ID:** \`${changeId}\``,
-        `- **Bookmark:** \`${bookmarkName}\``,
+        `- **Commit:** \`${headCommit}\``,
+        `- **Branch:** \`${headBranch}\``,
         `- **Pipeline Run:** \`${process.env.CONTRACT_PIPELINE_RUN_ID ?? 'unknown'}\``,
         '',
         `Generated by Pi Pipeline. Passes initial staging checks.`,
       ].join('\n');
 
-      // Step C: Teardown — clean up the workspace directory.
+      // Step C: Teardown — clean up the worktree.
       try {
-        runJj(`workspace forget ${wsPath}`, { cwd: cwd });
+        runGit(`worktree remove '${wsPath}' --force`, { cwd });
       } catch {
-        // Workspace may already be forgotten
-      }
-
-      if (existsSync(wsPath)) {
-        rmSync(wsPath, { recursive: true, force: true });
+        // Fall back to rm -rf if git worktree remove fails.
+        if (existsSync(wsPath)) {
+          rmSync(wsPath, { recursive: true, force: true });
+        }
       }
 
       // Reset in-memory state
@@ -488,13 +475,13 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             text: [
               `✅ **Workspace pushed to remote.**`,
               '',
-              `**Change ID:** \`${changeId}\``,
-              `**Bookmark (branch):** \`${bookmarkName}\``,
+              `**Commit:** \`${headCommit}\``,
+              `**Branch:** \`${headBranch}\``,
               `**Base branch:** \`${baseBranch}\``,
               '',
               `**Next: Call \`gh_create_pr\`** to create the Pull Request:`,
               `  - title: "${prTitle}"`,
-              `  - headBranch: "${bookmarkName}"`,
+              `  - headBranch: "${headBranch}"`,
               `  - baseBranch: "${baseBranch}"`,
               '',
               '**PR description:**',
@@ -505,20 +492,17 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
               'After the PR is created, you can: ',
               '- **Merge it** with `gh_merge_pr` when ready',
               '- **Check CI** with `gh_pr_status`',
-              '- **Sync bookmark** with `jj_sync` after merge',
-              '- **Move working copy** with `jj_new` to start on updated tip',
             ].join('\n'),
           },
         ],
         details: {
-          changeId,
-          bookmarkName,
-          headBranch: bookmarkName,
+          headCommit,
+          headBranch,
           baseBranch,
           prTitle,
           prBody,
           workspacePath: wsPath,
-          bookmarkPushed: true,
+          branchPushed: true,
           needsPrCreation: true,
         },
       };
@@ -533,18 +517,18 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
     name: 'contract_workspace_log_failure',
     label: 'Contract: Log Workspace Failure',
     description:
-      'Log diagnostic information for a failed workspace. Captures the change ID, ' +
-      'log output, and current status. Then cleans up the workspace safely. ' +
+      'Log diagnostic information for a failed worktree. Captures the commit, ' +
+      'log output, and current status. Then cleans up the worktree safely. ' +
       'Use during error recovery (Phase D).',
     promptSnippet: 'Use contract_workspace_log_failure to capture diagnostics before cleanup.',
     promptGuidelines: [
       'Call when a pipeline stage fails or error recovery is needed.',
-      'Abandons the change (does NOT delete history) for diagnostic traceability.',
-      'Cleans up the workspace directory afterward.',
+      'Captures diagnostic info before removing the worktree.',
+      'Cleans up the worktree directory afterward.',
     ],
     parameters: Type.Object({
       workspacePath: Type.String({
-        description: 'Absolute path to the failed jj workspace directory.',
+        description: 'Absolute path to the failed Git Worktree directory.',
       }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -552,62 +536,46 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       const cwd = ctx.cwd;
 
       // Capture diagnostics (log, status, and full diff for post-mortem)
-      let changeId: string | null = null;
+      let headCommit: string | null = null;
       let logOutput = '';
       let statusOutput = '';
       let diffOutput = '';
 
       if (existsSync(wsPath)) {
         try {
-          changeId = getJjChangeId(wsPath);
-          logOutput = runJj(`log -r @ --no-graph -T 'change_id ++ " " ++ description'`, {
-            cwd: wsPath,
-          });
-          statusOutput = runJj('status', { cwd: wsPath });
+          headCommit = getGitHeadCommit(wsPath);
+          logOutput = runGit('log -1 --format="%H %s"', { cwd: wsPath });
+          statusOutput = runGit('status', { cwd: wsPath });
           // Post-mortem artifact: full diff of what the agent changed.
-          // This lets human supervisors see exactly what code caused the failure
-          // without needing to manually reconstruct the workspace.
-          if (changeId) {
+          if (headCommit) {
             try {
-              diffOutput = runJj(`diff -r ${changeId}`, { cwd: wsPath });
+              diffOutput = runGit(`diff ${headCommit}~1..${headCommit}`, { cwd: wsPath });
             } catch {
-              diffOutput = '(diff unavailable)';
+              // If only one commit, show working tree diff.
+              diffOutput = runGit('diff HEAD', { cwd: wsPath });
             }
           }
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
-          logOutput = `Could not read jj diagnostics: ${message}`;
+          logOutput = `Could not read git diagnostics: ${message}`;
         }
       }
 
-      // Abandon the change (marks as abandoned, keeps history)
-      if (changeId) {
-        try {
-          runJj(`abandon ${changeId}`, { cwd: cwd });
-          console.log(`🚫 Abandoned failed change: ${changeId}`);
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn(`⚠️  Could not abandon change ${changeId}: ${message}`);
-        }
-      }
-
-      // Clean up the workspace directory
+      // Clean up the worktree
       try {
-        runJj(`workspace forget ${wsPath}`, { cwd: cwd });
+        runGit(`worktree remove '${wsPath}' --force`, { cwd });
       } catch {
-        // May already be forgotten
-      }
-
-      if (existsSync(wsPath)) {
-        rmSync(wsPath, { recursive: true, force: true });
+        if (existsSync(wsPath)) {
+          rmSync(wsPath, { recursive: true, force: true });
+        }
       }
 
       // Reset in-memory state
       _wsPath = null;
 
       const lines = [
-        `🚫 **Workspace failure logged**`,
-        `Change ID: \`${changeId ?? 'unknown'}\``,
+        `🚫 **Worktree failure logged**`,
+        `Commit: \`${headCommit ?? 'unknown'}\``,
         '',
         '**Diagnostic log:**',
         '```',
@@ -624,16 +592,15 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         diffOutput || '(diff unavailable)',
         '```',
         '',
-        `The change has been abandoned (not deleted) for traceability.`,
-        `Workspace directory cleaned up: \`${wsPath}\``,
+        `Worktree removed: \`${wsPath}\``,
       ];
 
       return {
         content: [{ type: 'text', text: lines.join('\n') }],
         details: {
-          changeId,
+          headCommit,
           workspacePath: wsPath,
-          abandoned: !!changeId,
+          cleaned: true,
         },
       };
     },

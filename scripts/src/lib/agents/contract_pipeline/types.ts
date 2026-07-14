@@ -3,7 +3,7 @@
 
 /**
  * 🔴 SINGLE SOURCE OF TRUTH: default base branch for contract pipeline PRs
- * and jj workspace base revisions.
+ * and Git Worktree base revisions.
  *
  * Currently `main` — early development, and CodeRabbit only reviews PRs
  * targeting main. Change this one constant (or set CONTRACT_PIPELINE_BASE_BRANCH)
@@ -45,7 +45,7 @@ export type ContractStageResult = {
 /**
  * Review decision modes matching user intent:
  *  - approve: accept run, stop here
- *  - approve_pr: reconcile → push bookmark → create PR to dev
+ *  - approve_pr: reconcile → push branch → create PR to dev
  *  - approve_merge: PR + auto-merge + sync (the "send-it")
  *  - changes_applied: edits made → re-verify
  *  - reject: block run, keep workspace for diagnostics

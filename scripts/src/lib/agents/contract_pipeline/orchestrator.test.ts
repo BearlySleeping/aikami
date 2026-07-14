@@ -69,7 +69,7 @@ describe('runContractPipeline', () => {
     expect(manifest.contractId).toBe('C-365');
   });
 
-  it('allows tracked+untracked changes (jj workspaces isolate mutations)', async () => {
+  it('allows tracked+untracked changes (Git Worktrees isolate mutations)', async () => {
     const repository = setupRepository();
     writeFileSync(join(repository.root, 'dirty-file.ts'), '// changed');
     writeFileSync(join(repository.root, 'untracked-file.ts'), '// untracked');
