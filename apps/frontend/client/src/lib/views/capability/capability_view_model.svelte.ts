@@ -13,6 +13,7 @@ import {
 import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
 import { encrypt } from '$lib/utils/crypto_vault';
 import { campaignService, capabilityService, routerService } from '$services';
+import { PROVIDER_MODEL_FETCH } from '$lib/services/config/provider_endpoints';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -207,16 +208,30 @@ class CapabilityViewModel
     const startTime = performance.now();
 
     try {
-      // For the capability screen, test via OpenRouter models endpoint
+      // Use the selected provider's model-fetch endpoint
+      const providerConfig = PROVIDER_MODEL_FETCH[this.selectedCloudProvider];
+      if (!providerConfig) {
+        this.testResult = `✗ Provider ${this.selectedCloudProvider} not configured`;
+        return;
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch('https://openrouter.ai/api/v1/models', {
+      // Build headers based on provider's auth configuration
+      const headers: Record<string, string> = {};
+      const { auth, extraHeaders } = providerConfig;
+      if (auth.location === 'header') {
+        const value = auth.prefix ? `${auth.prefix}${this.tempApiKey.trim()}` : this.tempApiKey.trim();
+        headers[auth.name] = value;
+      }
+      if (extraHeaders) {
+        Object.assign(headers, extraHeaders);
+      }
+
+      const response = await fetch(providerConfig.url, {
         method: 'GET',
-        headers: {
-          // biome-ignore lint/style/useNamingConvention: HTTP header name
-          Authorization: `Bearer ${this.tempApiKey.trim()}`,
-        },
+        headers,
         signal: controller.signal,
       });
 
@@ -227,15 +242,15 @@ class CapabilityViewModel
         const body = (await response.json()) as { data?: unknown[] };
         const modelCount = Array.isArray(body.data) ? body.data.length : 0;
         this.testResult = `✓ Connected — ${latency}ms, ${modelCount} models available`;
-        this.debug('testCloudConnection:success', { latency, modelCount });
+        this.debug('testCloudConnection:success', { provider: this.selectedCloudProvider, latency, modelCount });
       } else {
         this.testResult = `✗ Connection failed (HTTP ${response.status})`;
-        this.debug('testCloudConnection:bad-status', { status: response.status });
+        this.debug('testCloudConnection:bad-status', { provider: this.selectedCloudProvider, status: response.status });
       }
     } catch (error) {
       const latency = Math.round(performance.now() - startTime);
       this.testResult = `✗ Connection failed — ${String(error).slice(0, 100)}`;
-      this.debug('testCloudConnection:error', { latency, error: String(error) });
+      this.debug('testCloudConnection:error', { provider: this.selectedCloudProvider, latency, error: String(error) });
     } finally {
       this.isTesting = false;
     }
@@ -253,9 +268,9 @@ class CapabilityViewModel
     }
 
     try {
-      // Encrypt and store the API key
-      await encrypt({ text: JSON.stringify({ apiKeys: { openrouter: key } }) });
-      this.debug('confirmCloudConnection:saved');
+      // Encrypt and store the API key under the selected provider's ID
+      await encrypt({ text: JSON.stringify({ apiKeys: { [this.selectedCloudProvider]: key } }) });
+      this.debug('confirmCloudConnection:saved', { provider: this.selectedCloudProvider });
 
       this.showCloudSetup = false;
 

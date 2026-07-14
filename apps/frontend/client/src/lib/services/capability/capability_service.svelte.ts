@@ -118,7 +118,7 @@ class CapabilityService
 
     try {
       const response = await fetchWithTimeout('/api/image/object_info', PING_TIMEOUT_MS);
-      return response.status < 500 ? 'detected' : 'not_found';
+      return response.ok ? 'detected' : 'not_found';
     } catch {
       return 'not_found';
     }
@@ -144,11 +144,15 @@ class CapabilityService
 
   /**
    * Pings Ollama via Vite dev proxy first, then native fetch as fallback.
+   * Both attempts share the aggregate PING_TIMEOUT_MS deadline.
    */
   private async _pingOllama(): Promise<DetectionStatus> {
+    const deadline = Date.now() + PING_TIMEOUT_MS;
+
     // Primary: Vite dev proxy (same-origin, no CORS issues)
     try {
-      const response = await fetchWithTimeout(OLLAMA_PROXY_PATH, PING_TIMEOUT_MS);
+      const remaining = Math.max(0, deadline - Date.now());
+      const response = await fetchWithTimeout(OLLAMA_PROXY_PATH, remaining);
       if (response.ok) {
         this.debug('_pingOllama:proxy-ok');
         return 'detected';
@@ -160,7 +164,8 @@ class CapabilityService
     // Fallback: native fetch to localhost (CORS-limited in browser,
     // works in Tauri / Electron due to relaxed CSP)
     try {
-      const response = await fetchWithTimeout(OLLAMA_LOCAL_TAGS, PING_TIMEOUT_MS);
+      const remaining = Math.max(0, deadline - Date.now());
+      const response = await fetchWithTimeout(OLLAMA_LOCAL_TAGS, remaining);
       if (response.ok) {
         const body = (await response.json()) as { models?: unknown[] };
         const modelCount = Array.isArray(body.models) ? body.models.length : 0;

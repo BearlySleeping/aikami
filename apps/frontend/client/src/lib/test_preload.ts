@@ -480,8 +480,8 @@ const _localServicesMock = () => ({
     detect: mock(async () => ({
       isComplete: true,
       textStatus: 'detected',
-      imageStatus: 'online',
-      voiceStatus: 'online',
+      imageStatus: 'detected',
+      voiceStatus: 'detected',
       summary: 'Mock detection',
     })),
     detectText: mock(async () => 'detected'),

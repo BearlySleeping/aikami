@@ -109,10 +109,17 @@ describe('CapabilityViewModel', () => {
 
   // ── Initial state ────────────────────────────────────────────────────
 
-  test('starts with pending detection and detecting flag true', () => {
+  test('starts with pending detection and detecting flag true', async () => {
     const vm = createVm();
+    // Initial state before initialization
     expect(vm.snapshot.textStatus).toBe('pending');
     expect(vm.snapshot.isComplete).toBe(false);
+
+    // Initialize and verify detection completes
+    await vm.initialize();
+    expect(vm.snapshot.isComplete).toBe(true);
+    expect(vm.snapshot.textStatus).not.toBe('pending');
+    expect(vm.isDetecting).toBe(false);
   });
 
   test('localAiDetected is false when textStatus is not_found', async () => {
@@ -184,12 +191,30 @@ describe('CapabilityViewModel', () => {
     expect(vm.testResult).toBe('');
   });
 
-  test('selectCloudProvider changes provider and clears test result', () => {
+  test('selectCloudProvider changes provider and clears test result', async () => {
     const vm = createVm();
     vm.testResult = 'old result';
     vm.selectCloudProvider('anthropic');
     expect(vm.selectedCloudProvider).toBe('anthropic');
     expect(vm.testResult).toBe('');
+
+    // Verify provider-specific endpoint is used for testing
+    // Mock fetch to verify the correct URL is called
+    let fetchedUrl = '';
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      fetchedUrl = typeof input === 'string' ? input : input.toString();
+      return {
+        ok: true,
+        json: async () => ({ data: [] }),
+      };
+    }) as typeof globalThis.fetch;
+
+    vm.tempApiKey = 'test-key';
+    await vm.testCloudConnection();
+
+    // Anthropic should use api.anthropic.com, not openrouter.ai
+    expect(fetchedUrl).toInclude('anthropic.com');
+    expect(fetchedUrl).not.toInclude('openrouter.ai');
   });
 
   test('testCloudConnection is no-op with empty key', async () => {

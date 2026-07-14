@@ -252,11 +252,22 @@ describe('CapabilityService', () => {
   });
 
   test('detectText handles fetch timeout gracefully', async () => {
-    // Simulate a fetch that aborts (like a timeout)
-    mockFetch(() => {
-      throw new DOMException('The operation was aborted', 'AbortError');
+    const startTime = Date.now();
+    // Simulate hanging fetches that only abort when the signal fires
+    mockFetch((_url, init) => {
+      return new Promise((_resolve, reject) => {
+        const signal = (init as RequestInit | undefined)?.signal;
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          });
+        }
+      });
     });
     const result = await capabilityService.detectText();
+    const elapsed = Date.now() - startTime;
     expect(result).toBe('not_found');
+    // Should complete within aggregate timeout, not double (2x 3000ms = 6000ms)
+    expect(elapsed).toBeLessThan(4000); // Allow 1s margin
   });
 });
