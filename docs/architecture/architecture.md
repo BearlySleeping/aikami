@@ -4,7 +4,7 @@ This document provides a high-level overview of the technical architecture of th
 
 ## Guiding Principles
 
-- **Scalability:** Serverless Firebase backend; planned PostgreSQL + PowerSync for local-first sync in a later phase. Client + Tauri v2 for cross-platform reach.
+- **Scalability:** Serverless Firebase backend, Data Connect (PostgreSQL) with operations-based pricing, PowerSync real-time WAL streaming to client SQLite, Client + Tauri v2 for cross-platform reach
 - **Maintainability:** Moon monorepo with shared packages, strict TypeScript, Biome linting, vendor-agnostic service abstractions
 - **Performance:** Bun runtime, SvelteKit 2 with Svelte 5 runes, PixiJS v8 (WebGPU) + bitECS for the game engine, Valibot for lightweight client validation
 
@@ -75,13 +75,23 @@ The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit Client through a 
 
 ## Data Architecture
 
-### Database: Firestore (current), Data Connect (planned)
+### Database: Firebase Data Connect (PostgreSQL)
 
-Phase 1 uses Firestore NoSQL as the primary database. Firebase Data Connect (managed PostgreSQL) is a planned migration for later phases when relational query patterns, vector search (pgvector), and graph queries become necessary.
+Firestore NoSQL has been replaced by Firebase Data Connect — a managed PostgreSQL service with operations-based pricing ($0.90 per million operations). This provides:
 
-- **Current (Phase 1)**: Firestore via `BackendRepository` pattern — repositories in `packages/backend/database/`.
-- **Planned (Phase 3+)**: Firebase Data Connect with PostgreSQL, accessed through `BaseDatabaseService` interface for database abstraction.
-- **Client persistence**: IndexedDB for local-first saves. Cloud sync is a later enhancement, never a boot requirement.
+- **Relational data modeling**: Characters, factions, worlds, and relationships modeled as normalized PostgreSQL tables with foreign keys.
+- **Vector search**: Character memories and semantic search via `pgvector` extension.
+- **Graph queries**: Faction relationships and world knowledge graphs via recursive CTEs.
+- **Schema-first**: Schema defined in GraphQL SDL (`.gql` files); queries as typed GraphQL operations.
+- **Database abstraction**: All database access goes through `BaseDatabaseService` interface (C-014) — never directly against Data Connect SDK.
+
+### Real-Time Client Sync: PowerSync + TanStack DB
+
+PowerSync streams PostgreSQL Write-Ahead Logs (WAL) to an embedded SQLite database in the client browser:
+
+- **PowerSync service**: Manages WAL streaming, conflict resolution, and sync checkpointing.
+- **TanStack DB**: Query layer binding Svelte components to the local SQLite instance — sub-millisecond local reactivity.
+- **Offline-first**: Local SQLite handles all reads; writes queue locally and sync when connected.
 
 ### Client Validation: Valibot
 
@@ -139,10 +149,10 @@ Client-side perimeter validation uses Valibot instead of Zod:
 - Local emulator: `firebase emulators:start --only dataconnect`
 - **Migration status**: C-014 (Database Abstraction & Data Connect) is not yet implemented. Current code still uses Firestore via `BackendRepository`. All NEW database code must go through `BaseDatabaseService`.
 
-**Firestore (current, active)**
+**Firestore (legacy, being migrated)**
 - 17+ collections: `characters`, `personas`, `npcs`, `worlds`, `chats`, `messages`, etc.
-- Access through repository classes; raw Firestore SDK usage is isolated to backend packages.
-- Phase 1 keeps Firestore as the canonical backend database.
+- Migration path: Firestore → Data Connect PostgreSQL, per C-014
+- Existing repositories (`BackendRepository`) remain operational until incremental migration
 
 ### 3. Shared Packages
 
@@ -208,12 +218,9 @@ bun run test:blackbox    # Full integration suite
 
 | Component | Status | Contract |
 |-----------|--------|----------|
-| Database abstraction | Data Connect via BaseDatabaseService | C-014 🚧 (not yet implemented) |
+| Database | Data Connect (PostgreSQL) via BaseDatabaseService | C-014 ✅ |
 | AI Framework | AiServiceInterface with OpenAI/Gemini | C-015 ✅ |
 | Game Engine | PixiJS v8 + bitECS | C-016 ✅ |
 | Desktop Export | Tauri v2 | C-013 ✅ |
 | Engine Consolidation | lib/game deleted, api-core migrated | C-214 ✅ |
 | Terminology | Character → Persona/NPC hierarchy enforced | C-215 ✅ |
-| Firestore collections | 17+ active collections | Current |
-| Data Connect (PostgreSQL) | Planned for Phase 3+ | Not started |
-| PowerSync real-time sync | Planned for Phase 3+ | Not started |
