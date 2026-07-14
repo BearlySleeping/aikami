@@ -5,6 +5,7 @@ import { dirname, join, relative } from 'node:path';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { provisionJjWorkspace } from '../jj.ts';
 import { logPath } from './manifest_store.ts';
+import { piModelFlags } from './models.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
 
 type WorkspaceCreateResult = {
@@ -316,12 +317,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // JSON headless mode — no TUI. pi reads the prompt via -p (from file),
     // calls tools, writes contract_stage_complete result, and exits.
     const catFile = `$(cat ${shellQuote(taskMessagePath)})`;
+    const modelFlags = piModelFlags(request.role);
     return [
       environment,
       'pi',
       '--mode',
       'json',
       ...sessionArg,
+      ...modelFlags,
       '--append-system-prompt',
       shellQuote(promptPath),
       ...toolsArg,
@@ -396,6 +399,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'prompts',
       `${options.request.stage}-${options.request.attempt}-task.md`,
     );
+    // Ensure the prompts directory exists before writing task message.
+    // _buildWorkerCommand also creates this, but atomicWrite needs it NOW.
+    mkdirSync(dirname(taskMessagePath), { recursive: true });
     atomicWrite({ path: taskMessagePath, content: parts.join('\n\n') });
 
     const startCommand = this._buildWorkerCommand(
