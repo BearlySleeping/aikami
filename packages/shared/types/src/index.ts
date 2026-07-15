@@ -11,6 +11,7 @@ export * from './lib/backend/auth.ts';
 export * from './lib/backend/firebase.ts';
 export * from './lib/backend/firestorage.ts';
 export * from './lib/backend/http.ts';
+export * from './lib/capability.ts';
 export * from './lib/client/ai_service_interface.ts';
 export * from './lib/common/class.ts';
 export * from './lib/common/common.ts';

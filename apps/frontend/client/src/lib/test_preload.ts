@@ -476,6 +476,18 @@ const _localServicesMock = () => ({
   }),
   SessionService: class {},
   campaignService: _createServiceStub(),
+  capabilityService: Object.assign(_createServiceStub(), {
+    detect: mock(async () => ({
+      isComplete: true,
+      textStatus: 'detected',
+      imageStatus: 'detected',
+      voiceStatus: 'detected',
+      summary: 'Mock detection',
+    })),
+    detectText: mock(async () => 'detected'),
+    detectImage: mock(async () => 'detected'),
+    checkCloudTextConfig: mock(() => 'not_found'),
+  }),
   gmPromptService: _createServiceStub(),
   messageBranchStore: _createServiceStub(),
   SentenceBoundaryChunker: class {},
@@ -483,6 +495,10 @@ const _localServicesMock = () => ({
 });
 
 mock.module(_LOCAL_SVC_PATH, _localServicesMock);
+
+// Also mock the bare specifier — Bun resolves $services via tsconfig paths
+// before testing mock.module for bare specifiers.
+mock.module('$services', _localServicesMock);
 
 // ── Mock SvelteKit virtual modules required by transitive dependencies ──────
 

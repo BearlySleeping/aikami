@@ -4,6 +4,7 @@ export * from './lib/api/fcm.ts';
 export * from './lib/api/game.ts';
 export * from './lib/api/oauth.ts';
 export * from './lib/auth/auth.ts';
+export * from './lib/capability.ts';
 export * from './lib/common/fields.ts';
 export * from './lib/common/position.ts';
 export * from './lib/common/preference.ts';
