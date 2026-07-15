@@ -8,7 +8,7 @@
 | **Target** | Capability detection screen (new), capability service (new), start menu integration (modify), per-feature degradation policy. |
 | **Priority** | P0 — provider configuration must not block the authored demo. |
 | **Dependencies** | C-133 (completed), C-134 (completed), C-202 (completed), C-230 (completed), C-317 (approved — start menu rebuilt around campaigns). |
-| **Status** | verified |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | Internal — capability screen is self-documenting; degradation policy is a developer reference. |
 | **Contract version** | 2.0.0 |

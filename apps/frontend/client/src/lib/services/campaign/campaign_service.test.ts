@@ -19,6 +19,10 @@ mock.module('$services', () => ({
     imageProvider: { apiKey: '', endpoint: '' },
     ttsProvider: { apiKey: '', endpoint: '' },
   },
+  capabilityService: {
+    detectText: mock(async () => 'not_found'),
+    detectImage: mock(async () => 'not_found'),
+  },
 }));
 
 mock.module('../game/serializable_service', () => ({
