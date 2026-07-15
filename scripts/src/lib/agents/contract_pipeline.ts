@@ -57,10 +57,10 @@ const parseArguments = (): CliArguments => {
 const printHelp = (): void => {
   console.log(`
 Usage:
-  bun run contract C-365
-  bun run contract docs/contracts/C-365-....md
+  bun run contract C-xxx
+  bun run contract docs/contracts/C-xxx-....md
   bun run contract --resume <run-id>
-  bun run contract C-365 --dry-run
+  bun run contract C-xxx --dry-run
 
 Options:
   --resume <run-id>  Resume an incomplete v3 run

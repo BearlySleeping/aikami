@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-15)
 
-**160 active (44 without contract file), 119 archived, 1 duplicates**
+**159 active (46 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -122,8 +122,8 @@
 | C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | — | v2 |
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | — | v2 |
 | C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | — | — |
-| C-320 | C 320_mdc_skill_scraper | ⏳ not_started | — | v1 |
-| C-321 | C 321_mcp_runner_bridge | ⏳ not_started | — | v1 |
+| C-320 | Ship Real-Time LPC Appearance Preview with Safe Defaults | ⏳ not_started (no contract file) | — | — |
+| C-321 | Make `/game` Boot Atomic, Observable, and Content-Driven | ⏳ not_started (no contract file) | — | — |
 | C-322 | Add In-World Onboarding and Unified Interaction UX | ⏳ not_started (no contract file) | — | — |
 | C-323 | Integrate Bounded AI NPC Dialogue with Authored Fallbacks | ⏳ not_started (no contract file) | — | — |
 | C-324 | Integrate the Demo Quest from Offer Through Reward | ⏳ not_started (no contract file) | — | — |
@@ -167,7 +167,6 @@
 | C-362 | Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools | ⏳ not_started (no contract file) | — | — |
 | C-363 | Add Procedural Map and World Generation | ⏳ not_started (no contract file) | — | — |
 | C-364 | Add Community Content Sharing and Compatibility Review | ⏳ not_started (no contract file) | — | — |
-| C-365 | Harden Contract Pipeline Orchestration | ✅ verified | ❓ `integrated` | v2 |
 
 ---
 
