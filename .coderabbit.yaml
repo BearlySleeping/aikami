@@ -1,0 +1,35 @@
+# CodeRabbit AI Review Configuration
+# High-signal / low-noise settings optimized for the aikami monorepo.
+# Draft PRs are NOT reviewed — saves quota for human-promoted PRs only.
+
+language: "en-US"
+inheritance: true
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  collapse_walkthrough: true
+
+  # Auto_review must be under 'reviews'
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_pause_after_reviewed_commits: 1
+
+  # Path_filters must be under 'reviews' and use proper ** wildcards
+  path_filters:
+    - "!bun.lock"
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!.pi/generated-skills/**"
+    - "!.moon/**"
+    - "src/**"
+    - "apps/**"
+
+  path_instructions:
+    - path: "**/*.test.ts"
+      instructions: "Do not nitpick stylistic choices or formatting. ONLY flag missing edge cases, false-positive assertions, or improper mocking logic."
+    - path: "apps/backend/firebase/**"
+      instructions: "Strictly validate Firebase security rules, prioritize data validation/sanitization, and ensure robust error handling in cloud functions."
+    - path: "apps/frontend/**"
+      instructions: "Prioritize DaisyUI best practices, Tailwind conventions, SvelteKit ViewModel patterns, and evaluate performance optimization within the PixiJS render loops."
