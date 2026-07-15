@@ -7,7 +7,14 @@
 // isolated agent workspaces — root repo stays untouched on dev/main.
 
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 
 // ── Constants ────────────────────────────────────────────────
@@ -189,6 +196,25 @@ source_env ${options.repoRoot}
     });
   } catch {
     // direnv may not be installed — not fatal.
+  }
+
+  // 🔴 Safety: exclude workspace-local files from git tracking.
+  // .envrc contains an absolute path to the repo root (required for
+  // direnv delegation) and must never be committed. .pi/settings.json
+  // is a local agent config that varies per machine.
+  try {
+    const excludePath = join(wsDir, '.git', 'info', 'exclude');
+    const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf-8') : '';
+    const entries = ['/.envrc', '/.pi/settings.json'];
+    const missing = entries.filter((e) => !existing.includes(e));
+    if (missing.length > 0) {
+      appendFileSync(
+        excludePath,
+        `\n# contract pipeline workspace — never commit\n${missing.join('\n')}\n`,
+      );
+    }
+  } catch {
+    // Non-fatal — the workspace may not have .git/info/exclude writable.
   }
 
   // Symlink .pi/npm from root so pi extensions are available.
