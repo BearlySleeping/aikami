@@ -17,7 +17,13 @@ import type { WizardStep, WorldGenInput, WorldGenOutput } from '@aikami/types';
 import { getRandomPreset } from '@aikami/types';
 import { WorldGenSchema } from '$lib/data/ai_prompts/world_gen_schema';
 import { WORLD_GEN_SYSTEM_PROMPT } from '$lib/data/ai_prompts/world_gen_system_prompt';
-import { routerService, textGenerationService, worldGenSeedingService } from '$services';
+import {
+  campaignService,
+  routerService,
+  textGenerationService,
+  worldGenSeedingService,
+  worldStateService,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -357,6 +363,15 @@ export class WorldGenWizardViewModel
 
     const output = this._worldOutput;
     this.debug('acceptWorld:seeding', { worldName: output.worldName });
+
+    // Initialize world state before seeding — creates the world and a
+    // default location so NPCs and events have a place to attach to.
+    const campaignId = campaignService.activeCampaign?.id ?? crypto.randomUUID();
+    await worldStateService.subscribeToWorld(campaignId);
+    worldStateService.addLocation({
+      name: output.locations[0] ?? 'Town Square',
+      description: output.worldDescription,
+    });
 
     // Seed generated data into game state
     await worldGenSeedingService.seedNpcs({ npcs: output.npcs });

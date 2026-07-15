@@ -74,6 +74,8 @@ export abstract class BaseViewModel<Options extends BaseViewModelOptions = BaseV
    * before running the standard class cleanup.
    */
   override async dispose(): Promise<void> {
+    this.__mounted = false;
+
     // Fire every cleanup function to kill the $effects and prevent memory leaks
     for (const cleanup of this._effectCleanups) {
       cleanup();

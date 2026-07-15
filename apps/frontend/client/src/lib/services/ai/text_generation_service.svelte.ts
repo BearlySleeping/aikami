@@ -15,6 +15,7 @@ import {
 } from '@aikami/frontend/services';
 import { schemaCheck } from '@aikami/schemas';
 import { configService } from '$lib/services/config/config_service.svelte.ts';
+import { PROVIDER_MODEL_FETCH } from '$lib/services/config/provider_endpoints';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +46,7 @@ export type TextGenerationServiceOptions = BaseFrontendClassOptions;
 export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
   /**
    * Streams a chat completion from the configured text provider via
-   * OpenRouter's chat completions SSE endpoint. Tokens are delivered
+   * the provider's chat completions SSE endpoint. Tokens are delivered
    * via `onChunk` as they arrive.
    *
    * Resolves when the stream completes, rejects on network or abort errors.
@@ -61,7 +62,7 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
    * Extracts a strictly-typed object from the LLM using a TypeBox schema
    * as a structural constraint. The schema is compiled into a standard
    * JSON Schema dictionary with `additionalProperties: false` enforced
-   * and sent via OpenRouter's native `response_format: json_schema`.
+   * and sent via the provider's native `response_format: json_schema`.
    *
    * Falls back to system-prompt-based extraction when the provider does
    * not support native structured output.
@@ -85,19 +86,31 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Resolves the chat completions URL from routing info. */
+/**
+ * Resolves the chat completions URL from routing info.
+ * Uses the endpoint from ConfigService (single source of truth),
+ * falling back to well-known provider defaults.
+ * Throws if no URL can be resolved.
+ */
 function resolveChatUrl(routing: ResolvedRouting): string {
   if (routing.endpoint) {
-    // Strip trailing slash then append /chat/completions
     const base = routing.endpoint.replace(/\/$/, '');
     return `${base}/chat/completions`;
   }
-  // Default to OpenRouter
-  return 'https://openrouter.ai/api/v1/chat/completions';
+  // Provider-specific fallbacks for well-known local/cloud providers
+  const defaults: Record<string, string> = {
+    ollama: 'http://localhost:11434/v1',
+    ooba: 'http://localhost:5000/v1',
+  };
+  const base = defaults[routing.provider];
+  if (base) {
+    return `${base}/chat/completions`;
+  }
+  throw new Error(
+    `No endpoint configured for provider "${routing.provider}". ` +
+      'Create a Connection in Settings or configure a provider endpoint.',
+  );
 }
-
-/** Chat completions URL for backwards-compatible fallback. */
-const _OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** Timeout for the entire fetch+stream operation (90 seconds). */
 const FETCH_TIMEOUT_MS = 90_000;
@@ -108,11 +121,11 @@ const FIRST_CHUNK_TIMEOUT_MS = 15_000;
 /**
  * Timeout for individual SSE stream read operations after content has started
  * flowing. Kept short (5s) to prevent the text input from staying disabled
- * when OpenRouter delays the [DONE] signal after the last text chunk.
+ * when the provider delays the [DONE] signal after the last text chunk.
  */
 const IDLE_TIMEOUT_MS = 5_000;
 
-/** OpenRouter requires these headers for ranking/attribution on free models. */
+/** Provider requires these headers for ranking/attribution on free models (OpenRouter). */
 const OPENROUTER_HEADERS = {
   'HTTP-Referer': 'https://aikami.app',
   'X-Title': 'Aikami',
@@ -149,13 +162,13 @@ class TextGenerationService
       const match = state.models.find((m) => m.model === explicitModel);
       if (match) {
         return {
-          provider: match.provider || 'openrouter',
+          provider: match.provider,
           model: match.model,
           endpoint: match.endpoint || '',
         };
       }
-      // Model not found in config — use it verbatim with openrouter
-      return { provider: 'openrouter', model: explicitModel, endpoint: '' };
+      // Model not found in config — use it verbatim with a provider-agnostic fallback
+      return { provider: 'unknown', model: explicitModel, endpoint: '' };
     }
 
     // Delegate to ConfigService for the active text provider
@@ -263,14 +276,14 @@ class TextGenerationService
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error');
         this.error('streamChat:fetch-failed', { status: response.status, errorText });
-        throw new Error(`OpenRouter HTTP ${response.status}: ${errorText}`);
+        throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
       }
 
       if (!response.body) {
-        throw new Error(`No response body from ${chatUrl}`);
+        throw new Error(`No response body from provider "${routing.provider}"`);
       }
 
-      await this._readOpenRouterSSEStream({
+      await this._readChatSSEStream({
         body: response.body,
         signal: abortController.signal,
         onChunk,
@@ -349,12 +362,19 @@ class TextGenerationService
         hasApiKey: !!apiKey,
       });
 
+      const providerSupportsStructuredOutput =
+        PROVIDER_MODEL_FETCH[routing.provider]?.chatTestOpenAiCompat ?? false;
+
       const body: Record<string, unknown> = {
         model: routing.model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         stream: true,
-        // biome-ignore lint/style/useNamingConvention: OpenAI API contract field names
-        response_format: {
+      };
+
+      // Only send response_format for providers that support OpenAI-compatible structured output.
+      // Local providers (Ollama, Ooba) ignore it and return plain text.
+      if (providerSupportsStructuredOutput) {
+        body.response_format = {
           type: 'json_schema',
           // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
           json_schema: {
@@ -362,8 +382,8 @@ class TextGenerationService
             schema: compiledSchema,
             strict: true,
           },
-        },
-      };
+        };
+      }
 
       const chatUrl = resolveChatUrl(routing);
 
@@ -398,15 +418,15 @@ class TextGenerationService
           return parsed;
         }
 
-        throw new Error(`OpenRouter HTTP ${response.status}: ${errorText}`);
+        throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
       }
 
       if (!response.body) {
-        throw new Error('No response body from OpenRouter');
+        throw new Error(`No response body from provider "${routing.provider}"`);
       }
 
       let accumulated = '';
-      await this._readOpenRouterSSEStream({
+      await this._readChatSSEStream({
         body: response.body,
         signal: abortController.signal,
         onChunk: (text: string) => {
@@ -414,17 +434,33 @@ class TextGenerationService
         },
       });
 
-      const cleaned = this._sanitizeJsonResponse(accumulated);
-      const parsed = JSON.parse(cleaned);
-
-      this._validateAgainstSchema({ schema, parsed, schemaName });
-
-      this.debug('extractStructure:done', {
-        schemaName,
-        outputLength: accumulated.length,
-      });
-
-      return parsed;
+      try {
+        const cleaned = this._sanitizeJsonResponse(accumulated);
+        const parsed = JSON.parse(cleaned);
+        this._validateAgainstSchema({ schema, parsed, schemaName });
+        this.debug('extractStructure:done', {
+          schemaName,
+          outputLength: accumulated.length,
+        });
+        return parsed;
+      } catch (parseError) {
+        // Provider returned 200 but the output wasn't valid JSON —
+        // likely a provider that doesn't support structured output.
+        // Fall back to system-prompt approach via plain streamChat.
+        this.info('extractStructure:structured-output-failed, falling back to system-prompt', {
+          provider: routing.provider,
+          error: String(parseError),
+        });
+        const fallbackText = await this._extractViaSystemPrompt({
+          messages,
+          signal: abortController.signal,
+          model: explicitModel,
+        });
+        const cleaned = this._sanitizeJsonResponse(fallbackText);
+        const parsed = JSON.parse(cleaned);
+        this._validateAgainstSchema({ schema, parsed, schemaName });
+        return parsed;
+      }
     } catch (error: unknown) {
       if ((error as Error).name === 'AbortError') {
         this.debug('extractStructure:aborted');
@@ -450,15 +486,15 @@ class TextGenerationService
     (globalThis as Record<string, unknown>).__text_service_active_stream_count = 0;
   }
 
-  // ── Private: OpenRouter SSE stream reader ─────────────────────────────
+  // ── Private: Chat completions SSE stream reader ─────────────────────
 
   /**
-   * Reads an OpenRouter chat completions SSE response stream.
+   * Reads a chat completions SSE response stream.
    *
    * Each line is `data: {"id":"...","choices":[{"delta":{"content":"token"}}]}`.
    * The stream ends with `data: [DONE]`.
    */
-  private async _readOpenRouterSSEStream(options: {
+  private async _readChatSSEStream(options: {
     body: ReadableStream<Uint8Array>;
     signal: AbortSignal;
     onChunk: (text: string) => void;
@@ -514,7 +550,7 @@ class TextGenerationService
 
           // End of stream signal
           if (data === '[DONE]') {
-            this.debug('_readOpenRouterSSEStream:done', { chunkCount });
+            this.debug('_readChatSSEStream:done', { chunkCount });
             return;
           }
 
