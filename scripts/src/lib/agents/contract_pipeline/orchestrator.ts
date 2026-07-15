@@ -577,28 +577,52 @@ export const runContractPipeline = async (options: {
             manifest.verificationFingerprint = after.fingerprint;
             manifest.verificationContractHash = '';
 
-            // Reconcile workspace → push branch → create draft PR for review.
-            const reconciliation = reconcileWorkspace({
-              manifest,
-              repoRoot: options.repoRoot,
-              baseBranch: PIPELINE_BASE_BRANCH,
-            });
-            manifest.reconciliation = reconciliation;
-            const prUrl = createGitHubPr({
-              headBranch: reconciliation.headBranch,
-              baseBranch: reconciliation.baseBranch,
-              title: reconciliation.prTitle,
-              body: reconciliation.prBody,
-              repoRoot: options.repoRoot,
-              draft: true,
-            });
-            manifest.prUrl = prUrl;
-            pipelineLog({
-              runId: manifest.runId,
-              cwd: options.repoRoot,
-              message: `Draft PR created: ${prUrl}`,
-            });
-            console.log(`\n📦 Draft PR: ${prUrl}\n`);
+            // Reconcile workspace → push branch → create or update PR.
+            if (manifest.prUrl && manifest.reconciliation?.headBranch) {
+              // PR already exists — push updates to same branch (PR auto-updates, CodeRabbit re-reviews incrementally).
+              const headBranch = manifest.reconciliation.headBranch;
+              const wsCwd = adapter.getWorkspacePath() || options.repoRoot;
+              try {
+                commitAll({
+                  cwd: wsCwd,
+                  message: `Feat: Contract ${manifest.contractId} — revision`,
+                  authorName: 'Pi Agent',
+                  authorEmail: 'agent@pi.internal',
+                });
+              } catch {
+                // No new changes to commit.
+              }
+              pushBranch({ cwd: wsCwd, branchName: headBranch });
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `PR updated: ${manifest.prUrl}`,
+              });
+              console.log(`\n🔄 PR updated: ${manifest.prUrl}\n`);
+            } else {
+              // First verify pass — reconcile + create draft PR.
+              const reconciliation = reconcileWorkspace({
+                manifest,
+                repoRoot: options.repoRoot,
+                baseBranch: PIPELINE_BASE_BRANCH,
+              });
+              manifest.reconciliation = reconciliation;
+              const prUrl = createGitHubPr({
+                headBranch: reconciliation.headBranch,
+                baseBranch: reconciliation.baseBranch,
+                title: reconciliation.prTitle,
+                body: reconciliation.prBody,
+                repoRoot: options.repoRoot,
+                draft: true,
+              });
+              manifest.prUrl = prUrl;
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `Draft PR created: ${prUrl}`,
+              });
+              console.log(`\n📦 Draft PR: ${prUrl}\n`);
+            }
           } else if (result.status === 'changes_requested') {
             updateContractStatus({
               contractPath: manifest.contractPath,
@@ -705,25 +729,20 @@ export const runContractPipeline = async (options: {
           });
           console.log(`\n🚀 PR auto-merge queued: ${prUrl}\n`);
         } else if (decision.decision === 'change') {
-          execSync(`gh pr close ${prUrl}`, {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: options.repoRoot,
-            timeout: 15000,
-          });
+          // Keep PR open — implementer pushes new commits to same branch.
+          // CodeRabbit re-reviews incrementally with full context.
           pipelineLog({
             runId: manifest.runId,
             cwd: options.repoRoot,
-            message: `PR closed (changes requested): ${prUrl}`,
+            message: `PR kept open for revision: ${prUrl}`,
           });
-          delete manifest.prUrl;
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
           updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
           manifest = transition({ manifest, next: 'implement' });
           await adapter.sendReviewMessage({
             paneId: reviewPaneId,
-            message: 'Changes requested. Closed PR — starting fresh implementer run.',
+            message: `Changes requested. PR ${prUrl} stays open — implementer will push to the same branch.`,
           });
         } else {
           execSync(`gh pr close ${prUrl}`, {

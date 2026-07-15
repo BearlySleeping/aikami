@@ -8,6 +8,7 @@
 //   gh_create_pr      — Create a PR (default base: main)
 //   gh_list_prs       — List open PRs
 //   gh_summarize_pr   — View + summarize a PR
+//   gh_pr_comments    — Fetch PR comments (reviews + timeline) with timestamp cache
 //   gh_pr_status      — Show CI checks status for a PR
 //   gh_merge_pr       — Merge a PR (default: squash)
 //   gh_cancel_pr      — Close a PR without merging
@@ -15,6 +16,8 @@
 //
 // For git branch management after merge, use `git pull` on the target branch.
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
@@ -96,6 +99,192 @@ async function ensureGitHubRepo(
   return { ok: true, owner: match[1], repo: match[2] };
 }
 
+// ── PR Comments Cache ────────────────────────────────────────────────────
+
+const CACHE_DIR = '.pi/github';
+
+type CachedComment = {
+  id: string;
+  body: string;
+  author: string;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+};
+
+type CachedReview = {
+  id: string;
+  body: string;
+  author: string;
+  state: string;
+  submittedAt: string;
+};
+
+type PrCommentCache = {
+  prNumber: number;
+  fetchedAt: string;
+  prUpdatedAt: string;
+  comments: CachedComment[];
+  reviews: CachedReview[];
+};
+
+/** Read the cached comments for a PR. */
+const readCommentCache = (prNumber: number, cwd: string): PrCommentCache | undefined => {
+  const cachePath = join(cwd, CACHE_DIR, `pr-${prNumber}-comments.json`);
+  if (!existsSync(cachePath)) {
+    return undefined;
+  }
+  try {
+    const raw = readFileSync(cachePath, 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<PrCommentCache>;
+    if (typeof parsed.prNumber === 'number' && typeof parsed.fetchedAt === 'string') {
+      return parsed as PrCommentCache;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Write the comment cache for a PR. */
+const writeCommentCache = (cache: PrCommentCache, cwd: string): void => {
+  const cachePath = join(cwd, CACHE_DIR, `pr-${cache.prNumber}-comments.json`);
+  mkdirSync(join(cwd, CACHE_DIR), { recursive: true });
+  writeFileSync(cachePath, JSON.stringify(cache, undefined, 2));
+};
+
+/**
+ * Fetch PR comments + reviews from GitHub, returning a lightweight cacheable result.
+ * Uses `gh pr view --json comments,reviews` for timeline comments + review bodies.
+ * Does NOT fetch inline review comments (separate API endpoint).
+ */
+const fetchPrComments = async (
+  pi: ExtensionAPI,
+  prNumber: number,
+  cwd: string,
+  includeReviews: boolean,
+): Promise<PrCommentCache> => {
+  const jsonFields = includeReviews ? 'comments,reviews,updatedAt' : 'comments,updatedAt';
+
+  const result = await runGh(pi, ['pr', 'view', String(prNumber), '--json', jsonFields], {
+    parseJson: true,
+    cwd,
+  });
+
+  if (!result.success || !result.json) {
+    throw new Error(`Failed to fetch PR #${prNumber} comments: ${result.text}`);
+  }
+
+  const data = result.json as Record<string, unknown>;
+  const fetchedAt = new Date().toISOString();
+  const prUpdatedAt = String(data.updatedAt ?? fetchedAt);
+
+  const rawComments = Array.isArray(data.comments)
+    ? (data.comments as Array<Record<string, unknown>>)
+    : [];
+  const rawReviews = Array.isArray(data.reviews)
+    ? (data.reviews as Array<Record<string, unknown>>)
+    : [];
+
+  const comments: CachedComment[] = rawComments.map((c) => ({
+    id: String((c as Record<string, unknown>).id ?? ''),
+    body: String((c as Record<string, unknown>).body ?? ''),
+    author:
+      (c as Record<string, unknown>).author &&
+      typeof (c as Record<string, unknown>).author === 'object'
+        ? String(((c as Record<string, unknown>).author as Record<string, unknown>).login ?? '?')
+        : '?',
+    createdAt: String((c as Record<string, unknown>).createdAt ?? ''),
+    updatedAt: String(
+      (c as Record<string, unknown>).updatedAt ?? (c as Record<string, unknown>).createdAt ?? '',
+    ),
+    url: String((c as Record<string, unknown>).url ?? ''),
+  }));
+
+  const reviews: CachedReview[] = includeReviews
+    ? rawReviews.map((r) => ({
+        id: String((r as Record<string, unknown>).id ?? ''),
+        body: String((r as Record<string, unknown>).body ?? ''),
+        author:
+          (r as Record<string, unknown>).author &&
+          typeof (r as Record<string, unknown>).author === 'object'
+            ? String(
+                ((r as Record<string, unknown>).author as Record<string, unknown>).login ?? '?',
+              )
+            : '?',
+        state: String((r as Record<string, unknown>).state ?? ''),
+        submittedAt: String((r as Record<string, unknown>).submittedAt ?? ''),
+      }))
+    : [];
+
+  return { prNumber, fetchedAt, prUpdatedAt, comments, reviews };
+};
+
+/** Format comments + reviews for display. */
+const formatPrComments = (
+  cache: PrCommentCache,
+  since?: string,
+): { text: string; newCount: number; editedCount: number } => {
+  const lines: string[] = [];
+  let newCount = 0;
+  let editedCount = 0;
+
+  // Filter if timestamp provided
+  const filterComments = since
+    ? cache.comments.filter((c) => c.updatedAt > since || c.createdAt > since)
+    : cache.comments;
+  const filterReviews = since ? cache.reviews.filter((r) => r.submittedAt > since) : cache.reviews;
+
+  // Count new vs edited
+  for (const c of filterComments) {
+    if (since && c.createdAt > since) {
+      newCount++;
+    } else if (since && c.updatedAt > since) {
+      editedCount++;
+    } else {
+      newCount++;
+    }
+  }
+
+  // Header
+  const sinceLabel = since ? ` since ${since.slice(0, 19).replace('T', ' ')}` : '';
+  lines.push(`## PR #${cache.prNumber} comments${sinceLabel}`);
+  lines.push(`**Fetched:** ${cache.fetchedAt.slice(0, 19).replace('T', ' ')}`);
+  lines.push(`**New:** ${newCount} comments, ${filterReviews.length} reviews`);
+  if (editedCount > 0) {
+    lines.push(`**Edited:** ${editedCount} comment(s) updated`);
+  }
+  lines.push('');
+
+  // Reviews first (most important — CodeRabbit findings)
+  if (filterReviews.length > 0) {
+    for (const r of filterReviews) {
+      const body = r.body.length > 3000 ? `${r.body.slice(0, 3000)}...` : r.body;
+      lines.push(`---`, `### Review by @${r.author} (${r.state})`, '', body);
+    }
+  }
+
+  // Timeline comments
+  if (filterComments.length > 0) {
+    lines.push('', '---', '### Timeline comments', '');
+    for (const c of filterComments) {
+      const body = c.body.length > 1500 ? `${c.body.slice(0, 1500)}...` : c.body;
+      const created = c.createdAt.slice(0, 19).replace('T', ' ');
+      const edited =
+        c.updatedAt !== c.createdAt
+          ? ` (edited ${c.updatedAt.slice(0, 19).replace('T', ' ')})`
+          : '';
+      lines.push(`**@${c.author}** — ${created}${edited}`, '', body, '');
+    }
+  }
+
+  if (filterComments.length === 0 && filterReviews.length === 0) {
+    lines.push('_No new comments or reviews since last fetch._');
+  }
+
+  return { text: lines.join('\n'), newCount, editedCount };
+};
+
 // ── Formatters ──────────────────────────────────────────────────────────────
 
 /** Format a list of PRs from gh JSON output. */
@@ -173,7 +362,7 @@ function formatPrSummary(data: Record<string, unknown>): string {
     lines.push(`**Labels:** ${labels}`);
   }
 
-  // Review summary
+  // Reviews — show state + body content
   if (reviews.length > 0) {
     const reviewSummary = reviews
       .map((r) => {
@@ -186,10 +375,37 @@ function formatPrSummary(data: Record<string, unknown>): string {
       })
       .join(', ');
     lines.push(`**Reviews:** ${reviewSummary}`);
+
+    for (const r of reviews) {
+      const rBody = String(r.body ?? '');
+      if (rBody.trim()) {
+        const rAuthor =
+          r.author && typeof r.author === 'object'
+            ? String((r.author as Record<string, unknown>).login ?? '?')
+            : '?';
+        const truncated = rBody.length > 6000 ? `${rBody.slice(0, 6000)}...` : rBody;
+        lines.push('', `---`, `### Review by @${rAuthor}`, '', truncated);
+      }
+    }
   }
 
+  // Comments
   if (comments.length > 0) {
     lines.push(`**Comments:** ${comments.length}`);
+    for (const c of comments) {
+      const cBody = String((c as Record<string, unknown>).body ?? '');
+      if (cBody.trim()) {
+        const cAuthor =
+          (c as Record<string, unknown>).author &&
+          typeof (c as Record<string, unknown>).author === 'object'
+            ? String(
+                ((c as Record<string, unknown>).author as Record<string, unknown>).login ?? '?',
+              )
+            : '?';
+        const truncated = cBody.length > 2000 ? `${cBody.slice(0, 2000)}...` : cBody;
+        lines.push('', `---`, `**@${cAuthor}:**`, '', truncated);
+      }
+    }
   }
 
   // Changed files
@@ -458,7 +674,7 @@ export default function (pi: ExtensionAPI) {
     label: 'GitHub: Summarize PR',
     description:
       'View and summarize a GitHub Pull Request. Shows title, description, state, ' +
-      'author, reviews, changed files, and comment count. ' +
+      'author, review content (including CodeRabbit findings), comments, changed files, and stats. ' +
       'Accepts PR number, URL, or branch name.',
     promptSnippet: 'Use gh_summarize_pr to get the full summary of a GitHub PR',
     promptGuidelines: [
@@ -1583,6 +1799,113 @@ export default function (pi: ExtensionAPI) {
         ],
         details: { project: params.project, url: params.url },
       };
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_pr_comments
+  // ═══════════════════════════════════════════════════════════════════════
+
+  pi.registerTool({
+    name: 'gh_pr_comments',
+    label: 'GitHub: PR Comments',
+    description:
+      'Fetch PR comments (reviews + timeline) with timestamp-based caching. ' +
+      'First call fetches all comments and caches them. Subsequent calls with ' +
+      'the `since` parameter from the previous `fetchedAt` return only new/edited ' +
+      'comments. Use `force: true` to bypass cache.',
+    promptSnippet: 'Use gh_pr_comments to check for new PR comments since last fetch',
+    promptGuidelines: [
+      'On first call, omit `since` to get all comments and cache them.',
+      'On subsequent calls, pass the `fetchedAt` value from the previous response as `since`.',
+      'Pass `force: true` to re-fetch everything and refresh the cache.',
+      'For CodeRabbit reviews, leave `includeReviews` as default (true).',
+    ],
+    parameters: Type.Object({
+      pr: Type.String({
+        description: 'PR number (e.g. "42"), URL, or branch name',
+      }),
+      since: Type.Optional(
+        Type.String({
+          description:
+            'ISO 8601 timestamp (e.g. "2026-07-14T23:00:00Z"). Only return comments created/updated after this time. Use the `fetchedAt` value from the previous response.',
+        }),
+      ),
+      force: Type.Optional(
+        Type.Boolean({
+          default: false,
+          description: 'Bypass cache and re-fetch all comments from GitHub.',
+        }),
+      ),
+      includeReviews: Type.Optional(
+        Type.Boolean({
+          default: true,
+          description:
+            'Include formal review bodies (CodeRabbit findings). Set false for timeline comments only.',
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const selector = resolvePrSelector(params.pr);
+      const prNumber = Number(selector);
+      if (Number.isNaN(prNumber)) {
+        return {
+          content: [{ type: 'text', text: `❌ Could not resolve PR number from: ${params.pr}` }],
+          isError: true,
+          details: {},
+        };
+      }
+
+      const cwd = ctx.cwd ?? process.cwd();
+      const includeReviews = params.includeReviews ?? true;
+
+      // Check cache first (unless forced)
+      if (!params.force) {
+        const cached = readCommentCache(prNumber, cwd);
+        if (cached) {
+          const formatted = formatPrComments(cached, params.since);
+          return {
+            content: [{ type: 'text', text: formatted.text }],
+            details: {
+              prNumber,
+              fetchedAt: cached.fetchedAt,
+              newCount: formatted.newCount,
+              editedCount: formatted.editedCount,
+              fromCache: true,
+            },
+          };
+        }
+      }
+
+      // Fetch from GitHub
+      try {
+        const cache = await fetchPrComments(pi, prNumber, cwd, includeReviews);
+        writeCommentCache(cache, cwd);
+
+        const formatted = formatPrComments(cache, params.since);
+        return {
+          content: [{ type: 'text', text: formatted.text }],
+          details: {
+            prNumber,
+            fetchedAt: cache.fetchedAt,
+            prUpdatedAt: cache.prUpdatedAt,
+            newCount: formatted.newCount,
+            editedCount: formatted.editedCount,
+            fromCache: false,
+          },
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to fetch PR comments: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+          details: {},
+        };
+      }
     },
   });
 }
