@@ -4,6 +4,11 @@
 // Uses `gh` (v2.96+) from nixpkgs. All tools run via pi.exec for
 // cancellation safety and consistent timeout handling.
 //
+// 🔴 For CodeRabbit AI reviews, prefer the `coderabbitai` MCP tools
+//   (get_coderabbit_reviews, get_review_details, get_review_comments,
+//   resolve_comment) — they provide richer structured data and resolution
+//   tracking that gh_pr_comments cannot match.
+//
 // Registered tools:
 //   gh_create_pr      — Create a PR (default base: main)
 //   gh_list_prs       — List open PRs
@@ -13,6 +18,7 @@
 //   gh_merge_pr       — Merge a PR (default: squash)
 //   gh_cancel_pr      — Close a PR without merging
 //   gh_edit_pr        — Edit PR title/body/base/labels
+//   gh_promote_pr     — Promote a draft PR to "Ready for Review"
 //
 // For git branch management after merge, use `git pull` on the target branch.
 
@@ -682,6 +688,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       'Use gh_summarize_pr to review a PR before merging or when the user asks about a PR.',
       'Pass the PR number, URL, or branch name.',
+      '🔴 For detailed CodeRabbit review content within this PR, prefer the `coderabbitai` MCP tools (get_coderabbit_reviews, get_review_details) which provide structured findings and resolution tracking.',
     ],
     parameters: Type.Object({
       pr: Type.String({
@@ -1805,6 +1812,65 @@ export default function (pi: ExtensionAPI) {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
+  // Tool: gh_promote_pr
+  // ═══════════════════════════════════════════════════════════════════════
+
+  pi.registerTool({
+    name: 'gh_promote_pr',
+    label: 'GitHub: Promote PR',
+    description:
+      'Promote a draft GitHub Pull Request to "Ready for Review". ' +
+      'Executes `gh pr ready` to transition the PR out of draft status, ' +
+      'which triggers CodeRabbit AI code review and signals to human reviewers ' +
+      'that the PR is ready for inspection. ' +
+      'Accepts PR number, URL, or branch name.',
+    promptSnippet: 'Use gh_promote_pr to mark a draft PR ready for review',
+    promptGuidelines: [
+      'Use gh_promote_pr when CI passes and the PR is ready for CodeRabbit AI review.',
+      'This transitions the PR from Draft → Ready for Review, triggering automated reviews.',
+      'Only promote after local CI checks pass — draft PRs save CodeRabbit quota.',
+    ],
+    parameters: Type.Object({
+      pr: Type.String({
+        description: 'PR number (e.g. "42"), URL, or branch name',
+      }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+      const selector = resolvePrSelector(params.pr);
+
+      const result = await runGh(pi, ['pr', 'ready', selector], { timeout: 30_000 });
+
+      if (!result.success) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to promote PR #${selector}: ${result.text}`,
+            },
+          ],
+          isError: true,
+          details: { pr: selector },
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `✅ **PR #${selector} is now Ready for Review!**`,
+              '',
+              'CodeRabbit AI review has been triggered. You can check for review',
+              `comments with: \`gh_pr_comments("${selector}")\``,
+            ].join('\n'),
+          },
+        ],
+        details: { pr: selector, promoted: true },
+      };
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
   // Tool: gh_pr_comments
   // ═══════════════════════════════════════════════════════════════════════
 
@@ -1821,7 +1887,7 @@ export default function (pi: ExtensionAPI) {
       'On first call, omit `since` to get all comments and cache them.',
       'On subsequent calls, pass the `fetchedAt` value from the previous response as `since`.',
       'Pass `force: true` to re-fetch everything and refresh the cache.',
-      'For CodeRabbit reviews, leave `includeReviews` as default (true).',
+      '🔴 For CodeRabbit AI reviews, prefer the `coderabbitai` MCP tools (get_coderabbit_reviews, get_review_details, get_review_comments) — they provide structured findings with per-comment resolution tracking. Use gh_pr_comments for human comments and general timeline history only.',
     ],
     parameters: Type.Object({
       pr: Type.String({

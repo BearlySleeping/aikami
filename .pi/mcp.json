@@ -3,6 +3,13 @@
     "context-mode": {
       "command": "bunx",
       "args": ["context-mode"]
+    },
+    "coderabbitai": {
+      "command": "bunx",
+      "args": ["-y", "coderabbitai-mcp@latest"],
+      "env": {
+        "GITHUB_PAT": "${GITHUB_ACCESS_TOKEN}"
+      }
     }
   }
 }
