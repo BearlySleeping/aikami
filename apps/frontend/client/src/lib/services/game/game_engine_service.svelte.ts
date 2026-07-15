@@ -449,9 +449,7 @@ class GameEngineService
       const startingMap = pack.getStartingMap();
 
       await this._gameWorld.loadMap({
-        mapUrl: pack.resolveMapUrl(
-          this.contentPackId === 'emberwatch' ? 'sandbox_zone_a' : pack.manifest.startingMapId,
-        ),
+        mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX ?? 160,
         targetY: startingMap.defaultY ?? 192,
       });

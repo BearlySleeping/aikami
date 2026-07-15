@@ -5,17 +5,24 @@
 // and creates the campaign with the chosen capability profile.
 // Contract: C-318
 
-import { TEXT_PROVIDERS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
-import { encrypt } from '$lib/utils/crypto_vault';
-import { campaignService, capabilityService, PROVIDER_MODEL_FETCH, routerService } from '$services';
+import type { CapabilityProfile, CapabilitySnapshot, DetectionStatus } from '@aikami/types';
+import { campaignService, capabilityService, routerService } from '$services';
+import type { Connection } from '$types/connection';
+import type { ConnectionManagerViewModelInterface } from '$views/settings/connection/connection_manager_view_model.svelte';
+import { getConnectionManagerViewModel } from '$views/settings/connection/connection_manager_view_model.svelte';
 
 // ── Types ──────────────────────────────────────────────────────────────
+
+/** Status badge info passed from ViewModel to View for rendering. */
+export type StatusBadgeInfo = {
+  label: string;
+  status: DetectionStatus;
+};
 
 export type CapabilityViewModelInterface = BaseViewModelInterface & {
   /** Current capability snapshot from detection. */
@@ -28,16 +35,18 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   readonly cloudConfigured: boolean;
   /** Whether the guided cloud connection modal is visible. */
   readonly showCloudSetup: boolean;
-  /** Selected cloud provider for guided setup. */
-  readonly selectedCloudProvider: string;
-  /** Temporary API key for the guided cloud setup. */
-  tempApiKey: string;
-  /** Test result message from the cloud connection test. */
-  readonly testResult: string;
-  /** Whether a connection test is in progress. */
-  readonly isTesting: boolean;
   /** Error message to display, or empty string. */
   readonly errorMessage: string;
+  /** Status badges derived from the snapshot. */
+  readonly statusBadges: readonly StatusBadgeInfo[];
+  /** ViewModel for the cloud connection editor panel. */
+  readonly cloudConnectionVm: ConnectionManagerViewModelInterface;
+  /** Existing cloud connections from settings. */
+  readonly cloudConnections: readonly Connection[];
+  /** The default cloud connection, or undefined. */
+  readonly defaultConnection: Connection | undefined;
+  /** Provider display labels (id → label). */
+  readonly providerLabels: Record<string, string>;
 
   /** Starts provider detection. Called on initialization. */
   startDetection(): Promise<void>;
@@ -45,20 +54,12 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   selectOfflineDemo(): Promise<void>;
   /** Selects the "Use Detected Local AI" path. */
   selectLocalAi(): Promise<void>;
+  /** Selects an existing cloud connection and starts the campaign. */
+  selectCloudConnection(connectionId: string): Promise<void>;
   /** Opens the guided cloud connection modal. */
-  openCloudSetup(providerId?: string): void;
+  openCloudSetup(): void;
   /** Closes the guided cloud connection modal. */
   closeCloudSetup(): void;
-  /** Selects a cloud provider in the guided setup. */
-  selectCloudProvider(providerId: string): void;
-  /** Tests the cloud connection with the entered API key. */
-  testCloudConnection(): Promise<void>;
-  /** Saves the cloud connection and proceeds. */
-  confirmCloudConnection(): Promise<void>;
-  /** Human-readable label for the selected cloud provider. */
-  readonly selectedCloudProviderLabel: string;
-  /** Whether the selected cloud provider is OpenRouter (special routing note). */
-  readonly isCloudProviderOpenRouter: boolean;
 };
 
 export type CapabilityViewModelOptions = BaseViewModelOptions;
@@ -84,20 +85,29 @@ class CapabilityViewModel
   /** Whether the guided cloud connection modal is visible. */
   showCloudSetup = $state(false);
 
-  /** Selected cloud provider ID for guided setup. */
-  selectedCloudProvider = $state('openrouter');
-
-  /** Temporary API key for the guided setup input field. */
-  tempApiKey = $state('');
-
-  /** Test result message (latency + success/error). */
-  testResult = $state('');
-
-  /** Whether a connection test is in progress. */
-  isTesting = $state(false);
-
   /** Error message for display. */
   errorMessage = $state('');
+
+  /** Cloud connection editor ViewModel — reused from settings. */
+  cloudConnectionVm: ConnectionManagerViewModelInterface;
+
+  // ── Constructor ──────────────────────────────────────────────────────
+
+  constructor(options: CapabilityViewModelOptions) {
+    super(options);
+    this.cloudConnectionVm = getConnectionManagerViewModel({
+      className: 'CloudConnectionViewModel',
+    });
+
+    // Sync: when the connection editor closes itself (save or cancel),
+    // close our modal and detect if a new connection was created.
+    $effect(() => {
+      void this.cloudConnectionVm.isEditorOpen;
+      if (!this.cloudConnectionVm.isEditorOpen && this.showCloudSetup) {
+        this._handleEditorClosed();
+      }
+    });
+  }
 
   // ── Derived ──────────────────────────────────────────────────────────
 
@@ -109,13 +119,26 @@ class CapabilityViewModel
     return this.snapshot.textStatus === 'configured';
   }
 
-  get selectedCloudProviderLabel(): string {
-    const provider = TEXT_PROVIDERS.find((p) => p.id === this.selectedCloudProvider);
-    return provider?.label ?? this.selectedCloudProvider;
+  get statusBadges(): readonly StatusBadgeInfo[] {
+    return [
+      { label: 'Text AI', status: this.snapshot.textStatus },
+      { label: 'Image AI', status: this.snapshot.imageStatus },
+      { label: 'Voice', status: this.snapshot.voiceStatus },
+    ];
   }
 
-  get isCloudProviderOpenRouter(): boolean {
-    return this.selectedCloudProvider === 'openrouter';
+  get cloudConnections(): readonly Connection[] {
+    return this.cloudConnectionVm.connections;
+  }
+
+  get defaultConnection(): Connection | undefined {
+    return this.cloudConnectionVm.connections.find(
+      (c) => c.id === this.cloudConnectionVm.defaultConnectionId,
+    );
+  }
+
+  get providerLabels(): Record<string, string> {
+    return this.cloudConnectionVm.providerLabels;
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────
@@ -141,6 +164,7 @@ class CapabilityViewModel
       this.debug('startDetection:complete', {
         textStatus: result.textStatus,
         imageStatus: result.imageStatus,
+        voiceStatus: result.voiceStatus,
       });
     } catch (error) {
       this.warn('startDetection:failed', error);
@@ -149,6 +173,7 @@ class CapabilityViewModel
         isComplete: true,
         textStatus: 'error',
         imageStatus: 'error',
+        voiceStatus: 'error',
         summary: 'Detection error — offline demo available',
       };
     } finally {
@@ -184,132 +209,39 @@ class CapabilityViewModel
   }
 
   /**
-   * Opens the guided cloud connection modal.
-   * Defaults to 'openrouter' as the most user-friendly cloud option.
+   * Selects an existing cloud connection and starts the campaign.
    */
-  openCloudSetup(providerId?: string): void {
-    this.selectedCloudProvider = providerId ?? 'openrouter';
-    this.tempApiKey = '';
-    this.testResult = '';
+  async selectCloudConnection(connectionId: string): Promise<void> {
+    this.debug('selectCloudConnection', { connectionId });
+    await this._startCampaign({
+      textProvider: true,
+      imageProvider: false,
+      voiceProvider: false,
+    });
+  }
+
+  /**
+   * Opens the guided cloud connection modal.
+   * The connection editor panel (from settings) handles the provider
+   * selection, API key entry, and testing.
+   */
+  openCloudSetup(): void {
+    this.cloudConnectionVm.openCreate();
     this.showCloudSetup = true;
   }
 
   /** Closes the guided cloud connection modal. */
   closeCloudSetup(): void {
+    this.cloudConnectionVm.cancelEdit();
     this.showCloudSetup = false;
-    this.tempApiKey = '';
-    this.testResult = '';
-  }
-
-  /** Selects a cloud provider in the guided setup. */
-  selectCloudProvider(providerId: string): void {
-    this.selectedCloudProvider = providerId;
-    this.testResult = '';
   }
 
   /**
-   * Tests the cloud connection with the entered API key.
-   * Shows latency and result inline.
+   * Called when the connection editor panel closes itself (via save or cancel).
+   * Closes the modal so the user sees their connections listed in the main view.
    */
-  async testCloudConnection(): Promise<void> {
-    if (this.isTesting || !this.tempApiKey.trim()) {
-      return;
-    }
-
-    this.isTesting = true;
-    this.testResult = '';
-    const startTime = performance.now();
-
-    try {
-      // Use the selected provider's model-fetch endpoint
-      const providerConfig = PROVIDER_MODEL_FETCH[this.selectedCloudProvider];
-      if (!providerConfig) {
-        this.testResult = `✗ Provider ${this.selectedCloudProvider} not configured`;
-        return;
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      // Build headers based on provider's auth configuration
-      const headers: Record<string, string> = {};
-      const { auth, extraHeaders } = providerConfig;
-      if (auth.location === 'header') {
-        const value = auth.prefix
-          ? `${auth.prefix}${this.tempApiKey.trim()}`
-          : this.tempApiKey.trim();
-        headers[auth.name] = value;
-      }
-      if (extraHeaders) {
-        Object.assign(headers, extraHeaders);
-      }
-
-      const response = await fetch(providerConfig.url, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const latency = Math.round(performance.now() - startTime);
-
-      if (response.ok) {
-        const body = (await response.json()) as { data?: unknown[] };
-        const modelCount = Array.isArray(body.data) ? body.data.length : 0;
-        this.testResult = `✓ Connected — ${latency}ms, ${modelCount} models available`;
-        this.debug('testCloudConnection:success', {
-          provider: this.selectedCloudProvider,
-          latency,
-          modelCount,
-        });
-      } else {
-        this.testResult = `✗ Connection failed (HTTP ${response.status})`;
-        this.debug('testCloudConnection:bad-status', {
-          provider: this.selectedCloudProvider,
-          status: response.status,
-        });
-      }
-    } catch (error) {
-      const latency = Math.round(performance.now() - startTime);
-      this.testResult = `✗ Connection failed — ${String(error).slice(0, 100)}`;
-      this.debug('testCloudConnection:error', {
-        provider: this.selectedCloudProvider,
-        latency,
-        error: String(error),
-      });
-    } finally {
-      this.isTesting = false;
-    }
-  }
-
-  /**
-   * Saves the cloud API key to the encrypted vault and proceeds.
-   * On success, creates campaign with text AI enabled.
-   */
-  async confirmCloudConnection(): Promise<void> {
-    const key = this.tempApiKey.trim();
-    if (!key) {
-      this.errorMessage = 'Please enter an API key.';
-      return;
-    }
-
-    try {
-      // Encrypt and store the API key under the selected provider's ID
-      await encrypt({ text: JSON.stringify({ apiKeys: { [this.selectedCloudProvider]: key } }) });
-      this.debug('confirmCloudConnection:saved', { provider: this.selectedCloudProvider });
-
-      this.showCloudSetup = false;
-
-      await this._startCampaign({
-        textProvider: true,
-        imageProvider: false,
-        voiceProvider: false,
-      });
-    } catch (error) {
-      this.warn('confirmCloudConnection:failed', error);
-      this.errorMessage =
-        'Failed to store API key. Your browser may not support encryption (requires HTTPS or localhost).';
-    }
+  private _handleEditorClosed(): void {
+    this.showCloudSetup = false;
   }
 
   // ── Private ──────────────────────────────────────────────────────────
@@ -321,12 +253,10 @@ class CapabilityViewModel
   private async _startCampaign(profile: CapabilityProfile): Promise<void> {
     try {
       await campaignService.startNewCampaign();
-      // Override capability profile on the already-created campaign
       if (campaignService.activeCampaign) {
         campaignService.activeCampaign.capabilityProfile = profile;
-        // Direct assignment since the property is $state
-        // The campaign was already persisted; update it
-        await campaignService.saveCampaign();
+        // Transition creating → playing (persists via repository internally)
+        campaignService.completeSetup();
       }
 
       await routerService.goToRoute('setup', {

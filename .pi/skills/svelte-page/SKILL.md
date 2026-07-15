@@ -1,6 +1,6 @@
 ---
 name: svelte-page
-description: Scaffold a new SvelteKit page conforming to the Svelte 5 View and ViewModel pattern.
+description: Scaffold a new SvelteKit page, route, or view component. Use when creating a new page, route, view, or when adding a SvelteKit route. Covers ViewModel + View + route page pattern with BaseViewModelContainer lifecycle.
 ---
 
 # Svelte Page Scaffolding Skill

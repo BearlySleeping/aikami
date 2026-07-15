@@ -40,6 +40,7 @@ export type WorldStateServiceInterface = BaseFrontendClassInterface & {
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
+  addLocation(location: { name: string; description?: string }): void;
   updateLocation(locationId: string): Promise<void>;
   setVariable(key: string, value: unknown): Promise<void>;
   addNpc(npcId: string): Promise<void>;
@@ -179,6 +180,37 @@ class WorldStateService
     if (this._unsubscribeWorld) {
       this._unsubscribeWorld();
       this._unsubscribeWorld = undefined;
+    }
+  }
+
+  /**
+   * Creates a new location in the current world and sets it as active.
+   * The first location added also becomes the initial currentLocation
+   * so NPCs can be attached immediately.
+   */
+  addLocation(location: { name: string; description?: string }): void {
+    const world = this.currentWorld;
+    if (!world) {
+      throw new Error('No world loaded');
+    }
+
+    const newLocation: WorldLocation = {
+      id: crypto.randomUUID(),
+      name: location.name,
+      description: location.description ?? '',
+      connections: [],
+      npcIds: [],
+    };
+
+    this.currentWorld = {
+      ...world,
+      locations: [...world.locations, newLocation],
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Auto-select first location as current so NPC seeding works immediately
+    if (!this.currentLocation) {
+      this.currentLocation = newLocation;
     }
   }
 

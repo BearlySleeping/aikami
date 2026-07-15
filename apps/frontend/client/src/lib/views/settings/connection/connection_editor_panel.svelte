@@ -239,161 +239,169 @@ const {
           </div>
         {/if}
 
-        <!-- Generation Parameters -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <span class="label-text font-mono text-xs uppercase tracking-wider text-[#938ea1]"
-              >Generation Parameters</span
-            >
-            <select
-              class="select select-bordered select-xs font-mono text-[10px]"
-              onchange={(e) => {
-                const value = (e.target as HTMLSelectElement).value;
-                if (value) {
-                  viewModel.applyPreset(value);
-                }
-                (e.target as HTMLSelectElement).value = '';
-              }}
-            >
-              <option value="">Load Preset...</option>
-              {#each viewModel.presetOptions as preset}
-                <option value={preset.id}>{preset.name}</option>
-              {/each}
-            </select>
+        <!-- Generation Parameters (collapsed by default) -->
+        <div class="collapse collapse-arrow bg-base-300/50 border border-white/[0.04]">
+          <input type="checkbox">
+          <div
+            class="collapse-title font-mono text-xs uppercase tracking-wider text-[#938ea1] py-2 min-h-0"
+          >
+            Advanced — Generation Parameters & Presets
           </div>
+          <div class="collapse-content pt-0">
+            <div class="flex items-center justify-between mb-2">
+              <span class="label-text font-mono text-xs uppercase tracking-wider text-[#938ea1]"
+                >Generation Parameters</span
+              >
+              <select
+                class="select select-bordered select-xs font-mono text-[10px]"
+                onchange={(e) => {
+                  const value = (e.target as HTMLSelectElement).value;
+                  if (value) {
+                    viewModel.applyPreset(value);
+                  }
+                  (e.target as HTMLSelectElement).value = '';
+                }}
+              >
+                <option value="">Load Preset...</option>
+                {#each viewModel.presetOptions as preset}
+                  <option value={preset.id}>{preset.name}</option>
+                {/each}
+              </select>
+            </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <!-- Temperature -->
-            <div class="form-control">
-              <div class="flex items-center justify-between mb-0.5">
-                <span class="font-mono text-[10px] text-[#938ea1]">Temperature</span>
-                <span class="font-mono text-[10px] text-[#00e3fd]"
-                  >{viewModel.formattedParams.temperature}</span
+            <div class="grid grid-cols-2 gap-3">
+              <!-- Temperature -->
+              <div class="form-control">
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="font-mono text-[10px] text-[#938ea1]">Temperature</span>
+                  <span class="font-mono text-[10px] text-[#00e3fd]"
+                    >{viewModel.formattedParams.temperature}</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  class="range range-xs range-primary"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                  value={viewModel.draftParams.temperature}
+                  oninput={(e) => {
+                    const copy = { ...viewModel.draftParams };
+                    copy.temperature = Number((e.target as HTMLInputElement).value);
+                    viewModel.setDraftField('generationParams', copy);
+                  }}
                 >
               </div>
-              <input
-                type="range"
-                class="range range-xs range-primary"
-                min="0"
-                max="2"
-                step="0.05"
-                value={viewModel.draftParams.temperature}
-                oninput={(e) => {
-                  const copy = { ...viewModel.draftParams };
-                  copy.temperature = Number((e.target as HTMLInputElement).value);
-                  viewModel.setDraftField('generationParams', copy);
-                }}
-              >
-            </div>
-            <!-- Top P -->
-            <div class="form-control">
-              <div class="flex items-center justify-between mb-0.5">
-                <span class="font-mono text-[10px] text-[#938ea1]">Top P</span>
-                <span class="font-mono text-[10px] text-[#00e3fd]"
-                  >{viewModel.formattedParams.topP}</span
+              <!-- Top P -->
+              <div class="form-control">
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="font-mono text-[10px] text-[#938ea1]">Top P</span>
+                  <span class="font-mono text-[10px] text-[#00e3fd]"
+                    >{viewModel.formattedParams.topP}</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  class="range range-xs range-primary"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={viewModel.draftParams.topP}
+                  oninput={(e) => {
+                    const copy = { ...viewModel.draftParams };
+                    copy.topP = Number((e.target as HTMLInputElement).value);
+                    viewModel.setDraftField('generationParams', copy);
+                  }}
                 >
               </div>
-              <input
-                type="range"
-                class="range range-xs range-primary"
-                min="0"
-                max="1"
-                step="0.05"
-                value={viewModel.draftParams.topP}
-                oninput={(e) => {
-                  const copy = { ...viewModel.draftParams };
-                  copy.topP = Number((e.target as HTMLInputElement).value);
-                  viewModel.setDraftField('generationParams', copy);
-                }}
-              >
-            </div>
-            <!-- Top K -->
-            <div class="form-control">
-              <div class="flex items-center justify-between mb-0.5">
-                <span class="font-mono text-[10px] text-[#938ea1]">Top K</span>
-                <span class="font-mono text-[10px] text-[#00e3fd]"
-                  >{viewModel.formattedParams.topK}</span
+              <!-- Top K -->
+              <div class="form-control">
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="font-mono text-[10px] text-[#938ea1]">Top K</span>
+                  <span class="font-mono text-[10px] text-[#00e3fd]"
+                    >{viewModel.formattedParams.topK}</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  class="range range-xs range-primary"
+                  min="1"
+                  max="100"
+                  step="1"
+                  value={viewModel.draftParams.topK}
+                  oninput={(e) => {
+                    const copy = { ...viewModel.draftParams };
+                    copy.topK = Number((e.target as HTMLInputElement).value);
+                    viewModel.setDraftField('generationParams', copy);
+                  }}
                 >
               </div>
-              <input
-                type="range"
-                class="range range-xs range-primary"
-                min="1"
-                max="100"
-                step="1"
-                value={viewModel.draftParams.topK}
-                oninput={(e) => {
-                  const copy = { ...viewModel.draftParams };
-                  copy.topK = Number((e.target as HTMLInputElement).value);
-                  viewModel.setDraftField('generationParams', copy);
-                }}
-              >
-            </div>
-            <!-- Rep. Penalty -->
-            <div class="form-control">
-              <div class="flex items-center justify-between mb-0.5">
-                <span class="font-mono text-[10px] text-[#938ea1]">Rep. Penalty</span>
-                <span class="font-mono text-[10px] text-[#00e3fd]"
-                  >{viewModel.formattedParams.repetitionPenalty}</span
+              <!-- Rep. Penalty -->
+              <div class="form-control">
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="font-mono text-[10px] text-[#938ea1]">Rep. Penalty</span>
+                  <span class="font-mono text-[10px] text-[#00e3fd]"
+                    >{viewModel.formattedParams.repetitionPenalty}</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  class="range range-xs range-primary"
+                  min="1"
+                  max="2"
+                  step="0.05"
+                  value={viewModel.draftParams.repetitionPenalty}
+                  oninput={(e) => {
+                    const copy = { ...viewModel.draftParams };
+                    copy.repetitionPenalty = Number((e.target as HTMLInputElement).value);
+                    viewModel.setDraftField('generationParams', copy);
+                  }}
                 >
               </div>
-              <input
-                type="range"
-                class="range range-xs range-primary"
-                min="1"
-                max="2"
-                step="0.05"
-                value={viewModel.draftParams.repetitionPenalty}
-                oninput={(e) => {
-                  const copy = { ...viewModel.draftParams };
-                  copy.repetitionPenalty = Number((e.target as HTMLInputElement).value);
-                  viewModel.setDraftField('generationParams', copy);
-                }}
-              >
-            </div>
-            <!-- Max Tokens -->
-            <div class="form-control">
-              <div class="flex items-center justify-between mb-0.5">
-                <span class="font-mono text-[10px] text-[#938ea1]">Max Tokens</span>
-                <span class="font-mono text-[10px] text-[#00e3fd]"
-                  >{viewModel.formattedParams.maxTokens}</span
+              <!-- Max Tokens -->
+              <div class="form-control">
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="font-mono text-[10px] text-[#938ea1]">Max Tokens</span>
+                  <span class="font-mono text-[10px] text-[#00e3fd]"
+                    >{viewModel.formattedParams.maxTokens}</span
+                  >
+                </div>
+                <input
+                  type="range"
+                  class="range range-xs range-primary"
+                  min="64"
+                  max="8192"
+                  step="64"
+                  value={viewModel.draftParams.maxTokens}
+                  oninput={(e) => {
+                    const copy = { ...viewModel.draftParams };
+                    copy.maxTokens = Number((e.target as HTMLInputElement).value);
+                    viewModel.setDraftField('generationParams', copy);
+                  }}
                 >
               </div>
-              <input
-                type="range"
-                class="range range-xs range-primary"
-                min="64"
-                max="8192"
-                step="64"
-                value={viewModel.draftParams.maxTokens}
-                oninput={(e) => {
-                  const copy = { ...viewModel.draftParams };
-                  copy.maxTokens = Number((e.target as HTMLInputElement).value);
-                  viewModel.setDraftField('generationParams', copy);
-                }}
-              >
             </div>
-          </div>
 
-          <!-- Save as Preset -->
-          <div class="flex items-center gap-2 mt-3">
-            <input
-              type="text"
-              class="input input-bordered input-xs font-mono text-[10px] flex-1"
-              placeholder="Preset name..."
-              value={viewModel.presetName}
-              oninput={(e) => viewModel.setPresetName((e.target as HTMLInputElement).value)}
-            >
-            <button
-              type="button"
-              class="btn btn-xs btn-ghost font-mono text-[10px] text-[#00e3fd]"
-              disabled={!viewModel.presetName.trim()}
-              onclick={() => {
-                viewModel.savePresetFromInput();
-              }}
-            >
-              Save Preset
-            </button>
+            <!-- Save as Preset -->
+            <div class="flex items-center gap-2 mt-3">
+              <input
+                type="text"
+                class="input input-bordered input-xs font-mono text-[10px] flex-1"
+                placeholder="Preset name..."
+                value={viewModel.presetName}
+                oninput={(e) => viewModel.setPresetName((e.target as HTMLInputElement).value)}
+              >
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost font-mono text-[10px] text-[#00e3fd]"
+                disabled={!viewModel.presetName.trim()}
+                onclick={() => {
+                  viewModel.savePresetFromInput();
+                }}
+              >
+                Save Preset
+              </button>
+            </div>
           </div>
         </div>
 
