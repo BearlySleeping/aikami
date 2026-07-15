@@ -324,6 +324,7 @@ export const runContractPipeline = async (options: {
   resumeRunId?: string;
   fresh?: boolean;
   dryRun?: boolean;
+  ready?: boolean;
   onReady?: (manifest: RunManifest) => void;
   adapterFactory?: (options: {
     repoRoot: string;
@@ -600,23 +601,25 @@ export const runContractPipeline = async (options: {
               });
               console.log(`\n🔄 PR updated: ${manifest.prUrl}\n`);
             } else {
-              // First verify pass — reconcile + create draft PR.
+              // First verify pass — reconcile + create PR.
               const reconciliation = reconcileWorkspace({
                 manifest,
                 repoRoot: options.repoRoot,
                 baseBranch: PIPELINE_BASE_BRANCH,
               });
               manifest.reconciliation = reconciliation;
-              // Create as a Draft PR to allow CI checks to pass before a human
+              // Default to Draft to allow CI checks to pass before a human
               // promotes it to "Ready for review." CodeRabbit AI review is
               // configured (via .coderabbit.yaml) to skip drafts, saving API quota.
+              // Pass --ready to skip the draft and trigger CodeRabbit immediately.
+              const draft = !options.ready;
               const prUrl = createGitHubPr({
                 headBranch: reconciliation.headBranch,
                 baseBranch: reconciliation.baseBranch,
                 title: reconciliation.prTitle,
                 body: reconciliation.prBody,
                 repoRoot: options.repoRoot,
-                draft: true,
+                draft,
               });
               manifest.prUrl = prUrl;
               pipelineLog({

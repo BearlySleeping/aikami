@@ -8,7 +8,7 @@ import type {
   DegradationModeSchema,
   DetectionStatusSchema,
 } from '@aikami/schemas';
-import type { Static } from '@sinclair/typebox';
+import type { Static } from 'typebox';
 
 export type CapabilitySnapshot = Static<typeof CapabilitySnapshotSchema>;
 export type DetectionStatus = Static<typeof DetectionStatusSchema>;
