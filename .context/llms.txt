@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-15
-> Files: 274 across 13 categories
+> Files: 271 across 13 categories
 
 ## Quick Start (Read These First)
 
@@ -262,9 +262,6 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-316: Build the Authored "Emberwatch: The Fading Ward" Demo Adventure](contracts/C-316-build-the-authored-emberwatch-the-fading-ward-demo-adventure.md)
 - [Contract C-317: Rebuild the Start Menu Around Campaigns, Not Personas](contracts/C-317-rebuild-the-start-menu-around-campaigns-not-personas.md)
 - [Contract C-318: Add One-Screen Capability Setup and an Offline Demo Fallback](contracts/C-318-add-one-screen-capability-setup-and-an-offline-demo-fallback.md)
-- [Contract: C-320 - Automated MDC Skill Scraper and Transpiler](contracts/C-320_mdc_skill_scraper.md)
-- [Contract: C-321 - MCP (Model Context Protocol) Stdio Runner Bridge](contracts/C-321_mcp_runner_bridge.md)
-- [Contract C-365: Harden Contract Pipeline Orchestration](contracts/C-365-harden-contract-pipeline-orchestration.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)

@@ -137,8 +137,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | v2 |
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | v2 |
 | C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | v1 |
-| C-320 | C 320_mdc_skill_scraper | ⏳ not_started | v1 |
-| C-321 | C 321_mcp_runner_bridge | ⏳ not_started | v1 |
+| C-320 | Ship Real-Time LPC Appearance Preview with Safe Defaults | ⏳ not_started (no contract file) | v1 |
+| C-321 | Make `/game` Boot Atomic, Observable, and Content-Driven | ⏳ not_started (no contract file) | v1 |
 | C-322 | Add In-World Onboarding and Unified Interaction UX | ⏳ not_started (no contract file) | v1 |
 | C-323 | Integrate Bounded AI NPC Dialogue with Authored Fallbacks | ⏳ not_started (no contract file) | v1 |
 | C-324 | Integrate the Demo Quest from Offer Through Reward | ⏳ not_started (no contract file) | v1 |
