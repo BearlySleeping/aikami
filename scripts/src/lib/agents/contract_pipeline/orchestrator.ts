@@ -607,6 +607,9 @@ export const runContractPipeline = async (options: {
                 baseBranch: PIPELINE_BASE_BRANCH,
               });
               manifest.reconciliation = reconciliation;
+              // Create as a Draft PR to allow CI checks to pass before a human
+              // promotes it to "Ready for review." CodeRabbit AI review is
+              // configured (via .coderabbit.yaml) to skip drafts, saving API quota.
               const prUrl = createGitHubPr({
                 headBranch: reconciliation.headBranch,
                 baseBranch: reconciliation.baseBranch,

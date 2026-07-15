@@ -495,7 +495,9 @@ export default function (pi: ExtensionAPI) {
           description: `Target base branch (default: "${DEFAULT_BASE}")`,
         }),
       ),
-      draft: Type.Optional(Type.Boolean({ default: false, description: 'Create as draft PR' })),
+      // Default to draft — CI must pass and a human must promote the PR
+      // to "Ready for review" before CodeRabbit AI review is triggered.
+      draft: Type.Optional(Type.Boolean({ default: true, description: 'Create as draft PR' })),
       web: Type.Optional(
         Type.Boolean({ default: false, description: 'Open PR in browser after creation' }),
       ),
