@@ -115,6 +115,12 @@ _aikami_load_mode() {
 
 _aikami_load_mode
 
+# ── 3.5. Pi Version Sync ─────────────────────────────────────────────
+# Auto-installs correct @earendil-works/pi-coding-agent when .pi/package.json
+# drifts from node_modules (e.g. after `pi update`).
+source "${AIKAMI_ROOT}/scripts/direnv/sync-pi.sh"
+_aikami_sync_pi_version
+
 # ── 4. Pi-Hypa binary + configuration (additive mode — keeps custom tools active) ─
 _path_hypa_bin="$AIKAMI_ROOT/.pi/node_modules/.bin"
 if [ -d "$_path_hypa_bin" ]; then

@@ -23,6 +23,7 @@ type CliArguments = {
   dryRun: boolean;
   fresh: boolean;
   noAttach: boolean;
+  ready: boolean;
   launcherToken?: string;
   help: boolean;
 };
@@ -48,6 +49,7 @@ const parseArguments = (): CliArguments => {
     dryRun: args.includes('--dry-run'),
     fresh: args.includes('--fresh'),
     noAttach: args.includes('--no-attach'),
+    ready: args.includes('--ready'),
     help: args.length === 0 || args.includes('--help') || args.includes('-h'),
   };
 };
@@ -66,6 +68,7 @@ Options:
   --background       Internal/background mode; do not attach Herdr
   --fresh            Start a brand-new run (skip auto-resume)
   --no-attach        Run pipeline in background without attaching to herdr
+  --ready            Create PR as ready-for-review (skip draft); triggers CodeRabbit immediately
   -h, --help         Show this help
 `);
 };
@@ -150,6 +153,7 @@ const main = async (): Promise<void> => {
     resumeRunId: cli.resumeRunId,
     fresh: cli.fresh,
     dryRun: cli.dryRun,
+    ready: cli.ready,
     onReady: cli.launcherToken
       ? (readyManifest) => {
           atomicWrite({

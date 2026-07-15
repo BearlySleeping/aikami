@@ -5,13 +5,13 @@
 // and creates the campaign with the chosen capability profile.
 // Contract: C-318
 
+import { TEXT_PROVIDERS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
-import { TEXT_PROVIDERS } from '@aikami/constants';
 import { encrypt } from '$lib/utils/crypto_vault';
 import { campaignService, capabilityService, PROVIDER_MODEL_FETCH, routerService } from '$services';
 
@@ -235,7 +235,9 @@ class CapabilityViewModel
       const headers: Record<string, string> = {};
       const { auth, extraHeaders } = providerConfig;
       if (auth.location === 'header') {
-        const value = auth.prefix ? `${auth.prefix}${this.tempApiKey.trim()}` : this.tempApiKey.trim();
+        const value = auth.prefix
+          ? `${auth.prefix}${this.tempApiKey.trim()}`
+          : this.tempApiKey.trim();
         headers[auth.name] = value;
       }
       if (extraHeaders) {
@@ -255,15 +257,26 @@ class CapabilityViewModel
         const body = (await response.json()) as { data?: unknown[] };
         const modelCount = Array.isArray(body.data) ? body.data.length : 0;
         this.testResult = `✓ Connected — ${latency}ms, ${modelCount} models available`;
-        this.debug('testCloudConnection:success', { provider: this.selectedCloudProvider, latency, modelCount });
+        this.debug('testCloudConnection:success', {
+          provider: this.selectedCloudProvider,
+          latency,
+          modelCount,
+        });
       } else {
         this.testResult = `✗ Connection failed (HTTP ${response.status})`;
-        this.debug('testCloudConnection:bad-status', { provider: this.selectedCloudProvider, status: response.status });
+        this.debug('testCloudConnection:bad-status', {
+          provider: this.selectedCloudProvider,
+          status: response.status,
+        });
       }
     } catch (error) {
       const latency = Math.round(performance.now() - startTime);
       this.testResult = `✗ Connection failed — ${String(error).slice(0, 100)}`;
-      this.debug('testCloudConnection:error', { provider: this.selectedCloudProvider, latency, error: String(error) });
+      this.debug('testCloudConnection:error', {
+        provider: this.selectedCloudProvider,
+        latency,
+        error: String(error),
+      });
     } finally {
       this.isTesting = false;
     }

@@ -14,7 +14,7 @@ let initError = $state<string | null>(null);
 
 onMount(async () => {
   try {
-    await campaignService.initialize();
+    await campaignService.refreshCampaigns();
     initError = null;
   } catch (error) {
     // Store initialization error separately from isChecking
@@ -47,11 +47,7 @@ $effect(() => {
           Failed to load campaign data. This may be due to browser storage restrictions.
         </p>
         <div class="card-actions justify-end">
-          <button
-            type="button"
-            class="btn btn-primary"
-            onclick={() => window.location.reload()}
-          >
+          <button type="button" class="btn btn-primary" onclick={() => window.location.reload()}>
             Retry
           </button>
         </div>
