@@ -14,6 +14,7 @@
 - Create a tilemap editor, maybe add a new frontend app that is sveltekit but ssr that we host on cloud run similar to nordclaw, it will be like for creator.aikami.com, and it will be posible to create and edit tilemaps, items, npc, quests, and other game content. maybe even add mod support, like you can upload own
 - Use secretspec with gcsm https://secretspec.dev/quick-start (it garanties that you have the secrets before you build/dev)
 - There are some await import('... that should be refactored
+    - in .pi and client, and engine (probably other places as well)
 - We import @aikami/frontend/configs/firestore.ts directly somewhere, we should force to always use repositories: packages/frontend/repositories/src/lib/.
     - it is in apps/frontend/client/src/lib/services/agent/agent_registry_service.svelte.ts
     - apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts
@@ -21,3 +22,7 @@
 - prevent using "as"
 - @inheritdoc is not needed
 - Consider making all classes in packages/frontend/engine/ use BaseClass and initalize with Class.create() to auto debug log
+- Remove all hard local refrences to relative paths: aka /home/sonny/Development/Projects/passion/aikami/
+- convert .pi to use bun instead of node (optimized bun tools like Bun.file)
+- consider setting up bun in mcp .pi/mcp.json, maybe other mcp tools
+- consider creating internal mcp instead of tool calling
