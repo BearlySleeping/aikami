@@ -56,5 +56,6 @@ export * from './lib/game/swarm_handoff.ts';
 export * from './lib/game/world_gen.ts';
 export * from './lib/media/image_style_profile.ts';
 export * from './lib/media/music.ts';
+export * from './lib/onboarding.ts';
 export * from './lib/project/project.ts';
 export * from './lib/repository/utils.ts';

@@ -33,7 +33,6 @@ const viewModel = getForgotPasswordViewModel({
                 }}
       >
         <div class="form-control">
-          <!-- biome-ignore lint/a11y/noLabelWithoutControl: label has for attribute matching input id -->
           <label class="label" for="forgot-email">
             <span class="label-text">{t.email()}</span>
           </label>

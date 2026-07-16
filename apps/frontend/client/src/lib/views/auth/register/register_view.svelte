@@ -91,7 +91,6 @@ let { viewModel }: Props = $props();
                 }}
       >
         <div class="form-control">
-          <!-- biome-ignore lint/a11y/noLabelWithoutControl: label has for attribute matching input id -->
           <label class="label" for="displayName">
             <span class="label-text">{t.full_name()}</span>
           </label>
@@ -118,7 +117,6 @@ let { viewModel }: Props = $props();
         </div>
 
         <div class="form-control">
-          <!-- biome-ignore lint/a11y/noLabelWithoutControl: label has for attribute matching input id -->
           <label class="label" for="email"> <span class="label-text">{t.email()}</span> </label>
           <input
             id="email"
@@ -143,7 +141,6 @@ let { viewModel }: Props = $props();
         </div>
 
         <div class="form-control">
-          <!-- biome-ignore lint/a11y/noLabelWithoutControl: label has for attribute matching input id -->
           <label class="label" for="password">
             <span class="label-text">{t.password()}</span>
           </label>

@@ -46,6 +46,6 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.1",
     "@types/pg": "8.20.0",
-    "firebase-tools": "15.23.0"
+    "firebase-tools": "15.24.0"
   }
 }

@@ -1,8 +1,15 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
 import { execFileSync, execSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
-import { join, relative, resolve, dirname } from 'node:path';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+} from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { findWorkspace, herdrJson } from '../../herdr/session.ts';
 import {
   commitAll,

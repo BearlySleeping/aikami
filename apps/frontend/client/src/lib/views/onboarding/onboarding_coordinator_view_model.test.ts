@@ -617,7 +617,10 @@ describe('OnboardingCoordinatorViewModel — field setters', () => {
 
   it('setClassId pre-fills ability scores', () => {
     const vm = getVM({ className: 'TestVM' });
-    const fighter = CLASS_PRESETS.find((c) => c.id === 'fighter')!;
+    const fighter = CLASS_PRESETS.find((c) => c.id === 'fighter');
+    if (!fighter) {
+      throw new Error('fighter preset not found');
+    }
     vm.setClassId('fighter');
     expect(vm.classId).toBe('fighter');
     expect(vm.abilityScores[fighter.primaryAbility]).toBe(DND_STANDARD_ARRAY[0]);
@@ -795,7 +798,7 @@ describe('OnboardingCoordinatorViewModel — draft persistence', () => {
     vm.startCustom();
     const raw = localStorage.getItem('aikami-onboarding-draft');
     expect(raw).not.toBeNull();
-    const draft = JSON.parse(raw!);
+    const draft = JSON.parse(raw ?? '{}');
     expect(draft.step).toBe('identity');
     expect(draft.name).toBe('TestHero');
   });
@@ -806,7 +809,7 @@ describe('OnboardingCoordinatorViewModel — draft persistence', () => {
     vm.setName('Eldrin');
     vm.setPronounId('they_them');
     vm.setRaceId('elf');
-    const draft = JSON.parse(localStorage.getItem('aikami-onboarding-draft')!);
+    const draft = JSON.parse(localStorage.getItem('aikami-onboarding-draft') ?? '{}');
     expect(draft.name).toBe('Eldrin');
     expect(draft.pronounId).toBe('they_them');
     expect(draft.raceId).toBe('elf');
