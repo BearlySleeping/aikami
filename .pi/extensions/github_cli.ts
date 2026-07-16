@@ -37,9 +37,9 @@ const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
 
 /** Repository root — always run gh from here, not from a worktree subdirectory. */
 let _repoRoot: string | undefined;
-const repoRoot = (pi: ExtensionAPI): string => {
+const repoRoot = (): string => {
   if (!_repoRoot) {
-    _repoRoot = pi.cwd ?? process.cwd();
+    _repoRoot = process.cwd();
   }
   return _repoRoot;
 };
@@ -76,7 +76,7 @@ async function runGh(
   const result = await pi.exec('gh', args, {
     signal: undefined,
     timeout: opts?.timeout ?? DEFAULT_TIMEOUT,
-    cwd: opts?.cwd ?? repoRoot(pi),
+    cwd: opts?.cwd ?? repoRoot(),
   });
 
   if (result.code !== 0) {

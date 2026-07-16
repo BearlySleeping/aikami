@@ -2,21 +2,10 @@
 
 > **Canonical source of truth.** Completed implementation history remains in
 > `docs/contracts/`; pending work belongs here until a contract is generated.
-> `docs/TODO_DRAFT.md` and `docs/TODO_DRAFT_TTRPG.md` are absorbed working
-> notes — every actionable idea from both is merged into this file (see the
-> Legacy Backlog Merge Map) and those two files should be treated as historical
-> once this revision lands.
 >
 > **Roadmap rule:** no new breadth-first feature work until the Phase 1 playable
-> demo gate (C-335) passes. Existing dev sandboxes are capability inventory, not
-> proof that a feature works in the game.
->
-> **Vision update (this revision):** Aikami requires a working text AI engine
-> (local or cloud) to play — there is no supported "AI-less" game state. Local
-> persistence moves to Turso (libSQL) as the source of truth, with Firebase
-> demoted to an optional sync/auth/hosted-service adapter. See C-320–C-324 for
-> the foundational gateway and storage work this unlocks, inserted before the
-> renumbered demo-content contracts (old C-320–C-364 shifted to C-325–C-369).
+> demo gate passes. Existing dev sandboxes are capability inventory, not proof
+> that a feature works in the game.
 
 ---
 
@@ -209,13 +198,12 @@ under a minute.”**
    durable local repository for campaigns, saves, and chat history — not
    IndexedDB, not Firestore. Firebase/Data Connect/Storage sync is a later
    adapter, never the source required to boot.
-10. **One AI provider gateway, three modes.** All text, image, and voice
+10. **One AI provider gateway, three modes.** All text (and later image/voice)
     generation goes through a single `AiProviderGateway` abstraction with
     `offline` (local engine), `byok` (user-supplied cloud key), and `service`
     (Aikami-hosted, metered) modes. Product code depends on the interface, not
     on which mode is active; adding a fourth mode must not require touching
-    call sites. Text is the only capability required to be resolved before
-    gameplay starts (see #3); image/voice remain optional per capability.
+    call sites.
 11. **Promotion over duplication.** Dev sandboxes remain focused test harnesses.
     Production imports the same domain services/components; it does not copy
     sandbox logic.
@@ -379,15 +367,13 @@ Every `### C-NNN` item below is one potential contract based on
   false` and zero AI. This path must be removed or converted into a
   QA/accessibility-only debug flag per C-323 (Enforce Mandatory Text AI
   Capability Gate) — it is no longer a product-facing menu option.
-- **Dependencies:** C-133, C-134, C-202, C-230, C-317, C-320.
+- **Dependencies:** C-133, C-134, C-202, C-230, C-317, C-320, C-323.
 - **Acceptance gate:** Given no configured provider, when the capability screen
   runs, then a local engine is auto-detected or the player is guided to BYOK
   cloud setup in under a minute; character onboarding is unreachable until a
   text engine resolves. Given a resolved engine, when an individual AI call
   fails mid-session, then authored fallback text keeps the scene playable
-  without exposing an option to disable AI outright. Note: the hard block on
-  reaching onboarding without a resolved engine is enforced by C-323, which
-  depends on this contract, not the reverse.
+  without exposing an option to disable AI outright.
 - **References:** Marinara connection defaults but not its configuration depth;
   RisuAI provider breadth behind friendly UI.
 
@@ -422,39 +408,30 @@ Every `### C-NNN` item below is one potential contract based on
   a mirrored server-side gateway consumed by Firebase Functions/Cloud Run,
   replacing the current split between `aiService`, `text_generation_service`,
   `packages/backend/ai`, and `capability_service`'s standalone Ollama ping.
-- **Outcome:** one `AiProviderGateway` interface covering all three
-  capabilities — `generateText()`, `generateImage()`, `generateVoice()` — that
-  resolves each call to exactly one of three adapters based on the active
-  `AiMode` per capability (a campaign may run `offline` text with `byok`
-  image, for example):
-  - `offline` — local engine (Ollama for text today; ComfyUI/Kokoro Docker
-    services already running under `apps/backend/image`/`apps/backend/voice`
-    for image/voice; additional local runtimes are adapters behind the same
-    interface, not new call-site branches).
+- **Outcome:** one `AiProviderGateway` interface with `generateText()` (and a
+  typed extension point for `generateImage()`/`generateVoice()` reserved for a
+  later contract) that resolves to exactly one of three adapters based on the
+  active `AiMode`:
+  - `offline` — local engine (Ollama today; LM Studio/other local runtimes are
+    additional adapters behind the same interface, not new call-site branches).
   - `byok` — user-supplied cloud key/endpoint (OpenRouter, OpenAI, Gemini,
-    custom OpenAI-compatible for text; equivalent cloud image/voice APIs),
-    reusing `packages/backend/ai`'s existing adapters and `crypto_vault` for
-    key storage.
-  - `service` — Aikami-hosted, metered access (Cloud Run/Firebase Functions
-    fronting the same `apps/backend/text|image|voice` containers), reserved
-    for Phase 5 activation but the interface exists now so it is not bolted
-    on later.
-- **Scope:** define `AiProviderGateway`, `AiMode`, `AiCapability` (`'text' |
-  'image' | 'voice'`), and `AiGatewayError` types in `packages/shared/types` +
-  `packages/shared/schemas`; implement the `offline` and `byok` adapters for
-  all three capabilities by wrapping existing, working code
+    custom OpenAI-compatible), reusing `packages/backend/ai`'s existing
+    adapters and `crypto_vault` for key storage.
+  - `service` — Aikami-hosted, metered access (Cloud Run/Firebase Functions),
+    reserved for Phase 5 activation but the interface exists now so it is not
+    bolted on later.
+- **Scope:** define `AiProviderGateway`, `AiMode`, `AiCapability` (`'text'`
+  now; `'image' | 'voice'` typed but unimplemented), and `AiGatewayError`
+  types in `packages/shared/types` + `packages/shared/schemas`; implement the
+  `offline` and `byok` adapters by wrapping existing, working code
   (`ollama_adapter.ts`, `openrouter_adapter.ts`, `openai_service.ts`,
-  `gemini_service.ts` for text; `ImageGenerationOrchestrator`/
-  `ComfyUIRestClient` for image; the existing Kokoro voice client for voice)
-  rather than rewriting provider logic; route `text_generation_service.svelte.ts`,
-  `ai_service.svelte.ts`, and `capability_service.svelte.ts`'s detection logic
-  through the gateway; standardize streaming (SSE), cancellation
-  (`AbortSignal`), retry, and error shape across all three capabilities and
-  three modes; do not implement the `service` adapter's billing/metering (that
-  belongs to the Phase 5 hosted-service contract) — only its interface
-  conformance and a stub/mock implementation for tests. Text is the only
-  capability enforced as mandatory (C-323); image/voice remain optional even
-  though they share the same gateway shape.
+  `gemini_service.ts`) rather than rewriting provider logic; route
+  `text_generation_service.svelte.ts`, `ai_service.svelte.ts`, and
+  `capability_service.svelte.ts`'s detection logic through the gateway;
+  standardize streaming (SSE), cancellation (`AbortSignal`), retry, and error
+  shape across all three modes; do not implement the `service` adapter's
+  billing/metering (that belongs to the Phase 5 hosted-service contract) —
+  only its interface conformance and a stub/mock implementation for tests.
 - **Dependencies:** C-056 (completed — hybrid text gateway logic to absorb),
   C-133, C-134.
 - **Acceptance gate:** Given any client or server call site that previously
@@ -462,11 +439,9 @@ Every `### C-NNN` item below is one potential contract based on
   directly, when it is migrated to `AiProviderGateway.generateText()`, then
   behavior (streaming, cancellation, error handling) is preserved and the mode
   (offline/byok/service) is resolved once at the gateway boundary, never
-  re-checked ad hoc at the call site. Given `generateImage()`/`generateVoice()`
-  wrap the existing ComfyUI/Kokoro clients, then their public behavior is also
-  unchanged for current callers. Given the `service` mode is not yet
-  activated for any capability, then attempting to select it in the UI is
-  hidden/disabled, not broken.
+  re-checked ad hoc at the call site. Given the `service` mode is not yet
+  activated, then attempting to select it in the UI is hidden/disabled, not
+  broken.
 - **References:** TODO_DRAFT.md 3-mode vision (offline/web-BYOK/no-setup
   service); TODO_DRAFT_TTRPG.md "AI Orchestrator" staged pipeline concept;
   existing `packages/backend/ai` adapter quality (reuse, do not rewrite);
@@ -810,17 +785,13 @@ Every `### C-NNN` item below is one potential contract based on
   visual suites, accessibility checks, offline test, and performance budget.
 - **Outcome:** one command proves cold launch → setup → quest → check → combat or
   alternate resolution → reward → save → reload on production routes.
-- **Scope:** mock and real-local-AI profiles, network-offline-with-local-model
-  run, failure injection, WebGPU/WebGL coverage, keyboard-only flow, screenshot
-  states, console/network error assertions, an explicit assertion that no
-  production route can reach `playing` state without a resolved
-  `AiProviderGateway` connection (C-320, C-323), and contract evidence links.
+- **Scope:** mock and real-local-AI profiles, network-offline run, failure
+  injection, WebGPU/WebGL coverage, keyboard-only flow, screenshot states,
+  console/network error assertions, and contract evidence links.
 - **Dependencies:** all Phase 1 items; C-011, C-159, C-181–C-183, C-217, C-218.
 - **Acceptance gate:** Given a clean emulator profile, when the Phase 1 gate runs,
   then all required paths pass repeatedly with no skipped critical tests, no
-  missing artifacts, no uncaught errors, no state divergence after reload, and
-  no code path that reaches gameplay while `capabilityProfile.textProvider` is
-  false outside the documented QA/CI bypass flag (C-323).
+  missing artifacts, no uncaught errors, and no state divergence after reload.
 - **References:** `docs/contracts/TEMPLATE.md` test hooks; existing visual runner.
 
 ---
@@ -1127,29 +1098,20 @@ Every `### C-NNN` item below is one potential contract based on
 
 # Phase 4 — Offline Sync, Authoring, Performance, and Platform Quality
 
-### C-357 — Add Turso Cloud Sync with an Outbox and Conflict Policy
+### C-357 — Add Local-First Cloud Sync with an Outbox and Conflict Policy
 
 - **Status:** not_started
 - **Priority:** P2 — cloud should synchronize durable local campaigns, not own
-  the runtime. Turso/libSQL's embedded-replica sync is the primary mechanism;
-  Firebase remains a secondary, optional adapter for account/auth attachment.
-- **Target:** the C-321 Turso repository layer, libSQL embedded-replica sync
-  (`sync()` on `LocalDatabaseInterface`), mutation outbox, optional Firebase
-  Auth attachment for issuing sync tokens, conflict/fork UI, and migration
-  strategy.
-- **Outcome:** play offline indefinitely on the local Turso database, sign in
-  later, sync to a remote Turso database, and recover from conflict without
-  silent loss. Firebase involvement is limited to auth token issuance and
-  optional Firestore mirroring for cross-device account features — never the
-  primary campaign store.
-- **Dependencies:** C-014, C-321, C-334, C-344; evaluate PowerSync only against
-  this contract's needs, and only if Turso's native embedded-replica sync
-  proves insufficient.
+  the runtime.
+- **Target:** campaign repository adapters, mutation outbox, auth attachment,
+  cloud sync, conflict/fork UI, and migration strategy.
+- **Outcome:** play offline indefinitely, sign in later, upload/download/fork
+  campaigns, and recover from conflict without silent loss.
+- **Dependencies:** C-014, C-334, C-344; evaluate PowerSync only against this
+  contract’s needs.
 - **Acceptance gate:** Given divergent local/cloud revisions, when sync resumes,
   then deterministic policy preserves both histories or produces an explicit
   user-resolvable conflict—never last-write silent loss.
-- **References:** TODO_DRAFT_TTRPG.md "Firebase should solve exactly three
-  problems: device sync, shared campaigns, cloud backup" — nothing more.
 
 ### C-358 — Build a Content Authoring Studio and Validation Pipeline
 
@@ -1338,25 +1300,7 @@ Phase 1:
 - connected OOC chats, public character marketplace, and bulk import UI;
 - full D&D 5e rules fidelity, arbitrary PDF mechanics, and dynamic generated UI;
 - co-op, procedural maps, shared worlds, and mobile-native release;
-- PowerSync/TanStack DB adoption without a measured Phase 4 sync requirement
-  (Turso's own embedded-replica sync is the default, see C-357);
-- Aikami-hosted "no setup required" pay-per-use service mode (TODO_DRAFT.md
-  mode 3) — the `AiProviderGateway`'s `service` adapter interface exists from
-  C-320, but billing, Cloud Run cold-start optimization (model weights in
-  Storage instead of the Docker image), and GCP Model Garden evaluation are
-  Phase 5 work, not Phase 1;
-- Data Connect migration for NPC/chat/items — Turso is the campaign-runtime
-  source of truth (C-321); Data Connect is revisited only if a genuine
-  dashboard/reporting/admin use case emerges, per TODO_DRAFT_TTRPG.md;
-- creator.aikami.com content-authoring web app (tilemap/item/NPC/quest editor,
-  mod upload) — tracked as a future evolution of C-358 (Content Authoring
-  Studio), not a Phase 1 concern.
-
-**No longer deferred — now disallowed:** a campaign with zero text AI
-capability was previously an accepted "offline demo" product mode (old C-318).
-It is not merely deprioritized; it is removed as a supported state by C-323.
-Authored fallback text is a resilience behavior for AI failure, not a menu
-option a player can choose instead of AI.
+- PowerSync/TanStack DB adoption without a measured Phase 4 sync requirement.
 
 ---
 
@@ -1368,31 +1312,26 @@ Nothing actionable from the former two TODO files was discarded.
 |---|---|
 | Session Zero conversational creation | C-319; optional AI interview after fast starter/custom path |
 | NPC interaction intent macros | C-328 typed commands; C-348 transactional AI pipeline |
-| Quest graph/Data Connect | C-329 MVP integration; C-339 complete graph; Data Connect only where it fits a dashboard/reporting need, never the campaign runtime store (Turso owns that, C-321) |
-| Local-first AI / Ollama / hybrid fallback | C-320 unified provider gateway (offline/byok/service); C-323 mandatory capability gate; C-356 managed local model lifecycle |
-| 3 play modes: offline / web BYOK / no-setup service (TODO_DRAFT.md) | C-320 gateway modes; C-323 enforces text AI is required in every mode; hosted "no setup" service activation is Phase 5 (C-356, C-357) |
-| Turso as default database, Firebase as optional sync (TODO_DRAFT_TTRPG.md) | C-321 migrates campaign/save/chat off IndexedDB onto Turso; C-357 adds optional Turso cloud sync with Firebase limited to auth/backup |
-| Remove legacy/unused code: `packages/backend/ai`, `packages/backend/image/src/index.ts`, `packages/backend/svelte-kit` (TODO_DRAFT.md) | C-324 |
+| Quest graph/Data Connect | C-329 MVP integration; C-339 complete graph; storage adapter later |
+| Local-first AI / Ollama / hybrid fallback | C-318 authored fallback; C-356 managed local inference |
 | Dynamic ruleset / PDF RAG | C-365 |
 | Director agent / world state / GOAP | C-348, C-351, C-352 |
 | STT / continuous voice / session export | C-359, C-364 |
 | Co-op / spatial chat / party state | C-366 |
-| Provider configuration | C-320 gateway; C-322 capability/settings wiring; C-333 Advanced settings |
+| Provider configuration | C-318 default UX; C-333 Advanced settings |
 | Rich streaming chat / branches / commands | C-328 MVP; C-343 full promotion |
 | Character sheet and traits | C-319, C-337, C-341 |
 | World generation wizard | Deferred default; rebuilt safely in C-354 |
 | Combat/dice/initiative | C-330 MVP; C-336–C-338 depth |
 | GM, agents, macros, lorebook, expressions | C-348–C-355; C-367 power-user tools |
 | Session management / address modes / CYOA | C-343, C-344 |
-| Image generation / asset management / music | C-315, C-355, C-358, C-360; the `AiProviderGateway` (C-320) already exposes `generateImage()`/`generateVoice()` alongside the mandatory `generateText()`, but image/voice remain optional capabilities — C-355 (media director) is where they become an active, orchestrated gameplay feature |
+| Image generation / asset management / music | C-315, C-355, C-358, C-360 |
 | Import/export/custom agents/autonomous NPCs | C-352, C-359, C-367 |
 | OpenViking workflow | Evaluate and integrate under C-350, not as a mandatory stack choice |
 | PromptFoo NPC regression | C-349 |
 | Inventory/combat/quest/leveling/world persistence | C-329–C-331, C-334, C-336–C-339 |
 | Generative quests/worlds | C-353, C-354, C-368 |
 | Real-time player chat/multiplayer/mobile | C-362, C-366 |
-| SillyTavern RPG extension patterns (status bars, vitals, vendors, memory diary) | Reviewed for UX/data-shape inspiration only, not adopted as dependencies — see updated Example Project Review below; mechanics stay in the deterministic rules kernel (C-336), not model-computed state |
-| Multi-layer memory sprawl (Smart-Memory tiers, VectHare vector RAG, embeddings, knowledge graph) | Explicitly avoided per TODO_DRAFT_TTRPG.md "one source of truth" principle — C-350 (Hierarchical Lore and Memory Retrieval) owns exactly one memory system; do not add a second |
 
 ---
 
@@ -1409,21 +1348,14 @@ Nothing actionable from the former two TODO files was discarded.
 | **Godot Aikami v1/v2, AARPG, Game Template** | conventional menu/loading/pause/save shell, interactables, controller support, complete quest/inventory loops | another engine rewrite or manager layer parallel to PixiJS/bitECS |
 | **Pixi tiled-map projects** | asset-loader integration, preload, packed/chunked rendering, stable texture reuse, benchmarks | renderer replacement without profiling current C-210 pipeline |
 | **RapidLPC / Universal LPC Generator** | composable layers, live animation preview, deterministic export, attribution | requiring AI image generation for a usable player sprite |
-| **Firebase, SQLite/Kysely, multiplayer examples** | repository boundaries and auth/backup sync patterns (C-357) | treating Firebase/Data Connect as the primary campaign store — Turso (C-321) is the source of truth |
-| **sillytavern-rpg-extensions** (RPG Status Bar, Vitals, Vendors, Diary, Map Engine, Equipment Durability, Scene Card) | "extension is the source of truth, chat is just the narrator" discipline — deterministic bars/stats computed outside the model and injected as a short state note each turn; per-turn scene-card summarization by a cheap secondary model kept separate from the main roleplay model | letting the model compute HP/durability/economy math itself; per-extension isolated state stores — Aikami's rules kernel (C-336) and campaign aggregate (C-313) are the single owner, not a dozen independent SillyTavern-style extensions |
-| **Smart-Memory** | tiered memory budget with a visible token-usage bar and auto-tune, hardware-aware profiles (local vs. hosted), activation-trigger keyword boosting, per-turn state ledger for "where is X right now" facts | its five-plus concurrent memory tiers (long-term, session, short-term summary, canon, state ledger) as a design target — TODO_DRAFT_TTRPG.md's "exactly one source of truth" rules out replicating this sprawl; C-350 should study the budget/trigger UX, not the tier count |
-| **VectHare** | temporal decay and conditional activation as *retrieval ranking signals* if C-350's single memory system ever needs semantic search | adopting a second, independent vector database/RAG system alongside C-350's memory store — one memory system, one retrieval path |
+| **Firebase, SQLite/Kysely, multiplayer examples** | repository boundaries and later sync/network references | putting backend/sync work on the Phase 1 critical path |
 
 Projects reviewed under `examples/`: Marinara Engine; Universal LPC Generator;
 AARPG tutorial; Aikami v1 Godot; Aikami v2 GodotJS; gamejs-old; both Godot
 Game Template copies; GodotFirebase; GodotJS multiplayer; Godot SQLite/Kysely;
 GodotJS examples; RapidLPC; Pax Fluxia; pixi-tiledmap; tilemap; RisuAI;
 SillyTavern; MazeMaster; Multihog D&D Framework; RPG Companion; MVU Game
-Maker; Universal Immersion Engine; sillytavern-rpg-extensions (RPG Status Bar,
-RPG Vitals, RPG Vendors & Workshops, RPG Diary, RPG Map & Locations Engine,
-RPG Equipment & Durability, RPG Scene Card, Tavern RPG Engine, RPG Game
-Companion, Dual-Model Thoughts, CHAOS & SOUL RP Preset); Smart-Memory; and
-VectHare.
+Maker; and Universal Immersion Engine.
 
 ---
 
@@ -1433,24 +1365,16 @@ A contract may be marked completed only when all applicable conditions hold:
 
 1. Production path is reachable without a dev route.
 2. Domain state has one authoritative owner and a versioned schema at boundaries.
-3. Offline/degraded behavior is specified and tested — "offline" means no
-   network (local AI engine), never zero AI capability.
+3. Offline/degraded behavior is specified and tested.
 4. Required functional E2E and visual suite files declared by the contract exist.
 5. Tests exercise behavior, not only component rendering or sandbox boot.
 6. Accessibility, keyboard/focus, loading, empty, error, retry, and cancellation
    states are handled.
 7. Save migration and idempotency are covered for persistent mutations.
 8. AI output is validated, cost/cancellation behavior is bounded, and mechanics
-   have deterministic fallback for AI failure — not a player-facing toggle to
-   disable AI.
-9. Any new or modified AI call site goes through `AiProviderGateway` (C-320);
-   no direct provider SDK/fetch call is introduced outside the gateway's own
-   adapters.
-10. Any new or modified persistent campaign/save/chat data goes through the
-    Turso repository layer (C-321); no new IndexedDB or Firestore write path
-    is introduced for campaign-runtime truth.
-11. `validate()` passes for affected projects; no critical test is skipped.
-12. Execution Report records actual files, results, deviations, and follow-ups.
-13. Promotion matrix advances only after independent production evidence:
+   have deterministic fallback.
+9. `validate()` passes for affected projects; no critical test is skipped.
+10. Execution Report records actual files, results, deviations, and follow-ups.
+11. Promotion matrix advances only after independent production evidence:
     `sandbox → integrated → release_verified`.
-14. User-facing docs and the canonical backlog are updated in the same change.
+12. User-facing docs and the canonical backlog are updated in the same change.

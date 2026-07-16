@@ -2,21 +2,10 @@
 
 > **Canonical source of truth.** Completed implementation history remains in
 > `docs/contracts/`; pending work belongs here until a contract is generated.
-> `docs/TODO_DRAFT.md` and `docs/TODO_DRAFT_TTRPG.md` are absorbed working
-> notes — every actionable idea from both is merged into this file (see the
-> Legacy Backlog Merge Map) and those two files should be treated as historical
-> once this revision lands.
 >
 > **Roadmap rule:** no new breadth-first feature work until the Phase 1 playable
-> demo gate (C-335) passes. Existing dev sandboxes are capability inventory, not
-> proof that a feature works in the game.
->
-> **Vision update (this revision):** Aikami requires a working text AI engine
-> (local or cloud) to play — there is no supported "AI-less" game state. Local
-> persistence moves to Turso (libSQL) as the source of truth, with Firebase
-> demoted to an optional sync/auth/hosted-service adapter. See C-320–C-324 for
-> the foundational gateway and storage work this unlocks, inserted before the
-> renumbered demo-content contracts (old C-320–C-364 shifted to C-325–C-369).
+> demo gate passes. Existing dev sandboxes are capability inventory, not proof
+> that a feature works in the game.
 
 ---
 
@@ -209,13 +198,12 @@ under a minute.”**
    durable local repository for campaigns, saves, and chat history — not
    IndexedDB, not Firestore. Firebase/Data Connect/Storage sync is a later
    adapter, never the source required to boot.
-10. **One AI provider gateway, three modes.** All text, image, and voice
+10. **One AI provider gateway, three modes.** All text (and later image/voice)
     generation goes through a single `AiProviderGateway` abstraction with
     `offline` (local engine), `byok` (user-supplied cloud key), and `service`
     (Aikami-hosted, metered) modes. Product code depends on the interface, not
     on which mode is active; adding a fourth mode must not require touching
-    call sites. Text is the only capability required to be resolved before
-    gameplay starts (see #3); image/voice remain optional per capability.
+    call sites.
 11. **Promotion over duplication.** Dev sandboxes remain focused test harnesses.
     Production imports the same domain services/components; it does not copy
     sandbox logic.
@@ -379,15 +367,13 @@ Every `### C-NNN` item below is one potential contract based on
   false` and zero AI. This path must be removed or converted into a
   QA/accessibility-only debug flag per C-323 (Enforce Mandatory Text AI
   Capability Gate) — it is no longer a product-facing menu option.
-- **Dependencies:** C-133, C-134, C-202, C-230, C-317, C-320.
+- **Dependencies:** C-133, C-134, C-202, C-230, C-317, C-320, C-323.
 - **Acceptance gate:** Given no configured provider, when the capability screen
   runs, then a local engine is auto-detected or the player is guided to BYOK
   cloud setup in under a minute; character onboarding is unreachable until a
   text engine resolves. Given a resolved engine, when an individual AI call
   fails mid-session, then authored fallback text keeps the scene playable
-  without exposing an option to disable AI outright. Note: the hard block on
-  reaching onboarding without a resolved engine is enforced by C-323, which
-  depends on this contract, not the reverse.
+  without exposing an option to disable AI outright.
 - **References:** Marinara connection defaults but not its configuration depth;
   RisuAI provider breadth behind friendly UI.
 
@@ -422,39 +408,30 @@ Every `### C-NNN` item below is one potential contract based on
   a mirrored server-side gateway consumed by Firebase Functions/Cloud Run,
   replacing the current split between `aiService`, `text_generation_service`,
   `packages/backend/ai`, and `capability_service`'s standalone Ollama ping.
-- **Outcome:** one `AiProviderGateway` interface covering all three
-  capabilities — `generateText()`, `generateImage()`, `generateVoice()` — that
-  resolves each call to exactly one of three adapters based on the active
-  `AiMode` per capability (a campaign may run `offline` text with `byok`
-  image, for example):
-  - `offline` — local engine (Ollama for text today; ComfyUI/Kokoro Docker
-    services already running under `apps/backend/image`/`apps/backend/voice`
-    for image/voice; additional local runtimes are adapters behind the same
-    interface, not new call-site branches).
+- **Outcome:** one `AiProviderGateway` interface with `generateText()` (and a
+  typed extension point for `generateImage()`/`generateVoice()` reserved for a
+  later contract) that resolves to exactly one of three adapters based on the
+  active `AiMode`:
+  - `offline` — local engine (Ollama today; LM Studio/other local runtimes are
+    additional adapters behind the same interface, not new call-site branches).
   - `byok` — user-supplied cloud key/endpoint (OpenRouter, OpenAI, Gemini,
-    custom OpenAI-compatible for text; equivalent cloud image/voice APIs),
-    reusing `packages/backend/ai`'s existing adapters and `crypto_vault` for
-    key storage.
-  - `service` — Aikami-hosted, metered access (Cloud Run/Firebase Functions
-    fronting the same `apps/backend/text|image|voice` containers), reserved
-    for Phase 5 activation but the interface exists now so it is not bolted
-    on later.
-- **Scope:** define `AiProviderGateway`, `AiMode`, `AiCapability` (`'text' |
-  'image' | 'voice'`), and `AiGatewayError` types in `packages/shared/types` +
-  `packages/shared/schemas`; implement the `offline` and `byok` adapters for
-  all three capabilities by wrapping existing, working code
+    custom OpenAI-compatible), reusing `packages/backend/ai`'s existing
+    adapters and `crypto_vault` for key storage.
+  - `service` — Aikami-hosted, metered access (Cloud Run/Firebase Functions),
+    reserved for Phase 5 activation but the interface exists now so it is not
+    bolted on later.
+- **Scope:** define `AiProviderGateway`, `AiMode`, `AiCapability` (`'text'`
+  now; `'image' | 'voice'` typed but unimplemented), and `AiGatewayError`
+  types in `packages/shared/types` + `packages/shared/schemas`; implement the
+  `offline` and `byok` adapters by wrapping existing, working code
   (`ollama_adapter.ts`, `openrouter_adapter.ts`, `openai_service.ts`,
-  `gemini_service.ts` for text; `ImageGenerationOrchestrator`/
-  `ComfyUIRestClient` for image; the existing Kokoro voice client for voice)
-  rather than rewriting provider logic; route `text_generation_service.svelte.ts`,
-  `ai_service.svelte.ts`, and `capability_service.svelte.ts`'s detection logic
-  through the gateway; standardize streaming (SSE), cancellation
-  (`AbortSignal`), retry, and error shape across all three capabilities and
-  three modes; do not implement the `service` adapter's billing/metering (that
-  belongs to the Phase 5 hosted-service contract) — only its interface
-  conformance and a stub/mock implementation for tests. Text is the only
-  capability enforced as mandatory (C-323); image/voice remain optional even
-  though they share the same gateway shape.
+  `gemini_service.ts`) rather than rewriting provider logic; route
+  `text_generation_service.svelte.ts`, `ai_service.svelte.ts`, and
+  `capability_service.svelte.ts`'s detection logic through the gateway;
+  standardize streaming (SSE), cancellation (`AbortSignal`), retry, and error
+  shape across all three modes; do not implement the `service` adapter's
+  billing/metering (that belongs to the Phase 5 hosted-service contract) —
+  only its interface conformance and a stub/mock implementation for tests.
 - **Dependencies:** C-056 (completed — hybrid text gateway logic to absorb),
   C-133, C-134.
 - **Acceptance gate:** Given any client or server call site that previously
@@ -462,11 +439,9 @@ Every `### C-NNN` item below is one potential contract based on
   directly, when it is migrated to `AiProviderGateway.generateText()`, then
   behavior (streaming, cancellation, error handling) is preserved and the mode
   (offline/byok/service) is resolved once at the gateway boundary, never
-  re-checked ad hoc at the call site. Given `generateImage()`/`generateVoice()`
-  wrap the existing ComfyUI/Kokoro clients, then their public behavior is also
-  unchanged for current callers. Given the `service` mode is not yet
-  activated for any capability, then attempting to select it in the UI is
-  hidden/disabled, not broken.
+  re-checked ad hoc at the call site. Given the `service` mode is not yet
+  activated, then attempting to select it in the UI is hidden/disabled, not
+  broken.
 - **References:** TODO_DRAFT.md 3-mode vision (offline/web-BYOK/no-setup
   service); TODO_DRAFT_TTRPG.md "AI Orchestrator" staged pipeline concept;
   existing `packages/backend/ai` adapter quality (reuse, do not rewrite);
@@ -632,7 +607,7 @@ Every `### C-NNN` item below is one potential contract based on
   same recipe without a network request.
 - **References:** RapidLPC; Universal LPC generator and licensing guide.
 
-### C-326 — Make `/game` Boot Atomic, Observable, and Content-Driven
+### C-321 — Make `/game` Boot Atomic, Observable, and Content-Driven
 
 - **Status:** not_started
 - **Priority:** P0 — current game boot ignores campaign/world selection and
@@ -644,14 +619,14 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** remove hardcoded start map, report stage progress, cancellation,
   retry/return-to-menu, WebGPU-to-WebGL fallback, teardown, and pending-save
   handling.
-- **Dependencies:** C-124, C-152, C-210, C-313–C-316, C-325.
+- **Dependencies:** C-124, C-152, C-210, C-313–C-316, C-320.
 - **Acceptance gate:** Given a campaign content pack and persona, when `/game`
   opens, then the declared map/spawn/NPC set is ready before input unlocks; any
   stage failure leaves the save intact and offers recovery.
 - **References:** current `game_engine_service.svelte.ts`; Pixi Assets preload;
   Godot loading-screen pattern.
 
-### C-327 — Add In-World Onboarding and Unified Interaction UX
+### C-322 — Add In-World Onboarding and Unified Interaction UX
 
 - **Status:** not_started
 - **Priority:** P0 — players should understand what to do without reading docs.
@@ -662,13 +637,13 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** keyboard/gamepad prompt switching, rebind awareness, nearby target
   selection, interaction priority, optional tutorial replay, reduced motion,
   and touch-ready action abstractions.
-- **Dependencies:** C-140, C-141, C-161, C-212, C-316, C-326.
+- **Dependencies:** C-140, C-141, C-161, C-212, C-316, C-321.
 - **Acceptance gate:** Given a first-time player using keyboard or gamepad, when
   they enter Emberwatch, then contextual prompts lead them to the quest giver
   and disappear once each action is learned.
 - **References:** Godot templates/input icon mapping; AARPG interaction patterns.
 
-### C-328 — Integrate Bounded AI NPC Dialogue with Authored Fallbacks
+### C-323 — Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 - **Status:** not_started
 - **Priority:** P0 — AI character interaction is the product differentiator, but
@@ -680,14 +655,14 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** NPC persona/memory/reputation context, response cancellation,
   regenerate/edit safeguards, `trade`, `offerQuest`, `skillCheck`, `giveItem`,
   and `startCombat` commands with permission/precondition checks.
-- **Dependencies:** C-128, C-129, C-141, C-157, C-231, C-314, C-316, C-326.
+- **Dependencies:** C-128, C-129, C-141, C-157, C-231, C-314, C-316, C-321.
 - **Acceptance gate:** Given offline mode or malformed/malicious model output,
   when the player speaks to an NPC, then dialogue continues and only validated
   commands can change game state.
 - **References:** Multihog “state tracker feeds back to AI”; Marinara streaming
   and address UX; existing intent macro work.
 
-### C-329 — Integrate the Demo Quest from Offer Through Reward
+### C-324 — Integrate the Demo Quest from Offer Through Reward
 
 - **Status:** not_started
 - **Priority:** P0 — a complete quest loop turns engine features into a game.
@@ -698,14 +673,14 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** event-driven objective updates, idempotent rewards, objective pins,
   NPC/interaction prerequisites, failure/cancel policy, offline persistence,
   and AI context projection.
-- **Dependencies:** C-143, C-157, C-316, C-328.
+- **Dependencies:** C-143, C-157, C-316, C-323.
 - **Acceptance gate:** Given the Emberwatch quest, when each authored trigger
   occurs in any supported order, then progress updates exactly once and the
   final reward/world state survives reload.
 - **References:** existing quest dev route; MazeMaster objectives/hooks; Marinara
   quest tracker.
 
-### C-330 — Integrate Deterministic Demo Combat and Declared Skill Checks
+### C-325 — Integrate Deterministic Demo Combat and Declared Skill Checks
 
 - **Status:** not_started
 - **Priority:** P0 — D&D feel requires visible uncertainty and fair mechanical
@@ -717,14 +692,14 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** start/end transitions, initiative, action/bonus/reaction subset,
   attack/defend/item/flee, advantage/disadvantage, damage/status feedback,
   defeat/retry, and a supported non-combat quest resolution.
-- **Dependencies:** C-144–C-149, C-157, C-162–C-168, C-316, C-326, C-328.
+- **Dependencies:** C-144–C-149, C-157, C-162–C-168, C-316, C-321, C-323.
 - **Acceptance gate:** Given a fixed seed and command sequence, when the encounter
   is replayed, then rolls, HP, rewards, and outcome match while narration may
   differ.
 - **References:** Multihog declared-DC RNG; MazeMaster fairness/pity; existing
   combat sandboxes.
 
-### C-331 — Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop
+### C-326 — Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop
 
 - **Status:** not_started
 - **Priority:** P0 — existing inventory/economy systems need one coherent use in
@@ -736,14 +711,14 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** transaction validation, capacity/stack rules, compare UI, gold,
   vendor fallback lines, duplicate reward protection, keyboard/gamepad flow,
   and AI-readable inventory summary.
-- **Dependencies:** C-142, C-153, C-154, C-163, C-316, C-326, C-329, C-330.
+- **Dependencies:** C-142, C-153, C-154, C-163, C-316, C-321, C-324, C-325.
 - **Acceptance gate:** Given a purchased or looted item, when it is equipped and
   the campaign reloads, then inventory, gold, derived stats, and visual recipe
   remain consistent across ECS, UI, and AI context.
 - **References:** Universal Immersion staging/review UX; current vendor and
   inventory sandboxes.
 
-### C-332 — Redesign the Minimal Game HUD and Overlay Navigation
+### C-327 — Redesign the Minimal Game HUD and Overlay Navigation
 
 - **Status:** not_started
 - **Priority:** P0 — production currently exposes capability overlays without a
@@ -755,14 +730,14 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** overlay stack/back behavior, input capture, focus restore, combat
   layout, notifications, autosave indicator, optional clock/minimap, reduced
   clutter, and no dev/debug controls.
-- **Dependencies:** C-125, C-161, C-164, C-213, C-327, C-329–C-331.
+- **Dependencies:** C-125, C-161, C-164, C-213, C-322, C-324–C-326.
 - **Acceptance gate:** Given any overlay or combat transition, when Back/Escape
   is pressed, then exactly one layer closes, gameplay input resumes correctly,
   and keyboard focus returns to a meaningful element.
 - **References:** Godot pause/HUD shell; Marinara HUD strengths with fewer
   default widgets.
 
-### C-333 — Simplify Settings with Progressive Disclosure
+### C-328 — Simplify Settings with Progressive Disclosure
 
 - **Status:** not_started
 - **Priority:** P0 — advanced configuration currently competes with basic player
@@ -775,7 +750,7 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** searchable settings, sensible presets, reset per section, immediate
   preview/revert for display/audio, context-aware Close destination, capability
   badges, and mobile/gamepad navigation.
-- **Dependencies:** C-127, C-202, C-219, C-230, C-249, C-318, C-332.
+- **Dependencies:** C-127, C-202, C-219, C-230, C-249, C-318, C-327.
 - **Acceptance gate:** Given a first-time player, when Settings opens, then they
   can configure controls/audio/display or one AI connection without seeing raw
   generation parameters, agent pipelines, or provider jargon unless Advanced
@@ -783,7 +758,7 @@ Every `### C-NNN` item below is one potential contract based on
 - **References:** Marinara settings depth as Advanced only; Godot template
   persistent options.
 
-### C-334 — Make Local Save, Continue, Autosave, and Recovery Reliable
+### C-329 — Make Local Save, Continue, Autosave, and Recovery Reliable
 
 - **Status:** not_started
 - **Priority:** P0 — offline-first is a gameplay requirement, not a later sync
@@ -795,14 +770,14 @@ Every `### C-NNN` item below is one potential contract based on
 - **Scope:** atomic IndexedDB transaction, schema migration, checksum, slot
   metadata, save-in-progress guard, storage quota errors, exportable diagnostics,
   and optional signed-in cloud copy without boot dependency.
-- **Dependencies:** C-117, C-118, C-132, C-155, C-313, C-326, C-329–C-332.
+- **Dependencies:** C-117, C-118, C-132, C-155, C-313, C-321, C-324–C-327.
 - **Acceptance gate:** Given an offline campaign saved after quest/combat state
   changes, when the app is killed and Continue is selected, then map, spawn,
   persona, quest, inventory, NPC state, RNG state, and UI checkpoint restore.
 - **References:** local-first requirement; Godot global save/load; Pax deterministic
   replay.
 
-### C-335 — Enforce the Playable Demo Release Gate
+### C-330 — Enforce the Playable Demo Release Gate
 
 - **Status:** not_started
 - **Priority:** P0 — Phase 1 is not complete until the real game flow proves it.
@@ -810,27 +785,23 @@ Every `### C-NNN` item below is one potential contract based on
   visual suites, accessibility checks, offline test, and performance budget.
 - **Outcome:** one command proves cold launch → setup → quest → check → combat or
   alternate resolution → reward → save → reload on production routes.
-- **Scope:** mock and real-local-AI profiles, network-offline-with-local-model
-  run, failure injection, WebGPU/WebGL coverage, keyboard-only flow, screenshot
-  states, console/network error assertions, an explicit assertion that no
-  production route can reach `playing` state without a resolved
-  `AiProviderGateway` connection (C-320, C-323), and contract evidence links.
+- **Scope:** mock and real-local-AI profiles, network-offline run, failure
+  injection, WebGPU/WebGL coverage, keyboard-only flow, screenshot states,
+  console/network error assertions, and contract evidence links.
 - **Dependencies:** all Phase 1 items; C-011, C-159, C-181–C-183, C-217, C-218.
 - **Acceptance gate:** Given a clean emulator profile, when the Phase 1 gate runs,
   then all required paths pass repeatedly with no skipped critical tests, no
-  missing artifacts, no uncaught errors, no state divergence after reload, and
-  no code path that reaches gameplay while `capabilityProfile.textProvider` is
-  false outside the documented QA/CI bypass flag (C-323).
+  missing artifacts, no uncaught errors, and no state divergence after reload.
 - **References:** `docs/contracts/TEMPLATE.md` test hooks; existing visual runner.
 
 ---
 
 # Phase 2 — Core RPG Depth and Replayability
 
-> Start only after C-335 passes. These contracts deepen the proven loop rather
+> Start only after C-330 passes. These contracts deepen the proven loop rather
 > than creating parallel sandboxes.
 
-### C-336 — Extract a Deterministic Rules Kernel and Typed Game Command Protocol
+### C-331 — Extract a Deterministic Rules Kernel and Typed Game Command Protocol
 
 - **Status:** not_started
 - **Priority:** P1 — shared mechanics need one authoritative, replayable owner.
@@ -838,12 +809,12 @@ Every `### C-NNN` item below is one potential contract based on
   replay fixtures.
 - **Outcome:** movement-adjacent actions, checks, combat, items, quests, rewards,
   progression, and relationship mutations use validated commands/events.
-- **Dependencies:** C-313, C-330, C-335.
+- **Dependencies:** C-313, C-325, C-330.
 - **Acceptance gate:** Given a snapshot, seed, and command log, when replayed in
   browser or test runtime, then the same mechanical snapshot is produced.
 - **References:** Pax Fluxia deterministic shared engine; Multihog committed RNG.
 
-### C-337 — Complete Character Progression, Classes, Abilities, Skills, and Spells
+### C-332 — Complete Character Progression, Classes, Abilities, Skills, and Spells
 
 - **Status:** not_started
 - **Priority:** P1 — character choices need consequences beyond initial stats.
@@ -851,12 +822,12 @@ Every `### C-NNN` item below is one potential contract based on
   level-up UI, hotbar/action menu, and save projection.
 - **Outcome:** a curated D&D-inspired rules subset with clear class identity and
   no requirement to implement the entire 5e rules corpus.
-- **Dependencies:** C-232, C-153, C-162, C-336.
+- **Dependencies:** C-232, C-153, C-162, C-331.
 - **Acceptance gate:** Given earned XP and valid prerequisites, when leveling or
   choosing an ability, then derived stats/actions update consistently and AI
   context contains the same canonical sheet.
 
-### C-338 — Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI
+### C-333 — Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI
 
 - **Status:** not_started
 - **Priority:** P1 — combat must support multiple meaningful encounters.
@@ -864,12 +835,12 @@ Every `### C-NNN` item below is one potential contract based on
   initiative/action economy, enemy behavior, and combat presentation.
 - **Outcome:** party/enemy turns, area and support actions, resistances, cover or
   positioning rules, downed/revive policy, rewards, and encounter difficulty.
-- **Dependencies:** C-197, C-330, C-336, C-337.
+- **Dependencies:** C-197, C-325, C-331, C-332.
 - **Acceptance gate:** Given a multi-actor encounter, when turns resolve, then
   legal actions, effects, AI decisions, victory/defeat, and replay log remain
   deterministic and understandable.
 
-### C-339 — Complete Quest Graph, Journal, Objectives, and Reward Pipelines
+### C-334 — Complete Quest Graph, Journal, Objectives, and Reward Pipelines
 
 - **Status:** not_started
 - **Priority:** P1 — handcrafted and generated stories need the same robust
@@ -878,12 +849,12 @@ Every `### C-NNN` item below is one potential contract based on
   map/HUD tracking, rewards, and persistence.
 - **Outcome:** branching, hidden, optional, timed, failed, repeatable, and chained
   objectives with migration-safe state.
-- **Dependencies:** C-143, C-238, C-329, C-336.
+- **Dependencies:** C-143, C-238, C-324, C-331.
 - **Acceptance gate:** Given a graph with branches and optional objectives, when
   world events arrive out of order or repeat, then only valid transitions fire
   and rewards remain idempotent.
 
-### C-340 — Build Party and Companion Gameplay
+### C-335 — Build Party and Companion Gameplay
 
 - **Status:** not_started
 - **Priority:** P1 — party interaction is central to D&D and differentiates the
@@ -892,11 +863,11 @@ Every `### C-NNN` item below is one potential contract based on
   routing, combat control policy, equipment, and companion arcs.
 - **Outcome:** recruit/dismiss, follow, party banter, Talk to Party, companion
   turns, approval, downed state, and personal objectives.
-- **Dependencies:** C-212, C-241, C-337–C-339.
+- **Dependencies:** C-212, C-241, C-332–C-334.
 - **Acceptance gate:** Given a recruited companion, when exploring, talking, and
   fighting, then their presence, state, agency, and save data stay consistent.
 
-### C-341 — Add Relationships, Factions, Reputation, and Persistent Consequences
+### C-336 — Add Relationships, Factions, Reputation, and Persistent Consequences
 
 - **Status:** not_started
 - **Priority:** P1 — AI NPCs feel alive when choices alter future behavior.
@@ -904,12 +875,12 @@ Every `### C-NNN` item below is one potential contract based on
   thresholds, reputation UI, and authored consequences.
 - **Outcome:** affinity, trust/fear, faction standing, remembered promises, and
   visible but non-gameable feedback.
-- **Dependencies:** C-154, C-328, C-339, C-340.
+- **Dependencies:** C-154, C-323, C-334, C-335.
 - **Acceptance gate:** Given a consequential action, when the player later meets
   affected NPCs/factions, then authored mechanics and AI tone use the same
   persisted relationship facts.
 
-### C-342 — Add World Interactables, Dungeons, Puzzles, and Loot Tables
+### C-337 — Add World Interactables, Dungeons, Puzzles, and Loot Tables
 
 - **Status:** not_started
 - **Priority:** P1 — spatial play needs more verbs than move and talk.
@@ -917,12 +888,12 @@ Every `### C-NNN` item below is one potential contract based on
   puzzle state, loot tables, doors/chests/traps, and visual feedback.
 - **Outcome:** inspect, use, unlock, push, trigger, gather, discover, and solve
   interactions with deterministic state and accessibility alternatives.
-- **Dependencies:** C-173, C-175, C-315, C-331, C-336.
+- **Dependencies:** C-173, C-175, C-315, C-326, C-331.
 - **Acceptance gate:** Given a persisted dungeon, when interactables are changed
   and the map is revisited, then state, collision, visuals, and quest hooks
   restore without duplicate loot.
 
-### C-343 — Promote Rich Chat UX into Production Gameplay
+### C-338 — Promote Rich Chat UX into Production Gameplay
 
 - **Status:** not_started
 - **Priority:** P1 — keep Marinara-level conversation quality without turning
@@ -931,12 +902,12 @@ Every `### C-NNN` item below is one potential contract based on
   contextual choices, address mode, and accessibility.
 - **Outcome:** streaming, edit, copy, regenerate/swipe, branch, cancel, draft
   recovery, quick dice/actions, Scene/Party/GM modes, and optional CYOA choices.
-- **Dependencies:** C-231, C-241, C-245, C-328, C-340.
+- **Dependencies:** C-231, C-241, C-245, C-323, C-335.
 - **Acceptance gate:** Given a branched or regenerated conversation, when the
   campaign reloads, then the selected branch and associated expression/state
   commands restore without replaying discarded side effects.
 
-### C-344 — Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
+### C-339 — Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
 - **Status:** not_started
 - **Priority:** P1 — long campaigns need explicit continuity boundaries.
@@ -944,12 +915,12 @@ Every `### C-NNN` item below is one potential contract based on
   browser, journal, context compaction, and rollback/fork behavior.
 - **Outcome:** end session, review/edit recap, start next session, inspect past
   read-only sessions, and fork from a checkpoint without mutating the original.
-- **Dependencies:** C-240, C-334, C-343.
+- **Dependencies:** C-240, C-329, C-338.
 - **Acceptance gate:** Given a completed session, when a new one starts offline
   or with AI, then canonical state carries forward and recap failure never
   blocks continuation.
 
-### C-345 — Add a Campaign/Content-Pack Browser and a Second Adventure
+### C-340 — Add a Campaign/Content-Pack Browser and a Second Adventure
 
 - **Status:** not_started
 - **Priority:** P1 — one vertical slice proves quality; a second proves the
@@ -958,11 +929,11 @@ Every `### C-NNN` item below is one potential contract based on
   starter personas, and a second authored mini-adventure.
 - **Outcome:** create separate campaigns from different packs without state or
   asset leakage; surface compatibility and update notes.
-- **Dependencies:** C-315, C-334, C-339, C-344.
+- **Dependencies:** C-315, C-329, C-334, C-339.
 - **Acceptance gate:** Given two installed packs and campaigns, when switching
   between them, then each restores only its own maps, state, settings, and saves.
 
-### C-346 — Complete Gamepad, Touch, Responsive, and Accessibility Support
+### C-341 — Complete Gamepad, Touch, Responsive, and Accessibility Support
 
 - **Status:** not_started
 - **Priority:** P1 — a cross-platform game cannot rely on hover, tiny controls,
@@ -971,12 +942,12 @@ Every `### C-NNN` item below is one potential contract based on
   responsive overlays, screen-reader DOM UI, contrast/motion settings.
 - **Outcome:** keyboard-only, common controllers, and touch can complete all core
   loops; Pixi interactions have accessible DOM equivalents where needed.
-- **Dependencies:** C-327, C-332, C-333, C-343.
+- **Dependencies:** C-322, C-327, C-328, C-338.
 - **Acceptance gate:** Given each supported input profile, when the Phase 1
   adventure runs, then no required action is pointer-only and focus never
   becomes trapped or invisible.
 
-### C-347 — Establish Asset Attribution, Licensing, and Content Provenance
+### C-342 — Establish Asset Attribution, Licensing, and Content Provenance
 
 - **Status:** not_started
 - **Priority:** P1 — public distribution must preserve LPC and third-party asset
@@ -985,7 +956,7 @@ Every `### C-NNN` item below is one potential contract based on
   in-game credits, and export metadata.
 - **Outcome:** every shipped sprite, tile, audio, font, and generated asset has
   source/license/author/modification records and required attribution.
-- **Dependencies:** C-243, C-315, C-325, C-345.
+- **Dependencies:** C-243, C-315, C-320, C-340.
 - **Acceptance gate:** Given a release pack, when provenance validation runs,
   then every non-original asset is covered and credits are generated without
   manual duplication.
@@ -998,7 +969,7 @@ Every `### C-NNN` item below is one potential contract based on
 > AI depth comes after deterministic gameplay. Every contract must preserve the
 > authored/offline fallback and typed command boundary.
 
-### C-348 — Build a Unified AI Turn Orchestrator with Validated State Patches
+### C-343 — Build a Unified AI Turn Orchestrator with Validated State Patches
 
 - **Status:** not_started
 - **Priority:** P1 — separate agents and overlays currently risk duplicated
@@ -1007,12 +978,12 @@ Every `### C-NNN` item below is one potential contract based on
   structured outputs, cancellation, retries, and state-patch commit.
 - **Outcome:** pre-context → primary response → parallel extractors → validate →
   deterministic commit → presentation, with one trace and idempotency key.
-- **Dependencies:** C-236, C-237, C-336, C-339, C-343.
+- **Dependencies:** C-236, C-237, C-331, C-334, C-338.
 - **Acceptance gate:** Given retries, cancellation, duplicate chunks, or partial
   agent failure, when a turn completes, then user-visible text and mechanical
   side effects commit at most once.
 
-### C-349 — Add Prompt Regression, Context Budgets, Cost Guards, and AI Tracing
+### C-344 — Add Prompt Regression, Context Budgets, Cost Guards, and AI Tracing
 
 - **Status:** not_started
 - **Priority:** P1 — AI quality and cost need tests, not subjective spot checks.
@@ -1020,12 +991,12 @@ Every `### C-NNN` item below is one potential contract based on
   budgets, redaction, latency/cost telemetry, and trace viewer.
 - **Outcome:** regression suites for personality, rule obedience, command schema,
   prompt injection, repetition, continuity, and small local-model behavior.
-- **Dependencies:** C-348.
+- **Dependencies:** C-343.
 - **Acceptance gate:** Given a supported model profile, when the AI regression
   suite runs, then quality/schema thresholds and per-turn token/cost ceilings
   produce an actionable pass/fail report.
 
-### C-350 — Add Hierarchical Lore and Memory Retrieval
+### C-345 — Add Hierarchical Lore and Memory Retrieval
 
 - **Status:** not_started
 - **Priority:** P1 — long-term coherence cannot come from an ever-growing prompt.
@@ -1033,12 +1004,12 @@ Every `### C-NNN` item below is one potential contract based on
   adapter (evaluate OpenViking), local index, context citations, and editor.
 - **Outcome:** constant, keyword, relationship, location, quest, and semantic
   memories are retrieved within a strict budget and show why they activated.
-- **Dependencies:** C-238, C-339, C-341, C-348, C-349.
+- **Dependencies:** C-238, C-334, C-336, C-343, C-344.
 - **Acceptance gate:** Given a long campaign and offline local index, when a
   relevant person/place/event is mentioned, then the correct facts are injected
   within budget and conflicting/stale facts are detectable.
 
-### C-351 — Integrate an AI Game Master and Narrative Director
+### C-346 — Integrate an AI Game Master and Narrative Director
 
 - **Status:** not_started
 - **Priority:** P1 — the GM should pace and connect authored systems, not replace
@@ -1047,12 +1018,12 @@ Every `### C-NNN` item below is one potential contract based on
   modes, recap input, and deterministic command interface.
 - **Outcome:** scene framing, foreshadowing, consequences, party responses, and
   OOC GM conversation grounded in current campaign facts.
-- **Dependencies:** C-235, C-343, C-344, C-348–C-350.
+- **Dependencies:** C-235, C-338, C-339, C-343–C-345.
 - **Acceptance gate:** Given a hidden arc and authored quest constraints, when
   multiple turns occur, then the GM advances pacing without revealing secrets,
   contradicting canonical state, or applying unvalidated mechanics.
 
-### C-352 — Integrate NPC Autonomy, Schedules, and Offscreen Simulation
+### C-347 — Integrate NPC Autonomy, Schedules, and Offscreen Simulation
 
 - **Status:** not_started
 - **Priority:** P1 — a living world needs change outside the player camera, but
@@ -1061,12 +1032,12 @@ Every `### C-NNN` item below is one potential contract based on
   event queue, idle messages, and save hydration.
 - **Outcome:** NPCs move between authored activities, pursue goals, react to
   factions/relationships, and generate summarized offscreen events.
-- **Dependencies:** C-194, C-196, C-248, C-341, C-348, C-350.
+- **Dependencies:** C-194, C-196, C-248, C-336, C-343, C-345.
 - **Acceptance gate:** Given elapsed world time offline, when the campaign
   resumes, then bounded deterministic simulation applies before optional AI
   flavor and cannot invalidate active quests without declared rules.
 
-### C-353 — Add Generative Quests Inside Authored Rules and Content Constraints
+### C-348 — Add Generative Quests Inside Authored Rules and Content Constraints
 
 - **Status:** not_started
 - **Priority:** P2 — generation is valuable only after quest graphs are reliable.
@@ -1074,12 +1045,12 @@ Every `### C-NNN` item below is one potential contract based on
   simulation preview, approval policy, and quest graph compiler.
 - **Outcome:** AI can propose quests using existing places, NPCs, items, enemies,
   and objective types; invalid references/mechanics are rejected or repaired.
-- **Dependencies:** C-339, C-348–C-352.
+- **Dependencies:** C-334, C-343–C-347.
 - **Acceptance gate:** Given an installed pack, when AI proposes a quest, then it
   compiles to a valid graph whose objectives are mechanically achievable in
   that pack before it appears to the player.
 
-### C-354 — Reintroduce Generated Campaigns as a Content-Pack Compiler
+### C-349 — Reintroduce Generated Campaigns as a Content-Pack Compiler
 
 - **Status:** not_started
 - **Priority:** P2 — replaces the fragile “one big JSON call then mutate live
@@ -1088,14 +1059,14 @@ Every `### C-NNN` item below is one potential contract based on
   preview/edit, asset selection, and install flow.
 - **Outcome:** generated worlds use the same versioned pack contract and atomic
   loader as authored adventures; starter templates keep scope achievable.
-- **Dependencies:** C-233, C-315, C-345, C-348–C-353.
+- **Dependencies:** C-233, C-315, C-340, C-343–C-348.
 - **Acceptance gate:** Given a weak/local model or invalid output, when generation
   runs, then staged validation can retry/repair/fall back and no live campaign is
   created until the pack is complete and playable.
 - **References:** keep Marinara’s preview/suggestion strengths; avoid its single
   demanding world-gen transaction as default onboarding.
 
-### C-355 — Build an Optional Media Director for Expressions, Voice, Images, and Music
+### C-350 — Build an Optional Media Director for Expressions, Voice, Images, and Music
 
 - **Status:** not_started
 - **Priority:** P2 — media should amplify a stable scene, never control it or
@@ -1104,12 +1075,12 @@ Every `### C-NNN` item below is one potential contract based on
   cache, consent/cost policy, and graceful degradation.
 - **Outcome:** scene changes can select LPC expressions, stream voice, request an
   illustration, and crossfade local music from one shared scene context.
-- **Dependencies:** C-211, C-239, C-242, C-243, C-249, C-348, C-349.
+- **Dependencies:** C-211, C-239, C-242, C-243, C-249, C-343, C-344.
 - **Acceptance gate:** Given all media providers disabled or failing, when a turn
   completes, then text/gameplay latency and state are unaffected; enabled cues
   are deduplicated, cancellable, cached, and cost-bounded.
 
-### C-356 — Complete Local Model Discovery, Lifecycle, and Hybrid Failover
+### C-351 — Complete Local Model Discovery, Lifecycle, and Hybrid Failover
 
 - **Status:** not_started
 - **Priority:** P2 — “fully AI-powered offline” requires managed local inference,
@@ -1118,7 +1089,7 @@ Every `### C-NNN` item below is one potential contract based on
   capability benchmark, model profiles, download/storage UI, and circuit breaker.
 - **Outcome:** recommend models by hardware and role, start/stop local services,
   route small extraction tasks locally, and fail over by explicit privacy policy.
-- **Dependencies:** C-015, C-056, C-133, C-318, C-348, C-349.
+- **Dependencies:** C-015, C-056, C-133, C-318, C-343, C-344.
 - **Acceptance gate:** Given network loss and an installed compatible local
   model, when AI dialogue/agents run, then routing remains local, model limits
   are respected, and no cloud fallback occurs without consent.
@@ -1127,31 +1098,22 @@ Every `### C-NNN` item below is one potential contract based on
 
 # Phase 4 — Offline Sync, Authoring, Performance, and Platform Quality
 
-### C-357 — Add Turso Cloud Sync with an Outbox and Conflict Policy
+### C-352 — Add Local-First Cloud Sync with an Outbox and Conflict Policy
 
 - **Status:** not_started
 - **Priority:** P2 — cloud should synchronize durable local campaigns, not own
-  the runtime. Turso/libSQL's embedded-replica sync is the primary mechanism;
-  Firebase remains a secondary, optional adapter for account/auth attachment.
-- **Target:** the C-321 Turso repository layer, libSQL embedded-replica sync
-  (`sync()` on `LocalDatabaseInterface`), mutation outbox, optional Firebase
-  Auth attachment for issuing sync tokens, conflict/fork UI, and migration
-  strategy.
-- **Outcome:** play offline indefinitely on the local Turso database, sign in
-  later, sync to a remote Turso database, and recover from conflict without
-  silent loss. Firebase involvement is limited to auth token issuance and
-  optional Firestore mirroring for cross-device account features — never the
-  primary campaign store.
-- **Dependencies:** C-014, C-321, C-334, C-344; evaluate PowerSync only against
-  this contract's needs, and only if Turso's native embedded-replica sync
-  proves insufficient.
+  the runtime.
+- **Target:** campaign repository adapters, mutation outbox, auth attachment,
+  cloud sync, conflict/fork UI, and migration strategy.
+- **Outcome:** play offline indefinitely, sign in later, upload/download/fork
+  campaigns, and recover from conflict without silent loss.
+- **Dependencies:** C-014, C-329, C-339; evaluate PowerSync only against this
+  contract’s needs.
 - **Acceptance gate:** Given divergent local/cloud revisions, when sync resumes,
   then deterministic policy preserves both histories or produces an explicit
   user-resolvable conflict—never last-write silent loss.
-- **References:** TODO_DRAFT_TTRPG.md "Firebase should solve exactly three
-  problems: device sync, shared campaigns, cloud backup" — nothing more.
 
-### C-358 — Build a Content Authoring Studio and Validation Pipeline
+### C-353 — Build a Content Authoring Studio and Validation Pipeline
 
 - **Status:** not_started
 - **Priority:** P2 — repeatable content should not require editing scattered JSON
@@ -1160,12 +1122,12 @@ Every `### C-NNN` item below is one potential contract based on
   schema validation, sandbox launch, packaging, and docs.
 - **Outcome:** create/edit a pack, validate references/assets, launch at any
   checkpoint, and export a signed/versioned bundle.
-- **Dependencies:** C-305, C-315, C-339, C-342, C-345, C-347.
+- **Dependencies:** C-305, C-315, C-334, C-337, C-340, C-342.
 - **Acceptance gate:** Given a designer-authored pack, when validation/build runs,
   then it either produces an installable deterministic bundle or exact errors
   linked to editor fields/map objects.
 
-### C-359 — Complete Import, Export, Backup, and Migration
+### C-354 — Complete Import, Export, Backup, and Migration
 
 - **Status:** not_started
 - **Priority:** P2 — local-first users need ownership and migration paths.
@@ -1173,12 +1135,12 @@ Every `### C-NNN` item below is one potential contract based on
   migration, and import adapters for common character-card formats.
 - **Outcome:** portable `.aikami` bundles, human-readable transcript/novel export,
   selective restore, and supported SillyTavern/RisuAI character/lore import.
-- **Dependencies:** C-246, C-334, C-345, C-347, C-350.
+- **Dependencies:** C-246, C-329, C-340, C-342, C-345.
 - **Acceptance gate:** Given a supported export from an older/current version,
   when imported into a clean install, then validation previews changes and a
   round trip preserves canonical data without secrets.
 
-### C-360 — Enforce Runtime Performance, Memory, and Asset Budgets
+### C-355 — Enforce Runtime Performance, Memory, and Asset Budgets
 
 - **Status:** not_started
 - **Priority:** P2 — many isolated systems can overwhelm low-end hardware when
@@ -1187,13 +1149,13 @@ Every `### C-NNN` item below is one potential contract based on
   event budgets, AI concurrency, bundle size, and long-session soak tests.
 - **Outcome:** published targets for frame time, memory, load time, draw calls,
   reactive updates, context size, and cache eviction across WebGPU/WebGL.
-- **Dependencies:** C-180, C-200, C-210, C-335, C-355.
+- **Dependencies:** C-180, C-200, C-210, C-330, C-350.
 - **Acceptance gate:** Given the reference low/mid hardware profiles and a
   60-minute session, when budgets run, then no unbounded cache/listener growth,
   bridge storm, or unacceptable frame/load regression occurs.
 - **References:** Pixi tiled-map preload/chunk/texture guidance.
 
-### C-361 — Harden Tauri and PWA Offline Installation and Updates
+### C-356 — Harden Tauri and PWA Offline Installation and Updates
 
 - **Status:** not_started
 - **Priority:** P2 — desktop/PWA packaging must install all required demo assets
@@ -1202,12 +1164,12 @@ Every `### C-NNN` item below is one potential contract based on
   content/model asset installer, storage management, and release channels.
 - **Outcome:** install, first run, offline run, update, rollback, and uninstall
   leave campaign data predictable and optional models/assets manageable.
-- **Dependencies:** C-031, C-156, C-334, C-347, C-356, C-360.
+- **Dependencies:** C-031, C-156, C-329, C-342, C-351, C-355.
 - **Acceptance gate:** Given a supported desktop/PWA install, when connectivity
   disappears after initial asset installation, then the demo, saves, and local
   AI (if installed) still boot; interrupted update rolls back safely.
 
-### C-362 — Deliver Mobile/Small-Screen Packaging and Thermal Budgets
+### C-357 — Deliver Mobile/Small-Screen Packaging and Thermal Budgets
 
 - **Status:** not_started
 - **Priority:** P2 — mobile is a dedicated interaction/performance product, not a
@@ -1216,12 +1178,12 @@ Every `### C-NNN` item below is one potential contract based on
   asset profiles, battery/thermal throttling, and native packaging evaluation.
 - **Outcome:** core adventure is playable on supported phones/tablets with
   readable dialogue and reduced graphics/media profiles.
-- **Dependencies:** C-346, C-360, C-361.
+- **Dependencies:** C-341, C-355, C-356.
 - **Acceptance gate:** Given target mobile devices, when the demo runs for 30
   minutes, then controls remain usable, UI respects safe areas, state survives
   backgrounding, and thermal/memory budgets hold.
 
-### C-363 — Add Privacy, Security, Secret, and AI Cost Controls
+### C-358 — Add Privacy, Security, Secret, and AI Cost Controls
 
 - **Status:** not_started
 - **Priority:** P2 — local/cloud AI and generated media process sensitive player
@@ -1230,12 +1192,12 @@ Every `### C-NNN` item below is one potential contract based on
   retention, provider allowlists, spending/token caps, and security tests.
 - **Outcome:** clear local/cloud indicators, per-capability consent, no secret in
   exports/logs/saves, configurable budgets, and safe prompt/tool boundaries.
-- **Dependencies:** C-230, C-348, C-349, C-355–C-357.
+- **Dependencies:** C-230, C-343, C-344, C-350–C-352.
 - **Acceptance gate:** Given privacy-local mode or a configured budget, when any
   AI/media task is requested, then routing and spend are enforced before data
   leaves the device or a billable call starts.
 
-### C-364 — Add Speech Input and Hands-Free Play as an Accessibility Mode
+### C-359 — Add Speech Input and Hands-Free Play as an Accessibility Mode
 
 - **Status:** not_started
 - **Priority:** P2 — voice can improve roleplay and accessibility after the core
@@ -1244,7 +1206,7 @@ Every `### C-NNN` item below is one potential contract based on
   review, command/dialogue routing, interruption, and TTS coordination.
 - **Outcome:** speak a line/action, review or auto-send by preference, interrupt
   narration, and play without continuous cloud capture.
-- **Dependencies:** C-211, C-343, C-346, C-355, C-356, C-363.
+- **Dependencies:** C-211, C-338, C-341, C-350, C-351, C-358.
 - **Acceptance gate:** Given local speech mode, when the player speaks and edits
   a transcript, then only confirmed text enters the same validated input path as
   typing and microphone state is always visible/cancellable.
@@ -1253,7 +1215,7 @@ Every `### C-NNN` item below is one potential contract based on
 
 # Phase 5 — Expansion and Power-User Platform
 
-### C-365 — Add Bring-Your-Own Rulesets and Rulebook RAG
+### C-360 — Add Bring-Your-Own Rulesets and Rulebook RAG
 
 - **Status:** not_started
 - **Priority:** P2 — valuable after Aikami’s own rules subset is proven.
@@ -1261,12 +1223,12 @@ Every `### C-NNN` item below is one potential contract based on
   retrieval, mechanic adapters, dynamic sheet metadata, and compatibility UI.
 - **Outcome:** campaigns may opt into a supported ruleset without generating
   arbitrary executable UI or bypassing the deterministic command protocol.
-- **Dependencies:** C-336, C-350, C-358, C-363.
+- **Dependencies:** C-331, C-345, C-353, C-358.
 - **Acceptance gate:** Given an imported rules source, when a campaign enables
   it, then citations and supported mechanics are explicit; unsupported rules
   remain advisory and cannot mutate state directly.
 
-### C-366 — Add Co-op Multiplayer with Authoritative Campaign Sessions
+### C-361 — Add Co-op Multiplayer with Authoritative Campaign Sessions
 
 - **Status:** not_started
 - **Priority:** P2 — multiplayer multiplies every state/lifecycle problem and is
@@ -1275,13 +1237,13 @@ Every `### C-NNN` item below is one potential contract based on
   reconnect, proximity/party chat, conflict handling, and host migration policy.
 - **Outcome:** friends join a campaign, control distinct personas, and share the
   deterministic world while AI fills optional empty party seats.
-- **Dependencies:** C-336, C-340, C-357, C-361, C-363.
+- **Dependencies:** C-331, C-335, C-352, C-356, C-358.
 - **Acceptance gate:** Given disconnect/reconnect and concurrent actions, when a
   session continues, then all clients converge on one authoritative command log
   without duplicate AI turns or rewards.
 - **References:** GodotJS multiplayer example; Pax Fluxia AI-slot takeover.
 
-### C-367 — Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools
+### C-362 — Add Sandboxed Mods, Custom Agents, Macros, and Prompt Tools
 
 - **Status:** not_started
 - **Priority:** P2 — power-user extensibility must not leak into default UX or
@@ -1290,12 +1252,12 @@ Every `### C-NNN` item below is one potential contract based on
   editor, macro engine, import/export, and sandboxed execution.
 - **Outcome:** advanced users can add declarative agents, prompts, lore tools,
   commands, and UI contributions with explicit capabilities and budgets.
-- **Dependencies:** C-237, C-247, C-348, C-349, C-358, C-363.
+- **Dependencies:** C-237, C-247, C-343, C-344, C-353, C-358.
 - **Acceptance gate:** Given an untrusted extension, when installed, then it can
   access only declared data/tools, cannot read secrets or execute arbitrary host
   code, and can be disabled without corrupting a campaign.
 
-### C-368 — Add Procedural Map and World Generation
+### C-363 — Add Procedural Map and World Generation
 
 - **Status:** not_started
 - **Priority:** P2 — spatial generation must produce mechanically valid maps,
@@ -1304,12 +1266,12 @@ Every `### C-NNN` item below is one potential contract based on
   checks, JTON/Tiled compiler, navigation/collision validation, and preview.
 - **Outcome:** generate optional regions/dungeons that satisfy spawn, path,
   objective, asset, encounter, and performance constraints.
-- **Dependencies:** C-192, C-315, C-342, C-354, C-358, C-360.
+- **Dependencies:** C-192, C-315, C-337, C-349, C-353, C-355.
 - **Acceptance gate:** Given a seed and template, when a map compiles, then all
   required paths/objectives are reachable, references/assets resolve, and the
   same seed reproduces the same mechanical map.
 
-### C-369 — Add Community Content Sharing and Compatibility Review
+### C-364 — Add Community Content Sharing and Compatibility Review
 
 - **Status:** not_started
 - **Priority:** P2 — sharing is useful only after content provenance, security,
@@ -1318,7 +1280,7 @@ Every `### C-NNN` item below is one potential contract based on
   compatibility display, ratings, update/fork, and local install review.
 - **Outcome:** discover and install campaigns, personas, rulesets, presets, and
   extensions without silently executing or uploading data.
-- **Dependencies:** C-345, C-347, C-358, C-359, C-363, C-367.
+- **Dependencies:** C-340, C-342, C-353, C-354, C-358, C-362.
 - **Acceptance gate:** Given a third-party package, when a player previews and
   installs it, then provenance, permissions, dependencies, compatibility, size,
   and content warnings are known before activation.
@@ -1338,25 +1300,7 @@ Phase 1:
 - connected OOC chats, public character marketplace, and bulk import UI;
 - full D&D 5e rules fidelity, arbitrary PDF mechanics, and dynamic generated UI;
 - co-op, procedural maps, shared worlds, and mobile-native release;
-- PowerSync/TanStack DB adoption without a measured Phase 4 sync requirement
-  (Turso's own embedded-replica sync is the default, see C-357);
-- Aikami-hosted "no setup required" pay-per-use service mode (TODO_DRAFT.md
-  mode 3) — the `AiProviderGateway`'s `service` adapter interface exists from
-  C-320, but billing, Cloud Run cold-start optimization (model weights in
-  Storage instead of the Docker image), and GCP Model Garden evaluation are
-  Phase 5 work, not Phase 1;
-- Data Connect migration for NPC/chat/items — Turso is the campaign-runtime
-  source of truth (C-321); Data Connect is revisited only if a genuine
-  dashboard/reporting/admin use case emerges, per TODO_DRAFT_TTRPG.md;
-- creator.aikami.com content-authoring web app (tilemap/item/NPC/quest editor,
-  mod upload) — tracked as a future evolution of C-358 (Content Authoring
-  Studio), not a Phase 1 concern.
-
-**No longer deferred — now disallowed:** a campaign with zero text AI
-capability was previously an accepted "offline demo" product mode (old C-318).
-It is not merely deprioritized; it is removed as a supported state by C-323.
-Authored fallback text is a resilience behavior for AI failure, not a menu
-option a player can choose instead of AI.
+- PowerSync/TanStack DB adoption without a measured Phase 4 sync requirement.
 
 ---
 
@@ -1367,32 +1311,27 @@ Nothing actionable from the former two TODO files was discarded.
 | Former item | Canonical destination |
 |---|---|
 | Session Zero conversational creation | C-319; optional AI interview after fast starter/custom path |
-| NPC interaction intent macros | C-328 typed commands; C-348 transactional AI pipeline |
-| Quest graph/Data Connect | C-329 MVP integration; C-339 complete graph; Data Connect only where it fits a dashboard/reporting need, never the campaign runtime store (Turso owns that, C-321) |
-| Local-first AI / Ollama / hybrid fallback | C-320 unified provider gateway (offline/byok/service); C-323 mandatory capability gate; C-356 managed local model lifecycle |
-| 3 play modes: offline / web BYOK / no-setup service (TODO_DRAFT.md) | C-320 gateway modes; C-323 enforces text AI is required in every mode; hosted "no setup" service activation is Phase 5 (C-356, C-357) |
-| Turso as default database, Firebase as optional sync (TODO_DRAFT_TTRPG.md) | C-321 migrates campaign/save/chat off IndexedDB onto Turso; C-357 adds optional Turso cloud sync with Firebase limited to auth/backup |
-| Remove legacy/unused code: `packages/backend/ai`, `packages/backend/image/src/index.ts`, `packages/backend/svelte-kit` (TODO_DRAFT.md) | C-324 |
-| Dynamic ruleset / PDF RAG | C-365 |
-| Director agent / world state / GOAP | C-348, C-351, C-352 |
-| STT / continuous voice / session export | C-359, C-364 |
-| Co-op / spatial chat / party state | C-366 |
-| Provider configuration | C-320 gateway; C-322 capability/settings wiring; C-333 Advanced settings |
-| Rich streaming chat / branches / commands | C-328 MVP; C-343 full promotion |
-| Character sheet and traits | C-319, C-337, C-341 |
-| World generation wizard | Deferred default; rebuilt safely in C-354 |
-| Combat/dice/initiative | C-330 MVP; C-336–C-338 depth |
-| GM, agents, macros, lorebook, expressions | C-348–C-355; C-367 power-user tools |
-| Session management / address modes / CYOA | C-343, C-344 |
-| Image generation / asset management / music | C-315, C-355, C-358, C-360; the `AiProviderGateway` (C-320) already exposes `generateImage()`/`generateVoice()` alongside the mandatory `generateText()`, but image/voice remain optional capabilities — C-355 (media director) is where they become an active, orchestrated gameplay feature |
-| Import/export/custom agents/autonomous NPCs | C-352, C-359, C-367 |
-| OpenViking workflow | Evaluate and integrate under C-350, not as a mandatory stack choice |
-| PromptFoo NPC regression | C-349 |
-| Inventory/combat/quest/leveling/world persistence | C-329–C-331, C-334, C-336–C-339 |
-| Generative quests/worlds | C-353, C-354, C-368 |
-| Real-time player chat/multiplayer/mobile | C-362, C-366 |
-| SillyTavern RPG extension patterns (status bars, vitals, vendors, memory diary) | Reviewed for UX/data-shape inspiration only, not adopted as dependencies — see updated Example Project Review below; mechanics stay in the deterministic rules kernel (C-336), not model-computed state |
-| Multi-layer memory sprawl (Smart-Memory tiers, VectHare vector RAG, embeddings, knowledge graph) | Explicitly avoided per TODO_DRAFT_TTRPG.md "one source of truth" principle — C-350 (Hierarchical Lore and Memory Retrieval) owns exactly one memory system; do not add a second |
+| NPC interaction intent macros | C-323 typed commands; C-343 transactional AI pipeline |
+| Quest graph/Data Connect | C-324 MVP integration; C-334 complete graph; storage adapter later |
+| Local-first AI / Ollama / hybrid fallback | C-318 authored fallback; C-351 managed local inference |
+| Dynamic ruleset / PDF RAG | C-360 |
+| Director agent / world state / GOAP | C-343, C-346, C-347 |
+| STT / continuous voice / session export | C-354, C-359 |
+| Co-op / spatial chat / party state | C-361 |
+| Provider configuration | C-318 default UX; C-328 Advanced settings |
+| Rich streaming chat / branches / commands | C-323 MVP; C-338 full promotion |
+| Character sheet and traits | C-319, C-332, C-336 |
+| World generation wizard | Deferred default; rebuilt safely in C-349 |
+| Combat/dice/initiative | C-325 MVP; C-331–C-333 depth |
+| GM, agents, macros, lorebook, expressions | C-343–C-350; C-362 power-user tools |
+| Session management / address modes / CYOA | C-338, C-339 |
+| Image generation / asset management / music | C-315, C-350, C-353, C-355 |
+| Import/export/custom agents/autonomous NPCs | C-347, C-354, C-362 |
+| OpenViking workflow | Evaluate and integrate under C-345, not as a mandatory stack choice |
+| PromptFoo NPC regression | C-344 |
+| Inventory/combat/quest/leveling/world persistence | C-324–C-326, C-329, C-331–C-334 |
+| Generative quests/worlds | C-348, C-349, C-363 |
+| Real-time player chat/multiplayer/mobile | C-357, C-361 |
 
 ---
 
@@ -1409,21 +1348,14 @@ Nothing actionable from the former two TODO files was discarded.
 | **Godot Aikami v1/v2, AARPG, Game Template** | conventional menu/loading/pause/save shell, interactables, controller support, complete quest/inventory loops | another engine rewrite or manager layer parallel to PixiJS/bitECS |
 | **Pixi tiled-map projects** | asset-loader integration, preload, packed/chunked rendering, stable texture reuse, benchmarks | renderer replacement without profiling current C-210 pipeline |
 | **RapidLPC / Universal LPC Generator** | composable layers, live animation preview, deterministic export, attribution | requiring AI image generation for a usable player sprite |
-| **Firebase, SQLite/Kysely, multiplayer examples** | repository boundaries and auth/backup sync patterns (C-357) | treating Firebase/Data Connect as the primary campaign store — Turso (C-321) is the source of truth |
-| **sillytavern-rpg-extensions** (RPG Status Bar, Vitals, Vendors, Diary, Map Engine, Equipment Durability, Scene Card) | "extension is the source of truth, chat is just the narrator" discipline — deterministic bars/stats computed outside the model and injected as a short state note each turn; per-turn scene-card summarization by a cheap secondary model kept separate from the main roleplay model | letting the model compute HP/durability/economy math itself; per-extension isolated state stores — Aikami's rules kernel (C-336) and campaign aggregate (C-313) are the single owner, not a dozen independent SillyTavern-style extensions |
-| **Smart-Memory** | tiered memory budget with a visible token-usage bar and auto-tune, hardware-aware profiles (local vs. hosted), activation-trigger keyword boosting, per-turn state ledger for "where is X right now" facts | its five-plus concurrent memory tiers (long-term, session, short-term summary, canon, state ledger) as a design target — TODO_DRAFT_TTRPG.md's "exactly one source of truth" rules out replicating this sprawl; C-350 should study the budget/trigger UX, not the tier count |
-| **VectHare** | temporal decay and conditional activation as *retrieval ranking signals* if C-350's single memory system ever needs semantic search | adopting a second, independent vector database/RAG system alongside C-350's memory store — one memory system, one retrieval path |
+| **Firebase, SQLite/Kysely, multiplayer examples** | repository boundaries and later sync/network references | putting backend/sync work on the Phase 1 critical path |
 
 Projects reviewed under `examples/`: Marinara Engine; Universal LPC Generator;
 AARPG tutorial; Aikami v1 Godot; Aikami v2 GodotJS; gamejs-old; both Godot
 Game Template copies; GodotFirebase; GodotJS multiplayer; Godot SQLite/Kysely;
 GodotJS examples; RapidLPC; Pax Fluxia; pixi-tiledmap; tilemap; RisuAI;
 SillyTavern; MazeMaster; Multihog D&D Framework; RPG Companion; MVU Game
-Maker; Universal Immersion Engine; sillytavern-rpg-extensions (RPG Status Bar,
-RPG Vitals, RPG Vendors & Workshops, RPG Diary, RPG Map & Locations Engine,
-RPG Equipment & Durability, RPG Scene Card, Tavern RPG Engine, RPG Game
-Companion, Dual-Model Thoughts, CHAOS & SOUL RP Preset); Smart-Memory; and
-VectHare.
+Maker; and Universal Immersion Engine.
 
 ---
 
@@ -1433,24 +1365,16 @@ A contract may be marked completed only when all applicable conditions hold:
 
 1. Production path is reachable without a dev route.
 2. Domain state has one authoritative owner and a versioned schema at boundaries.
-3. Offline/degraded behavior is specified and tested — "offline" means no
-   network (local AI engine), never zero AI capability.
+3. Offline/degraded behavior is specified and tested.
 4. Required functional E2E and visual suite files declared by the contract exist.
 5. Tests exercise behavior, not only component rendering or sandbox boot.
 6. Accessibility, keyboard/focus, loading, empty, error, retry, and cancellation
    states are handled.
 7. Save migration and idempotency are covered for persistent mutations.
 8. AI output is validated, cost/cancellation behavior is bounded, and mechanics
-   have deterministic fallback for AI failure — not a player-facing toggle to
-   disable AI.
-9. Any new or modified AI call site goes through `AiProviderGateway` (C-320);
-   no direct provider SDK/fetch call is introduced outside the gateway's own
-   adapters.
-10. Any new or modified persistent campaign/save/chat data goes through the
-    Turso repository layer (C-321); no new IndexedDB or Firestore write path
-    is introduced for campaign-runtime truth.
-11. `validate()` passes for affected projects; no critical test is skipped.
-12. Execution Report records actual files, results, deviations, and follow-ups.
-13. Promotion matrix advances only after independent production evidence:
+   have deterministic fallback.
+9. `validate()` passes for affected projects; no critical test is skipped.
+10. Execution Report records actual files, results, deviations, and follow-ups.
+11. Promotion matrix advances only after independent production evidence:
     `sandbox → integrated → release_verified`.
-14. User-facing docs and the canonical backlog are updated in the same change.
+12. User-facing docs and the canonical backlog are updated in the same change.

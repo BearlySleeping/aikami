@@ -1,3 +1,13 @@
+> **Merge status:** the Turso-first / offline-first vision, the "AI is
+> stateless, world state is truth" principle, and the Firebase-scope-limiting
+> argument in this draft have been absorbed into `docs/TODO.md` — see C-320
+> (AI Provider Gateway), C-321 (Turso local persistence), C-336 (deterministic
+> rules kernel), C-350 (single hierarchical memory system, not the multi-layer
+> sprawl this draft warns against), and C-357 (Turso cloud sync with Firebase
+> limited to auth/backup/shared campaigns). The Phase-by-phase "Revised TODO"
+> and "Long-term Ideas" sections below remain useful as design rationale but
+> `docs/TODO.md` is the canonical, contract-ready backlog going forward.
+
 roadmap:
 
 1. **Build a game engine**

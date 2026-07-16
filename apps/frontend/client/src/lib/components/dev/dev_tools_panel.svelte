@@ -70,7 +70,6 @@ let collapsed = $state(false);
         <div class="flex flex-col gap-1">
           <span class="text-xs font-mono opacity-50 uppercase tracking-wider mb-1">Toggles</span>
           {#each toggles as toggle}
-            <!-- biome-ignore lint/a11y/noLabelWithoutControl: label wraps checkbox input with text -->
             <label
               class="flex items-center gap-2 cursor-pointer hover:bg-base-300/30 px-2 py-1 rounded"
             >
