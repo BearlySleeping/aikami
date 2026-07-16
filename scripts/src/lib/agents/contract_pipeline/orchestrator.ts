@@ -726,53 +726,84 @@ export const runContractPipeline = async (options: {
             // Reconcile workspace → push branch → create or update PR.
             if (manifest.prUrl && manifest.reconciliation?.headBranch) {
               // PR already exists — push updates to same branch (PR auto-updates, CodeRabbit re-reviews incrementally).
-              const headBranch = manifest.reconciliation.headBranch;
-              const wsCwd = adapter.getWorkspacePath() || options.repoRoot;
               try {
-                commitAll({
-                  cwd: wsCwd,
-                  message: `Feat: Contract ${manifest.contractId} — revision`,
-                  authorName: 'Pi Agent',
-                  authorEmail: 'agent@pi.internal',
+                const headBranch = manifest.reconciliation.headBranch;
+                const wsCwd = adapter.getWorkspacePath() || options.repoRoot;
+                try {
+                  commitAll({
+                    cwd: wsCwd,
+                    message: `Feat: Contract ${manifest.contractId} — revision`,
+                    authorName: 'Pi Agent',
+                    authorEmail: 'agent@pi.internal',
+                  });
+                } catch {
+                  // No new changes to commit.
+                }
+                pushBranch({ cwd: wsCwd, branchName: headBranch });
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `PR updated: ${manifest.prUrl}`,
                 });
-              } catch {
-                // No new changes to commit.
+                console.log(`\n🔄 PR updated: ${manifest.prUrl}\n`);
+              } catch (pushErr: unknown) {
+                const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `PR update failed: ${msg.slice(0, 300)}`,
+                });
+                console.error(`\n❌ PR update failed: ${msg}\n`);
+                manifest.blockedReason = `PR update failed: ${msg.slice(0, 500)}`;
+                manifest = transition({ manifest, next: 'blocked' });
+                writeManifest({ manifest, cwd: options.repoRoot });
+                continue;
               }
-              pushBranch({ cwd: wsCwd, branchName: headBranch });
-              pipelineLog({
-                runId: manifest.runId,
-                cwd: options.repoRoot,
-                message: `PR updated: ${manifest.prUrl}`,
-              });
-              console.log(`\n🔄 PR updated: ${manifest.prUrl}\n`);
             } else {
               // First verify pass — reconcile + create PR.
-              const reconciliation = reconcileWorkspace({
-                manifest,
-                repoRoot: options.repoRoot,
-                baseBranch: PIPELINE_BASE_BRANCH,
-              });
-              manifest.reconciliation = reconciliation;
-              // Default to Draft to allow CI checks to pass before a human
-              // promotes it to "Ready for review." CodeRabbit AI review is
-              // configured (via .coderabbit.yaml) to skip drafts, saving API quota.
-              // Pass --ready to skip the draft and trigger CodeRabbit immediately.
-              const draft = !options.ready;
-              const prUrl = createGitHubPr({
-                headBranch: reconciliation.headBranch,
-                baseBranch: reconciliation.baseBranch,
-                title: reconciliation.prTitle,
-                body: reconciliation.prBody,
-                repoRoot: options.repoRoot,
-                draft,
-              });
-              manifest.prUrl = prUrl;
-              pipelineLog({
-                runId: manifest.runId,
-                cwd: options.repoRoot,
-                message: `Draft PR created: ${prUrl}`,
-              });
-              console.log(`\n📦 Draft PR: ${prUrl}\n`);
+              try {
+                const reconciliation = reconcileWorkspace({
+                  manifest,
+                  repoRoot: options.repoRoot,
+                  baseBranch: PIPELINE_BASE_BRANCH,
+                });
+                manifest.reconciliation = reconciliation;
+                // Default to Draft to allow CI checks to pass before a human
+                // promotes it to "Ready for review." CodeRabbit AI review is
+                // configured (via .coderabbit.yaml) to skip drafts, saving API quota.
+                // Pass --ready to skip the draft and trigger CodeRabbit immediately.
+                const draft = !options.ready;
+                const prUrl = createGitHubPr({
+                  headBranch: reconciliation.headBranch,
+                  baseBranch: reconciliation.baseBranch,
+                  title: reconciliation.prTitle,
+                  body: reconciliation.prBody,
+                  repoRoot: options.repoRoot,
+                  draft,
+                });
+                manifest.prUrl = prUrl;
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `Draft PR created: ${prUrl}`,
+                });
+                console.log(`\n📦 Draft PR: ${prUrl}\n`);
+              } catch (reconcileErr: unknown) {
+                const msg =
+                  reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr);
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `Reconciliation failed: ${msg.slice(0, 300)}`,
+                });
+                console.error(`\n❌ Reconciliation failed: ${msg}\n`);
+                // Don't crash the pipeline — block with reason so the review
+                // session can present the error to the user.
+                manifest.blockedReason = `Reconciliation failed: ${msg.slice(0, 500)}`;
+                manifest = transition({ manifest, next: 'blocked' });
+                writeManifest({ manifest, cwd: options.repoRoot });
+                continue;
+              }
             }
           } else if (result.status === 'changes_requested') {
             updateContractStatus({
