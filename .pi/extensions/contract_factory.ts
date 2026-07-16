@@ -11,7 +11,7 @@
  *   contract_generate       — Generate a draft contract shell from a backlog item
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
@@ -548,8 +548,7 @@ export default function (pi: ExtensionAPI) {
                 `⚠️ Workspace already exists: \`${wsDir}\``,
                 `HEAD: \`${existingId}\``,
                 '',
-                'Use this existing workspace or clean it up first with `contract_workspace_cleanup` ',
-                'if you need a fresh one.',
+                'Use this existing workspace or run `bun workspace:cleanup` if you need a fresh one.',
               ].join('\n'),
             },
           ],
@@ -661,7 +660,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       'Call after all tests/verifications pass.',
       'Returns the branch name and HEAD commit needed for PR creation.',
-      'Does NOT clean up the worktree — use contract_workspace_cleanup separately.',
+      'The worktree persists until you run `bun workspace:cleanup`.',
     ],
     parameters: Type.Object({
       workspacePath: Type.String({
@@ -721,91 +720,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   // ─────────────────────────────────────────────────────────┐
-  // Tool 6: contract_workspace_cleanup                      │
-  // ─────────────────────────────────────────────────────────┘
-
-  pi.registerTool({
-    name: 'contract_workspace_cleanup',
-    label: 'Contract: Cleanup Workspace',
-    description:
-      'Safely remove a Git Worktree: runs `git worktree remove --force` and ' +
-      'deletes the directory. Also removes the local branch. ' +
-      'Use for both successful completions and error recovery.',
-    promptSnippet: 'Use contract_workspace_cleanup to tear down an isolated workspace.',
-    promptGuidelines: [
-      'Call after reconciliation or after a failed task.',
-      'Runs `git worktree remove --force` which cleans up both the worktree and its branch.',
-      'Does NOT affect commits that were already pushed.',
-    ],
-    parameters: Type.Object({
-      workspacePath: Type.String({
-        description: 'Absolute path to the Git Worktree directory to clean up.',
-      }),
-      abandonChange: Type.Optional(
-        Type.Boolean({
-          default: false,
-          description:
-            'If true, also deletes the local branch (error recovery). ' +
-            'By default, branches are preserved for PR creation.',
-        }),
-      ),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      // Determine the branch name before removing the worktree.
-      let branchName: string | undefined;
-      if (existsSync(params.workspacePath)) {
-        try {
-          branchName = runGit('rev-parse --abbrev-ref HEAD', {
-            cwd: params.workspacePath,
-          });
-        } catch {
-          // Non-fatal.
-        }
-      }
-
-      // Remove the Git Worktree (--force handles dirty state).
-      try {
-        runGit(`worktree remove '${params.workspacePath}' --force`, {
-          cwd: ctx.cwd,
-        });
-      } catch {
-        // Fall back to rm -rf if git worktree remove fails.
-        if (existsSync(params.workspacePath)) {
-          rmSync(params.workspacePath, { recursive: true, force: true });
-        }
-      }
-
-      // Optionally delete the local branch (error recovery).
-      if (params.abandonChange && branchName) {
-        try {
-          runGit(`branch -D ${branchName}`, { cwd: ctx.cwd });
-          console.log(`🚫 Deleted local branch ${branchName} (error recovery)`);
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn(`⚠️  Could not delete branch: ${message}`);
-        }
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `✅ Worktree cleaned up: \`${params.workspacePath}\``,
-              params.abandonChange ? '  (branch was deleted)' : '',
-            ].join('\n'),
-          },
-        ],
-        details: {
-          cleanedPath: params.workspacePath,
-          abandoned: params.abandonChange ?? false,
-        },
-      };
-    },
-  });
-
-  // ─────────────────────────────────────────────────────────┐
-  // Tool 7: contract_workspace_list                         │
+  // Tool 6: contract_workspace_list                         │
   // ─────────────────────────────────────────────────────────┘
 
   pi.registerTool({
