@@ -106,6 +106,12 @@ function generate(): string {
   return `${lines.join('\n')}\n`;
 }
 
+// Skip in contract pipeline worktrees — .context/llms.txt is regenerated
+// on main after PR merge. Prevents merge conflicts on parallel branches.
+if (process.env.CONTRACT_PIPELINE_WORKTREE) {
+  process.exit(0);
+}
+
 // Generate and write
 const output = generate();
 writeFileSync(OUTPUT, output, 'utf8');
