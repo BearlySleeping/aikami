@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-15)
+## Status Summary (Auto-generated: 2026-07-16)
 
-**159 active (46 without contract file), 119 archived, 1 duplicates**
+**159 active (45 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -121,7 +121,7 @@
 | C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | ✅ verified | — | v2 |
 | C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | — | v2 |
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | — | v2 |
-| C-319 | Replace `/setup` with Fast Character Onboarding | ⏳ not_started (no contract file) | — | — |
+| C-319 | Replace Setup With Fast Character Onboarding | ❌ verification_failed | — | v2 |
 | C-320 | Ship Real-Time LPC Appearance Preview with Safe Defaults | ⏳ not_started (no contract file) | — | — |
 | C-321 | Make `/game` Boot Atomic, Observable, and Content-Driven | ⏳ not_started (no contract file) | — | — |
 | C-322 | Add In-World Onboarding and Unified Interaction UX | ⏳ not_started (no contract file) | — | — |
