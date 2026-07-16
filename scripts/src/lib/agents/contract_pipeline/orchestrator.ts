@@ -1,8 +1,8 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
 import { execFileSync, execSync } from 'node:child_process';
-import { copyFileSync, existsSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { join, relative, resolve, dirname } from 'node:path';
 import { findWorkspace, herdrJson } from '../../herdr/session.ts';
 import {
   commitAll,
@@ -706,6 +706,24 @@ export const runContractPipeline = async (options: {
           const wcp = join(workspacePath, relative(options.repoRoot, manifest.contractPath));
           if (existsSync(wcp)) {
             copyFileSync(wcp, manifest.contractPath);
+          }
+        }
+
+        // Sync contract INTO workspace after writer/critic stages.
+        // Writer and critic modify the contract file in the main repo.
+        // The worktree was forked before they ran, so it has a stale version.
+        // This ensures the PR includes the latest contract.
+        if (
+          workspacePath &&
+          (stage === 'write_contract' || stage === 'critique') &&
+          existsSync(manifest.contractPath)
+        ) {
+          const wcp = join(workspacePath, relative(options.repoRoot, manifest.contractPath));
+          try {
+            mkdirSync(dirname(wcp), { recursive: true });
+            copyFileSync(manifest.contractPath, wcp);
+          } catch {
+            // Non-fatal — contract file may not exist yet.
           }
         }
 
