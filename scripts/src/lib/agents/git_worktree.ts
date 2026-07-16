@@ -260,24 +260,18 @@ source_env ${options.repoRoot}
     } catch {}
   }
 
-  // Remove moon pre-commit hook in worktrees to prevent shared-file conflicts.
-  // The hook runs `bun knowledge:sync` which regenerates PROGRESS.md/PROMOTION.md
-  // from contract files. In isolated worktrees this creates merge conflicts when
-  // multiple contracts are active. The sync should only run on main after PR merge.
+  // Set env var so knowledge:sync scripts skip in worktrees.
+  // PROGRESS.md and PROMOTION.md are shared files that cause merge
+  // conflicts when modified in parallel contract branches.
+  // Sync should only run on main (after PR merge).
   try {
-    const hookPath = join(wsDir, '.moon', 'hooks', 'pre-commit');
-    if (existsSync(hookPath)) {
-      writeFileSync(hookPath, '#!/bin/sh\n# Disabled in worktree — sync runs on main after PR merge\nexit 0\n');
-    }
-    const wsYml = join(wsDir, '.moon', 'workspace.yml');
-    if (existsSync(wsYml)) {
-      let yml = readFileSync(wsYml, 'utf-8');
-      // Remove knowledge:sync from hooks
-      yml = yml.replace(/^\s*- "bun knowledge:sync"\s*\n?/gm, '');
-      writeFileSync(wsYml, yml);
+    const envrcPath = join(wsDir, '.envrc');
+    const existing = existsSync(envrcPath) ? readFileSync(envrcPath, 'utf-8') : '';
+    if (!existing.includes('CONTRACT_PIPELINE_WORKTREE')) {
+      appendFileSync(envrcPath, '\nexport CONTRACT_PIPELINE_WORKTREE=1\n');
     }
   } catch {
-    // Non-fatal — hook will be skipped by --no-verify fallback anyway.
+    // Non-fatal.
   }
 
   return {

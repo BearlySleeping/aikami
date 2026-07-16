@@ -393,5 +393,11 @@ export const syncContracts = () => {
 };
 
 if (import.meta.main) {
+  // Skip in contract pipeline worktrees — PROGRESS.md and PROMOTION.md
+  // are shared files that cause merge conflicts when modified in parallel
+  // branches. They are regenerated on main after PR merge.
+  if (process.env.CONTRACT_PIPELINE_WORKTREE) {
+    process.exit(0);
+  }
   syncContracts();
 }
