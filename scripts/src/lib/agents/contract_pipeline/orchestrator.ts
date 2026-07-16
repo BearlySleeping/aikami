@@ -343,11 +343,21 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
   lines.push('');
 
   // Categorize the block reason.
+  const lastVerifyPassed = [...manifest.attempts]
+    .reverse()
+    .find((a) => a.stage === 'verify' && a.result?.status === 'passed');
+
   const lastVerifyLoopHit =
     manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
     manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
 
-  if (lastVerifyLoopHit) {
+  if (lastVerifyPassed && !lastVerifyLoopHit) {
+    // Verify passed but something after failed (e.g. reconciliation)
+    lines.push('Reason: Verification passed, but a post-verify step failed.');
+    if (manifest.blockedReason) {
+      lines.push(`Details: ${manifest.blockedReason}`);
+    }
+  } else if (lastVerifyLoopHit) {
     lines.push(
       `Reason: Max verify→implement bounces reached (${manifest.verifyLoops}/${MAX_VERIFY_LOOPS}).`,
     );
@@ -420,6 +430,56 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
 
   const summary = formatBlockedSummary(options.manifest);
 
+  // Determine the block category
+  const lastVerifyPassed = [...options.manifest.attempts]
+    .reverse()
+    .find((a) => a.stage === 'verify' && a.result?.status === 'passed');
+  const isLoopExhaustion =
+    options.manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
+    options.manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
+
+  // ── Post-verify failure (e.g. gh auth missing, PR creation failed) ──
+  if (lastVerifyPassed && !isLoopExhaustion) {
+    const reconciliation = options.manifest.reconciliation;
+    const branchInfo = reconciliation?.headBranch
+      ? `\nBranch: \`${reconciliation.headBranch}\`\nCommit: \`${reconciliation.changeId ?? 'unknown'}\``
+      : '';
+
+    return [
+      basePrompt,
+      '',
+      '## ⚠️ POST-VERIFY FAILURE — Review Captain',
+      '',
+      '**Verification PASSED.** All tests are green, the code is ready.',
+      'However, a post-verify step (PR creation) failed — likely a missing',
+      'GitHub token or `gh` authentication issue.',
+      '',
+      '### Status',
+      summary,
+      '',
+      '### What to do',
+      '',
+      '1. The branch is already pushed to origin:',
+      branchInfo,
+      '',
+      '2. Create the PR manually:',
+      '   ```bash',
+      `   gh pr create --head ${reconciliation?.headBranch ?? '<branch>'} --base ${reconciliation?.baseBranch ?? 'main'} --draft`,
+      '   ```',
+      '   Or open: https://github.com/BearlySleeping/aikami/compare/main...<branch>',
+      '',
+      '3. OR fix the gh auth issue and call `contract_review_decision` with `change`',
+      '   to retry reconciliation.',
+      '',
+      '### Decision shortcuts',
+      '- `/fix` or "retry" → `change` (retries reconciliation)',
+      '- `/reject` or "abandon" → `reject` (exit with summary)',
+      '',
+      '🔴 Your LAST action must call `contract_review_decision`.',
+    ].join('\n');
+  }
+
+  // ── Verify-loop-exhaustion blocked review ──
   return [
     basePrompt,
     '',
@@ -754,24 +814,43 @@ export const runContractPipeline = async (options: {
                   message: `PR update failed: ${msg.slice(0, 300)}`,
                 });
                 console.error(`\n❌ PR update failed: ${msg}\n`);
-                manifest.blockedReason = `PR update failed: ${msg.slice(0, 500)}`;
-                manifest = transition({ manifest, next: 'blocked' });
+                // Go to review session — the user can decide how to handle it.
+                manifest.blockedReason =
+                  `PR update failed for ${manifest.prUrl}: ${msg.slice(0, 400)}. ` +
+                  `The branch may need manual push or the PR may need to be recreated.`;
+                manifest = transition({ manifest, next: 'review' });
                 writeManifest({ manifest, cwd: options.repoRoot });
                 continue;
               }
             } else {
               // First verify pass — reconcile + create PR.
+              let reconciliation: ReconciliationResult | undefined;
               try {
-                const reconciliation = reconcileWorkspace({
+                reconciliation = reconcileWorkspace({
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
                 });
                 manifest.reconciliation = reconciliation;
-                // Default to Draft to allow CI checks to pass before a human
-                // promotes it to "Ready for review." CodeRabbit AI review is
-                // configured (via .coderabbit.yaml) to skip drafts, saving API quota.
-                // Pass --ready to skip the draft and trigger CodeRabbit immediately.
+              } catch (reconcileErr: unknown) {
+                const msg =
+                  reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr);
+                pipelineLog({
+                  runId: manifest.runId,
+                  cwd: options.repoRoot,
+                  message: `Reconciliation failed: ${msg.slice(0, 300)}`,
+                });
+                console.error(`\n❌ Reconciliation failed: ${msg}\n`);
+                manifest.blockedReason =
+                  `Reconciliation failed after verify passed: ${msg.slice(0, 400)}. ` +
+                  `The branch may not have been pushed — check the workspace.`;
+                manifest = transition({ manifest, next: 'review' });
+                writeManifest({ manifest, cwd: options.repoRoot });
+                continue;
+              }
+
+              // Reconciliation succeeded — now create the PR.
+              try {
                 const draft = !options.ready;
                 const prUrl = createGitHubPr({
                   headBranch: reconciliation.headBranch,
@@ -788,19 +867,19 @@ export const runContractPipeline = async (options: {
                   message: `Draft PR created: ${prUrl}`,
                 });
                 console.log(`\n📦 Draft PR: ${prUrl}\n`);
-              } catch (reconcileErr: unknown) {
-                const msg =
-                  reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr);
+              } catch (prErr: unknown) {
+                const msg = prErr instanceof Error ? prErr.message : String(prErr);
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
-                  message: `Reconciliation failed: ${msg.slice(0, 300)}`,
+                  message: `PR creation failed: ${msg.slice(0, 300)}`,
                 });
-                console.error(`\n❌ Reconciliation failed: ${msg}\n`);
-                // Don't crash the pipeline — block with reason so the review
-                // session can present the error to the user.
-                manifest.blockedReason = `Reconciliation failed: ${msg.slice(0, 500)}`;
-                manifest = transition({ manifest, next: 'blocked' });
+                console.error(`\n❌ PR creation failed: ${msg}\n`);
+                // Branch is pushed, reconciliation has the branch info
+                manifest.blockedReason =
+                  `PR creation failed after verify passed: ${msg.slice(0, 400)}. ` +
+                  `Branch \`${reconciliation.headBranch}\` is pushed — create the PR manually.`;
+                manifest = transition({ manifest, next: 'review' });
                 writeManifest({ manifest, cwd: options.repoRoot });
                 continue;
               }
