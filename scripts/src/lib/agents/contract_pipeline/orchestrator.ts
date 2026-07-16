@@ -530,7 +530,7 @@ export const runContractPipeline = async (options: {
     const c = resolveContract({ target: options.target, repoRoot: options.repoRoot });
     const f = findPreviousRuns({ contractId: c.id, cwd: options.repoRoot });
     if (f) {
-      console.log(`♻️  Found incomplete run for ${c.id} — resuming ${f}.`);
+      console.log(`Found incomplete run foround incomplete run for ${c.id} - resuming ${f}.`);
       console.log('   (use --fresh to start over)');
       resumeRunId = f;
     }
