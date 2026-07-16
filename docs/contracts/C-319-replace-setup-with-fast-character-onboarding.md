@@ -8,7 +8,7 @@
 | **Target** | `routes/setup/+page.svelte`, a setup coordinator ViewModel, starter hero data, class/race/pronoun presets in `packages/shared/constants/`, and decomposed onboarding step views |
 | **Priority** | P0 — clean character setup is the top immediate UX need |
 | **Dependencies** | C-123 (Character Creation Flow — `completed`), C-232 (Character Sheet & Traits — `completed`), C-313 (Campaign Aggregate & Boot State Machine — `implemented`), C-317 (Rebuild Start Menu Around Campaigns — `approved`), C-318 (One-Screen Capability Setup — `implemented`) |
-| **Status** | verified |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal player flow |
 | **Contract version** | 2.0.0 |
