@@ -113,6 +113,9 @@ export const loadReviewPrompt = (options: {
   repoRoot: string;
   contractPath: string;
   runId: string;
+  prUrl?: string;
+  headBranch?: string;
+  baseBranch?: string;
 }): string => {
   const promptPath = resolve(options.repoRoot, '.pi/prompts/contract-review-captain.md');
   if (!existsSync(promptPath)) {
@@ -122,11 +125,40 @@ export const loadReviewPrompt = (options: {
     '\\',
     '/',
   );
+
+  // Build the PR / branch URL display
+  const prInfo = options.prUrl
+    ? [
+        '',
+        '## 📦 Pull Request',
+        `**Status:** Draft PR created`,
+        `**URL:** ${options.prUrl}`,
+        `**Branch:** \`${options.headBranch ?? 'unknown'}\` → \`${options.baseBranch ?? 'main'}\``,
+        '',
+        'The PR is ready for review. You can:',
+        '- Inspect the diff at the URL above',
+        '- `/approve` to mark it ready for review',
+        '- `/merge` to auto-merge (squash)',
+        '- `/fix` to request changes from the implementer',
+      ].join('\n')
+    : options.headBranch
+      ? [
+          '',
+          '## 📦 Branch (no PR created)',
+          `**Branch:** \`${options.headBranch}\` → \`${options.baseBranch ?? 'main'}\``,
+          `**Compare:** https://github.com/BearlySleeping/aikami/compare/${options.baseBranch ?? 'main'}...${options.headBranch}`,
+          '',
+          '⚠️ **No PR exists yet.** The branch is pushed but PR creation failed.',
+          'The user must create the PR manually or fix gh auth and retry.',
+        ].join('\n')
+      : '';
+
   return [
     stripFrontmatter(readFileSync(promptPath, 'utf-8')).replace(/\$ARGUMENTS\b/g, options.runId),
     '\n## Active run coordinates',
     `Run manifest: .pi/contract-runs/${options.runId}/manifest.json`,
     `Contract: ${contractPath}`,
+    prInfo,
     '\nSpeak naturally with the user. You may inspect and fix code yourself.',
     '\n## Review Decision Modes',
     'When the user is ready, call `contract_review_decision` with one of:',

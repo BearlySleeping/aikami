@@ -422,10 +422,14 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
  * what went wrong, verifier findings, files to fix, and decision options.
  */
 const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: string }): string => {
+  const reconciliation = options.manifest.reconciliation;
   const basePrompt = loadReviewPrompt({
     repoRoot: options.repoRoot,
     contractPath: options.manifest.contractPath,
     runId: options.manifest.runId,
+    prUrl: options.manifest.prUrl,
+    headBranch: reconciliation?.headBranch,
+    baseBranch: reconciliation?.baseBranch,
   });
 
   const summary = formatBlockedSummary(options.manifest);
@@ -440,11 +444,6 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
 
   // ── Post-verify failure (e.g. gh auth missing, PR creation failed) ──
   if (lastVerifyPassed && !isLoopExhaustion) {
-    const reconciliation = options.manifest.reconciliation;
-    const branchInfo = reconciliation?.headBranch
-      ? `\nBranch: \`${reconciliation.headBranch}\`\nCommit: \`${reconciliation.changeId ?? 'unknown'}\``
-      : '';
-
     return [
       basePrompt,
       '',
@@ -452,27 +451,12 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
       '',
       '**Verification PASSED.** All tests are green, the code is ready.',
       '',
-      '**🔴 CRITICAL: No PR exists.** The manifest has `reconciliation` metadata',
-      '(branch, title, body) but `prUrl` is NOT set — the PR was never created.',
-      '`gh` is not authenticated in this environment.',
-      'Do NOT tell the user a PR exists. There is no PR.',
+      '**🔴 CRITICAL: No PR exists.** The branch is pushed but PR creation failed.',
+      'The base prompt above shows the branch and compare URL.',
+      'Do NOT claim a PR exists.',
       '',
-      '### Status',
+      '### Verifier findings (all passed)',
       summary,
-      '',
-      '### What to do',
-      '',
-      '1. The branch is already pushed to origin:',
-      branchInfo,
-      '',
-      '2. Tell the user to create the PR manually:',
-      '   ```bash',
-      `   gh pr create --head ${reconciliation?.headBranch ?? '<branch>'} --base ${reconciliation?.baseBranch ?? 'main'} --draft`,
-      '   ```',
-      '   Or open: https://github.com/BearlySleeping/aikami/compare/main...<branch>',
-      '',
-      '3. OR the user can fix gh auth and call `contract_review_decision` with `change`',
-      '   to retry reconciliation.',
       '',
       '### Decision shortcuts',
       '- `/fix` or "retry" → `change` (retries reconciliation — only works if gh auth is fixed)',
@@ -941,6 +925,9 @@ export const runContractPipeline = async (options: {
                 repoRoot: options.repoRoot,
                 contractPath: manifest.contractPath,
                 runId: manifest.runId,
+                prUrl: manifest.prUrl,
+                headBranch: manifest.reconciliation?.headBranch,
+                baseBranch: manifest.reconciliation?.baseBranch,
               });
           manifest.reviewPaneId = await adapter.startReview({
             prompt,
