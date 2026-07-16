@@ -27,7 +27,7 @@ import {
 import { validatePostconditions } from './postconditions.ts';
 import { loadReviewPrompt } from './prompt_loader.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
-import { resolveNextStage, transition } from './state_machine.ts';
+import { MAX_VERIFY_LOOPS, resolveNextStage, transition } from './state_machine.ts';
 import type {
   ContractPipelineStage,
   ContractReviewDecision,
@@ -313,6 +313,151 @@ const createGitHubPr = (options: {
   // Extract PR URL from gh output.
   const urlMatch = result.match(/https:\/\/github\.com\/[^\s]+/);
   return urlMatch?.[0] ?? result;
+};
+
+// ── Blocked summary ─────────────────────────────────────────
+
+const severityIcon = (finding: string): string => {
+  const upper = finding.toUpperCase();
+  if (upper.includes('CRITICAL')) {
+    return '🔴';
+  }
+  if (upper.includes('MODERATE')) {
+    return '🟡';
+  }
+  return '⚪';
+};
+
+/**
+ * Produce a human-readable blocked summary from the manifest.
+ * Determines the block reason category and formats findings + next steps.
+ */
+const formatBlockedSummary = (manifest: RunManifest): string => {
+  const lines: string[] = [];
+  const hr = '═══════════════════════════════════════════════════════════';
+
+  lines.push('');
+  lines.push(hr);
+  lines.push(`🚫 PIPELINE BLOCKED — ${manifest.contractId}`);
+  lines.push(hr);
+  lines.push('');
+
+  // Categorize the block reason.
+  const lastVerifyLoopHit =
+    manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
+    manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
+
+  if (lastVerifyLoopHit) {
+    lines.push(
+      `Reason: Max verify→implement bounces reached (${manifest.verifyLoops}/${MAX_VERIFY_LOOPS}).`,
+    );
+    lines.push(
+      'The verifier found issues the implementer could not resolve within the bounce limit.',
+    );
+  } else if (manifest.blockedReason) {
+    lines.push(`Reason: ${manifest.blockedReason}`);
+  } else {
+    lines.push('Reason: Pipeline blocked — no reason recorded.');
+  }
+
+  lines.push('');
+
+  // Collect findings from the LAST verifier result.
+  const lastVerify = [...manifest.attempts]
+    .reverse()
+    .find((a) => a.stage === 'verify' && a.result?.findings?.length);
+
+  if (lastVerify?.result?.findings?.length) {
+    lines.push('Last verifier findings:');
+    for (const finding of lastVerify.result.findings) {
+      const icon = severityIcon(finding);
+      lines.push(`  ${icon} ${finding}`);
+    }
+    lines.push('');
+  }
+
+  // Collect all implemented files touched by implementer.
+  const implementerAttempts = manifest.attempts.filter(
+    (a) => a.stage === 'implement' && a.result?.filesTouched?.length,
+  );
+  if (implementerAttempts.length > 0) {
+    const allFiles = [
+      ...new Set(implementerAttempts.flatMap((a) => a.result?.filesTouched ?? [])),
+    ].sort();
+    lines.push('Files needing fixes:');
+    for (const f of allFiles.slice(0, 10)) {
+      lines.push(`  📄 ${f}`);
+    }
+    if (allFiles.length > 10) {
+      lines.push(`  ... and ${allFiles.length - 10} more`);
+    }
+    lines.push('');
+  }
+
+  // Next steps.
+  lines.push('Next steps:');
+  lines.push(`  1. Fix the issues above manually in the codebase`);
+  lines.push(`  2. Run:  bun contract ${manifest.contractId} --fresh`);
+  lines.push(`  3. Or reset the contract status to 'implemented' and re-run without --fresh`);
+  lines.push('');
+  lines.push(hr);
+  lines.push('');
+
+  return lines.join('\n');
+};
+
+/**
+ * Build a review prompt for a blocked pipeline run.
+ * Extends the base review captain prompt with blockage context:
+ * what went wrong, verifier findings, files to fix, and decision options.
+ */
+const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: string }): string => {
+  const basePrompt = loadReviewPrompt({
+    repoRoot: options.repoRoot,
+    contractPath: options.manifest.contractPath,
+    runId: options.manifest.runId,
+  });
+
+  const summary = formatBlockedSummary(options.manifest);
+
+  return [
+    basePrompt,
+    '',
+    '## ⚠️ BLOCKED PIPELINE — Review Captain Override',
+    '',
+    'This pipeline is **blocked** — the verifier found issues the implementer',
+    'could not resolve within the bounce limit. The automated pipeline cannot',
+    'continue on its own. You are the human decision point.',
+    '',
+    '### What happened',
+    summary,
+    '',
+    '### Your options',
+    '',
+    '**1. Create a PR anyway** — `contract_review_decision` with `approve` or `merge`',
+    '   - `approve`: Create a draft PR. CodeRabbit will review and may fix issues.',
+    '     A human can then merge when ready.',
+    '   - `merge`: Create a PR and auto-merge with squash. Use this only if the',
+    '     issues are acceptable for the current phase.',
+    '',
+    '**2. Retry the implementer** — `contract_review_decision` with `change`',
+    '   - Resets the verify loop counter to 0 and returns to the implementer.',
+    '   - The implementer gets another chance with the verifier feedback.',
+    '   - If the implementer fails again, you will come back to this screen.',
+    '',
+    '**3. Abandon** — `contract_review_decision` with `reject`',
+    '   - Stays blocked. Closes any existing PR. Pipeline exits with summary.',
+    '   - You can fix issues manually and run `bun contract <id> --fresh` later.',
+    '',
+    '### Decision shortcuts',
+    '- "/approve" or "create PR" → `approve`',
+    '- "/merge" or "send it" → `merge`',
+    '- "/fix" or "retry" → `change`',
+    '- "/reject" or "abandon" → `reject`',
+    '',
+    '🔴 Your LAST action must call `contract_review_decision` — the pipeline',
+    'polls for this artifact. Without it, the pipeline blocks forever.',
+  ].join('\n');
 };
 
 // ── Main orchestrator ─────────────────────────────────────────
@@ -642,9 +787,18 @@ export const runContractPipeline = async (options: {
           verdict: result,
           verifyLoops: manifest.verifyLoops,
         });
+        const verifyLoopsExhausted =
+          stage === 'verify' &&
+          result.status === 'changes_requested' &&
+          next.verifyLoops >= MAX_VERIFY_LOOPS;
+
         manifest.verifyLoops = next.verifyLoops;
         manifest = transition({ manifest, next: next.next });
-        if (manifest.currentStage === 'blocked') {
+        // Record blocked reason when verify loops are exhausted — the review
+        // handler detects this to present a blocked-review session.
+        if (verifyLoopsExhausted) {
+          manifest.blockedReason = result.summary;
+        } else if (manifest.currentStage === 'blocked') {
           manifest.blockedReason = result.summary;
         }
         writeManifest({ manifest, cwd: options.repoRoot });
@@ -657,6 +811,8 @@ export const runContractPipeline = async (options: {
       }
 
       if (manifest.currentStage === 'review') {
+        const isBlockedReview = !!manifest.blockedReason;
+
         const reviewPath = join(
           runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
           'review',
@@ -666,12 +822,15 @@ export const runContractPipeline = async (options: {
           unlinkSync(reviewPath);
         }
         if (!manifest.reviewPaneId) {
+          const prompt = isBlockedReview
+            ? buildBlockedReviewPrompt({ manifest, repoRoot: options.repoRoot })
+            : loadReviewPrompt({
+                repoRoot: options.repoRoot,
+                contractPath: manifest.contractPath,
+                runId: manifest.runId,
+              });
           manifest.reviewPaneId = await adapter.startReview({
-            prompt: loadReviewPrompt({
-              repoRoot: options.repoRoot,
-              contractPath: manifest.contractPath,
-              runId: manifest.runId,
-            }),
+            prompt,
             contractPath: manifest.contractPath,
             reviewDecisionPath: reviewPath,
           });
@@ -685,14 +844,122 @@ export const runContractPipeline = async (options: {
           throw new Error('Review pane was not initialized.');
         }
 
+        // ── Blocked review: no PR yet, user decides how to handle the impasse ──
+        if (isBlockedReview) {
+          if (decision.decision === 'approve' || decision.decision === 'merge') {
+            // Create a PR even though the pipeline is blocked.
+            // CodeRabbit may resolve the issues, or a human can review.
+            const reconciliation = reconcileWorkspace({
+              manifest,
+              repoRoot: options.repoRoot,
+              baseBranch: PIPELINE_BASE_BRANCH,
+            });
+            manifest.reconciliation = reconciliation;
+            const draft = decision.decision === 'approve' ? !options.ready : false;
+            const prUrl = createGitHubPr({
+              headBranch: reconciliation.headBranch,
+              baseBranch: reconciliation.baseBranch,
+              title: `${reconciliation.prTitle} (blocked — review needed)`,
+              body: reconciliation.prBody,
+              repoRoot: options.repoRoot,
+              draft,
+            });
+            manifest.prUrl = prUrl;
+
+            if (decision.decision === 'approve') {
+              if (!draft) {
+                try {
+                  execSync(`gh pr ready ${prUrl}`, {
+                    encoding: 'utf-8',
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    cwd: options.repoRoot,
+                    timeout: 15000,
+                  });
+                } catch {
+                  // Non-fatal.
+                }
+              }
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `Draft PR created (blocked review): ${prUrl}`,
+              });
+              console.log(`\n📦 Draft PR (blocked): ${prUrl}\n`);
+              manifest = transition({ manifest, next: 'pr_created' });
+            } else {
+              // merge
+              try {
+                execSync(`gh pr ready ${prUrl}`, {
+                  encoding: 'utf-8',
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                  cwd: options.repoRoot,
+                  timeout: 15000,
+                });
+              } catch {
+                // Draft — still attempt merge.
+              }
+              execSync(`gh pr merge ${prUrl} --squash --auto --delete-branch`, {
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: options.repoRoot,
+                timeout: 30000,
+              });
+              manifest = transition({ manifest, next: 'merged' });
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: `PR auto-merge queued (blocked review): ${prUrl}`,
+              });
+              console.log(`\n🚀 PR auto-merge queued (blocked): ${prUrl}\n`);
+            }
+          } else if (decision.decision === 'change') {
+            // User wants to retry — reset the verify loop counter and go back
+            // to implementer for a fresh attempt.
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `Blocked review: retrying — resetting verify loops, returning to implement.`,
+            });
+            console.log('\n🔄 Retrying — back to implementer.\n');
+            manifest.verifyLoops = 0;
+            delete manifest.blockedReason;
+            delete manifest.verificationFingerprint;
+            delete manifest.verificationContractHash;
+            updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+            manifest = transition({ manifest, next: 'implement' });
+          } else {
+            // reject — stay blocked, exit with summary.
+            if (manifest.reconciliation?.headBranch) {
+              try {
+                execSync(`gh pr close ${manifest.prUrl}`, {
+                  encoding: 'utf-8',
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                  cwd: options.repoRoot,
+                  timeout: 15000,
+                });
+              } catch {
+                // PR may have already been closed.
+              }
+            }
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `Blocked review rejected: ${decision.summary}`,
+            });
+            manifest.blockedReason = decision.summary;
+            manifest = transition({ manifest, next: 'blocked' });
+          }
+          writeManifest({ manifest, cwd: options.repoRoot });
+          continue;
+        }
+
+        // ── Normal (post-verify) review ──────────────────────
         const prUrl = manifest.prUrl;
         if (!prUrl) {
           throw new Error('PR URL not found in manifest — review requires a PR.');
         }
 
         if (decision.decision === 'approve') {
-          // Mark draft PR as ready. gh pr ready may not exist in older gh CLI
-          // versions — the PR remains valid regardless.
           try {
             execSync(`gh pr ready ${prUrl}`, {
               encoding: 'utf-8',
@@ -735,8 +1002,6 @@ export const runContractPipeline = async (options: {
           });
           console.log(`\n🚀 PR auto-merge queued: ${prUrl}\n`);
         } else if (decision.decision === 'change') {
-          // Keep PR open — implementer pushes new commits to same branch.
-          // CodeRabbit re-reviews incrementally with full context.
           pipelineLog({
             runId: manifest.runId,
             cwd: options.repoRoot,
@@ -779,6 +1044,20 @@ export const runContractPipeline = async (options: {
       cwd: options.repoRoot,
       message: `Pipeline finished at ${manifest.currentStage}.`,
     });
+
+    // ── Blocked summary ──────────────────────────────────────
+    if (manifest.currentStage === 'blocked') {
+      const summary = formatBlockedSummary(manifest);
+      // Write full summary to pipeline log (appears in pipeline tail tab).
+      pipelineLog({
+        runId: manifest.runId,
+        cwd: options.repoRoot,
+        message: summary,
+      });
+      // Print to stdout for non-herdr runs.
+      console.log(summary);
+    }
+
     return manifest;
   } finally {
     releaseLock({ contractId: manifest.contractId, cwd: options.repoRoot });

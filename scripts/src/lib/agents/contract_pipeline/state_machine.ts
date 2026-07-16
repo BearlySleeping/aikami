@@ -9,7 +9,7 @@ import type {
   RunManifest,
 } from './types.ts';
 
-const MAX_VERIFY_LOOPS = 2;
+export const MAX_VERIFY_LOOPS = 2;
 
 /** Resolve the next stage from a validated worker result. */
 export const resolveNextStage = (options: {
@@ -37,13 +37,16 @@ export const resolveNextStage = (options: {
   }
 
   // Verify → review or bounce back to implement (max 2).
+  // When the bounce cap is hit, transition to review (not blocked) so the
+  // user gets an interactive session explaining the situation and can decide
+  // to create a PR anyway, retry, or abandon.
   if (options.currentStage === 'verify') {
     if (options.verdict.status !== 'changes_requested') {
       return { next: 'review', verifyLoops: options.verifyLoops };
     }
     const verifyLoops = options.verifyLoops + 1;
     return {
-      next: verifyLoops >= MAX_VERIFY_LOOPS ? 'blocked' : 'implement',
+      next: verifyLoops >= MAX_VERIFY_LOOPS ? 'review' : 'implement',
       verifyLoops,
     };
   }
