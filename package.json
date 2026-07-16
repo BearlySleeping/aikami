@@ -28,6 +28,7 @@
     "knowledge:sync": "bun run scripts/src/lib/ops/sync_contracts.ts && bun run scripts/src/lib/ops/generate_llms_txt.ts",
     "test:blackbox": "bun run scripts/src/lib/test_blackbox/run.ts",
     "herdr:start": "bun run scripts/src/lib/herdr/start.ts",
+    "workspace:cleanup": "bun run scripts/src/workspace_cleanup.ts",
     "herdr:pi": "bun run scripts/src/lib/herdr/start_pi.ts",
     "herdr:dev": "bun run herdr:start all && bun run herdr:pi && bun run herdr:join",
     "herdr:join": "bun run scripts/src/lib/herdr/join.ts",
