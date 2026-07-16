@@ -895,6 +895,39 @@ export const runContractPipeline = async (options: {
         // handler detects this to present a blocked-review session.
         if (verifyLoopsExhausted) {
           manifest.blockedReason = result.summary;
+          // Create a draft PR even when verification had issues.
+          // CodeRabbit may suggest fixes.
+          try {
+            const reconciliation = reconcileWorkspace({
+              manifest,
+              repoRoot: options.repoRoot,
+              baseBranch: PIPELINE_BASE_BRANCH,
+            });
+            manifest.reconciliation = reconciliation;
+            const prUrl = createGitHubPr({
+              headBranch: reconciliation.headBranch,
+              baseBranch: reconciliation.baseBranch,
+              title: `${reconciliation.prTitle} (needs review)`,
+              body: reconciliation.prBody,
+              repoRoot: options.repoRoot,
+              draft: true,
+            });
+            manifest.prUrl = prUrl;
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `Draft PR created (blocked review): ${prUrl}`,
+            });
+            console.log(`Draft PR (needs review): ${prUrl}`);
+          } catch (prErr: unknown) {
+            const msg = prErr instanceof Error ? prErr.message : String(prErr);
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `PR creation failed in blocked review: ${msg.slice(0, 300)}`,
+            });
+            console.error(`PR creation failed (blocked review): ${msg}`);
+          }
         } else if (manifest.currentStage === 'blocked') {
           manifest.blockedReason = result.summary;
         }
