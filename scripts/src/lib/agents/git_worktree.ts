@@ -260,6 +260,26 @@ source_env ${options.repoRoot}
     } catch {}
   }
 
+  // Remove moon pre-commit hook in worktrees to prevent shared-file conflicts.
+  // The hook runs `bun knowledge:sync` which regenerates PROGRESS.md/PROMOTION.md
+  // from contract files. In isolated worktrees this creates merge conflicts when
+  // multiple contracts are active. The sync should only run on main after PR merge.
+  try {
+    const hookPath = join(wsDir, '.moon', 'hooks', 'pre-commit');
+    if (existsSync(hookPath)) {
+      writeFileSync(hookPath, '#!/bin/sh\n# Disabled in worktree — sync runs on main after PR merge\nexit 0\n');
+    }
+    const wsYml = join(wsDir, '.moon', 'workspace.yml');
+    if (existsSync(wsYml)) {
+      let yml = readFileSync(wsYml, 'utf-8');
+      // Remove knowledge:sync from hooks
+      yml = yml.replace(/^\s*- "bun knowledge:sync"\s*\n?/gm, '');
+      writeFileSync(wsYml, yml);
+    }
+  } catch {
+    // Non-fatal — hook will be skipped by --no-verify fallback anyway.
+  }
+
   return {
     workspacePath: wsDir,
     branchName,
