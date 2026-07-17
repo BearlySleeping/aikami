@@ -1,5 +1,5 @@
 ---
-description: Independently verify a contract implementation — replay ACs, inspect diff, run tests, exercise production path
+description: Independently verify a contract implementation — replay ACs, inspect diff, run tests, fix trivial issues, bounce structural ones
 argument-hint: "docs/contracts/C-XXX-....md"
 ---
 
@@ -7,121 +7,145 @@ argument-hint: "docs/contracts/C-XXX-....md"
 
 Contract: $ARGUMENTS
 
-You are an **independent verifier**, not the implementer. Your job is to challenge every claim in the contract and its execution report. You do NOT trust the implementation report — you reconstruct evidence from scratch.
+You are an **independent verifier**. Your job is to challenge every claim, run tests, and either pass the contract or return actionable feedback.
 
 **Load `aikami-conventions` before any code inspection.**
 
+## 🔴 Verifier Mode: Fix trivial, bounce structural
+
+You have TWO options after inspecting the code:
+
+### Fix directly (call `contract_stage_complete` with `passed`)
+Fix these yourself — it's faster than bouncing:
+- Missing test stubs / empty test files
+- Typos, formatting, minor convention violations
+- Missing barrel exports, wrong import paths
+- Hardcoded values that should reference constants
+- Missing `@aikami/frontend-components` imports when using HUD components
+
+After fixing: run affected tests, commit your changes, call `contract_stage_complete` with `passed`.
+
+### Bounce back (call `contract_stage_complete` with `changes_requested`)
+Bounce these — you can't fix them safely:
+- Missing AC implementation (entire feature not built)
+- Design flaws that need architectural changes
+- Scope violations (files outside contract boundaries)
+- ACs that are fundamentally wrong or incomplete
+- New baseline test failures
+
+## On Retry (attempt > 1)
+
+When the pipeline sends you back after a bounce:
+
+1. **Check what changed**: `git diff HEAD~1 --name-only` — if nothing changed, the implementer didn't fix anything.
+2. **If nothing changed**: Call `contract_stage_complete` with `changes_requested` immediately — don't re-run all tests.
+3. **If changes exist**: Run only the tests relevant to the changed files. Don't re-verify everything from scratch.
+
 ## Phase 0: Preflight
 
-1. Read the contract file completely — ACs, Evidence Matrix, Test Hooks, Scope, Quality Requirements.
-2. Read any execution report at the bottom of the contract — note what the implementer claims.
-3. Check working-copy state. 🔴 You run inside an isolated Git Worktree — `git` commands work correctly within the worktree. Use git:
+1. Read the contract file completely — ACs, Evidence Matrix, Test Hooks, Scope.
+2. Read any execution report — note what the implementer claims.
+3. Check git state:
    ```bash
    git status
    git diff --name-only
    git log -1 --format="%H %s"
    ```
-4. If the workspace diff contains files unrelated to the contract scope, flag it.
-5. Check the contract status — must be `implemented` for verification. If it says `completed`, flag: "Implementer self-certified — rolling back to implemented for independent review."
+4. Contract status should be `implemented` or `approved`.
 
 ## Phase 1: Structural Audit
 
-Run deterministic checks. Every failure is a CHANGES_REQUESTED.
-
-1. **Required files exist**: For each file declared in the Evidence Matrix and execution report, verify it exists on disk.
-2. **Test files exist**: Every test file in Test Hooks must exist. `bun run test -- <file>` must find it.
-3. **No placeholders**: Grep the contract for `{` patterns — any remaining template placeholders.
-4. **No duplicate IDs**: Check PROGRESS.md for duplicate contract IDs.
-5. **Scope boundary check**: `jj diff --name-only` — confirm no files outside the contract's In Scope touched. (Never `git diff` — it reads the root repo, not your workspace.)
-6. **Convention audit**: Run the self-audit checks from the implementer prompt:
-   - `pixi.js` / `@pixi/` in ViewModels or .svelte files → violation
-   - `app.ticker.add` outside `packages/frontend/engine/` → violation
-   - TypeBox schemas in `**/services/**` → violation
-   - Label/dictionary constants in ViewModels → violation
+1. **Required files exist**: Every file in Evidence Matrix + execution report must exist.
+2. **Test files exist**: Every test in Test Hooks must exist.
+3. **No placeholders**: No `{TEMPLATE}` markers in contract.
+4. **Scope boundaries**: No files modified outside contract's In Scope.
+5. **Convention audit**: No pixi.js in ViewModels, no app.ticker outside engine, no TypeBox in services.
 
 ## Phase 2: Evidence Reconstruction
 
-For EVERY Acceptance Criteria:
+For EVERY AC:
 
-1. **Map to source**: Find the exact file(s) and line ranges that implement this AC.
-2. **Map to test**: Confirm the test artifact declared in Evidence Matrix exists and exercises the AC.
-3. **Replay the test**:
-   Use the `moon_run_task` Pi tool (has built-in timeout):
-   ```
-   moon_run_task({ target: "<project>:test" })
-   ```
-   Record: PASS / FAIL / SKIPPED.
-4. **Production path check**: If Evidence Matrix declares a production path, navigate there in browser or run the E2E spec that covers it.
+1. Find the implementing files
+2. Find the test files
+3. Run tests: `moon_run_task({ target: "<project>:test" })`
 
 ## Phase 3: Live Verification
 
-For contracts with UI or production paths:
+1. `herdr_session restart client firebase voice image text`
+2. Screenshot + validate each production path
+3. Test error paths + persistence
 
-1. Ensure client dev server is running: `herdr_session status` → `herdr_session restart client` if needed.
-2. For each production path in Evidence Matrix:
-   - `browser_screenshot` at the route
-   - `ai_validate_image` with expectation from the AC
-   - Record score + visual issues
-3. For stateful features:
-   - Reload the page → state must survive (if persistence AC exists)
-   - Trigger error paths → must degrade cleanly (if offline/degraded AC exists)
+## Phase 4-5: Quality + Cross-Cutting
 
-## Phase 4: Quality Requirements Audit
+- Quality Requirements from contract
+- No new baseline failures: `validate({ test: true })`
 
-For each Quality Requirement checkbox in the contract:
+## Phase 6: Fix or Bounce
 
-1. If marked with a concrete requirement → verify it.
-2. If marked "N/A — reason" → check the reason is valid.
-3. If left blank → flag as incomplete spec.
+| Issue type | Action |
+|---|---|
+| Missing test stubs, typos, imports, formatting | ✏️ Fix yourself → `passed` |
+| Missing AC, design flaw, scope violation, regression | ↩️ Bounce → `changes_requested` with clear instructions |
 
-Examples:
-- "Offline/degraded mode: show cached data" → disconnect network, reload, verify.
-- "Performance budget: 60fps" → check if rendering pipeline meets it.
+### When bouncing, write instructions the implementer can act on:
 
-## Phase 5: Cross-Cutting Checks
+```markdown
+## 🔴 Changes Required
 
-1. **No new baseline failures**: Use `validate({ test: true })` — the Pi tool handles fix+typecheck+build+test with timeouts. Compare failures to baseline. Any new failure = CHANGES_REQUESTED.
-2. **Migration path**: If the contract changes persistent state, verify migration code exists and is referenced in the execution report.
-3. **Unapproved scope changes**: Diff between contract's In Scope and actual changed files. Any unapproved expansion → flag.
-4. **Amendments**: If ACs were changed during implementation, verify an Amendment entry exists with version bump.
+### 1. Missing test: `input_action_service.test.ts`
+**File to create:** `apps/frontend/client/src/lib/services/game/input_action_service.test.ts`
+**What to test:** Device tracking debounce, gamepad→keyboard switching, action dispatch
+**Example:** See `interaction_proximity_system.test.ts` for test structure
 
-## Phase 6: Verdict
-
-Produce a structured verdict:
-
+### 2. AC-5 reduced-motion incomplete
+**File to fix:** `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte:44`
+**Current:** `reducedMotion={false}` hardcoded
+**Needed:** Read `window.matchMedia('(prefers-reduced-motion: reduce)')` and pass result
 ```
+
+### When fixing, report what you changed:
+
+```markdown
+## ✅ Verified (with fixes)
+
+### Fixes applied
+- Added test stubs for `input_action_service.test.ts` (3 test cases)
+- Fixed `reducedMotion` to use media query
+- Re-imported `keyToDisplayLabel` from `@aikami/constants`
+
+### Test results
+- Engine: 783/783 PASS
+- New tests: 3/3 PASS
+```
+
+## Verdict template
+
+```markdown
 ## Verification Verdict: {PASS | CHANGES_REQUESTED}
 
 ### AC Evidence
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅/⚠️/❌ | ... |
 
-| AC | Status | Test | Production Path | Notes |
-|---|---|---|---|---|
-| AC-1 | ✅/⚠️/❌ | PASS/FAIL/SKIPPED | ✅/❌/N/A | ... |
+### Fixes applied (if any)
+- {list}
 
-### Structural Issues
-- {issue or "None"}
+### Bounced issues (if any)
+- {specific instructions}
 
-### Quality Gaps
-- {gap or "None"}
-
-### Baseline Tests
-Pre-existing failures: {count}
-New failures: {count}
-→ {CLEAN | REGRESSION}
+### Test Results
+{pass/fail counts}
 
 ### Verdict
-{One of:}
-- PASS — all mandatory ACs verified, no regressions, no structural issues
-- CHANGES_REQUESTED — {list of specific problems the implementer must fix}
+PASS / CHANGES_REQUESTED — {summary}
 ```
 
 ## Rules
 
-- **Read-only initially** — do not modify any source file. If verification fails, return CHANGES_REQUESTED with specific items. The implementer fixes them.
-- **No trust** — the implementer's execution report is a hint, not evidence. Reconstruct independently.
-- **Mandatory ACs** — if an AC is marked ⚠️ or ❌, verdict is automatically CHANGES_REQUESTED regardless of other results.
-- **Never mark completed** — the verifier sets status to `verified` or `verification_failed`. Only the user marks `completed` after merge.
-- Report verbatim test output, not summaries. "PASS" / "FAIL" / "SKIPPED" with exact counts.
-- **Shared sections**: `Promotion Lifecycle` and `Status Lifecycle` reference `docs/contracts/SHARED_SECTIONS.md`. Do not read, verify, or re-evaluate them — they are static project-wide material outside this contract's scope. Focus exclusively on the Acceptance Criteria.
-- 🔴 **Use Pi tools for all test/validation commands** — `moon_run_task` and `validate()` have built-in timeouts. Never run raw shell `bun moon run` or `bun test`; they hang forever on large suites.
-- 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client firebase voice image text`. Main's dev servers run the wrong code.
+- **Fix trivial, bounce structural** — don't bounce for something you can fix in 2 minutes.
+- **On retry, check git diff first** — don't re-run everything if nothing changed.
+- **Write actionable instructions** — file paths, line numbers, what to change.
+- **Never mark `completed`** — only `verified` or `verification_failed`.
+- 🔴 **Use Pi tools for tests** — `moon_run_task`, `validate()`.
+- 🔴 **Restart dev services before testing**: `herdr_session restart client firebase voice image text`.
