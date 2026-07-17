@@ -140,16 +140,20 @@ class CapabilityService
       case 'pending':
         return 'Detecting AI providers...';
       case 'error':
-        return 'Detection error — offline demo available';
+        return 'Detection error — retry or configure a provider';
       case 'skipped':
         return 'Detection skipped';
       default:
         // Check if image or voice capabilities are available even when text is not
-        if (imageStatus === 'detected' || imageStatus === 'configured' ||
-            voiceStatus === 'detected' || voiceStatus === 'configured') {
+        if (
+          imageStatus === 'detected' ||
+          imageStatus === 'configured' ||
+          voiceStatus === 'detected' ||
+          voiceStatus === 'configured'
+        ) {
           return 'AI providers detected (image/voice available)';
         }
-        return 'No AI providers detected — offline demo available';
+        return 'No text AI detected — install Ollama or add a cloud provider';
     }
   }
 }
