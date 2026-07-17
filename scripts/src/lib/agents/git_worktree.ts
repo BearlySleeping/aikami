@@ -39,15 +39,25 @@ const isGitExecError = (err: unknown): err is GitExecError => err instanceof Err
  * @param command  git subcommand and args (e.g. `"rev-parse HEAD"`)
  * @param options  cwd, env
  */
-export const runGit = (command: string, options?: { cwd?: string; env?: Record<string, string> }): string => {
+export const runGit = (
+  command: string,
+  options?: { cwd?: string; env?: Record<string, string> },
+): string => {
   const cmd = `git ${command}`;
 
-  const opts: { encoding: 'utf-8'; stdio: ['pipe', 'pipe', 'pipe']; cwd?: string; env?: Record<string, string> } = {
+  const opts: {
+    encoding: 'utf-8';
+    stdio: ['pipe', 'pipe', 'pipe'];
+    cwd?: string;
+    env?: Record<string, string>;
+  } = {
     encoding: 'utf-8' as const,
     stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
     cwd: options?.cwd,
   };
-  if (options?.env) opts.env = { ...process.env as Record<string, string>, ...options.env };
+  if (options?.env) {
+    opts.env = { ...(process.env as Record<string, string>), ...options.env };
+  }
 
   const maxRetries = 3;
   let lastError: unknown;
@@ -353,6 +363,7 @@ export const commitAll = (options: {
       : '';
 
   // Suppress knowledge:sync pre-commit hooks in worktrees.
+  // biome-ignore lint/style/useNamingConvention: env var name matches process.env key
   const env = { CONTRACT_PIPELINE_WORKTREE: '1' };
 
   // Stage all changes including untracked files.

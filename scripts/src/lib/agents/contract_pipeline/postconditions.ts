@@ -32,7 +32,7 @@ export const validatePostconditions = (options: {
   }
 
   let unauthorizedPaths: string[] = [];
-  const PIPELINE_MANAGED_FILES = new Set(['.envrc', '.pi/settings.json']);
+  const PipelineManagedFiles = new Set(['.envrc', '.pi/settings.json']);
 
   // Implementer: validate that every claimed file actually exists on disk.
   // Prevents "ghost files" — implementer lists files in contract_stage_complete
@@ -40,7 +40,7 @@ export const validatePostconditions = (options: {
   if (options.role === 'implementer') {
     const wsRoot = options.workspacePath ?? options.repoRoot;
     const missing = changed.filter(
-      (path) => !existsSync(join(wsRoot, path)) && !PIPELINE_MANAGED_FILES.has(path),
+      (path) => !existsSync(join(wsRoot, path)) && !PipelineManagedFiles.has(path),
     );
     // Only flag files that were CLAIMED (in the implementer's filesTouched)
     // but don't exist on disk. Untracked files in changed that DO exist are fine
@@ -60,7 +60,7 @@ export const validatePostconditions = (options: {
       if (path === relativeContractPath) {
         return false;
       }
-      if (PIPELINE_MANAGED_FILES.has(path)) {
+      if (PipelineManagedFiles.has(path)) {
         return false;
       }
       // docs/ is a separate gitignored repo — non-contract docs/ files are fine.
