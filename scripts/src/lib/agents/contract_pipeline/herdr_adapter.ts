@@ -208,6 +208,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       if (pipelinePane) {
         this._workspaceId = existingWorkspaceId;
         this._pipelinePaneId = pipelinePane.pane_id;
+        // Restart `tail -f` if it died (reboot, herdr restart).
+        const active = await isCommandRunning(pipelinePane.pane_id).catch(() => false);
+        if (!active) {
+          await runPaneCommand({
+            paneId: pipelinePane.pane_id,
+            command: `tail -f ${shellQuote(logPath({ runId: this._runId, cwd: this._repoRoot }))}`,
+          });
+        }
         this._provisionGitWorktree();
         return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
       }
@@ -329,22 +337,22 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       timeoutMs: AGENT_READY_TIMEOUT_MS,
     });
     if (!ready) {
-      console.warn(`⚠️  Pane ${options.paneId} never reported receptive`);
+      // Pi isn't running or context-mode hasn't booted. Sending text to
+      // a shell pane would produce garbage (truncated text, shell errors).
+      console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
+      return;
     }
+    // Clear overlays, then wait for Pi to settle before sending.
     await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
-    await sleep(1000);
+    await sleep(1500);
     await runHerdr(['pane', 'run', options.paneId, options.text]);
     const accepted = await this._waitForAgentStatus({
       paneId: options.paneId,
       statuses: ['working', 'done'],
       timeoutMs: SEND_ACCEPT_TIMEOUT_MS,
     });
-    if (accepted) {
-      return;
-    }
-    if (await isCommandRunning(options.paneId).catch(() => false)) {
-      return;
-    }
+    if (accepted) return;
+    if (await isCommandRunning(options.paneId).catch(() => false)) return;
     console.warn(`⚠️  Prompt to ${options.paneId} unacked — pane may be dead`);
   }
 
