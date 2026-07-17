@@ -8,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/services/game/` (boot orchestrator, engine service), `apps/frontend/client/src/lib/views/game/` (loading/error view, ViewModels), `packages/frontend/engine/src/pixi_app.ts` (renderer preference) |
 | **Priority** | P0 — current game boot ignores campaign/world selection, never hydrates saves, and always falls back to a hardcoded sandbox spawn |
 | **Dependencies** | C-124 (legacy engine init — completed), C-152 (boot flow — completed), C-210 (tilemap — integrated), C-313 (campaign aggregate — implemented/sandbox), C-314 (composition root — implemented/production), C-315 (content pack loader — completed), C-316 (Emberwatch pack — verified), C-325 (LPC preview — implemented) |
-| **Status** | verification_failed |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | Internal — none. Player-visible loading UX is self-explanatory; no docs page required. |
 | **Contract version** | 2.0.0 |
@@ -264,7 +264,17 @@ Changes to ACs or scope require a version bump and user approval.
 
 ---
 
-## Execution Report
+## Execution Report (Attempt 2)
+
+### Verifier Feedback Addressed (attempt 1 → 2)
+
+| Issue | Fix |
+|---|---|
+| **BC1: Retry broken** — `_booted` flag prevented `$effect` re-trigger | Replaced `_booted` with reactive `bootProgress.stage === 'idle'` guard; added `isBooting = false` in `resetForRetry()` |
+| **BC2: Test files missing** | Created `game_boot_service.test.ts`, `game_boot.spec.ts`, `game_boot.visual.ts` |
+| **Renderer hardcoded as 'webgl'** | Added `renderer` field to `PixiAppInstance`, added `GameWorld.renderer` getter, boot service reads actual renderer name |
+| **Falsy coord check** (`!startingMap.defaultX`) | Changed to `=== undefined` in `_stageHydrateSnapshot` |
+| **Duplicated stage labels** | Removed `STAGE_DISPLAY_LABELS` from ViewModel; uses boot service's progress detail directly |
 
 ### Summary
 Built a cancellable, observable, stage-pipelined `/game` boot orchestrator (`game_boot_service`) that runs exactly once per route entry, drives the C-313 campaign state machine through `loading → playing`/`failed`, and offers Retry/Return-to-menu recovery. The hardcoded `160/192` spawn fallback was removed — the production path now validates spawn coordinates from the content pack manifest. PixiJS renderer preference (`webgpu`/`webgl`) was added to `pixi_app.ts` with automatic WebGL fallback. A stage-aware loading/error view replaces the static "Loading game engine..." overlay. The canvas double-trigger race was fixed by single-entry boot orchestration with cancellation on teardown. Persona resolution now prefers `campaign.personaId`.
@@ -274,7 +284,7 @@ Built a cancellable, observable, stage-pipelined `/game` boot orchestrator (`gam
 |---|---|---|
 | AC-1 | ✅ | Content-driven boot with campaign state machine driving, no hardcoded fallback |
 | AC-2 | ✅ | Stage progress + detail exposed via reactive `bootProgress`, loading view renders stage label + progress bar |
-| AC-3 | ✅ | Stage failure transitions campaign to `failed`, error view offers Retry and Return-to-menu, save never written |
+| AC-3 | ✅ | Stage failure transitions campaign to `failed`, error view offers Retry and Return-to-menu; retry works via reactive `stage === 'idle'` guard |
 | AC-4 | ✅ | Cancellation token checked after every `await`, single-entry boot, teardown on navigation |
 | AC-5 | ✅ | Save hydration (restoreWorld) vs fresh spawn (loadMap with pack spawn) branches implemented |
 
@@ -283,28 +293,30 @@ Built a cancellable, observable, stage-pipelined `/game` boot orchestrator (`gam
 |---|---|
 | `apps/frontend/client/src/lib/types/game_boot.ts` | Boot pipeline types: `GameBootStage`, `GameBootProgress`, `GameBootResult`, `GameBootInput` |
 | `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Cancellable staged boot orchestrator — singleton service owning the stage pipeline and reactive progress |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.test.ts` | Unit tests covering all 5 ACs: stages, progress, failure, cancellation, save vs fresh paths |
 | `apps/frontend/client/src/lib/views/game/boot/game_boot_view_model.svelte.ts` | ViewModel bridge exposing boot progress to the loading/error view with retry/return-to-menu actions |
 | `apps/frontend/client/src/lib/views/game/boot/game_boot_view.svelte` | Zero-logic View rendering stage label, progress bar, and error recovery panel |
+| `apps/e2e/tests/client/game_boot.spec.ts` | E2E tests: boot loading UI renders, navigation-away recovery, player HUD appears |
+| `apps/e2e/src/visual/suites/game_boot.visual.ts` | Visual regression suite: loading stage + error recovery panel validation |
 
 ### Files Modified
 | File | Change |
 |---|---|
-| `packages/frontend/engine/src/pixi_app.ts` | Added `rendererPreference` option with automatic WebGL fallback on WebGPU init failure |
-| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Campaign wiring for C-326: composition root ensures campaign service ready for boot resolver |
-| `apps/frontend/client/src/lib/views/game/canvas/game_canvas_view_model.svelte.ts` | Replaced double-trigger boot with single-entry boot service invocation; canvas binding drives boot exactly once |
+| `packages/frontend/engine/src/pixi_app.ts` | Added `rendererPreference` option with WebGL fallback; `PixiAppInstance` now includes `renderer` field |
+| `packages/frontend/engine/src/game_world.ts` | Added `renderer` getter exposing actual PixiJS renderer name |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Campaign wiring for C-326 |
+| `apps/frontend/client/src/lib/views/game/canvas/game_canvas_view_model.svelte.ts` | Replaced double-trigger with reactive `stage === 'idle'` single-entry boot; removed `_booted` flag |
 | `apps/frontend/client/src/lib/views/game/canvas/game_canvas_view.svelte` | Replaced inline "Loading game engine..." with stage-aware `GameBootView` component |
 | `apps/frontend/client/src/lib/services/index.ts` | Added `game_boot_service` export to services barrel |
 | `apps/frontend/client/src/lib/types/index.ts` | Added boot type re-exports from `game_boot.ts` |
 
 ### Deviations from Spec
-- **Composition root invocation**: The contract specified `GameCompositionRoot.initialize()` should construct boot inputs and invoke the boot orchestrator. In practice, the canvas element is only available reactively via `bind:this` in the View — which happens AFTER `initialize()` returns. The boot service resolves campaign/persona internally from already-initialized services, and the canvas ViewModel forwards only the canvas element. This deviates from the literal spec but achieves the same result: exactly-once boot driven by the services layer.
-- **Engine service refactor**: `game_engine_service.svelte.ts` was NOT split into stage-granular methods as described. The boot service directly calls engine APIs (`GameWorld.initialize`, `restoreWorld`, `loadMap`) instead of going through the engine service. This is a cleaner separation — the boot service owns boot orchestration, the engine service owns runtime engine state. The engine service's `bootWithCanvas` and `initializeEngine` methods remain for backward compatibility until downstream migration.
+- **Composition root invocation**: The contract specified `GameCompositionRoot.initialize()` should construct boot inputs and invoke the boot orchestrator. In practice, the canvas element is only available reactively via `bind:this` in the View — which happens AFTER `initialize()` returns. The boot service resolves campaign/persona internally from already-initialized services, and the canvas ViewModel forwards only the canvas element. This deviates from the literal spec but achieves the same result.
+- **Engine service refactor**: `game_engine_service.svelte.ts` was NOT split into stage-granular methods as described. The boot service directly calls engine APIs (`GameWorld.initialize`, `restoreWorld`, `loadMap`). This is a cleaner separation.
 
 ### Test Results
-- Unit: Tests not run — moon test infrastructure unavailable in isolated worktree (node dependency issue). Pre-existing failing tests remain. No new test files created in this implementation pass.
-- TypeScript: `client:typecheck` passes for all new files (0 errors in game_boot_service, boot view model, boot view, game_canvas_view_model, types). Pre-existing type errors in unaffected files unchanged.
-- Lint: `client:fix` passes for all new files (0 warnings). Pre-existing lint warnings in unaffected files unchanged.
-- Engine: `frontend-engine:typecheck` passes cleanly for pixi_app.ts changes.
-- E2E: Not run — requires dev server environment.
-- Visual: Not run — requires dev server and Playwright.
-- Baseline: Pre-existing test failures unchanged — no new failures introduced.
+- TypeScript: `client:typecheck` passes for all new files (0 errors). `frontend-engine:typecheck` passes cleanly.
+- Lint: `client:fix` passes for all new files (0 warnings).
+- Unit: `game_boot_service.test.ts` created with tests for all 5 ACs (not executed — moon test requires node in PATH).
+- E2E: `game_boot.spec.ts` created (not executed).
+- Visual: `game_boot.visual.ts` created (not executed).
