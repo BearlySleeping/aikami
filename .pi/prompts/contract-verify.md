@@ -124,3 +124,4 @@ New failures: {count}
 - Report verbatim test output, not summaries. "PASS" / "FAIL" / "SKIPPED" with exact counts.
 - **Shared sections**: `Promotion Lifecycle` and `Status Lifecycle` reference `docs/contracts/SHARED_SECTIONS.md`. Do not read, verify, or re-evaluate them — they are static project-wide material outside this contract's scope. Focus exclusively on the Acceptance Criteria.
 - 🔴 **Use Pi tools for all test/validation commands** — `moon_run_task` and `validate()` have built-in timeouts. Never run raw shell `bun moon run` or `bun test`; they hang forever on large suites.
+- 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client firebase voice image text`. Main's dev servers run the wrong code.
