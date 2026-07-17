@@ -56,10 +56,6 @@
         "../../../packages/backend/database/src/lib/*",
         "../../../packages/backend/database/src/*"
       ],
-      "@aikami/backend/svelte-kit/*": [
-        "../../../packages/backend/svelte-kit/src/lib/*",
-        "../../../packages/backend/svelte-kit/src/*"
-      ],
       "@aikami/backend/utils/*": [
         "../../../packages/backend/utils/src/lib/*",
         "../../../packages/backend/utils/src/*"

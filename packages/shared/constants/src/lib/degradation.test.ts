@@ -1,13 +1,13 @@
 // packages/shared/constants/src/lib/degradation.test.ts
 //
 // Unit tests for the per-feature degradation policy.
-// Contract: C-318 AC-5
+// Contract: C-318 AC-5, amended C-324
 
 import { describe, expect, test } from 'bun:test';
 import { DEGRADATION_POLICY, degradationBehavior, type FeatureId } from './degradation';
 
 describe('degradationBehavior', () => {
-  test('AC-5: all-text-offline returns correct fallback modes', () => {
+  test('AC-5 / C-324: text AI unavailable returns correct onFailure fallback modes', () => {
     const profile = { textProvider: false, imageProvider: false, voiceProvider: false };
 
     expect(degradationBehavior({ feature: 'dialogue', capabilityProfile: profile })).toBe(
@@ -110,8 +110,8 @@ describe('degradationBehavior', () => {
     for (const feature of features) {
       const entry = DEGRADATION_POLICY[feature];
       expect(entry).toBeDefined();
-      // Must have a fallback mode for offline (textProvider: false)
-      expect(entry.offline).toBeDefined();
+      // Must have a fallback mode for onFailure (textProvider: false / transient failure)
+      expect(entry.onFailure).toBeDefined();
       // Must have a fallback mode for online (textProvider: true)
       expect(entry.online).toBeDefined();
     }

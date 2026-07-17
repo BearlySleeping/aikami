@@ -3,7 +3,7 @@
 // Per-feature degradation policy — maps every game feature to its fallback
 // mode when AI capabilities (text, image, voice) are unavailable.
 // Read-only, no runtime dependencies — pure data module.
-// Contract: C-318 AC-5
+// Contract: C-318 AC-5, amended C-324
 
 /**
  * How a feature behaves when its required AI capability is absent.
@@ -30,12 +30,14 @@ export type FeatureId =
 /**
  * Degradation behaviour for each feature in each capability state.
  *
- * - `offline`: textProvider is false (no text AI at all).
+ * - `onFailure`: textProvider is false or the text AI call fails transiently.
+ *   Authored/template fallbacks are transient-failure resilience, never a
+ *   supported steady-state zero-AI mode (C-324).
  * - `online`:  textProvider is true (text AI is available).
  */
 type PolicyEntry = {
-  /** Fallback mode when text AI is unavailable. */
-  readonly offline: DegradationMode;
+  /** Fallback mode when a required text AI call fails or is transiently unavailable. */
+  readonly onFailure: DegradationMode;
   /** Fallback mode when text AI is available (may still degrade on image/voice). */
   readonly online: DegradationMode;
   /** Optional: secondary capability that overrides the online fallback when absent. */
@@ -50,41 +52,44 @@ type PolicyEntry = {
  */
 export const DEGRADATION_POLICY: Readonly<Record<FeatureId, PolicyEntry>> = {
   dialogue: {
-    offline: 'authored_fallback',
+    /** Authored dialogue lines — transient AI failure fallback, never a steady-state mode (C-324). */
+    onFailure: 'authored_fallback',
     online: 'full_ai',
   },
   combatNarration: {
-    offline: 'template_fallback',
+    /** Template-driven narration — transient AI failure fallback, never a steady-state mode (C-324). */
+    onFailure: 'template_fallback',
     online: 'full_ai',
   },
   questDescriptions: {
-    offline: 'authored_fallback',
+    /** Authored quest text — transient AI failure fallback, never a steady-state mode (C-324). */
+    onFailure: 'authored_fallback',
     online: 'full_ai',
   },
   npcExpressions: {
-    offline: 'static',
+    onFailure: 'static',
     online: 'full_ai',
   },
   lpcSprites: {
-    offline: 'full_ai',
+    onFailure: 'full_ai',
     online: 'full_ai',
   },
   ttsVoice: {
-    offline: 'disabled',
+    onFailure: 'disabled',
     online: 'full_ai',
     alsoRequires: 'voiceProvider',
   },
   imageGeneration: {
-    offline: 'disabled',
+    onFailure: 'disabled',
     online: 'full_ai',
     alsoRequires: 'imageProvider',
   },
   sessionRecap: {
-    offline: 'static',
+    onFailure: 'static',
     online: 'full_ai',
   },
   aiGm: {
-    offline: 'disabled',
+    onFailure: 'disabled',
     online: 'full_ai',
   },
 } as const;
@@ -104,17 +109,17 @@ export const degradationBehavior = (options: {
 }): DegradationMode => {
   const entry = DEGRADATION_POLICY[options.feature];
 
-  // Text AI is offline → use the offline fallback unconditionally
+  // Text AI unavailable or failing transiently → use the onFailure fallback
   if (!options.capabilityProfile.textProvider) {
-    return entry.offline;
+    return entry.onFailure;
   }
 
   // Text AI is online → check secondary capability requirement
   if (entry.alsoRequires) {
     const secondaryAvailable = options.capabilityProfile[entry.alsoRequires];
     if (!secondaryAvailable) {
-      // Secondary capability missing → degrade (same as offline for image/voice features)
-      return entry.offline;
+      // Secondary capability missing → degrade (same as onFailure for image/voice features)
+      return entry.onFailure;
     }
   }
 

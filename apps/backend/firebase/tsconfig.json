@@ -13,7 +13,6 @@
       "@aikami/backend/configs/*": ["../../../packages/backend/configs/src/lib/*"],
       "@aikami/backend/database": ["../../../packages/backend/database/src/index.ts"],
       "@aikami/backend/database/*": ["../../../packages/backend/database/src/lib/*"],
-      "@aikami/backend/svelte-kit/*": ["../../../packages/backend/svelte-kit/src/lib/*"],
       "@aikami/backend/utils/*": ["../../../packages/backend/utils/src/lib/*"],
       "@aikami/email": ["../../../packages/backend/email/src/index.ts"],
       "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],

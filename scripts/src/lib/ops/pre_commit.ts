@@ -37,4 +37,8 @@ if (!isWorktree) {
 }
 
 // 6. Re-stage files that formatters may have modified
-await runStream(['sh', '-c', 'git diff -z --name-only --cached | xargs -0 git add 2>/dev/null || true']);
+await runStream([
+  'sh',
+  '-c',
+  'git diff -z --name-only --cached | xargs -0 git add 2>/dev/null || true',
+]);

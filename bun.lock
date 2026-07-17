@@ -194,29 +194,6 @@
         "firebase": "12.16.0",
       },
     },
-    "packages/backend/image": {
-      "name": "@aikami/backend-image",
-      "dependencies": {
-        "@aikami/constants": "workspace:*",
-        "@aikami/logger": "workspace:*",
-        "@aikami/types": "workspace:*",
-        "@aikami/utils": "workspace:*",
-      },
-    },
-    "packages/backend/svelte-kit": {
-      "name": "@aikami/backend-svelte-kit",
-      "dependencies": {
-        "@aikami/backend-configs": "workspace:*",
-        "@aikami/backend-utils": "workspace:*",
-        "@aikami/constants": "workspace:*",
-        "@aikami/logger": "workspace:*",
-        "@aikami/schemas": "workspace:*",
-        "@aikami/types": "workspace:*",
-      },
-      "devDependencies": {
-        "@sveltejs/kit": "2.69.3",
-      },
-    },
     "packages/backend/utils": {
       "name": "@aikami/backend-utils",
       "dependencies": {
@@ -428,10 +405,6 @@
     "@aikami/backend-configs": ["@aikami/backend-configs@workspace:packages/backend/configs"],
 
     "@aikami/backend-database": ["@aikami/backend-database@workspace:packages/backend/database"],
-
-    "@aikami/backend-image": ["@aikami/backend-image@workspace:packages/backend/image"],
-
-    "@aikami/backend-svelte-kit": ["@aikami/backend-svelte-kit@workspace:packages/backend/svelte-kit"],
 
     "@aikami/backend-utils": ["@aikami/backend-utils@workspace:packages/backend/utils"],
 

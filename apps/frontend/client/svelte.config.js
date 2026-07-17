@@ -49,7 +49,6 @@ const config = {
       '$utils/*': toSrcPath('lib/utils/*'),
       '$views/*': toSrcPath('lib/views/*'),
 
-      '@aikami/backend/svelte-kit/*': toPackagesPath('backend/svelte-kit/src/lib/*'),
       '@aikami/backend/database': toPackagesPath('backend/database/src'),
       '@aikami/backend/database/*': toPackagesPath('backend/database/src/lib/*'),
       '@aikami/backend/auth/*': toPackagesPath('backend/auth/src/lib/*'),

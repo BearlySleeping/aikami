@@ -24,8 +24,8 @@ This document provides a high-level overview of the technical architecture of th
 │  constants │ types │ schemas │ logger │ utils │ mocks            │
 ├──────────────────────────────────────────────────────────────────┤
 │              Backend Packages (packages/backend/)                 │
-│  auth │ configs │ database (BaseDatabaseService) │ svelte-kit    │
-│  utils │ ai (AiServiceInterface)                                  │
+│  auth │ configs │ database (BaseDatabaseService)                │
+│  utils │ ai (server-side service-mode handler — C-324)          │
 ├──────────────────────────────────────────────────────────────────┤
 │             Frontend Packages (packages/frontend/)                │
 │  configs │ components │ repositories │ services │ utils           │
@@ -167,8 +167,7 @@ Client-side perimeter validation uses Valibot instead of Zod:
 | `backend/auth` | backend | Firebase Auth server helpers |
 | `backend/configs` | backend | Backend Firebase config |
 | `backend/database` | backend | BaseDatabaseService interface + FirebaseDataConnectService (C-014) |
-| `backend/ai` | backend | AiServiceInterface + OpenAI/Gemini providers (C-015) |
-| `backend/svelte-kit` | backend | SvelteKit server-side hooks and API helpers |
+| `backend/ai` | backend | Server-side AI service-mode handler — handleAIEndpoint + provider factory (C-056, C-324) |
 | `backend/utils` | backend | Server utilities (storage upload, etc.) |
 | `frontend/configs` | frontend | Firebase client init, env validation, feature flags |
 | `frontend/services` | frontend | Firebase client services (auth, functions, analytics, storage, FCM) |

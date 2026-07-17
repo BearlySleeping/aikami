@@ -39,8 +39,8 @@ export const DEFAULT_LOCAL_TEXT_ENDPOINTS: Record<string, string> = {
 /**
  * Ollama VRAM-eviction payload params (C-056 lesson): release the model
  * immediately after generation so image generation can claim VRAM.
- * Mirrors OLLAMA_VRAM_EVICTION_PARAMS in @aikami/backend/ai — duplicated
- * here because the backend package is not aliased in the client build.
+ * Formerly mirrored in @aikami/backend/ai (deleted C-324); this is now
+ * the canonical copy. Could be promoted to @aikami/constants later.
  */
 export const OLLAMA_VRAM_EVICTION_PARAMS = {
   // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
