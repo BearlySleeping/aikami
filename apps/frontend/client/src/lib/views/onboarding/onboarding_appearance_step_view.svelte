@@ -1,86 +1,86 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/onboarding/onboarding_appearance_step_view.svelte
-  //
-  // Appearance step — LPC sprite preview, curated presets, layer selectors,
-  // palette/tint controls, and text description.
-  // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
+// apps/frontend/client/src/lib/views/onboarding/onboarding_appearance_step_view.svelte
+//
+// Appearance step — LPC sprite preview, curated presets, layer selectors,
+// palette/tint controls, and text description.
+// Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
-  import { onDestroy } from 'svelte';
-  import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
-  import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
-  import {
-    getLpcPreviewViewModel,
-    type LpcPreviewViewModelInterface,
-  } from '$lib/views/character/lpc_preview/lpc_preview_view_model.svelte';
-  import type { OnboardingCoordinatorViewModelInterface } from './onboarding_coordinator_view_model.svelte';
+import { onDestroy } from 'svelte';
+import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
+import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
+import {
+  getLpcPreviewViewModel,
+  type LpcPreviewViewModelInterface,
+} from '$lib/views/character/lpc_preview/lpc_preview_view_model.svelte';
+import type { OnboardingCoordinatorViewModelInterface } from './onboarding_coordinator_view_model.svelte';
 
-  type Props = {
-    viewModel: OnboardingCoordinatorViewModelInterface;
-  };
+type Props = {
+  viewModel: OnboardingCoordinatorViewModelInterface;
+};
 
-  const { viewModel }: Props = $props();
+const { viewModel }: Props = $props();
 
-  // ── LPC preview sub-ViewModel ──────────────────────────────────────
+// ── LPC preview sub-ViewModel ──────────────────────────────────────
 
-  const previewVm: LpcPreviewViewModelInterface = getLpcPreviewViewModel({
-    className: 'LpcPreviewViewModel',
-  });
+const previewVm: LpcPreviewViewModelInterface = getLpcPreviewViewModel({
+  className: 'LpcPreviewViewModel',
+});
 
-  // Dispose the PixiJS context when leaving the appearance step
-  onDestroy(() => {
-    previewVm.dispose();
-  });
+// Dispose the PixiJS context when leaving the appearance step
+onDestroy(() => {
+  previewVm.dispose();
+});
 
-  // Reactively push recipes to the preview VM
-  $effect(() => {
-    void viewModel.lpcPreviewRecipes;
-    void viewModel.lpcRecipe;
-    void viewModel.paletteOverrides;
-    previewVm.setRecipes(viewModel.lpcPreviewRecipes);
-  });
+// Reactively push recipes to the preview VM
+$effect(() => {
+  void viewModel.lpcPreviewRecipes;
+  void viewModel.lpcRecipe;
+  void viewModel.paletteOverrides;
+  previewVm.setRecipes(viewModel.lpcPreviewRecipes);
+});
 
-  // Sync animation toggle (one-way: coordinator → preview)
-  let _prevPlaying = false;
-  $effect(() => {
-    void viewModel.previewPlaying;
-    // Only toggle if the coordinator changed the state
-    if (viewModel.previewPlaying !== _prevPlaying) {
-      previewVm.togglePlayback();
-      _prevPlaying = viewModel.previewPlaying;
-    }
-  });
+// Sync animation toggle (one-way: coordinator → preview)
+let _prevPlaying = false;
+$effect(() => {
+  void viewModel.previewPlaying;
+  // Only toggle if the coordinator changed the state
+  if (viewModel.previewPlaying !== _prevPlaying) {
+    previewVm.togglePlayback();
+    _prevPlaying = viewModel.previewPlaying;
+  }
+});
 
-  // ── Slot variant lookup helper ────────────────────────────────────
+// ── Slot variant lookup helper ────────────────────────────────────
 
-  /**
-   * Returns available variants for a given LPC slot from the generated catalog.
-   */
-  const getSlotVariants = (slotName: string): Array<{ assetId: string; label: string }> => {
-    const slotDef = GENERATED_LPC_SLOTS.find((s) => s.slot === slotName);
-    if (!slotDef) {
-      return [];
-    }
-    return slotDef.variants.map((v) => ({
-      assetId: v.assetId,
-      label: v.label,
-    }));
-  };
+/**
+ * Returns available variants for a given LPC slot from the generated catalog.
+ */
+const getSlotVariants = (slotName: string): Array<{ assetId: string; label: string }> => {
+  const slotDef = GENERATED_LPC_SLOTS.find((s) => s.slot === slotName);
+  if (!slotDef) {
+    return [];
+  }
+  return slotDef.variants.map((v) => ({
+    assetId: v.assetId,
+    label: v.label,
+  }));
+};
 
-  // Slots exposed in the onboarding UI
-  const editableSlots = ['body', 'hair', 'head', 'torso', 'legs'] as const;
-  const slotLabels: Record<string, string> = {
-    body: 'Body',
-    hair: 'Hair',
-    head: 'Head',
-    torso: 'Torso',
-    legs: 'Legs',
-  };
+// Slots exposed in the onboarding UI
+const editableSlots = ['body', 'hair', 'head', 'torso', 'legs'] as const;
+const slotLabels: Record<string, string> = {
+  body: 'Body',
+  hair: 'Hair',
+  head: 'Head',
+  torso: 'Torso',
+  legs: 'Legs',
+};
 
-  // ── Color picker state ─────────────────────────────────────────────
+// ── Color picker state ─────────────────────────────────────────────
 
-  const getPaletteHex = (slot: string): string => {
-    return viewModel.paletteOverrides[slot] ?? 'CCCCCC';
-  };
+const getPaletteHex = (slot: string): string => {
+  return viewModel.paletteOverrides[slot] ?? 'CCCCCC';
+};
 </script>
 
 <div class="space-y-6">
@@ -155,7 +155,7 @@
               'body',
               (e.target as HTMLInputElement).value.replace('#', ''),
             )}
-        />
+        >
       </div>
       <div class="form-control">
         <label for="lpc-color-hair" class="label py-1">
@@ -171,7 +171,7 @@
               'hair',
               (e.target as HTMLInputElement).value.replace('#', ''),
             )}
-        />
+        >
       </div>
     </div>
   </fieldset>
@@ -218,6 +218,6 @@
       value={viewModel.personalityTraits}
       oninput={(e) =>
         viewModel.setPersonalityTraits((e.target as HTMLInputElement).value)}
-    />
+    >
   </div>
 </div>
