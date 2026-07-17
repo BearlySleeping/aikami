@@ -92,7 +92,14 @@ The branch is already pushed. Create the PR NOW:
 - `draft=true` (or `draft=false` if the system prompt says `--ready`)
 - After creation, tell the user the PR URL.
 
-### Phase 3: Wait for the user
+### Phase 3: Wait for the user — or fix it yourself
+
+If the pipeline is blocked or the user asks you to fix issues:
+- You have `edit`, `bash`, and `moon_run_task` access in the worktree
+- Fix the issues, run `validate({test: true})`, commit + push
+- Then call `contract_review_decision` with `merge` or `approve`
+
+Otherwise, the user may ask you to:
 
 The user may ask you to:
 
