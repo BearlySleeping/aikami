@@ -692,29 +692,24 @@ export const runContractPipeline = async (options: {
         });
         if (stage === 'critique' && result.status === 'passed') {
           updateContractStatus({ contractPath: manifest.contractPath, status: 'approved' });
-          // Commit the approved contract to the worktree branch.
-          // This gives the PR a base commit with the contract file so the
-          // implementer's execution report and status updates are incremental
-          // diffs instead of a full-file addition — no merge conflicts.
+          // Sync the approved contract to the worktree for reading, then
+          // skip-worktree it so it's never committed to the PR branch.
+          // The contract only lives on main — never in PR branches.
           if (wPath && existsSync(manifest.contractPath)) {
             try {
               const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
               mkdirSync(dirname(wcp), { recursive: true });
               copyFileSync(manifest.contractPath, wcp);
-              commitAll({
-                cwd: wPath,
-                message: `docs(contracts): approve ${manifest.contractId}`,
-                authorName: 'Pi Agent',
-                authorEmail: 'agent@pi.internal',
-              });
+              const contractRelPath = relative(options.repoRoot, manifest.contractPath);
+              runGit(`update-index --skip-worktree '${contractRelPath}'`, { cwd: wPath });
               pipelineLog({
                 runId: manifest.runId,
                 cwd: options.repoRoot,
-                message: 'Approved contract committed to worktree branch.',
+                message: 'Contract synced to worktree (skip-worktree).',
               });
-            } catch (commitErr: unknown) {
-              const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
-              console.warn(`⚠️  Contract commit failed (non-fatal): ${msg.slice(0, 200)}`);
+            } catch (syncErr: unknown) {
+              const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+              console.warn(`⚠️  Contract sync failed (non-fatal): ${msg.slice(0, 200)}`);
             }
           }
           // Also commit + push the approved contract to main.
