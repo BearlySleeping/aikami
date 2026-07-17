@@ -1,0 +1,33 @@
+# packages/frontend/ai-gateway/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'ai-gateway'
+  - 'frontend'
+  - 'library'
+
+project:
+  name: 'frontend-ai-gateway'
+  description: 'Unified AI provider gateway — mode-resolving dispatch for text/image/voice across offline/byok/service.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+dependsOn:
+  - 'constants'
+  - 'schemas'
+  - 'types'
+  - 'logger'
+
+fileGroups:
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
