@@ -479,6 +479,56 @@ const _localServicesMock = () => ({
   }),
   SessionService: class {},
   campaignService: _createServiceStub(),
+  aiGatewayService: Object.assign(_createServiceStub(), {
+    detect: mock(async (capability: string) => {
+      const provider =
+        capability === 'image' ? 'comfyui' : capability === 'voice' ? 'kokoro' : 'ollama';
+      return {
+        capability,
+        available: true,
+        mode: 'offline',
+        provider,
+        detail: `${provider} reachable`,
+        checkedAt: new Date().toISOString(),
+      };
+    }),
+    resolveMode: mock((capability: string) => {
+      if (capability === 'text') {
+        return {
+          capability: 'text',
+          mode: 'offline',
+          provider: 'ollama',
+          model: 'llama3.2',
+          endpoint: 'http://localhost:11434/v1',
+        };
+      }
+      if (capability === 'image') {
+        return {
+          capability: 'image',
+          mode: 'offline',
+          provider: 'comfyui',
+          model: undefined,
+          endpoint: undefined,
+        };
+      }
+      if (capability === 'voice') {
+        return {
+          capability: 'voice',
+          mode: 'offline',
+          provider: 'kokoro',
+          model: undefined,
+          endpoint: undefined,
+        };
+      }
+      return {
+        capability,
+        mode: 'offline',
+        provider: 'ollama',
+        model: undefined,
+        endpoint: undefined,
+      };
+    }),
+  }),
   capabilityService: Object.assign(_createServiceStub(), {
     detect: mock(async () => ({
       isComplete: true,
@@ -489,7 +539,6 @@ const _localServicesMock = () => ({
     })),
     detectText: mock(async () => 'detected'),
     detectImage: mock(async () => 'detected'),
-    checkCloudTextConfig: mock(() => 'not_found'),
   }),
   gmPromptService: _createServiceStub(),
   messageBranchStore: _createServiceStub(),

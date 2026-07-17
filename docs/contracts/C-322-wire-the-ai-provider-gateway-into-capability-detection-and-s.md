@@ -8,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts`, `apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts` (detection config sourcing), and the C-230 Connection path in `config_service.svelte.ts` — make the C-320 gateway the single source of provider availability for the capability screen, boot diagnostics, and settings |
 | **Priority** | P0 — C-320 defines the gateway; this contract makes it the single source of provider state for the UI surfaces that currently duplicate detection logic (`capability_service.svelte.ts` still owns its own `_pingOllama()` / `checkCloudTextConfig()` fetch stack in parallel to the gateway's detection API) |
 | **Dependencies** | C-320 (status `implemented` — gateway + detection API exist in repo; not yet `verified`, see risk note in Open Questions → resolved), C-318 (status `implemented` — `capability_service` and capability screen exist), C-230 (completed — Connection CRUD in `config_service.svelte.ts` verified present), packages: `@aikami/frontend/ai-gateway`, `@aikami/types`, `@aikami/schemas` |
-| **Status** | verified |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none (service-layer rewiring; no player-facing behavior change beyond correctness) |
 | **Contract version** | 2.0.0 |
