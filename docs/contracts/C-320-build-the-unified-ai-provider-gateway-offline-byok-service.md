@@ -8,7 +8,7 @@
 | **Target** | New `packages/frontend/ai-gateway` package (moon id `frontend-ai-gateway`) + shared types/schemas — one `AiProviderGateway` call surface for text/image/voice across `offline` / `byok` / `service` modes |
 | **Priority** | P0 — every AI-dependent contract in the backlog (C-318, C-322, C-323, C-324, C-328, C-330, C-348…) needs one call surface that does not care whether it runs against a local model, a user's cloud key, or Aikami's hosted service |
 | **Dependencies** | C-056 (completed — hybrid text gateway logic in `packages/backend/ai` to absorb), C-133 (completed — flexible provider onboarding), C-134 (completed — inline provider setup), C-230 (completed — Connection abstraction in `config_service`), packages: `@aikami/schemas`, `@aikami/types`, `@aikami/backend/ai` |
-| **Status** | in_progress |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none (developer-facing gateway; player-facing surfaces are C-318/C-322) |
 | **Contract version** | 2.0.0 |
@@ -301,3 +301,70 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Built the unified AI Provider Gateway — a typed, mode-resolving dispatch layer for text/image/voice across `offline`/`byok`/`service` modes. Created `packages/frontend/ai-gateway` (new moon project `frontend-ai-gateway`), added shared gateway schemas/types to `packages/shared/`, migrated the client's `text_generation_service` and `ai_service` onto the gateway behind unchanged public interfaces, and relocated provider-ping logic into the gateway detection API. All gateway tests pass; client test suite shows zero new failures vs baseline (360 pass / 50 pre-existing env failures).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | 21 TypeBox schema tests pass; types derived via `Static<>` exported from `@aikami/schemas` and `@aikami/types` barrels; no gateway type defined in `apps/**` or the gateway package. |
+| AC-2 | ✅ | All 20 text_generation_service tests pass (up from 4 at baseline in main repo); streaming order, timeouts, abort propagation to upstream fetch, structured extraction + fallback, VRAM eviction params, OpenRouter headers preserved. ai_service routes through gateway `service`-mode adapter. Grep-verified: no provider/endpoint conditionals at call sites; resolution happens once via `onResolve` hook. |
+| AC-3 | ✅ | Image adapter delegates to `imageGenerationService` unchanged; voice adapter delegates to `ttsService.speak` (engine selection preserved inside tts_service). Both honor `AbortSignal` and normalize failures to `AiGatewayError`. Existing image_generation_service suite (20/20) green. |
+| AC-4 | ✅ | Shared adapter-contract suite runs against every registered adapter family (offline/byok text, service stub, image, voice) with synthetic SSE streams; all failures surface as `AiGatewayException`. `resolveMode` throws `mode_unavailable` when `serviceActivated` is false; explicit `service` dispatch with no registered adapter also throws `mode_unavailable`. |
+| AC-5 | ✅ | Detection parity tests: text (cloud config → configured; proxy → native fallback under one shared deadline; not_found within 3s), image (config → configured; ComfyUI ping → detected), voice (real engine status, optimistic-convertible). `toDetectionStatus` converts results to the existing `DetectionStatus` union. Hanging detectors time out within budget; throwing detectors yield unavailable results, never crashes; checks run independently. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/ai_gateway.ts` | TypeBox schemas: AiMode, AiCapability, AiGatewayErrorCode, AiGatewayError, AiModeResolution, AiDetectionResult, AiChatMessage, AiGatewayModeConfig |
+| `packages/shared/schemas/tests/ai_gateway.test.ts` | AC-1 schema validation tests (21 cases) |
+| `packages/shared/types/src/lib/ai_gateway.ts` | `Static<>`-derived types from gateway schemas |
+| `packages/frontend/ai-gateway/` (moon.yml, package.json, tsconfig.json, README.md) | New moon project `frontend-ai-gateway`, alias `@aikami/frontend/ai-gateway` |
+| `packages/frontend/ai-gateway/src/lib/gateway.ts` | Default AiProviderGateway (dispatch, cancelAll, bounded detect, error normalization) |
+| `packages/frontend/ai-gateway/src/lib/gateway_types.ts` | Call surface + adapter contracts (`AiTextAdapter`, `AiImageAdapter`, `AiVoiceAdapter`) |
+| `packages/frontend/ai-gateway/src/lib/adapter_registry.ts` | (capability, mode) adapter registry |
+| `packages/frontend/ai-gateway/src/lib/mode_resolver.ts` | Config-backed mode resolution with service guard |
+| `packages/frontend/ai-gateway/src/lib/errors.ts` | `AiGatewayException` + normalization (`toAiGatewayError`, HTTP-status mapping, retryability) |
+| `packages/frontend/ai-gateway/src/lib/sse.ts` | Chat-completions SSE reader (relocated; first-chunk/idle timeouts) |
+| `packages/frontend/ai-gateway/src/lib/structured.ts` | Strict-schema compilation w/ caching, JSON sanitization, TypeBox validation |
+| `packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts` | offline + byok text transport (relocated from text_generation_service) |
+| `packages/frontend/ai-gateway/src/lib/text_adapter_service.ts` | service-mode adapter over hosted callable + deterministic stub |
+| `packages/frontend/ai-gateway/src/lib/image_adapter.ts` | Delegating image adapter + `raceWithAbort` |
+| `packages/frontend/ai-gateway/src/lib/voice_adapter.ts` | Delegating voice adapter |
+| `packages/frontend/ai-gateway/src/lib/detection.ts` | Detection API (Ollama proxy/native, ComfyUI, Kokoro) + `toDetectionStatus` |
+| `packages/frontend/ai-gateway/tests/{helpers,adapter_contract.test,text_adapters.test,image_voice_adapters.test,detection.test}.ts` | 56 tests incl. synthetic SSE mocks and mixed-mode fixture |
+| `apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts` | Client gateway singleton (BaseFrontendClass) — composes core with client adapters/detectors, exposed via `$services` |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Export `./lib/ai_gateway.ts` |
+| `packages/shared/types/src/index.ts` | Export `./lib/ai_gateway.ts` |
+| `.moon/workspace.yml` | Registered `frontend-ai-gateway` |
+| `apps/frontend/client/svelte.config.js` | Added `@aikami/frontend/ai-gateway` aliases |
+| `apps/frontend/client/tsconfig.test.json` | Added gateway paths for bun test |
+| `apps/frontend/client/src/lib/services/ai/text_generation_service.svelte.ts` | Thin gateway consumer; public interface (`streamChat`/`extractStructure`/`cancelAll`) and diagnostics globals preserved; provider internals removed (667 lines → delegation) |
+| `apps/frontend/client/src/lib/services/ai/ai_service.svelte.ts` | Routes `sendMessageToAI`/`createPersona` through gateway service-mode adapter; undefined-on-error preserved |
+| `apps/frontend/client/src/lib/services/index.ts` | Barrel export for `ai_gateway_service` |
+| `apps/frontend/client/src/lib/services/ai/text_generation_service.test.ts` | Fixed hardcoded main-repo absolute mock paths → relative (tests now run in worktrees); merged image-state default to prevent cross-file singleton pollution |
+
+### Deviations from Spec
+1. **Cloud endpoint defaults restored**: current `resolveChatUrl` had lost well-known cloud chat endpoints (openai/openrouter/deepseek), which is why 16/20 C-080 tests failed at baseline even in the main repo. The gateway adapter injects defaults from the existing `PROVIDER_MODEL_FETCH` registry (`chatTestUrl`), restoring the C-080-specified behavior. No Amendment needed — AC-2 explicitly requires these suites to pass.
+2. **`OLLAMA_VRAM_EVICTION_PARAMS` duplicated** in the gateway package (contract watch point explicitly allows this) because `@aikami/backend/ai` is not aliased in the client build. Moving it to `@aikami/constants` is noted as preferred future work (out of scope).
+3. **`generateVoice` result `audio` is optional**: the existing Kokoro path (`ttsService.speak`) plays audio through the client pipeline and never exposes raw buffers; forcing a required `audio` field would have required re-implementing engine selection (forbidden by AC-3 watch point). Adapters that do produce raw audio return it.
+4. **Explicit `mode` override on `generateText`**: `ai_service` must keep calling the Firebase callable (current behavior) while `service` mode remains un-activated for resolution. The gateway therefore accepts an explicit `mode` override that dispatches to a registered adapter directly; `resolveMode` selection of `service` stays guarded with `mode_unavailable` (AC-4 tests cover both paths).
+5. **Baseline test environment**: the worktree had no `node_modules` (ran `bun install`) and lacked generated paraglide i18n files (copied from main repo; gitignored). Client baseline recorded after install: 279 pass / 101 fail (pre-existing, mostly env/mock issues). Post-implementation: 360 pass / 50 fail, zero new failures.
+
+### Test Results
+- Unit (schemas): 21/21 (0 failures)
+- Unit (frontend-ai-gateway): 56/56 (0 failures)
+- Unit (client): 360 pass / 50 fail — 0 new failures vs baseline (101 → 50; 16 text_generation_service failures eliminated)
+- Typecheck: schemas ✅, types ✅, frontend-ai-gateway ✅, client ✅ (0 errors, 1 pre-existing warning)
+- Build: client:build ✅
+- Dev-server smoke: vite dev serves 200, no errors in log
+- Visual: N/A — headless service layer
+- E2E: N/A per Evidence Matrix (C-322/C-318 own detection UX surfaces)
+- Live-Ollama integration check: not executed in pipeline environment (no herdr); adapter paths covered by unit suites — verifier may exercise with a running Ollama.
