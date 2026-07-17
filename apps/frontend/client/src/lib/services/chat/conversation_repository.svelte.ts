@@ -1,8 +1,14 @@
-// apps/frontend/client/src/lib/services/media/conversation_repository.svelte.ts
+// apps/frontend/client/src/lib/services/chat/conversation_repository.svelte.ts
+//
+// Turso/libSQL-backed repository for persisting NPC dialogue turns.
+// Writes player/NPC messages to the chat_history table via LocalDatabaseInterface.
+// Contract: C-321 Migrate Local Persistence to Turso
+
+import { getLocalDatabase } from '@aikami/frontend/repositories';
 import type { ConversationMessage } from './context_builder.ts';
 
 // ---------------------------------------------------------------------------
-// ConversationRepositoryAdapter — contract for persisting dialogue turns
+// Types
 // ---------------------------------------------------------------------------
 
 /** Options for saving a completed dialogue turn. */
@@ -18,11 +24,11 @@ export type SaveDialogueTurnOptions = {
 };
 
 /**
- * Minimal contract for persisting completed dialogue turns.
+ * Contract for persisting completed dialogue turns.
  *
  * The Stream Orchestrator calls this after a text stream completes
- * successfully.  Implementations forward the data to the underlying
- * database layer (Firestore, IndexedDB, mock, etc.).
+ * successfully. Implementations forward the data to the underlying
+ * database layer.
  */
 export type ConversationRepositoryInterface = {
   /**
@@ -32,3 +38,37 @@ export type ConversationRepositoryInterface = {
    */
   saveDialogueTurn(options: SaveDialogueTurnOptions): Promise<void>;
 };
+
+// ---------------------------------------------------------------------------
+// Turso-backed Implementation
+// ---------------------------------------------------------------------------
+
+/**
+ * Local SQLite-backed conversation repository.
+ *
+ * Writes dialogue turns to the `chat_history` table in the local
+ * Turso/libSQL database. The `session_id` column is set to the chatId
+ * for future session-scoped queries.
+ */
+class TursoConversationRepository implements ConversationRepositoryInterface {
+  /** @inheritdoc */
+  async saveDialogueTurn(options: SaveDialogueTurnOptions): Promise<void> {
+    const db = await getLocalDatabase();
+
+    // Persist player message
+    await db.execute({
+      sql: `INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)`,
+      args: [options.chatId, options.playerMessage.role, options.playerMessage.content],
+    });
+
+    // Persist NPC response
+    await db.execute({
+      sql: `INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)`,
+      args: [options.chatId, options.npcMessage.role, options.npcMessage.content],
+    });
+  }
+}
+
+/** Shared singleton instance. */
+export const conversationRepository: ConversationRepositoryInterface =
+  new TursoConversationRepository();
