@@ -230,6 +230,15 @@
         "uuid": "14.0.1",
       },
     },
+    "packages/frontend/ai-gateway": {
+      "name": "@aikami/frontend-ai-gateway",
+      "dependencies": {
+        "@aikami/constants": "workspace:*",
+        "@aikami/logger": "workspace:*",
+        "@aikami/schemas": "workspace:*",
+        "@aikami/types": "workspace:*",
+      },
+    },
     "packages/frontend/components": {
       "name": "@aikami/frontend-components",
       "version": "0.0.1",
@@ -300,6 +309,7 @@
         "@aikami/logger": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
+        "@sqlite.org/sqlite-wasm": "3.48.0-build4",
         "@tursodatabase/database": "0.7.0",
         "firebase": "12.16.0",
       },
@@ -434,6 +444,8 @@
     "@aikami/e2e": ["@aikami/e2e@workspace:apps/e2e"],
 
     "@aikami/firebase": ["@aikami/firebase@workspace:apps/backend/firebase"],
+
+    "@aikami/frontend-ai-gateway": ["@aikami/frontend-ai-gateway@workspace:packages/frontend/ai-gateway"],
 
     "@aikami/frontend-components": ["@aikami/frontend-components@workspace:packages/frontend/components"],
 

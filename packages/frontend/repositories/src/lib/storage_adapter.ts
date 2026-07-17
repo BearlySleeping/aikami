@@ -92,14 +92,35 @@ export type LocalDatabaseInterface = {
  * Applies to both Tauri (native) and browser (WASM) backends.
  */
 export const AIKAMI_SCHEMA_DDL: readonly string[] = [
-  // ── Game saves ──────────────────────────────────────────────────────
+  // ── Campaigns (C-321) ──────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+
+  // ── Capability profile (C-321) ─────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS capability_profile (
+    campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id),
+    text_provider INTEGER NOT NULL,
+    image_provider INTEGER NOT NULL,
+    voice_provider INTEGER NOT NULL
+  )`,
+
+  // ── Meta key/value store (C-321) ───────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )`,
+
+  // ── Game saves (C-321 realigned to SaveDocument) ───────────────────
   `CREATE TABLE IF NOT EXISTS saves (
     id TEXT PRIMARY KEY,
-    character_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    snapshot_json TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    slot_id TEXT NOT NULL,
+    campaign_id TEXT,
+    timestamp INTEGER NOT NULL,
+    map_name TEXT NOT NULL,
+    payload TEXT NOT NULL
   )`,
 
   // ── Characters ─────────────────────────────────────────────────────
