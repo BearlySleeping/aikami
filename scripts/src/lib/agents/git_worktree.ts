@@ -209,31 +209,17 @@ source_env ${options.repoRoot}
     // direnv may not be installed — not fatal.
   }
 
-  // 🔴 Safety: exclude workspace-local config files from git tracking.
+  // 🔴 Safety: mark workspace-local and auto-generated files as
+  // skip-worktree so git ignores modifications. Git worktrees use
+  // a `.git` FILE (not directory) so .git/info/exclude is unavailable.
+  // skip-worktree is the ONLY reliable mechanism here.
   try {
-    const excludePath = join(wsDir, '.git', 'info', 'exclude');
-    const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf-8') : '';
-    const entries = [
-      '/.envrc',
-      '/.pi/settings.json',
-      '/.context/llms.txt',
-      '/docs/contracts/PROGRESS.md',
-      '/docs/contracts/PROMOTION.md',
-    ];
-    const missing = entries.filter((e) => !existing.includes(e));
-    if (missing.length > 0) {
-      appendFileSync(
-        excludePath,
-        `\n# contract pipeline workspace — never commit\n${missing.join('\n')}\n`,
-      );
-    }
-    // Also mark as skip-worktree for already-tracked files.
     runGit(
       'update-index --skip-worktree .envrc .pi/settings.json .context/llms.txt docs/contracts/PROGRESS.md docs/contracts/PROMOTION.md',
       { cwd: wsDir },
     );
   } catch {
-    // Non-fatal — the workspace may not have .git/info/exclude writable.
+    // Non-fatal.
   }
 
   // Symlink .pi/npm from root so pi extensions are available.
