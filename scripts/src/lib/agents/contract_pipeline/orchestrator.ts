@@ -702,6 +702,31 @@ export const runContractPipeline = async (options: {
         });
         if (stage === 'critique' && result.status === 'passed') {
           updateContractStatus({ contractPath: manifest.contractPath, status: 'approved' });
+          // Commit the approved contract to the worktree branch.
+          // This gives the PR a base commit with the contract file so the
+          // implementer's execution report and status updates are incremental
+          // diffs instead of a full-file addition — no merge conflicts.
+          if (wPath && existsSync(manifest.contractPath)) {
+            try {
+              const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
+              mkdirSync(dirname(wcp), { recursive: true });
+              copyFileSync(manifest.contractPath, wcp);
+              commitAll({
+                cwd: wPath,
+                message: `docs(contracts): approve ${manifest.contractId}`,
+                authorName: 'Pi Agent',
+                authorEmail: 'agent@pi.internal',
+              });
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: 'Approved contract committed to worktree branch.',
+              });
+            } catch (commitErr: unknown) {
+              const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
+              console.warn(`⚠️  Contract commit failed (non-fatal): ${msg.slice(0, 200)}`);
+            }
+          }
         }
 
         if (stage === 'verify') {
