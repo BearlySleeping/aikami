@@ -455,6 +455,7 @@ export const runContractPipeline = async (options: {
   fresh?: boolean;
   dryRun?: boolean;
   ready?: boolean;
+  yolo?: boolean;
   onReady?: (manifest: RunManifest) => void;
   adapterFactory?: (opts: {
     repoRoot: string;
@@ -664,6 +665,27 @@ export const runContractPipeline = async (options: {
 
         if (stage === 'implement' && result.status === 'passed') {
           updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+          // Commit implementer changes to the worktree branch.
+          // The verifier runs next and expects a clean git state — untracked
+          // implementation files would otherwise be flagged as missing.
+          if (wPath) {
+            try {
+              commitAll({
+                cwd: wPath,
+                message: `Feat: Contract ${manifest.contractId} — implementation`,
+                authorName: 'Pi Agent',
+                authorEmail: 'agent@pi.internal',
+              });
+              pipelineLog({
+                runId: manifest.runId,
+                cwd: options.repoRoot,
+                message: 'Implementer changes committed to worktree.',
+              });
+            } catch (commitErr: unknown) {
+              const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
+              console.warn(`⚠️  Implementer commit failed (non-fatal — reconcile will retry): ${msg.slice(0, 200)}`);
+            }
+          }
         }
         result = enforceStageStatus({ stage, result, contractPath: manifest.contractPath });
 
@@ -802,6 +824,7 @@ export const runContractPipeline = async (options: {
                 prUrl: undefined,
                 headBranch,
                 baseBranch,
+                ready: options.ready,
               });
           manifest.reviewPaneId = await adapter.startReview({
             prompt,

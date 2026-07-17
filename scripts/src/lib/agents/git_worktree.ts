@@ -37,16 +37,17 @@ const isGitExecError = (err: unknown): err is GitExecError => err instanceof Err
  * backoff: 100ms → 200ms → 400ms). Throws on any other failure.
  *
  * @param command  git subcommand and args (e.g. `"rev-parse HEAD"`)
- * @param options  cwd
+ * @param options  cwd, env
  */
-export const runGit = (command: string, options?: { cwd?: string }): string => {
+export const runGit = (command: string, options?: { cwd?: string; env?: Record<string, string> }): string => {
   const cmd = `git ${command}`;
 
-  const opts = {
+  const opts: { encoding: 'utf-8'; stdio: ['pipe', 'pipe', 'pipe']; cwd?: string; env?: Record<string, string> } = {
     encoding: 'utf-8' as const,
     stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
     cwd: options?.cwd,
   };
+  if (options?.env) opts.env = { ...process.env as Record<string, string>, ...options.env };
 
   const maxRetries = 3;
   let lastError: unknown;
@@ -213,6 +214,8 @@ source_env ${options.repoRoot}
         `\n# contract pipeline workspace — never commit\n${missing.join('\n')}\n`,
       );
     }
+    // Also mark as skip-worktree for already-tracked files.
+    runGit('update-index --skip-worktree .envrc .pi/settings.json', { cwd: wsDir });
   } catch {
     // Non-fatal — the workspace may not have .git/info/exclude writable.
   }
@@ -349,12 +352,15 @@ export const commitAll = (options: {
       ? `-c "user.name=${options.authorName}" -c "user.email=${options.authorEmail}"`
       : '';
 
+  // Suppress knowledge:sync pre-commit hooks in worktrees.
+  const env = { CONTRACT_PIPELINE_WORKTREE: '1' };
+
   // Stage all changes including untracked files.
-  runGit(`${envFlags} add -A`.trim(), { cwd: options.cwd });
+  runGit(`${envFlags} add -A`.trim(), { cwd: options.cwd, env });
 
   // Check if there's anything to commit.
   try {
-    runGit(`${envFlags} diff --cached --quiet`.trim(), { cwd: options.cwd });
+    runGit(`${envFlags} diff --cached --quiet`.trim(), { cwd: options.cwd, env });
     // No changes — return current HEAD without committing.
     return getGitHeadCommit(options.cwd);
   } catch {
@@ -363,13 +369,13 @@ export const commitAll = (options: {
 
   const commitCmd = `${envFlags} commit -m "${options.message.replace(/"/g, '\\"')}"`.trim();
   try {
-    runGit(commitCmd, { cwd: options.cwd });
+    runGit(commitCmd, { cwd: options.cwd, env });
   } catch (firstErr: unknown) {
     const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
     console.warn(`⚠️  Commit failed (likely pre-commit hook): ${msg.slice(0, 200)}`);
     console.warn('   Retrying with --no-verify...');
     try {
-      runGit(`${commitCmd} --no-verify`, { cwd: options.cwd });
+      runGit(`${commitCmd} --no-verify`, { cwd: options.cwd, env });
     } catch (secondErr: unknown) {
       const msg2 = secondErr instanceof Error ? secondErr.message : String(secondErr);
       throw new Error(`Commit failed even with --no-verify: ${msg2}`);
