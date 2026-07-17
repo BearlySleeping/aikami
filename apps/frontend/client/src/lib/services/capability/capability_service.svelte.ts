@@ -1,50 +1,35 @@
 // apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts
 //
-// Singleton service that detects available AI providers at launch.
-// Extracts shared provider-ping logic from BootDiagnosticsViewModel
-// so both the pre-game capability screen and in-game diagnostics
-// use the same detection backend.
-// Contract: C-318
+// Singleton service that shapes AI capability snapshots for the pre-game
+// capability screen and in-game boot diagnostics. Every provider
+// availability decision is delegated to the AI Provider Gateway (C-320) —
+// this service only maps gateway detection results into the existing
+// CapabilitySnapshot shape.
+// Contracts: C-318 (origin), C-322 (gateway delegation)
 
+import { toDetectionStatus } from '@aikami/frontend/ai-gateway';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { CapabilitySnapshot, DetectionStatus } from '@aikami/types';
-import { aiSettingsService } from '$services';
-
-// ── Constants ──────────────────────────────────────────────────────────
-
-const OLLAMA_PROXY_PATH = '/api/text/' as const;
-const OLLAMA_LOCAL_TAGS = 'http://localhost:11434/api/tags' as const;
-const PING_TIMEOUT_MS = 3000;
+import type {
+  AiCapability,
+  AiDetectionResult,
+  CapabilitySnapshot,
+  DetectionStatus,
+} from '@aikami/types';
+import { aiGatewayService } from '$services';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type CapabilityServiceInterface = BaseFrontendClassInterface & {
   /** Runs full capability detection: text + image + voice. */
   detect(): Promise<CapabilitySnapshot>;
-  /** Pings text providers only (Ollama + cloud config check). */
+  /** Detects text AI availability via the gateway. */
   detectText(): Promise<DetectionStatus>;
-  /** Pings image providers (ComfyUI proxy). */
+  /** Detects image AI availability via the gateway. */
   detectImage(): Promise<DetectionStatus>;
-  /** Checks whether a cloud text provider is configured. */
-  checkCloudTextConfig(): DetectionStatus;
-};
-
-// ── Helpers ────────────────────────────────────────────────────────────
-
-/** Performs a fetch with an abort timeout. */
-const fetchWithTimeout = async (url: string, timeoutMs: number): Promise<Response> => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { method: 'GET', signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 };
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -55,129 +40,81 @@ class CapabilityService
 {
   /**
    * Runs full capability detection across all provider types.
-   * Individual checks are independent — a hanging text check does not
-   * block image/voice results.
+   * The three gateway checks run concurrently — a hanging text check does
+   * not block image/voice results. Individual gateway failures degrade to
+   * an 'error' status; the snapshot itself always completes.
    */
   async detect(): Promise<CapabilitySnapshot> {
-    const [textStatus, imageStatus, voiceStatus] = await Promise.all([
-      this.detectText(),
-      this.detectImage(),
-      Promise.resolve('detected' as DetectionStatus), // Voice is always available (Kokoro WebGPU)
+    const [textResult, imageResult, voiceResult] = await Promise.all([
+      this._safeDetect('text'),
+      this._safeDetect('image'),
+      this._safeDetect('voice'),
     ]);
 
-    const isComplete = true;
-    const providerId = textStatus === 'detected' ? 'ollama' : undefined;
-    const modelName = textStatus === 'detected' ? this._readEnv('PUBLIC_OLLAMA_MODEL') : undefined;
+    const textStatus = this._toStatus(textResult);
+    const imageStatus = this._toStatus(imageResult);
+    const voiceStatus = this._toStatus(voiceResult);
+
+    const providerId = textResult?.available ? textResult.provider : undefined;
+    const modelName = textResult?.available ? this._resolveTextModel() : undefined;
 
     return {
-      isComplete,
+      isComplete: true,
       textStatus,
       textProviderId: providerId,
       textModelName: modelName,
       imageStatus,
       voiceStatus,
       detectedAt: new Date().toISOString(),
-      summary: this._buildSummary({ textStatus, imageStatus, voiceStatus, providerId, modelName }),
+      summary: this._buildSummary({ textStatus, providerId, modelName }),
     };
   }
 
-  /**
-   * Detects text AI availability.
-   *
-   * Order:
-   * 1. Check for configured cloud connections (vault + env).
-   * 2. Ping Ollama via Vite dev proxy (primary path, same-origin → no CORS).
-   * 3. Fallback: native fetch to localhost:11434/api/tags (CORS-limited).
-   */
+  /** Detects text AI availability via the gateway (Ollama ping + cloud config). */
   async detectText(): Promise<DetectionStatus> {
-    // Check for existing cloud config first
-    const cloudStatus = this.checkCloudTextConfig();
-    if (cloudStatus === 'configured') {
-      return cloudStatus;
-    }
-
-    // Try Ollama via proxy
-    const ollamaStatus = await this._pingOllama();
-    return ollamaStatus;
+    return this._toStatus(await this._safeDetect('text'));
   }
 
-  /**
-   * Detects image AI availability via ComfyUI proxy.
-   * Returns 'detected' if already configured via aiSettingsService,
-   * otherwise pings the Vite dev proxy.
-   */
+  /** Detects image AI availability via the gateway (ComfyUI ping + config). */
   async detectImage(): Promise<DetectionStatus> {
-    try {
-      const { imageProvider } = aiSettingsService;
-      if (imageProvider.endpoint || imageProvider.model) {
-        return 'configured';
-      }
-    } catch {
-      // Fall through to proxy check
-    }
-
-    try {
-      const response = await fetchWithTimeout('/api/image/object_info', PING_TIMEOUT_MS);
-      return response.ok ? 'detected' : 'not_found';
-    } catch {
-      return 'not_found';
-    }
-  }
-
-  /**
-   * Checks whether a cloud text provider is configured.
-   * Returns 'configured' if an API key or endpoint+model exists.
-   */
-  checkCloudTextConfig(): DetectionStatus {
-    try {
-      const { textProvider } = aiSettingsService;
-      if (textProvider.apiKey || (textProvider.endpoint && textProvider.model)) {
-        return 'configured';
-      }
-      return 'not_found';
-    } catch {
-      return 'not_found';
-    }
+    return this._toStatus(await this._safeDetect('image'));
   }
 
   // ── Private ──────────────────────────────────────────────────────────
 
   /**
-   * Pings Ollama via Vite dev proxy first, then native fetch as fallback.
-   * Both attempts share the aggregate PING_TIMEOUT_MS deadline.
+   * Runs a gateway detection, degrading any thrown error to `undefined`
+   * so detection failures never propagate to ViewModels.
    */
-  private async _pingOllama(): Promise<DetectionStatus> {
-    const deadline = Date.now() + PING_TIMEOUT_MS;
-
-    // Primary: Vite dev proxy (same-origin, no CORS issues)
+  private async _safeDetect(capability: AiCapability): Promise<AiDetectionResult | undefined> {
     try {
-      const remaining = Math.max(0, deadline - Date.now());
-      const response = await fetchWithTimeout(OLLAMA_PROXY_PATH, remaining);
-      if (response.ok) {
-        this.debug('_pingOllama:proxy-ok');
-        return 'detected';
-      }
-    } catch {
-      this.debug('_pingOllama:proxy-failed');
+      return await aiGatewayService.detect(capability);
+    } catch (error) {
+      this.debug('_safeDetect:failed', { capability, error: String(error) });
+      return undefined;
     }
+  }
 
-    // Fallback: native fetch to localhost (CORS-limited in browser,
-    // works in Tauri / Electron due to relaxed CSP)
+  /** Maps a gateway detection result (or a detection failure) to DetectionStatus. */
+  private _toStatus(result: AiDetectionResult | undefined): DetectionStatus {
+    if (!result) {
+      return 'error';
+    }
+    return toDetectionStatus(result);
+  }
+
+  /**
+   * Resolves the active text model name from the gateway. Resolution
+   * throws when nothing is configured — a valid, non-exceptional outcome
+   * that degrades to `undefined`.
+   */
+  private _resolveTextModel(): string | undefined {
     try {
-      const remaining = Math.max(0, deadline - Date.now());
-      const response = await fetchWithTimeout(OLLAMA_LOCAL_TAGS, remaining);
-      if (response.ok) {
-        const body = (await response.json()) as { models?: unknown[] };
-        const modelCount = Array.isArray(body.models) ? body.models.length : 0;
-        this.debug('_pingOllama:native-ok', { modelCount });
-        return 'detected';
-      }
+      const resolution = aiGatewayService.resolveMode('text');
+      return resolution.model && resolution.model.length > 0 ? resolution.model : undefined;
     } catch {
-      // CORS rejection or connection refused — expected in browser mode
-      this.debug('_pingOllama:native-failed');
+      return undefined;
     }
-
-    return 'not_found';
   }
 
   /**
@@ -185,8 +122,6 @@ class CapabilityService
    */
   private _buildSummary(options: {
     textStatus: DetectionStatus;
-    imageStatus: DetectionStatus;
-    voiceStatus: DetectionStatus;
     providerId?: string;
     modelName?: string;
   }): string {
@@ -208,16 +143,6 @@ class CapabilityService
         return 'Detection skipped';
       default:
         return 'No AI providers detected — offline demo available';
-    }
-  }
-
-  /** Safely reads a Vite PUBLIC_* env var. Returns undefined in tests. */
-  private _readEnv(name: string): string | undefined {
-    try {
-      const value = (import.meta.env as Record<string, string | undefined>)[name];
-      return value && value.length > 0 ? value : undefined;
-    } catch {
-      return undefined;
     }
   }
 }

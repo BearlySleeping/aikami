@@ -1,41 +1,59 @@
 // apps/frontend/client/src/lib/services/capability/capability_service.test.ts
 //
-// Unit tests for CapabilityService — provider detection logic.
-// Contract: C-318 AC-1 (detection completes within 3s), AC-3 (local AI detection)
+// Unit tests for CapabilityService — gateway-backed detection mapping.
+// All provider availability decisions come from the mocked AI Provider
+// Gateway (C-320); no fetch stubs and no private ping logic remain.
+// Contract: C-322 AC-1 (gateway delegation), AC-4 (shared gateway mock)
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/capability/capability_service.test.ts
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
 
 // $state is polyfilled globally via test_preload.ts
 
-// ── Mocks ──────────────────────────────────────────────────────────────
+// ── Shared gateway mock ────────────────────────────────────────────────
+// The CapabilityService imports aiGatewayService from $services. Mock the
+// barrel with a mutable gateway surface so each test controls detection
+// results without stubbing globalThis.fetch.
 
-// Mock the aiSettingsService and capabilityService barrel paths to avoid
-// the full $services import chain. The CapabilityService module imports
-// aiSettingsService from $services.
+/** Builds a default per-capability detection result. */
+const _availableResult = (capability: AiCapability): AiDetectionResult => {
+  const provider = capability === 'text' ? 'ollama' : capability === 'image' ? 'comfyui' : 'kokoro';
+  return {
+    capability,
+    available: true,
+    mode: 'offline',
+    provider,
+    detail: `${provider} reachable`,
+    checkedAt: new Date().toISOString(),
+  };
+};
 
-const _AI_SETTINGS_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/.pi/workspaces/run-mrkquinj-c-318/apps/frontend/client/src/lib/services/settings/ai_settings.svelte.ts';
+/** Builds an unavailable detection result for a capability. */
+const _unavailableResult = (capability: AiCapability): AiDetectionResult => ({
+  capability,
+  available: false,
+  detail: 'No provider reachable or configured',
+  checkedAt: new Date().toISOString(),
+});
 
-let _mockTextConfig = { apiKey: '', endpoint: '', model: '' };
-let _mockImageConfig = { apiKey: '', endpoint: '', model: '' };
+let _detectImpl: (capability: AiCapability) => Promise<AiDetectionResult>;
+let _resolveModeImpl: (capability: AiCapability) => AiModeResolution;
 
-mock.module(_AI_SETTINGS_PATH, () => ({
-  aiSettingsService: {
-    get textProvider() {
-      return { ..._mockTextConfig };
-    },
-    get imageProvider() {
-      return { ..._mockImageConfig };
-    },
-  },
-}));
-
-// ── Mock $services comprehensively to avoid clobbering preload stubs ──
-// Include all exports the preload provides, overriding only aiSettingsService
+const _resetGateway = (): void => {
+  _detectImpl = async (capability) => _availableResult(capability);
+  _resolveModeImpl = (capability) => ({
+    capability,
+    mode: 'offline',
+    provider: 'ollama',
+    model: 'llama3.2',
+    endpoint: 'http://localhost:11434/v1',
+  });
+};
+_resetGateway();
 
 const _createSvcStub = () => {
   const handler: ProxyHandler<Record<string, unknown>> = {
@@ -51,61 +69,11 @@ const _createSvcStub = () => {
 
 mock.module('$services', () => ({
   ..._createSvcStub(),
-  aiSettingsService: {
-    get textProvider() {
-      return { ..._mockTextConfig };
-    },
-    get imageProvider() {
-      return { ..._mockImageConfig };
-    },
+  aiGatewayService: {
+    detect: (capability: AiCapability) => _detectImpl(capability),
+    resolveMode: (capability: AiCapability) => _resolveModeImpl(capability),
   },
 }));
-
-// ── Fetch mock ─────────────────────────────────────────────────────────
-
-type MockFetchResponse = { ok: boolean; status: number; json?: () => Promise<unknown> };
-
-let _fetchImpl:
-  | ((input: string | URL | Request, init?: RequestInit) => Promise<MockFetchResponse>)
-  | null = null;
-
-globalThis.fetch = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-  if (_fetchImpl) {
-    return _fetchImpl(input, init) as Promise<Response>;
-  }
-  return Promise.reject(new Error('No fetch mock configured'));
-}) as typeof globalThis.fetch;
-
-/** Sets the mock fetch implementation for a test. */
-const mockFetch = (impl: (url: string) => MockFetchResponse | Error) => {
-  _fetchImpl = async (input: string | URL | Request) => {
-    const url = typeof input === 'string' ? input : input.toString();
-    const result = impl(url);
-    if (result instanceof Error) {
-      throw result;
-    }
-    return result;
-  };
-};
-
-/** Default: all endpoints return success. */
-const mockFetchOnline = () => {
-  mockFetch((url) => {
-    if (
-      url.includes('/api/text/') ||
-      url.includes('/api/image/object_info') ||
-      url.includes('localhost:11434')
-    ) {
-      return { ok: true, status: 200 };
-    }
-    return { ok: true, status: 200 };
-  });
-};
-
-/** All endpoints return error. */
-const mockFetchOffline = () => {
-  mockFetch(() => new Error('Connection refused'));
-};
 
 // ── Import module under test ──────────────────────────────────────────
 
@@ -115,159 +83,180 @@ const { capabilityService } = await import('./capability_service.svelte');
 
 describe('CapabilityService', () => {
   beforeEach(() => {
-    _mockTextConfig = { apiKey: '', endpoint: '', model: '' };
-    _mockImageConfig = { apiKey: '', endpoint: '', model: '' };
-    mockFetchOnline();
+    _resetGateway();
   });
 
-  afterEach(() => {
-    _fetchImpl = null;
-  });
+  // ── AC-1: text detection maps gateway results ───────────────────────
 
-  // ── AC-1: Detection resolves within expected values ─────────────────
-
-  test('detectText returns not_found when no providers configured and Ollama unreachable', async () => {
-    mockFetchOffline();
-    const result = await capabilityService.detectText();
-    expect(result).toBe('not_found');
-  });
-
-  test('detectText returns detected when Ollama proxy responds', async () => {
-    mockFetchOnline();
+  test('detectText returns detected when gateway reports offline availability', async () => {
     const result = await capabilityService.detectText();
     expect(result).toBe('detected');
   });
 
-  test('detectText returns configured when cloud provider has API key', async () => {
-    _mockTextConfig = { apiKey: 'sk-test', endpoint: '', model: '' };
+  test('detectText returns configured when gateway reports byok availability', async () => {
+    _detectImpl = async () => ({
+      capability: 'text',
+      available: true,
+      mode: 'byok',
+      provider: 'cloud',
+      detail: 'Cloud text provider configured',
+      checkedAt: new Date().toISOString(),
+    });
     const result = await capabilityService.detectText();
     expect(result).toBe('configured');
   });
 
-  test('detectText returns configured when cloud provider has endpoint+model', async () => {
-    _mockTextConfig = { apiKey: '', endpoint: 'https://api.openai.com', model: 'gpt-4' };
-    const result = await capabilityService.detectText();
-    expect(result).toBe('configured');
-  });
-
-  // ── AC-1: Image detection ───────────────────────────────────────────
-
-  test('detectImage returns detected when ComfyUI proxy responds', async () => {
-    mockFetchOnline();
-    const result = await capabilityService.detectImage();
-    expect(result).toBe('detected');
-  });
-
-  test('detectImage returns not_found when ComfyUI is unreachable', async () => {
-    mockFetchOffline();
-    const result = await capabilityService.detectImage();
-    expect(result).toBe('not_found');
-  });
-
-  test('detectImage returns configured when image provider has endpoint', async () => {
-    _mockImageConfig = { apiKey: '', endpoint: 'http://localhost:8188', model: '' };
-    const result = await capabilityService.detectImage();
-    expect(result).toBe('configured');
-  });
-
-  // ── AC-3: Local AI detection via Ollama ─────────────────────────────
-
-  test('Ollama proxy ping returns detected on HTTP 200', async () => {
-    mockFetch((url) => {
-      if (url.includes('/api/text/')) {
-        return { ok: true, status: 200 };
-      }
-      return new Error('refused');
-    });
-    const result = await capabilityService.detectText();
-    expect(result).toBe('detected');
-  });
-
-  test('Ollama native fetch works as fallback when proxy fails', async () => {
-    mockFetch((url) => {
-      if (url.includes('/api/text/')) {
-        return new Error('refused'); // proxy down
-      }
-      if (url.includes('localhost:11434/api/tags')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ models: [{ name: 'llama3' }, { name: 'mistral' }] }),
-        };
-      }
-      return new Error('refused');
-    });
-    const result = await capabilityService.detectText();
-    expect(result).toBe('detected');
-  });
-
-  test('CORS error on native fetch treated as not_found', async () => {
-    mockFetch((url) => {
-      if (url.includes('/api/text/')) {
-        return new Error('refused');
-      }
-      if (url.includes('localhost:11434')) {
-        return new Error('CORS blocked');
-      }
-      return new Error('refused');
-    });
+  test('detectText returns not_found when gateway reports unavailable', async () => {
+    _detectImpl = async (capability) => _unavailableResult(capability);
     const result = await capabilityService.detectText();
     expect(result).toBe('not_found');
   });
 
-  // ── AC-1: Full detect() snapshot ────────────────────────────────────
+  test('detectText returns error when gateway detection throws', async () => {
+    _detectImpl = async () => {
+      throw new Error('gateway exploded');
+    };
+    const result = await capabilityService.detectText();
+    expect(result).toBe('error');
+  });
 
-  test('detect returns complete snapshot with all fields', async () => {
-    mockFetchOnline();
+  // ── AC-1: image detection maps gateway results ──────────────────────
+
+  test('detectImage returns detected when gateway reports offline availability', async () => {
+    const result = await capabilityService.detectImage();
+    expect(result).toBe('detected');
+  });
+
+  test('detectImage returns configured when gateway reports byok availability', async () => {
+    _detectImpl = async () => ({
+      capability: 'image',
+      available: true,
+      mode: 'byok',
+      provider: 'custom',
+      detail: 'Image provider configured',
+      checkedAt: new Date().toISOString(),
+    });
+    const result = await capabilityService.detectImage();
+    expect(result).toBe('configured');
+  });
+
+  test('detectImage returns not_found when gateway reports unavailable', async () => {
+    _detectImpl = async (capability) => _unavailableResult(capability);
+    const result = await capabilityService.detectImage();
+    expect(result).toBe('not_found');
+  });
+
+  test('detectImage returns error when gateway detection throws', async () => {
+    _detectImpl = async () => {
+      throw new Error('gateway exploded');
+    };
+    const result = await capabilityService.detectImage();
+    expect(result).toBe('error');
+  });
+
+  // ── AC-1: full detect() snapshot ────────────────────────────────────
+
+  test('detect returns complete snapshot with all fields from gateway results', async () => {
     const snapshot = await capabilityService.detect();
 
     expect(snapshot.isComplete).toBe(true);
     expect(snapshot.textStatus).toBe('detected');
     expect(snapshot.imageStatus).toBe('detected');
     expect(snapshot.voiceStatus).toBe('detected');
+    expect(snapshot.textProviderId).toBe('ollama');
+    expect(snapshot.textModelName).toBe('llama3.2');
     expect(snapshot.detectedAt).toBeDefined();
-    expect(snapshot.summary).toBeString();
+    expect(snapshot.summary).toInclude('Local AI detected');
   });
 
-  test('detect returns not_found across all providers when offline', async () => {
-    mockFetchOffline();
+  test('detect returns not_found across all providers when gateway reports unavailable', async () => {
+    _detectImpl = async (capability) => _unavailableResult(capability);
     const snapshot = await capabilityService.detect();
 
     expect(snapshot.isComplete).toBe(true);
     expect(snapshot.textStatus).toBe('not_found');
     expect(snapshot.imageStatus).toBe('not_found');
+    expect(snapshot.voiceStatus).toBe('not_found');
+    expect(snapshot.textProviderId).toBeUndefined();
+    expect(snapshot.textModelName).toBeUndefined();
     expect(snapshot.summary).toInclude('offline demo');
   });
 
-  // ── checkCloudTextConfig ────────────────────────────────────────────
+  test('detect reports cloud summary when gateway text mode is byok', async () => {
+    _detectImpl = async (capability) => {
+      if (capability === 'text') {
+        return {
+          capability: 'text',
+          available: true,
+          mode: 'byok',
+          provider: 'cloud',
+          detail: 'Cloud text provider configured',
+          checkedAt: new Date().toISOString(),
+        };
+      }
+      return _unavailableResult(capability);
+    };
+    const snapshot = await capabilityService.detect();
 
-  test('checkCloudTextConfig returns configured when API key exists', () => {
-    _mockTextConfig = { apiKey: 'sk-test', endpoint: '', model: '' };
-    expect(capabilityService.checkCloudTextConfig()).toBe('configured');
+    expect(snapshot.textStatus).toBe('configured');
+    expect(snapshot.summary).toBe('Cloud AI provider configured');
   });
 
-  test('checkCloudTextConfig returns not_found when no config', () => {
-    _mockTextConfig = { apiKey: '', endpoint: '', model: '' };
-    expect(capabilityService.checkCloudTextConfig()).toBe('not_found');
+  test('detect degrades to error status when gateway throws, snapshot stays complete', async () => {
+    _detectImpl = async () => {
+      throw new Error('gateway exploded');
+    };
+    const snapshot = await capabilityService.detect();
+
+    expect(snapshot.isComplete).toBe(true);
+    expect(snapshot.textStatus).toBe('error');
+    expect(snapshot.imageStatus).toBe('error');
+    expect(snapshot.voiceStatus).toBe('error');
+    expect(snapshot.summary).toInclude('error');
   });
 
-  test('detectText handles fetch timeout gracefully', async () => {
-    const startTime = Date.now();
-    // Simulate hanging fetches that only abort when the signal fires
-    mockFetch((_url, init) => {
-      return new Promise((_resolve, reject) => {
-        const signal = (init as RequestInit | undefined)?.signal;
-        if (signal) {
-          signal.addEventListener('abort', () => {
-            reject(new DOMException('The operation was aborted', 'AbortError'));
-          });
-        }
-      });
+  test('detect leaves textModelName undefined when mode resolution throws (nothing configured)', async () => {
+    _resolveModeImpl = () => {
+      throw new Error('No text generation provider configured.');
+    };
+    const snapshot = await capabilityService.detect();
+
+    expect(snapshot.textStatus).toBe('detected');
+    expect(snapshot.textProviderId).toBe('ollama');
+    expect(snapshot.textModelName).toBeUndefined();
+  });
+
+  test('detect keeps voice failures from blocking completion', async () => {
+    _detectImpl = async (capability) => {
+      if (capability === 'voice') {
+        return _unavailableResult('voice');
+      }
+      return _availableResult(capability);
+    };
+    const snapshot = await capabilityService.detect();
+
+    expect(snapshot.voiceStatus).toBe('not_found');
+    expect(snapshot.isComplete).toBe(true);
+  });
+
+  test('detect runs the three capability checks concurrently', async () => {
+    const started: AiCapability[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
     });
-    const result = await capabilityService.detectText();
-    const elapsed = Date.now() - startTime;
-    expect(result).toBe('not_found');
-    // Should complete within aggregate timeout, not double (2x 3000ms = 6000ms)
-    expect(elapsed).toBeLessThan(4000); // Allow 1s margin
+    _detectImpl = async (capability) => {
+      started.push(capability);
+      await gate;
+      return _availableResult(capability);
+    };
+
+    const pending = capabilityService.detect();
+    // All three checks must have started before any resolves.
+    await Promise.resolve();
+    expect(started.sort()).toEqual(['image', 'text', 'voice']);
+    release();
+    const snapshot = await pending;
+    expect(snapshot.isComplete).toBe(true);
   });
 });

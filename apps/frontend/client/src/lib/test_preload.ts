@@ -479,6 +479,27 @@ const _localServicesMock = () => ({
   }),
   SessionService: class {},
   campaignService: _createServiceStub(),
+  aiGatewayService: Object.assign(_createServiceStub(), {
+    detect: mock(async (capability: string) => {
+      const provider =
+        capability === 'image' ? 'comfyui' : capability === 'voice' ? 'kokoro' : 'ollama';
+      return {
+        capability,
+        available: true,
+        mode: 'offline',
+        provider,
+        detail: `${provider} reachable`,
+        checkedAt: new Date().toISOString(),
+      };
+    }),
+    resolveMode: mock((capability: string) => ({
+      capability,
+      mode: 'offline',
+      provider: 'ollama',
+      model: 'llama3.2',
+      endpoint: 'http://localhost:11434/v1',
+    })),
+  }),
   capabilityService: Object.assign(_createServiceStub(), {
     detect: mock(async () => ({
       isComplete: true,
@@ -489,7 +510,6 @@ const _localServicesMock = () => ({
     })),
     detectText: mock(async () => 'detected'),
     detectImage: mock(async () => 'detected'),
-    checkCloudTextConfig: mock(() => 'not_found'),
   }),
   gmPromptService: _createServiceStub(),
   messageBranchStore: _createServiceStub(),
@@ -612,7 +632,9 @@ const _fakeLocalDatabase = {
     const sql = options.sql.trim().toUpperCase();
 
     // INSERT with OR IGNORE / OR REPLACE conflict handling
-    const insertMatch = sql.match(/INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/);
+    const insertMatch = sql.match(
+      /INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/,
+    );
     if (insertMatch) {
       const conflictMode = insertMatch[1]?.toUpperCase() as 'IGNORE' | 'REPLACE' | undefined;
       const tableName = insertMatch[2]!.toLowerCase();
