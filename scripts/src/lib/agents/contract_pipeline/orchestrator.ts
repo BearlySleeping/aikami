@@ -388,7 +388,7 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
     '### Your options',
     '',
     '**1. Create a PR anyway** — `contract_review_decision` with `approve` or `merge`',
-    '   - `approve`: Create a draft PR. CodeRabbit will review and may fix issues.',
+    '   - `approve`: Create a ready PR (draft=false). CodeRabbit reviews immediately.',
     '   - `merge`: Create a PR and auto-merge with squash.',
     '',
     '**2. Retry the implementer** — `contract_review_decision` with `change`',
