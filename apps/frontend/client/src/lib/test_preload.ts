@@ -612,7 +612,9 @@ const _fakeLocalDatabase = {
     const sql = options.sql.trim().toUpperCase();
 
     // INSERT with OR IGNORE / OR REPLACE conflict handling
-    const insertMatch = sql.match(/INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/);
+    const insertMatch = sql.match(
+      /INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/,
+    );
     if (insertMatch) {
       const conflictMode = insertMatch[1]?.toUpperCase() as 'IGNORE' | 'REPLACE' | undefined;
       const tableName = insertMatch[2]!.toLowerCase();

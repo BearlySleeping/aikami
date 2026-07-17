@@ -224,7 +224,12 @@ const reconcileWorkspace = (options: {
     } catch {}
   }
   if (resolvedBase) {
-    for (const fp of ['.envrc', '.pi/settings.json', 'docs/contracts/PROGRESS.md', 'docs/contracts/PROMOTION.md']) {
+    for (const fp of [
+      '.envrc',
+      '.pi/settings.json',
+      'docs/contracts/PROGRESS.md',
+      'docs/contracts/PROMOTION.md',
+    ]) {
       try {
         runGit(`restore --source=${resolvedBase} -- '${fp}'`, { cwd: workspacePath });
       } catch {}
@@ -735,9 +740,15 @@ export const runContractPipeline = async (options: {
             runGit(`add -- '${contractRelPath}'`, { cwd: options.repoRoot });
             runGit(`commit -m "docs(contracts): approve ${manifest.contractId}"`, {
               cwd: options.repoRoot,
-              env: { CONTRACT_PIPELINE_WORKTREE: '1', GIT_AUTHOR_NAME: 'Pi Agent', GIT_AUTHOR_EMAIL: 'agent@pi.internal', GIT_COMMITTER_NAME: 'Pi Agent', GIT_COMMITTER_EMAIL: 'agent@pi.internal' },
+              env: {
+                CONTRACT_PIPELINE_WORKTREE: '1',
+                GIT_AUTHOR_NAME: 'Pi Agent',
+                GIT_AUTHOR_EMAIL: 'agent@pi.internal',
+                GIT_COMMITTER_NAME: 'Pi Agent',
+                GIT_COMMITTER_EMAIL: 'agent@pi.internal',
+              },
             });
-          } catch (commitErr: unknown) {
+          } catch (_commitErr: unknown) {
             // May fail if nothing to commit (already committed) — non-fatal.
           }
         }

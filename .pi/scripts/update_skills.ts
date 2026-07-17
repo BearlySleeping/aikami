@@ -61,6 +61,12 @@ const SKILL_SOURCES: SkillSource[] = [
     files: ['SKILL.md'],
   },
   {
+    name: 'CodeRabbit',
+    repoUrl: 'https://github.com/coderabbitai/skills.git',
+    sourceSubdir: 'skills',
+    targetSubdir: 'coderabbit',
+  },
+  {
     name: 'Firebase',
     repoUrl: 'https://github.com/firebase/agent-skills.git',
     sourceSubdir: 'skills',
