@@ -26,6 +26,7 @@
     "setup": "bun run scripts/src/lib/setup/setup.ts",
     "dev:all": "bun run scripts/src/lib/ops/dev_all.ts",
     "knowledge:sync": "bun run scripts/src/lib/ops/sync_contracts.ts && bun run scripts/src/lib/ops/generate_llms_txt.ts",
+    "pre-commit": "bun run scripts/src/lib/ops/pre_commit.ts",
     "test:blackbox": "bun run scripts/src/lib/test_blackbox/run.ts",
     "herdr:start": "bun run scripts/src/lib/herdr/start.ts",
     "workspace:cleanup": "bun run scripts/src/workspace_cleanup.ts",

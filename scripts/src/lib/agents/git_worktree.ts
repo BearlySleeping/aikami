@@ -216,6 +216,7 @@ source_env ${options.repoRoot}
     const entries = [
       '/.envrc',
       '/.pi/settings.json',
+      '/.context/llms.txt',
       '/docs/contracts/PROGRESS.md',
       '/docs/contracts/PROMOTION.md',
     ];
@@ -228,7 +229,7 @@ source_env ${options.repoRoot}
     }
     // Also mark as skip-worktree for already-tracked files.
     runGit(
-      'update-index --skip-worktree .envrc .pi/settings.json docs/contracts/PROGRESS.md docs/contracts/PROMOTION.md',
+      'update-index --skip-worktree .envrc .pi/settings.json .context/llms.txt docs/contracts/PROGRESS.md docs/contracts/PROMOTION.md',
       { cwd: wsDir },
     );
   } catch {

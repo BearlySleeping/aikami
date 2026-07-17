@@ -51,13 +51,7 @@ vcs:
   remoteCandidates: ["origin"]
   hooks:
     pre-commit:
-      - "bunx moon run :fix --affected --status=staged"
-      - "bunx moon run :typecheck --affected --status=staged"
-      - "bun knowledge:sync"
-      # Explicitly add the files updated by knowledge:sync to the commit payload
-      - "git add .context/llms.txt docs/contracts/ || true"
-      # Re-add any other staged files that formatters might have modified
-      - "git diff -z --name-only --cached | xargs -0 git add || true"
+      - "bun run pre-commit"
     post-merge:
       - "bunx moon sync"
     post-checkout:
