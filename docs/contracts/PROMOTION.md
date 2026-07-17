@@ -138,8 +138,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | v2 |
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | v2 |
 | C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | v2 |
-| C-322 | Wire The Ai Provider Gateway Into Capability Detection And S | ✅ verified | v2 |
-| C-323 | Enforce the Mandatory Text AI Capability Gate | ⏳ not_started (no contract file) | v1 |
+| C-322 | Wire The Ai Provider Gateway Into Capability Detection And S | 🛠️ implemented | v2 |
+| C-323 | Enforce The Mandatory Text Ai Capability Gate | 🛠️ implemented | v2 |
 | C-324 | Retire Legacy AI-Less Code Paths and Unused Backend Packages | ⏳ not_started (no contract file) | v1 |
 | C-325 | Ship Real-Time LPC Appearance Preview with Safe Defaults | ⏳ not_started (no contract file) | v1 |
 | C-326 | Make `/game` Boot Atomic, Observable, and Content-Driven | ⏳ not_started (no contract file) | v1 |
