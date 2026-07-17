@@ -33,8 +33,6 @@ projects:
   backend-utils: "packages/backend/utils"
   backend-database: "packages/backend/database"
   backend-auth: "packages/backend/auth"
-  backend-image: "packages/backend/image"
-  backend-svelte-kit: "packages/backend/svelte-kit"
 
   # Frontend Packages
   frontend-engine: "packages/frontend/engine"

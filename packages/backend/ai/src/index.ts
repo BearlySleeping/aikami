@@ -1,19 +1,11 @@
 // packages/backend/ai/src/index.ts
+//
+// Server-side AI service module — the "service"-mode implementation backing
+// the C-320 AiProviderGateway.  Provides the single `handleAIEndpoint` call
+// surface consumed by Firebase controllers and the `createAiService` factory
+// consumed by backend packages.
+// Contract: C-056, C-320, C-324
 
-export type {
-  AstCacheProvider,
-  FootprintResult,
-  MessagePayload,
-  OpenRouterPayload as AgentRouterPayload,
-  RouterInput,
-} from './lib/agent_router.ts';
-// ── Agent Router (C-301) ───────────────────────────────────
-export {
-  buildRouterPayload,
-  extractTypeFootprint,
-  extractTypeFootprintWithCache,
-  prepareAgentPayload,
-} from './lib/agent_router.ts';
 export type { AiServiceInterface } from './lib/ai_service_interface.ts';
 export { handleAIEndpoint } from './lib/api_handler.ts';
 export { BaseAiService } from './lib/base_ai_service.ts';
@@ -21,24 +13,8 @@ export { CircuitBreaker } from './lib/circuit_breaker.ts';
 export { AiServiceError } from './lib/errors.ts';
 export { createAiService } from './lib/factory.ts';
 export { GeminiService } from './lib/gemini_service.ts';
-export { buildOllamaPayload, createOllamaStream, parseOllamaStream } from './lib/ollama_adapter.ts';
 export { OpenAiService } from './lib/openai_service.ts';
-export {
-  buildOpenRouterPayload,
-  createOpenRouterStream,
-  parseOpenRouterStream,
-} from './lib/openrouter_adapter.ts';
 export { TokenBucketRateLimiter } from './lib/rate_limiter.ts';
-export { SyntheticSseMock } from './lib/synthetic_sse_mock.ts';
-export { routeTextGeneration } from './lib/text_generation_router.ts';
-export type {
-  SseStreamEvent,
-  SyntheticSseMockOptions,
-  TextGenerationConfig,
-  TextGenerationProvider,
-  TextGenerationRequest,
-} from './lib/text_generation_types.ts';
-export { OLLAMA_VRAM_EVICTION_PARAMS } from './lib/text_generation_types.ts';
 export type {
   AiServiceErrorCode,
   BaseAiServiceOptions,
