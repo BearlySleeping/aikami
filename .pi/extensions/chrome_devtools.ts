@@ -31,6 +31,9 @@ import { optimizeImage } from '../../scripts/src/lib/ai/image_optimizer';
 const CDP_PORT = 9222;
 const CDP_BASE = `http://localhost:${CDP_PORT}`;
 
+/** PID of the Chromium we spawned (null when reusing an existing instance). */
+let spawnedChromePid: number | null = null;
+
 // ── Helpers ───────────────────────────────────────────────────────────
 
 function getMode(): string {
@@ -122,6 +125,7 @@ async function ensureBrowser(_app: string): Promise<{ ok: boolean; message: stri
     detached: true,
   });
   proc.unref();
+  spawnedChromePid = proc.pid ?? null;
 
   // Wait for CDP to become available (up to 10s)
   const deadline = Date.now() + 10_000;
@@ -965,5 +969,24 @@ export default function (pi: ExtensionAPI) {
         fs.appendFileSync(gitignorePath, '\n.chromium-profile/\n.screenshots/\n');
       }
     }
+  });
+
+  // ── Kill the Chromium we spawned when the session ends ─────────────
+  pi.on('session_shutdown', async () => {
+    if (spawnedChromePid === null) {
+      return;
+    }
+    try {
+      // Negative PID kills the whole detached process group (renderer,
+      // gpu-process, zygote children) — not just the main process.
+      process.kill(-spawnedChromePid, 'SIGTERM');
+    } catch {
+      try {
+        process.kill(spawnedChromePid, 'SIGTERM');
+      } catch {
+        // already gone
+      }
+    }
+    spawnedChromePid = null;
   });
 }
