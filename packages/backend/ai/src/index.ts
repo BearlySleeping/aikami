@@ -17,7 +17,6 @@ export {
 export type { AiServiceInterface } from './lib/ai_service_interface.ts';
 export { handleAIEndpoint } from './lib/api_handler.ts';
 export { BaseAiService } from './lib/base_ai_service.ts';
-export { CircuitBreaker } from './lib/circuit_breaker.ts';
 export { AiServiceError } from './lib/errors.ts';
 export { createAiService } from './lib/factory.ts';
 export { GeminiService } from './lib/gemini_service.ts';
@@ -28,7 +27,6 @@ export {
   createOpenRouterStream,
   parseOpenRouterStream,
 } from './lib/openrouter_adapter.ts';
-export { TokenBucketRateLimiter } from './lib/rate_limiter.ts';
 export { SyntheticSseMock } from './lib/synthetic_sse_mock.ts';
 export { routeTextGeneration } from './lib/text_generation_router.ts';
 export type {
@@ -42,10 +40,8 @@ export { OLLAMA_VRAM_EVICTION_PARAMS } from './lib/text_generation_types.ts';
 export type {
   AiServiceErrorCode,
   BaseAiServiceOptions,
-  CircuitBreakerConfig,
   CreateAiServiceOptions,
   GeminiServiceOptions,
   OpenAiServiceOptions,
-  RateLimiterConfig,
   RetryConfig,
 } from './lib/types.ts';

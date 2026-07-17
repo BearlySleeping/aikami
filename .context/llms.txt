@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-17
-> Files: 276 across 14 categories
+> Files: 278 across 14 categories
 
 ## Quick Start (Read These First)
 
@@ -266,6 +266,8 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-320: Build the Unified AI Provider Gateway (Offline / BYOK / Service)](contracts/C-320-build-the-unified-ai-provider-gateway-offline-byok-service.md)
 - [Contract C-321: Migrate Local Persistence to Turso as the Source of Truth](contracts/C-321-migrate-local-persistence-to-turso-as-the-source-of-truth.md)
 - [Contract C-322: Wire the AI Provider Gateway into Capability Detection and Settings](contracts/C-322-wire-the-ai-provider-gateway-into-capability-detection-and-s.md)
+- [Contract C-323: Enforce the Mandatory Text AI Capability Gate](contracts/C-323-enforce-the-mandatory-text-ai-capability-gate.md)
+- [Contract C-324: Retire Legacy AI-Less Code Paths and Unused Backend Packages](contracts/C-324-retire-legacy-ai-less-code-paths-and-unused-backend-packages.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
