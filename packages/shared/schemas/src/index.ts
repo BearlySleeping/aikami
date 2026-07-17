@@ -1,5 +1,6 @@
 import { Value } from 'typebox/value';
 export const schemaCheck = Value.Check;
+export * from './lib/ai_gateway.ts';
 export * from './lib/api/fcm.ts';
 export * from './lib/api/game.ts';
 export * from './lib/api/oauth.ts';

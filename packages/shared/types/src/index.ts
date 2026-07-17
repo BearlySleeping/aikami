@@ -1,4 +1,5 @@
 export * from './lib/ai/index.js';
+export * from './lib/ai_gateway.ts';
 export * from './lib/api/auth.ts';
 export * from './lib/api/fcm.ts';
 export * from './lib/api/firestore.ts';

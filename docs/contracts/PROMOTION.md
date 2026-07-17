@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-07-16
+> Auto-generated: 2026-07-17
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
@@ -137,7 +137,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | v2 |
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | v2 |
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | v2 |
-| C-320 | Build the Unified AI Provider Gateway (Offline / BYOK / Service) | ⏳ not_started (no contract file) | v1 |
+| C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🔄 in_progress | v2 |
 | C-321 | Migrate Local Persistence to Turso as the Source of Truth | ⏳ not_started (no contract file) | v1 |
 | C-322 | Wire the AI Provider Gateway into Capability Detection and Settings | ⏳ not_started (no contract file) | v1 |
 | C-323 | Enforce the Mandatory Text AI Capability Gate | ⏳ not_started (no contract file) | v1 |
