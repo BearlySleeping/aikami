@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 124 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 123 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -138,7 +138,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | v2 |
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | v2 |
 | C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | v2 |
-| C-321 | Migrate Local Persistence to Turso as the Source of Truth | ⏳ not_started (no contract file) | v1 |
 | C-322 | Wire the AI Provider Gateway into Capability Detection and Settings | ⏳ not_started (no contract file) | v1 |
 | C-323 | Enforce the Mandatory Text AI Capability Gate | ⏳ not_started (no contract file) | v1 |
 | C-324 | Retire Legacy AI-Less Code Paths and Unused Backend Packages | ⏳ not_started (no contract file) | v1 |

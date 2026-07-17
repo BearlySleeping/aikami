@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-17)
 
-**164 active (49 without contract file), 119 archived, 1 duplicates**
+**164 active (48 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -123,7 +123,7 @@
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | — | v2 |
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | — | v2 |
 | C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | — | v2 |
-| C-321 | Migrate Local Persistence to Turso as the Source of Truth | ⏳ not_started (no contract file) | — | — |
+| C-321 | Migrate Local Persistence To Turso As The Source Of Truth | ❌ verification_failed | ❓ `integrated` | v2 |
 | C-322 | Wire the AI Provider Gateway into Capability Detection and Settings | ⏳ not_started (no contract file) | — | — |
 | C-323 | Enforce the Mandatory Text AI Capability Gate | ⏳ not_started (no contract file) | — | — |
 | C-324 | Retire Legacy AI-Less Code Paths and Unused Backend Packages | ⏳ not_started (no contract file) | — | — |

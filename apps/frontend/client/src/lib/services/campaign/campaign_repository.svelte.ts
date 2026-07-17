@@ -1,42 +1,20 @@
 // apps/frontend/client/src/lib/services/campaign/campaign_repository.svelte.ts
 //
-// IndexedDB-backed repository for Campaign aggregate persistence.
-// Shares the aikami_saves database with gameSaveService.
-// Contract: C-313 Introduce the Campaign Aggregate and Boot State Machine
+// Turso/libSQL-backed repository for Campaign aggregate persistence.
+// Replaces IndexedDB with the local SQLite database via LocalDatabaseInterface.
+// Contract: C-321 Migrate Local Persistence to Turso
+
+import { getLocalDatabase } from '@aikami/frontend/repositories';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { Campaign } from '@aikami/types';
-import { logger } from '$logger';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** IndexedDB database name — shared with gameSaveService. */
-const DB_NAME = 'aikami_saves';
-
-/** Database version — bumped to 2 to add the campaigns object store. */
-const DB_VERSION = 2;
-
-/** Object store name for campaign documents. */
-const STORE_NAME = 'campaigns';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/** Internal IndexedDB document shape. */
-type CampaignDocument = {
-  /** Same as Campaign.id — used as the object store key. */
-  id: string;
-  /** Full campaign data stored as a JSON string. */
-  data: string;
-  /** ISO timestamp of last update — used for sorting. */
-  updatedAt: string;
-};
 
 export type CampaignRepositoryInterface = BaseFrontendClassInterface & {
   /** Persists a campaign (upsert by ID). */
@@ -61,160 +39,86 @@ class CampaignRepository
 {
   /** @inheritdoc */
   async create(campaign: Campaign): Promise<Campaign> {
-    const db = await this._openDatabase();
-    try {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      await this._putDocument(store, campaign);
-      return campaign;
-    } finally {
-      db.close();
-    }
+    const db = await getLocalDatabase();
+    const data = JSON.stringify(campaign);
+
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO campaigns (id, data, updated_at) VALUES (?, ?, ?)`,
+      args: [campaign.id, data, campaign.updatedAt],
+    });
+
+    return campaign;
   }
 
   /** @inheritdoc */
   async getById(id: string): Promise<Campaign | undefined> {
-    const db = await this._openDatabase();
-    try {
-      const transaction = db.transaction(STORE_NAME, 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const doc = await this._getDocument(store, id);
-      return doc;
-    } finally {
-      db.close();
+    const db = await getLocalDatabase();
+    const result = await db.query({
+      sql: 'SELECT data FROM campaigns WHERE id = ?',
+      args: [id],
+    });
+
+    if (result.rows.length === 0) {
+      return undefined;
     }
+
+    return JSON.parse(result.rows[0].data as string) as Campaign;
   }
 
   /** @inheritdoc */
   async getAll(): Promise<Campaign[]> {
-    const db = await this._openDatabase();
-    try {
-      const transaction = db.transaction(STORE_NAME, 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.getAll();
+    const db = await getLocalDatabase();
+    const result = await db.query({
+      sql: 'SELECT data FROM campaigns ORDER BY updated_at DESC',
+      args: [],
+    });
 
-      return new Promise((resolve, reject) => {
-        request.onsuccess = (): void => {
-          const docs = request.result as CampaignDocument[];
-          const campaigns = docs.map((d) => JSON.parse(d.data) as Campaign);
-          // Sort by updatedAt descending (newest first)
-          campaigns.sort(
-            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-          );
-          resolve(campaigns);
-        };
-        request.onerror = (): void => {
-          reject(request.error ?? new Error('IndexedDB getAll failed'));
-        };
-      });
-    } finally {
-      db.close();
-    }
+    return result.rows.map((row) => JSON.parse(row.data as string) as Campaign);
   }
 
   /** @inheritdoc */
   async update(campaign: Campaign): Promise<Campaign> {
-    const db = await this._openDatabase();
-    try {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const existing = await this._getDocument(store, campaign.id);
-      if (!existing) {
-        throw new Error(`Campaign not found: ${campaign.id}`);
-      }
-      await this._putDocument(store, campaign);
-      return campaign;
-    } finally {
-      db.close();
+    const db = await getLocalDatabase();
+    const data = JSON.stringify(campaign);
+
+    // Use a transaction to make check and update atomic
+    await db.transaction([
+      {
+        sql: 'SELECT id FROM campaigns WHERE id = ?',
+        args: [campaign.id],
+      },
+      {
+        sql: `UPDATE campaigns SET data = ?, updated_at = ? WHERE id = ?`,
+        args: [data, campaign.updatedAt, campaign.id],
+      },
+    ]);
+
+    // Post-transaction verification: confirm the campaign exists
+    // If the transaction succeeded but the campaign doesn't exist,
+    // it means the SELECT returned empty (campaign was not found)
+    const verification = await db.query({
+      sql: 'SELECT id FROM campaigns WHERE id = ?',
+      args: [campaign.id],
+    });
+
+    if (verification.rows.length === 0) {
+      throw new Error(`Campaign not found: ${campaign.id}`);
     }
+
+    return campaign;
   }
 
   /** @inheritdoc */
   async delete(id: string): Promise<void> {
-    const db = await this._openDatabase();
-    try {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      await this._deleteDocument(store, id);
-    } finally {
-      db.close();
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Private: IndexedDB helpers
-  // -----------------------------------------------------------------------
-
-  /** Opens the IndexedDB database, handling version upgrades. */
-  private _openDatabase(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-      request.onupgradeneeded = (): void => {
-        const db = request.result;
-        // Ensure the legacy saves store exists (gameSaveService v1 creates it)
-        if (!db.objectStoreNames.contains('saves')) {
-          db.createObjectStore('saves', { keyPath: 'id' });
-        }
-        // Create the campaigns store if it doesn't exist (v2 migration)
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        }
-      };
-
-      request.onsuccess = (): void => {
-        resolve(request.result);
-      };
-
-      request.onerror = (): void => {
-        logger.error('CampaignRepository: failed to open IndexedDB', request.error);
-        reject(request.error ?? new Error('IndexedDB open failed'));
-      };
-    });
-  }
-
-  /** Stores a campaign document in the object store. */
-  private _putDocument(store: IDBObjectStore, campaign: Campaign): Promise<void> {
-    const doc: CampaignDocument = {
-      id: campaign.id,
-      data: JSON.stringify(campaign),
-      updatedAt: campaign.updatedAt,
-    };
-
-    return new Promise((resolve, reject) => {
-      const request = store.put(doc);
-      request.onsuccess = (): void => resolve();
-      request.onerror = (): void => reject(request.error ?? new Error('IndexedDB put failed'));
-    });
-  }
-
-  /** Retrieves a campaign document from the object store. */
-  private _getDocument(store: IDBObjectStore, id: string): Promise<Campaign | undefined> {
-    return new Promise((resolve, reject) => {
-      const request = store.get(id);
-      request.onsuccess = (): void => {
-        const doc = request.result as CampaignDocument | undefined;
-        if (!doc) {
-          resolve(undefined);
-          return;
-        }
-        resolve(JSON.parse(doc.data) as Campaign);
-      };
-      request.onerror = (): void => reject(request.error ?? new Error('IndexedDB get failed'));
-    });
-  }
-
-  /** Deletes a campaign document from the object store. */
-  private _deleteDocument(store: IDBObjectStore, id: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const request = store.delete(id);
-      request.onsuccess = (): void => resolve();
-      request.onerror = (): void => reject(request.error ?? new Error('IndexedDB delete failed'));
+    const db = await getLocalDatabase();
+    await db.execute({
+      sql: 'DELETE FROM campaigns WHERE id = ?',
+      args: [id],
     });
   }
 }
 
 /** Shared singleton instance. */
-export const campaignRepository: CampaignRepositoryInterface = new CampaignRepository({
+export const campaignRepository: CampaignRepositoryInterface = CampaignRepository.create({
   className: 'CampaignRepository',
 });

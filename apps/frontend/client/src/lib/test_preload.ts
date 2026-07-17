@@ -11,6 +11,8 @@
 //    validate without crashing in Bun.
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names from @aikami/frontend-services for module mocking
+// biome-ignore-all lint/style/noNonNullAssertion: safe regex group access in fake DB
+// biome-ignore-all lint/style/noSubstr: string parsing in fake SQL parser
 import { mock } from 'bun:test';
 
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────
@@ -361,6 +363,7 @@ const _localServicesMock = () => ({
   ExpressionAssetResolver: class {},
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
+  setPendingGameLoad: _createCallableStub(),
   gameStateService: Object.assign(_createServiceStub(), {
     worldGenOutput: {
       worldName: 'The Realm',
@@ -539,3 +542,170 @@ delete process.env.PUBLIC_OPENROUTER_API_KEY;
 delete process.env.PUBLIC_OPENROUTER_MODEL;
 delete process.env.OPENROUTER_API_KEY;
 delete process.env.PUBLIC_OLLAMA_MODEL;
+
+// ── Mock @aikami/frontend/repositories (C-321: Turso persistence) ──────────
+//
+// Provides an in-memory LocalDatabaseInterface fake so that repository
+// tests don't require a real SQLite connection.
+
+/** In-memory row store for the fake database. */
+const _fakeDbTables = new Map<string, Record<string, unknown>[]>();
+
+const _getFakeTable = (name: string): Record<string, unknown>[] => {
+  if (!_fakeDbTables.has(name)) {
+    _fakeDbTables.set(name, []);
+  }
+  return _fakeDbTables.get(name)!;
+};
+
+const _fakeLocalDatabase = {
+  async query(options: { sql: string; args: readonly unknown[] }) {
+    const sql = options.sql.trim().toUpperCase();
+
+    if (sql.includes('FROM META WHERE KEY')) {
+      const rows = _getFakeTable('meta');
+      const match = rows.find((r) => r.key === options.args[0]);
+      return { rows: match ? [match] : [] };
+    }
+
+    // Handle COUNT(*) before generic SELECT to match SQLite semantics
+    if (sql.includes('COUNT(*)')) {
+      const countMatch = sql.match(/FROM\s+(\w+)(?:\s+WHERE\s+(\w+)\s*=\s*\?)?/);
+      if (countMatch) {
+        const tableName = countMatch[1]!.toLowerCase();
+        const whereCol = countMatch[2]?.toLowerCase();
+        let rows = _getFakeTable(tableName);
+        if (whereCol) {
+          rows = rows.filter((r) => r[whereCol] === options.args[0]);
+        }
+        return { rows: [{ n: rows.length }] };
+      }
+    }
+
+    // Handle SELECT ... FROM table WHERE col = ?
+    const selectMatch = sql.match(
+      /FROM\s+(\w+)\s*(?:WHERE\s+(\w+)\s*=\s*\?)?(?:\s*ORDER BY\s+(\w+)\s*(DESC|ASC)?)?/,
+    );
+    if (selectMatch) {
+      const tableName = selectMatch[1]!.toLowerCase();
+      const whereCol = selectMatch[2]?.toLowerCase();
+      const orderCol = selectMatch[3]?.toLowerCase();
+      const orderDir = selectMatch[4];
+      let rows = _getFakeTable(tableName);
+      if (whereCol) {
+        rows = rows.filter((r) => r[whereCol] === options.args[0]);
+      }
+      if (orderCol) {
+        rows = [...rows].sort((a, b) => {
+          const aVal = String(a[orderCol] ?? '');
+          const bVal = String(b[orderCol] ?? '');
+          return orderDir === 'DESC' ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+        });
+      }
+      return { rows };
+    }
+
+    return { rows: [] };
+  },
+
+  async execute(options: { sql: string; args: readonly unknown[] }) {
+    const sql = options.sql.trim().toUpperCase();
+
+    // INSERT with OR IGNORE / OR REPLACE conflict handling
+    const insertMatch = sql.match(/INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/);
+    if (insertMatch) {
+      const conflictMode = insertMatch[1]?.toUpperCase() as 'IGNORE' | 'REPLACE' | undefined;
+      const tableName = insertMatch[2]!.toLowerCase();
+      const columns = insertMatch[3]!.split(',').map((c) => c.trim().toLowerCase());
+      const rows = _getFakeTable(tableName);
+      const newRow: Record<string, unknown> = {};
+      for (let i = 0; i < columns.length; i++) {
+        newRow[columns[i]] = options.args[i];
+      }
+
+      // Determine conflict key based on table (id is primary key for most tables)
+      const conflictKey = 'id';
+      const conflictKeyIdx = columns.indexOf(conflictKey);
+
+      if (conflictKeyIdx >= 0) {
+        const existingIdx = rows.findIndex((r) => r[conflictKey] === options.args[conflictKeyIdx]);
+        if (existingIdx >= 0) {
+          // Conflict detected
+          if (conflictMode === 'REPLACE') {
+            rows[existingIdx] = newRow;
+          } else if (conflictMode === 'IGNORE') {
+            // Do nothing - ignore the insert
+            return;
+          } else {
+            // Default INSERT behavior would fail on conflict, but for testing we'll replace
+            rows[existingIdx] = newRow;
+          }
+        } else {
+          rows.push(newRow);
+        }
+      } else {
+        rows.push(newRow);
+      }
+      return;
+    }
+
+    // UPDATE
+    const updateMatch = sql.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(\w+)\s*=\s*\?/);
+    if (updateMatch) {
+      const tableName = updateMatch[1]!.toLowerCase();
+      const whereCol = updateMatch[3]!.toLowerCase();
+      const whereVal = options.args[options.args.length - 1];
+      const rows = _getFakeTable(tableName);
+      const row = rows.find((r) => r[whereCol] === whereVal);
+      if (row) {
+        const setPairs = updateMatch[2]!.split(',').map((s) => s.trim());
+        let argIdx = 0;
+        for (const pair of setPairs) {
+          const eqIdx = pair.indexOf('=');
+          if (eqIdx >= 0) {
+            row[pair.substring(0, eqIdx).trim().toLowerCase()] = options.args[argIdx++];
+          }
+        }
+      }
+      return;
+    }
+
+    // DELETE - remove all matching rows, not just the first one
+    const deleteMatch = sql.match(/FROM\s+(\w+)\s+WHERE\s+(\w+)\s*=\s*\?/);
+    if (deleteMatch) {
+      const tableName = deleteMatch[1]!.toLowerCase();
+      const whereCol = deleteMatch[2]!.toLowerCase();
+      const whereVal = options.args[0];
+      const rows = _getFakeTable(tableName);
+      // Filter out all rows matching the predicate
+      const filtered = rows.filter((r) => r[whereCol] !== whereVal);
+      // Replace the table contents with filtered rows
+      _fakeDbTables.set(tableName, filtered);
+    }
+  },
+
+  async transaction(queries: readonly { sql: string; args: readonly unknown[] }[]) {
+    for (const query of queries) {
+      if (query.sql.includes('?, ?, ?, ?, ?)') && query.args.length < 5) {
+        throw new Error('SQL error: wrong number of arguments');
+      }
+      await this.execute(query);
+    }
+  },
+
+  async sync() {},
+  async close() {},
+
+  _reset() {
+    _fakeDbTables.clear();
+  },
+};
+
+mock.module('@aikami/frontend/repositories', () => ({
+  getLocalDatabase: mock(async () => _fakeLocalDatabase),
+  closeLocalDatabase: mock(async () => {}),
+  resetLocalDatabase: mock(() => {
+    _fakeDbTables.clear();
+  }),
+  __esModule: true,
+}));
