@@ -89,6 +89,7 @@ export const loadReviewPrompt = (options: {
   headBranch?: string;
   baseBranch?: string;
   ready?: boolean;
+  yolo?: boolean;
 }): string => {
   const promptPath = resolve(options.repoRoot, '.pi/prompts/contract-review-captain.md');
   if (!existsSync(promptPath)) {
@@ -99,7 +100,7 @@ export const loadReviewPrompt = (options: {
     '/',
   );
 
-  const draftFlag = options.ready ? 'false' : 'true';
+  const draftFlag = (options.ready || options.yolo) ? 'false' : 'true';
   const prInfo = options.prUrl
     ? [
         '',

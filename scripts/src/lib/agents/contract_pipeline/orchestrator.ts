@@ -876,6 +876,7 @@ export const runContractPipeline = async (options: {
                 headBranch,
                 baseBranch,
                 ready: options.ready,
+                yolo: options.yolo,
               });
           manifest.reviewPaneId = await adapter.startReview({
             prompt,
