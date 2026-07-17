@@ -1014,6 +1014,40 @@ export const runContractPipeline = async (options: {
               timeout: 15000,
             });
           } catch {}
+
+          // YOLO: wait for CodeRabbit review before merging.
+          if (options.yolo) {
+            console.log('\n⏳ YOLO: waiting for CodeRabbit review...\n');
+            const prNumber = prUrl.split('/').pop() ?? '';
+            let blocked = false;
+            const deadline = Date.now() + 5 * 60 * 1000; // 5 min timeout
+            while (Date.now() < deadline) {
+              try {
+                const reviews = execSync(
+                  `gh pr view ${prNumber} --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai") | .state'`,
+                  { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: options.repoRoot, timeout: 10000 },
+                ).trim();
+                if (reviews.includes('CHANGES_REQUESTED')) {
+                  console.warn('⚠️  CodeRabbit requested changes — skipping auto-merge.\n');
+                  blocked = true;
+                  break;
+                }
+                if (reviews.includes('APPROVED') || reviews.includes('COMMENTED')) {
+                  console.log('✅ CodeRabbit review complete — no blockers.\n');
+                  break;
+                }
+              } catch { /* gh query may fail if no review yet */ }
+              await sleep(30_000);
+            }
+            if (blocked) {
+              pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: 'YOLO blocked by CodeRabbit changes_requested.' });
+              console.log('⛔ YOLO blocked — PR left open for manual review.\n');
+              manifest = transition({ manifest, next: 'pr_created' });
+              writeManifest({ manifest, cwd: options.repoRoot });
+              continue;
+            }
+          }
+
           execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
             encoding: 'utf-8',
             stdio: ['pipe', 'pipe', 'pipe'],
