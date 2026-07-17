@@ -288,3 +288,4 @@ apps/frontend/client/static/lpc/**/*
 .pi/architect_plan_*.md
 tmp/
 apps/frontend/client/static/game-assets/
+.pi/github/
