@@ -262,6 +262,21 @@ export type GameEvent =
     }
   | {
       /**
+       * Emitted when the closest interactable target changes (entering range,
+       * switching targets, leaving range). Dirty-checked — only emitted when
+       * the selection actually changes, not every tick.
+       *
+       * Contract: C-327 AC-2
+       */
+      type: 'INTERACTION_TARGET_CHANGED';
+      /** undefined when no interactable is in range. */
+      targetEntityId?: number;
+      targetType?: 'npc' | 'item';
+      /** Display name for the prompt (NPC name or item id). */
+      targetName?: string;
+    }
+  | {
+      /**
        * Emitted when the turn manager system advances combat to the next entity.
        * The UI (CombatViewModel) listens for this event to update health bars,
        * turn order displays, and status effects.

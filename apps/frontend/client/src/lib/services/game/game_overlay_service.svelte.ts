@@ -16,11 +16,13 @@ import {
   sessionService,
   worldStateService,
 } from '$services';
+import { inputActionService } from './input_action_service.svelte.ts';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
+import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { timeService } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -114,6 +116,9 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   /** Starts a new session after previous ended. */
   startNewSession(): Promise<void>;
 
+  /** Resets onboarding hints for replay (C-327 AC-4). */
+  replayOnboarding(): void;
+
   /** Intent-driven methods for bridge_listeners (not for general use). */
   setBridge(bridge: EngineBridge): void;
   setActive(type: GameOverlayType): void;
@@ -130,6 +135,12 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   readonly vendorSessionOptions:
     | { vendorId: string; vendorName: string; vendorInventory: string }
     | undefined;
+  /** Interaction prompt label (C-327 AC-2). */
+  readonly interactionPromptLabel: string;
+  /** Whether the interaction prompt is visible (C-327 AC-2). */
+  readonly interactionPromptVisible: boolean;
+  /** Sets the interaction prompt state (called by bridge_listeners). */
+  setInteractionPrompt(options: { label: string; visible: boolean }): void;
 };
 
 export type GameOverlayServiceOptions = BaseFrontendClassOptions;
@@ -183,6 +194,8 @@ export class GameOverlayService
       combatService,
       timeService,
       audioService,
+      inputActionService,
+      onboardingHintService,
     });
   }
 
@@ -221,6 +234,16 @@ export class GameOverlayService
   vendorSessionOptions = $state<
     { vendorId: string; vendorName: string; vendorInventory: string } | undefined
   >(undefined);
+
+  /** Interaction prompt state (C-327 AC-2). */
+  interactionPromptLabel = $state<string>('');
+  interactionPromptVisible = $state<boolean>(false);
+
+  /** Sets the interaction prompt label and visibility (called by bridge_listeners). */
+  setInteractionPrompt(options: { label: string; visible: boolean }): void {
+    this.interactionPromptLabel = options.label;
+    this.interactionPromptVisible = options.visible;
+  }
 
   /** Plays pickup SFX when inventory count increases. */
   onInventoryCountChange(newCount: number): void {
@@ -287,7 +310,16 @@ export class GameOverlayService
   }
 
   handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
+    const actionId = inputActionService.keyToAction(event.key);
+    inputActionService.onKeyDown();
+
+    // Notify onboarding service of any recognized action (C-327 AC-3)
+    if (actionId) {
+      onboardingHintService.onActionPerformed(actionId);
+    }
+
+    // ── Overlay close/escape handling ──
+    if (event.key === 'Escape' || actionId === 'open_menu') {
       event.preventDefault();
       if (this.activeOverlay === 'DIALOGUE') {
         this.endDialogue();
@@ -317,7 +349,8 @@ export class GameOverlayService
       return;
     }
 
-    if (event.key === 'i' || event.key === 'I') {
+    // ── Overlay toggle: open_inventory ──
+    if (actionId === 'open_inventory') {
       if (this.activeOverlay === 'INVENTORY') {
         event.preventDefault();
         this.closeInventory();
@@ -331,7 +364,8 @@ export class GameOverlayService
       return;
     }
 
-    if (event.key === 'q' || event.key === 'Q') {
+    // ── Overlay toggle: open_quest_log ──
+    if (actionId === 'open_quest_log') {
       if (this.activeOverlay === 'QUEST_LOG') {
         event.preventDefault();
         this.closeQuestLog();
@@ -345,7 +379,8 @@ export class GameOverlayService
       return;
     }
 
-    if (event.key === 'c' || event.key === 'C') {
+    // ── Overlay toggle: open_character ──
+    if (actionId === 'open_character') {
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
         event.preventDefault();
         this.closeCharacterDashboard();
@@ -522,6 +557,11 @@ export class GameOverlayService
     this.activeOverlay = 'NONE';
     gameModeService.setMode('EXPLORE');
     this._engineService?.resumeEngine();
+  }
+
+  /** Resets onboarding hints for replay (C-327 AC-4). */
+  replayOnboarding(): void {
+    onboardingHintService.resetOnboarding();
   }
 
   private _togglePauseMenu(): void {

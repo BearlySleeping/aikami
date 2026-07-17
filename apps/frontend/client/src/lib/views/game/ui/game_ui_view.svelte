@@ -11,6 +11,8 @@ import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
 import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
+import InteractionPrompt from './hud/interaction_prompt.svelte';
+import OnboardingHint from './hud/onboarding_hint.svelte';
 
 type Props = {
   viewModel: GameUIViewModelInterface;
@@ -34,6 +36,21 @@ const { viewModel }: Props = $props();
       rainIntensity={viewModel.rainIntensity}
     />
   {/if}
+
+  <!-- ── C-327 AC-2: Interaction prompt HUD ── -->
+  <InteractionPrompt
+    label={viewModel.interactionPromptLabel}
+    visible={viewModel.interactionPromptVisible}
+    reducedMotion={false}
+  />
+
+  <!-- ── C-327 AC-3: Onboarding hint toast ── -->
+  <OnboardingHint
+    text={viewModel.onboardingHintText}
+    visible={viewModel.onboardingHintVisible}
+    reducedMotion={false}
+    onDismiss={() => viewModel.dismissOnboardingHint()}
+  />
 
   <!-- Overlay router -->
   {#if viewModel.chatLocked}

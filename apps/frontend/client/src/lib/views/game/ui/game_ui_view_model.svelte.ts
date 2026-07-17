@@ -14,7 +14,9 @@ import {
   type GameOverlayType,
   gameEngineService,
   gameOverlayService,
+  inputActionService,
   npcDialogueService,
+  onboardingHintService,
   sessionService,
   timeService,
 } from '$services';
@@ -81,12 +83,24 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
 
+  // ── Interaction HUD (C-327) ──
+
+  /** Current interaction prompt label (e.g. "E — Talk to Elder Thalia"). */
+  readonly interactionPromptLabel: string;
+  /** Whether the interaction prompt is visible. */
+  readonly interactionPromptVisible: boolean;
+  /** Current onboarding hint text, or undefined if none. */
+  readonly onboardingHintText: string | undefined;
+  /** Whether the onboarding hint toast is visible. */
+  readonly onboardingHintVisible: boolean;
+
   handleKeyDown(event: KeyboardEvent): void;
   resumeGame(): void;
   endDialogue(): void;
   saveGame(): Promise<void>;
   respawnPlayer(): Promise<void>;
   loadLastSave(): Promise<void>;
+  dismissOnboardingHint(): void;
 };
 
 class GameUIViewModel
@@ -104,6 +118,30 @@ class GameUIViewModel
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
+
+  // ── Interaction HUD state (C-327) ──
+
+  get interactionPromptLabel(): string {
+    return gameOverlayService.interactionPromptLabel;
+  }
+
+  get interactionPromptVisible(): boolean {
+    return gameOverlayService.interactionPromptVisible;
+  }
+
+  get onboardingHintText(): string | undefined {
+    const hint = onboardingHintService.currentHint;
+    if (!hint) {
+      return undefined;
+    }
+    // Replace {key} placeholder with the current binding label
+    const keyLabel = inputActionService.actionDisplayLabel(hint.action);
+    return hint.text.replaceAll('{key}', keyLabel);
+  }
+
+  get onboardingHintVisible(): boolean {
+    return onboardingHintService.hintVisible;
+  }
 
   // ── Service-proxied state ──
 
@@ -337,6 +375,11 @@ class GameUIViewModel
 
   async loadLastSave(): Promise<void> {
     await gameOverlayService.loadLastSave();
+  }
+
+  /** Dismisses the current onboarding hint (C-327 AC-3). */
+  dismissOnboardingHint(): void {
+    onboardingHintService.dismissCurrentHint();
   }
 }
 

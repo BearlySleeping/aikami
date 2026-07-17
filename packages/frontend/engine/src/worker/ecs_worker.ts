@@ -88,6 +88,7 @@ import { setEnvironmentConfig, stepEnvironment } from '../systems/environment_sy
 import { enqueueMacro, updateExpressions } from '../systems/expression_system.ts';
 import { updateGoapCombatTactics } from '../systems/goap_combat_tactics_system.ts';
 import { updateGoapScheduler } from '../systems/goap_scheduler_system.ts';
+import { updateInteractionProximity } from '../systems/interaction_proximity_system.ts';
 import { handleInteract } from '../systems/interaction_system.ts';
 import { initJpsPathfinder, tickJpsPathfinder } from '../systems/jps_pathfinder_system.ts';
 import {
@@ -819,6 +820,15 @@ const tickLoop = (): void => {
       spatialGrid,
     });
   }
+
+  // ── C-327 AC-2: Interaction proximity ──
+  // Evaluates the nearest interactable and emits INTERACTION_TARGET_CHANGED
+  // only when the target changes (dirty-checked).
+  updateInteractionProximity({
+    world,
+    playerEntityId,
+    bridge: workerBridge,
+  });
 
   // Compute per-entity animation frame indices from velocity vectors.
   // Runs right before the uniform buffer flush so that the frame index

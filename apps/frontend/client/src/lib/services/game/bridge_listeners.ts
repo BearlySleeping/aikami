@@ -10,7 +10,9 @@ import type { AudioServiceInterface } from '$lib/services/audio/audio_service.sv
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
+import type { InputActionServiceInterface } from './input_action_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
+import type { OnboardingHintServiceInterface } from './onboarding_hint_service.svelte.ts';
 import type { TimeServiceInterface } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +26,8 @@ export type SetupBridgeListenersParams = {
   combatService: CombatServiceInterface;
   timeService: TimeServiceInterface;
   audioService: AudioServiceInterface;
+  inputActionService: InputActionServiceInterface;
+  onboardingHintService: OnboardingHintServiceInterface;
 };
 
 // ---------------------------------------------------------------------------
@@ -38,6 +42,8 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     combatService,
     timeService,
     audioService,
+    inputActionService,
+    onboardingHintService,
   } = params;
 
   const { createEngineBridge } = await import('@aikami/frontend/engine');
@@ -175,4 +181,27 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       }
     }
   });
+
+  // ── C-327 AC-2: Interaction proximity ──
+
+  bridge.on('INTERACTION_TARGET_CHANGED', (event) => {
+    if (event.targetEntityId !== undefined && event.targetName && event.targetType) {
+      const verb = event.targetType === 'npc' ? 'Talk to' : 'Pick up';
+      const keyLabel = inputActionService.actionDisplayLabel('interact');
+      gameOverlayService.setInteractionPrompt({
+        label: `${keyLabel} — ${verb} ${event.targetName}`,
+        visible: true,
+      });
+    } else {
+      gameOverlayService.setInteractionPrompt({ label: '', visible: false });
+    }
+
+    // Forward target changes to the onboarding service for near_interactable hints
+    if (event.targetEntityId !== undefined) {
+      onboardingHintService.onInteractionTargetChanged();
+    }
+  });
+
+  // ── C-327 AC-5: Gamepad polling via UI rAF ──
+  // Gamepad is polled externally via the game_ui_view_model frame loop
 };
