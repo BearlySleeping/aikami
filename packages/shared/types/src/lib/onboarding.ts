@@ -34,4 +34,10 @@ export type OnboardingDraft = {
   personalityTraits: string;
   /** Equipment list. */
   equipment: string[];
+  /** LPC recipe: slot name → variant assetId for the previewed character. */
+  lpcRecipe?: Record<string, string>;
+  /** Palette overrides: slot name → 6-char hex color. */
+  paletteOverrides?: Record<string, string>;
+  /** ID of the selected appearance preset, if any. */
+  selectedPresetId?: string;
 };

@@ -4,8 +4,10 @@
 // flow: starter hero selection, 4-step custom creation, draft persistence,
 // persona assembly, campaign attachment, and Session Zero routing.
 // Contract: C-319 Replace /setup with Fast Character Onboarding
+// Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
 import type {
+  AppearancePreset,
   ClassPreset,
   OnboardingStep,
   PronounSet,
@@ -16,6 +18,7 @@ import {
   ABILITY_LABELS,
   APPEARANCE_PRESETS,
   CLASS_PRESETS,
+  DEFAULT_LPC_RECIPE,
   DND_STANDARD_ARRAY,
   ONBOARDING_STEPS,
   PLAY_STYLE_TAGS,
@@ -26,6 +29,7 @@ import {
   SPECIES_OPTIONS,
   STARTER_HEROES,
 } from '@aikami/constants';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -46,6 +50,19 @@ const EMPTY_SCORES: Record<string, number> = {
   charisma: 10,
 };
 
+/** Canonical render-order for LPC slots. Matches engine ordering. */
+const ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
+
+/** LPC slot labels for the appearance step UI. */
+const LPC_SLOT_LABELS: Record<string, string> = {
+  body: 'Body',
+  hair: 'Hair',
+  head: 'Head',
+  torso: 'Torso',
+  legs: 'Legs',
+  feet: 'Feet',
+};
+
 // ── Interface ──────────────────────────────────────────────────────────
 
 export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
@@ -61,7 +78,7 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly pronounSets: readonly PronounSet[];
   readonly abilityLabels: typeof ABILITY_LABELS;
   readonly playStyleTags: typeof PLAY_STYLE_TAGS;
-  readonly appearancePresets: typeof APPEARANCE_PRESETS;
+  readonly appearancePresets: readonly AppearancePreset[];
   readonly hasDraft: boolean;
 
   // Starter path
@@ -101,6 +118,22 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly selectedRace: SpeciesOption | undefined;
   readonly selectedPronoun: PronounSet | undefined;
 
+  // LPC appearance state
+  lpcRecipe: Record<string, string>;
+  paletteOverrides: Record<string, string>;
+  selectedPresetId: string | undefined;
+  previewPlaying: boolean;
+  readonly lpcPreviewRecipes: LpcLayerRecipe[];
+  readonly availableLpcSlots: Array<{
+    slot: string;
+    label: string;
+    variants: Array<{ assetId: string; label: string }>;
+  }>;
+  selectAppearancePreset(presetId: string): void;
+  setLpcLayer(slotName: string, assetId: string): void;
+  setPaletteOverride(slotName: string, hexColor: string): void;
+  togglePreviewAnimation(): void;
+
   // Finalize
   confirmAndEnter(): Promise<void>;
 
@@ -136,6 +169,12 @@ class OnboardingCoordinatorViewModel
   personalityTraits = $state('');
   equipment = $state<string[]>([]);
 
+  // LPC appearance state
+  lpcRecipe = $state<Record<string, string>>({ ...DEFAULT_LPC_RECIPE });
+  paletteOverrides = $state<Record<string, string>>({});
+  selectedPresetId = $state<string | undefined>(undefined);
+  previewPlaying = $state(false);
+
   // ── Computed ──────────────────────────────────────────────────────
 
   get stepIndex(): number {
@@ -166,7 +205,7 @@ class OnboardingCoordinatorViewModel
     return PLAY_STYLE_TAGS;
   }
 
-  get appearancePresets(): typeof APPEARANCE_PRESETS {
+  get appearancePresets(): readonly AppearancePreset[] {
     return APPEARANCE_PRESETS;
   }
 
@@ -208,6 +247,46 @@ class OnboardingCoordinatorViewModel
     return PRONOUN_SETS.find((p) => p.id === this.pronounId);
   }
 
+  /**
+   * Builds LpcLayerRecipe[] from the current lpcRecipe + paletteOverrides.
+   * Recipes are ordered by engine slot priority (body, hair, torso, legs, feet, head).
+   */
+  get lpcPreviewRecipes(): LpcLayerRecipe[] {
+    const recipes: LpcLayerRecipe[] = [];
+
+    for (const slot of ENGINE_SLOTS) {
+      const assetId = this.lpcRecipe[slot];
+      if (!assetId) {
+        continue;
+      }
+
+      const hexColor = this.paletteOverrides[slot];
+      const hexPalette = this._buildPaletteLut(hexColor);
+
+      recipes.push({ slot, assetId, hexPalette });
+    }
+
+    return recipes;
+  }
+
+  /**
+   * Returns the 6 engine LPC slots with their labels.
+   *
+   * Full variant lists are not exposed here to keep the coordinator thin.
+   * The appearance step view imports variant data from the LPC catalog directly.
+   */
+  get availableLpcSlots(): Array<{
+    slot: string;
+    label: string;
+    variants: Array<{ assetId: string; label: string }>;
+  }> {
+    return ENGINE_SLOTS.map((slot) => ({
+      slot,
+      label: LPC_SLOT_LABELS[slot] ?? slot,
+      variants: [], // populated by the view from the catalog
+    }));
+  }
+
   // ── Lifecycle ─────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -229,6 +308,7 @@ class OnboardingCoordinatorViewModel
   startCustom(): void {
     this.mode = 'custom';
     this.step = 'identity';
+    this._ensureDefaultRecipe();
     this._saveDraft();
   }
 
@@ -315,6 +395,45 @@ class OnboardingCoordinatorViewModel
     this._saveDraft();
   }
 
+  // ── LPC Appearance ────────────────────────────────────────────────
+
+  /**
+   * Applies a curated appearance preset, replacing all layers.
+   * Uses DEFAULT_LPC_RECIPE as fallback if the preset is not found.
+   */
+  selectAppearancePreset(presetId: string): void {
+    const preset = APPEARANCE_PRESETS.find((p) => p.id === presetId);
+
+    if (!preset) {
+      this.warn('selectAppearancePreset:notFound', { presetId });
+      return;
+    }
+
+    this.lpcRecipe = { ...preset.lpcLayers };
+    this.paletteOverrides = { ...(preset.paletteOverrides ?? {}) };
+    this.selectedPresetId = presetId;
+    this.appearanceDescription = preset.description;
+    this._saveDraft();
+  }
+
+  /** Updates a single LPC layer's asset ID. */
+  setLpcLayer(slotName: string, assetId: string): void {
+    this.lpcRecipe = { ...this.lpcRecipe, [slotName]: assetId };
+    this.selectedPresetId = undefined;
+    this._saveDraft();
+  }
+
+  /** Sets a palette override color for a specific slot. */
+  setPaletteOverride(slotName: string, hexColor: string): void {
+    this.paletteOverrides = { ...this.paletteOverrides, [slotName]: hexColor };
+    this._saveDraft();
+  }
+
+  /** Toggles the preview animation playback. */
+  togglePreviewAnimation(): void {
+    this.previewPlaying = !this.previewPlaying;
+  }
+
   // ── Randomize ─────────────────────────────────────────────────────
 
   randomizeCharacter(): void {
@@ -346,6 +465,11 @@ class OnboardingCoordinatorViewModel
     this.appearanceDescription = randomPreset.description;
     this.background = randomBg;
     this.personalityTraits = randomPers;
+
+    // Apply random preset's LPC layers
+    this.lpcRecipe = { ...randomPreset.lpcLayers };
+    this.paletteOverrides = { ...(randomPreset.paletteOverrides ?? {}) };
+    this.selectedPresetId = randomPreset.id;
 
     // Assign standard array with primary at 15, secondary at 14
     this._assignStandardArray();
@@ -424,7 +548,10 @@ class OnboardingCoordinatorViewModel
       alignment: this.alignment,
       abilityScores: this.abilityScores,
       equipment: this.selectedClass?.suggestedEquipment ?? [],
-      appearance: { physicalDescription: this.appearanceDescription },
+      appearance: {
+        physicalDescription: this.appearanceDescription,
+        lpcRecipe: { ...this.lpcRecipe },
+      },
       background: this.background,
       personalityTraits: this.personalityTraits,
       notes: `Pronouns: ${pronounDisplay}`,
@@ -460,19 +587,10 @@ class OnboardingCoordinatorViewModel
       return;
     }
 
-    // Save the persona to IndexedDB via campaign service pattern
-    // Store persona data for downstream use
     try {
       localStorage.setItem(`persona-${persona.id}`, JSON.stringify(persona));
-
-      // Attach persona ID to campaign by creating a new campaign with personaId
-      // Since campaign is already created, we need to update it
       campaign.personaId = persona.id;
-
-      // Complete setup — transitions to playing state
       campaignService.completeSetup();
-
-      // Clear draft after successful creation
       this._clearDraft();
 
       this.info('_attachPersonaToCampaign:complete', {
@@ -480,7 +598,6 @@ class OnboardingCoordinatorViewModel
         campaignId: campaign.id,
       });
 
-      // Navigate to /game
       await routerService.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,
@@ -503,17 +620,14 @@ class OnboardingCoordinatorViewModel
     const scores: Record<string, number> = { ...EMPTY_SCORES };
     const abilityKeys = Object.keys(scores) as Array<keyof typeof scores>;
 
-    // Assign primary at 15, secondary at 14
     scores[cls.primaryAbility] = DND_STANDARD_ARRAY[0]; // 15
     scores[cls.secondaryAbility] = DND_STANDARD_ARRAY[1]; // 14
 
-    // Randomly assign remaining 13, 12, 10, 8 to remaining abilities
     const remaining = abilityKeys.filter(
       (k) => k !== cls.primaryAbility && k !== cls.secondaryAbility,
     );
-    const remainingValues = DND_STANDARD_ARRAY.slice(2); // [13, 12, 10, 8]
+    const remainingValues = DND_STANDARD_ARRAY.slice(2);
 
-    // Shuffle remaining values
     const shuffled = [...remainingValues].sort(() => Math.random() - 0.5);
     for (let i = 0; i < remaining.length; i++) {
       scores[remaining[i]] = shuffled[i];
@@ -524,8 +638,7 @@ class OnboardingCoordinatorViewModel
 
   /**
    * Assigns standard array scores only if the current scores are still
-   * at their default values (all 10s). This prevents overwriting manually
-   * adjusted scores when navigating back and forth.
+   * at their default values (all 10s).
    */
   private _assignStandardArrayIfDefault(): void {
     const allDefaults = Object.values(this.abilityScores).every((v) => v === 10);
@@ -554,6 +667,9 @@ class OnboardingCoordinatorViewModel
         background: this.background,
         personalityTraits: this.personalityTraits,
         equipment: [...this.equipment],
+        lpcRecipe: { ...this.lpcRecipe },
+        paletteOverrides: { ...this.paletteOverrides },
+        selectedPresetId: this.selectedPresetId,
       };
       localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch (error) {
@@ -571,7 +687,6 @@ class OnboardingCoordinatorViewModel
 
       const draft = JSON.parse(raw) as OnboardingDraft;
 
-      // Validate that the draft references existing data
       const raceExists = SPECIES_OPTIONS.some((s) => s.id === draft.raceId);
       const classExists = CLASS_PRESETS.some((c) => c.id === draft.classId);
       const pronounExists = PRONOUN_SETS.some((p) => p.id === draft.pronounId);
@@ -599,6 +714,11 @@ class OnboardingCoordinatorViewModel
       this.personalityTraits = draft.personalityTraits;
       this.equipment = draft.equipment;
 
+      // Recover LPC recipe from draft (default to DEFAULT_LPC_RECIPE if absent)
+      this.lpcRecipe = draft.lpcRecipe ?? { ...DEFAULT_LPC_RECIPE };
+      this.paletteOverrides = draft.paletteOverrides ?? {};
+      this.selectedPresetId = draft.selectedPresetId;
+
       this.info('_recoverDraft', { step: draft.step });
     } catch (error) {
       this.warn('_recoverDraft:parse-failed', error);
@@ -612,6 +732,42 @@ class OnboardingCoordinatorViewModel
       localStorage.removeItem(DRAFT_KEY);
     } catch {
       // Best effort
+    }
+  }
+
+  // ── Private: LPC helpers ──────────────────────────────────────────
+
+  /** Builds a 1024-byte palette LUT from a 6-char hex color string. */
+  private _buildPaletteLut(hexColor: string | undefined): Uint8Array {
+    const palette = new Uint8Array(1024);
+
+    if (!hexColor || hexColor.length !== 6) {
+      return palette;
+    }
+
+    const r = Number.parseInt(hexColor.slice(0, 2), 16);
+    const g = Number.parseInt(hexColor.slice(2, 4), 16);
+    const b = Number.parseInt(hexColor.slice(4, 6), 16);
+
+    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+      return palette;
+    }
+
+    for (let entry = 0; entry < 256; entry++) {
+      const offset = entry * 4;
+      palette[offset] = r;
+      palette[offset + 1] = g;
+      palette[offset + 2] = b;
+      palette[offset + 3] = 255;
+    }
+
+    return palette;
+  }
+
+  /** Ensures the LPC recipe is at the default if empty. */
+  private _ensureDefaultRecipe(): void {
+    if (Object.keys(this.lpcRecipe).length === 0) {
+      this.lpcRecipe = { ...DEFAULT_LPC_RECIPE };
     }
   }
 }
