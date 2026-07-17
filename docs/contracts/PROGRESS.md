@@ -124,7 +124,7 @@
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | — | v2 |
 | C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | — | v2 |
 | C-321 | Migrate Local Persistence To Turso As The Source Of Truth | 🛠️ implemented | ❓ `integrated` | v2 |
-| C-322 | Wire The Ai Provider Gateway Into Capability Detection And S | 📝 draft | — | v2 |
+| C-322 | Wire The Ai Provider Gateway Into Capability Detection And S | ✅ verified | — | v2 |
 | C-323 | Enforce the Mandatory Text AI Capability Gate | ⏳ not_started (no contract file) | — | — |
 | C-324 | Retire Legacy AI-Less Code Paths and Unused Backend Packages | ⏳ not_started (no contract file) | — | — |
 | C-325 | Ship Real-Time LPC Appearance Preview with Safe Defaults | ⏳ not_started (no contract file) | — | — |
