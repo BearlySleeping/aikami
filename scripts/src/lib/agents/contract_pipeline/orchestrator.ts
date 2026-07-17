@@ -732,25 +732,6 @@ export const runContractPipeline = async (options: {
               console.warn(`⚠️  Contract commit failed (non-fatal): ${msg.slice(0, 200)}`);
             }
           }
-          // Also commit the approved contract to main locally (don't push).
-          // The PR merge later brings it to origin/main. This keeps
-          // `git status` clean without risking concurrent-push conflicts.
-          try {
-            const contractRelPath = relative(options.repoRoot, manifest.contractPath);
-            runGit(`add -- '${contractRelPath}'`, { cwd: options.repoRoot });
-            runGit(`commit -m "docs(contracts): approve ${manifest.contractId}"`, {
-              cwd: options.repoRoot,
-              env: {
-                CONTRACT_PIPELINE_WORKTREE: '1',
-                GIT_AUTHOR_NAME: 'Pi Agent',
-                GIT_AUTHOR_EMAIL: 'agent@pi.internal',
-                GIT_COMMITTER_NAME: 'Pi Agent',
-                GIT_COMMITTER_EMAIL: 'agent@pi.internal',
-              },
-            });
-          } catch (_commitErr: unknown) {
-            // May fail if nothing to commit (already committed) — non-fatal.
-          }
         }
 
         if (stage === 'verify') {
