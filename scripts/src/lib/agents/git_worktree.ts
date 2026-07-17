@@ -209,10 +209,7 @@ source_env ${options.repoRoot}
     // direnv may not be installed — not fatal.
   }
 
-  // 🔴 Safety: exclude workspace-local files from git tracking.
-  // .envrc contains an absolute path to the repo root (required for
-  // direnv delegation) and must never be committed. .pi/settings.json
-  // is a local agent config that varies per machine.
+  // 🔴 Safety: exclude workspace-local config files from git tracking.
   try {
     const excludePath = join(wsDir, '.git', 'info', 'exclude');
     const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf-8') : '';
