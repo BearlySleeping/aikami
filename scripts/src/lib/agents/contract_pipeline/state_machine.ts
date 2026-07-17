@@ -44,14 +44,21 @@ export const resolveNextStage = (options: {
 
 export const resolveReviewDecision = (decision: ReviewDecision): ContractPipelineStage => {
   switch (decision) {
-    case 'approve': return 'pr_created';
-    case 'merge': return 'merged';
-    case 'change': return 'implement';
-    case 'reject': return 'blocked';
+    case 'approve':
+      return 'pr_created';
+    case 'merge':
+      return 'merged';
+    case 'change':
+      return 'implement';
+    case 'reject':
+      return 'blocked';
   }
 };
 
-export const transition = (options: { manifest: RunManifest; next: ContractPipelineStage }): RunManifest => ({
+export const transition = (options: {
+  manifest: RunManifest;
+  next: ContractPipelineStage;
+}): RunManifest => ({
   ...options.manifest,
   currentStage: options.next,
   lastUpdated: new Date().toISOString(),

@@ -683,7 +683,9 @@ export const runContractPipeline = async (options: {
               });
             } catch (commitErr: unknown) {
               const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
-              console.warn(`⚠️  Implementer commit failed (non-fatal — reconcile will retry): ${msg.slice(0, 200)}`);
+              console.warn(
+                `⚠️  Implementer commit failed (non-fatal — reconcile will retry): ${msg.slice(0, 200)}`,
+              );
             }
           }
         }
