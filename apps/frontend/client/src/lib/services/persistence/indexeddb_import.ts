@@ -161,8 +161,14 @@ const _readLegacyIndexedDB = async (): Promise<{
 
     database.close();
   } catch (error) {
-    logger.warn('indexeddb_import:read-legacy-failed', { error });
-    // If IDB can't be opened, there's nothing to import
+    // Only treat a confirmed database-not-found as empty import
+    // Rethrow unexpected errors so the caller can retry
+    if (error instanceof Error && error.message.includes('not found')) {
+      logger.debug('indexeddb_import:legacy-db-not-found');
+      return { campaigns, saves };
+    }
+    logger.error('indexeddb_import:read-legacy-failed', { error });
+    throw error;
   }
 
   return { campaigns, saves };

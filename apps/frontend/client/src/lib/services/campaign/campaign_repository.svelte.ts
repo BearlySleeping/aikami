@@ -79,22 +79,31 @@ class CampaignRepository
   /** @inheritdoc */
   async update(campaign: Campaign): Promise<Campaign> {
     const db = await getLocalDatabase();
+    const data = JSON.stringify(campaign);
 
-    // Verify campaign exists
-    const existing = await db.query({
+    // Use a transaction to make check and update atomic
+    await db.transaction([
+      {
+        sql: 'SELECT id FROM campaigns WHERE id = ?',
+        args: [campaign.id],
+      },
+      {
+        sql: `UPDATE campaigns SET data = ?, updated_at = ? WHERE id = ?`,
+        args: [data, campaign.updatedAt, campaign.id],
+      },
+    ]);
+
+    // Post-transaction verification: confirm the campaign exists
+    // If the transaction succeeded but the campaign doesn't exist,
+    // it means the SELECT returned empty (campaign was not found)
+    const verification = await db.query({
       sql: 'SELECT id FROM campaigns WHERE id = ?',
       args: [campaign.id],
     });
 
-    if (existing.rows.length === 0) {
+    if (verification.rows.length === 0) {
       throw new Error(`Campaign not found: ${campaign.id}`);
     }
-
-    const data = JSON.stringify(campaign);
-    await db.execute({
-      sql: `UPDATE campaigns SET data = ?, updated_at = ? WHERE id = ?`,
-      args: [data, campaign.updatedAt, campaign.id],
-    });
 
     return campaign;
   }

@@ -55,17 +55,17 @@ class TursoConversationRepository implements ConversationRepositoryInterface {
   async saveDialogueTurn(options: SaveDialogueTurnOptions): Promise<void> {
     const db = await getLocalDatabase();
 
-    // Persist player message
-    await db.execute({
-      sql: `INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)`,
-      args: [options.chatId, options.playerMessage.role, options.playerMessage.content],
-    });
-
-    // Persist NPC response
-    await db.execute({
-      sql: `INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)`,
-      args: [options.chatId, options.npcMessage.role, options.npcMessage.content],
-    });
+    // Persist both messages in one transaction to prevent partial persistence
+    await db.transaction([
+      {
+        sql: `INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)`,
+        args: [options.chatId, options.playerMessage.role, options.playerMessage.content],
+      },
+      {
+        sql: `INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)`,
+        args: [options.chatId, options.npcMessage.role, options.npcMessage.content],
+      },
+    ]);
   }
 }
 

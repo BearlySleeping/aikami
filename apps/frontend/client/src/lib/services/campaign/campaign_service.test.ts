@@ -31,8 +31,13 @@ mock.module('../game/serializable_service', () => ({
 // Crypto mock
 // ---------------------------------------------------------------------------
 
+let _uuidCounter = 0;
 globalThis.crypto = {
-  randomUUID: () => '550e8400-e29b-41d4-a716-446655440000',
+  randomUUID: () => {
+    const counter = _uuidCounter++;
+    const hex = counter.toString(16).padStart(12, '0');
+    return `550e8400-e29b-41d4-a716-${hex}`;
+  },
 } as unknown as Crypto;
 
 // ---------------------------------------------------------------------------
@@ -176,5 +181,15 @@ describe('CampaignService', () => {
   test('hasCampaigns returns true after startNewCampaign', async () => {
     await getSvc().startNewCampaign();
     expect(getSvc().hasCampaigns()).toBe(true);
+  });
+
+  test('startNewCampaign consecutively creates distinct campaigns', async () => {
+    const campaign1 = await getSvc().startNewCampaign();
+    const campaign2 = await getSvc().startNewCampaign();
+    expect(campaign1.id).not.toBe(campaign2.id);
+    await getSvc().refreshCampaigns();
+    expect(getSvc().campaigns.length).toBe(2);
+    expect(getSvc().campaigns.find((c) => c.id === campaign1.id)).toBeDefined();
+    expect(getSvc().campaigns.find((c) => c.id === campaign2.id)).toBeDefined();
   });
 });

@@ -568,6 +568,20 @@ const _fakeLocalDatabase = {
       return { rows: match ? [match] : [] };
     }
 
+    // Handle COUNT(*) before generic SELECT to match SQLite semantics
+    if (sql.includes('COUNT(*)')) {
+      const countMatch = sql.match(/FROM\s+(\w+)(?:\s+WHERE\s+(\w+)\s*=\s*\?)?/);
+      if (countMatch) {
+        const tableName = countMatch[1]!.toLowerCase();
+        const whereCol = countMatch[2]?.toLowerCase();
+        let rows = _getFakeTable(tableName);
+        if (whereCol) {
+          rows = rows.filter((r) => r[whereCol] === options.args[0]);
+        }
+        return { rows: [{ n: rows.length }] };
+      }
+    }
+
     // Handle SELECT ... FROM table WHERE col = ?
     const selectMatch = sql.match(
       /FROM\s+(\w+)\s*(?:WHERE\s+(\w+)\s*=\s*\?)?(?:\s*ORDER BY\s+(\w+)\s*(DESC|ASC)?)?/,
@@ -591,42 +605,41 @@ const _fakeLocalDatabase = {
       return { rows };
     }
 
-    // Handle COUNT(*)
-    if (sql.includes('COUNT(*)')) {
-      const countMatch = sql.match(/FROM\s+(\w+)(?:\s+WHERE\s+(\w+)\s*=\s*\?)?/);
-      if (countMatch) {
-        const tableName = countMatch[1]!.toLowerCase();
-        const whereCol = countMatch[2]?.toLowerCase();
-        let rows = _getFakeTable(tableName);
-        if (whereCol) {
-          rows = rows.filter((r) => r[whereCol] === options.args[0]);
-        }
-        return { rows: [{ n: rows.length }] };
-      }
-    }
-
     return { rows: [] };
   },
 
   async execute(options: { sql: string; args: readonly unknown[] }) {
     const sql = options.sql.trim().toUpperCase();
 
-    // INSERT OR REPLACE
-    const insertMatch = sql.match(/INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/);
+    // INSERT with OR IGNORE / OR REPLACE conflict handling
+    const insertMatch = sql.match(/INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/);
     if (insertMatch) {
-      const tableName = insertMatch[1]!.toLowerCase();
-      const columns = insertMatch[2]!.split(',').map((c) => c.trim().toLowerCase());
+      const conflictMode = insertMatch[1]?.toUpperCase() as 'IGNORE' | 'REPLACE' | undefined;
+      const tableName = insertMatch[2]!.toLowerCase();
+      const columns = insertMatch[3]!.split(',').map((c) => c.trim().toLowerCase());
       const rows = _getFakeTable(tableName);
       const newRow: Record<string, unknown> = {};
       for (let i = 0; i < columns.length; i++) {
         newRow[columns[i]] = options.args[i];
       }
-      // Replace by id if present
-      const idIdx = columns.indexOf('id');
-      if (idIdx >= 0) {
-        const existingIdx = rows.findIndex((r) => r.id === options.args[idIdx]);
+
+      // Determine conflict key based on table (id is primary key for most tables)
+      const conflictKey = 'id';
+      const conflictKeyIdx = columns.indexOf(conflictKey);
+
+      if (conflictKeyIdx >= 0) {
+        const existingIdx = rows.findIndex((r) => r[conflictKey] === options.args[conflictKeyIdx]);
         if (existingIdx >= 0) {
-          rows[existingIdx] = newRow;
+          // Conflict detected
+          if (conflictMode === 'REPLACE') {
+            rows[existingIdx] = newRow;
+          } else if (conflictMode === 'IGNORE') {
+            // Do nothing - ignore the insert
+            return;
+          } else {
+            // Default INSERT behavior would fail on conflict, but for testing we'll replace
+            rows[existingIdx] = newRow;
+          }
         } else {
           rows.push(newRow);
         }
@@ -657,17 +670,17 @@ const _fakeLocalDatabase = {
       return;
     }
 
-    // DELETE
+    // DELETE - remove all matching rows, not just the first one
     const deleteMatch = sql.match(/FROM\s+(\w+)\s+WHERE\s+(\w+)\s*=\s*\?/);
     if (deleteMatch) {
       const tableName = deleteMatch[1]!.toLowerCase();
       const whereCol = deleteMatch[2]!.toLowerCase();
       const whereVal = options.args[0];
       const rows = _getFakeTable(tableName);
-      const idx = rows.findIndex((r) => r[whereCol] === whereVal);
-      if (idx >= 0) {
-        rows.splice(idx, 1);
-      }
+      // Filter out all rows matching the predicate
+      const filtered = rows.filter((r) => r[whereCol] !== whereVal);
+      // Replace the table contents with filtered rows
+      _fakeDbTables.set(tableName, filtered);
     }
   },
 
