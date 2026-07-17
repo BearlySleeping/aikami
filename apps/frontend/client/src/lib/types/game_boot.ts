@@ -39,4 +39,5 @@ export type GameBootInput = {
   personaId?: string;
   pendingSavePayload?: string;
   canvas: HTMLCanvasElement;
+  rendererPreference?: 'webgpu' | 'webgl';
 };

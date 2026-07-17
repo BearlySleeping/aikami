@@ -124,7 +124,6 @@ class GameCanvasViewModel
   async initialize(): Promise<void> {
     // Reactive canvas-binding effect: when the View binds the canvas element
     // and the boot service is idle, launch the boot orchestrator.
-    // On cleanup (navigation away), cancel and teardown.
     //
     // The effect reads gameBootService.bootProgress.stage as a dependency.
     // When resetForRetry() sets stage back to 'idle', the effect re-runs
@@ -139,7 +138,12 @@ class GameCanvasViewModel
           // Only the canvas element is forwarded from the View.
           void gameBootService.boot({ canvas, contentPackId: 'emberwatch' });
         }
+      });
+    });
 
+    // Teardown effect: dependency-free cleanup that only runs on ViewModel destruction
+    this.registerEffectRoot(() => {
+      $effect(() => {
         return () => {
           // Navigation away — cancel in-flight boot and teardown
           gameBootService.cancelBoot();

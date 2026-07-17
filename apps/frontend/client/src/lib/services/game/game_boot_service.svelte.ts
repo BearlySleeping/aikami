@@ -137,6 +137,7 @@ class GameBootService
     for (let i = 0; i < bootStageOrder.length; i++) {
       if (this._cancelled) {
         this._finishProgress('cancelled');
+        this._teardownEngineResources();
         const result: GameBootResult = { outcome: 'cancelled' };
         this.lastResult = result;
         this.isBooting = false;
@@ -151,6 +152,16 @@ class GameBootService
 
       try {
         await this._runStage(stage);
+
+        // Check cancellation immediately after each stage completes
+        if (this._cancelled) {
+          this._finishProgress('cancelled');
+          this._teardownEngineResources();
+          const result: GameBootResult = { outcome: 'cancelled' };
+          this.lastResult = result;
+          this.isBooting = false;
+          return result;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.error('boot:stage-failed', { stage, error: message });
@@ -185,8 +196,7 @@ class GameBootService
       }
     }
 
-    // All stages passed — finalize
-    this._finishProgress('ready');
+    // All stages passed — persist campaign state before declaring success
     const elapsed = performance.now() - t0;
     this.debug('boot:complete', { elapsedMs: elapsed, renderer: this._renderer });
 
@@ -202,13 +212,27 @@ class GameBootService
         };
         await campaignRepository.update(updated);
         this._campaign = updated;
-      } catch {
-        // Best effort — the boot result already captures success
-        this.warn('boot:campaign-complete-failed', {
-          state: this._campaign.state,
-        });
+      } catch (error) {
+        // Campaign persistence failure is a boot failure
+        const message = error instanceof Error ? error.message : String(error);
+        this.error('boot:campaign-persist-failed', { error: message });
+
+        this._finishProgress('failed', message, 'spawning_entities');
+        this._teardownEngineResources();
+
+        const result: GameBootResult = {
+          outcome: 'failed',
+          stage: 'spawning_entities',
+          error: `Campaign persistence failed: ${message}`,
+        };
+        this.lastResult = result;
+        this.isBooting = false;
+        return result;
       }
     }
+
+    // Campaign persisted — now finalize progress and publish ready
+    this._finishProgress('ready');
 
     const result: GameBootResult = { outcome: 'ready', renderer: this._renderer };
     this.lastResult = result;
@@ -465,7 +489,11 @@ class GameBootService
       height: input.canvas.clientHeight,
       initialPayload: undefined,
       playerData,
+      rendererPreference: input.rendererPreference,
     });
+
+    // Lock input immediately after initialization
+    this._gameWorld.setInputLocked(true);
 
     // Determine which renderer was actually used
     this._renderer = (this._gameWorld.renderer as 'webgpu' | 'webgl') ?? 'webgl';
@@ -522,6 +550,9 @@ class GameBootService
         spawnY: startingMap.defaultY,
       });
     }
+
+    // Re-lock input after hydration completes
+    this._gameWorld.setInputLocked(true);
 
     const elapsed = performance.now() - t0;
     this.debug('stage:hydrating_snapshot:complete', { elapsedMs: elapsed });

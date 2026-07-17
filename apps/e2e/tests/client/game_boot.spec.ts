@@ -52,6 +52,6 @@ test.describe('Game Boot Pipeline', () => {
     const playerHud = page.locator('.bg-base-200\\/80');
     await playerHud.waitFor({ state: 'visible', timeout: 30000 });
 
-    expect(playerHud).toBeVisible();
+    await expect(playerHud).toBeVisible();
   });
 });
