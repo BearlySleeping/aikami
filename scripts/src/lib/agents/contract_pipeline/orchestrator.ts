@@ -619,16 +619,6 @@ export const runContractPipeline = async (options: {
 
         if (
           wPath &&
-          (stage === 'implement' || stage === 'verify') &&
-          existsSync(manifest.contractPath)
-        ) {
-          const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
-          if (existsSync(wcp)) {
-            copyFileSync(wcp, manifest.contractPath);
-          }
-        }
-        if (
-          wPath &&
           (stage === 'write_contract' || stage === 'critique') &&
           existsSync(manifest.contractPath)
         ) {
@@ -731,6 +721,22 @@ export const runContractPipeline = async (options: {
               const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
               console.warn(`⚠️  Contract commit failed (non-fatal): ${msg.slice(0, 200)}`);
             }
+          }
+          // Also commit + push the approved contract to main.
+          // After this, worktrees branching from main have the contract.
+          // Implementer/verifier changes stay in the worktree → PR → main.
+          try {
+            const contractRelPath = relative(options.repoRoot, manifest.contractPath);
+            runGit(`add -- '${contractRelPath}'`, { cwd: options.repoRoot });
+            runGit(`commit -m "docs(contracts): approve ${manifest.contractId}"`, {
+              cwd: options.repoRoot,
+              env: { CONTRACT_PIPELINE_WORKTREE: '1', GIT_AUTHOR_NAME: 'Pi Agent', GIT_AUTHOR_EMAIL: 'agent@pi.internal', GIT_COMMITTER_NAME: 'Pi Agent', GIT_COMMITTER_EMAIL: 'agent@pi.internal' },
+            });
+            runGit('push origin main', { cwd: options.repoRoot });
+            pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: 'Approved contract pushed to main.' });
+          } catch (pushErr: unknown) {
+            const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+            console.warn(`⚠️  Push contract to main failed (non-fatal): ${msg.slice(0, 200)}`);
           }
         }
 
