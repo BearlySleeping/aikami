@@ -39,8 +39,10 @@ test.describe('Onboarding Appearance Persistence', () => {
     // Check localStorage for the draft
     const draftRaw = await page.evaluate(() => localStorage.getItem('aikami-onboarding-draft'));
     expect(draftRaw).not.toBeNull();
-
-    const draft = JSON.parse(draftRaw!);
+    if (!draftRaw) {
+      throw new Error('draftRaw was null');
+    }
+    const draft = JSON.parse(draftRaw);
     expect(draft.lpcRecipe).toBeDefined();
     expect(draft.lpcRecipe.head).toBeDefined();
     expect(draft.lpcRecipe.body).toBeDefined();

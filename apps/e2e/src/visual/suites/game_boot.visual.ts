@@ -73,5 +73,10 @@ export default defineConfig({
       prompt: BOOT_LOADING_PROMPT,
       schema: GameBootSchema,
     },
+    {
+      name: 'boot-error-stage',
+      prompt: BOOT_ERROR_PROMPT,
+      schema: GameBootSchema,
+    },
   ],
 });

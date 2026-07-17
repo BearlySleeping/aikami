@@ -65,6 +65,7 @@ export class OnboardingHintService
   private _packId = '';
   private _steps: OnboardingHintStep[] = [];
   private _learned: Record<string, boolean> = {};
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future hint priority queue
   private _pendingHints: OnboardingHintStep[] = [];
   private _nearInteractableTriggered = false;
 
@@ -146,9 +147,9 @@ export class OnboardingHintService
   resetOnboarding(): void {
     this._learned = {};
     this._pendingHints = [];
-    this._enqueuePendingHints();
     this.isComplete = false;
     this._nearInteractableTriggered = false;
+    this._enqueuePendingHints();
     this._saveProgress();
     this.debug('onboarding-reset', { packId: this._packId });
   }

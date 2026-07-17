@@ -16,11 +16,11 @@ import {
   sessionService,
   worldStateService,
 } from '$services';
-import { inputActionService } from './input_action_service.svelte.ts';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
+import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { timeService } from './time_service.svelte';
@@ -318,8 +318,8 @@ export class GameOverlayService
       onboardingHintService.onActionPerformed(actionId);
     }
 
-    // ── Overlay close/escape handling ──
-    if (event.key === 'Escape' || actionId === 'open_menu') {
+    // ── Overlay close/escape handling (binding-aware — open_menu defaults to Escape) ──
+    if (actionId === 'open_menu') {
       event.preventDefault();
       if (this.activeOverlay === 'DIALOGUE') {
         this.endDialogue();

@@ -93,6 +93,8 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly onboardingHintText: string | undefined;
   /** Whether the onboarding hint toast is visible. */
   readonly onboardingHintVisible: boolean;
+  /** Whether the user prefers reduced motion (AC-5). */
+  readonly reducedMotion: boolean;
 
   handleKeyDown(event: KeyboardEvent): void;
   resumeGame(): void;
@@ -142,6 +144,9 @@ class GameUIViewModel
   get onboardingHintVisible(): boolean {
     return onboardingHintService.hintVisible;
   }
+
+  /** Detects prefers-reduced-motion via matchMedia (C-327 AC-5). */
+  reducedMotion = $state<boolean>(false);
 
   // ── Service-proxied state ──
 
@@ -346,6 +351,15 @@ class GameUIViewModel
         sessionService.checkAutoSummaryThreshold();
       });
     });
+
+    // Detect prefers-reduced-motion (C-327 AC-5)
+    this.reducedMotion =
+      globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    globalThis
+      .matchMedia?.('(prefers-reduced-motion: reduce)')
+      .addEventListener('change', (event: MediaQueryListEvent) => {
+        this.reducedMotion = event.matches;
+      });
 
     await gameOverlayService.initialize();
     await super.initialize();

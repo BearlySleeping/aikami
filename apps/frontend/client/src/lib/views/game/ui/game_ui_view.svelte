@@ -4,6 +4,8 @@ import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
 import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
 import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
+import InteractionPrompt from './hud/interaction_prompt.svelte';
+import OnboardingHint from './hud/onboarding_hint.svelte';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
@@ -11,8 +13,6 @@ import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
 import PauseMenuView from './overlays/pause_menu/pause_menu_view.svelte';
 import TransitionOverlay from './overlays/transition_overlay.svelte';
-import InteractionPrompt from './hud/interaction_prompt.svelte';
-import OnboardingHint from './hud/onboarding_hint.svelte';
 
 type Props = {
   viewModel: GameUIViewModelInterface;
@@ -41,14 +41,14 @@ const { viewModel }: Props = $props();
   <InteractionPrompt
     label={viewModel.interactionPromptLabel}
     visible={viewModel.interactionPromptVisible}
-    reducedMotion={false}
+    reducedMotion={viewModel.reducedMotion}
   />
 
   <!-- ── C-327 AC-3: Onboarding hint toast ── -->
   <OnboardingHint
     text={viewModel.onboardingHintText}
     visible={viewModel.onboardingHintVisible}
-    reducedMotion={false}
+    reducedMotion={viewModel.reducedMotion}
     onDismiss={() => viewModel.dismissOnboardingHint()}
   />
 

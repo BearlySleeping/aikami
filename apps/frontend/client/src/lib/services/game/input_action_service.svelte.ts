@@ -8,16 +8,13 @@
 // Contract: C-327 AC-1, AC-5
 
 import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import {
   DEVICE_SWITCH_DEBOUNCE_MS,
   GAMEPAD_AXIS_THRESHOLD,
   GAMEPAD_BUTTON_TO_ACTION,
   GAMEPAD_DPAD_TO_ACTION,
+  gamepadActionLabel,
   type InputDevice,
+  keyToDisplayLabel,
 } from '@aikami/constants';
 import {
   buildKeyToAction,
@@ -25,6 +22,11 @@ import {
   KEYBINDING_STORAGE_KEY,
   loadKeybindings,
 } from '@aikami/frontend/engine';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +70,7 @@ export class InputActionService
   private _keyToActionMap = new Map<string, string>();
   private _bindings = { ...DEFAULT_KEYBINDINGS };
   private _lastDeviceSwitchTime = 0;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future dpad edge-trigger detection
   private _previousDpadState: number[] = [];
   private _previousButtonState: Array<{ pressed: boolean }> = [];
   private _previousAxisValues: number[] = [];
@@ -94,9 +97,9 @@ export class InputActionService
   /** Returns the display label for the given action (keyboard or gamepad glyph). */
   actionDisplayLabel(actionId: string): string {
     if (this.device === 'gamepad') {
-      return this._gamepadActionLabel(actionId);
+      return gamepadActionLabel(actionId);
     }
-    return this._keyToDisplayLabel(this._bindings[actionId] ?? actionId);
+    return keyToDisplayLabel(this._bindings[actionId] ?? actionId);
   }
 
   /** Refreshes the keybinding cache from localStorage. */
@@ -120,16 +123,16 @@ export class InputActionService
     const gamepads = navigator.getGamepads();
     let hasActivity = false;
 
-    for (const gamepad of gamepads) {
-      if (!gamepad) {
+    for (const gp of gamepads) {
+      if (!gp) {
         continue;
       }
+      const gamepad = gp; // non-null after guard
 
       // Buttons
       for (let i = 0; i < gamepad.buttons.length; i++) {
         const btn = gamepad.buttons[i];
-        const prev = this._previousButtonState[i];
-        // Detect new press (edge trigger) — buttons still active count as activity
+        // Detect press — any pressed button counts as gamepad activity
         if (btn && btn.pressed) {
           hasActivity = true;
         }
@@ -160,10 +163,11 @@ export class InputActionService
     const actions: string[] = [];
     const gamepads = navigator.getGamepads();
 
-    for (const gamepad of gamepads) {
-      if (!gamepad) {
+    for (const gp of gamepads) {
+      if (!gp) {
         continue;
       }
+      const gamepad = gp; // non-null after guard
 
       // Button actions
       for (let i = 0; i < gamepad.buttons.length; i++) {
@@ -214,54 +218,6 @@ export class InputActionService
     this._lastDeviceSwitchTime = now;
     this.device = target;
     this.debug('device-switch', { device: target });
-  }
-
-  /**
-   * Converts a raw keyboard key to a display label.
-   */
-  private _keyToDisplayLabel(key: string): string {
-    const labels: Record<string, string> = {
-      ' ': 'Space',
-      ArrowUp: '↑',
-      ArrowDown: '↓',
-      ArrowLeft: '←',
-      ArrowRight: '→',
-      Escape: 'Esc',
-      Enter: '↵',
-      Backspace: '⌫',
-      Tab: 'Tab',
-      CapsLock: 'Caps',
-      Shift: 'Shift',
-      Control: 'Ctrl',
-      Alt: 'Alt',
-      Meta: 'Meta',
-    };
-    const normalised = labels[key];
-    if (normalised) {
-      return normalised;
-    }
-    if (key.length === 1) {
-      return key.toUpperCase();
-    }
-    return key;
-  }
-
-  /**
-   * Returns the gamepad glyph label for a given action ID.
-   */
-  private _gamepadActionLabel(actionId: string): string {
-    const labels: Record<string, string> = {
-      move_up: '↑',
-      move_down: '↓',
-      move_left: '←',
-      move_right: '→',
-      interact: 'Ⓐ',
-      open_inventory: 'Ⓨ',
-      open_quest_log: 'Ⓧ',
-      open_character: 'Ⓧ',
-      open_menu: 'Ⓢ',
-    };
-    return labels[actionId] ?? actionId;
   }
 
   /** Loads prior gamepad state buffers. */
