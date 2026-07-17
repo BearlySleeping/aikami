@@ -32,7 +32,13 @@ export const validatePostconditions = (options: {
   }
 
   let unauthorizedPaths: string[] = [];
-  const PipelineManagedFiles = new Set(['.envrc', '.pi/settings.json']);
+  const PipelineManagedFiles = new Set([
+    '.envrc',
+    '.pi/settings.json',
+    '.context/llms.txt',
+    'docs/contracts/PROGRESS.md',
+    'docs/contracts/PROMOTION.md',
+  ]);
 
   // Implementer: validate that every claimed file actually exists on disk.
   // Prevents "ghost files" — implementer lists files in contract_stage_complete
