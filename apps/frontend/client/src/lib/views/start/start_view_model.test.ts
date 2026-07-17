@@ -38,7 +38,10 @@ let resetCalls = 0;
 let fetchSavesResult: Array<{ id: string; timestamp: number; mapName: string }> = [];
 let getSavePayloadResult: string | undefined;
 let getSavePayloadError: Error | undefined;
-let routeCalls: Array<{ route: string; options?: { queryParameters?: Record<string, string>; pathParameters?: unknown } }> = [];
+let routeCalls: Array<{
+  route: string;
+  options?: { queryParameters?: Record<string, string>; pathParameters?: unknown };
+}> = [];
 let pendingPayload: string | undefined;
 
 // ---------------------------------------------------------------------------
@@ -77,7 +80,10 @@ const _setupServiceOverrides = (): void => {
 
   // ── routerService ─────────────────────────────────────────────────────
   (_svcStubs.routerService as Record<string, unknown>).goToRoute = mock(
-    async (route: string, options?: { queryParameters?: Record<string, string>; pathParameters?: unknown }) => {
+    async (
+      route: string,
+      options?: { queryParameters?: Record<string, string>; pathParameters?: unknown },
+    ) => {
       routeCalls.push({ route, options });
     },
   );

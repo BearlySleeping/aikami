@@ -340,58 +340,145 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
 
 // ── Appearance Presets ───────────────────────────────────────────────
 
+/** Curated LPC appearance preset with concrete layer mappings. */
 export type AppearancePreset = {
   id: string;
   label: string;
   description: string;
+  /** LPC layer mappings: slot name → variant assetId. */
+  lpcLayers: Record<string, string>;
+  /** Optional per-slot palette overrides: slot name → 6-char hex (e.g. "FF44AA"). */
+  paletteOverrides?: Record<string, string>;
 };
+
+/**
+ * Safe default LPC recipe that always produces a valid character sprite.
+ * Used as the fallback when no recipe is available or a preset asset is missing.
+ */
+export const DEFAULT_LPC_RECIPE: Readonly<Record<string, string>> = {
+  head: 'head/heads/human_male',
+  body: 'body/bodies_male',
+  hair: 'hair/bangs_adult',
+  torso: 'torso/clothes/longsleeve/longsleeve_male',
+  legs: 'legs/pants_male',
+  feet: 'feet/shoes/basic_male',
+} as const;
 
 export const APPEARANCE_PRESETS: readonly AppearancePreset[] = [
   {
     id: 'battle_scarred',
     label: 'Battle-Scarred Veteran',
     description: 'Weathered face marked by old battles. Scars tell stories of campaigns past.',
+    lpcLayers: {
+      head: 'head/heads/human_male',
+      body: 'body/bodies_muscular',
+      hair: 'hair/messy2_adult',
+      torso: 'torso/armour/plate_male',
+      legs: 'legs/armour/plate_male',
+      feet: 'feet/boots/basic_male',
+    },
   },
   {
     id: 'scholarly',
     label: 'Scholarly Robes',
     description:
       'Practical academic attire — ink-stained fingers, well-worn robes, spectacles perched on the nose.',
+    lpcLayers: {
+      head: 'head/heads/human_female',
+      body: 'body/bodies_female',
+      hair: 'hair/page_adult',
+      torso: 'torso/clothes/robe_female',
+      legs: 'legs/formal_thin',
+      feet: 'feet/shoes/basic_thin',
+    },
+    paletteOverrides: { hair: 'C0C0C0' },
   },
   {
     id: 'mysterious',
     label: 'Mysterious Wanderer',
     description:
       "A hooded cloak shadows the face; worn traveler's boots and a tattered map peeking from a pocket.",
+    lpcLayers: {
+      head: 'head/heads/human_male',
+      body: 'body/bodies_male',
+      hair: 'hair/messy3_adult',
+      torso: 'torso/armour/leather_male',
+      legs: 'legs/pants_male',
+      feet: 'feet/boots/basic_male',
+    },
   },
   {
     id: 'noble',
     label: 'Noble Bearing',
     description:
       "Fine clothes and impeccable posture. Jewelry that's elegant but practical — a sign of old money.",
+    lpcLayers: {
+      head: 'head/heads/human_female',
+      body: 'body/bodies_female',
+      hair: 'hair/princess/bg_adult',
+      torso: 'torso/clothes/corset_female',
+      legs: 'legs/formal_thin',
+      feet: 'feet/shoes/sara_thin',
+    },
+    paletteOverrides: { hair: 'D4AF37' },
   },
   {
     id: 'wild',
     label: 'Child of the Wilds',
     description:
       'Leather and fur garments, feathers woven into braided hair, dirt under the fingernails.',
+    lpcLayers: {
+      head: 'head/heads/human_male',
+      body: 'body/bodies_male',
+      hair: 'hair/bedhead_adult',
+      torso: 'torso/clothes/sleeveless/sleeveless1_male',
+      legs: 'legs/fur_male',
+      feet: 'feet/sandals_male',
+    },
+    paletteOverrides: { hair: '8B4513' },
   },
   {
     id: 'rogue_chic',
     label: "Rogue's Chic",
     description: 'Stylish but functional dark attire. Too many hidden pockets, a disarming smile.',
+    lpcLayers: {
+      head: 'head/heads/human_male',
+      body: 'body/bodies_male',
+      hair: 'hair/swoop_adult',
+      torso: 'torso/clothes/vest_male',
+      legs: 'legs/cuffed_male',
+      feet: 'feet/boots/basic_male',
+    },
   },
   {
     id: 'divine',
     label: 'Divine Aura',
     description:
       'Simple robes with holy symbols. A calm, otherworldly presence that puts allies at ease.',
+    lpcLayers: {
+      head: 'head/heads/human_female',
+      body: 'body/bodies_female',
+      hair: 'hair/parted_adult',
+      torso: 'torso/clothes/tunic_female',
+      legs: 'legs/formal_thin',
+      feet: 'feet/sandals_thin',
+    },
+    paletteOverrides: { hair: 'FFD700' },
   },
   {
     id: 'arcane',
     label: 'Arcane Elegance',
     description:
       'Rich fabrics with subtle magical embroidery. The faint smell of incense and old parchment.',
+    lpcLayers: {
+      head: 'head/heads/human_male',
+      body: 'body/bodies_male',
+      hair: 'hair/longhawk_adult',
+      torso: 'torso/clothes/longsleeve/longsleeve2_cardigan_male',
+      legs: 'legs/formal_male',
+      feet: 'feet/shoes/basic_male',
+    },
+    paletteOverrides: { hair: '4B0082' },
   },
 ] as const;
 

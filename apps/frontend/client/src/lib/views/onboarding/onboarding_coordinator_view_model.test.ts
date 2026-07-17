@@ -84,15 +84,124 @@ mock.module('@aikami/constants', () => ({
     charisma: { label: 'CHA', description: 'Personality' },
   },
   APPEARANCE_PRESETS: [
-    { id: 'p1', label: 'Preset1', description: 'Desc1' },
-    { id: 'p2', label: 'Preset2', description: 'Desc2' },
-    { id: 'p3', label: 'Preset3', description: 'Desc3' },
-    { id: 'p4', label: 'Preset4', description: 'Desc4' },
-    { id: 'p5', label: 'Preset5', description: 'Desc5' },
-    { id: 'p6', label: 'Preset6', description: 'Desc6' },
-    { id: 'p7', label: 'Preset7', description: 'Desc7' },
-    { id: 'p8', label: 'Preset8', description: 'Desc8' },
+    {
+      id: 'p1',
+      label: 'Preset1',
+      description: 'Desc1',
+      lpcLayers: {
+        head: 'head/heads/human_male',
+        body: 'body/bodies_male',
+        hair: 'hair/bangs_adult',
+        torso: 'torso/clothes/longsleeve/longsleeve_male',
+        legs: 'legs/pants_male',
+        feet: 'feet/shoes/basic_male',
+      },
+    },
+    {
+      id: 'p2',
+      label: 'Preset2',
+      description: 'Desc2',
+      lpcLayers: {
+        head: 'head/heads/human_female',
+        body: 'body/bodies_female',
+        hair: 'hair/page_adult',
+        torso: 'torso/clothes/robe_female',
+        legs: 'legs/formal_thin',
+        feet: 'feet/shoes/basic_thin',
+      },
+      paletteOverrides: { hair: 'C0C0C0' },
+    },
+    {
+      id: 'p3',
+      label: 'Preset3',
+      description: 'Desc3',
+      lpcLayers: {
+        head: 'head/heads/human_male',
+        body: 'body/bodies_male',
+        hair: 'hair/messy3_adult',
+        torso: 'torso/armour/leather_male',
+        legs: 'legs/pants_male',
+        feet: 'feet/boots/basic_male',
+      },
+    },
+    {
+      id: 'p4',
+      label: 'Preset4',
+      description: 'Desc4',
+      lpcLayers: {
+        head: 'head/heads/human_female',
+        body: 'body/bodies_female',
+        hair: 'hair/princess/bg_adult',
+        torso: 'torso/clothes/corset_female',
+        legs: 'legs/formal_thin',
+        feet: 'feet/shoes/sara_thin',
+      },
+      paletteOverrides: { hair: 'D4AF37' },
+    },
+    {
+      id: 'p5',
+      label: 'Preset5',
+      description: 'Desc5',
+      lpcLayers: {
+        head: 'head/heads/human_male',
+        body: 'body/bodies_male',
+        hair: 'hair/bedhead_adult',
+        torso: 'torso/clothes/sleeveless/sleeveless1_male',
+        legs: 'legs/fur_male',
+        feet: 'feet/sandals_male',
+      },
+      paletteOverrides: { hair: '8B4513' },
+    },
+    {
+      id: 'p6',
+      label: 'Preset6',
+      description: 'Desc6',
+      lpcLayers: {
+        head: 'head/heads/human_male',
+        body: 'body/bodies_male',
+        hair: 'hair/swoop_adult',
+        torso: 'torso/clothes/vest_male',
+        legs: 'legs/cuffed_male',
+        feet: 'feet/boots/basic_male',
+      },
+    },
+    {
+      id: 'p7',
+      label: 'Preset7',
+      description: 'Desc7',
+      lpcLayers: {
+        head: 'head/heads/human_female',
+        body: 'body/bodies_female',
+        hair: 'hair/parted_adult',
+        torso: 'torso/clothes/tunic_female',
+        legs: 'legs/formal_thin',
+        feet: 'feet/sandals_thin',
+      },
+      paletteOverrides: { hair: 'FFD700' },
+    },
+    {
+      id: 'p8',
+      label: 'Preset8',
+      description: 'Desc8',
+      lpcLayers: {
+        head: 'head/heads/human_male',
+        body: 'body/bodies_male',
+        hair: 'hair/longhawk_adult',
+        torso: 'torso/clothes/longsleeve/longsleeve2_cardigan_male',
+        legs: 'legs/formal_male',
+        feet: 'feet/shoes/basic_male',
+      },
+      paletteOverrides: { hair: '4B0082' },
+    },
   ],
+  DEFAULT_LPC_RECIPE: {
+    head: 'head/heads/human_male',
+    body: 'body/bodies_male',
+    hair: 'hair/bangs_adult',
+    torso: 'torso/clothes/longsleeve/longsleeve_male',
+    legs: 'legs/pants_male',
+    feet: 'feet/shoes/basic_male',
+  },
   CLASS_PRESETS: [
     {
       id: 'fighter',
@@ -321,6 +430,8 @@ mock.module('@aikami/constants', () => ({
 }));
 
 mock.module('@aikami/types', () => ({}));
+
+mock.module('@aikami/frontend/engine', () => ({}));
 
 mock.module('$app/navigation', () => ({
   goto: mock(async () => {}),
@@ -997,5 +1108,270 @@ describe('OnboardingCoordinatorViewModel — constant accessors', () => {
   it('8 appearance presets', () => {
     const vm = getVM({ className: 'TestVM' });
     expect(vm.appearancePresets.length).toBe(8);
+  });
+});
+
+// ── LPC Appearance Tests (C-325) ─────────────────────────────────────
+
+describe('OnboardingCoordinatorViewModel — LPC recipe defaults', () => {
+  it('initializes with DEFAULT_LPC_RECIPE', () => {
+    const vm = getVM({ className: 'TestVM' });
+    expect(Object.keys(vm.lpcRecipe).length).toBeGreaterThanOrEqual(6);
+    expect(vm.lpcRecipe.head).toBe('head/heads/human_male');
+    expect(vm.lpcRecipe.body).toBe('body/bodies_male');
+  });
+
+  it('paletteOverrides start empty', () => {
+    const vm = getVM({ className: 'TestVM' });
+    expect(Object.keys(vm.paletteOverrides).length).toBe(0);
+  });
+
+  it('selectedPresetId starts undefined', () => {
+    const vm = getVM({ className: 'TestVM' });
+    expect(vm.selectedPresetId).toBeUndefined();
+  });
+
+  it('previewPlaying starts false', () => {
+    const vm = getVM({ className: 'TestVM' });
+    expect(vm.previewPlaying).toBe(false);
+  });
+
+  it('lpcPreviewRecipes returns recipes for all engine slots', () => {
+    const vm = getVM({ className: 'TestVM' });
+    const recipes = vm.lpcPreviewRecipes;
+    expect(recipes.length).toBeGreaterThanOrEqual(6);
+    for (const recipe of recipes) {
+      expect(recipe.slot).toBeDefined();
+      expect(recipe.assetId).toBeDefined();
+      expect(recipe.hexPalette).toBeInstanceOf(Uint8Array);
+    }
+  });
+});
+
+describe('OnboardingCoordinatorViewModel — LPC preset selection', () => {
+  it('selectAppearancePreset applies all layers from preset', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p1');
+    expect(vm.selectedPresetId).toBe('p1');
+    expect(vm.lpcRecipe.head).toBe('head/heads/human_male');
+    expect(vm.lpcRecipe.body).toBe('body/bodies_male');
+    expect(vm.lpcRecipe.hair).toBe('hair/bangs_adult');
+  });
+
+  it('selectAppearancePreset applies paletteOverrides when present', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p2');
+    expect(vm.selectedPresetId).toBe('p2');
+    expect(vm.paletteOverrides.hair).toBe('C0C0C0');
+  });
+
+  it('selectAppearancePreset clears paletteOverrides when preset has none', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p2'); // has paletteOverrides
+    vm.selectAppearancePreset('p1'); // no paletteOverrides
+    expect(vm.selectedPresetId).toBe('p1');
+    expect(Object.keys(vm.paletteOverrides).length).toBe(0);
+  });
+
+  it('selectAppearancePreset updates appearanceDescription', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p5');
+    expect(vm.appearanceDescription).toBe('Desc5');
+  });
+});
+
+describe('OnboardingCoordinatorViewModel — LPC layer setters', () => {
+  it('setLpcLayer updates a single slot', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.setLpcLayer('hair', 'hair/mohawk_adult');
+    expect(vm.lpcRecipe.hair).toBe('hair/mohawk_adult');
+  });
+
+  it('setLpcLayer clears selectedPresetId', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p1');
+    expect(vm.selectedPresetId).toBe('p1');
+    vm.setLpcLayer('hair', 'hair/mohawk_adult');
+    expect(vm.selectedPresetId).toBeUndefined();
+  });
+
+  it('setLpcLayer does not affect other slots', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p1');
+    const originalBody = vm.lpcRecipe.body;
+    vm.setLpcLayer('hair', 'hair/longhawk_adult');
+    expect(vm.lpcRecipe.body).toBe(originalBody);
+  });
+});
+
+describe('OnboardingCoordinatorViewModel — LPC palette overrides', () => {
+  it('setPaletteOverride stores hex color', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.setPaletteOverride('hair', 'FF44AA');
+    expect(vm.paletteOverrides.hair).toBe('FF44AA');
+  });
+
+  it('setPaletteOverride updates lpcPreviewRecipes with palette LUT', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.setPaletteOverride('hair', 'FF44AA');
+    const recipes = vm.lpcPreviewRecipes;
+    const hairRecipe = recipes.find((r) => r.slot === 'hair');
+    expect(hairRecipe).toBeDefined();
+    if (hairRecipe) {
+      // Palette LUT should contain FF, 44, AA, and opaque alpha (255)
+      // Check first palette entry (offset 0)
+      expect(hairRecipe.hexPalette[0]).toBe(0xFF); // R
+      expect(hairRecipe.hexPalette[1]).toBe(0x44); // G
+      expect(hairRecipe.hexPalette[2]).toBe(0xAA); // B
+      expect(hairRecipe.hexPalette[3]).toBe(255);  // A
+    }
+  });
+
+  it('setPaletteOverride clears selectedPresetId', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p1');
+    expect(vm.selectedPresetId).toBe('p1');
+    vm.setPaletteOverride('hair', 'AABBCC');
+    expect(vm.selectedPresetId).toBeUndefined();
+  });
+});
+
+describe('OnboardingCoordinatorViewModel — LPC toggle animation', () => {
+  it('togglePreviewAnimation toggles previewPlaying', () => {
+    const vm = getVM({ className: 'TestVM' });
+    expect(vm.previewPlaying).toBe(false);
+    vm.togglePreviewAnimation();
+    expect(vm.previewPlaying).toBe(true);
+    vm.togglePreviewAnimation();
+    expect(vm.previewPlaying).toBe(false);
+  });
+});
+
+describe('OnboardingCoordinatorViewModel — LPC draft persistence', () => {
+  it('draft includes lpcRecipe after startCustom', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.startCustom();
+    const draft = JSON.parse(localStorage.getItem('aikami-onboarding-draft') ?? '{}');
+    expect(draft.lpcRecipe).toBeDefined();
+    expect(draft.lpcRecipe.head).toBe('head/heads/human_male');
+  });
+
+  it('draft includes paletteOverrides and selectedPresetId', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p2');
+    const draft = JSON.parse(localStorage.getItem('aikami-onboarding-draft') ?? '{}');
+    expect(draft.selectedPresetId).toBe('p2');
+    expect(draft.paletteOverrides.hair).toBe('C0C0C0');
+  });
+
+  it('draft recovery restores LPC recipe', async () => {
+    const preDraft = {
+      step: 'appearance' as const,
+      name: 'LpcTest',
+      pronounId: 'he_him',
+      pronounDisplay: 'he/him',
+      raceId: 'human',
+      classId: 'fighter',
+      alignment: 'Neutral',
+      abilityScores: {
+        strength: 10,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+      },
+      appearanceDescription: '',
+      background: '',
+      personalityTraits: '',
+      equipment: [],
+      lpcRecipe: {
+        head: 'head/heads/human_female',
+        body: 'body/bodies_female',
+        hair: 'hair/bob_adult',
+      },
+      paletteOverrides: { hair: 'FF0000' },
+      selectedPresetId: 'test_preset',
+    };
+    localStorage.setItem('aikami-onboarding-draft', JSON.stringify(preDraft));
+    const vm = getVM({ className: 'TestVM' });
+    await vm.initialize();
+    expect(vm.lpcRecipe.head).toBe('head/heads/human_female');
+    expect(vm.lpcRecipe.hair).toBe('hair/bob_adult');
+    expect(vm.paletteOverrides.hair).toBe('FF0000');
+    expect(vm.selectedPresetId).toBe('test_preset');
+  });
+
+  it('draft recovery defaults to DEFAULT_LPC_RECIPE when lpcRecipe is missing', async () => {
+    const preDraft = {
+      step: 'appearance' as const,
+      name: 'NoLpc',
+      pronounId: 'he_him',
+      pronounDisplay: 'he/him',
+      raceId: 'human',
+      classId: 'fighter',
+      alignment: 'Neutral',
+      abilityScores: {
+        strength: 10,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+      },
+      appearanceDescription: '',
+      background: '',
+      personalityTraits: '',
+      equipment: [],
+    };
+    localStorage.setItem('aikami-onboarding-draft', JSON.stringify(preDraft));
+    const vm = getVM({ className: 'TestVM' });
+    await vm.initialize();
+    expect(vm.lpcRecipe.head).toBe('head/heads/human_male');
+    expect(vm.lpcRecipe.body).toBe('body/bodies_male');
+  });
+});
+
+describe('OnboardingCoordinatorViewModel — persona assembly with LPC', () => {
+  it('_assemblePersonaFromDraft includes lpcRecipe in appearance', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.startCustom();
+    vm.setName('LpcHero');
+    vm.setRaceId('human');
+    vm.setClassId('fighter');
+    vm.selectAppearancePreset('p3');
+    const internal = vm as unknown as Record<string, (...args: unknown[]) => unknown>;
+    const persona = internal._assemblePersonaFromDraft() as {
+      appearance?: Record<string, unknown>;
+    };
+    expect(persona.appearance?.lpcRecipe).toBeDefined();
+    const recipe = persona.appearance?.lpcRecipe as Record<string, string>;
+    expect(recipe.head).toBe('head/heads/human_male');
+  });
+});
+
+describe('OnboardingCoordinatorViewModel — randomize includes LPC', () => {
+  it('randomize applies preset LPC layers', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.startCustom();
+    vm.randomizeCharacter();
+    // Should have a non-default LPC recipe (from a preset)
+    expect(Object.keys(vm.lpcRecipe).length).toBeGreaterThanOrEqual(6);
+    expect(vm.selectedPresetId).toBeDefined();
+    // Each preset has defined lpcLayers
+    const preset = vm.appearancePresets.find((p) => p.id === vm.selectedPresetId);
+    expect(preset).toBeDefined();
+    if (preset) {
+      // Verify the recipe matches the preset
+      expect(vm.lpcRecipe.head).toBe(preset.lpcLayers.head);
+      expect(vm.lpcRecipe.body).toBe(preset.lpcLayers.body);
+      expect(vm.lpcRecipe.hair).toBe(preset.lpcLayers.hair);
+      // Verify palette overrides match if preset has them
+      if (preset.paletteOverrides) {
+        for (const [slot, color] of Object.entries(preset.paletteOverrides)) {
+          expect(vm.paletteOverrides[slot]).toBe(color);
+        }
+      }
+    }
   });
 });
