@@ -18,6 +18,11 @@
         "../../../packages/frontend/services/src/*"
       ],
       "@aikami/frontend/utils": ["../../../packages/frontend/utils/src/index.ts"],
+      "@aikami/frontend/ai-gateway": ["../../../packages/frontend/ai-gateway/src/index.ts"],
+      "@aikami/frontend/ai-gateway/*": [
+        "../../../packages/frontend/ai-gateway/src/lib/*",
+        "../../../packages/frontend/ai-gateway/src/*"
+      ],
       "@aikami/frontend/utils/*": [
         "../../../packages/frontend/utils/src/lib/*",
         "../../../packages/frontend/utils/src/*"

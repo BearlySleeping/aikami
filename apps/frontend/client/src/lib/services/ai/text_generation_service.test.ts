@@ -31,8 +31,7 @@ let mockConfigState: Record<string, unknown> = {
 // Mock: crypto_vault (config_service depends on this)
 // ---------------------------------------------------------------------------
 
-const CRYPTO_VAULT_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/utils/crypto_vault.ts';
+const CRYPTO_VAULT_PATH = '../../utils/crypto_vault.ts';
 
 mock.module(CRYPTO_VAULT_PATH, () => ({
   encrypt: () => Promise.resolve(),
@@ -41,8 +40,7 @@ mock.module(CRYPTO_VAULT_PATH, () => ({
   __esModule: true,
 }));
 
-const CONFIG_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/config/config_service.svelte.ts';
+const CONFIG_SVC_PATH = '../config/config_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Mock: global fetch
@@ -110,7 +108,12 @@ const loadService = async () => {
 
 const setConfigState = async (state: Record<string, unknown>) => {
   const cfg = await import(CONFIG_SVC_PATH);
-  (cfg.configService as Record<string, unknown>).state = state;
+  // Merge an image-state default so sibling test files sharing the
+  // configService singleton (image_generation_service) keep working.
+  (cfg.configService as Record<string, unknown>).state = {
+    image: { checkpoint: '' },
+    ...state,
+  };
 };
 
 /** Builds an OpenRouter SSE chunk: `data: {"choices":[{"delta":{"content":"token"}}]}\n\n` */
