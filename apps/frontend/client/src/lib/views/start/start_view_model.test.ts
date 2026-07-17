@@ -38,7 +38,7 @@ let resetCalls = 0;
 let fetchSavesResult: Array<{ id: string; timestamp: number; mapName: string }> = [];
 let getSavePayloadResult: string | undefined;
 let getSavePayloadError: Error | undefined;
-let routeCalls: Array<{ route: string }> = [];
+let routeCalls: Array<{ route: string; options?: { queryParameters?: Record<string, string>; pathParameters?: unknown } }> = [];
 let pendingPayload: string | undefined;
 
 // ---------------------------------------------------------------------------
@@ -76,9 +76,11 @@ const _setupServiceOverrides = (): void => {
   );
 
   // ── routerService ─────────────────────────────────────────────────────
-  (_svcStubs.routerService as Record<string, unknown>).goToRoute = mock(async (route: string) => {
-    routeCalls.push({ route });
-  });
+  (_svcStubs.routerService as Record<string, unknown>).goToRoute = mock(
+    async (route: string, options?: { queryParameters?: Record<string, string>; pathParameters?: unknown }) => {
+      routeCalls.push({ route, options });
+    },
+  );
 
   // ── setPendingGameLoad ───────────────────────────────────────────────
   (_svcStubs.setPendingGameLoad as unknown as { fn: (...args: never) => unknown }).fn = mock(
@@ -237,6 +239,7 @@ describe('StartViewModel', () => {
 
     expect(routeCalls).toHaveLength(1);
     expect(routeCalls[0].route).toBe('capability');
+    expect(routeCalls[0].options?.queryParameters?.reason).toBe('text-required');
   });
 
   test('continueGame routes to /capability when gateway resolveMode fails', async () => {
@@ -253,6 +256,7 @@ describe('StartViewModel', () => {
 
     expect(routeCalls).toHaveLength(1);
     expect(routeCalls[0].route).toBe('capability');
+    expect(routeCalls[0].options?.queryParameters?.reason).toBe('text-required');
   });
 
   test('startNewGame routes to /setup when gateway resolves successfully', async () => {

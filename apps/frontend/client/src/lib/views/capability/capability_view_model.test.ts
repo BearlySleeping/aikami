@@ -171,7 +171,21 @@ describe('CapabilityViewModel', () => {
     setDetectionResult('detected');
     const vm = createVm();
     await vm.startDetection();
+
+    const { campaignService } = await import('$services');
+    const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
+    startMock.mockClear();
+
     await vm.selectLocalAi();
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    expect(startMock).toHaveBeenCalledWith({
+      capabilityProfile: {
+        textProvider: true,
+        imageProvider: false,
+        voiceProvider: false,
+      },
+    });
     expect(vm.errorMessage).toBe('');
   });
 
@@ -181,8 +195,21 @@ describe('CapabilityViewModel', () => {
     setDetectionResult('configured');
     const vm = createVm();
     await vm.startDetection();
+
+    const { campaignService } = await import('$services');
+    const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
+    startMock.mockClear();
+
     await vm.selectCloudConnection('test-conn-id');
-    // campaignService.startNewCampaign is a mock stub — verify no errors
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    expect(startMock).toHaveBeenCalledWith({
+      capabilityProfile: {
+        textProvider: true,
+        imageProvider: false,
+        voiceProvider: false,
+      },
+    });
     expect(vm.errorMessage).toBe('');
   });
 
