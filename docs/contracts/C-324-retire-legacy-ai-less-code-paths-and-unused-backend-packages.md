@@ -8,7 +8,7 @@
 | **Target** | `apps/backend/firebase/src/controllers/callable/ai.ts`, `apps/backend/firebase/src/controllers/api/prompt_ai.ts`, `packages/backend/ai` (consumer surface), `packages/backend/chat` (its `createAiService` import), `packages/backend/svelte-kit` (package existence), `packages/backend/image` (zero-importer export surface), `packages/shared/constants/src/lib/degradation.ts` |
 | **Priority** | P1 — cleanup that removes the temptation to reintroduce an AI-less mode and reduces the number of AI call surfaces before more contracts build on top of C-320's gateway |
 | **Dependencies** | C-320 (status `implemented` — `packages/frontend/ai-gateway` exists with a `service`-mode adapter wrapping the Firebase `ai` callable), C-323 (status `implemented` — zero-AI campaign path removed from the player-facing menu). Neither is `verified`/`completed` yet — see Edge Cases for the risk note. Packages: `@aikami/constants`, `@aikami/types`, `@aikami/schemas`. |
-| **Status** | implemented |
+| **Status** | verified |
 | **Promotion** | — |
 | **Docs Impact** | internal → none (no player-facing docs page; `docs/architecture/architecture.md` line 171 lists `backend/svelte-kit` and must be updated when the package is deleted) |
 | **Contract version** | 2.0.0 |

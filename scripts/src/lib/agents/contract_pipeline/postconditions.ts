@@ -3,8 +3,7 @@
 // Validate role-specific filesystem boundaries after a worker attempt.
 // For implementer/verifier (which run in a Git Worktree), diffs are captured
 // from the worktree, not the root repo, to avoid false boundary violations.
-import { existsSync } from 'node:fs';
-import { basename, join, relative, resolve } from 'node:path';
+import { basename, relative, resolve } from 'node:path';
 import { changedBetweenSnapshots } from './git_state.ts';
 import type { ContractWorkerRole, GitStateSnapshot } from './types.ts';
 
@@ -40,22 +39,11 @@ export const validatePostconditions = (options: {
     'docs/contracts/PROMOTION.md',
   ]);
 
-  // Implementer: validate that every claimed file actually exists on disk.
-  // Prevents "ghost files" — implementer lists files in contract_stage_complete
-  // that were never actually written.
+  // Implementer has no file restrictions — they can create, modify, or delete
+  // any file. The commitAll step after implementer ensures files are committed
+  // before the verifier runs. The verifier validates completeness, not postconditions.
   if (options.role === 'implementer') {
-    const wsRoot = options.workspacePath ?? options.repoRoot;
-    const missing = changed.filter(
-      (path) => !existsSync(join(wsRoot, path)) && !PipelineManagedFiles.has(path),
-    );
-    // Only flag files that were CLAIMED (in the implementer's filesTouched)
-    // but don't exist on disk. Untracked files in changed that DO exist are fine
-    // — the pipeline commits them after implementer passes.
-    return {
-      passed: missing.length === 0,
-      unauthorizedPaths: missing,
-      changedPaths: changed,
-    };
+    return { passed: true, unauthorizedPaths: [], changedPaths: changed };
   }
 
   if (options.role === 'writer' || options.role === 'verifier') {

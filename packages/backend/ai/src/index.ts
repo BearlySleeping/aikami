@@ -13,6 +13,7 @@ export { AiServiceError } from './lib/errors.ts';
 export { createAiService } from './lib/factory.ts';
 export { GeminiService } from './lib/gemini_service.ts';
 export { OpenAiService } from './lib/openai_service.ts';
+
 export type {
   AiServiceErrorCode,
   BaseAiServiceOptions,
