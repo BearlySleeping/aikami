@@ -178,6 +178,18 @@ export const provisionGitWorktree = (options: {
     runGit(`worktree add -b ${branchName} '${wsDir}' ${baseRef}`, {
       cwd: options.repoRoot,
     });
+
+    // Install dependencies so dev servers and tests can run.
+    try {
+      execSync('bun install --frozen-lockfile', {
+        cwd: wsDir,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 60_000,
+      });
+    } catch {
+      // Non-fatal — implementer can run bun install manually.
+    }
   }
 
   // Resolve the branch name of the worktree.
