@@ -6,7 +6,7 @@
 // Verifies that the LPC recipe and palette overrides survive page reload
 // and are present in the aikami-onboarding-draft localStorage key.
 
-import { type Page, test, expect } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 const SETUP_URL = 'http://localhost:5274/setup';
 
@@ -37,9 +37,7 @@ test.describe('Onboarding Appearance Persistence', () => {
     await navigateToAppearanceStep(page);
 
     // Check localStorage for the draft
-    const draftRaw = await page.evaluate(() =>
-      localStorage.getItem('aikami-onboarding-draft'),
-    );
+    const draftRaw = await page.evaluate(() => localStorage.getItem('aikami-onboarding-draft'));
     expect(draftRaw).not.toBeNull();
 
     const draft = JSON.parse(draftRaw!);
@@ -124,8 +122,12 @@ test.describe('Onboarding Appearance Persistence', () => {
           classId: 'fighter',
           alignment: 'Neutral',
           abilityScores: {
-            strength: 10, dexterity: 10, constitution: 10,
-            intelligence: 10, wisdom: 10, charisma: 10,
+            strength: 10,
+            dexterity: 10,
+            constitution: 10,
+            intelligence: 10,
+            wisdom: 10,
+            charisma: 10,
           },
           appearanceDescription: 'Old description',
           background: '',

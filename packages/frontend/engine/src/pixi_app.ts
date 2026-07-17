@@ -6,6 +6,7 @@ import 'pixi.js/unsafe-eval';
 
 import { isEmulatorModePublic } from '@aikami/frontend/configs';
 import { Application } from 'pixi.js';
+import { logger } from '$logger';
 import { initLpcShaders } from './rendering/sprite_composer.ts';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,8 @@ export type PixiAppOptions = {
   backgroundAlpha?: number;
   /** Element to automatically resize the canvas to. */
   resizeTo?: HTMLElement | Window;
+  /** Renderer preference — defaults to `'webgl'` for compatibility. */
+  rendererPreference?: 'webgpu' | 'webgl';
 };
 
 /**
@@ -70,6 +73,8 @@ export type PixiAppInstance = {
   readonly app: Application;
   /** Read-only debug metrics updated every frame. */
   readonly debug: PixiAppDebugMetrics;
+  /** The renderer that was actually initialised (e.g. 'webgl', 'webgpu'). */
+  readonly renderer: string;
 };
 
 /**
@@ -118,19 +123,42 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
 
   const app = new Application();
 
-  await app.init({
-    canvas,
-    width,
-    height,
-    backgroundColor,
-    antialias,
-    backgroundAlpha,
-    resizeTo: options.resizeTo,
-    // Use WebGL with drawing buffer preservation for headless Chromium
-    // screenshot capture (Playwright visual tests).
-    preference: 'webgl',
-    preserveDrawingBuffer: true,
-  });
+  const { rendererPreference = 'webgl' } = options;
+
+  try {
+    await app.init({
+      canvas,
+      width,
+      height,
+      backgroundColor,
+      antialias,
+      backgroundAlpha,
+      resizeTo: options.resizeTo,
+      preference: rendererPreference,
+      preserveDrawingBuffer: true,
+    });
+  } catch (error) {
+    const pref = rendererPreference;
+    if (pref === 'webgpu') {
+      logger.warn('createPixiApp:webgpu-failed', {
+        error: String(error),
+        fallback: 'webgl',
+      });
+      await app.init({
+        canvas,
+        width,
+        height,
+        backgroundColor,
+        antialias,
+        backgroundAlpha,
+        resizeTo: options.resizeTo,
+        preference: 'webgl',
+        preserveDrawingBuffer: true,
+      });
+    } else {
+      throw error;
+    }
+  }
 
   // Pipeline gate: compile LPC shaders now that the renderer context
   // is live. Headless environments skip this path — compilation is
@@ -206,7 +234,10 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
 
   const debug = counters as PixiAppDebugMetrics;
 
-  return { app, debug };
+  // Determine the actual renderer that was initialised
+  const renderer = app.renderer.name;
+
+  return { app, debug, renderer };
 };
 
 export { createPixiApp, DEFAULT_BACKGROUND, DEFAULT_HEIGHT, DEFAULT_WIDTH };

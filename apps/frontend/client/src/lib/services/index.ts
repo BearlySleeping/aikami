@@ -63,6 +63,7 @@ export {
 export * from './game/bridge_listeners';
 export * from './game/combat_service.svelte';
 export * from './game/equipment_service.svelte.ts';
+export * from './game/game_boot_service.svelte.ts';
 export * from './game/game_composition_root.svelte.ts';
 export * from './game/game_engine_service.svelte.ts';
 export * from './game/game_mode_service.svelte.ts';

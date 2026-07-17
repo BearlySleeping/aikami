@@ -3,6 +3,8 @@
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import FloatingText from '$lib/components/game/floating_text.svelte';
 import DiegeticHealthBar from '$lib/views/combat/components/diegetic_health_bar.svelte';
+import GameBootView from '../boot/game_boot_view.svelte';
+import { getGameBootViewModel } from '../boot/game_boot_view_model.svelte';
 import type { GameCanvasViewModelInterface } from './game_canvas_view_model.svelte';
 
 type Props = {
@@ -10,6 +12,8 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+const bootViewModel = getGameBootViewModel({ className: 'GameBootViewModel' });
 </script>
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
@@ -77,12 +81,12 @@ const { viewModel }: Props = $props();
         </div>
       {/if}
 
-      <!-- Loading State -->
-      {#if !viewModel.isGameReady && !viewModel.gameError}
+      <!-- Loading / Error State — stage-aware boot view (C-326) -->
+      {#if !viewModel.isGameReady || bootViewModel.isFailed}
         <div
           class="pointer-events-auto absolute inset-0 flex items-center justify-center bg-base-100/80"
         >
-          <p class="text-sm text-base-content/60">Loading game engine...</p>
+          <GameBootView viewModel={bootViewModel} />
         </div>
       {/if}
     </div>

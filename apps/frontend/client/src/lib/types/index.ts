@@ -16,6 +16,12 @@ export type {
   GameStateListener,
   GameStateOptions,
 } from './game.ts';
+export type {
+  GameBootInput,
+  GameBootProgress,
+  GameBootResult,
+  GameBootStage,
+} from './game_boot.ts';
 export type { ImpersonationConfig } from './impersonation.ts';
 export type {
   KeywordMatch,

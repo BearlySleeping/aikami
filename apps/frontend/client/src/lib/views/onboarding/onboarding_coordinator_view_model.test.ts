@@ -1220,10 +1220,10 @@ describe('OnboardingCoordinatorViewModel — LPC palette overrides', () => {
     if (hairRecipe) {
       // Palette LUT should contain FF, 44, AA, and opaque alpha (255)
       // Check first palette entry (offset 0)
-      expect(hairRecipe.hexPalette[0]).toBe(0xFF); // R
+      expect(hairRecipe.hexPalette[0]).toBe(0xff); // R
       expect(hairRecipe.hexPalette[1]).toBe(0x44); // G
-      expect(hairRecipe.hexPalette[2]).toBe(0xAA); // B
-      expect(hairRecipe.hexPalette[3]).toBe(255);  // A
+      expect(hairRecipe.hexPalette[2]).toBe(0xaa); // B
+      expect(hairRecipe.hexPalette[3]).toBe(255); // A
     }
   });
 

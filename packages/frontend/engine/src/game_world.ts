@@ -228,6 +228,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
 
+  /** The renderer name that was actually initialised (e.g. 'webgl', 'webgpu'). */
+  get renderer(): string {
+    return this._app?.renderer.name ?? 'unknown';
+  }
+
   /**
    * Master container for all game entities.
    *

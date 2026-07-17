@@ -5,8 +5,8 @@
 // Renders preset recipes directly without the onboarding flow.
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
-import { onDestroy } from 'svelte';
 import { APPEARANCE_PRESETS, DEFAULT_LPC_RECIPE } from '@aikami/constants';
+import { onDestroy } from 'svelte';
 import { page } from '$app/state';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
