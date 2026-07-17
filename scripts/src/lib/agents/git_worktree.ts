@@ -213,7 +213,7 @@ source_env ${options.repoRoot}
   try {
     const excludePath = join(wsDir, '.git', 'info', 'exclude');
     const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf-8') : '';
-    const entries = ['/.envrc', '/.pi/settings.json'];
+    const entries = ['/.envrc', '/.pi/settings.json', '/docs/contracts/PROGRESS.md', '/docs/contracts/PROMOTION.md'];
     const missing = entries.filter((e) => !existing.includes(e));
     if (missing.length > 0) {
       appendFileSync(
@@ -222,7 +222,7 @@ source_env ${options.repoRoot}
       );
     }
     // Also mark as skip-worktree for already-tracked files.
-    runGit('update-index --skip-worktree .envrc .pi/settings.json', { cwd: wsDir });
+    runGit('update-index --skip-worktree .envrc .pi/settings.json docs/contracts/PROGRESS.md docs/contracts/PROMOTION.md', { cwd: wsDir });
   } catch {
     // Non-fatal — the workspace may not have .git/info/exclude writable.
   }
