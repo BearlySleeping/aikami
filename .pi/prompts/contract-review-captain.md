@@ -95,6 +95,30 @@ git commit -m "fix: apply CodeRabbit auto-fixes — {description}"
 git push origin HEAD
 ```
 
+## YOLO Mode (--yolo)
+
+When the system prompt says `--yolo`, automate everything:
+
+### Step 1: Create ready PR
+Same as Phase 2, but `draft=false`.
+
+### Step 2: Wait for CodeRabbit
+Poll `gh pr view <number> --json reviews` every 30s until CodeRabbit finishes:
+- `APPROVED` or `COMMENTED` → go to Step 4
+- `CHANGES_REQUESTED` → go to Step 3
+
+### Step 3: Apply autofixes
+1. Use CodeRabbit MCP (`get_coderabbit_reviews` / `get_review_comments`) to fetch findings
+2. For each non-critical finding: fix the file with `edit` tool
+3. Commit: `git add -A && git commit -m "fix: apply CodeRabbit auto-fixes" && git push`
+4. Wait for CodeRabbit re-review → back to Step 2
+5. If still CHANGES_REQUESTED after fix → give up, call `contract_review_decision` with `reject`
+
+### Step 4: Validate + Merge
+1. Run `validate({test: true})` to confirm tests still pass
+2. Call `contract_review_decision` with `merge`
+3. The orchestrator handles squash-merge + sync main + cleanup
+
 ## Rules
 
 - **Create the PR in Phase 2** — never skip this step.
