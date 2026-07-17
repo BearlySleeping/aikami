@@ -66,7 +66,7 @@ class CapabilityService
       imageStatus,
       voiceStatus,
       detectedAt: new Date().toISOString(),
-      summary: this._buildSummary({ textStatus, providerId, modelName }),
+      summary: this._buildSummary({ textStatus, imageStatus, voiceStatus, providerId, modelName }),
     };
   }
 
@@ -122,10 +122,12 @@ class CapabilityService
    */
   private _buildSummary(options: {
     textStatus: DetectionStatus;
+    imageStatus: DetectionStatus;
+    voiceStatus: DetectionStatus;
     providerId?: string;
     modelName?: string;
   }): string {
-    const { textStatus, providerId, modelName } = options;
+    const { textStatus, imageStatus, voiceStatus, providerId, modelName } = options;
 
     switch (textStatus) {
       case 'detected':
@@ -142,6 +144,11 @@ class CapabilityService
       case 'skipped':
         return 'Detection skipped';
       default:
+        // Check if image or voice capabilities are available even when text is not
+        if (imageStatus === 'detected' || imageStatus === 'configured' ||
+            voiceStatus === 'detected' || voiceStatus === 'configured') {
+          return 'AI providers detected (image/voice available)';
+        }
         return 'No AI providers detected — offline demo available';
     }
   }

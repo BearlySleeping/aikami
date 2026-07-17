@@ -492,13 +492,42 @@ const _localServicesMock = () => ({
         checkedAt: new Date().toISOString(),
       };
     }),
-    resolveMode: mock((capability: string) => ({
-      capability,
-      mode: 'offline',
-      provider: 'ollama',
-      model: 'llama3.2',
-      endpoint: 'http://localhost:11434/v1',
-    })),
+    resolveMode: mock((capability: string) => {
+      if (capability === 'text') {
+        return {
+          capability: 'text',
+          mode: 'offline',
+          provider: 'ollama',
+          model: 'llama3.2',
+          endpoint: 'http://localhost:11434/v1',
+        };
+      }
+      if (capability === 'image') {
+        return {
+          capability: 'image',
+          mode: 'offline',
+          provider: 'comfyui',
+          model: undefined,
+          endpoint: undefined,
+        };
+      }
+      if (capability === 'voice') {
+        return {
+          capability: 'voice',
+          mode: 'offline',
+          provider: 'kokoro',
+          model: undefined,
+          endpoint: undefined,
+        };
+      }
+      return {
+        capability,
+        mode: 'offline',
+        provider: 'ollama',
+        model: undefined,
+        endpoint: undefined,
+      };
+    }),
   }),
   capabilityService: Object.assign(_createServiceStub(), {
     detect: mock(async () => ({

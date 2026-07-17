@@ -182,6 +182,22 @@ describe('CapabilityService', () => {
     expect(snapshot.summary).toInclude('offline demo');
   });
 
+  test('detect returns positive summary when text unavailable but image/voice available', async () => {
+    _detectImpl = async (capability) => {
+      if (capability === 'text') {
+        return _unavailableResult('text');
+      }
+      return _availableResult(capability);
+    };
+    const snapshot = await capabilityService.detect();
+
+    expect(snapshot.isComplete).toBe(true);
+    expect(snapshot.textStatus).toBe('not_found');
+    expect(snapshot.imageStatus).toBe('detected');
+    expect(snapshot.voiceStatus).toBe('detected');
+    expect(snapshot.summary).toInclude('image/voice available');
+  });
+
   test('detect reports cloud summary when gateway text mode is byok', async () => {
     _detectImpl = async (capability) => {
       if (capability === 'text') {
