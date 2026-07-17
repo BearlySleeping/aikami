@@ -172,6 +172,8 @@ const isPipelineStage = (value: unknown): value is ContractPipelineStage =>
     'review',
     'accepted',
     'blocked',
+    'pr_created',
+    'merged',
   ].includes(value);
 
 const isManifest = (value: unknown, expectedRunId: string): value is RunManifest => {

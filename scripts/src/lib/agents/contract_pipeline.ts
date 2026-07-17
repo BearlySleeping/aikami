@@ -24,6 +24,7 @@ type CliArguments = {
   fresh: boolean;
   noAttach: boolean;
   ready: boolean;
+  yolo: boolean;
   launcherToken?: string;
   help: boolean;
 };
@@ -50,6 +51,7 @@ const parseArguments = (): CliArguments => {
     fresh: args.includes('--fresh'),
     noAttach: args.includes('--no-attach'),
     ready: args.includes('--ready'),
+    yolo: args.includes('--yolo'),
     help: args.length === 0 || args.includes('--help') || args.includes('-h'),
   };
 };
@@ -154,6 +156,7 @@ const main = async (): Promise<void> => {
     fresh: cli.fresh,
     dryRun: cli.dryRun,
     ready: cli.ready,
+    yolo: cli.yolo,
     onReady: cli.launcherToken
       ? (readyManifest) => {
           atomicWrite({

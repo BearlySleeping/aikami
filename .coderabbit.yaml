@@ -23,8 +23,14 @@ reviews:
     - "!dist/**"
     - "!.pi/generated-skills/**"
     - "!.moon/**"
+    - "!.context/**"
+    - "!docs/contracts/**"
+    - "!docs/PROMOTION.md"
+    - "!docs/PROGRESS.md"
     - "src/**"
+    - "scripts/**"
     - "apps/**"
+    - "packages/**"
 
   path_instructions:
     - path: "**/*.test.ts"

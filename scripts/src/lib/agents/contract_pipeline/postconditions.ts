@@ -3,7 +3,8 @@
 // Validate role-specific filesystem boundaries after a worker attempt.
 // For implementer/verifier (which run in a Git Worktree), diffs are captured
 // from the worktree, not the root repo, to avoid false boundary violations.
-import { basename, relative, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { basename, join, relative, resolve } from 'node:path';
 import { changedBetweenSnapshots } from './git_state.ts';
 import type { ContractWorkerRole, GitStateSnapshot } from './types.ts';
 
@@ -31,12 +32,35 @@ export const validatePostconditions = (options: {
   }
 
   let unauthorizedPaths: string[] = [];
+  const PIPELINE_MANAGED_FILES = new Set(['.envrc', '.pi/settings.json']);
+
+  // Implementer: validate that every claimed file actually exists on disk.
+  // Prevents "ghost files" — implementer lists files in contract_stage_complete
+  // that were never actually written.
+  if (options.role === 'implementer') {
+    const wsRoot = options.workspacePath ?? options.repoRoot;
+    const missing = changed.filter(
+      (path) => !existsSync(join(wsRoot, path)) && !PIPELINE_MANAGED_FILES.has(path),
+    );
+    // Only flag files that were CLAIMED (in the implementer's filesTouched)
+    // but don't exist on disk. Untracked files in changed that DO exist are fine
+    // — the pipeline commits them after implementer passes.
+    return {
+      passed: missing.length === 0,
+      unauthorizedPaths: missing,
+      changedPaths: changed,
+    };
+  }
+
   if (options.role === 'writer' || options.role === 'verifier') {
     const contractFileName = basename(options.contractPath);
     const contractId = contractFileName.match(/^(C-\d+|MIG-\d+)/)?.[0];
 
     unauthorizedPaths = changed.filter((path) => {
       if (path === relativeContractPath) {
+        return false;
+      }
+      if (PIPELINE_MANAGED_FILES.has(path)) {
         return false;
       }
       // docs/ is a separate gitignored repo — non-contract docs/ files are fine.

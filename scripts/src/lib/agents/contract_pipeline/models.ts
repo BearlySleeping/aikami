@@ -24,7 +24,7 @@ export const CONTRACT_ROLE_MODEL_TIER: Record<string, ModelTier> = {
   critic: 'flash',
   implementer: 'pro',
   verifier: 'flash',
-  review: 'flash',
+  review: 'pro',
 } as const;
 
 /** Per-stage thinking levels — DeepSeek bills thinking tokens as output. */
@@ -33,7 +33,7 @@ export const CONTRACT_ROLE_THINKING_LEVEL: Record<string, ThinkingLevel> = {
   critic: 'low',
   implementer: 'medium',
   verifier: 'low',
-  review: 'low',
+  review: 'medium',
 } as const;
 
 /** Resolve the model slug for a contract pipeline role. Never undefined. */

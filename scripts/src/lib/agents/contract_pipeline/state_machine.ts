@@ -11,7 +11,6 @@ import type {
 
 export const MAX_VERIFY_LOOPS = 2;
 
-/** Resolve the next stage from a validated worker result. */
 export const resolveNextStage = (options: {
   currentStage: ContractPipelineStage;
   verdict: ContractStageResult;
@@ -20,26 +19,16 @@ export const resolveNextStage = (options: {
   if (options.verdict.status === 'blocked' || options.verdict.status === 'failed') {
     return { next: 'blocked', verifyLoops: options.verifyLoops };
   }
-
-  // Writer → always proceed to critic. No bounce.
   if (options.currentStage === 'write_contract') {
     return { next: 'critique', verifyLoops: options.verifyLoops };
   }
-
-  // Critic fixes inline and approves. Only blocks for structural issues.
   if (options.currentStage === 'critique') {
     return { next: 'implement', verifyLoops: options.verifyLoops };
   }
-
-  // Implementer → verify.
   if (options.currentStage === 'implement') {
     return { next: 'verify', verifyLoops: options.verifyLoops };
   }
-
-  // Verify → review or bounce back to implement (max 2).
-  // When the bounce cap is hit, transition to review (not blocked) so the
-  // user gets an interactive session explaining the situation and can decide
-  // to create a PR anyway, retry, or abandon.
+  // Verify: pass → review (human creates PR). Bounce on changes_requested (max 2).
   if (options.currentStage === 'verify') {
     if (options.verdict.status !== 'changes_requested') {
       return { next: 'review', verifyLoops: options.verifyLoops };
@@ -50,29 +39,19 @@ export const resolveNextStage = (options: {
       verifyLoops,
     };
   }
-
   return { next: 'blocked', verifyLoops: options.verifyLoops };
 };
 
-/** Map review decision to next stage. */
 export const resolveReviewDecision = (decision: ReviewDecision): ContractPipelineStage => {
   switch (decision) {
-    case 'approve':
-      return 'pr_created';
-    case 'merge':
-      return 'merged';
-    case 'change':
-      return 'implement';
-    case 'reject':
-      return 'blocked';
+    case 'approve': return 'pr_created';
+    case 'merge': return 'merged';
+    case 'change': return 'implement';
+    case 'reject': return 'blocked';
   }
 };
 
-/** Return a manifest with its current stage changed. */
-export const transition = (options: {
-  manifest: RunManifest;
-  next: ContractPipelineStage;
-}): RunManifest => ({
+export const transition = (options: { manifest: RunManifest; next: ContractPipelineStage }): RunManifest => ({
   ...options.manifest,
   currentStage: options.next,
   lastUpdated: new Date().toISOString(),
