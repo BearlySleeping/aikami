@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-17)
 
-**164 active (47 without contract file), 119 archived, 1 duplicates**
+**164 active (45 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -124,9 +124,9 @@
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | — | v2 |
 | C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | — | v2 |
 | C-321 | Migrate Local Persistence To Turso As The Source Of Truth | 🛠️ implemented | ❓ `integrated` | v2 |
-| C-322 | Wire The Ai Provider Gateway Into Capability Detection And S | ✅ verified | — | v2 |
-| C-323 | Enforce the Mandatory Text AI Capability Gate | ⏳ not_started (no contract file) | — | — |
-| C-324 | Retire Legacy AI-Less Code Paths and Unused Backend Packages | ⏳ not_started (no contract file) | — | — |
+| C-322 | Wire The Ai Provider Gateway Into Capability Detection And S | 🛠️ implemented | — | v2 |
+| C-323 | Enforce The Mandatory Text Ai Capability Gate | 🛠️ implemented | — | v2 |
+| C-324 | Retire Legacy Ai Less Code Paths And Unused Backend Packages | ✅ verified | — | v2 |
 | C-325 | Ship Real-Time LPC Appearance Preview with Safe Defaults | ⏳ not_started (no contract file) | — | — |
 | C-326 | Make `/game` Boot Atomic, Observable, and Content-Driven | ⏳ not_started (no contract file) | — | — |
 | C-327 | Add In-World Onboarding and Unified Interaction UX | ⏳ not_started (no contract file) | — | — |
