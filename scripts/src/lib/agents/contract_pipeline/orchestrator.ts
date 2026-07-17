@@ -146,18 +146,9 @@ const enforceStageStatus = (options: {
     };
   }
   if (options.stage === 'implement' && status !== 'implemented') {
-    if (!existsSync(options.contractPath) && status === 'draft') {
-      console.warn(
-        `⚠️  Contract file missing at ${options.contractPath} — implementer passed but status check skipped.`,
-      );
-      return options.result;
-    }
-    return {
-      ...options.result,
-      status: 'blocked',
-      summary: `Implementer ended with contract status ${status}; expected implemented.`,
-      findings: [...options.result.findings, 'Implementation report/status handoff is incomplete.'],
-    };
+    // Skip — implementer/verifier don't update the main contract.
+    // Status is tracked in the run manifest, not the contract file.
+    return options.result;
   }
   return options.result;
 };
@@ -397,7 +388,7 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
     '### Your options',
     '',
     '**1. Create a PR anyway** — `contract_review_decision` with `approve` or `merge`',
-    '   - `approve`: Create a draft PR. CodeRabbit will review and may fix issues.',
+    '   - `approve`: Create a ready PR (draft=false). CodeRabbit reviews immediately.',
     '   - `merge`: Create a PR and auto-merge with squash.',
     '',
     '**2. Retry the implementer** — `contract_review_decision` with `change`',
@@ -659,7 +650,7 @@ export const runContractPipeline = async (options: {
             });
 
         if (stage === 'implement' && result.status === 'passed') {
-          updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+          // Status is tracked in run manifest only — don't touch main contract.
           // Commit implementer changes to the worktree branch.
           // The verifier runs next and expects a clean git state — untracked
           // implementation files would otherwise be flagged as missing.
@@ -742,7 +733,7 @@ export const runContractPipeline = async (options: {
 
         if (stage === 'verify') {
           if (result.status === 'passed') {
-            updateContractStatus({ contractPath: manifest.contractPath, status: 'verified' });
+            // Status is tracked in run manifest only — don't touch main contract.
             manifest.verificationFingerprint = after.fingerprint;
             manifest.verificationContractHash = '';
             if (manifest.reconciliation?.headBranch) {
@@ -792,10 +783,7 @@ export const runContractPipeline = async (options: {
               }
             }
           } else if (result.status === 'changes_requested') {
-            updateContractStatus({
-              contractPath: manifest.contractPath,
-              status: 'verification_failed',
-            });
+            // Status is tracked in run manifest only — don't touch main contract.
           }
         }
 
@@ -953,7 +941,7 @@ export const runContractPipeline = async (options: {
             manifest.blockedReason = undefined;
             delete manifest.verificationFingerprint;
             delete manifest.verificationContractHash;
-            updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+            // Status tracked in run manifest — don't touch main contract.
             manifest = transition({ manifest, next: 'implement' });
           } else {
             const prUrl = findPrUrl();
@@ -1033,7 +1021,7 @@ export const runContractPipeline = async (options: {
           });
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
-          updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+          // Status tracked in run manifest — don't touch main contract.
           manifest = transition({ manifest, next: 'implement' });
         } else {
           execSync(`gh pr close ${prUrl}`, {
