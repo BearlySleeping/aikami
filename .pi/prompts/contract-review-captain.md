@@ -147,3 +147,4 @@ git push origin HEAD
 - **If you modify source files**, warn the user that re-verification is needed.
 - **The orchestrator handles merge/promote/close** — you only call `contract_review_decision`.
 - **No `gh_create_pr` after Phase 2** — the PR already exists.
+- 🔴 **Always restart services before testing**: `herdr_session restart client firebase voice image text`. Worktrees have different code than main.

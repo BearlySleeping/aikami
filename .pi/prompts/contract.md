@@ -191,6 +191,7 @@ Decide from the contract's Target/Overview:
 - `moon_run_task` for per-project operations
 - 🔴 NEVER run raw shell `bun moon run` or `bun test` — use the Pi tools `moon_run_task` and `validate()` which have built-in timeouts. Raw shell commands will hang forever on large test suites.
 - 🔴 NEVER run long-lived servers in the main thread — use `herdr_session` / `firebase_emulator`
+- 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client firebase voice image text`. The main repo's dev servers are running the wrong code — you must restart from the worktree CWD.
 - 🔴 Route groups: literal `(dev)` — a `\(dev\)` directory breaks the route tree
 - Report failures honestly — a partial implementation with a truthful report beats a fake ✅
 - End at `implemented`, never `completed` — the verifier handles the rest
