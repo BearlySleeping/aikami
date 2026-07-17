@@ -100,7 +100,7 @@ export const loadReviewPrompt = (options: {
     '/',
   );
 
-  const draftFlag = (options.ready || options.yolo) ? 'false' : 'true';
+  const draftFlag = options.ready || options.yolo ? 'false' : 'true';
   const prInfo = options.prUrl
     ? [
         '',
@@ -141,7 +141,9 @@ export const loadReviewPrompt = (options: {
 
   return [
     stripFrontmatter(readFileSync(promptPath, 'utf-8')).replace(/\$ARGUMENTS\b/g, options.runId),
-    options.yolo ? '\n🚀 YOLO MODE: Auto-fix, auto-validate, auto-merge. Do not wait for user approval.' : '',
+    options.yolo
+      ? '\n🚀 YOLO MODE: Auto-fix, auto-validate, auto-merge. Do not wait for user approval.'
+      : '',
     '\n## Active run',
     `Manifest: .pi/contract-runs/${options.runId}/manifest.json`,
     `Contract: ${contractPath}`,

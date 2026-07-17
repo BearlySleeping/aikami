@@ -18,7 +18,6 @@ dependsOn:
   - 'backend-configs'
   - 'backend-utils'
   - 'backend-database'
-  - 'backend-image'
   - 'schemas'
   - 'types'
   - 'constants'
