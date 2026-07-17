@@ -224,7 +224,7 @@ const reconcileWorkspace = (options: {
     } catch {}
   }
   if (resolvedBase) {
-    for (const fp of ['.envrc', '.pi/settings.json']) {
+    for (const fp of ['.envrc', '.pi/settings.json', 'docs/contracts/PROGRESS.md', 'docs/contracts/PROMOTION.md']) {
       try {
         runGit(`restore --source=${resolvedBase} -- '${fp}'`, { cwd: workspacePath });
       } catch {}
