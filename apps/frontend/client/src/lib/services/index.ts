@@ -23,6 +23,7 @@ export {
   customAgentToConfig,
   runCustomAgent,
 } from './agent/index.ts';
+export * from './ai/ai_gateway_service.svelte.ts';
 export * from './ai/ai_service.svelte.ts';
 export * from './ai/sentence_boundary_chunker';
 export * from './ai/stream_orchestrator_service.svelte.ts';

@@ -73,6 +73,8 @@ const config = {
 
       '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
       '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
+      '@aikami/frontend/ai-gateway': toPackagesPath('frontend/ai-gateway/src'),
+      '@aikami/frontend/ai-gateway/*': toPackagesPath('frontend/ai-gateway/src/lib/*'),
       '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
       '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),
       '@aikami/frontend/svelte-kit': toPackagesPath('frontend/svelte-kit/src'),

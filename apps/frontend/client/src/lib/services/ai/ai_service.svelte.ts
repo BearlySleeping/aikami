@@ -1,16 +1,17 @@
+// apps/frontend/client/src/lib/services/ai/ai_service.svelte.ts
+//
+// Legacy AI service — routes sendMessageToAI/createPersona through the
+// AI Provider Gateway's `service`-mode text adapter (which wraps the
+// Firebase `ai` callable), preserving the original public interface and
+// undefined-on-error semantics. Contract: C-320 AC-2/AC-4.
+
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-  firebaseFunctionsService,
 } from '@aikami/frontend/services';
-import type {
-  AIMessageData,
-  AIMessageResponse,
-  AIMessageType,
-  NpcData,
-  PersonaData,
-} from '@aikami/types';
+import type { NpcData, PersonaData } from '@aikami/types';
+import { aiGatewayService } from '$lib/services/ai/ai_gateway_service.svelte.ts';
 
 export type AIServiceOptions = BaseFrontendClassOptions;
 
@@ -35,14 +36,15 @@ export class AIService extends BaseFrontendClass<AIServiceOptions> implements AI
   async createPersona(prompt: string): Promise<PersonaData | undefined> {
     this.log('createPersona', { prompt });
     try {
-      const response = await this._callAIEndpoint({
-        type: 'createPersona',
-        payload: {
-          prompt,
-        },
+      // Explicit `service` mode: the gateway dispatches to the adapter
+      // wrapping the hosted callable, bypassing capability resolution.
+      const response = await aiGatewayService.generateText({
+        messages: [{ role: 'user', content: prompt }],
+        schemaName: 'createPersona',
+        mode: 'service',
       });
 
-      return response.persona;
+      return response.structured as PersonaData | undefined;
     } catch (error) {
       this.error('createPersona', error);
     }
@@ -54,26 +56,15 @@ export class AIService extends BaseFrontendClass<AIServiceOptions> implements AI
   ): Promise<string | undefined> {
     this.log('sendMessage', { text, character });
     try {
-      const response = await this._callAIEndpoint({
-        type: 'sendMessage',
-        payload: {
-          text,
-          context: {
-            messages: [],
-          },
-        },
+      const response = await aiGatewayService.generateText({
+        messages: [{ role: 'user', content: text }],
+        mode: 'service',
       });
 
       return response.text;
     } catch (error) {
       this.error('sendMessage', error);
     }
-  }
-
-  private async _callAIEndpoint<T extends AIMessageType>(
-    data: AIMessageData<T>,
-  ): Promise<AIMessageResponse<T>> {
-    return await firebaseFunctionsService.call('ai', data);
   }
 }
 
