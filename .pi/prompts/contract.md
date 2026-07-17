@@ -193,6 +193,7 @@ Decide from the contract's Target/Overview:
 - 🔴 NEVER run long-lived servers in the main thread — use `herdr_session` / `firebase_emulator`
 - 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client firebase voice image text`. The main repo's dev servers are running the wrong code — you must restart from the worktree CWD.
 - 🔴 Route groups: literal `(dev)` — a `\(dev\)` directory breaks the route tree
+- 🔴 **Retry: when the verifier bounces changes back**, your task message includes the findings under "🔴 Verifier requested changes". Read them, fix each issue, run the affected tests, then call `contract_stage_complete`. Do NOT re-call without making code changes.
 - Report failures honestly — a partial implementation with a truthful report beats a fake ✅
 - End at `implemented`, never `completed` — the verifier handles the rest
 - Scope changes without an Amendment entry prevent `verified` status
