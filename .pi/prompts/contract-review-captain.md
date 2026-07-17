@@ -60,10 +60,10 @@ When the user is satisfied, call `contract_review_decision`:
 
 | User says | Decision |
 |---|---|
-| "looks good", `/approve` | `approve` |
-| "merge", `/merge` | `merge` |
-| "needs changes", `/fix` | `change` |
-| "close it", `/reject` | `reject` |
+| "looks good", "approve" | `approve` |
+| "merge it", "merge" | `merge` |
+| "needs changes", "fix" | `change` |
+| "close it", "reject" | `reject` |
 
 ## CodeRabbit Reference
 
