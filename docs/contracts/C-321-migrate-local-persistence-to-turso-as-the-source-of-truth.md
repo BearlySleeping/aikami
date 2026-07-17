@@ -8,7 +8,7 @@
 | **Target** | `packages/frontend/repositories` (`storage_adapter.ts`, `turso_storage_adapter.ts`, `AIKAMI_SCHEMA_DDL`, new browser WASM/OPFS adapter) + client repositories `campaign_repository.svelte.ts`, `game_save_service.svelte.ts`, `conversation_repository.svelte.ts` |
 | **Priority** | P0 — "local-first on Turso" is a Non-Negotiable Directive; campaign/save/chat truth currently lives in ad hoc IndexedDB stores while the completed C-203 Turso adapter is not called from any production path |
 | **Dependencies** | C-203 (completed — adapter + schema to build on), C-313 (implemented, promotion `sandbox` — Campaign aggregate; see risk note), packages: `@tursodatabase/database` (already a dependency), a libSQL/Turso WASM build for the browser (new dependency) |
-| **Status** | approved |
+| **Status** | verification_failed |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
