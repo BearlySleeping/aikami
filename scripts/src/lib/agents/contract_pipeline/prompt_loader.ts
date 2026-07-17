@@ -18,10 +18,17 @@ export const feedbackMessage = (options: {
 }): string => {
   if (options.role === 'implementer') {
     return [
-      '## Prior Verifier Feedback',
-      'The verifier found the following issues. Fix them and re-submit.',
+      '## 🔴 Verifier requested changes — fix these before re-submitting',
+      'Read EACH issue below, fix it, then call `contract_stage_complete` with `passed`.',
+      'Do NOT just re-call `contract_stage_complete` with the same code — you must make actual changes.',
       '',
       options.feedback,
+      '',
+      '### How to proceed',
+      '1. Read the contract Acceptance Criteria referenced in each finding',
+      '2. Fix the code to satisfy each criterion',
+      '3. Run the affected tests to confirm fixes work',
+      '4. Call `contract_stage_complete` with `passed`',
     ].join('\n');
   }
   return options.feedback;
