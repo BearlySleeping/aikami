@@ -10,16 +10,18 @@ import type {
   CombatantScreenState,
   FloatingTextInstance,
 } from '$lib/services/game/game_engine_service.svelte.ts';
-import { gameEngineService, gameModeService } from '$services';
+import { gameBootService, gameEngineService, gameModeService } from '$services';
 import type { ActiveContextEntry } from '$types';
 
 // ---------------------------------------------------------------------------
-// GameViewViewModel — thin bridge between the game canvas view and
-// the GameEngineService. Follows the Svelte 5 ViewModel pattern.
+// GameCanvasViewModel — thin bridge between the game canvas view and
+// the game engine/boot services. Follows the Svelte 5 ViewModel pattern.
 //
-// All engine lifecycle, bridge events, and game state live in
-// GameEngineService. This ViewModel exposes reactive state to the
-// View and keeps the View free of engine imports.
+// Contract: C-326 — Cancellable staged boot orchestrator
+//
+// The ViewModel owns the canvas element binding and triggers the boot
+// service when the canvas element arrives. Engine lifecycle state (bridge
+// events, game state) remain in GameEngineService.
 // ---------------------------------------------------------------------------
 
 export type GameCanvasViewModelOptions = BaseViewModelOptions;
@@ -57,26 +59,27 @@ export type GameCanvasViewModelInterface = BaseViewModelInterface & {
 };
 
 /**
- * Thin ViewModel bridge to {@link GameEngineService}.
+ * Thin ViewModel bridge to the boot service and engine service.
  *
- * All reactive state is read directly from the singleton service's
- * `$state` fields. The only logic here is the canvas-binding `$effect`
- * that connects the View's `<canvas bind:this>` to the engine.
+ * All reactive game state is read directly from the game engine service's
+ * `$state` fields. Boot orchestration is delegated to the boot service.
+ * The sole logic here is the canvas-binding `$effect` that triggers the
+ * boot pipeline exactly once per route entry, with cancellation on teardown.
  */
 class GameCanvasViewModel
   extends BaseViewModel<GameCanvasViewModelOptions>
   implements GameCanvasViewModelInterface
 {
-  // ── Bindable canvas element (owned here, forwarded to service) ──
+  // ── Bindable canvas element ──
 
   /**
    * Canvas element bound via bind:this from the View.
    * Uses $state.raw so Svelte doesn't deep-proxy the WebGL canvas.
-   * When set, forwarded to {@link GameEngineService} for engine boot.
+   * When set, triggers the boot pipeline via {@link GameBootService}.
    */
   canvasElement = $state.raw<HTMLCanvasElement | undefined>(undefined);
 
-  // ── Reactive state (proxied from service) ──
+  // ── Reactive state (proxied from engine service) ──
 
   get playerScene(): string {
     return gameEngineService.playerScene;
@@ -87,7 +90,7 @@ class GameCanvasViewModel
   }
 
   get gameError(): string | undefined {
-    return gameEngineService.gameError;
+    return gameBootService.bootProgress.error ?? gameEngineService.gameError;
   }
 
   get activeContexts(): readonly ActiveContextEntry[] {
@@ -119,33 +122,38 @@ class GameCanvasViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    // Set up the reactive canvas binding: when the View binds
-    // canvasElement (via bind:this), forward it to the service
-    // and boot/destroy the engine.
+    // Reactive canvas-binding effect: when the View binds the canvas element
+    // and the boot service is idle, launch the boot orchestrator.
+    //
+    // The effect reads gameBootService.bootProgress.stage as a dependency.
+    // When resetForRetry() sets stage back to 'idle', the effect re-runs
+    // and triggers a fresh boot attempt.
     this.registerEffectRoot(() => {
       $effect(() => {
         const canvas = this.canvasElement;
-        if (canvas) {
-          gameEngineService.canvasElement = canvas;
-          void gameEngineService.bootWithCanvas(canvas);
-        }
+        const progress = gameBootService.bootProgress;
 
+        if (canvas && !gameBootService.isBooting && progress.stage === 'idle') {
+          // Boot service resolves campaign/persona from already-initialized services.
+          // Only the canvas element is forwarded from the View.
+          void gameBootService.boot({ canvas, contentPackId: 'emberwatch' });
+        }
+      });
+    });
+
+    // Teardown effect: dependency-free cleanup that only runs on ViewModel destruction
+    this.registerEffectRoot(() => {
+      $effect(() => {
         return () => {
-          gameEngineService.canvasElement = undefined;
+          // Navigation away — cancel in-flight boot and teardown
+          gameBootService.cancelBoot();
           gameEngineService.destroyEngine();
         };
       });
     });
 
-    // Initialize the engine bridge (register listeners, load persona).
+    // Initialize the engine bridge (register listeners).
     await gameEngineService.initializeEngine();
-
-    // If canvas was already bound when the $effect fired, bootWithCanvas
-    // may have returned early because the bridge wasn't initialized yet.
-    // Retry now that the bridge is guaranteed to be available.
-    if (this.canvasElement) {
-      void gameEngineService.bootWithCanvas(this.canvasElement);
-    }
 
     await super.initialize();
   }
@@ -196,10 +204,7 @@ class GameCanvasViewModel
 }
 
 /**
- * Factory function for creating a GameViewViewModel.
- *
- * Follows the Svelte 5 `getXViewModel` pattern — see
- * {@link getPersonaListViewModel} for reference.
+ * Factory function for creating a GameCanvasViewModel.
  */
 export const getGameCanvasViewModel = (
   options: GameCanvasViewModelOptions,

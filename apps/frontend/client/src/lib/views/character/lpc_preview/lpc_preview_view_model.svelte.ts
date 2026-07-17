@@ -384,7 +384,11 @@ class LpcPreviewViewModel
       await Promise.all(layerPromises);
 
       // Check if this render is stale
-      if (thisGeneration !== this._renderGeneration || this._pixiApp !== capturedPixiApp || !this._isInitialized) {
+      if (
+        thisGeneration !== this._renderGeneration ||
+        this._pixiApp !== capturedPixiApp ||
+        !this._isInitialized
+      ) {
         // Stale render — destroy newly created children and abort
         for (const child of newChildren) {
           child.destroy({ children: true });
@@ -417,7 +421,11 @@ class LpcPreviewViewModel
       this.error('lpcPreview.composeFailed', { error: message });
 
       // Check if still valid before fallback operations
-      if (thisGeneration !== this._renderGeneration || this._pixiApp !== capturedPixiApp || !this._isInitialized) {
+      if (
+        thisGeneration !== this._renderGeneration ||
+        this._pixiApp !== capturedPixiApp ||
+        !this._isInitialized
+      ) {
         return;
       }
 

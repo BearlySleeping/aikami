@@ -5,6 +5,7 @@
 // five split game state services. Defines a clear initialize/dispose lifecycle.
 //
 // Contract: C-314 Establish a Production Game Composition Root and Split God Services
+// Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven (campaign wiring)
 
 import {
   BaseFrontendClass,
@@ -184,10 +185,8 @@ export class GameCompositionRoot
     // Phase 5: Campaign service (C-313)
     this._campaignService = campaignService;
 
-    // Phase 5b: Thread contentPackId from campaign to engine (C-315)
-    // The engine uses this to resolve the starting map on boot.
+    // Phase 5b: Thread contentPackId to engine and ensure campaign service is ready
     const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
-    this._gameEngineService.contentPackId = contentPackId;
     this.debug('initialize:contentPackId', { contentPackId });
 
     // Phase 6: Start ECS bridge listeners for state services
