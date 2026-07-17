@@ -2,19 +2,13 @@
 // scripts/src/lib/ops/pre_commit.ts
 //
 // Centralized pre-commit hook. Run from .moon/workspace.yml via `bun run pre-commit`.
-// Skips everything in contract pipeline worktrees (CONTRACT_PIPELINE_WORKTREE=1)
-// to prevent shared files (PROGRESS.md, PROMOTION.md, .context/llms.txt) from
-// being regenerated and staged — which causes merge conflicts in PRs.
-//
-// In worktrees, the pipeline's commitAll passes CONTRACT_PIPELINE_WORKTREE=1.
-// On main (after PR merge), these files are regenerated normally.
+// In contract pipeline worktrees (CONTRACT_PIPELINE_WORKTREE=1), skips only
+// knowledge:sync — shared dashboard files cause merge conflicts in PRs.
+// Formatting and typechecking always run.
 
 import { execSync } from 'node:child_process';
 
-if (process.env.CONTRACT_PIPELINE_WORKTREE) {
-  console.log('🔇 Skipping pre-commit hooks in contract pipeline worktree.');
-  process.exit(0);
-}
+const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE;
 
 const run = (cmd: string): void => {
   console.log(`  → ${cmd}`);
@@ -27,15 +21,19 @@ const run = (cmd: string): void => {
   }
 };
 
-// 1. Fix formatting + lint on affected staged files
+// 1. Fix formatting + lint on affected staged files (always)
 run('bunx moon run :fix --affected --status=staged');
 
-// 2. Typecheck affected projects
+// 2. Typecheck affected projects (always)
 run('bunx moon run :typecheck --affected --status=staged');
 
-// 3. Regenerate contract dashboard files (PROGRESS.md, PROMOTION.md, .context/llms.txt)
-run('bun knowledge:sync');
+if (!isWorktree) {
+  // 3. Regenerate dashboard files (main repo only)
+  run('bun knowledge:sync');
 
-// 4. Stage any files modified by the sync/formatters
-run('git add .context/llms.txt docs/contracts/ 2>/dev/null || true');
+  // 4. Stage dashboard files modified by sync
+  run('git add .context/llms.txt docs/contracts/ 2>/dev/null || true');
+}
+
+// 5. Re-stage files that formatters may have modified (always)
 run('git diff -z --name-only --cached | xargs -0 git add 2>/dev/null || true');
