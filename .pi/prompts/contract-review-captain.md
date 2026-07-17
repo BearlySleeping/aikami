@@ -146,5 +146,6 @@ git push origin HEAD
 - **Do not re-run tests** if the verifier passed. Trust the verifier's evidence.
 - **If you modify source files**, warn the user that re-verification is needed.
 - **The orchestrator handles merge/promote/close** — you only call `contract_review_decision`.
+- 🔴 **NEVER call gh_merge_pr, gh_promote_pr, or gh_cancel_pr yourself.** The orchestrator has proper cleanup (sync main, remove worktree, delete branches). Manual gh calls skip cleanup and leave stale worktrees.
 - **No `gh_create_pr` after Phase 2** — the PR already exists.
 - 🔴 **Always restart services before testing**: `herdr_session restart client firebase voice image text`. Worktrees have different code than main.
