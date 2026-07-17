@@ -115,8 +115,7 @@ class AiGatewayService
 
     const textAdapter = createOpenAiCompatibleTextAdapter({
       getApiKey: (provider) => this._getTextApiKey(provider),
-      supportsStructuredOutput: (provider) =>
-        PROVIDER_MODEL_FETCH[provider]?.chatTestOpenAiCompat ?? false,
+      supportsStructuredOutput: () => false,
       getDefaultEndpoint: (provider) => this._getDefaultTextEndpoint(provider),
       onSchemaCacheSize: (size) => {
         (globalThis as Record<string, unknown>).__text_service_compiled_schema_cache_size = size;
@@ -224,8 +223,13 @@ class AiGatewayService
           endpoint: match.endpoint || '',
         });
       }
-      // Model not found in config — use it verbatim with a provider-agnostic fallback
-      return this._toTextResolution({ provider: 'unknown', model: explicitModel, endpoint: '' });
+      // Model not found in config — use it verbatim with the active provider/endpoint
+      const resolved = configService.getActiveTextProvider();
+      return this._toTextResolution({
+        provider: resolved.provider,
+        model: explicitModel,
+        endpoint: resolved.endpoint,
+      });
     }
 
     const resolved = configService.getActiveTextProvider();

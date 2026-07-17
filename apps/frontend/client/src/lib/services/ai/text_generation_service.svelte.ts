@@ -112,19 +112,20 @@ class TextGenerationService
   }
 
   /** Registers a per-call controller linked to the caller's signal. */
-  private _linkController(signal?: AbortSignal): AbortController {
+  private _linkController(signal?: AbortSignal): { controller: AbortController; cleanup: () => void } {
     const abortController = new AbortController();
     this._abortControllers.add(abortController);
+    let cleanup = () => {};
     if (signal) {
       if (signal.aborted) {
         abortController.abort(signal.reason);
       } else {
-        signal.addEventListener('abort', () => abortController.abort(signal.reason), {
-          once: true,
-        });
+        const handler = () => abortController.abort(signal.reason);
+        signal.addEventListener('abort', handler, { once: true });
+        cleanup = () => signal.removeEventListener('abort', handler);
       }
     }
-    return abortController;
+    return { controller: abortController, cleanup };
   }
 
   /** Whether the error represents cancellation (typed or raw AbortError). */
@@ -149,7 +150,7 @@ class TextGenerationService
       return;
     }
 
-    const abortController = this._linkController(signal);
+    const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
 
     try {
@@ -169,6 +170,7 @@ class TextGenerationService
       this.error('streamChat:failed', error);
       throw error;
     } finally {
+      cleanup();
       this._abortControllers.delete(abortController);
       this._decrementStreamCount();
     }
@@ -187,10 +189,15 @@ class TextGenerationService
     const { schema, schemaName, prompt, systemPrompt, signal, model } = options;
 
     if (signal?.aborted) {
-      throw new Error('Aborted');
+      const error = new Error('Aborted');
+      error.name = 'AbortError';
+      if (signal.reason !== undefined) {
+        throw signal.reason;
+      }
+      throw error;
     }
 
-    const abortController = this._linkController(signal);
+    const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
 
     try {
@@ -219,6 +226,7 @@ class TextGenerationService
       this.error('extractStructure:failed', error);
       throw error;
     } finally {
+      cleanup();
       this._abortControllers.delete(abortController);
       this._decrementStreamCount();
     }
