@@ -5,6 +5,7 @@
   // palette/tint controls, and text description.
   // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
+  import { onDestroy } from 'svelte';
   import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
   import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
   import {
@@ -25,17 +26,27 @@
     className: 'LpcPreviewViewModel',
   });
 
-  // Reactively push recipes to the preview VM when they change
+  // Dispose the PixiJS context when leaving the appearance step
+  onDestroy(() => {
+    previewVm.dispose();
+  });
+
+  // Reactively push recipes to the preview VM
   $effect(() => {
     void viewModel.lpcPreviewRecipes;
+    void viewModel.lpcRecipe;
+    void viewModel.paletteOverrides;
     previewVm.setRecipes(viewModel.lpcPreviewRecipes);
   });
 
-  // Sync animation toggle
+  // Sync animation toggle (one-way: coordinator → preview)
+  let _prevPlaying = false;
   $effect(() => {
     void viewModel.previewPlaying;
-    if (viewModel.previewPlaying !== previewVm.isPlaying) {
+    // Only toggle if the coordinator changed the state
+    if (viewModel.previewPlaying !== _prevPlaying) {
       previewVm.togglePlayback();
+      _prevPlaying = viewModel.previewPlaying;
     }
   });
 
@@ -43,7 +54,6 @@
 
   /**
    * Returns available variants for a given LPC slot from the generated catalog.
-   * @param slotName - The slot name to look up (e.g. "body", "hair")
    */
   const getSlotVariants = (slotName: string): Array<{ assetId: string; label: string }> => {
     const slotDef = GENERATED_LPC_SLOTS.find((s) => s.slot === slotName);

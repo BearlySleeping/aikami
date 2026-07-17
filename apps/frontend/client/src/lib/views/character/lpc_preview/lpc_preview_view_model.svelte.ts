@@ -17,10 +17,10 @@ import {
   Assets,
   Container,
   Graphics,
+  type PixiApplication,
   Rectangle,
   Sprite,
   Texture,
-  type PixiApplication,
 } from './lpc_preview_pixi_facade';
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -124,7 +124,8 @@ class LpcPreviewViewModel
 
   private _pixiApp: PixiApplication | undefined;
   private _characterContainer: Container | undefined;
-  private _layerSprites: Sprite[] = [];
+  /** All child display objects in the current composite. Includes Sprites and placeholder Containers. */
+  private _currentChildren: Container[] = [];
   private _recipes: readonly LpcLayerRecipe[] = [];
   private _animationState: LpcAnimationState = LpcAnimationState.Walk;
   private _facingDirection: LpcDirection = LpcDirection.Down;
@@ -136,6 +137,7 @@ class LpcPreviewViewModel
   private _canvasWidth: number;
   private _canvasHeight: number;
   private _backgroundColor: number;
+  private _isInitialized = false;
 
   constructor(options: LpcPreviewViewModelOptions) {
     super(options);
@@ -152,7 +154,9 @@ class LpcPreviewViewModel
 
   setRecipes(recipes: readonly LpcLayerRecipe[]): void {
     this._recipes = recipes;
-    this._renderCharacter();
+    if (this._isInitialized) {
+      this._renderCharacter();
+    }
   }
 
   setAnimationState(state: LpcAnimationState): void {
@@ -161,10 +165,11 @@ class LpcPreviewViewModel
     if (this.animationFrame > this._maxFrame) {
       this.animationFrame = 0;
     }
-    // Clear sheet cache on state change (different spritesheets)
     this._sheetCache.clear();
     this._sheetPromises.clear();
-    this._renderCharacter();
+    if (this._isInitialized) {
+      this._renderCharacter();
+    }
   }
 
   togglePlayback(): void {
@@ -190,12 +195,14 @@ class LpcPreviewViewModel
         }
       });
 
-      // Reactively re-render when recipes or animation frame change
+      // Animate: drive animationFrame from the ticker, not from $effect
+      // (the ticker runs inside PixiJS, mutations to animationFrame trigger re-render)
       $effect(() => {
-        void this._recipes;
         void this.animationFrame;
         void this.zoom;
-        this._renderCharacter();
+        if (this._isInitialized) {
+          this._renderCharacter();
+        }
       });
     });
 
@@ -203,7 +210,8 @@ class LpcPreviewViewModel
   }
 
   override async dispose(): Promise<void> {
-    this._destroyAllSprites();
+    this._isInitialized = false;
+    this._destroyAllChildren();
     this._sheetCache.clear();
     this._sheetPromises.clear();
 
@@ -236,7 +244,7 @@ class LpcPreviewViewModel
         sharedTicker: false,
       });
 
-      // Register playback ticker
+      // Register playback ticker for animation frame advancement
       this._pixiApp.ticker.add(() => {
         if (this.isPlaying) {
           const delta = this._pixiApp!.ticker.deltaMS;
@@ -254,6 +262,8 @@ class LpcPreviewViewModel
       if (typeof window !== 'undefined') {
         (window as unknown as Record<string, unknown>).__PIXI_LPC_PREVIEW_LOADED__ = true;
       }
+
+      this._isInitialized = true;
 
       this.debug('lpcPreview.initialized', {
         width: this._canvasWidth,
@@ -287,30 +297,28 @@ class LpcPreviewViewModel
     const currentState = this._animationState;
     const currentDirection = this._facingDirection;
 
-    if (!this._pixiApp) {
+    if (!this._pixiApp || !this._isInitialized) {
       return;
     }
 
     this.compositionFailed = false;
 
     try {
-      const newSprites: Sprite[] = [];
+      const newChildren: Container[] = [];
 
       const layerPromises = recipes.map(async (recipe, i) => {
         const slotName = recipe.slot;
         const assetId = recipe.assetId;
         const hexPalette = recipe.hexPalette;
 
-        // Load spritesheet for current animation state
         const stateSuffix = STATE_SUFFIX[currentState] ?? 'walk';
         const sheetKey = `${assetId}.${stateSuffix}`;
         const texture = await this._loadSheetTexture(assetId, stateSuffix);
 
         if (!texture || texture === Texture.EMPTY) {
-          // Missing asset fallback: magenta placeholder
           this.warn('lpcPreview.missingAsset', { slot: slotName, assetId, sheetKey });
           const placeholder = this._createPlaceholder(slotName);
-          newSprites.push(placeholder);
+          newChildren.push(placeholder);
           return;
         }
 
@@ -332,7 +340,7 @@ class LpcPreviewViewModel
             row,
           });
           const placeholder = this._createPlaceholder(slotName);
-          newSprites.push(placeholder);
+          newChildren.push(placeholder);
           return;
         }
 
@@ -352,32 +360,28 @@ class LpcPreviewViewModel
         sprite.zIndex = zIndex;
 
         // Apply palette tint from LpcLayerRecipe.hexPalette
-        if (hexPalette && hexPalette.length >= 3) {
-          const r = hexPalette[0] ?? 0;
-          const g = hexPalette[1] ?? 0;
-          const b = hexPalette[2] ?? 0;
-          if (r !== 0 || g !== 0 || b !== 0) {
-            sprite.tint = (r << 16) | (g << 8) | b;
-          }
+        const tintColor = this._extractTintFromPalette(hexPalette);
+        if (tintColor !== undefined) {
+          sprite.tint = tintColor;
         }
 
-        newSprites.push(sprite);
+        newChildren.push(sprite);
       });
 
       await Promise.all(layerPromises);
 
       // Sort by zIndex for correct render order
-      newSprites.sort((a, b) => a.zIndex - b.zIndex);
+      newChildren.sort((a, b) => a.zIndex - b.zIndex);
 
-      this._destroyAllSprites();
+      this._destroyAllChildren();
 
       const container = new Container();
       container.eventMode = 'none';
       container.sortableChildren = true;
 
-      for (const s of newSprites) {
-        container.addChild(s);
-        this._layerSprites.push(s);
+      for (const child of newChildren) {
+        container.addChild(child);
+        this._currentChildren.push(child);
       }
 
       container.scale.set(currentZoom, currentZoom);
@@ -390,18 +394,13 @@ class LpcPreviewViewModel
       const message = error instanceof Error ? error.message : String(error);
       this.error('lpcPreview.composeFailed', { error: message });
 
-      // Global fallback: render a magenta rectangle covering the center
-      this._destroyAllSprites();
-      const fallbackGfx = new Graphics();
-      fallbackGfx.rect(0, 0, FRAME_W, FRAME_H);
-      fallbackGfx.fill({ color: 0xff00ff, alpha: 0.9 });
-      fallbackGfx.rect(0, 0, FRAME_W, FRAME_H);
-      fallbackGfx.stroke({ color: 0xff0000, width: 2 });
-      fallbackGfx.x = this._canvasWidth / 2 - FRAME_W / 2;
-      fallbackGfx.y = this._canvasHeight / 2 - FRAME_H / 2;
-      fallbackGfx.eventMode = 'none';
-      this._pixiApp.stage.addChild(fallbackGfx);
-      this._layerSprites = [];
+      // Global fallback: magenta rectangle covering the center
+      this._destroyAllChildren();
+      const fallbackContainer = this._createPlaceholder('_global');
+      fallbackContainer.x = this._canvasWidth / 2;
+      fallbackContainer.y = this._canvasHeight / 2;
+      this._pixiApp.stage.addChild(fallbackContainer);
+      this._currentChildren.push(fallbackContainer);
       this.compositionFailed = true;
     }
   }
@@ -456,58 +455,55 @@ class LpcPreviewViewModel
   }
 
   /**
-   * Creates a magenta placeholder Graphics object for a missing layer.
-   *
-   * @param slotName - The slot name for debug labeling.
-   * @returns A 64×64 magenta Graphics sprite with red border.
+   * Extracts an RGB tint value (0xRRGGBB) from a palette LUT's first entry.
+   * Returns undefined if the palette is all-zeros (no tint).
    */
-  private _createPlaceholder(slotName: string): Sprite {
+  private _extractTintFromPalette(hexPalette: Uint8Array): number | undefined {
+    if (!hexPalette || hexPalette.length < 3) {
+      return undefined;
+    }
+    const r = hexPalette[0] ?? 0;
+    const g = hexPalette[1] ?? 0;
+    const b = hexPalette[2] ?? 0;
+    if (r === 0 && g === 0 && b === 0) {
+      return undefined;
+    }
+    return (r << 16) | (g << 8) | b;
+  }
+
+  /**
+   * Creates a 64×64 magenta placeholder with red border for a missing layer.
+   *
+   * Uses a Graphics object inside a Container, centered at origin.
+   */
+  private _createPlaceholder(slotName: string): Container {
     const gfx = new Graphics();
     gfx.rect(0, 0, FRAME_W, FRAME_H);
     gfx.fill({ color: 0xff00ff, alpha: 0.9 });
     gfx.rect(0, 0, FRAME_W, FRAME_H);
     gfx.stroke({ color: 0xff0000, width: 2 });
-    // Convert Graphics to a Sprite-like container — use a Container with the Graphics
+    gfx.eventMode = 'none';
+
     const container = new Container();
-    gfx.x = 0;
-    gfx.y = 0;
-    container.addChild(gfx);
+    container.eventMode = 'none';
     container.x = -FRAME_W / 2;
     container.y = -FRAME_H / 2;
-    container.eventMode = 'none';
-
-    // Create a 1x1 empty texture for a dummy Sprite (needed for return type consistency)
-    // We actually want to return the container as a child added directly.
-    // Instead, let's return a Sprite with an empty texture and add the placeholder to the stage.
-    // Actually, the calling code expects a Sprite. Let me adjust the approach:
-    // Use a Sprite wrapper approach. The graphics placeholder is a Container;
-    // We can't use Sprite. Let me change the approach to return Container.
-    // The safest approach: skip Sprite return type and add placeholder directly.
-    // Actually, looking at the code, _createPlaceholder returns Sprite but creates Graphics.
-    // This won't type-check. Let me fix this to return a proper Sprite.
-    // We can create a Sprite from Texture.EMPTY (which is 1x1) and overlay the Graphics.
+    container.zIndex = SLOT_Z_ORDER[slotName] ?? DEFAULT_Z_ORDER;
+    container.addChild(gfx);
 
     this.warn('lpcPreview.placeholderRendered', { slot: slotName });
-    // Return a dummy 1-pixel sprite — the actual placeholder graphics is added
-    // separately by the caller. We actually should restructure, but for now:
-    // Create a placeholder using a colored Sprite
-    const dummySprite = new Sprite(Texture.EMPTY);
-    dummySprite.x = -FRAME_W / 2;
-    dummySprite.y = -FRAME_H / 2;
-    dummySprite.width = FRAME_W;
-    dummySprite.height = FRAME_H;
-    dummySprite.tint = 0xff00ff;
-    dummySprite.eventMode = 'none';
-    dummySprite.zIndex = SLOT_Z_ORDER[slotName] ?? DEFAULT_Z_ORDER;
-    return dummySprite;
+    return container;
   }
 
-  /** Destroys all existing layer sprites and clears the character container. */
-  private _destroyAllSprites(): void {
-    for (const sprite of this._layerSprites) {
-      sprite.destroy();
+  /** Destroys all existing display children and clears the character container. */
+  private _destroyAllChildren(): void {
+    for (const child of this._currentChildren) {
+      if (child.parent) {
+        child.parent.removeChild(child);
+      }
+      child.destroy({ children: true });
     }
-    this._layerSprites = [];
+    this._currentChildren = [];
 
     if (this._characterContainer) {
       if (this._characterContainer.parent) {

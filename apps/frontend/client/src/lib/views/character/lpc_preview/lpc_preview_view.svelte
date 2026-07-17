@@ -1,26 +1,24 @@
 <script lang="ts">
-  // apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view.svelte
-  //
-  // LPC Preview View — zero-logic wrapper for the PixiJS character preview canvas.
-  // Binds the canvas element to the ViewModel and provides an animation toggle.
-  // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
+// apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view.svelte
+//
+// LPC Preview View — zero-logic wrapper for the PixiJS character preview canvas.
+// Binds the canvas element to the ViewModel and provides an animation toggle.
+// Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
-  import {
-    getLpcPreviewViewModel,
-    type LpcPreviewViewModelInterface,
-    type LpcPreviewViewModelOptions,
-  } from './lpc_preview_view_model.svelte';
+import {
+  getLpcPreviewViewModel,
+  type LpcPreviewViewModelInterface,
+  type LpcPreviewViewModelOptions,
+} from './lpc_preview_view_model.svelte';
 
-  type Props = {
-    viewModel?: LpcPreviewViewModelInterface;
-    options?: LpcPreviewViewModelOptions;
-  };
+type Props = {
+  viewModel?: LpcPreviewViewModelInterface;
+  options?: LpcPreviewViewModelOptions;
+};
 
-  const {
-    viewModel = getLpcPreviewViewModel(
-      options ?? { className: 'LpcPreviewViewModel' },
-    ),
-  }: Props = $props();
+const {
+  viewModel = getLpcPreviewViewModel(options ?? { className: 'LpcPreviewViewModel' }),
+}: Props = $props();
 </script>
 
 <div class="flex flex-col items-center gap-2">
