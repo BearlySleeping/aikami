@@ -26,7 +26,8 @@ await sh('bunx moon run :fix --affected --status=staged');
 await sh('bunx moon run :typecheck --affected --status=staged');
 
 if (!isWorktree) {
-  await sh('bun knowledge:sync');
+  await sh('bun run scripts/src/lib/ops/sync_contracts.ts');
+  await sh('bun run scripts/src/lib/ops/generate_llms_txt.ts');
   await runStream(['sh', '-c', 'git add .context/llms.txt docs/contracts/ 2>/dev/null || true']);
 }
 await runStream(['sh', '-c', 'git diff -z --name-only --cached | xargs -0 git add 2>/dev/null || true']);
