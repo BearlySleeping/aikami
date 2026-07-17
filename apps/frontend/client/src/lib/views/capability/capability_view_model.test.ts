@@ -1,18 +1,45 @@
 // apps/frontend/client/src/lib/views/capability/capability_view_model.test.ts
 //
 // Unit tests for CapabilityViewModel — path selection and cloud setup.
-// Contract: C-318 AC-2 (Play Offline Demo), AC-4 (Connect Cloud AI)
+// Contract: C-323 AC-2 (offline demo removed, only local + cloud paths)
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/capability/capability_view_model.test.ts
+
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state, $derived, $effect are polyfilled globally via test_preload.ts
 // $services stubs are provided globally via test_preload.ts
 
+// ── Mock @aikami/utils ────────────────────────────────────────────────
+
+mock.module('@aikami/utils', () => ({
+  AiTextProviderRequiredError: class AiTextProviderRequiredError extends Error {
+    readonly code = 'text-provider-required' as const;
+    constructor(message?: string) {
+      super(message ?? 'A text AI provider is required to start a campaign.');
+      this.name = 'AiTextProviderRequiredError';
+    }
+  },
+  isAiTextProviderRequiredError: (error: unknown): boolean =>
+    error instanceof Error && error.message.includes('text AI provider'),
+}));
+
 // ── Mocks for crypto_vault ─────────────────────────────────────────────
+
+mock.module('$views/settings/connection/connection_manager_view_model.svelte', () => ({
+  getConnectionManagerViewModel: mock(() => ({
+    connections: [],
+    defaultConnectionId: undefined,
+    isEditorOpen: false,
+    providerLabels: {},
+    openCreate: mock(() => {}),
+    cancelEdit: mock(() => {}),
+  })),
+}));
 
 mock.module('$lib/utils/crypto_vault', () => ({
   encrypt: mock(async () => {}),
@@ -59,7 +86,13 @@ mock.module('$services', () => ({
   campaignService: {
     startNewCampaign: mock(async () => ({ id: 'test-id', state: 'creating' })),
     saveCampaign: mock(async () => {}),
+    completeSetup: mock(() => {}),
     activeCampaign: { id: 'test-id', capabilityProfile: {} },
+  },
+  aiSettingsService: {
+    textProvider: { apiKey: 'test-key', endpoint: 'http://localhost:11434', model: 'llama3' },
+    imageProvider: { apiKey: '', endpoint: '' },
+    ttsProvider: { apiKey: '', endpoint: '' },
   },
   routerService: {
     goToRoute: mock(async () => {}),
@@ -132,101 +165,70 @@ describe('CapabilityViewModel', () => {
     expect(vm.cloudConfigured).toBe(true);
   });
 
-  // ── AC-2: Play Offline Demo ─────────────────────────────────────────
-
-  test('selectOfflineDemo calls campaignService.startNewCampaign', async () => {
-    const vm = createVm();
-    await vm.selectOfflineDemo();
-    // campaignService.startNewCampaign is a mock stub — verify no errors
-    expect(vm.errorMessage).toBe('');
-  });
-
-  // ── AC-3: selectLocalAi ─────────────────────────────────────────────
+  // ── AC-2: selectLocalAi ─────────────────────────────────────────────
 
   test('selectLocalAi calls campaignService.startNewCampaign', async () => {
     setDetectionResult('detected');
     const vm = createVm();
     await vm.startDetection();
+
+    const { campaignService } = await import('$services');
+    const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
+    startMock.mockClear();
+
     await vm.selectLocalAi();
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    expect(startMock).toHaveBeenCalledWith({
+      capabilityProfile: {
+        textProvider: true,
+        imageProvider: false,
+        voiceProvider: false,
+      },
+    });
     expect(vm.errorMessage).toBe('');
   });
 
-  // ── AC-4: Cloud setup modal ─────────────────────────────────────────
+  // ── AC-2: selectCloudConnection ─────────────────────────────────────
 
-  test('openCloudSetup shows modal with default provider', () => {
+  test('selectCloudConnection calls campaignService.startNewCampaign', async () => {
+    setDetectionResult('configured');
+    const vm = createVm();
+    await vm.startDetection();
+
+    const { campaignService } = await import('$services');
+    const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
+    startMock.mockClear();
+
+    await vm.selectCloudConnection('test-conn-id');
+
+    expect(startMock).toHaveBeenCalledTimes(1);
+    expect(startMock).toHaveBeenCalledWith({
+      capabilityProfile: {
+        textProvider: true,
+        imageProvider: false,
+        voiceProvider: false,
+      },
+    });
+    expect(vm.errorMessage).toBe('');
+  });
+
+  // ── Cloud setup modal ───────────────────────────────────────────────
+
+  test('openCloudSetup shows modal', () => {
     const vm = createVm();
     expect(vm.showCloudSetup).toBe(false);
 
     vm.openCloudSetup();
     expect(vm.showCloudSetup).toBe(true);
-    expect(vm.selectedCloudProvider).toBe('openrouter');
   });
 
-  test('openCloudSetup accepts provider override', () => {
+  test('closeCloudSetup hides modal', () => {
     const vm = createVm();
-    vm.openCloudSetup('anthropic');
-    expect(vm.selectedCloudProvider).toBe('anthropic');
-  });
-
-  test('closeCloudSetup hides modal and clears state', () => {
-    const vm = createVm();
-    vm.tempApiKey = 'sk-test';
-    vm.testResult = '✓ Connected';
     vm.openCloudSetup();
+    expect(vm.showCloudSetup).toBe(true);
 
     vm.closeCloudSetup();
     expect(vm.showCloudSetup).toBe(false);
-    expect(vm.tempApiKey).toBe('');
-    expect(vm.testResult).toBe('');
-  });
-
-  test('selectCloudProvider changes provider and clears test result', async () => {
-    const vm = createVm();
-    vm.testResult = 'old result';
-    vm.selectCloudProvider('anthropic');
-    expect(vm.selectedCloudProvider).toBe('anthropic');
-    expect(vm.testResult).toBe('');
-
-    // Verify provider-specific endpoint is used for testing
-    // Mock fetch to verify the correct URL is called
-    let fetchedUrl = '';
-    globalThis.fetch = (async (input: string | URL | Request) => {
-      fetchedUrl = typeof input === 'string' ? input : input.toString();
-      return {
-        ok: true,
-        json: async () => ({ data: [] }),
-      };
-    }) as typeof globalThis.fetch;
-
-    vm.tempApiKey = 'test-key';
-    await vm.testCloudConnection();
-
-    // Anthropic should use api.anthropic.com, not openrouter.ai
-    expect(fetchedUrl).toInclude('anthropic.com');
-    expect(fetchedUrl).not.toInclude('openrouter.ai');
-  });
-
-  test('testCloudConnection is no-op with empty key', async () => {
-    const vm = createVm();
-    vm.tempApiKey = '';
-    await vm.testCloudConnection();
-    expect(vm.testResult).toBe('');
-    expect(vm.isTesting).toBe(false);
-  });
-
-  test('testCloudConnection is no-op while already testing', async () => {
-    const vm = createVm();
-    vm.tempApiKey = 'sk-test';
-    vm.isTesting = true;
-    await vm.testCloudConnection();
-    // Should not change — already testing
-    expect(vm.isTesting).toBe(true);
-  });
-
-  test('confirmCloudConnection shows error with empty key', async () => {
-    const vm = createVm();
-    vm.tempApiKey = '';
-    await vm.confirmCloudConnection();
-    expect(vm.errorMessage).toInclude('Please enter');
   });
 });

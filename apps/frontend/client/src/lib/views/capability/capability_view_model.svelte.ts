@@ -1,9 +1,9 @@
 // apps/frontend/client/src/lib/views/capability/capability_view_model.svelte.ts
 //
 // ViewModel for the pre-game capability detection screen.
-// Orchestrates provider detection, presents three paths based on results,
-// and creates the campaign with the chosen capability profile.
-// Contract: C-318
+// Orchestrates provider detection, presents two paths based on results
+// (Local AI, Cloud AI), and creates the campaign with the chosen profile.
+// Contract: C-318 (origin), C-323 (offline demo removed, text AI gate)
 
 import {
   BaseViewModel,
@@ -50,8 +50,6 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
 
   /** Starts provider detection. Called on initialization. */
   startDetection(): Promise<void>;
-  /** Selects the "Play Offline Demo" path. */
-  selectOfflineDemo(): Promise<void>;
   /** Selects the "Use Detected Local AI" path. */
   selectLocalAi(): Promise<void>;
   /** Selects an existing cloud connection and starts the campaign. */
@@ -184,19 +182,6 @@ class CapabilityViewModel
   // ── Path selection ───────────────────────────────────────────────────
 
   /**
-   * "Play Offline Demo" — creates campaign with no AI providers.
-   * Proceeds directly to character onboarding (/setup).
-   */
-  async selectOfflineDemo(): Promise<void> {
-    this.debug('selectOfflineDemo');
-    await this._startCampaign({
-      textProvider: false,
-      imageProvider: false,
-      voiceProvider: false,
-    });
-  }
-
-  /**
    * "Use Detected Local AI" — creates campaign with text AI enabled.
    */
   async selectLocalAi(): Promise<void> {
@@ -249,12 +234,13 @@ class CapabilityViewModel
   /**
    * Creates a new campaign with the given capability profile and
    * navigates to character onboarding (/setup).
+   * The capability profile is passed to startNewCampaign() as an option —
+   * the gate enforcement runs on this profile during creation.
    */
   private async _startCampaign(profile: CapabilityProfile): Promise<void> {
     try {
-      await campaignService.startNewCampaign();
+      await campaignService.startNewCampaign({ capabilityProfile: profile });
       if (campaignService.activeCampaign) {
-        campaignService.activeCampaign.capabilityProfile = profile;
         // Transition creating → playing (persists via repository internally)
         campaignService.completeSetup();
       }

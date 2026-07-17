@@ -14,6 +14,7 @@ export * from './lib/database/firestore_data_converters.ts';
 export * from './lib/database/firestore_paths.ts';
 export * from './lib/database/geohash.ts';
 export * from './lib/device.ts';
+export * from './lib/errors.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/form/oauth2.ts';
 export * from './lib/form/validation.ts';

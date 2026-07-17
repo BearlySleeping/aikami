@@ -33,7 +33,8 @@ export type ErrorType =
   | 'access-denied'
   | 'unauthorized'
   | 'server-error'
-  | 'unknown-error';
+  | 'unknown-error'
+  | 'text-provider-required';
 
 export type SvelteKitError = {
   type: ErrorType;
