@@ -8,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts`, `apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts` (detection config sourcing), and the C-230 Connection path in `config_service.svelte.ts` — make the C-320 gateway the single source of provider availability for the capability screen, boot diagnostics, and settings |
 | **Priority** | P0 — C-320 defines the gateway; this contract makes it the single source of provider state for the UI surfaces that currently duplicate detection logic (`capability_service.svelte.ts` still owns its own `_pingOllama()` / `checkCloudTextConfig()` fetch stack in parallel to the gateway's detection API) |
 | **Dependencies** | C-320 (status `implemented` — gateway + detection API exist in repo; not yet `verified`, see risk note in Open Questions → resolved), C-318 (status `implemented` — `capability_service` and capability screen exist), C-230 (completed — Connection CRUD in `config_service.svelte.ts` verified present), packages: `@aikami/frontend/ai-gateway`, `@aikami/types`, `@aikami/schemas` |
-| **Status** | approved |
+| **Status** | verified |
 | **Promotion** | — |
 | **Docs Impact** | internal → none (service-layer rewiring; no player-facing behavior change beyond correctness) |
 | **Contract version** | 2.0.0 |
@@ -243,3 +243,43 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Wired `capability_service` into the C-320 AI Provider Gateway as the single source of provider availability. Deleted the duplicated ping/config-check stack (`_pingOllama`, `fetchWithTimeout`, `checkCloudTextConfig`, ComfyUI fetch). Extended gateway `_hasCloudTextConfig` to consult C-230 connections from `configService` in addition to the legacy `aiSettingsService` shape, with local-provider gating and guarded config reads. All consumer call sites (capability screen, boot diagnostics) unchanged; tests converted to shared gateway mock.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `capability_service` has zero fetch/ping/endpoint constants; delegates to `aiGatewayService.detect()` + `toDetectionStatus`; snapshot shape preserved |
+| AC-2 | ✅ | Cloud connection via `addConnection()` visible to next `detect('text')` without reload; local (ollama) connection does NOT short-circuit; `configService` read failures degrade to `not_found` |
+| AC-3 | ✅ | Boot diagnostics (18/0 pass) and capability screen call sites unchanged; no ping/fetch logic remains in either directory |
+| AC-4 | ✅ | `capability_service.test.ts` uses shared gateway mock, no `globalThis.fetch` stubs, no absolute paths; `config_service.test.ts` has zero provider fetch stubs; AC-2 connection-visibility asserted in `config_service.test.ts` |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| — | No new files |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts` | Rewired to delegate to `aiGatewayService`; deleted private ping/fetch stack, `checkCloudTextConfig` member, endpoint constants |
+| `apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts` | Extended `_hasCloudTextConfig` to union C-230 connections (guarded, local-provider-aware, presence-only) with legacy `aiSettingsService` |
+| `apps/frontend/client/src/lib/services/capability/capability_service.test.ts` | Rewritten against shared gateway mock; no `globalThis.fetch` stubs, no absolute paths; covers all gateway statuses + error degradation |
+| `apps/frontend/client/src/lib/services/config/config_service.test.ts` | Added C-322 AC-2 connection-visibility test block (cloud configured, shared key, local not short-circuited, config-failure degrade) |
+| `apps/frontend/client/src/lib/views/capability/capability_view_model.test.ts` | Removed `checkCloudTextConfig` from mock; removed dead absolute-path crypto_vault mock |
+| `apps/frontend/client/src/lib/test_preload.ts` | Removed `checkCloudTextConfig` from `capabilityService` stub; added `aiGatewayService` stub |
+
+### Deviations from Spec
+None. All ACs met as specified. The `capability_view_model.test.ts` pre-existing failures (9/13, ConnectionManagerViewModel import) and `campaign_service.test.ts` pre-existing failures (5/15, fake DB integration) are unchanged from baseline.
+
+### Test Results
+- Unit (capability_service): 15/15 pass (0 failures)
+- Unit (config_service): 35/35 pass (0 failures)
+- Unit (boot_diagnostics_view_model): 18/18 pass (0 failures)
+- Unit (gateway detection): 14/14 pass (0 failures)
+- Unit (capability_view_model): 4/13 pass (9 pre-existing failures)
+- Unit (campaign_service): 10/15 pass (5 pre-existing failures)
+- Baseline: 9 pre-existing capability_view_model failures, 5 pre-existing campaign_service failures, 0 new failures

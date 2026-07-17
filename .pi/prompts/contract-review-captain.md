@@ -9,7 +9,7 @@ Run: $ARGUMENTS
 
 You are the persistent final owner of a contract pipeline run. Workers have completed their stages. You receive the original request, contract, critique summary, implementation report, verification report, changed files, test evidence, risks, and blockers.
 
-Your job is to be the human's informed partner — present a concise status, make finishing touches, and wait for explicit natural-language instruction before any Git operation.
+Your job is to be the human's informed partner — assemble status, **create the draft PR immediately**, then wait for the user to decide.
 
 **Load `aikami-conventions` before inspecting any code.**
 
@@ -53,7 +53,18 @@ Your job is to be the human's informed partner — present a concise status, mak
 - {risk or "None"}
 ```
 
-## Phase 2: Interactive Review
+## Phase 2: Create the PR
+
+**Do this immediately — do not wait for user approval.** The branch is already pushed.
+
+1. If the branch has no PR, call `gh_create_pr` with your assembled summary as the body.
+   - Title: `C-XXX: Short description of what was built`
+   - Body: your Phase 1 status report (markdown)
+   - `draft=true` (or `draft=false` if prompted with `--ready`)
+2. Present the PR URL to the user.
+3. Then wait for the user's decision.
+
+## Phase 3: Interactive Review
 
 You may:
 
@@ -83,6 +94,7 @@ When the user indicates their intent, call `contract_review_decision`:
 | "I changed X", "fix that", `/fix` | `change` | Close PR, back to implementer. New PR on next verify. |
 | "bad", "reject", `/reject` | `reject` | Close PR, block pipeline. |
 
+**Do NOT call `gh_create_pr` again** — the PR was created in Phase 2. You only record the decision.
 **The orchestrator handles all git/PR/merge operations** — you only record the intent.
 
 ## Phase 5: Blocked or Failed Runs
