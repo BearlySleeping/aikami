@@ -7,11 +7,56 @@ argument-hint: "[run ID or contract ID]"
 
 Run: $ARGUMENTS
 
-You are the persistent final owner of a contract pipeline run. Workers have completed their stages. Your job is to assemble status, create the PR, and wait for the user.
+You are the persistent final owner of a contract pipeline run. Workers have completed their stages.
 
 **Load `aikami-conventions` before inspecting any code.**
 
-## Phase 1: Assemble Status
+## 🚀 YOLO MODE (--yolo)
+
+If the system prompt says `🚀 YOLO MODE`, DO NOT WAIT for the user. Automate everything:
+
+### Y1: Create ready PR immediately
+`gh_create_pr` with `draft=false`. Use Phase 1 summary as body.
+
+### Y2: Trigger CodeRabbit review
+Comment `@coderabbitai review` on the PR to start review.
+
+### Y3: Wait for CodeRabbit + handle rate limits
+Loop every 60s:
+```bash
+# Check if review is done
+gh pr view <number> --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai") | .state'
+
+# Check for rate limits
+gh pr view <number> --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body' | grep -oP 'available in:?\s*\K[\d]+' || true
+```
+
+- If "Next review available in X minutes": wait X minutes, then comment `@coderabbitai review` again
+- If state is `APPROVED`: go to Y6
+- If state is `CHANGES_REQUESTED`: go to Y4
+
+### Y4: Read findings
+Use `get_coderabbit_reviews` MCP tool to fetch unresolved threads. Read each finding carefully.
+
+### Y5: Apply fixes
+For each finding where you can determine the correct fix:
+1. Read the affected file
+2. Use `edit` to apply the fix
+3. Commit: `git add -A && git commit -m "fix: apply CodeRabbit auto-fixes — <summary>" && git push`
+After all fixes: comment `@coderabbitai review` and go back to Y3.
+
+If you cannot determine the fix for any finding: call `contract_review_decision` with `reject`.
+
+### Y6: Validate + Merge
+1. Run `validate({test: true})` to confirm tests pass
+2. If tests fail → call `contract_review_decision` with `reject`
+3. If tests pass → call `contract_review_decision` with `merge`
+
+---
+
+## Normal Mode (no --yolo)
+
+### Phase 1: Assemble Status
 
 1. Read the run manifest from `.pi/contract-runs/<run-id>/manifest.json`.
 2. Read the contract file, implementation report, and verification report.
@@ -37,7 +82,7 @@ You are the persistent final owner of a contract pipeline run. Workers have comp
 {pass/fail counts}
 ```
 
-## Phase 2: Create the PR — immediately, do not wait
+### Phase 2: Create the PR — immediately, do not wait
 
 The branch is already pushed. Create the PR NOW:
 
@@ -47,7 +92,7 @@ The branch is already pushed. Create the PR NOW:
 - `draft=true` (or `draft=false` if the system prompt says `--ready`)
 - After creation, tell the user the PR URL.
 
-## Phase 3: Wait for the user
+### Phase 3: Wait for the user
 
 The user may ask you to:
 
@@ -67,62 +112,37 @@ When the user is satisfied, call `contract_review_decision`:
 
 ## CodeRabbit Reference
 
-CodeRabbit reviews are async. Use these commands to check status:
-
 | Command | Purpose |
 |---|---|
-| `gh pr view <number> --json reviews --jq '.reviews[] \| select(.author.login=="coderabbitai") \| {state,submittedAt}'` | Check if CodeRabbit already reviewed |
-| `gh pr view <number> --json comments --jq '.comments[] \| select(.author.login=="coderabbitai") \| .body'` | Read CodeRabbit findings |
-| `gh pr comment <number> --body "summary"` | Post a comment on the PR |
-| `gh pr merge <number> --squash` | Squash-merge (orchestrator handles this via `contract_review_decision`) |
+| `gh pr view <number> --json reviews --jq '.reviews[] \| select(.author.login=="coderabbitai") \| .state'` | Check review status |
+| `@coderabbitai review` (as PR comment) | Trigger/retrigger review |
+| `gh pr view <number> --json comments` | Read CodeRabbit comments |
+| Check for rate limit: `gh pr view <number> --json comments \| grep "available in"` | Parse wait time |
 
-**Before claiming "I triggered a review" or "autofix is running":** verify with `gh pr view --json reviews`. Do NOT invent actions you didn't take.
+**Rate limit handling:**
+```
+# If CodeRabbit says "Next review available in X minutes":
+# 1. Parse X from the comment
+# 2. Wait X minutes
+# 3. Comment @coderabbitai review to retrigger
+```
 
 ## Applying CodeRabbit Autofixes
 
-When the user asks to apply CodeRabbit's autofix suggestions:
-
-1. Read the CodeRabbit comments with `gh pr view --json comments`
-2. Find the autofix checkboxes in the Finishing Touches section
-3. Check the "Commit unit tests in branch" or "Create PR with unit tests" checkbox by editing the comment body
-4. Wait for CodeRabbit to process (monitor with `gh pr view --json comments`)
-5. Commit + push the resulting changes if needed
+1. Read CodeRabbit comments/findings
+2. For each fixable issue: read the file, apply `edit`, commit + push
+3. Comment `@coderabbitai review` to re-trigger
 
 ```bash
-# Apply autofix manually when checkboxes aren't available:
 git add -A
 git commit -m "fix: apply CodeRabbit auto-fixes — {description}"
 git push origin HEAD
 ```
 
-## YOLO Mode (--yolo)
-
-When the system prompt says `--yolo`, automate everything:
-
-### Step 1: Create ready PR
-Same as Phase 2, but `draft=false`.
-
-### Step 2: Wait for CodeRabbit
-Poll `gh pr view <number> --json reviews` every 30s until CodeRabbit finishes:
-- `APPROVED` or `COMMENTED` → go to Step 4
-- `CHANGES_REQUESTED` → go to Step 3
-
-### Step 3: Apply autofixes
-1. Use CodeRabbit MCP (`get_coderabbit_reviews` / `get_review_comments`) to fetch findings
-2. For each non-critical finding: fix the file with `edit` tool
-3. Commit: `git add -A && git commit -m "fix: apply CodeRabbit auto-fixes" && git push`
-4. Wait for CodeRabbit re-review → back to Step 2
-5. If still CHANGES_REQUESTED after fix → give up, call `contract_review_decision` with `reject`
-
-### Step 4: Validate + Merge
-1. Run `validate({test: true})` to confirm tests still pass
-2. Call `contract_review_decision` with `merge`
-3. The orchestrator handles squash-merge + sync main + cleanup
-
 ## Rules
 
 - **Create the PR in Phase 2** — never skip this step.
-- **Verify before claiming** — use `gh pr view --json reviews` to check CodeRabbit status, don't guess.
+- **Verify before claiming** — use `gh pr view --json reviews`, don't guess.
 - **Do not re-run tests** if the verifier passed. Trust the verifier's evidence.
 - **If you modify source files**, warn the user that re-verification is needed.
 - **The orchestrator handles merge/promote/close** — you only call `contract_review_decision`.
