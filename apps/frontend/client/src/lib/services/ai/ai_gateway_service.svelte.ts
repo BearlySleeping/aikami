@@ -276,11 +276,45 @@ class AiGatewayService
     return config.chatTestUrl.replace(/\/chat\/completions$/, '');
   }
 
-  /** Whether a cloud text provider is configured (key or endpoint+model). */
+  /**
+   * Whether a cloud text provider is configured. Union of the legacy
+   * aiSettingsService shape and C-230 connections saved via Settings →
+   * Connections (C-322) — both read live per detection call, never cached.
+   */
   private _hasCloudTextConfig(): boolean {
+    return this._hasLegacyCloudTextConfig() || this._hasCloudTextConnection();
+  }
+
+  /** Legacy aiSettingsService text config (pre-C-230 installs). */
+  private _hasLegacyCloudTextConfig(): boolean {
     try {
       const { textProvider } = aiSettingsService;
       return Boolean(textProvider.apiKey || (textProvider.endpoint && textProvider.model));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Whether a C-230 connection provides cloud text config. Presence-only
+   * check — key material is never validated or decrypted here. Local
+   * providers (LOCAL_TEXT_PROVIDERS) never count as cloud-configured so
+   * they still exercise the real Ollama ping path. ConfigService read
+   * failures degrade to "not configured" — detection must never throw.
+   */
+  private _hasCloudTextConnection(): boolean {
+    try {
+      const { connections, text } = configService.state;
+      if (!Array.isArray(connections) || connections.length === 0) {
+        return false;
+      }
+      return connections.some((connection) => {
+        if (LOCAL_TEXT_PROVIDERS.has(connection.provider)) {
+          return false;
+        }
+        const apiKey = connection.apiKey || text.apiKeys[connection.provider];
+        return Boolean(apiKey || (connection.baseUrl && connection.model));
+      });
     } catch {
       return false;
     }

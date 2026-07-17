@@ -61,6 +61,43 @@ mock.module('$logger', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mocks for the AI gateway's heavy client adapters (C-322)
+// ---------------------------------------------------------------------------
+// The connection-visibility tests below import the real aiGatewayService.
+// Its composition pulls in TTS / image / legacy-settings singletons that
+// are irrelevant here — stub them with alias-path module mocks.
+
+mock.module('$lib/services/audio/tts_service.svelte.ts', () => ({
+  ttsService: {
+    status: 'uninitialized',
+    isKokoroServerAvailable: false,
+    speak: mock(async () => {}),
+  },
+  __esModule: true,
+}));
+
+mock.module('$lib/services/image/image_generation_service.svelte.ts', () => ({
+  imageGenerationService: {
+    generateImage: mock(async () => ({})),
+  },
+  __esModule: true,
+}));
+
+// No legacy aiSettingsService text config — AC-2 requires the gateway to
+// see C-230 connections without any legacy shape populated.
+mock.module('$lib/services/settings/ai_settings.svelte.ts', () => ({
+  aiSettingsService: {
+    get textProvider() {
+      return { apiKey: '', endpoint: '', model: '' };
+    },
+    get imageProvider() {
+      return { apiKey: '', endpoint: '', model: '' };
+    },
+  },
+  __esModule: true,
+}));
+
+// ---------------------------------------------------------------------------
 // Tests: C-079 — ConfigService
 // ---------------------------------------------------------------------------
 
@@ -414,4 +451,144 @@ describe('ConfigService — C-079', () => {
       expect(service.state.models[0].model).toBe('test');
     });
   });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: C-322 AC-2 — Saved connections visible to gateway text detection
+// ---------------------------------------------------------------------------
+// Uses the real configService singleton (the same live $state the gateway
+// reads) and the real aiGatewayService — no provider fetch stubs. Only the
+// gateway's unrelated adapter dependencies are mocked above.
+
+describe('ConfigService × AiGateway — C-322 connection visibility', () => {
+  /** Base generation params for test connections. */
+  const _params = {
+    temperature: 0.7,
+    topP: 0.9,
+    topK: 40,
+    repetitionPenalty: 1.1,
+    presencePenalty: 0,
+    maxTokens: 1024,
+    contextSize: 4096,
+  };
+
+  const _getSingletons = async () => {
+    const configMod = await import('./config_service.svelte.ts');
+    const gatewayMod = await import('../ai/ai_gateway_service.svelte.ts');
+    return {
+      configService: configMod.configService,
+      aiGatewayService: gatewayMod.aiGatewayService,
+    };
+  };
+
+  const _clearConnections = async () => {
+    const { configService } = await _getSingletons();
+    configService.state.connections = [];
+    configService.state.defaultConnectionId = null;
+    configService.state.text.apiKeys = {};
+  };
+
+  beforeEach(async () => {
+    await _clearConnections();
+  });
+
+  test('a cloud connection saved via addConnection is configured on the next text detection (no reload)', async () => {
+    const { configService, aiGatewayService } = await _getSingletons();
+
+    configService.addConnection({
+      name: 'OpenRouter',
+      provider: 'openrouter',
+      apiKey: 'sk-or-test',
+      baseUrl: '',
+      model: 'openrouter/auto',
+      generationParams: _params,
+      isDefault: true,
+    });
+
+    const result = await aiGatewayService.detect('text');
+    expect(result.available).toBe(true);
+    expect(result.mode).toBe('byok');
+  });
+
+  test('a cloud connection with baseUrl+model but no key is configured', async () => {
+    const { configService, aiGatewayService } = await _getSingletons();
+
+    configService.addConnection({
+      name: 'Custom endpoint',
+      provider: 'custom',
+      apiKey: '',
+      baseUrl: 'https://llm.example.com/v1',
+      model: 'my-model',
+      generationParams: _params,
+      isDefault: true,
+    });
+
+    const result = await aiGatewayService.detect('text');
+    expect(result.available).toBe(true);
+    expect(result.mode).toBe('byok');
+  });
+
+  test('a cloud connection using a shared provider API key (text.apiKeys) is configured', async () => {
+    const { configService, aiGatewayService } = await _getSingletons();
+
+    configService.setTextApiKey('openrouter', 'sk-or-shared');
+    configService.addConnection({
+      name: 'OpenRouter (shared key)',
+      provider: 'openrouter',
+      apiKey: '',
+      baseUrl: '',
+      model: 'openrouter/auto',
+      generationParams: _params,
+      isDefault: true,
+    });
+
+    const result = await aiGatewayService.detect('text');
+    expect(result.available).toBe(true);
+    expect(result.mode).toBe('byok');
+  });
+
+  test('a local ollama connection does NOT short-circuit as cloud-configured', async () => {
+    const { configService, aiGatewayService } = await _getSingletons();
+
+    configService.addConnection({
+      name: 'Ollama (local)',
+      provider: 'ollama',
+      apiKey: '',
+      baseUrl: 'http://localhost:11434/v1',
+      model: 'llama3.2',
+      generationParams: _params,
+      isDefault: true,
+    });
+
+    // The gateway must exercise the real Ollama ping path — the result
+    // depends on whether a local Ollama is running, but it must never be
+    // reported as byok (cloud-configured).
+    const result = await aiGatewayService.detect('text');
+    expect(result.mode).not.toBe('byok');
+  }, 10_000);
+
+  test('configService read failures during detection degrade instead of throwing', async () => {
+    const { configService, aiGatewayService } = await _getSingletons();
+    const originalState = configService.state;
+
+    Object.defineProperty(configService, 'state', {
+      configurable: true,
+      get() {
+        throw new Error('vault read failed');
+      },
+    });
+
+    try {
+      const result = await aiGatewayService.detect('text');
+      // Must resolve (never throw) and must not claim cloud config.
+      expect(result.capability).toBe('text');
+      expect(result.mode).not.toBe('byok');
+    } finally {
+      Object.defineProperty(configService, 'state', {
+        configurable: true,
+        writable: true,
+        value: originalState,
+      });
+    }
+  }, 10_000);
 });

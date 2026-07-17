@@ -14,16 +14,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // ── Mocks for crypto_vault ─────────────────────────────────────────────
 
-const _CRYPTO_VAULT_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/.pi/workspaces/run-mrkquinj-c-318/apps/frontend/client/src/lib/utils/crypto_vault.ts';
-
-mock.module(_CRYPTO_VAULT_PATH, () => ({
-  encrypt: mock(async () => {}),
-  decrypt: mock(async () => undefined),
-  clearVault: mock(() => {}),
-}));
-
-// Also mock bare specifier for Bun resolutions
 mock.module('$lib/utils/crypto_vault', () => ({
   encrypt: mock(async () => {}),
   decrypt: mock(async () => undefined),
@@ -65,7 +55,6 @@ mock.module('$services', () => ({
     detect: mock(async () => ({ ..._detectResult })),
     detectText: mock(async () => _detectResult.textStatus),
     detectImage: mock(async () => _detectResult.imageStatus),
-    checkCloudTextConfig: mock(() => 'not_found'),
   },
   campaignService: {
     startNewCampaign: mock(async () => ({ id: 'test-id', state: 'creating' })),
