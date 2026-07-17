@@ -108,7 +108,12 @@ const loadService = async () => {
 
 const setConfigState = async (state: Record<string, unknown>) => {
   const cfg = await import(CONFIG_SVC_PATH);
-  (cfg.configService as Record<string, unknown>).state = state;
+  // Merge an image-state default so sibling test files sharing the
+  // configService singleton (image_generation_service) keep working.
+  (cfg.configService as Record<string, unknown>).state = {
+    image: { checkpoint: '' },
+    ...state,
+  };
 };
 
 /** Builds an OpenRouter SSE chunk: `data: {"choices":[{"delta":{"content":"token"}}]}\n\n` */
