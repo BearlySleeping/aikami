@@ -426,6 +426,7 @@ class OnboardingCoordinatorViewModel
   /** Sets a palette override color for a specific slot. */
   setPaletteOverride(slotName: string, hexColor: string): void {
     this.paletteOverrides = { ...this.paletteOverrides, [slotName]: hexColor };
+    this.selectedPresetId = undefined;
     this._saveDraft();
   }
 
@@ -551,6 +552,7 @@ class OnboardingCoordinatorViewModel
       appearance: {
         physicalDescription: this.appearanceDescription,
         lpcRecipe: { ...this.lpcRecipe },
+        paletteOverrides: { ...this.paletteOverrides },
       },
       background: this.background,
       personalityTraits: this.personalityTraits,

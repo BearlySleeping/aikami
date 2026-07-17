@@ -25,6 +25,13 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
+/** Import LPC asset URLs via Vite glob */
+const LPC_ASSET_URLS = import.meta.glob('/src/lib/assets/lpc/**/*.webp', {
+  query: '?url',
+  import: 'default',
+  eager: false,
+}) as Record<string, () => Promise<string>>;
+
 /** Canonical Aikami z-order offsets for each slot. */
 const SLOT_Z_ORDER: Record<string, number> = {
   body: 0,
@@ -138,6 +145,7 @@ class LpcPreviewViewModel
   private _canvasHeight: number;
   private _backgroundColor: number;
   private _isInitialized = false;
+  private _renderGeneration = 0;
 
   constructor(options: LpcPreviewViewModelOptions) {
     super(options);
@@ -301,6 +309,11 @@ class LpcPreviewViewModel
       return;
     }
 
+    // Increment generation to invalidate any in-flight renders
+    this._renderGeneration++;
+    const thisGeneration = this._renderGeneration;
+    const capturedPixiApp = this._pixiApp;
+
     this.compositionFailed = false;
 
     try {
@@ -370,6 +383,15 @@ class LpcPreviewViewModel
 
       await Promise.all(layerPromises);
 
+      // Check if this render is stale
+      if (thisGeneration !== this._renderGeneration || this._pixiApp !== capturedPixiApp || !this._isInitialized) {
+        // Stale render — destroy newly created children and abort
+        for (const child of newChildren) {
+          child.destroy({ children: true });
+        }
+        return;
+      }
+
       // Sort by zIndex for correct render order
       newChildren.sort((a, b) => a.zIndex - b.zIndex);
 
@@ -393,6 +415,11 @@ class LpcPreviewViewModel
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.error('lpcPreview.composeFailed', { error: message });
+
+      // Check if still valid before fallback operations
+      if (thisGeneration !== this._renderGeneration || this._pixiApp !== capturedPixiApp || !this._isInitialized) {
+        return;
+      }
 
       // Global fallback: magenta rectangle covering the center
       this._destroyAllChildren();
@@ -422,11 +449,16 @@ class LpcPreviewViewModel
 
     const promise = (async () => {
       try {
-        // Use Vite's URL import for local LPC assets
-        const mod = await import(
-          /* @vite-ignore */ `/src/lib/assets/lpc/${assetId}.${stateSuffix}.webp?url`
-        );
-        const url = (mod as { default: string }).default;
+        // Look up asset URL from the import.meta.glob map
+        const assetPath = `/src/lib/assets/lpc/${assetId}.${stateSuffix}.webp`;
+        const urlLoader = LPC_ASSET_URLS[assetPath];
+
+        if (!urlLoader) {
+          this._sheetCache.set(cacheKey, Texture.EMPTY);
+          return Texture.EMPTY;
+        }
+
+        const url = await urlLoader();
         const texture = await Assets.load(url);
         texture.source.scaleMode = 'nearest';
         this._sheetCache.set(cacheKey, texture);

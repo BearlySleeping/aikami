@@ -67,7 +67,7 @@ test.describe('Onboarding Appearance Persistence', () => {
 
     // Navigate back to the appearance step (draft recovery should restore step)
     // The coordinator should recover the draft and be on the appearance step
-    await page.waitForTimeout(500);
+    await page.waitForSelector('#lpc-preview-canvas', { timeout: 5000 });
 
     // Check that the draft still has the LPC recipe
     const afterRecipe = await page.evaluate(() => {
@@ -88,18 +88,24 @@ test.describe('Onboarding Appearance Persistence', () => {
     await page.goto(SETUP_URL);
     await navigateToAppearanceStep(page);
 
-    // Set a hair color override via the coordinator
+    // Set a hair color override via the UI
+    const hairColorPicker = page.locator('#lpc-color-hair');
+    await hairColorPicker.fill('#FF5733');
+
+    // Check that the palette override is persisted
     const result = await page.evaluate(() => {
       const draftRaw = localStorage.getItem('aikami-onboarding-draft');
       const draft = JSON.parse(draftRaw ?? '{}');
       return {
         hasPaletteOverrides: draft.paletteOverrides !== undefined,
         hasLpcRecipe: draft.lpcRecipe !== undefined,
+        hairOverride: draft.paletteOverrides?.hair,
       };
     });
 
     expect(result.hasLpcRecipe).toBe(true);
     expect(result.hasPaletteOverrides).toBe(true);
+    expect(result.hairOverride).toBe('FF5733');
   });
 
   test('old draft without LPC fields is handled gracefully', async ({ page }) => {
@@ -129,14 +135,24 @@ test.describe('Onboarding Appearance Persistence', () => {
       );
     });
 
-    // The draft should be recoverable — the coordinator defaults to DEFAULT_LPC_RECIPE
-    const draftRaw = await page.evaluate(() =>
-      localStorage.getItem('aikami-onboarding-draft'),
-    );
-    expect(draftRaw).not.toBeNull();
+    // Reload to trigger draft recovery
+    await page.reload();
 
-    const draft = JSON.parse(draftRaw!);
-    // Old draft won't have lpcRecipe, but that's OK — new code handles it
-    expect(draft.name).toBe('OldDraft');
+    // Wait for the appearance step to render
+    await page.waitForSelector('#lpc-preview-canvas', { timeout: 5000 });
+
+    // Verify the draft was recovered and the UI shows the old name
+    const nameInput = page.locator('#onboarding-name');
+    await expect(nameInput).toHaveValue('OldDraft');
+
+    // Check that LPC recipe was defaulted in the recovered draft
+    const recoveredDraft = await page.evaluate(() => {
+      const draftRaw = localStorage.getItem('aikami-onboarding-draft');
+      return JSON.parse(draftRaw ?? '{}');
+    });
+
+    expect(recoveredDraft.name).toBe('OldDraft');
+    expect(recoveredDraft.lpcRecipe).toBeDefined();
+    expect(recoveredDraft.lpcRecipe.head).toBeDefined();
   });
 });

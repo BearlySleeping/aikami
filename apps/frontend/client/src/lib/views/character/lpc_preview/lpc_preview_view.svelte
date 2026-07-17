@@ -5,6 +5,7 @@
 // Binds the canvas element to the ViewModel and provides an animation toggle.
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
+import { onMount, onDestroy } from 'svelte';
 import {
   getLpcPreviewViewModel,
   type LpcPreviewViewModelInterface,
@@ -16,15 +17,35 @@ type Props = {
   options?: LpcPreviewViewModelOptions;
 };
 
-const {
-  viewModel = getLpcPreviewViewModel(options ?? { className: 'LpcPreviewViewModel' }),
-}: Props = $props();
+const props = $props<Props>();
+const viewModel = props.viewModel ?? getLpcPreviewViewModel(props.options ?? { className: 'LpcPreviewViewModel' });
+const isOwnedViewModel = !props.viewModel;
+
+let canvasElement: HTMLCanvasElement | undefined = $state(undefined);
+
+$effect(() => {
+  if (canvasElement) {
+    viewModel.setCanvasElement(canvasElement);
+  }
+});
+
+onMount(async () => {
+  if (isOwnedViewModel) {
+    await viewModel.initialize();
+  }
+});
+
+onDestroy(async () => {
+  if (isOwnedViewModel) {
+    await viewModel.dispose();
+  }
+});
 </script>
 
 <div class="flex flex-col items-center gap-2">
   <canvas
     id="lpc-preview-canvas"
-    bind:this={(el) => viewModel.setCanvasElement(el)}
+    bind:this={canvasElement}
     class="rounded border border-base-300 bg-base-300"
     width={256}
     height={256}

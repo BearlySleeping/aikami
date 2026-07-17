@@ -1218,15 +1218,21 @@ describe('OnboardingCoordinatorViewModel — LPC palette overrides', () => {
     const hairRecipe = recipes.find((r) => r.slot === 'hair');
     expect(hairRecipe).toBeDefined();
     if (hairRecipe) {
-      // Palette LUT should have non-zero bytes (FF, 44, AA repeated)
-      let nonZeroCount = 0;
-      for (let i = 0; i < hairRecipe.hexPalette.length; i++) {
-        if (hairRecipe.hexPalette[i] !== 0) {
-          nonZeroCount++;
-        }
-      }
-      expect(nonZeroCount).toBeGreaterThan(0);
+      // Palette LUT should contain FF, 44, AA, and opaque alpha (255)
+      // Check first palette entry (offset 0)
+      expect(hairRecipe.hexPalette[0]).toBe(0xFF); // R
+      expect(hairRecipe.hexPalette[1]).toBe(0x44); // G
+      expect(hairRecipe.hexPalette[2]).toBe(0xAA); // B
+      expect(hairRecipe.hexPalette[3]).toBe(255);  // A
     }
+  });
+
+  it('setPaletteOverride clears selectedPresetId', () => {
+    const vm = getVM({ className: 'TestVM' });
+    vm.selectAppearancePreset('p1');
+    expect(vm.selectedPresetId).toBe('p1');
+    vm.setPaletteOverride('hair', 'AABBCC');
+    expect(vm.selectedPresetId).toBeUndefined();
   });
 });
 
@@ -1355,5 +1361,17 @@ describe('OnboardingCoordinatorViewModel — randomize includes LPC', () => {
     // Each preset has defined lpcLayers
     const preset = vm.appearancePresets.find((p) => p.id === vm.selectedPresetId);
     expect(preset).toBeDefined();
+    if (preset) {
+      // Verify the recipe matches the preset
+      expect(vm.lpcRecipe.head).toBe(preset.lpcLayers.head);
+      expect(vm.lpcRecipe.body).toBe(preset.lpcLayers.body);
+      expect(vm.lpcRecipe.hair).toBe(preset.lpcLayers.hair);
+      // Verify palette overrides match if preset has them
+      if (preset.paletteOverrides) {
+        for (const [slot, color] of Object.entries(preset.paletteOverrides)) {
+          expect(vm.paletteOverrides[slot]).toBe(color);
+        }
+      }
+    }
   });
 });

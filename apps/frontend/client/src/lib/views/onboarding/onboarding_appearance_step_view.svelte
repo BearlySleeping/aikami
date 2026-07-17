@@ -67,13 +67,14 @@ const getSlotVariants = (slotName: string): Array<{ assetId: string; label: stri
 };
 
 // Slots exposed in the onboarding UI
-const editableSlots = ['body', 'hair', 'head', 'torso', 'legs'] as const;
+const editableSlots = ['body', 'hair', 'head', 'torso', 'legs', 'feet'] as const;
 const slotLabels: Record<string, string> = {
   body: 'Body',
   hair: 'Hair',
   head: 'Head',
   torso: 'Torso',
   legs: 'Legs',
+  feet: 'Feet',
 };
 
 // ── Color picker state ─────────────────────────────────────────────

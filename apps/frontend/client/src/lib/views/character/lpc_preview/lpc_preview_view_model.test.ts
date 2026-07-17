@@ -69,7 +69,9 @@ mock.module('@aikami/frontend/services', () => ({
     }
     async initialize() {}
     async dispose() {}
-    protected registerEffectRoot(_fn: () => void) {}
+    protected registerEffectRoot(fn: () => void) {
+      fn();
+    }
   },
   dialogService: {},
 }));
@@ -92,6 +94,9 @@ mock.module('$lib/data/lpc_models', () => ({
 }));
 
 // PixiJS facade mock — all classes are empty shells
+let mockPixiInitCalled = false;
+let mockPixiDestroyCalled = false;
+
 mock.module('./lpc_preview_pixi_facade', () => {
   class MockContainer {
     children: unknown[] = [];
@@ -116,11 +121,15 @@ mock.module('./lpc_preview_pixi_facade', () => {
 
   return {
     Application: class {
-      ticker = { add: () => {} };
+      ticker = { add: () => {}, deltaMS: 16 };
       stage = { addChild: () => {} };
       renderer = { canvas: { addEventListener: () => {} } };
-      init = async () => {};
-      destroy = () => {};
+      init = async () => {
+        mockPixiInitCalled = true;
+      };
+      destroy = () => {
+        mockPixiDestroyCalled = true;
+      };
     },
     Assets: { load: async () => ({ source: { scaleMode: 'nearest' } }) },
     Container: MockContainer,
@@ -301,6 +310,29 @@ describe('LpcPreviewViewModel — lifecycle', () => {
     await vm.dispose();
     await vm.dispose();
     // Should not throw
+  });
+
+  it('initializes PixiJS when canvas element is set', async () => {
+    mockPixiInitCalled = false;
+    const vm = getVM({ className: 'TestPreview' });
+    const canvas = { width: 256, height: 256 } as HTMLCanvasElement;
+    await vm.initialize();
+    vm.setCanvasElement(canvas);
+    // Allow effect to run
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mockPixiInitCalled).toBe(true);
+  });
+
+  it('calls Pixi destroy on dispose', async () => {
+    mockPixiInitCalled = false;
+    mockPixiDestroyCalled = false;
+    const vm = getVM({ className: 'TestPreview' });
+    const canvas = { width: 256, height: 256 } as HTMLCanvasElement;
+    await vm.initialize();
+    vm.setCanvasElement(canvas);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vm.dispose();
+    expect(mockPixiDestroyCalled).toBe(true);
   });
 });
 

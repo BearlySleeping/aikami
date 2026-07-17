@@ -5,6 +5,7 @@
 // Renders preset recipes directly without the onboarding flow.
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
+import { onDestroy } from 'svelte';
 import { APPEARANCE_PRESETS, DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import { page } from '$app/state';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
@@ -12,10 +13,6 @@ import {
   getLpcPreviewViewModel,
   type LpcPreviewViewModelInterface,
 } from '$lib/views/character/lpc_preview/lpc_preview_view_model.svelte';
-
-// Determine which preset to show from URL params
-const presetId = page.url.searchParams.get('preset') ?? 'default';
-const preset = APPEARANCE_PRESETS.find((p) => p.id === presetId);
 
 /** Builds LpcLayerRecipe[] from a recipe record. */
 const buildRecipes = (
@@ -45,21 +42,25 @@ const buildRecipes = (
   return recipes;
 };
 
-const recipe = preset?.lpcLayers ?? DEFAULT_LPC_RECIPE;
-const paletteOverrides = preset?.paletteOverrides;
-const initialRecipes = buildRecipes(recipe, paletteOverrides);
-
 const previewVm: LpcPreviewViewModelInterface = getLpcPreviewViewModel({
   className: 'LpcPreviewSandbox',
 });
 
-// Push recipes after init
-let recipesSet = $state(false);
+// Reactive preset selection from URL
+let presetId = $derived(page.url.searchParams.get('preset') ?? 'default');
+let preset = $derived(APPEARANCE_PRESETS.find((p) => p.id === presetId));
+let recipe = $derived(preset?.lpcLayers ?? DEFAULT_LPC_RECIPE);
+let paletteOverrides = $derived(preset?.paletteOverrides);
+
+// Update recipes when preset changes
 $effect(() => {
-  if (!recipesSet) {
-    previewVm.setRecipes(initialRecipes);
-    recipesSet = true;
-  }
+  const recipes = buildRecipes(recipe, paletteOverrides);
+  previewVm.setRecipes(recipes);
+});
+
+// Clean up PixiJS resources on unmount
+onDestroy(() => {
+  previewVm.dispose();
 });
 </script>
 
