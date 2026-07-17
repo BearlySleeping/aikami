@@ -178,7 +178,11 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           try {
             const headCommit = getGitHeadCommit(wsPath);
             const checkpointMsg = `Checkpoint: ${role} stage passed (attempt ${attempt})`;
-            runGit(`commit -a -m "${checkpointMsg}"`, { cwd: wsPath });
+            // Use separate add + commit instead of `commit -a`.
+            // `commit -a` bypasses skip-worktree and picks up
+            // PROGRESS.md / PROMOTION.md / .envrc — causing merge conflicts.
+            runGit('add -A', { cwd: wsPath });
+            runGit(`commit -m "${checkpointMsg}"`, { cwd: wsPath });
             console.log(`📝 Workspace checkpointed: ${headCommit}`);
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
