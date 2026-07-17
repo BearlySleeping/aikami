@@ -8,7 +8,7 @@
 | **Target** | `apps/backend/firebase/src/controllers/callable/ai.ts`, `apps/backend/firebase/src/controllers/api/prompt_ai.ts`, `packages/backend/ai` (consumer surface), `packages/backend/chat` (its `createAiService` import), `packages/backend/svelte-kit` (package existence), `packages/backend/image` (zero-importer export surface), `packages/shared/constants/src/lib/degradation.ts` |
 | **Priority** | P1 — cleanup that removes the temptation to reintroduce an AI-less mode and reduces the number of AI call surfaces before more contracts build on top of C-320's gateway |
 | **Dependencies** | C-320 (status `implemented` — `packages/frontend/ai-gateway` exists with a `service`-mode adapter wrapping the Firebase `ai` callable), C-323 (status `implemented` — zero-AI campaign path removed from the player-facing menu). Neither is `verified`/`completed` yet — see Edge Cases for the risk note. Packages: `@aikami/constants`, `@aikami/types`, `@aikami/schemas`. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none (no player-facing docs page; `docs/architecture/architecture.md` line 171 lists `backend/svelte-kit` and must be updated when the package is deleted) |
 | **Contract version** | 2.0.0 |
@@ -457,3 +457,73 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Stripped `packages/backend/ai` to the folded server-side `service`-mode module — kept `handleAIEndpoint`, `createAiService`, `BaseAiService`, provider services, `CircuitBreaker`/`TokenBucketRateLimiter` (consumed by `BaseAiService`), errors, and types. Deleted legacy adapters (`ollama_adapter`, `openrouter_adapter`, `text_generation_router`, `synthetic_sse_mock`, `agent_router`, `text_generation_types`) and their tests. Deleted the `prompt_ai` HTTP controller (zero consumers, security win). Deleted `packages/backend/svelte-kit` and `packages/backend/image` packages with full config cleanup. Amended `DEGRADATION_POLICY`: `offline` key → `onFailure` semantics — authored/template fallbacks are transient-failure resilience, not a supported zero-AI steady state. Updated `OLLAMA_VRAM_EVICTION_PARAMS` comment in the gateway.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Only `callable/ai.ts` and `backend/chat` consume `@aikami/backend/ai`; `prompt_ai.ts` deleted. Gateway service-adapter contract tests pass (56/56). `backend-ai:typecheck` and `backend-chat:typecheck` pass cleanly. |
+| AC-2 | ✅ | Both packages deleted. All workspace/alias/config/architecture references cleaned. `bun install` succeeds. `backend-ai` and `backend-chat` typecheck passes. |
+| AC-3 | ✅ | `offline` → `onFailure` in type, policy entries, and function body. Doc comments rewritten. `constants:test` passes (114/114). |
+| AC-4 | ✅ | `backend-ai:typecheck` passes. `backend-chat:typecheck` passes. `constants:test` passes (114/114). `frontend-ai-gateway:test` passes (56/56). No new failures vs baseline. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| — | No new files created |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/lib/degradation.ts` | `offline` → `onFailure` key rename + doc comment rewrite |
+| `packages/shared/constants/src/lib/degradation.test.ts` | Updated test names and `entry.offline` → `entry.onFailure` |
+| `packages/backend/ai/src/index.ts` | Rewritten — exports only kept live server-module pieces |
+| `packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts` | Updated `OLLAMA_VRAM_EVICTION_PARAMS` comment (backend copy deleted) |
+| `.moon/workspace.yml` | Removed `backend-svelte-kit` and `backend-image` project entries |
+| `biome.json` | Removed restricted-import entries for deleted packages |
+| `apps/backend/firebase/tsconfig.json` | Removed `@aikami/backend/svelte-kit/*` path alias |
+| `apps/backend/firebase/moon.yml` | Removed `backend-image` from `dependsOn` |
+| `apps/frontend/client/tsconfig.test.json` | Removed `@aikami/backend/svelte-kit/*` path alias |
+| `apps/frontend/client/svelte.config.js` | Removed `@aikami/backend/svelte-kit/*` alias |
+| `docs/architecture/architecture.md` | Updated ASCII diagram, `backend/ai` description, removed `backend/svelte-kit` |
+| `bun.lock` | Regenerated via `bun install` (2 packages removed) |
+
+### Files Deleted
+
+| File | Reason |
+|---|---|
+| `packages/backend/ai/src/lib/agent_router.ts` | Zero app consumers; superseded by C-301 gateway path (recoverable via git) |
+| `packages/backend/ai/src/lib/ollama_adapter.ts` | Superseded by `packages/frontend/ai-gateway` (C-320) |
+| `packages/backend/ai/src/lib/openrouter_adapter.ts` | Superseded by `packages/frontend/ai-gateway` (C-320) |
+| `packages/backend/ai/src/lib/synthetic_sse_mock.ts` | Superseded by `packages/frontend/ai-gateway` (C-320) |
+| `packages/backend/ai/src/lib/text_generation_router.ts` | Superseded by `packages/frontend/ai-gateway` (C-320) |
+| `packages/backend/ai/src/lib/text_generation_types.ts` | Types/constants superseded; `OLLAMA_VRAM_EVICTION_PARAMS` already in gateway |
+| `packages/backend/ai/tests/ollama_adapter.test.ts` | Superseded adapter |
+| `packages/backend/ai/tests/openrouter_adapter.test.ts` | Superseded adapter |
+| `packages/backend/ai/tests/synthetic_sse_mock.test.ts` | Superseded mock |
+| `packages/backend/ai/tests/text_generation_router.test.ts` | Superseded router |
+| `apps/backend/firebase/src/controllers/api/prompt_ai.ts` | Zero internal/external consumers; unauthenticated surface removed (security improvement) |
+| `apps/backend/firebase/src/controllers/api/` (directory) | Empty after `prompt_ai.ts` deletion |
+| `packages/backend/svelte-kit/` (entire package) | Empty `index.ts`, orphaned `src/lib/` files, zero importers repo-wide |
+| `packages/backend/image/` (entire package) | Zero non-test importers; ComfyUI orchestration unused in current product |
+
+### Deviations from Spec
+
+- **`CircuitBreaker` and `TokenBucketRateLimiter` retained**: The contract claimed these were zero-consumer, but they are consumed internally by `BaseAiService` (which is a kept live piece). Deleting them would have broken `GeminiService` and `OpenAiService`. Justification recorded here — they survive as internal dependencies of the folded server module.
+
+### Test Results
+
+- Unit (`constants`): 114/114 pass (0 failures)
+- Unit (`backend-ai`): 16/17 pass (1 pre-existing failure — `ai_service.test.ts` cannot find `@aikami/mocks`; not caused by this contract)
+- Unit (`frontend-ai-gateway`): 56/56 pass (0 failures)
+- Baseline: 1 pre-existing failure preserved (`ai_service.test.ts`), 0 new failures
+- Typecheck: `backend-ai:typecheck` passes, `backend-chat:typecheck` passes
+- Visual: N/A — no UI change
