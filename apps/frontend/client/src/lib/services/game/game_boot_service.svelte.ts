@@ -229,6 +229,7 @@ class GameBootService
   resetForRetry(): void {
     this.debug('boot:reset-for-retry');
     this._cancelled = false;
+    this.isBooting = false;
     this._teardownEngineResources();
     this._setStage('idle', 0);
 
@@ -467,7 +468,7 @@ class GameBootService
     });
 
     // Determine which renderer was actually used
-    this._renderer = 'webgl'; // Engine currently defaults to WebGL
+    this._renderer = (this._gameWorld.renderer as 'webgpu' | 'webgl') ?? 'webgl';
     this.bootProgress.detail = `Renderer: ${this._renderer}`;
 
     this._registerResizeHandler(input.canvas);
@@ -501,7 +502,7 @@ class GameBootService
       const pack = await loadContentPack({ packId });
       const startingMap = pack.getStartingMap();
 
-      if (!startingMap.defaultX || !startingMap.defaultY) {
+      if (startingMap.defaultX === undefined || startingMap.defaultY === undefined) {
         throw new Error(
           'Starting map is missing spawn coordinates — this should have been caught in preloading_content',
         );

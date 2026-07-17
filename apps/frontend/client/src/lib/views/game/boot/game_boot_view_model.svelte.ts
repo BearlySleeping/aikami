@@ -36,23 +36,6 @@ export type GameBootViewModelInterface = BaseViewModelInterface & {
 };
 
 // ---------------------------------------------------------------------------
-// Stage labels for display
-// ---------------------------------------------------------------------------
-
-const STAGE_DISPLAY_LABELS: Record<string, string> = {
-  idle: 'Preparing...',
-  loading_campaign: 'Loading campaign...',
-  validating_save: 'Validating save...',
-  preloading_content: 'Loading content pack...',
-  creating_engine: 'Starting game engine...',
-  hydrating_snapshot: 'Restoring world...',
-  spawning_entities: 'Spawning entities...',
-  ready: 'Ready',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-};
-
-// ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
@@ -63,11 +46,7 @@ class GameBootViewModel
   // ── Computed from boot service ──
 
   get stageLabel(): string {
-    const stage = gameBootService.bootProgress.stage;
-    const detail = gameBootService.bootProgress.detail;
-    return detail && detail !== STAGE_DISPLAY_LABELS[stage]
-      ? detail
-      : (STAGE_DISPLAY_LABELS[stage] ?? stage);
+    return gameBootService.bootProgress.detail ?? gameBootService.bootProgress.stage;
   }
 
   get stageIndex(): number {

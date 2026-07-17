@@ -79,9 +79,6 @@ class GameCanvasViewModel
    */
   canvasElement = $state.raw<HTMLCanvasElement | undefined>(undefined);
 
-  /** Tracks whether boot has been triggered for this lifecycle. */
-  private _booted = false;
-
   // ── Reactive state (proxied from engine service) ──
 
   get playerScene(): string {
@@ -125,14 +122,19 @@ class GameCanvasViewModel
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    // Single reactive effect: when the View binds the canvas element,
-    // launch the boot orchestrator. On cleanup, cancel and teardown.
+    // Reactive canvas-binding effect: when the View binds the canvas element
+    // and the boot service is idle, launch the boot orchestrator.
+    // On cleanup (navigation away), cancel and teardown.
+    //
+    // The effect reads gameBootService.bootProgress.stage as a dependency.
+    // When resetForRetry() sets stage back to 'idle', the effect re-runs
+    // and triggers a fresh boot attempt.
     this.registerEffectRoot(() => {
       $effect(() => {
         const canvas = this.canvasElement;
-        if (canvas && !this._booted) {
-          this._booted = true;
+        const progress = gameBootService.bootProgress;
 
+        if (canvas && !gameBootService.isBooting && progress.stage === 'idle') {
           // Boot service resolves campaign/persona from already-initialized services.
           // Only the canvas element is forwarded from the View.
           void gameBootService.boot({ canvas, contentPackId: 'emberwatch' });
@@ -142,7 +144,6 @@ class GameCanvasViewModel
           // Navigation away — cancel in-flight boot and teardown
           gameBootService.cancelBoot();
           gameEngineService.destroyEngine();
-          this._booted = false;
         };
       });
     });

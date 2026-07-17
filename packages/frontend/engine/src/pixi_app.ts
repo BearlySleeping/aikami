@@ -73,6 +73,8 @@ export type PixiAppInstance = {
   readonly app: Application;
   /** Read-only debug metrics updated every frame. */
   readonly debug: PixiAppDebugMetrics;
+  /** The renderer that was actually initialised (e.g. 'webgl', 'webgpu'). */
+  readonly renderer: string;
 };
 
 /**
@@ -232,7 +234,10 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
 
   const debug = counters as PixiAppDebugMetrics;
 
-  return { app, debug };
+  // Determine the actual renderer that was initialised
+  const renderer = app.renderer.name;
+
+  return { app, debug, renderer };
 };
 
 export { createPixiApp, DEFAULT_BACKGROUND, DEFAULT_HEIGHT, DEFAULT_WIDTH };
