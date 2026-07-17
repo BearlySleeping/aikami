@@ -122,7 +122,7 @@
 | C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | — | v2 |
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | — | v2 |
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | — | v2 |
-| C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🔄 in_progress | — | v2 |
+| C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | — | v2 |
 | C-321 | Migrate Local Persistence to Turso as the Source of Truth | ⏳ not_started (no contract file) | — | — |
 | C-322 | Wire the AI Provider Gateway into Capability Detection and Settings | ⏳ not_started (no contract file) | — | — |
 | C-323 | Enforce the Mandatory Text AI Capability Gate | ⏳ not_started (no contract file) | — | — |
