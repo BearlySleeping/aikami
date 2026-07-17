@@ -112,7 +112,10 @@ class TextGenerationService
   }
 
   /** Registers a per-call controller linked to the caller's signal. */
-  private _linkController(signal?: AbortSignal): { controller: AbortController; cleanup: () => void } {
+  private _linkController(signal?: AbortSignal): {
+    controller: AbortController;
+    cleanup: () => void;
+  } {
     const abortController = new AbortController();
     this._abortControllers.add(abortController);
     let cleanup = () => {};

@@ -1,6 +1,6 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator.ts
 // biome-ignore-all lint/style/useNamingConvention: pipeline stage identifiers are persisted domain values
-import { execFileSync, execSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -10,12 +10,13 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { findWorkspace, herdrJson } from '../../herdr/session.ts';
+import { findWorkspace } from '../../herdr/session.ts';
 import {
   commitAll,
   provisionGitWorktree,
   pushBranch,
   remoteBranchExists,
+  removeWorktree,
   runGit,
 } from '../git_worktree.ts';
 import { resolveContract } from './contract_resolver.ts';
@@ -45,12 +46,16 @@ import type {
 } from './types.ts';
 import { PIPELINE_BASE_BRANCH, STATUS_TO_START_STAGE } from './types.ts';
 
-const STAGE_TIMEOUTS: Record<string, number> = {
-  write_contract: 20 * 60 * 1000,
-  critique: 15 * 60 * 1000,
-  implement: 120 * 60 * 1000,
-  verify: 45 * 60 * 1000,
+/** Hard wall-clock caps — only hit when herdr is unreachable. Working agents never killed. */
+const STAGE_HARD_CAPS: Record<string, number> = {
+  write_contract: 2 * 60 * 60 * 1000,
+  critique: 90 * 60 * 1000,
+  implement: 12 * 60 * 60 * 1000,
+  verify: 6 * 60 * 60 * 1000,
 };
+const IDLE_TIMEOUT_MS: number =
+  Number(process.env.CONTRACT_STAGE_IDLE_TIMEOUT_MS) || 10 * 60 * 1000;
+
 const WORKER_STAGES: readonly ContractPipelineStage[] = [
   'write_contract',
   'critique',
@@ -62,7 +67,6 @@ const sleep = async (ms: number): Promise<void> => new Promise((r) => setTimeout
 
 const TERMINAL_STAGES: readonly ContractPipelineStage[] = ['pr_created', 'merged'];
 
-/** Find the newest incomplete run for a contract. */
 const findPreviousRuns = (options: { contractId: string; cwd: string }): string | undefined => {
   const d = join(options.cwd, '.pi/contract-runs');
   if (!existsSync(d)) {
@@ -81,7 +85,6 @@ const findPreviousRuns = (options: { contractId: string; cwd: string }): string 
   return undefined;
 };
 
-/** Build implementer feedback from prior verifier results (for retries). */
 const verifierFeedback = (options: {
   manifest: RunManifest;
   attempt: number;
@@ -89,22 +92,17 @@ const verifierFeedback = (options: {
   if (options.attempt <= 1) {
     return undefined;
   }
-
-  // Include previous implementer context + verifier findings.
   const prevImpl = [...options.manifest.attempts]
     .reverse()
-    .find((candidate) => candidate.role === 'implementer' && candidate.result);
+    .find((c) => c.role === 'implementer' && c.result);
   const prevVerify = [...options.manifest.attempts]
     .reverse()
-    .find((candidate) => candidate.role === 'verifier' && candidate.result);
-
+    .find((c) => c.role === 'verifier' && c.result);
   if (!prevVerify?.result) {
     return undefined;
   }
-
   const parts = [prevVerify.result.summary];
   parts.push(...prevVerify.result.findings.map((item) => `- ${item}`));
-
   if (prevImpl?.result) {
     parts.push(
       '',
@@ -113,7 +111,6 @@ const verifierFeedback = (options: {
       'Continue from where the previous attempt left off. Do NOT redo already-completed work.',
     );
   }
-
   return parts.join('\n');
 };
 
@@ -194,27 +191,21 @@ const waitForReviewDecision = async (options: {
   runId: string;
 }): Promise<ContractReviewDecision> => {
   while (true) {
-    const decision = readReviewDecision(options.path, options.runId);
-    if (decision) {
-      return decision;
+    const d = readReviewDecision(options.path, options.runId);
+    if (d) {
+      return d;
     }
     await sleep(1_000);
   }
 };
 
-// ── Reconciliation (post-accept) ─────────────────────────────
+// ── Reconciliation ───────────────────────────────────────────
 
-/**
- * Reconcile the isolated Git Worktree: commit all changes, push the branch,
- * return head branch info for PR creation. The worktree is NOT deleted — it
- * persists until the user merges or explicitly cleans up.
- */
 const reconcileWorkspace = (options: {
   manifest: RunManifest;
   repoRoot: string;
   baseBranch?: string;
 }): ReconciliationResult => {
-  // Find workspace path — the implementer/verifier ran there.
   const workspaceRunName = options.manifest.runId;
   const { workspacePath, branchName } = provisionGitWorktree({
     repoRoot: options.repoRoot,
@@ -222,35 +213,38 @@ const reconcileWorkspace = (options: {
     baseRevision: options.baseBranch ?? PIPELINE_BASE_BRANCH,
   });
 
-  // Restore provisioning artifacts from the base branch.
-  for (const fp of ['.envrc', '.pi/settings.json']) {
+  // Restore .envrc / .pi/settings.json from base (origin/main), not HEAD.
+  const b = options.baseBranch ?? PIPELINE_BASE_BRANCH;
+  let resolvedBase: string | undefined;
+  try {
+    resolvedBase = runGit(`rev-parse --verify origin/${b}`, { cwd: options.repoRoot });
+  } catch {
     try {
-      runGit(`checkout HEAD -- '${fp}'`, { cwd: workspacePath });
+      resolvedBase = runGit(`rev-parse --verify ${b}`, { cwd: options.repoRoot });
     } catch {}
+  }
+  if (resolvedBase) {
+    for (const fp of ['.envrc', '.pi/settings.json']) {
+      try {
+        runGit(`restore --source=${resolvedBase} -- '${fp}'`, { cwd: workspacePath });
+      } catch {}
+    }
   }
 
   const runToken = options.manifest.runId.replace(/^run-/, '').split('-')[0];
   const baseBranchName = `contract-task-${options.manifest.contractId.toLowerCase()}-${runToken}`;
-  const baseBranch = options.baseBranch ?? PIPELINE_BASE_BRANCH;
-
-  // Check for collision, append token if needed.
   let headBranch = baseBranchName;
   if (remoteBranchExists({ branchName: baseBranchName, repoRoot: options.repoRoot })) {
-    const token = Date.now().toString(36).slice(-6);
-    headBranch = `${baseBranchName}-${token}`;
+    headBranch = `${baseBranchName}-${Date.now().toString(36).slice(-6)}`;
   }
-
-  // If the worktree is on a different branch, rename it.
   if (branchName !== headBranch) {
     try {
       runGit(`branch -m ${branchName} ${headBranch}`, { cwd: workspacePath });
     } catch {
-      // Branch rename may fail — use the existing branch name.
       headBranch = branchName;
     }
   }
 
-  // Finalize: commit all changes, then push.
   const finalMsg = `Feat: Contract ${options.manifest.contractId} (run ${options.manifest.runId})`;
   const finalCommit = commitAll({
     cwd: workspacePath,
@@ -258,108 +252,42 @@ const reconcileWorkspace = (options: {
     authorName: 'Pi Agent',
     authorEmail: 'agent@pi.internal',
   });
-
   pushBranch({ cwd: workspacePath, branchName: headBranch });
-
-  const prTitle = `Contract ${options.manifest.contractId} — Automated Resolution`;
-  const prBody = [
-    `## Automated PR`,
-    '',
-    `- **Contract ID:** \`${options.manifest.contractId}\``,
-    `- **Commit:** \`${finalCommit}\``,
-    `- **Branch:** \`${headBranch}\``,
-    `- **Pipeline Run:** \`${options.manifest.runId}\``,
-    '',
-    `Generated by Pi Contract Pipeline.`,
-  ].join('\n');
 
   return {
     changeId: finalCommit,
     bookmarkName: headBranch,
     headBranch,
-    baseBranch,
-    prTitle,
-    prBody,
+    baseBranch: b,
+    prTitle: `Contract ${options.manifest.contractId}`,
+    prBody: '',
   };
-};
-
-/**
- * Create a GitHub PR from the reconciled bookmark.
- * Returns the PR URL or throws.
- */
-const createGitHubPr = (options: {
-  headBranch: string;
-  baseBranch: string;
-  title: string;
-  body: string;
-  repoRoot: string;
-  draft?: boolean;
-}): string => {
-  const args = [
-    'pr',
-    'create',
-    '--head',
-    options.headBranch,
-    '--base',
-    options.baseBranch,
-    '--title',
-    options.title,
-    '--body',
-    options.body,
-  ];
-  if (options.draft) {
-    args.push('--draft');
-  }
-  const result = execFileSync('gh', args, {
-    encoding: 'utf-8',
-    stdio: ['pipe', 'pipe', 'pipe'],
-    cwd: options.repoRoot,
-    timeout: 30000,
-  }).trim();
-
-  // Extract PR URL from gh output.
-  const urlMatch = result.match(/https:\/\/github\.com\/[^\s]+/);
-  return urlMatch?.[0] ?? result;
 };
 
 // ── Blocked summary ─────────────────────────────────────────
 
 const severityIcon = (finding: string): string => {
-  const upper = finding.toUpperCase();
-  if (upper.includes('CRITICAL')) {
+  const u = finding.toUpperCase();
+  if (u.includes('CRITICAL')) {
     return '🔴';
   }
-  if (upper.includes('MODERATE')) {
+  if (u.includes('MODERATE')) {
     return '🟡';
   }
   return '⚪';
 };
 
-/**
- * Produce a human-readable blocked summary from the manifest.
- * Determines the block reason category and formats findings + next steps.
- */
 const formatBlockedSummary = (manifest: RunManifest): string => {
   const lines: string[] = [];
   const hr = '═══════════════════════════════════════════════════════════';
-
-  lines.push('');
-  lines.push(hr);
-  lines.push(`🚫 PIPELINE BLOCKED — ${manifest.contractId}`);
-  lines.push(hr);
-  lines.push('');
-
-  // Categorize the block reason.
+  lines.push('', hr, `🚫 PIPELINE BLOCKED — ${manifest.contractId}`, hr, '');
   const lastVerifyPassed = [...manifest.attempts]
     .reverse()
     .find((a) => a.stage === 'verify' && a.result?.status === 'passed');
-
   const lastVerifyLoopHit =
     manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
     manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
-
   if (lastVerifyPassed && !lastVerifyLoopHit) {
-    // Verify passed but something after failed (e.g. reconciliation)
     lines.push('Reason: Verification passed, but a post-verify step failed.');
     if (manifest.blockedReason) {
       lines.push(`Details: ${manifest.blockedReason}`);
@@ -368,80 +296,59 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
     lines.push(
       `Reason: Max verify→implement bounces reached (${manifest.verifyLoops}/${MAX_VERIFY_LOOPS}).`,
     );
-    lines.push(
-      'The verifier found issues the implementer could not resolve within the bounce limit.',
-    );
   } else if (manifest.blockedReason) {
     lines.push(`Reason: ${manifest.blockedReason}`);
   } else {
     lines.push('Reason: Pipeline blocked — no reason recorded.');
   }
-
   lines.push('');
-
-  // Collect findings from the LAST verifier result.
   const lastVerify = [...manifest.attempts]
     .reverse()
     .find((a) => a.stage === 'verify' && a.result?.findings?.length);
-
   if (lastVerify?.result?.findings?.length) {
     lines.push('Last verifier findings:');
-    for (const finding of lastVerify.result.findings) {
-      const icon = severityIcon(finding);
-      lines.push(`  ${icon} ${finding}`);
+    for (const f of lastVerify.result.findings) {
+      lines.push(`  ${severityIcon(f)} ${f}`);
     }
     lines.push('');
   }
-
-  // Collect all implemented files touched by implementer.
-  const implementerAttempts = manifest.attempts.filter(
+  const impl = manifest.attempts.filter(
     (a) => a.stage === 'implement' && a.result?.filesTouched?.length,
   );
-  if (implementerAttempts.length > 0) {
-    const allFiles = [
-      ...new Set(implementerAttempts.flatMap((a) => a.result?.filesTouched ?? [])),
-    ].sort();
+  if (impl.length > 0) {
+    const all = [...new Set(impl.flatMap((a) => a.result?.filesTouched ?? []))].sort();
     lines.push('Files needing fixes:');
-    for (const f of allFiles.slice(0, 10)) {
+    for (const f of all.slice(0, 10)) {
       lines.push(`  📄 ${f}`);
     }
-    if (allFiles.length > 10) {
-      lines.push(`  ... and ${allFiles.length - 10} more`);
+    if (all.length > 10) {
+      lines.push(`  ... and ${all.length - 10} more`);
     }
     lines.push('');
   }
-
-  // Next steps.
-  lines.push('Next steps:');
-  lines.push(`  1. Fix the issues above manually in the codebase`);
-  lines.push(`  2. Run:  bun contract ${manifest.contractId} --fresh`);
-  lines.push(`  3. Or reset the contract status to 'implemented' and re-run without --fresh`);
-  lines.push('');
-  lines.push(hr);
-  lines.push('');
-
+  lines.push(
+    'Next steps:',
+    `  1. Fix the issues above manually in the codebase`,
+    `  2. Run:  bun contract ${manifest.contractId} --fresh`,
+    `  3. Or reset the contract status to 'implemented' and re-run without --fresh`,
+    '',
+    hr,
+    '',
+  );
   return lines.join('\n');
 };
 
-/**
- * Build a review prompt for a blocked pipeline run.
- * Extends the base review captain prompt with blockage context:
- * what went wrong, verifier findings, files to fix, and decision options.
- */
 const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: string }): string => {
-  const reconciliation = options.manifest.reconciliation;
+  const r = options.manifest.reconciliation;
   const basePrompt = loadReviewPrompt({
     repoRoot: options.repoRoot,
     contractPath: options.manifest.contractPath,
     runId: options.manifest.runId,
-    prUrl: options.manifest.prUrl,
-    headBranch: reconciliation?.headBranch,
-    baseBranch: reconciliation?.baseBranch,
+    prUrl: undefined,
+    headBranch: r?.headBranch,
+    baseBranch: r?.baseBranch,
   });
-
   const summary = formatBlockedSummary(options.manifest);
-
-  // Determine the block category
   const lastVerifyPassed = [...options.manifest.attempts]
     .reverse()
     .find((a) => a.stage === 'verify' && a.result?.status === 'passed');
@@ -449,7 +356,6 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
     options.manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
     options.manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
 
-  // ── Post-verify failure (e.g. gh auth missing, PR creation failed) ──
   if (lastVerifyPassed && !isLoopExhaustion) {
     return [
       basePrompt,
@@ -472,16 +378,13 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
       '🔴 Your LAST action must call `contract_review_decision`.',
     ].join('\n');
   }
-
-  // ── Verify-loop-exhaustion blocked review ──
   return [
     basePrompt,
     '',
     '## ⚠️ BLOCKED PIPELINE — Review Captain Override',
     '',
     'This pipeline is **blocked** — the verifier found issues the implementer',
-    'could not resolve within the bounce limit. The automated pipeline cannot',
-    'continue on its own. You are the human decision point.',
+    'could not resolve within the bounce limit.',
     '',
     '### What happened',
     summary,
@@ -490,18 +393,11 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
     '',
     '**1. Create a PR anyway** — `contract_review_decision` with `approve` or `merge`',
     '   - `approve`: Create a draft PR. CodeRabbit will review and may fix issues.',
-    '     A human can then merge when ready.',
-    '   - `merge`: Create a PR and auto-merge with squash. Use this only if the',
-    '     issues are acceptable for the current phase.',
+    '   - `merge`: Create a PR and auto-merge with squash.',
     '',
     '**2. Retry the implementer** — `contract_review_decision` with `change`',
-    '   - Resets the verify loop counter to 0 and returns to the implementer.',
-    '   - The implementer gets another chance with the verifier feedback.',
-    '   - If the implementer fails again, you will come back to this screen.',
     '',
     '**3. Abandon** — `contract_review_decision` with `reject`',
-    '   - Stays blocked. Closes any existing PR. Pipeline exits with summary.',
-    '   - You can fix issues manually and run `bun contract <id> --fresh` later.',
     '',
     '### Decision shortcuts',
     '- "/approve" or "create PR" → `approve`',
@@ -509,14 +405,49 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
     '- "/fix" or "retry" → `change`',
     '- "/reject" or "abandon" → `reject`',
     '',
-    '🔴 Your LAST action must call `contract_review_decision` — the pipeline',
-    'polls for this artifact. Without it, the pipeline blocks forever.',
+    '🔴 Your LAST action must call `contract_review_decision`.',
   ].join('\n');
+};
+
+// ── Merge helpers ────────────────────────────────────────────
+
+const syncMainOnMerge = (repoRoot: string): void => {
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: repoRoot,
+      timeout: 5000,
+    }).trim();
+    if (branch === 'main' || branch === 'master') {
+      execSync('git pull --ff-only origin main', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: repoRoot,
+        timeout: 30000,
+      });
+      console.log('\n📥 Pulled latest main\n');
+    }
+  } catch (e: unknown) {
+    console.warn(
+      `⚠️  Could not sync main: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+    );
+  }
+};
+
+const cleanupAfterMerge = (repoRoot: string, workspacePath: string, branchName: string): void => {
+  try {
+    removeWorktree({ workspacePath, repoRoot, branchName, deleteRemoteBranch: false });
+    console.log(`\n🧹 Worktree cleaned: ${branchName}\n`);
+  } catch (e: unknown) {
+    console.warn(
+      `⚠️  Worktree cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+    );
+  }
 };
 
 // ── Main orchestrator ─────────────────────────────────────────
 
-/** Execute one contract pipeline run. */
 export const runContractPipeline = async (options: {
   repoRoot: string;
   target?: string;
@@ -525,19 +456,18 @@ export const runContractPipeline = async (options: {
   dryRun?: boolean;
   ready?: boolean;
   onReady?: (manifest: RunManifest) => void;
-  adapterFactory?: (options: {
+  adapterFactory?: (opts: {
     repoRoot: string;
     runId: string;
     contractId: string;
   }) => ContractHerdrAdapterInterface;
 }): Promise<RunManifest> => {
-  // Auto-resume
   let resumeRunId = options.resumeRunId;
   if (!resumeRunId && options.target && !options.fresh) {
     const c = resolveContract({ target: options.target, repoRoot: options.repoRoot });
     const f = findPreviousRuns({ contractId: c.id, cwd: options.repoRoot });
     if (f) {
-      console.log(`Found incomplete run foround incomplete run for ${c.id} - resuming ${f}.`);
+      console.log(`Found incomplete run for ${c.id} - resuming ${f}.`);
       console.log('   (use --fresh to start over)');
       resumeRunId = f;
     }
@@ -550,12 +480,10 @@ export const runContractPipeline = async (options: {
       throw new Error(`Run ${resumeRunId} is not a valid v3 manifest.`);
     }
     manifest = resumed;
-    delete manifest.reviewPaneId;
-    delete manifest.blockedReason;
+    manifest.blockedReason = undefined;
 
-    const contractStatus = readContractStatus(manifest.contractPath);
-    const contractStage = STATUS_TO_START_STAGE[contractStatus] ?? 'write_contract';
-
+    const cs = readContractStatus(manifest.contractPath);
+    const contractStage = STATUS_TO_START_STAGE[cs] ?? 'write_contract';
     const stageOrder: ContractPipelineStage[] = [
       'write_contract',
       'critique',
@@ -575,15 +503,16 @@ export const runContractPipeline = async (options: {
         const li = l ? stageOrder.indexOf(l) : -1;
         return ai > li ? a.stage : l;
       }, null);
-    const lastAttempted = manifest.attempts[manifest.attempts.length - 1]?.stage;
     const resumeStage = lastCompleted
-      ? (stageAfter[lastCompleted] ?? lastAttempted ?? contractStage)
+      ? (stageAfter[lastCompleted] ??
+        manifest.attempts[manifest.attempts.length - 1]?.stage ??
+        contractStage)
       : contractStage;
     if (resumeStage !== manifest.currentStage) {
       pipelineLog({
         runId: manifest.runId,
         cwd: options.repoRoot,
-        message: `Resuming: contract status ${contractStatus} → stage ${resumeStage} (was ${manifest.currentStage}).`,
+        message: `Resuming: contract status ${cs} → stage ${resumeStage} (was ${manifest.currentStage}).`,
       });
       manifest.currentStage = resumeStage;
       writeManifest({ manifest, cwd: options.repoRoot });
@@ -592,38 +521,34 @@ export const runContractPipeline = async (options: {
     if (!options.target) {
       throw new Error('A contract ID or path is required for a new run.');
     }
-    // No dirty-worktree guardrail — Git Worktrees isolate all stage mutations.
     const contract = resolveContract({ target: options.target, repoRoot: options.repoRoot });
-    const baseline = captureGitState(options.repoRoot);
     manifest = createManifest({
       contractId: contract.id,
       contractPath: contract.path,
       baseCommit: currentCommit(options.repoRoot),
-      baselineFingerprint: baseline.fingerprint,
+      baselineFingerprint: captureGitState(options.repoRoot).fingerprint,
       startStage: STATUS_TO_START_STAGE[contract.status] ?? 'write_contract',
     });
     writeManifest({ manifest, cwd: options.repoRoot });
   }
-
   if (options.dryRun) {
     return manifest;
   }
 
-  const buildWorkspaceLabel = (contractId: string): string => `aikami-contract-${contractId}`;
-
+  const buildWsLabel = (cid: string): string => `aikami-contract-${cid}`;
   await acquireLock({
     contractId: manifest.contractId,
     runId: manifest.runId,
     cwd: options.repoRoot,
-    checkWorkspaceAlive: async (_runId: string) => {
+    checkWorkspaceAlive: async () => {
       try {
-        const wsId = await findWorkspace(buildWorkspaceLabel(manifest.contractId));
-        return wsId !== null;
+        return (await findWorkspace(buildWsLabel(manifest.contractId))) !== null;
       } catch {
         return false;
       }
     },
   });
+
   const adapter =
     options.adapterFactory?.({
       repoRoot: options.repoRoot,
@@ -642,9 +567,9 @@ export const runContractPipeline = async (options: {
       cwd: options.repoRoot,
       message: `Initializing Herdr for ${manifest.contractId}.`,
     });
-    const workspace = await adapter.initialize();
-    manifest.workspaceId = workspace.workspaceId;
-    manifest.pipelinePaneId = workspace.pipelinePaneId;
+    const ws = await adapter.initialize();
+    manifest.workspaceId = ws.workspaceId;
+    manifest.pipelinePaneId = ws.pipelinePaneId;
     writeManifest({ manifest, cwd: options.repoRoot });
     options.onReady?.(manifest);
     pipelineLog({
@@ -652,8 +577,6 @@ export const runContractPipeline = async (options: {
       cwd: options.repoRoot,
       message: `Pipeline started at ${manifest.currentStage} for ${manifest.contractId}.`,
     });
-
-    // ── Main loop ────────────────────────────────────────────
 
     while (
       manifest.currentStage !== 'pr_created' &&
@@ -663,19 +586,12 @@ export const runContractPipeline = async (options: {
       if (WORKER_STAGES.includes(manifest.currentStage)) {
         const stage = manifest.currentStage;
         const role = roleForStage(stage);
-        const attempt = manifest.attempts.filter((entry) => entry.stage === stage).length + 1;
+        const attempt = manifest.attempts.filter((e) => e.stage === stage).length + 1;
         const startTime = new Date().toISOString();
-
-        // Capture git state BEFORE. For implementer/verifier, this should
-        // be in the workspace. For writer/critic (root), use the repo root.
-        const workspacePath = adapter.getWorkspacePath();
+        const wPath = adapter.getWorkspacePath();
         const cwdForGit =
-          workspacePath && (stage === 'implement' || stage === 'verify')
-            ? workspacePath
-            : options.repoRoot;
+          wPath && (stage === 'implement' || stage === 'verify') ? wPath : options.repoRoot;
         const before = captureGitState(cwdForGit);
-
-        // Feedback: only implementer retries get prior verifier feedback.
         const feedback =
           stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
 
@@ -686,92 +602,69 @@ export const runContractPipeline = async (options: {
           stage,
           attempt,
           contractPath: manifest.contractPath,
-          timeoutMs: STAGE_TIMEOUTS[stage] ?? 30 * 60 * 1000,
+          idleTimeoutMs: IDLE_TIMEOUT_MS,
+          hardTimeoutMs: STAGE_HARD_CAPS[stage] ?? 8 * 60 * 60 * 1000,
           feedback,
-          launchWorker: (request) => adapter.launchWorker(request),
-          checkAgentWorking: async (paneId: string) => {
-            try {
-              const panes = await herdrJson<{
-                result: { panes: Array<{ pane_id: string; agent_status?: string }> };
-              }>(['pane', 'list', '--workspace', adapter.getWorkspaceId()]);
-              const pane = panes?.result?.panes.find((p) => p.pane_id === paneId);
-              // Treat herdr-unreachable/null as "assume working" so the clock advances.
-              return panes ? pane?.agent_status === 'working' : true;
-            } catch {
-              return true;
-            }
-          },
+          launchWorker: (req) => adapter.launchWorker(req),
+          checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
+          nudgeWorker: (opts) => adapter.nudgeWorker(opts),
         });
         const after = captureGitState(cwdForGit);
 
-        // Sync contract back from workspace (docs/ is gitignored — git won't propagate).
         if (
-          workspacePath &&
+          wPath &&
           (stage === 'implement' || stage === 'verify') &&
           existsSync(manifest.contractPath)
         ) {
-          const wcp = join(workspacePath, relative(options.repoRoot, manifest.contractPath));
+          const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
           if (existsSync(wcp)) {
             copyFileSync(wcp, manifest.contractPath);
           }
         }
-
-        // Sync contract INTO workspace after writer/critic stages.
-        // Writer and critic modify the contract file in the main repo.
-        // The worktree was forked before they ran, so it has a stale version.
-        // This ensures the PR includes the latest contract.
         if (
-          workspacePath &&
+          wPath &&
           (stage === 'write_contract' || stage === 'critique') &&
           existsSync(manifest.contractPath)
         ) {
-          const wcp = join(workspacePath, relative(options.repoRoot, manifest.contractPath));
+          const wcp = join(wPath, relative(options.repoRoot, manifest.contractPath));
           try {
             mkdirSync(dirname(wcp), { recursive: true });
             copyFileSync(manifest.contractPath, wcp);
-          } catch {
-            // Non-fatal — contract file may not exist yet.
-          }
+          } catch {}
         }
-
-        // After writer succeeds, discover the actual contract file.
-        // The resolver uses a placeholder path; contract_generate creates the real file.
         if (stage === 'write_contract' && outcome.result.status === 'passed') {
-          const contractsDirectory = resolve(options.repoRoot, 'docs/contracts');
-          if (existsSync(contractsDirectory)) {
-            const discovered = readdirSync(contractsDirectory).find(
-              (file) =>
-                file.startsWith(`${manifest.contractId}-`) &&
-                file.endsWith('.md') &&
-                file !== `${manifest.contractId}.md`,
+          const cd = resolve(options.repoRoot, 'docs/contracts');
+          if (existsSync(cd)) {
+            const discovered = readdirSync(cd).find(
+              (f) =>
+                f.startsWith(`${manifest.contractId}-`) &&
+                f.endsWith('.md') &&
+                f !== `${manifest.contractId}.md`,
             );
             if (discovered) {
-              manifest.contractPath = join(contractsDirectory, discovered);
+              manifest.contractPath = join(cd, discovered);
             }
           }
         }
 
-        // Postconditions: validate role-specific file boundaries.
-        const postconditions = validatePostconditions({
+        const pc = validatePostconditions({
           role,
           contractPath: manifest.contractPath,
           repoRoot: options.repoRoot,
-          workspacePath,
+          workspacePath: wPath,
           before,
           after,
         });
-        let result = postconditions.passed
+        let result = pc.passed
           ? outcome.result
           : resultForPostconditionFailure({
               original: outcome.result,
-              unauthorizedPaths: postconditions.unauthorizedPaths,
+              unauthorizedPaths: pc.unauthorizedPaths,
             });
 
-        // Update contract status BEFORE enforceStageStatus so the guardrail passes.
         if (stage === 'implement' && result.status === 'passed') {
           updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
         }
-
         result = enforceStageStatus({ stage, result, contractPath: manifest.contractPath });
 
         manifest.attempts.push({
@@ -783,23 +676,17 @@ export const runContractPipeline = async (options: {
           endTime: new Date().toISOString(),
           result,
         });
-
-        // Stage lifecycle status updates.
         if (stage === 'critique' && result.status === 'passed') {
           updateContractStatus({ contractPath: manifest.contractPath, status: 'approved' });
         }
+
         if (stage === 'verify') {
           if (result.status === 'passed') {
             updateContractStatus({ contractPath: manifest.contractPath, status: 'verified' });
-            // Fingerprint from workspace for verification gate.
             manifest.verificationFingerprint = after.fingerprint;
             manifest.verificationContractHash = '';
-
-            // Reconcile workspace → push branch → create or update PR.
-            if (manifest.prUrl && manifest.reconciliation?.headBranch) {
-              // PR already exists — push updates to same branch (PR auto-updates, CodeRabbit re-reviews incrementally).
+            if (manifest.reconciliation?.headBranch) {
               try {
-                const headBranch = manifest.reconciliation.headBranch;
                 const wsCwd = adapter.getWorkspacePath() || options.repoRoot;
                 try {
                   commitAll({
@@ -808,89 +695,37 @@ export const runContractPipeline = async (options: {
                     authorName: 'Pi Agent',
                     authorEmail: 'agent@pi.internal',
                   });
-                } catch {
-                  // No new changes to commit.
-                }
-                pushBranch({ cwd: wsCwd, branchName: headBranch });
+                } catch {}
+                pushBranch({ cwd: wsCwd, branchName: manifest.reconciliation.headBranch });
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
-                  message: `PR updated: ${manifest.prUrl}`,
+                  message: `Branch updated: ${manifest.reconciliation.headBranch}`,
                 });
-                console.log(`\n🔄 PR updated: ${manifest.prUrl}\n`);
-              } catch (pushErr: unknown) {
-                const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
-                pipelineLog({
-                  runId: manifest.runId,
-                  cwd: options.repoRoot,
-                  message: `PR update failed: ${msg.slice(0, 300)}`,
-                });
-                console.error(`\n❌ PR update failed: ${msg}\n`);
-                // Go to review session — the user can decide how to handle it.
-                manifest.blockedReason =
-                  `PR update failed for ${manifest.prUrl}: ${msg.slice(0, 400)}. ` +
-                  `The branch may need manual push or the PR may need to be recreated.`;
+                console.log(`\n🔄 Branch updated: ${manifest.reconciliation.headBranch}\n`);
+              } catch (e: unknown) {
+                const m = e instanceof Error ? e.message : String(e);
+                manifest.blockedReason = `Branch push failed: ${m.slice(0, 400)}.`;
                 manifest = transition({ manifest, next: 'review' });
                 writeManifest({ manifest, cwd: options.repoRoot });
                 continue;
               }
             } else {
-              // First verify pass — reconcile + create PR.
-              let reconciliation: ReconciliationResult | undefined;
               try {
-                reconciliation = reconcileWorkspace({
+                manifest.reconciliation = reconcileWorkspace({
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
                 });
-                manifest.reconciliation = reconciliation;
-              } catch (reconcileErr: unknown) {
-                const msg =
-                  reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr);
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
-                  message: `Reconciliation failed: ${msg.slice(0, 300)}`,
+                  message: `Branch pushed: ${manifest.reconciliation.headBranch} (no PR — review captain creates it)`,
                 });
-                console.error(`\n❌ Reconciliation failed: ${msg}\n`);
-                manifest.blockedReason =
-                  `Reconciliation failed after verify passed: ${msg.slice(0, 400)}. ` +
-                  `The branch may not have been pushed — check the workspace.`;
-                manifest = transition({ manifest, next: 'review' });
-                writeManifest({ manifest, cwd: options.repoRoot });
-                continue;
-              }
-
-              // Reconciliation succeeded — now create the PR.
-              try {
-                const draft = !options.ready;
-                const prUrl = createGitHubPr({
-                  headBranch: reconciliation.headBranch,
-                  baseBranch: reconciliation.baseBranch,
-                  title: reconciliation.prTitle,
-                  body: reconciliation.prBody,
-                  repoRoot: options.repoRoot,
-                  draft,
-                });
-                manifest.prUrl = prUrl;
-                pipelineLog({
-                  runId: manifest.runId,
-                  cwd: options.repoRoot,
-                  message: `Draft PR created: ${prUrl}`,
-                });
-                console.log(`\n📦 Draft PR: ${prUrl}\n`);
-              } catch (prErr: unknown) {
-                const msg = prErr instanceof Error ? prErr.message : String(prErr);
-                pipelineLog({
-                  runId: manifest.runId,
-                  cwd: options.repoRoot,
-                  message: `PR creation failed: ${msg.slice(0, 300)}`,
-                });
-                console.error(`\n❌ PR creation failed: ${msg}\n`);
-                // Branch is pushed, reconciliation has the branch info
-                manifest.blockedReason =
-                  `PR creation failed after verify passed: ${msg.slice(0, 400)}. ` +
-                  `Branch \`${reconciliation.headBranch}\` is pushed — create the PR manually.`;
+                console.log(`\n📤 Branch pushed: ${manifest.reconciliation.headBranch}\n`);
+              } catch (e: unknown) {
+                const m = e instanceof Error ? e.message : String(e);
+                manifest.blockedReason = `Reconciliation failed: ${m.slice(0, 400)}.`;
                 manifest = transition({ manifest, next: 'review' });
                 writeManifest({ manifest, cwd: options.repoRoot });
                 continue;
@@ -909,50 +744,14 @@ export const runContractPipeline = async (options: {
           verdict: result,
           verifyLoops: manifest.verifyLoops,
         });
-        const verifyLoopsExhausted =
+        const exhausted =
           stage === 'verify' &&
           result.status === 'changes_requested' &&
           next.verifyLoops >= MAX_VERIFY_LOOPS;
-
         manifest.verifyLoops = next.verifyLoops;
         manifest = transition({ manifest, next: next.next });
-        // Record blocked reason when verify loops are exhausted — the review
-        // handler detects this to present a blocked-review session.
-        if (verifyLoopsExhausted) {
+        if (exhausted) {
           manifest.blockedReason = result.summary;
-          // Create a draft PR even when verification had issues.
-          // CodeRabbit may suggest fixes.
-          try {
-            const reconciliation = reconcileWorkspace({
-              manifest,
-              repoRoot: options.repoRoot,
-              baseBranch: PIPELINE_BASE_BRANCH,
-            });
-            manifest.reconciliation = reconciliation;
-            const prUrl = createGitHubPr({
-              headBranch: reconciliation.headBranch,
-              baseBranch: reconciliation.baseBranch,
-              title: `${reconciliation.prTitle} (needs review)`,
-              body: reconciliation.prBody,
-              repoRoot: options.repoRoot,
-              draft: true,
-            });
-            manifest.prUrl = prUrl;
-            pipelineLog({
-              runId: manifest.runId,
-              cwd: options.repoRoot,
-              message: `Draft PR created (blocked review): ${prUrl}`,
-            });
-            console.log(`Draft PR (needs review): ${prUrl}`);
-          } catch (prErr: unknown) {
-            const msg = prErr instanceof Error ? prErr.message : String(prErr);
-            pipelineLog({
-              runId: manifest.runId,
-              cwd: options.repoRoot,
-              message: `PR creation failed in blocked review: ${msg.slice(0, 300)}`,
-            });
-            console.error(`PR creation failed (blocked review): ${msg}`);
-          }
         } else if (manifest.currentStage === 'blocked') {
           manifest.blockedReason = result.summary;
         }
@@ -967,7 +766,8 @@ export const runContractPipeline = async (options: {
 
       if (manifest.currentStage === 'review') {
         const isBlockedReview = !!manifest.blockedReason;
-
+        const headBranch = manifest.reconciliation?.headBranch;
+        const baseBranch = manifest.reconciliation?.baseBranch ?? PIPELINE_BASE_BRANCH;
         const reviewPath = join(
           runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
           'review',
@@ -976,6 +776,22 @@ export const runContractPipeline = async (options: {
         if (existsSync(reviewPath)) {
           unlinkSync(reviewPath);
         }
+
+        // Reconnect to live pane on resume.
+        if (manifest.reviewPaneId) {
+          const alive = await adapter.isPaneAlive(manifest.reviewPaneId).catch(() => false);
+          if (alive) {
+            if (manifest.reviewDecision === undefined) {
+              await adapter.sendReviewMessage({
+                paneId: manifest.reviewPaneId,
+                message: `Pipeline resumed. Your session was preserved — continue from where you left off. Branch \`${headBranch ?? 'unknown'}\` is still pushed.`,
+              });
+            }
+          } else {
+            manifest.reviewPaneId = undefined;
+            writeManifest({ manifest, cwd: options.repoRoot });
+          }
+        }
         if (!manifest.reviewPaneId) {
           const prompt = isBlockedReview
             ? buildBlockedReviewPrompt({ manifest, repoRoot: options.repoRoot })
@@ -983,9 +799,9 @@ export const runContractPipeline = async (options: {
                 repoRoot: options.repoRoot,
                 contractPath: manifest.contractPath,
                 runId: manifest.runId,
-                prUrl: manifest.prUrl,
-                headBranch: manifest.reconciliation?.headBranch,
-                baseBranch: manifest.reconciliation?.baseBranch,
+                prUrl: undefined,
+                headBranch,
+                baseBranch,
               });
           manifest.reviewPaneId = await adapter.startReview({
             prompt,
@@ -997,55 +813,46 @@ export const runContractPipeline = async (options: {
 
         const decision = await waitForReviewDecision({ path: reviewPath, runId: manifest.runId });
         manifest.reviewDecision = decision;
-        const reviewPaneId = manifest.reviewPaneId;
-        if (!reviewPaneId) {
+        if (!manifest.reviewPaneId) {
           throw new Error('Review pane was not initialized.');
         }
 
-        // ── Blocked review: no PR yet, user decides how to handle the impasse ──
+        const findPrUrl = (): string | undefined => {
+          if (manifest.prUrl) {
+            return manifest.prUrl;
+          }
+          if (!headBranch) {
+            return undefined;
+          }
+          try {
+            const r = execSync(
+              `gh pr list --head '${headBranch}' --state open --json url --jq '.[0].url'`,
+              {
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: options.repoRoot,
+                timeout: 10000,
+              },
+            ).trim();
+            if (r) {
+              manifest.prUrl = r;
+            }
+            return r || undefined;
+          } catch {
+            return undefined;
+          }
+        };
+
         if (isBlockedReview) {
           if (decision.decision === 'approve' || decision.decision === 'merge') {
-            // Create a PR even though the pipeline is blocked.
-            // CodeRabbit may resolve the issues, or a human can review.
-            const reconciliation = reconcileWorkspace({
-              manifest,
-              repoRoot: options.repoRoot,
-              baseBranch: PIPELINE_BASE_BRANCH,
-            });
-            manifest.reconciliation = reconciliation;
-            const draft = decision.decision === 'approve' ? !options.ready : false;
-            const prUrl = createGitHubPr({
-              headBranch: reconciliation.headBranch,
-              baseBranch: reconciliation.baseBranch,
-              title: `${reconciliation.prTitle} (blocked — review needed)`,
-              body: reconciliation.prBody,
-              repoRoot: options.repoRoot,
-              draft,
-            });
-            manifest.prUrl = prUrl;
-
+            const prUrl = findPrUrl();
+            if (!prUrl) {
+              console.error('❌ No PR found — review captain should have created one.');
+              manifest = transition({ manifest, next: 'blocked' });
+              writeManifest({ manifest, cwd: options.repoRoot });
+              continue;
+            }
             if (decision.decision === 'approve') {
-              if (!draft) {
-                try {
-                  execSync(`gh pr ready ${prUrl}`, {
-                    encoding: 'utf-8',
-                    stdio: ['pipe', 'pipe', 'pipe'],
-                    cwd: options.repoRoot,
-                    timeout: 15000,
-                  });
-                } catch {
-                  // Non-fatal.
-                }
-              }
-              pipelineLog({
-                runId: manifest.runId,
-                cwd: options.repoRoot,
-                message: `Draft PR created (blocked review): ${prUrl}`,
-              });
-              console.log(`\n📦 Draft PR (blocked): ${prUrl}\n`);
-              manifest = transition({ manifest, next: 'pr_created' });
-            } else {
-              // merge
               try {
                 execSync(`gh pr ready ${prUrl}`, {
                   encoding: 'utf-8',
@@ -1053,57 +860,51 @@ export const runContractPipeline = async (options: {
                   cwd: options.repoRoot,
                   timeout: 15000,
                 });
-              } catch {
-                // Draft — still attempt merge.
-              }
-              execSync(`gh pr merge ${prUrl} --squash --auto --delete-branch`, {
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-                cwd: options.repoRoot,
-                timeout: 30000,
-              });
-              manifest = transition({ manifest, next: 'merged' });
-              pipelineLog({
-                runId: manifest.runId,
-                cwd: options.repoRoot,
-                message: `PR auto-merge queued (blocked review): ${prUrl}`,
-              });
-              console.log(`\n🚀 PR auto-merge queued (blocked): ${prUrl}\n`);
-            }
-          } else if (decision.decision === 'change') {
-            // User wants to retry — reset the verify loop counter and go back
-            // to implementer for a fresh attempt.
-            pipelineLog({
-              runId: manifest.runId,
-              cwd: options.repoRoot,
-              message: `Blocked review: retrying — resetting verify loops, returning to implement.`,
-            });
-            console.log('\n🔄 Retrying — back to implementer.\n');
-            manifest.verifyLoops = 0;
-            delete manifest.blockedReason;
-            delete manifest.verificationFingerprint;
-            delete manifest.verificationContractHash;
-            updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
-            manifest = transition({ manifest, next: 'implement' });
-          } else {
-            // reject — stay blocked, exit with summary.
-            if (manifest.reconciliation?.headBranch) {
+              } catch {}
+              console.log(`\n✅ PR ready: ${prUrl}\n`);
+              manifest = transition({ manifest, next: 'pr_created' });
+            } else {
               try {
-                execSync(`gh pr close ${manifest.prUrl}`, {
+                execSync(`gh pr ready ${prUrl}`, {
                   encoding: 'utf-8',
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
                   timeout: 15000,
                 });
-              } catch {
-                // PR may have already been closed.
+              } catch {}
+              execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: options.repoRoot,
+                timeout: 60000,
+              });
+              syncMainOnMerge(options.repoRoot);
+              if (headBranch && adapter.getWorkspacePath()) {
+                cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
               }
+              manifest = transition({ manifest, next: 'merged' });
+              console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
             }
-            pipelineLog({
-              runId: manifest.runId,
-              cwd: options.repoRoot,
-              message: `Blocked review rejected: ${decision.summary}`,
-            });
+          } else if (decision.decision === 'change') {
+            console.log('\n🔄 Retrying — back to implementer.\n');
+            manifest.verifyLoops = 0;
+            manifest.blockedReason = undefined;
+            delete manifest.verificationFingerprint;
+            delete manifest.verificationContractHash;
+            updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
+            manifest = transition({ manifest, next: 'implement' });
+          } else {
+            const prUrl = findPrUrl();
+            if (prUrl) {
+              try {
+                execSync(`gh pr close ${prUrl}`, {
+                  encoding: 'utf-8',
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                  cwd: options.repoRoot,
+                  timeout: 15000,
+                });
+              } catch {}
+            }
             manifest.blockedReason = decision.summary;
             manifest = transition({ manifest, next: 'blocked' });
           }
@@ -1111,12 +912,13 @@ export const runContractPipeline = async (options: {
           continue;
         }
 
-        // ── Normal (post-verify) review ──────────────────────
-        const prUrl = manifest.prUrl;
+        // Normal review
+        const prUrl = findPrUrl();
         if (!prUrl) {
-          throw new Error('PR URL not found in manifest — review requires a PR.');
+          throw new Error(
+            `No PR found for branch ${headBranch ?? 'unknown'}. The review captain should have created a PR with gh_create_pr.`,
+          );
         }
-
         if (decision.decision === 'approve') {
           try {
             execSync(`gh pr ready ${prUrl}`, {
@@ -1125,14 +927,7 @@ export const runContractPipeline = async (options: {
               cwd: options.repoRoot,
               timeout: 15000,
             });
-          } catch {
-            // Non-fatal — user can mark ready manually in GitHub UI.
-          }
-          pipelineLog({
-            runId: manifest.runId,
-            cwd: options.repoRoot,
-            message: `PR marked ready: ${prUrl}`,
-          });
+          } catch {}
           console.log(`\n✅ PR ready for review: ${prUrl}\n`);
           manifest = transition({ manifest, next: 'pr_created' });
         } else if (decision.decision === 'merge') {
@@ -1143,22 +938,24 @@ export const runContractPipeline = async (options: {
               cwd: options.repoRoot,
               timeout: 15000,
             });
-          } catch {
-            // Draft PR — fall through to merge attempt.
-          }
-          execSync(`gh pr merge ${prUrl} --squash --auto --delete-branch`, {
+          } catch {}
+          execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
             encoding: 'utf-8',
             stdio: ['pipe', 'pipe', 'pipe'],
             cwd: options.repoRoot,
-            timeout: 30000,
+            timeout: 60000,
           });
+          syncMainOnMerge(options.repoRoot);
+          if (headBranch && adapter.getWorkspacePath()) {
+            cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+          }
           manifest = transition({ manifest, next: 'merged' });
           pipelineLog({
             runId: manifest.runId,
             cwd: options.repoRoot,
-            message: `PR auto-merge queued: ${prUrl}`,
+            message: `PR merged: ${prUrl}`,
           });
-          console.log(`\n🚀 PR auto-merge queued: ${prUrl}\n`);
+          console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
         } else if (decision.decision === 'change') {
           pipelineLog({
             runId: manifest.runId,
@@ -1169,21 +966,12 @@ export const runContractPipeline = async (options: {
           delete manifest.verificationContractHash;
           updateContractStatus({ contractPath: manifest.contractPath, status: 'implemented' });
           manifest = transition({ manifest, next: 'implement' });
-          await adapter.sendReviewMessage({
-            paneId: reviewPaneId,
-            message: `Changes requested. PR ${prUrl} stays open — implementer will push to the same branch.`,
-          });
         } else {
           execSync(`gh pr close ${prUrl}`, {
             encoding: 'utf-8',
             stdio: ['pipe', 'pipe', 'pipe'],
             cwd: options.repoRoot,
             timeout: 15000,
-          });
-          pipelineLog({
-            runId: manifest.runId,
-            cwd: options.repoRoot,
-            message: `PR closed (rejected): ${prUrl}`,
           });
           manifest.blockedReason = decision.summary;
           manifest = transition({ manifest, next: 'blocked' });
@@ -1202,20 +990,11 @@ export const runContractPipeline = async (options: {
       cwd: options.repoRoot,
       message: `Pipeline finished at ${manifest.currentStage}.`,
     });
-
-    // ── Blocked summary ──────────────────────────────────────
     if (manifest.currentStage === 'blocked') {
-      const summary = formatBlockedSummary(manifest);
-      // Write full summary to pipeline log (appears in pipeline tail tab).
-      pipelineLog({
-        runId: manifest.runId,
-        cwd: options.repoRoot,
-        message: summary,
-      });
-      // Print to stdout for non-herdr runs.
-      console.log(summary);
+      const s = formatBlockedSummary(manifest);
+      pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
+      console.log(s);
     }
-
     return manifest;
   } finally {
     releaseLock({ contractId: manifest.contractId, cwd: options.repoRoot });

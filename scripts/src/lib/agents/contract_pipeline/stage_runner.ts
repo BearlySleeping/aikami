@@ -22,6 +22,11 @@ const STAGE_ROLES = {
 const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+/** Continuous idle time before the worker gets a nudge to call contract_stage_complete. */
+const NUDGE_AFTER_IDLE_MS = 2 * 60 * 1000;
+/** Maximum nudges before allowing continuous idle to reach the idle timeout. */
+const MAX_NUDGES = 3;
+
 /** Return the worker role for a model-driven stage. */
 export const roleForStage = (stage: ContractPipelineStage): ContractWorkerRole => {
   const role = STAGE_ROLES[stage as keyof typeof STAGE_ROLES];
@@ -34,8 +39,12 @@ export const roleForStage = (stage: ContractPipelineStage): ContractWorkerRole =
 /**
  * Run one worker stage and accept only its exact structured result artifact.
  *
- * Feedback from prior stages is sent as a user message (not system prompt)
- * so that DeepSeek's prefix cache stays valid across retries.
+ * Timeout model:
+ * - While the agent is actively working (herdr agent_status === 'working'),
+ *   NO timeout accrues — an actively working pi session is never killed.
+ * - Continuous idle time triggers nudges, then blocks after `idleTimeoutMs`.
+ * - `hardTimeoutMs` is a generous wall-clock safety net for cases where
+ *   the agent status is unobservable (herdr unreachable → assumed working).
  */
 export const runStage = async (options: {
   repoRoot: string;
@@ -44,13 +53,13 @@ export const runStage = async (options: {
   stage: ContractPipelineStage;
   attempt: number;
   contractPath: string;
-  timeoutMs: number;
+  idleTimeoutMs: number;
+  hardTimeoutMs: number;
   pollIntervalMs?: number;
-  /** Raw feedback from prior stage. Sent as user message, not injected into system prompt. */
   feedback?: string;
   launchWorker: (request: WorkerLaunchRequest) => Promise<{ paneId: string }>;
-  /** Check whether the agent in the worker pane is actively working. Only working time counts toward the timeout. */
   checkAgentWorking?: (paneId: string) => Promise<boolean>;
+  nudgeWorker?: (opts: { paneId: string; message: string }) => Promise<void>;
 }): Promise<StageRunOutcome> => {
   const role = roleForStage(options.stage);
   const resultPath = join(
@@ -58,7 +67,7 @@ export const runStage = async (options: {
     'stages',
     `${options.stage}-${options.attempt}.json`,
   );
-  // Adopt orphaned result from crashed orchestrator
+
   const orphaned = readStageResult({
     resultPath,
     runId: options.runId,
@@ -70,18 +79,14 @@ export const runStage = async (options: {
     return { result: orphaned, paneId: 'recovered' };
   }
   if (existsSync(resultPath)) {
-    // Stale — discard.
     unlinkSync(resultPath);
   }
 
-  // System prompt is static — no feedback injected.
   const prompt = loadRolePrompt({
     role,
     contractPath: options.contractPath,
     repoRoot: options.repoRoot,
   });
-
-  // Feedback goes as a user message so the system prompt prefix cache stays valid.
   const userMessage = options.feedback?.trim()
     ? feedbackMessage({ role, feedback: options.feedback })
     : undefined;
@@ -99,9 +104,11 @@ export const runStage = async (options: {
   });
 
   const pollIntervalMs = options.pollIntervalMs ?? 500;
-  let activeMs = 0;
-  let idleChecks = 0;
-  while (activeMs < options.timeoutMs) {
+  const startedAt = Date.now();
+  let idleMs = 0;
+  let nudgesSent = 0;
+
+  while (true) {
     const result = readStageResult({
       resultPath,
       runId: options.runId,
@@ -111,31 +118,51 @@ export const runStage = async (options: {
     if (result) {
       return { result, paneId };
     }
+
+    if (Date.now() - startedAt >= options.hardTimeoutMs) {
+      break;
+    }
+
     await sleep(pollIntervalMs);
 
-    // Only count time toward the timeout when the agent is actively working.
+    let isWorking = true;
     if (options.checkAgentWorking) {
-      try {
-        const isWorking = await options.checkAgentWorking(paneId);
-        if (isWorking) {
-          activeMs += pollIntervalMs;
-          idleChecks = 0;
-        } else {
-          idleChecks += 1;
-          // After 120 idle polls (~60s), nudge the agent to complete.
-          if (idleChecks === 120) {
-            console.warn(`⚠️  ${role} idle for ~60s — nudging to complete.`);
-            idleChecks = 0;
-            // We can't re-send text here (different pane context), but we count
-            // idle time toward timeout to eventually force failure.
-          }
-        }
-      } catch {
-        activeMs += pollIntervalMs;
-      }
-    } else {
-      activeMs += pollIntervalMs;
+      isWorking = await options.checkAgentWorking(paneId).catch(() => true);
     }
+    if (isWorking) {
+      idleMs = 0;
+      continue;
+    }
+
+    idleMs += pollIntervalMs;
+    if (idleMs >= NUDGE_AFTER_IDLE_MS && nudgesSent < MAX_NUDGES && options.nudgeWorker) {
+      nudgesSent += 1;
+      idleMs = 0;
+      console.warn(
+        `⚠️  ${role} idle for ~${Math.round(NUDGE_AFTER_IDLE_MS / 1000)}s — nudging (${nudgesSent}/${MAX_NUDGES}).`,
+      );
+      await options
+        .nudgeWorker({
+          paneId,
+          message: `You finished a turn without calling contract_stage_complete. If your ${role} stage work is done, call contract_stage_complete NOW with your final status. If work remains, continue it. Do not ask questions — if stuck, complete with status blocked.`,
+        })
+        .catch(() => {});
+      continue;
+    }
+    if (idleMs >= options.idleTimeoutMs) {
+      break;
+    }
+  }
+
+  // Final re-read — close race between last poll and blocked write.
+  const lastChance = readStageResult({
+    resultPath,
+    runId: options.runId,
+    role,
+    attempt: options.attempt,
+  });
+  if (lastChance) {
+    return { result: lastChance, paneId };
   }
 
   const blockedResult: ContractStageResult = {
@@ -143,7 +170,7 @@ export const runStage = async (options: {
     stage: role,
     attempt: options.attempt,
     status: 'blocked',
-    summary: 'Stage timed out without a schema-valid completion artifact.',
+    summary: `Worker went idle for ${Math.round(options.idleTimeoutMs / 60_000)} min after ${nudgesSent} nudge(s) without a schema-valid completion artifact.`,
     findings: ['No exact contract_stage_complete result was produced before timeout.'],
     filesTouched: [],
     evidence: [],
