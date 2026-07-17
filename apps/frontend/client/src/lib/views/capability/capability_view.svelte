@@ -53,17 +53,6 @@ const { viewModel }: Props = $props();
 
         <!-- Path buttons -->
         <div class="flex flex-col gap-3">
-          <!-- Play Offline Demo — always available, visually dominant when no AI -->
-          <button
-            type="button"
-            class="btn btn-lg {viewModel.localAiDetected || viewModel.cloudConfigured || viewModel.cloudConnections.length > 0 ? 'btn-outline' : 'btn-primary'}"
-            onclick={() => viewModel.selectOfflineDemo()}
-          >
-            <span class="text-lg">🎮</span>
-            Play Offline Demo
-            <span class="badge badge-sm badge-ghost ml-2">No setup</span>
-          </button>
-
           <!-- Use Detected Local AI — enabled when Ollama found -->
           {#if viewModel.localAiDetected}
             <button
@@ -117,12 +106,47 @@ const { viewModel }: Props = $props();
             <span class="text-lg">➕</span>
             Add Cloud AI
           </button>
+
+          <!-- No AI Available — guidance text when no path is available -->
+          {#if !viewModel.localAiDetected && !viewModel.cloudConfigured && viewModel.cloudConnections.length === 0 && !viewModel.isDetecting}
+            <div class="alert alert-warning mt-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6 shrink-0 stroke-current"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <title>Warning</title>
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              <div>
+                <h3 class="font-bold">No Text AI Provider Detected</h3>
+                <p class="text-sm">
+                  Aikami requires a text AI engine to create or continue a campaign. Install Ollama
+                  for local AI, or add a cloud provider to get started.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline"
+              onclick={() => viewModel.startDetection()}
+            >
+              <span class="text-base">🔄</span>
+              Retry Detection
+            </button>
+          {/if}
         </div>
 
         <!-- Privacy note -->
         <p class="text-center text-xs text-base-content/40">
-          API keys are encrypted and stored only on your device. No account required — play offline
-          anytime.
+          API keys are encrypted and stored only on your device.
         </p>
 
         <!-- Error display -->

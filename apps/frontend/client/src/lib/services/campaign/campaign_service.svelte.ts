@@ -3,6 +3,7 @@
 // Singleton campaign lifecycle service — bridges the campaign repository,
 // boot state machine, and game state.
 // Contract: C-313 Introduce the Campaign Aggregate and Boot State Machine
+// Contract: C-323 Enforce the Mandatory Text AI Capability Gate
 
 import {
   BaseFrontendClass,
@@ -10,6 +11,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { Campaign, CapabilityProfile } from '@aikami/types';
+import { AiTextProviderRequiredError } from '@aikami/utils';
 import { aiSettingsService } from '$services';
 import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
@@ -72,6 +74,25 @@ const buildCapabilityProfile = (): CapabilityProfile => {
   };
 };
 
+/**
+ * Returns true when the AI gate bypass is active for QA/CI testing.
+ * Checks window.__AIKAMI_AI_GATE_BYPASS__ first, then PUBLIC_AI_GATE_BYPASS
+ * env var (which is compiled away by Vite in non-emulator builds).
+ */
+const isAiGateBypassed = (): boolean => {
+  if (
+    typeof window !== 'undefined' &&
+    (window as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__
+  ) {
+    return true;
+  }
+  try {
+    return import.meta.env.PUBLIC_AI_GATE_BYPASS === 'true';
+  } catch {
+    return false;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Campaign Service
 // ---------------------------------------------------------------------------
@@ -107,7 +128,10 @@ class CampaignService
   }
 
   /** @inheritdoc */
-  async startNewCampaign(options?: { personaId?: string }): Promise<Campaign> {
+  async startNewCampaign(options?: {
+    personaId?: string;
+    capabilityProfile?: CapabilityProfile;
+  }): Promise<Campaign> {
     if (this.isBusy) {
       throw new Error('Campaign operation already in progress');
     }
@@ -118,6 +142,20 @@ class CampaignService
       const now = new Date().toISOString();
       const state = transition('idle', { type: 'START_NEW' });
 
+      const capabilityProfile = options?.capabilityProfile ?? buildCapabilityProfile();
+
+      // Gate: text AI provider is mandatory unless QA/CI bypass is active
+      if (!capabilityProfile.textProvider && !isAiGateBypassed()) {
+        this.debug('startNewCampaign:gate-blocked', { reason: 'textProvider false' });
+        throw new AiTextProviderRequiredError(
+          'A text AI provider is required to start a campaign. Install Ollama or configure a cloud provider.',
+        );
+      }
+
+      if (isAiGateBypassed() && !capabilityProfile.textProvider) {
+        this.debug('startNewCampaign:gate-bypassed', { mode: 'QA/CI' });
+      }
+
       const campaign: Campaign = {
         id: generateCampaignId(),
         name: 'New Adventure',
@@ -127,7 +165,7 @@ class CampaignService
         seed: generateSeed(),
         createdAt: now,
         updatedAt: now,
-        capabilityProfile: buildCapabilityProfile(),
+        capabilityProfile,
       };
 
       await campaignRepository.create(campaign);

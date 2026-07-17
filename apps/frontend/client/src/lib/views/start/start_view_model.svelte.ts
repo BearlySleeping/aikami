@@ -3,6 +3,7 @@
 // ViewModel for the root Start Menu. Bridges AuthService (Firebase auth),
 // RouterService (SPA navigation), and Tauri window API (desktop quit).
 // Supports optional Google Sign-In — the game is fully functional without it.
+// Contract: C-323 Enforce the Mandatory Text AI Capability Gate (AC-3)
 
 import {
   BaseViewModel,
@@ -12,7 +13,7 @@ import {
 import { personaService } from '$lib/services/persona/persona_repository.svelte';
 import type { SaveSlotInfo } from '$services';
 import {
-  aiSettingsService,
+  aiGatewayService,
   authService,
   campaignService,
   equipmentService,
@@ -46,9 +47,6 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether the credits modal is visible. */
   readonly showCredits: boolean;
 
-  /** Whether the missing AI text provider dialog is visible. */
-  readonly showMissingProvidersDialog: boolean;
-
   /** Whether there are existing IndexedDB saves available. */
   readonly hasSaves: boolean;
 
@@ -78,15 +76,6 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Closes the credits modal. */
   hideCreditsModal(): void;
-
-  /** Opens the missing providers dialog. */
-  openMissingProvidersDialog(): void;
-
-  /** Closes the missing providers dialog. */
-  closeMissingProvidersDialog(): void;
-
-  /** Navigates to the settings page for provider configuration. */
-  goToSettingsForProviderSetup(): Promise<void>;
 
   /** Credit groups for the credits modal. */
   readonly creditGroups: readonly CreditGroup[];
@@ -192,9 +181,6 @@ class StartViewModel
   /** Whether the credits modal is currently visible. */
   showCredits = $state(false);
 
-  /** Whether the missing AI text provider dialog is visible. */
-  showMissingProvidersDialog = $state(false);
-
   /** @inheritdoc */
   get isLoggedIn(): boolean {
     return authService.isLoggedIn;
@@ -217,8 +203,11 @@ class StartViewModel
 
   /** @inheritdoc */
   async startNewGame(): Promise<void> {
-    if (!this._hasTextProvider()) {
-      this.showMissingProvidersDialog = true;
+    if (!this._resolveTextProvider()) {
+      await routerService.goToRoute('capability', {
+        queryParameters: { reason: 'text-required' },
+        pathParameters: undefined,
+      });
       return;
     }
 
@@ -295,8 +284,11 @@ class StartViewModel
 
   /** @inheritdoc */
   async continueGame(): Promise<void> {
-    if (!this._hasTextProvider()) {
-      this.showMissingProvidersDialog = true;
+    if (!this._resolveTextProvider()) {
+      await routerService.goToRoute('capability', {
+        queryParameters: { reason: 'text-required' },
+        pathParameters: undefined,
+      });
       return;
     }
 
@@ -400,25 +392,6 @@ class StartViewModel
     this.showCredits = false;
   }
 
-  /** @inheritdoc */
-  openMissingProvidersDialog(): void {
-    this.showMissingProvidersDialog = true;
-  }
-
-  /** @inheritdoc */
-  closeMissingProvidersDialog(): void {
-    this.showMissingProvidersDialog = false;
-  }
-
-  /** @inheritdoc */
-  async goToSettingsForProviderSetup(): Promise<void> {
-    this.showMissingProvidersDialog = false;
-    await routerService.goToRoute('settings', {
-      queryParameters: { from: 'start' },
-      pathParameters: undefined,
-    });
-  }
-
   /**
    * Returns the credit groups for the credits modal.
    * Public getter so the View can iterate groups.
@@ -445,24 +418,17 @@ class StartViewModel
   }
 
   /**
-   * Returns true if a text AI provider is configured.
-   * Checks for a non-empty API key (cloud provider) or a localhost
-   * endpoint with a model name (local text service).
+   * Resolves whether a text AI provider is available via the gateway.
+   * Returns true when the gateway can resolve a text generation mode.
+   * On failure (no provider configured, gateway throws), returns false.
    */
-  private _hasTextProvider(): boolean {
-    const { textProvider } = aiSettingsService;
-
-    // Cloud provider with a configured API key
-    if (textProvider.apiKey) {
+  private _resolveTextProvider(): boolean {
+    try {
+      aiGatewayService.resolveMode('text');
       return true;
+    } catch {
+      return false;
     }
-
-    // Local text service: endpoint is a localhost URL with a model name
-    if (textProvider.endpoint?.includes('localhost') && textProvider.model) {
-      return true;
-    }
-
-    return false;
   }
 
   /** @inheritdoc */

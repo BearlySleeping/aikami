@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/start/start_view_model.test.ts
+// Contract: C-323 AC-3 (start menu routes to capability screen instead of dialog)
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // $state and $derived are polyfilled globally via test_preload.ts.
@@ -37,7 +38,7 @@ let resetCalls = 0;
 let fetchSavesResult: Array<{ id: string; timestamp: number; mapName: string }> = [];
 let getSavePayloadResult: string | undefined;
 let getSavePayloadError: Error | undefined;
-let routeCalls: Array<{ route: string }> = [];
+let routeCalls: Array<{ route: string; options?: { queryParameters?: Record<string, string>; pathParameters?: unknown } }> = [];
 let pendingPayload: string | undefined;
 
 // ---------------------------------------------------------------------------
@@ -75,9 +76,11 @@ const _setupServiceOverrides = (): void => {
   );
 
   // ── routerService ─────────────────────────────────────────────────────
-  (_svcStubs.routerService as Record<string, unknown>).goToRoute = mock(async (route: string) => {
-    routeCalls.push({ route });
-  });
+  (_svcStubs.routerService as Record<string, unknown>).goToRoute = mock(
+    async (route: string, options?: { queryParameters?: Record<string, string>; pathParameters?: unknown }) => {
+      routeCalls.push({ route, options });
+    },
+  );
 
   // ── setPendingGameLoad ───────────────────────────────────────────────
   (_svcStubs.setPendingGameLoad as unknown as { fn: (...args: never) => unknown }).fn = mock(
@@ -86,12 +89,27 @@ const _setupServiceOverrides = (): void => {
     },
   );
 
+  // ── aiGatewayService.resolveMode — mock text resolution ──
+  (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
+    // Default: no-op (succeeds), overridden in individual tests
+  });
+
   // ── aiSettingsService.textProvider — ensure it returns a configured key ──
   Object.defineProperty(_svcStubs.aiSettingsService, 'textProvider', {
     get: () => ({ apiKey: 'test-key', endpoint: '', model: '' }),
     configurable: true,
   });
 };
+
+// ---------------------------------------------------------------------------
+// Mock persona_repository (pre-existing Bun resolution issue for .svelte → .svelte.ts)
+// ---------------------------------------------------------------------------
+
+mock.module('$lib/services/persona/persona_repository.svelte', () => ({
+  personaService: {
+    setActivePersona: mock(async () => {}),
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Import StartViewModel AFTER mocks are configured
@@ -205,6 +223,57 @@ describe('StartViewModel', () => {
       expect(routeCalls).toHaveLength(0);
       expect(vm.errorMessage).toBe('Failed to load save. Try starting a new game.');
     });
+  });
+
+  // ── AC-3: Routes to capability screen when text provider unresolved ──
+
+  test('startNewGame routes to /capability when gateway resolveMode fails', async () => {
+    const vm = createViewModel();
+
+    // Make gateway resolution fail
+    (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
+      throw new Error('No text generation provider configured.');
+    });
+
+    await vm.startNewGame();
+
+    expect(routeCalls).toHaveLength(1);
+    expect(routeCalls[0].route).toBe('capability');
+    expect(routeCalls[0].options?.queryParameters?.reason).toBe('text-required');
+  });
+
+  test('continueGame routes to /capability when gateway resolveMode fails', async () => {
+    const vm = createViewModel();
+    vm.availableSaves = [{ id: 'auto-save', timestamp: 1000, mapName: 'Town' }];
+    vm.hasSaves = true;
+
+    // Make gateway resolution fail
+    (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
+      throw new Error('No text generation provider configured.');
+    });
+
+    await vm.continueGame();
+
+    expect(routeCalls).toHaveLength(1);
+    expect(routeCalls[0].route).toBe('capability');
+    expect(routeCalls[0].options?.queryParameters?.reason).toBe('text-required');
+  });
+
+  test('startNewGame routes to /setup when gateway resolves successfully', async () => {
+    const vm = createViewModel();
+
+    // Gateway resolves successfully (default mock returns undefined, which is fine)
+    (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => ({
+      capability: 'text',
+      mode: 'offline',
+      provider: 'ollama',
+      model: 'llama3',
+    }));
+
+    await vm.startNewGame();
+
+    expect(routeCalls).toHaveLength(1);
+    expect(routeCalls[0].route).toBe('setup');
   });
 
   // ── AC-1/3: initialize() checks for existing saves ────────────────────

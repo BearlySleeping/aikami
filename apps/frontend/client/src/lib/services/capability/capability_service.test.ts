@@ -14,6 +14,22 @@ import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/
 
 // $state is polyfilled globally via test_preload.ts
 
+// ── Mock @aikami/frontend/ai-gateway ──────────────────────────────────
+// Bun test can't resolve TypeScript path aliases for workspace packages.
+// The toDetectionStatus function is the only import from this module in
+// capability_service, so we provide a minimal mock.
+mock.module('@aikami/frontend/ai-gateway', () => ({
+  toDetectionStatus: (result: AiDetectionResult): string => {
+    if (!result.available) {
+      return 'not_found';
+    }
+    if (result.mode === 'byok') {
+      return 'configured';
+    }
+    return 'detected';
+  },
+}));
+
 // ── Shared gateway mock ────────────────────────────────────────────────
 // The CapabilityService imports aiGatewayService from $services. Mock the
 // barrel with a mutable gateway surface so each test controls detection
@@ -179,7 +195,7 @@ describe('CapabilityService', () => {
     expect(snapshot.voiceStatus).toBe('not_found');
     expect(snapshot.textProviderId).toBeUndefined();
     expect(snapshot.textModelName).toBeUndefined();
-    expect(snapshot.summary).toInclude('offline demo');
+    expect(snapshot.summary).toInclude('install Ollama');
   });
 
   test('detect returns positive summary when text unavailable but image/voice available', async () => {
@@ -228,7 +244,7 @@ describe('CapabilityService', () => {
     expect(snapshot.textStatus).toBe('error');
     expect(snapshot.imageStatus).toBe('error');
     expect(snapshot.voiceStatus).toBe('error');
-    expect(snapshot.summary).toInclude('error');
+    expect(snapshot.summary).toInclude('retry or configure');
   });
 
   test('detect leaves textModelName undefined when mode resolution throws (nothing configured)', async () => {

@@ -4,16 +4,50 @@
 // Uses the test_preload fake LocalDatabaseInterface instead of
 // mock IndexedDB.
 // Contract: C-313 Introduce the Campaign Aggregate and Boot State Machine
+// Contract: C-323 Enforce the Mandatory Text AI Capability Gate (AC-1, AC-4)
+
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { Campaign } from '@aikami/types';
 
+// Mock @aikami/utils before it gets resolved — Bun's tsconfig paths don't
+// cover workspace packages in test mode, so we provide the AiTextProviderRequiredError
+// class locally.
+mock.module('@aikami/utils', () => {
+  class AiTextProviderRequiredError extends Error {
+    readonly code = 'text-provider-required' as const;
+    constructor(message = 'A text AI provider is required to start a campaign.') {
+      super(message);
+      this.name = 'AiTextProviderRequiredError';
+    }
+  }
+  return {
+    AiTextProviderRequiredError,
+    isAiTextProviderRequiredError: (error: unknown): error is AiTextProviderRequiredError =>
+      error instanceof AiTextProviderRequiredError,
+  };
+});
+
+const { AiTextProviderRequiredError } = await import('@aikami/utils');
+
 // Mocks — must run before any imports that transitively touch $services
 // ---------------------------------------------------------------------------
 
+/** Mutable stubs for aiSettingsService — used to control gate behavior. */
+let _textProviderApiKey = '';
+let _textProviderEndpoint = 'http://localhost:11434';
+let _textProviderModel = 'llama3';
+
 mock.module('$services', () => ({
   aiSettingsService: {
-    textProvider: { apiKey: '', endpoint: 'http://localhost:11434', model: 'llama3' },
+    get textProvider() {
+      return {
+        apiKey: _textProviderApiKey,
+        endpoint: _textProviderEndpoint,
+        model: _textProviderModel,
+      };
+    },
     imageProvider: { apiKey: '', endpoint: '' },
     ttsProvider: { apiKey: '', endpoint: '' },
   },
@@ -165,6 +199,87 @@ describe('CampaignService', () => {
     getSvc().completeSetup();
     await getSvc().saveCampaign({ slotId: 'manual-1' });
     expect(getSvc().activeCampaign?.lastSaveSlotId).toBe('manual-1');
+  });
+
+  // ── AC-1: Gate rejection when text provider is false ──────────────────
+
+  test('startNewCampaign throws AiTextProviderRequiredError when textProvider is false', async () => {
+    // Disable all text providers
+    _textProviderApiKey = '';
+    _textProviderEndpoint = '';
+    _textProviderModel = '';
+
+    await expect(getSvc().startNewCampaign()).rejects.toBeInstanceOf(AiTextProviderRequiredError);
+  });
+
+  test('gate rejection message includes actionable guidance', async () => {
+    _textProviderApiKey = '';
+    _textProviderEndpoint = '';
+    _textProviderModel = '';
+
+    try {
+      await getSvc().startNewCampaign();
+      expect(false).toBe(true); // Should not reach here
+    } catch (error) {
+      expect(error).toBeInstanceOf(AiTextProviderRequiredError);
+      expect(String(error)).toInclude('text AI provider');
+    }
+  });
+
+  test('gate rejection does not persist campaign to DB', async () => {
+    _textProviderApiKey = '';
+    _textProviderEndpoint = '';
+    _textProviderModel = '';
+
+    // Count campaigns before the rejected attempt
+    await getSvc().refreshCampaigns();
+    const preCount = getSvc().campaigns.length;
+
+    try {
+      await getSvc().startNewCampaign();
+    } catch {
+      // Expected
+    }
+
+    // No new campaign should have been created
+    await getSvc().refreshCampaigns();
+    expect(getSvc().campaigns.length).toBe(preCount);
+  });
+
+  // ── AC-4: QA/CI bypass allows creation without text provider ──────────
+
+  test('startNewCampaign succeeds with textProvider:false when bypass window flag is set', async () => {
+    _textProviderApiKey = '';
+    _textProviderEndpoint = '';
+    _textProviderModel = '';
+
+    // Set the bypass flag
+    (window as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__ = true;
+
+    try {
+      const campaign = await getSvc().startNewCampaign();
+      expect(campaign.state).toBe('creating');
+      expect(campaign.capabilityProfile.textProvider).toBe(false);
+    } finally {
+      delete (window as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__;
+    }
+  });
+
+  test('startNewCampaign with explicit capabilityProfile overrides buildCapabilityProfile', async () => {
+    _textProviderApiKey = 'test-key';
+    _textProviderEndpoint = '';
+    _textProviderModel = '';
+
+    const campaign = await getSvc().startNewCampaign({
+      capabilityProfile: {
+        textProvider: true,
+        imageProvider: false,
+        voiceProvider: false,
+      },
+    });
+    expect(campaign.capabilityProfile.textProvider).toBe(true);
+    expect(campaign.capabilityProfile.imageProvider).toBe(false);
+    expect(campaign.capabilityProfile.voiceProvider).toBe(false);
   });
 
   test('saveCampaign throws without active campaign', async () => {
