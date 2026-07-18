@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-18
-> Files: 285 across 14 categories
+> Files: 286 across 14 categories
 
 ## Quick Start (Read These First)
 
@@ -275,6 +275,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-329: Integrate the Demo Quest from Offer Through Reward](contracts/C-329-integrate-the-demo-quest-from-offer-through-reward.md)
 - [Contract C-330: Integrate Deterministic Demo Combat and Declared Skill Checks](contracts/C-330-integrate-deterministic-demo-combat-and-declared-skill-check.md)
 - [Contract C-331: Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop](contracts/C-331-integrate-inventory-equipment-loot-and-vendor-into-the-demo.md)
+- [Contract C-332: Redesign the Minimal Game HUD and Overlay Navigation](contracts/C-332-redesign-the-minimal-game-hud-and-overlay-navigation.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
