@@ -5,8 +5,10 @@
 // and credits for a game world.
 // Contract: C-315 Define a Versioned Campaign Content Pack and Atomic Loader
 // Contract: C-316 Build the Authored Emberwatch Demo Adventure
+// Contract: C-327 AC-3 — optional onboarding section added
 
 import Type, { type Static } from 'typebox';
+import { OnboardingSectionSchema } from './onboarding_hints.ts';
 
 // ---------------------------------------------------------------------------
 // Semver validation pattern (x.y.z with optional pre-release + build)
@@ -384,6 +386,8 @@ export const ContentPackManifestSchema = Type.Object({
   encounters: Type.Optional(ManifestEncounterMapSchema),
   /** Optional: adventure credits (C-316) */
   credits: Type.Optional(ContentPackCreditsSchema),
+  /** Optional: onboarding/tutorial hints (C-327) */
+  onboarding: Type.Optional(OnboardingSectionSchema),
 });
 
 export type ContentPackManifest = Static<typeof ContentPackManifestSchema>;

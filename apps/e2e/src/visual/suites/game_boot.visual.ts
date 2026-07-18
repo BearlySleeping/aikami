@@ -23,6 +23,9 @@ const GameBootSchema = Type.Object({
   retryButtonVisible: Type.Boolean({
     description: 'Whether a Retry button is visible (only expected in error state)',
   }),
+  returnToMenuButtonVisible: Type.Boolean({
+    description: 'Whether a Return to Menu button is visible (only expected in error state)',
+  }),
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
 
@@ -71,6 +74,11 @@ export default defineConfig({
     {
       name: 'boot-loading-stage',
       prompt: BOOT_LOADING_PROMPT,
+      schema: GameBootSchema,
+    },
+    {
+      name: 'boot-error-stage',
+      prompt: BOOT_ERROR_PROMPT,
       schema: GameBootSchema,
     },
   ],

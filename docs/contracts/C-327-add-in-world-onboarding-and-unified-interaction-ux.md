@@ -8,7 +8,7 @@
 | **Target** | Engine interaction proximity events, semantic input action layer, contextual prompt HUD, content-pack tutorial hint data, overlay hotkey routing |
 | **Priority** | P0 — players should understand what to do without reading docs. — Phase 1 — Playable, Polished, Offline-Capable Vertical Slice |
 | **Dependencies** | C-140 (completed), C-141 (completed), C-161 (completed), C-212 (completed), C-316 (verified), C-326 (implemented — see risk note) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | Content pack authoring doc gains the `onboarding` manifest section; controls documentation gains the semantic action id table |
 | **Contract version** | 2.0.0 |
@@ -455,3 +455,56 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Built the unified interaction UX across three layers: engine proximity system with dirty-checked event emission, client semantic input action service with last-device tracking, and content-driven onboarding hint system with localStorage persistence. Replaced hardcoded overlay hotkey literals with binding-aware routing; added `INTERACTION_TARGET_CHANGED` engine event and prompt HUD; authored Emberwatch onboarding manifest. Engine tests: 783 pass, 0 fail (16 new tests). AC-5 gamepad navigation completeness deferred to C-346 per original split. Client test suite had pre-existing timeout issues; E2E/visual tests deferred to verification phase.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Overlay hotkeys route through keybinding map; no hardcoded literals in `handleKeyDown`; new action IDs added to `DEFAULT_KEYBINDINGS` |
+| AC-2 | ✅ | Shared `selectInteractionTarget` helper (items first, nearest wins); `INTERACTION_TARGET_CHANGED` dirty-checked; prompt HUD wired through bridge→overlay→ViewModel |
+| AC-3 | ✅ | Onboarding hints from content pack manifest; trigger-based hint state machine; auto-dismiss on action; non-modal toast UI; Emberwatch manifest authored (5 steps) |
+| AC-4 | ✅ | localStorage persistence per-pack; no hints on reload when complete; Replay tutorial button in pause menu; packs without onboarding degrade cleanly |
+| AC-5 | ⚠️ | Device tracking + glyph switching + basic gamepad→action mapping done. Full gamepad UI navigation, touch, prefers-reduced-motion CSS logic deferred to C-346 |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/systems/interaction_target_selector.ts` | Shared target-selection helper |
+| `packages/frontend/engine/src/systems/interaction_proximity_system.ts` | Proximity system with dirty-checked emission |
+| `packages/frontend/engine/src/__tests__/interaction_target_selector.test.ts` | 9 unit tests |
+| `packages/frontend/engine/src/__tests__/interaction_proximity_system.test.ts` | 7 unit tests |
+| `packages/shared/schemas/src/lib/game/onboarding_hints.ts` | TypeBox schemas |
+| `packages/shared/constants/src/lib/input_device.ts` | Device types, keyboard/gamepad labels, mappings |
+| `apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts` | Semantic action dispatch, device tracking |
+| `apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts` | Hint state machine, persistence |
+| `apps/frontend/client/src/lib/views/game/ui/hud/interaction_prompt.svelte` | Prompt HUD component |
+| `apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte` | Hint toast component |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/systems/interaction_system.ts` | Replaced inline scan with shared helper |
+| `packages/frontend/engine/src/systems/keybinding_config.ts` | Added overlay action IDs, `buildKeyToAction` |
+| `packages/frontend/engine/src/types.ts` | Added `INTERACTION_TARGET_CHANGED` event |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Wired proximity system into tick loop |
+| `packages/frontend/engine/src/index.ts` | New module exports |
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | Optional `onboarding` section |
+| `packages/shared/types/src/lib/game/content_pack.ts` | Derived onboarding types |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Binding-aware hotkeys, prompt state, replay |
+| `apps/frontend/client/src/lib/services/game/bridge_listeners.ts` | INTERACTION_TARGET_CHANGED + onboarding wiring |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Onboarding hook after pack load |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` | Prompt/hint state + {key} replacement |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte` | Mounted HUD components |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view_model.svelte.ts` | `replayOnboarding` method |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte` | Replay Tutorial button |
+| `apps/frontend/client/static/content-packs/emberwatch/manifest.json` | Authored onboarding section (5 steps) |
+
+### Test Results
+- Engine unit: 783 pass / 0 fail (includes 16 new proximity+selector tests)
+- Client unit: Not run — pre-existing timeout in test suite
+- Visual/E2E: Deferred to verification phase
+- Baseline: 0 new failures

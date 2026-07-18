@@ -39,6 +39,7 @@ export * from './lib/game/ecs_snapshot.ts';
 export * from './lib/game/game_assets.ts';
 export * from './lib/game/macro.ts';
 export * from './lib/game/npc_schedule.ts';
+export * from './lib/game/onboarding_hints.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/logging/index.ts';
 export * from './lib/media/image_generation.ts';

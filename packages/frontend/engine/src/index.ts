@@ -396,7 +396,15 @@ export {
   setFactionProtection,
   updateGoapScheduler,
 } from './systems/goap_scheduler_system.ts';
+export {
+  clearInteractionProximityState,
+  updateInteractionProximity,
+} from './systems/interaction_proximity_system.ts';
 export { handleInteract } from './systems/interaction_system.ts';
+export {
+  type InteractionTarget,
+  selectInteractionTarget,
+} from './systems/interaction_target_selector.ts';
 // JPS Pathfinding (C-192)
 export {
   cancelPathfinding,
@@ -407,9 +415,15 @@ export {
 } from './systems/jps_pathfinder_system.ts';
 // Keybinding config (shared between settings UI and engine)
 export {
+  buildKeyToAction,
   DEFAULT_KEYBINDINGS,
+  type InputActionId,
   KEYBINDING_STORAGE_KEY,
   type KeybindingMap,
+  keyToDirection,
+  loadKeybindings,
+  MOVEMENT_ACTION_IDS,
+  OVERLAY_ACTION_IDS,
 } from './systems/keybinding_config.ts';
 export type { RenderEntry } from './systems/render_system.ts';
 export {

@@ -1,8 +1,9 @@
 // scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts
 // biome-ignore-all lint/style/useNamingConvention: Herdr JSON fields mirror the external CLI contract
+
+import { execSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { execSync } from 'node:child_process';
 import { ensureServer, findWorkspace, herdr, herdrJson } from '../../herdr/session.ts';
 import { provisionGitWorktree } from '../git_worktree.ts';
 import { logPath } from './manifest_store.ts';
@@ -444,14 +445,18 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       if (existsSync(paraglideSrc) && !existsSync(paraglideDst)) {
         try {
           execSync(`cp -r '${paraglideSrc}' '${paraglideDst}'`, { stdio: 'pipe' });
-        } catch { /* non-fatal */ }
+        } catch {
+          /* non-fatal */
+        }
       }
       // Also copy .env files for dev server configuration.
       for (const envFile of ['.env', '.env.local', '.env.emulator']) {
         const envSrc = join(this._repoRoot, `apps/frontend/client/${envFile}`);
         const envDst = join(cwd, `apps/frontend/client/${envFile}`);
         if (existsSync(envSrc) && !existsSync(envDst)) {
-          try { copyFileSync(envSrc, envDst); } catch {}
+          try {
+            copyFileSync(envSrc, envDst);
+          } catch {}
         }
       }
     }
