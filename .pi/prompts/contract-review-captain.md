@@ -18,39 +18,13 @@ If the system prompt says `🚀 YOLO MODE`, DO NOT WAIT for the user. Automate e
 ### Y1: Create ready PR immediately
 `gh_create_pr` with `draft=false`. Use Phase 1 summary as body.
 
-### Y2: Trigger CodeRabbit review
-Comment `@coderabbitai review` on the PR to start review.
+### Y2: Trigger + wait for CodeRabbit autofix
+Call `code_rabbit_autofix` with the PR number and `merge=true`.
+This triggers review, waits for completion, applies autofixes, validates, and merges.
 
-### Y3: Wait for CodeRabbit + handle rate limits
-Loop every 60s:
-```bash
-# Check if review is done
-gh pr view <number> --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai") | .state'
-
-# Check for rate limits
-gh pr view <number> --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body' | grep -oP 'available in:?\s*\K[\d]+' || true
-```
-
-- If "Next review available in X minutes": wait X minutes, then comment `@coderabbitai review` again
-- If state is `APPROVED`: go to Y6
-- If state is `CHANGES_REQUESTED`: go to Y4
-
-### Y4: Read findings
-Use `get_coderabbit_reviews` MCP tool to fetch unresolved threads. Read each finding carefully.
-
-### Y5: Apply fixes
-For each finding where you can determine the correct fix:
-1. Read the affected file
-2. Use `edit` to apply the fix
-3. Commit: `git add -A && git commit -m "fix: apply CodeRabbit auto-fixes — <summary>" && git push`
-After all fixes: comment `@coderabbitai review` and go back to Y3.
-
-If you cannot determine the fix for any finding: call `contract_review_decision` with `reject`.
-
-### Y6: Validate + Merge
-1. Run `validate({test: true})` to confirm tests pass
-2. If tests fail → call `contract_review_decision` with `reject`
-3. If tests pass → call `contract_review_decision` with `merge`
+You do NOT need to manually poll, fix, or merge — the tool handles everything.
+If it succeeds, call `contract_review_decision` with `merge`.
+If it fails or times out, call `contract_review_decision` with `reject`.
 
 ---
 
