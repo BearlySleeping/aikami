@@ -927,26 +927,37 @@ export const runContractPipeline = async (options: {
               console.log(`\n✅ PR ready: ${prUrl}\n`);
               manifest = transition({ manifest, next: 'pr_created' });
             } else {
-              try {
-                execSync(`gh pr ready ${prUrl}`, {
+              // In YOLO mode, Captain already merged via gh_merge_pr.
+              // Orchestrator just syncs main + cleans up.
+              if (options.yolo) {
+                syncMainOnMerge(options.repoRoot);
+                if (headBranch && adapter.getWorkspacePath()) {
+                  cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+                }
+                manifest = transition({ manifest, next: 'merged' });
+                console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
+              } else {
+                try {
+                  execSync(`gh pr ready ${prUrl}`, {
+                    encoding: 'utf-8',
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    cwd: options.repoRoot,
+                    timeout: 15000,
+                  });
+                } catch {}
+                execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
                   encoding: 'utf-8',
                   stdio: ['pipe', 'pipe', 'pipe'],
                   cwd: options.repoRoot,
-                  timeout: 15000,
+                  timeout: 60000,
                 });
-              } catch {}
-              execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'pipe'],
-                cwd: options.repoRoot,
-                timeout: 60000,
-              });
-              syncMainOnMerge(options.repoRoot);
-              if (headBranch && adapter.getWorkspacePath()) {
-                cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+                syncMainOnMerge(options.repoRoot);
+                if (headBranch && adapter.getWorkspacePath()) {
+                  cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+                }
+                manifest = transition({ manifest, next: 'merged' });
+                console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
               }
-              manifest = transition({ manifest, next: 'merged' });
-              console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
             }
           } else if (decision.decision === 'change') {
             console.log('\n🔄 Retrying — back to implementer.\n');
@@ -994,38 +1005,49 @@ export const runContractPipeline = async (options: {
           console.log(`\n✅ PR ready for review: ${prUrl}\n`);
           manifest = transition({ manifest, next: 'pr_created' });
         } else if (decision.decision === 'merge') {
-          try {
-            execSync(`gh pr ready ${prUrl}`, {
+          // In YOLO mode, the Captain already executed the merge via gh_merge_pr.
+          // The orchestrator just syncs main and cleans up.
+          if (options.yolo) {
+            console.log('\n🚀 YOLO: Captain merged — syncing main + cleanup.\n');
+            syncMainOnMerge(options.repoRoot);
+            if (headBranch && adapter.getWorkspacePath()) {
+              cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+            }
+            manifest = transition({ manifest, next: 'merged' });
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `PR merged by Captain: ${prUrl}`,
+            });
+            console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
+          } else {
+            // Non-YOLO: orchestrator handles the merge.
+            try {
+              execSync(`gh pr ready ${prUrl}`, {
+                encoding: 'utf-8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                cwd: options.repoRoot,
+                timeout: 15000,
+              });
+            } catch {}
+            execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
               encoding: 'utf-8',
               stdio: ['pipe', 'pipe', 'pipe'],
               cwd: options.repoRoot,
-              timeout: 15000,
+              timeout: 60000,
             });
-          } catch {}
-
-          // YOLO: the review captain already waited for CodeRabbit and applied
-          // autofixes. Merge immediately — no orchestrator-side polling needed.
-          if (options.yolo) {
-            console.log('\n🚀 YOLO: auto-merging (captain handled CodeRabbit).\n');
+            syncMainOnMerge(options.repoRoot);
+            if (headBranch && adapter.getWorkspacePath()) {
+              cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+            }
+            manifest = transition({ manifest, next: 'merged' });
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `PR merged: ${prUrl}`,
+            });
+            console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
           }
-
-          execSync(`gh pr merge ${prUrl} --squash --delete-branch`, {
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: options.repoRoot,
-            timeout: 60000,
-          });
-          syncMainOnMerge(options.repoRoot);
-          if (headBranch && adapter.getWorkspacePath()) {
-            cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
-          }
-          manifest = transition({ manifest, next: 'merged' });
-          pipelineLog({
-            runId: manifest.runId,
-            cwd: options.repoRoot,
-            message: `PR merged: ${prUrl}`,
-          });
-          console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
         } else if (decision.decision === 'change') {
           pipelineLog({
             runId: manifest.runId,

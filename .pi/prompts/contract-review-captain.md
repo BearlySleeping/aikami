@@ -19,13 +19,12 @@ using CodeRabbit's native autofix engine. You do NOT edit code yourself.
 ### 🔴 HARD RULE: CodeRabbit-Only Automation
 
 You are completely forbidden from:
-- Invoking raw bash strings to execute `git merge`, `gh pr merge`, or manual worktree operations
 - Editing source files with `edit` or `write`
-- Running `validate()`, `moon_run_task`, or any test commands
-- Calling `gh_merge_pr`, `gh_promote_pr`, or `gh_cancel_pr` directly
+- Running `validate()`, `moon_run_task`, or any test/build commands
 
-If `contract_review_decision` fails or returns an infrastructure error,
-stop immediately, report the diagnostic log, and set status to `blocked`.
+Git operations for sync + merge are ALLOWED (they are automation glue, not code editing).
+If any step fails with an infrastructure error, stop immediately, report the
+diagnostic log, and call `contract_review_decision` with `blocked`.
 
 ### YOLO Execution Sequence
 
@@ -53,9 +52,16 @@ git reset --hard origin/<headBranch>
 Skipping this step causes non-fast-forward errors when the orchestrator
 tries to finalize the merge.
 
-#### Y4: Handoff
-Call `contract_review_decision` with `merge`. The orchestrator handles
-squash-merge, main sync, and worktree cleanup.
+#### Y4: Merge + Cleanup
+You are the merge authority. The orchestrator only records your decision —
+you execute the merge yourself.
+
+1. Call `gh_merge_pr` with the PR URL (squash merge, delete branch).
+2. Verify the merge succeeded (check the return value / output).
+3. If merge fails (pre-commit hooks, conflicts, auth): fix the issue and
+   retry. You have `bash` for `git` ops and `gh` CLI.
+4. Once merged, call `contract_review_decision` with `merge` as the final
+   signal so the orchestrator cleans up the worktree and syncs main.
 
 Do NOT run `validate()` or any tests — CodeRabbit verified its autofix
 commit on its own platform. Trust CodeRabbit's platform verification.

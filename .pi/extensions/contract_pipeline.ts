@@ -286,8 +286,38 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         createdAt: new Date().toISOString(),
       };
       atomicWrite({ path: reviewPath, value: decision });
+
+      // When the Captain signals 'merge', verify the PR was actually merged.
+      // The orchestrator only syncs main + cleans up — it trusts the Captain
+      // already called gh_merge_pr. If the PR is still open, warn loudly.
+      let mergeWarning = '';
+      if (params.decision === 'merge' && manifest.prUrl) {
+        try {
+          const state = execSync(`gh pr view ${manifest.prUrl} --json state --jq '.state'`, {
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            timeout: 10000,
+          }).trim();
+          if (state === 'OPEN') {
+            mergeWarning = [
+              '',
+              '⚠️  WARNING: PR is still OPEN.',
+              `   ${manifest.prUrl}`,
+              '   The merge may have failed. Call gh_merge_pr before re-signaling.',
+            ].join('\n');
+            console.warn(mergeWarning);
+          } else if (state === 'MERGED') {
+            console.log(`✅ PR verified as MERGED: ${manifest.prUrl}`);
+          }
+        } catch {
+          // Can't verify — proceed but don't claim certainty.
+        }
+      }
+
       return {
-        content: [{ type: 'text', text: `Review decision recorded: ${params.decision}` }],
+        content: [
+          { type: 'text', text: `Review decision recorded: ${params.decision}.${mergeWarning}` },
+        ],
         details: decision,
       };
     },

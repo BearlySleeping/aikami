@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 122 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 121 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -146,7 +146,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-327 | Add In World Onboarding And Unified Interaction Ux | 🛠️ implemented | v2 |
 | C-329 | Integrate The Demo Quest From Offer Through Reward | 👍 approved | v2 |
 | C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | v2 |
-| C-331 | Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop | ⏳ not_started (no contract file) | v1 |
 | C-332 | Redesign the Minimal Game HUD and Overlay Navigation | ⏳ not_started (no contract file) | v1 |
 | C-333 | Simplify Settings with Progressive Disclosure | ⏳ not_started (no contract file) | v1 |
 | C-334 | Make Local Save, Continue, Autosave, and Recovery Reliable | ⏳ not_started (no contract file) | v1 |

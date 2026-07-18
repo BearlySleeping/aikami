@@ -27,13 +27,23 @@ export const CONTRACT_ROLE_MODEL_TIER: Record<string, ModelTier> = {
   review: 'pro',
 } as const;
 
-/** Per-stage thinking levels — DeepSeek bills thinking tokens as output. */
+/**
+ * Per-stage thinking levels.
+ *
+ * DeepSeek V4 Pro only natively supports three thinking levels:
+ *   off (non-thinking), high, max.
+ * `low` and `medium` are NOT native — wrappers silently map them to
+ * `high`, adding routing overhead and latency. We use only native
+ * levels here to avoid the mapping layer.
+ *
+ * 🔴 DeepSeek bills thinking tokens as output tokens.
+ */
 export const CONTRACT_ROLE_THINKING_LEVEL: Record<string, ThinkingLevel> = {
-  writer: 'medium',
-  critic: 'low',
-  implementer: 'medium',
-  verifier: 'low',
-  review: 'medium',
+  writer: 'high',
+  critic: 'high',
+  implementer: 'high',
+  verifier: 'high',
+  review: 'high',
 } as const;
 
 /** Resolve the model slug for a contract pipeline role. Never undefined. */
@@ -42,4 +52,4 @@ export const getContractModelForRole = (role: string): string =>
 
 /** Resolve the thinking level for a contract pipeline role. */
 export const getContractThinkingForRole = (role: string): ThinkingLevel =>
-  CONTRACT_ROLE_THINKING_LEVEL[role] ?? 'low';
+  CONTRACT_ROLE_THINKING_LEVEL[role] ?? 'high';
