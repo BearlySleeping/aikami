@@ -126,8 +126,8 @@ export default defineConfig({
         // Assert reduced-motion actually disables animation (AC-5)
         const hintElement = page.locator('.onboarding-hint');
         if (await hintElement.isVisible()) {
-          const animName = await hintElement.evaluate((el) =>
-            window.getComputedStyle(el).animationName,
+          const animName = await hintElement.evaluate(
+            (el) => window.getComputedStyle(el).animationName,
           );
           expect(animName).toBe('none');
         }

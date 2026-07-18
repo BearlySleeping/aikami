@@ -353,8 +353,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       statuses: ['working', 'done'],
       timeoutMs: SEND_ACCEPT_TIMEOUT_MS,
     });
-    if (accepted) return;
-    if (await isCommandRunning(options.paneId).catch(() => false)) return;
+    if (accepted) {
+      return;
+    }
+    if (await isCommandRunning(options.paneId).catch(() => false)) {
+      return;
+    }
     console.warn(`⚠️  Prompt to ${options.paneId} unacked — pane may be dead`);
   }
 
@@ -512,7 +516,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
 
     if (!this._headless) {
       const taskText = isRetry
-        ? `${parts[0]} ${options.request.userMessage ? '\n\n' + options.request.userMessage + '\n\n' : ''}Your full task brief is in the system prompt. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`
+        ? `${parts[0]} ${options.request.userMessage ? `\n\n${options.request.userMessage}\n\n` : ''}Your full task brief is in the system prompt. Pick up where you left off. Your LAST action MUST call contract_stage_complete. Do not ask questions; if blocked, finish with status blocked.`
         : `${parts[0]} Read your full task brief at ${taskMessagePath} FIRST, then execute it. Your LAST action MUST call contract_stage_complete — a text summary without the tool call blocks the pipeline forever. Do not ask questions; if blocked, finish with status blocked.`;
       await this._sendTaskText({ paneId, text: taskText });
     }

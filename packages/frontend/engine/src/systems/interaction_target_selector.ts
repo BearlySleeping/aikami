@@ -96,25 +96,27 @@ export const selectInteractionTarget = (options: {
   // ── NPCs — only consider if no item target has been selected (items-before-NPCs) ──
 
   if (closestEid < 0) {
-    const npcDialog = getComponent(world, eid, NPCDialog) as NPCDialogData | undefined;
-    if (!npcDialog) {
-      continue;
-    }
+    for (const eid of query(world, NPC_QUERY_TERMS)) {
+      const npcDialog = getComponent(world, eid, NPCDialog) as NPCDialogData | undefined;
+      if (!npcDialog) {
+        continue;
+      }
 
-    const pos = getComponent(world, eid, Position) as PositionData | undefined;
-    if (!pos) {
-      continue;
-    }
+      const pos = getComponent(world, eid, Position) as PositionData | undefined;
+      if (!pos) {
+        continue;
+      }
 
-    const dx = pos.x - playerX;
-    const dy = pos.y - playerY;
-    const distSq = dx * dx + dy * dy;
-    const radiusSq = npcDialog.interactionRadius * npcDialog.interactionRadius;
+      const dx = pos.x - playerX;
+      const dy = pos.y - playerY;
+      const distSq = dx * dx + dy * dy;
+      const radiusSq = npcDialog.interactionRadius * npcDialog.interactionRadius;
 
-    if (distSq <= radiusSq && distSq < closestDistSq) {
-      closestEid = eid;
-      closestDistSq = distSq;
-      closestType = 'npc';
+      if (distSq <= radiusSq && distSq < closestDistSq) {
+        closestEid = eid;
+        closestDistSq = distSq;
+        closestType = 'npc';
+      }
     }
   }
 

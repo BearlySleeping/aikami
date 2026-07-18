@@ -38,10 +38,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export default function codeRabbitExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'code_rabbit_autofix',
-    description: 'Trigger CodeRabbit review + autofix on a PR, wait for completion, validate, and merge.',
+    description:
+      'Trigger CodeRabbit review + autofix on a PR, wait for completion, validate, and merge.',
     parameters: Type.Object({
       pr: Type.String({ description: 'PR number (e.g. "27") or URL' }),
-      merge: Type.Optional(Type.Boolean({ default: true, description: 'Auto-merge after autofix completes' })),
+      merge: Type.Optional(
+        Type.Boolean({ default: true, description: 'Auto-merge after autofix completes' }),
+      ),
     }),
     async handler(params) {
       const num = prNumber(params.pr);
@@ -60,15 +63,23 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
 
       while (Date.now() < deadline) {
         // Check if CodeRabbit review is complete
-        const reviews = gh(`pr view ${num} --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state'`);
-        if (reviews.includes('APPROVED') || reviews.includes('COMMENTED') || reviews.includes('CHANGES_REQUESTED')) {
+        const reviews = gh(
+          `pr view ${num} --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state'`,
+        );
+        if (
+          reviews.includes('APPROVED') ||
+          reviews.includes('COMMENTED') ||
+          reviews.includes('CHANGES_REQUESTED')
+        ) {
           reviewDone = true;
           pi.log(`✅ CodeRabbit review complete: ${reviews}`);
           break;
         }
 
         // Also check if review is still in progress
-        const comments = gh(`pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`);
+        const comments = gh(
+          `pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`,
+        );
         if (comments.includes('processing new changes') || comments.includes('Come back again')) {
           pi.log('  Still reviewing...');
         }
@@ -98,12 +109,20 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
 
       // Step 3: Check for autofix checkboxes
       pi.log('🔧 Checking for CodeRabbit autofixes...');
-      const finishComment = gh(`pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`).split('\n').find(l => l.includes('Finishing Touches') || l.includes('Trigger review'));
-      
+      const finishComment = gh(
+        `pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`,
+      )
+        .split('\n')
+        .find((l) => l.includes('Finishing Touches') || l.includes('Trigger review'));
+
       if (finishComment) {
         // Try to check autofix checkboxes by fetching the comment ID and editing
-        const commentId = gh(`api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){comments(first:5,authorLogins:["coderabbitai","coderabbitai[bot]"]){nodes{id,body}}}}}' -F owner=BearlySleeping -F repo=aikami -F pr=${num}`);
-        pi.log('  CodeRabbit comment found. Check the autofix checkbox in the PR UI to trigger automatic fixes.');
+        const _commentId = gh(
+          `api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){comments(first:5,authorLogins:["coderabbitai","coderabbitai[bot]"]){nodes{id,body}}}}}' -F owner=BearlySleeping -F repo=aikami -F pr=${num}`,
+        );
+        pi.log(
+          '  CodeRabbit comment found. Check the autofix checkbox in the PR UI to trigger automatic fixes.',
+        );
       }
 
       // Step 4: Validate + Merge
