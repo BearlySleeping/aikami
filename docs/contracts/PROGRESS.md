@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-18)
 
-**164 active (41 without contract file), 119 archived, 1 duplicates**
+**164 active (39 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -131,8 +131,8 @@
 | C-326 | Make Game Boot Atomic Observable And Content Driven | 🛠️ implemented | — | v2 |
 | C-327 | Add In World Onboarding And Unified Interaction Ux | 🛠️ implemented | — | v2 |
 | C-328 | Integrate Bounded Ai Npc Dialogue With Authored Fallbacks | 🛠️ implemented | ❓ production — the dialogue overlay is already mounted on the production `/game` journey; this contract hardens it in place (no sandbox promotion step required, dev sandbox at `/dev/sandbox/dialogue` is updated alongside) | v2 |
-| C-329 | Integrate the Demo Quest from Offer Through Reward | ⏳ not_started (no contract file) | — | — |
-| C-330 | Integrate Deterministic Demo Combat and Declared Skill Checks | ⏳ not_started (no contract file) | — | — |
+| C-329 | Integrate The Demo Quest From Offer Through Reward | 👍 approved | — | v2 |
+| C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | — | v2 |
 | C-331 | Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop | ⏳ not_started (no contract file) | — | — |
 | C-332 | Redesign the Minimal Game HUD and Overlay Navigation | ⏳ not_started (no contract file) | — | — |
 | C-333 | Simplify Settings with Progressive Disclosure | ⏳ not_started (no contract file) | — | — |

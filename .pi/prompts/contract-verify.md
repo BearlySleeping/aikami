@@ -43,15 +43,31 @@ When the pipeline sends you back after a bounce:
 
 ## Phase 0: Preflight
 
-1. Read the contract file completely — ACs, Evidence Matrix, Test Hooks, Scope.
-2. Read any execution report — note what the implementer claims.
-3. Check git state:
+1. **🔴 Audit dev services**: Before analyzing any code, verify the running container infrastructure:
+   ```bash
+   herdr_session list
+   ```
+   - `firebase` must be `running` (or started via `firebase_emulator start`)
+   - `client` must be `running` (or started via `herdr_session start client`)
+   - If ANY service is unresponsive, you MUST restart it before proceeding:
+     ```bash
+     herdr_session restart firebase
+     herdr_session restart client
+     ```
+   - **🔴 AUTO-FAIL RULE**: If you claim a server is down or unreachable without
+     first showing the output of a failed `herdr_session start` or `herdr_session restart`
+     attempt, your stage will be automatically failed. You MUST attempt to start/restart
+     the service and show the error log before claiming it is unavailable.
+
+2. Read the contract file completely — ACs, Evidence Matrix, Test Hooks, Scope.
+3. Read any execution report — note what the implementer claims.
+4. Check git state:
    ```bash
    git status
    git diff --name-only
    git log -1 --format="%H %s"
    ```
-4. Contract status should be `implemented` or `approved`.
+5. Contract status should be `implemented` or `approved`.
 
 ## Phase 1: Structural Audit
 
@@ -69,11 +85,27 @@ For EVERY AC:
 2. Find the test files
 3. Run tests: `moon_run_task({ target: "<project>:test" })`
 
-## Phase 3: Live Verification
+## Phase 3: 🔴 Live Verification (MANDATORY — never skip)
 
-1. `herdr_session restart client firebase voice image text`
-2. Screenshot + validate each production path
-3. Test error paths + persistence
+**Abstract claims are BANNED.** You may NOT claim "route works" or "UI renders correctly"
+without visual evidence. Every production path AC must have a corresponding screenshot
++ ai_validate_image assertion.
+
+1. **Restart dev services from the worktree context**:
+   ```bash
+   herdr_session restart firebase
+   herdr_session restart client
+   ```
+   **🔴 If any restart fails, capture the error log BEFORE claiming the server is down.
+   You MUST show the failed restart attempt output. Do NOT skip verification because
+   "the server is down" — the pipeline environment provides dev servers.**
+
+2. **Screenshot + validate each production path**:
+   - `browser_screenshot` at the **production route path** (NOT the dev sandbox route)
+   - `ai_validate_image` with explicit AC expectations. Score ≥ 85 required.
+   - Write a detailed expectation string that references specific AC criteria.
+
+3. **Test error paths + persistence**: reload the page, trigger failures, verify clean degradation.
 
 ## Phase 4-5: Quality + Cross-Cutting
 

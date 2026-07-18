@@ -37,6 +37,30 @@ const environment = (name: string): string => {
 const hashContract = (path: string): string =>
   existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : '';
 
+/**
+ * Derive the absolute repository root from a result or review path env var.
+ *
+ * These paths are absolute and contain `.pi/contract-runs/` inside the repo root.
+ * When an agent runs inside a Git Worktree, `process.cwd()` resolves to the worktree
+ * directory — which does NOT contain `.pi/contract-runs/`. The repo root is the
+ * authoritative location for manifest/store operations.
+ */
+const deriveRepoRoot = (): string => {
+  const candidates = [
+    process.env.CONTRACT_PIPELINE_RESULT_PATH,
+    process.env.CONTRACT_PIPELINE_REVIEW_PATH,
+  ];
+  for (const p of candidates) {
+    if (p) {
+      const idx = p.indexOf('/.pi/contract-runs/');
+      if (idx !== -1) {
+        return p.slice(0, idx);
+      }
+    }
+  }
+  return process.cwd();
+};
+
 const atomicWrite = (options: { path: string; value: unknown }): void => {
   const temporaryPath = `${options.path}.${process.pid}.tmp`;
   writeFileSync(temporaryPath, JSON.stringify(options.value, undefined, 2));
@@ -243,7 +267,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
       }
       const runId = environment('CONTRACT_PIPELINE_RUN_ID');
       const reviewPath = environment('CONTRACT_PIPELINE_REVIEW_PATH');
-      const manifest = readManifest({ runId, cwd: process.cwd() });
+      const repoRoot = deriveRepoRoot();
+      const manifest = readManifest({ runId, cwd: repoRoot });
       if (!manifest) {
         throw new Error(`Run manifest not found: ${runId}`);
       }

@@ -25,21 +25,37 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
    ```
    The pipeline provisioned this worktree on top of `dev`. If `git status` shows unrelated in-flight changes, report them in your findings.
 
-2. **Record baseline**: The run manifest already stores the base commit — no manual bookkeeping needed. Never write state to `/tmp`.
+2. **🔴 Audit dev services**: Before analyzing any code, verify the running container infrastructure:
+   ```bash
+   herdr_session list
+   ```
+   - `firebase` must be `running` (or started via `firebase_emulator start`)
+   - `client` must be `running` (or started via `herdr_session start client`)
+   - If ANY service is unresponsive, you MUST restart it before proceeding:
+     ```bash
+     herdr_session restart firebase
+     herdr_session restart client
+     ```
+   - **🔴 AUTO-FAIL RULE**: If you claim a server is down or unreachable without
+     first showing the output of a failed `herdr_session start` or `herdr_session restart`
+     attempt, your stage will be automatically failed. You MUST attempt to start/restart
+     the service and show the error log before claiming it is unavailable.
 
-3. **Read the contract** fully: data model, ACs, Evidence Matrix, Scope, Quality Requirements, Open Questions.
+3. **Record baseline**: The run manifest already stores the base commit — no manual bookkeeping needed. Never write state to `/tmp`.
 
-4. **Check dependencies**: every contract in Dependencies must exist and have status `verified` or `completed`. If not, stop — build the dependency first.
+4. **Read the contract** fully: data model, ACs, Evidence Matrix, Scope, Quality Requirements, Open Questions.
 
-5. **Read PROGRESS.md** — check in-progress/completed. If picking next: read INDEX.md for priority (INDEX.md is READ-ONLY).
+5. **Check dependencies**: every contract in Dependencies must exist and have status `verified` or `completed`. If not, stop — build the dependency first.
 
-6. **Run `moon_detect_affected`** to see current project state.
+6. **Read PROGRESS.md** — check in-progress/completed. If picking next: read INDEX.md for priority (INDEX.md is READ-ONLY).
 
-7. **Run baseline tests** for any related areas listed in Problem & Baseline Evidence:
+7. **Run `moon_detect_affected`** to see current project state.
+
+8. **Run baseline tests** for any related areas listed in Problem & Baseline Evidence:
    Use `moon_run_task({ target: "<project>:test" })` (Pi tool with built-in timeout):
    Record exact failing test IDs. These are the pre-existing failures — no new failures are allowed.
 
-8. **Confirm status is `approved`**. If `draft`, stop — the contract is not ready for implementation.
+9. **Confirm status is `approved`**. If `draft`, stop — the contract is not ready for implementation.
 
 ## Phase 1: Plan (architect)
 
@@ -107,12 +123,23 @@ Do NOT skip. The contract must pass these before status becomes `implemented`.
 
 2. **Run focused tests**: each AC's test from Phase 2. Record PASS/FAIL counts.
 
-3. **Production path verification** (user-facing contracts):
+3. **🔴 Production path verification** (ALL user-facing contracts — MANDATORY, never skip):
+   - **Abstract claims are BANNED.** You may NOT claim "route works" or "UI renders correctly"
+     without visual evidence. Every production path AC must have a corresponding screenshot
+     + ai_validate_image assertion.
    - Ensure client dev server is running: `herdr_session restart client` if routes were added.
-   - `browser_screenshot` at the production route.
-   - `ai_validate_image` with expectation from the AC. Score ≥ 85 required.
-   - Test state persistence: reload the page — state must survive if persistence is an AC.
-   - Test error paths: trigger failures — must degrade cleanly.
+     **🔴 If `herdr_session restart client` fails, capture the error log BEFORE claiming the
+     server is down. You MUST show the failed restart attempt output.**
+   - **`browser_screenshot` at the PRODUCTION route path** (NOT the dev sandbox route).
+     The screenshot must capture the actual user-facing page, not an isolated sandbox.
+   - **`ai_validate_image` with explicit AC expectations**. Score ≥ 85 required.
+     Write a detailed expectation string that references specific AC criteria
+     (layout, colors, text content, interactive elements).
+   - **Test state persistence**: reload the page — state must survive if persistence is an AC.
+   - **Test error paths**: trigger failures — must degrade cleanly.
+   - **🔴 AUTO-FAIL**: If you claim you "cannot test because the dev server is down" without
+     showing the failed `herdr_session start` / `herdr_session restart` log output,
+     your stage will be automatically failed. The pipeline environment provides dev servers.
 
 4. **Sandbox check** (only if you created one):
    - `browser_screenshot` the sandbox route.

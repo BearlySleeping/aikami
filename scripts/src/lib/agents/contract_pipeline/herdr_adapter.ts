@@ -285,9 +285,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       baseRevision: PIPELINE_BASE_BRANCH,
     });
     this._workspacePath = workspacePath;
-    console.log(
-      `🔧 git worktree: ${workspacePath} (branch: ${branchName}, commit: ${headCommit})`,
-    );
+    console.log(`🔧 git worktree: ${workspacePath} (branch: ${branchName}, commit: ${headCommit})`);
   }
 
   private async _closeTabByLabel(label: string): Promise<void> {

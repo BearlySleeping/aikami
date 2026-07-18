@@ -33,7 +33,7 @@ import {
   writeManifest,
 } from './manifest_store.ts';
 import { validatePostconditions } from './postconditions.ts';
-import { loadReviewPrompt } from './prompt_loader.ts';
+import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
 import { MAX_VERIFY_LOOPS, resolveNextStage, transition } from './state_machine.ts';
 import type {
@@ -334,17 +334,49 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
   return lines.join('\n');
 };
 
+const FALLBACK_RECOVERY_PROMPT_HEADER = [
+  '',
+  '## ⚠️ FALLBACK RECOVERY — Review Captain Override',
+  '',
+  'This pipeline is **blocked** — the verifier → implementer bounce loop',
+  'has been exhausted. You are in diagnostic-only mode.',
+  '',
+  '🔴 You may NOT edit source files or run tests.',
+  '🔴 You may NOT call `gh_merge_pr` or `gh_promote_pr`.',
+  '',
+  '### Your only permitted actions',
+  '1. Read the manifest, contract, and verifier findings',
+  '2. Call `contract_workspace_log_failure` to capture diagnostics',
+  '3. Produce a clear failure summary for human intervention',
+  '4. Call `contract_review_decision`',
+  '',
+  '### Decision shortcuts',
+  '- "retry" → `change` (back to implementer)',
+  '- "approve" / "create PR" → `approve`',
+  '- "abandon" / "reject" → `reject`',
+  '',
+  '🔴 Your LAST action must call `contract_review_decision`.',
+].join('\n');
+
+const POST_VERIFY_FAILURE_HEADER = [
+  '',
+  '## ⚠️ POST-VERIFY FAILURE — Review Captain',
+  '',
+  '**Verification PASSED.** All tests are green, the code is ready.',
+  '',
+  '**🔴 CRITICAL: No PR exists.** The branch is pushed but PR creation failed.',
+  'The base prompt above shows the branch and compare URL.',
+  'Do NOT claim a PR exists.',
+  '',
+  '### Decision shortcuts',
+  '- "fix" or "retry" → `change` (retries reconciliation — only works if gh auth is fixed)',
+  '- "reject" or "abandon" → `reject` (exit with summary)',
+  '',
+  '🔴 Your LAST action must call `contract_review_decision`.',
+].join('\n');
+
 const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: string }): string => {
   const r = options.manifest.reconciliation;
-  const basePrompt = loadReviewPrompt({
-    repoRoot: options.repoRoot,
-    contractPath: options.manifest.contractPath,
-    runId: options.manifest.runId,
-    prUrl: undefined,
-    headBranch: r?.headBranch,
-    baseBranch: r?.baseBranch,
-  });
-  const summary = formatBlockedSummary(options.manifest);
   const lastVerifyPassed = [...options.manifest.attempts]
     .reverse()
     .find((a) => a.stage === 'verify' && a.result?.status === 'passed');
@@ -352,61 +384,23 @@ const buildBlockedReviewPrompt = (options: { manifest: RunManifest; repoRoot: st
     options.manifest.verifyLoops >= MAX_VERIFY_LOOPS &&
     options.manifest.attempts.filter((a) => a.stage === 'verify').length >= MAX_VERIFY_LOOPS;
 
+  const profile: ReviewProfile = isLoopExhaustion ? 'fallback_recovery' : 'ready';
+
+  const basePrompt = loadReviewPrompt({
+    repoRoot: options.repoRoot,
+    contractPath: options.manifest.contractPath,
+    runId: options.manifest.runId,
+    prUrl: undefined,
+    headBranch: r?.headBranch,
+    baseBranch: r?.baseBranch,
+    profile,
+  });
+  const summary = formatBlockedSummary(options.manifest);
+
   if (lastVerifyPassed && !isLoopExhaustion) {
-    return [
-      basePrompt,
-      '',
-      '## ⚠️ POST-VERIFY FAILURE — Review Captain',
-      '',
-      '**Verification PASSED.** All tests are green, the code is ready.',
-      '',
-      '**🔴 CRITICAL: No PR exists.** The branch is pushed but PR creation failed.',
-      'The base prompt above shows the branch and compare URL.',
-      'Do NOT claim a PR exists.',
-      '',
-      '### Verifier findings (all passed)',
-      summary,
-      '',
-      '### Decision shortcuts',
-      '- "fix" or "retry" → `change` (retries reconciliation — only works if gh auth is fixed)',
-      '- "reject" or "abandon" → `reject` (exit with summary)',
-      '',
-      '🔴 Your LAST action must call `contract_review_decision`.',
-    ].join('\n');
+    return [basePrompt, POST_VERIFY_FAILURE_HEADER, summary].join('\n');
   }
-  return [
-    basePrompt,
-    '',
-    '## ⚠️ BLOCKED PIPELINE — Review Captain Override',
-    '',
-    'This pipeline is **blocked** — the verifier found issues the implementer',
-    'could not resolve within the bounce limit.',
-    '',
-    '### What happened',
-    summary,
-    '',
-    '### Your options',
-    '',
-    '**1. Fix it yourself (Recommended)** — You have `edit` and `bash` access. Fix the issues,',
-    '   run `validate({test: true})`, push, then call `contract_review_decision` with `merge` or `approve`.',
-    '   This is fastest — no bounce loop.',
-    '',
-    '**2. Create a PR anyway** — `contract_review_decision` with `approve` or `merge`',
-    '   - `approve`: Create a ready PR (draft=false). CodeRabbit reviews immediately.',
-    '   - `merge`: Create a PR and auto-merge with squash.',
-    '',
-    '**3. Retry the implementer** — `contract_review_decision` with `change`',
-    '',
-    '**4. Abandon** — `contract_review_decision` with `reject`',
-    '',
-    '### Decision shortcuts',
-    '- "approve" or "create PR" → `approve`',
-    '- "merge" or "send it" → `merge`',
-    '- "fix" or "retry" → `change`',
-    '- "reject" or "abandon" → `reject`',
-    '',
-    '🔴 Your LAST action must call `contract_review_decision`.',
-  ].join('\n');
+  return [basePrompt, FALLBACK_RECOVERY_PROMPT_HEADER, summary].join('\n');
 };
 
 // ── Merge helpers ────────────────────────────────────────────
@@ -867,8 +861,7 @@ export const runContractPipeline = async (options: {
                 prUrl: undefined,
                 headBranch,
                 baseBranch,
-                ready: options.ready,
-                yolo: options.yolo,
+                profile: options.yolo ? 'yolo' : options.ready ? 'ready' : 'ready',
               });
           manifest.reviewPaneId = await adapter.startReview({
             prompt,
