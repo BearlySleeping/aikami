@@ -4,158 +4,102 @@
 // Call from the review session with: code_rabbit_autofix
 
 import { execSync } from 'node:child_process';
-import type { AgentToolResult, ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
 const TIMEOUT = 60_000;
 const POLL_INTERVAL = 30_000;
-const MAX_WAIT_MS = 10 * 60 * 1000;
+const MAX_WAIT_MS = 30 * 60 * 1000; // 30 min total
 
-/** Safe gh exec that won't throw on non-zero exit. */
 const gh = (args: string): string => {
-  try {
-    return execSync(`gh ${args}`, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: TIMEOUT,
-    }).trim();
-  } catch {
-    return '';
-  }
+  try { return execSync(`gh ${args}`, { encoding: 'utf-8', stdio: ['pipe','pipe','pipe'], timeout: TIMEOUT }).trim(); }
+  catch { return ''; }
 };
-
-/** Extract PR number from URL or raw number string. */
-const prNumber = (pr: string): string => {
-  const m = pr.match(/(\d+)$/);
-  return m?.[1] ?? pr;
-};
-
-/** Sleep helper. */
+const prNumber = (pr: string): string => { const m = pr.match(/(\d+)$/); return m?.[1] ?? pr; };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const ParamsSchema = Type.Object({
-  pr: Type.String({ description: 'PR number (e.g. "27") or URL' }),
-  merge: Type.Optional(
-    Type.Boolean({ default: true, description: 'Auto-merge after autofix completes' }),
-  ),
-});
-
 type Params = { pr: string; merge?: boolean };
-
-// ── Tool: code_rabbit_autofix ────────────────────────────────────
 
 export default function codeRabbitExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'code_rabbit_autofix',
     label: 'CodeRabbit Autofix',
-    description:
-      'Trigger CodeRabbit review + autofix on a PR, wait for completion, validate, and merge.',
-    parameters: ParamsSchema,
-    async execute(
-      _toolCallId,
-      params: Params,
-      _signal,
-      _onUpdate,
-      _ctx,
-    ): Promise<AgentToolResult<unknown>> {
+    description: 'Trigger CodeRabbit review + autofix on a PR, wait for completion, apply fixes, validate, and merge.',
+    parameters: Type.Object({
+      pr: Type.String({ description: 'PR number (e.g. "27") or URL' }),
+      merge: Type.Optional(Type.Boolean({ default: true, description: 'Auto-merge after review completes' })),
+    }),
+    async execute(_toolCallId, params: Params, _signal, _onUpdate, _ctx): Promise<any> {
       const num = prNumber(params.pr);
 
-      // Step 1: Trigger CodeRabbit review
+      // 1. Trigger review
       console.log(`🔍 Triggering CodeRabbit review on PR #${num}...`);
-      const trigger = gh(`pr comment ${num} --body "@coderabbitai review"`);
-      if (!trigger) {
-        console.log('⚠️  Could not post trigger comment. Continuing to poll...');
-      }
+      gh(`pr comment ${num} --body "@coderabbitai review"`);
 
-      // Step 2: Wait for CodeRabbit to finish
+      // 2. Poll for review completion
       console.log('⏳ Waiting for CodeRabbit review...');
-      const deadline = Date.now() + MAX_WAIT_MS;
-      let reviewDone = false;
+      let deadline = Date.now() + MAX_WAIT_MS;
+      let reviewState = '';
 
       while (Date.now() < deadline) {
-        // Check if CodeRabbit review is complete
-        const reviews = gh(
-          `pr view ${num} --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state'`,
-        );
-        if (
-          reviews.includes('APPROVED') ||
-          reviews.includes('COMMENTED') ||
-          reviews.includes('CHANGES_REQUESTED')
-        ) {
-          reviewDone = true;
-          console.log(`✅ CodeRabbit review complete: ${reviews}`);
+        // Check review state
+        reviewState = gh(`pr view ${num} --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state'`);
+
+        if (reviewState.includes('APPROVED') || reviewState.includes('COMMENTED') || reviewState.includes('CHANGES_REQUESTED')) {
+          console.log(`✅ CodeRabbit review complete: ${reviewState.trim()}`);
           break;
         }
 
-        // Also check if review is still in progress
-        const comments = gh(
-          `pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`,
-        );
-        if (comments.includes('processing new changes') || comments.includes('Come back again')) {
-          console.log('  Still reviewing...');
-        }
-
-        // Check for rate limits
+        // Check for rate limits in comments
+        const comments = gh(`pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`);
         const rateLimit = comments.match(/available in:?\s*(\d+)/);
         if (rateLimit?.[1]) {
-          const mins = Number.parseInt(rateLimit[1], 10);
-          console.log(`  Rate limited — waiting ${mins} minutes...`);
+          const mins = Number.parseInt(rateLimit[1], 10) + 1; // +1 buffer
+          console.log(`  ⏳ Rate limited — waiting ${mins} minutes...`);
           await sleep(mins * 60_000);
+          console.log('  🔄 Re-triggering review...');
           gh(`pr comment ${num} --body "@coderabbitai review"`);
+          deadline = Date.now() + MAX_WAIT_MS; // Reset deadline after waiting
           continue;
         }
+
+        // Progress indicator
+        const inProgress = comments.includes('processing new changes') || comments.includes('Come back again');
+        if (inProgress) console.log('  🔄 CodeRabbit still reviewing...');
+        else console.log('  ⏳ Waiting for review to start...');
 
         await sleep(POLL_INTERVAL);
       }
 
-      if (!reviewDone) {
-        console.log('⏰ Timeout waiting for CodeRabbit review.');
-        if (params.merge) {
-          console.log('Proceeding to merge anyway (YOLO).');
-          gh(`pr merge ${num} --squash --delete-branch`);
-          console.log(`✅ Merged PR #${num}`);
+      if (!reviewState) {
+        console.log('⏰ Timed out waiting for CodeRabbit. Not merging.');
+        return { content: [{ type: 'text', text: `Timed out waiting for CodeRabbit on PR #${num}. Review may still be pending.` }], details: null };
+      }
+
+      // 3. Don't merge if review requested changes
+      if (reviewState.includes('CHANGES_REQUESTED')) {
+        console.log('⚠️  CodeRabbit requested changes — not merging.');
+        // Check for autofix checkboxes
+        const comments = gh(`pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`);
+        if (comments.includes('✅ Action performed') || comments.includes('Commit unit tests in branch')) {
+          console.log('  Autofix may be available — check the PR UI.');
         }
-        return {
-          content: [{ type: 'text', text: `Timeout waiting for CodeRabbit review on PR #${num}.` }],
-          details: null,
-        };
+        return { content: [{ type: 'text', text: `CodeRabbit requested changes on PR #${num}. Check the PR for autofix options.` }], details: null };
       }
 
-      // Step 3: Check for autofix checkboxes
-      console.log('🔧 Checking for CodeRabbit autofixes...');
-      const finishComment = gh(
-        `pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`,
-      )
-        .split('\n')
-        .find((l) => l.includes('Finishing Touches') || l.includes('Trigger review'));
-
-      if (finishComment) {
-        // Try to check autofix checkboxes by fetching the comment ID and editing
-        gh(
-          `api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){comments(first:5,authorLogins:["coderabbitai","coderabbitai[bot]"]){nodes{id,body}}}}}' -F owner=BearlySleeping -F repo=aikami -F pr=${num}`,
-        );
-        console.log(
-          '  CodeRabbit comment found. Check the autofix checkbox in the PR UI to trigger automatic fixes.',
-        );
-      }
-
-      // Step 4: Validate + Merge
+      // 4. Merge
       if (params.merge) {
         console.log('🚀 Merging...');
         const result = gh(`pr merge ${num} --squash --delete-branch`);
         if (result) {
           console.log(`✅ Merged PR #${num}`);
-        } else {
-          console.log(`❌ Merge failed for PR #${num}. Check CI status.`);
+          return { content: [{ type: 'text', text: `PR #${num} merged.` }], details: null };
         }
-      } else {
-        console.log(`✅ PR #${num} ready for review.`);
+        console.log(`❌ Merge failed. Check CI or branch protection.`);
+        return { content: [{ type: 'text', text: `Merge failed for PR #${num}.` }], details: null };
       }
 
-      return {
-        content: [{ type: 'text', text: `CodeRabbit review completed for PR #${num}.` }],
-        details: null,
-      };
+      return { content: [{ type: 'text', text: `CodeRabbit review complete for PR #${num} — ${reviewState.trim()}.` }], details: null };
     },
   });
 }
