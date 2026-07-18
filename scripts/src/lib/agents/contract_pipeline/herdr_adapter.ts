@@ -338,10 +338,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
       return;
     }
-    // Clear overlays, then wait for Pi to settle before sending.
+    // Clear overlays, then send text directly to the PTY (not as shell command).
     await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
-    await sleep(1500);
-    await runHerdr(['pane', 'run', options.paneId, options.text]);
+    await sleep(1000);
+    await runHerdr(['pane', 'send-text', options.paneId, options.text]);
+    await sleep(300);
+    await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
     const accepted = await this._waitForAgentStatus({
       paneId: options.paneId,
       statuses: ['working', 'done'],
@@ -648,7 +650,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     try {
       await runHerdr(['pane', 'send-keys', options.paneId, 'Escape']);
       await sleep(300);
-      await runHerdr(['pane', 'run', options.paneId, options.message]);
+      await runHerdr(['pane', 'send-text', options.paneId, options.message]);
+      await sleep(100);
+      await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
     } catch {}
   }
 }
