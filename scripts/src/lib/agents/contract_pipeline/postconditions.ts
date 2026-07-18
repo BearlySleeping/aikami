@@ -39,14 +39,12 @@ export const validatePostconditions = (options: {
     'docs/contracts/PROMOTION.md',
   ]);
 
-  // Implementer has no file restrictions — they can create, modify, or delete
-  // any file. The commitAll step after implementer ensures files are committed
-  // before the verifier runs. The verifier validates completeness, not postconditions.
-  if (options.role === 'implementer') {
+  // Verifier can fix trivial issues — no file restrictions.
+  if (options.role === 'implementer' || options.role === 'verifier') {
     return { passed: true, unauthorizedPaths: [], changedPaths: changed };
   }
 
-  if (options.role === 'writer' || options.role === 'verifier') {
+  if (options.role === 'writer') {
     const contractFileName = basename(options.contractPath);
     const contractId = contractFileName.match(/^(C-\d+|MIG-\d+)/)?.[0];
 
