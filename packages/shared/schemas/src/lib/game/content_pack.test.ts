@@ -52,7 +52,7 @@ describe('ContentPackManifestSchema', () => {
           name: 'Rusty Sword',
           type: 'weapon' as const,
           attackBonus: 3,
-          equipmentSlot: 'mainHand',
+          equipmentSlot: 'weapon',
         },
       },
       dialogues: {
@@ -548,14 +548,14 @@ describe('ContentPackManifestSchema', () => {
           name: 'Iron Helm',
           type: 'armor' as const,
           defenseBonus: 5,
-          equipmentSlot: 'head',
+          equipmentSlot: 'armor',
         },
       },
     };
     const result = Value.Parse(ContentPackManifestSchema, manifest);
     const item = result.items.ironHelm;
     expect(item.defenseBonus).toBe(5);
-    expect(item.equipmentSlot).toBe('head');
+    expect(item.equipmentSlot).toBe('armor');
     expect(item.attackBonus).toBeUndefined();
   });
 });

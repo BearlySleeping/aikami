@@ -21,6 +21,7 @@ import {
 } from '@aikami/frontend/services';
 import { NpcDialogueAiEnvelopeSchema, NpcDialogueTurnSchema } from '@aikami/schemas';
 import type {
+  ContentPackItemEntry,
   NpcDialogueChoice,
   NpcDialogueCommand,
   NpcDialogueCommandKind,
@@ -65,6 +66,10 @@ export type NpcDialogueContentProvider = {
   getEncounter(
     encounterId: string,
   ): { id: string; dialogueKey?: string; encounterNpcIds?: string[] } | undefined;
+  /** Returns an item entry by ID, or undefined (C-331). */
+  getItem?(itemId: string): ContentPackItemEntry | undefined;
+  /** Returns all item entries keyed by item ID (C-331). */
+  getAllItems?(): Record<string, ContentPackItemEntry>;
 };
 
 /**

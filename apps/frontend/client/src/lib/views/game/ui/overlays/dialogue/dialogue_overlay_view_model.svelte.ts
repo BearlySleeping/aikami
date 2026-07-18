@@ -10,6 +10,7 @@ import { FALLBACK_AVATAR_URL } from '$lib/data/dialogue_personas';
 import type { NpcDialogueServiceInterface } from '$lib/services/game/npc_dialogue_service.svelte';
 import type { ActionOption, DialogueMessage, DialoguePhase } from '$lib/types/dialogue';
 import {
+  buildGameStateFacts,
   combatService,
   diceService,
   draftStore,
@@ -825,6 +826,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
+        gameStateFacts: buildGameStateFacts(),
       });
 
       // Update the NPC message with the full response
@@ -1074,6 +1076,7 @@ class DialogueOverlayViewModel
         npcName: this._npcData.npcName,
         messages,
         signal: controller.signal,
+        gameStateFacts: buildGameStateFacts(),
       });
 
       // Remove the virtual player message

@@ -125,6 +125,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   clearActive(): void;
   setTransitioning(value: boolean): void;
   getDefeatedEnemies(): string[];
+  /** Returns the collected item pickup spawn IDs for map-load suppression (C-331). */
+  getCollectedPickups(): string[];
   setCameraZoom(options: { npcScreenX?: number; npcScreenY?: number }): void;
   onInventoryCountChange(newCount: number): void;
   onMapLoaded(): void;
@@ -226,6 +228,11 @@ export class GameOverlayService
   /** Returns the current defeated enemies list. */
   getDefeatedEnemies(): string[] {
     return [...worldStateService.defeatedEnemies];
+  }
+
+  /** @inheritdoc */
+  getCollectedPickups(): string[] {
+    return [...worldStateService.collectedPickups];
   }
 
   /** Sets camera zoom data for dialogue spatial UI. */
@@ -467,6 +474,7 @@ export class GameOverlayService
       targetX: 160,
       targetY: 192,
       defeatedEnemies: [...worldStateService.defeatedEnemies],
+      collectedPickups: [...worldStateService.collectedPickups],
     });
   }
 

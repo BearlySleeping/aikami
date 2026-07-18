@@ -412,6 +412,77 @@ const _itemIcon = (itemId: string): string => {
             {/each}
           </div>
         {/if}
+
+        <!-- ── Sell section (C-331 AC-3) ── -->
+        <div class="pt-3 pb-1 flex items-center gap-2">
+          <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >Sell Your Items</span
+          >
+          <div class="flex-1 border-t border-base-300"></div>
+          <span class="text-xs text-base-content/30">{viewModel.sellableItems.length} items</span>
+        </div>
+
+        {#if viewModel.sellableItems.length === 0}
+          <p class="text-xs text-base-content/40 text-center py-2">Nothing the vendor will buy.</p>
+        {:else}
+          <div class="flex flex-col gap-1.5">
+            {#each viewModel.sellableItems as sellable (sellable.itemId)}
+              <div
+                class="flex items-center gap-2 rounded-lg border border-base-300 bg-base-200 px-3 py-2"
+              >
+                <div class="flex-1 min-w-0">
+                  <span class="text-sm font-medium text-base-content truncate">
+                    {sellable.label}
+                  </span>
+                  {#if sellable.quantity > 1}
+                    <span class="badge badge-xs badge-ghost ml-1">x{sellable.quantity}</span>
+                  {/if}
+                </div>
+                <span class="text-xs font-bold text-warning">🪙 {sellable.sellPrice}</span>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-outline btn-warning"
+                  onclick={() => viewModel.requestSell(sellable.itemId)}
+                  aria-label="Sell {sellable.label} for {sellable.sellPrice} gold"
+                >
+                  Sell
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Sell confirmation -->
+        {#if viewModel.pendingSellItemId}
+          <div
+            class="mt-2 rounded-lg border border-warning/50 bg-warning/10 p-3"
+            role="alertdialog"
+            aria-label="Confirm sale"
+          >
+            <p class="text-sm text-base-content mb-2">
+              Sell <span class="font-bold">{viewModel.pendingSellLabel}</span> for
+              <span class="font-bold text-warning">{viewModel.pendingSellPrice} gold</span>?
+            </p>
+            <div class="flex gap-2 justify-end">
+              <button
+                type="button"
+                class="btn btn-xs btn-ghost"
+                onclick={() => viewModel.cancelSell()}
+                aria-label="Cancel sale"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="btn btn-xs btn-warning"
+                onclick={() => viewModel.confirmSell()}
+                aria-label="Confirm sale of {viewModel.pendingSellLabel}"
+              >
+                Confirm Sale
+              </button>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Footer hint -->

@@ -11,7 +11,11 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { hydrateAllServices, serializeAllServices } from './serializable_service';
+import {
+  hydrateAllServices,
+  type ServiceSnapshot,
+  serializeAllServices,
+} from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -19,6 +23,30 @@ import { hydrateAllServices, serializeAllServices } from './serializable_service
 
 /** Stable key prefix for save entries. */
 const KEY_PREFIX = 'aikami_save_';
+
+/**
+ * Parses a raw save payload into its envelope parts.
+ *
+ * Handles both legacy plain ECS snapshots and the JSON envelope with
+ * service snapshots ({ ecsSnapshot, serviceSnapshots }). Exposed so the
+ * game boot pipeline can hydrate domain services on Continue (C-331 AC-2).
+ */
+export const parseSavePayloadEnvelope = (
+  raw: string,
+): { ecsSnapshot: string; serviceSnapshots?: ServiceSnapshot[] } => {
+  try {
+    const envelope = JSON.parse(raw) as {
+      ecsSnapshot: string;
+      serviceSnapshots?: ServiceSnapshot[];
+    };
+    if (envelope.ecsSnapshot) {
+      return envelope;
+    }
+  } catch {
+    // Not valid JSON — treat as legacy plain ECS snapshot
+  }
+  return { ecsSnapshot: raw };
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,6 +134,17 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
    * @throws If the save is not found.
    */
   getSavePayload(slotId: string): Promise<string>;
+
+  /**
+   * Retrieves the raw, unparsed save payload (full envelope) for a slot.
+   *
+   * The game boot pipeline parses it with {@link parseSavePayloadEnvelope}
+   * to restore both the ECS world and the domain service snapshots (C-331).
+   *
+   * @param slotId - The slot identifier to read.
+   * @throws If the save is not found.
+   */
+  getRawSavePayload(slotId: string): Promise<string>;
 };
 
 // ---------------------------------------------------------------------------
@@ -222,6 +261,13 @@ class GameSaveService
 
   /** @inheritdoc */
   async getSavePayload(slotId: string): Promise<string> {
+    const payload = await this.getRawSavePayload(slotId);
+    const { ecsSnapshot } = this._parsePayload(payload);
+    return ecsSnapshot;
+  }
+
+  /** @inheritdoc */
+  async getRawSavePayload(slotId: string): Promise<string> {
     const db = await getLocalDatabase();
     const result = await db.query({
       sql: 'SELECT payload FROM saves WHERE id = ?',
@@ -232,9 +278,7 @@ class GameSaveService
       throw new Error(`Save not found: ${slotId}`);
     }
 
-    const payload = result.rows[0].payload as string;
-    const { ecsSnapshot } = this._parsePayload(payload);
-    return ecsSnapshot;
+    return result.rows[0].payload as string;
   }
 
   // -----------------------------------------------------------------------
@@ -247,20 +291,9 @@ class GameSaveService
    */
   private _parsePayload(raw: string): {
     ecsSnapshot: string;
-    serviceSnapshots?: import('./serializable_service').ServiceSnapshot[];
+    serviceSnapshots?: ServiceSnapshot[];
   } {
-    try {
-      const envelope = JSON.parse(raw) as {
-        ecsSnapshot: string;
-        serviceSnapshots?: import('./serializable_service').ServiceSnapshot[];
-      };
-      if (envelope.ecsSnapshot) {
-        return envelope;
-      }
-    } catch {
-      // Not valid JSON — treat as legacy plain ECS snapshot
-    }
-    return { ecsSnapshot: raw };
+    return parseSavePayloadEnvelope(raw);
   }
 
   /**

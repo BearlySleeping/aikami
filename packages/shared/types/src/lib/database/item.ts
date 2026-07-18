@@ -2,4 +2,12 @@
 //
 // Re-exports from @aikami/schemas — source of truth for schema-derived types.
 
-export type { EquipmentSlot, InventoryItem, ItemDefinition } from '@aikami/schemas';
+export type {
+  ConsumableEffect,
+  EquipmentSlot,
+  EquipmentSnapshot,
+  InventoryItem,
+  InventorySnapshot,
+  ItemDefinition,
+  WorldPickupState,
+} from '@aikami/schemas';

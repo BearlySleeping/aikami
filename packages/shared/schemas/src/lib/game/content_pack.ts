@@ -8,6 +8,7 @@
 // Contract: C-327 AC-3 — optional onboarding section added
 
 import Type, { type Static } from 'typebox';
+import { ConsumableEffectSchema, EquipmentSlotSchema, ItemTypeSchema } from '../database/item.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
 
 // ---------------------------------------------------------------------------
@@ -98,15 +99,8 @@ export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;
 // ContentPackItemEntry — item definition in the pack
 // ---------------------------------------------------------------------------
 
-export const ItemTypeSchema = Type.Union([
-  Type.Literal('weapon'),
-  Type.Literal('armor'),
-  Type.Literal('consumable'),
-  Type.Literal('key'),
-  Type.Literal('misc'),
-]);
-
-export type ItemType = Static<typeof ItemTypeSchema>;
+// Re-exported from database/item.ts — single source of truth (C-331).
+export { type ItemType, ItemTypeSchema } from '../database/item.ts';
 
 export const ContentPackItemEntrySchema = Type.Object({
   /** Display name */
@@ -117,8 +111,14 @@ export const ContentPackItemEntrySchema = Type.Object({
   attackBonus: Type.Optional(Type.Number({ description: 'Attack bonus value' })),
   /** Optional defense bonus */
   defenseBonus: Type.Optional(Type.Number({ description: 'Defense bonus value' })),
-  /** Optional reference to an equipment slot */
-  equipmentSlot: Type.Optional(Type.String({ description: 'Equipment slot reference' })),
+  /** Optional reference to an equipment slot (weapon | armor) */
+  equipmentSlot: Type.Optional(EquipmentSlotSchema),
+  /** Optional deterministic vendor base price in gold (0 = not sold) — C-331 */
+  basePrice: Type.Optional(
+    Type.Number({ minimum: 0, description: 'Vendor base price in gold (0 = unsold)' }),
+  ),
+  /** Optional consumable effect (heal) — C-331 */
+  effect: Type.Optional(ConsumableEffectSchema),
 });
 
 export type ContentPackItemEntry = Static<typeof ContentPackItemEntrySchema>;

@@ -25,6 +25,9 @@ import { selectInteractionTarget } from '../systems/interaction_target_selector.
 //
 // Contract C-327 AC-2: Target selection reuses the shared helper — same
 // priority rules as the proximity system (items before NPCs, nearest wins).
+//
+// Contract C-331: Pickups emit a per-item ITEM_PICKED_UP delta (itemId,
+// quantity, spawnId) instead of the lossy full-array INVENTORY_UPDATED.
 // ---------------------------------------------------------------------------
 
 /**
@@ -34,8 +37,9 @@ import { selectInteractionTarget } from '../systems/interaction_target_selector.
  * player and performs the appropriate action:
  *
  * - **Items**: Adds the item stack to the player's Inventory component,
- *   destroys the item entity from the world, and emits `INVENTORY_UPDATED`
- *   with the full inventory array.
+ *   destroys the item entity from the world, and emits `ITEM_PICKED_UP`
+ *   with the per-item delta (itemId, quantity, spawnId). When no free
+ *   slot exists, emits `INVENTORY_FULL` and leaves the entity in place.
  * - **NPCs**: Emits `NPC_INTERACTED` so the dialogue overlay can open.
  *
  * Uses squared distance (`dx*dx + dy*dy`) to avoid `Math.sqrt` overhead.
@@ -92,7 +96,11 @@ const handleInteract = (options: {
 
 /**
  * Adds the item from the given entity into the player's inventory,
- * destroys the item entity, and emits {@link INVENTORY_UPDATED}.
+ * destroys the item entity, and emits `ITEM_PICKED_UP` with the per-item
+ * delta (never the full lossy inventory array — C-331).
+ *
+ * When the engine inventory has no free slot, the entity is preserved
+ * and `INVENTORY_FULL` is emitted for UI feedback.
  */
 const _handleItemPickup = (options: {
   world: World;
@@ -107,7 +115,7 @@ const _handleItemPickup = (options: {
     return;
   }
 
-  const { itemId, quantity } = interactable;
+  const { itemId, quantity, spawnId } = interactable;
 
   // ── Add to player inventory (find first empty slot) ──
 
@@ -132,7 +140,8 @@ const _handleItemPickup = (options: {
   }
 
   if (!slotFound) {
-    // Inventory full — could emit a feedback event in the future
+    // Inventory full — keep the map entity and surface feedback (C-331 AC-2)
+    bridge.emit({ type: 'INVENTORY_FULL', itemId });
     return;
   }
 
@@ -141,22 +150,13 @@ const _handleItemPickup = (options: {
   incrementEntityGeneration(itemEid);
   removeEntity(world, itemEid);
 
-  // ── Emit INVENTORY_UPDATED with full inventory ──
-
-  const inventoryPayload: Array<{ itemId: string; quantity: number }> = [];
-  for (let slot = 0; slot < MAX_INVENTORY_SLOTS; slot++) {
-    const slotItemId = playerItemIds[slot] ?? 0;
-    if (slotItemId > 0) {
-      inventoryPayload.push({
-        itemId,
-        quantity: playerQuantities[slot] ?? 0,
-      });
-    }
-  }
+  // ── Emit the per-item pickup delta (C-331) ──
 
   bridge.emit({
-    type: 'INVENTORY_UPDATED',
-    inventory: inventoryPayload,
+    type: 'ITEM_PICKED_UP',
+    itemId,
+    quantity,
+    ...(spawnId ? { spawnId } : {}),
   });
 };
 

@@ -20,7 +20,7 @@ import {
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { registerCollisionDataObservers } from '../components/collision_data.ts';
-import { registerCombatStatsObservers } from '../components/combat_stats.ts';
+import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
 import {
   createEngineStateEntity,
@@ -370,6 +370,24 @@ const handleBridgeCommand = (command: GameCommand): void => {
         _updatePlayerAppearanceFromEquipment(playerEntityId, {
           weapon: (command as { weapon?: string }).weapon,
           armor: (command as { armor?: string }).armor,
+        });
+      }
+      break;
+    }
+    case 'HEAL_PLAYER': {
+      // ── Out-of-combat consumable heal (C-331 AC-4) ──
+      // Clamps player HP at max and mirrors the change to the UI via
+      // COMBAT_STATE_UPDATE (the existing player-stats bridge path).
+      if (playerEntityId > 0) {
+        const amount = Math.max(0, Math.floor((command as { amount: number }).amount ?? 0));
+        const currentHp = CombatStats.health[playerEntityId] ?? 0;
+        const maxHp = CombatStats.maxHealth[playerEntityId] ?? currentHp;
+        const newHp = Math.min(maxHp, currentHp + amount);
+        CombatStats.health[playerEntityId] = newHp;
+        workerBridge.emit({
+          type: 'COMBAT_STATE_UPDATE',
+          entityHpMap: { [playerEntityId]: newHp },
+          entityMaxHpMap: { [playerEntityId]: maxHp },
         });
       }
       break;
@@ -1358,6 +1376,7 @@ self.onmessage = (event: MessageEvent): void => {
             targetY,
             targetSpawnHash,
             defeatedEnemies,
+            collectedPickups,
             spawnPointEntities,
             disableClamping,
           } = message;
@@ -1400,11 +1419,13 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           // 3. Spawn new NPC and prop entities from the new map.
-          //    Pass defeatedEnemies so previously-defeated enemies are filtered.
+          //    Pass defeatedEnemies + collectedPickups so previously-defeated
+          //    enemies and already-collected items are filtered (C-147, C-331).
           const results = spawnEntities({
             world,
             spawnPoints,
             defeatedEnemies: defeatedEnemies as string[] | undefined,
+            collectedPickups: collectedPickups as string[] | undefined,
           });
 
           // 4. Spawn transition zone trigger entities

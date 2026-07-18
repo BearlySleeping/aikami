@@ -208,14 +208,16 @@ describe('Interaction System — Item Pickup', () => {
     expect(entityCountAfter).toBe(entityCountBefore);
   });
 
-  it('emits INVENTORY_UPDATED event with inventory contents', () => {
+  it('emits ITEM_PICKED_UP delta event (C-331)', () => {
     const { world, playerEid } = setupTestWorld();
     const bridge = new MockEngineBridge();
 
-    let receivedInventory: Array<{ itemId: string; quantity: number }> | undefined;
+    let receivedItemId: string | undefined;
+    let receivedQuantity: number | undefined;
 
-    bridge.on('INVENTORY_UPDATED', (event) => {
-      receivedInventory = event.inventory;
+    bridge.on('ITEM_PICKED_UP', (event) => {
+      receivedItemId = event.itemId;
+      receivedQuantity = event.quantity;
     });
 
     createItemEntity(world, {
@@ -227,10 +229,8 @@ describe('Interaction System — Item Pickup', () => {
 
     handleInteract({ world, playerEntityId: playerEid, bridge });
 
-    expect(receivedInventory).toBeDefined();
-    expect(receivedInventory?.length).toBe(1);
-    expect(receivedInventory?.[0]?.itemId).toBe('manaPotion');
-    expect(receivedInventory?.[0]?.quantity).toBe(5);
+    expect(receivedItemId).toBe('manaPotion');
+    expect(receivedQuantity).toBe(5);
   });
 
   it('does nothing when no interactable entities exist', () => {

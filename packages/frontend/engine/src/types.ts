@@ -143,6 +143,17 @@ export type GameCommand =
     }
   | {
       /**
+       * Heals the player entity by the given amount, clamped at max HP.
+       * Sent by the client when an out-of-combat consumable (potion) is used.
+       *
+       * Contract: C-331 Integrate Inventory, Equipment, Loot, and Vendor
+       */
+      type: 'HEAL_PLAYER';
+      /** HP restored (positive integer). */
+      amount: number;
+    }
+  | {
+      /**
        * Configures the environment system at runtime (time scale, weather).
        * Used by dev sandboxes to test diurnal cycles and weather overlays.
        *
@@ -538,10 +549,27 @@ export type GameEvent =
   | {
       /**
        * Emitted when the player picks up an item from the world.
-       * The QuestStateService listens for this to advance item-pickup objectives.
-       * Contract: C-329 Integrate the Demo Quest from Offer Through Reward
+       * Carries the per-item delta (never the full inventory array) so the
+       * client inventory service can apply additive stacking.
+       * Contract: C-329 (event), C-331 (quantity + spawnId delta extension)
        */
       type: 'ITEM_PICKED_UP';
+      itemId: string;
+      /** Stack quantity picked up (defaults to 1 for legacy emitters). */
+      quantity?: number;
+      /**
+       * Tiled spawn-point ID for respawn suppression. Absent for
+       * programmatic/dev spawns — those pickups are never suppressed.
+       */
+      spawnId?: string;
+    }
+  | {
+      /**
+       * Emitted when an item pickup is rejected because the inventory has
+       * no free slot. The map entity remains in the world.
+       * Contract: C-331 AC-2 — "inventory full" feedback
+       */
+      type: 'INVENTORY_FULL';
       itemId: string;
     };
 

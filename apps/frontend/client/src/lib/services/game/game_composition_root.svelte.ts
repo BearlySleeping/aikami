@@ -7,14 +7,17 @@
 // Contract: C-314 Establish a Production Game Composition Root and Split God Services
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven (campaign wiring)
 
+import type { GameCommand } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { ContentPackLootEntry } from '@aikami/types';
 import { aiGatewayService } from '../ai/ai_gateway_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
@@ -33,6 +36,7 @@ import type { QuestStateServiceInterface } from './quest_state_service.svelte';
 import { questStateService } from './quest_state_service.svelte';
 import type { SessionServiceInterface } from './session_service.svelte';
 import { sessionService } from './session_service.svelte';
+import { vendorService } from './vendor_service.svelte';
 import type { WorldStateServiceInterface } from './world_state_service.svelte';
 import { worldStateService } from './world_state_service.svelte';
 
@@ -60,6 +64,12 @@ export type GameCompositionRootInterface = BaseFrontendClassInterface & {
 
   initialize(): Promise<void>;
   dispose(): Promise<void>;
+
+  /**
+   * Overrides the loot roll RNG (0..1 per entry) for deterministic tests.
+   * Contract C-331 AC-5 — declared-before-RNG discipline.
+   */
+  setLootRollFn(rollFn: () => number): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +81,12 @@ export class GameCompositionRoot
   implements GameCompositionRootInterface
 {
   private _initialized = false;
+
+  /** Injectable loot roll RNG — deterministic in tests (C-331 AC-5). */
+  private _lootRollFn: () => number = Math.random;
+
+  /** Unsubscribers for composition-root-owned bridge listeners. */
+  private _bridgeUnsubscribers: Array<() => void> = [];
 
   // Services are lazily initialised by initialize()
   // These are set during initialize() and cleared during dispose()
@@ -167,6 +183,11 @@ export class GameCompositionRoot
     return this._npcDialogueService;
   }
 
+  /** @inheritdoc */
+  setLootRollFn(rollFn: () => number): void {
+    this._lootRollFn = rollFn;
+  }
+
   /**
    * Initializes all game runtime services in dependency order.
    * Idempotent — calling twice returns without duplicate subscriptions.
@@ -215,8 +236,55 @@ export class GameCompositionRoot
     this.debug('initialize:contentPackId', { contentPackId });
 
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
-    const { loadContentPack } = await import('@aikami/frontend/engine');
+    const { loadContentPack, createEngineBridge } = await import('@aikami/frontend/engine');
     const contentPack = await loadContentPack({ packId: contentPackId });
+
+    // ── C-331 AC-1: content pack is the single source of item truth ──
+    inventoryService.configureCatalog({
+      items: buildItemCatalogFromPack({ items: contentPack.manifest.items }),
+    });
+
+    // ── C-331: engine command senders (appearance sync + consumable heal) ──
+    const sendEngineCommand = (command: GameCommand): void => {
+      gameEngineService.sendCommand(command);
+    };
+    equipmentService.configureCommandSender({ sendCommand: sendEngineCommand });
+    inventoryService.configureCommandSender({ sendCommand: sendEngineCommand });
+
+    // ── C-331 AC-2: pickup suppression + SFX wiring ──
+    inventoryService.configureWorldIntegration({
+      isPickupCollected: (spawnId) => worldStateService.isPickupCollected(spawnId),
+      recordPickup: (spawnId) => worldStateService.recordCollectedPickup(spawnId),
+      onItemCountChange: (totalCount) => gameOverlayService.onInventoryCountChange(totalCount),
+    });
+
+    // ── C-331 AC-3: authored vendor fallback lines ──
+    vendorService.configureFallback({
+      getVendorLine: (vendorId) => {
+        const npc = contentPack.getNpc(vendorId);
+        if (!npc?.defaultDialogueKey) {
+          return undefined;
+        }
+        return contentPack.getDialogue(npc.defaultDialogueKey);
+      },
+    });
+
+    // ── C-331 AC-5: encounter loot delivery (idempotent, additive) ──
+    try {
+      const lootBridge = createEngineBridge();
+      this._bridgeUnsubscribers.push(
+        lootBridge.on('ENCOUNTER_COMPLETED', (event) => {
+          if (event.victory) {
+            this._applyEncounterLoot({
+              encounterId: event.encounterId,
+              getEncounterLoot: (id) => contentPack.getEncounter(id)?.loot,
+            });
+          }
+        }),
+      );
+    } catch (error) {
+      this.debug('initialize:loot-listener-failed', { error: String(error) });
+    }
 
     npcDialogueService.configure({
       contentProvider: {
@@ -264,6 +332,8 @@ export class GameCompositionRoot
             encounterNpcIds: e.enemyNpcIds,
           };
         },
+        getItem: (itemId) => contentPack.getItem(itemId),
+        getAllItems: () => contentPack.manifest.items,
       },
       textGenerator: async (opts) => {
         const result = await aiGatewayService.generateText({
@@ -307,9 +377,12 @@ export class GameCompositionRoot
           return true;
         },
         giveItem: (_opts) => {
-          // Add item to inventory via inventory service
-          // (requires addItem on InventoryService — see Phase 2 note)
-          return true;
+          // Add item to inventory via inventory service (C-331 — rewards
+          // bypass the capacity cap; never silently lost)
+          return inventoryService.addItem({
+            itemId: _opts.itemId,
+            quantity: _opts.quantity,
+          });
         },
         startCombat: (opts) => {
           gameOverlayService.startCombat({ enemyName: opts.npcName });
@@ -334,6 +407,44 @@ export class GameCompositionRoot
   }
 
   /**
+   * Rolls a content-pack loot table and delivers drops additively to the
+   * inventory (C-331 AC-5). Idempotent per encounter ID — the granted flag
+   * persists with world state across save/reload.
+   */
+  private _applyEncounterLoot(options: {
+    encounterId: string;
+    getEncounterLoot: (encounterId: string) => ContentPackLootEntry[] | undefined;
+  }): void {
+    const { encounterId, getEncounterLoot } = options;
+    if (!encounterId) {
+      return;
+    }
+    if (worldStateService.isLootGranted(encounterId)) {
+      this.debug('_applyEncounterLoot:already-granted', { encounterId });
+      return;
+    }
+
+    const lootTable = getEncounterLoot(encounterId);
+    // Record BEFORE delivery — replayed events must never double-grant
+    worldStateService.recordLootGranted(encounterId);
+    if (!lootTable || lootTable.length === 0) {
+      return;
+    }
+
+    const rolled: Array<{ itemId: string; quantity: number }> = [];
+    for (const entry of lootTable) {
+      const roll = this._lootRollFn();
+      if (roll <= entry.dropChance) {
+        // Loot delivery bypasses the capacity cap — authored drops are
+        // never silently lost (C-331 edge case).
+        inventoryService.addItem({ itemId: entry.itemId, quantity: entry.quantity });
+        rolled.push({ itemId: entry.itemId, quantity: entry.quantity });
+      }
+    }
+    this.debug('_applyEncounterLoot:granted', { encounterId, rolled });
+  }
+
+  /**
    * Disposes all services in reverse order.
    * Safe to call on an uninitialized root.
    */
@@ -343,6 +454,16 @@ export class GameCompositionRoot
     }
 
     const t0 = performance.now();
+
+    // Remove composition-root-owned bridge listeners (C-331 loot)
+    for (const unsubscribe of this._bridgeUnsubscribers) {
+      try {
+        unsubscribe();
+      } catch (_error) {
+        // Best-effort cleanup
+      }
+    }
+    this._bridgeUnsubscribers = [];
 
     // Reset all state services
     this._playerStateService?.reset();
