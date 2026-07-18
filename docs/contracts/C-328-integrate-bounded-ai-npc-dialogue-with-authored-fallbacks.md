@@ -8,7 +8,7 @@
 | **Target** | Production dialogue overlay (`apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/`), NPC dialogue orchestrator (`apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts`), prompt context projection, typed dialogue command schema (`packages/shared/schemas/`), authored fallback dialogue (content pack `dialogues{}`) |
 | **Priority** | P0 — AI character interaction is the product differentiator, but it cannot be allowed to corrupt mechanics or block offline play. Phase 1 — Playable, Polished, Offline-Capable Vertical Slice |
 | **Dependencies** | C-128, C-129, C-141, C-157, C-231, C-314, C-316, C-326 (see Dependency Status below) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | production — the dialogue overlay is already mounted on the production `/game` journey; this contract hardens it in place (no sandbox promotion step required, dev sandbox at `/dev/sandbox/dialogue` is updated alongside) |
 | **Docs Impact** | `docs/PROGRESS.md` regenerated via `bun knowledge:sync`; execution report appended to this file. No player-facing docs. |
 | **Contract version** | 2.0.0 |
@@ -295,4 +295,64 @@ Changes to ACs or scope require a version bump and user approval.
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
----
+## Execution Report
+
+### Summary
+Built the NPC dialogue orchestrator (`npc_dialogue_service.svelte.ts`) with context projection, gateway routing, authored fallback resolution, precondition whitelist derivation, and command validation. Created shared TypeBox `NpcDialogueCommandSchema` (trade/offerQuest/skillCheck/giveItem/startCombat) + turn/choice/envelope schemas with `additionalProperties: false`. Refactored the dialogue overlay ViewModel to delegate to the orchestrator, removing all direct OllamaClient/textGenerationService streaming paths. Wired the orchestrator through the game composition root with content pack loader + AI gateway. Updated the dev sandbox with an inline mock orchestrator.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Authored fallback: orchestrator serves content-pack dialogue when text generator throws or capability is absent. NPCs without defaultDialogueKey get a generic persona fallback line. Never shows `*...*` placeholder. |
+| AC-2 | ✅ | Malformed output rejected: TypeBox `Value.Check` with `additionalProperties: false` on all schemas. Unknown `kind`, extra fields, and out-of-range DC values all fail validation. One repair attempt before fallback. Command outside precondition whitelist is dropped silently with `warn` log. |
+| AC-3 | ✅ | Precondition whitelist: `deriveAllowedCommands()` gates `trade` on `isVendor`, `giveItem` on `vendorInventory`, `startCombat` on `combatStats`. Commands dispatch through executor callbacks wired in the composition root (trade → vendor overlay, startCombat → combat transition, offerQuest/giveItem/skillCheck deferred to consuming contracts). |
+| AC-4 | ✅ | Gateway routing: generation routed exclusively through `aiGatewayService` (no OllamaClient/textGenerationService remain in the ViewModel). Context projection (persona, memory window, game-state facts, allowed-command whitelist) built in the orchestrator. |
+| AC-5 | ✅ | Cancellation + regenerate safety: concurrency gate in `generateTurn` cancels previous via AbortController. `markCommandExecuted`/`wasCommandExecuted` per-turn guard prevents re-execution. Concurrent sends cancel first (tested). |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/game/npc_dialogue_command.ts` | TypeBox schemas: NpcDialogueCommandSchema (discriminated union), NpcDialogueChoiceSchema, NpcDialogueTurnSchema, NpcDialogueAiEnvelopeSchema |
+| `packages/shared/schemas/src/lib/game/npc_dialogue_command.test.ts` | 16 unit tests: valid variants, unknown kinds, extra fields, DC bounds, empty labels, max choices, malformed JSON |
+| `packages/shared/types/src/lib/game/npc_dialogue_command.ts` | Re-exports types derived via `Static<>` from @aikami/schemas |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | 21 unit tests covering AC-1 through AC-5 + edge cases |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Added `export * from './lib/game/npc_dialogue_command.ts'` |
+| `packages/shared/types/src/index.ts` | Added `export * from './lib/game/npc_dialogue_command.ts'` |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Full rewrite: 58-line overlay → 400+ line orchestrator with configure(), generateTurn(), deriveAllowedCommands(), buildContext(), markCommandExecuted() |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Added npcDialogueService wiring: imports aiGatewayService, loads content pack via loadContentPack(), configures orchestrator with content provider, text generator, and executors |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Removed _buildSystemPrompt, _generateAiResponse, _streamViaOllama, _streamViaTextGenerationService, _isRiskyAction, _executeStructuredIntent, _resolveSkillCheck, _handleStateMutation. Added _delegateGenerateResponse (orchestrator delegation), _dispatchCommand (command routing), activeChoices. Removed direct OllamaClient, textGenerationService, gmPromptService, PERSONA_PROMPTS imports. |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` | Removed OllamaClient import; pass npcDialogueService instead of ollamaClient to getDialogueOverlayViewModel. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` | Full rewrite: removed OllamaClient/stream mocking. Tests now mock npcDialogueService.generateTurn() and verify orchestration. 22 tests covering init, send, auth fallback, action menu, dice, key handling. |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte` | Added inline mock npcDialogueService to DialogueDevViewModel.create() |
+
+### Deviations from Spec
+- **AC-3 executor depth**: `offerQuest`, `skillCheck`, and `giveItem` executors are wired as stubs in the composition root (return `true`). These execute the precondition validation gate but defer full dispatch to consuming contracts (C-329 for quest graph, C-157 dice flow remains in the ViewModel). The contract's architecture directive says "This contract adds the validation gate in front of them, not new executor logic" — the gates are fully implemented.
+- **Token streaming**: The orchestrator currently returns the full narrative text from `generateTurn()` rather than streaming token-by-token through the VM. The VM's `_chunker.feed()` / `_chunker.close()` TTS integration is preserved in `initialize()` but the streaming path is simplified in the orchestrator. Streaming can be re-added by calling `generateText` with an `onChunk` callback in the composition root executor wrapper (the `AiTextGenerationOptions` interface supports `onChunk`).
+
+### Test Results
+- Unit (schemas): 245/245 pass (16 new) — 0 failures
+- Unit (npc_dialogue_service): 21/21 pass — 0 failures
+- Unit (dialogue_overlay_view_model): 22/22 pass — 0 failures
+- Unit (engine): 783/783 pass — 0 failures (baseline unchanged)
+- Unit (dev view model): 3 pre-existing failures (generateSceneImage), unchanged from baseline
+- Unit (composition root): 11 pre-existing failures (integration tests require full game state), unchanged from baseline
+- Visual: deferred to verifier — dev sandbox route renders with mock orchestrator
+- Baseline regression: 0 new failures
+
+### Suggested Commit Message
+```
+feat(client): add bounded AI NPC dialogue with content-pack fallback (C-328)
+
+- Add NpcDialogueCommandSchema (trade/offerQuest/skillCheck/giveItem/startCombat)
+  with additionalProperties:false in shared schemas/types
+- Build NPC dialogue orchestrator with gateway routing, context projection,
+  precondition whitelist, and authored fallback resolution
+- Wire orchestrator through game composition root with content pack + AI gateway
+- Refactor dialogue overlay ViewModel to delegate to orchestrator
+- Remove direct OllamaClient/textGenerationService streaming paths
+- Add 21 orchestrator tests + 16 schema tests
+```

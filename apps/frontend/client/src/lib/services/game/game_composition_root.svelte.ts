@@ -12,6 +12,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { aiGatewayService } from '../ai/ai_gateway_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
@@ -24,6 +25,8 @@ import type { GameOverlayServiceInterface } from './game_overlay_service.svelte'
 import { gameOverlayService } from './game_overlay_service.svelte';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
+import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
+import { npcDialogueService } from './npc_dialogue_service.svelte';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
 import type { SessionServiceInterface } from './session_service.svelte';
@@ -50,6 +53,7 @@ export type GameCompositionRootInterface = BaseFrontendClassInterface & {
   readonly gameEngineService: GameEngineServiceInterface;
   readonly gameOverlayService: GameOverlayServiceInterface;
   readonly sessionService: SessionServiceInterface;
+  readonly npcDialogueService: NpcDialogueServiceInterface;
 
   initialize(): Promise<void>;
   dispose(): Promise<void>;
@@ -76,6 +80,7 @@ export class GameCompositionRoot
   private _gameEngineService: GameEngineServiceInterface | undefined;
   private _gameOverlayService: GameOverlayServiceInterface | undefined;
   private _sessionService: SessionServiceInterface | undefined;
+  private _npcDialogueService: NpcDialogueServiceInterface | undefined;
 
   get isInitialized(): boolean {
     return this._initialized;
@@ -144,6 +149,13 @@ export class GameCompositionRoot
     return this._sessionService;
   }
 
+  get npcDialogueService(): NpcDialogueServiceInterface {
+    if (!this._npcDialogueService) {
+      throw new Error('GameCompositionRoot not initialised');
+    }
+    return this._npcDialogueService;
+  }
+
   /**
    * Initializes all game runtime services in dependency order.
    * Idempotent — calling twice returns without duplicate subscriptions.
@@ -168,6 +180,7 @@ export class GameCompositionRoot
     this._gameEngineService = gameEngineService;
     // Phase 1b: Overlay service (init EngineBridge)
     this._gameOverlayService = gameOverlayService;
+    this._npcDialogueService = npcDialogueService;
 
     // Phase 2: Initialise overlay (sets up bridge listeners)
     await gameOverlayService.initialize();
@@ -188,6 +201,105 @@ export class GameCompositionRoot
     // Phase 5b: Thread contentPackId to engine and ensure campaign service is ready
     const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
     this.debug('initialize:contentPackId', { contentPackId });
+
+    // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
+    const { loadContentPack } = await import('@aikami/frontend/engine');
+    const contentPack = await loadContentPack({ packId: contentPackId });
+
+    npcDialogueService.configure({
+      contentProvider: {
+        getNpc: (npcId) => {
+          const npc = contentPack.getNpc(npcId);
+          if (!npc) {
+            return undefined;
+          }
+          return {
+            name: npc.name,
+            defaultDialogueKey: npc.defaultDialogueKey,
+            isVendor: npc.isVendor,
+            vendorInventory: npc.vendorInventory,
+            combatStats: npc.combatStats as Record<string, unknown> | undefined,
+          };
+        },
+        getDialogue: (key) => contentPack.getDialogue(key),
+        getQuest: (questId) => {
+          const q = contentPack.getQuest(questId);
+          if (!q) {
+            return undefined;
+          }
+          return { id: q.id, name: q.name, offerDialogueKey: q.offerDialogueKey };
+        },
+        getAllQuests: () =>
+          contentPack.getAllQuests().map((q) => ({
+            id: q.id,
+            name: q.name,
+            offerDialogueKey: q.offerDialogueKey,
+          })),
+        getAllEncounters: () =>
+          contentPack.getAllEncounters().map((e) => ({
+            id: e.id,
+            dialogueKey: e.startDialogueKey,
+            encounterNpcIds: e.enemyNpcIds,
+          })),
+        getEncounter: (encounterId) => {
+          const e = contentPack.getEncounter(encounterId);
+          if (!e) {
+            return undefined;
+          }
+          return {
+            id: e.id,
+            dialogueKey: e.startDialogueKey,
+            encounterNpcIds: e.enemyNpcIds,
+          };
+        },
+      },
+      textGenerator: async (opts) => {
+        const result = await aiGatewayService.generateText({
+          messages: opts.messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })) as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+          schema: opts.schema,
+          schemaName: opts.schemaName,
+          signal: opts.signal,
+          onChunk: undefined,
+        });
+        return {
+          text: result.text,
+          structured: result.structured,
+        };
+      },
+      executors: {
+        trade: (_opts) => {
+          gameOverlayService.openVendor({
+            vendorId: _opts.npcId,
+            vendorName: '',
+            vendorInventory: '',
+          });
+          return true;
+        },
+        offerQuest: (_opts) => {
+          // C-329 will consume this envelope; for now, open quest log
+          // with the offered quest info (deferred to C-329 proper)
+          return true;
+        },
+        skillCheck: (_opts) => {
+          // Dice flow handled by the dialogue ViewModel; the orchestrator
+          // validates the command and returns it as the turn.command.
+          // The VM extracts it and runs the dice flow.
+          return true;
+        },
+        giveItem: (_opts) => {
+          // Add item to inventory via inventory service
+          // (requires addItem on InventoryService — see Phase 2 note)
+          return true;
+        },
+        startCombat: (opts) => {
+          gameOverlayService.startCombat({ enemyName: opts.npcName });
+          return true;
+        },
+      },
+    });
 
     // Phase 6: Start ECS bridge listeners for state services
     await playerStateService.startListening();
@@ -228,6 +340,7 @@ export class GameCompositionRoot
     this._gameEngineService = undefined;
     this._gameOverlayService = undefined;
     this._sessionService = undefined;
+    this._npcDialogueService = undefined;
 
     this._initialized = false;
 

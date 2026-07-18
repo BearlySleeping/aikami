@@ -39,6 +39,27 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   className: 'DialogueSandboxVM',
   npcData: MOCK_NPC_DATA,
   onEndChat: goBack,
+  npcDialogueService: {
+    generateTurn: async () => ({
+      narrative: '[Dev mock AI response]',
+      choices: [
+        { id: 'talk', label: 'Ask about the ward' },
+        { id: 'leave', label: 'Leave' },
+      ],
+      source: 'ai',
+    }),
+    wasCommandExecuted: () => false,
+    markCommandExecuted: () => {},
+    configure: () => {},
+    deriveAllowedCommands: () => ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
+    buildContext: () => ({
+      persona: 'You are a dev sandbox NPC.',
+      npcName: 'Elder Thrain',
+      memory: [],
+      gameStateFacts: [],
+      allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
+    }),
+  },
   onStartCombat: () => {
     goBack();
   },
