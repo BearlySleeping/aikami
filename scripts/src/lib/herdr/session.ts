@@ -145,15 +145,47 @@ export const expandServices = (inputs: ServiceInput[]): DevService[] => {
 
 // ── Workspace naming ───────────────────────────────────────
 
-/** Build the workspace name for a given mode. */
-export const buildSessionName = (mode: AikamiMode): string => `aikami-${mode}`;
+/** Build the workspace name for a given mode, optionally scoped to a contract. */
+export const buildSessionName = (mode: AikamiMode, contractId?: string): string =>
+  contractId ? `aikami-${mode}-${contractId}` : `aikami-${mode}`;
+
+/** Extract the current contract ID from the pipeline env, or undefined. */
+export const currentContractId = (): string | undefined => {
+  const contractPath = process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+  if (contractPath) {
+    const m = contractPath.match(/(C-\d+|MIG-\d+)/);
+    return m?.[0];
+  }
+  return undefined;
+};
+
+/** Resolve the workspace name for a given mode in the current context. */
+export const resolveSessionName = (mode: AikamiMode): string =>
+  buildSessionName(mode, currentContractId());
+
+/** Extract contract ID from a session name. Returns undefined if not contract-scoped. */
+export const contractIdFromSessionName = (name: string): string | undefined => {
+  // aikami-emulator-C-331 → C-331
+  // aikami-emulator → undefined
+  const parts = name.split('-');
+  // After 'aikami-{mode}', if there are more segments, the rest is the contract ID
+  if (parts.length > 2) {
+    const contractParts = parts.slice(2);
+    return contractParts.join('-');
+  }
+  return undefined;
+};
 
 /** Parse a workspace name back to mode, or null if not an aikami workspace. */
 export const parseWorkspaceName = (name: string): AikamiMode | null => {
   if (name.startsWith('aikami-')) {
-    const suffix = name.slice(7);
-    if (suffix === 'emulator' || suffix === 'staging' || suffix === 'production') {
-      return suffix;
+    const rest = name.slice(7);
+    // Extract mode: 'emulator', 'staging', 'production'
+    // May be followed by -C-XXX (contract-scoped)
+    for (const mode of ['emulator', 'staging', 'production'] as const) {
+      if (rest === mode || rest.startsWith(`${mode}-`)) {
+        return mode;
+      }
     }
   }
   return null;
@@ -401,7 +433,7 @@ const getWorkspacePanes = async (workspaceId: string): Promise<PaneListEntry[]> 
  */
 export const startServices = async (config: SessionConfig): Promise<string> => {
   const { mode, services, force = false, join = false, projectRoot = process.cwd() } = config;
-  const workspaceLabel = buildSessionName(mode);
+  const workspaceLabel = resolveSessionName(mode);
 
   if (services.length === 0) {
     throw new Error('No services specified. Use: firebase, client, voice, image, text, all');
@@ -538,7 +570,7 @@ export const stopServices = async (config: {
   services: DevService[] | 'all';
 }): Promise<void> => {
   const { mode, services } = config;
-  const workspaceLabel = buildSessionName(mode);
+  const workspaceLabel = resolveSessionName(mode);
 
   const workspaceId = await findWorkspace(workspaceLabel);
   if (!workspaceId) {
@@ -586,7 +618,7 @@ export const stopServices = async (config: {
  */
 export const restartServices = async (config: SessionConfig): Promise<string> => {
   const { mode, services, projectRoot } = config;
-  const workspaceLabel = buildSessionName(mode);
+  const workspaceLabel = resolveSessionName(mode);
 
   const svcNames = services.map((s) => SERVICE_DEFS[s].name).join(', ');
   console.log(`🔄 Restarting ${svcNames}...`);
@@ -635,7 +667,7 @@ export const stopAllSessions = async (): Promise<void> => {
 // ── Join workspace ─────────────────────────────────────────
 
 export const joinSession = async (mode: AikamiMode): Promise<void> => {
-  const workspaceLabel = buildSessionName(mode);
+  const workspaceLabel = resolveSessionName(mode);
 
   if (!(await workspaceExists(workspaceLabel))) {
     throw new Error(
@@ -671,7 +703,10 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
   }
 
   const aikamiWorkspaces = mode
-    ? r.result.workspaces.filter((w) => w.label === buildSessionName(mode))
+    ? r.result.workspaces.filter((w) => {
+        const parsed = parseWorkspaceName(w.label);
+        return parsed === mode;
+      })
     : r.result.workspaces.filter((w) => {
         if (!w.label.startsWith('aikami-')) {
           return false;
@@ -797,7 +832,7 @@ export const waitForReady = async (
   timeoutMs = 180_000,
 ): Promise<void> => {
   const { services, mode } = config;
-  const workspaceLabel = buildSessionName(mode);
+  const workspaceLabel = resolveSessionName(mode);
 
   const wsId = await findWorkspace(workspaceLabel);
   if (!wsId) {
@@ -825,4 +860,21 @@ export const waitForReady = async (
       console.error(`  ✗ ${svc.name} timed out on :${svc.readyPort}`);
     }),
   );
+};
+
+// ── Contract session lifecycle ────────────────────────────
+
+/**
+ * Stop the contract-scoped herdr session for a given mode.
+ * Closes the entire workspace (stopping all services — client, firebase, etc.).
+ * Called during pipeline cleanup after merge/block.
+ */
+export const stopContractSession = async (mode: AikamiMode, contractId: string): Promise<void> => {
+  const label = buildSessionName(mode, contractId);
+  const wsId = await findWorkspace(label);
+  if (!wsId) {
+    return; // Already stopped or never started
+  }
+  await herdr(['workspace', 'close', wsId]);
+  console.log(`🧹 Stopped contract session: ${label}`);
 };

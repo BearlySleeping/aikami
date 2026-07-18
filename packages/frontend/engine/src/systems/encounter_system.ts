@@ -173,13 +173,35 @@ const _triggerEncounter = (params: EncounterTriggerParams): void => {
   // 4. Read encounter ID from the Enemy component (C-330 AC-2)
   const encounterId = Enemy.encounterId[enemyEid] || null;
 
-  // 5. Switch engine mode to COMBAT (gates movement)
+  // 5. Read non-combat resolution flag from the enemy component (C-330 AC-4)
+  const allowNonCombatResolution = Enemy.allowNonCombatResolution[enemyEid] ?? false;
+  const nonCombatSkillCheckRaw = Enemy.nonCombatSkillCheck[enemyEid] ?? null;
+
+  // 6. Switch engine mode to COMBAT (gates movement)
   setEngineGameMode('COMBAT');
 
-  // 6. Generate a combat seed for deterministic replay (AC-1)
+  // 7. Generate a combat seed for deterministic replay (AC-1)
   const combatSeed = (Date.now() & 0x7fffffff) >>> 0;
 
-  // 7. Emit COMBAT_STARTED with enemy metadata and seed
+  // 8. Parse non-combat skill check JSON if present
+  let nonCombatSkillCheck:
+    | {
+        skill: string;
+        dc: number;
+        statModifier: 'strength' | 'dexterity' | 'intelligence' | 'charisma' | 'wisdom';
+        successDialogueKey: string;
+        failureDialogueKey: string;
+      }
+    | undefined;
+  if (nonCombatSkillCheckRaw) {
+    try {
+      nonCombatSkillCheck = JSON.parse(nonCombatSkillCheckRaw) as typeof nonCombatSkillCheck;
+    } catch {
+      nonCombatSkillCheck = undefined;
+    }
+  }
+
+  // 9. Emit COMBAT_STARTED with enemy metadata and seed
   bridge.emit({
     type: 'COMBAT_STARTED',
     participantIds: [playerEntityId, enemyEid],
@@ -189,7 +211,8 @@ const _triggerEncounter = (params: EncounterTriggerParams): void => {
     enemyMaxHp,
     combatSeed,
     encounterId,
-    allowNonCombatResolution: false,
+    allowNonCombatResolution,
+    nonCombatSkillCheck,
   });
 };
 
@@ -211,12 +234,24 @@ export type EncounterEnemySpawnData = {
   y: number;
   /** Max HP. */
   hitPoints: number;
-  /** Attack bonus added to d20 hit check. */
+  /** Attack bonus added to d20 hit check (used for accuracy). */
   attackBonus: number;
   /** Armor class (evasion threshold). */
   armorClass: number;
   /** Initiative bonus. */
   initiative: number;
+  /**
+   * Whether non-combat resolution is available for this encounter.
+   * When true, the dialogue system can offer a non-combat path (C-330 AC-4).
+   */
+  allowNonCombatResolution?: boolean;
+  /**
+   * Skill check definition for non-combat resolution (serialized JSON).
+   * Only meaningful when allowNonCombatResolution is true.
+   */
+  nonCombatSkillCheck?: string | null;
+  /** Dialogue key for non-combat success outcome. */
+  nonCombatSuccessDialogueKey?: string | null;
 };
 
 /**
@@ -253,6 +288,9 @@ export const spawnEncounterEnemy = (options: {
       isActive: true,
       spawnId: `${data.encounterId}:${data.npcName}`,
       encounterId: data.encounterId,
+      allowNonCombatResolution: data.allowNonCombatResolution ?? false,
+      nonCombatSkillCheck: data.nonCombatSkillCheck ?? null,
+      nonCombatSuccessDialogueKey: data.nonCombatSuccessDialogueKey ?? null,
     }),
   );
 
@@ -276,9 +314,9 @@ export const spawnEncounterEnemy = (options: {
       health: data.hitPoints,
       maxHealth: data.hitPoints,
       initiative: data.initiative,
-      attack: data.attackBonus,
+      attack: 5, // base enemy damage (separate from hit bonus)
       defense: data.armorClass,
-      accuracy: 2, // default enemy accuracy
+      accuracy: data.attackBonus, // attackBonus is a hit modifier, not damage
       evasion: data.armorClass,
     }),
   );

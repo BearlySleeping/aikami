@@ -291,7 +291,18 @@ export default function (pi: ExtensionAPI) {
     const env = process.env.AIKAMI_MODE as string | undefined;
     return env === 'staging' || env === 'production' ? env : 'emulator';
   })();
-  const workspaceLabel = `aikami-${mode}`;
+  const workspaceLabel = (() => {
+    // In contract pipeline, scope the workspace to the contract so
+    // cleanup can terminate only that contract's services.
+    const contractPath = process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
+    if (contractPath) {
+      const m = contractPath.match(/(C-\d+|MIG-\d+)/);
+      if (m?.[0]) {
+        return `aikami-${mode}-${m[0]}`;
+      }
+    }
+    return `aikami-${mode}`;
+  })();
 
   if (herdrEnv && ownPaneId) {
     // ───────────────────────────────────────────────────────────

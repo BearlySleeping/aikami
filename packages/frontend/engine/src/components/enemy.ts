@@ -25,6 +25,18 @@ export const Enemy = {
    * Set when this enemy was spawned from a content pack encounter definition.
    */
   encounterId: [] as string[],
+  /**
+   * Whether non-combat resolution is available for this encounter (C-330 AC-4).
+   */
+  allowNonCombatResolution: [] as boolean[],
+  /**
+   * Non-combat skill check definition (serialized JSON, null if not set).
+   */
+  nonCombatSkillCheck: [] as (string | null)[],
+  /**
+   * Dialogue key for non-combat success outcome.
+   */
+  nonCombatSuccessDialogueKey: [] as (string | null)[],
 };
 
 /**
@@ -37,13 +49,32 @@ export const registerEnemyObservers = (world: World): void => {
   observe(
     world,
     onSet(Enemy),
-    (eid: number, params: { isActive: boolean; spawnId?: string; encounterId?: string }) => {
+    (
+      eid: number,
+      params: {
+        isActive: boolean;
+        spawnId?: string;
+        encounterId?: string;
+        allowNonCombatResolution?: boolean;
+        nonCombatSkillCheck?: string | null;
+        nonCombatSuccessDialogueKey?: string | null;
+      },
+    ) => {
       Enemy.isActive[eid] = params.isActive;
       if (params.spawnId !== undefined) {
         Enemy.spawnId[eid] = params.spawnId;
       }
       if (params.encounterId !== undefined) {
         Enemy.encounterId[eid] = params.encounterId;
+      }
+      if (params.allowNonCombatResolution !== undefined) {
+        Enemy.allowNonCombatResolution[eid] = params.allowNonCombatResolution;
+      }
+      if (params.nonCombatSkillCheck !== undefined) {
+        Enemy.nonCombatSkillCheck[eid] = params.nonCombatSkillCheck;
+      }
+      if (params.nonCombatSuccessDialogueKey !== undefined) {
+        Enemy.nonCombatSuccessDialogueKey[eid] = params.nonCombatSuccessDialogueKey;
       }
     },
   );

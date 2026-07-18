@@ -129,6 +129,24 @@ export type GameCommand =
     }
   | {
       /**
+       * Retry the last combat encounter with the preserved seed for
+       * deterministic replay. Sent by the game-over ViewModel when the
+       * player clicks "Retry Encounter".
+       *
+       * The engine resets turn tracking, reinitializes combat with the
+       * preserved seed, and emits COMBAT_STARTED. The existing bridge
+       * listener handles the COMBAT_STARTED response.
+       *
+       * Contract: C-330 AC-5 — Deterministic retry
+       */
+      type: 'RETRY_ENCOUNTER';
+      /** Combat seed from the original encounter (32-bit integer). */
+      combatSeed: number;
+      /** Encounter ID for content pack resolution tracking. */
+      encounterId?: string | null;
+    }
+  | {
+      /**
        * Updates the player entity's Appearance component layers based on
        * current equipment state. Sent by the InventoryViewModel after equip
        * or unequip resolves.

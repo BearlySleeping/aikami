@@ -51,10 +51,9 @@ const BaseItemSchema = Type.Object({
   equippable: Type.Boolean({ description: 'Whether the item can be equipped at all' }),
   slot: Type.Optional(EquipmentSlotSchema),
   /** Deterministic vendor base price in gold. 0 = unsellable, or >= 2 to avoid zero-gold sales. */
-  basePrice: Type.Union(
-    [Type.Literal(0), Type.Number({ minimum: 2 })],
-    { description: 'Vendor base price in gold (0 = unsellable, or >= 2)' },
-  ),
+  basePrice: Type.Union([Type.Literal(0), Type.Number({ minimum: 2 })], {
+    description: 'Vendor base price in gold (0 = unsellable, or >= 2)',
+  }),
 });
 
 const ConsumableItemSchema = Type.Intersect([
@@ -77,10 +76,9 @@ const NonConsumableItemSchema = Type.Intersect([
   }),
 ]);
 
-export const ItemDefinitionSchema = Type.Union(
-  [ConsumableItemSchema, NonConsumableItemSchema],
-  { description: 'Definition for a single item type in the game' },
-);
+export const ItemDefinitionSchema = Type.Union([ConsumableItemSchema, NonConsumableItemSchema], {
+  description: 'Definition for a single item type in the game',
+});
 
 export type ItemDefinitionData = Type.Static<typeof ItemDefinitionSchema>;
 export type ItemDefinition = Type.Static<typeof ItemDefinitionSchema>;

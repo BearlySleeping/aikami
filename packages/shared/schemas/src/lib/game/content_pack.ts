@@ -8,7 +8,7 @@
 // Contract: C-327 AC-3 — optional onboarding section added
 
 import Type, { type Static } from 'typebox';
-import { ConsumableEffectSchema, EquipmentSlotSchema, ItemTypeSchema } from '../database/item.ts';
+import { ConsumableEffectSchema, EquipmentSlotSchema } from '../database/item.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
 
 // ---------------------------------------------------------------------------
@@ -113,10 +113,9 @@ const BaseContentPackItemSchema = Type.Object({
   equipmentSlot: Type.Optional(EquipmentSlotSchema),
   /** Optional deterministic vendor base price in gold (0 = unsellable, or >= 2) — C-331 */
   basePrice: Type.Optional(
-    Type.Union(
-      [Type.Literal(0), Type.Number({ minimum: 2 })],
-      { description: 'Vendor base price in gold (0 = unsellable, or >= 2)' },
-    ),
+    Type.Union([Type.Literal(0), Type.Number({ minimum: 2 })], {
+      description: 'Vendor base price in gold (0 = unsellable, or >= 2)',
+    }),
   ),
 });
 
