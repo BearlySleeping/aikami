@@ -46,7 +46,7 @@ const validManifest = {
       name: 'Rusty Sword',
       type: 'weapon' as const,
       attackBonus: 3,
-      equipmentSlot: 'main_hand',
+      equipmentSlot: 'weapon',
     },
   },
   dialogues: {

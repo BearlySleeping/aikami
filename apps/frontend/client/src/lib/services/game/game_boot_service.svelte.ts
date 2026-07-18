@@ -398,7 +398,8 @@ class GameBootService
     const slotId = this._campaign.lastSaveSlotId;
     try {
       const { gameSaveService } = await import('./game_save_service.svelte.ts');
-      const payload = await gameSaveService.getSavePayload(slotId);
+      // Raw envelope — hydration stage splits it into ECS + service snapshots (C-331)
+      const payload = await gameSaveService.getRawSavePayload(slotId);
       // Validation passed — store payload for hydration stage
       input.pendingSavePayload = payload;
       this._input = input;
@@ -517,9 +518,23 @@ class GameBootService
     const t0 = performance.now();
 
     if (input.pendingSavePayload) {
-      // Restore from save snapshot
+      // Restore from save snapshot — the payload may be a full envelope
+      // ({ ecsSnapshot, serviceSnapshots }) or a legacy plain ECS snapshot.
       this.bootProgress.detail = 'Restoring saved world...';
-      await this._gameWorld.restoreWorld(input.pendingSavePayload);
+      const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte.ts');
+      const { hydrateAllServices } = await import('./serializable_service');
+      const { ecsSnapshot, serviceSnapshots } = parseSavePayloadEnvelope(input.pendingSavePayload);
+
+      // Hydrate domain services FIRST so world flags (collected pickups,
+      // loot-granted encounters) are in place before any map load (C-331).
+      if (serviceSnapshots) {
+        hydrateAllServices(serviceSnapshots);
+        this.debug('stage:hydrating_snapshot:services-hydrated', {
+          snapshotCount: serviceSnapshots.length,
+        });
+      }
+
+      await this._gameWorld.restoreWorld(ecsSnapshot);
       this.debug('stage:hydrating_snapshot:restored', {
         bytes: input.pendingSavePayload.length,
       });
@@ -538,10 +553,13 @@ class GameBootService
 
       this.bootProgress.detail = `Loading map: ${pack.manifest.startingMapId}`;
 
+      const { worldStateService } = await import('./world_state_service.svelte');
       await this._gameWorld.loadMap({
         mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX,
         targetY: startingMap.defaultY,
+        defeatedEnemies: [...worldStateService.defeatedEnemies],
+        collectedPickups: [...worldStateService.collectedPickups],
       });
 
       this.debug('stage:hydrating_snapshot:fresh', {

@@ -190,13 +190,13 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
     test('returns definition for known equippable item', () => {
       const viewModel = createViewModel({ vendorInventory: 'ironSword' });
       const def = viewModel.getItemDef('ironSword');
-      expect(def.label).toBe('ironSword');
+      expect(def.label).toBe('Iron Sword');
     });
 
     test('returns definition for consumable items', () => {
       const viewModel = createViewModel({ vendorInventory: 'healthPotion' });
       const def = viewModel.getItemDef('healthPotion');
-      expect(def.label).toBe('healthPotion');
+      expect(def.label).toBe('Health Potion');
       expect(def.equippable).toBe(false);
     });
 

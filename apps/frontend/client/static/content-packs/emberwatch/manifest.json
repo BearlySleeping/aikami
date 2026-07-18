@@ -1,7 +1,7 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "updatedAt": "2026-07-13T00:00:00.000Z",
   "startingMapId": "emberwatch_village",
   "maps": {
@@ -82,42 +82,62 @@
       "name": "Iron Sword",
       "type": "weapon",
       "attackBonus": 5,
-      "equipmentSlot": "weapon"
+      "equipmentSlot": "weapon",
+      "basePrice": 50
+    },
+    "steelSword": {
+      "name": "Steel Sword",
+      "type": "weapon",
+      "attackBonus": 8,
+      "equipmentSlot": "weapon",
+      "basePrice": 150
     },
     "healthPotion": {
       "name": "Health Potion",
-      "type": "consumable"
+      "type": "consumable",
+      "basePrice": 10,
+      "effect": {
+        "kind": "heal",
+        "amount": 30
+      }
     },
     "manaPotion": {
       "name": "Mana Potion",
-      "type": "consumable"
+      "type": "consumable",
+      "basePrice": 15,
+      "effect": {
+        "kind": "heal",
+        "amount": 20
+      }
     },
     "ironArmor": {
       "name": "Iron Armor",
       "type": "armor",
       "defenseBonus": 5,
-      "equipmentSlot": "armor"
+      "equipmentSlot": "armor",
+      "basePrice": 120
     },
     "woodenShield": {
       "name": "Wooden Shield",
       "type": "armor",
       "defenseBonus": 2,
-      "equipmentSlot": "armor"
+      "equipmentSlot": "armor",
+      "basePrice": 20
     },
     "wardPendant": {
       "name": "Ward Pendant",
-      "type": "key",
-      "equipmentSlot": "neck"
+      "type": "key"
     },
     "wardAmulet": {
       "name": "Ward Amulet",
-      "type": "misc",
+      "type": "armor",
       "defenseBonus": 3,
-      "equipmentSlot": "neck"
+      "equipmentSlot": "armor"
     },
     "wardShard": {
       "name": "Ward Shard",
-      "type": "misc"
+      "type": "misc",
+      "basePrice": 30
     }
   },
   "dialogues": {

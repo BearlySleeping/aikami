@@ -4,23 +4,30 @@
 // and computed attack/defense bonuses from equipped items.
 //
 // Extracted from game_state_service (C-314 service split).
+//
+// Contract C-331: single equip path (ViewModels must delegate here), sends
+// UPDATE_PLAYER_APPEARANCE over the bridge after each successful change,
+// and participates in save/load via the serializable registry.
 
+import type { GameCommand } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { EquipmentSlot } from '@aikami/types';
+import type { EquipmentSlot, EquipmentSnapshot } from '@aikami/types';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
-import { getItemDefinition } from './inventory_service.svelte';
+import { getItemDefinition, inventoryService } from './inventory_service.svelte';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
+import { playerStateService } from './player_state_service.svelte';
+import { registerSerializable, type SerializableService } from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type EquipmentServiceOptions = BaseFrontendClassOptions & {
-  /** Reference to PlayerStateService for base stat access (set by composition root). */
+  /** Reference to PlayerStateService for base stat access. */
   playerStateService: PlayerStateServiceInterface;
   /** Reference to InventoryService for inventory manipulation. */
   inventoryService: InventoryServiceInterface;
@@ -32,8 +39,27 @@ export type EquipmentServiceInterface = BaseFrontendClassInterface & {
   readonly totalAttack: number;
   readonly totalDefense: number;
 
-  equipItem(options: { itemId: string }): void;
-  unequipItem(options: { slot: EquipmentSlot }): void;
+  /** Wires the engine command sender for UPDATE_PLAYER_APPEARANCE (C-331 AC-4). */
+  configureCommandSender(options: { sendCommand(command: GameCommand): void }): void;
+
+  /**
+   * Equips an item from inventory into its slot.
+   * @returns `true` when equipped; `false` when rejected.
+   */
+  equipItem(options: { itemId: string }): boolean;
+
+  /**
+   * Unequips the item in the given slot back to inventory.
+   * @returns `true` when unequipped; `false` when the slot was empty.
+   */
+  unequipItem(options: { slot: EquipmentSlot }): boolean;
+
+  /** Serializes equipped slot item IDs for the save envelope (C-331 AC-2). */
+  serialize(): EquipmentSnapshot;
+
+  /** Restores equipped slots from a save envelope snapshot. */
+  hydrate(data: EquipmentSnapshot): void;
+
   reset(): void;
 };
 
@@ -50,6 +76,7 @@ class EquipmentService
 
   private readonly _playerStateService: PlayerStateServiceInterface;
   private readonly _inventoryService: InventoryServiceInterface;
+  private _sendCommand: ((command: GameCommand) => void) | undefined;
 
   constructor(options: EquipmentServiceOptions) {
     super(options);
@@ -86,25 +113,30 @@ class EquipmentService
   }
 
   /** @inheritdoc */
-  equipItem(options: { itemId: string }): void {
+  configureCommandSender(options: { sendCommand(command: GameCommand): void }): void {
+    this._sendCommand = (command) => options.sendCommand(command);
+  }
+
+  /** @inheritdoc */
+  equipItem(options: { itemId: string }): boolean {
     const { itemId } = options;
     const definition = getItemDefinition(itemId);
 
     if (!definition.equippable || !definition.slot) {
       this.debug('equipItem:not-equippable', { itemId });
-      return;
+      return false;
     }
 
     if (!this._inventoryService) {
       this.debug('equipItem:inventory-not-wired', { itemId });
-      return;
+      return false;
     }
 
     // Find the item in inventory
     const index = this._inventoryService.inventory.findIndex((item) => item.itemId === itemId);
     if (index < 0) {
       this.debug('equipItem:not-in-inventory', { itemId });
-      return;
+      return false;
     }
 
     const slot = definition.slot;
@@ -116,14 +148,20 @@ class EquipmentService
       this._unequipCurrent(slot);
     }
 
-    // Remove from inventory (reduce quantity or remove entirely)
+    // Remove from inventory (reduce quantity or remove entirely).
+    // Re-resolve the index — the unequip above may have mutated the array.
     const inventory = this._inventoryService.inventory;
-    const item = inventory[index];
+    const currentIndex = inventory.findIndex((item) => item.itemId === itemId);
+    if (currentIndex < 0) {
+      this.debug('equipItem:vanished-from-inventory', { itemId });
+      return false;
+    }
+    const item = inventory[currentIndex];
     if (item.quantity > 1) {
       // Mutate in-place — inventory is a $state array on InventoryService
-      inventory[index] = { itemId, quantity: item.quantity - 1 };
+      inventory[currentIndex] = { itemId, quantity: item.quantity - 1 };
     } else {
-      inventory.splice(index, 1);
+      inventory.splice(currentIndex, 1);
     }
 
     // Equip into slot
@@ -134,39 +172,39 @@ class EquipmentService
     }
 
     this.debug('equipItem:equipped', { itemId, slot });
+    this._emitAppearanceUpdate();
+    return true;
   }
 
   /** @inheritdoc */
-  unequipItem(options: { slot: EquipmentSlot }): void {
+  unequipItem(options: { slot: EquipmentSlot }): boolean {
     const { slot } = options;
-    this._unequipCurrent(slot);
+    const unequipped = this._unequipCurrent(slot);
+    if (unequipped) {
+      this._emitAppearanceUpdate();
+    }
+    return unequipped;
   }
 
   /**
    * Moves the currently equipped item in the given slot back to inventory.
+   *
+   * @returns `true` when an item was unequipped, `false` when the slot was empty.
    */
-  private _unequipCurrent(slot: EquipmentSlot): void {
+  private _unequipCurrent(slot: EquipmentSlot): boolean {
     const itemId = slot === 'weapon' ? this.equippedWeapon : this.equippedArmor;
     if (!itemId) {
-      return;
+      return false;
     }
 
     if (!this._inventoryService) {
       this.debug('_unequipCurrent:inventory-not-wired', { itemId, slot });
-      return;
+      return false;
     }
 
-    // Return to inventory (stack if existing, otherwise new entry)
-    const inventory = this._inventoryService.inventory;
-    const existingIndex = inventory.findIndex((item) => item.itemId === itemId);
-    if (existingIndex >= 0) {
-      inventory[existingIndex] = {
-        itemId,
-        quantity: inventory[existingIndex].quantity + 1,
-      };
-    } else {
-      inventory.push({ itemId, quantity: 1 });
-    }
+    // Return to inventory (stack if existing, otherwise new entry).
+    // Unequip never drops the item — capacity is intentionally bypassed.
+    this._inventoryService.addItem({ itemId, quantity: 1 });
 
     // Clear the slot
     if (slot === 'weapon') {
@@ -176,6 +214,46 @@ class EquipmentService
     }
 
     this.debug('_unequipCurrent', { itemId, slot });
+    return true;
+  }
+
+  /**
+   * Sends UPDATE_PLAYER_APPEARANCE with the current slot state over the
+   * bridge so the player sprite reflects equipment (C-163 command, C-331
+   * finally wired). Best-effort — missing sender (dev sandboxes) is a no-op.
+   */
+  private _emitAppearanceUpdate(): void {
+    if (!this._sendCommand) {
+      return;
+    }
+    try {
+      this._sendCommand({
+        type: 'UPDATE_PLAYER_APPEARANCE',
+        weapon: this.equippedWeapon,
+        armor: this.equippedArmor,
+      });
+    } catch (error) {
+      this.debug('_emitAppearanceUpdate:failed', { error: String(error) });
+    }
+  }
+
+  /** @inheritdoc */
+  serialize(): EquipmentSnapshot {
+    return {
+      equippedWeapon: this.equippedWeapon,
+      equippedArmor: this.equippedArmor,
+    };
+  }
+
+  /** @inheritdoc */
+  hydrate(data: EquipmentSnapshot): void {
+    if (!data) {
+      return;
+    }
+    this.equippedWeapon = data.equippedWeapon;
+    this.equippedArmor = data.equippedArmor;
+    this.debug('hydrate', { weapon: this.equippedWeapon, armor: this.equippedArmor });
+    this._emitAppearanceUpdate();
   }
 
   /** @inheritdoc */
@@ -188,6 +266,9 @@ class EquipmentService
 
 export const equipmentService: EquipmentServiceInterface = EquipmentService.create({
   className: 'EquipmentService',
-  playerStateService: undefined as unknown as PlayerStateServiceInterface,
-  inventoryService: undefined as unknown as InventoryServiceInterface,
+  playerStateService,
+  inventoryService,
 });
+
+// Register for save/load persistence (C-331 AC-2)
+registerSerializable('equipment', equipmentService as unknown as SerializableService<unknown>);

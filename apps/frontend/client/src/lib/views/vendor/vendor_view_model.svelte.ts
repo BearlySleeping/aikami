@@ -19,6 +19,12 @@ export type VendorViewModelInterface = BaseViewModelInterface & {
   readonly vendorName: string;
   readonly messages: ReadonlyArray<{ id: string; role: 'player' | 'vendor'; content: string }>;
   readonly items: ReadonlyArray<{ itemId: string; label: string; basePrice: number }>;
+  readonly sellableItems: ReadonlyArray<{
+    itemId: string;
+    label: string;
+    quantity: number;
+    sellPrice: number;
+  }>;
   readonly playerGold: number;
   readonly priceMultiplier: number;
   readonly refusesToSell: boolean;
@@ -26,10 +32,20 @@ export type VendorViewModelInterface = BaseViewModelInterface & {
   readonly isBuying: boolean;
   readonly transactionMessage: string | undefined;
   readonly transactionSuccess: boolean;
+  /** Item ID awaiting sell confirmation, or undefined (C-331 AC-3). */
+  readonly pendingSellItemId: string | undefined;
+  readonly pendingSellLabel: string;
+  readonly pendingSellPrice: number;
 
   getFinalPrice(basePrice: number): number;
   haggle(message: string): Promise<void>;
   buyItem(itemId: string): Promise<void>;
+  /** Opens the sell confirmation for an owned item. */
+  requestSell(itemId: string): void;
+  /** Confirms and executes the pending sell. */
+  confirmSell(): void;
+  /** Cancels the pending sell confirmation. */
+  cancelSell(): void;
   closeVendor(): void;
   getItemDef(itemId: string): ItemDefinition;
 };
@@ -58,6 +74,9 @@ class VendorViewModel
   get items() {
     return vendorService.items;
   }
+  get sellableItems() {
+    return vendorService.sellableItems;
+  }
   get playerGold(): number {
     return vendorService.playerGold;
   }
@@ -80,6 +99,17 @@ class VendorViewModel
     return vendorService.transactionSuccess;
   }
 
+  /** Item ID awaiting sell confirmation (C-331 AC-3). */
+  pendingSellItemId = $state<string | undefined>(undefined);
+
+  get pendingSellLabel(): string {
+    return this.pendingSellItemId ? vendorService.getItemDef(this.pendingSellItemId).label : '';
+  }
+
+  get pendingSellPrice(): number {
+    return this.pendingSellItemId ? vendorService.getSellPrice(this.pendingSellItemId) : 0;
+  }
+
   getFinalPrice(basePrice: number): number {
     return vendorService.getFinalPrice(basePrice);
   }
@@ -88,6 +118,19 @@ class VendorViewModel
   }
   async buyItem(itemId: string): Promise<void> {
     await vendorService.buyItem(itemId);
+  }
+  requestSell(itemId: string): void {
+    this.pendingSellItemId = itemId;
+  }
+  confirmSell(): void {
+    if (!this.pendingSellItemId) {
+      return;
+    }
+    vendorService.sellItem(this.pendingSellItemId);
+    this.pendingSellItemId = undefined;
+  }
+  cancelSell(): void {
+    this.pendingSellItemId = undefined;
   }
   closeVendor(): void {
     vendorService.close();

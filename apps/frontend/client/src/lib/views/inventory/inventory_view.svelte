@@ -106,6 +106,13 @@ const { viewModel }: Props = $props();
 
       <div class="divider my-0"></div>
 
+      <!-- Transient feedback (inventory full / used item / full HP) -->
+      {#if viewModel.feedbackMessage}
+        <div class="alert alert-warning py-1.5 px-3" role="status">
+          <span class="text-xs font-semibold">{viewModel.feedbackMessage}</span>
+        </div>
+      {/if}
+
       <!-- Bag items -->
       <h3 class="text-sm font-semibold text-base-content/70">Bag</h3>
 
@@ -132,7 +139,6 @@ const { viewModel }: Props = $props();
       {:else}
         <div class="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
           {#each viewModel.items as item, index (index)}
-            {@const definition = viewModel.isEquippable(item.itemId)}
             <div
               class="flex flex-col items-center gap-1 rounded-lg bg-base-200 p-3 transition-colors hover:bg-base-300"
             >
@@ -142,19 +148,32 @@ const { viewModel }: Props = $props();
                 >
               </div>
               <span class="text-xs font-medium text-base-content truncate w-full text-center">
-                {item.itemId}
+                {viewModel.getItemLabel(item.itemId)}
               </span>
               {#if item.quantity > 1}
                 <span class="badge badge-sm badge-primary">{item.quantity}</span>
               {/if}
-              {#if definition}
+              {#if viewModel.isEquippable(item.itemId)}
+                <span class="text-[10px] text-warning font-semibold">
+                  {viewModel.getCompareLabel(item.itemId)}
+                </span>
                 <button
                   type="button"
                   class="btn btn-xs btn-primary btn-outline mt-1"
                   onclick={() => viewModel.equipItem(item.itemId)}
-                  aria-label="Equip {item.itemId}"
+                  aria-label="Equip {viewModel.getItemLabel(item.itemId)}"
                 >
                   Equip
+                </button>
+              {/if}
+              {#if viewModel.isConsumable(item.itemId)}
+                <button
+                  type="button"
+                  class="btn btn-xs btn-secondary btn-outline mt-1"
+                  onclick={() => viewModel.useItem(item.itemId)}
+                  aria-label="Use {viewModel.getItemLabel(item.itemId)}"
+                >
+                  Use
                 </button>
               {/if}
             </div>

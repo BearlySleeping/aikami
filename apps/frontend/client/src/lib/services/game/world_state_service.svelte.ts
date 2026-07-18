@@ -16,9 +16,11 @@ import type {
   WorldEvent,
   WorldGenOutput,
   WorldLocation,
+  WorldPickupState,
   WorldState,
 } from '@aikami/types';
 import type { ActiveContextEntry, GameStateEvent, GameStateListener } from '$types/game.ts';
+import { registerSerializable, type SerializableService } from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +39,28 @@ export type WorldStateServiceInterface = BaseFrontendClassInterface & {
   readonly worldGenOutput: WorldGenOutput;
   readonly quests: readonly QuestData[];
   readonly defeatedEnemies: readonly string[];
+  /** Spawn-point IDs of already-collected map items (C-331 AC-2). */
+  readonly collectedPickups: readonly string[];
+  /** Encounter IDs whose loot was already granted (C-331 AC-5). */
+  readonly lootGrantedEncounters: readonly string[];
+
+  /** Returns true when the given item spawn point was already collected. */
+  isPickupCollected(spawnId: string): boolean;
+
+  /** Records an item spawn point as collected (idempotent). */
+  recordCollectedPickup(spawnId: string): void;
+
+  /** Returns true when the given encounter's loot was already granted. */
+  isLootGranted(encounterId: string): boolean;
+
+  /** Records an encounter's loot as granted (idempotent). */
+  recordLootGranted(encounterId: string): void;
+
+  /** Serializes world persistence flags for the save envelope (C-331). */
+  serialize(): WorldPickupState & { defeatedEnemies: string[] };
+
+  /** Restores world persistence flags from a save envelope snapshot. */
+  hydrate(data: WorldPickupState & { defeatedEnemies?: string[] }): void;
 
   subscribeToWorld(worldId: string): Promise<void>;
   unsubscribeFromWorld(): void;
@@ -83,6 +107,8 @@ class WorldStateService
   activeContexts = $state<ActiveContextEntry[]>([]);
   quests = $state<QuestData[]>([]);
   defeatedEnemies = $state<string[]>([]);
+  collectedPickups = $state<string[]>([]);
+  lootGrantedEncounters = $state<string[]>([]);
 
   private _worldGenOutput = $state<WorldGenOutput | undefined>(undefined);
 
@@ -392,10 +418,66 @@ class WorldStateService
     return this.activeSession;
   }
 
+  // ── Pickup / loot persistence (C-331) ──
+
+  /** @inheritdoc */
+  isPickupCollected(spawnId: string): boolean {
+    return this.collectedPickups.includes(spawnId);
+  }
+
+  /** @inheritdoc */
+  recordCollectedPickup(spawnId: string): void {
+    if (!spawnId || this.collectedPickups.includes(spawnId)) {
+      return;
+    }
+    this.collectedPickups = [...this.collectedPickups, spawnId];
+    this.debug('recordCollectedPickup', { spawnId });
+  }
+
+  /** @inheritdoc */
+  isLootGranted(encounterId: string): boolean {
+    return this.lootGrantedEncounters.includes(encounterId);
+  }
+
+  /** @inheritdoc */
+  recordLootGranted(encounterId: string): void {
+    if (!encounterId || this.lootGrantedEncounters.includes(encounterId)) {
+      return;
+    }
+    this.lootGrantedEncounters = [...this.lootGrantedEncounters, encounterId];
+    this.debug('recordLootGranted', { encounterId });
+  }
+
+  /** @inheritdoc */
+  serialize(): WorldPickupState & { defeatedEnemies: string[] } {
+    return {
+      defeatedEnemies: [...this.defeatedEnemies],
+      collectedPickups: [...this.collectedPickups],
+      lootGrantedEncounters: [...this.lootGrantedEncounters],
+    };
+  }
+
+  /** @inheritdoc */
+  hydrate(data: WorldPickupState & { defeatedEnemies?: string[] }): void {
+    if (!data) {
+      return;
+    }
+    this.defeatedEnemies = [...(data.defeatedEnemies ?? [])];
+    this.collectedPickups = [...(data.collectedPickups ?? [])];
+    this.lootGrantedEncounters = [...(data.lootGrantedEncounters ?? [])];
+    this.debug('hydrate', {
+      defeated: this.defeatedEnemies.length,
+      collected: this.collectedPickups.length,
+      lootGranted: this.lootGrantedEncounters.length,
+    });
+  }
+
   /** @inheritdoc */
   reset(): void {
     this.quests = [];
     this.defeatedEnemies = [];
+    this.collectedPickups = [];
+    this.lootGrantedEncounters = [];
     this._worldGenOutput = undefined;
     this.debug('reset:cleared');
   }
@@ -439,3 +521,6 @@ export const worldStateService: WorldStateServiceInterface = WorldStateService.c
   uid: 'singleton',
   className: 'WorldStateService',
 });
+
+// Register world pickup/loot/defeated-enemy flags for save/load (C-331 AC-2/AC-5)
+registerSerializable('worldState', worldStateService as unknown as SerializableService<unknown>);

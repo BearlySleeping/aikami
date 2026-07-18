@@ -1378,6 +1378,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param options.targetX - X pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
    * @param options.targetY - Y pixel coordinate for the player on the new map (legacy — use targetSpawnHash).
    * @param options.defeatedEnemies - Array of defeated enemy spawn IDs to filter during spawn.
+   * @param options.collectedPickups - Array of collected item pickup spawn IDs to suppress (C-331).
    * @param options.targetSpawnHash - Numeric hash of the target spawn point ID (C-172).
    * @param options.disableClamping - Bypass viewport boundary clamping for visual testing (C-199).
    * @throws If the worker is not running or the map fails to load.
@@ -1389,6 +1390,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetX: number;
     targetY: number;
     defeatedEnemies?: string[];
+    collectedPickups?: string[];
     targetSpawnHash?: number;
     disableClamping?: boolean;
     /** GIDs to treat as water (blocked). Defaults to [2] for debug maps. Pass empty Set for maps without water. */
@@ -1399,6 +1401,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       targetX,
       targetY,
       defeatedEnemies,
+      collectedPickups,
       targetSpawnHash,
       disableClamping,
       waterGids,
@@ -1487,6 +1490,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         targetX,
         targetY,
         defeatedEnemies,
+        collectedPickups,
         targetSpawnHash,
         spawnPointEntities,
         disableClamping,
@@ -1532,6 +1536,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     targetX: number;
     targetY: number;
     defeatedEnemies?: string[];
+    collectedPickups?: string[];
     targetSpawnHash?: number;
     spawnPointEntities?: import('./assets/map_loader.ts').SpawnPointEntity[];
     disableClamping?: boolean;
@@ -1585,6 +1590,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         targetX: options.targetX,
         targetY: options.targetY,
         defeatedEnemies: options.defeatedEnemies,
+        collectedPickups: options.collectedPickups,
         targetSpawnHash: options.targetSpawnHash,
         spawnPointEntities: options.spawnPointEntities,
         disableClamping: options.disableClamping,

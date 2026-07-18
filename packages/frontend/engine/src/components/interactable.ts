@@ -20,6 +20,8 @@ export const Interactable = {
   itemId: [] as string[],
   /** Stack quantity for pickup items (0 for NPCs). */
   quantity: [] as number[],
+  /** Tiled spawn-point ID for respawn suppression (empty for programmatic spawns) — C-331. */
+  spawnId: [] as string[],
 };
 
 /** Payload shape stored/retrieved via observers. */
@@ -27,6 +29,8 @@ export type InteractableData = {
   type: InteractableType;
   itemId: string;
   quantity: number;
+  /** Optional spawn-point ID — defaults to '' when unset. */
+  spawnId?: string;
 };
 
 /**
@@ -40,6 +44,7 @@ export const registerInteractableObservers = (world: World): void => {
     Interactable.type[eid] = params.type;
     Interactable.itemId[eid] = params.itemId;
     Interactable.quantity[eid] = params.quantity;
+    Interactable.spawnId[eid] = params.spawnId ?? '';
   });
 
   observe(
@@ -49,6 +54,7 @@ export const registerInteractableObservers = (world: World): void => {
       type: Interactable.type[eid],
       itemId: Interactable.itemId[eid],
       quantity: Interactable.quantity[eid],
+      spawnId: Interactable.spawnId[eid] ?? '',
     }),
   );
 };

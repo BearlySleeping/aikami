@@ -20,6 +20,12 @@ const InventorySchema = Type.Object({
   itemCardsVisible: Type.Boolean({
     description: 'Whether item cards with names and descriptions are rendered',
   }),
+  equipCompareVisible: Type.Boolean({
+    description: 'Whether stat compare deltas are visible near equippable items (C-331 AC-4)',
+  }),
+  useButtonVisible: Type.Boolean({
+    description: 'Whether Use button is rendered on consumable items (C-331 AC-4)',
+  }),
   noOverflow: Type.Boolean({
     description:
       'Whether all content stays within the modal bounds (no items cut off, no horizontal overflow)',

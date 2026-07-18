@@ -301,7 +301,6 @@ export class GameStateService
       },
     });
 
-    void this._listenForInventoryUpdates();
     void this._listenForQuestUpdates();
     void this._listenForCombatEnded();
     void this._listenForPlayerStats();
@@ -679,26 +678,6 @@ export class GameStateService
       bridge.send({ type: 'SET_GAME_MODE' as never, mode } as never);
     } catch (error) {
       this.debug('_broadcastModeToEngine:failed', { mode, error: String(error) });
-    }
-  }
-
-  /**
-   * Listens for INVENTORY_UPDATED events from the ECS via the EngineBridge.
-   *
-   * When the player picks up or drops an item, the ECS emits the full
-   * inventory array. This method updates the reactive `inventory` state
-   * so the Inventory UI overlay renders the latest contents.
-   */
-  private async _listenForInventoryUpdates(): Promise<void> {
-    try {
-      const { createEngineBridge } = await import('@aikami/frontend/engine');
-      const bridge = createEngineBridge();
-
-      bridge.on('INVENTORY_UPDATED', (event) => {
-        this.inventory = event.inventory;
-      });
-    } catch (error) {
-      this.debug('_listenForInventoryUpdates:failed', { error: String(error) });
     }
   }
 

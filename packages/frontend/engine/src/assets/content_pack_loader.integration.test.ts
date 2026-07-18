@@ -132,13 +132,12 @@ const emberwatchManifest = {
     wardPendant: {
       name: 'Ward Pendant',
       type: 'key',
-      equipmentSlot: 'neck',
     },
     wardAmulet: {
       name: 'Ward Amulet',
-      type: 'misc',
+      type: 'armor',
       defenseBonus: 3,
-      equipmentSlot: 'neck',
+      equipmentSlot: 'armor',
     },
     wardShard: {
       name: 'Ward Shard',
