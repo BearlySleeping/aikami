@@ -49,9 +49,16 @@ export type NpcDialogueContentProvider = {
   /** Returns a piece of authored dialogue by key, or undefined. */
   getDialogue(dialogueKey: string): string | undefined;
   /** Returns a quest entry by ID, or undefined. */
-  getQuest(questId: string): { id: string; name: string; offerDialogueKey: string } | undefined;
+  getQuest(
+    questId: string,
+  ): { id: string; name: string; offerDialogueKey: string; offeredByNpcId?: string } | undefined;
   /** Returns quest entries keyed by ID. */
-  getAllQuests(): Array<{ id: string; name: string; offerDialogueKey: string }>;
+  getAllQuests(): Array<{
+    id: string;
+    name: string;
+    offerDialogueKey: string;
+    offeredByNpcId?: string;
+  }>;
   /** Returns encounter entries keyed by ID. */
   getAllEncounters(): Array<{ id: string; dialogueKey?: string; encounterNpcIds?: string[] }>;
   /** Returns an encounter entry by ID, or undefined. */
@@ -619,7 +626,7 @@ export class NpcDialogueService
    * Returns a turn even if the NPC has no authored dialogue (generic fallback).
    */
   private _buildAuthoredTurn(turnCtx: TurnContext): NpcDialogueTurn {
-    const { npcEntry, npcName, contextualDialogueKey, allowedCommands } = turnCtx;
+    const { npcEntry, npcId, npcName, contextualDialogueKey, allowedCommands } = turnCtx;
 
     // Resolve the authored dialogue key — three tiers:
     // 1. Contextual (quest/encounter) dialogue key
@@ -660,6 +667,7 @@ export class NpcDialogueService
     // Derive choices from NPC capabilities + related dialogue keys
     fallbackRecord.choices = this._deriveAuthoredChoices({
       npcEntry,
+      npcId,
       currentDialogueKey: dialogueKey,
       allowedCommands,
       npcName,
@@ -922,6 +930,7 @@ export class NpcDialogueService
   /** Derives choices for authored fallback branches. */
   private _deriveAuthoredChoices(options: {
     npcEntry: ReturnType<NpcDialogueContentProvider['getNpc']>;
+    npcId: string;
     currentDialogueKey?: string;
     allowedCommands: NpcDialogueCommandKind[];
     npcName: string;
@@ -934,8 +943,16 @@ export class NpcDialogueService
     // 1. Quest offers (if NPC has associated quest)
     const quests = this._contentProvider!.getAllQuests();
     if (quests.length > 0 && allowedCommands.includes('offerQuest')) {
-      // Filter to only offerable quests (not already active, completed, failed, or declined)
-      const offerableQuest = quests.find((q) => q && questStateService.canAcceptQuest(q.id));
+      // Filter to quests associated with this NPC (if offeredByNpcId is set),
+      // then filter to only offerable quests (not already active, completed, failed, or declined)
+      const npcId = options.npcId;
+      const offerableQuest = quests.find(
+        (q) =>
+          q &&
+          // If quest has offeredByNpcId, only match the active NPC
+          (!q.offeredByNpcId || q.offeredByNpcId === npcId) &&
+          questStateService.canAcceptQuest(q.id),
+      );
       if (offerableQuest) {
         choices.push({
           id: 'quest',

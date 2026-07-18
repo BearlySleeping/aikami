@@ -130,11 +130,20 @@ class ContentPackLoader implements ContentPackLoaderInterface {
   resolveMapId(mapUrl: string): string | undefined {
     this._assertNotDisposed();
 
-    // Suffix match: check if the URL ends with any map entry's file path.
-    // This handles both absolute URLs (e.g. `/content-packs/emberwatch/maps/old_road.json`)
-    // and relative paths (e.g. `maps/old_road.json`).
+    // Normalize the URL to extract a clean pathname for boundary-safe matching.
+    let pathname: string;
+    try {
+      const url = new URL(mapUrl);
+      pathname = url.pathname;
+    } catch {
+      // Not a valid URL — treat as relative path
+      pathname = mapUrl.startsWith('/') ? mapUrl : `/${mapUrl}`;
+    }
+
+    // Require the pathname to end with "/<mapFile>" (path-boundary match).
+    // This prevents a shorter filename like "road.json" from matching "maps/old_road.json".
     for (const [mapId, entry] of Object.entries(this.manifest.maps)) {
-      if (mapUrl.endsWith(entry.file)) {
+      if (pathname.endsWith(`/${entry.file}`)) {
         return mapId;
       }
     }

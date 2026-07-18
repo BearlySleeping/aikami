@@ -89,6 +89,12 @@ class PlayerStateService
     }
     this.playerXp += amount;
     this.debug('addXp', { amount, newXp: this.playerXp });
+
+    // TODO(C-339): Route XP through ECS-owned progression system.
+    // Currently this only mutates the frontend mirror — level-up, stat boosts,
+    // and threshold checks should be handled by the ECS worker via a
+    // PLAYER_XP_GAINED bridge event → ECS processes level-up → PLAYER_LEVELED_UP
+    // emitted back. This is tracked as part of the quest/progression system (C-339).
   }
 
   /** @inheritdoc */
