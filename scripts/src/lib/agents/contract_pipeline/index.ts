@@ -26,7 +26,7 @@ export {
 } from './manifest_store.ts';
 export { runContractPipeline } from './orchestrator.ts';
 export { validatePostconditions } from './postconditions.ts';
-export { loadReviewPrompt, loadRolePrompt } from './prompt_loader.ts';
+export { loadReviewPrompt, loadRolePrompt, type ReviewProfile } from './prompt_loader.ts';
 export {
   canEnterReview,
   isFingerprintCurrent,

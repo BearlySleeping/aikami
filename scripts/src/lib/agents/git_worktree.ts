@@ -151,7 +151,9 @@ export const provisionGitWorktree = (options: {
 
   if (!alreadyExists) {
     // Clean up stale worktree references (directory deleted manually).
-    try { runGit('worktree prune', { cwd: options.repoRoot }); } catch {}
+    try {
+      runGit('worktree prune', { cwd: options.repoRoot });
+    } catch {}
     // Generate a unique branch name. If sanitized already exists, append a
     // short token to avoid collision.
     let branchName = sanitized;
