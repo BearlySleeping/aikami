@@ -19,6 +19,8 @@ export type CombatState = {
   enemyMaxHp: number;
   participantIds: number[];
   firstTurnEntityId: number;
+  combatSeed?: number;
+  encounterId?: string | null;
 };
 
 export type CombatServiceInterface = BaseFrontendClassInterface & {
@@ -27,6 +29,19 @@ export type CombatServiceInterface = BaseFrontendClassInterface & {
   readonly enemyMaxHp: number;
   readonly participantIds: readonly number[];
   readonly firstTurnEntityId: number;
+  readonly combatSeed: number | undefined;
+  readonly encounterId: string | null | undefined;
+  /** Last combat initialization options for retry (C-330 AC-5). */
+  readonly lastCombatOptions: {
+    enemyName: string;
+    enemyHp: number;
+    enemyMaxHp: number;
+    participantIds: number[];
+    firstTurnEntityId: number;
+    combatSeed?: number;
+    encounterId?: string | null;
+    allowNonCombatResolution?: boolean;
+  } | null;
 
   startCombat(options: {
     enemyName: string;
@@ -35,7 +50,13 @@ export type CombatServiceInterface = BaseFrontendClassInterface & {
     participantIds: number[];
     firstTurnEntityId: number;
     setActive: (overlay: GameOverlayType) => void;
+    combatSeed?: number;
+    encounterId?: string | null;
+    allowNonCombatResolution?: boolean;
   }): void;
+
+  /** Retries the last encounter with the same seed (C-330 AC-5). */
+  retryEncounter(options: { setActive: (overlay: GameOverlayType) => void }): void;
 };
 
 class CombatService
@@ -47,6 +68,9 @@ class CombatService
   private _enemyMaxHp = $state(80);
   private _participantIds: number[] = $state([]);
   private _firstTurnEntityId = $state(1);
+  private _combatSeed: number | undefined = $state(undefined);
+  private _encounterId: string | null | undefined = $state(undefined);
+  private _lastCombatOptions: CombatServiceInterface['lastCombatOptions'] = $state(null);
 
   get enemyName(): string {
     return this._enemyName;
@@ -68,9 +92,21 @@ class CombatService
     return this._firstTurnEntityId;
   }
 
+  get combatSeed(): number | undefined {
+    return this._combatSeed;
+  }
+
+  get encounterId(): string | null | undefined {
+    return this._encounterId;
+  }
+
   constructor(options: BaseFrontendClassOptions) {
     super(options);
     registerSerializable('combat', this as unknown as SerializableService<unknown>);
+  }
+
+  get lastCombatOptions(): CombatServiceInterface['lastCombatOptions'] {
+    return this._lastCombatOptions;
   }
 
   startCombat(options: {
@@ -80,14 +116,45 @@ class CombatService
     participantIds: number[];
     firstTurnEntityId: number;
     setActive: (overlay: GameOverlayType) => void;
+    combatSeed?: number;
+    encounterId?: string | null;
+    allowNonCombatResolution?: boolean;
   }): void {
     this._enemyName = options.enemyName;
     this._enemyHp = options.enemyHp;
     this._enemyMaxHp = options.enemyMaxHp;
     this._participantIds = options.participantIds;
     this._firstTurnEntityId = options.firstTurnEntityId;
+    this._combatSeed = options.combatSeed;
+    this._encounterId = options.encounterId;
+    // Store options for retry (C-330 AC-5)
+    this._lastCombatOptions = {
+      enemyName: options.enemyName,
+      enemyHp: options.enemyHp,
+      enemyMaxHp: options.enemyMaxHp,
+      participantIds: options.participantIds,
+      firstTurnEntityId: options.firstTurnEntityId,
+      combatSeed: options.combatSeed,
+      encounterId: options.encounterId,
+      allowNonCombatResolution: options.allowNonCombatResolution,
+    };
     options.setActive('COMBAT');
     gameEngineService.pauseEngine();
+  }
+
+  retryEncounter(options: { setActive: (overlay: GameOverlayType) => void }): void {
+    const last = this._lastCombatOptions;
+    if (!last) {
+      this.warn('retryEncounter:no-previous-encounter');
+      return;
+    }
+    this.debug('retryEncounter', { combatSeed: last.combatSeed, encounterId: last.encounterId });
+
+    // Re-initialize with the same options and seed for deterministic replay (AC-5)
+    this.startCombat({
+      ...last,
+      setActive: options.setActive,
+    });
   }
 
   serialize(): CombatState {
@@ -97,6 +164,8 @@ class CombatService
       enemyMaxHp: this._enemyMaxHp,
       participantIds: [...this._participantIds],
       firstTurnEntityId: this._firstTurnEntityId,
+      combatSeed: this._combatSeed,
+      encounterId: this._encounterId,
     };
   }
 
@@ -106,6 +175,8 @@ class CombatService
     this._enemyMaxHp = data.enemyMaxHp;
     this._participantIds = [...data.participantIds];
     this._firstTurnEntityId = data.firstTurnEntityId;
+    this._combatSeed = data.combatSeed;
+    this._encounterId = data.encounterId;
   }
 }
 

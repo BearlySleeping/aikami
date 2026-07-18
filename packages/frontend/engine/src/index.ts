@@ -56,10 +56,13 @@ export {
 export { resetMovementTracking, updateMovement } from './systems/movement_system.ts';
 export {
   advanceTurn,
+  createSeedableRng,
   endCombat,
+  getCombatSeed,
   handleCombatAction,
   initCombat,
   resetTurnTracking,
+  setCombatSeed,
 } from './systems/turn_manager_system.ts';
 
 // ECS components
@@ -361,7 +364,7 @@ export {
   resolveMoveIntents,
   setCollisionGrid,
 } from './systems/collision_system.ts';
-export { updateEncounterSystem } from './systems/encounter_system.ts';
+export { spawnEncounterEnemy, updateEncounterSystem } from './systems/encounter_system.ts';
 export type {
   SpawnEntitiesOptions,
   SpawnPointSpawnOptions,
