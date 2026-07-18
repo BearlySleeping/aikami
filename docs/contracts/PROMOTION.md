@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 123 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 122 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -144,7 +144,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-325 | Ship Real Time Lpc Appearance Preview With Safe Defaults | 🛠️ implemented | v2 |
 | C-326 | Make Game Boot Atomic Observable And Content Driven | 🛠️ implemented | v2 |
 | C-327 | Add In World Onboarding And Unified Interaction Ux | 🛠️ implemented | v2 |
-| C-328 | Integrate Bounded AI NPC Dialogue with Authored Fallbacks | ⏳ not_started (no contract file) | v1 |
 | C-329 | Integrate the Demo Quest from Offer Through Reward | ⏳ not_started (no contract file) | v1 |
 | C-330 | Integrate Deterministic Demo Combat and Declared Skill Checks | ⏳ not_started (no contract file) | v1 |
 | C-331 | Integrate Inventory, Equipment, Loot, and Vendor into the Demo Loop | ⏳ not_started (no contract file) | v1 |

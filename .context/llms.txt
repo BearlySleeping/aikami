@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-07-18
-> Files: 281 across 14 categories
+> Files: 282 across 14 categories
 
 ## Quick Start (Read These First)
 
@@ -271,6 +271,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-325: Ship Real-Time LPC Appearance Preview with Safe Defaults](contracts/C-325-ship-real-time-lpc-appearance-preview-with-safe-defaults.md)
 - [Contract C-326: Make `/game` Boot Atomic, Observable, and Content-Driven](contracts/C-326-make-game-boot-atomic-observable-and-content-driven.md)
 - [Contract C-327: Add In-World Onboarding and Unified Interaction UX](contracts/C-327-add-in-world-onboarding-and-unified-interaction-ux.md)
+- [Contract C-328: Integrate Bounded AI NPC Dialogue with Authored Fallbacks](contracts/C-328-integrate-bounded-ai-npc-dialogue-with-authored-fallbacks.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)

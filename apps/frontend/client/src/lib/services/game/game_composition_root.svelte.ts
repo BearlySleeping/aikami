@@ -273,8 +273,8 @@ export class GameCompositionRoot
         trade: (_opts) => {
           gameOverlayService.openVendor({
             vendorId: _opts.npcId,
-            vendorName: '',
-            vendorInventory: '',
+            vendorName: _opts.vendorName ?? '',
+            vendorInventory: _opts.vendorInventory ?? '',
           });
           return true;
         },

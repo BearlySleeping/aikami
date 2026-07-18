@@ -77,7 +77,7 @@ export type NpcDialogueTextGenerator = (options: {
  * true if the command was executed, false if denied at runtime.
  */
 export type NpcDialogueExecutors = {
-  trade(options: { npcId: string }): boolean;
+  trade(options: { npcId: string; vendorName?: string; vendorInventory?: string }): boolean;
   offerQuest(options: { npcId: string; questId: string }): boolean;
   skillCheck(options: { skill: string; difficultyClass: number }): boolean;
   giveItem(options: { itemId: string; quantity: number }): boolean;
@@ -123,7 +123,9 @@ type FallbackTurnRecord = {
 
 export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   /** The currently active NPC being conversed with, if any. */
-  readonly activeNpc: { npcId: string; npcName: string } | undefined;
+  readonly activeNpc:
+    | { npcId: string; npcName: string; dialog?: string; personaId?: string }
+    | undefined;
 
   /**
    * Configures the orchestrator with its required dependencies.
@@ -179,6 +181,8 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
     gameStateFacts?: string[];
+    /** Active encounter ID — restricts contextual dialogue resolution to this encounter only. */
+    activeEncounterId?: string;
   }): Promise<NpcDialogueTurn>;
 
   /**
@@ -207,6 +211,18 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
    * Checks whether a command was already executed for a given turn.
    */
   wasCommandExecuted(turnId: string): boolean;
+
+  /**
+   * Executes a validated dialogue command through the orchestrator-owned
+   * executor boundary. Returns true if executed, false if denied at runtime.
+   */
+  executeCommand(options: {
+    kind: string;
+    npcId: string;
+    npcName: string;
+    npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>;
+    command: NpcDialogueCommand;
+  }): boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -219,7 +235,6 @@ export class NpcDialogueService
 {
   private _contentProvider: NpcDialogueContentProvider | undefined;
   private _textGenerator: NpcDialogueTextGenerator | undefined;
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: executor dispatch deferred (AC-3 stubs)
   private _executors: NpcDialogueExecutors | undefined;
   private _configured = false;
 
@@ -230,10 +245,14 @@ export class NpcDialogueService
   private _activeAbortController: AbortController | null = null;
 
   /** The currently active NPC, if any. */
-  private _activeNpc: { npcId: string; npcName: string } | undefined;
+  private _activeNpc:
+    | { npcId: string; npcName: string; dialog?: string; personaId?: string }
+    | undefined;
 
   /** @inheritdoc */
-  get activeNpc(): { npcId: string; npcName: string } | undefined {
+  get activeNpc():
+    | { npcId: string; npcName: string; dialog?: string; personaId?: string }
+    | undefined {
     return this._activeNpc;
   }
 
@@ -243,7 +262,12 @@ export class NpcDialogueService
     setOverlay: (type: string) => void;
     pauseEngine: () => void;
   }): void {
-    this._activeNpc = { npcId: options.npcData.npcId, npcName: options.npcData.npcName };
+    this._activeNpc = {
+      npcId: options.npcData.npcId,
+      npcName: options.npcData.npcName,
+      dialog: options.npcData.dialog,
+      personaId: options.npcData.personaId,
+    };
     options.pauseEngine();
     options.setOverlay('DIALOGUE');
   }
@@ -305,6 +329,7 @@ export class NpcDialogueService
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
     gameStateFacts?: string[];
+    activeEncounterId?: string;
   }): Promise<NpcDialogueTurn> {
     this._assertConfigured();
 
@@ -316,14 +341,17 @@ export class NpcDialogueService
 
     const controller = new AbortController();
     this._activeAbortController = controller;
-    const linkedSignal = this._linkSignals(options.signal, controller.signal);
+    const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
 
     try {
       const npc = this._contentProvider!.getNpc(options.npcId);
 
       // ── Build turn context ─────────────────────────────────────────
       const allowedCommands = this._deriveAllowedCommands(npc);
-      const contextualKey = this._resolveContextualDialogueKey(options.npcId);
+      const contextualKey = this._resolveContextualDialogueKey(
+        options.npcId,
+        options.activeEncounterId,
+      );
 
       const turnCtx: TurnContext = {
         npcId: options.npcId,
@@ -347,8 +375,8 @@ export class NpcDialogueService
           contextProjection,
           messages: options.messages,
           signal: linkedSignal,
+          turnCtx,
         });
-        this._activeAbortController = null;
         return aiTurn;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -380,7 +408,108 @@ export class NpcDialogueService
     return this._executedCommands.has(turnId);
   }
 
+  /**
+   * Executes a validated dialogue command through the orchestrator-owned
+   * executor boundary.
+   */
+  executeCommand(options: {
+    kind: string;
+    npcId: string;
+    npcName: string;
+    npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>;
+    command: NpcDialogueCommand;
+  }): boolean {
+    this._assertConfigured();
+    const { kind, npcId, npcName, npcEntry, command } = options;
+
+    const npc = npcEntry ?? this._contentProvider!.getNpc(npcId);
+
+    switch (kind) {
+      case 'trade':
+        return this._executors!.trade({
+          npcId,
+          vendorName: npcName,
+          vendorInventory: npc?.vendorInventory,
+        });
+      case 'offerQuest':
+        return this._executors!.offerQuest({
+          npcId,
+          questId: (command as { questId: string }).questId,
+        });
+      case 'skillCheck':
+        return this._executors!.skillCheck({
+          skill: (command as { skill: string }).skill,
+          difficultyClass: (command as { difficultyClass: number }).difficultyClass,
+        });
+      case 'giveItem':
+        return this._executors!.giveItem({
+          itemId: (command as { itemId: string }).itemId,
+          quantity: (command as { quantity: number }).quantity ?? 1,
+        });
+      case 'startCombat':
+        return this._executors!.startCombat({
+          npcId,
+          npcName,
+          encounterId: (command as { encounterId?: string }).encounterId,
+        });
+      default:
+        this.warn('executeCommand:unknown-kind', { kind });
+        return false;
+    }
+  }
+
   // ── Private: AI generation path ───────────────────────────────────────
+
+  /**
+   * Parses and validates the raw structured envelope from the AI response.
+   * Returns a parsed envelope or null if validation fails.
+   */
+  private _parseEnvelope(
+    narrative: string,
+    rawEnvelope: unknown,
+  ): {
+    narrative?: string;
+    command?: NpcDialogueCommand;
+    choices?: NpcDialogueChoice[];
+  } | null {
+    if (!rawEnvelope || typeof rawEnvelope !== 'object') {
+      return null;
+    }
+
+    const env = rawEnvelope as Record<string, unknown>;
+
+    // First attempt: check raw envelope directly
+    if (Value.Check(NpcDialogueAiEnvelopeSchema, env)) {
+      return env as {
+        narrative?: string;
+        command?: NpcDialogueCommand;
+        choices?: NpcDialogueChoice[];
+      };
+    }
+
+    // One repair attempt: try merging with narrative
+    const repaired = {
+      narrative: narrative || (env.narrative as string) || '',
+      command: env.command,
+      choices: env.choices,
+    };
+    if (Value.Check(NpcDialogueAiEnvelopeSchema, repaired)) {
+      this.warn('_generateAiTurn:repaired', {
+        narrativeLength: narrative.length,
+      });
+      return repaired as {
+        narrative?: string;
+        command?: NpcDialogueCommand;
+        choices?: NpcDialogueChoice[];
+      };
+    }
+
+    this.warn('_generateAiTurn:invalid-output', {
+      narrativeLength: narrative.length,
+      envelopeKeys: Object.keys(env),
+    });
+    return null;
+  }
 
   /**
    * Calls the gateway text generator with the projected context.
@@ -391,6 +520,7 @@ export class NpcDialogueService
     contextProjection: DialogueContextProjection;
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
+    turnCtx?: TurnContext;
   }): Promise<NpcDialogueTurn> {
     const { contextProjection, messages, signal } = options;
 
@@ -424,38 +554,7 @@ export class NpcDialogueService
       const rawEnvelope = result.structured;
 
       // ── Parse and validate the structured envelope ────────────────
-      let parsedEnvelope: {
-      narrative?: string;
-      command?: NpcDialogueCommand;
-      choices?: NpcDialogueChoice[];
-    } | null = null;
-
-      if (rawEnvelope && typeof rawEnvelope === 'object') {
-        const env = rawEnvelope as Record<string, unknown>;
-
-        // First attempt: check raw envelope directly
-        if (Value.Check(NpcDialogueAiEnvelopeSchema, env)) {
-          parsedEnvelope = env as NonNullable<typeof parsedEnvelope>;
-        } else {
-          // One repair attempt: try merging with narrative
-          const repaired = {
-            narrative: narrative || (env.narrative as string) || '',
-            command: env.command,
-            choices: env.choices,
-          };
-          if (Value.Check(NpcDialogueAiEnvelopeSchema, repaired)) {
-            this.warn('_generateAiTurn:repaired', {
-              narrativeLength: narrative.length,
-            });
-            parsedEnvelope = repaired as NonNullable<typeof parsedEnvelope>;
-          } else {
-            this.warn('_generateAiTurn:invalid-output', {
-              narrativeLength: narrative.length,
-              envelopeKeys: Object.keys(env),
-            });
-          }
-        }
-      }
+      const parsedEnvelope = this._parseEnvelope(narrative, rawEnvelope);
 
       // ── Assemble the turn ─────────────────────────────────────────
       const finalNarrative = parsedEnvelope?.narrative || narrative;
@@ -472,18 +571,23 @@ export class NpcDialogueService
 
       // Precondition check on command
       if (command) {
-        if (!contextProjection.allowedCommands.includes(command.kind)) {
+        const precondResult = this._validateCommandPreconditions(
+          command,
+          contextProjection.allowedCommands,
+          options.turnCtx?.npcEntry,
+        );
+        if (!precondResult.allowed) {
           this.warn('_generateAiTurn:command-denied', {
             commandKind: command.kind,
+            reason: precondResult.reason,
             allowed: contextProjection.allowedCommands,
           });
           // Drop the command — narrative still renders
-          const turn: NpcDialogueTurn = {
+          return {
             narrative: finalNarrative,
             choices,
-            source: 'ai',
+            source: 'ai' as const,
           };
-          return turn;
         }
       }
 
@@ -494,14 +598,10 @@ export class NpcDialogueService
         source: 'ai',
       };
 
-      // Final validation
+      // Final validation — throw on failure so generateTurn activates authored fallback
       if (!Value.Check(NpcDialogueTurnSchema, turn)) {
         this.warn('_generateAiTurn:turn-validation-failed');
-        return {
-          narrative: finalNarrative,
-          choices,
-          source: 'ai',
-        };
+        throw new Error('AI generation produced invalid turn — falling back to authored');
       }
 
       return turn;
@@ -679,11 +779,119 @@ export class NpcDialogueService
     return allowed;
   }
 
+  // ── Private: command-specific precondition validation ─────────────────
+
+  /**
+   * Validates a command beyond its kind whitelist:
+   * - giveItem: item must be in the NPC's inventory
+   * - offerQuest: quest must exist in content
+   * - startCombat: NPC must have combat stats
+   * - skillCheck: difficulty class in [1, 30], skill must be non-empty
+   * - trade: NPC must be a vendor
+   */
+  private _validateCommandPreconditions(
+    command: NpcDialogueCommand,
+    allowedCommands: NpcDialogueCommandKind[],
+    npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>,
+  ): { allowed: boolean; reason?: string } {
+    // Kind-level check
+    if (!allowedCommands.includes(command.kind)) {
+      return { allowed: false, reason: `kind ${command.kind} not in whitelist` };
+    }
+
+    const c = command as NpcDialogueCommand & Record<string, unknown>;
+
+    switch (command.kind) {
+      case 'giveItem': {
+        const itemId = c.itemId as string | undefined;
+        if (!itemId) {
+          return { allowed: false, reason: 'giveItem missing itemId' };
+        }
+        const quantity = (c.quantity as number) ?? 1;
+        if (quantity < 1 || quantity > 99) {
+          return { allowed: false, reason: `giveItem quantity ${quantity} out of bounds` };
+        }
+        // Check NPC inventory contains the item
+        const inventory = npcEntry?.vendorInventory;
+        if (!inventory) {
+          return { allowed: false, reason: 'NPC has no inventory for giveItem' };
+        }
+        const items = inventory.split(',').map((s: string) => s.trim());
+        if (!items.includes(itemId)) {
+          return { allowed: false, reason: `item ${itemId} not in NPC inventory` };
+        }
+        return { allowed: true };
+      }
+
+      case 'offerQuest': {
+        const questId = c.questId as string | undefined;
+        if (!questId) {
+          return { allowed: false, reason: 'offerQuest missing questId' };
+        }
+        const quest = this._contentProvider!.getQuest(questId);
+        if (!quest) {
+          return { allowed: false, reason: `quest ${questId} not found` };
+        }
+        return { allowed: true };
+      }
+
+      case 'skillCheck': {
+        const skill = c.skill as string | undefined;
+        if (!skill) {
+          return { allowed: false, reason: 'skillCheck missing skill' };
+        }
+        const difficultyClass = (c.difficultyClass as number) ?? 0;
+        if (difficultyClass < 1 || difficultyClass > 30) {
+          return {
+            allowed: false,
+            reason: `skillCheck DC ${difficultyClass} out of bounds [1,30]`,
+          };
+        }
+        return { allowed: true };
+      }
+
+      case 'startCombat': {
+        if (!npcEntry?.combatStats) {
+          return { allowed: false, reason: 'NPC has no combat stats' };
+        }
+        return { allowed: true };
+      }
+
+      case 'trade': {
+        if (!npcEntry?.isVendor) {
+          return { allowed: false, reason: 'NPC is not a vendor' };
+        }
+        return { allowed: true };
+      }
+
+      default: {
+        const unknownCmd = command as NpcDialogueCommand & Record<string, unknown>;
+        return { allowed: false, reason: `unknown command kind: ${String(unknownCmd.kind)}` };
+      }
+    }
+  }
+
   // ── Private: contextual dialogue key resolution ──────────────────────
 
-  /** Resolves the active quest-specific or encounter-specific dialogue key. */
-  private _resolveContextualDialogueKey(npcId: string): string | undefined {
-    // Check encounters — if this NPC is in an encounter, use its dialogue key
+  /**
+   * Resolves the active encounter-specific dialogue key.
+   * When `activeEncounterId` is provided, only that encounter is checked,
+   * preventing NPCs listed in other encounters from inheriting their dialogue.
+   * Falls back to scanning all encounters only when no active encounter is known.
+   */
+  private _resolveContextualDialogueKey(
+    npcId: string,
+    activeEncounterId?: string,
+  ): string | undefined {
+    if (activeEncounterId) {
+      const enc = this._contentProvider!.getEncounter(activeEncounterId);
+      if (enc?.encounterNpcIds?.includes(npcId) && enc.dialogueKey) {
+        return enc.dialogueKey;
+      }
+      return undefined;
+    }
+
+    // No active encounter — fall back to scanning all (legacy compat)
     const encounters = this._contentProvider!.getAllEncounters();
     for (const enc of encounters) {
       if (enc.encounterNpcIds?.includes(npcId) && enc.dialogueKey) {
@@ -766,17 +974,26 @@ export class NpcDialogueService
 
   // ── Private: signal linking ──────────────────────────────────────────
 
-  /** Links the caller's signal with our internal controller. */
-  private _linkSignals(callerSignal: AbortSignal, internalSignal: AbortSignal): AbortSignal {
-    // When the caller signal aborts, abort our internal controller.
+  /**
+   * Links the caller's signal with our internal controller.
+   * Captures `controller` locally so aborting an older caller cannot
+   * cancel a newer turn.
+   */
+  private _linkSignals(
+    callerSignal: AbortSignal,
+    internalSignal: AbortSignal,
+    controller: AbortController,
+  ): AbortSignal {
+    // Handle already-aborted caller before starting work
+    if (callerSignal.aborted) {
+      controller.abort();
+      return internalSignal;
+    }
+
+    // When the caller signal aborts, abort the captured controller
     const onCallerAbort = () => {
       try {
-        if (!internalSignal.aborted) {
-          const ctrl = this._activeAbortController;
-          if (ctrl) {
-            ctrl.abort();
-          }
-        }
+        controller.abort();
       } catch {
         // ignore — signal may already be aborted
       }

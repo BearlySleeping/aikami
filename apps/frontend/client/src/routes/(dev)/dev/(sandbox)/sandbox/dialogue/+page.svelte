@@ -40,6 +40,11 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   npcData: MOCK_NPC_DATA,
   onEndChat: goBack,
   npcDialogueService: {
+    _className: 'DevMockNpcDialogueService',
+    dispose: async () => {},
+    activeNpc: undefined,
+    startDialogue: () => {},
+    endDialogue: () => {},
     generateTurn: async () => ({
       narrative: '[Dev mock AI response]',
       choices: [
@@ -59,6 +64,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       gameStateFacts: [],
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
     }),
+    executeCommand: () => true,
   },
   onStartCombat: () => {
     goBack();
