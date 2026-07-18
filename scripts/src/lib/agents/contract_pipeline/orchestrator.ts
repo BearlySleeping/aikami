@@ -878,7 +878,9 @@ export const runContractPipeline = async (options: {
           writeManifest({ manifest, cwd: options.repoRoot });
         }
 
-        const decision = manifest.reviewDecision ?? (await waitForReviewDecision({ path: reviewPath, runId: manifest.runId }));
+        const decision =
+          manifest.reviewDecision ??
+          (await waitForReviewDecision({ path: reviewPath, runId: manifest.runId }));
         manifest.reviewDecision = decision;
         if (!manifest.reviewPaneId) {
           throw new Error('Review pane was not initialized.');

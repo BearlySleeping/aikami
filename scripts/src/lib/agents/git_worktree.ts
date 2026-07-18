@@ -376,26 +376,14 @@ export const commitAll = (options: {
   // Check if there's anything to commit.
   try {
     runGit(`${envFlags} diff --cached --quiet`.trim(), { cwd: options.cwd, env });
-    // No changes — return current HEAD without committing.
     return getGitHeadCommit(options.cwd);
   } catch {
-    // There are staged changes — proceed with commit.
+    // Staged changes exist — proceed with commit.
   }
 
   const commitCmd = `${envFlags} commit -m "${options.message.replace(/"/g, '\\"')}"`.trim();
-  try {
-    runGit(commitCmd, { cwd: options.cwd, env });
-  } catch (firstErr: unknown) {
-    const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
-    console.warn(`⚠️  Commit failed (likely pre-commit hook): ${msg.slice(0, 200)}`);
-    console.warn('   Retrying with --no-verify...');
-    try {
-      runGit(`${commitCmd} --no-verify`, { cwd: options.cwd, env });
-    } catch (secondErr: unknown) {
-      const msg2 = secondErr instanceof Error ? secondErr.message : String(secondErr);
-      throw new Error(`Commit failed even with --no-verify: ${msg2}`);
-    }
-  }
+  runGit(commitCmd, { cwd: options.cwd, env });
+  return getGitHeadCommit(options.cwd);
 
   return getGitHeadCommit(options.cwd);
 };

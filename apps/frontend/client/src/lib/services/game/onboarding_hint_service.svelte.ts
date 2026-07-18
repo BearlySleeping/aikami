@@ -239,7 +239,8 @@ export class OnboardingHintService
           this._learned = { ...progress.learned };
           // Derive isComplete from current manifest steps —
           // newly added steps under the same packId must still be eligible
-          const allStepsLearned = this._steps.length > 0 && this._steps.every((s) => this._learned[s.id]);
+          const allStepsLearned =
+            this._steps.length > 0 && this._steps.every((s) => this._learned[s.id]);
           if (allStepsLearned) {
             this.isComplete = true;
           }
