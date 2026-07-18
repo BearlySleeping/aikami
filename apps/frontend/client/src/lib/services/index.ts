@@ -69,6 +69,7 @@ export * from './game/game_engine_service.svelte.ts';
 export * from './game/game_mode_service.svelte.ts';
 export * from './game/game_overlay_service.svelte.ts';
 export * from './game/game_save_service.svelte.ts';
+export * from './game/game_state_facts.ts';
 export * from './game/game_state_service.svelte.ts';
 export * from './game/idle_detection_service.svelte.ts';
 export * from './game/input_action_service.svelte.ts';

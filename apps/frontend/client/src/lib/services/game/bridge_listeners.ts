@@ -120,6 +120,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       targetX: event.targetX,
       targetY: event.targetY,
       defeatedEnemies: gameOverlayService.getDefeatedEnemies(),
+      collectedPickups: gameOverlayService.getCollectedPickups(),
       targetSpawnHash: event.targetSpawnHash,
     });
   });
@@ -136,6 +137,10 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   });
 
   // ── Combat ──
+
+  // NOTE (C-331): the INVENTORY_UPDATED replace-array listener was removed —
+  // pickups now flow as ITEM_PICKED_UP deltas handled by inventoryService,
+  // which triggers the pickup SFX via gameOverlayService.onInventoryCountChange.
 
   bridge.on('COMBAT_STARTED', (event) => {
     if (
@@ -164,11 +169,6 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     if (event.message.includes('Hits for')) {
       void audioService.playSfx('/assets/audio/sfx/sfx_hit.wav');
     }
-  });
-
-  bridge.on('INVENTORY_UPDATED', (event) => {
-    const newCount = event.inventory.reduce((sum, item) => sum + item.quantity, 0);
-    gameOverlayService.onInventoryCountChange(newCount);
   });
 
   bridge.on('COMBAT_ENDED', (event) => {

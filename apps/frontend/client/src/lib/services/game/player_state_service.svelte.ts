@@ -38,6 +38,15 @@ export type PlayerStateServiceInterface = BaseFrontendClassInterface & {
   addXp(options: { amount: number }): void;
 
   /**
+   * Heals the player's HP mirror by the given amount, clamped at max HP.
+   * Used by out-of-combat consumables (C-331 AC-4); the ECS receives the
+   * authoritative HEAL_PLAYER command separately.
+   *
+   * @returns The player's HP after healing.
+   */
+  heal(options: { amount: number }): number;
+
+  /**
    * Starts listening for ECS bridge events (PLAYER_LEVELED_UP, COMBAT_STATE_UPDATE).
    * Must be called after the game engine is ready.
    */
@@ -95,6 +104,17 @@ class PlayerStateService
     // and threshold checks should be handled by the ECS worker via a
     // PLAYER_XP_GAINED bridge event → ECS processes level-up → PLAYER_LEVELED_UP
     // emitted back. This is tracked as part of the quest/progression system (C-339).
+  }
+
+  /** @inheritdoc */
+  heal(options: { amount: number }): number {
+    const { amount } = options;
+    if (amount <= 0) {
+      return this.playerHp;
+    }
+    this.playerHp = Math.min(this.playerMaxHp, this.playerHp + amount);
+    this.debug('heal', { amount, newHp: this.playerHp });
+    return this.playerHp;
   }
 
   /** @inheritdoc */

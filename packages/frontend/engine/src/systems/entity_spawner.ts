@@ -53,6 +53,13 @@ export type SpawnEntitiesOptions = {
    * Contract: C-147 Progression & Persistence
    */
   defeatedEnemies?: string[];
+  /**
+   * Spawn point IDs of map items that have already been collected.
+   * Item pickups matching these IDs are skipped during spawn.
+   *
+   * Contract: C-331 AC-2 — collected-pickup respawn suppression
+   */
+  collectedPickups?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -92,13 +99,19 @@ const NPC_APPEARANCE_LAYERS: readonly number[] = [10, 11, 14, 12, 15, 13];
  * @returns Array of results with entity IDs and metadata.
  */
 export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
-  const { world, spawnPoints, defeatedEnemies } = options;
+  const { world, spawnPoints, defeatedEnemies, collectedPickups } = options;
   const results: SpawnResult[] = [];
   const defeatedSet = new Set(defeatedEnemies ?? []);
+  const collectedSet = new Set(collectedPickups ?? []);
 
   for (const spawnPoint of spawnPoints) {
     // Skip enemies that have already been defeated (C-147)
     if (spawnPoint.type === 'enemy' && defeatedSet.has(spawnPoint.id)) {
+      continue;
+    }
+
+    // Skip item pickups that have already been collected (C-331)
+    if (spawnPoint.type === 'item' && collectedSet.has(spawnPoint.id)) {
       continue;
     }
 
@@ -315,6 +328,7 @@ const _spawnItem = (world: World, spawnPoint: SpawnPoint): number => {
       type: 'item',
       itemId,
       quantity,
+      spawnId: spawnPoint.id,
     }),
   );
 

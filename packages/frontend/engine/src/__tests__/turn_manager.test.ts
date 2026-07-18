@@ -598,11 +598,6 @@ describe('handleCombatAction', () => {
       endEvents.push(event);
     });
 
-    const inventoryEvents: Array<{ inventory: unknown[] }> = [];
-    bridge.on('INVENTORY_UPDATED', (event) => {
-      inventoryEvents.push(event);
-    });
-
     handleCombatAction({
       world,
       playerEntityId: playerEid,
@@ -619,9 +614,6 @@ describe('handleCombatAction', () => {
     // COMBAT_ENDED with victory emitted
     expect(endEvents.length).toBe(1);
     expect(endEvents[0].victory).toBe(true);
-
-    // INVENTORY_UPDATED (loot) emitted
-    expect(inventoryEvents.length).toBe(1);
   });
 
   // ── HP floor check ──

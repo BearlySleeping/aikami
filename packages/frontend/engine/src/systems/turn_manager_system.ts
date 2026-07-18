@@ -852,10 +852,15 @@ const _processLegacyEnemyAttack = (
 // ---------------------------------------------------------------------------
 
 /**
- * Handles enemy defeat: grants XP, destroys the entity, grants loot via
- * INVENTORY_UPDATED, and emits COMBAT_ENDED with victory = true.
+ * Handles enemy defeat: grants XP, destroys the entity, and emits
+ * COMBAT_ENDED with victory = true.
+ *
+ * Loot resolution is owned by the client (content-pack loot tables applied
+ * on ENCOUNTER_COMPLETED) — the legacy `loot_<eid>` placeholder emit was
+ * removed in C-331.
  *
  * Contract: C-147 Progression & Persistence — XP grant + level-up check
+ * Contract: C-331 — no placeholder INVENTORY_UPDATED loot emit
  *
  * @param playerEntityId - The player entity ID for XP granting.
  */
@@ -869,19 +874,6 @@ const _handleEnemyDefeated = (
   if (playerEntityId > 0) {
     _grantXp(world, playerEntityId, 25, bridge);
   }
-
-  // Emit a loot event — each enemy drops a generic item on defeat.
-  // In a full implementation, the itemId would come from the enemy's
-  // spawn properties or a loot table.
-  bridge.emit({
-    type: 'INVENTORY_UPDATED',
-    inventory: [
-      {
-        itemId: `loot_${enemyId}`,
-        quantity: 1,
-      },
-    ],
-  });
 
   // Read the spawn point ID from the Enemy component for persistence tracking
   const spawnId = Enemy.spawnId[enemyId] ?? '';

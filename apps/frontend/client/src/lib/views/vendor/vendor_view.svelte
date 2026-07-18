@@ -16,6 +16,12 @@ let messageContainer = $state<HTMLDivElement>();
 /** Reference to the textarea for mode-aware autofocus. */
 let inputElement = $state<HTMLTextAreaElement>();
 
+/** Reference to the sell confirmation dialog. */
+let sellDialogElement = $state<HTMLDialogElement>();
+
+/** Reference to the triggering Sell button for focus restoration. */
+let lastSellButtonElement = $state<HTMLButtonElement>();
+
 /** Player's current haggling text. */
 let haggleInput = $state('');
 
@@ -87,6 +93,26 @@ const submitHaggle = async () => {
   await viewModel.haggle(text);
 };
 
+/** Opens the sell confirmation dialog and manages focus. */
+const requestSellWithDialog = (itemId: string, buttonElement: HTMLButtonElement) => {
+  lastSellButtonElement = buttonElement;
+  viewModel.requestSell(itemId);
+};
+
+/** Confirms the sale and closes the dialog with focus restoration. */
+const confirmSellWithDialog = () => {
+  viewModel.confirmSell();
+  sellDialogElement?.close();
+  lastSellButtonElement?.focus();
+};
+
+/** Cancels the sale and closes the dialog with focus restoration. */
+const cancelSellWithDialog = () => {
+  viewModel.cancelSell();
+  sellDialogElement?.close();
+  lastSellButtonElement?.focus();
+};
+
 /** Handle Enter key for submit (Shift+Enter for newline). */
 const handleKeyDown = (event: KeyboardEvent) => {
   if (event.key === 'Enter' && !event.shiftKey) {
@@ -95,7 +121,11 @@ const handleKeyDown = (event: KeyboardEvent) => {
   }
   if (event.key === 'Escape') {
     event.preventDefault();
-    viewModel.closeVendor();
+    if (viewModel.pendingSellItemId) {
+      cancelSellWithDialog();
+    } else {
+      viewModel.closeVendor();
+    }
   }
 };
 
@@ -411,6 +441,91 @@ const _itemIcon = (itemId: string): string => {
               </div>
             {/each}
           </div>
+        {/if}
+
+        <!-- ── Sell section (C-331 AC-3) ── -->
+        <div class="pt-3 pb-1 flex items-center gap-2">
+          <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider"
+            >Sell Your Items</span
+          >
+          <div class="flex-1 border-t border-base-300"></div>
+          <span class="text-xs text-base-content/30">{viewModel.sellableItems.length} items</span>
+        </div>
+
+        {#if viewModel.sellableItems.length === 0}
+          <p class="text-xs text-base-content/40 text-center py-2">Nothing the vendor will buy.</p>
+        {:else}
+          <div class="flex flex-col gap-1.5">
+            {#each viewModel.sellableItems as sellable (sellable.itemId)}
+              <div
+                class="flex items-center gap-2 rounded-lg border border-base-300 bg-base-200 px-3 py-2"
+              >
+                <div class="flex-1 min-w-0">
+                  <span class="text-sm font-medium text-base-content truncate">
+                    {sellable.label}
+                  </span>
+                  {#if sellable.quantity > 1}
+                    <span class="badge badge-xs badge-ghost ml-1">x{sellable.quantity}</span>
+                  {/if}
+                </div>
+                <span class="text-xs font-bold text-warning">🪙 {sellable.sellPrice}</span>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-outline btn-warning"
+                  onclick={(e) =>
+                    requestSellWithDialog(sellable.itemId, e.currentTarget as HTMLButtonElement)}
+                  aria-label="Sell {sellable.label} for {sellable.sellPrice} gold"
+                >
+                  Sell
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Sell confirmation dialog -->
+        {#if viewModel.pendingSellItemId}
+          <dialog
+            bind:this={sellDialogElement}
+            open
+            class="modal modal-open"
+            role="alertdialog"
+            aria-labelledby="sell-dialog-title"
+            oncancel={(e) => {
+              e.preventDefault();
+              cancelSellWithDialog();
+            }}
+          >
+            <div class="modal-box">
+              <h3 id="sell-dialog-title" class="font-bold text-lg mb-2">Confirm Sale</h3>
+              <p class="text-sm text-base-content mb-4">
+                Sell <span class="font-bold">{viewModel.pendingSellLabel}</span> for
+                <span class="font-bold text-warning">{viewModel.pendingSellPrice} gold</span>?
+              </p>
+              <div class="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-ghost"
+                  onclick={cancelSellWithDialog}
+                  aria-label="Cancel sale"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-warning"
+                  onclick={confirmSellWithDialog}
+                  aria-label="Confirm sale of {viewModel.pendingSellLabel}"
+                  autofocus
+                >
+                  Confirm Sale
+                </button>
+              </div>
+            </div>
+            <form method="dialog" class="modal-backdrop" onclick={cancelSellWithDialog}>
+              <button type="button">close</button>
+            </form>
+          </dialog>
         {/if}
       </div>
 

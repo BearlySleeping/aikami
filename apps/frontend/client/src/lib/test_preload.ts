@@ -271,8 +271,7 @@ mock.module(_FRONTEND_SVC_PATH, () => ({
 // mock to all subsequent test files. Provide a comprehensive stub barrel
 // here so every test sees a consistent set of functional stubs.
 
-const _LOCAL_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/index.ts';
+const _LOCAL_SVC_PATH = '$lib/services/index.ts';
 
 const _createServiceStub = () => {
   const handler: ProxyHandler<Record<string, unknown>> = {
@@ -423,6 +422,12 @@ const _localServicesMock = () => ({
     },
     quests: [],
     defeatedEnemies: [],
+    collectedPickups: [],
+    lootGrantedEncounters: [],
+    isPickupCollected: mock(() => false),
+    recordCollectedPickup: _createCallableStub(),
+    isLootGranted: mock(() => false),
+    recordLootGranted: _createCallableStub(),
     reset: _createCallableStub(),
     startListening: _createCallableStub(),
   }),
@@ -430,9 +435,17 @@ const _localServicesMock = () => ({
     inventory: [],
     gold: 100,
     isOpen: false,
-    addItem: _createCallableStub(),
+    feedbackMessage: undefined,
+    addItem: mock(() => true),
+    removeItem: mock(() => true),
+    useConsumable: mock(() => 'ok'),
     addGold: _createCallableStub(),
     removeGold: _createCallableStub(),
+    configureCatalog: _createCallableStub(),
+    configureWorldIntegration: _createCallableStub(),
+    configureCommandSender: _createCallableStub(),
+    serialize: mock(() => ({ items: [], gold: 100 })),
+    hydrate: _createCallableStub(),
     open: _createCallableStub(),
     close: _createCallableStub(),
     toggle: _createCallableStub(),
@@ -444,8 +457,11 @@ const _localServicesMock = () => ({
     equippedArmor: undefined,
     totalAttack: 5,
     totalDefense: 12,
-    equipItem: _createCallableStub(),
-    unequipItem: _createCallableStub(),
+    equipItem: mock(() => true),
+    unequipItem: mock(() => true),
+    configureCommandSender: _createCallableStub(),
+    serialize: mock(() => ({ equippedWeapon: undefined, equippedArmor: undefined })),
+    hydrate: _createCallableStub(),
     reset: _createCallableStub(),
   }),
   gameModeService: Object.assign(_createServiceStub(), {
@@ -455,11 +471,14 @@ const _localServicesMock = () => ({
   }),
   getItemDefinition: mock((itemId: string) => ({
     label: itemId,
+    itemType: 'misc',
     attackBonus: 0,
     defenseBonus: 0,
     equippable: false,
     slot: undefined,
+    basePrice: 0,
   })),
+  buildGameStateFacts: mock(() => ['Gold: 100', 'Inventory: (empty)', 'Equipped: nothing']),
   imageGenerationService: _createServiceStub(),
   ImageGenerationService: class {},
   notificationService: _createServiceStub(),

@@ -103,12 +103,13 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
   /** Forces a PixiJS resize to current canvas dimensions (C-164). */
   triggerResize(): void;
 
-  /** Loads a new map at the given coordinates (C-147, C-172, C-199). */
+  /** Loads a new map at the given coordinates (C-147, C-172, C-199, C-331). */
   loadMap(options: {
     mapUrl: string;
     targetX: number;
     targetY: number;
     defeatedEnemies?: string[];
+    collectedPickups?: string[];
     targetSpawnHash?: number;
     disableClamping?: boolean;
   }): Promise<void>;
@@ -254,6 +255,7 @@ class GameEngineService
     targetX: number;
     targetY: number;
     defeatedEnemies?: string[];
+    collectedPickups?: string[];
     targetSpawnHash?: number;
     disableClamping?: boolean;
   }): Promise<void> {

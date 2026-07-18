@@ -1,4 +1,5 @@
 // packages/frontend/engine/src/components/inventory.ts
+import { MAX_INVENTORY_SLOTS } from '@aikami/constants';
 import type { World } from 'bitecs';
 import { observe, onGet, onSet } from 'bitecs';
 
@@ -12,8 +13,8 @@ import { observe, onGet, onSet } from 'bitecs';
 // writes.
 // ---------------------------------------------------------------------------
 
-/** Maximum number of item stacks an entity can carry. */
-export const MAX_INVENTORY_SLOTS = 24;
+/** Maximum number of item stacks an entity can carry (shared constant — C-331). */
+export { MAX_INVENTORY_SLOTS };
 
 /**
  * SoA storage for per-entity inventory slots.
