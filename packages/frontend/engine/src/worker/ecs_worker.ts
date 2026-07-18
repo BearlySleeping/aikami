@@ -103,7 +103,11 @@ import {
   syncAppearanceSystem,
 } from '../systems/render_worker.ts';
 import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
-import { handleCombatAction } from '../systems/turn_manager_system.ts';
+import {
+  handleCombatAction,
+  initCombat,
+  resetTurnTracking,
+} from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
@@ -359,6 +363,16 @@ const handleBridgeCommand = (command: GameCommand): void => {
       // ── Trigger player attack animation during AI resolution (C-166) ──
       if (world) {
         triggerPlayerAttackAnimation(world);
+      }
+      break;
+    }
+    case 'RETRY_ENCOUNTER': {
+      // ── Retry encounter with preserved seed (C-330 AC-5) ──
+      // Resets turn tracking, reinitializes combat, and emits COMBAT_STARTED.
+      // The bridge listener picks up COMBAT_STARTED and calls combatService.startCombat.
+      if (world) {
+        resetTurnTracking();
+        initCombat(world, workerBridge, command.combatSeed);
       }
       break;
     }

@@ -10,7 +10,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { findWorkspace } from '../../herdr/session.ts';
+import { currentContractId, findWorkspace, stopContractSession } from '../../herdr/session.ts';
 import {
   commitAll,
   provisionGitWorktree,
@@ -437,6 +437,20 @@ const cleanupAfterMerge = (repoRoot: string, workspacePath: string, branchName: 
     console.warn(
       `⚠️  Worktree cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
     );
+  }
+
+  // Stop the contract-scoped herdr session (client, firebase, etc.).
+  const cid = currentContractId();
+  if (cid) {
+    const mode: 'emulator' | 'staging' | 'production' =
+      process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
+        ? process.env.AIKAMI_MODE
+        : 'emulator';
+    stopContractSession(mode, cid).catch((e: unknown) => {
+      console.warn(
+        `⚠️  Herdr session cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+      );
+    });
   }
 };
 
@@ -1087,6 +1101,17 @@ export const runContractPipeline = async (options: {
       pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
       console.log(s);
     }
+
+    // Stop the contract-scoped herdr session on pipeline exit.
+    const cid = currentContractId();
+    if (cid && adapter.getWorkspacePath()) {
+      const mode: 'emulator' | 'staging' | 'production' =
+        process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
+          ? process.env.AIKAMI_MODE
+          : 'emulator';
+      stopContractSession(mode, cid).catch(() => {});
+    }
+
     return manifest;
   } finally {
     releaseLock({ contractId: manifest.contractId, cwd: options.repoRoot });

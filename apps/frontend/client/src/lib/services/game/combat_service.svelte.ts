@@ -151,6 +151,17 @@ class CombatService
     }
     this.debug('retryEncounter', { combatSeed: last.combatSeed, encounterId: last.encounterId });
 
+    // Send engine-level retry command to reset ECS health, turn state, and RNG (CR finding)
+    if (last.combatSeed !== undefined) {
+      void import('@aikami/frontend/engine').then(({ createEngineBridge }) => {
+        createEngineBridge().send({
+          type: 'RETRY_ENCOUNTER',
+          combatSeed: last.combatSeed ?? 0,
+          encounterId: last.encounterId,
+        });
+      });
+    }
+
     // Re-initialize with the same options and seed for deterministic replay (AC-5)
     this.startCombat({
       ...last,

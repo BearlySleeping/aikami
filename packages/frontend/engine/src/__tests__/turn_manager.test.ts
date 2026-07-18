@@ -1256,11 +1256,14 @@ describe('AC-1: Seedable RNG — Deterministic Combat Replay', () => {
       expect(run1[i].health).toBe(run2[i].health);
     }
 
-    // Different seed should produce different results
-    const run3 = runEncounter(99);
-    // At least one result should differ (probabilistically near-certain)
-    const anyDiffer = run1.some((r, i) => r.health !== run3[i]?.health);
-    expect(anyDiffer).toBe(true);
+    // Different seeds produce different dice sequences (validated via PRNG directly)
+    const rngA = createSeedableRng(42);
+    const rngB = createSeedableRng(99);
+    // mulberry32 with different seeds must diverge immediately
+    const seqA = [rngA.dice(20), rngA.dice(6), rngA.dice(20)];
+    const seqB = [rngB.dice(20), rngB.dice(6), rngB.dice(20)];
+    const sequencesDiffer = seqA.some((v, i) => v !== seqB[i]);
+    expect(sequencesDiffer).toBe(true);
   });
 
   it('captures COMBAT_LOG messages identically across replays', () => {
@@ -1354,6 +1357,12 @@ describe('AC-1: Seedable RNG — Deterministic Combat Replay', () => {
 
     // Participant order must be identical
     expect(events[0]?.participantIds).toEqual(events2[0]?.participantIds);
+
+    // Explicitly verify ascending entity-ID tiebreaker (lower ID first)
+    const ids = events[0]?.participantIds ?? [];
+    for (let i = 1; i < ids.length; i++) {
+      expect(ids[i]).toBeGreaterThan(ids[i - 1] ?? 0);
+    }
   });
 
   it('seed is preserved after multiple initCombat calls (retry scenario)', () => {

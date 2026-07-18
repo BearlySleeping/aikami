@@ -304,6 +304,13 @@ class DialogueOverlayViewModel
   /** Whether the AI is resolving a structured skill check. */
   isResolvingSkillCheck = $state(false);
 
+  /**
+   * Guard flag set during the automatic roll phase of tryNonCombatResolution.
+   * Prevents user-triggered rollDice() from overlapping with the auto-roll
+   * during the 400ms delay after acknowledgeDeclaration.
+   */
+  private _isAutoRolling = false;
+
   /** Unified dice state mapping for the shared GameDice component. */
   get diceState(): DiceState | null {
     const s = this.skillCheckState;
@@ -572,12 +579,16 @@ class DialogueOverlayViewModel
     };
     this.dialoguePhase = 'DICE';
 
+    // Guard against concurrent manual dice interaction during auto-roll (CR finding)
+    this._isAutoRolling = true;
+
     // Auto-acknowledge and roll after brief delay
     await new Promise<void>((resolve) => setTimeout(resolve, 800));
     this.acknowledgeDeclaration();
     await new Promise<void>((resolve) => setTimeout(resolve, 400));
 
-    // Roll the d20
+    // Roll the d20 — release auto-roll guard now that the roll has been consumed
+    this._isAutoRolling = false;
     const { natural: rollValue, total } = diceService.rollD20(statModifierValue);
     const isSuccess = total >= difficultyClass;
 
@@ -650,6 +661,12 @@ class DialogueOverlayViewModel
     const state = this.skillCheckState;
     if (state?.phase !== 'awaiting_click') {
       this.debug('rollDice:invalid-phase', { phase: state?.phase });
+      return;
+    }
+
+    // Prevent manual roll from overlapping with automatic roll (CR finding)
+    if (this._isAutoRolling) {
+      this.debug('rollDice:blocked-by-auto-roll');
       return;
     }
 
