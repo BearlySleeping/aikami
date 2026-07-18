@@ -10,7 +10,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { currentContractId, findWorkspace, stopContractSession } from '../../herdr/session.ts';
+import { findWorkspace, stopContractSession } from '../../herdr/session.ts';
 import {
   commitAll,
   provisionGitWorktree,
@@ -429,10 +429,20 @@ const syncMainOnMerge = (repoRoot: string): void => {
   }
 };
 
-const cleanupAfterMerge = (repoRoot: string, workspacePath: string, branchName: string): void => {
+const cleanupAfterMerge = (options: {
+  repoRoot: string;
+  workspacePath: string;
+  branchName: string;
+  contractId: string;
+}): void => {
   try {
-    removeWorktree({ workspacePath, repoRoot, branchName, deleteRemoteBranch: false });
-    console.log(`\n🧹 Worktree cleaned: ${branchName}\n`);
+    removeWorktree({
+      workspacePath: options.workspacePath,
+      repoRoot: options.repoRoot,
+      branchName: options.branchName,
+      deleteRemoteBranch: false,
+    });
+    console.log(`\n🧹 Worktree cleaned: ${options.branchName}\n`);
   } catch (e: unknown) {
     console.warn(
       `⚠️  Worktree cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
@@ -440,18 +450,15 @@ const cleanupAfterMerge = (repoRoot: string, workspacePath: string, branchName: 
   }
 
   // Stop the contract-scoped herdr session (client, firebase, etc.).
-  const cid = currentContractId();
-  if (cid) {
-    const mode: 'emulator' | 'staging' | 'production' =
-      process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
-        ? process.env.AIKAMI_MODE
-        : 'emulator';
-    stopContractSession(mode, cid).catch((e: unknown) => {
-      console.warn(
-        `⚠️  Herdr session cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
-      );
-    });
-  }
+  const mode: 'emulator' | 'staging' | 'production' =
+    process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
+      ? process.env.AIKAMI_MODE
+      : 'emulator';
+  stopContractSession(mode, options.contractId).catch((e: unknown) => {
+    console.warn(
+      `⚠️  Herdr session cleanup failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`,
+    );
+  });
 };
 
 // ── Main orchestrator ─────────────────────────────────────────
@@ -946,7 +953,12 @@ export const runContractPipeline = async (options: {
               if (options.yolo) {
                 syncMainOnMerge(options.repoRoot);
                 if (headBranch && adapter.getWorkspacePath()) {
-                  cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+                  cleanupAfterMerge({
+                    repoRoot: options.repoRoot,
+                    workspacePath: adapter.getWorkspacePath(),
+                    branchName: headBranch,
+                    contractId: manifest.contractId,
+                  });
                 }
                 manifest = transition({ manifest, next: 'merged' });
                 console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
@@ -967,7 +979,12 @@ export const runContractPipeline = async (options: {
                 });
                 syncMainOnMerge(options.repoRoot);
                 if (headBranch && adapter.getWorkspacePath()) {
-                  cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+                  cleanupAfterMerge({
+                    repoRoot: options.repoRoot,
+                    workspacePath: adapter.getWorkspacePath(),
+                    branchName: headBranch,
+                    contractId: manifest.contractId,
+                  });
                 }
                 manifest = transition({ manifest, next: 'merged' });
                 console.log(`\n🚀 Merged + cleaned: ${prUrl}\n`);
@@ -1025,7 +1042,12 @@ export const runContractPipeline = async (options: {
             console.log('\n🚀 YOLO: Captain merged — syncing main + cleanup.\n');
             syncMainOnMerge(options.repoRoot);
             if (headBranch && adapter.getWorkspacePath()) {
-              cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+              cleanupAfterMerge({
+                repoRoot: options.repoRoot,
+                workspacePath: adapter.getWorkspacePath(),
+                branchName: headBranch,
+                contractId: manifest.contractId,
+              });
             }
             manifest = transition({ manifest, next: 'merged' });
             pipelineLog({
@@ -1052,7 +1074,12 @@ export const runContractPipeline = async (options: {
             });
             syncMainOnMerge(options.repoRoot);
             if (headBranch && adapter.getWorkspacePath()) {
-              cleanupAfterMerge(options.repoRoot, adapter.getWorkspacePath(), headBranch);
+              cleanupAfterMerge({
+                repoRoot: options.repoRoot,
+                workspacePath: adapter.getWorkspacePath(),
+                branchName: headBranch,
+                contractId: manifest.contractId,
+              });
             }
             manifest = transition({ manifest, next: 'merged' });
             pipelineLog({
@@ -1103,13 +1130,12 @@ export const runContractPipeline = async (options: {
     }
 
     // Stop the contract-scoped herdr session on pipeline exit.
-    const cid = currentContractId();
-    if (cid && adapter.getWorkspacePath()) {
+    if (adapter.getWorkspacePath()) {
       const mode: 'emulator' | 'staging' | 'production' =
         process.env.AIKAMI_MODE === 'staging' || process.env.AIKAMI_MODE === 'production'
           ? process.env.AIKAMI_MODE
           : 'emulator';
-      stopContractSession(mode, cid).catch(() => {});
+      stopContractSession(mode, manifest.contractId).catch(() => {});
     }
 
     return manifest;

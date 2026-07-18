@@ -585,16 +585,11 @@ export const stopServices = async (config: {
     return;
   }
 
-  const existing = await getWorkspaceTabNames(workspaceId);
   const targetNames = targets.map((s) => SERVICE_DEFS[s].name);
 
-  // If killing all existing tabs, just nuke the workspace
-  if (targetNames.length >= existing.length && existing.every((w) => targetNames.includes(w))) {
-    await herdr(['workspace', 'close', workspaceId]);
-    console.log(`✓ Workspace ${workspaceLabel} stopped`);
-    return;
-  }
-
+  // Stop tabs individually. Never nuke the workspace — contract-scoped
+  // sessions only contain the services we started, so the "all tabs match"
+  // optimization would fire on every restart and destroy the workspace.
   for (const name of targetNames) {
     const tabId = await findTab(workspaceId, name);
     if (tabId) {

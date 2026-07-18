@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-07-18)
 
-**164 active (38 without contract file), 119 archived, 1 duplicates**
+**164 active (37 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -134,7 +134,7 @@
 | C-329 | Integrate The Demo Quest From Offer Through Reward | 👍 approved | — | v2 |
 | C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | — | v2 |
 | C-331 | Integrate Inventory Equipment Loot And Vendor Into The Demo | 👍 approved | ❓ `integrated` — inventory, vendor, and character-dashboard overlays are already mounted on the production `/game` journey (`game_ui_view.svelte`); this contract hardens them in place. Dev sandboxes `/dev/inventory` and `/dev/vendor` are updated alongside. | v2 |
-| C-332 | Redesign the Minimal Game HUD and Overlay Navigation | ⏳ not_started (no contract file) | — | — |
+| C-332 | Redesign The Minimal Game Hud And Overlay Navigation | 👍 approved | ❓ `integrated` — the HUD and overlay navigation already live on the production `/game` route; this contract redesigns them in place. Dev sandboxes are updated alongside. | v2 |
 | C-333 | Simplify Settings with Progressive Disclosure | ⏳ not_started (no contract file) | — | — |
 | C-334 | Make Local Save, Continue, Autosave, and Recovery Reliable | ⏳ not_started (no contract file) | — | — |
 | C-335 | Enforce the Playable Demo Release Gate | ⏳ not_started (no contract file) | — | — |
