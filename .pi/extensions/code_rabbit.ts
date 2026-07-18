@@ -5,6 +5,7 @@
 
 import { execSync } from 'node:child_process';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { Type } from 'typebox';
 
 const TIMEOUT = 60_000;
 const POLL_INTERVAL = 30_000;
