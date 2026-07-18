@@ -1,4 +1,5 @@
 // packages/shared/constants/src/lib/input_device.ts
+// biome-ignore-all lint/style/useNamingConvention: KeyboardEvent.key values and gamepad action IDs are Web API identifiers, not camelCase
 //
 // Input device and key label constants — device glyph labels and keyboard
 // display-name normalisation for interaction prompts and onboarding hints.

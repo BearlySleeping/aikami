@@ -4,7 +4,7 @@
 // Call from the review session with: code_rabbit_autofix
 
 import { execSync } from 'node:child_process';
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import type { AgentToolResult, ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
 const TIMEOUT = 60_000;
@@ -33,31 +33,42 @@ const prNumber = (pr: string): string => {
 /** Sleep helper. */
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const ParamsSchema = Type.Object({
+  pr: Type.String({ description: 'PR number (e.g. "27") or URL' }),
+  merge: Type.Optional(
+    Type.Boolean({ default: true, description: 'Auto-merge after autofix completes' }),
+  ),
+});
+
+type Params = { pr: string; merge?: boolean };
+
 // ── Tool: code_rabbit_autofix ────────────────────────────────────
 
 export default function codeRabbitExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'code_rabbit_autofix',
+    label: 'CodeRabbit Autofix',
     description:
       'Trigger CodeRabbit review + autofix on a PR, wait for completion, validate, and merge.',
-    parameters: Type.Object({
-      pr: Type.String({ description: 'PR number (e.g. "27") or URL' }),
-      merge: Type.Optional(
-        Type.Boolean({ default: true, description: 'Auto-merge after autofix completes' }),
-      ),
-    }),
-    async handler(params) {
+    parameters: ParamsSchema,
+    async execute(
+      _toolCallId,
+      params: Params,
+      _signal,
+      _onUpdate,
+      _ctx,
+    ): Promise<AgentToolResult<unknown>> {
       const num = prNumber(params.pr);
 
       // Step 1: Trigger CodeRabbit review
-      pi.log(`🔍 Triggering CodeRabbit review on PR #${num}...`);
+      console.log(`🔍 Triggering CodeRabbit review on PR #${num}...`);
       const trigger = gh(`pr comment ${num} --body "@coderabbitai review"`);
       if (!trigger) {
-        pi.log('⚠️  Could not post trigger comment. Continuing to poll...');
+        console.log('⚠️  Could not post trigger comment. Continuing to poll...');
       }
 
       // Step 2: Wait for CodeRabbit to finish
-      pi.log('⏳ Waiting for CodeRabbit review...');
+      console.log('⏳ Waiting for CodeRabbit review...');
       const deadline = Date.now() + MAX_WAIT_MS;
       let reviewDone = false;
 
@@ -72,7 +83,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           reviews.includes('CHANGES_REQUESTED')
         ) {
           reviewDone = true;
-          pi.log(`✅ CodeRabbit review complete: ${reviews}`);
+          console.log(`✅ CodeRabbit review complete: ${reviews}`);
           break;
         }
 
@@ -81,14 +92,14 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           `pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`,
         );
         if (comments.includes('processing new changes') || comments.includes('Come back again')) {
-          pi.log('  Still reviewing...');
+          console.log('  Still reviewing...');
         }
 
         // Check for rate limits
         const rateLimit = comments.match(/available in:?\s*(\d+)/);
-        if (rateLimit) {
+        if (rateLimit?.[1]) {
           const mins = Number.parseInt(rateLimit[1], 10);
-          pi.log(`  Rate limited — waiting ${mins} minutes...`);
+          console.log(`  Rate limited — waiting ${mins} minutes...`);
           await sleep(mins * 60_000);
           gh(`pr comment ${num} --body "@coderabbitai review"`);
           continue;
@@ -98,17 +109,20 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
       }
 
       if (!reviewDone) {
-        pi.log('⏰ Timeout waiting for CodeRabbit review.');
+        console.log('⏰ Timeout waiting for CodeRabbit review.');
         if (params.merge) {
-          pi.log('Proceeding to merge anyway (YOLO).');
+          console.log('Proceeding to merge anyway (YOLO).');
           gh(`pr merge ${num} --squash --delete-branch`);
-          pi.log(`✅ Merged PR #${num}`);
+          console.log(`✅ Merged PR #${num}`);
         }
-        return;
+        return {
+          content: [{ type: 'text', text: `Timeout waiting for CodeRabbit review on PR #${num}.` }],
+          details: null,
+        };
       }
 
       // Step 3: Check for autofix checkboxes
-      pi.log('🔧 Checking for CodeRabbit autofixes...');
+      console.log('🔧 Checking for CodeRabbit autofixes...');
       const finishComment = gh(
         `pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`,
       )
@@ -117,26 +131,31 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
 
       if (finishComment) {
         // Try to check autofix checkboxes by fetching the comment ID and editing
-        const _commentId = gh(
+        gh(
           `api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){comments(first:5,authorLogins:["coderabbitai","coderabbitai[bot]"]){nodes{id,body}}}}}' -F owner=BearlySleeping -F repo=aikami -F pr=${num}`,
         );
-        pi.log(
+        console.log(
           '  CodeRabbit comment found. Check the autofix checkbox in the PR UI to trigger automatic fixes.',
         );
       }
 
       // Step 4: Validate + Merge
       if (params.merge) {
-        pi.log('🚀 Merging...');
+        console.log('🚀 Merging...');
         const result = gh(`pr merge ${num} --squash --delete-branch`);
         if (result) {
-          pi.log(`✅ Merged PR #${num}`);
+          console.log(`✅ Merged PR #${num}`);
         } else {
-          pi.log(`❌ Merge failed for PR #${num}. Check CI status.`);
+          console.log(`❌ Merge failed for PR #${num}. Check CI status.`);
         }
       } else {
-        pi.log(`✅ PR #${num} ready for review.`);
+        console.log(`✅ PR #${num} ready for review.`);
       }
+
+      return {
+        content: [{ type: 'text', text: `CodeRabbit review completed for PR #${num}.` }],
+        details: null,
+      };
     },
   });
 }

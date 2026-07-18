@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.test.ts
+// biome-ignore-all lint/style/useNamingConvention: mock properties mirror external API / enum names
 //
 // Unit tests for LpcPreviewViewModel — interface contract, state transitions,
 // and non-rendering logic.
@@ -12,7 +13,7 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/character/lpc_preview/lpc_preview_view_model.test.ts
 
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 
 // ── Svelte 5 runes polyfill (matches test_preload.ts) ────────────────
 
@@ -160,10 +161,6 @@ mock.module('./lpc_preview_pixi_facade', () => {
 });
 
 // ── Import the VM ──────────────────────────────────────────────────────
-
-type LpcPreviewViewModelInterface = Awaited<
-  ReturnType<typeof import('./lpc_preview_view_model.svelte')>
->['LpcPreviewViewModelInterface'];
 
 type GetLpcPreviewViewModel = Awaited<
   ReturnType<typeof import('./lpc_preview_view_model.svelte')>

@@ -384,8 +384,6 @@ export const commitAll = (options: {
   const commitCmd = `${envFlags} commit -m "${options.message.replace(/"/g, '\\"')}"`.trim();
   runGit(commitCmd, { cwd: options.cwd, env });
   return getGitHeadCommit(options.cwd);
-
-  return getGitHeadCommit(options.cwd);
 };
 
 /**

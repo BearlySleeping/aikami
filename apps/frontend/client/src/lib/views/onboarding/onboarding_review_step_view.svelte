@@ -8,7 +8,7 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-const abilityKeys = Object.keys(viewModel.abilityScores) as string[];
+const abilityKeys = $derived(Object.keys(viewModel.abilityScores) as string[]);
 </script>
 
 <div class="space-y-6">

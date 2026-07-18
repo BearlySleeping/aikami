@@ -16,12 +16,7 @@ import {
   type InputDevice,
   keyToDisplayLabel,
 } from '@aikami/constants';
-import {
-  buildKeyToAction,
-  DEFAULT_KEYBINDINGS,
-  KEYBINDING_STORAGE_KEY,
-  loadKeybindings,
-} from '@aikami/frontend/engine';
+import { buildKeyToAction, DEFAULT_KEYBINDINGS, loadKeybindings } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -133,7 +128,7 @@ export class InputActionService
       for (let i = 0; i < gamepad.buttons.length; i++) {
         const btn = gamepad.buttons[i];
         // Detect press — any pressed button counts as gamepad activity
-        if (btn && btn.pressed) {
+        if (btn?.pressed) {
           hasActivity = true;
         }
         // Store for next frame
@@ -172,7 +167,7 @@ export class InputActionService
       // Button actions
       for (let i = 0; i < gamepad.buttons.length; i++) {
         const btn = gamepad.buttons[i];
-        if (btn && btn.pressed && GAMEPAD_BUTTON_TO_ACTION[i]) {
+        if (btn?.pressed && GAMEPAD_BUTTON_TO_ACTION[i]) {
           actions.push(GAMEPAD_BUTTON_TO_ACTION[i]);
         }
       }
@@ -180,7 +175,7 @@ export class InputActionService
       // D-pad actions
       for (let i = 12; i <= 15; i++) {
         const btn = gamepad.buttons[i];
-        if (btn && btn.pressed && GAMEPAD_DPAD_TO_ACTION[i]) {
+        if (btn?.pressed && GAMEPAD_DPAD_TO_ACTION[i]) {
           actions.push(GAMEPAD_DPAD_TO_ACTION[i]);
         }
       }

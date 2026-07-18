@@ -70,6 +70,7 @@ const BOOT_ERROR_PROMPT = [
 export default defineConfig({
   id: 'game_boot',
   route: '/game',
+  waitCondition: 'pixi_loaded' as const,
   cases: [
     {
       name: 'boot-loading-stage',

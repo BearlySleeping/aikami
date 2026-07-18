@@ -5,8 +5,6 @@
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven
 
 import { describe, expect, test } from 'bun:test';
-import type { GameBootInput, GameBootResult } from '$types/game_boot';
-import type { GameBootServiceInterface } from './game_boot_service.svelte';
 import { gameBootService } from './game_boot_service.svelte';
 
 // ---------------------------------------------------------------------------

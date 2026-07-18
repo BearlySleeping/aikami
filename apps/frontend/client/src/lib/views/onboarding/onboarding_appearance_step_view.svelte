@@ -17,8 +17,7 @@ import type { OnboardingCoordinatorViewModelInterface } from './onboarding_coord
 type Props = {
   viewModel: OnboardingCoordinatorViewModelInterface;
 };
-
-const { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 
 // ── LPC preview sub-ViewModel ──────────────────────────────────────
 
