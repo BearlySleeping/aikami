@@ -17,6 +17,11 @@ const { viewModel }: Props = $props();
     <h1 class="text-3xl font-bold text-error">Defeated</h1>
     <p class="text-center text-base text-base-content/60">Your journey ends here... for now.</p>
     <div class="flex gap-4">
+      {#if viewModel.canRetry}
+        <button type="button" class="btn btn-accent" onclick={() => viewModel.retryEncounter()}>
+          Retry Encounter
+        </button>
+      {/if}
       <button type="button" class="btn btn-primary" onclick={() => viewModel.respawnPlayer()}>
         Respawn
       </button>

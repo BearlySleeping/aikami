@@ -20,6 +20,11 @@ export const Enemy = {
    * Contract: C-147 Progression & Persistence
    */
   spawnId: [] as string[],
+  /**
+   * Content pack encounter ID (C-330 AC-2).
+   * Set when this enemy was spawned from a content pack encounter definition.
+   */
+  encounterId: [] as string[],
 };
 
 /**
@@ -29,10 +34,17 @@ export const Enemy = {
  * @param world - The bitECS world to register observers on.
  */
 export const registerEnemyObservers = (world: World): void => {
-  observe(world, onSet(Enemy), (eid: number, params: { isActive: boolean; spawnId?: string }) => {
-    Enemy.isActive[eid] = params.isActive;
-    if (params.spawnId !== undefined) {
-      Enemy.spawnId[eid] = params.spawnId;
-    }
-  });
+  observe(
+    world,
+    onSet(Enemy),
+    (eid: number, params: { isActive: boolean; spawnId?: string; encounterId?: string }) => {
+      Enemy.isActive[eid] = params.isActive;
+      if (params.spawnId !== undefined) {
+        Enemy.spawnId[eid] = params.spawnId;
+      }
+      if (params.encounterId !== undefined) {
+        Enemy.encounterId[eid] = params.encounterId;
+      }
+    },
+  );
 };

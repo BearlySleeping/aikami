@@ -150,6 +150,9 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       enemyMaxHp: event.enemyMaxHp ?? 80,
       participantIds: event.participantIds,
       firstTurnEntityId: event.firstTurnEntityId,
+      combatSeed: event.combatSeed,
+      encounterId: event.encounterId,
+      allowNonCombatResolution: event.allowNonCombatResolution,
       setActive: (overlay) => {
         gameOverlayService.setActive(overlay);
       },
@@ -171,6 +174,11 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('COMBAT_ENDED', (event) => {
     if (gameOverlayService.activeOverlay === 'COMBAT') {
       if (event.victory) {
+        // Emit ENCOUNTER_COMPLETED for quest tracking (C-330 AC-4)
+        const encounterId = combatService.encounterId;
+        if (encounterId) {
+          bridge.emit({ type: 'ENCOUNTER_COMPLETED', encounterId, victory: true });
+        }
         setTimeout(() => {
           gameOverlayService.clearActive();
           void audioService.transitionToBgm('/assets/audio/music/bgm_explore.webm');
