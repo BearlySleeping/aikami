@@ -849,7 +849,15 @@ export const runContractPipeline = async (options: {
             writeManifest({ manifest, cwd: options.repoRoot });
           }
         }
-        if (!manifest.reviewPaneId) {
+
+        // If a decision already exists (pipeline died after it was recorded),
+        // process it immediately instead of starting a new session.
+        const existingDecision = readReviewDecision(reviewPath, manifest.runId);
+        if (existingDecision) {
+          manifest.reviewDecision = existingDecision;
+          console.log(`📋 Processing existing review decision: ${existingDecision.decision}`);
+          // Fall through to the decision processing block below.
+        } else if (!manifest.reviewPaneId) {
           const prompt = isBlockedReview
             ? buildBlockedReviewPrompt({ manifest, repoRoot: options.repoRoot })
             : loadReviewPrompt({
@@ -870,7 +878,7 @@ export const runContractPipeline = async (options: {
           writeManifest({ manifest, cwd: options.repoRoot });
         }
 
-        const decision = await waitForReviewDecision({ path: reviewPath, runId: manifest.runId });
+        const decision = manifest.reviewDecision ?? (await waitForReviewDecision({ path: reviewPath, runId: manifest.runId }));
         manifest.reviewDecision = decision;
         if (!manifest.reviewPaneId) {
           throw new Error('Review pane was not initialized.');
