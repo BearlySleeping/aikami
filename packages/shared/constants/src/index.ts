@@ -14,6 +14,7 @@ export * from './lib/export.ts';
 export * from './lib/game_assets.ts';
 export * from './lib/image_style_profiles.ts';
 export * from './lib/impersonation.ts';
+export * from './lib/input_device.ts';
 export * from './lib/locale_codes.ts';
 export * from './lib/location.ts';
 export * from './lib/logger.ts';

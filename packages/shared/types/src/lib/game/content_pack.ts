@@ -4,6 +4,7 @@
 // Single source of truth for content pack data shapes.
 // Contract: C-315 Define a Versioned Campaign Content Pack and Atomic Loader
 // Contract: C-316 Build the Authored Emberwatch Demo Adventure
+// Contract: C-327 AC-3 — onboarding hint types added
 
 import type {
   ContentPackCombatStatsSchema,
@@ -22,6 +23,8 @@ import type {
   ContentPackSkillCheckSchema,
   ContentPackSkillStatSchema,
   ItemTypeSchema,
+  OnboardingHintStepSchema,
+  OnboardingSectionSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
 
@@ -72,3 +75,9 @@ export type ContentPackCredits = Static<typeof ContentPackCreditsSchema>;
 
 /** Top-level content pack manifest. */
 export type ContentPackManifest = Static<typeof ContentPackManifestSchema>;
+
+/** An onboarding/tutorial hint step (C-327). */
+export type OnboardingHintStep = Static<typeof OnboardingHintStepSchema>;
+
+/** Onboarding section in a content pack manifest (C-327). */
+export type OnboardingSection = Static<typeof OnboardingSectionSchema>;

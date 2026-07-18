@@ -71,6 +71,14 @@ const { viewModel }: Props = $props();
 
       <button
         type="button"
+        class="btn btn-ghost btn-block"
+        onclick={() => viewModel.replayOnboarding()}
+      >
+        Replay Tutorial
+      </button>
+
+      <button
+        type="button"
         class="btn btn-ghost btn-block text-error"
         onclick={() => viewModel.quitToMainMenu()}
       >

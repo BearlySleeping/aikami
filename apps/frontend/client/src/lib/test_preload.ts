@@ -760,3 +760,29 @@ mock.module('@aikami/frontend/repositories', () => ({
   }),
   __esModule: true,
 }));
+
+// ── Browser localStorage polyfill (Bun test env lacks it) ──
+
+const _localStore = new Map<string, string>();
+
+(globalThis as Record<string, unknown>).localStorage = {
+  getItem(key: string): string | null {
+    return _localStore.get(key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    _localStore.set(key, value);
+  },
+  removeItem(key: string): void {
+    _localStore.delete(key);
+  },
+  clear(): void {
+    _localStore.clear();
+  },
+  get length(): number {
+    return _localStore.size;
+  },
+  key(index: number): string | null {
+    const keys = [..._localStore.keys()];
+    return keys[index] ?? null;
+  },
+};

@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/systems/interaction_system.ts
 import type { World } from 'bitecs';
-import { getComponent, query, removeEntity } from 'bitecs';
+import { getComponent, removeEntity } from 'bitecs';
 import { logger } from '$logger';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { InteractableData } from '../components/interactable.ts';
@@ -13,23 +13,19 @@ import { Position } from '../components/position.ts';
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { startDialogueZoom } from '../systems/camera_system.ts';
+import { selectInteractionTarget } from '../systems/interaction_target_selector.ts';
 
 // ---------------------------------------------------------------------------
 // Interaction System — handle INTERACT command for item pickup and NPC dialogue
 //
 // Contract C-142 Task 2: Wire the ECS Inventory component to interaction logic.
 // When the player presses the Interact key (E/Enter), the system finds the
-// closest interactable entity and dispatches the appropriate action.
+// closest interactable entity (via the shared selectInteractionTarget helper)
+// and dispatches the appropriate action.
+//
+// Contract C-327 AC-2: Target selection reuses the shared helper — same
+// priority rules as the proximity system (items before NPCs, nearest wins).
 // ---------------------------------------------------------------------------
-
-/** Default interaction radius in pixels for items (same as NPC default). */
-const DEFAULT_INTERACTION_RADIUS = 50;
-
-/** Cached query terms — entities with Position + Interactable (pickup items). */
-const ITEM_QUERY_TERMS = [Position, Interactable];
-
-/** Cached query terms — entities with Position + NPCDialog (NPCs). */
-const NPC_QUERY_TERMS = [Position, NPCDialog];
 
 /**
  * Handles the INTERACT command from the UI layer.
@@ -69,71 +65,24 @@ const handleInteract = (options: {
     return;
   }
 
-  // ── Find the closest interactable entity (item or NPC) ──
+  // ── Find the closest interactable entity (shared helper — items first, nearest wins) ──
 
-  let closestEid = -1;
-  let closestDistSq = Number.POSITIVE_INFINITY;
-  let closestType: 'npc' | 'item' | undefined;
+  const target = selectInteractionTarget({
+    world,
+    playerX: playerPos.x,
+    playerY: playerPos.y,
+  });
 
-  // Check item entities first (priority over NPCs — items are picked up).
-  for (const eid of query(world, ITEM_QUERY_TERMS)) {
-    const interactable = getComponent(world, eid, Interactable) as InteractableData | undefined;
-    if (interactable?.type !== 'item') {
-      continue;
-    }
-
-    const pos = getComponent(world, eid, Position) as PositionData | undefined;
-    if (!pos) {
-      continue;
-    }
-
-    const dx = pos.x - playerPos.x;
-    const dy = pos.y - playerPos.y;
-    const distSq = dx * dx + dy * dy;
-    const radius = DEFAULT_INTERACTION_RADIUS;
-    const radiusSq = radius * radius;
-
-    if (distSq <= radiusSq && distSq < closestDistSq) {
-      closestEid = eid;
-      closestDistSq = distSq;
-      closestType = 'item';
-    }
-  }
-
-  // Check NPC entities
-  for (const eid of query(world, NPC_QUERY_TERMS)) {
-    const npcDialog = getComponent(world, eid, NPCDialog) as NPCDialogData | undefined;
-    if (!npcDialog) {
-      continue;
-    }
-
-    const pos = getComponent(world, eid, Position) as PositionData | undefined;
-    if (!pos) {
-      continue;
-    }
-
-    const dx = pos.x - playerPos.x;
-    const dy = pos.y - playerPos.y;
-    const distSq = dx * dx + dy * dy;
-    const radiusSq = npcDialog.interactionRadius * npcDialog.interactionRadius;
-
-    if (distSq <= radiusSq && distSq < closestDistSq) {
-      closestEid = eid;
-      closestDistSq = distSq;
-      closestType = 'npc';
-    }
-  }
-
-  if (closestEid < 0 || !closestType) {
+  if (!target) {
     return; // Nothing interactable in range
   }
 
   // ── Dispatch based on type ──
 
-  if (closestType === 'item') {
-    _handleItemPickup({ world, playerEntityId, itemEid: closestEid, bridge });
+  if (target.targetType === 'item') {
+    _handleItemPickup({ world, playerEntityId, itemEid: target.entityId, bridge });
   } else {
-    _handleNpcInteraction({ world, npcEid: closestEid, playerEntityId, bridge });
+    _handleNpcInteraction({ world, npcEid: target.entityId, playerEntityId, bridge });
   }
 };
 

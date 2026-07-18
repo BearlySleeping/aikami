@@ -14,7 +14,9 @@ import {
   type GameOverlayType,
   gameEngineService,
   gameOverlayService,
+  inputActionService,
   npcDialogueService,
+  onboardingHintService,
   sessionService,
   timeService,
 } from '$services';
@@ -81,12 +83,26 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
 
+  // ── Interaction HUD (C-327) ──
+
+  /** Current interaction prompt label (e.g. "E — Talk to Elder Thalia"). */
+  readonly interactionPromptLabel: string;
+  /** Whether the interaction prompt is visible. */
+  readonly interactionPromptVisible: boolean;
+  /** Current onboarding hint text, or undefined if none. */
+  readonly onboardingHintText: string | undefined;
+  /** Whether the onboarding hint toast is visible. */
+  readonly onboardingHintVisible: boolean;
+  /** Whether the user prefers reduced motion (AC-5). */
+  readonly reducedMotion: boolean;
+
   handleKeyDown(event: KeyboardEvent): void;
   resumeGame(): void;
   endDialogue(): void;
   saveGame(): Promise<void>;
   respawnPlayer(): Promise<void>;
   loadLastSave(): Promise<void>;
+  dismissOnboardingHint(): void;
 };
 
 class GameUIViewModel
@@ -104,6 +120,35 @@ class GameUIViewModel
   vendorViewModel = $state<VendorViewModelInterface | undefined>(undefined);
   endSessionViewModel = $state<EndSessionViewModelInterface | undefined>(undefined);
   gameOverViewModel = $state<GameOverViewModelInterface | undefined>(undefined);
+
+  // ── Interaction HUD state (C-327) ──
+
+  get interactionPromptLabel(): string {
+    return gameOverlayService.interactionPromptLabel;
+  }
+
+  get interactionPromptVisible(): boolean {
+    return gameOverlayService.interactionPromptVisible;
+  }
+
+  get onboardingHintText(): string | undefined {
+    const hint = onboardingHintService.currentHint;
+    if (!hint) {
+      return undefined;
+    }
+    // Replace {key} placeholder with the current binding label
+    const keyLabel = inputActionService.actionDisplayLabel(hint.action);
+    return hint.text.replaceAll('{key}', keyLabel);
+  }
+
+  get onboardingHintVisible(): boolean {
+    return onboardingHintService.hintVisible;
+  }
+
+  /** Detects prefers-reduced-motion via matchMedia (C-327 AC-5). */
+  reducedMotion = $state<boolean>(false);
+
+  private _reducedMotionQuery: MediaQueryList | undefined;
 
   // ── Service-proxied state ──
 
@@ -309,6 +354,13 @@ class GameUIViewModel
       });
     });
 
+    // Detect prefers-reduced-motion (C-327 AC-5)
+    this._reducedMotionQuery = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (this._reducedMotionQuery) {
+      this.reducedMotion = this._reducedMotionQuery.matches;
+      this._reducedMotionQuery.addEventListener('change', this._onReducedMotionChange);
+    }
+
     await gameOverlayService.initialize();
     await super.initialize();
   }
@@ -337,6 +389,24 @@ class GameUIViewModel
 
   async loadLastSave(): Promise<void> {
     await gameOverlayService.loadLastSave();
+  }
+
+  /** Dismisses the current onboarding hint (C-327 AC-3). */
+  dismissOnboardingHint(): void {
+    onboardingHintService.dismissCurrentHint();
+  }
+
+  // ── Media query cleanup (C-327 AC-5) ──
+
+  private readonly _onReducedMotionChange = (event: MediaQueryListEvent): void => {
+    this.reducedMotion = event.matches;
+  };
+
+  async dispose(): Promise<void> {
+    if (this._reducedMotionQuery) {
+      this._reducedMotionQuery.removeEventListener('change', this._onReducedMotionChange);
+    }
+    await super.dispose();
   }
 }
 

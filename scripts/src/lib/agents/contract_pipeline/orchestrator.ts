@@ -720,10 +720,20 @@ export const runContractPipeline = async (options: {
             runGit(`add -- '${contractRelPath}'`, { cwd: options.repoRoot });
             runGit(`commit -m "docs(contracts): approve ${manifest.contractId}"`, {
               cwd: options.repoRoot,
-              env: { CONTRACT_PIPELINE_WORKTREE: '1', GIT_AUTHOR_NAME: 'Pi Agent', GIT_AUTHOR_EMAIL: 'agent@pi.internal', GIT_COMMITTER_NAME: 'Pi Agent', GIT_COMMITTER_EMAIL: 'agent@pi.internal' },
+              env: {
+                CONTRACT_PIPELINE_WORKTREE: '1',
+                GIT_AUTHOR_NAME: 'Pi Agent',
+                GIT_AUTHOR_EMAIL: 'agent@pi.internal',
+                GIT_COMMITTER_NAME: 'Pi Agent',
+                GIT_COMMITTER_EMAIL: 'agent@pi.internal',
+              },
             });
             runGit('push origin main', { cwd: options.repoRoot });
-            pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: 'Approved contract pushed to main.' });
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: 'Approved contract pushed to main.',
+            });
           } catch (pushErr: unknown) {
             const msg = pushErr instanceof Error ? pushErr.message : String(pushErr);
             console.warn(`⚠️  Push contract to main failed (non-fatal): ${msg.slice(0, 200)}`);

@@ -4,6 +4,8 @@ import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
 import CharacterSheetView from '../dashboard/character_sheet_view.svelte';
 import type { GameUIViewModelInterface } from './game_ui_view_model.svelte';
+import InteractionPrompt from './hud/interaction_prompt.svelte';
+import OnboardingHint from './hud/onboarding_hint.svelte';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
@@ -34,6 +36,21 @@ const { viewModel }: Props = $props();
       rainIntensity={viewModel.rainIntensity}
     />
   {/if}
+
+  <!-- ── C-327 AC-2: Interaction prompt HUD ── -->
+  <InteractionPrompt
+    label={viewModel.interactionPromptLabel}
+    visible={viewModel.interactionPromptVisible}
+    reducedMotion={viewModel.reducedMotion}
+  />
+
+  <!-- ── C-327 AC-3: Onboarding hint toast ── -->
+  <OnboardingHint
+    text={viewModel.onboardingHintText}
+    visible={viewModel.onboardingHintVisible}
+    reducedMotion={viewModel.reducedMotion}
+    onDismiss={() => viewModel.dismissOnboardingHint()}
+  />
 
   <!-- Overlay router -->
   {#if viewModel.chatLocked}

@@ -448,6 +448,24 @@ class GameEngineService
       const pack = await loadPack({ packId: this.contentPackId });
       const startingMap = pack.getStartingMap();
 
+      // ── C-327 AC-3: Load onboarding hints from the content pack ──
+      if (pack.manifest.onboarding) {
+        const { onboardingHintService: svc } = await import('./onboarding_hint_service.svelte.ts');
+        svc.loadOnboarding({
+          packId: this.contentPackId,
+          onboarding: pack.manifest.onboarding,
+        });
+      } else {
+        // Clear stale hints from a previous pack that had onboarding
+        const { onboardingHintService: svc } = await import('./onboarding_hint_service.svelte.ts');
+        svc.resetOnboarding();
+      }
+      // Also refresh keybindings when loading the pack (for current bindings)
+      {
+        const { inputActionService: inputSvc } = await import('./input_action_service.svelte.ts');
+        inputSvc.refreshBindings();
+      }
+
       await this._gameWorld.loadMap({
         mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
         targetX: startingMap.defaultX ?? 160,
