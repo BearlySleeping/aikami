@@ -9,7 +9,7 @@ import { Type } from 'typebox';
 
 const TIMEOUT = 60_000;
 const POLL_INTERVAL = 30_000;
-const MAX_WAIT_MS = 30 * 60 * 1000; // 30 min total
+const MAX_WAIT_MS = 30 * 60 * 1000;
 
 const gh = (args: string): string => {
   try { return execSync(`gh ${args}`, { encoding: 'utf-8', stdio: ['pipe','pipe','pipe'], timeout: TIMEOUT }).trim(); }
@@ -24,82 +24,71 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'code_rabbit_autofix',
     label: 'CodeRabbit Autofix',
-    description: 'Trigger CodeRabbit review + autofix on a PR, wait for completion, apply fixes, validate, and merge.',
+    description: 'Trigger CodeRabbit review, wait for completion, fetch findings. Does NOT merge if findings exist.',
     parameters: Type.Object({
-      pr: Type.String({ description: 'PR number (e.g. "27") or URL' }),
-      merge: Type.Optional(Type.Boolean({ default: true, description: 'Auto-merge after review completes' })),
+      pr: Type.String({ description: 'PR number' }),
+      merge: Type.Optional(Type.Boolean({ default: false, description: 'Auto-merge only if no findings' })),
     }),
     async execute(_toolCallId, params: Params, _signal, _onUpdate, _ctx): Promise<any> {
       const num = prNumber(params.pr);
 
-      // 1. Trigger review
-      console.log(`🔍 Triggering CodeRabbit review on PR #${num}...`);
+      // 1. Trigger
+      console.log(`🔍 Triggering CodeRabbit on PR #${num}...`);
       gh(`pr comment ${num} --body "@coderabbitai review"`);
 
-      // 2. Poll for review completion
-      console.log('⏳ Waiting for CodeRabbit review...');
+      // 2. Poll
+      console.log('⏳ Waiting for CodeRabbit...');
       let deadline = Date.now() + MAX_WAIT_MS;
       let reviewState = '';
 
       while (Date.now() < deadline) {
-        // Check review state
         reviewState = gh(`pr view ${num} --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state'`);
+        if (reviewState) { console.log(`✅ Review complete: ${reviewState.trim()}`); break; }
 
-        if (reviewState.includes('APPROVED') || reviewState.includes('COMMENTED') || reviewState.includes('CHANGES_REQUESTED')) {
-          console.log(`✅ CodeRabbit review complete: ${reviewState.trim()}`);
-          break;
-        }
-
-        // Check for rate limits in comments
         const comments = gh(`pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`);
         const rateLimit = comments.match(/available in:?\s*(\d+)/);
         if (rateLimit?.[1]) {
-          const mins = Number.parseInt(rateLimit[1], 10) + 1; // +1 buffer
-          console.log(`  ⏳ Rate limited — waiting ${mins} minutes...`);
+          const mins = Number.parseInt(rateLimit[1], 10) + 1;
+          console.log(`  ⏳ Rate limited — waiting ${mins} min...`);
           await sleep(mins * 60_000);
-          console.log('  🔄 Re-triggering review...');
           gh(`pr comment ${num} --body "@coderabbitai review"`);
-          deadline = Date.now() + MAX_WAIT_MS; // Reset deadline after waiting
+          deadline = Date.now() + MAX_WAIT_MS;
           continue;
         }
-
-        // Progress indicator
-        const inProgress = comments.includes('processing new changes') || comments.includes('Come back again');
-        if (inProgress) console.log('  🔄 CodeRabbit still reviewing...');
-        else console.log('  ⏳ Waiting for review to start...');
-
+        console.log('  ⏳ Polling...');
         await sleep(POLL_INTERVAL);
       }
 
       if (!reviewState) {
-        console.log('⏰ Timed out waiting for CodeRabbit. Not merging.');
-        return { content: [{ type: 'text', text: `Timed out waiting for CodeRabbit on PR #${num}. Review may still be pending.` }], details: null };
+        return { content: [{ type: 'text', text: `Timed out waiting for CodeRabbit on PR #${num}.` }] };
       }
 
-      // 3. Don't merge if review requested changes
+      // 3. Check findings
+      const comments = gh(`pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`);
+      const hasFindings = comments.includes('Actionable comments posted:');
+
       if (reviewState.includes('CHANGES_REQUESTED')) {
-        console.log('⚠️  CodeRabbit requested changes — not merging.');
-        // Check for autofix checkboxes
-        const comments = gh(`pr view ${num} --json comments --jq '.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body'`);
-        if (comments.includes('✅ Action performed') || comments.includes('Commit unit tests in branch')) {
-          console.log('  Autofix may be available — check the PR UI.');
-        }
-        return { content: [{ type: 'text', text: `CodeRabbit requested changes on PR #${num}. Check the PR for autofix options.` }], details: null };
+        console.log('⚠️  CodeRabbit requested changes.');
+        return { content: [{ type: 'text', text: `CodeRabbit requested changes on PR #${num}. Fetch findings with MCP, fix, re-trigger review.` }] };
       }
 
-      // 4. Merge
+      if (hasFindings) {
+        console.log('📋 CodeRabbit has findings.');
+        if (params.merge) {
+          console.log('  Skipping merge — fix findings first.');
+        }
+        return { content: [{ type: 'text', text: `CodeRabbit found issues on PR #${num}. Use coderabbitai_get_coderabbit_reviews MCP to fetch them, fix with edit, then re-trigger.` }] };
+      }
+
+      // 4. No findings — safe to merge
       if (params.merge) {
-        console.log('🚀 Merging...');
+        console.log('🚀 No findings — merging...');
         const result = gh(`pr merge ${num} --squash --delete-branch`);
-        if (result) {
-          console.log(`✅ Merged PR #${num}`);
-          return { content: [{ type: 'text', text: `PR #${num} merged.` }], details: null };
-        }
-        console.log(`❌ Merge failed. Check CI or branch protection.`);
-        return { content: [{ type: 'text', text: `Merge failed for PR #${num}.` }], details: null };
+        if (result) console.log(`✅ Merged PR #${num}`);
+        else console.log('❌ Merge failed.');
       }
 
-      return { content: [{ type: 'text', text: `CodeRabbit review complete for PR #${num} — ${reviewState.trim()}.` }], details: null };
+      return { content: [{ type: 'text', text: `CodeRabbit done on PR #${num}: ${reviewState.trim()}${hasFindings ? ' (has findings)' : ' (clean)'}.` }] };
     },
   });
 }

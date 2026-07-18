@@ -18,13 +18,21 @@ If the system prompt says `🚀 YOLO MODE`, DO NOT WAIT for the user. Automate e
 ### Y1: Create ready PR immediately
 `gh_create_pr` with `draft=false`. Use Phase 1 summary as body.
 
-### Y2: Trigger + wait for CodeRabbit autofix
-Call `code_rabbit_autofix` with the PR number and `merge=true`.
-This triggers review, waits for completion, applies autofixes, validates, and merges.
+### Y2: Wait for CodeRabbit
+Poll `gh pr view <number> --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai") | .state'` every 30s.
+- If "Next review available in X minutes": wait X min, then comment `@coderabbitai review`
+- State is `APPROVED` or `COMMENTED` → go to Y3
+- State is `CHANGES_REQUESTED` → optionally fix issues, then go to Y3
 
-You do NOT need to manually poll, fix, or merge — the tool handles everything.
-If it succeeds, call `contract_review_decision` with `merge`.
-If it fails or times out, call `contract_review_decision` with `reject`.
+### Y3: Apply autofixes (if CodeRabbit found issues)
+1. Use MCP `coderabbitai_get_coderabbit_reviews` to fetch findings
+2. For each non-blocking finding: read the file, use `edit` to fix, commit + push
+3. Re-trigger review: comment `@coderabbitai review`
+4. Go back to Y2
+
+### Y4: Validate + Merge
+1. Run `validate({test: true})` to confirm tests pass
+2. Call `contract_review_decision` with `merge`
 
 ---
 
