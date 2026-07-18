@@ -255,7 +255,7 @@ class LpcPreviewViewModel
       // Register playback ticker for animation frame advancement
       this._pixiApp.ticker.add(() => {
         if (this.isPlaying) {
-          const delta = this._pixiApp!.ticker.deltaMS;
+          const delta = this._pixiApp?.ticker.deltaMS ?? 0;
           const frameInterval = 1000 / this._playbackFps;
           this._tickAccumulator += delta;
 

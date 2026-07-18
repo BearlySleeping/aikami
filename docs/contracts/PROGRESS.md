@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-07-17)
+## Status Summary (Auto-generated: 2026-07-18)
 
-**164 active (45 without contract file), 119 archived, 1 duplicates**
+**164 active (42 without contract file), 119 archived, 1 duplicates**
 
 ### Active Contracts
 
@@ -127,9 +127,9 @@
 | C-322 | Wire The Ai Provider Gateway Into Capability Detection And S | 🛠️ implemented | — | v2 |
 | C-323 | Enforce The Mandatory Text Ai Capability Gate | 🛠️ implemented | — | v2 |
 | C-324 | Retire Legacy Ai Less Code Paths And Unused Backend Packages | ✅ verified | — | v2 |
-| C-325 | Ship Real-Time LPC Appearance Preview with Safe Defaults | ⏳ not_started (no contract file) | — | — |
-| C-326 | Make `/game` Boot Atomic, Observable, and Content-Driven | ⏳ not_started (no contract file) | — | — |
-| C-327 | Add In-World Onboarding and Unified Interaction UX | ⏳ not_started (no contract file) | — | — |
+| C-325 | Ship Real Time Lpc Appearance Preview With Safe Defaults | 🛠️ implemented | — | v2 |
+| C-326 | Make Game Boot Atomic Observable And Content Driven | 🛠️ implemented | — | v2 |
+| C-327 | Add In World Onboarding And Unified Interaction Ux | 🛠️ implemented | — | v2 |
 | C-328 | Integrate Bounded AI NPC Dialogue with Authored Fallbacks | ⏳ not_started (no contract file) | — | — |
 | C-329 | Integrate the Demo Quest from Offer Through Reward | ⏳ not_started (no contract file) | — | — |
 | C-330 | Integrate Deterministic Demo Combat and Declared Skill Checks | ⏳ not_started (no contract file) | — | — |

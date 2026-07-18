@@ -30,7 +30,10 @@ export type CampaignServiceInterface = BaseFrontendClassInterface & {
   readonly isBusy: boolean;
 
   /** Creates a new campaign (idle → creating) and returns it. */
-  startNewCampaign(options?: { personaId?: string }): Promise<Campaign>;
+  startNewCampaign(options?: {
+    personaId?: string;
+    capabilityProfile?: CapabilityProfile;
+  }): Promise<Campaign>;
   /** Loads an existing campaign (idle/creating/failed → loading → playing). */
   loadCampaign(options: { campaignId: string }): Promise<Campaign>;
   /** Resumes the active campaign from paused → playing. */
@@ -82,7 +85,7 @@ const buildCapabilityProfile = (): CapabilityProfile => {
 const isAiGateBypassed = (): boolean => {
   if (
     typeof window !== 'undefined' &&
-    (window as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__
+    (window as unknown as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__
   ) {
     return true;
   }

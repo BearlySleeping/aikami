@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-07-17
-> Files: 278 across 14 categories
+> Generated: 2026-07-18
+> Files: 281 across 14 categories
 
 ## Quick Start (Read These First)
 
@@ -268,6 +268,9 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-322: Wire the AI Provider Gateway into Capability Detection and Settings](contracts/C-322-wire-the-ai-provider-gateway-into-capability-detection-and-s.md)
 - [Contract C-323: Enforce the Mandatory Text AI Capability Gate](contracts/C-323-enforce-the-mandatory-text-ai-capability-gate.md)
 - [Contract C-324: Retire Legacy AI-Less Code Paths and Unused Backend Packages](contracts/C-324-retire-legacy-ai-less-code-paths-and-unused-backend-packages.md)
+- [Contract C-325: Ship Real-Time LPC Appearance Preview with Safe Defaults](contracts/C-325-ship-real-time-lpc-appearance-preview-with-safe-defaults.md)
+- [Contract C-326: Make `/game` Boot Atomic, Observable, and Content-Driven](contracts/C-326-make-game-boot-atomic-observable-and-content-driven.md)
+- [Contract C-327: Add In-World Onboarding and Unified Interaction UX](contracts/C-327-add-in-world-onboarding-and-unified-interaction-ux.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)

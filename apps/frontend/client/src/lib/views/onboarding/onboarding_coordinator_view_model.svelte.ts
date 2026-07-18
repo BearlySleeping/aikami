@@ -553,7 +553,7 @@ class OnboardingCoordinatorViewModel
         physicalDescription: this.appearanceDescription,
         lpcRecipe: { ...this.lpcRecipe },
         paletteOverrides: { ...this.paletteOverrides },
-      },
+      } as Record<string, unknown>,
       background: this.background,
       personalityTraits: this.personalityTraits,
       notes: `Pronouns: ${pronounDisplay}`,
@@ -743,7 +743,7 @@ class OnboardingCoordinatorViewModel
   private _buildPaletteLut(hexColor: string | undefined): Uint8Array {
     const palette = new Uint8Array(1024);
 
-    if (!hexColor || hexColor.length !== 6) {
+    if (hexColor?.length !== 6) {
       return palette;
     }
 

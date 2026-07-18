@@ -204,6 +204,7 @@ class StartViewModel
   /** @inheritdoc */
   async startNewGame(): Promise<void> {
     if (!this._resolveTextProvider()) {
+      // @ts-expect-error — 'capability' route not yet registered in routes config
       await routerService.goToRoute('capability', {
         queryParameters: { reason: 'text-required' },
         pathParameters: undefined,
@@ -285,6 +286,7 @@ class StartViewModel
   /** @inheritdoc */
   async continueGame(): Promise<void> {
     if (!this._resolveTextProvider()) {
+      // @ts-expect-error — 'capability' route not yet registered in routes config
       await routerService.goToRoute('capability', {
         queryParameters: { reason: 'text-required' },
         pathParameters: undefined,

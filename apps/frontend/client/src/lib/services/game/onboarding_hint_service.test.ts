@@ -14,21 +14,18 @@ const BASIC_ONBOARDING = {
       id: 'hint_move',
       action: 'move_up',
       text: 'Press {key} to move up',
-      // biome-ignore lint/style/useNamingConvention: schema field
       trigger: 'map_loaded' as const,
     },
     {
       id: 'hint_interact',
       action: 'interact',
       text: 'Press {key} to interact with objects and people',
-      // biome-ignore lint/style/useNamingConvention: schema field
       trigger: 'after_previous' as const,
     },
     {
       id: 'hint_inventory',
       action: 'open_inventory',
       text: 'Press {key} to open your inventory',
-      // biome-ignore lint/style/useNamingConvention: schema field
       trigger: 'after_previous' as const,
     },
   ],
@@ -40,14 +37,12 @@ const NEAR_INTERACTABLE_ONBOARDING = {
       id: 'hint_move',
       action: 'move_up',
       text: 'Move up',
-      // biome-ignore lint/style/useNamingConvention: schema field
       trigger: 'map_loaded' as const,
     },
     {
       id: 'hint_near',
       action: 'interact',
       text: 'Interact with nearby objects',
-      // biome-ignore lint/style/useNamingConvention: schema field
       trigger: 'near_interactable' as const,
     },
   ],
