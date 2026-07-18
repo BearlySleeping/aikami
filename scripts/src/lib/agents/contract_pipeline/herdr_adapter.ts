@@ -278,21 +278,15 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   }
 
   private _provisionGitWorktree(): void {
-    try {
-      const { workspacePath, branchName, headCommit } = provisionGitWorktree({
-        repoRoot: this._repoRoot,
-        name: this._runId,
-        baseRevision: PIPELINE_BASE_BRANCH,
-      });
-      this._workspacePath = workspacePath;
-      console.log(
-        `🔧 git worktree: ${workspacePath} (branch: ${branchName}, commit: ${headCommit})`,
-      );
-    } catch (err) {
-      console.warn(
-        `⚠️  git worktree provisioning failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    const { workspacePath, branchName, headCommit } = provisionGitWorktree({
+      repoRoot: this._repoRoot,
+      name: this._runId,
+      baseRevision: PIPELINE_BASE_BRANCH,
+    });
+    this._workspacePath = workspacePath;
+    console.log(
+      `🔧 git worktree: ${workspacePath} (branch: ${branchName}, commit: ${headCommit})`,
+    );
   }
 
   private async _closeTabByLabel(label: string): Promise<void> {
